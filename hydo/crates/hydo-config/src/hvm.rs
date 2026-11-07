@@ -42,7 +42,7 @@ impl Engine {
 /// The Rust Mac engine's options (hydo-hvm), as the C engine read them with `getenv`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Options {
-    /// `HVM_MEM_MB`: guest RAM in MiB (the engine: 256..4096, default 1024; `hydo-hvm hvm`: default 256).
+    /// `HVM_MEM_MB`: guest RAM in MiB (the engine: 256..8192, default 1024; `hydo-hvm hvm`: default 256).
     pub mem_mb: Option<String>,
     /// `HVM_STEP`: virtual ticks per exit (default 64).
     pub step: Option<String>,

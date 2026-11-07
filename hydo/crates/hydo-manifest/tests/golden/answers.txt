@@ -832,18 +832,18 @@ R	^	<tmp>/cases/v-guest-5.json --arch x86_64 []	ok	d:91610522 w:4f53cda1 c:02b9d
 R	^	<tmp>/cases/v-guest-5.json --arch arm64 []	err	"guest.cpu: v3 (AVX/AVX2) is an x86_64 option; --arch arm64 cannot use it"
 R	^	<tmp>/cases/v-guest-6.json --arch x86_64 []	err	"guest.cpu: v2 (the default: x86-64-v2, no AVX) or v3 (adds A…#2e97827ad9a9019e"
 R	^	<tmp>/cases/v-guest-6.json --arch arm64 []	err	"guest.cpu: v2 (the default: x86-64-v2, no AVX) or v3 (adds A…#2e97827ad9a9019e"
-R	^	<tmp>/cases/v-guest-7.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got 255…#0478669bfda6e4d1"
-R	^	<tmp>/cases/v-guest-7.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got 255…#0478669bfda6e4d1"
-R	^	<tmp>/cases/v-guest-8.json --arch x86_64 []	err	"guest.ram_mib: 4096 MiB is more than --arch x86_64 runs (at most 3072)"
+R	^	<tmp>/cases/v-guest-7.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got 255)"
+R	^	<tmp>/cases/v-guest-7.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got 255)"
+R	^	<tmp>/cases/v-guest-8.json --arch x86_64 []	ok	d:16beae09 w:4f53cda1 c:7e1201bb m:74234e98
 R	^	<tmp>/cases/v-guest-8.json --arch arm64 []	ok	d:16beae09 w:4f53cda1 c:7e1201bb m:74234e98
 R	^	<tmp>/cases/v-guest-9.json --arch x86_64 []	ok	d:0e7ac760 w:4f53cda1 c:39646dc2 m:74234e98
 R	^	<tmp>/cases/v-guest-9.json --arch arm64 []	ok	d:0e7ac760 w:4f53cda1 c:39646dc2 m:74234e98
 R	^	<tmp>/cases/v-guest-10.json --arch x86_64 []	ok	d:b1f74369 w:4f53cda1 c:f55967ee m:74234e98
 R	^	<tmp>/cases/v-guest-10.json --arch arm64 []	ok	d:b1f74369 w:4f53cda1 c:f55967ee m:74234e98
-R	^	<tmp>/cases/v-guest-11.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got '10…#9061ecd0b80cf7d0"
-R	^	<tmp>/cases/v-guest-11.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got '10…#9061ecd0b80cf7d0"
-R	^	<tmp>/cases/v-guest-12.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got Tru…#05488a9cbfc06117"
-R	^	<tmp>/cases/v-guest-12.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got Tru…#05488a9cbfc06117"
+R	^	<tmp>/cases/v-guest-11.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got '1024')"
+R	^	<tmp>/cases/v-guest-11.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got '1024')"
+R	^	<tmp>/cases/v-guest-12.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got True)"
+R	^	<tmp>/cases/v-guest-12.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got True)"
 R	^	<tmp>/cases/v-guest-13.json --arch x86_64 []	err	"guest.clock_start: invalid type: string \"2024-01-01\", expect…#9360a251e9555bb9"
 R	^	<tmp>/cases/v-guest-13.json --arch arm64 []	err	"guest.clock_start: invalid type: string \"2024-01-01\", expect…#9360a251e9555bb9"
 R	^	<tmp>/cases/v-guest-14.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: list object i…#dab5e50983647e36"
@@ -5878,6 +5878,7 @@ R	^	embedded <tmp>/cases/v-fm-10.json None	ok	d:abfd7b82 w:74234e98 c:74234e98 m
 R	^	embedded <tmp>/cases/v-fm-freeze-10.json None	ok	d:ea388e51 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-guest-1.json None	ok	d:c879d842 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-guest-5.json None	ok	d:91610522 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/cases/v-guest-8.json None	ok	d:16beae09 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-guest-9.json None	ok	d:0e7ac760 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-guest-10.json None	ok	d:b1f74369 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-check-0.json None	ok	d:e098c44d w:74234e98 c:74234e98 m:74234e98

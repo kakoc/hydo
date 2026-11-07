@@ -571,7 +571,7 @@ pub struct Project {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, expecting = "a mapping")]
 pub struct Guest {
-    /// Guest RAM in MiB: 256..3072 on x86_64, 256..4096 on arm64.
+    /// Guest RAM in MiB: 256..8192 (every engine; the host needs that much free per running guest).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = 1024))]
     pub ram_mib: Option<i64>,

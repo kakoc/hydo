@@ -424,6 +424,7 @@ impl Vmm {
         let mut ram = Ram {
             b: self.ram.bytes_mut(),
             base: 0,
+            high: ram_high(self.ram_size),
             dirty: self.rw.on.then_some(&mut self.rw.dev_dirty),
         };
         self.vio.poll(&mut ram, now);
@@ -479,6 +480,7 @@ impl Vmm {
         let ram = Ram {
             b: self.ram.bytes_mut(),
             base: 0,
+            high: ram_high(self.ram_size),
             dirty: None,
         };
         let vd = self.vio.next_due(&ram, now);
@@ -629,6 +631,7 @@ impl Vmm {
             let mut ram = Ram {
                 b: self.ram.bytes_mut(),
                 base: 0,
+                high: ram_high(self.ram_size),
                 dirty: self.rw.on.then_some(&mut self.rw.dev_dirty),
             };
             self.vio.mmio(&mut ram, ipa, write, len as u32, &mut v, now);
@@ -1445,15 +1448,25 @@ fn counter_of(states: &[crate::abi::kvm_regs], flows: &[crate::spin::Flow]) -> O
     None
 }
 
-/// A guest virtual address through the guest's 4-level page tables at `cr3`: its physical
-/// address in `ram`, or None when it is not mapped.
+/// The devices' view of RAM in two blocks (`hydo_hvm::virtio::Ram::high`) for a guest of more
+/// than 3 GiB: the same rule as [`crate::layout::ram_offset`].
+fn ram_high(ram_size: u64) -> Option<(u64, u64)> {
+    let b = crate::layout::ram_blocks(ram_size);
+    b.get(1).map(|&(at, off, _)| (off, at))
+}
+
+/// A guest virtual address through the guest's 4-level page tables at `cr3`: the offset in
+/// `ram` (the RAM buffer, [`crate::layout::ram_offset`]) of the physical address it maps to, or
+/// None when it is not mapped to RAM.
 pub fn translate(ram: &[u8], cr3: u64, va: u64) -> Option<u64> {
     const ADDR: u64 = 0x000f_ffff_ffff_f000;
+    let len = ram.len() as u64;
     let rd = |pa: u64| -> Option<u64> {
-        let o = pa as usize;
+        let o = crate::layout::ram_offset(len, pa, 8)?;
         ram.get(o..o + 8)
             .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
     };
+    let off = |pa: u64| crate::layout::ram_offset(len, pa, 1).map(|o| o as u64);
     let mut table = cr3 & ADDR;
     for (level, shift) in [(4u32, 39u32), (3, 30), (2, 21), (1, 12)] {
         let e = rd(table + ((va >> shift) & 0x1ff) * 8)?;
@@ -1464,12 +1477,11 @@ pub fn translate(ram: &[u8], cr3: u64, va: u64) -> Option<u64> {
             let size = 1u64 << shift;
             let pa = (e & ADDR & !(size - 1)) | (va & (size - 1));
             // a large page may point past guest RAM (the guest writes its page tables)
-            return ((pa as usize) < ram.len()).then_some(pa);
+            return off(pa);
         }
         table = e & ADDR;
     }
-    let pa = table | (va & 0xfff);
-    ((pa as usize) < ram.len()).then_some(pa)
+    off(table | (va & 0xfff))
 }
 
 impl Drop for Vmm {
@@ -1484,6 +1496,75 @@ impl Drop for Vmm {
         }
         if let Some(j) = self.wd.take() {
             let _ = j.join();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn put(ram: &mut [u8], gpa: u64, v: u64) {
+        let o = crate::layout::ram_offset(ram.len() as u64, gpa, 8).unwrap();
+        ram[o..o + 8].copy_from_slice(&v.to_le_bytes());
+    }
+
+    #[test]
+    fn page_tables_and_pages_above_4_gib_are_read_from_the_high_block() {
+        let len = 4usize << 30; // 3 GiB low, 1 GiB at 4 GiB
+        let mut ram = vec![0u8; len];
+        let hi = crate::layout::RAM_HIGH_BASE;
+        // PML4 at 0x1000 -> PDPT in the high block -> PD at 0x3000 -> PT in the high block
+        put(&mut ram, 0x1000, (hi + 0x2000) | 3);
+        put(&mut ram, hi + 0x2000, 0x3000 | 3);
+        put(&mut ram, 0x3000, (hi + 0x5000) | 3);
+        put(&mut ram, hi + 0x5000, (hi + 0x10_0000) | 3); // va 0 -> 4 GiB + 1 MiB
+        put(&mut ram, hi + 0x5000 + 8, 0xC000_0000 | 3); // va 0x1000 -> the hole
+        put(&mut ram, 0x3000 + 8, (hi + 0x20_0000) | 0x83); // va 2 MiB: a 2 MiB page
+        let off = |gpa| crate::layout::ram_offset(len as u64, gpa, 1).map(|o| o as u64);
+        assert_eq!(translate(&ram, 0x1000, 0x123), off(hi + 0x10_0123));
+        assert_eq!(off(hi + 0x10_0123), Some(0xC000_0000 + 0x10_0123));
+        assert_eq!(translate(&ram, 0x1000, 0x1000), None, "the hole is not RAM");
+        assert_eq!(translate(&ram, 0x1000, 0x20_0042), off(hi + 0x20_0042));
+        // below 3 GiB the offset is the address, as it always was
+        let mut small = vec![0u8; 64 << 20];
+        put(&mut small, 0x1000, 0x2000 | 3);
+        put(&mut small, 0x2000, 0x3000 | 3);
+        put(&mut small, 0x3000, 0x83);
+        assert_eq!(translate(&small, 0x1000, 0x1234), Some(0x1234));
+        assert_eq!(translate(&small, 0x1000, 0x40_0000), None);
+    }
+
+    #[test]
+    fn the_devices_see_the_same_two_blocks() {
+        use hydo_hvm::virtio::Ram;
+        let len = 4u64 << 30;
+        let mut b = vec![0u8; len as usize];
+        let high = ram_high(len);
+        assert_eq!(high, Some((0xC000_0000, 0x1_0000_0000)));
+        assert_eq!(ram_high(3 << 30), None);
+        let ram = Ram {
+            b: &mut b,
+            base: 0,
+            high,
+            dirty: None,
+        };
+        for (gpa, n) in [
+            (0u64, 8u64),
+            (0xC000_0000 - 8, 8),
+            (0xC000_0000 - 4, 8),
+            (0xC000_0000, 4),
+            (0xD000_0000, 4),
+            (0x1_0000_0000 - 4, 8),
+            (0x1_0000_0000, 4096),
+            (0x1_4000_0000 - 8, 8),
+            (0x1_4000_0000 - 4, 8),
+        ] {
+            assert_eq!(
+                ram.offset(gpa, n),
+                crate::layout::ram_offset(len, gpa, n),
+                "{gpa:#x}+{n}"
+            );
         }
     }
 }

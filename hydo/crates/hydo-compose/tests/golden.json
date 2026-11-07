@@ -1354,13 +1354,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "4a001a66b657415d88782c55e03ebb43419d96fea3347d7079ab31cf7d4d1f9e",
+    "9b188cdc98134de79be691c8d04eb783a90edbd8e9e3e5bce3b7ad81a5a0cb41",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: warning: compose.x-healthcheck-defaults.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.timeout: ${HEALTHCHECK_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.retries: ${HEALTHCHECK_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.start_period: ${HEALTHCHECK_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.interval: ${HEALTHCHECK_FILE_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.timeout: ${HEALTHCHECK_FILE_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.retries: ${HEALTHCHECK_FILE_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.start_period: ${HEALTHCHECK_FILE_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-snuba-defaults.image: ${SNUBA_IMAGE} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.timeout: ${HEALT",
-  "stderr_sha256": "a7315c7e20ef5a47ba9b6709076f412b7925f8ad17a900c08d4c1705db4530cb",
+  "stderr_sha256": "aa140bb2945f9af20847590bbc8bdb9d9cfeb0813e4d5333a01089fd87dbfb57",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1371,13 +1371,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "773dc09a0d390ca6b308e27ced2a916349eb3f6dd3fa1fee54cb79a4bc1a6a62",
+    "70e90e56fd89700f3ca874d4d3d9c666236d03264fac8d900ee60a67bd6270c4",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: warning: compose.x-healthcheck-defaults.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.timeout: ${HEALTHCHECK_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.retries: ${HEALTHCHECK_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.start_period: ${HEALTHCHECK_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.interval: ${HEALTHCHECK_FILE_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.timeout: ${HEALTHCHECK_FILE_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.retries: ${HEALTHCHECK_FILE_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.start_period: ${HEALTHCHECK_FILE_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-snuba-defaults.image: ${SNUBA_IMAGE} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.timeout: ${HEALT",
-  "stderr_sha256": "a7315c7e20ef5a47ba9b6709076f412b7925f8ad17a900c08d4c1705db4530cb",
+  "stderr_sha256": "aa140bb2945f9af20847590bbc8bdb9d9cfeb0813e4d5333a01089fd87dbfb57",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1388,13 +1388,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "2f79bbeecbef66dc4b21394a56be1886ecac20d9839160089efabc88fee3029e",
+    "cf73bab657658a3e487cc704a90bcb9cf40041d8463f111a4d3ea93bda708003",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: warning: compose.x-healthcheck-defaults.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.timeout: ${HEALTHCHECK_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.retries: ${HEALTHCHECK_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.start_period: ${HEALTHCHECK_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.interval: ${HEALTHCHECK_FILE_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.timeout: ${HEALTHCHECK_FILE_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.retries: ${HEALTHCHECK_FILE_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.start_period: ${HEALTHCHECK_FILE_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-snuba-defaults.image: ${SNUBA_IMAGE} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.timeout: ${HEALT",
-  "stderr_sha256": "1c8aa1eb27cc05c00ca823472771fe57f8872d66d8aafe3a1b489b8f68a5232d",
+  "stderr_sha256": "3f804c2cd45f0b3d9a5423a39c81a9637161e7cf69538d67ef113d828e280cb5",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1405,13 +1405,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "90c8f7ed2efc7a0ccb1ce732e415c7246934a2a31ed43b9e6e2efc579109c443",
+    "ef161d3d4ff72ed3b22e6c7b09cbffe3e73b73ff570175dcb9672ea38275c989",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: warning: compose.x-healthcheck-defaults.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.timeout: ${HEALTHCHECK_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.retries: ${HEALTHCHECK_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.start_period: ${HEALTHCHECK_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.interval: ${HEALTHCHECK_FILE_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.timeout: ${HEALTHCHECK_FILE_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.retries: ${HEALTHCHECK_FILE_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.start_period: ${HEALTHCHECK_FILE_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-snuba-defaults.image: ${SNUBA_IMAGE} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.timeout: ${HEALT",
-  "stderr_sha256": "1869517f849ae4f145c314e44b85a298d07829cadd7784db674cc8914ae16e92",
+  "stderr_sha256": "0dec34875758c21bb8eb7437b5a1c821ad6860fa0ddcd0e608987da7e278a63b",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1422,13 +1422,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "9bd6348dd1cfd9295bc4ef0390bf64bb957db68abf92d34b762c716a785e6f25",
+    "ac62be7e9a0c40544549540c185d21170890ce03995a685aeef165c190f3e8ce",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: warning: compose.x-healthcheck-defaults.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.timeout: ${HEALTHCHECK_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.retries: ${HEALTHCHECK_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.start_period: ${HEALTHCHECK_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.interval: ${HEALTHCHECK_FILE_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.timeout: ${HEALTHCHECK_FILE_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.retries: ${HEALTHCHECK_FILE_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.start_period: ${HEALTHCHECK_FILE_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-snuba-defaults.image: ${SNUBA_IMAGE} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.timeout: ${HEALT",
-  "stderr_sha256": "d015afef141833a58b4f8a6cfc2d488f8179020d8d95bf6603856e4a2b241dae",
+  "stderr_sha256": "7def204e1a2254e77ec01ea8865cf7c841e4b9161ed8e5ef8985a4263e01021e",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1439,13 +1439,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "571a6b7aee6abb27a717f8879ecd2876bf1efe37ab287a70e5f5700fb4537c6d",
+    "49821b5080d27956dc7f753ce6210c5380e85cbae330261885cc8521a8c9ee6a",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: warning: compose.x-healthcheck-defaults.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.timeout: ${HEALTHCHECK_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.retries: ${HEALTHCHECK_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.start_period: ${HEALTHCHECK_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.interval: ${HEALTHCHECK_FILE_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.timeout: ${HEALTHCHECK_FILE_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.retries: ${HEALTHCHECK_FILE_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.start_period: ${HEALTHCHECK_FILE_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-snuba-defaults.image: ${SNUBA_IMAGE} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.timeout: ${HEALT",
-  "stderr_sha256": "1c8aa1eb27cc05c00ca823472771fe57f8872d66d8aafe3a1b489b8f68a5232d",
+  "stderr_sha256": "3f804c2cd45f0b3d9a5423a39c81a9637161e7cf69538d67ef113d828e280cb5",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1456,13 +1456,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "3a244fc31ab3ab5727d1beecd59457929b7f96f2269dca143a355554eba8e6d2",
+    "2ba2483a7070cd54b022cd9aee786f192660e35479be54c8ee61fb13f01f248a",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: warning: compose.x-healthcheck-defaults.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.timeout: ${HEALTHCHECK_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.retries: ${HEALTHCHECK_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.start_period: ${HEALTHCHECK_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.interval: ${HEALTHCHECK_FILE_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.timeout: ${HEALTHCHECK_FILE_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.retries: ${HEALTHCHECK_FILE_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.start_period: ${HEALTHCHECK_FILE_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-snuba-defaults.image: ${SNUBA_IMAGE} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.timeout: ${HEALT",
-  "stderr_sha256": "1869517f849ae4f145c314e44b85a298d07829cadd7784db674cc8914ae16e92",
+  "stderr_sha256": "0dec34875758c21bb8eb7437b5a1c821ad6860fa0ddcd0e608987da7e278a63b",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1473,13 +1473,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "2cbf7e3f2b21b67b8867e7579a8253e9c9b73641fb8c11e289f585bb6da22525",
+    "f88e3f5147c0230eb2c89ba3d86696158cfa267a4e9a6cc43852a49449dd5982",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: warning: compose.x-healthcheck-defaults.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.timeout: ${HEALTHCHECK_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.retries: ${HEALTHCHECK_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-healthcheck-defaults.start_period: ${HEALTHCHECK_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.interval: ${HEALTHCHECK_FILE_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.timeout: ${HEALTHCHECK_FILE_TIMEOUT} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.retries: ${HEALTHCHECK_FILE_RETRIES} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-file-healthcheck.start_period: ${HEALTHCHECK_FILE_START_PERIOD} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.x-snuba-defaults.image: ${SNUBA_IMAGE} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.interval: ${HEALTHCHECK_INTERVAL} is not set; it became an empty string (as in Compose)\nhydo-compose: warning: compose.services.memcached.healthcheck.timeout: ${HEALT",
-  "stderr_sha256": "d015afef141833a58b4f8a6cfc2d488f8179020d8d95bf6603856e4a2b241dae",
+  "stderr_sha256": "7def204e1a2254e77ec01ea8865cf7c841e4b9161ed8e5ef8985a4263e01021e",
   "stdlib_same": false,
   "stdout": ""
  },

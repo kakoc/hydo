@@ -178,6 +178,15 @@ pub fn controlled_engine(
     eargs: &[String],
     quiet: bool,
 ) -> (Arc<dyn ControlledEngine + Send + Sync>, BootSpec) {
+    // M179: a guest may have up to 8 GiB; refuse before the engine fails to make the VM
+    let ram = eargs
+        .windows(2)
+        .find(|w| w[0] == "--ram-mib")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(1024);
+    if let Err(e) = hydo_engine::guest_fits(ram) {
+        die(&e);
+    }
     match ctx.platform {
         Platform::Linux if ctx.kvm => {
             // the KVM build of the image's recorded kernel, and the image's initramfs

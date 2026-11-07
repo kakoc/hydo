@@ -9,7 +9,7 @@ format: 1                        # the project format (experimental until hydo 1
 hydo_version: "0.2"              # the hydo this project was made for
 
 guest:
-  ram_mib: 1024                  # must hold every service (256..3072 on x86_64, 256..4096 on arm64)
+  ram_mib: 1024                  # must hold every service (256..8192)
   # cpu: v3                      # x86_64 only: AVX/AVX2 for binaries built for x86-64-v3
   # clock_after_cut: 60          # when a check compares times from before and after a power cut
 

@@ -79,7 +79,7 @@ From the removed KVM monitor (`git show 9c5e41f^:src/vmm.rs`, `detlinux.rs`, `li
 
 | reused | where now |
 |---|---|
-| VM and vCPU setup: `KVM_CREATE_VM`, guest RAM as one memory slot from GPA 0, `KVM_SET_TSS_ADDR` and `KVM_SET_IDENTITY_MAP_ADDR` at `0xfffbd000`/`0xfffbc000`, the vCPU and its `kvm_run` page | `src/sys.rs` (`Kvm::fresh`) |
+| VM and vCPU setup: `KVM_CREATE_VM`, guest RAM as one memory slot from GPA 0 (two above 3 GiB: the rest from 4 GiB), `KVM_SET_TSS_ADDR` and `KVM_SET_IDENTITY_MAP_ADDR` at `0xfffbd000`/`0xfffbc000`, the vCPU and its `kvm_run` page | `src/sys.rs` (`Kvm::fresh`) |
 | long-mode entry state (page tables, GDT, segments, CR0/CR4/EFER) and the bzImage loader | already ported into hydo-hvx's boot recipe in M14; called as it is (`src/boot.rs`) |
 | interrupt injection with `KVM_INTERRUPT`, `ready_for_interrupt_injection` and `request_interrupt_window` | `src/vmm.rs` (`deliver`), as the delivery rule |
 | finishing an I/O instruction with a `KVM_RUN` that has `immediate_exit` set (the monitor's `drain_pending_io`) | `Cpu::complete`, now after every exit that needs it, not only before a snapshot (see "Completion") |
@@ -226,7 +226,7 @@ network modules are ignored the same way.
 
 | what | where |
 |---|---|
-| guest RAM | GPA 0, 256..3072 MiB (below the devices), e820 as hvx |
+| guest RAM | 256..8192 MiB: up to 3 GiB from GPA 0 (below the devices), the rest from GPA 4 GiB (`layout::ram_blocks`); e820 as hvx |
 | 8259 PIC pair | ports `0x20/0x21`, `0xa0/0xa1`; every line level-triggered, fixed priorities |
 | hydo clock, wall clock, timer, power | ports `0x5e0`, `0x5e4`, `0x5e8` (IRQ 0), `0x5ec` |
 | 16550 UART (the console, the agent's channel) | ports `0x3f8..0x3ff`, IRQ 4 |
@@ -409,7 +409,7 @@ top, after the stop hook and before the interrupt decision: the vCPU's state, th
 outputs the decision reads (`ready_for_interrupt_injection`, `if_flag`, the window request), the
 machine state, the devices (the copy-on-write disk is a cheap copy), tick jitter, preemption
 points and the receive queue; guest RAM as a second mapping kept equal to RAM at the checkpoint,
-updated at each checkpoint from KVM's dirty-page log (`KVM_GET_DIRTY_LOG` on the memory slot,
+updated at each checkpoint from KVM's dirty-page log (`KVM_GET_DIRTY_LOG` on each memory slot,
 whose flag the mode turns on) and from the pages the devices wrote (hydo-hvm's `Ram` view logs
 them). A checkpoint is taken at the start of every phase, at the loop top after every stop of the
 lock-step protocol (the host may have typed input there), after every rewind, and every 1024

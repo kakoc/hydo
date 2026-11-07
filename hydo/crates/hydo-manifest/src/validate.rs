@@ -110,8 +110,11 @@ pub const NET_MODES: &[&str] = &["loopback", "bridge"];
 pub const NET_BRIDGE: &str = "10.89.0.0/16";
 pub const NET_GW: &str = "10.89.0.1";
 pub const RAM_MIB_MIN: i128 = 256;
-pub const RAM_MIB_MAX_X86: i128 = 3072;
-pub const RAM_MIB_MAX_ARM: i128 = 4096;
+/// Guest RAM at most, in MiB (8 GiB on every engine since Milestone 179; before it 3072 on
+/// x86_64 and 4096 on arm64).
+pub const RAM_MIB_MAX: i128 = 8192;
+pub const RAM_MIB_MAX_X86: i128 = RAM_MIB_MAX;
+pub const RAM_MIB_MAX_ARM: i128 = RAM_MIB_MAX;
 pub(crate) const KNOWN_ERRORS_TOP: &[&str] = &["level", "max", "services", "description"];
 pub(crate) const KNOWN_ERRORS_SVC: &[&str] = &[
     "format",
@@ -669,13 +672,12 @@ pub fn validate(m: &mut Value) -> R<()> {
     }
     if has(&guest, "ram_mib")? {
         let r = index(&guest, "ram_mib")?;
-        if !int_in(r, RAM_MIB_MIN, RAM_MIB_MAX_ARM) {
+        if !int_in(r, RAM_MIB_MIN, RAM_MIB_MAX) {
             return Err(err(format!(
-                "guest.ram_mib: a whole number of MiB in [{}, {}] (got {}; x86_64 allows up to {})",
+                "guest.ram_mib: a whole number of MiB in [{}, {}] (got {})",
                 RAM_MIB_MIN,
-                RAM_MIB_MAX_ARM,
-                repr(r),
-                RAM_MIB_MAX_X86
+                RAM_MIB_MAX,
+                repr(r)
             )));
         }
     }

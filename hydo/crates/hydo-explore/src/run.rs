@@ -342,11 +342,7 @@ fn setup(a: Args, env: &Env) -> Cx {
             None => ("default", json!(1024)),
         },
     };
-    let (lo, hi) = if cx.ex.backend == Backend::Hvx || cx.kvm {
-        (256, 3072)
-    } else {
-        (256, 4096)
-    };
+    let (lo, hi) = (256, hydo_manifest::RAM_MIB_MAX as i64);
     match v.as_i64() {
         Some(r) if (lo..=hi).contains(&r) && !v.is_boolean() => cx.ram_mib = r,
         _ => die(&format!(
@@ -656,6 +652,23 @@ fn size_pool(cx: &Cx, engine: &dyn Engine, mut spec: BootSpec) -> (usize, BootSp
     };
     let fits = avail.is_some_and(|m| m >= n as u64 * per_mem);
     let memory = hvx && fits;
+    // M179: a guest may have 8 GiB; say it before the workers fail to make their VMs
+    if let Err(e) = hydo_engine::guest_fits(ram) {
+        die(&format!("explore: {e}"));
+    }
+    // what one worker holds: its VM, and on hvx S0 and S1 in memory too (the hvx engine keeps
+    // them there whatever the store says)
+    let per = if hvx { per_mem } else { per_files };
+    if let Some(av) = avail.filter(|&m| m < n as u64 * per) {
+        eprintln!(
+            "warning: {n} worker{} with {ram} MiB guests need{} up to about {} MiB, and this machine has \
+             {av} MiB available: a worker may fail to make its VM (--workers {} fits)",
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "s" } else { "" },
+            n as u64 * per,
+            (av / per.max(1)).max(1)
+        );
+    }
     if memory {
         spec.snapshots = SnapshotStore::Memory;
     }

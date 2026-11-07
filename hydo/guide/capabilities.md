@@ -35,7 +35,7 @@ shell-init images, which still run but follow neither key.
 | `hydo/` folder: commands, checks `final_`/`always_`/`eventually_`, regressions | yes | yes | yes |
 | `eventually` liveness checks | yes | yes | yes |
 | Docker/OCI images (`image:`), `hydo compose` | yes | yes (before M99 `hydo compose` passed `--no-addr`; after M99 it writes `network: bridge` as on Linux; a big image root needs a bigger `guest.ram_mib`, since the root is in guest RAM) | yes |
-| `guest.ram_mib` | 256–3072 | 256–4096 | 256–3072 |
+| `guest.ram_mib` | 256–8192 | 256–8192 | 256–8192 |
 | `guest.clock_after_cut` | yes | yes | yes |
 | `guest.cpu: v3` (AVX/AVX2) | yes | no (arm64) | yes |
 | `params:` (build variants, `hydo build --set k=v`) | yes | after M96 | yes |

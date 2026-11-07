@@ -291,7 +291,7 @@
       "type": "object",
       "properties": {
         "ram_mib": {
-          "description": "Guest RAM in MiB: 256..3072 on x86_64, 256..4096 on arm64.",
+          "description": "Guest RAM in MiB: 256..8192 (every engine; the host needs that much free per running guest).",
           "type": [
             "integer",
             "null"

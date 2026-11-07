@@ -10,8 +10,10 @@ use crate::abi::{kvm_dtable, kvm_regs, kvm_segment, kvm_sregs};
 use hydo_hvx::abi::hvx_segment;
 use hydo_hvx::boot;
 
-/// Load `image` (a bzImage), `initrd` and `cmdline` into `mem` (guest RAM from GPA 0): Ok with a
-/// line describing what was loaded.
+/// Load `image` (a bzImage), `initrd` and `cmdline` into `mem` (the guest RAM buffer: its low
+/// block from GPA 0, the rest from 4 GiB, [`crate::layout::ram_blocks`]; everything the recipe
+/// writes is below 1 GiB, and its e820 map describes the same two blocks, hydo-hvx's
+/// `boot::e820_map`): Ok with a line describing what was loaded.
 pub fn load(mem: &mut [u8], image: &[u8], initrd: &[u8], cmdline: &str) -> Result<String, String> {
     let mut w = Vec::new();
     boot::build_page_tables_and_gdt(mem, &mut w);
@@ -142,6 +144,49 @@ mod tests {
         }
         assert_ne!(&hvx[0x9fc00..0x9fc04], b"\0\0\0\0");
         assert_eq!(&ours[0x9fc00..0x9fc04], b"\0\0\0\0");
+    }
+
+    /// The zero page's e820 entries: (address, size, type).
+    fn e820_of(mem: &[u8]) -> Vec<(u64, u64, u32)> {
+        let bp = &mem[0x10000..0x11000];
+        let rd = |o: usize, n: usize| {
+            let mut b = [0u8; 8];
+            b[..n].copy_from_slice(&bp[o..o + n]);
+            u64::from_le_bytes(b)
+        };
+        (0..bp[0x1e8] as usize)
+            .map(|i| {
+                let o = 0x2d0 + i * 20;
+                (rd(o, 8), rd(o + 8, 8), rd(o + 16, 4) as u32)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn e820_one_block_up_to_3_gib_and_the_rest_at_4_gib() {
+        let img = bzimage();
+        // 3 GiB and less: the recipe's two entries (the test above compares the bytes)
+        let mut mem = vec![0u8; 64 << 20];
+        load(&mut mem, &img, &[], "x").unwrap();
+        assert_eq!(
+            e820_of(&mem),
+            vec![(0, 0x9fc00, 1), (0x100000, (64 << 20) - 0x100000, 1)]
+        );
+        // above 3 GiB: 1 MiB to 3 GiB, then the rest from 4 GiB, as layout::ram_blocks maps it
+        // (the buffer is zero pages the kernel never backs, apart from what the recipe writes)
+        let len = (3u64 << 30) + (64 << 20);
+        let mut big = vec![0u8; len as usize];
+        load(&mut big, &img, &[], "x").unwrap();
+        let blocks = crate::layout::ram_blocks(len);
+        assert_eq!(
+            e820_of(&big),
+            vec![
+                (0, 0x9fc00, 1),
+                (0x100000, blocks[0].2 - 0x100000, 1),
+                (blocks[1].0, blocks[1].2, 1)
+            ]
+        );
+        assert_eq!(blocks[1], (0x1_0000_0000, 0xC000_0000, 64 << 20));
     }
 
     #[test]

@@ -2261,9 +2261,10 @@ impl<'a> Importer<'a> {
             name = format!("c-{name}");
         }
         let mut ram = 1024.max((self.ram + 255).div_euclid(256) * 256);
-        if ram > 3072 {
-            self.w.warn("ram", format!("the services need about {ram} MiB; hydo's x86_64 guest has at most 3072 MiB (guest.ram_mib was set to 3072)"));
-            ram = 3072;
+        let max = hydo_manifest::RAM_MIB_MAX;
+        if ram > max {
+            self.w.warn("ram", format!("the services need about {ram} MiB; hydo's guest has at most {max} MiB (guest.ram_mib was set to {max})"));
+            ram = max;
         }
         let data_mib = 512.max((self.data_mib + 255).div_euclid(256) * 256);
         // job commands go into the dependents' setup
