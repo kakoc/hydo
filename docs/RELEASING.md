@@ -2,8 +2,9 @@
 
 The steps of a release, in order. Each release is two tarballs and the two sources archives that
 accompany them; nothing is published until step 7, and step 8 points the Homebrew tap at the new
-Mac tarball. The history of how each step was first done is in docs/HISTORY.md (Milestones 149,
-150, 153–158 and 168).
+Mac tarball. The onboarding skill is released on its own (the last section). The history of how
+each step was first done is in docs/HISTORY.md (Milestones 149, 150, 153–158, 168 and 170).
+docs/PUBLISHING.md lists every place hydo is published.
 
 ## 1. Before building
 
@@ -161,3 +162,50 @@ the tag `sdk/go/v<version>` for the Go module. The Rust test SDK (`hydo-test`,
 about code-first tests.
 An uploaded version can never be replaced on any of them (only yanked, deprecated or retracted),
 so run each dry run first.
+
+## Releasing the onboarding skill (separate from hydo releases)
+
+The onboarding skill (`skills/hydo-onboard/`, Milestone 170) is the process of onboarding a
+project; hydo's facts are in the guide built into each `hydo` (`hydo/guide/`, `hydo guide`). The
+skill therefore has its own version (`metadata.version` in its `SKILL.md`, 1.0.0 first) and its
+own releases, and a new skill version needs no new hydo. A change of the skill alone never needs
+the steps above; a hydo release ships the skill as it is in the tree (`skill/hydo-onboard/` and
+inside `bin/hydo`). Users get a skill release in two ways:
+
+- **Claude Code** reads the marketplace `.claude-plugin/marketplace.json` at the repository root
+  (staged at `hydo/dist/skill/marketplace.json` until hydo 0.2.0, user decision 2026-11-07, so
+  the skill and a hydo with its guide topics go out together: at the 0.2.0 release, `git mv
+  hydo/dist/skill/marketplace.json .claude-plugin/marketplace.json` in the release commit)
+  (`/plugin marketplace add kakoc/hydo`, then `/plugin install hydo-onboard@hydo`). Its plugin
+  entry names the skill folder and the version. Claude Code offers an update when that version
+  changes on the default branch (`claude plugin update hydo-onboard@hydo`, the `/plugin` panel,
+  or by itself when the user turned on auto-update for the marketplace, which is off by default
+  for marketplaces outside Anthropic's), so pushing the bumped version to `main` is the release
+  for Claude Code users.
+- **Codex, Cursor, GitHub Copilot and Gemini CLI** get the skill with `hydo skill install --agent
+  <tool>` (the version carried by their hydo) and later `hydo skill update`, which fetches the
+  newest GitHub release tagged `skill-v<version>`, checks its archive against the release's
+  `SHA256SUMS` and installs it.
+
+Steps, on a commit of `main` that holds the new skill:
+
+1. Edit the skill. Keep it process only: every key, command, option or limit of hydo belongs in
+   `hydo/guide/` (where a new hydo version ships it), and the skill names it as `hydo guide
+   <topic>`. If the skill needs a guide topic that only a newer hydo has, raise
+   `metadata.hydo-min` to that hydo's version and say in the step what the user should upgrade.
+2. Raise `metadata.version` in `skills/hydo-onboard/SKILL.md` and `version` of the plugin entry in
+   `.claude-plugin/marketplace.json` to the same new version (a fix: the third number; a new step
+   or reference: the second). `cargo test -p hydo-agents --test skill_check` refuses different
+   versions, an unknown `hydo guide` topic and anything in the folder that Claude Code would load
+   as another plugin component; `claude plugin validate .` must pass.
+3. Commit and merge to `main`.
+4. `sh hydo/dist/skill/build-skill-release.sh` writes `hydo/dist/out/skill/hydo-skill-<version>.tar.gz`
+   and `SHA256SUMS` (it packs twice and compares, and refuses uncommitted skill changes).
+5. (the user decides) Tag the commit `skill-v<version>`, create a GitHub release for the tag (not
+   marked as the latest release, so that `releases/latest` stays a hydo release), and upload both
+   files. Never replace the assets of a published skill release: publish a new version instead.
+6. Check: `hydo skill update --check --to <a folder with the previous version>` reports the new
+   version (exit status 3), and `hydo skill update --to <that folder>` installs it.
+
+If step 5 is skipped, Claude Code users still get the new version from `main` (step 3), but
+`hydo skill update` keeps installing the previous release.

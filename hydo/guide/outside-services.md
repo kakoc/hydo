@@ -2,7 +2,7 @@
 
 Full reference: the sections "Fake outside services and protocol faults", "gRPC faults" and
 "gRPC services: generated drivers" of `hydo guide manifest`. Everything on this page is x86_64
-only and needs a build from hydo's repository (capabilities.md).
+only and needs a build from hydo's repository (`hydo guide capabilities`).
 
 ## Fakes: outside services the system calls
 
@@ -62,7 +62,7 @@ failed to say so"). On a gRPC proxy also `status=<CODE NAME>`, `reset=conn`, `cu
 
 List `protocol` in `faults:`. `hydo explore --protocol-faults` (and `--grpc-faults` for gRPC
 proxies) draws these tokens; `--sweep protocol` tries every rule kind on every target, one round
-at a time. The record's checks are in checks.md ("Side effects at fake outside services");
+at a time. The record's checks are in `hydo guide checks` ("Side effects at fake outside services");
 `hydo-world check calls <proxy>` reports what gRPC clients saw versus what the server did.
 
 ## Generated gRPC drivers (`hydo-grpc-gen`)

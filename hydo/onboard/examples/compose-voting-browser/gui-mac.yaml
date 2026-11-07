@@ -1,0 +1,220 @@
+# The Mac (arm64) copy of hydo.yaml: guest RAM 4096 MiB and the arm64 driver; otherwise the same.
+# Docker's example voting app (../compose-voting, Milestone 84/95) tested through a real browser
+# (Milestone 166, docs/design/gui-testing.md): the voters are headless Chromium in the guest, and
+# what counts as acknowledged is what the vote page SHOWS after the click, not an HTTP status.
+#
+# Two services more than ../compose-voting/hydo.yaml, which is otherwise copied:
+# - browser: chromedp/headless-shell 156.0.8078.48 by digest (Debian 12 slim, Chromium's headless
+#   shell, DejaVu fonts). It runs nothing by itself; the workload and the checks run the driver
+#   /opt/gui/hydo-gui in it (hydo-oci browser ...), which starts Chromium for the voter and drives
+#   it over --remote-debugging-pipe (gui-driver/).
+# - cdn: busybox httpd under the names of the public CDNs the vote page loads jQuery from
+#   (code.jquery.com, cdnjs.cloudflare.com). The vote page draws its confirmation with jQuery, so
+#   without it no voter would ever see a vote confirmed. Font Awesome (https) is not served: the
+#   check icon element is there, its glyph is not drawn.
+# Inputs: sh fetch-inputs.sh (images and the two scripts, by sha256) and gui-driver/build.sh.
+#
+# Try:  disk=none dseed=1 | run          -> OK: every vote the screen confirmed is counted, and the
+#                                            results page shows what PostgreSQL counts
+#       disk=none dseed=1 | run K=worker@5+10 C=12   -> VIOLATION screen.confirmed_counted_soon:
+#                                            the screen confirmed votes 5..11 while the worker was
+#                                            down; they sat in Redis (no persistence) and the power
+#                                            cut lost them
+#       disk=none dseed=1 | run K=db@5+5 -> VIOLATION results.page_live: the result app dies when
+#                                            PostgreSQL restarts, and the results page stays down
+#       (RESULTS.md has every schedule run, twice each, with its fingerprint)
+name: compose-voting-browser
+description: "Docker's voting app with headless Chromium as the voters: the screen must agree with the backend"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 4096   # on the Mac the root (about 1.5 GB with Chromium) is the initramfs in guest RAM
+
+data:
+  size_mib: 1280   # the data disk: every volume lives here (the fault target)
+  dirs: [vol/db-data]
+
+root:
+  files:
+    - {src: healthchecks, dst: /etc/hydo/compose/bind/0-healthchecks}
+    - {src: cdn, dst: /opt/cdn}
+    - {src: build/hydo-gui-arm64, dst: /opt/gui/hydo-gui, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:; the CDNs' names -> the cdn service
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 vote
+      10.89.0.12 result
+      10.89.0.13 worker
+      10.89.0.14 redis
+      10.89.0.15 db
+      10.89.0.16 browser
+      10.89.0.17 cdn code.jquery.com cdnjs.cloudflare.com maxcdn.bootstrapcdn.com
+
+services:
+  - name: vote
+    image: {x86_64: images/dockersamples-examplevotingapp_vote-latest-amd64.docker.tar, arm64: images/dockersamples-examplevotingapp_vote-latest-arm64.docker.tar}
+    image_ref: "dockersamples/examplevotingapp_vote:latest"
+    port: 80
+    addr: 10.89.0.11
+    depends_on: [redis]
+    ready: "nc -z -w 2 10.89.0.11 80"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+  - name: result
+    image: {x86_64: images/dockersamples-examplevotingapp_result-latest-amd64.docker.tar, arm64: images/dockersamples-examplevotingapp_result-latest-arm64.docker.tar}
+    image_ref: "dockersamples/examplevotingapp_result:latest"
+    port: 80
+    addr: 10.89.0.12
+    depends_on: [db]
+    ready: "nc -z -w 2 10.89.0.12 80"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+  - name: worker
+    image: {x86_64: images/dockersamples-examplevotingapp_worker-latest-amd64.docker.tar, arm64: images/dockersamples-examplevotingapp_worker-latest-arm64.docker.tar}
+    image_ref: "dockersamples/examplevotingapp_worker:latest"
+    addr: 10.89.0.13
+    depends_on: [redis, db]
+    ready: "true"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+  - name: redis
+    image: {x86_64: images/redis-alpine-amd64.docker.tar, arm64: images/redis-alpine-arm64.docker.tar}
+    image_ref: "redis:alpine"
+    port: 6379
+    addr: 10.89.0.14
+    ready: "timeout 30 hydo-oci redis /bin/sh -c /healthchecks/redis.sh"
+    ready_timeout: 120
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-healthchecks, dst: /healthchecks}
+  - name: db
+    image: {x86_64: images/postgres-15-alpine-amd64.docker.tar, arm64: images/postgres-15-alpine-arm64.docker.tar}
+    image_ref: "postgres:15-alpine"
+    env:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+    port: 5432
+    addr: 10.89.0.15
+    ready: "timeout 30 hydo-oci db /bin/sh -c /healthchecks/postgres.sh"
+    ready_timeout: 120
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/db-data, dst: /var/lib/postgresql/data, copy_up: true}
+      - {src: /etc/hydo/compose/bind/0-healthchecks, dst: /healthchecks}
+  # the public CDNs, as far as the vote page needs them (two scripts, plain http)
+  - name: cdn
+    cmd: busybox httpd -f -p 80 -h /opt/cdn
+    port: 80
+    addr: 10.89.0.17
+    ready: "nc -z -w 2 10.89.0.17 80"
+  # the voters' browser: headless Chromium, started by the driver for every workload call
+  - name: browser
+    image: {x86_64: images/chromedp-headless-shell-156.0.8078.48-amd64.docker.tar, arm64: images/chromedp-headless-shell-156.0.8078.48-arm64.docker.tar}
+    image_ref: "chromedp/headless-shell:156.0.8078.48"
+    entrypoint: [/bin/sleep, infinity]
+    addr: 10.89.0.16
+    depends_on: [vote, result, cdn]
+    ready: "true"
+    env:
+      HOME: /tmp/gui/home
+      TZ: UTC
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {src: /opt/gui, dst: /opt/gui}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+
+# step i = voter<i> opens the vote page in the browser and clicks Cats (a) on even steps, Dogs (b)
+# on odd ones. Acknowledged = the page then shows that vote as cast (the chosen button disabled
+# with the check icon, the other one dimmed); the id is voter<i>-<option the screen showed>.
+workload:
+  steps: 20
+  run: |
+    mkdir -p /tmp/gui/shots /tmp/gui/home
+    out=/tmp/gui/vote-$HYDO_FROM.txt
+    hydo-oci browser /opt/gui/hydo-gui vote $HYDO_FROM $HYDO_TO > $out 2>> /tmp/gui/driver.err
+    while read -r id clicked screen why; do
+      c=${clicked#clicked=}; s=${screen#screen=}
+      shot=-; [ -f /tmp/gui/shots/$id.png ] && shot=$(sha256sum /tmp/gui/shots/$id.png | cut -c1-16)
+      if [ "$s" = "$c" ]; then
+        echo $id-$s >> $HYDO_ACKED; echo "$id ack" >> $HYDO_OUTCOMES
+      else
+        echo "$id unknown" >> $HYDO_OUTCOMES
+      fi
+      echo "hydo-gui: $id clicked $c, screen shows $s ${why#why=} png $shot" > /dev/console
+    done < $out
+  timeout: 300
+  process: hydo-gui
+
+shell: |
+  # The two sides of "the screen agrees with the backend". A check that cannot decide exits 2.
+  db_votes() {   # sets got="<voter> <vote>" lines; 0 = read, 3 = no votes table yet, 2 = db down
+    mkdir -p /tmp/gui/home
+    got=$(hydo-oci db psql -U postgres -tAc "select id || ' ' || vote from votes" 2>/tmp/gui-db.err) && return 0
+    got=""
+    grep -q 'relation "votes" does not exist' /tmp/gui-db.err && return 3
+    echo "db not answering: $(head -1 /tmp/gui-db.err)"; return 2
+  }
+  # every vote the voter's screen showed as confirmed is a row in PostgreSQL with that choice
+  screen_confirmed_counted() {
+    db_votes; rc=$?
+    [ $rc = 2 ] && return 2
+    n=0; total=0; missing=""
+    for t in $(cat $HYDO_ACKED); do
+      id=${t%-*}; v=${t##*-}; total=$((total + 1))
+      if echo "$got" | grep -qx "$id $v"; then n=$((n + 1)); else [ -n "$missing" ] || missing="$id (its screen showed the vote for $v as cast)"; fi
+    done
+    if [ -n "$missing" ]; then
+      echo "the screen confirmed $total votes, PostgreSQL counts $n of them; $missing is not counted"; return 1
+    fi
+    echo "all $n votes the screen confirmed are counted in PostgreSQL"
+  }
+  # the results page, rendered by the browser, shows the totals PostgreSQL holds
+  results_screen_agrees() {
+    db_votes; rc=$?
+    [ $rc = 2 ] && return 2
+    if [ $rc = 3 ]; then hydo-oci browser /opt/gui/hydo-gui results - - 2>> /tmp/gui/driver.err; return; fi
+    a=$(echo "$got" | grep -c ' a$'); b=$(echo "$got" | grep -c ' b$')
+    hydo-oci browser /opt/gui/hydo-gui results $a $b 2>> /tmp/gui/driver.err
+  }
+  # while people vote: the results page loads and shows a vote total whenever PostgreSQL answers
+  results_page_live() {
+    db_votes; rc=$?
+    [ $rc = 0 ] || return 2   # the database is down or has no votes table: nothing to show yet
+    hydo-oci browser /opt/gui/hydo-gui live 2>> /tmp/gui/driver.err
+  }
+
+invariants:
+  - id: screen.confirmed_counted_soon
+    msg: every vote the screen showed as confirmed reaches PostgreSQL within 60 s after the faults end
+    type: eventually
+    within: 60
+    poll: 2
+    cmd: screen_confirmed_counted
+  - id: results.screen_agrees_soon
+    msg: within 60 s after the faults end, the results page shows the totals PostgreSQL counts
+    type: eventually
+    within: 60
+    poll: 5
+    cmd: results_screen_agrees
+  - id: screen.confirmed_counted
+    msg: every vote the screen showed as confirmed is counted, with the choice the screen showed
+    cmd: screen_confirmed_counted
+  - id: results.page_live
+    msg: while people vote, the results page shows a vote total whenever PostgreSQL answers
+    type: always_or_unreachable
+    every: 2
+    cmd: results_page_live
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

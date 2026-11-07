@@ -33,6 +33,12 @@ entitlement. Alternatively, download `hydo-mac-<version>.tar.gz` (or, for Linux 
 Intel VT-x, `hydo-linux-<version>.tar.gz`) from https://github.com/kakoc/hydo/releases, unpack it
 and run its `install.sh`; the tarball's README or `QUICKSTART-mac.md` takes it from there.
 
+To onboard a project with an AI coding tool, use hydo's onboarding skill: run
+`hydo skill install --agent claude` (or `codex`, `cursor`, `copilot`, `gemini`) in the repository,
+then ask the tool to onboard the project with hydo. From hydo 0.2.0 on, Claude Code can also
+install it as a plugin (`/plugin marketplace add kakoc/hydo`), and `hydo skill update` fetches a
+newer skill. The skill holds the process; it reads every fact about your hydo from `hydo guide`.
+
 ## How it fits together
 
 ```

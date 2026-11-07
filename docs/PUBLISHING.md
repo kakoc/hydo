@@ -6,7 +6,7 @@ nothing is published until the user decides to; the packages' metadata and the d
 are prepared in the tree (Milestone 160; the APIs were cleaned up before their first
 publication in Milestone 163).
 
-The `hydo` program itself is published through the Homebrew tap (docs/RELEASING.md step 8, `brew install kakoc/tap/hydo`) and the release index (step 9); this file covers the SDKs.
+The `hydo` program itself is published through the Homebrew tap (docs/RELEASING.md step 8, `brew install kakoc/tap/hydo`) and the release index (step 9); this file covers the SDKs, the crates of `cargo install hydo`, and (last section) the onboarding skill, which has its own releases.
 
 | SDK | registry | name | code-level name | directory |
 |---|---|---|---|---|
@@ -403,3 +403,29 @@ platform.
 agent's re-pin). A workspace version change moves the bytes of `guest/hydo-world` and
 `guest/hydo-grpc` (AGENTS.md open item 40), so plan the re-baseline with it. Then the same
 commands, in the same order.
+
+## The onboarding skill (Milestone 170)
+
+The skill has its own channels and its own version (docs/RELEASING.md, "Releasing the onboarding
+skill"); publishing it is the user's decision, like everything else here.
+
+| Channel | What | Updated by |
+|---|---|---|
+| GitHub release `skill-v<version>` | `hydo-skill-<version>.tar.gz` and `SHA256SUMS`, read by `hydo skill update` | docs/RELEASING.md, "Releasing the onboarding skill", step 5 |
+| Claude Code marketplace `.claude-plugin/marketplace.json` on `main` (staged at `hydo/dist/skill/marketplace.json` until 0.2.0) (`/plugin marketplace add kakoc/hydo`, `/plugin install hydo-onboard@hydo`) | the folder `skills/hydo-onboard/` as the plugin `hydo-onboard`, at the version its entry names | the same section, step 3 |
+
+The skill is published separately from hydo (Milestone 170), so its process can improve between
+hydo releases while the facts always come from the user's own hydo (`hydo guide`):
+
+- One folder in the Agent Skills format (https://agentskills.io/specification), the same files
+  for every tool. Claude Code takes it as a plugin: the marketplace entry's `source` is the folder
+  itself (`./skills/hydo-onboard`), and with no `plugin.json` in it the entry is the plugin's
+  manifest and the folder's `SKILL.md` its one skill, so nothing is copied or linked. Codex,
+  Cursor, GitHub Copilot and Gemini CLI read the copy that `hydo skill install --agent <tool>`
+  writes into `.agents/skills/` (Claude Code without the plugin: `.claude/skills/`).
+- A user of another tool gets a new skill version with `hydo skill update`, which runs only when
+  the user runs it, takes the newest `skill-v<version>` release from the GitHub API, and accepts
+  the archive only with the sha256 that the release's `SHA256SUMS` (fetched over TLS) names. The
+  skill itself never downloads anything.
+- A published skill release is never changed: a fix is a new version. A skill version states the
+  oldest hydo it supports (`metadata.hydo-min`); a skill that needs a newer guide topic raises it.

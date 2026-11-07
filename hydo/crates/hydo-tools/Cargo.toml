@@ -39,7 +39,13 @@ path = "src/bin/hydo-elfdeps.rs"
 name = "hydo-elf-comment"
 path = "src/bin/hydo-elf-comment.rs"
 
+# hydo/dist/skill/build-skill-release.sh: the onboarding skill's release assets (Milestone 170)
+[[bin]]
+name = "hydo-skill-pack"
+path = "src/bin/hydo-skill-pack.rs"
+
 [dependencies]
+hydo-agents = { workspace = true }
 hydo-build = { workspace = true }
 hydo-config = { workspace = true }
 hydo-manifest = { workspace = true }
