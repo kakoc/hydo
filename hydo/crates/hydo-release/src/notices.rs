@@ -145,7 +145,12 @@ pub fn third_party_md(
             ));
         }
         if !c.nix.is_empty() {
-            srcs.push(format!("recipe: `upstream/{}`", list.nixpkgs.archive));
+            let r: Vec<String> = c
+                .recipe_files(list)
+                .iter()
+                .map(|f| format!("`upstream/{f}`"))
+                .collect();
+            srcs.push(format!("recipe: {}", r.join(", ")));
         }
         let _ = writeln!(
             s,
@@ -171,14 +176,25 @@ pub fn third_party_md(
             let _ = writeln!(s, "  {n}");
         }
         for n in &c.nix {
+            let mut from = String::new();
+            if let Some(a) = &n.attr {
+                from = match &n.nixpkgs {
+                    Some(t) => format!(" (nixpkgs `{a}` of `upstream/{t}`)"),
+                    None => format!(" (nixpkgs `{a}`)"),
+                };
+            }
+            if let Some(d) = &n.drv {
+                from.push_str(&format!(" by the derivation `{d}`"));
+            }
+            if let Some(r) = &n.recipe {
+                from.push_str(&format!(
+                    ", whose whole derivation closure is in `upstream/{r}`"
+                ));
+            }
             let _ = writeln!(
                 s,
-                "  Built by Nix for {}{}: {}.{}",
+                "  Built by Nix for {}{from}: {}.{}",
                 n.system,
-                n.attr
-                    .as_ref()
-                    .map(|a| format!(" (nixpkgs `{a}`)"))
-                    .unwrap_or_default(),
                 code_list(&n.out),
                 n.note.as_ref().map(|x| format!(" {x}")).unwrap_or_default()
             );
@@ -187,8 +203,19 @@ pub fn third_party_md(
     let _ = writeln!(
         s,
         "\nThe Nix-built components come from nixpkgs revision `{}` (`upstream/{}`, {}), whose \
-         recipes (`pkgs/…`) and patches built them.\n",
-        list.nixpkgs.rev, list.nixpkgs.archive, list.nixpkgs.url
+         recipes (`pkgs/…`) and patches built them{}.\n",
+        list.nixpkgs.rev,
+        list.nixpkgs.archive,
+        list.nixpkgs.url,
+        if list
+            .components
+            .iter()
+            .any(|c| c.nix.iter().any(|n| n.nixpkgs.is_some()))
+        {
+            ", except where a component's note names another nixpkgs tree"
+        } else {
+            ""
+        }
     );
     let _ = writeln!(s, "## Rust crates\n");
     let _ = writeln!(

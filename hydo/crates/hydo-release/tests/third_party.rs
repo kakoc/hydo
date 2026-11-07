@@ -81,6 +81,108 @@ fn a_copyleft_component_needs_its_source_archive() {
 }
 
 #[test]
+fn a_copyleft_component_built_by_nix_needs_its_recipe() {
+    // Milestone 158 addendum: busybox 1.37.0 came from a nixpkgs revision that was not recorded.
+    let r = repo();
+    let l0 = List::load(&r, Platform::Linux).unwrap();
+    let n = &l0
+        .components
+        .iter()
+        .find(|c| c.id == "busybox-1.37.0")
+        .unwrap()
+        .nix[0];
+    assert!(
+        n.attr.is_some() && n.recipe.is_some() && n.nixpkgs.is_some() && n.drv.is_some(),
+        "{n:?}"
+    );
+    let set = |l: &mut List, f: &dyn Fn(&mut hydo_release::model::NixRef)| {
+        let c = l
+            .components
+            .iter_mut()
+            .find(|c| c.id == "busybox-1.37.0")
+            .unwrap();
+        f(&mut c.nix[0]);
+    };
+    // Neither the attribute nor the derivation closure: refused.
+    let mut l = l0.clone();
+    set(&mut l, &|n| {
+        n.attr = None;
+        n.nixpkgs = None;
+        n.recipe = None;
+    });
+    let e = check::components(&r, Platform::Linux, &l);
+    assert!(
+        e.iter().any(|m| m.contains("busybox-1.37.0")
+            && m.contains("build recipe is not recorded")
+            && m.contains("\"recipe\"")),
+        "{e:?}"
+    );
+    // The derivation closure alone is enough.
+    let mut l = l0.clone();
+    set(&mut l, &|n| {
+        n.attr = None;
+        n.nixpkgs = None;
+    });
+    assert!(check::components(&r, Platform::Linux, &l).is_empty());
+    // A tree or closure that is not included, or a tree without the attribute: refused.
+    let mut l = l0.clone();
+    set(&mut l, &|n| {
+        n.nixpkgs = Some("nixpkgs-0000.tar.gz".into());
+        n.recipe = Some("no-such-recipe.tar.gz".into());
+        n.drv = Some("/nix/store/x-busybox".into());
+    });
+    let e = check::components(&r, Platform::Linux, &l);
+    for want in [
+        "nixpkgs-0000.tar.gz, which no component includes",
+        "no-such-recipe.tar.gz, which no component includes",
+        "is not the store path of a derivation",
+    ] {
+        assert!(e.iter().any(|m| m.contains(want)), "{want}: {e:?}");
+    }
+    let mut l = l0.clone();
+    set(&mut l, &|n| n.attr = None);
+    let e = check::components(&r, Platform::Linux, &l);
+    assert!(
+        e.iter()
+            .any(|m| m.contains("but not the attribute") && m.contains("add \"attr\"")),
+        "{e:?}"
+    );
+    // A permissive component built by Nix needs no recipe (musl is MIT).
+    let mut l = l0.clone();
+    let c = l
+        .components
+        .iter_mut()
+        .find(|c| c.id == "musl-1.2.6")
+        .unwrap();
+    c.nix[0].attr = None;
+    c.nix[0].nixpkgs = None;
+    c.nix[0].recipe = None;
+    assert!(check::components(&r, Platform::Linux, &l).is_empty());
+}
+
+#[test]
+fn the_fetch_list_names_every_tree() {
+    let l = List::load(&repo(), Platform::Linux).unwrap();
+    let s = hydo_release::sources::fetch_list(&l, None);
+    let first = s.lines().next().unwrap();
+    assert!(
+        first.starts_with(&format!("{}\t", l.nixpkgs.archive)) && first.contains("\tnix-pack:"),
+        "{first}"
+    );
+    assert!(!s
+        .lines()
+        .any(|x| x.split('\t').nth(2).unwrap().starts_with("nix:")));
+    assert!(s.lines().any(|x| x.contains(&format!(
+        "\tnix-in:{}:x86_64-linux:linux_6_6:",
+        l.nixpkgs.store_path
+    ))));
+    assert!(s
+        .lines()
+        .any(|x| x.starts_with("busybox-1.37.0-nix-recipe.tar.gz\t")
+            && x.contains("\tnix-recipe:/nix/store/")));
+}
+
+#[test]
 fn a_new_destination_in_build_release_is_named() {
     let l = List::load(&repo(), Platform::Linux).unwrap();
     let ok = "cp \"$A/guest/x\" \"$REL/guest/bzImage\"\nmkdir -p \"$REL/bin\"\n";

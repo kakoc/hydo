@@ -44,17 +44,27 @@
 //!                      "url": ["https://…"], "from": "nix:x86_64-linux:linux_6_6" } ],
 //!                    // or { "url": [...] } alone: a source that is referenced, not included
 //!       "repo": ["hv/hvm/linux/apply-cntpct.py"],           // our files that go into the archive
-//!       "nix": [ { "system", "attr"?, "out": ["/nix/store/…"], "note"? } ],
+//!       "nix": [ { "system", "attr"?, "out": ["/nix/store/…"], "note"?,
+//!                  "drv"?: "/nix/store/….drv",          // the derivation that built "out"
+//!                  "nixpkgs"?: "nixpkgs-<rev>.tar.gz",  // an included tree other than the pinned
+//!                                                       // one, in which "attr" built "out"
+//!                  "recipe"?: "<name>.tar.gz" } ],      // an included derivation closure
+//!            // a copyleft component built by Nix needs "attr" (in the pinned tree, or in the
+//!            // tree "nixpkgs" names) or "recipe", so that its build recipe is in the archive
 //!       "note": "how it was built, and anything a reader of THIRD-PARTY.md needs"
 //!   } ]
 //! }
 //! ```
 //!
 //! `from` says how `hydo/dist/fetch-sources.sh` obtains an included source again on a Linux
-//! machine with Nix and the pinned nixpkgs: `url` (downloaded), `nix:<system>:<attr>` (a
-//! fixed-output input of that package's derivation with the file's name, a directory packed as a
-//! deterministic `.tar.gz`), `nix-cache:<store path>` (a file output read from cache.nixos.org) or
-//! `nix-pack:<store path>` (a store directory packed). A sources cache is a directory with the
+//! machine with Nix and the pinned nixpkgs: `url` (downloaded), `nix:<system>:<attr>:<name>` (a
+//! fixed-output input of that package's derivation with that name, a directory packed as a
+//! deterministic `.tar.gz`), `nix-in:<tree store path>:<system>:<attr>:<name>` (the same in
+//! another nixpkgs tree), `nix-cache:<store path>` (a file output read from cache.nixos.org),
+//! `nix-pack:<store path>` (a store directory packed; a tree the store lacks is fetched from the
+//! source's `url` with `builtins.fetchTarball`) or `nix-recipe:<tree store path>:<system>:<attr>`
+//! (the derivation closure of that attribute, packed: `derivations.json`, `drv/`, `inputs/`;
+//! Milestone 158 addendum). A sources cache is a directory with the
 //! files by name; the release scripts take it from `$HYDO_SOURCES_FROM` or fill
 //! `hydo/dist/<platform>/sources/` once, as they do with the assets.
 

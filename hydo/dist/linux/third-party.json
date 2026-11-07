@@ -333,18 +333,75 @@
             "https://busybox.net/downloads/busybox-1.37.0.tar.bz2"
           ],
           "from": "url"
+        },
+        {
+          "file": "nixpkgs-f13ff45afd1b.tar.gz",
+          "sha256": "367a6939ced80b5f08094a6c0a77fdffe39d943602238daaecd616c400f572c8",
+          "url": [
+            "https://github.com/NixOS/nixpkgs/archive/f13ff45afd1bb73e640eaa08a7066dbed07e3238.tar.gz"
+          ],
+          "from": "nix-pack:/nix/store/cc7ff4ysismx0c3778v8gc6b14plrz3z-source"
+        },
+        {
+          "file": "busybox-1.37.0-nix-recipe.tar.gz",
+          "sha256": "50de4f0de5e8dbdf68eb456a3c7555158819c9ef80148a15d37bfbceefbb7932",
+          "from": "nix-recipe:/nix/store/cc7ff4ysismx0c3778v8gc6b14plrz3z-source:x86_64-linux:pkgsStatic.busybox"
+        },
+        {
+          "file": "busybox-1.37.0-CVE-2023-39810.patch",
+          "sha256": "a4e0116c2c22b9cae43484c1a0e3292c5dc69e262f262c817818b6fc0c36258f",
+          "url": [
+            "https://git.busybox.net/busybox/patch/?id=9a8796436b9b0641e13480811902ea2ac57881d3"
+          ],
+          "from": "nix-in:/nix/store/cc7ff4ysismx0c3778v8gc6b14plrz3z-source:x86_64-linux:pkgsStatic.busybox:CVE-2023-39810.patch"
+        },
+        {
+          "file": "busybox-1.37.0-CVE-2026-26157_CVE-2026-26158.patch",
+          "sha256": "32c9bdb0366b571ee87ee9e7be74d2ef748f2945294774efe7167fc0177eaedb",
+          "url": [
+            "https://git.busybox.net/busybox/patch/?id=3fb6b31c716669e12f75a2accd31bb7685b1a1cb"
+          ],
+          "from": "nix-in:/nix/store/cc7ff4ysismx0c3778v8gc6b14plrz3z-source:x86_64-linux:pkgsStatic.busybox:CVE-2026-26157_CVE-2026-26158.patch"
+        },
+        {
+          "file": "busybox-1.37.0-CVE-2026-26157_CVE-2026-26158-2.patch",
+          "sha256": "828fca1d2b2e3129b6d670b4caf284b4042cf099e38ea75cb398bc456046c13e",
+          "url": [
+            "https://github.com/vda-linux/busybox_mirror/commit/599f5dd8fac390c18b79cba4c14c334957605dae.patch"
+          ],
+          "from": "nix-in:/nix/store/cc7ff4ysismx0c3778v8gc6b14plrz3z-source:x86_64-linux:pkgsStatic.busybox:CVE-2026-26157_CVE-2026-26158-2.patch"
+        },
+        {
+          "file": "busybox-1.37-fix-syslogd.patch",
+          "sha256": "35945cb4bbf50a94df9d1ebe080f3dd1863c9630502c6924b1e9723f9fd39ec4",
+          "url": [
+            "https://hg.slitaz.org/wok/raw-file/1cba565dc2a9/busybox/stuff/busybox-1.37-fix-syslogd.patch"
+          ],
+          "from": "nix-in:/nix/store/cc7ff4ysismx0c3778v8gc6b14plrz3z-source:x86_64-linux:pkgsStatic.busybox:busybox-1.37-fix-syslogd.patch"
+        },
+        {
+          "file": "busybox-debian-1.30.1-6.tar.gz",
+          "sha256": "1fb76956b2c2419ef76d667dd22fea8a1b356ca0fce2611fc46c56abcbb9bc02",
+          "url": [
+            "https://salsa.debian.org/installer-team/busybox/-/archive/debian/1%251.30.1-6/busybox-debian-1%251.30.1-6.tar.gz"
+          ],
+          "from": "nix-in:/nix/store/cc7ff4ysismx0c3778v8gc6b14plrz3z-source:x86_64-linux:pkgsStatic.busybox:source"
         }
       ],
       "nix": [
         {
           "system": "x86_64-linux",
+          "attr": "pkgsStatic.busybox",
           "out": [
             "/nix/store/ahw5fkq085k5ppdsylyd475xlxb18pz1-busybox-static-x86_64-unknown-linux-musl-1.37.0"
           ],
-          "note": "Substituted from cache.nixos.org (deriver rnr9smwj912vyija4w0w7pv9va3zb4h3-busybox-static-x86_64-unknown-linux-musl-1.37.0.drv), built by nixpkgs's pkgsStatic.busybox recipe (pkgs/os-specific/linux/busybox) of a nixpkgs revision newer than the one above that was not recorded."
+          "drv": "/nix/store/rnr9smwj912vyija4w0w7pv9va3zb4h3-busybox-static-x86_64-unknown-linux-musl-1.37.0.drv",
+          "nixpkgs": "nixpkgs-f13ff45afd1b.tar.gz",
+          "recipe": "busybox-1.37.0-nix-recipe.tar.gz",
+          "note": "Substituted from cache.nixos.org (signed by cache.nixos.org-1), not built here. Its nixpkgs revision, f13ff45afd1bb73e640eaa08a7066dbed07e3238 (nixpkgs 26.11 pre-release), was not recorded when it was fetched; it was recovered in the Milestone 158 addendum from the build machine's Nix fetcher cache (that tree was fetched 22 minutes before the store path was registered) and proven: evaluating pkgsStatic.busybox of that tree for x86_64-linux gives exactly this derivation and output path (and pkgsStatic.stdenv.cc.libc gives musl 1.2.6's), and the derivation closure built from it is byte-identical to the deriver kept on the build machine."
         }
       ],
-      "note": "A static musl build; it contains musl 1.2.6 (below). The source archive is busybox.net's (its sha256 matches busybox.net's .sha256 file); the recipe that configured it is nixpkgs's busybox recipe, of which upstream/nixpkgs-89c49874fb15.tar.gz holds the 1.36.1 version."
+      "note": "A static musl build; it contains musl 1.2.6 (below). Its corresponding source in the sources archive: busybox.net's archive (its sha256 matches busybox.net's .sha256 file); the nixpkgs tree that built it (upstream/nixpkgs-f13ff45afd1b.tar.gz: the recipe pkgs/os-specific/linux/busybox/default.nix, whose configurePhase runs make defconfig and then sets the listed CONFIG_ options, and its four local patches); the four patches it fetched (upstream/busybox-1.37.0-CVE-*.patch and upstream/busybox-1.37-fix-syslogd.patch, as fetchpatch normalised them) and Debian's busybox packaging for the udhcpc script (upstream/busybox-debian-1.30.1-6.tar.gz); and the whole derivation closure (upstream/busybox-1.37.0-nix-recipe.tar.gz: derivations.json, every .drv file down to the bootstrap tools, and every builder script, setup hook and patch they take). The compilers and libraries of that closure (GCC 15.3.0, binutils 2.46 and the bootstrap chain) are named in it with their upstream URLs and sha256 but their archives are not included: they built busybox and are not part of it, except musl 1.2.6 (below), whose archive is."
     },
     {
       "id": "musl-1.2.6",
@@ -373,13 +430,17 @@
       "nix": [
         {
           "system": "x86_64-linux",
+          "attr": "pkgsStatic.stdenv.cc.libc",
           "out": [
             "/nix/store/0nlqfwsn4qpx1453gb4zvx6dvn3121l4-musl-static-x86_64-unknown-linux-musl-1.2.6"
           ],
-          "note": "Substituted from cache.nixos.org (deriver qb610gzkgc0k52sgm3brkdv5d21jyi7n-musl-static-x86_64-unknown-linux-musl-1.2.6.drv)."
+          "drv": "/nix/store/qb610gzkgc0k52sgm3brkdv5d21jyi7n-musl-static-x86_64-unknown-linux-musl-1.2.6.drv",
+          "nixpkgs": "nixpkgs-f13ff45afd1b.tar.gz",
+          "recipe": "busybox-1.37.0-nix-recipe.tar.gz",
+          "note": "Substituted from cache.nixos.org, not built here; from the same nixpkgs revision as busybox 1.37.0 (f13ff45afd1bb73e640eaa08a7066dbed07e3238, recovered and proven in the Milestone 158 addendum), and its derivation is part of busybox's derivation closure."
         }
       ],
-      "note": "Statically linked into busybox and into hydo's two static helpers."
+      "note": "Statically linked into busybox and into hydo's two static helpers. MIT-licensed, so only its license text is required; its source archive and recipe are included anyway."
     },
     {
       "id": "gcc",
@@ -413,9 +474,16 @@
           "attr": "stdenv.cc.cc",
           "out": [
             "/nix/store/p44qan69linp3ii0xrviypsw2j4qdcp2-gcc-13.2.0-lib",
-            "/nix/store/ygbwizd4kj74myzla7drrckl3ah6ppl2-gcc-13.2.0-libgcc",
-            "/nix/store/nda0h04bakn2damsd06vkscwi5ds4qjd-xgcc-13.2.0-libgcc"
+            "/nix/store/ygbwizd4kj74myzla7drrckl3ah6ppl2-gcc-13.2.0-libgcc"
           ]
+        },
+        {
+          "system": "x86_64-linux",
+          "attr": "stdenv.__bootPackages.stdenv.__bootPackages.stdenv.__bootPackages.stdenv.cc.cc",
+          "out": [
+            "/nix/store/nda0h04bakn2damsd06vkscwi5ds4qjd-xgcc-13.2.0-libgcc"
+          ],
+          "note": "The first GCC of the pinned nixpkgs's stdenv bootstrap (xgcc), whose libgcc is in the iproute2/iptables closure."
         },
         {
           "system": "x86_64-linux",
