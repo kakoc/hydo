@@ -2242,7 +2242,22 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             (&zsvc, zup, &mut zdown, "its files were corrupted"),
         ] {
             if p == up && *is_down {
+                *is_down = false;
+                // another fault on the same service (K=, or the other storage token) may have
+                // started it again already; its restart then stays the only one
+                fx.until(|h, _| !h.starting.contains(svc.as_str()))?;
+                if fx.effect_bool(|h, f| running(h, f, svc)) {
+                    log(
+                        fx,
+                        format!("{svc} is running before step {p}; not restarted again"),
+                    );
+                    continue;
+                }
                 log(fx, format!("restarting {svc} before step {p}"));
+                // K= on the same service would wait for this process to end before its restart
+                if *svc == ksvc {
+                    down = false;
+                }
                 if !start_svc(fx, ctx, svc)? {
                     let after_faults =
                         p == steps && ctx.plan.service(svc).is_some_and(|s| s.restart_may_fail);
@@ -2257,7 +2272,6 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
                         format!("{svc} restart failed after the last step (restart_may_fail): left to the heal"),
                     );
                 }
-                *is_down = false;
             }
         }
         if p == lat {

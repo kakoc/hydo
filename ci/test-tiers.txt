@@ -51,6 +51,7 @@ hydo-control::m123                       full
 hydo-control::react                      fast
 hydo-control::restart                    fast
 hydo-control::restart_may_fail           fast
+hydo-control::storage                    fast
 hydo-engine                              fast
 hydo-engine-proto                        fast
 hydo-engine::lockstep                    fast
