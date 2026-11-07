@@ -301,8 +301,16 @@ changed in hydo in this work (each in its own commit, with a test or a proof).
    provisioning command, just before S1 is taken (it differs), or in the primary's readiness
    command, earlier (it agrees). So something in flight in the guest when S1 is taken (an armed
    timer, a packet on the bridge) is probably not restored exactly. `hv/kvm/kvm-check.sh`'s S1
-   check uses one image and one schedule, so it would not see it. Not investigated further; the
-   engine's design document says a run from S1 equals the fresh boot.
+   check uses one image and one schedule, so it would not see it. **Explained and fixed after
+   this onboarding** (`docs/design/kvm-engine.md`, "A run from S1 against a fresh boot"): when an
+   interrupt was pending at the stop where the host took S1, the run that took it injected the
+   interrupt at once, while a run restored from S1 into a fresh vCPU first asked for the
+   interrupt window (KVM's `ready_for_interrupt_injection` is not part of the state a snapshot
+   loaded, and a fresh vCPU says 0), one exit more; from there the restored run was one exit
+   behind. A snapshot now keeps those flags. The image "set once" rebuilt from this folder does
+   not land S1 on such a stop (its S1 and fresh-boot runs agree before the fix too); on the
+   release's Redis image, moving where S1 lands with `HYDO_KVM_STEP`, 8 of 21 steps differed
+   before the fix and none after.
 
 ## What a ready-made SQL workload generator needs
 
@@ -383,5 +391,6 @@ already speaks for reading), the node addresses, and which node a statement may 
 10. **Console room for long histories** (friction 13).
 
 Not a lack of a feature, but found on the way and worth the KVM engine's attention: a snapshot
-run that differs from a fresh boot on one image (friction 19), and one unexplained fingerprint
-difference between two simultaneous runs (friction 18). Neither changed a verdict.
+run that differs from a fresh boot on one image (friction 19, since explained and fixed), and one
+unexplained fingerprint difference between two simultaneous runs (friction 18). Neither changed a
+verdict.

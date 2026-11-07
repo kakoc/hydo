@@ -244,8 +244,10 @@ pub trait Cpu: Send {
         Some((crate::spin::step_of(rip, &insn)?, insn.flow))
     }
     /// The outputs KVM leaves in `kvm_run` at an exit that the interrupt rule reads (whether an
-    /// interrupt can be injected now, RFLAGS.IF) and the window request: the rewind mode keeps
-    /// them with its checkpoint and gives them back to the fresh vCPU it restores into.
+    /// interrupt can be injected now, RFLAGS.IF) and the window request. They are not part of
+    /// [`CpuState`] (`KVM_SET_*` does not set them; a fresh vCPU has them 0 until its first
+    /// `KVM_RUN`), so every restore into a fresh vCPU gives them back: a snapshot
+    /// ([`crate::vmm::XSnap`]) and the rewind mode's checkpoint keep them.
     fn run_flags(&self) -> [u8; 3] {
         [0; 3]
     }

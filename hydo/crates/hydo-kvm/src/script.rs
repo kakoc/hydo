@@ -67,6 +67,8 @@ impl Hypervisor for Script {
             print_at: 0,
             wait: Wait::None,
             stepping: None,
+            ready: false,
+            ifl: false,
         }))
     }
     fn describe(&self) -> String {
@@ -96,53 +98,27 @@ pub struct ScriptCpu {
     /// the addresses a step runs to ([`Cpu::step_to`]): at least one operation, then the first
     /// arrival at one of them
     stepping: Option<Vec<u64>>,
+    /// what `kvm_run` says since the last exit (`ready_for_interrupt_injection`, `if_flag`): set
+    /// only when a run or a completion returns, as KVM does, so a fresh vCPU says 0 until its
+    /// first run, whatever state was loaded into it
+    ready: bool,
+    ifl: bool,
 }
 
 impl ScriptCpu {
-    fn pc(&self) -> usize {
-        self.s.regs.rip.wrapping_sub(ENTRY) as usize
+    /// Whether an interrupt injected now is taken before the next instruction.
+    fn can_take(&self) -> bool {
+        self.if_on() && self.pending.is_none() && self.wait == Wait::None
     }
-    fn set_pc(&mut self, pc: usize) {
-        self.s.regs.rip = ENTRY + pc as u64;
-    }
-    fn if_on(&self) -> bool {
-        self.s.regs.rflags & (1 << 9) != 0
-    }
-    fn set_if(&mut self, on: bool) {
-        if on {
-            self.s.regs.rflags |= 1 << 9;
-        } else {
-            self.s.regs.rflags &= !(1 << 9);
-        }
-    }
-    /// Finish the instruction an exit stopped at.
-    fn finish(&mut self) {
-        let pc = self.pc();
-        match std::mem::replace(&mut self.wait, Wait::None) {
-            Wait::None => return,
-            Wait::In(b) => {
-                let b = b.unwrap_or_default();
-                let mut v = [0u8; 8];
-                let n = b.len().min(8);
-                v[..n].copy_from_slice(&b[..n]);
-                self.s.regs.rax = u64::from_le_bytes(v);
-            }
-            Wait::Value(v) => self.s.regs.rax = v.unwrap_or(0),
-            Wait::Done => {}
-        }
-        if let Some(Op::Print(s)) = self.p.ops.get(pc) {
-            self.print_at += 1;
-            if self.print_at < s.len() {
-                return;
-            }
-        }
-        self.print_at = 0;
-        self.set_pc(pc + 1);
-    }
-}
 
-impl Cpu for ScriptCpu {
-    fn run(&mut self) -> Exit {
+    /// KVM's `post_kvm_run_save`: the flags of the state the vCPU returned in.
+    fn post_run(&mut self) {
+        self.ready = self.can_take();
+        self.ifl = self.if_on();
+    }
+
+    /// Run until an exit (the body of [`Cpu::run`]).
+    fn exec(&mut self) -> Exit {
         self.finish();
         if let Some(v) = self.pending.take() {
             // the injected interrupt is taken before the next instruction
@@ -286,6 +262,55 @@ impl Cpu for ScriptCpu {
         Exit::Kick
     }
 
+    fn pc(&self) -> usize {
+        self.s.regs.rip.wrapping_sub(ENTRY) as usize
+    }
+    fn set_pc(&mut self, pc: usize) {
+        self.s.regs.rip = ENTRY + pc as u64;
+    }
+    fn if_on(&self) -> bool {
+        self.s.regs.rflags & (1 << 9) != 0
+    }
+    fn set_if(&mut self, on: bool) {
+        if on {
+            self.s.regs.rflags |= 1 << 9;
+        } else {
+            self.s.regs.rflags &= !(1 << 9);
+        }
+    }
+    /// Finish the instruction an exit stopped at.
+    fn finish(&mut self) {
+        let pc = self.pc();
+        match std::mem::replace(&mut self.wait, Wait::None) {
+            Wait::None => return,
+            Wait::In(b) => {
+                let b = b.unwrap_or_default();
+                let mut v = [0u8; 8];
+                let n = b.len().min(8);
+                v[..n].copy_from_slice(&b[..n]);
+                self.s.regs.rax = u64::from_le_bytes(v);
+            }
+            Wait::Value(v) => self.s.regs.rax = v.unwrap_or(0),
+            Wait::Done => {}
+        }
+        if let Some(Op::Print(s)) = self.p.ops.get(pc) {
+            self.print_at += 1;
+            if self.print_at < s.len() {
+                return;
+            }
+        }
+        self.print_at = 0;
+        self.set_pc(pc + 1);
+    }
+}
+
+impl Cpu for ScriptCpu {
+    fn run(&mut self) -> Exit {
+        let e = self.exec();
+        self.post_run();
+        e
+    }
+
     fn reply(&mut self, r: Reply) {
         self.wait = match (std::mem::replace(&mut self.wait, Wait::None), r) {
             (Wait::In(_), Reply::Io(b)) => Wait::In(Some(b)),
@@ -299,19 +324,20 @@ impl Cpu for ScriptCpu {
 
     fn complete(&mut self) -> Option<Exit> {
         self.finish();
+        self.post_run();
         None
     }
 
     fn interruptible(&self) -> bool {
-        self.if_on() && self.pending.is_none() && self.wait == Wait::None
+        self.ready
     }
 
     fn if_flag(&self) -> bool {
-        self.if_on()
+        self.ifl
     }
 
     fn inject(&mut self, vector: u8) {
-        assert!(self.interruptible(), "an injection the vCPU cannot take");
+        assert!(self.can_take(), "an injection the vCPU cannot take");
         self.pending = Some(vector);
     }
 
@@ -319,6 +345,15 @@ impl Cpu for ScriptCpu {
         self.window = on;
     }
 
+    fn run_flags(&self) -> [u8; 3] {
+        [self.ready as u8, self.ifl as u8, self.window as u8]
+    }
+
+    fn set_run_flags(&mut self, f: [u8; 3]) {
+        self.ready = f[0] != 0;
+        self.ifl = f[1] != 0;
+        self.window = f[2] != 0;
+    }
     fn save(&self) -> CpuState {
         let mut s = self.s.clone();
         if let Some(v) = self.pending {

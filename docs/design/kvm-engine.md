@@ -447,6 +447,7 @@ where the counter's flags are written and never read.
 | host interrupts, EPT faults, PAUSE-loop exits, preemption of the vCPU thread | handled inside KVM, not counted, invisible to the guest | runs twice identical, pinned and under load |
 | when an injected interrupt lands | only at exits; injected only where the CPU takes it before the next instruction, else at the architectural interrupt-window exit | `tests/engine.rs`; runs twice identical |
 | an unfinished I/O/MMIO/MSR instruction at a decision or snapshot | completed at every exit with `immediate_exit` | `snap_and_resume_continue_the_same_run`; S1 run equals fresh boot |
+| what KVM leaves in `kvm_run` at an exit (`ready_for_interrupt_injection`, `if_flag`), which the interrupt rule reads at the first loop top after a restore, before any `KVM_RUN` sets them again (a fresh vCPU says 0: "cannot take an interrupt now") | a snapshot keeps them and a restore gives them back to the fresh vCPU, as the rewind mode's checkpoint does (until this fix, a run restored at a stop where an interrupt was pending asked for the interrupt window, one exit more, where the run that took the snapshot injected at once; "A run from S1 against a fresh boot" below) | `a_run_from_s1_equals_a_fresh_boot_wherever_s1_is_taken` (the scripted vCPU keeps the flags as KVM does); S1 run equals fresh boot over a sweep of exit steps |
 | MSRs KVM answers from the host (IA32_TSC, PLATFORM_INFO, ARCH_CAPABILITIES, UCODE_REV, MISC_ENABLE, the PMU's, KVM's own) | MSR filter with default deny, every denied access to the engine's fixed model, unknown MSRs #GP | `msr` tests; `HYDO_KVM_TRACE_UNKNOWN` lists the guest's accesses (one at boot: 0x140) |
 | CPUID (vendor, model, features, caches, topology, the hybrid core-type leaf 0x1A) | one fixed table on every host, checked against what the host's KVM supports | `cpuid` tests; P-core and E-core runs equal |
 | the PMU (RDPMC, counters) | leaf 0xA zero; KVM's PMU disabled where `KVM_CAP_PMU_CAPABILITY` allows; CR4.PCE clear | `cpuid` tests |
@@ -510,7 +511,9 @@ exits, as on the Mac. `spin=rewind` runs a schedule's phases in the rewind mode 
 refused before); the mode's checkpoints are taken after the stop hook and its replays do not call
 it, so the stops, the typed input and `inh=` are those of the run, and a schedule that completes
 plainly gives the same fingerprint with the mode on. A run from the worker's S1 and the same
-schedule from a fresh boot give the same fingerprint (tested on the scripted vCPU and on KVM).
+schedule from a fresh boot give the same fingerprint (tested on the scripted vCPU and on KVM; until
+the fix described in "A run from S1 against a fresh boot", only when no interrupt was pending at
+the stop where the host took S1).
 
 ## Using it
 
@@ -696,3 +699,54 @@ kernel module (KVM)". The 0.2.0 candidate, installed with `install.sh --no-modul
 machine, gave this document's values for the release's Redis image (`bfa03053d51bec8a`,
 `8ed16d6da60c34c6`, netem `0fcb6905c8f54cd1`, the exploration's 46 runs twice the same);
 docs/HISTORY.md "Milestone 172".
+
+## A run from S1 against a fresh boot (after Milestone 172)
+
+Found in the libSQL onboarding (`hydo/onboard/examples/libsql-replica/RESULTS.md`, friction 19): on
+one image every schedule gave one fingerprint from a fresh boot (`hydo run`) and another from the
+explorer's worker, which restores its S1 for every run; each was the same every time and the
+verdicts agreed. So `hydo repro` of an explorer finding on such an image says DIFFERENT.
+
+**The cause.** At a stop the host's commands (SNAP among them) are served at the top of the run
+loop, before the interrupt rule. When an interrupt became pending at the exit before that stop
+(for example an idle HLT whose clock jump reached the timer's deadline, the case of the test
+below), the run that took S1 goes
+on in the same vCPU, whose `kvm_run` still says what KVM said at that exit
+(`ready_for_interrupt_injection` = 1), and injects the interrupt at once. A run restored from S1
+loads the vCPU's whole state into a fresh vCPU, but `kvm_run`'s outputs are not part of that state:
+a fresh vCPU says 0 until its first `KVM_RUN`. The interrupt rule therefore asked for the interrupt
+window, KVM gave that exit at once, and the exit was counted: from there on the restored run was
+one exit (2.5 µs of guest time) behind the fresh boot, which moves where events fall on the
+cadence stops (the libSQL transcripts first differed at a cadence stop, `at=` 62848 against 62912,
+one cadence apart) and with it everything after. Where nothing was pending at S1's stop the two
+runs agree, which is why the Redis image's check at the default step passed. The rewind mode
+(Milestone 161) already kept these flags with its checkpoints; snapshots did not.
+
+**The fix** (`hydo/crates/hydo-kvm/src/vmm.rs`): `XSnap` keeps the vCPU's `run_flags()` and a
+restore gives them back after loading the state, as the rewind mode does. The scripted vCPU of the
+tests now keeps the flags as KVM does (set only when a run or a completion returns, 0 in a fresh
+vCPU), and `a_run_from_s1_equals_a_fresh_boot_wherever_s1_is_taken` takes S1 at each of the first
+40 stops of a boot with a stop at every exit: without the fix it fails where S1 lands on the
+HLT whose clock jump makes the timer pending (one exit more, 84 stops against 83).
+
+**The measurements** (the build machine; `HYDO_KVM_STEP`, the nanoseconds per exit, varied only to
+move where S1 lands; each line a run from a worker's S1 by `hydo explore --schedule` and a fresh
+boot by `hydo run`):
+
+| image, schedule | before the fix | with the fix |
+|---|---|---|
+| the release's Redis image (`d255fb2b…`), `disk=none dseed=1 \| run`, steps 2300 to 2700 by 20 (21 steps) | 8 of 21 differ (2340, 2460, 2480, 2600, 2640, 2660, 2680, 2700) | 0 of 21 differ; every fresh-boot fingerprint the same as before the fix |
+| the release's Redis image, the default step | `ac512c2616cef6a4` both | the same |
+| the stack's pinned reproducers' schedule, old and fixed order service | `c3419179cf1a55ba`, `c0746a7568ccf3b8` both | the same |
+| libsql-replica rebuilt from its folder: "set once" with `disk=none dseed=1 \| run` (the default step and six others) and `K=primary@10+4`; the final folder with `disk=none dseed=1 \| run` and `disk=cut dseed=1 \| run C=20` | all equal (this rebuild's S1 does not land on such a stop; the onboarding's image did) | all equal, the same values |
+
+A fresh boot restores no snapshot until a power cut, whose recovery boot restores the host's S0
+(the fix applies there too); none of the recorded values moved: `hv/kvm/kvm-check.sh` with the
+fix (the release of M158 with this tree's `hydo`, CPUs 0 and 16, with the ledger-spin check) gave
+16 of 16 and every value of this document (`bfa03053d51bec8a`, `8ed16d6da60c34c6` 22 times, S1
+`ac512c2616cef6a4`, the six fault schedules, netem `0fcb6905c8f54cd1`, the exploration's 46 runs
+with `hydo repro` 14 of 14, ledger-spin `f796ae624a9473d1`), and the stack's pinned reproducers'
+schedule (a power cut) gave `c3419179cf1a55ba` and `c0746a7568ccf3b8` from S1 and from a fresh boot.
+A run from S1 moves only on an image where it differed from the fresh boot, and then to the fresh
+boot's value; an exploration recorded before the fix on such an image does not reproduce its
+fingerprints any more (its verdicts do).
