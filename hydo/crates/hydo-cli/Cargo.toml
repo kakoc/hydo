@@ -37,6 +37,12 @@ hydo-results = { workspace = true }
 hydo-image = { workspace = true }
 hydo-control = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
+flate2 = { workspace = true }
+# the install cache (src/fetch.rs, src/cache.rs, Milestone 162): the same versions and features
+# as hydo-compose's, which is compiled into hydo already, so no crate is added to the program
+tar = { version = "0.4", default-features = false }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 
 libc = "0.2"
 

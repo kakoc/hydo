@@ -10,8 +10,21 @@ the release is complete as it is.
 
 ## 1. Install
 
-Unpack the release and run its installer. It copies hydo into `~/.hydo` and runs
-`hydo setup` there, then `hydo doctor`.
+The easiest way is Homebrew:
+
+```sh
+brew install kakoc/tap/hydo
+hydo doctor
+```
+
+The formula (in the tap https://github.com/kakoc/homebrew-tap) installs this release as it is
+into `$(brew --prefix hydo)/libexec`, puts `hydo` on your PATH and runs `hydo setup` there. With
+Homebrew, `~/.hydo` in the rest of this guide is that `libexec` directory:
+`cp -R "$(brew --prefix hydo)/libexec/examples/redis" ~/hydo-redis` copies the first example.
+`brew uninstall hydo` removes it again.
+
+Without Homebrew, unpack the release and run its installer. It copies hydo into `~/.hydo` and
+runs `hydo setup` there, then `hydo doctor`.
 
 ```sh
 tar xzf hydo-mac-0.1.0.tar.gz

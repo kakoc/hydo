@@ -7,6 +7,13 @@ nothing in the release uses Python, and since Milestone 150 nothing on the Mac n
 `hydo/dist/mac/QUICKSTART-mac.md` at the top of the repository is the user guide; it is shipped
 inside the release.
 
+Since Milestone 168 the published tarball is also installed by Homebrew:
+`brew install kakoc/tap/hydo` (the tap https://github.com/kakoc/homebrew-tap, `Formula/hydo.rb`)
+puts the unpacked release unchanged into the keg's `libexec`, links `hydo`, `hydo-build` and
+`hydo-fetch-image` into Homebrew's `bin`, and runs `hydo setup` as its post-install step.
+`update-homebrew.sh <version> <tap clone>` points the formula at a new release (docs/RELEASING.md
+step 8).
+
 ## What is in a release
 
 | Path | What |
