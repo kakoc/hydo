@@ -686,6 +686,7 @@ pub fn build(
         Path::new(&busybox),
         &bdir.join(format!("{out}-oci-tmp")),
         netns,
+        pyv::get(rootsec, "share_images")? == Some(&serde_json::Value::Bool(true)),
         any_layer.then_some(dstage.as_path()),
         trust.as_ref(),
         io,

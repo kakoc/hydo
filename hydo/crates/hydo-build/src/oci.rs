@@ -1452,8 +1452,9 @@ fn layer_lines(svc: &str) -> String {
         + "\n"
 }
 
-/// `_scripts(o, home)`: the launcher (run) and `hydo-oci`'s helper (exec).
-fn scripts(o: &OciService, home: &str) -> (String, String) {
+/// `_scripts(o, home)`: the launcher (run) and `hydo-oci`'s helper (exec). `shares`: the service
+/// whose tree this one uses (`root.share_images`): it is bind-mounted on this service's root first.
+fn scripts(o: &OciService, home: &str, shares: Option<&str>) -> (String, String) {
     let svc = &o.svc;
     let r = format!("/oci/{svc}");
     let mut env: Vec<String> = o
@@ -1477,6 +1478,19 @@ fn scripts(o: &OciService, home: &str) -> (String, String) {
         o.img.config_digest,
         BINDS.join(" ")
     );
+    if let Some(owner) = shares {
+        // the shared tree first, then the binds and mounts on this service's own mount of it.
+        // Once per boot: /proc/mounts decides, because busybox `mountpoint` compares the device
+        // with the parent's, and a bind of the same root file system has the same device (a
+        // restart stacked a second bind over the first and hid the service's own mounts).
+        head = head.replacen(
+            "for d in",
+            &format!(
+                "$BB grep -q \" $R \" /proc/mounts || $BB mount --bind /oci/{owner} $R || exit 125\nfor d in"
+            ),
+            1,
+        );
+    }
     if !o.mounts.is_empty() {
         head.push_str(&mount_lines(o));
     }
@@ -1549,17 +1563,51 @@ fn mounts_json(ms: &[Mount]) -> Value {
     )
 }
 
-/// `stage(oci, R, busybox, tmpdir, netns)`: flatten every image service's image into
+/// Unpack a service's image into its tree: the layers in order, the bind mount points, hydo's
+/// busybox and /etc/hosts (`hosts`).
+fn unpack(o: &OciService, t: &mut Tree, tmpdir: &Path, busybox: &Path, hosts: &str) -> R<()> {
+    for (k, ((name, dig), diff)) in o.img.layers.iter().zip(o.img.diff_ids.iter()).enumerate() {
+        let lt = tmpdir.join(format!("layer-{k:03}.tar"));
+        let diff = diff
+            .as_str()
+            .map(str::to_string)
+            .unwrap_or_else(|| py::str_of(diff));
+        layer_to_file(&o.img, name, dig.as_deref(), Some(&diff), &lt)?;
+        t.apply_layer(&lt)?;
+        fs::remove_file(&lt).map_err(|e| e.to_string())?;
+    }
+    for d in BINDS {
+        t.ensure_dir(d, if *d == "tmp" { 0o1777 } else { 0o755 })?;
+    }
+    t.ensure_dir(".hydo", 0o755)?;
+    t.meta.insert(".hydo".into(), (S_IFDIR, 0o755, 0, 0));
+    let bb = fs::read(busybox).map_err(|e| e.to_string())?;
+    t.put_file(".hydo/busybox", &bb, 0o755)?;
+    t.put_file("etc/hosts", hosts.as_bytes(), 0o644)?;
+    Ok(())
+}
+
+/// `stage(oci, R, busybox, tmpdir, netns, share)`: flatten every image service's image into
 /// R/oci/<svc>, add the launchers. Returns the owners and modes of everything under R/oci.
+///
+/// `share` (`root.share_images: true`, opt-in): a service whose image (by config digest) an
+/// earlier service already unpacked gets no tree of its own: its R/oci/<svc> is an empty
+/// directory, and its launcher bind-mounts the first service's tree there before anything else
+/// (a plain bind, so the first service's own mounts are not seen through it: each service keeps
+/// its own /tmp, /data, volumes and tmpfs mounts on its own mount point). The mount points of
+/// every sharing service's `mounts:` are made in the one tree. Opt-in because it changes the
+/// bytes of every image whose services share an image (libSQL's primary and replica: one tree
+/// instead of two copies of a 576 MiB root).
 pub fn stage(
     oci: &mut [OciService],
     root: &Path,
     busybox: &Path,
     tmpdir: &Path,
     netns: bool,
+    share: bool,
     io: &mut Io,
 ) -> Result<HashMap<String, MetaEntry>, Fail> {
-    stage_with(oci, root, busybox, tmpdir, netns, None, None, io).map(|(m, _)| m)
+    stage_with(oci, root, busybox, tmpdir, netns, share, None, None, io).map(|(m, _)| m)
 }
 
 /// Owners and modes by path.
@@ -1577,6 +1625,7 @@ pub fn stage_with(
     busybox: &Path,
     tmpdir: &Path,
     netns: bool,
+    share: bool,
     layers: Option<&Path>,
     tls: Option<&TlsTrust>,
     io: &mut Io,
@@ -1592,49 +1641,61 @@ pub fn stage_with(
         fs::remove_dir_all(tmpdir).map_err(|e| io_fail("cannot remove", tmpdir, e))?;
     }
     fsx::makedirs(tmpdir)?;
+    // the trees unpacked so far: (config digest, when other services may share the tree; the
+    // service that owns it; the tree; the bundle `tls:` trusts in it)
+    let mut trees: Vec<(Option<String>, String, Tree, Option<String>)> = Vec::new();
     for o in oci.iter_mut() {
         let svc = o.svc.clone();
         let wrap = |e: String| Fail::Manifest(format!("service {svc}, image {}: {e}", o.path));
-        let in_layer = o.writable && layers.is_some();
-        let tree_root = match layers {
-            Some(l) if o.writable => {
-                // the root keeps an empty directory for the bind
-                fsx::makedirs(&root.join("oci").join(&o.svc))?;
-                l.join(".hydo/layers").join(&o.svc)
-            }
-            _ => root.join("oci").join(&o.svc),
+        // a writable service's tree is its own layer: it neither shares a tree nor is shared
+        let shared = if share && !o.writable {
+            trees
+                .iter()
+                .position(|x| x.0.as_deref() == Some(o.img.config_digest.as_str()))
+        } else {
+            None
         };
-        let mut t = Tree::new(tree_root).map_err(wrap)?;
+        let in_layer = o.writable && layers.is_some();
+        let ti = match shared {
+            Some(i) => {
+                let d = root.join("oci").join(&o.svc);
+                fsx::makedirs(&d)?;
+                meta.insert(format!("oci/{}", o.svc), (S_IFDIR, 0o755, 0, 0));
+                i
+            }
+            None => {
+                let tree_root = match layers {
+                    Some(l) if o.writable => {
+                        // the root keeps an empty directory for the bind
+                        fsx::makedirs(&root.join("oci").join(&o.svc))?;
+                        l.join(".hydo/layers").join(&o.svc)
+                    }
+                    _ => root.join("oci").join(&o.svc),
+                };
+                trees.push((
+                    (!o.writable).then(|| o.img.config_digest.clone()),
+                    o.svc.clone(),
+                    Tree::new(tree_root).map_err(wrap)?,
+                    None,
+                ));
+                trees.len() - 1
+            }
+        };
+        let owner = trees[ti].1.clone();
+        let (_, _, t, bundle) = &mut trees[ti];
+        let hosts = match tls {
+            None => HOSTS.to_string(),
+            Some(tt) => format!("{HOSTS}{}", tt.host_lines),
+        };
         let res = (|| -> R<String> {
-            for (k, ((name, dig), diff)) in
-                o.img.layers.iter().zip(o.img.diff_ids.iter()).enumerate()
-            {
-                let lt = tmpdir.join(format!("layer-{k:03}.tar"));
-                let diff = diff
-                    .as_str()
-                    .map(str::to_string)
-                    .unwrap_or_else(|| py::str_of(diff));
-                layer_to_file(&o.img, name, dig.as_deref(), Some(&diff), &lt)?;
-                t.apply_layer(&lt)?;
-                fs::remove_file(&lt).map_err(|e| e.to_string())?;
-            }
-            for d in BINDS {
-                t.ensure_dir(d, if *d == "tmp" { 0o1777 } else { 0o755 })?;
-            }
-            t.ensure_dir(".hydo", 0o755)?;
-            t.meta.insert(".hydo".into(), (S_IFDIR, 0o755, 0, 0));
-            let bb = fs::read(busybox).map_err(|e| e.to_string())?;
-            t.put_file(".hydo/busybox", &bb, 0o755)?;
-            match tls {
-                None => t.put_file("etc/hosts", HOSTS.as_bytes(), 0o644)?,
-                Some(tt) => {
-                    t.put_file(
-                        "etc/hosts",
-                        format!("{HOSTS}{}", tt.host_lines).as_bytes(),
-                        0o644,
-                    )?;
-                    trust_image(&mut t, tt, &mut o.env)?;
+            if shared.is_none() {
+                unpack(o, t, tmpdir, busybox, &hosts)?;
+                if let Some(tt) = tls {
+                    *bundle = Some(trust_image(t, tt)?);
                 }
+            }
+            if let Some(b) = bundle.as_deref() {
+                trust_env(b, &mut o.env);
             }
             for mt in o.mounts.iter_mut() {
                 if under_binds(&mt.dst) {
@@ -1691,16 +1752,17 @@ pub fn stage_with(
             lmeta.insert(done, (S_IFREG, 0o644, 0, 0));
             meta.insert(format!("oci/{}", o.svc), (S_IFDIR, 0o755, 0, 0));
         } else {
+            // the tree's entries under its owner's path (a sharing service adds its mount points)
             for (k, v) in &t.meta {
                 let key = if k.is_empty() {
-                    format!("oci/{}", o.svc)
+                    format!("oci/{owner}")
                 } else {
-                    format!("oci/{}/{k}", o.svc)
+                    format!("oci/{owner}/{k}")
                 };
                 meta.insert(key, *v);
             }
         }
-        let (run, ex) = scripts(o, &home);
+        let (run, ex) = scripts(o, &home, shared.map(|_| owner.as_str()));
         let d = root.join("etc/hydo/oci").join(&o.svc);
         fsx::makedirs(&d)?;
         for (n, c) in [("run", &run), ("exec", &ex)] {
@@ -1764,6 +1826,9 @@ pub fn stage_with(
         rec.insert("image_config".into(), Value::Object(ic));
         rec.insert("effective".into(), Value::Object(eff));
         rec.insert("skipped_special_files".into(), Value::from(t.skipped));
+        if shared.is_some() {
+            rec.insert("shares_tree_of".into(), Value::String(owner.clone()));
+        }
         fsx::write_text(
             &d.join("image.json"),
             &(pyjson::dumps_indent1_sorted(&Value::Object(rec)) + "\n"),
@@ -1782,6 +1847,17 @@ pub fn stage_with(
                     }
                 ),
             );
+        }
+        if shared.is_some() {
+            outln(
+                io,
+                &format!(
+                    "hydo-build: image {} -> /oci/{} (the tree of /oci/{owner}, root.share_images)",
+                    head(&o.img.config_digest, 19),
+                    o.svc
+                ),
+            );
+            continue;
         }
         let skipped = if t.skipped > 0 {
             format!(", {} device/FIFO entries skipped", t.skipped)
@@ -1851,9 +1927,9 @@ fn image_file(t: &mut Tree, rel: &str) -> R<Option<String>> {
 }
 
 /// `tls:`: the CA into the image's system bundles (each real file once; made at the Debian path
-/// if the image has none), its own copy at /.hydo/tls-ca.pem, and the trust variables in the
-/// service's environment unless the image or the manifest sets them.
-fn trust_image(t: &mut Tree, tt: &TlsTrust, env: &mut Vec<(String, String)>) -> R<()> {
+/// if the image has none) and its own copy at /.hydo/tls-ca.pem. Returns the bundle the trust
+/// variables name ([`trust_env`]).
+fn trust_image(t: &mut Tree, tt: &TlsTrust) -> R<String> {
     t.put_file(
         crate::tls::IMAGE_CA.trim_start_matches('/'),
         tt.ca_pem.as_bytes(),
@@ -1875,20 +1951,24 @@ fn trust_image(t: &mut Tree, tt: &TlsTrust, env: &mut Vec<(String, String)>) -> 
             t.put_file(&format!("{dir}/{file}"), tt.ca_pem.as_bytes(), 0o644)?;
         }
     }
-    let bundle = match done.first() {
+    Ok(match done.first() {
         Some(r) => format!("/{r}"),
         None => {
             let r = crate::tls::BUNDLE.trim_start_matches('/');
             t.put_file(r, tt.ca_pem.as_bytes(), 0o644)?;
             crate::tls::BUNDLE.to_string()
         }
-    };
-    for (k, v) in crate::tls::env(crate::tls::IMAGE_CA, &bundle) {
+    })
+}
+
+/// `tls:`: the trust variables in a service's environment unless the image or the manifest sets
+/// them (`bundle`: what [`trust_image`] returned for the service's tree).
+fn trust_env(bundle: &str, env: &mut Vec<(String, String)>) {
+    for (k, v) in crate::tls::env(crate::tls::IMAGE_CA, bundle) {
         if !env.iter().any(|(n, _)| n == k) {
             env.push((k.to_string(), v));
         }
     }
-    Ok(())
 }
 
 /// The cpio writer's view of the meta (arm64).

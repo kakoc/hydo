@@ -138,7 +138,9 @@ fn world_addrs(m: &Value) -> Vec<String> {
     out
 }
 
-const KNOWN_HOOK: &[&str] = &["url", "method", "body", "headers", "delay_ms", "retries"];
+const KNOWN_HOOK: &[&str] = &[
+    "url", "method", "body", "headers", "delay_ms", "retries", "sign",
+];
 
 /// `world_config(m)`: /etc/hydo/world.json.
 pub fn world_config(m: &Value) -> String {
@@ -190,6 +192,8 @@ pub fn world_config(m: &Value) -> String {
                     "ref",
                     "effect",
                     "idempotent",
+                    "save",
+                    "load",
                 ] {
                     if let Some(v) = r.get(k) {
                         d.insert(k.into(), v.clone());

@@ -100,7 +100,15 @@ fn rust_case(mpath: &Path, arch: &str, rrs: &Path, busybox: &Path) -> Value {
         hydo_build::oci::prepare(&mut m, &mpath.to_string_lossy(), arch, &mut io).and_then(
             |mut svcs| {
                 let tmpd = PathBuf::from(format!("{}.tmp", rrs.display()));
-                hydo_build::oci::stage(&mut svcs, rrs, busybox, &tmpd, arch == "arm64", &mut io)
+                hydo_build::oci::stage(
+                    &mut svcs,
+                    rrs,
+                    busybox,
+                    &tmpd,
+                    arch == "arm64",
+                    false,
+                    &mut io,
+                )
             },
         )
     };

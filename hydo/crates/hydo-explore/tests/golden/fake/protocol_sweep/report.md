@@ -45,9 +45,9 @@ runs=228 (setup-complete seen in 0); properties=2; violations=0
 
 ## Liveness (eventually properties, hvx/ASSERTIONS.md)
 
-| property | held in time | missed deadline | slowest in time | first miss |
-|---|---|---|---|---|
-| `orders.drained` | 228 | 0 | 3.49 s (seed-177) | - |
+| property | held in time | missed deadline | slowest in time | deadline | slowest held late | first miss |
+|---|---|---|---|---|---|---|
+| `orders.drained` | 228 | 0 | 3.49 s (seed-177) | - | - | - |
 
 ## Error logs (errors: in the manifest)
 

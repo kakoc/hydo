@@ -38,6 +38,8 @@ pub struct St {
     trunc: bool,
     /// gRPC proxies: "<proxy> <path>" -> calls so far
     pub call_n: BTreeMap<String, i64>,
+    /// objects.rs: what the fakes' `save:` routes stored (carried across a power cut)
+    pub objects: crate::objects::Objects,
 }
 
 #[derive(Clone, Debug)]
@@ -180,6 +182,7 @@ impl World {
                 heal: Latch::new(),
                 trunc: false,
                 call_n: BTreeMap::new(),
+                objects: BTreeMap::new(),
             }),
         })
     }
@@ -323,6 +326,11 @@ impl World {
                 }
                 if http1::hget(&hs, "Content-Type").is_none_or(<[u8]>::is_empty) {
                     http1::hset(&mut hs, "Content-Type", b"application/json".to_vec());
+                }
+                if let Some(sg) = &wh.sign {
+                    // signed at each attempt with its own time (sign.rs)
+                    let (k, val) = sg.header(unix_milli().div_euclid(1000), &body, &ctx);
+                    http1::hset(&mut hs, &k, val);
                 }
                 let req = http1::Req {
                     method: &wh.method,
@@ -506,6 +514,7 @@ impl World {
                 esc(&h.idem)
             ));
         }
+        out.extend(crate::objects::carry(&st.objects));
         let n: usize = out.iter().map(|s| s.len() + 1).sum();
         if n > CARRY_MAX || st.trunc {
             return "w:trunc\nEND\n".into();
@@ -533,6 +542,10 @@ impl World {
             };
             let f: Vec<&[u8]> = body.split(|&c| c == b',').collect();
             if f.len() != 6 {
+                continue;
+            }
+            if f[1] == b"o" {
+                crate::objects::load_carried(&mut st.objects, &f[2..]);
                 continue;
             }
             let seq = std::str::from_utf8(f[0])

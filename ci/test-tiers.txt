@@ -28,10 +28,13 @@ hydo-build::equivalence                  full
 hydo-build::errlog                       fast
 hydo-build::netns                        fast
 hydo-build::oci                          fast
+hydo-build::oci_share                    fast
+hydo-build::world_objects                fast
 hydo-compose                             fast
 hydo-compose::bin/hydo-compose           fast
 hydo-compose::bin/hydo-fetch-image       fast
 hydo-compose::equivalence                fast
+hydo-compose::local_build                fast
 hydo-compose::pycheck                    fast
 hydo-compose::registry                   fast
 hydo-composer                            fast
@@ -61,6 +64,7 @@ hydo-explore::bin/hydo-explore           fast
 hydo-explore::corpus                     full
 hydo-explore::fake_engine                fast
 hydo-explore::identity                   fast
+hydo-explore::liveness_deadline          fast
 hydo-explore::netns_links                fast
 hydo-explore::reactive                   fast
 hydo-grpc                                fast
@@ -94,8 +98,10 @@ hydo-kvm::abi                            fast
 hydo-kvm::bin/hydo-kvm                   fast
 hydo-kvm::engine                         fast
 hydo-manifest                            fast
+hydo-manifest::engine_version            fast
 hydo-manifest::equivalence               full
 hydo-manifest::extractors                fast
+hydo-manifest::fake_objects              fast
 hydo-manifest::format                    fast
 hydo-release                             fast
 hydo-release::bin/hydo-release           fast
@@ -120,6 +126,7 @@ hydo-tools::bin/hydo-nar-extract         fast
 hydo-tools::bin/hydo-nix-fetch           fast
 hydo-tools::bin/hydo-skill-pack          fast
 hydo-world::bin/hydo-world               fast
+hydo-world::objects_sign                 fast
 hydo-world::xcheck                       full
 hydo::agents_equivalence                 fast
 hydo::bin/hydo                           fast

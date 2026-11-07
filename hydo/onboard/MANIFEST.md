@@ -157,6 +157,9 @@ root:                          # what goes on the read-only root filesystem
     /etc/myapp.conf: |
       port 8080
   dirs: [/etc/myapp]           # empty directories to create
+  share_images: true           # image services with the same image (config digest) share one
+                               # unpacked tree, each on its own mount of it with its own /tmp,
+                               # /data and mounts (default false: one copy per service)
 
 data:                          # the read-write disk, mounted on /data; the fault target
   size_mib: 512                # default 512
@@ -852,6 +855,18 @@ fakes:
           body: '{"type":"charge.succeeded","id":"ch_{seq}","order":"{ref}"}'
           delay_ms: 20         # after the effect
           retries: 5           # a failed (non-2xx) delivery is retried after 0.5, 1, 2, ... s
+          sign:                # optional: an HMAC-SHA256 signature header on every attempt
+            header: Webhook-Signature
+            secret: whsec_test             # the endpoint secret (its bytes are the key)
+            payload: '{ts}.{body}'         # what is signed (default); {ts} = the attempt's Unix s
+            value: 't={ts},v1={hmac}'      # the header's value (default)
+            encoding: hex                  # hex (default) | base64
+        save: {key: 'ch_{seq}', fields: {amount: '{json:amount}', status: paid}}   # remember it
+      - name: get
+        method: GET
+        path: /v1/charges/{id}
+        load: '{path:id}'      # the object it is about: 404 and no effect when unknown
+        body: '{"id":"{path:id}","amount":{obj:amount},"status":"{obj:status}"}'
 proxies:
   - name: redisp               # a fault proxy in front of a real service
     port: 6380                 # the system talks to this port instead of the service's
@@ -872,6 +887,22 @@ of the request; replays use the original's), `{ref}`, `{idem}`, `{fake}`, `{rout
 also `{json:a.b}`, `{header:X}`, `{query:x}`, `{path:x}`, `{form:x}`, `{pb:n}` from the request.
 Single braces: `{{name}}` is a build parameter (`params:`). A webhook may use only the first five
 (it can be re-sent after a power cut, without its request).
+
+**Objects** (`save:`, `load:` on a route): a fake remembers what it created, so a later read
+answers with it (a payment's currency and amount, its status after a capture). `save: {key:
+<template>, fields: {<field>: <template>}}` stores the fields under the key when the request takes
+effect (`fx=1`: not an idempotent replay, not an error rule without `effect=yes`), merging into an
+object already there. `load: <template>` names the object a request is about; a missing one is
+answered 404 (`{"error":"hydo fake: no object <key>"}`, gRPC NOT_FOUND) and takes no effect
+(`out=- obj=missing` in the record). Answers (body and headers) read `{obj:<field>}`: the loaded
+object after the route's own save, or on a route with only `save:` the saved one (a replay sees
+what the first request stored); a field the object lacks is empty. Objects are carried across a
+power cut with the rest of the world (within its 3000 bytes).
+
+**Signed webhooks** (`webhook.sign`): every delivery attempt carries the header `header:` with
+`value:`, where `{hmac}` is the HMAC-SHA256 of `payload:` under `secret:` (hex or base64);
+`{ts}` is the attempt's guest time in Unix seconds and `{body}` the webhook's body, so a
+provider's signature check (a timestamp, the body, the endpoint secret) passes.
 
 **gRPC** (`protocol: grpc`): cleartext HTTP/2 with prior knowledge. A route's `path` is the method
 (`/pkg.Service/Method`), its answer `message:` (hex protobuf bytes, default empty) and `code:`
@@ -1662,9 +1693,12 @@ image keeps working after hydo is upgraded").
   host's available memory (and keeps snapshots in files when they do not fit), and `hydo run`
   refuses a guest that does not fit.
 - Images are files on the build machine (no registry pulls); one root per image service, not
-  a merged root; no xattrs/capabilities, devices or FIFOs from layers; no zstd layers.
-- The guest console is 64 KiB: a workload that prints every acknowledged id should print
-  short ids, or the done marker can be lost.
+  a merged root (with `root.share_images: true`, services of one image share its unpacked
+  tree; it is opt-in because it changes the image's bytes); no xattrs/capabilities, devices or
+  FIFOs from layers; no zstd layers.
+- The guest console keeps 64 KiB per VM on hvx (the kernel module's buffer; `hydo run` warns
+  when a run wrote more) and 4 MiB on the KVM engine and the Mac: a workload that prints every
+  acknowledged id should print short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.
 
 ## From Docker Compose
@@ -1716,9 +1750,14 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The hydo-onboard skill (`hydo guide skill`, `skills/hydo-onboard`) writes the real ones. |
 | `faults:` | all kinds except `freeze` |
 
-Reported as warnings, with what to do (the file's header repeats them): `build:` (with an image:
-the image is used; without one the import stops: build it, `docker save` it, set `image:`),
-non-default `networks:` (one bridge in the guest: isolation between Compose networks is not
+Reported as warnings, with what to do (the file's header repeats them): `build:` (a service
+built locally: its image is never pulled by its tag. An image file already at
+`images/<name>-<tag>-amd64.docker.tar` (or a lock entry) pins it by its content; a tag its
+registry has is pinned by digest as any image; otherwise it is imported as a local build, named
+as Docker Compose names it, `image:` or else `<project>-<service>`, and fetch-images.sh fetches
+nothing for it: it prints `docker build -t <tag> <context> && docker save -o <file> <tag>` (or an
+OCI layout at `images/<name>-<tag>-arm64-oci` for arm64) and stops while the file is missing; run
+`hydo compose` again once the file is there to pin it), non-default `networks:` (one bridge in the guest: isolation between Compose networks is not
 modelled), `network_mode` (for `host`, the warning says that peers named as
 `0.0.0.0:<port>` or `localhost:<port>` must become their `addr:`), `privileged`, `cap_add`/`cap_drop`, `devices`, `security_opt`,
 `pid`/`ipc`/`uts`/`userns_mode`, `sysctls`, `ulimits`, `dns*`, `init`, `volumes_from`, `extends`,
@@ -1834,7 +1873,7 @@ for an API that documents a stronger promise.
 **Records.** Every attempt is two lines in the history recorder's format (`HYDO-HIST`,
 `hydo/HISTORIES.md`), history `grpc` (`record.history:`), in `/tmp/hydo/grpc/calls`
 (`$HYDO_GRPC_CALLS`) with the bodies, and on the guest console without them (`record.console:
-brief`, the default; `full` or `off`), so a few hundred calls fit in the 64 KiB console:
+brief`, the default; `full` or `off`), so a few hundred calls fit in hvx's 64 KiB console:
 
 ```
 HYDO-HIST grpc <process> invoke <time> <rpc> <op> <request JSON>

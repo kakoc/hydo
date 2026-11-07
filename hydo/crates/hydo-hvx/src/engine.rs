@@ -73,6 +73,9 @@ struct Boot {
     tgt: Option<Tgt>,
     /// M138: the VM comes from the reuse pool; the next restore resets it in place first.
     reused: bool,
+    /// The guest wrote more console than the module keeps (`HVX_CONSOLE_SZ`), and engine.log
+    /// said so (once per VM).
+    console_full: bool,
 }
 
 /// M138: the snapshot a reusable VM was restored to: its RAM pages and its data partition's,
@@ -97,6 +100,7 @@ impl Boot {
             hc_active: false,
             tgt: None,
             reused: false,
+            console_full: false,
         }
     }
     fn vm(&self) -> &Vm {
@@ -248,6 +252,19 @@ pub struct Io {
     /// stderr: diagnostics.
     pub diag: Box<dyn Write + std::marker::Send>,
 }
+
+/// The engine.log line when a VM's console outgrew the module's buffer. `hydo run` looks for
+/// [`CONSOLE_FULL_MARK`] in engine.log and repeats the warning.
+pub fn console_full_note(written: usize) -> String {
+    format!(
+        "{CONSOLE_FULL_MARK}: the guest wrote {written} bytes of console; the hvx module keeps the \
+         first {HVX_CONSOLE_SZ} of a VM's (HVX_CONSOLE_SZ in hvx_abi.h), so later lines, \
+         HYDO-HIST and HYDO-ASSERT records included, are not in this run's console"
+    )
+}
+
+/// The start of [`console_full_note`].
+pub const CONSOLE_FULL_MARK: &str = "hvx: console full";
 
 /// Truncate to at most `cap - 1` bytes (a C buffer of `cap` bytes), on a char boundary.
 fn ccap(s: &mut String, cap: usize) {
@@ -939,6 +956,12 @@ impl Core {
             );
             return Err(());
         }
+        if self.con.len as usize > HVX_CONSOLE_SZ && !b.console_full {
+            // the module keeps the first HVX_CONSOLE_SZ bytes of a VM's console and counts the
+            // rest: say once that later lines (history and assertion records too) are lost
+            b.console_full = true;
+            diag!(self, "{}", console_full_note(self.con.len as usize));
+        }
         let modlen = (self.con.len as usize).min(HVX_CONSOLE_SZ);
         if modlen <= b.drained {
             return Ok(());
@@ -965,6 +988,7 @@ impl Core {
             return Err(());
         }
         b.drained = (self.con.len as usize).min(HVX_CONSOLE_SZ);
+        b.console_full = false;
         Ok(())
     }
 
@@ -3478,4 +3502,17 @@ pub fn main_stdio(args: &[String], o: Options) -> i32 {
         diag: Box::new(std::io::stderr()),
     };
     main_with(args, o, io)
+}
+
+#[cfg(test)]
+mod tests {
+    /// `hydo run` finds the note by its mark, and the note names the module's limit.
+    #[test]
+    fn console_full_note_starts_with_its_mark() {
+        let n = super::console_full_note(70000);
+        assert!(n.starts_with(super::CONSOLE_FULL_MARK));
+        assert_eq!(super::CONSOLE_FULL_MARK, "hvx: console full");
+        assert!(n.contains("wrote 70000 bytes"));
+        assert!(n.contains("first 65536"));
+    }
 }

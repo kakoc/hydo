@@ -57,6 +57,10 @@ pub struct Route {
     pub idempotent: bool,
     pub webhook: Option<Webhook>,
     pub segs: Option<Vec<String>>,
+    /// objects.rs: store fields of the object a request creates or changes (when it takes effect)
+    pub save: Option<crate::objects::Save>,
+    /// objects.rs: the key (template) of the object a request reads; {obj:<field>} in the answer
+    pub load: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -68,6 +72,8 @@ pub struct Webhook {
     pub headers: BTreeMap<String, String>,
     pub delay_ms: i64,
     pub retries: i64,
+    /// sign.rs: an HMAC signature header on every delivery
+    pub sign: Option<crate::sign::Sign>,
 }
 
 // ------------------------------------------------------------------ loading (Go's json.Unmarshal)
@@ -173,6 +179,7 @@ fn webhook(v: &Value) -> Result<Option<Webhook>, String> {
             _ if is(k, "headers") => set_map(&mut w.headers, x, "headers")?,
             _ if is(k, "delay_ms") => set_int(&mut w.delay_ms, x, "delay_ms")?,
             _ if is(k, "retries") => set_int(&mut w.retries, x, "retries")?,
+            _ if is(k, "sign") => w.sign = crate::sign::Sign::from_value(x)?,
             _ => {}
         }
     }
@@ -206,6 +213,8 @@ fn route(v: &Value) -> Result<Route, String> {
             }
             _ if is(k, "idempotent") => set_bool(&mut r.idempotent, x, "idempotent")?,
             _ if is(k, "webhook") => r.webhook = webhook(x)?,
+            _ if is(k, "save") => r.save = crate::objects::Save::from_value(x)?,
+            _ if is(k, "load") => set_str(&mut r.load, x, "load")?,
             _ => {}
         }
     }

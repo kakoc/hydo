@@ -657,6 +657,14 @@
             "null"
           ],
           "format": "double"
+        },
+        "within_s": {
+          "description": "Eventually properties: the deadline in seconds after the anchor (the records' `within_s`,\nthe largest seen; added after M176).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
         }
       },
       "required": [
@@ -2001,7 +2009,29 @@
             "null"
           ]
         },
-        "first_miss": true
+        "first_miss": true,
+        "within_s": {
+          "description": "The property's deadline in seconds after its anchor (the records' `within_s`; the largest\nwhen runs differ), so that `slowest_s` can be read against it (added after M176).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "slowest_late_s": {
+          "description": "The slowest episode that held only after its deadline (the host's `satisfied only <t>s\nafter ...`): the guest time the property needed in that run, and the run (added after\nM176). A deadline of at least this would have held there.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "slowest_late_run": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
       "required": [
         "id",

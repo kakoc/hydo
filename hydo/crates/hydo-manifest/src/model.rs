@@ -607,6 +607,12 @@ pub struct Root {
     /// Empty directories to create.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dirs: Option<Vec<Text>>,
+    /// Image services with the same image (by config digest) share one unpacked tree; each still
+    /// has its own mount of it, with its own /tmp, /data, volumes and tmpfs mounts. Off by
+    /// default (it changes the image's bytes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub share_images: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
@@ -964,8 +970,53 @@ pub struct FakeRoute {
     pub idempotent: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webhook: Option<Webhook>,
+    /// Store fields of the object a request creates or changes, when it takes effect; later
+    /// answers read them as `{obj:<field>}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub save: Option<FakeSave>,
+    /// The key (a template) of the object a request is about; a missing one is answered 404 and
+    /// takes no effect. The answer reads its fields as `{obj:<field>}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub load: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
+}
+
+/// `save:` of a fake's route: the object's key and the fields to store (templates).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct FakeSave {
+    pub key: Text,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fields: Option<IndexMap<String, Text>>,
+}
+
+/// `sign:` of a webhook: an HMAC-SHA256 signature header on every delivery attempt.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct WebhookSign {
+    /// The header that carries the signature.
+    pub header: Text,
+    /// The endpoint secret; its bytes are the HMAC key.
+    pub secret: Text,
+    /// What is signed: `{ts}` (the attempt's Unix seconds), `{body}` and the webhook's values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "{ts}.{body}"))]
+    pub payload: Option<Text>,
+    /// The header's value; `{hmac}` is the signature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "t={ts},v1={hmac}"))]
+    pub value: Option<Text>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "hex"))]
+    pub encoding: Option<SignEncoding>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum SignEncoding {
+    Hex,
+    Base64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -983,6 +1034,8 @@ pub struct Webhook {
     pub delay_ms: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retries: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sign: Option<WebhookSign>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

@@ -192,9 +192,18 @@
   "stdout": ""
  },
  "rw-awesome-nginx-flask-mysql-default": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "48651a1dfccc7b0613443bfcc8477c8c8475b20136ef08c2d4f163d4b8561bfd",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "cadb402c11dec65a7abd4bcd5cbdb63e58133a6b9e5b53e355b47cde2300b468",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target builder backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service proxy: image proj-proxy is built locally (build:): make its file with `docker build -t proj-proxy proxy && docker save -o images/proj-proxy-latest-amd64.docker.tar proj-proxy` (on a Mac, or for arm64: an OCI layout of it at images/proj-proxy-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: networks backnet, frontnet: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (3 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -249,44 +258,80 @@
  "rw-awesome-nginx-flask-mysql-images-noresolve": {
   "files": {
    "proj/fetch-images.sh": [
-    "d5a13f9fe03e9ec2609e680eee189d6ab867535f71576244369e0b231aa2fe50",
+    "b397809d9772cb6457f644ccb51b20ac4a70062194df52abd4668afd08031d0e",
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "180983d43b113af55b74f0f6c2d1647f761e6b889ed6c36a5cbd77e64e4bce2d",
+    "b057a10374601e09779628f5c7ae80b4ab4a7c64961ffc940ae41372bb678ec1",
     "0o644"
    ]
   },
   "rc": 0,
-  "stderr": "hydo-compose: warning: service db: image mariadb:10-focal is not pinned by digest (--no-resolve)\nhydo-compose: warning: service backend: build: ignored, the image example/backend:dev is used (build and push it, or `docker save` your local build and point image: at the file)\nhydo-compose: warning: service backend: image example/backend:dev is not pinned by digest (--no-resolve)\nhydo-compose: warning: service proxy: build: ignored, the image example/proxy:dev is used (build and push it, or `docker save` your local build and point image: at the file)\nhydo-compose: warning: service proxy: image example/proxy:dev is not pinned by digest (--no-resolve)\nhydo-compose: warning: networks backnet, frontnet: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (3 services, 6 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
+  "stderr": "hydo-compose: warning: service db: image mariadb:10-focal is not pinned by digest (--no-resolve)\nhydo-compose: warning: service backend: image example/backend:dev is built locally (build:): make its file with `docker build -t example/backend:dev --target builder backend && docker save -o images/example-backend-dev-amd64.docker.tar example/backend:dev` (on a Mac, or for arm64: an OCI layout of it at images/example-backend-dev-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service proxy: image example/proxy:dev is built locally (build:): make its file with `docker build -t example/proxy:dev proxy && docker save -o images/example-proxy-dev-amd64.docker.tar example/proxy:dev` (on a Mac, or for arm64: an OCI layout of it at images/example-proxy-dev-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: networks backnet, frontnet: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (3 services, 4 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-nginx-flask-mysql-loopback": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "48651a1dfccc7b0613443bfcc8477c8c8475b20136ef08c2d4f163d4b8561bfd",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "4d1adb82450d48484af169c092c9494f4c2ad6488baa36c86a6c2d80a5af4e88",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target builder backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service proxy: image proj-proxy is built locally (build:): make its file with `docker build -t proj-proxy proxy && docker save -o images/proj-proxy-latest-amd64.docker.tar proj-proxy` (on a Mac, or for arm64: an OCI layout of it at images/proj-proxy-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: networks backnet, frontnet: all services share one loopback network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (3 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-nginx-flask-mysql-noaddr": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "48651a1dfccc7b0613443bfcc8477c8c8475b20136ef08c2d4f163d4b8561bfd",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "e2b8a4efc5b41438a933df33f64b9c070f5d48407ffa03f673676e2cb47bdd9b",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target builder backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service proxy: image proj-proxy is built locally (build:): make its file with `docker build -t proj-proxy proxy && docker save -o images/proj-proxy-latest-amd64.docker.tar proj-proxy` (on a Mac, or for arm64: an OCI layout of it at images/proj-proxy-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: networks backnet, frontnet: all services share one loopback network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (3 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-nginx-flask-mysql-noresolve": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "7d1caee2f10e3641bf0b334b6aa91ecc263283de8731d2035a5ffc44abf0ea9e",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "a08595176a3c8aa4524137d0e1d3a9a3c56656f1b60690b481d7f49150ef2718",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service db: image mariadb:10-focal is not pinned by digest (--no-resolve)\nhydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target builder backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service proxy: image proj-proxy is built locally (build:): make its file with `docker build -t proj-proxy proxy && docker save -o images/proj-proxy-latest-amd64.docker.tar proj-proxy` (on a Mac, or for arm64: an OCI layout of it at images/proj-proxy-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: networks backnet, frontnet: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (3 services, 4 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-nginx-golang-postgres-default": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "87c177cfdcfefd5558293b9fd14d63d5d523277bbf482e4ecb99ce751349a509",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "dc9ab70b4d5c1486599b7049def388e43f3b8a5dec0854c6f40c5aaa9cbade2e",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target builder backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service proxy: bind mount source ./proxy/nginx.conf does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-proxy_nginx.conf\nhydo-compose: wrote proj/hydo.yaml (3 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -341,37 +386,64 @@
  "rw-awesome-nginx-golang-postgres-images-noresolve": {
   "files": {
    "proj/fetch-images.sh": [
-    "133bd78de881a446e97f11b7f499c6c0ebced3ca7389c0192e5f208ba6221d55",
+    "ff1ab239094285b091c35e4116a5593013417aa8e8e85ed951c45115913be568",
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "51896896fa2d9f65d7b76df1ae41348dc6c80323acd8dc3f9dc26dd741c8ab2c",
+    "f4bf8efeb2b49f94c6295d3a09867abacfa4be814a6481def521d79012ef35a9",
     "0o644"
    ]
   },
   "rc": 0,
-  "stderr": "hydo-compose: warning: service backend: build: ignored, the image example/backend:dev is used (build and push it, or `docker save` your local build and point image: at the file)\nhydo-compose: warning: service backend: image example/backend:dev is not pinned by digest (--no-resolve)\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service db: image postgres is not pinned by digest (--no-resolve)\nhydo-compose: warning: service proxy: image nginx is not pinned by digest (--no-resolve)\nhydo-compose: warning: service proxy: bind mount source ./proxy/nginx.conf does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-proxy_nginx.conf\nhydo-compose: wrote proj/hydo.yaml (3 services, 6 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
+  "stderr": "hydo-compose: warning: service backend: image example/backend:dev is built locally (build:): make its file with `docker build -t example/backend:dev --target builder backend && docker save -o images/example-backend-dev-amd64.docker.tar example/backend:dev` (on a Mac, or for arm64: an OCI layout of it at images/example-backend-dev-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service db: image postgres is not pinned by digest (--no-resolve)\nhydo-compose: warning: service proxy: image nginx is not pinned by digest (--no-resolve)\nhydo-compose: warning: service proxy: bind mount source ./proxy/nginx.conf does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-proxy_nginx.conf\nhydo-compose: wrote proj/hydo.yaml (3 services, 5 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-nginx-golang-postgres-loopback": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "87c177cfdcfefd5558293b9fd14d63d5d523277bbf482e4ecb99ce751349a509",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "fccd6b7e9d7cbf9d8faf1464dd4abc683a0e5c7b3d78264987bc20e2c21a4e60",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target builder backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service proxy: bind mount source ./proxy/nginx.conf does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-proxy_nginx.conf\nhydo-compose: wrote proj/hydo.yaml (3 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-nginx-golang-postgres-noaddr": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "87c177cfdcfefd5558293b9fd14d63d5d523277bbf482e4ecb99ce751349a509",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "7b56c9dd708d6fae5b9ebea5c93bfbb851c528bbcc0d499140366fd505c6e6ca",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target builder backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service proxy: bind mount source ./proxy/nginx.conf does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-proxy_nginx.conf\nhydo-compose: wrote proj/hydo.yaml (3 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-nginx-golang-postgres-noresolve": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "74aeba23dec58b803d8fce8d0657a5ea49408aed4d1583181ebc903392035d7e",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "81c69255e2b85c39f118b8ce18426f9fe90e79b35e1532f7ee1294c6d4653689",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target builder backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service db: image postgres is not pinned by digest (--no-resolve)\nhydo-compose: warning: service proxy: image nginx is not pinned by digest (--no-resolve)\nhydo-compose: warning: service proxy: bind mount source ./proxy/nginx.conf does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-proxy_nginx.conf\nhydo-compose: wrote proj/hydo.yaml (3 services, 5 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -568,9 +640,18 @@
   "stdout": ""
  },
  "rw-awesome-react-express-mongodb-default": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service frontend: has build: and no image:. hydo needs an image file: build it, then `docker save -o frontend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "dc4563f7e02e27f835416dace51692d723841d1d77014f0bb9222378bec4d7ab",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "dbb72a759967ed5b1f44687ef41e24c7399c417b70a66116316eb25e78659d93",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service frontend: image proj-frontend is built locally (build:): make its file with `docker build -t proj-frontend --target development frontend && docker save -o images/proj-frontend-latest-amd64.docker.tar proj-frontend` (on a Mac, or for arm64: an OCI layout of it at images/proj-frontend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service frontend: bind mount source ./frontend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-frontend\nhydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target development backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: bind mount source ./backend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-backend\nhydo-compose: warning: networks react-express, express-mongo: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (3 services, 5 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -625,44 +706,80 @@
  "rw-awesome-react-express-mongodb-images-noresolve": {
   "files": {
    "proj/fetch-images.sh": [
-    "771f48af4dca74badd75f6884f503287bc87463477347021bba2068c45ccd5e4",
+    "81a31e1249fe1d49294410b10bd26c8d999de0a4c2413f734ff0718060aeb4a1",
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "98058c78640796cd1a4b1c29e2fec9c12011986cb5d7f5c425416c8dab316795",
+    "3d2f46c530ce46da69e1ea331d540552b8a79a0cdc84f03706105fa591d92eb1",
     "0o644"
    ]
   },
   "rc": 0,
-  "stderr": "hydo-compose: warning: service frontend: build: ignored, the image example/frontend:dev is used (build and push it, or `docker save` your local build and point image: at the file)\nhydo-compose: warning: service frontend: image example/frontend:dev is not pinned by digest (--no-resolve)\nhydo-compose: warning: service frontend: bind mount source ./frontend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-frontend\nhydo-compose: warning: service backend: build: ignored, the image example/backend:dev is used (build and push it, or `docker save` your local build and point image: at the file)\nhydo-compose: warning: service backend: image example/backend:dev is not pinned by digest (--no-resolve)\nhydo-compose: warning: service backend: bind mount source ./backend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-backend\nhydo-compose: warning: service mongo: image mongo:4.2.0 is not pinned by digest (--no-resolve)\nhydo-compose: warning: networks react-express, express-mongo: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (3 services, 8 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
+  "stderr": "hydo-compose: warning: service frontend: image example/frontend:dev is built locally (build:): make its file with `docker build -t example/frontend:dev --target development frontend && docker save -o images/example-frontend-dev-amd64.docker.tar example/frontend:dev` (on a Mac, or for arm64: an OCI layout of it at images/example-frontend-dev-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service frontend: bind mount source ./frontend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-frontend\nhydo-compose: warning: service backend: image example/backend:dev is built locally (build:): make its file with `docker build -t example/backend:dev --target development backend && docker save -o images/example-backend-dev-amd64.docker.tar example/backend:dev` (on a Mac, or for arm64: an OCI layout of it at images/example-backend-dev-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: bind mount source ./backend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-backend\nhydo-compose: warning: service mongo: image mongo:4.2.0 is not pinned by digest (--no-resolve)\nhydo-compose: warning: networks react-express, express-mongo: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (3 services, 6 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-react-express-mongodb-loopback": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service frontend: has build: and no image:. hydo needs an image file: build it, then `docker save -o frontend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "dc4563f7e02e27f835416dace51692d723841d1d77014f0bb9222378bec4d7ab",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "4dc4b6951ecb2b955605393ddb684f5bded829126922598db29dd959c1107cd2",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service frontend: image proj-frontend is built locally (build:): make its file with `docker build -t proj-frontend --target development frontend && docker save -o images/proj-frontend-latest-amd64.docker.tar proj-frontend` (on a Mac, or for arm64: an OCI layout of it at images/proj-frontend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service frontend: bind mount source ./frontend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-frontend\nhydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target development backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: bind mount source ./backend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-backend\nhydo-compose: warning: networks react-express, express-mongo: all services share one loopback network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: warning: services frontend, backend all use container port 3000. In Compose each has its own network; in the guest they share one, so if they listen on 0.0.0.0:3000 only the first starts. Make each listen on its own addr: (frontend=127.0.0.11, backend=127.0.0.12) or move one to another port, e.g. with env:/cmd:\nhydo-compose: wrote proj/hydo.yaml (3 services, 6 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-react-express-mongodb-noaddr": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service frontend: has build: and no image:. hydo needs an image file: build it, then `docker save -o frontend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "dc4563f7e02e27f835416dace51692d723841d1d77014f0bb9222378bec4d7ab",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "33fc2757fcba5d9125576d33b07961996e8ce144898ebd6256c9289113697f39",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service frontend: image proj-frontend is built locally (build:): make its file with `docker build -t proj-frontend --target development frontend && docker save -o images/proj-frontend-latest-amd64.docker.tar proj-frontend` (on a Mac, or for arm64: an OCI layout of it at images/proj-frontend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service frontend: bind mount source ./frontend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-frontend\nhydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target development backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: bind mount source ./backend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-backend\nhydo-compose: warning: networks react-express, express-mongo: all services share one loopback network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: warning: services frontend, backend all use container port 3000. In Compose each has its own network; in the guest they share one, so if they listen on 0.0.0.0:3000 only the first starts. Make each listen on its own addr: (frontend=127.0.0.1, backend=127.0.0.1) or move one to another port, e.g. with env:/cmd:\nhydo-compose: wrote proj/hydo.yaml (3 services, 6 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-react-express-mongodb-noresolve": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service frontend: has build: and no image:. hydo needs an image file: build it, then `docker save -o frontend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "e053ba03914a5a30da385027a6d892cbc0f2c1535e5b565aea228fb073b73b10",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "99661405d7c59edec447da807d287f8dbc31a248c5dfe8c912413585d4c80856",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service frontend: image proj-frontend is built locally (build:): make its file with `docker build -t proj-frontend --target development frontend && docker save -o images/proj-frontend-latest-amd64.docker.tar proj-frontend` (on a Mac, or for arm64: an OCI layout of it at images/proj-frontend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service frontend: bind mount source ./frontend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-frontend\nhydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend --target development backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: bind mount source ./backend does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-backend\nhydo-compose: warning: service mongo: image mongo:4.2.0 is not pinned by digest (--no-resolve)\nhydo-compose: warning: networks react-express, express-mongo: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (3 services, 6 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-spring-postgres-default": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "c717916d1910e62555cf08b616cec252633d0c63a8bafb0d427c208a2770f386",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "5758dd8f8d56705cdc34cedb49a52c0f27cec21e9f21a8002c7a2cc6c25dd145",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: networks spring-postgres: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (2 services, 2 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -717,44 +834,80 @@
  "rw-awesome-spring-postgres-images-noresolve": {
   "files": {
    "proj/fetch-images.sh": [
-    "8ab11719e8ed03031493b238d5411600b68fabff7f28ca694b5e064ed74184d4",
+    "97cd63f165a1d8cc6ad62decea6ab1508681bcf52529a16fb58a82e290f3785f",
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "26b63d5837cb221d1fe2628dbae038d4bd2a0c9ca4ee25b391a524404d7e5913",
+    "94f5e985b0636df9194b88d405ea8b91935ae5bc6efc1f071d5cf665bf2a7097",
     "0o644"
    ]
   },
   "rc": 0,
-  "stderr": "hydo-compose: warning: service backend: build: ignored, the image example/backend:dev is used (build and push it, or `docker save` your local build and point image: at the file)\nhydo-compose: warning: service backend: image example/backend:dev is not pinned by digest (--no-resolve)\nhydo-compose: warning: service db: image postgres is not pinned by digest (--no-resolve)\nhydo-compose: warning: networks spring-postgres: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (2 services, 4 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
+  "stderr": "hydo-compose: warning: service backend: image example/backend:dev is built locally (build:): make its file with `docker build -t example/backend:dev backend && docker save -o images/example-backend-dev-amd64.docker.tar example/backend:dev` (on a Mac, or for arm64: an OCI layout of it at images/example-backend-dev-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service db: image postgres is not pinned by digest (--no-resolve)\nhydo-compose: warning: networks spring-postgres: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (2 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-spring-postgres-loopback": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "c717916d1910e62555cf08b616cec252633d0c63a8bafb0d427c208a2770f386",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "6cc6d5a94552047d109f898f57b6d07fd72075b72a9f5894a37f71e1d81a4451",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: networks spring-postgres: all services share one loopback network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (2 services, 2 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-spring-postgres-noaddr": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "c717916d1910e62555cf08b616cec252633d0c63a8bafb0d427c208a2770f386",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "5021ee6e9507cbf6da7936871f27aa775519d94016209396150ff93b263f52f9",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: networks spring-postgres: all services share one loopback network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (2 services, 2 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-spring-postgres-noresolve": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "eb70dae077c2ad603c4cd67a976eac1645fe65333967c4e329feef3db8978082",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "dcc2d174cbe5c9f8d4d384b3bf5c6701aeac44e5eb41f0f17438abfbb4f6b890",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service db: image postgres is not pinned by digest (--no-resolve)\nhydo-compose: warning: networks spring-postgres: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (2 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-traefik-golang-default": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "067ad3998138240a6383d5e4da038c553bc83fffdcfbd6d80574a31782ae7ba2",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "4b08769fc691522c50459a82a70224f3f3e5cbd0742715da09e1864c82f45d49",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service frontend: bind mount of the host's /var/run/docker.sock skipped: the guest is a separate machine (there is no Docker daemon inside)\nhydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: wrote proj/hydo.yaml (2 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -809,37 +962,64 @@
  "rw-awesome-traefik-golang-images-noresolve": {
   "files": {
    "proj/fetch-images.sh": [
-    "e30fcaa2d05f8260a4cb081f9b5a9037dc5304b177efaeeb93cedaed5bc081e9",
+    "11db21a866de0da32a395d703887b4e35577749d2c23caf90a89facdd4d0993b",
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "70fe22033055dd05d8184aef4177edc10cb8705bcbb1eb0ca82a12c0e003fd94",
+    "8160aeed3fe5be4a939d57b4220419ec3715a57d3a09b756ecc3c9c75ffbe80f",
     "0o644"
    ]
   },
   "rc": 0,
-  "stderr": "hydo-compose: warning: service frontend: image traefik:2.6 is not pinned by digest (--no-resolve)\nhydo-compose: warning: service frontend: bind mount of the host's /var/run/docker.sock skipped: the guest is a separate machine (there is no Docker daemon inside)\nhydo-compose: warning: service backend: build: ignored, the image example/backend:dev is used (build and push it, or `docker save` your local build and point image: at the file)\nhydo-compose: warning: service backend: image example/backend:dev is not pinned by digest (--no-resolve)\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: wrote proj/hydo.yaml (2 services, 5 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
+  "stderr": "hydo-compose: warning: service frontend: image traefik:2.6 is not pinned by digest (--no-resolve)\nhydo-compose: warning: service frontend: bind mount of the host's /var/run/docker.sock skipped: the guest is a separate machine (there is no Docker daemon inside)\nhydo-compose: warning: service backend: image example/backend:dev is built locally (build:): make its file with `docker build -t example/backend:dev backend && docker save -o images/example-backend-dev-amd64.docker.tar example/backend:dev` (on a Mac, or for arm64: an OCI layout of it at images/example-backend-dev-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: wrote proj/hydo.yaml (2 services, 4 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-traefik-golang-loopback": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "067ad3998138240a6383d5e4da038c553bc83fffdcfbd6d80574a31782ae7ba2",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "d401567d663de120d7b265d0d4521ef2be977e3c590569b178f005401259be68",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service frontend: bind mount of the host's /var/run/docker.sock skipped: the guest is a separate machine (there is no Docker daemon inside)\nhydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: wrote proj/hydo.yaml (2 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-traefik-golang-noaddr": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "067ad3998138240a6383d5e4da038c553bc83fffdcfbd6d80574a31782ae7ba2",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "c9f39a9f03e8bf4ebc90b11923ec2c6cf404d7dfe49e689f2b56ee843a23b667",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service frontend: bind mount of the host's /var/run/docker.sock skipped: the guest is a separate machine (there is no Docker daemon inside)\nhydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: wrote proj/hydo.yaml (2 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-awesome-traefik-golang-noresolve": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service backend: has build: and no image:. hydo needs an image file: build it, then `docker save -o backend.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "5be20f01af1aeb00d96a4842883cdbe4b7b9ce61ccb3eb6dffe5d3c110c53db7",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "a14a02d73182f893978706b11b3189268f518c066543e01afd7ee646929bd949",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service frontend: image traefik:2.6 is not pinned by digest (--no-resolve)\nhydo-compose: warning: service frontend: bind mount of the host's /var/run/docker.sock skipped: the guest is a separate machine (there is no Docker daemon inside)\nhydo-compose: warning: service backend: image proj-backend is built locally (build:): make its file with `docker build -t proj-backend backend && docker save -o images/proj-backend-latest-amd64.docker.tar proj-backend` (on a Mac, or for arm64: an OCI layout of it at images/proj-backend-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service backend: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: wrote proj/hydo.yaml (2 services, 4 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -972,9 +1152,18 @@
   "stdout": ""
  },
  "rw-example-voting-app-default": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service vote: has build: and no image:. hydo needs an image file: build it, then `docker save -o vote.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "43a142c098eaa34fcd47645e00c96cc98c8eaa64682db74edf67a91f9fea7ffb",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "779e4c3aa7cda0645a764651bfe2eadc259458197823e63ccaba920b57edd34b",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service seed is in profile(s) seed and was left out (as `docker compose up` does); pass --profile seed to include it\nhydo-compose: warning: service vote: image proj-vote is built locally (build:): make its file with `docker build -t proj-vote --target dev vote && docker save -o images/proj-vote-latest-amd64.docker.tar proj-vote` (on a Mac, or for arm64: an OCI layout of it at images/proj-vote-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service vote: bind mount source ./vote does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-vote\nhydo-compose: warning: service result: image proj-result is built locally (build:): make its file with `docker build -t proj-result result && docker save -o images/proj-result-latest-amd64.docker.tar proj-result` (on a Mac, or for arm64: an OCI layout of it at images/proj-result-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service result: bind mount source ./result does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-result\nhydo-compose: warning: service worker: image proj-worker is built locally (build:): make its file with `docker build -t proj-worker worker && docker save -o images/proj-worker-latest-amd64.docker.tar proj-worker` (on a Mac, or for arm64: an OCI layout of it at images/proj-worker-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service worker: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service redis: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: service db: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: networks front-tier, back-tier: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (5 services, 10 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -1029,37 +1218,64 @@
  "rw-example-voting-app-images-noresolve": {
   "files": {
    "proj/fetch-images.sh": [
-    "cac1fa69e6885800f739e1aa8ba13e57ce0fa760196b91a64f488959984f9a69",
+    "89c8e0376b4b30e71f57b9be32d66eea42ebcb5f41a378cc902a1dc6c20fa94c",
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "5381b31f2f7ce46e4d9fe8092652bda5b31727845739d647f277e0dd937190b4",
+    "1287924e7627e5c39562a1471fa512115b3a8aa026f27172ac1d89d2f48fded7",
     "0o644"
    ]
   },
   "rc": 0,
-  "stderr": "hydo-compose: warning: service seed is in profile(s) seed and was left out (as `docker compose up` does); pass --profile seed to include it\nhydo-compose: warning: service vote: build: ignored, the image example/vote:dev is used (build and push it, or `docker save` your local build and point image: at the file)\nhydo-compose: warning: service vote: image example/vote:dev is not pinned by digest (--no-resolve)\nhydo-compose: warning: service vote: bind mount source ./vote does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-vote\nhydo-compose: warning: service result: build: ignored, the image example/result:dev is used (build and push it, or `docker save` your local build and point image: at the file)\nhydo-compose: warning: service result: image example/result:dev is not pinned by digest (--no-resolve)\nhydo-compose: warning: service result: bind mount source ./result does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-result\nhydo-compose: warning: service worker: build: ignored, the image example/worker:dev is used (build and push it, or `docker save` your local build and point image: at the file)\nhydo-compose: warning: service worker: image example/worker:dev is not pinned by digest (--no-resolve)\nhydo-compose: warning: service worker: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service redis: image redis:alpine is not pinned by digest (--no-resolve)\nhydo-compose: warning: service redis: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: service db: image postgres:15-alpine is not pinned by digest (--no-resolve)\nhydo-compose: warning: service db: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: networks front-tier, back-tier: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (5 services, 15 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
+  "stderr": "hydo-compose: warning: service seed is in profile(s) seed and was left out (as `docker compose up` does); pass --profile seed to include it\nhydo-compose: warning: service vote: image example/vote:dev is built locally (build:): make its file with `docker build -t example/vote:dev --target dev vote && docker save -o images/example-vote-dev-amd64.docker.tar example/vote:dev` (on a Mac, or for arm64: an OCI layout of it at images/example-vote-dev-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service vote: bind mount source ./vote does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-vote\nhydo-compose: warning: service result: image example/result:dev is built locally (build:): make its file with `docker build -t example/result:dev result && docker save -o images/example-result-dev-amd64.docker.tar example/result:dev` (on a Mac, or for arm64: an OCI layout of it at images/example-result-dev-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service result: bind mount source ./result does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-result\nhydo-compose: warning: service worker: image example/worker:dev is built locally (build:): make its file with `docker build -t example/worker:dev worker && docker save -o images/example-worker-dev-amd64.docker.tar example/worker:dev` (on a Mac, or for arm64: an OCI layout of it at images/example-worker-dev-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service worker: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service redis: image redis:alpine is not pinned by digest (--no-resolve)\nhydo-compose: warning: service redis: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: service db: image postgres:15-alpine is not pinned by digest (--no-resolve)\nhydo-compose: warning: service db: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: networks front-tier, back-tier: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (5 services, 12 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-example-voting-app-loopback": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service vote: has build: and no image:. hydo needs an image file: build it, then `docker save -o vote.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "43a142c098eaa34fcd47645e00c96cc98c8eaa64682db74edf67a91f9fea7ffb",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "d8e26616e8a0b4d85be3df7f95bbe28097b75c6890b54acfaaac74b02f6ad86a",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service seed is in profile(s) seed and was left out (as `docker compose up` does); pass --profile seed to include it\nhydo-compose: warning: service vote: image proj-vote is built locally (build:): make its file with `docker build -t proj-vote --target dev vote && docker save -o images/proj-vote-latest-amd64.docker.tar proj-vote` (on a Mac, or for arm64: an OCI layout of it at images/proj-vote-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service vote: bind mount source ./vote does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-vote\nhydo-compose: warning: service result: image proj-result is built locally (build:): make its file with `docker build -t proj-result result && docker save -o images/proj-result-latest-amd64.docker.tar proj-result` (on a Mac, or for arm64: an OCI layout of it at images/proj-result-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service result: bind mount source ./result does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-result\nhydo-compose: warning: service worker: image proj-worker is built locally (build:): make its file with `docker build -t proj-worker worker && docker save -o images/proj-worker-latest-amd64.docker.tar proj-worker` (on a Mac, or for arm64: an OCI layout of it at images/proj-worker-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service worker: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service redis: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: service db: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: networks front-tier, back-tier: all services share one loopback network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: warning: services vote, result all use container port 80. In Compose each has its own network; in the guest they share one, so if they listen on 0.0.0.0:80 only the first starts. Make each listen on its own addr: (vote=127.0.0.11, result=127.0.0.12) or move one to another port, e.g. with env:/cmd:\nhydo-compose: wrote proj/hydo.yaml (5 services, 11 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-example-voting-app-noaddr": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service vote: has build: and no image:. hydo needs an image file: build it, then `docker save -o vote.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "43a142c098eaa34fcd47645e00c96cc98c8eaa64682db74edf67a91f9fea7ffb",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "ac30286543cf99193f46bdbfc74c8660ebe428022dbec829ac4b29413bac5681",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service seed is in profile(s) seed and was left out (as `docker compose up` does); pass --profile seed to include it\nhydo-compose: warning: service vote: image proj-vote is built locally (build:): make its file with `docker build -t proj-vote --target dev vote && docker save -o images/proj-vote-latest-amd64.docker.tar proj-vote` (on a Mac, or for arm64: an OCI layout of it at images/proj-vote-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service vote: bind mount source ./vote does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-vote\nhydo-compose: warning: service result: image proj-result is built locally (build:): make its file with `docker build -t proj-result result && docker save -o images/proj-result-latest-amd64.docker.tar proj-result` (on a Mac, or for arm64: an OCI layout of it at images/proj-result-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service result: bind mount source ./result does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-result\nhydo-compose: warning: service worker: image proj-worker is built locally (build:): make its file with `docker build -t proj-worker worker && docker save -o images/proj-worker-latest-amd64.docker.tar proj-worker` (on a Mac, or for arm64: an OCI layout of it at images/proj-worker-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service worker: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service redis: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: service db: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: networks front-tier, back-tier: all services share one loopback network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: warning: services vote, result all use container port 80. In Compose each has its own network; in the guest they share one, so if they listen on 0.0.0.0:80 only the first starts. Make each listen on its own addr: (vote=127.0.0.1, result=127.0.0.1) or move one to another port, e.g. with env:/cmd:\nhydo-compose: wrote proj/hydo.yaml (5 services, 11 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
  "rw-example-voting-app-noresolve": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service vote: has build: and no image:. hydo needs an image file: build it, then `docker save -o vote.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "d167c13901581ee9fa23c6c53a7b1781f7c90416dd8f79568af09da2ccc7d5eb",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "3e76433d358592338df4192cb81fb5c0a1979f5dc664b018ef6351bcd346b7e0",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service seed is in profile(s) seed and was left out (as `docker compose up` does); pass --profile seed to include it\nhydo-compose: warning: service vote: image proj-vote is built locally (build:): make its file with `docker build -t proj-vote --target dev vote && docker save -o images/proj-vote-latest-amd64.docker.tar proj-vote` (on a Mac, or for arm64: an OCI layout of it at images/proj-vote-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service vote: bind mount source ./vote does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-vote\nhydo-compose: warning: service result: image proj-result is built locally (build:): make its file with `docker build -t proj-result result && docker save -o images/proj-result-latest-amd64.docker.tar proj-result` (on a Mac, or for arm64: an OCI layout of it at images/proj-result-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service result: bind mount source ./result does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-result\nhydo-compose: warning: service worker: image proj-worker is built locally (build:): make its file with `docker build -t proj-worker worker && docker save -o images/proj-worker-latest-amd64.docker.tar proj-worker` (on a Mac, or for arm64: an OCI layout of it at images/proj-worker-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service worker: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service redis: image redis:alpine is not pinned by digest (--no-resolve)\nhydo-compose: warning: service redis: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: service db: image postgres:15-alpine is not pinned by digest (--no-resolve)\nhydo-compose: warning: service db: bind mount source ./healthchecks does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-healthchecks\nhydo-compose: warning: networks front-tier, back-tier: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (5 services, 12 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -1418,7 +1634,7 @@
  "rw-sentry-self-hosted-images-noresolve": {
   "files": {
    "proj/fetch-images.sh": [
-    "2a2bc60b0f2551fb7f057a0c979877fc61aa1b6d48ee6f721c6f655fbaaed81e",
+    "be3b73734b57ea948c4f91ebadc84c5a51d265d1320b477c96869a1ff7d6c6bd",
     "0o755"
    ],
    "proj/hydo.yaml": [
@@ -1469,7 +1685,7 @@
  "rw-sentry-self-hosted-noresolve": {
   "files": {
    "proj/fetch-images.sh": [
-    "59ced879a2254a4830b70f60a268927af088b4e911e808ce12c8103f696c352e",
+    "4d94e032c591e620338157055b472be522d9eefa63a8bca971d3b7c45babf2e3",
     "0o755"
    ],
    "proj/hydo.yaml": [
@@ -1656,9 +1872,18 @@
   "stdout": ""
  },
  "unit-build-only": {
-  "files": {},
-  "rc": 1,
-  "stderr": "hydo-compose: service app: has build: and no image:. hydo needs an image file: build it, then `docker save -o app.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)\n",
+  "files": {
+   "proj/fetch-images.sh": [
+    "42d5e71a1350ce5ab0209d243003a6e29536d81d87761fa838d06fd5631e17e2",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "b7f02c725355546ebda39c6a4579cd3745cda48fbe913497ead314a9e7d1ba4a",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stderr": "hydo-compose: warning: service app: image proj-app is built locally (build:): make its file with `docker build -t proj-app . && docker save -o images/proj-app-latest-amd64.docker.tar proj-app` (on a Mac, or for arm64: an OCI layout of it at images/proj-app-latest-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service app: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: wrote proj/hydo.yaml (1 services, 2 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -2216,16 +2441,16 @@
  "unit-unsupported-noresolve": {
   "files": {
    "proj/fetch-images.sh": [
-    "ada533d56c59c6c9457adfb3f65d6e01e4b3c8ce9320b90ddeca5a15c63850f1",
+    "182cd1f41a962d745a46d41c173f27c58bc49b2b929b6d4b8a97064c1e42f109",
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "e7f28d233800119943f854ada1138263c8976779107aa16ee728b407a20b067d",
+    "fc170896a1ec3112289bc879a338e197cbf702fe9d4f23d64ee4cd28a3d7d975",
     "0o644"
    ]
   },
   "rc": 0,
-  "stderr": "hydo-compose: warning: service seed is in profile(s) seed and was left out (as `docker compose up` does); pass --profile seed to include it\nhydo-compose: warning: service app: privileged: hydo runs every service as a plain process (no capabilities beyond root's); remove it if the program does not need it\nhydo-compose: warning: service app: cap_add: capabilities are not modelled; programs run as root or as their user\nhydo-compose: warning: service app: devices: host devices are not available in the guest; drop the service or replace the device\nhydo-compose: warning: service app: sysctls: set them in a service's setup: (sysctl -w ...) if the program needs them\nhydo-compose: warning: service app: build: ignored, the image example/app:1 is used (build and push it, or `docker save` your local build and point image: at the file)\nhydo-compose: warning: service app: image example/app:1 is not pinned by digest (--no-resolve)\nhydo-compose: warning: service app: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service app: deploy.replicas 3: one instance is started; copy the service for more\nhydo-compose: warning: service my-worker.v2: network_mode: host: here each service has its own network namespace and addr:, so a peer named as 0.0.0.0:<port> or localhost:<port> in a command or configuration must become that peer's addr: (or import again with --network loopback: one shared loopback network)\nhydo-compose: warning: service my-worker.v2: init: there is no init process per service (no tini); a program that must reap children should be started by its own init\nhydo-compose: warning: service my-worker.v2: image example/worker:1 is not pinned by digest (--no-resolve)\nhydo-compose: warning: service my-worker.v2: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: networks front, back: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (2 services, 14 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
+  "stderr": "hydo-compose: warning: service seed is in profile(s) seed and was left out (as `docker compose up` does); pass --profile seed to include it\nhydo-compose: warning: service app: privileged: hydo runs every service as a plain process (no capabilities beyond root's); remove it if the program does not need it\nhydo-compose: warning: service app: cap_add: capabilities are not modelled; programs run as root or as their user\nhydo-compose: warning: service app: devices: host devices are not available in the guest; drop the service or replace the device\nhydo-compose: warning: service app: sysctls: set them in a service's setup: (sysctl -w ...) if the program needs them\nhydo-compose: warning: service app: image example/app:1 is built locally (build:): make its file with `docker build -t example/app:1 app && docker save -o images/example-app-1-amd64.docker.tar example/app:1` (on a Mac, or for arm64: an OCI layout of it at images/example-app-1-arm64-oci), then run hydo compose again to pin it by the file's content\nhydo-compose: warning: service app: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: service app: deploy.replicas 3: one instance is started; copy the service for more\nhydo-compose: warning: service my-worker.v2: network_mode: host: here each service has its own network namespace and addr:, so a peer named as 0.0.0.0:<port> or localhost:<port> in a command or configuration must become that peer's addr: (or import again with --network loopback: one shared loopback network)\nhydo-compose: warning: service my-worker.v2: init: there is no init process per service (no tini); a program that must reap children should be started by its own init\nhydo-compose: warning: service my-worker.v2: image example/worker:1 is not pinned by digest (--no-resolve)\nhydo-compose: warning: service my-worker.v2: no healthcheck and no port: readiness is just `started`; write a ready: check\nhydo-compose: warning: networks front, back: all services share one bridge network in the guest, so the isolation between Compose networks is not modelled (every service can reach every other)\nhydo-compose: wrote proj/hydo.yaml (2 services, 13 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },

@@ -23,6 +23,7 @@ mod gojson;
 mod grpc;
 mod h2x;
 mod http1;
+mod objects;
 mod rt;
 mod rules;
 mod serve;
@@ -30,6 +31,7 @@ mod serve;
 mod tls;
 #[cfg(feature = "tls")]
 mod tls_crypto;
+mod sign;
 mod world;
 
 use std::os::unix::ffi::OsStringExt;

@@ -419,6 +419,14 @@
             "$ref": "#/$defs/Text"
           }
         },
+        "share_images": {
+          "description": "Image services with the same image (by config digest) share one unpacked tree; each still\nhas its own mount of it, with its own /tmp, /data, volumes and tmpfs mounts. Off by\ndefault (it changes the image's bytes).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
         "description": {
           "anyOf": [
             {
@@ -1648,6 +1656,28 @@
             }
           ]
         },
+        "save": {
+          "description": "Store fields of the object a request creates or changes, when it takes effect; later\nanswers read them as `{obj:<field>}`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FakeSave"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "load": {
+          "description": "The key (a template) of the object a request is about; a missing one is answered 404 and\ntakes no effect. The answer reads its fields as `{obj:<field>}`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -1713,6 +1743,16 @@
             "null"
           ],
           "format": "int64"
+        },
+        "sign": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WebhookSign"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "description": {
           "anyOf": [

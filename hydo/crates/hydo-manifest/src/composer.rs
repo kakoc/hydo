@@ -1086,7 +1086,11 @@ pub fn test_from_meta(meta: &Value) -> Value {
 
 // ------------------------------------------------------------------ hydo_version
 
-/// `engine_version(here)` with `here` = the product's onboard/ directory.
+/// `engine_version(here)` with `here` = the product's onboard/ directory: the release's (or the
+/// tree's) `VERSION` file, else the version this program is built with (the workspace version,
+/// which `hydo/VERSION` equals). Until the TigerBeetle onboarding the fallback was `0.0.0`, so a
+/// hydo built in a checkout, whose onboard/ directory is not next to it, refused every plan with
+/// `hydo_version: "0.1"`.
 pub fn engine_version(onboard_dir: &Path) -> String {
     for p in [
         onboard_dir.join("..").join("VERSION"),
@@ -1098,7 +1102,7 @@ pub fn engine_version(onboard_dir: &Path) -> String {
             }
         }
     }
-    "0.0.0".into()
+    env!("CARGO_PKG_VERSION").into()
 }
 
 fn vt(x: &str) -> [i128; 3] {

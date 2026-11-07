@@ -374,6 +374,7 @@ pub fn build(
         Path::new(&busybox),
         &bdir.join(format!("{out}-arm64-oci-tmp")),
         netns,
+        pyv::get(rootsec, "share_images")? == Some(&serde_json::Value::Bool(true)),
         None,
         trust.as_ref(),
         io,
