@@ -254,6 +254,71 @@ fn serve_runs_are_identical_and_equal_a_fresh_boot() {
     o.join.take().unwrap().join().unwrap();
 }
 
+/// S1 taken at boot stop `k` (S0 at the first), then the schedule: from the worker's S1 in a
+/// fresh vCPU (serve, CTL) and from a fresh boot that goes on in the vCPU that took S1 (one).
+fn s1_and_fresh_at(k: u64, s: &str) -> (RunResult, RunResult, String) {
+    let mut h = Host::start(
+        Mode::Serve {
+            boot: Some(sched(s)),
+        },
+        5,
+    );
+    h.drive(|h, n, _, _| {
+        if n == 1 {
+            h.snap("S0");
+        }
+        if n == k {
+            h.snap("S1");
+            h.cmd(HostCmd::End(None));
+            return true;
+        }
+        false
+    });
+    h.recv(); // READY
+    h.tx.send(HostMsg::Request(Request::Ctl {
+        tag: "w".into(),
+        schedule: sched(s),
+    }))
+    .unwrap();
+    let w = to_the_end(&mut h);
+    let wlog = h.log.join("\n");
+    h.quit();
+    let mut o = Host::start(Mode::One(sched(s)), 5);
+    let f = o.drive(|h, n, phase, why| {
+        if phase == Phase::Boot && n == 1 {
+            h.snap("S0");
+        }
+        if phase == Phase::Boot && n == k {
+            h.snap("S1");
+        }
+        if why == StopWhy::Exit {
+            h.cmd(HostCmd::End(None));
+            return true;
+        }
+        false
+    });
+    o.join.take().unwrap().join().unwrap();
+    let logs = format!("from S1:\n{wlog}\nfresh boot:\n{}", o.log.join("\n"));
+    (w, f, logs)
+}
+
+#[test]
+fn a_run_from_s1_equals_a_fresh_boot_wherever_s1_is_taken() {
+    // with a stop at every exit, S1 lands on every kind of exit of the boot, among them the HLT
+    // whose clock jump makes the timer's interrupt pending at the stop: the run that took S1
+    // injects it at once (KVM said "ready" at that exit), and a run restored from S1 must too,
+    // not ask for the window first (a fresh vCPU's kvm_run says 0 until its first KVM_RUN)
+    for k in 2..=40 {
+        let (w, f, logs) = s1_and_fresh_at(k, "rb=1 | run");
+        assert_eq!(f.verdict, "HYDO-ORACLE: OK ticks");
+        assert_eq!(
+            (w.fp, w.wfp, w.extras),
+            (f.fp, f.wfp, f.extras),
+            "S1 at boot stop {k}: the run from S1 differs from the fresh boot\n{logs}"
+        );
+    }
+}
+
 #[test]
 fn snap_and_resume_continue_the_same_run() {
     // a run with a SNAP in the middle, then a RESUME from it: the same fingerprint

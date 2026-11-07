@@ -150,6 +150,13 @@ pub struct Vmm {
 #[derive(Default)]
 pub struct XSnap {
     pub cpu: CpuState,
+    /// what KVM said at the last exit (`ready_for_interrupt_injection`, `if_flag`) and the window
+    /// request ([`crate::cpu::Cpu::run_flags`]): not part of the vCPU's state that `KVM_SET_*`
+    /// loads, but the interrupt rule reads them at the first loop top after a restore, before
+    /// any `KVM_RUN` has set them again. A fresh vCPU has them all 0 ("cannot take an interrupt
+    /// now"), so a run restored at a stop where an interrupt was pending asked for the window (an
+    /// exit more) where the run that took the snapshot injected at once.
+    pub flags: [u8; 3],
     pub m: Mach,
     pub ram: RamImage,
     pub vio: Option<virtio::Save>,
@@ -1221,6 +1228,7 @@ impl Vmm {
     /// a base.
     pub fn snapshot(&mut self, s: &mut XSnap, as_base: bool) {
         s.cpu = self.cpu().save();
+        s.flags = self.cpu().run_flags();
         s.m = self.m;
         let own = self.ram.private_pages(self.base.as_deref());
         if as_base || self.base.is_none() {
@@ -1299,6 +1307,7 @@ impl Vmm {
         self.base = s.ram.base.clone();
         self.fresh_vm();
         self.cpu_mut().load(&s.cpu);
+        self.cpu_mut().set_run_flags(s.flags);
         self.m = s.m;
         let n = self.m.console_len as usize;
         self.console[..n].copy_from_slice(&s.con[..n]);
