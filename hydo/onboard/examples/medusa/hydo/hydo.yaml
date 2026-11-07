@@ -1,0 +1,204 @@
+# A commerce backend as its team runs it: Medusa 2.18.0 (Node.js) with PostgreSQL 15 and Redis 7,
+# payments through Stripe. Imported with `hydo compose ../docker-compose.yaml --no-resolve`; hand
+# changes are marked `hand:`. RESULTS.md says what was hunted and found.
+#
+# Stripe is a fake (hydo-world, `fakes:` below). Medusa's Stripe provider calls
+# https://api.stripe.com with certificate checks and has no option for another base URL, while
+# hydo's fakes speak plain HTTP; so a TLS front (`stripe_tls`, socat from alpine/socat) holds a
+# certificate for api.stripe.com signed by a test CA (tls/, made for this example), /etc/hosts
+# sends api.stripe.com to it, and Medusa trusts the CA through NODE_EXTRA_CA_CERTS.
+#
+# Build and run on Linux (the KVM engine works without hydo's kernel module):
+#   sh ../app/build-app.sh                          # the Medusa image, saved into images/
+#   sh fetch-images.sh                              # postgres, redis, socat by digest
+#   hydo build hydo.yaml
+#   hydo run --backend kvm "disk=none | run"
+#   hydo explore --backend kvm --seeds 1-20 --strategy process --protocol-faults
+format: 1
+name: medusa
+description: "Medusa commerce backend (orders, stock, Stripe payments) with PostgreSQL and Redis"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 2048   # hand: Medusa's Node.js process alone takes about 600 MiB
+
+data:
+  size_mib: 1280
+  dirs: [vol/postgres_data, vol/redis_data, shop]   # hand: shop/ holds the seed's answer (seed.json)
+
+root:
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 postgres
+      10.89.0.12 redis
+      10.89.0.13 medusa
+      10.89.0.20 stripe_tls
+      10.89.0.20 api.stripe.com
+  files:   # hand: the test CA and the TLS front's certificate for api.stripe.com
+    - {src: tls/ca.pem, dst: /hydo/tls/ca.pem}
+    - {src: tls/api.pem, dst: /hydo/tls/api.pem}
+    - {src: tls/api.key, dst: /hydo/tls/api.key}
+
+services:
+  # Compose service postgres
+  # ready: from Compose healthcheck
+  - name: postgres
+    image: {x86_64: images/postgres-15-alpine-amd64.docker.tar}
+    image_ref: "sha256:2a4caaf0fc726d8323fb979c8b1acf2e807c3f9ba55e5f720e3a543fa853e998"   # postgres:15-alpine
+    env:
+      POSTGRES_DB: "medusa-store"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+    addr: 10.89.0.11
+    port: 5432   # hand: the importer found no port (Compose publishes none)
+    ready: "timeout 30 hydo-oci postgres /bin/sh -c 'pg_isready -U postgres -d medusa-store'"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/postgres_data, dst: /var/lib/postgresql/data, copy_up: true}
+  # Compose service redis (its volume on /data is the data disk's root)
+  - name: redis
+    image: {x86_64: images/redis-7-alpine-amd64.docker.tar}
+    image_ref: "sha256:e7b0b929eb5b1e7b18f4662e190ceeac481b72e35dfede063b09a4ce8beac79f"   # redis:7-alpine
+    addr: 10.89.0.12
+    port: 6379   # hand
+    ready: "timeout 30 hydo-oci redis redis-cli ping"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors: {format: redis}   # hand
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/redis_data, dst: /data}   # hand: redis_data as its own /data (the image chowns its /data)
+  # hand: the TLS front for api.stripe.com (not in the Compose file: production talks to Stripe)
+  - name: stripe_tls
+    image: {x86_64: images/socat-amd64.docker.tar}
+    image_ref: "sha256:c1ad67b3a41457ba4c4c28574e4b003f0ade5d728463b74f3f456c9a0607314a"   # alpine/socat:1.8.0.3
+    entrypoint: [socat, "OPENSSL-LISTEN:443,reuseaddr,fork,cert=/hydo/tls/api.pem,key=/hydo/tls/api.key,verify=0", "TCP:10.89.0.1:9101"]
+    addr: 10.89.0.20
+    port: 443
+    ready: "nc -z -w 2 10.89.0.20 443"
+    restart: "always"
+    mounts:
+      - {src: /hydo/tls, dst: /hydo/tls}
+  # Compose service medusa (built from ../app; saved with `docker save`)
+  # ready: from Compose healthcheck
+  - name: medusa
+    image: {x86_64: images/medusa-shop-amd64.docker.tar}
+    image_ref: "sha256:56393269f15c40ed58ae0e594b2158d4083599c30d89ad103c186d127958e9ec"   # medusa-shop:hydo, app/build-app.sh
+    cmd: [sh, "-c", "./node_modules/.bin/medusa db:migrate && exec ./node_modules/.bin/medusa start"]
+    env:
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/medusa-store"
+      REDIS_URL: "redis://redis:6379"
+      STRIPE_API_KEY: "sk_test_hydo_fake_key"
+      STRIPE_WEBHOOK_SECRET: "whsec_hydo_fake_secret"
+      STORE_CORS: "http://localhost:8000"
+      ADMIN_CORS: "http://localhost:9000"
+      AUTH_CORS: "http://localhost:9000"
+      JWT_SECRET: "change-me"
+      COOKIE_SECRET: "change-me"
+      NODE_EXTRA_CA_CERTS: "/hydo/tls/ca.pem"   # hand: trust the test CA (the fake Stripe's TLS front)
+    port: 9000
+    addr: 10.89.0.13
+    depends_on: [postgres, redis, stripe_tls]
+    ready: "timeout 30 hydo-oci medusa wget -q -O- http://localhost:9000/health"
+    ready_timeout: 600   # hand: Medusa's start under the exit clock
+    restart: "unless-stopped"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /hydo/tls, dst: /hydo/tls}            # hand: the test CA
+      - {src: /hydo/workload, dst: /hydo/workload}  # hand: the test client runs with this image's node
+      - {tmpfs: true, dst: /root}                   # hand: the Medusa CLI writes ~/.config (a container has a writable layer)
+      # hand: db:migrate writes an empty schema snapshot into each module without migrations (Docker: the writable layer)
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/auth-emailpass/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/cache-inmemory/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/event-bus-redis/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/file/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/fulfillment-manual/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/locking/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/notification-local/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/payment-stripe/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/locking-redis/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/file-local/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/analytics/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/analytics-local/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/caching/dist/migrations}
+      - {tmpfs: true, dst: /server/node_modules/@medusajs/event-bus-local/dist/migrations}
+
+# hand: Stripe, faked. Medusa's provider (stripe-node) creates a PaymentIntent per payment
+# session (manual capture), reads it to authorize, captures, cancels and refunds. Every intent
+# is answered as confirmed by the customer ("requires_capture"): the storefront's card step is
+# not part of the test. A fake answers from its request only (it keeps no objects), so every
+# answer about an existing intent names the shop's currency (eur): Medusa reads it to refund.
+fakes:
+  - name: stripe
+    port: 9101
+    idempotency: header:Idempotency-Key
+    routes:
+      - name: intent_capture
+        method: POST
+        path: /v1/payment_intents/{id}/capture
+        ref: path:id
+        idempotent: true
+        headers: {Content-Type: application/json}
+        body: '{"id":"{path:id}","object":"payment_intent","currency":"eur","status":"succeeded","capture_method":"manual","latest_charge":"ch_{seq}"}'
+      - name: intent_cancel
+        method: POST
+        path: /v1/payment_intents/{id}/cancel
+        ref: path:id
+        idempotent: true
+        headers: {Content-Type: application/json}
+        body: '{"id":"{path:id}","object":"payment_intent","currency":"eur","status":"canceled","capture_method":"manual"}'
+      - name: intent_create
+        method: POST
+        path: /v1/payment_intents
+        ref: form:metadata[session_id]   # the payment session, as stripe-node sends it
+        idempotent: true
+        headers: {Content-Type: application/json}
+        body: '{"id":"pi_{seq}","object":"payment_intent","amount":{form:amount},"currency":"{form:currency}","status":"requires_capture","capture_method":"manual","client_secret":"pi_{seq}_secret_x","metadata":{"session_id":"{form:metadata[session_id]}"}}'
+      - name: intent_update
+        method: POST
+        path: /v1/payment_intents/{id}
+        ref: path:id
+        idempotent: true
+        headers: {Content-Type: application/json}
+        body: '{"id":"{path:id}","object":"payment_intent","currency":"eur","status":"requires_capture","capture_method":"manual"}'
+      - name: intent_get
+        method: GET
+        path: /v1/payment_intents/{id}
+        ref: path:id
+        headers: {Content-Type: application/json}
+        body: '{"id":"{path:id}","object":"payment_intent","currency":"eur","status":"requires_capture","capture_method":"manual"}'
+      - name: refund
+        method: POST
+        path: /v1/refunds
+        ref: form:payment_intent
+        idempotent: true
+        headers: {Content-Type: application/json}
+        body: '{"id":"re_{seq}","object":"refund","amount":{form:amount},"payment_intent":"{form:payment_intent}","status":"succeeded"}'
+
+workload:
+  steps: 12
+  timeout: 900
+
+test:
+  parallel: 3
+  per_round: 2
+  round_ms: 1000
+  command_timeout: 120
+  drain_timeout: 120
+
+# hand: error lines of every service as findings (hydo guide error-logs); Redis marks its errors
+# with "#"
+errors: true
+
+faults: [kill, pause, network, oneway, cut, clock, disk, protocol]

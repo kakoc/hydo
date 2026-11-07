@@ -819,8 +819,10 @@ proxies:
 ```
 
 **Extractors** (`idempotency:`, `ref:`): `header:<Name>`, `json:<field>` (dotted path into a JSON
-body), `query:<name>`, `form:<name>`, `path:<name or 1-based segment>`, `pb:<field number>` (a
-top-level field of the first gRPC message: a string or a varint), `body` (a hash of the body).
+body), `query:<name>`, `form:<name>` (a bracketed name too: Stripe and Rails send
+`metadata[order]=o7`, read with `form:metadata[order]`), `path:<name or 1-based segment>`,
+`pb:<field number>` (a top-level field of the first gRPC message: a string or a varint), `body`
+(a hash of the body).
 
 **Templates** (answer bodies, header values, webhook url/body/headers): `{seq}` (the record number
 of the request; replays use the original's), `{ref}`, `{idem}`, `{fake}`, `{route}`; in answers
@@ -1581,7 +1583,7 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | `depends_on:` (list or map) | `depends_on:`. hydo starts a service only after its dependencies passed their `ready:`, so `service_healthy` and `service_started` both hold. |
 | `depends_on.<job>.condition: service_completed_successfully` | the job service idles (`/.hydo/busybox sleep`) and its command runs once per boot in the `setup:` of every service that waits for it (also before a restart and in crash recovery). |
 | `healthcheck:` (else the image's `HEALTHCHECK`) | `ready: timeout <t> hydo-oci <svc> <test>`: `CMD` as argv, `CMD-SHELL`/a string through `/bin/sh -c`, as the service's `user:` (busybox `chpst`), polled every second; `ready_timeout` = `start_period + interval x retries + 60` s (120..600). Without one: `nc -z -w 2 <addr> <port>`, or `true` (with a TODO) when there is no port. |
-| `volumes:` named / anonymous, the image's `VOLUME`s | a directory `/data/vol/<name>` on the data disk (the fault target; listed in `data.dirs`), mounted on the target with `copy_up` (on first use it gets the image's content, owner and mode, as a Docker named volume). Several services naming one volume share it. `external: true` starts empty (warning). A volume on `/data` is the data disk's root already, except when several services have their own named volume on `/data` (the nodes of a cluster): then each gets `{src: /data/vol/<name>, dst: /data}` (services naming one volume share it). |
+| `volumes:` named / anonymous, the image's `VOLUME`s | a directory `/data/vol/<name>` on the data disk (the fault target; listed in `data.dirs`), mounted on the target with `copy_up` (on first use it gets the image's content, owner and mode, as a Docker named volume). Several services naming one volume share it. `external: true` starts empty (warning). A volume on `/data` is the data disk's root already, except when several services have their own named volume on `/data` (the nodes of a cluster), or when one has and another service keeps a named volume elsewhere on the data disk (Redis's `redis_data:/data` beside PostgreSQL's volume: the Redis image's entrypoint chowns everything under its `/data` to its own user, which took PostgreSQL's files away from PostgreSQL): then each gets `{src: /data/vol/<name>, dst: /data}` (services naming one volume share it). |
 | `volumes:` bind mount of an existing file or directory | copied into the read-only root (`root.files`, `/etc/hydo/compose/bind/<n>-<name>`) and mounted on the target; read-only in effect (a warning for a directory not marked `:ro`: if the program writes there, make it a named volume). A source that does not exist becomes an empty data-disk directory (Docker creates it). Host paths `/etc/localtime`, `/etc/timezone`, `/var/run/docker.sock`, `/proc`, `/sys`, `/dev`, ... are skipped with a warning. |
 | `tmpfs:`, `type: tmpfs` | a tmpfs mount (mode 1777, `size=` kept) |
 | `secrets:` with `file:` | the file, copied into the root, mounted on `/run/secrets/<name>` (or `target:`) |

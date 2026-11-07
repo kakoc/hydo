@@ -235,6 +235,14 @@ fn path_ok_re() -> &'static Regex {
 /// The named volume (`safe_name` of its source) a Compose `volumes:` entry puts on `/data`, if it
 /// is one: the short form `name:/data[:opts]` or the long form `{type: volume, source, target}`.
 fn named_volume_on_data(v: &Y) -> Option<String> {
+    named_volume(v)
+        .filter(|(_, tgt)| tgt == "/data")
+        .map(|(name, _)| name)
+}
+
+/// A named volume entry (`name:/target`, or `type: volume` with a source): its safe name and its
+/// normalised target.
+fn named_volume(v: &Y) -> Option<(String, String)> {
     let (typ, src, tgt) = if v.is_map() {
         (
             pstr(v.get("type").unwrap_or(&Y::s("volume"))),
@@ -250,8 +258,8 @@ fn named_volume_on_data(v: &Y) -> Option<String> {
         ("volume".to_string(), Y::s(parts[0]), Y::s(parts[1]))
     };
     let Y::Str(s) = src else { return None };
-    (typ == "volume" && hydo_manifest::py::normpath(&pstr(&tgt)) == "/data" && !s.is_empty())
-        .then(|| safe_name(&s))
+    (typ == "volume" && !s.is_empty())
+        .then(|| (safe_name(&s), hydo_manifest::py::normpath(&pstr(&tgt))))
 }
 
 /// `re.sub(r"[^A-Za-z0-9._-]", "_", s)`.
@@ -738,6 +746,8 @@ pub struct Importer<'a> {
     data_dirs: Vec<String>,
     /// several services each have their own named volume on /data: mount each on its /data
     own_data: bool,
+    /// why `own_data` is on, for the note
+    own_data_why: &'static str,
     ram: i128,
     data_mib: i128,
     cpu: Option<String>,
@@ -779,6 +789,7 @@ impl<'a> Importer<'a> {
             bind_files: Vec::new(),
             data_dirs: Vec::new(),
             own_data: false,
+            own_data_why: "",
             ram: 256,
             data_mib: 256,
             cpu: None,
@@ -971,7 +982,12 @@ impl<'a> Importer<'a> {
         }
         // Several services, each with its own named volume on /data (the nodes of a cluster):
         // each gets that volume as its /data, instead of all sharing the data disk's root.
+        // The same when one service has its volume on /data and another service keeps its own
+        // named volume on the data disk: the data disk's root holds that other service's data, and
+        // an image that takes over its /data (Redis's entrypoint chowns everything under its
+        // working directory /data to its own user) would take it over too.
         let mut on_data: Vec<String> = Vec::new();
+        let mut elsewhere = false;
         for (n, s) in raw.map_items() {
             if !order.iter().any(|(o, _)| o == n) || !s.is_map() {
                 continue;
@@ -981,10 +997,17 @@ impl<'a> Importer<'a> {
                     if !on_data.contains(&k) {
                         on_data.push(k);
                     }
+                } else if named_volume(&v).is_some() {
+                    elsewhere = true;
                 }
             }
         }
-        self.own_data = on_data.len() > 1;
+        self.own_data = on_data.len() > 1 || (!on_data.is_empty() && elsewhere);
+        self.own_data_why = if on_data.len() > 1 {
+            "several services have their own volume on /data"
+        } else {
+            "the data disk also holds another service's volume"
+        };
         for (n, ns) in &order {
             if let Y::Str(_) = n {
             } else {
@@ -1869,7 +1892,8 @@ impl<'a> Importer<'a> {
             // hydo-build mounts a data-disk directory over the image's /data (no copy_up: the
             // image's own /data is never visible, /data is the data disk)
             self.notes.push(format!(
-                "{wh}: {what} on /data: several services have their own volume on /data, so it is mounted as this service's /data"
+                "{wh}: {what} on /data: {}, so it is mounted as this service's /data",
+                self.own_data_why
             ));
             m.dst = d.clone();
             m.copy_up = false;

@@ -97,6 +97,23 @@ fn trace(items: &[Item]) -> Vec<String> {
     v
 }
 
+/// Every `image:` file of the manifest's services exists (the x86_64 one when the image names
+/// one per architecture), relative to the manifest's directory.
+fn images_present(m: &str, data: &serde_json::Value) -> bool {
+    let dir = top().join(m).parent().unwrap().to_path_buf();
+    let services = data["services"].as_array().cloned().unwrap_or_default();
+    services.iter().all(|s| {
+        let img = match &s["image"] {
+            serde_json::Value::String(p) => Some(p.clone()),
+            serde_json::Value::Object(o) => {
+                o.get("x86_64").and_then(|v| v.as_str()).map(str::to_string)
+            }
+            _ => None,
+        };
+        img.is_none_or(|p| dir.join(p).exists())
+    })
+}
+
 /// `want` is a subsequence of `got`.
 fn in_order(got: &[String], want: &[&str]) -> bool {
     let mut i = 0;
@@ -133,6 +150,11 @@ fn the_plan_reads_hydo_builds_targets() {
         let Some(w) = PlanWorld::of(&data) else {
             continue;
         };
+        // a manifest with Docker/OCI image services compiles only once its image files are
+        // fetched (hydo-build never pulls; the examples fetch them with a script)
+        if !images_present(&m, &data) {
+            continue;
+        }
         n += 1;
         let shell = run(&m, "--print-shell");
         let line = |k: &str| -> String {

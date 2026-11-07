@@ -1,0 +1,19 @@
+#!/bin/sh
+# hydo-msg: every checkout the storefront saw acknowledged has its order in the database
+# The client's acknowledgement is the order Medusa returned for the cart; after the faults (and
+# after a power cut) that cart must still be linked to a live order.
+. /hydo/workload/helper_sql.sh
+f=/tmp/hydo-check-carts.$$
+Q "select oc.cart_id from order_cart oc join \"order\" o on o.id = oc.order_id where oc.deleted_at is null and o.deleted_at is null" > $f || {
+  echo "cannot read orders"; exit 2; }
+touch "$HYDO_ACKED"
+acked=$(grep -c . "$HYDO_ACKED")
+carts=$(cat $f)
+# acknowledged carts that have no order (awk, not grep -f: an empty pattern file matches everything)
+missing=$(awk 'FILENAME == ARGV[1] { seen[$0] = 1; next } $0 != "" && !($0 in seen) { print }' $f "$HYDO_ACKED")
+if [ -n "$missing" ]; then
+  echo "acknowledged carts without an order: $(echo $missing | cut -c1-300)"
+  echo "lost $(echo "$missing" | grep -c .) of $acked acknowledged orders"
+  exit 1
+fi
+echo "acked=$acked orders=$(echo "$carts" | grep -c .) all acknowledged orders present"
