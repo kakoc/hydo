@@ -40,14 +40,18 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+// The four pin lists are hydo/dist/<platform>/*.sha256, read through the links in this crate's
+// pins/ folder, so that the crate published to crates.io carries them (cargo copies a linked
+// file's content into the package; docs/PUBLISHING.md).
+
 /// The Linux release's pinned assets, as `assets.sha256` lists them (paths of the asset tree).
-pub const LINUX_ASSETS: &str = include_str!("../../../dist/linux/assets.sha256");
+pub const LINUX_ASSETS: &str = include_str!("../pins/linux/assets.sha256");
 /// The Mac release's pinned assets.
-pub const MAC_ASSETS: &str = include_str!("../../../dist/mac/assets.sha256");
+pub const MAC_ASSETS: &str = include_str!("../pins/mac/assets.sha256");
 /// The Linux release's guest programs built from the tree, by release path.
-pub const LINUX_GUEST: &str = include_str!("../../../dist/linux/guest-programs.sha256");
+pub const LINUX_GUEST: &str = include_str!("../pins/linux/guest-programs.sha256");
 /// The Mac release's guest programs built from the tree, by release path.
-pub const MAC_GUEST: &str = include_str!("../../../dist/mac/guest-programs.sha256");
+pub const MAC_GUEST: &str = include_str!("../pins/mac/guest-programs.sha256");
 
 /// setup's record, at the release root.
 pub const RECORD: &str = ".hydo-setup";

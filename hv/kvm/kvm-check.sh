@@ -7,7 +7,7 @@
 #
 # REL is the Linux release (its guest/ has initramfs-kafka.cpio.gz and must also have
 # bzImage-kvm, from hv/kvm/linux/build-kernel.sh); HYDO is this tree's `hydo` (cargo build
-# --release -p hydo-cli -p hydo-kvm -p hydo-explore), copied into REL/bin so that it finds the
+# --release -p hydo -p hydo-kvm -p hydo-explore), copied into REL/bin so that it finds the
 # release's files. The Redis example's image is built with the release's own hydo when it is
 # not in OUT yet (the quickstart's bytes, d255fb2b...).
 #

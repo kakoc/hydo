@@ -140,7 +140,7 @@ else
   # building Mac (M154; until M153 they named the builder's home); both are found at run time
   CH=$(cd "${CARGO_HOME:-$HOME/.cargo}" 2>/dev/null && pwd || echo "${CARGO_HOME:-$HOME/.cargo}")
   ( cd "$TOP" && RUSTFLAGS="--remap-path-prefix=$TOP=/hydo --remap-path-prefix=$CH=/cargo" \
-    cargo build --release --locked -p hydo-cli -p hydo-build -p hydo-compose -p hydo-hvm --target aarch64-apple-darwin ) >&2
+    cargo build --release --locked -p hydo -p hydo-build -p hydo-compose -p hydo-hvm --target aarch64-apple-darwin ) >&2
   BD=$TOP/target/aarch64-apple-darwin/release
 fi
 for b in $BINS; do
