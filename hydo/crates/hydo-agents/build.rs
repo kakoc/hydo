@@ -1,6 +1,8 @@
-//! Embed the onboarding skill (skills/hydo-onboard/) and MANIFEST.md into the binary, so that
-//! `hydo guide`, `hydo skill install` and `hydo init` work from the `hydo` binary alone. A release
-//! that ships the folder (skill/hydo-onboard/) still reads it from disk first (src/lib.rs).
+//! Embed the onboarding skill (skills/hydo-onboard/, the process), the guide (hydo/guide/, this
+//! hydo's facts: the topics of `hydo guide`, the examples and `hydo init`'s template) and
+//! MANIFEST.md into the binary, so that `hydo guide`, `hydo skill install` and `hydo init` work
+//! from the `hydo` binary alone. A release that ships the skill folder (skill/hydo-onboard/) still
+//! reads the skill from disk first (src/lib.rs); the guide is always the built-in one.
 
 use std::fmt::Write as _;
 use std::os::unix::fs::PermissionsExt;
@@ -43,23 +45,29 @@ fn main() {
     let here = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo = here.join("../../..").canonicalize().unwrap();
     let skill = repo.join("skills/hydo-onboard");
+    let guide = repo.join("hydo/guide");
     let manifest = repo
         .join("hydo/onboard/MANIFEST.md")
         .canonicalize()
         .unwrap();
     let mut files = Vec::new();
     let mut dirs = Vec::new();
-    walk(&skill, "", &mut files, &mut dirs);
-    let mut src = String::from("pub static FILES: &[(&str, u32, &[u8])] = &[\n");
-    for (rel, p, mode) in &files {
-        writeln!(
-            src,
-            "    ({rel:?}, 0o{mode:o}, include_bytes!({:?})),",
-            p.display()
-        )
-        .unwrap();
+    let mut src = String::new();
+    for (name, top) in [("FILES", &skill), ("GUIDE", &guide)] {
+        let mut these = Vec::new();
+        walk(top, "", &mut these, &mut dirs);
+        writeln!(src, "pub static {name}: &[(&str, u32, &[u8])] = &[").unwrap();
+        for (rel, p, mode) in &these {
+            writeln!(
+                src,
+                "    ({rel:?}, 0o{mode:o}, include_bytes!({:?})),",
+                p.display()
+            )
+            .unwrap();
+        }
+        src.push_str("];\n");
+        files.extend(these);
     }
-    src.push_str("];\n");
     writeln!(
         src,
         "pub static MANIFEST_MD: &[u8] = include_bytes!({:?});",

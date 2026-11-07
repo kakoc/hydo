@@ -10,3 +10,10 @@ build = "build.rs"
 [dependencies]
 hydo-manifest = { workspace = true }
 regex = "1"
+# the skill's release archive (src/release.rs, Milestone 170): the same versions and features as
+# hydo-cli's, so no crate is added to the program
+tar = { version = "0.4", default-features = false }
+flate2 = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

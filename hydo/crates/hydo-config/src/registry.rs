@@ -363,11 +363,17 @@ variables! {
     /// archives and guest kernels by sha256), `versions/<version>/` (releases `hydo setup --get`
     /// installed), `bin/hydo` (the current one). An empty value means the default.
     HYDO_HOME: Cli, User, "path", "~/.hydo", "hydo-cli";
-    /// Where releases are fetched from: `<value>/v<version>/<file>`. HTTPS only (plain `http://`
-    /// only to a loopback host). An empty value means the default.
+    /// Where releases are fetched from: `<value>/v<version>/<file>` (hydo), and
+    /// `<value>/skill-v<version>/<file>` (the onboarding skill, `hydo skill update`). HTTPS only
+    /// (plain `http://` only to a loopback host). An empty value means the default.
     HYDO_RELEASE_URL: Cli, User, "URL", "https://github.com/kakoc/hydo/releases/download", "hydo-cli";
-    /// Set and not `0`: never use the network (`hydo setup`, and the kernel lookup of runs); what
-    /// the install cache does not have is refused with its URL (`--offline` does the same).
+    /// Where `hydo skill update` lists the releases to find the newest skill release (tags
+    /// `skill-v<version>`): a GitHub releases API URL answering a JSON list. HTTPS only (plain
+    /// `http://` only to a loopback host). An empty value means the default.
+    HYDO_RELEASE_API: Cli, User, "URL", "https://api.github.com/repos/kakoc/hydo/releases", "hydo-cli";
+    /// Set and not `0`: never use the network (`hydo setup`, the kernel lookup of runs, `hydo skill
+    /// update`); what the install cache does not have is refused with its URL (`--offline` does
+    /// the same).
     HYDO_OFFLINE: Cli, User, "flag: set and not `0`", "", "hydo-cli";
     /// `warn`: a plan whose `hydo_version:` this hydo does not satisfy builds with a warning.
     HYDO_VERSION_CHECK: Build, User, "word: warn", "refuse", "hydo-build (through hydo-manifest)";

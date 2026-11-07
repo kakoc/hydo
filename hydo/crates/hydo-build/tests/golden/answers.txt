@@ -217,9 +217,9 @@ I	sdk/cases/programs/js.json	500524a7ad054e9f72d747906b395a5f8946b3d8d9140802a40
 I	sdk/cases/programs/python.json	132dc64f992135e0967fd9dd19e2303d05dfdda12f5bdfab5cdc0c89b1a55a4f
 I	sdk/cases/programs/rust.json	4c01f91f15d568be3e4f150f4bee16987a4134680de0980f2c2c5074d9ba425d
 I	sdk/js/package.json	c706cf80a265d00a7214e6202e77144355f03aff9bee3b50140380a56b88ed9e
-I	skills/hydo-onboard/assets/example-miniflux.yaml	056fe1ea51d103145f0db56f65c550c83bd6a87b491b2cdbad74509dd3a2ee57
-I	skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml	a5d2effbdf6ba22a31cbbfbc07d1e52127834fa5ce4e1e14c5db619e2cb339b5
-I	skills/hydo-onboard/assets/hydo-init/hydo/hydo.yaml	4f2ae608d43856af3e036e9b34f9738ae0893127472f3fa22b6a74fa0ba5d9d9
+I	hydo/guide/examples/example-miniflux.yaml	056fe1ea51d103145f0db56f65c550c83bd6a87b491b2cdbad74509dd3a2ee57
+I	hydo/guide/examples/example-redis-composed/hydo/hydo.yaml	a5d2effbdf6ba22a31cbbfbc07d1e52127834fa5ce4e1e14c5db619e2cb339b5
+I	hydo/guide/init/hydo/hydo.yaml	4f2ae608d43856af3e036e9b34f9738ae0893127472f3fa22b6a74fa0ba5d9d9
 G	hydo/history/hydo_hist.sh	1ea4d05fad96aafe522a14608702de49eccbdbe8bd57228966c5bf9b901da8a7
 R	--set and flag combinations	<root>/hydo/bench/m56/map-d0.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
@@ -633,11 +633,11 @@ R	^	<root>/sdk/cases/programs/rust.json --set version=zz --print-shell	run	1	""	
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/sdk/js/package.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
-R	^	<root>/skills/hydo-onboard/assets/example-miniflux.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
+R	^	<root>/hydo/guide/examples/example-miniflux.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
-R	^	<root>/skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#a17d99c760380fb6"
+R	^	<root>/hydo/guide/examples/example-redis-composed/hydo/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#a17d99c760380fb6"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
-R	^	<root>/skills/hydo-onboard/assets/hydo-init/hydo/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
+R	^	<root>/hydo/guide/init/hydo/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	argument handling	<root>/hydo/onboard/examples/redis/hydo.yaml --bogus	run	2	""	"hydo-build: unknown argument --bogus\n"
 R	^	^ --set novalue --check	run	2	""	"hydo-build: unknown argument --set\n"
@@ -7657,19 +7657,19 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/skills/hydo-onboard/assets/example-miniflux.yaml --arch x86_64 --check	run	0	#f28818cc12afd5f5/117	""
+R	^	<root>/hydo/guide/examples/example-miniflux.yaml --arch x86_64 --check	run	0	#117d34c943189d5b/110	""
 R	^	^ --arch x86_64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	#f28818cc12afd5f5/117	^
+R	^	^ --arch arm64 --check	run	0	#117d34c943189d5b/110	^
 R	^	^ --arch arm64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<root>/skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml --arch x86_64 --check	run	0	#31a2699aa6589983/333	^
+R	^	<root>/hydo/guide/examples/example-redis-composed/hydo/hydo.yaml --arch x86_64 --check	run	0	#9c47952b28605f97/326	^
 R	^	^ --arch x86_64 --print-shell	run	0	#6cf3d709720b20c0/2937	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	^ --arch arm64 --check	run	0	#31a2699aa6589983/333	^
+R	^	^ --arch arm64 --check	run	0	#9c47952b28605f97/326	^
 R	^	^ --arch arm64 --print-shell	run	0	#6cf3d709720b20c0/2937	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<root>/skills/hydo-onboard/assets/hydo-init/hydo/hydo.yaml --arch x86_64 --check	run	1	""	"hydo-build: name: use lowercase letters, digits and '-' (got '@NAME@')\n"
+R	^	<root>/hydo/guide/init/hydo/hydo.yaml --arch x86_64 --check	run	1	""	"hydo-build: name: use lowercase letters, digits and '-' (got '@NAME@')\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^

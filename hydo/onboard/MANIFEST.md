@@ -11,8 +11,9 @@ built then still run.)
 This file explains the project format to people and to tools that generate manifests; the
 authority is the schema generated from the format's types and the permanent example documents
 ("The project format" below). The onboarding skill (`skills/hydo-onboard/`, an Agent Skills
-folder that any AI tool can follow; `hydo guide` prints it, `hydo guide manifest` prints this
-file, `hydo guide schema` the schema) reads a repository and writes its `hydo/` folder. Complete
+folder that any AI tool can follow; `hydo guide skill` prints it) reads a repository and writes
+its `hydo/` folder, taking every fact from the installed hydo: `hydo guide` (the topics in
+`hydo/guide/`), `hydo guide manifest` (this file) and `hydo guide schema` (the schema). Complete
 examples: `examples/redis/hydo.yaml` (one service, about 60 lines),
 `examples/stack/hydo.yaml` (MySQL + Kafka + Redis + a gRPC front door),
 `examples/redis-oci/hydo.yaml` (Redis from the official Docker image, no file list),
@@ -1589,7 +1590,7 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | `profiles:` | services in a profile are left out unless `--profile <p>` (as `docker compose up`) |
 | `mem_limit:`, `deploy.resources.limits.memory` | counted in the `guest.ram_mib` guess |
 | (images) | `guest.ram_mib`: 256 MiB + a per-image guess (PostgreSQL 384, MySQL/MongoDB 640, Redis 96, JVM services 1024, others 256), at least 1024, at most 3072. `guest.cpu: v3` when an image's linux/amd64 manifest has variant v3/v4 or the image is known to need AVX2 (restatedev/restate); otherwise a commented line to uncomment if a service stops with "invalid opcode". `data.size_mib` from the volumes. |
-| (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The hydo-onboard skill (`hydo guide`, `skills/hydo-onboard`) writes the real ones. |
+| (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The hydo-onboard skill (`hydo guide skill`, `skills/hydo-onboard`) writes the real ones. |
 | `faults:` | all kinds except `freeze` |
 
 Reported as warnings, with what to do (the file's header repeats them): `build:` (with an image:

@@ -312,8 +312,11 @@ dependencies = [
 name = "hydo-agents"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "hydo-manifest",
  "regex",
+ "serde_json",
+ "tar",
 ]
 
 [[package]]
@@ -621,6 +624,7 @@ name = "hydo-tools"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "hydo-agents",
  "hydo-build",
  "hydo-config",
  "hydo-manifest",

@@ -5,7 +5,7 @@ numbered-steps manifest; the body is the same). Exit 0 = holds, 1 = violated, 2 
 evaluated now. Print one line of details last. Files: `$HYDO_ACKED` (one acknowledged id per
 line), `$HYDO_OUTCOMES` (`<id> ack|failed|unknown`, the last line per id wins), `$HYDO_FAILED`
 (ids whose last outcome was `failed`). Where a ready-made `hydo-check` line exists it is shown
-first; use the shell version where `hydo-read` is not available (capabilities.md) or the store is
+first; use the shell version where `hydo-read` is not available (`hydo guide capabilities`) or the store is
 not one it reads.
 
 Start every check by testing that the store answers and `exit 2` if not, so a killed service is
@@ -72,7 +72,7 @@ echo "negative balances: $n"; [ "$n" = 0 ]
 Use the same shape for conservation (`SELECT SUM(balance) ...` equals the starting total),
 orphans (`... LEFT JOIN ... WHERE parent.id IS NULL`) and uniqueness (`GROUP BY k HAVING
 COUNT(*) > 1`). As `always_` checks they also run at the end. A shell example of conservation:
-`assets/example-redis-composed/hydo/checks/final_total_conserved`.
+`hydo guide examples/example-redis-composed/hydo/checks/final_total_conserved`.
 
 ## Monotonic reads — `always_version_never_goes_back`
 
@@ -88,7 +88,7 @@ echo $v > /tmp/hydo/last_version; echo "version $v"
 ```
 
 For a store with versions or revisions, a history check (`linearizable_<name>`) is stronger:
-checks.md, "History checks".
+`hydo guide checks`, "History checks".
 
 ## A cache never disagrees with the store — `final_cache_never_wrong`
 
