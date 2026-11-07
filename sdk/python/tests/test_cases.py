@@ -11,6 +11,7 @@ cases that need "f32" are skipped (and reported).
 
 import asyncio
 import glob
+import itertools
 import json
 import os
 import re
@@ -205,7 +206,15 @@ def arg(x, h):
 def child():
     sys.path.insert(0, os.path.join(HERE, "..", "src"))
     import hydo_assert as ha
+    from hydo_assert import _eventually
     from hydo_assert import history as h
+
+    # The cases hold elapsed_ms 0 for every episode (each ends at once, and one with a deadline
+    # of 0 ms is late because some time passed); under the guest's deterministic clock that is
+    # what happens. The host's clock is not deterministic: on a busy machine a millisecond can
+    # pass between begin and done. So the child's monotonic clock advances by one nanosecond
+    # per reading (test_hydo_assert.py tests eventually against the real clock).
+    _eventually._now_ns = itertools.count(1).__next__
 
     with open(os.environ["HYDO_CASE_FILE"], encoding="utf-8") as f:
         case = json.load(f)
