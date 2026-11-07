@@ -24,6 +24,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Named explicitly, bash runs with -eo pipefail: a failing test before a `| grep` fails its step.
+defaults:
+  run:
+    shell: bash
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
@@ -63,10 +68,11 @@ jobs:
       # cannot run on a runner, with the reason each test gives (docs/CI.md lists them).
       - name: What the tests skipped, and why
         run: |
-          cargo test --locked --release -q -p hydo-agents --test public_content -- --nocapture
-          cargo test --locked --release -q -p hydo-agents --test skill_check -- --nocapture 2>&1 | grep -i 'skills-ref'
-          cargo test --locked --release -q -p hydo-errors --test equivalence recorded_files -- --nocapture
-          cargo test --locked --release -q -p hydo-cli --test equivalence cli_matches_golden -- --nocapture 2>&1 | grep '^cli: '
+          # --workspace (not -p) keeps the features of the run above, so nothing is rebuilt
+          t="cargo test --locked --release --workspace -q"
+          $t --test public_content -- --nocapture 2>&1 | grep '^public_content: '
+          $t --test skill_check -- --nocapture 2>&1 | grep -o 'skills-ref: .*'
+          $t --test equivalence -- --nocapture --exact recorded_files cli_matches_golden 2>&1 | grep -E '^(SKIPPED|cli): '
 
   guest-programs:
     name: guest programs (ubuntu-24.04)
@@ -86,13 +92,18 @@ jobs:
       - name: hydo-agent (the guest agent's native tests, as an unprivileged user)
         working-directory: hydo/crates/hydo-agent
         run: cargo test --locked
+      # The ignored test needs `sudo -n` (the agent as PID 1 of its own PID and mount
+      # namespace); a GitHub Linux runner has password-less sudo.
+      - name: hydo-agent (the agent as PID 1 in a namespace, with sudo)
+        working-directory: hydo/crates/hydo-agent
+        run: cargo test --locked --test native -- --ignored
       # The store tests need live MySQL, PostgreSQL, Kafka, Redis and etcd servers
       # (native-test.sh starts them); without their address variables each one says so.
       - name: hydo-read (the store reader and its checks)
         working-directory: hydo/crates/hydo-read
         run: |
           cargo test --locked
-          cargo test --locked -q --test stores -- --nocapture 2>&1 | grep 'skipped'
+          cargo test --locked --test stores -- --nocapture --test-threads=1 2>&1 | grep 'skipped'
 
   sdks:
     name: sdks
@@ -127,8 +138,7 @@ jobs:
           GOTOOLCHAIN: local
         run: |
           go version
-          # -v for the shared cases' summary (how many ran, which were skipped and why);
-          # the shell's pipefail keeps a failing test a failing step
+          # -v for the shared cases' summary (how many ran, which were skipped and why)
           go test -count=1 -v ./hydoassert/... ./hydohist/... 2>&1 | grep -E 'cases_test.go:|^(ok|FAIL|--- FAIL)'
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
