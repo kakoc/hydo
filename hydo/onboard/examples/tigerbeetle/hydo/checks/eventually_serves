@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: within=60 after=heal poll=1
+# hydo-msg: after the faults stop, the cluster answers a lookup within 60 seconds
+. ${HYDO_WORKLOAD:-/hydo/workload}/helper_tb.sh
+tb 5 "lookup_accounts id=1" | grep -q '"id": "1"'

@@ -1598,7 +1598,8 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 Reported as warnings, with what to do (the file's header repeats them): `build:` (with an image:
 the image is used; without one the import stops: build it, `docker save` it, set `image:`),
 non-default `networks:` (one bridge in the guest: isolation between Compose networks is not
-modelled), `network_mode`, `privileged`, `cap_add`/`cap_drop`, `devices`, `security_opt`,
+modelled), `network_mode` (for `host`, the warning says that peers named as
+`0.0.0.0:<port>` or `localhost:<port>` must become their `addr:`), `privileged`, `cap_add`/`cap_drop`, `devices`, `security_opt`,
 `pid`/`ipc`/`uts`/`userns_mode`, `sysctls`, `ulimits`, `dns*`, `init`, `volumes_from`, `extends`,
 `configs`, `scale`, `deploy.replicas` > 1 and other `deploy:` (Swarm) keys, `shm_size`, GPU
 reservations, `platform:` other than linux/amd64 or linux/arm64, an `include:`. Ignored silently:

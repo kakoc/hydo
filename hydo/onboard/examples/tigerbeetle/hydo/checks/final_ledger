@@ -1,0 +1,70 @@
+#!/bin/sh
+# hydo-msg: every acknowledged transfer is in the ledger with what it moved, no transfer the clients never sent is there, and every balance is the sum of its transfers
+# Reads the 8 accounts and every transfer of the ledger (query_transfers) back from the cluster,
+# then compares (awk): see helper_tb.sh for the id encoding. In the recovery boot after a power
+# cut $HYDO_OUTCOMES is empty (hydo carries only the acknowledged and the failed ids), so the
+# "no client sent it" part is checked only when the outcomes are there.
+. ${HYDO_WORKLOAD:-/hydo/workload}/helper_tb.sh
+W=/tmp/hydo/check-ledger; rm -rf $W; mkdir -p $W
+
+stmt="lookup_accounts"; sep=" "; i=1
+while [ $i -le $TB_ACCOUNTS ]; do stmt="$stmt$sep id=$i"; sep=","; i=$((i + 1)); done
+tb 30 "$stmt" > $W/accounts.json || { echo "the cluster did not answer lookup_accounts"; exit 2; }
+# an empty result is "No transfers were found." (exit 1 before 0.17); a time-out is any other status
+tb 30 "query_transfers ledger=700 limit=8189" > $W/transfers.json
+case $? in 0|1) ;; *) echo "the cluster did not answer query_transfers"; exit 2 ;; esac
+
+awk '{print $1}' "$HYDO_OUTCOMES" 2>/dev/null | sort -u > $W/attempted
+sort -u "$HYDO_ACKED" 2>/dev/null > $W/acked
+
+# JSON objects -> "id a b c" lines (accounts: id debits credits; transfers: id debit credit amount)
+flat() {
+  awk -v want="$2" '
+    /"id":/ { gsub(/[",]/, "", $2); id = $2 }
+    { k = $1; gsub(/[":]/, "", k); v = $2; gsub(/[",]/, "", v); f[k] = v }
+    /^}/ { if (want == "a") print id, f["debits_posted"], f["credits_posted"];
+           else print id, f["debit_account_id"], f["credit_account_id"], f["amount"]; delete f }' "$1"
+}
+flat $W/accounts.json a > $W/accounts
+flat $W/transfers.json t > $W/found
+[ "$(wc -l < $W/accounts)" = "$TB_ACCOUNTS" ] || { echo "lookup_accounts returned $(wc -l < $W/accounts) of $TB_ACCOUNTS accounts"; exit 1; }
+
+awk -v acc=$W/accounts -v att=$W/attempted -v ack=$W/acked -v fnd=$W/found '
+  BEGIN {
+    while ((getline l < att) > 0) { attempted[l] = 1; natt++ }
+    while ((getline l < ack) > 0) { acked[l] = 1; nacked++ }
+    while ((getline l < fnd) > 0) {
+      split(l, a, " "); id = a[1]; found[id] = 1; nfound++
+      x = id; cr = x % 10; x = int(x / 10); dr = x % 10; x = int(x / 10); amt = x % 1000
+      if (a[2] != dr || a[3] != cr || a[4] != amt) { bad++; if (bad <= 5) badl = badl " " id }
+      if (natt && !(id in attempted)) { phantom++; if (phantom <= 5) phl = phl " " id }
+      deb[a[2]] += a[4]; cre[a[3]] += a[4]
+    }
+    for (id in acked) if (!(id in found)) { lost++; if (lost <= 5) lostl = lostl " " id }
+    while ((getline l < acc) > 0) {
+      split(l, a, " ")
+      if (a[2] != deb[a[1]] + 0 || a[3] != cre[a[1]] + 0) {
+        off++; offl = offl " account " a[1] ": debits " a[2] " (transfers " deb[a[1]] + 0 ") credits " a[3] " (transfers " cre[a[1]] + 0 ")"
+      }
+    }
+    if (lost) print "lost acknowledged transfers:" lostl
+    if (phantom) print "transfers no client sent:" phl
+    if (bad) print "transfers that differ from what was sent:" badl
+    if (off) print "balances:" offl
+    if (lost) { printf "lost %d of %d acknowledged transfers (found %d)\n", lost, nacked, nfound; exit 1 }
+    if (phantom || bad) { printf "%d unknown and %d altered transfers in the ledger\n", phantom, bad; exit 1 }
+    if (off) { printf "%d account balances differ from the sum of their transfers\n", off; exit 1 }
+    printf "ledger ok: %d acknowledged, %d in the ledger, balances match\n", nacked, nfound
+  }' > $W/verdict
+rc=$?
+if [ $rc != 0 ]; then
+  # For the person reading the console: what each replica logged at the end.
+  {
+    echo "final_ledger: $(tail -n 1 $W/verdict)"
+    for f in /tmp/hydo/tigerbeetle_?.log; do
+      echo "== $f"; grep -v -E 'on_connect: error|heartbeat|message_bus' "$f" | tail -n 8
+    done
+  } > /dev/console 2>&1
+fi
+cat $W/verdict
+exit $rc

@@ -1144,7 +1144,17 @@ impl<'a> Importer<'a> {
             {
                 continue;
             }
-            if let Some((_, why)) = UNSUPPORTED.iter().find(|(u, _)| *u == ks) {
+            if ks == "network_mode" && s.get("network_mode").map(pstr).as_deref() == Some("host") {
+                // Docker's host network: every service sees every other on one localhost, so
+                // the program's own arguments often name peers as 0.0.0.0:<port> or
+                // localhost:<port>, which point at the service itself inside its own namespace.
+                let how = if self.bridge {
+                    "here each service has its own network namespace and addr:, so a peer named as 0.0.0.0:<port> or localhost:<port> in a command or configuration must become that peer's addr: (or import again with --network loopback: one shared loopback network)"
+                } else {
+                    "with --network loopback every service shares one loopback network, as with Docker's host network"
+                };
+                self.w.warn(&ks, format!("{wh}: network_mode: host: {how}"));
+            } else if let Some((_, why)) = UNSUPPORTED.iter().find(|(u, _)| *u == ks) {
                 self.w.warn(&ks, format!("{wh}: {ks}: {why}"));
             } else {
                 self.w.warn(
