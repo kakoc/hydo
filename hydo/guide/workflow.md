@@ -58,7 +58,10 @@ service in its own network namespace at its own address) and prints a warning fo
 could not map; read each one (bind mounts that the program writes to need a hand fix). It also
 writes a numbered-steps `workload.run` and a `TODO` invariant: delete both (keep `workload.steps`
 and `workload.timeout`) and add a `test:` section with commands. Keep the generated comments that
-say where each value came from. Reference: `hydo guide manifest`, "From Docker Compose".
+say where each value came from. A service built locally (`build:`) is never pulled:
+fetch-images.sh prints the `docker build` and `docker save` commands that make its file and stops
+until the file is there; run `hydo compose` again then, to pin it by the file's content.
+Reference: `hydo guide manifest`, "From Docker Compose".
 
 ## Where each program comes from
 

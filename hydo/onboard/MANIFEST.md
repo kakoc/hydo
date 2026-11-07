@@ -1595,9 +1595,14 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The hydo-onboard skill (`hydo guide skill`, `skills/hydo-onboard`) writes the real ones. |
 | `faults:` | all kinds except `freeze` |
 
-Reported as warnings, with what to do (the file's header repeats them): `build:` (with an image:
-the image is used; without one the import stops: build it, `docker save` it, set `image:`),
-non-default `networks:` (one bridge in the guest: isolation between Compose networks is not
+Reported as warnings, with what to do (the file's header repeats them): `build:` (a service
+built locally: its image is never pulled by its tag. An image file already at
+`images/<name>-<tag>-amd64.docker.tar` (or a lock entry) pins it by its content; a tag its
+registry has is pinned by digest as any image; otherwise it is imported as a local build, named
+as Docker Compose names it, `image:` or else `<project>-<service>`, and fetch-images.sh fetches
+nothing for it: it prints `docker build -t <tag> <context> && docker save -o <file> <tag>` (or an
+OCI layout at `images/<name>-<tag>-arm64-oci` for arm64) and stops while the file is missing; run
+`hydo compose` again once the file is there to pin it), non-default `networks:` (one bridge in the guest: isolation between Compose networks is not
 modelled), `network_mode` (for `host`, the warning says that peers named as
 `0.0.0.0:<port>` or `localhost:<port>` must become their `addr:`), `privileged`, `cap_add`/`cap_drop`, `devices`, `security_opt`,
 `pid`/`ipc`/`uts`/`userns_mode`, `sysctls`, `ulimits`, `dns*`, `init`, `volumes_from`, `extends`,

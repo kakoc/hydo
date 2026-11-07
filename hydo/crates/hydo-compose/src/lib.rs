@@ -708,6 +708,9 @@ struct Svc {
     /// The Compose restart policy, in its words (`restart:` or `deploy.restart_policy`), M134.
     restart: Option<String>,
     mounts: Vec<Mount>,
+    /// Built locally (`build:` with no image file, lock entry or registry image yet): the
+    /// arguments of `docker build` that make it, for fetch-images.sh.
+    build: Option<String>,
 }
 
 /// The options of one import.
@@ -901,6 +904,110 @@ impl<'a> Importer<'a> {
             .filter(Y::is_map)
             .unwrap_or(Y::Map(Vec::new()));
         self.lock_dirty = false;
+    }
+
+    /// `docker build`'s arguments for a Compose `build:` (a context, or a mapping with
+    /// `context:`, `dockerfile:` and `target:`), with the paths relative to the output directory,
+    /// where fetch-images.sh runs.
+    fn build_args(&self, b: &Y) -> String {
+        let (ctx, file, target) = if b.is_map() {
+            let opt = |k: &str| b.get(k).filter(|v| v.truthy()).map(pstr);
+            (
+                opt("context").unwrap_or_else(|| ".".into()),
+                opt("dockerfile"),
+                opt("target"),
+            )
+        } else {
+            (pstr(b), None, None)
+        };
+        let local = |p: &str| {
+            if p.contains("://") || p.starts_with("git@") {
+                p.to_string()
+            } else {
+                relpath(&join(&self.cdir, p), &self.odir)
+            }
+        };
+        let cdir = local(&ctx);
+        let mut a: Vec<String> = Vec::new();
+        if let Some(f) = file {
+            // dockerfile: is relative to the context
+            let f = if cdir.contains("://") || f.starts_with('/') {
+                f
+            } else {
+                relpath(&join(&join(&self.cdir, &ctx), &f), &self.odir)
+            };
+            a.push("-f".into());
+            a.push(shlex::quote(&f));
+        }
+        if let Some(t) = target {
+            a.push("--target".into());
+            a.push(shlex::quote(&t));
+        }
+        a.push(shlex::quote(&cdir));
+        a.join(" ")
+    }
+
+    /// The image of `r` is already pinned without a registry: by the lock file, or by an image
+    /// file in the images directory (`<stem>-amd64.docker.tar`, read by its content).
+    fn image_known(&self, r: &str) -> R<bool> {
+        if self.lock.get(r).is_some() {
+            return Ok(true);
+        }
+        let (reg, repo, tag, digest) = parse_ref(r);
+        let stem = file_stem(&reg, &repo, tag.as_deref(), digest.as_deref())?;
+        let idir = join(
+            &self.odir,
+            self.o
+                .images_dir
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .unwrap_or("images"),
+        );
+        Ok(exists(&join(&idir, &format!("{stem}-amd64.docker.tar"))))
+    }
+
+    /// The image of a service built locally whose file is not there yet: no platforms, no
+    /// digest, never looked up in a registry (`local_build`).
+    fn local_info(&self, r: &str) -> R<Y> {
+        let (reg, repo, tag, digest) = parse_ref(r);
+        file_stem(&reg, &repo, tag.as_deref(), digest.as_deref())?;
+        Ok(Y::Map(vec![
+            (Y::s("ref"), Y::s(r)),
+            (Y::s("name"), Y::Str(short_name(&reg, &repo))),
+            (Y::s("tag"), opt_y(tag)),
+            (Y::s("index_digest"), opt_y(digest)),
+            (Y::s("registry"), Y::s(&reg)),
+            (Y::s("repo"), Y::s(&repo)),
+            (Y::s("platforms"), Y::Map(Vec::new())),
+            (Y::s("local_build"), Y::Bool(true)),
+        ]))
+    }
+
+    /// Docker Compose's project name (`name:`, else the Compose file's directory), as it names
+    /// the image of a `build:` without `image:` (`<project>-<service>`).
+    fn compose_project(&self) -> String {
+        let raw = match (&self.o.name, self.doc.get("name")) {
+            (Some(n), _) if !n.is_empty() => n.clone(),
+            (_, Some(n)) if n.truthy() => pstr(n),
+            _ => hydo_manifest::py::basename(&self.cdir),
+        };
+        let p: String = raw
+            .to_lowercase()
+            .chars()
+            .map(|c| {
+                if c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect();
+        let p = p.trim_matches('-').to_string();
+        if p.is_empty() {
+            "compose".into()
+        } else {
+            p
+        }
     }
 
     fn image_info(&mut self, r: &str) -> R<Y> {
@@ -1163,18 +1270,62 @@ impl<'a> Importer<'a> {
                 );
             }
         }
-        if s.has("build") {
-            if let Some(img) = s.get("image") {
-                self.w.warn("build", format!("{wh}: build: ignored, the image {} is used (build and push it, or `docker save` your local build and point image: at the file)", pstr(img)));
-            } else {
-                return err(format!("{wh}: has build: and no image:. hydo needs an image file: build it, then `docker save -o {n}.tar <tag>` and add `image: <tag>` to the Compose service (or set services[].image in hydo.yaml to the .tar)"));
+        // A service built locally (`build:`): its image is a file the user makes with Docker (or
+        // an OCI layout), never a pull of the tag, which usually names only the local build.
+        // An image file already in the images directory, or a lock entry, pins it as before; a
+        // tag the registry has (a published image the Compose file also builds) is pinned by
+        // digest as before; otherwise the service is imported as a local build, and
+        // fetch-images.sh says how to make the file.
+        let mut local_build: Option<String> = None;
+        let rf = if s.has("build") {
+            let ctxt = self.build_args(s.getn("build"));
+            match s.get("image") {
+                Some(img) => {
+                    let rf = pstr(img);
+                    if !self.image_known(&rf)? {
+                        local_build = Some(ctxt);
+                    }
+                    rf
+                }
+                None => {
+                    // Docker Compose names the image of a build without image: <project>-<service>
+                    local_build = Some(ctxt);
+                    format!(
+                        "{}-{}",
+                        self.compose_project(),
+                        safe_dash(&n.to_lowercase())
+                    )
+                }
             }
-        }
-        let Some(img) = s.get("image") else {
-            return err(format!("{wh}: no image:"));
+        } else {
+            let Some(img) = s.get("image") else {
+                return err(format!("{wh}: no image:"));
+            };
+            pstr(img)
         };
-        let rf = pstr(img);
-        let info = self.image_info(&rf)?;
+        let info = match &local_build {
+            Some(_) if !self.o.no_resolve && s.get("image").is_some() => {
+                // a tag the registry may have; a refusal (401, 404) leaves it a local build
+                match self.image_info(&rf) {
+                    Ok(i) => {
+                        local_build = None;
+                        i
+                    }
+                    Err(e) => {
+                        self.w.warn(
+                            "build",
+                            format!("{wh}: image {rf} is not in its registry ({e}): imported as a local build"),
+                        );
+                        self.local_info(&rf)?
+                    }
+                }
+            }
+            Some(_) => self.local_info(&rf)?,
+            None => self.image_info(&rf)?,
+        };
+        if s.has("build") && local_build.is_none() && pstr(info.getn("from")) != "local file" {
+            self.w.warn("build", format!("{wh}: build: ignored, the image {rf} is used (build and push it, or `docker save` your local build and point image: at the file)"));
+        }
         let (reg, repo, tag, digest) = parse_ref(&rf);
         let stem = file_stem(&reg, &repo, tag.as_deref(), digest.as_deref())?;
         let idir = self
@@ -1192,9 +1343,17 @@ impl<'a> Importer<'a> {
             }
         }
         let x86 = format!("{idir}/{stem}-amd64.docker.tar");
-        let unresolved = info.getn("unresolved").truthy();
+        let unresolved = info.getn("unresolved").truthy() || local_build.is_some();
+        let arm = format!("{idir}/{stem}-arm64-oci");
+        if let Some(b) = &local_build {
+            comments.push(format!("image {rf}: built locally (build:), NOT pinned yet: fetch-images.sh says how to make its file; run hydo compose again once it is there to pin it by the file's content"));
+            self.w.warn(
+                "build",
+                format!("{wh}: image {rf} is built locally (build:): make its file with `docker build -t {rf} {b} && docker save -o {x86} {rf}` (on a Mac, or for arm64: an OCI layout of it at {arm}), then run hydo compose again to pin it by the file's content"),
+            );
+        }
         let image = if plat.has("arm64") || unresolved {
-            Img::Two(x86, format!("{idir}/{stem}-arm64-oci"))
+            Img::Two(x86, arm)
         } else {
             Img::One(x86)
         };
@@ -1204,11 +1363,13 @@ impl<'a> Importer<'a> {
             _ => iname.clone(),
         };
         if unresolved {
-            comments.push(format!("image {rf}: NOT resolved to a digest (--no-resolve); fetch-images.sh fetches the tag, which can change"));
-            self.w.warn(
-                "image",
-                format!("{wh}: image {rf} is not pinned by digest (--no-resolve)"),
-            );
+            if local_build.is_none() {
+                comments.push(format!("image {rf}: NOT resolved to a digest (--no-resolve); fetch-images.sh fetches the tag, which can change"));
+                self.w.warn(
+                    "image",
+                    format!("{wh}: image {rf} is not pinned by digest (--no-resolve)"),
+                );
+            }
         } else {
             comments.push(format!(
                 "image {rf} = {}/{}@{}",
@@ -1288,6 +1449,7 @@ impl<'a> Importer<'a> {
             recovery_false: false,
             restart: None,
             mounts: Vec::new(),
+            build: local_build.clone(),
         };
         let is_job = jobs.iter().any(|j| j == n);
         if is_job {
@@ -2524,8 +2686,42 @@ impl<'a> Importer<'a> {
             format!("mkdir -p {}", shlex::quote(&idir)),
         ];
         let mut done: Vec<String> = Vec::new();
+        let mut local: Vec<String> = Vec::new();
         for s in &self.svcs {
             let info = &s.info;
+            if let (Some(b), Img::Two(x86, arm)) = (&s.build, &s.image) {
+                // built locally: nothing to fetch; say how to make the file, and stop at the end
+                // when it is not there
+                if local.contains(x86) {
+                    continue;
+                }
+                local.push(x86.clone());
+                let (x, a, t) = (
+                    shlex::quote(x86),
+                    shlex::quote(arm),
+                    shlex::quote(&s.image_ref),
+                );
+                l.push(format!(
+                    "# {} is built locally (build:): nothing is fetched. Make its file once with Docker:",
+                    s.image_ref
+                ));
+                l.push(format!(
+                    "#   docker build -t {t} {b} && docker save -o {x} {t}"
+                ));
+                l.push(format!("#   (arm64, for the Mac: docker buildx build --platform linux/arm64 -t {t} -o type=oci,tar=false,dest={a} {b})"));
+                l.push(
+                    "# then run hydo compose again: it pins the image by the file's content."
+                        .into(),
+                );
+                l.push(format!(
+                    "[ -f {x} ] || [ -e {a} ] || {{ echo {} >&2; LOCAL=1; }}",
+                    shlex::quote(&format!(
+                        "fetch-images.sh: {x86} is built locally (build:): docker build -t {} {b} && docker save -o {x86} {}",
+                        s.image_ref, s.image_ref
+                    ))
+                ));
+                continue;
+            }
             let mut img: Vec<(&str, &String)> = match &s.image {
                 Img::One(a) => vec![("x86_64", a)],
                 Img::Two(a, b) => vec![("x86_64", a), ("arm64", b)],
@@ -2565,6 +2761,12 @@ impl<'a> Importer<'a> {
             }
         }
         done.sort();
+        if !local.is_empty() {
+            l.push("[ -z \"${LOCAL:-}\" ] || exit 1".into());
+        }
+        if done.is_empty() {
+            return l.join("\n") + "\n";
+        }
         l.push(format!(
             "ls -ld {}",
             done.iter()

@@ -32,6 +32,7 @@ hydo-compose                             fast
 hydo-compose::bin/hydo-compose           fast
 hydo-compose::bin/hydo-fetch-image       fast
 hydo-compose::equivalence                fast
+hydo-compose::local_build                fast
 hydo-compose::pycheck                    fast
 hydo-compose::registry                   fast
 hydo-composer                            fast
