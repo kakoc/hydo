@@ -1,0 +1,18 @@
+# The release index (Milestone 162, docs/design/install-cache.md): every published hydo release's
+# archives by sha256, and the guest kernels and initramfs files inside them. It is compiled into
+# hydo (hydo-image, src/releases.rs), so every hydo can fetch an earlier release's archive with a
+# pinned sha256 and find the release that shipped a kernel an image names.
+#
+# Additions only: a line of a published release never changes. After publishing a release, add
+# its two archive lines (the sha256 of the release's SHA256SUMS asset) and its file lines
+# (docs/RELEASING.md, "Publish"). The running hydo's own version is known without lines here.
+#
+#   archive <version> <platform> <sha256> <archive file name>
+#   file    <version> <platform> <sha256> <path below the archive's top directory>
+
+archive 0.1.0 linux 58aab3b1898826d4ec9c892445099352a0b666fd11a74feee33c98129d4c491c hydo-linux-0.1.0.tar.gz
+file    0.1.0 linux 0a9ede352483e1718a8583e35afa3e82791c8223e40c0a888d39b0530158e9d3 guest/bzImage
+file    0.1.0 linux d074d764c76ce11932d5ff445cd468de38fdca8dd0db02f85fde3817ff997230 guest/initramfs-kafka.cpio.gz
+archive 0.1.0 mac   5c02e7f364424e97aad67a7fa91b73d29a8466e5fe17ea4bd540edc06dac9806 hydo-mac-0.1.0.tar.gz
+file    0.1.0 mac   f80c565589f1fecf9ccd49d33cb0717c7a15d5cddf3bb3bec7f2dd2b335b51ac hv/hvm/explore/out/Image-explore
+file    0.1.0 mac   806807e7be5f55dae342f796ccc6e20c35514b3684a8c0d4633901a8ac0aa609 hv/hvm/explore/out/Image-explore-netns

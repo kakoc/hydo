@@ -25,14 +25,25 @@
 //!   hypervisor entitlement (`hv/hvm/hv.entitlements`; an ad-hoc signature is enough);
 //! - write the record.
 //!
-//! A damaged file is never repaired: setup refuses and says to unpack the release again. The
-//! one place where a later "download this version's assets into a cache" step plugs in is
-//! [`obtain_assets`], between the inspection and the steps.
+//! A damaged file is restored from the release's archive of the same version (Milestone 162,
+//! docs/design/install-cache.md): [`obtain_assets`], between the inspection and the steps, asks
+//! the install cache ([`Assets`], `src/cache.rs`) for the files that repair each damage
+//! ([`Damage::fix`]), from its store or fetched from the release (not with `--offline`); each
+//! restored file must have the sha256 the release's `SHA256SUMS` lists, and the inspection that
+//! follows checks everything again. What no restored file repairs (a `bin/hydo` of another
+//! release, a record that cannot be read), or an archive that cannot be had, is refused as
+//! before: unpack the release again.
 //!
-//! Exit status: 0 done (or, with `--check`, nothing to do), 1 a file is damaged or this machine
-//! cannot run the release, 2 usage, 3 (`--check` only) steps are pending that `hydo setup` takes.
-//! `--verify` checks the files only (pending steps are not reported), so an installer can check
-//! an unpacked release before it replaces an earlier installation with it.
+//! `--get [VERSION]` installs a version from its archive into the install cache
+//! (`$HYDO_HOME/versions/<VERSION>`, set up with these same steps) and points
+//! `$HYDO_HOME/bin/hydo` at it; `--archive FILE` puts a downloaded archive into the cache
+//! (`src/cache.rs`).
+//!
+//! Exit status: 0 done (or, with `--check`, nothing to do), 1 a file is damaged (and cannot be
+//! restored) or this machine cannot run the release, 2 usage, 3 (`--check` only) steps are
+//! pending that `hydo setup` takes (restoring files included). `--verify` checks the files only
+//! (pending steps and restorable files are not reported), so an installer can check an unpacked
+//! release before it replaces an earlier installation with it.
 
 use crate::ctx::{die_rc, Ctx, Platform};
 use std::collections::BTreeMap;
@@ -195,11 +206,16 @@ impl Step {
     }
 }
 
-/// A file that does not match the release: setup cannot fix it.
+/// A file that does not match the release. Setup's steps cannot fix it; restoring the file
+/// `fix` names from the version's archive can (Milestone 162, [`Assets`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Damage {
     pub path: String,
     pub why: String,
+    /// The release file (a path of `SHA256SUMS`) whose restoring repairs this damage; None: no
+    /// restored file can (a `SHA256SUMS` or record that cannot be read, or a file pinned in this
+    /// hydo that the release lists with another sha256: a `bin/hydo` of another release).
+    pub fix: Option<String>,
 }
 
 impl Damage {
@@ -576,6 +592,7 @@ pub fn inspect(root: &Path, p: Platform, pins: &[Pin], host: &dyn Host) -> Repor
         r.damaged.push(Damage {
             path: path.to_string(),
             why,
+            fix: None,
         })
     };
     let sums = match parse_sums(&sums_text) {
@@ -619,6 +636,8 @@ pub fn inspect(root: &Path, p: Platform, pins: &[Pin], host: &dyn Host) -> Repor
             Some(_) => r.pinned += 1,
         }
     }
+    // the damages from here on are of files the release lists: restoring one repairs them
+    let file_damages = r.damaged.len();
     let mut record_needed = false;
     for (sha, path) in &sums {
         let file = root.join(path);
@@ -722,16 +741,74 @@ pub fn inspect(root: &Path, p: Platform, pins: &[Pin], host: &dyn Host) -> Repor
         Step::UnpackStore | Step::Sign => 2,
         Step::Record => 3,
     });
+    let listed: BTreeMap<&str, ()> = sums.iter().map(|(_, p)| (p.as_str(), ())).collect();
+    for d in &mut r.damaged[file_damages..] {
+        d.fix = if d.path == STORE_DIR || d.path.starts_with(&format!("{STORE_DIR}/")) {
+            // the store tree is unpacked again from a restored tar
+            listed
+                .contains_key(STORE_TAR)
+                .then(|| STORE_TAR.to_string())
+        } else {
+            listed.contains_key(d.path.as_str()).then(|| d.path.clone())
+        };
+    }
     r
 }
 
-/// Where the release's pinned files come from when some are missing or changed. In this version
-/// the only source is the unpacked release itself, so nothing can be fetched again and every
-/// damage stays (the fix is to unpack the release again). A later version plugs in here a
-/// source that downloads this version's assets into a cache and puts them in place: it gets the
-/// damaged files and returns the ones it could not provide.
-fn obtain_assets(_root: &Path, _pins: &[Pin], damaged: Vec<Damage>) -> Vec<Damage> {
-    damaged
+/// Where a damaged release's files come from again (Milestone 162): the install cache's archive
+/// of the release's version (`cache::VersionAssets`). The release's own `SHA256SUMS` says what
+/// each restored file must be.
+pub trait Assets {
+    /// Where the files would come from, in words ("hydo-linux-0.1.0.tar.gz in the install
+    /// cache", "…, fetched from <url>"), or why they cannot come from anywhere now (offline).
+    fn plan(&self) -> Result<String, String>;
+    /// Write each (path, sha256) into the release tree `root`, verified. Returns the source in
+    /// words.
+    fn restore(&self, root: &Path, files: &[(String, String)]) -> Result<String, String>;
+}
+
+/// The files that would repair `damaged`, with the sha256 the release's `SHA256SUMS` lists
+/// (None: a damage no restored file repairs).
+fn repairs(root: &Path, damaged: &[Damage]) -> Option<Vec<(String, String)>> {
+    let sums = parse_sums(&std::fs::read_to_string(root.join(SUMS)).ok()?).ok()?;
+    let by: BTreeMap<&str, &str> = sums.iter().map(|(s, p)| (p.as_str(), s.as_str())).collect();
+    let mut v: Vec<(String, String)> = Vec::new();
+    for d in damaged {
+        let f = d.fix.as_deref()?;
+        let s = by.get(f)?;
+        if !v.iter().any(|(p, _)| p == f) {
+            v.push((f.to_string(), s.to_string()));
+        }
+    }
+    Some(v)
+}
+
+/// Restore the damaged files from `assets`. Ok: what was done (empty when nothing was
+/// damaged); Err: why it could not.
+fn obtain_assets(
+    root: &Path,
+    damaged: &[Damage],
+    assets: Option<&dyn Assets>,
+) -> Result<Vec<String>, String> {
+    let (Some(a), false) = (assets, damaged.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    let Some(files) = repairs(root, damaged) else {
+        return Err("a damage no file of the release's archive repairs is among them".into());
+    };
+    // a restored guest/store.tar is unpacked again by the step UnpackStore, which replaces the
+    // damaged tree
+    let from = a.restore(root, &files)?;
+    Ok(vec![format!(
+        "restore {} file{} from {from}: {}",
+        files.len(),
+        if files.len() == 1 { "" } else { "s" },
+        files
+            .iter()
+            .map(|(p, _)| p.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    )])
 }
 
 fn chmod_tree_writable(dir: &Path) {
@@ -820,15 +897,47 @@ pub fn setup(
     pins: &[Pin],
     host: &dyn Host,
 ) -> Result<(Report, Vec<String>), Vec<String>> {
+    setup_with(root, p, pins, host, None)
+}
+
+/// [`setup`], restoring damaged files from `assets` first (Milestone 162). Every restored file
+/// is checked by the inspection that follows, against the release's `SHA256SUMS` and this
+/// hydo's pins.
+pub fn setup_with(
+    root: &Path,
+    p: Platform,
+    pins: &[Pin],
+    host: &dyn Host,
+    assets: Option<&dyn Assets>,
+) -> Result<(Report, Vec<String>), Vec<String>> {
     let mut r = inspect(root, p, pins, host);
     if !r.release {
         return Err(vec![not_a_release(root)]);
     }
-    r.damaged = obtain_assets(root, pins, std::mem::take(&mut r.damaged));
+    let mut restored = Vec::new();
+    if r.unsupported.is_empty() && !r.damaged.is_empty() && assets.is_some() {
+        match obtain_assets(root, &r.damaged, assets) {
+            Ok(done) => {
+                restored = done;
+                r = inspect(root, p, pins, host);
+            }
+            Err(e) => {
+                let mut v = refusal(&r);
+                let last = v.len() - 1;
+                v[last] = format!(
+                    "the release is damaged or incomplete, and hydo setup could not restore it \
+                     from the release's archive ({e}): unpack the release again (check the \
+                     download) and run its install.sh"
+                );
+                return Err(v);
+            }
+        }
+    }
     if !r.unsupported.is_empty() || !r.damaged.is_empty() {
         return Err(refusal(&r));
     }
-    let done = apply(root, &r, host).map_err(|e| vec![e])?;
+    let mut done = restored;
+    done.extend(apply(root, &r, host).map_err(|e| vec![e])?);
     let after = inspect(root, p, pins, host);
     if !after.ok() || !after.pending.is_empty() {
         let mut v = refusal(&after);
@@ -913,26 +1022,141 @@ pub fn inspect_ctx(ctx: &Ctx) -> Report {
     inspect(&ctx.root, ctx.platform, &pins(ctx.platform), &System)
 }
 
+const USAGE: &str = "usage: hydo setup [--check | --verify] [--add-to-path] [--offline]\n       \
+                     hydo setup --get [VERSION] [--add-to-path] [--offline]\n       \
+                     hydo setup --archive FILE";
+
+/// What `hydo setup --check` and `--verify` print, and their exit status (0 nothing to do or
+/// intact, 1 damaged, 3 steps pending). Damage that `assets` can restore is a pending step.
+pub fn check_lines(
+    root: &Path,
+    p: Platform,
+    pins: &[Pin],
+    host: &dyn Host,
+    verify: bool,
+    assets: Option<&dyn Assets>,
+) -> (Vec<String>, i32) {
+    let mut out = Vec::new();
+    let r = inspect(root, p, pins, host);
+    if !r.release {
+        out.push(format!("  {}", not_a_release(root)));
+        return (out, 1);
+    }
+    for u in &r.unsupported {
+        out.push(format!("  cannot run here: {u}"));
+    }
+    out.push(format!(
+        "  {} files and store entries match ({} of them pinned in this hydo)",
+        r.checked, r.pinned
+    ));
+    for d in &r.damaged {
+        out.push(format!("  damaged: {}", d.line()));
+    }
+    // what restoring from the version's archive would do (not for --verify, which checks the
+    // files only)
+    let restore = match (verify, assets, r.damaged.is_empty()) {
+        (false, Some(a), false) => match repairs(root, &r.damaged) {
+            None => Err("a damage no file of the release's archive repairs is among them".into()),
+            Some(files) => a.plan().map(|from| (files.len(), from)),
+        },
+        _ => Err(String::new()),
+    };
+    if !r.unsupported.is_empty() || (!r.damaged.is_empty() && restore.is_err()) {
+        if let Err(e) = &restore {
+            if !e.is_empty() {
+                out.push(format!("  cannot restore the damaged files: {e}"));
+            }
+        }
+        out.push(
+            "  the release is damaged or incomplete: unpack it again and run its install.sh".into(),
+        );
+        return (out, 1);
+    }
+    if verify {
+        out.push("  the release's files are intact".into());
+        return (out, 0);
+    }
+    if let Ok((n, from)) = &restore {
+        out.push(format!(
+            "  hydo setup would: restore {n} file{} from {from} (then check the release again)",
+            if *n == 1 { "" } else { "s" }
+        ));
+        return (out, 3);
+    }
+    if r.pending.is_empty() {
+        out.push("  set up: nothing to do".into());
+        return (out, 0);
+    }
+    for s in &r.pending {
+        out.push(format!("  hydo setup would: {}", s.describe()));
+    }
+    (out, 3)
+}
+
+fn print_add_to_path(bin: &Path, p: Platform) -> i32 {
+    let home = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()));
+    let shell = std::env::var("SHELL").unwrap_or_default();
+    let rc = rc_file(&home, &shell, p);
+    match add_to_path(&rc, bin) {
+        Ok(true) => println!("  added {} to PATH in {}", bin.display(), rc.display()),
+        Ok(false) => println!("  {} is on PATH in {} already", bin.display(), rc.display()),
+        Err(e) => {
+            eprintln!("hydo setup: cannot write {}: {e}", rc.display());
+            return 1;
+        }
+    }
+    0
+}
+
+fn platform_name(p: Platform) -> &'static str {
+    match p {
+        Platform::Linux => "linux",
+        Platform::Mac => "mac",
+    }
+}
+
+/// The install cache of this `hydo` command (Milestone 162).
+pub fn cache_of(ctx: &Ctx, offline: bool) -> crate::cache::Cache {
+    let c = &ctx.config.cli.cache;
+    crate::cache::Cache::new(c, platform_name(ctx.platform), offline || c.offline, None)
+}
+
 pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut check = false;
     let mut verify = false;
     let mut add_path = false;
-    for a in argv {
-        match a.as_str() {
+    let mut offline = false;
+    let mut get: Option<Option<String>> = None;
+    let mut archive: Option<PathBuf> = None;
+    let mut i = 0;
+    while i < argv.len() {
+        let a = argv[i].as_str();
+        match a {
             "--check" => check = true,
             "--verify" => verify = true,
             "--add-to-path" => add_path = true,
+            "--offline" => offline = true,
+            "--get" => {
+                let v = argv.get(i + 1).filter(|v| !v.starts_with('-')).cloned();
+                if v.is_some() {
+                    i += 1;
+                }
+                get = Some(v);
+            }
+            "--archive" => {
+                let Some(f) = argv.get(i + 1) else {
+                    die_rc(&format!("setup: --archive needs a file ({USAGE})"), 2)
+                };
+                archive = Some(PathBuf::from(f));
+                i += 1;
+            }
             "-h" | "--help" => {
-                println!("usage: hydo setup [--check | --verify] [--add-to-path]");
+                println!("{USAGE}");
                 return 0;
             }
-            _ => die_rc(
-                &format!(
-                    "setup: unknown argument {a} (usage: hydo setup [--check | --verify] [--add-to-path])"
-                ),
-                2,
-            ),
+            _ => die_rc(&format!("setup: unknown argument {a} ({USAGE})"), 2),
         }
+        i += 1;
     }
     if check && verify {
         die_rc("setup: --check or --verify, not both", 2);
@@ -942,6 +1166,65 @@ pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
             "setup: --add-to-path changes a file; not with --check or --verify",
             2,
         );
+    }
+    if (get.is_some() || archive.is_some()) && (check || verify) {
+        die_rc(
+            "setup: --get and --archive change the install cache; not with --check or --verify",
+            2,
+        );
+    }
+    let cache = cache_of(ctx, offline);
+    if let Some(f) = &archive {
+        match cache.import(f) {
+            Ok(p) => println!(
+                "hydo setup: {} is in the install cache ({})",
+                f.display(),
+                p.display()
+            ),
+            Err(e) => {
+                eprintln!("hydo setup: {e}");
+                return 1;
+            }
+        }
+        if get.is_none() {
+            return 0;
+        }
+    }
+    if let Some(v) = get {
+        let version = v.unwrap_or_else(|| cache.own_version.clone());
+        // this hydo's pins check its own version; another version's archive is pinned in the
+        // release index
+        let pins = if version == cache.own_version {
+            pins(ctx.platform)
+        } else {
+            Vec::new()
+        };
+        println!(
+            "hydo setup: hydo {version} for the {} into {}",
+            platform_word(ctx.platform),
+            cache.home.version(&version).display()
+        );
+        match cache.install(&version, &pins, &System, ctx.platform) {
+            Err(lines) => {
+                for l in lines {
+                    eprintln!("hydo setup: {l}");
+                }
+                return 1;
+            }
+            Ok(done) => {
+                for d in &done {
+                    println!("  done: {d}");
+                }
+            }
+        }
+        if add_path && print_add_to_path(&cache.home.bin(), ctx.platform) != 0 {
+            return 1;
+        }
+        println!(
+            "hydo setup: hydo {version} is installed; run it as {}",
+            cache.program(&version).display()
+        );
+        return 0;
     }
     let root = &ctx.root;
     let pins = pins(ctx.platform);
@@ -953,44 +1236,22 @@ pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
         root.display(),
         platform_word(ctx.platform)
     );
+    let va = crate::cache::VersionAssets {
+        cache: &cache,
+        version: version.clone(),
+    };
+    let assets: Option<&dyn Assets> =
+        hydo_image::releases::valid_version(&version).then_some(&va as &dyn Assets);
     if check || verify {
-        let r = inspect(root, ctx.platform, &pins, &System);
         println!("{head}");
-        if !r.release {
-            println!("  {}", not_a_release(root));
-            return 1;
+        let (lines, rc) = check_lines(root, ctx.platform, &pins, &System, verify, assets);
+        for l in lines {
+            println!("{l}");
         }
-        for u in &r.unsupported {
-            println!("  cannot run here: {u}");
-        }
-        println!(
-            "  {} files and store entries match ({} of them pinned in this hydo)",
-            r.checked, r.pinned
-        );
-        for d in &r.damaged {
-            println!("  damaged: {}", d.line());
-        }
-        if !r.ok() {
-            println!(
-                "  the release is damaged or incomplete: unpack it again and run its install.sh"
-            );
-            return 1;
-        }
-        if verify {
-            println!("  the release's files are intact");
-            return 0;
-        }
-        if r.pending.is_empty() {
-            println!("  set up: nothing to do");
-            return 0;
-        }
-        for s in &r.pending {
-            println!("  hydo setup would: {}", s.describe());
-        }
-        return 3;
+        return rc;
     }
     println!("{head}");
-    match setup(root, ctx.platform, &pins, &System) {
+    match setup_with(root, ctx.platform, &pins, &System, assets) {
         Err(lines) => {
             for l in lines {
                 eprintln!("hydo setup: {l}");
@@ -1005,26 +1266,8 @@ pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
                 "  {} files and store entries match ({} of them pinned in this hydo)",
                 r.checked, r.pinned
             );
-            if add_path {
-                let home = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()));
-                let shell = std::env::var("SHELL").unwrap_or_default();
-                let rc = rc_file(&home, &shell, ctx.platform);
-                match add_to_path(&rc, &root.join("bin")) {
-                    Ok(true) => println!(
-                        "  added {} to PATH in {}",
-                        root.join("bin").display(),
-                        rc.display()
-                    ),
-                    Ok(false) => println!(
-                        "  {} is on PATH in {} already",
-                        root.join("bin").display(),
-                        rc.display()
-                    ),
-                    Err(e) => {
-                        eprintln!("hydo setup: cannot write {}: {e}", rc.display());
-                        return 1;
-                    }
-                }
+            if add_path && print_add_to_path(&root.join("bin"), ctx.platform) != 0 {
+                return 1;
             }
             println!(
                 "hydo setup: {}",
@@ -1255,6 +1498,7 @@ mod tests {
             vec![Damage {
                 path: "guest/bzImage".into(),
                 why: format!("has changed (sha256 {now}, the release's is {want})"),
+                fix: Some("guest/bzImage".into()),
             }]
         );
         let err = setup(&root, Platform::Linux, &pins, &host).unwrap_err();
@@ -1402,6 +1646,76 @@ mod tests {
             "{err:?}"
         );
         cleanup(&root);
+    }
+
+    /// The release's archive as a copy of the files (the install cache's part is in
+    /// src/cache/tests.rs).
+    struct Copy {
+        from: PathBuf,
+        restored: RefCell<Vec<String>>,
+    }
+
+    impl Assets for Copy {
+        fn plan(&self) -> Result<String, String> {
+            Ok("the copy".into())
+        }
+        fn restore(&self, root: &Path, files: &[(String, String)]) -> Result<String, String> {
+            for (p, s) in files {
+                assert_eq!(&sha256(&self.from.join(p)).unwrap(), s);
+                let _ = std::fs::remove_file(root.join(p));
+                std::fs::copy(self.from.join(p), root.join(p)).unwrap();
+                self.restored.borrow_mut().push(p.clone());
+            }
+            Ok("the copy".into())
+        }
+    }
+
+    #[test]
+    fn a_damaged_store_tree_is_unpacked_again_from_a_restored_tar() {
+        let (root, pins) = linux_release();
+        let copy = scratch();
+        std::fs::create_dir_all(copy.join("guest")).unwrap();
+        std::fs::copy(root.join(STORE_TAR), copy.join(STORE_TAR)).unwrap();
+        let host = Fake::default();
+        setup(&root, Platform::Linux, &pins, &host).unwrap();
+        let tool = root.join("guest/store/nix/store/abc-tool/bin/tool");
+        let bin = tool.parent().unwrap().to_path_buf();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o644)).unwrap();
+        std::fs::write(&tool, b"changed").unwrap();
+        let a = Copy {
+            from: copy.clone(),
+            restored: RefCell::new(Vec::new()),
+        };
+        let (lines, rc) = check_lines(&root, Platform::Linux, &pins, &host, false, Some(&a));
+        assert_eq!(rc, 3, "{lines:?}");
+        assert!(
+            lines
+                .iter()
+                .any(|l| l == "  hydo setup would: restore 1 file from the copy (then check the release again)"),
+            "{lines:?}"
+        );
+        let (after, done) = setup_with(&root, Platform::Linux, &pins, &host, Some(&a)).unwrap();
+        assert!(
+            after.ok() && after.pending.is_empty(),
+            "{:?}",
+            after.damaged
+        );
+        assert_eq!(*a.restored.borrow(), vec![STORE_TAR.to_string()]);
+        assert_eq!(done[0], "restore 1 file from the copy: guest/store.tar");
+        assert!(done.contains(&Step::UnpackStore.describe()), "{done:?}");
+        assert_eq!(std::fs::read(&tool).unwrap(), b"a tool");
+        assert!(!root.join(STORE_TAR).exists());
+        // a file of another release (a foreign pin) is not restored: refused as before
+        let mut foreign = pins.clone();
+        foreign[0].sha256 = "e".repeat(64);
+        let (_, rc) = check_lines(&root, Platform::Linux, &foreign, &host, false, Some(&a));
+        assert_eq!(rc, 1);
+        let e = setup_with(&root, Platform::Linux, &foreign, &host, Some(&a)).unwrap_err();
+        assert!(e.last().unwrap().contains("could not restore"), "{e:?}");
+        assert_eq!(a.restored.borrow().len(), 1);
+        cleanup(&root);
+        cleanup(&copy);
     }
 
     #[test]
