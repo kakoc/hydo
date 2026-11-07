@@ -22,7 +22,10 @@
 //! - Linux: unpack `guest/store.tar` into `guest/store` (the iproute2 and iptables closures with
 //!   their read-only modes; `hydo build` copies them into images) and delete the tar;
 //! - Mac: remove the quarantine attribute a download leaves, and sign `bin/hydo-hvm` with the
-//!   hypervisor entitlement (`hv/hvm/hv.entitlements`; an ad-hoc signature is enough);
+//!   hypervisor entitlement (`hv/hvm/hv.entitlements`; an ad-hoc signature is enough) unless it
+//!   already carries a valid signature with it: a release built since Milestone 172 ships its
+//!   programs signed with a Developer ID (docs/design/signing.md), and setup leaves them as they
+//!   are; an unsigned build (cargo's ad-hoc linker signature has no entitlement) is signed here;
 //! - write the record.
 //!
 //! A damaged file is restored from the release's archive of the same version (Milestone 162,
@@ -681,9 +684,14 @@ pub fn inspect(root: &Path, p: Platform, pins: &[Pin], host: &dyn Host) -> Repor
             record_needed = true;
             match sha256(&file) {
                 Err(_) => damage(&mut r, path, "is missing".into()),
+                // a signed release (Milestone 172: a Developer ID signature with the hypervisor
+                // entitlement, attached to the reproducible build) is used as it is; an unsigned
+                // build (cargo's ad-hoc linker signature, no entitlement) is signed here
                 Ok(h) if h == *sha => {
                     r.checked += 1;
-                    r.pending.push(Step::Sign);
+                    if !host.signed_ok(&file) {
+                        r.pending.push(Step::Sign);
+                    }
                 }
                 Ok(h) => match record.as_ref().and_then(|rec| rec.signed.as_ref()) {
                     Some((from, to)) if from == sha && *to == h => {
@@ -1448,7 +1456,7 @@ mod tests {
     #[test]
     fn the_built_in_lists_parse_and_map_into_the_release() {
         for (p, assets, guest, n_assets, n_guest) in [
-            (Platform::Linux, LINUX_ASSETS, LINUX_GUEST, 38, 4),
+            (Platform::Linux, LINUX_ASSETS, LINUX_GUEST, 39, 4),
             (Platform::Mac, MAC_ASSETS, MAC_GUEST, 62, 3),
         ] {
             let a = parse_sums(assets).unwrap();
@@ -1647,6 +1655,34 @@ mod tests {
         write(&root, ENGINE_MAC, b"the engine", 0o755);
         let r = inspect(&root, Platform::Mac, &pins, &host);
         assert_eq!(r.pending, vec![Step::Sign, Step::Record]);
+        cleanup(&root);
+    }
+
+    #[test]
+    fn a_signed_mac_release_is_not_signed_again() {
+        // Milestone 172: the release's own engine already carries a valid signature with the
+        // hypervisor entitlement (the Developer ID signature attached to the reproducible build)
+        let root = scratch();
+        write(&root, "bin/hydo", b"hydo", 0o755);
+        let mut engine = b"the engine".to_vec();
+        engine.extend_from_slice(MARK);
+        write(&root, ENGINE_MAC, &engine, 0o755);
+        write(&root, ENTITLEMENTS, b"<plist/>", 0o644);
+        sums(&root, &["bin/hydo", ENGINE_MAC, ENTITLEMENTS]);
+        let host = Fake::default();
+        let r = inspect(&root, Platform::Mac, &[], &host);
+        assert!(r.ok(), "{:?}", r.damaged);
+        assert_eq!(r.pending, vec![Step::Record]);
+        let (_, done) = setup(&root, Platform::Mac, &[], &host).unwrap();
+        assert_eq!(done.len(), 1, "{done:?}");
+        assert_eq!(
+            *host.signs.borrow(),
+            0,
+            "a signed engine is not signed again"
+        );
+        assert_eq!(std::fs::read(root.join(ENGINE_MAC)).unwrap(), engine);
+        let r = inspect(&root, Platform::Mac, &[], &host);
+        assert!(r.ok() && r.pending.is_empty(), "{r:?}");
         cleanup(&root);
     }
 

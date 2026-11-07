@@ -35,8 +35,11 @@ export PATH="$HOME/.hydo/bin:$PATH"
 `hydo setup` checks that this Mac can run hydo (Apple Silicon, macOS 13 or later,
 Hypervisor.framework), checks every file against the release's `SHA256SUMS` and against the
 sha256 pins built into `hydo` (the guest kernels, the guest tools and the guest programs),
-removes the quarantine attribute a download leaves on the files, and signs the
-virtual-machine engine (`bin/hydo-hvm`) on your Mac with the hypervisor entitlement. A damaged
+and removes the quarantine attribute a download leaves on the files. The release's programs
+(`bin/hydo`, `bin/hydo-build`, `bin/hydo-fetch-image` and the virtual-machine engine
+`bin/hydo-hvm`, which carries the hypervisor entitlement) are signed with the project's
+Developer ID and notarized by Apple, so `hydo setup` leaves them as they are; an engine built
+from source instead is signed on your Mac with the entitlement (an ad-hoc signature). A damaged
 or incomplete download is refused with the name of each file that does not match. Running
 `hydo setup` again does nothing on a complete installation; `hydo setup --check` only reports
 (exit status 0: nothing to do, 1: a file is damaged, 3: setup has steps left).

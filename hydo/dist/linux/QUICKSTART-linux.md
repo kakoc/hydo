@@ -17,7 +17,9 @@ installing to your first exploration and a reproduced failure.
 - The headers of the running kernel (Debian/Ubuntu: `sudo apt install linux-headers-$(uname -r)`),
   a C compiler and `make` (`sudo apt install build-essential`) for the kernel module, `xz` and
   `flock`. Nothing else: no Python, Go or Rust (every hydo program comes built).
-- KVM must not be running virtual machines: hvx takes VT-x over from KVM.
+- KVM must not be running virtual machines: hvx takes VT-x over from KVM. Without root, or on a
+  machine where KVM must stay, use hydo's KVM engine instead (section 6): it needs only
+  `/dev/kvm`.
 - No Nix and no internet access: the release carries the guest kernel, the guest tools and the
   disk-image tools, pinned by sha256.
 
@@ -228,6 +230,36 @@ build` puts them into an image when a command of the manifest calls them (MANIFE
 readers"). `hydo-grpc-gen <proto dir> --out <dir>` writes gRPC drivers for your services from
 their `.proto` files, with the static client `hydo-grpc` copied from `guest/` (MANIFEST.md "gRPC
 services").
+
+## 6. Run without the kernel module (KVM)
+
+hydo has a second engine for Linux that needs no kernel module and no root: it runs the same
+images on the KVM that comes with Linux (`/dev/kvm`). Use it on a machine where you cannot load
+`hvx` (no root, a cloud VM with nested virtualization, a machine that runs other KVM virtual
+machines). It needs x86_64 Linux 5.10 or later with `/dev/kvm` usable by your user (often: be in
+the group `kvm`); it has so far been run on Intel CPUs only.
+
+```sh
+./hydo-linux-0.1.0/install.sh --no-module     # nothing to build or load
+hydo doctor --backend kvm
+cd ~/hydo-redis && hydo build hydo.yaml        # the same image as above
+hydo run --backend kvm "disk=none | run"
+hydo run --backend kvm "disk=cut | run C=12 R=everysec"
+hydo explore --backend kvm --seeds 1-20 --strategy swarm --workers 2
+```
+
+`HYDO_BACKEND=kvm` selects it for every command instead of `--backend kvm`. The engine runs inside
+`hydo` (or as `bin/hydo-kvm` with `HYDO_KVM=process`) and boots its own build of the guest kernel,
+`guest/bzImage-kvm`, which takes all its time from the engine's clock. Runs are deterministic, with
+the same verdicts as with hvx, but they are counted differently: guest time advances with the
+virtual machine's exits to the engine (there is no PMU clock), every guest has one virtual CPU at
+the x86-64-v2 level (an image with several CPUs or `guest.cpu: v3` is refused), and the
+fingerprints are this engine's own. `hydo repro` of an hvx run with `--backend kvm` (or the other
+way round) compares verdicts, not fingerprints, and says so. A host power cut at the k-th disk
+flush (`cf=`) and inserted ticks (`pp=`, `xt…`) are hvx's alone; the explorer draws the faults both
+engines apply. With the image above, the two schedules end `OK` (`bfa03053d51bec8a`) and
+`VIOLATION … key k:1 lost` (`8ed16d6da60c34c6`), on an Intel Core i7-13700HX on both its
+performance and its efficiency cores.
 
 ## Notes
 

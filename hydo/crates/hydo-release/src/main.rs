@@ -5,6 +5,8 @@
 //! hydo-release notices <linux|mac> --version V [--repo DIR] <release tree>
 //! hydo-release sources <linux|mac> --version V --cache DIR --out FILE [--repo DIR]
 //! hydo-release fetch-list <linux|mac> [--cache DIR] [--repo DIR]   (only what DIR lacks)
+//! hydo-release signatures extract <unsigned tree> <signed tree> <hydo-mac-V-signatures.tar.gz>
+//! hydo-release signatures attach <unsigned tree> <hydo-mac-V-signatures.tar.gz>
 //! ```
 
 use hydo_release::model::{List, Platform};
@@ -27,6 +29,9 @@ fn fail(msgs: &[String]) -> ! {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("signatures") {
+        exit(signatures(&args[1..]));
+    }
     if args.len() < 2 {
         eprintln!("{USAGE}");
         exit(2);
@@ -122,6 +127,43 @@ fn main() {
         _ => {
             eprintln!("{USAGE}");
             exit(2)
+        }
+    }
+}
+
+/// `hydo-release signatures extract|attach` (Milestone 172, docs/design/signing.md).
+fn signatures(args: &[String]) -> i32 {
+    use hydo_release::signatures as s;
+    let res = match args {
+        [c, unsigned, signed, out] if c == "extract" => {
+            s::extract_tree(unsigned.as_ref(), signed.as_ref()).and_then(|sigs| {
+                let h = s::write_archive(&sigs, out.as_ref())?;
+                for x in &sigs {
+                    println!("{}  {}  {}", x.unsigned_sha256, x.signed_sha256, x.path);
+                }
+                println!("{h}  {out}");
+                Ok(())
+            })
+        }
+        [c, tree, archive] if c == "attach" => s::read_archive(archive.as_ref()).and_then(|sigs| {
+            s::attach_tree(tree.as_ref(), &sigs)?;
+            for x in &sigs {
+                println!("attached {} ({})", x.path, x.signed_sha256);
+            }
+            Ok(())
+        }),
+        _ => {
+            eprintln!(
+                "usage: hydo-release signatures extract <unsigned tree> <signed tree> <archive.tar.gz>\n       hydo-release signatures attach <unsigned tree> <archive.tar.gz>"
+            );
+            return 2;
+        }
+    };
+    match res {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("hydo-release signatures: {e}");
+            1
         }
     }
 }

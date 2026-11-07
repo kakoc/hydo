@@ -18,6 +18,7 @@
       "files": [
         "bin/hydo",
         "bin/hydo-hvx",
+        "bin/hydo-kvm",
         "bin/hydo-build",
         "bin/hydo-fetch-image",
         "libexec/hydo-grpc-gen"
@@ -26,6 +27,7 @@
       "packages": [
         "hydo",
         "hydo-hvx",
+        "hydo-kvm",
         "hydo-build",
         "hydo-compose",
         "hydo-grpc-gen"
@@ -90,6 +92,7 @@
       "files": [
         "bin/hydo",
         "bin/hydo-hvx",
+        "bin/hydo-kvm",
         "bin/hydo-build",
         "bin/hydo-fetch-image",
         "bin/hydo-grpc-gen",
@@ -161,6 +164,7 @@
       "files": [
         "bin/hydo",
         "bin/hydo-hvx",
+        "bin/hydo-kvm",
         "bin/hydo-build",
         "bin/hydo-fetch-image",
         "libexec/hydo-grpc-gen",
@@ -191,6 +195,7 @@
       "files": [
         "bin/hydo",
         "bin/hydo-hvx",
+        "bin/hydo-kvm",
         "bin/hydo-build",
         "bin/hydo-fetch-image",
         "libexec/hydo-grpc-gen",
@@ -222,6 +227,7 @@
       "files": [
         "bin/hydo",
         "bin/hydo-hvx",
+        "bin/hydo-kvm",
         "bin/hydo-build",
         "bin/hydo-fetch-image",
         "libexec/hydo-grpc-gen",
@@ -312,6 +318,36 @@
         }
       ],
       "note": "guest/bzImage and the modules under guest/modules/ (and the modules inside guest/initramfs-kafka.cpio.gz) are nixpkgs's linux_6_6 output byte for byte (checked against cache.nixos.org in Milestone 158). nixpkgs applies its patches pkgs/os-specific/linux/kernel/{bridge-stp-helper,request-key-helper,randstruct-provide-seed-5.19}.patch and generates the configuration (upstream/linux-6.6.35-nixpkgs.config, the exact .config) from pkgs/os-specific/linux/kernel/common-config.nix. The initramfs (assembled by hv/hvx/images/build-linux.sh section 2l.6) holds this kernel's modules, busybox 1.37.0 and hydo's init script."
+    },
+    {
+      "id": "linux-kvm",
+      "name": "Linux kernel (the KVM engine's guest kernel)",
+      "version": "6.6.35",
+      "license": "GPL-2.0-only WITH Linux-syscall-note",
+      "files": [
+        "guest/bzImage-kvm"
+      ],
+      "texts": [
+        "hydo/dist/licenses/linux-6.6.35/COPYING",
+        "hydo/dist/licenses/linux-6.6.35/LICENSES/"
+      ],
+      "sources": [
+        {
+          "file": "linux-6.6.35.tar.xz",
+          "sha256": "fce3ee728712ed063aa8c14a8756c8ff8c7a46ba3827f61d2b04a73c7cf5dd9e",
+          "url": [
+            "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.35.tar.xz"
+          ],
+          "from": "nix:x86_64-linux:linux_6_6:linux-6.6.35.tar.xz"
+        }
+      ],
+      "repo": [
+        "hv/kvm/linux/hydo-kvm-guest.patch",
+        "hv/kvm/linux/hydo-kvm.config",
+        "hv/kvm/linux/kernel.nix",
+        "hv/kvm/linux/build-kernel.sh"
+      ],
+      "note": "guest/bzImage-kvm is the guest kernel of the KVM engine (bin/hydo-kvm, docs/design/kvm-engine.md): kernel.org's Linux 6.6.35 (upstream/linux-6.6.35.tar.xz) with hydo's patch hv/kvm/linux/hydo-kvm-guest.patch (all its time from the engine's exit clock, never the TSC), configured with allnoconfig plus hv/kvm/linux/hydo-kvm.config, and built by hv/kvm/linux/kernel.nix (run by build-kernel.sh) with the pinned nixpkgs tree (upstream/nixpkgs-89c49874fb15.tar.gz: its gcc 13.2.0, binutils, bc, bison, flex, perl, python3 and elfutils) in Nix's sandbox; `nix-build --check` rebuilds it to the same bytes (docs/BUILD-PINS.md \"The KVM engine's guest kernel\"). Every driver it needs is built in; it loads no modules."
     },
     {
       "id": "busybox-1.37.0",

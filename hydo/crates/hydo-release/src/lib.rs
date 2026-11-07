@@ -24,6 +24,10 @@
 //! It also checks that the crates `cargo install hydo` builds can be published to crates.io and
 //! build from there alone ([`publish`], Milestone 169; `cargo test -p hydo-release --test crates`).
 //!
+//! And it carries the Mac release's signatures apart from its programs ([`signatures`], Milestone
+//! 172): `hydo-release signatures extract` writes the signatures asset from an unsigned and a signed
+//! release tree, and `hydo-release signatures attach` puts them back onto an unsigned build.
+//!
 //! # The component list (format 1)
 //!
 //! ```text
@@ -77,6 +81,7 @@ pub mod model;
 pub mod notices;
 pub mod publish;
 pub mod rust;
+pub mod signatures;
 pub mod sources;
 
 use sha2::{Digest, Sha256};

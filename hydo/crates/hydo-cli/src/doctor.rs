@@ -146,6 +146,48 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
     c.summary()
 }
 
+/// The KVM engine's state in the default (hvx) doctor (Milestone 172: the Linux release ships it):
+/// its program and guest kernel, and whether this machine's `/dev/kvm` can be used now. A
+/// missing file is a warning (hvx runs without it); `hydo doctor --backend kvm` checks the rest.
+fn kvm_state(c: &mut Checks, ctx: &Ctx) {
+    let k = hydo_kvm::kernel::KERNEL;
+    let want = hydo_image::FileRef {
+        file: k.file.into(),
+        sha256: k.sha256.into(),
+    };
+    let dirs = [ctx.guest(), ctx.p("build"), ctx.p("hv/kvm/linux/out")];
+    let kernel = hydo_image::kernels::locate(&want, hydo_image::kernels::Role::Kernel, &dirs);
+    let program = crate::ctx::access(
+        &hydo_engine::kvm::program(&ctx.root, &ctx.config.kvm),
+        libc::X_OK,
+    );
+    c.check(
+        program && kernel.is_some(),
+        &format!(
+            "the KVM engine's files (bin/hydo-kvm, the guest kernel {} sha256 {}): `--backend kvm` runs without the kernel module",
+            k.file,
+            &k.sha256[..16]
+        ),
+        reinstall(ctx),
+        true,
+    );
+    let dev = ctx.config.kvm.dev();
+    let state = if !dev.exists() {
+        format!(
+            "{} is not there (no KVM module loaded; on this machine hvx owns VT-x)",
+            dev.display()
+        )
+    } else if access(&dev, libc::R_OK | libc::W_OK) {
+        format!(
+            "{} is usable by you: `hydo doctor --backend kvm` checks the rest",
+            dev.display()
+        )
+    } else {
+        format!("{} is there but not usable by you", dev.display())
+    };
+    println!("     KVM engine: {state}");
+}
+
 pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
     if ctx.kvm {
         return cmd_doctor_kvm(ctx);
@@ -376,6 +418,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         &fix,
         false,
     );
+    kvm_state(&mut c, ctx);
     installation(&mut c, ctx);
     let cwd = std::env::current_dir().unwrap_or_default();
     // (until M144 also the snapshot directory, which the deleted C engine wrote)
@@ -585,6 +628,18 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         "hydo setup",
         false,
     );
+    // who signed the engine (Milestone 172): a release's Developer ID, or setup's ad-hoc signature
+    if let Some((_, t)) = cmd_out("codesign", &["-dvv", &hvmx.display().to_string()]) {
+        let authority = t.lines().find_map(|l| l.strip_prefix("Authority="));
+        let team = t.lines().find_map(|l| l.strip_prefix("TeamIdentifier="));
+        match (authority, team) {
+            (Some(a), Some(team)) => println!("     signature: {a} (team {team})"),
+            _ if t.contains("Signature=adhoc") => {
+                println!("     signature: ad hoc (signed on this Mac)")
+            }
+            _ => {}
+        }
+    }
     installation(&mut c, ctx);
     let cwd = std::env::current_dir().unwrap_or_default();
     if let Some(free) = free_gib(&cwd) {
