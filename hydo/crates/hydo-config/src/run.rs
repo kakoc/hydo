@@ -92,6 +92,10 @@ pub enum Platform {
 pub struct Cli {
     /// `HYDO_CLI_PLATFORM=linux|mac`: act as that platform's command; None: this binary's.
     pub platform: Option<Platform>,
+    /// `HYDO_CLI_HOST_ROOT`: the directory read in place of `/` for the host's kernel-module
+    /// state (`/proc/modules`, `/proc/locks`, `/sys/module`, `/dev`, `/etc/udev/rules.d`);
+    /// None (unset or empty): `/`. Printed paths and writes are unchanged.
+    pub host_root: Option<PathBuf>,
     /// The install cache (Milestone 162).
     pub cache: Cache,
 }
@@ -143,6 +147,7 @@ impl Cli {
                 Some("mac") => Some(Platform::Mac),
                 _ => None,
             },
+            host_root: e.path_nonempty(HYDO_CLI_HOST_ROOT),
             cache: Cache::from_env(e),
         }
     }

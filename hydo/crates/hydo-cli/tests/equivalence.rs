@@ -168,6 +168,53 @@ fn keep(text: &str, max: usize) -> Value {
     }
 }
 
+/// The answers must not depend on the machine that runs the test (M167, the CI runners), so
+/// every case sees the same host: `HYDO_CLI_HOST_ROOT` names an empty directory, so no kernel
+/// module (hvx, kvm, kvm_intel), no `/dev/hvx` and no udev rule is there (a CI runner has kvm
+/// loaded, the bare-metal machine hvx), and PATH has no `debugfs`: a Mac has none and a
+/// release brings its own in `libexec/bin`, while a Linux host's would change how the Mac cases
+/// read an image. Built once per test process: the host PATH with every directory that holds a
+/// `debugfs` replaced by a copy of symlinks to its other entries.
+struct Host {
+    root: PathBuf,
+    path: String,
+}
+
+fn host() -> &'static Host {
+    static HOST: std::sync::OnceLock<Host> = std::sync::OnceLock::new();
+    HOST.get_or_init(|| {
+        let base = scratch("host");
+        let root = base.join("root");
+        std::fs::create_dir_all(&root).unwrap();
+        let mut dirs = Vec::new();
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        for (i, d) in std::env::split_paths(&path).enumerate() {
+            if !d.join("debugfs").exists() {
+                dirs.push(d);
+                continue;
+            }
+            let shadow = base.join(format!("path{i}"));
+            std::fs::create_dir_all(&shadow).unwrap();
+            for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+                if e.file_name() != "debugfs" {
+                    let _ = std::os::unix::fs::symlink(e.path(), shadow.join(e.file_name()));
+                }
+            }
+            eprintln!(
+                "cli: {} holds a debugfs; the cases see {} without it",
+                d.display(),
+                shadow.display()
+            );
+            dirs.push(shadow);
+        }
+        let path = std::env::join_paths(dirs)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        Host { root, path }
+    })
+}
+
 fn run_one(root: &Path, cwd: &Path, platform: &str, args: &[&str]) -> Value {
     let mut c = if record_python() {
         let mut c = Command::new("python3");
@@ -183,6 +230,8 @@ fn run_one(root: &Path, cwd: &Path, platform: &str, args: &[&str]) -> Value {
         .current_dir(cwd)
         .env_remove("HYDO_LOCK")
         .env_remove("HVX_DEV")
+        .env("HYDO_CLI_HOST_ROOT", &host().root)
+        .env("PATH", &host().path)
         .env("HOME", cwd.join("home"))
         .output()
         .unwrap();

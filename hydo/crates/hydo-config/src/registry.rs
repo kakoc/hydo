@@ -359,6 +359,10 @@ variables! {
     /// `linux` or `mac`: run the `hydo` command as the other platform's (the CLI test checks
     /// the other platform's commands that need no engine).
     HYDO_CLI_PLATFORM: Cli, Developer, "word: linux | mac", "this binary's platform", "hydo-cli";
+    /// A directory read in place of `/` for the host's kernel-module state (`/proc/modules`,
+    /// `/proc/locks`, `/sys/module`, `/dev`, `/etc/udev/rules.d`): the CLI test sets an empty one,
+    /// so its recorded answers are those of a host without hvx, KVM or the udev rule.
+    HYDO_CLI_HOST_ROOT: Cli, Developer, "path; empty = `/`", "/", "hydo-cli";
     /// The install cache (Milestone 162, docs/design/install-cache.md): `store/` (release
     /// archives and guest kernels by sha256), `versions/<version>/` (releases `hydo setup --get`
     /// installed), `bin/hydo` (the current one). An empty value means the default.

@@ -79,6 +79,13 @@ function arg(x, h) {
 }
 
 async function child() {
+  // The cases hold elapsed_ms 0 for every episode (each ends at once, and one with a deadline
+  // of 0 ms is late because some time passed); under the guest's deterministic clock that is
+  // what happens. The host's clock is not deterministic: on a busy machine a millisecond can
+  // pass between begin and done. So the child's monotonic clock advances by one nanosecond per
+  // reading (unit.test.js tests eventually against the real clock).
+  let ns = 0n;
+  process.hrtime.bigint = () => (ns += 1n);
   const esm = process.env.HYDO_JS_ENTRY === 'esm';
   const ha = esm ? await import('../index.mjs') : require('..');
   const h = esm ? await import('../history.mjs') : require('../history.js');
