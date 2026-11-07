@@ -22,7 +22,6 @@ pub fn all() -> Vec<Case> {
     v.extend(eventually_cases());
     v.extend(buggify_cases());
     v.extend(output_cases());
-    v.extend(emit_cases());
     v.extend(history_cases());
     v
 }
@@ -249,28 +248,6 @@ fn compare_cases() -> Vec<Case> {
         one(),
     ));
 
-    for (helper, t, f) in [
-        ("greater_than", (2, 1), (1, 2)),
-        ("greater_than_or_equal_to", (0, 0), (-1, 0)),
-        ("less_than", (-5, 5), (5, -5)),
-        ("less_than_or_equal_to", (4, 4), (5, 4)),
-    ] {
-        let mut p = Prog::new();
-        let a = p.always(format!("c.{}", helper), format!("always {}", helper));
-        let s = p.sometimes(format!("c.s_{}", helper), format!("sometimes {}", helper));
-        p.cmp_helper(a, helper, t.0, t.1, Some(d! {"k": "v"}));
-        p.cmp_helper(a, helper, f.0, f.1, None);
-        p.cmp_helper(s, helper, f.0, f.1, None);
-        p.cmp_helper(s, helper, t.0, t.1, None);
-        let about: &'static str = Box::leak(
-            format!(
-                "the {} helper (JavaScript and Python; Go and Rust call cmp with its operator) writes the comparison record",
-                helper
-            )
-            .into_boxed_str(),
-        );
-        v.push(case("compare", helper, about, p, one()));
-    }
     v
 }
 
@@ -625,24 +602,6 @@ fn output_cases() -> Vec<Case> {
             run("missing", "missing"),
             run("off", "off"),
         ],
-    )]
-}
-
-// ---- other record kinds ----
-
-fn emit_cases() -> Vec<Case> {
-    let mut p = Prog::new();
-    p.emit_line("HYDO-EXT", d! {"b": 1, "a": "x", "n": l![1.5, (), true]});
-    p.emit_line("HYDO-EXT", l![1, "two"]);
-    p.emit_line("HYDO-EXT", V::from("a <string>"));
-    p.emit_line("HYDO-EXT", d! {"bad": f64::NAN});
-    p.emit_line("HYDO-OTHER", d! {});
-    vec![case(
-        "emit",
-        "emit_line",
-        "emit_line writes `<tag> <json>` through the assertion sink; a value with a NaN writes nothing (Go's SDK has no emit_line)",
-        p,
-        one(),
     )]
 }
 

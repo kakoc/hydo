@@ -2846,7 +2846,7 @@ Branch `worktree-agent-a9c17325f19c53878` from `main` = `cf7e083` (public). Neit
 - **Checks:** `cargo fmt --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings` and `cargo test --locked --release --workspace` (126 test binaries, 379 passed, 0 failed, 2 ignored; `public_content` with the local list) pass on the Mac.
 - **Not settled** (AGENTS.md open item 44): the exact nixpkgs revision of the Linux release's busybox 1.37.0 and musl 1.2.6 store paths; publishing and keeping the sources archives; Rust crate sources only referenced on crates.io; three approximate SPDX expressions. This is a reading of what the licenses require, not legal advice.
 
-### Milestone 159 — DONE (the SDKs prepared for their registries, consistently named, nothing published: `hydo-assert`, `hydo-test-macros`, `hydo-test` and `cargo-hydo` for crates.io, `hydo-assert` for PyPI and npm, and the public Go module `github.com/kakoc/hydo/sdk/go` with a test that keeps it equal to the frozen copy in `hydo/stack`; every registry's packaging check run without uploading; docs/PUBLISHING.md; node-kv re-recorded; 2026-11-07)
+### Milestone 160 — DONE (the SDKs prepared for their registries, consistently named, nothing published: `hydo-assert`, `hydo-test-macros`, `hydo-test` and `cargo-hydo` for crates.io, `hydo-assert` for PyPI and npm, and the public Go module `github.com/kakoc/hydo/sdk/go` with a test that keeps it equal to the frozen copy in `hydo/stack`; every registry's packaging check run without uploading; docs/PUBLISHING.md; node-kv re-recorded; 2026-11-07)
 
 Branch from `main` = `dbb1df8`. Nothing was published, pushed, tagged or logged in anywhere; the bare-metal machine and the build machine were not used.
 

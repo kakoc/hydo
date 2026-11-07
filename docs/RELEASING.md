@@ -104,7 +104,9 @@ asks of a written offer).
 ## 8. Publish the SDKs (the user decides; with the release)
 
 Publish every SDK with the release's version, in the order and with the commands of
-docs/PUBLISHING.md: `hydo-assert`, `hydo-test-macros`, `hydo-test` and `cargo-hydo` on
-crates.io, `hydo-assert` on PyPI and on npm, and the tag `sdk/go/v<version>` for the Go module.
+docs/PUBLISHING.md: the four assertion SDKs, `hydo-assert` on crates.io, on PyPI and on npm, and
+the tag `sdk/go/v<version>` for the Go module. The Rust test SDK (`hydo-test`,
+`hydo-test-macros`, `cargo-hydo`) is not published (`publish = false`) until the user decides
+about code-first tests.
 An uploaded version can never be replaced on any of them (only yanked, deprecated or retracted),
 so run each dry run first.

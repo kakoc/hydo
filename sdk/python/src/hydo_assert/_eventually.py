@@ -34,15 +34,15 @@ def _to_ns(d):
 class Liveness(object):
     """A declared eventually property (create it with eventually())."""
 
-    __slots__ = ("assertion", "within_ns")
+    __slots__ = ("_assertion", "within_ns")
 
     def __init__(self, id, msg, within):
-        self.assertion = _core.declare(_core.EVENTUALLY, id, msg)
+        self._assertion = _core.declare(_core.EVENTUALLY, id, msg)
         self.within_ns = _to_ns(within)
 
     @property
     def id(self):
-        return self.assertion.id
+        return self._assertion.id
 
     def begin(self):
         """Start an episode now (the anchor)."""
@@ -99,7 +99,7 @@ class Watch(object):
         d = _core.details_dict(details)
         d["elapsed_ms"] = elapsed_ns // _NS_PER_MS
         d["within_ms"] = self.liveness.within_ns // _NS_PER_MS
-        self.liveness.assertion._record(ok, d)
+        self.liveness._assertion._record(ok, d)
         return ok
 
     def done(self, details=None):

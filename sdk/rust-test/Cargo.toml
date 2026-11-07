@@ -12,6 +12,8 @@ readme = "README.md"
 keywords = ["testing", "deterministic", "fault-injection", "simulation", "hydo"]
 categories = ["development-tools::testing"]
 include = ["src/**", "Cargo.toml", "README.md", "LICENSE"]
+# Not published until the user decides about code-first tests (docs/PUBLISHING.md).
+publish = false
 
 # Its own workspace: not a member of the repository's workspace, because this crate is compiled
 # into recorded guest programs (redis-composed-rs) and Cargo's symbol hashes depend on the

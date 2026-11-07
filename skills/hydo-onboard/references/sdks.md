@@ -8,7 +8,8 @@ Depend on them by path or git, or copy them into the project. The wire format an
 They write the same console records byte for byte, with the same deduplication and BUGGIFY
 decisions, so the explorer and the reports read them unchanged. Properties: `always`,
 `always_or_unreachable`, `sometimes`, `reachable`, `unreachable`, `eventually`, and BUGGIFY
-fault points.
+fault points; a numeric comparison is `cmp(left, op, right)` on an `always` or `sometimes`
+property (Rust also `hydo_always_cmp!`).
 
 | language | where in hydo's repository | how a project uses it |
 |---|---|---|
@@ -25,9 +26,10 @@ programs that carry fault points.
 
 ## The Rust test SDK: the whole test as one Rust program
 
-`sdk/rust-test` (crate `hydo-test`) writes the same plan that the `hydo/` folder describes, from
-Rust code: a `system()` builder on the host (services, files, data disk, knobs, faults, composer
-options, regressions), and drivers and checks as functions:
+`sdk/rust-test` (crate `hydo-test`; not published to crates.io, so depend on it by path or git)
+writes the same plan that the `hydo/` folder describes, from Rust code: a `system()` builder on
+the host (services, files, data disk, knobs, faults, composer options, regressions), and drivers
+and checks as functions:
 
 ```rust
 use hydo_test::prelude::*;
@@ -54,8 +56,9 @@ fn orders_settle(_ctx: &Ctx) -> Result<()> { Ok(()) }
 hydo_test::main!(system);
 ```
 
-`cargo install --path sdk/rust-test` installs `cargo-hydo`; then `cargo hydo plan`, `cargo hydo
-build`, `cargo hydo run "disk=none | run"`, `cargo hydo explore` call the installed `hydo`.
+`cargo install --path sdk/rust-test/cargo-hydo` installs `cargo-hydo`; then `cargo hydo plan`,
+`cargo hydo build`, `cargo hydo run "disk=none | run"`, `cargo hydo explore` call the installed
+`hydo`.
 Results map to the composer's exit codes: a driver's `Err(fail!(..))` is a failed operation,
 `Err(violation!(..))` fails the run; a check's `Err(violation!(..))` is a violation and
 `Err(fail!(..))` "cannot be evaluated now". Not yet in the Rust SDK: importing Compose files and

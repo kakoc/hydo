@@ -60,7 +60,8 @@ impl Details {
         self.0.iter()
     }
     /// The JSON text of this object, as Go would write it; `None` if it holds a NaN or an
-    /// infinity.
+    /// infinity. Used by the SDK's tests.
+    #[doc(hidden)]
     pub fn to_json(&self) -> Option<String> {
         let mut s = String::new();
         write_map(&mut s, self).ok()?;
@@ -70,7 +71,8 @@ impl Details {
 
 impl Value {
     /// The JSON text of this value, as Go would write it; `None` if it holds a NaN or an
-    /// infinity.
+    /// infinity. Used by the SDK's tests.
+    #[doc(hidden)]
     pub fn to_json(&self) -> Option<String> {
         let mut s = String::new();
         write_value(&mut s, self).ok()?;

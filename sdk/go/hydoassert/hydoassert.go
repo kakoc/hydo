@@ -38,15 +38,15 @@ import (
 	"syscall"
 )
 
-// Type is an assertion type as it appears on the wire.
-type Type string
+// kind is an assertion type as it appears on the wire.
+type kind string
 
 const (
-	TAlways              Type = "always"
-	TAlwaysOrUnreachable Type = "always_or_unreachable"
-	TSometimes           Type = "sometimes"
-	TReachable           Type = "reachable"
-	TUnreachable         Type = "unreachable"
+	tAlways              kind = "always"
+	tAlwaysOrUnreachable kind = "always_or_unreachable"
+	tSometimes           kind = "sometimes"
+	tReachable           kind = "reachable"
+	tUnreachable         kind = "unreachable"
 )
 
 // D is the free-form details object of an evaluation.
@@ -54,7 +54,7 @@ type D map[string]interface{}
 
 // Assertion is one declared property.
 type Assertion struct {
-	t       Type
+	t       kind
 	id, msg string
 	seen    [2]bool // outcome already emitted by this process: [false, true]
 }
@@ -67,7 +67,7 @@ var (
 	off     bool
 )
 
-func declare(t Type, id, msg string) *Assertion {
+func declare(t kind, id, msg string) *Assertion {
 	a := &Assertion{t: t, id: id, msg: msg}
 	mu.Lock()
 	catalog = append(catalog, a)
@@ -76,20 +76,20 @@ func declare(t Type, id, msg string) *Assertion {
 }
 
 // Always declares a property that must hold whenever it is evaluated.
-func Always(id, msg string) *Assertion { return declare(TAlways, id, msg) }
+func Always(id, msg string) *Assertion { return declare(tAlways, id, msg) }
 
 // AlwaysOrUnreachable declares a property that must hold whenever evaluated; it is also fine
 // for it never to be evaluated.
-func AlwaysOrUnreachable(id, msg string) *Assertion { return declare(TAlwaysOrUnreachable, id, msg) }
+func AlwaysOrUnreachable(id, msg string) *Assertion { return declare(tAlwaysOrUnreachable, id, msg) }
 
 // Sometimes declares a property that must be true at least once across an exploration.
-func Sometimes(id, msg string) *Assertion { return declare(TSometimes, id, msg) }
+func Sometimes(id, msg string) *Assertion { return declare(tSometimes, id, msg) }
 
 // Reachable declares a code location that must be reached at least once.
-func Reachable(id, msg string) *Assertion { return declare(TReachable, id, msg) }
+func Reachable(id, msg string) *Assertion { return declare(tReachable, id, msg) }
 
 // Unreachable declares a code location that must never be reached.
-func Unreachable(id, msg string) *Assertion { return declare(TUnreachable, id, msg) }
+func Unreachable(id, msg string) *Assertion { return declare(tUnreachable, id, msg) }
 
 // sink opens the console once. HYDO_ASSERT_OUT overrides the device (a path, "stderr", or
 // "off"); if the console cannot be opened the records go to stderr.
@@ -134,13 +134,13 @@ func emit(prefix string, rec interface{}) {
 }
 
 type declRec struct {
-	T   Type   `json:"t"`
+	T   kind   `json:"t"`
 	ID  string `json:"id"`
 	Msg string `json:"msg"`
 }
 
 type evalRec struct {
-	T       Type   `json:"t"`
+	T       kind   `json:"t"`
 	ID      string `json:"id"`
 	OK      bool   `json:"ok"`
 	Msg     string `json:"msg"`
@@ -175,7 +175,7 @@ func (a *Assertion) record(ok bool, d D) {
 // Check evaluates an Always / AlwaysOrUnreachable / Sometimes assertion. For Sometimes only a
 // true outcome is recorded. It returns cond, so it can be used inline.
 func (a *Assertion) Check(cond bool, d D) bool {
-	if a.t == TSometimes && !cond {
+	if a.t == tSometimes && !cond {
 		return cond
 	}
 	a.record(cond, d)
@@ -185,7 +185,7 @@ func (a *Assertion) Check(cond bool, d D) bool {
 // Hit marks a Reachable (recorded as ok=true) or Unreachable (recorded as ok=false: reaching
 // it is a violation) location as reached.
 func (a *Assertion) Hit(d D) {
-	a.record(a.t != TUnreachable, d)
+	a.record(a.t != tUnreachable, d)
 }
 
 // Cmp is a numeric-comparison helper: it evaluates left <op> right (op one of
@@ -267,7 +267,7 @@ var (
 
 // Buggify declares a fault point.
 func Buggify(id, msg string) *Point {
-	p := &Point{id: id, a: declare(TSometimes, "buggify."+id, "fault point fired: "+msg)}
+	p := &Point{id: id, a: declare(tSometimes, "buggify."+id, "fault point fired: "+msg)}
 	mu.Lock()
 	points = append(points, p)
 	mu.Unlock()

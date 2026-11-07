@@ -59,7 +59,7 @@ func TestEventually(t *testing.T) {
 		ok bool
 	}{{"t.in_time", true}, {"t.late", false}, {"t.done_late", false}}
 	for i, r := range rs {
-		if r.T != TEventually || r.ID != want[i].id || r.OK != want[i].ok {
+		if r.T != tEventually || r.ID != want[i].id || r.OK != want[i].ok {
 			t.Fatalf("record %d = %+v, want %v", i, r, want[i])
 		}
 		if _, ok := r.Details["elapsed_ms"]; !ok {

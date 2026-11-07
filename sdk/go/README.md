@@ -61,14 +61,39 @@ The same code lives in two places:
   copy there stays as it is.
 
 The test `cargo test -p hydo-release --test sdks` (in the repository's Cargo workspace) fails
-when the two copies differ in anything but these documented differences, all in
-`hydoassert/cases_test.go`:
+when the two copies differ in anything but these documented differences. Exactly these may
+differ, and nothing else (a file on one side only fails too, except the shell SDK):
 
-| `hydo/stack` | `sdk/go` | why |
-|---|---|---|
-| `"hydostack/hydoassert"`, `"hydostack/hydohist"` | `"github.com/kakoc/hydo/sdk/go/hydoassert"`, `.../hydohist` | the module path |
-| `const casesDir = "../../../sdk/cases"` | `const casesDir = "../../cases"` | where the shared cases are from the package directory |
-| `(in hydo/stack/hydoassert)` | `(in sdk/go)` | the comment that says where to run the tests |
+1. Three lines of `hydoassert/cases_test.go`, each exactly once in each copy:
+
+   | `hydo/stack` | `sdk/go` | why |
+   |---|---|---|
+   | `"hydostack/hydoassert"`, `"hydostack/hydohist"` | `"github.com/kakoc/hydo/sdk/go/hydoassert"`, `.../hydohist` | the module path |
+   | `const casesDir = "../../../sdk/cases"` | `const casesDir = "../../cases"` | where the shared cases are from the package directory |
+   | `(in hydo/stack/hydoassert)` | `(in sdk/go)` | the comment that says where to run the tests |
+
+2. Seven identifiers in every file of `hydoassert` (Milestone 163): the public module keeps
+   unexported what no call of its API takes or returns, so the assertion type and its
+   constants are lower case here and exported in the frozen copy:
+
+   | `hydo/stack` | `sdk/go` |
+   |---|---|
+   | `Type` | `kind` |
+   | `TAlways`, `TAlwaysOrUnreachable`, `TSometimes`, `TReachable`, `TUnreachable`, `TEventually` | `tAlways`, `tAlwaysOrUnreachable`, `tSometimes`, `tReachable`, `tUnreachable`, `tEventually` |
+
+   The test maps every whole-word occurrence of the `sdk/go` names back to the frozen names
+   before it compares the files byte for byte, so the copies may differ only by the rename
+   (also in comments). It also fails when a frozen name is still a word in `sdk/go` (the rename
+   must be complete, so the public module never exports them) and when an `sdk/go` name is a
+   word in `hydo/stack` (so the mapping stays one to one).
+
+The public API is therefore: `Always`, `AlwaysOrUnreachable`, `Sometimes`, `Reachable`,
+`Unreachable` (an `*Assertion` with `Check`, `Hit`, `Cmp`), `Eventually` (a `*Liveness` with
+`Await` and `Begin`, a `*Watch` with `Done` and `Expire`), `Buggify` (a `*Point` with `Fire`),
+`Catalog`, `SetupComplete` and the details type `D`; and in `hydohist` `New`, `History`
+(`Invoke`, `Record`), `Op` (`Ok`, `Fail`, `Info`), `Nil` and the token functions `Enc`, `Ver`,
+`ValOrNil`, `List`, `Append`, `Read`, `ReadResult`. A comparison has one form, `Cmp` with its
+operator, as in the other SDKs.
 
 `hydo/stack/hydoassert/hydo_assert.sh` (the shell SDK) is not part of this module. A change to the
 Go SDK is made in both places in one commit; a change to the frozen copy changes the order

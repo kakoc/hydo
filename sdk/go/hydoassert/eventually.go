@@ -25,8 +25,8 @@ package hydoassert
 
 import "time"
 
-// TEventually is the wire type of a bounded-liveness property.
-const TEventually Type = "eventually"
+// tEventually is the wire type of a bounded-liveness property.
+const tEventually kind = "eventually"
 
 // Liveness is a declared Eventually property.
 type Liveness struct {
@@ -36,7 +36,7 @@ type Liveness struct {
 
 // Eventually declares a bounded-liveness property: after an anchor, cond holds within `within`.
 func Eventually(id, msg string, within time.Duration) *Liveness {
-	return &Liveness{a: declare(TEventually, id, msg), within: within}
+	return &Liveness{a: declare(tEventually, id, msg), within: within}
 }
 
 // Watch is one episode of a Liveness property, started at its anchor.

@@ -162,7 +162,7 @@ impl Rules {
 }
 
 /// The repository's public address on GitHub, `github.com/<owner>/hydo` (the SDK packages'
-/// repository field and the Go module path name it, Milestone 159). It is removed from a line
+/// repository field and the Go module path name it, Milestone 160). It is removed from a line
 /// before the concrete values are looked for, because the owner's name there is public by the
 /// repository itself; the same name anywhere else on the line still fails.
 fn public_repository() -> Regex {

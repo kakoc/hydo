@@ -1,10 +1,15 @@
-//! The SDKs as packages for their registries (Milestone 159; docs/PUBLISHING.md).
+//! The SDKs as packages for their registries (Milestone 160; docs/PUBLISHING.md).
 //!
 //! 1. The public Go module `sdk/go` and the frozen copy in `hydo/stack` (whose compiled bytes are
 //!    inside recorded images) hold the same code: they may differ only in the documented
-//!    differences below (`sdk/go/README.md` lists them too).
-//! 2. Every SDK package has the release's version, the license Apache-2.0, the repository's URL
-//!    and nothing that blocks publishing, and carries the repository's `LICENSE` text.
+//!    differences below (`sdk/go/README.md` lists them too): the renamed identifiers of
+//!    `GO_RENAMES` (Milestone 163 made the assertion type unexported in `sdk/go` only) and the
+//!    lines of `GO_DIFFERENCES`.
+//! 2. Every published SDK package (the four assertion SDKs: crates.io, PyPI and npm
+//!    `hydo-assert`, the Go module `sdk/go`) has the release's version, the license Apache-2.0,
+//!    the repository's URL and nothing that blocks publishing, and carries the repository's
+//!    `LICENSE` text; the Rust test SDK's crates (`hydo-test`, `hydo-test-macros`,
+//!    `cargo-hydo`) keep `publish = false` until the user decides about code-first tests.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -39,6 +44,54 @@ const GO_DIFFERENCES: &[(&str, &str, &str)] = &[
         "(in hydo/stack/hydoassert)\n",
     ),
 ];
+
+/// Identifiers that `sdk/go` spells differently from `hydo/stack`: (name in sdk/go, name in
+/// hydo/stack). Milestone 163 made the assertion type and its constants unexported in the
+/// public module (no call of the API takes or returns them); the frozen copy keeps the exported
+/// names because its bytes are inside recorded images. The test maps every whole-word occurrence
+/// in `sdk/go` back before it compares, and it fails when a `hydo/stack` name is still a word in
+/// `sdk/go` (the rename must be complete) or an `sdk/go` name is a word in `hydo/stack` (the
+/// mapping must be one to one).
+const GO_RENAMES: &[(&str, &str)] = &[
+    ("kind", "Type"),
+    ("tAlways", "TAlways"),
+    ("tAlwaysOrUnreachable", "TAlwaysOrUnreachable"),
+    ("tSometimes", "TSometimes"),
+    ("tReachable", "TReachable"),
+    ("tUnreachable", "TUnreachable"),
+    ("tEventually", "TEventually"),
+];
+
+/// The package whose files `GO_RENAMES` applies to.
+const GO_RENAMED_PACKAGE: &str = "hydoassert";
+
+fn is_ident(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// Byte offsets of `word` in `text` where it is a whole identifier.
+fn word_positions(text: &str, word: &str) -> Vec<usize> {
+    text.match_indices(word)
+        .map(|(i, _)| i)
+        .filter(|&i| {
+            let before = text[..i].chars().next_back();
+            let after = text[i + word.len()..].chars().next();
+            !before.is_some_and(is_ident) && !after.is_some_and(is_ident)
+        })
+        .collect()
+}
+
+fn replace_word(text: &str, from: &str, to: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for i in word_positions(text, from) {
+        out.push_str(&text[last..i]);
+        out.push_str(to);
+        last = i + from.len();
+    }
+    out.push_str(&text[last..]);
+    out
+}
 
 /// Files that only the frozen copy has (the shell SDK is not part of the Go module).
 const GO_FROZEN_ONLY: &[&str] = &["hydoassert/hydo_assert.sh"];
@@ -97,6 +150,17 @@ fn go_sdk_equals_the_frozen_copy_in_hydo_stack() {
         for file in p.intersection(&f) {
             let mut a = read(&public.join(file));
             let b = read(&frozen.join(file));
+            if file.starts_with(&format!("{GO_RENAMED_PACKAGE}/")) {
+                for (ours, theirs) in GO_RENAMES {
+                    if !word_positions(&a, theirs).is_empty() {
+                        problems.push(format!("sdk/go/{file}: {theirs} is still a word here; sdk/go spells it {ours} (GO_RENAMES)"));
+                    }
+                    if !word_positions(&b, ours).is_empty() {
+                        problems.push(format!("hydo/stack/{file}: {ours} is a word here, so the rename {ours} -> {theirs} is not one to one (GO_RENAMES)"));
+                    }
+                    a = replace_word(&a, ours, theirs);
+                }
+            }
             for (_, ours, theirs) in GO_DIFFERENCES.iter().filter(|d| d.0 == file) {
                 let (na, nb) = (a.matches(ours).count(), b.matches(theirs).count());
                 if na != 1 || nb != 1 {
@@ -166,12 +230,8 @@ fn sdk_packages_share_version_license_and_repository() {
             "hydo/VERSION is {version} but the workspace version is {workspace:?}"
         ));
     }
-    let crates = [
-        ("sdk/rust", "hydo-assert"),
-        ("sdk/rust-test", "hydo-test"),
-        ("sdk/rust-test/macros", "hydo-test-macros"),
-        ("sdk/rust-test/cargo-hydo", "cargo-hydo"),
-    ];
+    // The published crate. The Rust test SDK's crates stay unpublished (below).
+    let crates = [("sdk/rust", "hydo-assert")];
     for (dir, name) in crates {
         let path = format!("{dir}/Cargo.toml");
         let t = read(&r.join(&path));
@@ -204,14 +264,16 @@ fn sdk_packages_share_version_license_and_repository() {
             ));
         }
     }
-    let test = read(&r.join("sdk/rust-test/Cargo.toml"));
-    for dep in ["hydo-test-macros", "hydo-assert"] {
-        let line = test
-            .lines()
-            .find(|l| l.starts_with(&format!("{dep} =")))
-            .unwrap_or("");
-        if !line.contains(&format!("version = \"{version}\"")) {
-            problems.push(format!("sdk/rust-test/Cargo.toml: the dependency {dep} needs version = \"{version}\" next to its path"));
+    for dir in [
+        "sdk/rust-test",
+        "sdk/rust-test/macros",
+        "sdk/rust-test/cargo-hydo",
+    ] {
+        let path = format!("{dir}/Cargo.toml");
+        if toml_field(&read(&r.join(&path)), "package", "publish").as_deref() != Some("false") {
+            problems.push(format!(
+                "{path}: [package] publish = false is required: the Rust test SDK is not published until the user decides about code-first tests (docs/PUBLISHING.md)"
+            ));
         }
     }
 
@@ -264,15 +326,7 @@ fn sdk_packages_share_version_license_and_repository() {
     }
 
     let license = read(&r.join("LICENSE"));
-    for dir in [
-        "sdk/rust",
-        "sdk/rust-test",
-        "sdk/rust-test/macros",
-        "sdk/rust-test/cargo-hydo",
-        "sdk/python",
-        "sdk/js",
-        "sdk/go",
-    ] {
+    for dir in ["sdk/rust", "sdk/python", "sdk/js", "sdk/go"] {
         if std::fs::read_to_string(r.join(dir).join("LICENSE"))
             .ok()
             .as_deref()

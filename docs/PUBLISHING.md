@@ -1,16 +1,14 @@
 # Publishing the SDKs
 
-hydo's SDKs are published to their languages' registries with the release's version, at every
-release (docs/RELEASING.md step 8). Nothing here is done automatically, and nothing is published
-until the user decides to; the packages' metadata and the dry runs below are prepared in the
-tree (Milestone 159).
+hydo's four assertion SDKs are published to their languages' registries with the release's
+version, at every release (docs/RELEASING.md step 8). Nothing here is done automatically, and
+nothing is published until the user decides to; the packages' metadata and the dry runs below
+are prepared in the tree (Milestone 160; the APIs were cleaned up before their first
+publication in Milestone 163).
 
 | SDK | registry | name | code-level name | directory |
 |---|---|---|---|---|
-| Rust assertions | crates.io | `hydo-assert` | `hydo_assert` | `sdk/rust` |
-| Rust test macros | crates.io | `hydo-test-macros` | (used through `hydo-test`) | `sdk/rust-test/macros` |
-| Rust test SDK | crates.io | `hydo-test` | `hydo_test` | `sdk/rust-test` |
-| `cargo hydo` | crates.io | `cargo-hydo` | the `cargo hydo` subcommand | `sdk/rust-test/cargo-hydo` |
+| Rust | crates.io | `hydo-assert` | `hydo_assert` | `sdk/rust` |
 | Python | PyPI | `hydo-assert` | `import hydo_assert` | `sdk/python` |
 | JavaScript | npm | `hydo-assert` | `require('hydo-assert')` | `sdk/js` |
 | Go | GitHub tag, Go module proxy | `github.com/kakoc/hydo/sdk/go` | packages `hydoassert`, `hydohist` | `sdk/go` |
@@ -18,7 +16,31 @@ tree (Milestone 159).
 Every package has the version of `hydo/VERSION` (and of the Cargo workspace), the license
 Apache-2.0, a copy of the repository's `LICENSE` and the repository `https://github.com/kakoc/hydo`.
 The test `cargo test -p hydo-release --test sdks` checks this, and that the Go module `sdk/go`
-holds the same code as the frozen copy in `hydo/stack` (`sdk/go/README.md`, "Two copies").
+holds the same code as the frozen copy in `hydo/stack` apart from the documented differences
+(`sdk/go/README.md`, "Two copies").
+
+**Not published: the Rust test SDK.** `hydo-test` (`sdk/rust-test`), `hydo-test-macros`
+(`sdk/rust-test/macros`) and `cargo-hydo` (`sdk/rust-test/cargo-hydo`) stay unpublished until the
+user decides about code-first tests (user decision, 2026-11-07). Their code stays in the tree
+and keeps working (the redis-composed-rs example uses it by path); each has `publish = false`,
+which the `sdks` test requires, so `cargo publish` refuses them. Their metadata from Milestone
+159 (description, license, repository, `include`, `LICENSE`) is kept for the day they are
+published: then remove `publish = false`, add them to this document in dependency order
+(`hydo-test-macros` before `hydo-test`, which needs `hydo-assert` on crates.io first) and to
+the `sdks` test.
+
+## The API a first publication freezes
+
+A published name cannot be taken back (below), so each SDK's public API is only what a user's
+program calls: declaring properties (`always`, `always_or_unreachable`, `sometimes`,
+`reachable`, `unreachable`, `eventually`, `buggify`), evaluating them (`check`, `hit`, `cmp`,
+`fire`, an eventually property's `begin`/`done`/`expire`/await calls), `catalog`,
+`setup_complete`, the details type, and the history recorder with the functions that make its
+argument tokens. A comparison has one form, `cmp` with its operator. Everything else is the
+SDK's own: in Rust `#[doc(hidden)]` (the `__` items, `Type` and `to_json`, public only because
+macros expand in the user's crate or the SDK's tests call them), in Python names starting with
+`_`, in JavaScript what `index.d.ts` and `history.d.ts` do not declare, in Go unexported names.
+Milestone 163 removed or hid what did not meet this rule (docs/HISTORY.md, "Milestone 163").
 
 ## What is permanent
 
@@ -72,7 +94,7 @@ registry and PyPI twine's default repository; the commands name them anyway.
 ```sh
 cargo test --locked --release -p hydo-release --test sdks              # names, versions, licenses, Go copies
 (cd sdk/rust && cargo test)                                            # the Rust SDK and its shared cases
-(cd sdk/rust-test && cargo test --workspace)
+(cd sdk/rust-test && cargo test --workspace)                           # unpublished, but it uses hydo-assert
 (cd sdk/go && go vet ./... && go test ./...)                            # and GOTOOLCHAIN=go1.26.5 go test ./...
 (cd hydo/stack && go test ./hydoassert/ ./hydohist/)                    # the frozen copy
 python3 -m unittest discover -s sdk/python/tests
@@ -81,10 +103,8 @@ python3 -m unittest discover -s sdk/python/tests
 
 ## The order and the commands
 
-The Rust crates go in dependency order, because crates.io resolves a crate's dependencies when it
-is uploaded: `hydo-assert` and `hydo-test-macros` before `hydo-test`. The other registries are
-independent; do them in the order below so that each SDK's README links work when users arrive.
-Each upload is preceded by its dry run.
+The four registries are independent; do them in the order below so that each SDK's README links
+work when users arrive. Each upload is preceded by its dry run.
 
 1. **`hydo-assert` (crates.io)**
 
@@ -94,37 +114,7 @@ Each upload is preceded by its dry run.
    cargo publish --registry crates-io
    ```
 
-2. **`hydo-test-macros` (crates.io)**
-
-   ```sh
-   cd sdk/rust-test
-   cargo publish --dry-run --registry crates-io -p hydo-test-macros
-   cargo publish --registry crates-io -p hydo-test-macros
-   ```
-
-3. **`hydo-test` (crates.io)**: only after 1 and 2 are on the index (`cargo publish` waits for
-   them, or check `cargo search hydo-assert`).
-
-   ```sh
-   cd sdk/rust-test
-   cargo publish --dry-run --registry crates-io -p hydo-test
-   cargo publish --registry crates-io -p hydo-test
-   ```
-
-   Before 1 and 2 are published its dry run fails with "no matching package named `hydo-assert`
-   found": that is expected. Milestone 159 checked it instead with
-   `cargo package --no-verify --exclude-lockfile -p hydo-test` and a build of the packed sources
-   of all four crates, joined by `[patch.crates-io]`, in a consumer crate.
-
-4. **`cargo-hydo` (crates.io)**
-
-   ```sh
-   cd sdk/rust-test
-   cargo publish --dry-run --registry crates-io -p cargo-hydo
-   cargo publish --registry crates-io -p cargo-hydo
-   ```
-
-5. **`hydo-assert` (PyPI)**: build in a throwaway virtual environment, from a copy of `sdk/python`
+2. **`hydo-assert` (PyPI)**: build in a throwaway virtual environment, from a copy of `sdk/python`
    (setuptools writes `src/hydo_assert.egg-info` next to the sources).
 
    ```sh
@@ -138,7 +128,7 @@ Each upload is preceded by its dry run.
    (Optionally first `--repository testpypi` with a TestPyPI token, as a rehearsal: TestPyPI has
    the same rules and is a separate account.)
 
-6. **`hydo-assert` (npm)**
+3. **`hydo-assert` (npm)**
 
    ```sh
    cd sdk/js
@@ -146,7 +136,7 @@ Each upload is preceded by its dry run.
    npm publish --registry https://registry.npmjs.org/
    ```
 
-7. **The Go module**: a tag on the release commit, pushed to GitHub, then one fetch through the
+4. **The Go module**: a tag on the release commit, pushed to GitHub, then one fetch through the
    proxy so that the version is listed at once.
 
    ```sh
@@ -158,16 +148,17 @@ Each upload is preceded by its dry run.
    The tag's prefix `sdk/go/` is the module's directory in the repository; Go finds a module in a
    subdirectory only by such a tag. pkg.go.dev shows the documentation after the first fetch.
 
-8. **Check from outside:** in an empty directory, `cargo add hydo-assert hydo-test`,
-   `cargo install cargo-hydo`, `pip install hydo-assert` in a new virtual environment,
+5. **Check from outside:** in an empty directory, `cargo add hydo-assert`,
+   `pip install hydo-assert` in a new virtual environment,
    `npm install hydo-assert --registry https://registry.npmjs.org/`, and a Go module with
    `go get github.com/kakoc/hydo/sdk/go@v0.1.0`, each importing the package.
 
 ## The next version
 
 A release changes the version of every SDK at once (the `sdks` test refuses anything else):
-`hydo/VERSION`, the workspace version in `Cargo.toml`, the four SDK `Cargo.toml` files (and the
-two dependency versions in `sdk/rust-test/Cargo.toml`, and `sdk/rust-test/Cargo.lock`),
+`hydo/VERSION`, the workspace version in `Cargo.toml`, `sdk/rust/Cargo.toml` (and, to keep the
+unpublished test SDK in step, the three `sdk/rust-test` `Cargo.toml` files, the two dependency
+versions in `sdk/rust-test/Cargo.toml` and `sdk/rust-test/Cargo.lock`),
 `sdk/python/pyproject.toml` and `__version__` in `sdk/python/src/hydo_assert/__init__.py`,
 `sdk/js/package.json`, and the Go tag. A version change moves bytes inside recorded images, so
 plan the re-baseline with it (docs/REBASELINE.md):

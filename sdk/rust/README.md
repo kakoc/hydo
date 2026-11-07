@@ -3,8 +3,8 @@
 A Rust program running under hydo (the deterministic hypervisor of
 [github.com/kakoc/hydo](https://github.com/kakoc/hydo)) uses this crate to say what must be true
 and what should happen at least once. It writes the same console records as the Go SDK
-(`sdk/go`), byte for byte, with the same deduplication rules, so `hydo_assert_report`, the
-harnesses and the explorer (`hydo explore`) read them unchanged. The wire format and the verdict
+(`sdk/go`), byte for byte, with the same deduplication rules, so `hydo run` and the explorer
+(`hydo explore`) read them unchanged. The wire format and the verdict
 rules are in `hydo/ASSERTIONS.md` of that repository; paths below are relative to it.
 
 The crate uses only the standard library:
@@ -17,7 +17,7 @@ hydo-assert = "0.1"                                  # or { path = "../hydo/sdk/
 ## Use
 
 ```rust
-use hydo_assert::{declare, details, hydo_always, hydo_buggify, hydo_reachable, hydo_sometimes};
+use hydo_assert::{declare, details, hydo_always, hydo_always_cmp, hydo_buggify, hydo_reachable, hydo_sometimes};
 use std::time::Duration;
 
 declare! {   // named properties, in the catalog before main, in this order
@@ -33,7 +33,7 @@ fn main() {
     hydo_always!(len <= cap, "kv.log_size" => "the log stays under its cap", {"len": len});
     hydo_sometimes!(retried, "a request needed a retry");      // no id given: the message is the id
     hydo_reachable!("kv.torn_tail" => "the log ended in a partial line");
-    hydo_assert::hydo_always_less_than_or_equal_to!(len, cap, "kv.log_size2" => "len <= cap");
+    hydo_always_cmp!(len, "<=", cap, "kv.log_cap" => "len <= cap");   // details: left, op, right
     if LOST_REPLY.fire(()) { return; }          // or inline: hydo_buggify!("id" => "message")
     BACK.await_cond(|| ping().is_ok(), Duration::from_millis(100), ());
     hydo_assert::setup_complete();               // HYDO-SETUP-COMPLETE
@@ -44,11 +44,18 @@ fn main() {
 |---|---|
 | `Always(id, msg)`, `AlwaysOrUnreachable`, `Sometimes`, `Reachable`, `Unreachable` | the same names in lower case (run-time declaration, registered at once), `declare!` entries, or the call-site macros `hydo_always!`, `hydo_always_or_unreachable!`, `hydo_sometimes!`, `hydo_reachable!`, `hydo_unreachable!` |
 | `a.Check(cond, d)`, `a.Hit(d)` | `a.check(cond, d)`, `a.hit(d)`; `d` is a `Details`, `details!{..}`, `()` or `None` |
-| `a.Cmp(left, op, right, d)` | `a.cmp(left, op, right, d)` (any ordered value, not only `i64`); macros `hydo_always_cmp!`, `hydo_sometimes_cmp!` and the named `hydo_always_greater_than!`, `..._greater_than_or_equal_to!`, `..._less_than!`, `..._less_than_or_equal_to!`, and the same four for `hydo_sometimes_` |
+| `a.Cmp(left, op, right, d)` | `a.cmp(left, op, right, d)` (any ordered value, not only `i64`; `op` is one of `<`, `<=`, `==`, `!=`, `>=`, `>`), or the call-site macros `hydo_always_cmp!(left, op, right, ..)` and `hydo_sometimes_cmp!(..)` |
 | `Eventually(id, msg, within)`, `l.Await(cond, poll, d)`, `l.Begin()`, `w.Done(d)`, `w.Expire(d)` | `eventually(..)`, `declare!{.. eventually(..)}` or `hydo_eventually!(within, "id" => "msg")`; `l.await_cond(cond, poll, d)`, `l.await_async(cond, poll, sleep, d).await`, `l.begin()`, `w.done(d)`, `w.expire(d)` |
 | `Buggify(id, msg)`, `p.Fire(d)` | `buggify(..)`, `declare!{.. buggify(..)}`, `p.fire(d)`, or inline `hydo_buggify!("id" => "msg")` |
 | `Catalog()`, `SetupComplete()` | `catalog()`, `setup_complete()` |
 | `D{...}` | `details!{...}`, `Details`, alias `D` |
+
+That table is the whole API, plus `register(&STATIC)` for a `static` built with
+`Assertion::always(..)` and friends outside `declare!`, and the history recorder below. Items
+marked `#[doc(hidden)]` (the `__`-prefixed functions, the assertion type `Type`, `to_json`) are
+public only because the macros expand in your crate or the SDK's own tests call them; they are
+not part of the API and may change in any version. A comparison has one form, `cmp` with its
+operator (the SDK has no separate "greater than" or "less than" calls).
 
 ## Records, deduplication, catalog
 
@@ -84,8 +91,8 @@ when `splitmix64(splitmix64(seed ^ fnv1a(id)) + k·0x9e3779b97f4a7c15) % 1000 < 
 point is also a `sometimes` property `buggify.<id>` ("fault point fired: <msg>"), recorded at
 its first firing with `{"hit": k}`. Without a configuration every point returns false and has
 no other effect. Under hydo the schedule token `B=<seed>` (`hydo explore --buggify`) reaches the
-file through the guest init: the stack's `stack-explore.sh` writes it, and an onboarded
-project gets it with `buggify: true` in its `hydo.yaml` (`hydo/onboard/MANIFEST.md`).
+file through the host controller: an onboarded project gets it with `buggify: true` in its
+`hydo.yaml` (`hydo/onboard/MANIFEST.md`).
 
 ## Eventually, async code
 
@@ -110,17 +117,15 @@ async tasks and threads (one global lock, held only while a record is formatted 
 - `serde_json`: `From<serde_json::Value>` for `Value` and `Details`, so
   `a.check(ok, serde_json::json!({"k": v}))` works.
 
-## Extension point for other record kinds
-
-`hydo_assert::emit_line(tag, &value)` writes one line `<tag> <json>` through the same sink with
-one write, for other JSON record kinds.
-
 ## Operation histories (`hydo_assert::history`)
 
 The typed recorder for hydo's host-side history checkers (`hydo/HISTORIES.md`): `History::new("kv")`,
 `.invoke(proc, f, &args) -> Op`, then `op.ok(&results)` / `op.ok_same()` / `op.fail()` /
-`op.info()`; value helpers `enc`, `ver(v, version)`, `value_or_nil`, `list`, and the txn
-micro-ops `append_mop`, `read_mop`, `read_result_mop`. Its lines are not JSON
+`op.info()`; `.record_raw(proc, type, f, &args)` writes one record without an `Op` (for a
+program that completes operations elsewhere than where it invoked them; Go's `Record`). The
+arguments are tokens, and these functions make them: `enc` (any value as one token),
+`ver(v, version)`, `value_or_nil`, `list`, and the txn micro-ops `append_mop`, `read_mop`,
+`read_result_mop`; a program needs them to write values the checkers can read back. Its lines are not JSON
 (`HYDO-HIST <history> <process> <type> <time-ns> <f> <args>`), so it has its own sink: one write
 per record to `/dev/console`, `HYDO_HIST_OUT=<path>|stderr|off`; `noop` turns it off.
 `tests/history.rs` checks the exact lines (the same as the Go recorder's test).
@@ -167,21 +172,20 @@ programs these cases replaced (M110); their outputs equal Go 1.26.5's.
 **Files.** `sdk/cases/<area>/<name>.json` is one case; each of its runs has an output file,
 `<name>.out` (a case with one unnamed run) or `<name>.<run>.out`. Areas: `assert` (the types and
 deduplication), `compare`, `details` (the JSON encoding), `catalog`, `eventually`, `buggify`,
-`output` (`HYDO_ASSERT_OUT`), `emit` (`emit_line`), `history` (`HYDO-HIST` records and
+`output` (`HYDO_ASSERT_OUT`), `history` (`HYDO-HIST` records and
 `HYDO_HIST_OUT`), `programs`. A case file has:
 
 - `about`: what the case shows.
 - `needs`: features a language may lack: `f32` (a float32 value), `bytes` (a byte string,
   Go's `[]byte`), `invalid_utf8` (invalid UTF-8 in an assertion string), `raw_hist` (invalid
-  UTF-8 in a history record), `emit_line`. A reader skips, and reports, a case that needs what
+  UTF-8 in a history record). A reader skips, and reports, a case that needs what
   its language cannot express, and fails on a need it does not know.
 - `steps`: the calls, in order. Declarations `always`, `always_or_unreachable`, `sometimes`,
   `reachable`, `unreachable` (`id`, `msg`), `eventually` (`within_ms`) and `buggify` are
   numbered from 0 in the order they appear and named by `a`; then `check` (`cond`), `hit`,
-  `cmp` (`left`, `op`, `right`; with `helper`, the SDKs that have named comparison helpers call
-  that one), `begin` (its watches are numbered and named by `w`), `done`, `expire`, `await`
+  `cmp` (`left`, `op`, `right`), `begin` (its watches are numbered and named by `w`), `done`, `expire`, `await`
   (the condition is true at once; `async`: the async form), `fire`, `catalog`,
-  `setup_complete`, `emit_line` (`tag`, `value`). Any of them may carry `details` (a map
+  `setup_complete`. Any of them may carry `details` (a map
   value). History steps: `history` (`name`; numbered, named by `h`), `invoke` (`proc`, `f`,
   `args`; numbered, named by `o`), `ok` (`args`; empty only for an operation without
   arguments), `ok_same` (the invocation's arguments: Go's, JavaScript's and Python's `ok()`),

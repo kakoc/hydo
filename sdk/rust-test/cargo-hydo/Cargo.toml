@@ -12,3 +12,5 @@ readme = "README.md"
 keywords = ["testing", "deterministic", "cargo-subcommand", "hydo"]
 categories = ["development-tools::testing", "development-tools::cargo-plugins"]
 include = ["src/**", "Cargo.toml", "README.md", "LICENSE"]
+# Not published until the user decides about code-first tests (docs/PUBLISHING.md).
+publish = false

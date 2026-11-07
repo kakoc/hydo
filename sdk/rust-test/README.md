@@ -7,7 +7,7 @@ hypervisor in [this repository](https://github.com/kakoc/hydo).
 
 ```toml
 [dependencies]
-hydo-test = "0.1"          # or { path = "../hydo/sdk/rust-test" } from a checkout
+hydo-test = { path = "../hydo/sdk/rust-test" }   # a checkout of the repository (or a git dependency)
 ```
 
 ```rust
@@ -71,8 +71,8 @@ boot or of the recovery boot).
 
 ## cargo hydo
 
-`cargo install cargo-hydo` (or, from a checkout, `cargo install --path sdk/rust-test/cargo-hydo`)
-installs the `cargo hydo` subcommand; it is its own crate, so a test crate depends only on
+`cargo install --path sdk/rust-test/cargo-hydo` (from a checkout) installs the `cargo hydo`
+subcommand; it is its own crate, so a test crate depends only on
 `hydo-test`. In the test crate:
 
 ```sh

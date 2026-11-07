@@ -3,8 +3,8 @@
 A Python program running under hydo (the deterministic hypervisor of
 [github.com/kakoc/hydo](https://github.com/kakoc/hydo)) uses this package to say what must be
 true and what should happen at least once. It writes the same console records as the Go SDK
-(`sdk/go`), byte for byte, with the same deduplication rules, so `hydo_assert_report`, the
-harnesses and the explorer (`hydo explore`) read them unchanged. The wire format and the verdict
+(`sdk/go`), byte for byte, with the same deduplication rules, so `hydo run` and the explorer
+(`hydo explore`) read them unchanged. The wire format and the verdict
 rules are in `hydo/ASSERTIONS.md` of that repository; paths below are relative to it.
 
 - Distribution name `hydo-assert`, import name `hydo_assert`.
@@ -33,7 +33,7 @@ ACKED.check(got == want, {"key": k, "got": got})   # returns bool(cond)
 REPLAYED.check(n > 0, {"entries": n})
 TORN.hit({"bytes": len(tail)})
 BAD.hit()
-SIZE.less_than_or_equal_to(n, 10000)               # = SIZE.cmp(n, "<=", 10000)
+SIZE.cmp(n, "<=", 10000)                           # details: left, op, right
 if LOST.fire({"key": k}):                          # BUGGIFY fault point
     return
 BACK.await_cond(lambda: ping() == "PONG", poll=0.2)   # blocks; one record
@@ -50,16 +50,17 @@ to the console under one process-wide lock that is never held across a blocking 
 |---|---|
 | `Always(id, msg)`, `AlwaysOrUnreachable`, `Sometimes`, `Reachable`, `Unreachable` | `always(id, msg)`, `always_or_unreachable`, `sometimes`, `reachable`, `unreachable` (return an `Assertion`) |
 | `a.Check(cond, d)`, `a.Hit(d)` | `a.check(cond, details=None)`, `a.hit(details=None)` |
-| `a.Cmp(left, op, right, d)` | `a.cmp(left, op, right, details=None)`, and the named helpers `a.greater_than`, `a.greater_than_or_equal_to`, `a.less_than`, `a.less_than_or_equal_to(left, right, details=None)` |
+| `a.Cmp(left, op, right, d)` | `a.cmp(left, op, right, details=None)` (`op` is one of `<`, `<=`, `==`, `!=`, `>=`, `>`) |
 | `Eventually(id, msg, within)`, `l.Await(cond, poll, d)`, `l.Begin()`, `w.Done(d)`, `w.Expire(d)` | `eventually(id, msg, within)`, `l.await_cond(cond, poll, details=None)`, `await l.await_async(cond, poll, details=None)`, `l.begin()`, `w.done(details=None)`, `w.expire(details=None)` |
 | `Buggify(id, msg)`, `p.Fire(d)` | `buggify(id, msg)`, `p.fire(details=None)` |
 | `Catalog()`, `SetupComplete()` | `catalog()`, `setup_complete()` |
 | `D{...}` | any mapping (a `dict`); `hydo_assert.D` is `dict` |
 
-The naming follows the other SDKs (`sdk/js`, `sdk/rust`): the Go
-names in Python's snake case, the named comparison helpers, `await_cond` /
-`await_async` for Go's `Await`, and `emit_line(tag, value)` as the extension point for other
-record kinds.
+The naming follows the other SDKs (`sdk/js`, `sdk/rust`): the Go names in Python's snake case,
+and `await_cond` / `await_async` for Go's `Await`. That table, `Liveness`, `Watch` and `Point`
+(the classes the calls return) and the history recorder below are the whole API: a comparison
+has one form, `cmp` with its operator, and names that start with `_` (the modules `_core`,
+`_buggify`, `_eventually`, `_json`, `_sink`) are the package's own.
 
 ## Records, deduplication, catalog
 
@@ -190,7 +191,7 @@ writing `.pyc` files on the guest's read-only root.
   case's calls with this package and `hydo_assert.history`, and compares the bytes the sink
   received and the calls' results with the case's files: every assertion type, comparisons,
   details with tricky values (invalid UTF-8 as `surrogateescape` characters), the catalog,
-  `eventually`, BUGGIFY under 18 configurations, `HYDO_ASSERT_OUT`, `emit_line`, and the
+  `eventually`, BUGGIFY under 18 configurations, `HYDO_ASSERT_OUT`, and the
   history records with every helper and `HYDO_HIST_OUT` setting. Cases that need a float32
   (`f32`) are skipped and listed. To add a case, add it to the Rust SDK's
   `tests/cases/defs.rs` and run `HYDO_BLESS=1 cargo test --test cases` there; this test then

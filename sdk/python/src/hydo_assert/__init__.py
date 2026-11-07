@@ -1,9 +1,9 @@
 """hydo-assert: the Python assertion SDK of hydo, the deterministic hypervisor.
 
 A Python program running under hydo uses this package to say what must be true and what should
-happen at least once. It writes the same console records as the Go SDK (hvx/stack/hydoassert),
+happen at least once. It writes the same console records as the Rust, Go and JavaScript SDKs,
 byte for byte, with the same deduplication rules; the wire format and verdict rules are in
-hvx/ASSERTIONS.md. Standard library only; Python 3.8+.
+hydo/ASSERTIONS.md. Standard library only; Python 3.8+.
 
 Declare properties at module level, so the whole catalog is known once the module is imported::
 
@@ -19,7 +19,7 @@ Declare properties at module level, so the whole catalog is known once the modul
 
     ha.catalog()                                 # once, early: the HYDO-ASSERT-DECL lines
     ACKED.check(got == want, {"key": k, "got": got})
-    SIZE.less_than_or_equal_to(n, cap)           # = SIZE.cmp(n, "<=", cap)
+    SIZE.cmp(n, "<=", cap)                       # op: < <= == != >= >
     TORN.hit()
     if LOST.fire():
         return
@@ -30,18 +30,10 @@ Records go to /dev/ttyS0; ``HYDO_ASSERT_OUT=<path>|stderr|off|logging`` override
 """
 
 from ._core import (
-    ALWAYS,
-    ALWAYS_OR_UNREACHABLE,
-    EVENTUALLY,
-    REACHABLE,
-    SOMETIMES,
-    UNREACHABLE,
     Assertion,
     always,
     always_or_unreachable,
-    assertions,
     catalog,
-    emit_line,
     reachable,
     setup_complete,
     sometimes,
@@ -56,12 +48,6 @@ D = dict
 __version__ = "0.1.0"
 
 __all__ = [
-    "ALWAYS",
-    "ALWAYS_OR_UNREACHABLE",
-    "EVENTUALLY",
-    "REACHABLE",
-    "SOMETIMES",
-    "UNREACHABLE",
     "Assertion",
     "D",
     "Liveness",
@@ -69,10 +55,8 @@ __all__ = [
     "Watch",
     "always",
     "always_or_unreachable",
-    "assertions",
     "buggify",
     "catalog",
-    "emit_line",
     "eventually",
     "reachable",
     "setup_complete",

@@ -35,7 +35,9 @@ HYDO-SETUP-COMPLETE
 | `eventually` | after an anchor, the condition becomes true within a deadline (bounded liveness) | FAIL on any `ok:false` (an episode missed its deadline); NOT EVALUATED if no episode was resolved |
 
 Numeric comparisons are `always` / `sometimes` evaluations whose `details` carry
-`{"left":L,"op":"<=","right":R}` (Go SDK: `Cmp`).
+`{"left":L,"op":"<=","right":R}`. Every SDK has one call for them, `cmp` with the operator
+(`<`, `<=`, `==`, `!=`, `>=`, `>`; Go `Cmp`, and in Rust also the macros `hydo_always_cmp!` and
+`hydo_sometimes_cmp!`); there are no separate "greater than" or "less than" calls.
 
 **Bounded liveness: `eventually`.** The other types are safety properties ("never X",
 "always Y"). An `eventually` property says "after an anchor point, X becomes true within a
@@ -132,7 +134,7 @@ LOST = ha.buggify("kv.put.lost_reply", "the PUT is logged but its reply is lost"
 ha.catalog()                                     # once, early: the DECL lines
 ACKED.check(got == want, {"key": k, "got": got})
 TORN.hit()
-SIZE.less_than_or_equal_to(n, 10000)            # = SIZE.cmp(n, "<=", 10000)
+SIZE.cmp(n, "<=", 10000)                        # details: left, op, right
 if LOST.fire({"key": k}): ...
 BACK.await_cond(ping_ok, poll=0.2)              # asyncio: await BACK.await_async(aping, 0.2)
 ha.setup_complete()
@@ -171,15 +173,14 @@ The run-time API (`hydo_assert::always(id, msg)`, `.check`, `.hit`, `.cmp`, `eve
 writes the same bytes (it is the reference: its tests write the shared cases below). Same output switch
 (`HYDO_ASSERT_OUT`), same deduplication, same BUGGIFY configuration (`$HYDO_BUGGIFY`, else
 `/tmp/hydo-buggify`) and decisions. Rust additions: call-site macros (`hydo_always!`,
-`hydo_sometimes!`, `hydo_reachable!`, `hydo_unreachable!`, `hydo_always_or_unreachable!`, the
-comparison macros, `hydo_buggify!`, `hydo_eventually!`) whose records carry one more field,
+`hydo_sometimes!`, `hydo_reachable!`, `hydo_unreachable!`, `hydo_always_or_unreachable!`,
+`hydo_always_cmp!`, `hydo_sometimes_cmp!`, `hydo_buggify!`, `hydo_eventually!`) whose records carry one more field,
 `"loc":"<file>:<line>"`, last; `declare!`; both register before `main` with a std-only
 constructor, so a property in code that never runs is still in the catalog. Catalog order:
 `declare!` entries and macro sites sorted by file, line and column (a `declare!` block in the
 order written), then run-time declarations in declaration order. Feature `noop` compiles
 everything to nothing (BUGGIFY always false); feature `serde_json` accepts `serde_json::Value`
-details. `hydo_assert::emit_line(tag, &value)` writes any other one-line record kind (the
-extension point for a history recorder).
+details. The operation-history recorder is `hydo_assert::history` (`hydo/HISTORIES.md`).
 
 For an onboarded project, `buggify: true` in `hydo.yaml` makes the guest init write the
 schedule's `B=` token to `/tmp/hydo-buggify` (`hydo/onboard/MANIFEST.md`), as `stack-explore.sh` (deleted in M146)
@@ -197,7 +198,7 @@ const LOST_REPLY = ha.buggify('kv.put.lost_reply', 'the write lands but the repl
 ha.catalog();                                     // once, early: the DECL lines
 ACKED.check(got === want, { key: k, got });
 ha.reachable('kv.torn_tail', 'the log ended in a partial line').hit({ bytes });
-LOG_SIZE.lessThanOrEqualTo(size, cap);            // = LOG_SIZE.cmp(size, '<=', cap)
+LOG_SIZE.cmp(size, '<=', cap);                    // details: left, op, right
 if (LOST_REPLY.fire({ key })) { socket.destroy(); return; }
 await BACK.awaitCond(async () => (await ping()) === 'pong', 100);   // awaitCondSync blocks
 ha.setupComplete();
@@ -205,9 +206,7 @@ ha.setupComplete();
 
 The API is the Go SDK's in camelCase (`alwaysOrUnreachable`, `check`, `hit`, `cmp`,
 `eventually(id, msg, withinMs)` with `begin`/`done`/`expire`, `buggify`/`fire`, `catalog`,
-`setupComplete`), plus the named comparison helpers (`greaterThan`,
-`greaterThanOrEqualTo`, `lessThan`, `lessThanOrEqualTo`) and `emitLine(tag, value)` for other
-one-line record kinds. For the same sequence of calls it writes the same bytes as the Go SDK
+`setupComplete`). For the same sequence of calls it writes the same bytes as the Go SDK
 (the shared cases below, through both entries). Records are written synchronously
 (`fs.writeSync`, one write per record) to `/dev/ttyS0`; same output switch (`HYDO_ASSERT_OUT`,
 `off` makes it a no-op), same deduplication, same BUGGIFY configuration and decisions. Details
@@ -225,8 +224,8 @@ the exact bytes the sink receives and what the calls return, under the run's out
 make the same calls and compare: Go `go test ./...` in `sdk/go` and in `hydo/stack/hydoassert` (Go 1.26.5,
 the guest images' Go; with Go 1.27 or later the invalid-UTF-8 cases are skipped), Python
 `python3 -m unittest discover -s sdk/python/tests`, JavaScript `node --test` in `sdk/js`. A
-case needing what a language lacks (float32, invalid UTF-8 in a JavaScript history record,
-`emit_line` in Go) is skipped and reported. A format change starts in Rust: change it, run
+case needing what a language lacks (float32, invalid UTF-8 in a JavaScript history record) is
+skipped and reported. A format change starts in Rust: change it, run
 `HYDO_BLESS=1 cargo test --test cases`, commit `sdk/cases`, and the other SDKs' tests fail on
 the lines they must change. To add a case, add it to `sdk/rust/tests/cases/defs.rs` and bless.
 The cases equal what Go 1.26.5 writes (docs/HISTORY.md, Milestone 110).
