@@ -279,6 +279,7 @@ impl Fixture {
         let cfg = hydo_config::run::Cache {
             home: self.dir.join(home),
             release_url: self.server.base(),
+            release_api: String::new(),
             offline: !online,
         };
         let opts = Options {
@@ -746,6 +747,7 @@ fn an_http_base_url_off_the_loopback_is_refused() {
     let cfg = hydo_config::run::Cache {
         home: scratch(),
         release_url: "http://example.org/releases".into(),
+        release_api: String::new(),
         offline: false,
     };
     let c = Cache::new(&cfg, "linux", false, None);

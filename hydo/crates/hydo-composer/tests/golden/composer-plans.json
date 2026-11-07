@@ -1251,7 +1251,7 @@
       }
     },
     {
-      "dir": "<TOP>/skills/hydo-onboard/assets/example-redis-composed/hydo",
+      "dir": "<TOP>/hydo/guide/examples/example-redis-composed/hydo",
       "pin": "31b04d4f564d2f4ab4159dafadd9396a426188ea37262726498751555597f1c1",
       "m": {
         "name": "redis-composed",
@@ -1328,7 +1328,7 @@
       }
     },
     {
-      "dir": "<TOP>/skills/hydo-onboard/assets/hydo-init/hydo",
+      "dir": "<TOP>/hydo/guide/init/hydo",
       "pin": "ed8303f992565d06d3bb873e8144f28b106ea81a26b8c87171f2b3b7d942acae",
       "m": {
         "name": "@NAME@",

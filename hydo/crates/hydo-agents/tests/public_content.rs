@@ -18,8 +18,10 @@
 //! `<!-- public-content-forbidden: end -->`, one `` - `value` `` per line. When the file exists,
 //! no tracked file at all (recorded data included) may contain one of them as a word
 //! (case-insensitive), except as the owner in the project's public names (`PublicNames`): the
-//! repositories `github.com/<owner>/hydo` and `github.com/<owner>/homebrew-tap`, and the Homebrew
-//! tap `<owner>/tap` with its formula `<owner>/tap/hydo`. Without the file (a fresh clone, a
+//! repositories `github.com/<owner>/hydo` (also as `api.github.com/repos/<owner>/hydo`, and as
+//! `<owner>/hydo`, the Claude Code marketplace's name, Milestone 170) and
+//! `github.com/<owner>/homebrew-tap`, and the Homebrew tap `<owner>/tap` with its formula
+//! `<owner>/tap/hydo`. Without the file (a fresh clone, a
 //! release tarball) that part is skipped.
 //! Run from a tree that is not a git checkout, the test only says so.
 
@@ -166,7 +168,9 @@ impl Rules {
 /// The project's public names, which carry the GitHub owner's name because the owner published
 /// them: the repository `github.com/<owner>/hydo` (its releases, the packages' repository field),
 /// the Homebrew tap's repository `github.com/<owner>/homebrew-tap`, and the tap and its formula as
-/// `brew` names them, `<owner>/tap` and `<owner>/tap/hydo` (Milestone 168). The owner in each is
+/// `brew` names them, `<owner>/tap` and `<owner>/tap/hydo` (Milestone 168), and since Milestone 170 the
+/// repository as the GitHub API names it, `api.github.com/repos/<owner>/hydo` (the skill's
+/// release list), and as Claude Code's marketplace shorthand, `<owner>/hydo`. The owner in each is
 /// replaced by `<owner>` before the concrete values are looked for; the same name anywhere else
 /// on the line still fails.
 struct PublicNames {
@@ -178,11 +182,11 @@ impl PublicNames {
     fn new() -> PublicNames {
         PublicNames {
             github: Regex::new(
-                r"(?i)(github\.com/)[A-Za-z0-9-]+(/(?:hydo|homebrew-tap)(?:[^A-Za-z0-9_-]|$))",
+                r"(?i)(github\.com/(?:repos/)?)[A-Za-z0-9-]+(/(?:hydo|homebrew-tap)(?:[^A-Za-z0-9_-]|$))",
             )
             .unwrap(),
             tap: Regex::new(
-                r"(^|[^A-Za-z0-9_./~-])[A-Za-z0-9-]+(/tap(?:/hydo)?(?:[^A-Za-z0-9_/-]|$))",
+                r"(^|[^A-Za-z0-9_./~-])[A-Za-z0-9-]+(/(?:tap(?:/hydo)?|hydo)(?:[^A-Za-z0-9_/-]|$))",
             )
             .unwrap(),
         }
@@ -270,6 +274,12 @@ fn rules_catch_what_they_should() {
             false,
         ),
         ("brew untap owner1/tap owner1/tap", false),
+        ("/plugin marketplace add owner1/hydo", false),
+        ("`claude plugin marketplace add owner1/hydo`", false),
+        ("https://api.github.com/repos/owner1/hydo/releases", false),
+        ("/home/owner1/hydo", true),
+        ("owner1/hydo-other", true),
+        ("cd owner1/hydo/src", true),
         (
             "see https://github.com/owner1/hydo and /home/owner1/x",
             true,

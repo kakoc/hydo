@@ -23,7 +23,7 @@ found.
 - **Network access.** Anything that downloads, resolves external names, sends telemetry, checks
   for updates or contacts a license server at start fails. Disable it in the configuration, or
   report it as a blocker. Outside services the system really calls become fakes
-  (outside-services.md).
+  (`hydo guide outside-services`).
 - **Listening address.** On one shared loopback network, bind every service to 127.0.0.1 (or to
   its `addr:`). With `network: bridge`, a service that others call must listen on `0.0.0.0` or on
   its `addr:`: inside its namespace, 127.0.0.1 is reachable only from the service itself (as in a

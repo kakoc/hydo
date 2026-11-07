@@ -4,21 +4,31 @@
 //! ```text
 //! hydo guide [TOPIC | --list | --path]
 //! hydo skill install [--agent claude|codex|cursor|copilot|gemini|all ...] [--to DIR] [--user] [--force]
-//! hydo skill agents | path
+//! hydo skill agents | path | version
 //! hydo init [--dir DIR] [--name NAME] [--no-agents-md] [--no-gitignore]
 //! ```
 //!
-//! One text for every AI tool: the onboarding skill is an Agent Skills folder
-//! (<https://agentskills.io/specification>) at skills/hydo-onboard/ in hydo's repository and at
-//! skill/hydo-onboard/ in a release. `hydo guide` prints its SKILL.md, `hydo skill install` copies
-//! the folder where each tool looks for skills, and `hydo init` starts a repository's hydo/ folder
-//! from the skill's assets/hydo-init/ template and adds a short section to its AGENTS.md.
+//! (`hydo skill update`, which needs the network, is in hydo-cli's src/skillupdate.rs; it uses
+//! [`Where`], [`replace_dir`] and [`release`] from here.)
+//!
+//! Since Milestone 170 the process and the facts are apart. The onboarding skill is an Agent
+//! Skills folder (<https://agentskills.io/specification>) at skills/hydo-onboard/ in hydo's
+//! repository and at skill/hydo-onboard/ in a release: the process only, with its own version
+//! (`metadata.version`) and its own releases (`skill-v<version>`, [`release`]). The facts of this
+//! hydo (the project format's keys, commands, options, fault kinds, limits, examples, `hydo
+//! init`'s template) are the guide, hydo/guide/ in the repository, built into the binary and
+//! printed by `hydo guide <topic>`; so they always match the hydo that prints them. `hydo guide`
+//! alone prints this hydo's version, how to get the skill and the topics; `hydo guide skill`
+//! prints the skill's SKILL.md (for a tool without skills). The skill's old file paths
+//! (`references/<topic>.md`, `assets/...`) still answer.
 //!
 //! How the skill is found: the folder on disk under the release root (skill/hydo-onboard, then
 //! skills/hydo-onboard), exactly as the Python did; when neither exists, the copy built into this
-//! binary at compile time (build.rs embeds skills/hydo-onboard/ and hydo/onboard/MANIFEST.md), so a
-//! lone `hydo` binary still has the whole skill. The supported tools are Claude Code
-//! (.claude/skills/) and Codex (.agents/skills/); the other `--agent` values are kept as they were.
+//! binary at compile time (build.rs embeds skills/hydo-onboard/, hydo/guide/ and
+//! hydo/onboard/MANIFEST.md), so a lone `hydo` binary still has the whole skill. The guide is always
+//! the built-in one. The supported tools are Claude Code (.claude/skills/, or the plugin of the
+//! marketplace .claude-plugin/marketplace.json) and Codex (.agents/skills/); the other `--agent`
+//! values are kept as they were.
 
 use std::fmt;
 use std::io::Write;
@@ -26,6 +36,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use hydo_manifest::py;
+
+pub mod release;
 
 mod embedded {
     include!(concat!(env!("OUT_DIR"), "/embedded.rs"));
@@ -72,6 +84,10 @@ const GUIDE_TOPICS: &[(&str, &str)] = &[
     (
         "schema",
         "the project format's JSON Schema (format 1, hydo/schema/project-v1.json)",
+    ),
+    (
+        "skill",
+        "the onboarding skill's SKILL.md (the process), for a tool without skills",
     ),
 ];
 pub const BEGIN: &str =
@@ -173,132 +189,9 @@ impl Skill {
         }
     }
 
-    /// `os.walk` of a directory of the skill (top-down, directories sorted): (relative
-    /// directory, its directories, its files as (name, mode, bytes)).
-    #[allow(clippy::type_complexity)]
-    fn walk(&self, rel: &str) -> R<Vec<(String, Vec<(String, u32, Vec<u8>)>)>> {
-        let mut out = Vec::new();
-        self.walk_into(rel, ".", &mut out)?;
-        Ok(out)
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn walk_into(
-        &self,
-        top: &str,
-        rel: &str,
-        out: &mut Vec<(String, Vec<(String, u32, Vec<u8>)>)>,
-    ) -> R<()> {
-        let here = if rel == "." {
-            top.to_string()
-        } else {
-            format!("{top}/{rel}")
-        };
-        if let Skill::Disk(d) = self {
-            if !d.join(&here).is_dir() {
-                return Ok(()); // os.walk yields nothing for a directory it cannot list
-            }
-        }
-        let (dirs, files) = self.list(&here)?;
-        out.push((rel.to_string(), files));
-        for d in dirs {
-            let r = if rel == "." { d } else { format!("{rel}/{d}") };
-            self.walk_into(top, &r, out)?;
-        }
-        Ok(())
-    }
-
-    /// The sorted subdirectories and the files (name, mode, bytes) of one directory.
-    #[allow(clippy::type_complexity)]
-    fn list(&self, rel: &str) -> R<(Vec<String>, Vec<(String, u32, Vec<u8>)>)> {
-        let mut dirs = Vec::new();
-        let mut files = Vec::new();
-        match self {
-            Skill::Disk(d) => {
-                let p = d.join(rel);
-                let mut names: Vec<String> = std::fs::read_dir(&p)
-                    .map_err(|e| io_fail(e, &p))?
-                    .filter_map(Result::ok)
-                    .map(|e| e.file_name().to_string_lossy().into_owned())
-                    .collect();
-                names.sort();
-                for n in names {
-                    let q = p.join(&n);
-                    match std::fs::metadata(&q) {
-                        Ok(m) if m.is_dir() && !q.is_symlink() => dirs.push(n),
-                        Ok(m) if m.is_dir() => {}
-                        Ok(m) => {
-                            let b = std::fs::read(&q).map_err(|e| io_fail(e, &q))?;
-                            files.push((n, m.permissions().mode() & 0o7777, b));
-                        }
-                        Err(_) => {}
-                    }
-                }
-            }
-            Skill::Embedded => {
-                let pre = format!("{rel}/");
-                for (p, mode, b) in embedded::FILES {
-                    let Some(rest) = p.strip_prefix(&pre) else {
-                        continue;
-                    };
-                    match rest.split_once('/') {
-                        Some((dname, _)) => {
-                            if !dirs.iter().any(|x| x == dname) {
-                                dirs.push(dname.to_string());
-                            }
-                        }
-                        None => files.push((rest.to_string(), *mode, b.to_vec())),
-                    }
-                }
-                dirs.sort();
-                files.sort_by(|a, b| a.0.cmp(&b.0));
-            }
-        }
-        Ok((dirs, files))
-    }
-
-    /// The topics: references/<name>.md and its first non-empty line.
-    fn topics(&self) -> R<Vec<(String, String)>> {
-        let mut t = Vec::new();
-        let names: Vec<(String, Vec<u8>)> = match self {
-            Skill::Disk(d) => {
-                let r = d.join("references");
-                if !r.is_dir() {
-                    return Ok(t);
-                }
-                let mut names: Vec<String> = std::fs::read_dir(&r)
-                    .map_err(|e| io_fail(e, &r))?
-                    .filter_map(Result::ok)
-                    .map(|e| e.file_name().to_string_lossy().into_owned())
-                    .filter(|f| f.ends_with(".md") && !skipped(f))
-                    .collect();
-                names.sort();
-                let mut v = Vec::new();
-                for n in names {
-                    let p = r.join(&n);
-                    v.push((n, std::fs::read(&p).map_err(|e| io_fail(e, &p))?));
-                }
-                v
-            }
-            Skill::Embedded => embedded::FILES
-                .iter()
-                .filter_map(|(p, _, b)| {
-                    let n = p.strip_prefix("references/")?;
-                    (!n.contains('/') && n.ends_with(".md") && !skipped(n))
-                        .then(|| (n.to_string(), b.to_vec()))
-                })
-                .collect(),
-        };
-        for (n, b) in names {
-            let text = text_of(&b);
-            let first = text
-                .split_inclusive('\n')
-                .find(|l| !py::strip(l).is_empty())
-                .map(|l| l.trim_matches(|c| c == '#' || c == ' ' || c == '\n'))
-                .unwrap_or("");
-            t.push((n[..n.len() - 3].to_string(), first.to_string()));
-        }
-        Ok(t)
+    /// The skill's version: `metadata.version` in SKILL.md's frontmatter.
+    pub fn version(&self) -> Option<String> {
+        self.read("SKILL.md").ok().and_then(|t| skill_version(&t))
     }
 
     /// A file inside the skill folder named by the user (`hydo guide FILE`), if it is one.
@@ -360,6 +253,85 @@ impl Skill {
             }
         }
     }
+}
+
+/// One directory of a built-in tree: its sorted subdirectories and its files (name, mode, bytes).
+#[allow(clippy::type_complexity)]
+fn list_embedded(
+    tree: &[(&str, u32, &[u8])],
+    rel: &str,
+) -> (Vec<String>, Vec<(String, u32, Vec<u8>)>) {
+    let (mut dirs, mut files) = (Vec::<String>::new(), Vec::new());
+    let pre = format!("{rel}/");
+    for (p, mode, b) in tree {
+        let Some(rest) = p.strip_prefix(&pre) else {
+            continue;
+        };
+        match rest.split_once('/') {
+            Some((dname, _)) => {
+                if !dirs.iter().any(|x| x == dname) {
+                    dirs.push(dname.to_string());
+                }
+            }
+            None => files.push((rest.to_string(), *mode, b.to_vec())),
+        }
+    }
+    dirs.sort();
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+    (dirs, files)
+}
+
+/// `os.walk` of a directory of a built-in tree (top-down, directories sorted).
+#[allow(clippy::type_complexity)]
+fn walk_embedded(
+    tree: &[(&str, u32, &[u8])],
+    top: &str,
+) -> Vec<(String, Vec<(String, u32, Vec<u8>)>)> {
+    let mut out = Vec::new();
+    let mut todo = vec![".".to_string()];
+    while let Some(rel) = todo.pop() {
+        let here = if rel == "." {
+            top.to_string()
+        } else {
+            format!("{top}/{rel}")
+        };
+        let (dirs, files) = list_embedded(tree, &here);
+        out.push((rel.clone(), files));
+        for d in dirs.into_iter().rev() {
+            todo.push(if rel == "." { d } else { format!("{rel}/{d}") });
+        }
+    }
+    out
+}
+
+/// The version in a SKILL.md: `metadata:` → `version:` of its frontmatter.
+pub fn skill_version(skill_md: &str) -> Option<String> {
+    let body = skill_md.strip_prefix("---\n")?;
+    let fm = &body[..body.find("\n---\n")?];
+    let mut in_meta = false;
+    for l in fm.lines() {
+        if !l.starts_with(' ') {
+            in_meta = l.trim_end() == "metadata:";
+            continue;
+        }
+        if in_meta {
+            if let Some(v) = l.trim().strip_prefix("version:") {
+                let v = v.trim().trim_matches(|c| c == '"' || c == '\'');
+                return (!v.is_empty()).then(|| v.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Whether version `a` is older than `b` (dotted numbers; a part that is not a number counts as 0).
+pub fn version_lt(a: &str, b: &str) -> bool {
+    let p = |v: &str| -> Vec<u64> { v.split('.').map(|x| x.parse().unwrap_or(0)).collect() };
+    let (mut x, mut y) = (p(a), p(b));
+    let n = x.len().max(y.len());
+    x.resize(n, 0);
+    y.resize(n, 0);
+    x < y
 }
 
 fn copytree(src: &Path, dst: &Path) -> R<()> {
@@ -424,17 +396,116 @@ fn ljust(s: &str, n: usize) -> String {
     }
 }
 
+// ---------------------------------------------------------------- the guide (facts)
+
+/// The guide built into this binary (hydo/guide/ of the repository): the bytes of one file.
+fn guide_bytes(rel: &str) -> Option<&'static [u8]> {
+    embedded::GUIDE
+        .iter()
+        .find(|(p, _, _)| *p == rel)
+        .map(|(_, _, b)| *b)
+}
+
+/// The guide's topics: its top-level `<name>.md` files (but the overview) and each one's first
+/// non-empty line.
+pub fn topics() -> Vec<(String, String)> {
+    let mut t: Vec<(String, String)> = embedded::GUIDE
+        .iter()
+        .filter_map(|(p, _, b)| {
+            let n = p.strip_suffix(".md")?;
+            if n.contains('/') || n == "overview" || skipped(p) {
+                return None;
+            }
+            let text = text_of(b);
+            let first = text
+                .split_inclusive('\n')
+                .find(|l| !py::strip(l).is_empty())
+                .map(|l| l.trim_matches(|c| c == '#' || c == ' ' || c == '\n'))
+                .unwrap_or("")
+                .to_string();
+            Some((n.to_string(), first))
+        })
+        .collect();
+    t.sort();
+    t
+}
+
+/// A path inside the guide named by the user (`hydo guide examples/x`), also in the skill's old
+/// spelling from before Milestone 170 (`references/<topic>.md`, `assets/example-*`,
+/// `assets/hydo-init/*`).
+fn guide_path(a: &str) -> Option<&'static [u8]> {
+    if a.starts_with('/') {
+        return None;
+    }
+    let n = py::normpath(a);
+    if n == "." || n == ".." || n.starts_with("../") {
+        return None;
+    }
+    let mut cands = vec![n.clone()];
+    if let Some(r) = n.strip_prefix("references/") {
+        cands.push(r.to_string());
+    }
+    if let Some(r) = n.strip_prefix("assets/hydo-init/") {
+        cands.push(format!("init/{r}"));
+    } else if let Some(r) = n.strip_prefix("assets/") {
+        cands.push(format!("examples/{r}"));
+    }
+    cands.iter().find_map(|c| guide_bytes(c))
+}
+
+/// The topic lines of `hydo guide` (indented) and `hydo guide --list`.
+fn topic_lines(sk: &Skill, list: bool) -> String {
+    let mut all: Vec<(String, String)> = topics();
+    for (k, v) in GUIDE_TOPICS {
+        all.retain(|(x, _)| x != k);
+        all.push((k.to_string(), v.to_string()));
+    }
+    all.sort();
+    let pad = if list { "" } else { "  " };
+    let mut s = String::new();
+    let mut line = |k: &str, v: &str| {
+        s.push_str(&format!("{pad}{} {v}\n", ljust(k, 29)));
+    };
+    if list {
+        line(
+            "hydo guide",
+            "how to get the onboarding skill, and the topics",
+        );
+    }
+    for (k, v) in &all {
+        line(&format!("hydo guide {k}"), v);
+    }
+    line(
+        "hydo guide examples/<file>",
+        "a file of the examples (start with examples/example-redis-composed/README.md)",
+    );
+    if list {
+        line(
+            "hydo guide <file>",
+            &format!("any file of the skill folder ({})", sk.shown()),
+        );
+    }
+    s
+}
+
+/// What `hydo guide` prints: this hydo's version, how to get the skill, and the topics.
+fn overview(sk: &Skill) -> String {
+    let t = guide_bytes("overview.md").map(text_of).unwrap_or_default();
+    t.replace("@VERSION@", env!("CARGO_PKG_VERSION"))
+        .replace("@TOPICS@\n", &topic_lines(sk, false))
+}
+
 // ---------------------------------------------------------------- hydo guide
 
 pub fn guide(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
     let sk = Skill::find(root);
     let Some(a) = argv.first() else {
-        out.put(&sk.read("SKILL.md")?)?;
+        out.put(&overview(&sk))?;
         return Ok(0);
     };
     let a = a.as_str();
     if a == "-h" || a == "--help" {
-        out.put("usage: hydo guide [TOPIC | FILE | --list | --path]\n  no argument: the onboarding skill's SKILL.md (give it to any AI tool: \"run `hydo guide` and follow it\")\n  TOPIC: one of `hydo guide --list`;  FILE: a path inside the skill folder, e.g. assets/example-miniflux.yaml\n")?;
+        out.put("usage: hydo guide [TOPIC | FILE | --list | --path]\n  no argument: how to get the onboarding skill, and the topics of this guide\n  TOPIC: one of `hydo guide --list` (this hydo's facts); `skill`: the onboarding skill's SKILL.md\n  FILE: a file of the examples (examples/...) or of the skill folder (references/...)\n")?;
         return Ok(0);
     }
     if a == "--path" {
@@ -446,31 +517,8 @@ pub fn guide(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
             Skill::Embedded => Err(embedded_path()),
         };
     }
-    let t = sk.topics()?;
     if a == "--list" {
-        out.put(&format!(
-            "{} {}\n",
-            ljust("hydo guide", 29),
-            "the onboarding skill (SKILL.md)"
-        ))?;
-        let mut all: Vec<(String, String)> = t.clone();
-        for (k, v) in GUIDE_TOPICS {
-            all.retain(|(x, _)| x != k);
-            all.push((k.to_string(), v.to_string()));
-        }
-        all.sort();
-        for (k, v) in all {
-            out.put(&format!(
-                "{} {}\n",
-                ljust(&format!("hydo guide {k}"), 29),
-                v
-            ))?;
-        }
-        out.put(&format!(
-            "{} {}\n",
-            ljust("hydo guide <file>", 29),
-            format_args!("any file of the skill folder ({})", sk.shown())
-        ))?;
+        out.put(&topic_lines(&sk, true))?;
         return Ok(0);
     }
     if a == "manifest" {
@@ -481,13 +529,27 @@ pub fn guide(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
         out.put(&hydo_manifest::model::schema_text())?;
         return Ok(0);
     }
+    if a == "skill" {
+        out.put(&sk.read("SKILL.md")?)?;
+        return Ok(0);
+    }
     let name = if a.ends_with(".md") && !a.contains('/') {
         &a[..a.len() - 3]
     } else {
         a
     };
-    if t.iter().any(|(k, _)| k == name) {
-        out.put(&sk.read(&format!("references/{name}.md"))?)?;
+    if name == "overview" {
+        out.put(&overview(&sk))?;
+        return Ok(0);
+    }
+    if topics().iter().any(|(k, _)| k == name) {
+        if let Some(b) = guide_bytes(&format!("{name}.md")) {
+            out.put(&text_of(b))?;
+            return Ok(0);
+        }
+    }
+    if let Some(b) = guide_path(a) {
+        out.put(&text_of(b))?;
         return Ok(0);
     }
     if let Some(text) = sk.file(a)? {
@@ -568,7 +630,8 @@ fn copy_skill(sk: &Skill, dst: &Path, force: bool, out: &mut Out) -> R<()> {
         std::fs::create_dir_all(p).map_err(|e| io_fail(e, p))?;
     }
     sk.copy_to(dst)?;
-    out.put(&format!("hydo: {verb} {}\n", dst.display()))
+    let v = sk.version().unwrap_or_else(|| "unknown".into());
+    out.put(&format!("hydo: {verb} {} ({SKILL} {v})\n", dst.display()))
 }
 
 /// `os.path.expanduser` for `~` and `~/...`.
@@ -592,12 +655,222 @@ fn cwd() -> R<PathBuf> {
     Ok(std::env::current_dir()?)
 }
 
+/// Where `hydo skill install` and `hydo skill update` put the skill.
+#[derive(Debug, Default)]
+pub struct Where {
+    /// `--agent` values (`all` expanded).
+    pub agents: Vec<String>,
+    /// `--to DIR`.
+    pub to: Option<String>,
+    /// `--user`: the tools' directories in the home directory instead of the repository's.
+    pub user: bool,
+    /// `--force`: replace a folder of the same name that is not the hydo-onboard skill.
+    pub force: bool,
+}
+
+impl Where {
+    /// Parse the options; anything else is an error naming `cmd`'s help.
+    pub fn parse(argv: &[String], cmd: &str) -> R<Where> {
+        let mut a: Vec<String> = argv.to_vec();
+        let mut w = Where::default();
+        while !a.is_empty() {
+            let x = a.remove(0);
+            if x == "--agent" && !a.is_empty() {
+                let v = a.remove(0);
+                w.agents
+                    .extend(v.split(',').filter(|y| !y.is_empty()).map(str::to_string));
+            } else if let Some(v) = x.strip_prefix("--agent=") {
+                w.agents
+                    .extend(v.split(',').filter(|y| !y.is_empty()).map(str::to_string));
+            } else if x == "--to" && !a.is_empty() {
+                w.to = Some(a.remove(0));
+            } else if x == "--user" {
+                w.user = true;
+            } else if x == "--force" {
+                w.force = true;
+            } else {
+                return Err(Fail(format!(
+                    "unknown argument {} ({cmd} --help)",
+                    py::repr_str(&x)
+                )));
+            }
+        }
+        if w.agents.iter().any(|x| x == "all") {
+            w.agents = AGENTS.iter().map(|(k, _, _)| k.to_string()).collect();
+        }
+        let bad: Vec<&str> = w
+            .agents
+            .iter()
+            .filter(|x| !AGENTS.iter().any(|(k, _, _)| k == x))
+            .map(String::as_str)
+            .collect();
+        if !bad.is_empty() {
+            return Err(Fail(format!(
+                "unknown agent {} (known: {}, all)",
+                bad.join(", "),
+                AGENTS
+                    .iter()
+                    .map(|(k, _, _)| *k)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        }
+        if w.to.is_some() && w.user {
+            return Err(Fail("--user and --to exclude each other".into()));
+        }
+        Ok(w)
+    }
+
+    /// Whether a place was named (`--agent` or `--to`).
+    pub fn named(&self) -> bool {
+        !self.agents.is_empty() || self.to.is_some()
+    }
+
+    /// The skill folders named: `--to DIR` first, then each tool directory once.
+    pub fn targets(&self) -> R<Vec<PathBuf>> {
+        let mut targets = Vec::new();
+        if let Some(t) = &self.to {
+            targets.push(PathBuf::from(py::abspath(&expanduser(t))).join(SKILL));
+        }
+        let base = if self.user {
+            PathBuf::from(expanduser("~"))
+        } else {
+            repo_root(&cwd()?)
+        };
+        let mut dirs: Vec<&str> = self
+            .agents
+            .iter()
+            .filter_map(|x| AGENTS.iter().find(|(k, _, _)| k == x).map(|(_, d, _)| *d))
+            .collect();
+        dirs.sort();
+        dirs.dedup();
+        for d in dirs {
+            targets.push(base.join(d).join(SKILL));
+        }
+        Ok(targets)
+    }
+}
+
+/// The copies of the skill in the usual places: this repository's and the home directory's
+/// `.claude/skills/hydo-onboard` and `.agents/skills/hydo-onboard`, where a folder of the
+/// hydo-onboard skill is (not a symbolic link: hydo's own repository links them to its source).
+pub fn installed_copies() -> R<Vec<PathBuf>> {
+    let mut v = Vec::new();
+    for base in [repo_root(&cwd()?), PathBuf::from(expanduser("~"))] {
+        for (d, _) in READERS {
+            let p = base.join(d).join(SKILL);
+            if !p.is_symlink() && p.is_dir() && is_hydo_skill(&p) && !v.contains(&p) {
+                v.push(p);
+            }
+        }
+    }
+    Ok(v)
+}
+
+/// Who reads a skill folder, for the line after "installed".
+pub fn readers_of(t: &Path) -> Option<&'static str> {
+    let ts = t.display().to_string();
+    READERS
+        .iter()
+        .find(|(k, _)| ts.ends_with(&format!("{k}/{SKILL}")))
+        .map(|(_, who)| *who)
+}
+
+/// The version of the skill folder at `d`, if it is one.
+pub fn version_at(d: &Path) -> Option<String> {
+    std::fs::read(d.join("SKILL.md"))
+        .ok()
+        .and_then(|b| skill_version(&text_of(&b)))
+}
+
+/// Whether `dst` may be replaced by the skill: it does not exist, or it is a folder of the
+/// hydo-onboard skill, or `force`. A symbolic link is never replaced.
+pub fn replaceable(dst: &Path, force: bool) -> R<()> {
+    if dst.is_symlink() {
+        let to = std::fs::read_link(dst).unwrap_or_default();
+        return Err(Fail(format!(
+            "{} is a symbolic link (to {}); not replacing it. Remove it or install with --to elsewhere",
+            dst.display(),
+            to.display()
+        )));
+    }
+    if dst.exists() && !dst.is_dir() {
+        return Err(Fail(format!(
+            "[Errno 20] Not a directory: {}",
+            py::repr_str(&dst.display().to_string())
+        )));
+    }
+    if dst.exists() && !is_hydo_skill(dst) && !force {
+        return Err(Fail(format!(
+            "{} exists and is not the {SKILL} skill; not replacing it (use --force)",
+            dst.display()
+        )));
+    }
+    Ok(())
+}
+
+/// Put the skill folder `src` (complete, already checked) at `dst`, replacing an earlier copy
+/// in one step: the new folder is written next to it as `.hydo-onboard.new-<pid>`, the old one
+/// is moved aside as `.hydo-onboard.old-<pid>` and deleted after the swap. Nothing else in
+/// `dst`'s parent is touched. "installed" or "updated".
+pub fn replace_dir(src: &Path, dst: &Path, force: bool) -> R<&'static str> {
+    replaceable(dst, force)?;
+    let parent = dst
+        .parent()
+        .ok_or_else(|| Fail(format!("{}: no parent directory", dst.display())))?;
+    std::fs::create_dir_all(parent).map_err(|e| io_fail(e, parent))?;
+    let pid = std::process::id();
+    let new = parent.join(format!(".{SKILL}.new-{pid}"));
+    let old = parent.join(format!(".{SKILL}.old-{pid}"));
+    for t in [&new, &old] {
+        if t.exists() {
+            std::fs::remove_dir_all(t).map_err(|e| io_fail(e, t))?;
+        }
+    }
+    let r = (|| {
+        copytree(src, &new)?;
+        let verb = if dst.exists() {
+            std::fs::rename(dst, &old).map_err(|e| io_fail(e, dst))?;
+            "updated"
+        } else {
+            "installed"
+        };
+        if let Err(e) = std::fs::rename(&new, dst) {
+            if old.exists() {
+                let _ = std::fs::rename(&old, dst);
+            }
+            return Err(io_fail(e, dst));
+        }
+        Ok(verb)
+    })();
+    let _ = std::fs::remove_dir_all(&new);
+    let _ = std::fs::remove_dir_all(&old);
+    r
+}
+
+const SKILL_USAGE: &str = "usage: hydo skill install [--agent NAME ...] [--to DIR] [--user] [--force]
+       hydo skill update  [--agent NAME ...] [--to DIR] [--user] [--force] [--version V] [--check] [--offline]
+       hydo skill agents        where each AI tool reads skills
+       hydo skill path          the skill folder of this installation
+       hydo skill version       the version of the skill this hydo carries
+  install: copy the skill this hydo carries (its process; hydo guide holds the facts)
+  update:  fetch the newest skill release (tag skill-v<version>) from hydo's GitHub releases,
+           check it by sha256 against the release's SHA256SUMS over TLS, and install it; without
+           --agent or --to, every copy in this repository's and your home's .claude/skills and
+           .agents/skills is updated. --check only reports (exit status 0: up to date, 3: newer
+           available); --version installs that release. It uses the network only when you run it.
+  --agent claude|codex|cursor|copilot|gemini|all (repeatable, or comma-separated): that tool's
+          skill directory of this repository (--user: of your home directory)
+  --to DIR: DIR/hydo-onboard instead (any other tool, or a custom location)
+  An earlier copy of the skill is replaced; another folder of the same name is kept unless --force.
+  Claude Code can also take the skill as a plugin: /plugin marketplace add kakoc/hydo, then
+  /plugin install hydo-onboard@hydo (updates come as plugin updates).
+";
+
 pub fn skill(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
     let mut a: Vec<String> = argv.to_vec();
     if a.is_empty() || a[0] == "-h" || a[0] == "--help" {
-        out.put(&format!(
-            "usage: hydo skill install [--agent NAME ...] [--to DIR] [--user] [--force]\n       hydo skill agents        where each AI tool reads skills\n       hydo skill path          the skill folder of this installation\n  --agent claude|codex|cursor|copilot|gemini|all (repeatable, or comma-separated): copy the skill\n          into that tool's skill directory of this repository (--user: of your home directory)\n  --to DIR: copy it to DIR/{SKILL} instead (any other tool, or a custom location)\n  An earlier copy of the skill is replaced; another folder of the same name is kept unless --force.\n  Alternative for many tools at once: the Vercel `skills` CLI, `npx skills add <this skill folder>`\n"
-        ))?;
+        out.put(SKILL_USAGE)?;
         return Ok(if a.is_empty() { 2 } else { 0 });
     }
     let sk = Skill::find(root);
@@ -610,6 +883,14 @@ pub fn skill(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
             }
             Skill::Embedded => Err(embedded_path()),
         };
+    }
+    if cmd == "version" {
+        out.put(&format!(
+            "{SKILL} {} ({})\n",
+            sk.version().unwrap_or_else(|| "unknown".into()),
+            sk.shown()
+        ))?;
+        return Ok(0);
     }
     if cmd == "agents" {
         out.put("agent     project directory          user directory\n")?;
@@ -632,81 +913,17 @@ pub fn skill(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
             "unknown `hydo skill {cmd}` (hydo skill --help)"
         )));
     }
-    let (mut agents, mut to, mut user, mut force) = (Vec::<String>::new(), None, false, false);
-    while !a.is_empty() {
-        let x = a.remove(0);
-        if x == "--agent" && !a.is_empty() {
-            let v = a.remove(0);
-            agents.extend(v.split(',').filter(|y| !y.is_empty()).map(str::to_string));
-        } else if let Some(v) = x.strip_prefix("--agent=") {
-            agents.extend(v.split(',').filter(|y| !y.is_empty()).map(str::to_string));
-        } else if x == "--to" && !a.is_empty() {
-            to = Some(a.remove(0));
-        } else if x == "--user" {
-            user = true;
-        } else if x == "--force" {
-            force = true;
-        } else {
-            return Err(Fail(format!(
-                "unknown argument {} (hydo skill --help)",
-                py::repr_str(&x)
-            )));
-        }
-    }
-    if agents.is_empty() && to.is_none() {
+    let w = Where::parse(&a, "hydo skill")?;
+    if !w.named() {
         return Err(Fail("say where: --agent claude|codex|cursor|copilot|gemini|all, or --to DIR (hydo skill --help)".into()));
     }
-    if agents.iter().any(|x| x == "all") {
-        agents = AGENTS.iter().map(|(k, _, _)| k.to_string()).collect();
-    }
-    let bad: Vec<&str> = agents
-        .iter()
-        .filter(|x| !AGENTS.iter().any(|(k, _, _)| k == x))
-        .map(String::as_str)
-        .collect();
-    if !bad.is_empty() {
-        return Err(Fail(format!(
-            "unknown agent {} (known: {}, all)",
-            bad.join(", "),
-            AGENTS
-                .iter()
-                .map(|(k, _, _)| *k)
-                .collect::<Vec<_>>()
-                .join(", ")
-        )));
-    }
-    if to.is_some() && user {
-        return Err(Fail("--user and --to exclude each other".into()));
-    }
-    let mut targets = Vec::new();
-    if let Some(t) = &to {
-        targets.push(PathBuf::from(py::abspath(&expanduser(t))).join(SKILL));
-    }
-    let base = if user {
-        PathBuf::from(expanduser("~"))
-    } else {
-        repo_root(&cwd()?)
-    };
-    let mut dirs: Vec<&str> = agents
-        .iter()
-        .filter_map(|x| AGENTS.iter().find(|(k, _, _)| k == x).map(|(_, d, _)| *d))
-        .collect();
-    dirs.sort();
-    dirs.dedup();
-    for d in dirs {
-        targets.push(base.join(d).join(SKILL));
-    }
-    for t in &targets {
-        copy_skill(&sk, t, force, out)?;
-        let ts = t.display().to_string();
-        if let Some((_, who)) = READERS
-            .iter()
-            .find(|(k, _)| ts.ends_with(&format!("{k}/{SKILL}")))
-        {
+    for t in &w.targets()? {
+        copy_skill(&sk, t, w.force, out)?;
+        if let Some(who) = readers_of(t) {
             out.put(&format!("      read by {who}\n"))?;
         }
     }
-    if !user && to.is_none() {
+    if !w.user && w.to.is_none() {
         out.put("hydo: commit the copied folder so that everyone working in the repository gets the skill\n")?;
     }
     Ok(0)
@@ -744,8 +961,10 @@ pub fn project_name(d: &Path) -> String {
     }
 }
 
-fn agents_block(sk: &Skill) -> R<String> {
-    let text = sk.read("assets/hydo-init/agents-section.md")?;
+fn agents_block() -> R<String> {
+    let text = guide_bytes("init/agents-section.md")
+        .map(text_of)
+        .ok_or_else(|| Fail("init/agents-section.md: missing from the built-in guide".into()))?;
     Ok(format!("{BEGIN}\n{}\n{END}\n", text.trim_matches('\n')))
 }
 
@@ -887,7 +1106,7 @@ fn relpath(p: &str, start: &str) -> String {
     }
 }
 
-pub fn init(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
+pub fn init(argv: &[String], _root: &Path, out: &mut Out) -> R<i32> {
     let mut a: Vec<String> = argv.to_vec();
     let mut d = cwd()?.display().to_string();
     let (mut name, mut do_agents, mut do_ignore) = (None::<String>, true, true);
@@ -928,9 +1147,8 @@ pub fn init(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
             py::repr_str(&name)
         )));
     }
-    let sk = Skill::find(root);
     let (mut made, mut kept) = (Vec::new(), Vec::new());
-    for (rel, files) in sk.walk("assets/hydo-init/hydo")? {
+    for (rel, files) in walk_embedded(embedded::GUIDE, "init/hydo") {
         let dst_dir = py::normpath(&format!("{d}/hydo/{rel}"));
         let ddp = PathBuf::from(&dst_dir);
         std::fs::create_dir_all(&ddp).map_err(|e| io_fail(e, &ddp))?;
@@ -974,7 +1192,7 @@ pub fn init(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
         }
     }
     if do_agents {
-        let r = update_agents_md(&dp.join("AGENTS.md"), &agents_block(&sk)?)?;
+        let r = update_agents_md(&dp.join("AGENTS.md"), &agents_block()?)?;
         out.put(&format!("hydo: AGENTS.md: hydo section {r}\n"))?;
         for c in ["CLAUDE.md", ".claude/CLAUDE.md"] {
             let p = dp.join(c);
@@ -1051,10 +1269,42 @@ mod tests {
     #[test]
     fn embedded_has_the_skill() {
         assert!(embedded::FILES.iter().any(|(p, _, _)| *p == "SKILL.md"));
-        assert!(embedded::FILES.iter().any(|(p, m, _)| *p
-            == "assets/hydo-init/hydo/workload/parallel_driver_todo"
-            && m & 0o111 != 0));
+        assert!(embedded::GUIDE
+            .iter()
+            .any(|(p, m, _)| *p == "init/hydo/workload/parallel_driver_todo" && m & 0o111 != 0));
         assert!(!embedded::MANIFEST_MD.is_empty());
+        assert!(Skill::Embedded.version().is_some());
+        let t = topics();
+        for n in ["workflow", "services", "composer", "checks", "hazards"] {
+            assert!(t.iter().any(|(k, _)| k == n), "{n}");
+        }
+        assert!(!t.iter().any(|(k, _)| k == "overview"));
+    }
+
+    #[test]
+    fn versions() {
+        let md = "---\nname: x\nmetadata:\n  version: \"1.2.0\"\n  hydo-min: \"0.1.0\"\n---\n# x\n";
+        assert_eq!(skill_version(md).as_deref(), Some("1.2.0"));
+        assert_eq!(skill_version("---\nname: x\nversion: 1\n---\n"), None);
+        assert_eq!(skill_version("no frontmatter"), None);
+        assert!(version_lt("1.0.0", "1.0.1"));
+        assert!(version_lt("1.9.0", "1.10.0"));
+        assert!(version_lt("1.0", "1.0.1"));
+        assert!(!version_lt("1.0.0", "1.0"));
+        assert!(!version_lt("2.0.0", "1.99.99"));
+    }
+
+    #[test]
+    fn guide_paths() {
+        assert!(guide_path("references/composer.md").is_some());
+        assert!(guide_path("assets/example-miniflux.yaml").is_some());
+        assert!(guide_path("assets/hydo-init/hydo/hydo.yaml").is_some());
+        assert!(guide_path("examples/example-redis-composed/hydo/hydo.yaml").is_some());
+        assert!(guide_path("../hydo/guide/composer.md").is_none());
+        assert!(guide_path("/etc/passwd").is_none());
+        let w = walk_embedded(embedded::GUIDE, "init/hydo");
+        assert_eq!(w[0].0, ".");
+        assert!(w.iter().any(|(r, f)| r == "workload" && f.len() == 1));
     }
 
     #[test]

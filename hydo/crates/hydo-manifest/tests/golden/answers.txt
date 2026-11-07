@@ -209,9 +209,9 @@ I	sdk/cases/programs/js.json	fa4b432deb158bfaaf7f32600d4571d972aa4f02244150a3727
 I	sdk/cases/programs/python.json	a809d7cd8b7cca4ca888014935f0ecb64a6d2e8963443e8ca93e65eb033b49c6
 I	sdk/cases/programs/rust.json	4c01f91f15d568be3e4f150f4bee16987a4134680de0980f2c2c5074d9ba425d
 I	sdk/js/package.json	76379c03e5a2cc2f14ea6ecd26655185e77b7e79df7a552a0d632d5bebe53547
-I	skills/hydo-onboard/assets/example-miniflux.yaml	056fe1ea51d103145f0db56f65c550c83bd6a87b491b2cdbad74509dd3a2ee57
-I	skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml	a5d2effbdf6ba22a31cbbfbc07d1e52127834fa5ce4e1e14c5db619e2cb339b5
-I	skills/hydo-onboard/assets/hydo-init/hydo/hydo.yaml	4f2ae608d43856af3e036e9b34f9738ae0893127472f3fa22b6a74fa0ba5d9d9
+I	hydo/guide/examples/example-miniflux.yaml	056fe1ea51d103145f0db56f65c550c83bd6a87b491b2cdbad74509dd3a2ee57
+I	hydo/guide/examples/example-redis-composed/hydo/hydo.yaml	a5d2effbdf6ba22a31cbbfbc07d1e52127834fa5ce4e1e14c5db619e2cb339b5
+I	hydo/guide/init/hydo/hydo.yaml	4f2ae608d43856af3e036e9b34f9738ae0893127472f3fa22b6a74fa0ba5d9d9
 R	--set	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch x86_64 [("transfer", "racy")]	ok	d:fd5beb70 w:4f53cda1 c:3f730dfc m:74234e98
 R	^	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch x86_64 [("nope", "1")]	err	"--set nope: the manifest declares no parameter 'nope' (params: transfer)"
 R	^	<root>/hydo/onboard/examples/redis/hydo.yaml --arch x86_64 [("x", "1")]	err	"--set x: the manifest declares no parameter 'x' (params: none)"
@@ -5754,12 +5754,12 @@ R	^	<root>/sdk/cases/programs/rust.json --arch x86_64 []	err	"top level: unknown
 R	^	<root>/sdk/cases/programs/rust.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/js/package.json --arch x86_64 []	err	"top level: unknown field(s) bugs, engines, exports, files, h…#eeb601e4d4626252"
 R	^	<root>/sdk/js/package.json --arch arm64 []	err	"top level: unknown field(s) bugs, engines, exports, files, h…#eeb601e4d4626252"
-R	^	<root>/skills/hydo-onboard/assets/example-miniflux.yaml --arch x86_64 []	ok	d:31ddf6d9 w:4f53cda1 c:1a45818e m:74234e98
-R	^	<root>/skills/hydo-onboard/assets/example-miniflux.yaml --arch arm64 []	ok	d:31ddf6d9 w:4f53cda1 c:1a45818e m:74234e98
-R	^	<root>/skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml --arch x86_64 []	ok	d:7daf6c58 w:4f53cda1 c:43322f85 m:74234e98
-R	^	<root>/skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml --arch arm64 []	ok	d:7daf6c58 w:4f53cda1 c:43322f85 m:74234e98
-R	^	<root>/skills/hydo-onboard/assets/hydo-init/hydo/hydo.yaml --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
-R	^	<root>/skills/hydo-onboard/assets/hydo-init/hydo/hydo.yaml --arch arm64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
+R	^	<root>/hydo/guide/examples/example-miniflux.yaml --arch x86_64 []	ok	d:31ddf6d9 w:4f53cda1 c:a94faf06 m:74234e98
+R	^	<root>/hydo/guide/examples/example-miniflux.yaml --arch arm64 []	ok	d:31ddf6d9 w:4f53cda1 c:a94faf06 m:74234e98
+R	^	<root>/hydo/guide/examples/example-redis-composed/hydo/hydo.yaml --arch x86_64 []	ok	d:d4469772 w:4f53cda1 c:31ecb758 m:74234e98
+R	^	<root>/hydo/guide/examples/example-redis-composed/hydo/hydo.yaml --arch arm64 []	ok	d:d4469772 w:4f53cda1 c:31ecb758 m:74234e98
+R	^	<root>/hydo/guide/init/hydo/hydo.yaml --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
+R	^	<root>/hydo/guide/init/hydo/hydo.yaml --arch arm64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	yaml texts	<tmp>/yaml/y-basic.yaml --arch x86_64 []	ok	d:6369658e w:4f53cda1 c:cce9e9cc m:74234e98
 R	^	<tmp>/yaml/y-comments.yaml --arch x86_64 []	ok	d:733b0096 w:4f53cda1 c:f7200149 m:74234e98
 R	^	<tmp>/yaml/y-blocks.yaml --arch x86_64 []	ok	d:1bc35db0 w:4f53cda1 c:a3a28acb m:74234e98
@@ -6652,8 +6652,8 @@ R	^	embedded <root>/hydo/onboard/examples/stack/hydo-errors.yaml None	ok	d:e7558
 R	^	embedded <root>/hydo/onboard/examples/stack/hydo-grpcgen.yaml None	ok	d:d78be1ab w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/stack/hydo-read.yaml None	ok	d:f1da6f33 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/stack/hydo.yaml None	ok	d:d76c85a8 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <root>/skills/hydo-onboard/assets/example-miniflux.yaml None	ok	d:31ddf6d9 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <root>/skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5544.compose.json")	ok	d:5ccf3698 w:74234e98 c:74234e98 m:b5e65201
+R	^	embedded <root>/hydo/guide/examples/example-miniflux.yaml None	ok	d:31ddf6d9 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <root>/hydo/guide/examples/example-redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5544.compose.json")	ok	d:5ccf3698 w:74234e98 c:74234e98 m:b5e65201
 R	^	embedded <tmp>/yaml/y-basic.yaml None	ok	d:6369658e w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/yaml/y-comments.yaml None	ok	d:733b0096 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/yaml/y-blocks.yaml None	ok	d:1bc35db0 w:74234e98 c:74234e98 m:74234e98

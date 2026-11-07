@@ -26,15 +26,19 @@ mod module;
 mod pyjson;
 mod runs;
 mod setup;
+mod skillupdate;
 
 use ctx::{Ctx, Platform};
 
 const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Linux machine with VT-x (the hvx backend).
 
     hydo init    [--dir DIR] [--name NAME]         start a repository's hydo/ folder and its AGENTS.md section
-    hydo guide   [TOPIC | --list]                  print the onboarding guide for any AI tool (the skill's SKILL.md)
+    hydo --version | -V                            print this hydo's version (and commit)
+    hydo guide   [TOPIC | --list]                  this hydo's facts for onboarding, and how to get the skill
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
+    hydo skill   update [--check] [--agent NAME | --to DIR] [--version V]
+                                                   fetch the newest skill release (sha256-verified), install it
     hydo setup   [--check | --verify] [--add-to-path] [--offline]
                                                    make this unpacked release usable (install.sh runs it);
                                                    a damaged file is restored from the release's archive
@@ -82,9 +86,12 @@ yourself (see `hydo module udev`; HYDO_SUDO=1 forces sudo). One static program; 
 const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silicon Mac (the hvm backend).
 
     hydo init    [--dir DIR] [--name NAME]         start a repository's hydo/ folder and its AGENTS.md section
-    hydo guide   [TOPIC | --list]                  print the onboarding guide for any AI tool (the skill's SKILL.md)
+    hydo --version | -V                            print this hydo's version (and commit)
+    hydo guide   [TOPIC | --list]                  this hydo's facts for onboarding, and how to get the skill
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
+    hydo skill   update [--check] [--agent NAME | --to DIR] [--version V]
+                                                   fetch the newest skill release (sha256-verified), install it
     hydo setup   [--check | --verify] [--add-to-path] [--offline]
                                                    make this unpacked release usable (install.sh runs it);
                                                    a damaged file is restored from the release's archive
@@ -146,6 +153,9 @@ fn main() {
 fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
     let cmd = argv.get(1).map(String::as_str).unwrap_or("");
     let rest = if argv.len() > 2 { &argv[2..] } else { &[] };
+    if cmd == "skill" && rest.first().map(String::as_str) == Some("update") {
+        return skillupdate::cmd_skill_update(ctx, &rest[1..]);
+    }
     if matches!(cmd, "guide" | "skill" | "init") {
         return delegated::cmd_agents(ctx, cmd, rest);
     }
