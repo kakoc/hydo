@@ -26,10 +26,15 @@ Update the platform's `third-party.json` (format: `hydo/crates/hydo-release/src/
 - a new third-party file: add it to the `files` of its component, or add a component with its
   `name`, `version`, SPDX `license`, `texts` (copy its license files from its source archive into
   `hydo/dist/licenses/<archive name>/`), `sources` (`file`, `sha256`, `url`, `from`) and, when
-  Nix built it, `nix` (system, attribute, store paths);
+  Nix built it, `nix` (system, attribute, store paths). A copyleft component built by Nix needs
+  its recipe: the attribute in the pinned nixpkgs, or, when another nixpkgs revision built it,
+  that tree as a source (`nix-pack:` with the GitHub archive URL) named by `nixpkgs`, with
+  `drv` and ideally its derivation closure (`nix-recipe:`) named by `recipe` (the busybox 1.37.0
+  entry is the example). Record the revision when a store path is fetched; recovering it later
+  took the build machine's fetcher cache (docs/BUILD-PINS.md "The sources archives");
 - a new source archive: fetch it into the sources cache with `hydo/dist/fetch-sources.sh` on a
   Linux machine with Nix and the pinned nixpkgs (the bare-metal machine), or by hand for a `url`
-  source, and pin its sha256;
+  source, and pin its sha256 (a line with `-` as its sha256 fetches the file and prints it);
 - a new Rust crate: nothing, unless the test says it has no license field or text (then a
   `rust_overrides` entry);
 - `target/release/hydo-release check <linux|mac> --repo .` runs the checks without the tests.

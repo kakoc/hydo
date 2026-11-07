@@ -416,7 +416,35 @@ nixpkgs (NixOS 24.05 at `89c49874`):
 `hydo/dist/fetch-sources.sh` fetches them again the same way (every file checked by its sha256).
 Checked in Milestone 158: the guest kernel `guest/bzImage` (`0a9ede35…`) and its modules are
 nixpkgs's `linux_6_6` output (`rp8637p7…-linux-6.6.35`) byte for byte. Two store paths of the
-Linux release come from a newer nixpkgs revision that was not recorded: busybox 1.37.0
-(`ahw5fkq0…`) and musl 1.2.6 (`0nlqfwsn…`), both substituted from cache.nixos.org; their upstream
-archives are included, and their recipe is nixpkgs's (the pinned tree has the busybox 1.36.1 and
-musl 1.2.3 versions of it).
+Linux release come from a newer nixpkgs revision, not the pinned one: busybox 1.37.0
+(`ahw5fkq0…`) and musl 1.2.6 (`0nlqfwsn…`), both substituted from cache.nixos.org.
+
+**Their revision, recovered (Milestone 158 addendum).** It was not recorded when the store paths
+were fetched. The build machine still has the busybox deriver
+(`rnr9smwj…-busybox-static-x86_64-unknown-linux-musl-1.37.0.drv`), and its Nix fetcher cache
+(`~/.cache/nix/fetcher-cache-v1.sqlite`) shows the nixpkgs tree `f13ff45afd1bb73e640eaa08a7066dbed07e3238`
+(nixpkgs 26.11 pre-release) fetched 22 minutes before the busybox store path was registered. On
+the bare-metal machine, evaluating that tree (Nix 2.18.9, `--readonly-mode`) for x86_64-linux
+gives `pkgsStatic.busybox` = exactly that deriver and `ahw5fkq0…`, and
+`pkgsStatic.stdenv.cc.libc` = `0nlqfwsn…` (musl 1.2.6). The Linux sources archive now includes:
+
+- `nixpkgs-f13ff45afd1b.tar.gz` (`367a6939…`, the tree `cc7ff4ys…-source` that
+  `builtins.fetchTarball` makes from GitHub's archive of the revision, packed as above);
+- `busybox-1.37.0-nix-recipe.tar.gz` (`50de4f0d…`, 1,084,154 bytes), busybox's whole derivation
+  closure instantiated from that tree: `derivations.json` (`nix derivation show -r`, byte-identical
+  to the build machine's output for its own deriver), the 679 `.drv` files (busybox, musl 1.2.6,
+  GCC 15.3.0, binutils 2.46 and the stdenv bootstrap) and the 185 non-derivation inputs (builder
+  scripts, setup hooks, nixpkgs's local patches such as `busybox-in-store.patch`);
+- busybox's four fetched patches as nixpkgs's `fetchpatch` produced them
+  (`busybox-1.37.0-CVE-2023-39810.patch` `a4e0116c…`, `…-CVE-2026-26157_CVE-2026-26158.patch`
+  `32c9bdb0…`, `…-CVE-2026-26157_CVE-2026-26158-2.patch` `828fca1d…`,
+  `busybox-1.37-fix-syslogd.patch` `35945cb4…`) and Debian's packaging for its udhcpc script
+  (`busybox-debian-1.30.1-6.tar.gz` `1fb76956…`, the same file as the Mac's).
+
+`fetch-sources.sh` makes each of them again (`nix-pack:` with `fetchTarball`, `nix-recipe:`,
+`nix-in:`); two runs gave the same bytes. Every other Nix store path of both lists (58 attribute
+entries) evaluates from the pinned nixpkgs to the recorded output, with two corrections to the
+lists: the bootstrap GCC's `xgcc-13.2.0-libgcc` (`nda0h04b…`) is the pinned tree's
+`stdenv.__bootPackages.stdenv.__bootPackages.stdenv.__bootPackages.stdenv.cc.cc` (now its own
+entry), and the Mac list's util-linux path lacks its `-bin` suffix (`y065hayr…-2.39.4-bin`;
+left until the Mac release is rebuilt, AGENTS.md open item 44).
