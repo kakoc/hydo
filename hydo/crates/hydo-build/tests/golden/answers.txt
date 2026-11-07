@@ -17,7 +17,7 @@ I	hydo/bench/m56/map-d4-produce-timeout-definite.json	c235006a2a46f001166fb67909
 I	hydo/bench/m56/map-d6-client-deadline-definite.json	67f5ae08481ca7c59ee87a56656a9211b7ab660484f1c0df0a8c23c690ebeba9
 I	hydo/bench/m56/map-d7.json	fa3d12a35627c6957fa85f64915fe57d54e5dc2f6df383da12da77388095af4b
 I	hydo/bench/manifest/hydo.yaml	a371422ccb2fa44bf34b4eb29d70d76752f3b67caa240bd0c2b9aa759b3eb852
-I	hydo/crates/hydo-compose/tests/cases.json	b2aef7ba1554c5e1c5b7a2af6e71ce3a88b89d828eca9bdaced3a8c0854dcf5f
+I	hydo/crates/hydo-compose/tests/cases.json	0767d69a5bfd4e2b5c4798c777fd35cb81e7f6c503988465b8555a248a541c92
 I	hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana/docker-compose.yml	09409df7d8b9cac06f9ebdc2bcdf11155d924307f2354f9de2973b81007bacc0
 I	hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-elasticsearch-logstash-kibana/lock.json	1104b866bc34aa6cbce6ddfcea238bec7f55b6caed7f7852b66a1157f3a8cefc
 I	hydo/crates/hydo-compose/tests/fixtures/realworld/awesome-gitea-postgres/docker-compose.yml	ec30da447d0856cceeeffec7ec9d1ca648d64e26cffa06bab5c2f48c704c0b73

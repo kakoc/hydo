@@ -1,0 +1,15 @@
+# A database with its named volume and a cache whose named volume is its /data (a commerce
+# backend's Compose file): the cache gets that volume as its /data, so that an image which takes
+# over its /data (Redis's entrypoint chowns it) does not take over the database's files too.
+services:
+  db:
+    image: postgres:16.4
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  cache:
+    image: redis:7.2.4
+    volumes:
+      - cache-data:/data
+volumes:
+  pgdata:
+  cache-data:
