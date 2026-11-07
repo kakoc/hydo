@@ -66,6 +66,7 @@ tag!(StartType, "start");
 tag!(ShrinkType, "shrink");
 tag!(EndType, "end");
 tag!(ExplorationType, "exploration");
+tag!(DiffType, "diff");
 
 /// The values of [`Finding::kind`] hydo writes.
 pub mod kind {
@@ -821,6 +822,125 @@ pub struct Exploration {
     pub artifacts: ExplorationArtifacts,
 }
 
+/// Where an event of one run is in that run (added in M165): its conversation, the number of the
+/// stop that saw it (the control transcript's `n`) and the engine's virtual clock at it (hvx's
+/// instruction clock, hvm's exit count).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DiffPoint {
+    /// `boot`, `run` or `recovery`.
+    pub conversation: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<u64>,
+}
+
+/// One event of a diff (added in M165): its level, its text, and where it is in each run (absent
+/// on the side that does not have it).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DiffLine {
+    /// `control` (a command the host typed, an engine action), `controller` (the host
+    /// controller's notes and reports), `guest` (a line the guest printed), `assertion`,
+    /// `assertion-decl`, `history`, `fake-world`, `error-log`, `composer`, `outcome` (the
+    /// acknowledged and failed lists, the end of a conversation) or `verdict`.
+    pub level: String,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub a: Option<DiffPoint>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub b: Option<DiffPoint>,
+    /// The host controller's last note before it in the run that has it (`hydo-ob: KILLED redis
+    /// before step 11`): where in the workload it happened.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<String>,
+}
+
+/// A place where two runs part (added in M165).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Divergence {
+    /// The conversation it is in.
+    pub conversation: String,
+    /// The level of its first differing event (`timing` for a guest-time divergence).
+    pub level: String,
+    /// Where it is in run A and in run B (the first differing event, or, on the side that has
+    /// none, the next shared event).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub a: Option<DiffPoint>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub b: Option<DiffPoint>,
+    /// The events both runs share right before it, oldest first.
+    #[serde(default)]
+    pub context: Vec<DiffLine>,
+    /// The differing events: those only A has (`a` set) and those only B has (`b` set).
+    #[serde(default)]
+    pub lines: Vec<DiffLine>,
+    /// What differs inside two events of the same kind (`only in B: 11`, `env: only in A: ...`).
+    #[serde(default)]
+    pub details: Vec<String>,
+}
+
+/// One of the two runs of a diff (added in M165).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DiffSide {
+    /// The run directory.
+    pub dir: String,
+    pub schedule: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_sha256: Option<String>,
+    pub verdict: Verdict,
+    pub fingerprints: Fingerprints,
+}
+
+/// How many events of one level one run has and the other does not (added in M165).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DiffCount {
+    pub conversation: String,
+    pub level: String,
+    pub only_a: u64,
+    pub only_b: u64,
+}
+
+/// `diff.json`: where two runs first differ (`hydo diff`, `hydo explain`; added in M165). The
+/// runs are aligned event by event, per conversation (the control transcripts' commands, notes
+/// and reports, and the guest's console lines); `first` is the first event that differs,
+/// `timing` the first shared event the two runs reach at another stop or guest time, and
+/// `first_outcome` the first difference in what the checks judge (acknowledged lists,
+/// assertions, history records, verdicts) among records both runs write.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Diff {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: DiffType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydo_version: Option<String>,
+    pub a: DiffSide,
+    pub b: DiffSide,
+    /// `hydo explain`: how run B's schedule was made from run A's (`without K=redis@11+1`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub neighbour: Option<String>,
+    /// The sources compared (`control`, `console`, `result`).
+    #[serde(default)]
+    pub levels: Vec<String>,
+    /// No difference at the levels compared.
+    pub identical: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first: Option<Divergence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing: Option<Divergence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_outcome: Option<Divergence>,
+    /// Records of a kind the other run never writes (an assertion id it never reports), each at
+    /// its first occurrence: often code only one of two images has.
+    #[serde(default)]
+    pub one_sided: Vec<DiffLine>,
+    /// Every difference, counted by conversation and level.
+    #[serde(default)]
+    pub counts: Vec<DiffCount>,
+    /// The number of separate places where the runs differ.
+    #[serde(default)]
+    pub hunks: u64,
+}
+
 /// Any version-1 record or document (the schema's root).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
@@ -830,6 +950,7 @@ pub enum AnyV1 {
     Start(Box<Start>),
     Shrink(Box<Shrink>),
     End(Box<End>),
+    Diff(Box<Diff>),
 }
 
 impl Run {

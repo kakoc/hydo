@@ -66,7 +66,7 @@ impl Hypervisor for Script {
             window: false,
             print_at: 0,
             wait: Wait::None,
-            stepping: false,
+            stepping: None,
         }))
     }
     fn describe(&self) -> String {
@@ -93,7 +93,9 @@ pub struct ScriptCpu {
     /// the next byte of a Print operation
     print_at: usize,
     wait: Wait,
-    stepping: bool,
+    /// the addresses a step runs to ([`Cpu::step_to`]): at least one operation, then the first
+    /// arrival at one of them
+    stepping: Option<Vec<u64>>,
 }
 
 impl ScriptCpu {
@@ -151,8 +153,12 @@ impl Cpu for ScriptCpu {
                 None => return Exit::Fail(format!("no handler for vector {v:#x}")),
             }
         }
-        let budget = if self.stepping { 1 } else { 100_000 };
-        for _ in 0..budget {
+        for done in 0..100_000 {
+            if let Some(at) = &self.stepping {
+                if done > 0 && at.contains(&self.s.regs.rip) {
+                    return Exit::Debug;
+                }
+            }
             if self.window && self.if_on() {
                 self.window = false;
                 return Exit::IrqWindow;
@@ -276,12 +282,8 @@ impl Cpu for ScriptCpu {
                 Op::Shutdown => return Exit::Shutdown,
             }
         }
-        if self.stepping {
-            Exit::Debug
-        } else {
-            // the watchdog's kick of a program that loops without an exit
-            Exit::Kick
-        }
+        // the watchdog's kick of a program that loops without an exit
+        Exit::Kick
     }
 
     fn reply(&mut self, r: Reply) {
@@ -348,21 +350,52 @@ impl Cpu for ScriptCpu {
     }
 
     fn step_to(&mut self, step: Option<&crate::spin::Step>) {
-        self.stepping = step.is_some();
+        self.stepping = step.map(|s| s.addrs().to_vec());
     }
 
     /// The scripted counterparts of [`crate::spin::decode`]: jumps, compares and register
-    /// arithmetic (every run of the stepping vCPU executes one operation, so the step's address
-    /// is only nominal).
-    fn next_step(&self, _ram: &[u8], _cr3: u64) -> Option<crate::spin::Step> {
-        matches!(
-            self.p.ops.get(self.pc()),
-            Some(Op::Jmp(_) | Op::JmpIfBelow(..) | Op::JmpIfCountBelow(..) | Op::Inc)
-        )
-        .then_some(crate::spin::Step {
-            at: [self.s.regs.rip, 0],
-            n: 1,
-        })
+    /// arithmetic, with their data flow (the counter `Inc` feeds only itself; a jump on the
+    /// accumulator or on the counter is a conditional branch on that register).
+    fn next_step(&self, _ram: &[u8], _cr3: u64) -> Option<(crate::spin::Step, crate::spin::Flow)> {
+        use crate::spin::Flow;
+        // rax is register 0 and rbx register 3 in the flow's numbering
+        let flow = match self.p.ops.get(self.pc())? {
+            Op::Jmp(_) => Flow::default(),
+            Op::JmpIfBelow(..) => Flow {
+                reads: 1,
+                control: true,
+                ..Flow::default()
+            },
+            Op::JmpIfCountBelow(..) => Flow {
+                reads: 1 << 3,
+                control: true,
+                ..Flow::default()
+            },
+            Op::Inc => Flow {
+                reads: 1 << 3,
+                writes: 1 << 3,
+                ..Flow::default()
+            },
+            _ => return None,
+        };
+        // where the operation can end: the next operation, and a jump's target
+        let pc = self.pc();
+        let at = |p: usize| ENTRY + p as u64;
+        let step = match self.p.ops[pc] {
+            Op::Jmp(t) => crate::spin::Step {
+                at: [at(t), 0],
+                n: 1,
+            },
+            Op::JmpIfBelow(_, t) | Op::JmpIfCountBelow(_, t) if t != pc + 1 => crate::spin::Step {
+                at: [at(pc + 1), at(t)],
+                n: 2,
+            },
+            _ => crate::spin::Step {
+                at: [at(pc + 1), 0],
+                n: 1,
+            },
+        };
+        Some((step, flow))
     }
 
     fn kicker(&self) -> Box<dyn Fn() + Send + Sync> {

@@ -1,0 +1,10 @@
+#!/bin/sh
+# The ledger CGI (hydo/onboard/examples-mac/ledger-spin, for x86_64) with a busy-wait before each
+# append: /bin/spin_load arms a 100 ms interval timer and spins in user space on a flag its SIGALRM
+# handler clears, with no system call and no clock read -- an exact cycle the KVM engine's spin
+# observer resolves. Every tenth entry uses /bin/spin_count instead, a loop that also counts in a
+# register, which only the rewind mode resolves (the host runs such a schedule again in it).
+id=${QUERY_STRING#id=}
+case "$id" in *0) /bin/spin_count > /dev/null ;; *) /bin/spin_load > /dev/null ;; esac
+echo "$id" >> /data/ledger/entries
+printf 'Content-Type: text/plain\r\n\r\nOK %s\n' "$id"

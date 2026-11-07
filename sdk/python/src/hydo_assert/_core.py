@@ -28,16 +28,16 @@ def _after_fork():
 class Assertion(object):
     """One declared property. Create it with always(), sometimes(), ... (it joins the catalog)."""
 
-    __slots__ = ("type", "id", "msg", "_seen")
+    __slots__ = ("_type", "id", "msg", "_seen")
 
     def __init__(self, t, id, msg):
-        self.type = t
+        self._type = t
         self.id = id
         self.msg = msg
         self._seen = [False, False]  # outcome already emitted by this process: [false, true]
 
     def __repr__(self):
-        return "Assertion(%r, %r, %r)" % (self.type, self.id, self.msg)
+        return "Assertion(%r, %r, %r)" % (self._type, self.id, self.msg)
 
     def _record(self, ok, details):
         with _mu:
@@ -45,13 +45,13 @@ class Assertion(object):
             if self._seen[i]:
                 return
             self._seen[i] = True
-            _emit_eval(self.type, self.id, ok, self.msg, details)
+            _emit_eval(self._type, self.id, ok, self.msg, details)
 
     def check(self, cond, details=None):
         """Evaluate an always / always_or_unreachable / sometimes property. For sometimes only a
         true outcome is recorded. Returns bool(cond), so it can be used inline."""
         ok = bool(cond)
-        if self.type == SOMETIMES and not ok:
+        if self._type == SOMETIMES and not ok:
             return ok
         self._record(ok, details)
         return ok
@@ -59,7 +59,7 @@ class Assertion(object):
     def hit(self, details=None):
         """Mark a reachable location (recorded ok=true) or an unreachable one (recorded
         ok=false: reaching it is a violation) as reached."""
-        self._record(self.type != UNREACHABLE, details)
+        self._record(self._type != UNREACHABLE, details)
 
     def cmp(self, left, op, right, details=None):
         """Evaluate ``left <op> right`` (op one of < <= == != >= >) as check(), with left, op
@@ -84,20 +84,6 @@ class Assertion(object):
         d = details_dict(details)
         d["left"], d["op"], d["right"] = left, op, right
         return self.check(ok, d)
-
-    # Named comparison helpers (the same records as cmp with that op).
-    def greater_than(self, left, right, details=None):
-        return self.cmp(left, ">", right, details)
-
-    def greater_than_or_equal_to(self, left, right, details=None):
-        return self.cmp(left, ">=", right, details)
-
-    def less_than(self, left, right, details=None):
-        return self.cmp(left, "<", right, details)
-
-    def less_than_or_equal_to(self, left, right, details=None):
-        return self.cmp(left, "<=", right, details)
-
 
 def details_dict(details):
     """A fresh dict of ``details`` (None -> {}; a mapping is copied, so the caller's object is
@@ -165,7 +151,7 @@ def catalog():
     with _mu:
         for a in _catalog:
             _sink.write_line(
-                'HYDO-ASSERT-DECL {"t":' + _json.quote(a.type)
+                'HYDO-ASSERT-DECL {"t":' + _json.quote(a._type)
                 + ',"id":' + _json.quote(a.id)
                 + ',"msg":' + _json.quote(a.msg) + "}"
             )
@@ -175,25 +161,6 @@ def setup_complete():
     """Write the lifecycle line HYDO-SETUP-COMPLETE: the system is provisioned and ready,
     faults may begin, and this is a good snapshot/branch point."""
     _sink.write_line("HYDO-SETUP-COMPLETE")
-
-
-def emit_line(tag, value):
-    """Write one line ``<tag> <json>`` through the same sink with one write (an extension point
-    for other record kinds; the Rust SDK has the same call). Returns False if ``value`` holds a
-    NaN or an infinity (nothing is written)."""
-    try:
-        line = tag + " " + _json.encode(value)
-    except _json.Unencodable:
-        return False
-    with _mu:
-        _sink.write_line(line)
-    return True
-
-
-def assertions():
-    """The declared assertions, in declaration order (a copy)."""
-    with _mu:
-        return list(_catalog)
 
 
 if hasattr(os, "register_at_fork"):

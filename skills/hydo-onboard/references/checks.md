@@ -71,7 +71,7 @@ hydo_hist kv $HYDO_CMD_ID ok write k1 5          # after an acknowledged reply
 hydo_hist kv $HYDO_CMD_ID info write k1 5        # no reply: the outcome is unknown
 ```
 
-Go programs use `hydo/stack/hydohist`, Rust `hydo_assert::history` or `hydo_test::HistoryCheck`,
+Go programs use `hydohist` (module `github.com/kakoc/hydo/sdk/go`), Rust `hydo_assert::history` or `hydo_test::HistoryCheck`,
 JavaScript `require("hydo-assert/history")` and Python `from hydo_assert import history`; all write the
 same lines.
 The check file `checks/linearizable_<name>` reads every key back at the end and records the reads,

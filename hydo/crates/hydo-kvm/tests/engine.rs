@@ -389,11 +389,7 @@ fn hvx_only_tokens_are_refused() {
     );
     boot(&mut h);
     h.recv();
-    for s in [
-        "disk=cut cf=3 rb=4 | run",
-        "pp=5 rb=4 | run",
-        "spin=rewind rb=4 | run",
-    ] {
+    for s in ["disk=cut cf=3 rb=4 | run", "pp=5 rb=4 | run"] {
         h.tx.send(HostMsg::Request(Request::Ctl {
             tag: "x".into(),
             schedule: sched(s),
@@ -442,4 +438,159 @@ fn an_exit_free_spin_is_resolved_and_the_run_stays_deterministic() {
         h.quit();
     }
     assert_eq!(fps[0], fps[1]);
+}
+
+/// A guest that waits for its timer in a counter loop (`while (rax < 0x10000) rbx++`, the
+/// counter feeding nothing else): the register state never repeats, so only the rewind mode
+/// resolves it. The handler sets rax (an unknown port reads all ones) and the loop ends.
+fn counter_program() -> Program {
+    use Op::*;
+    let mut ops = program(1).ops[..11].to_vec();
+    ops.extend([
+        Print(b"boot\n".to_vec()),
+        RdMsr(0x1a0), // rax: the model's MISC_ENABLE, below 0x10000
+        Out(PORT_TIMER, 4, 1_000_000),
+        Sti,
+        Inc, // 15: the counter loop
+        JmpIfBelow(0x10000, 15),
+        InPair(PORT_CLOCK),
+        Print(b"HYDO-ORACLE: OK counted\n".to_vec()),
+        Cli,
+        Hlt,
+    ]);
+    let handler = ops.len();
+    ops.extend([
+        In(0x5f8, 4),
+        Print(b"tick\n".to_vec()),
+        Out(0x20, 1, 0x60),
+        Iret,
+    ]);
+    Program {
+        ops,
+        handlers: HashMap::from([(TIMER_VECTOR, handler)]),
+    }
+}
+
+/// One run of `prog` from S1 with each schedule, each from its own engine: the results (the
+/// host ends a run at the guest's exit stop; `cont`: it says CONT there, so a guest that stopped
+/// gives the engine's own verdict).
+fn runs_of(prog: &Program, schedules: &[&str]) -> Vec<RunResult> {
+    runs_of_with(prog, schedules, false)
+}
+
+fn runs_of_with(prog: &Program, schedules: &[&str], cont: bool) -> Vec<RunResult> {
+    schedules
+        .iter()
+        .map(|s| {
+            let mut h = Host::start_program(
+                Mode::Serve {
+                    boot: Some(sched("rb=4 | run")),
+                },
+                prog.clone(),
+            );
+            boot(&mut h);
+            h.recv();
+            h.tx.send(HostMsg::Request(Request::Ctl {
+                tag: "c".into(),
+                schedule: sched(s),
+            }))
+            .unwrap();
+            let r = if cont {
+                h.drive(|_, _, _, _| false)
+            } else {
+                to_the_end(&mut h)
+            };
+            h.quit();
+            r
+        })
+        .collect()
+}
+
+#[test]
+fn a_counter_loop_is_a_spin_without_the_rewind_mode_and_resolved_with_it() {
+    let p = counter_program();
+    let spin = runs_of_with(&p, &["rb=4 | run"], true);
+    assert!(
+        spin[0]
+            .verdict
+            .starts_with("ERROR workload: SPIN (guest loops without exits"),
+        "{}",
+        spin[0].verdict
+    );
+    let r = runs_of(
+        &p,
+        &[
+            "spin=rewind rb=4 | run",
+            "spin=rewind rb=4 | run",
+            "spin=rewind rb=64 | run",
+            "spin=rewind rb=64 | run",
+        ],
+    );
+    for x in &r {
+        assert_eq!(x.verdict, "HYDO-ORACLE: OK counted");
+    }
+    // the delivery point is the guest's: the same run whatever the cadence (rb=64 replays the
+    // exits since the run's first checkpoint, rb=4 checkpoints at every stop)
+    let key = |x: &RunResult| (x.fp.clone(), x.wfp.clone());
+    assert_eq!(key(&r[0]), key(&r[1]));
+    assert_eq!(key(&r[2]), key(&r[3]));
+    assert_eq!(
+        key(&r[0]),
+        key(&r[2]),
+        "the cadence does not move the delivery point"
+    );
+}
+
+#[test]
+fn the_rewind_mode_changes_nothing_without_a_counter_loop() {
+    // a run that idles in HLT and a run with an exact-repeat spin: the same fingerprints, stops
+    // and inh= with the mode on
+    for p in [program(5), spin_program(4)] {
+        let r = runs_of(&p, &["rb=4 | run", "spin=rewind rb=4 | run"]);
+        assert!(
+            r[0].verdict.starts_with("HYDO-ORACLE: OK"),
+            "{}",
+            r[0].verdict
+        );
+        assert_eq!(
+            (&r[0].fp, &r[0].wfp, &r[0].verdict, &r[0].extras),
+            (&r[1].fp, &r[1].wfp, &r[1].verdict, &r[1].extras)
+        );
+    }
+}
+
+#[test]
+fn a_snap_in_the_rewind_mode_resumes_in_it() {
+    let mut h = Host::start_program(
+        Mode::Serve {
+            boot: Some(sched("rb=4 | run")),
+        },
+        counter_program(),
+    );
+    boot(&mut h);
+    h.recv();
+    h.tx.send(HostMsg::Request(Request::Ctl {
+        tag: "a".into(),
+        schedule: sched("spin=rewind rb=4 | run"),
+    }))
+    .unwrap();
+    let a = h.drive(|h, n, _, why| {
+        if n == 3 {
+            h.snap("mid");
+        }
+        if why == StopWhy::Exit {
+            h.cmd(HostCmd::End(None));
+            return true;
+        }
+        false
+    });
+    h.tx.send(HostMsg::Request(Request::Resume {
+        tag: "b".into(),
+        snapshot: "mid".into(),
+    }))
+    .unwrap();
+    let b = to_the_end(&mut h);
+    assert_eq!(a.verdict, "HYDO-ORACLE: OK counted", "{}", h.log.join("\n"));
+    assert_eq!((a.fp, a.wfp), (b.fp, b.wfp), "{}", h.log.join("\n"));
+    h.quit();
 }

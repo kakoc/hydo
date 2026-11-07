@@ -449,6 +449,25 @@ fn run_document(
     run
 }
 
+/// One schedule from a fresh boot into `outdir`, quietly, with the host's checks and
+/// `result.json`, as `hydo run` makes it (for `hydo explain`, M165). None when the run produced no
+/// RESULT line (its engine.log says why).
+pub fn run_to_dir(
+    ctx: &Ctx,
+    image: &Path,
+    image_sha: Option<String>,
+    sched: &str,
+    outdir: &Path,
+) -> Option<hydo_results::Run> {
+    let eargs = engine_args(image, None, None, 1);
+    let (r, _) = run_engine(ctx, image, sched, outdir, &eargs, true, &Policy::Schedule);
+    let res = host_checks(outdir, result_map(&r?), true);
+    let res = errors_one(outdir, sched, res, None);
+    let run = run_document(outdir, image, image_sha, sched, &eargs, &res, ctx.backend_name());
+    write_run_document(outdir, &run);
+    Some(run)
+}
+
 fn write_run_document(outdir: &Path, run: &hydo_results::Run) {
     let _ = hydo_results::write_document(&outdir.join(hydo_results::RUN_DOC), run);
 }

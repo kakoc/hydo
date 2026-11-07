@@ -80,7 +80,7 @@ prefix() {
     *) progs="hydo hydo-hvx hydo-build hydo-fetch-image";;
   esac
   for b in $progs; do
-    [ -x "$T/target/release/$b" ] || die "no $T/target/release/$b: cargo build --release -p hydo-cli -p hydo-bench $( [ $PLAT = hvm ] && echo -p hydo-hvm || echo -p hydo-hvx) -p hydo-build -p hydo-compose"
+    [ -x "$T/target/release/$b" ] || die "no $T/target/release/$b: cargo build --release -p hydo -p hydo-bench $( [ $PLAT = hvm ] && echo -p hydo-hvm || echo -p hydo-hvx) -p hydo-build -p hydo-compose"
     cp "$T/target/release/$b" "$P/bin/$b"
   done
   for d in guest tools module examples skill; do [ -e "$REL/$d" ] && ln -s "$REL/$d" "$P/$d"; done

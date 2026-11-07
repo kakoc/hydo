@@ -1,0 +1,497 @@
+{
+  "v": 1,
+  "type": "diff",
+  "hydo_version": "0.1.0",
+  "a": {
+    "dir": "a/old",
+    "schedule": "disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24",
+    "image_sha256": "dc8f8a89e9a758a8be5c25f58768beddddf4f820b938a2a3adea7bb5df11303a",
+    "verdict": {
+      "kind": "violation",
+      "text": "HYDO-ORACLE: VIOLATION [stack.exactly_once] order=11 is in kafka (1 times) but the client was never ACKed"
+    },
+    "fingerprints": {
+      "fp": "1dc3677fb94053cf",
+      "wfp": "dc9321d7bad3e2a5",
+      "ctl": "e873020651036931"
+    }
+  },
+  "b": {
+    "dir": "a/fix",
+    "schedule": "disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24",
+    "image_sha256": "1de40b6a2681530ddf197d511589ad5639afcabe956ba65edc41453921b6f9ed",
+    "verdict": {
+      "kind": "ok",
+      "text": "HYDO-ORACLE: OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)"
+    },
+    "fingerprints": {
+      "fp": "ba0aa0612502a1df",
+      "wfp": "30130050db038e08",
+      "ctl": "07c598044a68e5be"
+    }
+  },
+  "levels": [
+    "control",
+    "console",
+    "result"
+  ],
+  "identical": false,
+  "first": {
+    "conversation": "run",
+    "level": "controller",
+    "a": {
+      "conversation": "run",
+      "stop": 88905,
+      "at": 8156677
+    },
+    "b": {
+      "conversation": "run",
+      "stop": 90405,
+      "at": 8174718
+    },
+    "context": [
+      {
+        "level": "controller",
+        "text": "hydo-ob: restarting redis before step 12",
+        "a": {
+          "conversation": "run",
+          "stop": 88839,
+          "at": 8153609
+        },
+        "b": {
+          "conversation": "run",
+          "stop": 89667,
+          "at": 8152597
+        },
+        "after": "hydo-ob: workload steps 11..11 rc=0"
+      },
+      {
+        "level": "control",
+        "text": "run /bin/busybox cat /tmp/hydo/redis.log >> /tmp/hydo/redis.log.old",
+        "a": {
+          "conversation": "run",
+          "stop": 88839,
+          "at": 8153609
+        },
+        "b": {
+          "conversation": "run",
+          "stop": 89667,
+          "at": 8152597
+        },
+        "after": "hydo-ob: restarting redis before step 12"
+      },
+      {
+        "level": "control",
+        "text": "spawn [redis] exec /bin/redis-server /etc/redis.conf",
+        "a": {
+          "conversation": "run",
+          "stop": 88859,
+          "at": 8153910
+        },
+        "b": {
+          "conversation": "run",
+          "stop": 89687,
+          "at": 8152906
+        },
+        "after": "hydo-ob: restarting redis before step 12"
+      },
+      {
+        "level": "control",
+        "text": "probe /bin/redis-cli -p 6379 ping | grep -q PONG (until ready)",
+        "a": {
+          "conversation": "run",
+          "stop": 88875,
+          "at": 8156208
+        },
+        "b": {
+          "conversation": "run",
+          "stop": 89702,
+          "at": 8155191
+        },
+        "after": "hydo-ob: restarting redis before step 12"
+      }
+    ],
+    "lines": [
+      {
+        "level": "controller",
+        "text": "hydo-ob: redis ready after 0 polls",
+        "a": {
+          "conversation": "run",
+          "stop": 88905,
+          "at": 8156677
+        },
+        "after": "hydo-ob: restarting redis before step 12"
+      },
+      {
+        "level": "control",
+        "text": "run n=$(SQL -e \"SELECT COUNT(*) FROM stack.orders WHERE amount <> 100000 + id\" 2>/dev/null) || exit 2 echo \"rows with a wro…",
+        "b": {
+          "conversation": "run",
+          "stop": 90405,
+          "at": 8174718
+        },
+        "after": "hydo-ob: restarting redis before step 12"
+      },
+      {
+        "level": "assertion",
+        "text": "assert mysql.amounts_valid ok=true: every order row in MySQL has the amount its id implies (100000 + id) {\"out\":\"rows with a wrong amount: 0\"}",
+        "b": {
+          "conversation": "run",
+          "stop": 90442,
+          "at": 8183478
+        },
+        "after": "hydo-ob: restarting redis before step 12"
+      },
+      {
+        "level": "control",
+        "text": "run sleep 1",
+        "b": {
+          "conversation": "run",
+          "stop": 90442,
+          "at": 8183478
+        },
+        "after": "hydo-ob: restarting redis before step 12"
+      },
+      {
+        "level": "controller",
+        "text": "hydo-ob: redis ready after 1 polls",
+        "b": {
+          "conversation": "run",
+          "stop": 90703,
+          "at": 8187636
+        },
+        "after": "hydo-ob: restarting redis before step 12"
+      }
+    ],
+    "details": [
+      "hydo-ob: redis ready: only in A: 0; only in B: 1"
+    ]
+  },
+  "timing": {
+    "conversation": "boot",
+    "level": "timing",
+    "a": {
+      "conversation": "boot",
+      "stop": 71094,
+      "at": 4637004
+    },
+    "b": {
+      "conversation": "boot",
+      "stop": 71149,
+      "at": 4629772
+    },
+    "context": [
+      {
+        "level": "control",
+        "text": "spawn [setup:mysql] [ -d /data/mysql/mysql ] || \"$MYSQL/bin/mysqld\" --defaults-file=/etc/my.cnf --initialize-insecure",
+        "a": {
+          "conversation": "boot",
+          "stop": 22923,
+          "at": 841628
+        },
+        "b": {
+          "conversation": "boot",
+          "stop": 22923,
+          "at": 841628
+        },
+        "after": "hydo-ob: redis ready after 1 polls"
+      }
+    ],
+    "lines": [
+      {
+        "level": "control",
+        "text": "spawn [mysql] exec \"$MYSQL/bin/mysqld\" --defaults-file=/etc/my.cnf",
+        "a": {
+          "conversation": "boot",
+          "stop": 71094,
+          "at": 4637004
+        },
+        "b": {
+          "conversation": "boot",
+          "stop": 71149,
+          "at": 4629772
+        },
+        "after": "hydo-ob: redis ready after 1 polls"
+      }
+    ],
+    "details": []
+  },
+  "first_outcome": {
+    "conversation": "run",
+    "level": "outcome",
+    "a": {
+      "conversation": "run",
+      "stop": 89825,
+      "at": 8200716
+    },
+    "b": {
+      "conversation": "run",
+      "stop": 91648,
+      "at": 8232010
+    },
+    "context": [
+      {
+        "level": "controller",
+        "text": "hydo-ob: workload steps 12..23 rc=0",
+        "a": {
+          "conversation": "run",
+          "stop": 89808,
+          "at": 8200463
+        },
+        "b": {
+          "conversation": "run",
+          "stop": 91622,
+          "at": 8231635
+        },
+        "after": "hydo-ob: redis ready after 0 polls"
+      },
+      {
+        "level": "control",
+        "text": "read /tmp/hydo/outcomes",
+        "a": {
+          "conversation": "run",
+          "stop": 89808,
+          "at": 8200463
+        },
+        "b": {
+          "conversation": "run",
+          "stop": 91622,
+          "at": 8231635
+        },
+        "after": "hydo-ob: workload steps 12..23 rc=0"
+      },
+      {
+        "level": "control",
+        "text": "write /tmp/hydo/failed (0 bytes)",
+        "a": {
+          "conversation": "run",
+          "stop": 89815,
+          "at": 8200560
+        },
+        "b": {
+          "conversation": "run",
+          "stop": 91634,
+          "at": 8231814
+        },
+        "after": "hydo-ob: workload steps 12..23 rc=0"
+      },
+      {
+        "level": "control",
+        "text": "read /tmp/hydo/acked",
+        "a": {
+          "conversation": "run",
+          "stop": 89815,
+          "at": 8200560
+        },
+        "b": {
+          "conversation": "run",
+          "stop": 91634,
+          "at": 8231814
+        },
+        "after": "hydo-ob: workload steps 12..23 rc=0"
+      }
+    ],
+    "lines": [
+      {
+        "level": "outcome",
+        "text": "hydo-explore-acked: 0 1 2 3 4 5 6 7 8 9 10 12 13 14 15 16 17 18 19 20 21 22 23",
+        "a": {
+          "conversation": "run",
+          "stop": 89825,
+          "at": 8200716
+        },
+        "after": "hydo-ob: workload steps 12..23 rc=0"
+      },
+      {
+        "level": "outcome",
+        "text": "hydo-explore-acked: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23",
+        "b": {
+          "conversation": "run",
+          "stop": 91648,
+          "at": 8232010
+        },
+        "after": "hydo-ob: workload steps 12..23 rc=0"
+      }
+    ],
+    "details": [
+      "hydo-explore-acked: only in B: 11"
+    ]
+  },
+  "one_sided": [
+    {
+      "level": "assertion",
+      "text": "assert server.place_acked ok=true: a Place call was ACKed",
+      "b": {
+        "conversation": "run",
+        "stop": 89437,
+        "at": 8136612
+      },
+      "after": "hydo-ob: command: run K=redis@11+1 C=24"
+    },
+    {
+      "level": "assertion",
+      "text": "assert server.redis_redialed ok=true: the front door re-dialed Redis after its connection broke",
+      "b": {
+        "conversation": "run",
+        "stop": 89667,
+        "at": 8152597
+      },
+      "after": "hydo-ob: KILLED redis before step 11"
+    },
+    {
+      "level": "assertion",
+      "text": "assert server.cache_write_skipped ok=true: a Redis cache write failed and was skipped; the order was still ACKed {\"error\":\"dial tcp 127.0.0.1:6379: connect: connection refused\",\"order\":11}",
+      "b": {
+        "conversation": "run",
+        "stop": 89667,
+        "at": 8152597
+      },
+      "after": "hydo-ob: KILLED redis before step 11"
+    },
+    {
+      "level": "assertion",
+      "text": "assert oracle.stores_readable ok=true: after recovery the oracle can read MySQL, Kafka and Redis",
+      "b": {
+        "conversation": "recovery",
+        "stop": 121282,
+        "at": 4607527
+      },
+      "after": "hydo-ob: kafka ready after 16 polls"
+    },
+    {
+      "level": "assertion",
+      "text": "assert order.in_mysql ok=true: every checked order is in MySQL with its amount {\"got\":\"100000\",\"in_kafka\":true,\"order\":0,\"want\":100000}",
+      "b": {
+        "conversation": "recovery",
+        "stop": 121282,
+        "at": 4607527
+      },
+      "after": "hydo-ob: kafka ready after 16 polls"
+    },
+    {
+      "level": "assertion",
+      "text": "assert order.in_kafka ok=true: every checked order is in Kafka with its amount {\"got\":\"100000\",\"in_mysql\":true,\"order\":0,\"want\":100000}",
+      "b": {
+        "conversation": "recovery",
+        "stop": 121282,
+        "at": 4607527
+      },
+      "after": "hydo-ob: kafka ready after 16 polls"
+    },
+    {
+      "level": "assertion",
+      "text": "assert order.kafka_exactly_once ok=true: every checked order is in Kafka exactly once {\"count\":1,\"order\":0}",
+      "b": {
+        "conversation": "recovery",
+        "stop": 121282,
+        "at": 4607527
+      },
+      "after": "hydo-ob: kafka ready after 16 polls"
+    },
+    {
+      "level": "assertion",
+      "text": "assert order.acked_marked_published ok=true: an ACKed order is marked published in MySQL {\"order\":0}",
+      "b": {
+        "conversation": "recovery",
+        "stop": 121282,
+        "at": 4607527
+      },
+      "after": "hydo-ob: kafka ready after 16 polls"
+    },
+    {
+      "level": "assertion",
+      "text": "assert order.redis_never_wrong ok=true: Redis never holds a wrong amount (a missing key is allowed) {\"got\":\"100000\",\"order\":0,\"want\":100000}",
+      "b": {
+        "conversation": "recovery",
+        "stop": 121282,
+        "at": 4607527
+      },
+      "after": "hydo-ob: kafka ready after 16 polls"
+    },
+    {
+      "level": "assertion",
+      "text": "assert oracle.redis_cache_miss ok=true: the oracle saw a Redis cache miss {\"order\":11}",
+      "b": {
+        "conversation": "recovery",
+        "stop": 121282,
+        "at": 4607527
+      },
+      "after": "hydo-ob: kafka ready after 16 polls"
+    }
+  ],
+  "counts": [
+    {
+      "conversation": "run",
+      "level": "assertion",
+      "only_a": 0,
+      "only_b": 4
+    },
+    {
+      "conversation": "run",
+      "level": "controller",
+      "only_a": 1,
+      "only_b": 1
+    },
+    {
+      "conversation": "run",
+      "level": "control",
+      "only_a": 0,
+      "only_b": 2
+    },
+    {
+      "conversation": "run",
+      "level": "outcome",
+      "only_a": 2,
+      "only_b": 2
+    },
+    {
+      "conversation": "recovery",
+      "level": "controller",
+      "only_a": 1,
+      "only_b": 1
+    },
+    {
+      "conversation": "recovery",
+      "level": "control",
+      "only_a": 1,
+      "only_b": 1
+    },
+    {
+      "conversation": "recovery",
+      "level": "assertion",
+      "only_a": 1,
+      "only_b": 8
+    },
+    {
+      "conversation": "recovery",
+      "level": "verdict",
+      "only_a": 1,
+      "only_b": 1
+    },
+    {
+      "conversation": "recovery",
+      "level": "outcome",
+      "only_a": 1,
+      "only_b": 1
+    },
+    {
+      "conversation": "recovery",
+      "level": "assertion-decl",
+      "only_a": 0,
+      "only_b": 23
+    },
+    {
+      "conversation": "result",
+      "level": "verdict",
+      "only_a": 2,
+      "only_b": 1
+    },
+    {
+      "conversation": "result",
+      "level": "assertion",
+      "only_a": 1,
+      "only_b": 0
+    }
+  ],
+  "hunks": 9
+}

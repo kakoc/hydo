@@ -13,7 +13,11 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.90"
-publish = false
+repository = "https://github.com/kakoc/hydo"
+homepage = "https://github.com/kakoc/hydo"
+# What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests, the
+# example transcripts they check and the schema stay in the repository.
+include = ["/src/**", "/Cargo.toml", "/LICENSE"]
 
 [dependencies]
 

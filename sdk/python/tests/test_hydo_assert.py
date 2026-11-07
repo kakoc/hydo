@@ -98,8 +98,8 @@ class TestAssertions(unittest.TestCase):
     def test_cmp_does_not_change_callers_details(self):
         a = ha.always("u.cmp", "c")
         d = {"k": 1}
-        self.assertTrue(a.less_than_or_equal_to(1, 2, d))
-        self.assertFalse(a.greater_than(1, 2, d))
+        self.assertTrue(a.cmp(1, "<=", 2, d))
+        self.assertFalse(a.cmp(1, ">", 2, d))
         self.assertFalse(a.cmp(1, "??", 1))
         self.assertFalse(a.cmp(1, "<", "x"))  # not comparable: false, not an exception
         self.assertEqual(d, {"k": 1})

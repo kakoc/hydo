@@ -992,7 +992,7 @@ same fingerprint (docs/REBASELINE.md section 13, which also says how each image 
 |---|---|---|---|---|
 | `disk=none dseed=d7071eb1f9d436b9 \| run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3` | OK invariants=2 held (compose.commands: started=2 ok=1 failed=1 timeout=0 violation=0 killed=0 skipped=0) | `ec450ee463da3f5d` | `9fcb1c71aa47fc8b` | yes |
 
-## Milestone 157: node-kv with the SDK comment reworded (the current values)
+## Milestone 157: node-kv with the SDK comment reworded (superseded by "Milestone 163" below)
 
 Milestone 157 reworded a comment in `sdk/js/index.js`, which node-kv copies into its image, so
 the node-kv image has new bytes (initramfs `ae2bbb9b231f295c…`) and new fingerprints; the verdict
@@ -1007,3 +1007,23 @@ lines and the ctl values are Milestone 155's. Each schedule ran twice with the s
 | `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `3146b75677356b19` | `8de6e3d2ba8ff5d8` | yes |
 | `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `1cbb888242587805` | `202dcc1810826541` | yes |
 | `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `772d0ca8f633d3be` | `39129eaa9b7e2227` | yes |
+
+## Milestone 163: node-kv with the SDK cleanup (the current values)
+
+Milestone 160 (the SDKs prepared for their registries) changed `sdk/js/package.json`, which node-kv
+copies into its image; its values are in docs/REBASELINE.md section 15. Milestone 163 cleaned up the assertion SDKs' APIs before their first publication (the named
+comparison helpers and `emit_line` removed, internals hidden; docs/HISTORY.md "Milestone 163").
+The records the remaining calls write are unchanged, but node-kv copies `sdk/js/index.js` and `index.mjs` into its image and its `nkv-server.mjs` now calls `P.LOG_SIZE.cmp(size, '<=', MAX_LOG)` instead of the removed `lessThanOrEqualTo`, so the image has new bytes and new
+fingerprints. Every verdict line is the earlier one word for word; each schedule ran twice with
+the same fingerprint (docs/REBASELINE.md section 16, which also says how the images were made).
+Fingerprint epoch 1.
+One ctl value moved with the same verdict (section 16).
+
+**Mac (hvm), node-kv** (initramfs `39d38e81…`)
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `9a4166f95ce564f1` | `0141194b466e3bd9` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `eae9b3e9d9df7262` | `bfdec020a46f3dcf` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `db0ced2ee18e2182` | `202dcc1810826541` | yes |
+| `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `258c878ca6f94d50` | `0c5914e7cd7b1a58` | yes |

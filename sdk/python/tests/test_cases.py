@@ -23,7 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CASES = os.path.normpath(os.path.join(HERE, "..", "..", "cases"))
 PRE = b"PRE existing line\n"
 UNSUPPORTED = {"f32": "Python has no float32"}
-KNOWN = {"f32", "bytes", "invalid_utf8", "raw_hist", "emit_line"}
+KNOWN = {"f32", "bytes", "invalid_utf8", "raw_hist"}
 
 
 def mask_times(b):
@@ -233,10 +233,7 @@ def child():
             objs[st["a"]].hit(details(st))
         elif do == "cmp":
             a, left, right = objs[st["a"]], val(st["left"]), val(st["right"])
-            if "helper" in st:
-                push(getattr(a, st["helper"])(left, right, details(st)))
-            else:
-                push(a.cmp(left, st["op"], right, details(st)))
+            push(a.cmp(left, st["op"], right, details(st)))
         elif do == "begin":
             watches.append(objs[st["a"]].begin())
         elif do == "done":
@@ -254,8 +251,6 @@ def child():
             ha.catalog()
         elif do == "setup_complete":
             ha.setup_complete()
-        elif do == "emit_line":
-            ha.emit_line(st["tag"], val(st["value"]))
         elif do == "history":
             hists.append(h.History(st["name"]))
         elif do == "invoke":

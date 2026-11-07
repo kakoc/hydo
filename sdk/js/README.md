@@ -1,14 +1,15 @@
 # hydo-assert: the JavaScript assertion SDK (Node.js)
 
-A Node.js program running under hydo (the deterministic hypervisor in this repository) uses this
-package to say what must be true, what should happen at least once, what must happen within a
-deadline, and where a dependency may misbehave. It writes the same console records as the Go
-SDK (`hydo/stack/hydoassert`), byte for byte, with the same deduplication rules, so
-`hydo_assert_report`, the harnesses and the explorer (`hydo explore`) read them unchanged. The wire format and
-the verdict rules are in `hydo/ASSERTIONS.md`.
+A Node.js program running under hydo (the deterministic hypervisor of
+[github.com/kakoc/hydo](https://github.com/kakoc/hydo)) uses this package to say what must be
+true, what should happen at least once, what must happen within a deadline, and where a
+dependency may misbehave. It writes the same console records as the Go SDK (`sdk/go`), byte for
+byte, with the same deduplication rules, so `hydo run` and the explorer (`hydo explore`) read
+them unchanged. The wire format and the verdict rules are in
+`hydo/ASSERTIONS.md` of that repository; paths below are relative to it.
 
-The package has no dependencies, works from CommonJS and ESM, and ships TypeScript types. It
-is not published (`"private": true`); depend on it by path:
+The package has no dependencies, works from CommonJS and ESM, and ships TypeScript types.
+Install it from npm (`npm install hydo-assert`), or depend on a checkout by path:
 
 ```json
 { "dependencies": { "hydo-assert": "file:../hydo/sdk/js" } }
@@ -36,7 +37,7 @@ ACKED.check(got === want, { key: k, got });
 RECOVERED.check(n > 0, { keys: n });
 TORN.hit({ bytes });
 OVERWRITE.hit({ key });
-LOG_SIZE.lessThanOrEqualTo(size, cap);       // or LOG_SIZE.cmp(size, '<=', cap, details)
+LOG_SIZE.cmp(size, '<=', cap);               // details: left, op, right
 if (LOST_REPLY.fire({ key })) { socket.destroy(); return; }
 await BACK.awaitCond(async () => (await ping()) === 'pong', 100);   // one record per episode
 ha.setupComplete();                          // HYDO-SETUP-COMPLETE
@@ -46,14 +47,18 @@ ha.setupComplete();                          // HYDO-SETUP-COMPLETE
 |---|---|
 | `Always(id, msg)`, `AlwaysOrUnreachable`, `Sometimes`, `Reachable`, `Unreachable` | `always(id, msg)`, `alwaysOrUnreachable`, `sometimes`, `reachable`, `unreachable` |
 | `a.Check(cond, d)`, `a.Hit(d)` | `a.check(cond, d)` (returns the condition as a boolean), `a.hit(d)` |
-| `a.Cmp(left, op, right, d)` | `a.cmp(left, op, right, d)` (numbers or bigints), and the named helpers `a.greaterThan`, `a.greaterThanOrEqualTo`, `a.lessThan`, `a.lessThanOrEqualTo` (`(left, right, d)`; the same records) |
+| `a.Cmp(left, op, right, d)` | `a.cmp(left, op, right, d)` (numbers or bigints; `op` is one of `<`, `<=`, `==`, `!=`, `>=`, `>`) |
 | `Eventually(id, msg, within)` | `eventually(id, msg, withinMs)` |
 | `l.Await(cond, poll, d)` | `await l.awaitCond(cond, pollMs, d)` (cond may return a promise); `l.awaitCondSync(cond, pollMs, d)` blocks the thread |
 | `l.Begin()`, `w.Done(d)`, `w.Expire(d)` | `l.begin()`, `w.done(d)`, `w.expire(d)` |
 | `Buggify(id, msg)`, `p.Fire(d)` | `buggify(id, msg)`, `p.fire(d)` |
 | `Catalog()`, `SetupComplete()` | `catalog()`, `setupComplete()` |
 | `D{...}` | a plain object (or a `Map`) |
-| (none) | `emitLine(tag, value)`: any other one-line record kind through the same sink; `toJSON(value)`: the Go encoding of a value |
+
+That table, the classes the calls return (`Assertion`, `Liveness`, `Watch`, `Point`) and the
+history recorder below are the whole API, as `index.d.ts` declares it: a comparison has one
+form, `cmp` with its operator. Exports and fields whose names start with `_` and fields that
+`index.d.ts` does not declare are the package's own and may change in any version.
 
 ## Records, deduplication, catalog
 
@@ -94,8 +99,8 @@ ha.setupComplete();                          // HYDO-SETUP-COMPLETE
 | NaN, ±Infinity, a cycle | the record is not written | `json.Marshal` fails |
 | details that are not an object (a string, an array) | `{"value": ...}` | |
 
-An absent or empty details object gives no `details` field (Go's `omitempty`). `cmp` and the
-comparison helpers add `left`/`op`/`right`, `eventually` adds `elapsed_ms`/`within_ms`, and a
+An absent or empty details object gives no `details` field (Go's `omitempty`). `cmp` adds
+`left`/`op`/`right`, `eventually` adds `elapsed_ms`/`within_ms`, and a
 fired fault point adds `hit`: each to the caller's own object (or `Map`) when one is given, as
 the Go SDK writes into the caller's map.
 
@@ -139,7 +144,7 @@ project gets it with `buggify: true` in its `hydo.yaml` (`hydo/onboard/MANIFEST.
 The entry `hydo-assert/history` records operation histories for hydo's host-side checkers
 (linearizability of a register or compare-and-set object per key, and Elle-style list-append;
 the format and the checkers are in `hydo/HISTORIES.md`). It writes the same `HYDO-HIST` lines as
-the Go recorder (`hydo/stack/hydohist`), byte for byte except the time field. It is separate from
+the Go recorder (`sdk/go/hydohist`), byte for byte except the time field. It is separate from
 the assertion SDK, so loading it changes nothing the assertion records contain. In a guest
 image, also copy `history.js` and `history.mjs`.
 

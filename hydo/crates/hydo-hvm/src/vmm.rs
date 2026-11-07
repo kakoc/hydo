@@ -236,6 +236,7 @@ macro_rules! ramv {
         Ram {
             b: $s.ram.bytes_mut(),
             base: RAM_BASE,
+            dirty: None,
         }
     };
 }

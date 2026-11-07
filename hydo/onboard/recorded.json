@@ -331,75 +331,75 @@
     {
       "id": "hvm/node-kv",
       "platform": "hvm",
-      "recorded": "docs/REBASELINE.md 14",
+      "recorded": "docs/REBASELINE.md 16",
       "build": {
         "stage": "mac-node-kv",
         "dir": "hydo/onboard/examples/node-kv",
         "manifest": "hydo-mac.yaml",
         "args": []
       },
-      "sha256": "ae2bbb9b231f295c",
+      "sha256": "39d38e81ed7c16c393b852429f1a663fd97a7a37ce8c9f28ab4e725590bd8537",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (nkv.oracle: acked=20 all present)",
-          "fp": "5f47c9a775cd40a8",
+          "fp": "9a4166f95ce564f1",
           "ctl": "0141194b466e3bd9"
         },
         {
           "schedule": "disk=cut | run C=12 S=never",
           "verdict": "VIOLATION [nkv.oracle] key k:0 lost (got null)",
-          "fp": "3146b75677356b19",
-          "ctl": "8de6e3d2ba8ff5d8"
+          "fp": "eae9b3e9d9df7262",
+          "ctl": "bfdec020a46f3dcf"
         },
         {
           "schedule": "disk=cut | run C=12",
           "verdict": "OK invariants=1 held (nkv.oracle: acked=12 all present)",
-          "fp": "1cbb888242587805",
+          "fp": "db0ced2ee18e2182",
           "ctl": "202dcc1810826541"
         },
         {
           "schedule": "disk=none | run K=nkv@8+2 B=1234",
           "verdict": "OK invariants=1 held (nkv.oracle: acked=18 all present)",
-          "fp": "772d0ca8f633d3be",
-          "ctl": "39129eaa9b7e2227"
+          "fp": "258c878ca6f94d50",
+          "ctl": "0c5914e7cd7b1a58"
         }
       ]
     },
     {
       "id": "hvm/python-kv",
       "platform": "hvm",
-      "recorded": "docs/REBASELINE.md 14",
+      "recorded": "docs/REBASELINE.md 16",
       "build": {
         "stage": "mac-python-kv",
         "dir": "hydo/onboard/examples/python-kv",
         "manifest": "hydo-mac.yaml",
         "args": []
       },
-      "sha256": "3d7c2130b76cdd8e",
+      "sha256": "0796b2166f663d8be289517d28cf817ee45dba0ab677335a48d4cf2ae3842420",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (pykv.oracle: acked=20 all present)",
-          "fp": "f37f7b2513c61d0c",
+          "fp": "77662a4dc66660b4",
           "ctl": "99d3a6c9bcab4d75"
         },
         {
           "schedule": "disk=none | run K=pykv@8+2",
           "verdict": "OK invariants=1 held (pykv.oracle: acked=18 all present)",
-          "fp": "0dc1f942d30494c2",
+          "fp": "d218c9200955852c",
           "ctl": "9dac63ed9843b10c"
         },
         {
           "schedule": "disk=cut | run C=12 S=never",
           "verdict": "VIOLATION [pykv.oracle] key k:0 lost (got 'NONE')",
-          "fp": "bd9cb77e5587ec31",
+          "fp": "67c1be61543262ec",
           "ctl": "3b8233343cb49963"
         },
         {
           "schedule": "disk=none | run B=1234",
           "verdict": "OK invariants=1 held (pykv.oracle: acked=18 all present)",
-          "fp": "5bf4fc7e7881d4d9",
+          "fp": "9de124f239acb2d2",
           "ctl": "ece160c3964f7f03"
         }
       ]
@@ -407,25 +407,25 @@
     {
       "id": "hvm/python-kv-hist",
       "platform": "hvm",
-      "recorded": "docs/REBASELINE.md 14",
+      "recorded": "docs/REBASELINE.md 16",
       "build": {
         "stage": "mac-python-kv",
         "dir": "hydo/onboard/examples/python-kv",
         "manifest": "hydo-mac-hist.yaml",
         "args": []
       },
-      "sha256": "1c03cd40f532ac95",
+      "sha256": "08d77aa7933e01f2b22f7a5aa34ded346809aec2fd53e707477194e18b55854d",
       "runs": [
         {
           "schedule": "disk=cut | run C=12",
           "verdict": "OK invariants=0 held (); history OK",
-          "fp": "618b9d4430b2089e",
+          "fp": "c784a2d6d224eb47",
           "ctl": "133c9c994223dbe4"
         },
         {
           "schedule": "disk=cut | run C=12 S=never",
           "verdict": "OK invariants=0 held (); history VIOLATION [kv.linearizable]",
-          "fp": "78c99aebf1097a15",
+          "fp": "4e0ea385f449db81",
           "ctl": "4a799f3170dcb41b"
         }
       ]
@@ -433,61 +433,61 @@
     {
       "id": "hvm/rust-kv",
       "platform": "hvm",
-      "recorded": "docs/REBASELINE.md 13.1",
+      "recorded": "docs/REBASELINE.md 16",
       "build": {
         "stage": "mac-rust-kv",
         "dir": "hydo/onboard/examples/rust-kv",
         "manifest": "hydo.yaml",
         "args": []
       },
-      "sha256": "23b338645b762cd6",
+      "sha256": "c450aacb054240740d4a14dcbe314fa3b0c04e7a68db5c99c7391ddca4b4bace",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present)",
-          "fp": "547f7b419affd943",
+          "fp": "5e1d844bdf412e73",
           "ctl": "bc6fe53352fa8359"
         },
         {
           "schedule": "disk=cut | run C=12",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present)",
-          "fp": "6d32a2e7ac9aecce",
+          "fp": "ac2bfa6ddc729e9f",
           "ctl": "ded68d8cdfcf34f0"
         },
         {
           "schedule": "disk=cut | run C=12 S=never",
           "verdict": "VIOLATION [rkv.oracle] rkv check: acked=12 lost=12",
-          "fp": "c221cba5d3298571",
+          "fp": "3a4be66e14c4c051",
           "ctl": "22168eb0b60f5ac1"
         },
         {
           "schedule": "disk=none | run K=rkv@8+2",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present)",
-          "fp": "3d188ff780a5d993",
+          "fp": "bf97e6e506a17a14",
           "ctl": "0ad74bffbfd87b1f"
         },
         {
           "schedule": "disk=none | run B=5abc,1000,500",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=2 all present)",
-          "fp": "439f45f7fe19dff7",
+          "fp": "839345b237fb6bef",
           "ctl": "d20fa8483538cd42"
         },
         {
           "schedule": "disk=none | run B=1234",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present)",
-          "fp": "dbc272cd3cc600ec",
+          "fp": "1f691ae7e24d1f34",
           "ctl": "243f271a5911baf1"
         },
         {
           "schedule": "disk=none | run K=rkv@8+2 B=1234",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present)",
-          "fp": "0178e70f40b959a5",
+          "fp": "aa0b8c437f8b33f4",
           "ctl": "31ca45bf4f0d1dfe"
         },
         {
           "schedule": "disk=none | run P=rkv@5+3",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=17 all present)",
-          "fp": "6e6269b2af51beab",
+          "fp": "a55085a1fe310ad9",
           "ctl": "53e69be30dff5ad1"
         }
       ]
@@ -1040,7 +1040,7 @@
     {
       "id": "hvx/rust-kv",
       "platform": "hvx",
-      "recorded": "docs/REBASELINE.md 13.2",
+      "recorded": "docs/REBASELINE.md 16",
       "build": {
         "stage": "rust-kv",
         "dir": "hydo/onboard/examples/rust-kv",
@@ -1048,27 +1048,31 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "20fb50e4",
+      "sha256": "ef1b4c5d079a19a6321d53fc9d29a56dced928c4cc4a9fba1fc7cf97a8994882",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present)",
-          "fp": "2db6fdcc217982c3"
+          "fp": "d184b981aeb40784",
+          "ctl": "f8463ecaf1560f12"
         },
         {
           "schedule": "disk=cut | run C=12",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present)",
-          "fp": "9391d8a94083dd30"
+          "fp": "a9cdd32d8953d7f2",
+          "ctl": "9003b2c60348a405"
         },
         {
           "schedule": "disk=cut | run C=12 S=never",
           "verdict": "VIOLATION [rkv.oracle] rkv check: acked=12 lost=12",
-          "fp": "4ce661597e641723"
+          "fp": "9e590e418c25edae",
+          "ctl": "50d7001af4588bc1"
         },
         {
           "schedule": "disk=none | run K=rkv@8+2 B=1234",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present)",
-          "fp": "faa3c2c7c56207c8"
+          "fp": "eb37594cfd033c85",
+          "ctl": "20741d9f13ac3585"
         }
       ]
     },

@@ -351,7 +351,7 @@ variables! {
     HYDO_BACKEND: Kvm, User, "word: hvx | kvm", "hvx", "hydo-cli";
 
     // ------------------------------------------------------------------ Control
-    /// `0`: the host does not run a SPIN of an agent image on hvm again in the rewind mode
+    /// `0`: the host does not run a SPIN of an agent image on hvm or kvm again in the rewind mode
     /// (`hydo-hvm hvm` reads it too: `1` turns the rewind mode on).
     HVM_SPIN_REWIND: Control, User, "flag: exactly `0` turns it off", "on", "hydo-control, hydo-hvm";
 
@@ -359,6 +359,16 @@ variables! {
     /// `linux` or `mac`: run the `hydo` command as the other platform's (the CLI test checks
     /// the other platform's commands that need no engine).
     HYDO_CLI_PLATFORM: Cli, Developer, "word: linux | mac", "this binary's platform", "hydo-cli";
+    /// The install cache (Milestone 162, docs/design/install-cache.md): `store/` (release
+    /// archives and guest kernels by sha256), `versions/<version>/` (releases `hydo setup --get`
+    /// installed), `bin/hydo` (the current one). An empty value means the default.
+    HYDO_HOME: Cli, User, "path", "~/.hydo", "hydo-cli";
+    /// Where releases are fetched from: `<value>/v<version>/<file>`. HTTPS only (plain `http://`
+    /// only to a loopback host). An empty value means the default.
+    HYDO_RELEASE_URL: Cli, User, "URL", "https://github.com/kakoc/hydo/releases/download", "hydo-cli";
+    /// Set and not `0`: never use the network (`hydo setup`, and the kernel lookup of runs); what
+    /// the install cache does not have is refused with its URL (`--offline` does the same).
+    HYDO_OFFLINE: Cli, User, "flag: set and not `0`", "", "hydo-cli";
     /// `warn`: a plan whose `hydo_version:` this hydo does not satisfy builds with a warning.
     HYDO_VERSION_CHECK: Build, User, "word: warn", "refuse", "hydo-build (through hydo-manifest)";
 

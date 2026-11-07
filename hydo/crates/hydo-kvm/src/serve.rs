@@ -22,14 +22,22 @@
 //!   `dseed=` arm hvx's seeded fault classes on it.
 //! - **Timing tokens**: tick jitter (`tj=`, `tjx=`, delays in exits, `tjmax=` default 1000) and
 //!   forced preemption points (`pct=`, `pctn=`, `pctk=`), counted in exits as on the Mac. Host
-//!   tokens only hvx applies (`pp=`, `xt*`, `q*`, `cf=`, `cfn`) are refused, and so is `spin=`
-//!   (this engine has no rewind mode).
+//!   tokens only hvx applies (`pp=`, `xt*`, `q*`, `cf=`, `cfn`) are refused.
+//! - **Exit-free loops**: exact cycles are resolved in every run; a counter loop ends the run at
+//!   once as a SPIN unless the schedule has `spin=rewind`, which runs its workload, check and
+//!   recovery phases in the rewind mode ([`crate::vmm`], Milestone 161; the host runs a SPIN again
+//!   with it, as for the Mac engine), and a SNAP keeps the mode for its RESUME. The mode's
+//!   checkpoints are taken at loop tops after the stop hook and its replays do not call the hook,
+//!   so the stops stay those of the run: a schedule that completes plainly gives the same
+//!   fingerprint, stops and `inh=` with the mode on.
+//! - **Snapshots** share memory: RAM is a base (S0 and S1 each make one) and the pages that differ
+//!   from it, the disk a copy-on-write copy ([`crate::mem`], `hydo_hvm::disk`).
 //! - **Guest RAM**: `--ram-mib N`, 256..3072 (default 1024).
 
 use crate::cpu::Hypervisor;
 use crate::fnv::{fnv, fnv_u64, OFFSET};
 use crate::layout::*;
-use crate::machine::{Mach, Tjit};
+use crate::machine::Tjit;
 use crate::vmm::{VmOpts, Vmm, XSnap};
 use crate::{catch_fatal, fatal, say, Diag};
 use hydo_engine_proto::{
@@ -92,6 +100,8 @@ struct RunSt {
     pct_n: u32,
     wx0: u64,
     tjinfo: String,
+    /// the run's phases in the rewind mode (`spin=rewind`)
+    rewind: bool,
 }
 
 impl Default for RunSt {
@@ -104,6 +114,7 @@ impl Default for RunSt {
             pct_n: 0,
             wx0: 0,
             tjinfo: String::new(),
+            rewind: false,
         }
     }
 }
@@ -395,15 +406,10 @@ impl Host {
         };
         let mut x = match self.snaps[slot].take() {
             Some(old) => old.x,
-            None => XSnap {
-                cpu: Default::default(),
-                m: Mach::default(),
-                ram: Vec::new(),
-                vio: None,
-                con: Vec::new(),
-            },
+            None => XSnap::default(),
         };
-        vm.snapshot(&mut x);
+        // S0 and S1, which every run restores, become RAM bases of their own
+        vm.snapshot(&mut x, name == "S0" || name == "S1");
         let mut k = self.c.k.clone();
         for s in &mut k.s {
             if s.state == Cs::Typed {
@@ -431,6 +437,7 @@ impl Host {
 
     /// One stop: report, then serve host commands until CONT (false) or END/EOF (true).
     fn ctl_stop(&mut self, vm: &mut Vmm, why: StopWhy) -> bool {
+        vm.stops += 1; // the rewind mode takes a checkpoint after a conversation
         let mut p = self.c.k.evfrom;
         let len = vm.m.console_len as usize;
         let mut q = p;
@@ -627,8 +634,7 @@ fn tj_wanted(t: &Tjit) -> bool {
     t.n_explicit != 0 || (t.permille != 0 && t.max_delay != 0)
 }
 
-/// The host tokens hvx alone applies, and `spin=` (the Mac's rewind mode): the first one's
-/// refusal.
+/// The host tokens hvx alone applies: the first one's refusal.
 fn host_token_problem(s: &Schedule) -> Option<String> {
     for t in &s.host {
         let hvx_only = matches!(
@@ -656,11 +662,6 @@ fn host_token_problem(s: &Schedule) -> Option<String> {
             let w = &w[..w.len().min(60)];
             let msg = format!("host token {w} needs hvx (the PMU clock, vCPU turns or a power cut at a disk FLUSH)");
             return Some(lossy(&ccap(msg.into_bytes(), 200)));
-        }
-        if matches!(t, HostToken::SpinRewind) {
-            return Some(
-                "host token spin=rewind needs hvm (this engine has no rewind mode)".into(),
-            );
         }
     }
     None
@@ -942,6 +943,7 @@ impl Engine {
             rs.tjinfo = format!(" tjk={}", self.vm.m.vtime / TJ_PERIOD);
         }
         rs.wx0 = self.vm.m.exits;
+        rs.rewind = s.host_token("spin").is_some();
         if pct_n != 0 {
             let x = self.vm.m.exits;
             self.vm.pct = Pct::set(pct_seed, pct_n, x, x.wrapping_add(pct_k));
@@ -960,6 +962,8 @@ impl Engine {
         let mut cut = rs.cut;
         let mut why = 0;
         let mut from = rs.from;
+        let rewind = rs.rewind;
+        self.vm.set_rewind(rewind);
         self.h.c.rs = rs;
         let mut r = self.run_to(&mut why);
         if r == -7 {
@@ -1028,7 +1032,7 @@ impl Engine {
             let snap = self.h.snaps[s0].as_ref().expect("S0");
             self.vm.restore(&snap.x);
             if let (Some(d), Some(du)) = (&mut self.vm.vio.disk, durable) {
-                d.copy_from_slice(&du);
+                *d = du;
             }
             self.vm.vio.set_fault(0, 0, 0);
             from = self.vm.m.console_len as usize;
@@ -1049,6 +1053,14 @@ impl Engine {
             log_tag = format!("{tag}.recovery");
         }
         self.save_log(&log_tag, from);
+        if rewind {
+            let rw = &self.vm.rw;
+            self.h.say(&format!(
+                "hydo-kvm: {tag}: reported from a rewind-mode run (counter loops proven {}, resolved {}; checkpoints {}, exits replayed {})",
+                rw.proven, rw.resolved, rw.checkpoints, rw.replayed_exits
+            ));
+        }
+        self.vm.set_rewind(false);
         if self.h.c.on {
             let k = &self.h.c.k;
             tjinfo.push_str(&format!(

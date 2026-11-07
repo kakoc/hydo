@@ -18,7 +18,7 @@
 # Prerequisites (an x86_64 Linux machine; Milestone 140's setup of the bare-metal machine):
 #   - HYDO_PREFIX: an installed Linux release (hydo/dist/linux; its guest/, tools/, libexec/ are
 #     used, its bin/hydo is replaced by this tree's target/release/hydo, built with
-#     `cargo build --release -p hydo-cli`); default ~/hydo-rf-work/prefix-rf
+#     `cargo build --release -p hydo`); default ~/hydo-rf-work/prefix-rf
 #   - HYDO_AGENT_BIN: the pinned hydo-agent (docs/BUILD-PINS.md, x86_64 398f297e...;
 #     hydo/crates/hydo-agent/build.sh gives these bytes)
 #   - the manifest's Nix store paths in /nix/store (MySQL 8.4.10 aw6ljbiw..., OpenJDK 17.0.7
@@ -54,7 +54,7 @@ declare -A BIN_SHA=([old]=3ddaf8baf54c16bdaddcecf76d21e840d58d8b625d3c400c0c31ff
 sha() { sha256sum < "$1" | cut -d' ' -f1; }
 need() { [ "$(sha "$1")" = "$2" ] || { echo "error: $1 is not ${2:0:16}... (docs/BUILD-PINS.md)" >&2; exit 1; }; }
 
-[ -x "$HYDO" ] || { echo "error: no $HYDO (cargo build --release -p hydo-cli)" >&2; exit 1; }
+[ -x "$HYDO" ] || { echo "error: no $HYDO (cargo build --release -p hydo)" >&2; exit 1; }
 [ -d "$PREFIX_SRC/guest" ] || { echo "error: $PREFIX_SRC is not an installed Linux release (HYDO_PREFIX)" >&2; exit 1; }
 "$GO" version | grep -q 'go1.26.5 ' || { echo "error: $GO is not go1.26.5 (HYDO_GO)" >&2; exit 1; }
 need "$AGENT" 398f297e7425768a6175e58d27eca00d417fec25f0fb8b48842bcbbb53fdb8a6

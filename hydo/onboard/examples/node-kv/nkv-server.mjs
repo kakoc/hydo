@@ -50,7 +50,7 @@ async function put(key, value, req, res) {
   const line = Buffer.from('PUT ' + key + ' ' + value + '\n');
   fs.writeSync(fd, line);
   size += line.length;
-  P.LOG_SIZE.lessThanOrEqualTo(size, MAX_LOG);
+  P.LOG_SIZE.cmp(size, '<=', MAX_LOG);
   if (fsyncMode() !== 'never') {
     if (P.SLOW_FSYNC.fire({ key })) await sleep(3000);
     fs.fdatasyncSync(fd);

@@ -11,6 +11,8 @@
 //!   [`Start`], a [`Run`] for every run the explorer made (first runs as they finish, in seed
 //!   order; re-runs, shrink candidates and confirmations after them), a [`Shrink`] per minimal
 //!   schedule, and an [`End`].
+//! - `diff.json` (`hydo diff`, `hydo explain`; added in M165): one [`Diff`] document, where two
+//!   runs first differ. `diff.txt` next to it is its view for people.
 //!
 //! Every record and document is a JSON object with `"v"` (the format version, 1) and `"type"`.
 //! Within a version only additions are made: new optional fields and new record types. A field
@@ -38,6 +40,8 @@ pub const RUN_DOC: &str = "result.json";
 pub const EXPLORATION_DOC: &str = "exploration.json";
 /// An exploration directory's event stream.
 pub const EVENTS: &str = "events.jsonl";
+/// A diff's document (added in M165).
+pub const DIFF_DOC: &str = "diff.json";
 
 /// One stream record as a line: compact JSON and a newline.
 pub fn to_line<T: serde::Serialize>(rec: &T) -> String {

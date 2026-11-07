@@ -170,7 +170,7 @@ fn js_program() -> Case {
     p.cmp(cmp, 3, "<=", 5, None);
     p.cmp(cmp, 7, "<", 5, Some(d! {"extra": "e"}));
     p.cmp(cmp, 1, "??", 1, None);
-    p.cmp_helper(scmp, "greater_than", 1, 2, None);
+    p.cmp(scmp, 1, ">", 2, None);
     p.cmp(scmp, 2, "==", 2, None);
     p.check(nan, true, Some(d! {"f": f64::NAN}));
     p.check(nan, true, Some(d! {"f": 1}));
@@ -294,12 +294,12 @@ fn python_program() -> Case {
     p.cmp(cmp, 1, "??", 1, None);
     p.cmp(scmp, 1, ">", 2, None);
     p.cmp(scmp, 2, "==", 2, None);
-    p.cmp_helper(gt, "greater_than", 2, 1, None);
-    p.cmp_helper(gt, "greater_than", 1, 2, Some(d! {"k": "v"}));
-    p.cmp_helper(ge, "greater_than_or_equal_to", -1, 0, None);
-    p.cmp_helper(ge, "greater_than_or_equal_to", 0, 0, None);
-    p.cmp_helper(lt, "less_than", i64::MIN, i64::MAX, None);
-    p.cmp_helper(le, "less_than_or_equal_to", 5, 4, None);
+    p.cmp(gt, 2, ">", 1, None);
+    p.cmp(gt, 1, ">", 2, Some(d! {"k": "v"}));
+    p.cmp(ge, -1, ">=", 0, None);
+    p.cmp(ge, 0, ">=", 0, None);
+    p.cmp(lt, i64::MIN, "<", i64::MAX, None);
+    p.cmp(le, 5, "<=", 4, None);
     p.cmp(le, 4, "!=", 4, None);
     p.check(nan, true, Some(d! {"f": f64::NAN}));
     p.check(nan, true, Some(d! {"f": 1}));

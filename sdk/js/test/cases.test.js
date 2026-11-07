@@ -21,7 +21,7 @@ const UNSUPPORTED = {
   f32: 'JavaScript has no float32',
   raw_hist: 'JavaScript strings cannot hold the invalid UTF-8 bytes of a history record',
 };
-const KNOWN = new Set(['f32', 'bytes', 'invalid_utf8', 'raw_hist', 'emit_line']);
+const KNOWN = new Set(['f32', 'bytes', 'invalid_utf8', 'raw_hist']);
 
 // ---- the child ----
 
@@ -78,13 +78,6 @@ function arg(x, h) {
   throw new Error('argument tag ' + tag);
 }
 
-const CAMEL = {
-  greater_than: 'greaterThan',
-  greater_than_or_equal_to: 'greaterThanOrEqualTo',
-  less_than: 'lessThan',
-  less_than_or_equal_to: 'lessThanOrEqualTo',
-};
-
 async function child() {
   const esm = process.env.HYDO_JS_ENTRY === 'esm';
   const ha = esm ? await import('../index.mjs') : require('..');
@@ -116,7 +109,7 @@ async function child() {
       let left = val(st.left);
       let right = val(st.right);
       if (typeof left !== typeof right) { left = BigInt(left); right = BigInt(right); }
-      push(st.helper ? a[CAMEL[st.helper]](left, right, details(st)) : a.cmp(left, st.op, right, details(st)));
+      push(a.cmp(left, st.op, right, details(st)));
     } else if (d === 'begin') watches.push(objs[st.a].begin());
     else if (d === 'done') push(watches[st.w].done(details(st)));
     else if (d === 'expire') watches[st.w].expire(details(st));
@@ -126,7 +119,6 @@ async function child() {
     } else if (d === 'fire') push(objs[st.a].fire(details(st)));
     else if (d === 'catalog') ha.catalog();
     else if (d === 'setup_complete') ha.setupComplete();
-    else if (d === 'emit_line') ha.emitLine(st.tag, val(st.value));
     else if (d === 'history') hists.push(new h.History(st.name));
     else if (d === 'invoke') ops.push(hists[st.h].invoke(val(st.proc), st.f, ...args(st)));
     else if (d === 'ok') ops[st.o].ok(...args(st));

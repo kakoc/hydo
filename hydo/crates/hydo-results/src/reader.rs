@@ -13,7 +13,7 @@
 //! 6. A stream's last line without its newline (a stream still being written, or cut off) is
 //!    ignored; any other line that is not JSON is an error.
 
-use crate::v1::{End, Exploration, Run, Shrink, Start};
+use crate::v1::{Diff, End, Exploration, Run, Shrink, Start};
 use crate::{EVENTS, EXPLORATION_DOC, RUN_DOC};
 use serde_json::Value;
 use std::fmt;
@@ -30,6 +30,8 @@ pub enum Record {
     Shrink(Box<Shrink>),
     End(Box<End>),
     Exploration(Box<Exploration>),
+    /// `diff.json` (`hydo diff`, added in M165).
+    Diff(Box<Diff>),
 }
 
 /// A record the reader skipped (rule 3).
@@ -126,6 +128,7 @@ pub fn record(v: Value) -> Result<Option<Record>, String> {
         "shrink" => Record::Shrink(de(v, &ty)?),
         "end" => Record::End(de(v, &ty)?),
         "exploration" => Record::Exploration(de(v, &ty)?),
+        "diff" => Record::Diff(de(v, &ty)?),
         _ => return Ok(None),
     }))
 }
@@ -198,6 +201,14 @@ pub fn read_exploration(p: &Path) -> Result<Exploration, ReadError> {
     match document(&read(p)?).map_err(|e| err(format!("{}: {e}", p.display())))? {
         Record::Exploration(r) => Ok(*r),
         _ => Err(err(format!("{}: not an exploration document", p.display()))),
+    }
+}
+
+/// `diff.json` (added in M165).
+pub fn read_diff(p: &Path) -> Result<Diff, ReadError> {
+    match document(&read(p)?).map_err(|e| err(format!("{}: {e}", p.display())))? {
+        Record::Diff(r) => Ok(*r),
+        _ => Err(err(format!("{}: not a diff document", p.display()))),
     }
 }
 

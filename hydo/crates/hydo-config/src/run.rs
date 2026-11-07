@@ -61,8 +61,8 @@ impl Pool {
 /// The host controller of agent images (hydo-control).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Control {
-    /// Not `HVM_SPIN_REWIND=0`: a SPIN of an agent image on hvm runs again in the rewind mode
-    /// (M130). Default on.
+    /// Not `HVM_SPIN_REWIND=0`: a SPIN of an agent image on hvm or kvm runs again in the rewind
+    /// mode (M130; kvm since M161). Default on.
     pub spin_rewind: bool,
 }
 
@@ -92,6 +92,37 @@ pub enum Platform {
 pub struct Cli {
     /// `HYDO_CLI_PLATFORM=linux|mac`: act as that platform's command; None: this binary's.
     pub platform: Option<Platform>,
+    /// The install cache (Milestone 162).
+    pub cache: Cache,
+}
+
+/// The default of `HYDO_RELEASE_URL`: the project's GitHub releases.
+pub const RELEASE_URL: &str = "https://github.com/kakoc/hydo/releases/download";
+
+/// The install cache of the `hydo` command (Milestone 162, docs/design/install-cache.md).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Cache {
+    /// `HYDO_HOME`: the cache's root. Default (unset or empty) `~/.hydo`.
+    pub home: PathBuf,
+    /// `HYDO_RELEASE_URL`: releases are fetched from `<url>/v<version>/<file>`. Default (unset
+    /// or empty) [`RELEASE_URL`].
+    pub release_url: String,
+    /// `HYDO_OFFLINE` set and not `0`: never use the network. Default off.
+    pub offline: bool,
+}
+
+impl Cache {
+    pub fn from_env(e: &Env) -> Cache {
+        Cache {
+            home: e
+                .path_nonempty(HYDO_HOME)
+                .unwrap_or_else(|| e.home().join(".hydo")),
+            release_url: e
+                .nonempty(HYDO_RELEASE_URL)
+                .unwrap_or_else(|| RELEASE_URL.to_string()),
+            offline: e.set_not_0(HYDO_OFFLINE),
+        }
+    }
 }
 
 impl Cli {
@@ -102,6 +133,7 @@ impl Cli {
                 Some("mac") => Some(Platform::Mac),
                 _ => None,
             },
+            cache: Cache::from_env(e),
         }
     }
 }

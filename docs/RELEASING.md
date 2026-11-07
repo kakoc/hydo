@@ -1,13 +1,15 @@
 # Releasing hydo
 
 The steps of a release, in order. Each release is two tarballs and the two sources archives that
-accompany them; nothing is published until the last step. The history of how each step was first
-done is in docs/HISTORY.md (Milestones 149, 150, 153–158).
+accompany them; nothing is published until step 7, and step 8 points the Homebrew tap at the new
+Mac tarball. The history of how each step was first done is in docs/HISTORY.md (Milestones 149,
+150, 153–158 and 168).
 
 ## 1. Before building
 
 1. Decide the version (`hydo/VERSION`, and `HYDO_VERSION` for the release scripts; AGENTS.md open
-   item 40 says what a version change moves).
+   item 40 says what a version change moves). The SDKs carry the same version (docs/PUBLISHING.md,
+   "The next version", lists the files and the images a version change moves).
 2. On the final commit: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`
    and `cargo test --locked --release --workspace` pass. Among them:
    - `public_content` (no machine details, no value of the local list, in any tracked file);
@@ -15,7 +17,9 @@ done is in docs/HISTORY.md (Milestones 149, 150, 153–158).
      are complete (every file of `assets.sha256` and `guest-programs.sha256` and every literal
      destination of `build-release.sh` belongs to a component; every component has a license, its
      full license texts and a source, a copyleft one its source archive pinned by sha256; every
-     Rust crate compiled into a shipped program has a license and license texts).
+     Rust crate compiled into a shipped program has a license and license texts);
+   - `hydo-release`'s `sdks` tests: every SDK package has this version, Apache-2.0 and the
+     repository, and the Go module `sdk/go` holds the frozen copy's code.
 3. `git grep -i` the competitor names AGENTS.md "No other product in hydo's space" names: only
    citations in research notes.
 4. The recorded example values are those of the final commit: `hydo-bench rebaseline --check` on
@@ -111,3 +115,49 @@ Create the GitHub release for the tag of the final commit and upload all four fi
 third-party software in the tarballs. Keep every sources archive available for as long as its
 tarball is offered (and at least three years after the last download of it, as GPL-2.0 section 3
 asks of a written offer).
+
+## 8. Update the Homebrew tap (after the release is published)
+
+`brew install kakoc/tap/hydo` installs the Mac tarball of the release the formula names
+(https://github.com/kakoc/homebrew-tap, `Formula/hydo.rb`; Milestone 168). After step 7, in a
+clone of the tap repository:
+
+1. `sh hydo/dist/mac/update-homebrew.sh <version> <tap clone>` writes the formula's `url` and
+   `sha256` for `hydo-mac-<version>.tar.gz` from the release's `SHA256SUMS` and checks the
+   published tarball against it (Homebrew reads the version from the url).
+2. `brew style Formula/hydo.rb`, then commit (`hydo <version>`) and push the tap.
+3. On a Mac: `brew update`, then `brew upgrade kakoc/tap/hydo` (or `brew install
+   kakoc/tap/hydo`); `hydo doctor` must pass every check, the quickstart's Redis example must give
+   the Mac values of docs/REBASELINE.md, and `brew test hydo` and `brew audit --strict --online
+   kakoc/tap/hydo` must pass.
+
+If this step is skipped, `brew install kakoc/tap/hydo` keeps installing the previous release.
+
+## 9. Add the release to the release index (after publishing)
+
+Every later hydo fetches this release's archive, and the guest kernels inside it, by sha256 from
+the release index compiled into hydo (`hydo/dist/releases.txt`, Milestone 162,
+docs/design/install-cache.md). On `main`, add the release's lines in one commit, after the release
+is published and only then (a line names a file that must exist at
+`<release URL>/v<version>/<file>`):
+
+- `archive <version> linux <sha256> hydo-linux-<version>.tar.gz` and the same for `mac`, with the
+  sha256 of the published `SHA256SUMS` asset;
+- one `file <version> <platform> <sha256> <path>` line per guest kernel and initramfs in each
+  tarball (today `guest/bzImage` and `guest/initramfs-kafka.cpio.gz` for Linux,
+  `hv/hvm/explore/out/Image-explore` and `Image-explore-netns` for the Mac), with the sha256 of
+  the tarball's own `SHA256SUMS` line.
+
+Never change a line that is there. `cargo test -p hydo-image` checks the format. The release
+tarballs and `build-release.sh` do not change for this: the index is in the program, not in the
+release.
+
+## 10. Publish the SDKs (the user decides; with the release)
+
+Publish every SDK with the release's version, in the order and with the commands of
+docs/PUBLISHING.md: the four assertion SDKs, `hydo-assert` on crates.io, on PyPI and on npm, and
+the tag `sdk/go/v<version>` for the Go module. The Rust test SDK (`hydo-test`,
+`hydo-test-macros`, `cargo-hydo`) is not published (`publish = false`) until the user decides
+about code-first tests.
+An uploaded version can never be replaced on any of them (only yanked, deprecated or retracted),
+so run each dry run first.

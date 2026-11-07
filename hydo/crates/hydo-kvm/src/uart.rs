@@ -31,6 +31,7 @@ impl Regs {
 
 /// The receive queue: input typed by the host, not in any snapshot (as on the Mac: a SNAP is
 /// refused while a typed send is unacknowledged, and RESUME types it again).
+#[derive(Clone)]
 pub struct Rx {
     q: Box<[u8; RXQ]>,
     pub head: u32,

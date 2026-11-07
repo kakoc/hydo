@@ -1,8 +1,9 @@
 # The KVM engine (hydo-kvm)
 
 Status: built, run end to end on a KVM machine (the build machine, "Phase 2" below), reviewed
-and verified again in Milestone 159 ("Milestone 159: the review and the second verification"
-at the end); on a branch for after the first release, not merged. Crate `hydo/crates/hydo-kvm`;
+and verified again in Milestone 159 ("Milestone 159: the review and the second verification"),
+counter loops resolved and snapshots made to share memory in Milestone 161 ("Milestone 161" at
+the end); on a branch for after the first release, not merged. Crate `hydo/crates/hydo-kvm`;
 guest kernel recipe `hv/kvm/linux/`; end-to-end check `hv/kvm/kvm-check.sh`.
 
 What a user needs to know, in short: the KVM engine runs hydo's x86_64 images on any x86_64
@@ -11,8 +12,11 @@ runner, a laptop), with no kernel module and no root (`--backend kvm`). It gives
 vCPU at the x86-64-v2 level (images that ask for several vCPUs or `guest.cpu: v3` are refused).
 Guest time is counted in VM exits that reach the engine, not in instructions, so a stretch of
 guest code that makes no exit takes no guest time and gets no timer interrupt; a loop that spins
-without exits is resolved only when it is an exact cycle of register states, and a counting loop
-without exits ends the run as invalid (SPIN). Its fingerprints are its own: they compare with
+without exits is resolved when it is an exact cycle of register states, and a loop that also
+counts while it spins is resolved in the rewind mode, which the host chooses by running such a
+schedule again (anything else that runs without exits ends the run as invalid, SPIN). Snapshots
+share the image's disk and RAM, so a worker's memory grows with what its runs write. Its
+fingerprints are its own: they compare with
 runs of this engine with the same guest kernel on the same kind of host CPU, never with hvx's or
 the Mac engine's (across engines only verdicts compare, and `hydo repro` says so). It has run on
 one Intel machine only (no AMD host yet).
@@ -26,7 +30,8 @@ virtualization, many machines are AMD, and loading a module is often not allowed
 runs the same x86_64 agent images on stock Linux KVM (`/dev/kvm`), without a module and without
 root, with the trade-offs the Mac engine (hvm) makes on Hypervisor.framework: the clock counts VM
 exits, every interrupt is delivered at such an exit, one vCPU, and a guest that computes without
-exits is handled by a spin observer (exact cycles) or ends the run as invalid (anything else).
+exits is handled by a spin observer (exact cycles, and counter loops in the rewind mode) or ends
+the run as invalid (anything else).
 
 The first Rust KVM monitor (removed in M100) failed because stock KVM cannot trap RDTSC and Linux
 calibrates its clocks with it: two boots stayed bit-identical for about 730 million instructions
@@ -60,6 +65,11 @@ CPUID says the CPU has no TSC.
   work unchanged.
 - **The images are hvx's**: the same disk image and initramfs, booted with the KVM build of the
   image's recorded kernel. No image changes, no recorded fingerprint moves.
+- **Exit-free loops** are resolved at points the guest alone fixes: an exact cycle at its
+  canonical state, a counter loop (Milestone 161) by a rewind to a checkpoint and a hardware
+  breakpoint at its canonical instruction ("Exit-free loops", "Counter loops: the rewind mode").
+- **Snapshots share memory** (Milestone 161): the disk is copy-on-write over the image file, RAM a
+  sealed memory file mapped privately plus the pages that differ ("Memory: snapshots that share").
 - **Fingerprints are this engine's own** (prefix `hydo-kvm-v1`); they compare with runs of this
   engine on the same kind of host, never with hvx's or hvm's.
 
@@ -237,8 +247,69 @@ guest addresses (`0xd0000000 + i*0x200` to the Mac's `0x0a000000 + i*0x200`) and
 RAM from address 0. The disk is the whole image file (the root on `vda1`, the data on `vda2`), with
 the flush-aware fault class at probability 0 at boot so the guest negotiates FLUSH, and the
 schedule's `disk=`/`dseed=` arming hvx's seeded classes. A power cut keeps only the flushed bytes
-and runs the recovery boot from the host's S0, as on the Mac. Snapshots keep RAM and the disk in
-memory (a 2.4 GB stack image costs 2.4 GB per snapshot; sharing unchanged pages is future work).
+and runs the recovery boot from the host's S0, as on the Mac. Snapshots share the disk and RAM
+with the image and with each other ("Memory: snapshots that share", Milestone 161; until then a
+2.4 GB stack image cost 2.4 GB per snapshot).
+
+## Memory: snapshots that share (Milestone 161)
+
+Until Milestone 161 every snapshot (the host's S0 and S1, every SNAP, the durable disk kept at a
+power cut) held a full copy of guest RAM and of the disk image, and the live VM held one more: one
+`hydo run` of the stack image peaked at 12.3 GB, an exploration worker on it at 10 GB. Now a
+snapshot costs what the runs changed:
+
+- **The disk** (hydo-hvm's `disk::Disk`, the virtio block device of both engines that use it):
+  the image file is the base, mapped read-only and private (its pages are the page cache, shared
+  by every process that reads the image, and the kernel drops them under memory pressure; where
+  the file cannot be mapped it is read once). The 4 KiB blocks a run writes are held in a
+  two-level table of reference-counted blocks (chunks of 512 blocks, 2 MiB of disk each). A copy
+  (a snapshot, the durable image of a power cut, a checkpoint of the rewind mode) copies the
+  table's top level, a few thousand pointers for a disk of gigabytes, and shares every block; a
+  write copies a block, or a chunk's table, only while a copy shares it. The volatile write
+  cache's data and the network device's capture buffer are shared the same way. Every read, the
+  hash and `HVM_DISK_OUT` see exactly the bytes the flat image held (`disk::tests`), so no
+  fingerprint moves (the Mac engine's included). `HVM_DISK_OUT` is written to a new file that
+  then takes the name, so a path the base is mapped from is never rewritten under the mapping.
+  The image file must not be rebuilt while an engine runs from it; that was never supported
+  (workers that booted before and after a rebuild already ran different images).
+- **RAM** (`mem::RamBase`, `mem::RamImage`): the host's S0 and S1, which every run restores, each
+  become a base: RAM's nonzero pages written into a sealed memory file (`memfd`, zero pages left
+  as holes), and guest RAM is then mapped from it privately, so that a page reads the base until
+  it is written and only written pages take memory of their own (the kernel copies a page at its
+  first write, whether the guest writes it through KVM or a device does). Which pages those are
+  comes from the kernel's page map (`/proc/self/pagemap`: present and not the file's, or swapped
+  out; where the page map cannot be read, every page is compared with the base, the same answer).
+  Any other snapshot (a SNAP during a run) keeps only those pages. A restore maps the snapshot's
+  base again, which drops every page of the run before it at once, writes the snapshot's own
+  pages back, and creates the fresh VM as before. The fingerprint still hashes every byte of RAM
+  in order (`mix64` page by page gives the value of `mix64` over all of RAM): RAM's own pages from
+  RAM, the others from the base's read-only view, a hole's zeros without reading it (reading a
+  hole through a mapping would give it memory). S0 and S1 are taken during the boot, which goes
+  on in the same VM: guest RAM is remapped under the running VM, with the same bytes, and KVM
+  follows the new mapping (its MMU notifier drops the old pages' entries); nothing of it is
+  visible to the guest.
+
+The measurements (the build machine, one VM at a time, `hydo run` and `hydo explore` with the
+engine in hydo's process; memory is the largest proportional set size seen, `/proc/<pid>/smaps_rollup`
+sampled every 0.2 s, in MiB, with the image file's page cache that the run read listed apart,
+since it is shared and the kernel can drop it; before = the KVM branch at 7728ccc, after = this
+milestone; every fingerprint and verdict the same before and after):
+
+| run | before | after |
+|---|---|---|
+| Redis, `disk=none \| run` (boot, S0, S1, the run) | 2,494 MiB, 1.9 s | 225 MiB (anonymous 7, memory files 83, image file and program 134), 1.1 s |
+| Redis, `disk=cut \| run C=12 R=everysec` (a power cut and the recovery boot) | 3,468 MiB (peak 3,598), 2.5 s | 230 MiB (anonymous 12, memory files 83, files 134), 1.1 s |
+| Redis, exploration, 20 seeds, swarm, 1 worker (46 runs) | 3,600 MiB; 36.8 s, 0.64 s per run | 238 MiB; 29.7 s, 0.58 s per run |
+| Redis, the same with 2 workers | 7,191 MiB; 20.2 s | 482 MiB; 15.4 s |
+| stack (old order service), the pinned reproducers' schedule | 12,301 MiB, 21.4 s | 3,592 MiB, of which 2,310 the image file's page cache (anonymous 878, memory files 455); 18.9 s |
+| stack, exploration, 6 seeds, 1 worker (7 runs) | 10,000 MiB; 46.5 s, 4.50 s per run | 3,221 MiB, of which 2,312 the image file's page cache (anonymous 880, memory files 460); 43.1 s, 4.56 s per run |
+
+A stack worker's own memory is about 1.3 GB (the run's written RAM pages and disk blocks, and the
+two bases' nonzero pages) where it was 10 GB; the 2.3 GB of the image file are the page cache's,
+shared by every worker and process that reads the image. The time per run is the same within
+noise (Redis 0.62-0.64 s before, 0.56-0.58 s after, over three explorations each; the stack
+4.43-4.50 s and 4.49-4.56 s); a boot is faster (no full copies at S0 and S1; Redis `hydo run`
+1.9 s to 1.1 s).
 
 ## The interrupt delivery rule and completion
 
@@ -299,8 +370,69 @@ where free running would have taken it; a guest that stays without exits for
 `HYDO_KVM_SPIN_SECS` (default 10) ends the run as a SPIN (invalid). A proven cycle that no
 interrupt can end (nothing armed, or the due event's line masked) ends the run at once as a
 deadlock (Milestone 159; before, a due but masked event kept the engine resolving the same cycle
-forever). Not resolved, as on the Mac without its rewind mode: counter loops (`while (!flag)
-n++`), whose state never repeats.
+forever). Counter loops (`while (!flag) n++`), whose state never repeats, are the next section's.
+
+## Counter loops: the rewind mode (Milestone 161)
+
+A loop that counts while it waits returns to the same instruction with other register values in
+every pass, so the exact rule never sees a repeat, and the state at the kick is the entry state
+plus k passes, k depending on when the host-timed kick came. The Mac engine resolves such loops in
+its rewind mode (Milestones 57 and 130); this engine has a port of it, adapted to x86 and KVM.
+
+**The proof** (`spin::counter_loop`). While the observer steps, it keeps the register states and
+the data flow of every stepped instruction (`spin::Flow`, computed by the same decoder: the
+registers read, written and used in an address, whether the arithmetic flags are read, written in
+full or in part, whether the instruction is a conditional branch; an 8- or 16-bit write merges and
+so reads its register, AH..BH are the second bytes of rax..rbx without a REX prefix, `xor`/`sub`
+of a register with itself reads nothing). Two consecutive passes back to the same instruction
+prove an infinite counter loop when: they run the same instructions; every bit of RFLAGS but the
+arithmetic flags is the same; the registers that change between passes (the counters, and the
+flags when they change) are tainted, the taint closed over a pass (what a tainted value writes is
+tainted, what only untainted values write is not), and then no tainted value reaches a
+conditional branch or a memory address; and the two passes agree, state by state, on every
+untainted register (and on the flags where they are untainted). Then every untainted value is
+the same in every later pass (the stepped instructions store nothing, and on one vCPU without
+exits nothing else writes memory, so the loads read the same bytes from the same addresses), the
+path is the same, and the loop never ends without an interrupt. The checks on two passes rather
+than one also rule out a pass in which a fault's handler ran inside a step and changed memory. A
+counter loop is reported only when the observer's whole budget (4096 steps) found no exact cycle,
+so a loop the exact rule resolves (also one whose register only toggles) is resolved as before.
+
+**Without the rewind mode** a proven counter loop ends the run at once as a SPIN (before
+Milestone 161 it ended the same way after `HYDO_KVM_SPIN_SECS`), and the host runs the schedule
+again with `spin=rewind` (hydo-control's `rewind_again`, now for the KVM engine as for the Mac's;
+`HVM_SPIN_REWIND=0` turns it off for both). A plain run that completes is reported as it is.
+
+**The rewind mode** (`vmm::Rewind`, `spin=rewind`; the workload, check and recovery phases of a
+run, and a SNAP keeps it for its RESUME, as on the Mac). The engine keeps a checkpoint at a loop
+top, after the stop hook and before the interrupt decision: the vCPU's state, the `kvm_run`
+outputs the decision reads (`ready_for_interrupt_injection`, `if_flag`, the window request), the
+machine state, the devices (the copy-on-write disk is a cheap copy), tick jitter, preemption
+points and the receive queue; guest RAM as a second mapping kept equal to RAM at the checkpoint,
+updated at each checkpoint from KVM's dirty-page log (`KVM_GET_DIRTY_LOG` on the memory slot,
+whose flag the mode turns on) and from the pages the devices wrote (hydo-hvm's `Ram` view logs
+them). A checkpoint is taken at the start of every phase, at the loop top after every stop of the
+lock-step protocol (the host may have typed input there), after every rewind, and every 1024
+exits (`vmm::CK_EVERY`), never where a kick left the guest. A proven counter loop then rewinds:
+the written pages back from the copy, the vCPU into a fresh VM (as a restore does), and the run
+goes on from the checkpoint, without calling the stop hook up to the exit count where the loop
+was found (the host saw those exits and their stops already; the guest makes them again exactly,
+the engine being deterministic) and without echoing or tracing them again; at that exit's loop
+top a hardware breakpoint is armed at the loop's canonical instruction, the smallest address of
+the pass with interrupts enabled. At the first arrival there with interrupts enabled (an arrival
+with interrupts off steps over it), the clock jumps to the next event, as at an idle HLT, and the
+interrupt is delivered at the next entry. The delivery point is fixed by the guest alone; the
+host's timing decides only how many exits are replayed. A replay that makes an exit before the
+breakpoint, or finds another counter loop, would mean the replay is not the run; it is reported
+and the loop stays unresolved (a SPIN), never resolved at another point.
+
+Differences from the Mac's rewind mode: the Mac takes a copy-on-write checkpoint at every exit
+(RAM write-protected at stage 2, the old page copied at the first write), which makes a rewind
+mode run several times slower; this engine checkpoints at stops and every 1024 exits and replays
+the exits between, using KVM's dirty-page log instead of write faults (KVM gives user space no
+fault on a guest write). The proof is register data flow over x86 instructions instead of the
+Mac's "only `add`/`sub` of an induction register reads it", which also accepts the x86 forms
+where the counter's flags are written and never read.
 
 ## Nondeterminism under KVM, and how each source is closed
 
@@ -334,7 +466,8 @@ n++`), whose state never repeats.
 | guest RAM's initial contents | anonymous zero pages | — |
 | a kick (the watchdog's signal) | not an exit: nothing changes in the guest, nothing is counted | the run loop |
 | the host's KVM version and CPU microarchitecture (undefined flag results, FPU pointers) | not closed: a fingerprint is this engine's on one kind of host; verdicts compare everywhere | see "Where fingerprints compare" |
-| counter loops without exits | not closed (the Mac's rewind mode is not ported): the run ends as a SPIN (invalid) | — |
+| counter loops without exits (the state at a kick depends on when it came) | the rewind mode: back to a checkpoint, the same exits again, the interrupt at the first arrival at the loop's canonical instruction (M161); without the mode the run ends at once as a SPIN and the host runs it again in the mode | `counter_loop` tests; `a_counter_loop_is_...`; ledger-spin on KVM, each schedule twice on a performance and an efficiency core |
+| what the host's memory holds for a snapshot | not the guest's: RAM bases, private pages and the copy-on-write disk give the same bytes as full copies; the fingerprint reads every byte (zero pages of a base without reading them) | `mem` and `disk` tests; every M159 fingerprint again |
 
 ## Where fingerprints compare
 
@@ -372,8 +505,11 @@ and SIPI (no SMM, one vCPU).
 SNAP S0/S1, READY), CTL, RESUME, the lock-step stops (EVENT, SENT, STOP; SEND, ACK, SNAP, CONT,
 END), DISKOFF and CUT with the recovery boot, the same RESULT lines with `stops=`, `typed=`,
 `inh=`. Differences: the cadence stop is due when the exit count crosses a multiple of `rb=`
-(an instruction that needs two exits can step over one); `spin=` is refused (no rewind mode); the
-default cadence of agent images is 64 exits, as on the Mac. A run from the worker's S1 and the same
+(an instruction that needs two exits can step over one); the default cadence of agent images is 64
+exits, as on the Mac. `spin=rewind` runs a schedule's phases in the rewind mode (Milestone 161;
+refused before); the mode's checkpoints are taken after the stop hook and its replays do not call
+it, so the stops, the typed input and `inh=` are those of the run, and a schedule that completes
+plainly gives the same fingerprint with the mode on. A run from the worker's S1 and the same
 schedule from a fresh boot give the same fingerprint (tested on the scripted vCPU and on KVM).
 
 ## Using it
@@ -392,6 +528,10 @@ schedule from a fresh boot give the same fingerprint (tested on the scripted vCP
   `xt*`; forced preemption points `pct=` instead), with hvx's images.
 - An image that asks for several vCPUs or `guest.cpu: v3` is refused by the engine itself (for
   `hydo run`, the explorer and hydo-bench alike), not run on less (Milestone 159).
+- A run that ends as a SPIN (a counter loop the engine proved, Milestone 161) is run again by the
+  host with `spin=rewind` (`hydo run`, `hydo repro`, the explorer and hydo-bench alike), and the
+  second run is the one reported, as on the Mac; `HVM_SPIN_REWIND=0` turns that off for both
+  engines. A schedule can also carry `spin=rewind` itself.
 - `hydo repro` without `--backend kvm` of a KVM run (or with it, of an hvx run) runs the other
   engine and compares verdicts, not fingerprints, and says so; a control transcript is typed
   again only by the engine that recorded it.
@@ -425,10 +565,13 @@ yet.
 
 - `abi.rs` the KVM ABI subset (pure; `tests/abi.rs` compares it with `<linux/kvm.h>`);
 - `sys.rs` the ioctls, the `kvm_run` page, kicks: with `mem.rs` the only `unsafe` code;
-- `cpu.rs` the `Cpu` and `Hypervisor` traits and `CpuState`; `script.rs` a scripted vCPU;
+- `cpu.rs` the `Cpu` and `Hypervisor` traits and `CpuState`; `script.rs` a scripted vCPU (its
+  steps run to the next operation's address, as KVM's run to a breakpoint);
+- `mem.rs` guest RAM, the RAM bases snapshots share, and RAM images (with `sys.rs` the only
+  `unsafe` code); the disk's copy-on-write blocks are hydo-hvm's `disk`;
 - `cpuid.rs`, `msr.rs`, `pic.rs`, `uart.rs`, `machine.rs`, `layout.rs`, `boot.rs`, `kernel.rs`;
-- `vmm.rs` the machine and the run loop (generic over the vCPU); `spin.rs` the spin observer's
-  rules;
+- `vmm.rs` the machine, the run loop (generic over the vCPU) and the rewind mode; `spin.rs` the
+  spin observer's rules, the decoder's data flow and the counter-loop proof;
 - `serve.rs` the protocol; `bin/hydo-kvm.rs` the program.
 
 Everything but `sys.rs` builds and is tested on any system: the run loop, devices, interrupt rule,
@@ -445,7 +588,10 @@ exploration of 20 seeds with 2 workers and `hydo repro` of it; a kill, a pause, 
 I/O error, tick jitter and forced preemption points, each twice; a network fault (the release's
 `hydo-netem.yaml`) twice. It needs: nested virtualization when the machine is a VM (Intel VT-x
 or AMD-V exposed to the guest), the Linux release unpacked, `bzImage-kvm` in its `guest/`, and this
-tree's `hydo`. On the build machine it takes about 2 minutes.
+tree's `hydo`. On the build machine it takes about 2 minutes. With `SPIN_BIN=<dir>` (the two
+programs of `hv/kvm/spin/build.sh`) it also builds the ledger-spin example and checks that its
+counter loops are resolved in the rewind mode with one fingerprint on every CPU of `CPUS`
+(Milestone 161; 16 checks).
 
 ## Phase 2: the runs on the build machine
 
@@ -506,3 +652,36 @@ verdict is the one of phase 2 and of hvx.
 Left: an AMD host (never run; RDRAND, RDSEED and TSX cannot be made to fault there); several
 vCPUs (no instruction-exact clock on KVM); counting loops without exits (the Mac's rewind mode is
 not ported); snapshots keep the whole disk in memory; the engine is in neither release tarball.
+
+## Milestone 161: counter loops and shared snapshots
+
+What was built ("Counter loops: the rewind mode", "Memory: snapshots that share"): the
+counter-loop proof and the rewind mode, `spin=rewind` accepted and the host's re-run of a SPIN
+extended to this engine, a copy-on-write disk (in hydo-hvm, so the Mac engine's snapshots share
+too) and RAM bases with private pages. The guest to prove it: `hv/kvm/spin/ledger-spin`,
+the Mac's ledger-spin for x86_64, whose CGI busy-waits in user space for a timer signal in every
+request, without a system call or a clock read (`hv/kvm/spin/spinvar.c`: `spin_load` an exact
+cycle, `spin_count` the counter loop `mov edx,[fired]; add rax,1; test edx,edx; jne`, built by
+`hv/kvm/spin/build.sh` with the pinned static gcc 13.2.0 and binutils 2.41: `97fc2b0e…` and
+`f46111a9…`; the image `f16a3762…`, built twice with the same bytes by the Linux release of M158).
+
+| check (the build machine; kernel `d50fbc67…`; the release of M158) | result |
+|---|---|
+| `hv/kvm/kvm-check.sh`, three times (the second and third time with the new ledger-spin check: 16 of 16; the third from the final tree) | 15 of 15, every value of Milestone 159's table: `bfa03053d51bec8a`, `8ed16d6da60c34c6` (22 runs each time: twice, 10 on CPU 0, 10 on CPU 16; and 3 in the measurements), S1 against a fresh boot `ac512c2616cef6a4`, `818c50920c9ced38`, `b72c5c7732e6a67f`, `49a776b9f1c8febd`, `b059f4d71358bc4d`, `06ee67ef4d1a50b2`, `aec48eb5ca42eca3`, `0fcb6905c8f54cd1`; the exploration 46 runs, `hydo repro` 14 of 14 |
+| the exploration again (20 seeds, swarm, 2 workers), and once with the code before this milestone | the same 46 schedules and fingerprints, three times |
+| the stack, the pinned reproducers' schedule, twice on CPU 2 and twice on CPU 18 | old `c3419179cf1a55ba` four times, VIOLATION order 11; fixed `c0746a7568ccf3b8` four times, OK (Milestone 159's values) |
+| ledger-spin `disk=none \| run` without the rewind mode | `ERROR workload: SPIN` at once, the counter loop proven at `rip 0x4010cc` (the code before this milestone: the same SPIN after 10 s) |
+| ledger-spin with the host's re-run in the rewind mode | `disk=none \| run` `f796ae624a9473d1` OK acked=30; `K=front@10+2` `cab50b0e332bc0b7` OK; `P=front@5+3` `603bcb8735ba9c4b` VIOLATION entry 5 stored twice (the example's planted bug); `T=8:3600` `9fa90d803a6ebb1d` OK; each four times, twice on CPU 2 and twice on CPU 18; in one run 79 counter loops proven and resolved, 478 checkpoints, 1,039 exits replayed |
+| ledger-spin, exploration of 10 seeds with 2 workers, twice | the same 10 fingerprints, every run OK |
+| the Mac engine with the copy-on-write disk (this tree's `hydo-hvm`, the Mac release of M158, each twice) | Redis `67e5d6469f1a90a5`, `C=12 R=everysec` `a6870a92a1bbf0ae`, `disk=lying:3 dseed=eac0b527c5ac67d9 \| run C=20` `0441476f5fd74d0b`, ledger-spin `aa732142c0f5567f` and `P=front@10+2` `3b4dd4910d2a6123`: docs/REBASELINE.md 13.4's values |
+
+No fingerprint moved: the RAM and disk hashes read the same bytes in the same order, the
+observer steps exactly as before and reports a counter loop only where it gave up before, and the
+rewind mode is on only in runs the host starts with `spin=rewind`.
+
+Left: the rewind mode on an AMD host and in a guest with several counter loops at once in one
+pass (both untested); a loop without exits whose counter decides when it ends (a wait counted in
+iterations) is not an infinite loop, so nothing is proven: it runs on and, when it lasts
+`HYDO_KVM_SPIN_SECS`, ends the run as a SPIN, as before; S0 and
+S1 are two RAM bases (S0 could be kept as the pages where it differs from S1); the image file's
+page cache counts in each process's resident set (shared and reclaimable, but visible in RSS).

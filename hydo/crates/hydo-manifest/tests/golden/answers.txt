@@ -81,6 +81,8 @@ I	hydo/crates/hydo-manifest/tests/fixtures/folders/regressions-only/hydo/hydo.ya
 I	hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/hydo/hydo.yaml	c49532c1aabe4e123f31acd6a7d45821433658ccf428af04ddda353f4a3c2848
 I	hydo/crates/hydo-manifest/tests/fixtures/folders/two-schedules/hydo/hydo.yaml	2c3b77759f05c4420d6739d08778d52ecb8240bbfbfad3dbd5c4b74b9d1cf36c
 I	hydo/crates/hydo-manifest/tests/fixtures/yaml_cases.json	1bd685d8d18a6f8e195254a21c50ce058763fa33b7373bff3923051a8da663ed
+I	hydo/dist/linux/third-party.json	de5fe985b4b61c36f8dccfb67363a26375210321aa14d13fabc089894ae0d9d6
+I	hydo/dist/mac/third-party.json	2bd72aa24a3c879f40daf3a73150be3ca5d37ee8406ffac8cb26aab1c1db6e37
 I	hydo/grpcgen/demo/hints.yaml	61f215d0658471d8dcecd611de222f8af6628583f4d2689b9064f9529c14c0f3
 I	hydo/grpcgen/demo/hydo-mac.yaml	8df424c6576e59769fc88a8c9dc6611980d33df4b273b9be7c6d43c6eba73403
 I	hydo/grpcgen/demo/hydo.yaml	2f7ec93857b9dbdb43bd901fb530463933b707e95d21bf2633132a9e056f4fb2
@@ -160,11 +162,7 @@ I	sdk/cases/catalog/every_type.json	0a04940b165a9098f859879b11ae4c5b4a1066b1b588
 I	sdk/cases/catalog/setup_complete.json	b0727051e99d47876a3494788f0a155f360f56039e31000c9836e3bef80d4a6f
 I	sdk/cases/catalog/twice.json	b65f41836c9c51a2cd07665c7def6e4b4437c66da7157425fb95a9f4a80975b4
 I	sdk/cases/compare/details_merged.json	76bdd6ccb6f38f661e361a594df63fea11a9e2d156b42803fd500d41f09ca0b3
-I	sdk/cases/compare/greater_than.json	53d9f4e2badd5f77f7060a5b726cc4c349b8de9527ea5578811802612ec0748c
-I	sdk/cases/compare/greater_than_or_equal_to.json	0cee3b9d2a40b783cd109fe6a2f0e928cc54a57cdb1b6eff31fd6c4bd38c893c
 I	sdk/cases/compare/int64_extremes.json	25fc23e31ed75e5db9651ce0f2fb3c5df076192d4bb31d08c3f03ccdfc2bab52
-I	sdk/cases/compare/less_than.json	09241b3fccc40b402f095621f7cb0058749fc741606beab1a7453d50ca598161
-I	sdk/cases/compare/less_than_or_equal_to.json	1f89984fcf9ffb799b45afa4e599cee426993918df1e8f3f57d4ae2cffa76fd8
 I	sdk/cases/compare/op_eq.json	0bae5cbe54aa8a69d2549eed77b4a3567a3a35352b5602c32cf9561be81d7d69
 I	sdk/cases/compare/op_ge.json	33b4a29b4ed7baa1a8270b8cb92149da3047a534c354287b53b35d297c08e139
 I	sdk/cases/compare/op_gt.json	ceb69a7406dd3478e8d05bc2c6f5633028f7dfddc52ee3b07f3a5d740b0cd258
@@ -186,7 +184,6 @@ I	sdk/cases/details/on_hit.json	5dec2322881d4e64a97eb78856ddb929cc895abd97e4581d
 I	sdk/cases/details/string_escapes.json	ea195adcce5ecb893e25d95a602f2fb2c9dfcff836e4069e961c1dc58903c95d
 I	sdk/cases/details/string_invalid_utf8.json	f822d1e22d25322bd59e0e133c161b346fa55d4cf191ca593030d78b1f0f074a
 I	sdk/cases/details/string_unicode.json	51360a6ce7fb19c400c3b68a693bcbef4e1ecd47cd1b41e40426e231d7c80477
-I	sdk/cases/emit/emit_line.json	abcca2a636d26da18051b52dc5543abe46c2582f475097eaa748f8e47c1ee4f0
 I	sdk/cases/eventually/await.json	72b9af55e9266ad28cbb1ce436eb5a50925848a816b026bb8e55ce27cfa6561e
 I	sdk/cases/eventually/await_async.json	25818382eac388c8bff736a617296b4dedb3895eb276b64ca8b383110a211ac1
 I	sdk/cases/eventually/begin_done.json	c149c8d7b9cb32f8fc1589f4053f7ea9ca5bea13f8b7daf633dba1cbbbf6e504
@@ -208,10 +205,10 @@ I	sdk/cases/history/write_ok_fail_info.json	36894824a06b5f0ec4033d36947517ceb59b
 I	sdk/cases/output/assert_out.json	0ebb8c66fae6ef8950bc88e3e7bbbf45d5020422d9e50a458c10f068c3dcf72c
 I	sdk/cases/programs/history_js.json	88557efaedc3882c28abd39843c3aab40c4cb540216caf81e4c4a5c79ffa7ed1
 I	sdk/cases/programs/history_python.json	decdc5c2d4a32f6b110db41ede3d320a76857b10da9d595b84c0737da316c64c
-I	sdk/cases/programs/js.json	500524a7ad054e9f72d747906b395a5f8946b3d8d9140802a409a65ca59df29f
-I	sdk/cases/programs/python.json	132dc64f992135e0967fd9dd19e2303d05dfdda12f5bdfab5cdc0c89b1a55a4f
+I	sdk/cases/programs/js.json	fa4b432deb158bfaaf7f32600d4571d972aa4f02244150a372743795a55470a7
+I	sdk/cases/programs/python.json	a809d7cd8b7cca4ca888014935f0ecb64a6d2e8963443e8ca93e65eb033b49c6
 I	sdk/cases/programs/rust.json	4c01f91f15d568be3e4f150f4bee16987a4134680de0980f2c2c5074d9ba425d
-I	sdk/js/package.json	c706cf80a265d00a7214e6202e77144355f03aff9bee3b50140380a56b88ed9e
+I	sdk/js/package.json	76379c03e5a2cc2f14ea6ecd26655185e77b7e79df7a552a0d632d5bebe53547
 I	skills/hydo-onboard/assets/example-miniflux.yaml	056fe1ea51d103145f0db56f65c550c83bd6a87b491b2cdbad74509dd3a2ee57
 I	skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml	a5d2effbdf6ba22a31cbbfbc07d1e52127834fa5ce4e1e14c5db619e2cb339b5
 I	skills/hydo-onboard/assets/hydo-init/hydo/hydo.yaml	4f2ae608d43856af3e036e9b34f9738ae0893127472f3fa22b6a74fa0ba5d9d9
@@ -5501,6 +5498,10 @@ R	^	<root>/hydo/crates/hydo-manifest/tests/fixtures/folders/two-schedules/hydo/h
 R	^	<root>/hydo/crates/hydo-manifest/tests/fixtures/folders/two-schedules/hydo/hydo.yaml --arch arm64 []	err	"<root>/hydo/crates/hydo-manifest/tests/fixtures/folders/two-…#61cbd660aa103ea6"
 R	^	<root>/hydo/crates/hydo-manifest/tests/fixtures/yaml_cases.json --arch x86_64 []	err	"the manifest must be a mapping"
 R	^	<root>/hydo/crates/hydo-manifest/tests/fixtures/yaml_cases.json --arch arm64 []	err	"the manifest must be a mapping"
+R	^	<root>/hydo/dist/linux/third-party.json --arch x86_64 []	err	"top level: unknown field(s) about, components, nixpkgs, plat…#7ef4c0466a777a2c"
+R	^	<root>/hydo/dist/linux/third-party.json --arch arm64 []	err	"top level: unknown field(s) about, components, nixpkgs, plat…#7ef4c0466a777a2c"
+R	^	<root>/hydo/dist/mac/third-party.json --arch x86_64 []	err	"top level: unknown field(s) about, components, nixpkgs, plat…#7ef4c0466a777a2c"
+R	^	<root>/hydo/dist/mac/third-party.json --arch arm64 []	err	"top level: unknown field(s) about, components, nixpkgs, plat…#7ef4c0466a777a2c"
 R	^	<root>/hydo/grpcgen/demo/hints.yaml --arch x86_64 []	err	"top level: unknown field(s) deadline_ms, rpcs, seed, steps, …#9d37a9a836e63819"
 R	^	<root>/hydo/grpcgen/demo/hints.yaml --arch arm64 []	err	"top level: unknown field(s) deadline_ms, rpcs, seed, steps, …#9d37a9a836e63819"
 R	^	<root>/hydo/grpcgen/demo/hydo-mac.yaml --arch x86_64 []	ok	d:e08ffdcc w:4f53cda1 c:a520b93d m:74234e98
@@ -5659,16 +5660,8 @@ R	^	<root>/sdk/cases/catalog/twice.json --arch x86_64 []	err	"top level: unknown
 R	^	<root>/sdk/cases/catalog/twice.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/compare/details_merged.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/compare/details_merged.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
-R	^	<root>/sdk/cases/compare/greater_than.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
-R	^	<root>/sdk/cases/compare/greater_than.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
-R	^	<root>/sdk/cases/compare/greater_than_or_equal_to.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
-R	^	<root>/sdk/cases/compare/greater_than_or_equal_to.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/compare/int64_extremes.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/compare/int64_extremes.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
-R	^	<root>/sdk/cases/compare/less_than.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
-R	^	<root>/sdk/cases/compare/less_than.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
-R	^	<root>/sdk/cases/compare/less_than_or_equal_to.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
-R	^	<root>/sdk/cases/compare/less_than_or_equal_to.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/compare/op_eq.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/compare/op_eq.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/compare/op_ge.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
@@ -5711,8 +5704,6 @@ R	^	<root>/sdk/cases/details/string_invalid_utf8.json --arch x86_64 []	err	"top 
 R	^	<root>/sdk/cases/details/string_invalid_utf8.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/details/string_unicode.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/details/string_unicode.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
-R	^	<root>/sdk/cases/emit/emit_line.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
-R	^	<root>/sdk/cases/emit/emit_line.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/eventually/await.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/eventually/await.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/eventually/await_async.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
@@ -5761,8 +5752,8 @@ R	^	<root>/sdk/cases/programs/python.json --arch x86_64 []	err	"top level: unkno
 R	^	<root>/sdk/cases/programs/python.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/programs/rust.json --arch x86_64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
 R	^	<root>/sdk/cases/programs/rust.json --arch arm64 []	err	"top level: unknown field(s) about, needs, runs, steps (known…#9aa3192f09a1b790"
-R	^	<root>/sdk/js/package.json --arch x86_64 []	err	"top level: unknown field(s) engines, exports, files, license…#e9fb494b7ff0baaf"
-R	^	<root>/sdk/js/package.json --arch arm64 []	err	"top level: unknown field(s) engines, exports, files, license…#e9fb494b7ff0baaf"
+R	^	<root>/sdk/js/package.json --arch x86_64 []	err	"top level: unknown field(s) bugs, engines, exports, files, h…#eeb601e4d4626252"
+R	^	<root>/sdk/js/package.json --arch arm64 []	err	"top level: unknown field(s) bugs, engines, exports, files, h…#eeb601e4d4626252"
 R	^	<root>/skills/hydo-onboard/assets/example-miniflux.yaml --arch x86_64 []	ok	d:31ddf6d9 w:4f53cda1 c:1a45818e m:74234e98
 R	^	<root>/skills/hydo-onboard/assets/example-miniflux.yaml --arch arm64 []	ok	d:31ddf6d9 w:4f53cda1 c:1a45818e m:74234e98
 R	^	<root>/skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml --arch x86_64 []	ok	d:7daf6c58 w:4f53cda1 c:43322f85 m:74234e98
@@ -6620,15 +6611,15 @@ R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/crlf-reg/hy
 R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/merge-yaml/hydo/hydo.yaml Some("<tmp>/embedded/5272.compose.json")	ok	d:3d461382 w:74234e98 c:74234e98 m:a9c84540
 R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/ok/hydo/hydo.yaml Some("<tmp>/embedded/5276.compose.json")	ok	d:8001e79a w:74234e98 c:74234e98 m:55786676
 R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/hydo/hydo.yaml Some("<tmp>/embedded/5280.compose.json")	ok	d:6b06d3b9 w:74234e98 c:74234e98 m:25f84ffa
-R	^	embedded <root>/hydo/grpcgen/demo/hydo-mac.yaml Some("<tmp>/embedded/5288.compose.json")	ok	d:324462f3 w:74234e98 c:74234e98 m:8612ae8b
-R	^	embedded <root>/hydo/grpcgen/demo/hydo.yaml Some("<tmp>/embedded/5290.compose.json")	ok	d:848a5a90 w:74234e98 c:74234e98 m:8612ae8b
+R	^	embedded <root>/hydo/grpcgen/demo/hydo-mac.yaml Some("<tmp>/embedded/5292.compose.json")	ok	d:324462f3 w:74234e98 c:74234e98 m:8612ae8b
+R	^	embedded <root>/hydo/grpcgen/demo/hydo.yaml Some("<tmp>/embedded/5294.compose.json")	ok	d:848a5a90 w:74234e98 c:74234e98 m:8612ae8b
 R	^	embedded <root>/hydo/knownbugs/sqlite/hydo-cpudiag.yaml None	err	"name: use lowercase letters, digits and '-' (got 'kb-sqlite-cpudiag-{{v}}')"
 R	^	embedded <root>/hydo/knownbugs/sqlite/hydo-reset.yaml None	err	"name: use lowercase letters, digits and '-' (got 'kb-sqlite-reset-{{v}}')"
 R	^	embedded <root>/hydo/knownbugs/sqlite/hydo.yaml None	err	"name: use lowercase letters, digits and '-' (got 'kb-sqlite-{{v}}')"
 R	^	embedded <root>/hydo/onboard/examples-mac/ledger-spin/hydo.yaml None	ok	d:b0e46b7a w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples-mac/ledger/hydo.yaml None	ok	d:8b673fe5 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples-mac/redis-bridge/hydo.yaml None	ok	d:e9d18127 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <root>/hydo/onboard/examples-mac/redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5304.compose.json")	ok	d:fef057ee w:74234e98 c:74234e98 m:b5e65201
+R	^	embedded <root>/hydo/onboard/examples-mac/redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5308.compose.json")	ok	d:fef057ee w:74234e98 c:74234e98 m:b5e65201
 R	^	embedded <root>/hydo/onboard/examples-mac/redis-ram/hydo.yaml None	ok	d:6cb27fdd w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples-mac/redis/hydo-hist.yaml None	ok	d:9bb8289f w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples-mac/redis/hydo-read.yaml None	ok	d:4815070d w:74234e98 c:74234e98 m:74234e98
@@ -6643,10 +6634,10 @@ R	^	embedded <root>/hydo/onboard/examples/node-kv/hydo.yaml None	ok	d:caaaabd9 w
 R	^	embedded <root>/hydo/onboard/examples/python-kv/hydo-mac-hist.yaml None	ok	d:f7336537 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/python-kv/hydo-mac.yaml None	ok	d:e0209579 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/redis-bridge/hydo.yaml None	ok	d:6ea0d748 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <root>/hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml Some("<tmp>/embedded/5354.compose.json")	ok	d:3f601bb3 w:74234e98 c:74234e98 m:1960ca96
-R	^	embedded <root>/hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml Some("<tmp>/embedded/5356.compose.json")	ok	d:59730534 w:74234e98 c:74234e98 m:a220798b
-R	^	embedded <root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5358.compose.json")	ok	d:5ccf3698 w:74234e98 c:74234e98 m:b5e65201
-R	^	embedded <root>/hydo/onboard/examples/redis-errors/hydo/hydo.yaml Some("<tmp>/embedded/5360.compose.json")	ok	d:2aff2947 w:74234e98 c:74234e98 m:b246f877
+R	^	embedded <root>/hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml Some("<tmp>/embedded/5358.compose.json")	ok	d:3f601bb3 w:74234e98 c:74234e98 m:1960ca96
+R	^	embedded <root>/hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml Some("<tmp>/embedded/5360.compose.json")	ok	d:59730534 w:74234e98 c:74234e98 m:a220798b
+R	^	embedded <root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5362.compose.json")	ok	d:5ccf3698 w:74234e98 c:74234e98 m:b5e65201
+R	^	embedded <root>/hydo/onboard/examples/redis-errors/hydo/hydo.yaml Some("<tmp>/embedded/5364.compose.json")	ok	d:2aff2947 w:74234e98 c:74234e98 m:b246f877
 R	^	embedded <root>/hydo/onboard/examples/redis-ram/hydo.yaml None	ok	d:31d3b555 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/redis/hydo-freeze.yaml None	ok	d:84e133cf w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/redis/hydo-hist.yaml None	ok	d:eb3ca386 w:74234e98 c:74234e98 m:74234e98
@@ -6662,7 +6653,7 @@ R	^	embedded <root>/hydo/onboard/examples/stack/hydo-grpcgen.yaml None	ok	d:d78b
 R	^	embedded <root>/hydo/onboard/examples/stack/hydo-read.yaml None	ok	d:f1da6f33 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/stack/hydo.yaml None	ok	d:d76c85a8 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/skills/hydo-onboard/assets/example-miniflux.yaml None	ok	d:31ddf6d9 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <root>/skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5550.compose.json")	ok	d:5ccf3698 w:74234e98 c:74234e98 m:b5e65201
+R	^	embedded <root>/skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5544.compose.json")	ok	d:5ccf3698 w:74234e98 c:74234e98 m:b5e65201
 R	^	embedded <tmp>/yaml/y-basic.yaml None	ok	d:6369658e w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/yaml/y-comments.yaml None	ok	d:733b0096 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/yaml/y-blocks.yaml None	ok	d:1bc35db0 w:74234e98 c:74234e98 m:74234e98

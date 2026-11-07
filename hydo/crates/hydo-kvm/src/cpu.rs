@@ -229,8 +229,9 @@ pub trait Cpu: Send {
         true
     }
     /// The step of the next instruction when the spin observer may step it
-    /// ([`crate::spin::decode`]), read through the guest's page tables from `ram`.
-    fn next_step(&self, ram: &[u8], cr3: u64) -> Option<crate::spin::Step> {
+    /// ([`crate::spin::decode`]), read through the guest's page tables from `ram`, and its data
+    /// flow.
+    fn next_step(&self, ram: &[u8], cr3: u64) -> Option<(crate::spin::Step, crate::spin::Flow)> {
         let rip = self.regs().rip;
         let mut code = Vec::with_capacity(15);
         for k in 0..15 {
@@ -240,8 +241,20 @@ pub trait Cpu: Send {
             }
         }
         let insn = crate::spin::decode(&code)?;
-        crate::spin::step_of(rip, &insn)
+        Some((crate::spin::step_of(rip, &insn)?, insn.flow))
     }
+    /// The outputs KVM leaves in `kvm_run` at an exit that the interrupt rule reads (whether an
+    /// interrupt can be injected now, RFLAGS.IF) and the window request: the rewind mode keeps
+    /// them with its checkpoint and gives them back to the fresh vCPU it restores into.
+    fn run_flags(&self) -> [u8; 3] {
+        [0; 3]
+    }
+    fn set_run_flags(&mut self, _f: [u8; 3]) {}
+    /// Start (or stop) KVM's dirty-page log of guest RAM (the rewind mode).
+    fn dirty_log(&mut self, _on: bool) {}
+    /// Append the pages the guest wrote since the last call (or since the log started), and
+    /// start the log afresh.
+    fn take_dirty(&mut self, _out: &mut Vec<u64>) {}
     /// A function another thread calls to make a running [`Cpu::run`] return [`Exit::Kick`]
     /// (the watchdog).
     fn kicker(&self) -> Box<dyn Fn() + Send + Sync>;

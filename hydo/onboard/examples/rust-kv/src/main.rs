@@ -11,7 +11,7 @@
 //! /tmp/rkv-fsync says "never" (read at every PUT), after fdatasync. "never" is the relaxed
 //! setting the explorer may choose (knob S): then a power cut loses acknowledged writes, which
 //! the oracle's always-assertion reports.
-use hydo_assert::{declare, details, hydo_always, hydo_always_less_than_or_equal_to, hydo_buggify, hydo_reachable, hydo_sometimes};
+use hydo_assert::{declare, details, hydo_always, hydo_always_cmp, hydo_buggify, hydo_reachable, hydo_sometimes};
 use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -108,7 +108,7 @@ fn conn(c: TcpStream, st: Arc<Mutex<Store>>) {
                         let _ = s.log.sync_data();
                     }
                     s.map.insert(k.to_string(), v.to_string());
-                    hydo_always_less_than_or_equal_to!(s.size, MAX_LOG, "rkv.log_size" => "the log stays under 1 MiB");
+                    hydo_always_cmp!(s.size, "<=", MAX_LOG, "rkv.log_size" => "the log stays under 1 MiB");
                     if LOST_REPLY.fire(details! {"key": k}) {
                         return; // the connection closes with no reply; the write is durable
                     }
