@@ -31,6 +31,22 @@ input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8
 input	hydo/onboard/examples/stack/hydo-grpcgen.yaml	72b3a42760bb79db3be04fe34d4e7a55645ed133e86008b059f0935cd3f247cf
 input	hydo/onboard/examples/stack/hydo-read.yaml	d3899b9ac926be02576d0f8e9b950bcc174682dc727791d4f1309294b3a1fb68
 input	hydo/onboard/examples/stack/hydo.yaml	369ed2074d0024dcbb5bf2218731bee7526fa006ff0e900aef339cc6cf69fb24
+input	hydo/onboard/examples/medusa/hydo/hydo.yaml	3c1bbf890f4bda462b3c0fe9bc1ee5cdbf39792463b19c9d9db59d858b2eefd8
+input	hydo/onboard/examples/medusa/hydo/checks/eventually_money_matches_stripe	c5b1f63992da0d47b13cc46f10917f909dd478f54db09df1c2737688940fbd0c
+input	hydo/onboard/examples/medusa/hydo/checks/final_acked_orders_exist	23ad70582fe648dee4256eda526b1980dddf49b77eed3f3a62c4b3bfb02e3bc1
+input	hydo/onboard/examples/medusa/hydo/checks/final_no_hold_without_order	0e7e51e244cb8181c7b215d29bb5eefc931ca853c6691f0477f2dac7a2956c11
+input	hydo/onboard/examples/medusa/hydo/checks/final_orders_paid_once	d8e2858e97c182b48a7250d4d8c565613f5cbbfa70e363ffeedcccad42a5e9e0
+input	hydo/onboard/examples/medusa/hydo/checks/final_stock_not_oversold	20bf267373e4bb3d0cc55adc4249369cc7fde2746a470ef900aa2863834da905
+input	hydo/onboard/examples/medusa/hydo/fetch-images.sh	a6f06e32114986074aa417405b875edc7317970b6671e3a41e7af658f23bd6fd
+input	hydo/onboard/examples/medusa/hydo/known-errors.yaml	aa0904c64ac6f38493dad25cff34806568f4d1be7af8fff334aa5944386b51e7
+input	hydo/onboard/examples/medusa/hydo/tls/api.key	1c4b281f242a47576ba3a17aa8241a0060e981b2168712b1947a3765fdbdc222
+input	hydo/onboard/examples/medusa/hydo/tls/api.pem	05b2d74ccced9bf1e6591a3dedbf9267036b6385e424755301c84564d7bb7f3a
+input	hydo/onboard/examples/medusa/hydo/tls/ca.pem	e08ab9df8f994d6509e585f3382d8055825742d5123704f20f26c74b4092852e
+input	hydo/onboard/examples/medusa/hydo/workload/first_seed	c13dcb65d046ee3ece09d24c6cde5b0c6ce6e9a8d173357a6d1849ec570bc0f3
+input	hydo/onboard/examples/medusa/hydo/workload/helper_client.mjs	21aaafc2ea3be8f2dd391e1de8f5f002bddfb51f15ee759bb4c4f2e6befea5a9
+input	hydo/onboard/examples/medusa/hydo/workload/helper_sql.sh	3aafbfa1c678e8bff255fbe2e7d232ffac7b505b0002b6f955d558e43ef9fb7f
+input	hydo/onboard/examples/medusa/hydo/workload/parallel_driver_capture_refund	d89e7c8787331322273737224b0ba3b07aa7f88feb68ac37b6e102d22d42baa4
+input	hydo/onboard/examples/medusa/hydo/workload/parallel_driver_checkout	da67717b8a4e78fca8248b27dea0855239ff60b37c26dd833959dff8fd8ad554
 input	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	a7e19bf3c01be56d464b7a6e443792caee1ad45e29fa7ea8be9801cf05965719
 input	hydo/onboard/examples/nats-jetstream/hydo/checks/final_acked_readable	900e87df6b54fa36af827d5c7d246375af4da61bd20b61838640fb1508b546a9
 input	hydo/onboard/examples/nats-jetstream/hydo/fetch-images.sh	b8360f6b9d20162d723336510712e6eba9c919e0899b29b67673f0a433ff20ae
@@ -142,17 +158,21 @@ chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml/hvm/TrueTrue	0	256	5382b8841
 chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml/hvm/TrueTrue	1	158	1246c5e1c997fbbbb24a96036b372a4c4e18350096ebe23a782d6c00aad15087
 chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml/hvm/FalseFalse	0	256	1d1c0e5e92297c6042273db4561c23ceb1dd8f21c75e32416c3ecbe0e50fdfa1
 chunk	hydo/onboard/examples/stack/hydo-grpcgen.yaml/hvm/FalseFalse	1	157	c2551192de09fa3b445c2b54b881a391e52d3ae9a610e60d0165e6ff3be6a9f7
-chunk	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml/hvx	0	256	678a56d2c9b4766fa9a7bb3fe7ef525ad24c3e2fa5f2048dc3ae7d8b4796f4be
-chunk	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml/hvx	1	180	01dcaff49b5eab781b6ec410c5418aa70b9a4b611079d11c2a8c45b180628aae
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml/hvm/TrueTrue	0	256	789c5fb0954e62e8f84eea8ae9c3190e0e660a45703e9bee69b3fcf64ebd1c7f
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml/hvm/TrueTrue	1	177	b229e9886dbdd6ecad74962cbbdfc5ffb6707b6d9fcbcde0f54584809dfab2d3
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml/hvm/FalseFalse	0	256	b18f20147b99e4436825212a6cb36d57245ec95ce72708cebc519142013275f4
-chunk	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml/hvm/FalseFalse	1	178	b08e108ddd80d21e07d6c255b30e2e58e16ce34b7ab1f477a7fdc438ecf7c510
-chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml/hvx	0	256	1c0657be0411d7739f799e500fd25a02745d0e84cc51c4b7ee379c5a3159b692
-chunk	hydo/onboard/examples-mac/ledger-spin/hydo.yaml/hvx	1	159	48f7a7afd56c25a5e7648efb5c86ec657c8dfafaf8d3b3b63a18d5315e1597ce
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml/hvm/TrueTrue	0	256	544a8dbf4864b8cb6a156ea9c033c1a6e046d61588113b759ac5c320b2d0f174
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml/hvm/TrueTrue	1	182	2a0c41b61435733bb1038233a3e1d2e1325b1d52a01b726214f8a5fa241ff3b3
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml/hvm/FalseFalse	0	256	3a485c1e55bb37433d6e9b3177ddf72933ad0a2e50c8c2322769f67e9473aa90
-chunk	hydo/onboard/examples-mac/redis-bridge/hydo.yaml/hvm/FalseFalse	1	183	60e8199c5e8faaef6d70aa92041137c0e79415e267cb5b050e58a7d2dd2cd59c
-chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml/hvx	0	256	1629da913397009d2f10522bc57abfae55798fa69d3684b2fbec4179c0607df5
-chunk	hydo/onboard/examples-mac/redis/hydo-read.yaml/hvx	1	157	bcc63adc702823d86e87df3f0ce3ef386692ec050b089e52f3bf337d0d8f6853
+chunk	hydo/onboard/examples/medusa/hydo/hydo.yaml/hvx	0	256	b446bd6c0b0fce8dc6fc76aae1570a82d33b5c269fefe3b8be62323d25b01ab9
+chunk	hydo/onboard/examples/medusa/hydo/hydo.yaml/hvx	1	80	eff557c1587de348d303f5173033ad7e00fb2423cee954b9a058ee9003280db0
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml/hvm/TrueTrue	0	256	dbabb2864337ce4837f877b324e644687c3f9c2bcb858f0fe5d3e3af9e16927c
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml/hvm/TrueTrue	1	178	8b0a6037c460684f85f4844a611b27885e04f054f308bf4ce9b168c091805b1c
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml/hvm/FalseFalse	0	256	45e04e2f3cc449140163d4ec10c0ebb1cede191f680167db3ffef3e11381890a
+chunk	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml/hvm/FalseFalse	1	178	9ede156792873315f05ae2efcd5ef55c8b9abaecdd1ce2ec1c852eaf03129af2
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml/hvx	0	256	06b67022e88ce3665a12397b801a5b897971d22d199d15fd2bcbe124f3df82e6
+chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml/hvx	1	186	816babec491463b1c1a8684c105692ede4723c56d80d289a48aa5551e426a06d
+chunk	hydo/onboard/examples-mac/ledger/hydo.yaml/hvm/TrueTrue	0	256	82621b1ee55869ae44874784109ae8c29850ba5b044a505b222a09ff67029e5c
+chunk	hydo/onboard/examples-mac/ledger/hydo.yaml/hvm/TrueTrue	1	157	b1ee1c55a2b67fbdb6cca38e65f7ff9fe30685c6b82c944ed45c27c61f6256d5
+chunk	hydo/onboard/examples-mac/ledger/hydo.yaml/hvm/FalseFalse	0	256	8df648219a1b329d8a18efc0587e37f9d7298d8bf52929c418990f6f620d4bee
+chunk	hydo/onboard/examples-mac/ledger/hydo.yaml/hvm/FalseFalse	1	158	084f4dec83cdc43ac503467ed5fc7b25a32e5d7f8da62d7d718e9fc3ab0a41c7
+chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml/hvx	0	256	fadf31f122d2dc6aa13297ff8bc04a9647814c94123ad0a7b87f077ebf8d5270
+chunk	hydo/onboard/examples-mac/redis/hydo-hist.yaml/hvx	1	160	d9bb11f4eb47f8fcad7c362bc3fc991fcac8e6abb1a960945afd771832fd8c33
+chunk	hydo/onboard/examples-mac/redis/hydo.yaml/hvm/TrueTrue	0	256	cc76fc447e5af85249c9e3aa12b40500f871c5622fbbe80e9e7ee1706a8b153d
+chunk	hydo/onboard/examples-mac/redis/hydo.yaml/hvm/TrueTrue	1	159	e567719c7a38e45bc2927c7a95fd078d0e915b93d5d600291c2223683cab44d9
+chunk	hydo/onboard/examples-mac/redis/hydo.yaml/hvm/FalseFalse	0	256	c3b547bf9dcdc5c63c58d668d29500f442d4dfbaf601b70c3d85cac9bd2c8d00
+chunk	hydo/onboard/examples-mac/redis/hydo.yaml/hvm/FalseFalse	1	157	c8011a623a8f98c9cf509b60befb6b593bf1cc475523db957f5389e9c769c7c5

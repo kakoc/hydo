@@ -81,6 +81,9 @@ hydo explore --backend kvm --seeds 1-20 --strategy process --protocol-faults --w
 
 The Medusa image is pinned by its id (`image_ref:`); `build-app.sh` resolves the npm dependencies
 again on every build, so a rebuild gives other bytes and needs the new id in `hydo.yaml`.
+`hydo.yaml` needs a `hydo` with this example's bracketed-name fix (hydo 0.1.0 refuses
+`form:metadata[session_id]`; `header:Idempotency-Key` works there too, since Medusa sets the
+key to the session id).
 
 ## Stripe over HTTPS: what a user has to build today
 
