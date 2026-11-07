@@ -476,6 +476,32 @@ pub fn run_to_dir(
     Some(run)
 }
 
+/// One line per eventually property that held in this run: how long after its anchor it held and
+/// its deadline, so that a deadline can be chosen from runs (the libSQL onboarding rebuilt its
+/// image with a longer one to learn this). `hydo report` shows the same in the property table.
+pub fn eventually_lines(run: &hydo_results::Run) -> Vec<String> {
+    let Some(t) = &run.properties else {
+        return Vec::new();
+    };
+    t.properties
+        .iter()
+        .filter(|p| p.assertion == "eventually" && p.fails == 0)
+        .filter_map(|p| {
+            let s = p.slowest_ok_s?;
+            Some(match p.within_s {
+                Some(w) => format!(
+                    "hydo: eventually {}: held {s:.2} s of guest time after its anchor (deadline {w} s)",
+                    p.id
+                ),
+                None => format!(
+                    "hydo: eventually {}: held {s:.2} s of guest time after its anchor",
+                    p.id
+                ),
+            })
+        })
+        .collect()
+}
+
 fn write_run_document(outdir: &Path, run: &hydo_results::Run) {
     let _ = hydo_results::write_document(&outdir.join(hydo_results::RUN_DOC), run);
 }
@@ -527,6 +553,9 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         ctx.backend_name(),
     );
     write_run_document(&outdir, &run);
+    for l in eventually_lines(&run) {
+        println!("{l}");
+    }
     println!(
         "hydo: run directory {}   (hydo repro {}  runs it again and compares fp=)",
         outdir.display(),

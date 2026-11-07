@@ -474,6 +474,10 @@ pub struct Property {
     /// Eventually properties: the slowest episode that held, in seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slowest_ok_s: Option<f64>,
+    /// Eventually properties: the deadline in seconds after the anchor (the records' `within_s`,
+    /// the largest seen; added after M176).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub within_s: Option<f64>,
 }
 
 /// The property table: every assertion property over a set of runs (hydo/ASSERTIONS.md).
@@ -508,6 +512,17 @@ pub struct Liveness {
     pub first_miss_run: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_miss: Option<Value>,
+    /// The property's deadline in seconds after its anchor (the records' `within_s`; the largest
+    /// when runs differ), so that `slowest_s` can be read against it (added after M176).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub within_s: Option<f64>,
+    /// The slowest episode that held only after its deadline (the host's `satisfied only <t>s
+    /// after ...`): the guest time the property needed in that run, and the run (added after
+    /// M176). A deadline of at least this would have held there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slowest_late_s: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slowest_late_run: Option<String>,
 }
 
 /// A run of a schedule again, to confirm it.

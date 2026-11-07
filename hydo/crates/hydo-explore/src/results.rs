@@ -420,6 +420,8 @@ struct P {
     runs_fail: u64,
     first_fail: Vec<u8>,
     max_ok_elapsed: f64,
+    /// eventually: the largest `within_s` of its records (-1: none)
+    max_within: f64,
     run_pass: bool,
     run_fail: bool,
 }
@@ -506,6 +508,7 @@ impl Table {
             id: cut(id, ID_LEN),
             ty: cut(ty, TYPE_LEN),
             max_ok_elapsed: -1.0,
+            max_within: -1.0,
             ..P::default()
         });
         Some(self.p.len() - 1)
@@ -524,6 +527,15 @@ impl Table {
         if decl {
             p.declared = true;
             return;
+        }
+        if p.ty == b"eventually" {
+            if let Some(e) = find(rec, b"\"within_s\":") {
+                let x = &rec[e + 11..];
+                let w = atof(if x.first() == Some(&b'"') { &x[1..] } else { x });
+                if w > p.max_within {
+                    p.max_within = w;
+                }
+            }
         }
         if find(rec, b"\"ok\":true").is_some() {
             p.passes += 1;
@@ -643,36 +655,38 @@ pub fn property_table(runs: &[String]) -> Option<PropertyTable> {
     if !any {
         return None;
     }
-    let props: Vec<Property> =
-        t.p.iter()
-            .map(|p| {
-                let v = verdict(p);
-                Property {
-                    id: lossy(&p.id),
-                    assertion: lossy(&p.ty),
-                    message: lossy(&p.msg),
-                    declared: p.declared,
-                    passes: p.passes,
-                    fails: p.fails,
-                    runs_passed: p.runs_pass,
-                    runs_failed: p.runs_fail,
-                    verdict: v.into(),
-                    status: if v.starts_with("FAIL") {
-                        status::VIOLATION
-                    } else if v == "NOT EXERCISED" {
-                        status::NOT_EXERCISED
-                    } else if v == "NOT EVALUATED" {
-                        status::NOT_EVALUATED
-                    } else {
-                        status::OK
-                    }
-                    .into(),
-                    first_failure: (!p.first_fail.is_empty()).then(|| lossy(&p.first_fail)),
-                    slowest_ok_s: (p.ty == b"eventually" && p.max_ok_elapsed >= 0.0)
-                        .then_some(p.max_ok_elapsed),
+    let props: Vec<Property> = t
+        .p
+        .iter()
+        .map(|p| {
+            let v = verdict(p);
+            Property {
+                id: lossy(&p.id),
+                assertion: lossy(&p.ty),
+                message: lossy(&p.msg),
+                declared: p.declared,
+                passes: p.passes,
+                fails: p.fails,
+                runs_passed: p.runs_pass,
+                runs_failed: p.runs_fail,
+                verdict: v.into(),
+                status: if v.starts_with("FAIL") {
+                    status::VIOLATION
+                } else if v == "NOT EXERCISED" {
+                    status::NOT_EXERCISED
+                } else if v == "NOT EVALUATED" {
+                    status::NOT_EVALUATED
+                } else {
+                    status::OK
                 }
-            })
-            .collect();
+                .into(),
+                first_failure: (!p.first_fail.is_empty()).then(|| lossy(&p.first_fail)),
+                slowest_ok_s: (p.ty == b"eventually" && p.max_ok_elapsed >= 0.0)
+                    .then_some(p.max_ok_elapsed),
+                within_s: (p.ty == b"eventually" && p.max_within >= 0.0).then_some(p.max_within),
+            }
+        })
+        .collect();
     Some(PropertyTable {
         runs: t.runs,
         setup_complete_runs: t.setup,
@@ -718,7 +732,10 @@ pub fn render_properties(t: &PropertyTable) -> String {
             nl += 1;
             nlf += (p.fails > 0) as u64;
             if let (None, Some(s)) = (&p.first_failure, p.slowest_ok_s) {
-                slow = format!("  [slowest in time: {s:.2} s]");
+                slow = match p.within_s {
+                    Some(w) => format!("  [slowest in time: {s:.2} s of {w} s]"),
+                    None => format!("  [slowest in time: {s:.2} s]"),
+                };
             }
         }
         o.push_str(&format!(
@@ -785,6 +802,28 @@ pub fn liveness(runs: &[(String, String)]) -> Vec<Liveness> {
                 id: pid,
                 ..Liveness::default()
             });
+            for (ok, el, det) in &eps {
+                let w = match det.get("within_s") {
+                    Some(Value::String(s)) => s.trim().parse::<f64>().ok(),
+                    Some(v) => v.as_f64(),
+                    None => None,
+                };
+                if let Some(w) = w {
+                    if p.within_s.is_none_or(|x| w > x) {
+                        p.within_s = Some(w);
+                    }
+                }
+                // satisfied after the deadline: the host's "satisfied only <t>s after <anchor>"
+                let late = !ok
+                    && det
+                        .get("out")
+                        .and_then(Value::as_str)
+                        .is_some_and(|o| o.contains("satisfied only "));
+                if late && p.slowest_late_s.is_none_or(|s| *el > s) {
+                    p.slowest_late_s = Some(*el);
+                    p.slowest_late_run = Some(stem.clone());
+                }
+            }
             if eps.iter().all(|e| e.0) {
                 p.held_runs += 1;
                 let worst = eps.iter().map(|e| e.1).fold(f64::NEG_INFINITY, f64::max);
@@ -817,11 +856,19 @@ pub fn render_liveness(l: &[Liveness]) -> Vec<String> {
     let mut out = vec![
         "## Liveness (eventually properties, hvx/ASSERTIONS.md)".to_string(),
         String::new(),
-        "| property | held in time | missed deadline | slowest in time | first miss |".into(),
-        "|---|---|---|---|---|".into(),
+        "| property | held in time | missed deadline | slowest in time | deadline | slowest held late | first miss |".into(),
+        "|---|---|---|---|---|---|---|".into(),
     ];
     for p in l {
         let slow = match (p.slowest_s, &p.slowest_run) {
+            (Some(w), Some(s)) => format!("{w:.2} s ({s})"),
+            _ => "-".into(),
+        };
+        let within = p
+            .within_s
+            .map(|w| format!("{w} s"))
+            .unwrap_or_else(|| "-".into());
+        let late = match (p.slowest_late_s, &p.slowest_late_run) {
             (Some(w), Some(s)) => format!("{w:.2} s ({s})"),
             _ => "-".into(),
         };
@@ -838,7 +885,7 @@ pub fn render_liveness(l: &[Liveness]) -> Vec<String> {
             None => "-".into(),
         };
         out.push(format!(
-            "| `{}` | {} | {} | {slow} | {miss} |",
+            "| `{}` | {} | {} | {slow} | {within} | {late} | {miss} |",
             p.id, p.held_runs, p.missed_runs
         ));
     }

@@ -62,6 +62,7 @@ hydo-explore::bin/hydo-explore           fast
 hydo-explore::corpus                     full
 hydo-explore::fake_engine                fast
 hydo-explore::identity                   fast
+hydo-explore::liveness_deadline          fast
 hydo-explore::netns_links                fast
 hydo-explore::reactive                   fast
 hydo-grpc                                fast
