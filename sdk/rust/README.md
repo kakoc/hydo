@@ -1,16 +1,17 @@
 # hydo-assert: the Rust assertion SDK
 
-A Rust program running under hydo (the deterministic hypervisor in this repository) uses this
-crate to say what must be true and what should happen at least once. It writes the same console
-records as the Go SDK (`hydo/stack/hydoassert`), byte for byte, with the same deduplication
-rules, so `hydo_assert_report`, the harnesses and the explorer (`hydo explore`) read them unchanged. The wire
-format and the verdict rules are in `hydo/ASSERTIONS.md`.
+A Rust program running under hydo (the deterministic hypervisor of
+[github.com/kakoc/hydo](https://github.com/kakoc/hydo)) uses this crate to say what must be true
+and what should happen at least once. It writes the same console records as the Go SDK
+(`sdk/go`), byte for byte, with the same deduplication rules, so `hydo_assert_report`, the
+harnesses and the explorer (`hydo explore`) read them unchanged. The wire format and the verdict
+rules are in `hydo/ASSERTIONS.md` of that repository; paths below are relative to it.
 
-The crate uses only the standard library. It is not published; depend on it by path or git:
+The crate uses only the standard library:
 
 ```toml
 [dependencies]
-hydo-assert = { path = "../hydo/sdk/rust" }          # or { git = "...", package = "hydo-assert" }
+hydo-assert = "0.1"                                  # or { path = "../hydo/sdk/rust" } from a checkout
 ```
 
 ## Use
@@ -149,7 +150,7 @@ its `build-rkv.sh` (two clean builds give the same sha256), and a `hydo.yaml`.
 `sdk/cases/` holds example files that say "this call, under this configuration, writes exactly
 these bytes". This crate's test `tests/cases/` writes them; the Go, Python and JavaScript SDKs
 each have a test that reads every case, makes the same calls with its own API and compares the
-bytes (`go test ./...` in `hydo/stack/hydoassert`, `python3 -m unittest discover -s
+bytes (`go test ./...` in `sdk/go` and in its frozen copy `hydo/stack/hydoassert`, `python3 -m unittest discover -s
 sdk/python/tests`, `node --test` in `sdk/js`). No SDK test needs another language installed.
 
 ```sh

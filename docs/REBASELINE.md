@@ -3013,3 +3013,48 @@ Fingerprint by fingerprint (section 13.1, M155 → M157): node-kv `eb0811dba0a01
 No other recorded value moved: the other source files M157 changed are compiled into recorded
 programs or modules, and each gives the same bytes before and after (docs/HISTORY.md
 "Milestone 157").
+
+## 15. node-kv with the publishable JavaScript package file (M159, 2026-11-07)
+
+Milestone 159 prepared the SDKs for their registries (docs/PUBLISHING.md). npm refuses a package
+marked `"private": true`, so `sdk/js/package.json` lost that field and gained `repository`,
+`homepage`, `bugs` and `keywords`, and its description now says what hydo is. The node-kv example
+copies that file into its images (`/app/node_modules/hydo-assert/package.json`), so the node-kv
+images have new bytes and new fingerprints; no other image contains the file. Every other SDK
+change of M159 is outside the images or byte-neutral (docs/HISTORY.md "Milestone 159"). The
+engines, the controller, the agent and the guest kernels did not change, so the fingerprint epoch
+stays 1 (an image built before M159 still gives its section 14 values). These values supersede
+section 14's node-kv table.
+
+How: M157's staged node-kv inputs and `sdk/js` (the release prefix of M155, whose image builder is
+`main`'s, and the staged Node.js), checked against `main` (`dbb1df8`: the same `sdk/js` and
+node-kv files apart from the README, which no image contains). `hydo build hydo-mac.yaml` once
+with `main`'s `package.json` (initramfs `ae2bbb9b231f295c…`, section 14's, byte for byte) and twice
+with this milestone's (two builds byte-identical); then every recorded schedule twice with
+`hydo run --image` from a fresh boot, one VM at a time.
+
+Images: initramfs `a15ec5d60932ec2b…` (`a15ec5d60932ec2be98d748e64a43522dbd31025c33ab1c5f5a14cc5060bf799`);
+the root disk `d031f382…` and the data disk `9dba2707…` are the same as before. Unpacked, the
+before and after initramfs have the same 492 paths, modes and owners, and only
+`app/node_modules/hydo-assert/package.json` differs.
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `d5ecbd4819dd31ba` | `0141194b466e3bd9` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `453377f5c45e05b8` | `bfdec020a46f3dcf` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `426f966e55917bef` | `202dcc1810826541` | yes |
+| `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `cfeb973e2598ce99` | `39129eaa9b7e2227` | yes |
+
+The verdict lines are section 14's word for word. Three ctl values are section 14's; the
+`C=12 S=never` run's moved (`8de6e3d2ba8ff5d8` → `bfdec020a46f3dcf`): its boot transcript
+(`control.boot.jsonl`, 52 lines) and its run's (`control.jsonl`, 48 lines) are M157's line for
+line, and in the recovery transcript (`control.recovery.jsonl`, 36 lines) only the last four lines
+differ: the oracle's two report lines and the end come two stops later (`n` 761 at the cadence
+stop `at=19392` instead of 759 at `19264`). The likely reason, not traced further: the oracle
+(`nkv.cjs check`) loads the SDK, Node.js reads and parses the SDK's `package.json` to resolve its
+`exports`, and the file grew from 1,141 to 1,511 bytes, which moves the check's end across a
+cadence stop. M152's change of the same file (one shorter line) moved no ctl value.
+
+Fingerprint by fingerprint (section 14, M157 → M159): `5f47c9a775cd40a8` → `d5ecbd4819dd31ba`,
+`3146b75677356b19` → `453377f5c45e05b8`, `1cbb888242587805` → `426f966e55917bef`,
+`772d0ca8f633d3be` → `cfeb973e2598ce99`.

@@ -1,0 +1,14 @@
+[package]
+name = "cargo-hydo"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.70"
+description = "cargo hydo: build a hydo-test program for the host and the guest, write its plan and run it with hydo, a deterministic hypervisor"
+repository = "https://github.com/kakoc/hydo"
+homepage = "https://github.com/kakoc/hydo"
+documentation = "https://github.com/kakoc/hydo/tree/main/sdk/rust-test#cargo-hydo"
+readme = "README.md"
+keywords = ["testing", "deterministic", "cargo-subcommand", "hydo"]
+categories = ["development-tools::testing", "development-tools::cargo-plugins"]
+include = ["src/**", "Cargo.toml", "README.md", "LICENSE"]

@@ -7,7 +7,8 @@ done is in docs/HISTORY.md (Milestones 149, 150, 153–158).
 ## 1. Before building
 
 1. Decide the version (`hydo/VERSION`, and `HYDO_VERSION` for the release scripts; AGENTS.md open
-   item 40 says what a version change moves).
+   item 40 says what a version change moves). The SDKs carry the same version (docs/PUBLISHING.md,
+   "The next version", lists the files and the images a version change moves).
 2. On the final commit: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`
    and `cargo test --locked --release --workspace` pass. Among them:
    - `public_content` (no machine details, no value of the local list, in any tracked file);
@@ -15,7 +16,9 @@ done is in docs/HISTORY.md (Milestones 149, 150, 153–158).
      are complete (every file of `assets.sha256` and `guest-programs.sha256` and every literal
      destination of `build-release.sh` belongs to a component; every component has a license, its
      full license texts and a source, a copyleft one its source archive pinned by sha256; every
-     Rust crate compiled into a shipped program has a license and license texts).
+     Rust crate compiled into a shipped program has a license and license texts);
+   - `hydo-release`'s `sdks` tests: every SDK package has this version, Apache-2.0 and the
+     repository, and the Go module `sdk/go` holds the frozen copy's code.
 3. `git grep -i` the competitor names AGENTS.md "No other product in hydo's space" names: only
    citations in research notes.
 
@@ -97,3 +100,11 @@ Create the GitHub release for the tag of the final commit and upload all four fi
 third-party software in the tarballs. Keep every sources archive available for as long as its
 tarball is offered (and at least three years after the last download of it, as GPL-2.0 section 3
 asks of a written offer).
+
+## 8. Publish the SDKs (the user decides; with the release)
+
+Publish every SDK with the release's version, in the order and with the commands of
+docs/PUBLISHING.md: `hydo-assert`, `hydo-test-macros`, `hydo-test` and `cargo-hydo` on
+crates.io, `hydo-assert` on PyPI and on npm, and the tag `sdk/go/v<version>` for the Go module.
+An uploaded version can never be replaced on any of them (only yanked, deprecated or retracted),
+so run each dry run first.

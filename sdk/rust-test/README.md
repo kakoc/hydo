@@ -2,7 +2,13 @@
 
 A team writes its test in Rust: a `system()` function that describes the system (services,
 files, data disk, knobs, allowed faults, composer options, saved regressions), and the test's
-operations and properties as ordinary functions with an attribute:
+operations and properties as ordinary functions with an attribute. hydo is the deterministic
+hypervisor in [this repository](https://github.com/kakoc/hydo).
+
+```toml
+[dependencies]
+hydo-test = "0.1"          # or { path = "../hydo/sdk/rust-test" } from a checkout
+```
 
 ```rust
 use hydo_test::prelude::*;
@@ -65,7 +71,9 @@ boot or of the recovery boot).
 
 ## cargo hydo
 
-`cargo install --path sdk/rust-test` installs `cargo-hydo`. In the test crate:
+`cargo install cargo-hydo` (or, from a checkout, `cargo install --path sdk/rust-test/cargo-hydo`)
+installs the `cargo hydo` subcommand; it is its own crate, so a test crate depends only on
+`hydo-test`. In the test crate:
 
 ```sh
 cargo hydo plan  [--arch x86_64|aarch64]   # host build + static musl guest build -> .hydo/plan.json, .hydo/guest/<bin>

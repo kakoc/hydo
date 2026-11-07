@@ -5,7 +5,8 @@
 //!     cargo hydo build   [same options]                          plan, then `hydo build .hydo/plan.json --out .hydo`
 //!     cargo hydo run|explore|repro|save|report [hydo args...]    plan + build, then `hydo <verb> <args>`
 //!
-//! Install: `cargo install --path sdk/rust-test` (puts cargo-hydo on PATH). The guest target
+//! Install: `cargo install cargo-hydo` (or `cargo install --path sdk/rust-test/cargo-hydo` from a
+//! checkout; either puts cargo-hydo on PATH). The guest target
 //! needs `rustup target add <arch>-unknown-linux-musl`; linking uses Rust's self-contained musl
 //! and rust-lld, so no C toolchain is needed. --arch defaults to the engine of this machine:
 //! aarch64 on macOS (the Mac backend), x86_64 elsewhere. `HYDO` names the engine command

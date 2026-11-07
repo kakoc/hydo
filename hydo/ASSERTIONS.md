@@ -73,7 +73,8 @@ emitted records (per process and outcome), not of every evaluation.
 
 ## Guest SDKs
 
-**Go** (`hydo/stack/hydoassert`, import `hydostack/hydoassert`):
+**Go** (`sdk/go`, import `github.com/kakoc/hydo/sdk/go/hydoassert`; `hydo/stack/hydoassert` is a
+frozen copy that the order service imports as `hydostack/hydoassert`):
 
 ```go
 var ackedInMySQL = hydoassert.Always("order.in_mysql", "every checked order is in MySQL with its amount")
@@ -221,7 +222,7 @@ writes invalid UTF-8 as a raw U+FFFD; the SDK writes Go 1.26's `\ufffd` escape.
 `cargo test --test cases` (in `sdk/rust`) runs each case's calls and writes, for every run,
 the exact bytes the sink receives and what the calls return, under the run's output target
 (`HYDO_ASSERT_OUT` / `HYDO_HIST_OUT`) and BUGGIFY configuration. The other SDKs read every case,
-make the same calls and compare: Go `go test ./...` in `hydo/stack/hydoassert` (Go 1.26.5,
+make the same calls and compare: Go `go test ./...` in `sdk/go` and in `hydo/stack/hydoassert` (Go 1.26.5,
 the guest images' Go; with Go 1.27 or later the invalid-UTF-8 cases are skipped), Python
 `python3 -m unittest discover -s sdk/python/tests`, JavaScript `node --test` in `sdk/js`. A
 case needing what a language lacks (float32, invalid UTF-8 in a JavaScript history record,

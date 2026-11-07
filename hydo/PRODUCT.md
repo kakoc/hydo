@@ -76,11 +76,11 @@ hydo is used from the team's own repository. Nobody checks out hydo's repository
 
 | Language | Where | State | Proof of the same output |
 |---|---|---|---|
-| Go | `hydo/stack/hydoassert` (import `hydostack/hydoassert`) | on main (M38, M56, M59) | `cases_test.go` reads the shared cases (`sdk/cases`), Go 1.26.5 |
+| Go | `sdk/go` (module `github.com/kakoc/hydo/sdk/go`, packages `hydoassert` and `hydohist`; `hydo/stack/hydoassert` is the order service's frozen copy, M159) | on main (M38, M56, M59); published with a release as the tag `sdk/go/v<version>` (docs/PUBLISHING.md) | `cases_test.go` reads the shared cases (`sdk/cases`), Go 1.22 or later, Go 1.26.5 for every case |
 | shell (busybox sh) | `hydo/stack/hydoassert/hydo_assert.sh` | on main; no deduplication, no BUGGIFY | |
-| Rust | `sdk/rust` (crate `hydo-assert`, not published) | branch `rust-sdk` (M82), not merged yet; std only, call-site macros with file:line, `declare!`, sync and runtime-agnostic async `eventually`, features `noop` and `serde_json` | the reference (M110): its test `tests/cases` writes the shared cases `sdk/cases`, which equal Go 1.26.5's bytes |
-| Python (3.8+) | `sdk/python` (distribution `hydo-assert`, import `hydo_assert`, not published) | branch `python-sdk`, not merged yet (M86); standard library only, thread- and asyncio-safe; example `hydo/onboard/examples/python-kv` on the Mac backend | `tests/test_cases.py` reads the shared cases, Python 3.8 and 3.15 |
-| JavaScript / TypeScript (Node.js) | `sdk/js` (package `hydo-assert`, not published) | branch `js-sdk`, not merged yet; CommonJS and ESM, types, no dependencies | `test/cases.test.js` reads the shared cases, both entries |
+| Rust | `sdk/rust` (crate `hydo-assert`, with `hydo-test`, `hydo-test-macros` and `cargo-hydo`; for crates.io, published with a release, docs/PUBLISHING.md) | on main (M82); std only, call-site macros with file:line, `declare!`, sync and runtime-agnostic async `eventually`, features `noop` and `serde_json` | the reference (M110): its test `tests/cases` writes the shared cases `sdk/cases`, which equal Go 1.26.5's bytes |
+| Python (3.8+) | `sdk/python` (distribution `hydo-assert`, import `hydo_assert`; for PyPI, published with a release, docs/PUBLISHING.md) | on main (M83); standard library only, thread- and asyncio-safe; example `hydo/onboard/examples/python-kv` on the Mac backend | `tests/test_cases.py` reads the shared cases, Python 3.8 and 3.15 |
+| JavaScript / TypeScript (Node.js) | `sdk/js` (package `hydo-assert`; for npm, published with a release, docs/PUBLISHING.md) | on main (M80); CommonJS and ESM, types, no dependencies | `test/cases.test.js` reads the shared cases, both entries |
 
 **The `hydo/` folder** (agreed) holds everything hydo needs in the team's repository, next to `docker-compose.yaml`:
 

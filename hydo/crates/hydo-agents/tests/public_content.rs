@@ -17,7 +17,8 @@
 //! and names between the lines `<!-- public-content-forbidden: begin -->` and
 //! `<!-- public-content-forbidden: end -->`, one `` - `value` `` per line. When the file exists,
 //! no tracked file at all (recorded data included) may contain one of them as a word
-//! (case-insensitive). Without the file (a fresh clone, a release tarball) that part is skipped.
+//! (case-insensitive), except as the owner in the repository's public address
+//! `github.com/<owner>/hydo` (`public_repository`). Without the file (a fresh clone, a release tarball) that part is skipped.
 //! Run from a tree that is not a git checkout, the test only says so.
 
 use regex::Regex;
@@ -160,6 +161,14 @@ impl Rules {
     }
 }
 
+/// The repository's public address on GitHub, `github.com/<owner>/hydo` (the SDK packages'
+/// repository field and the Go module path name it, Milestone 159). It is removed from a line
+/// before the concrete values are looked for, because the owner's name there is public by the
+/// repository itself; the same name anywhere else on the line still fails.
+fn public_repository() -> Regex {
+    Regex::new(r"(?i)github\.com/[A-Za-z0-9-]+/hydo([^A-Za-z0-9_-]|$)").unwrap()
+}
+
 /// One case-insensitive whole-word pattern per concrete value.
 fn value_patterns(values: &[String]) -> Vec<(String, Regex)> {
     values
@@ -207,6 +216,24 @@ fn rules_catch_what_they_should() {
     assert!(pats[0].1.is_match("rsync f ALPHA-ONE:dir/"));
     assert!(!pats[0].1.is_match("alpha-ones"));
     assert!(pats[1].1.is_match("as beta@two."));
+    // the repository's public address hides its owner's name, and only there
+    let owner = value_patterns(&["owner1".to_string()]);
+    let repo = public_repository();
+    for (line, caught) in [
+        ("module github.com/owner1/hydo/sdk/go", false),
+        ("\"url\": \"git+https://github.com/Owner1/hydo.git\"", false),
+        ("repository = \"https://github.com/owner1/hydo\"", false),
+        (
+            "see https://github.com/owner1/hydo and /home/owner1/x",
+            true,
+        ),
+        ("https://github.com/owner1/hydo-other", true),
+        ("https://github.com/owner1/other", true),
+        ("owner1@machine", true),
+    ] {
+        let stripped = repo.replace_all(line, "$1");
+        assert_eq!(owner[0].1.is_match(&stripped), caught, "{line}");
+    }
 }
 
 #[test]
@@ -232,6 +259,7 @@ fn tracked_files_have_no_machine_access_details() {
         }
     };
     let pats = value_patterns(&values);
+    let repo_url = public_repository();
     let r = Rules::new();
     let mut problems = Vec::new();
     let mut checked = 0;
@@ -251,8 +279,9 @@ fn tracked_files_have_no_machine_access_details() {
                     problems.push(format!("{path}:{}: {why}: {}", n + 1, shown()));
                 }
             }
+            let without_repo = repo_url.replace_all(line, "$1");
             for (_, re) in &pats {
-                if re.is_match(line) {
+                if re.is_match(&without_repo) {
                     problems.push(format!(
                         "{path}:{}: a value listed in AGENTS.local.md: {}",
                         n + 1,
