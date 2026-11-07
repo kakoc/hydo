@@ -47,6 +47,7 @@ pub fn default_cadence(kind: EngineKind) -> u64 {
     match kind {
         EngineKind::Hvx => 16,
         EngineKind::Hvm => 64,
+        EngineKind::Kvm => 64,
     }
 }
 

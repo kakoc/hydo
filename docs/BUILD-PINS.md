@@ -420,3 +420,36 @@ Linux release come from a newer nixpkgs revision that was not recorded: busybox 
 (`ahw5fkq0…`) and musl 1.2.6 (`0nlqfwsn…`), both substituted from cache.nixos.org; their upstream
 archives are included, and their recipe is nixpkgs's (the pinned tree has the busybox 1.36.1 and
 musl 1.2.3 versions of it).
+
+## The KVM engine's guest kernel (Milestone 159; a branch, not merged)
+
+`bzImage-kvm` is the x86_64 guest kernel of the KVM engine (`hydo/crates/hydo-kvm`,
+docs/design/kvm-engine.md): Linux 6.6.35 from kernel.org (`linux-6.6.35.tar.xz`, sha256
+`fce3ee728712ed063aa8c14a8756c8ff8c7a46ba3827f61d2b04a73c7cf5dd9e`, the Mac netns kernel's
+tarball) with `hv/kvm/linux/hydo-kvm-guest.patch`, allnoconfig plus `hv/kvm/linux/hydo-kvm.config`,
+built by `hv/kvm/linux/kernel.nix` with the pinned nixpkgs (NixOS 24.05 `89c49874`,
+`/nix/store/f0ddmw6s86y567yg06h5019z72szbzch-source`): its gcc 13.2.0, binutils, bc, bison, flex,
+perl, python3 and elfutils. `hv/kvm/linux/build-kernel.sh` runs it (`nice -n 19`, `JOBS=8`;
+`CHECK=1` rebuilds it with `nix-build --check`, which fails unless the bytes are the same).
+
+| file | sha256 |
+|---|---|
+| `bzImage-kvm` | `d50fbc67261a2544404d7a5f3e7a79cabe3b0a2e1f455158ccc5369d878d6207` |
+| `bzImage-kvm.config` | `412c482c740b37f05c68d951b0b358775d4f72cb54b1e1948eaf7c6a81f564e5` |
+
+Proof (Milestone 159): `nix-build` and `nix-build --check` on the build machine (sandboxed), the
+same bytes; the store path is `7hqyd9n0…-hydo-kvm-guest-kernel-6.6.35`; the RDTSC audit of its
+`vmlinux` (`hv/kvm/linux/audit-rdtsc.sh`) lists the same 10 sites as before. The pin before it,
+`319b234edf4c74ab1983928c133a27b105e2a7bad36a12f4470e8f554b987e48` (store path
+`5kp5mg03…`, the recipe without M159's accessed-bit flush), was built the same way, and the
+bare-metal machine's single-user Nix (no sandbox) built that store path with the same bytes (as
+it did for the two earlier versions of the recipe, `c35de6f1…` and `1b4939d6…`); M159 rebuilt it
+from the transplanted recipe with `nix-build --check`, the same bytes again. The current pin was
+not built on the bare-metal machine. The recipe has no build-id notes (the
+kernel's and the vDSO's): with them, a build outside Nix's sandbox on the bare-metal machine gave
+the vDSO another build-id (20 bytes of `raw_data` in `.rodata`), and the kernel's own build-id was
+computed before `scripts/sorttable` sorted its tables. A `--check` rebuild outside the sandbox
+still differed once in the compressed payload of `bzImage` (with equal `vmlinux` bytes): pin with
+a sandboxed Nix. The sha256 is recorded in
+`hydo/crates/hydo-kvm/src/kernel.rs` (`KERNEL`), paired with the hvx guest kernel an image records
+(`0a9ede35…`).

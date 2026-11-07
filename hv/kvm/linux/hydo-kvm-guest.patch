@@ -1,0 +1,536 @@
+diff -ruN a/arch/x86/Kconfig b/arch/x86/Kconfig
+--- a/arch/x86/Kconfig
++++ b/arch/x86/Kconfig
+@@ -830,6 +830,20 @@
+ 	  underlying device model, the host provides the guest with
+ 	  timing infrastructure such as time of day, and system time
+ 
++config HYDO_KVM_GUEST
++	bool "hydo deterministic guest on KVM"
++	depends on X86_64 && PARAVIRT
++	help
++	  This option makes the kernel a guest of hydo's KVM engine, whose
++	  execution is a pure function of its inputs. Detected by the CPUID
++	  signature "hydo-kvm-x86", it takes every clock from the engine's
++	  exit clock on I/O ports (a clocksource, sched_clock, a one-shot
++	  clock event on IRQ 0, the wall clock at boot), makes rdtsc() and
++	  rdtsc_ordered() read that clock instead of the TSC, sets CR4.TSD
++	  and emulates user-space RDTSC in the #GP handler with the same
++	  clock, presets the delay loop and powers off through the engine.
++	  Say N unless the kernel is built for hydo's KVM engine.
++
+ config ARCH_CPUIDLE_HALTPOLL
+ 	def_bool n
+ 	prompt "Disable host haltpoll when loading haltpoll driver"
+diff -ruN a/arch/x86/include/asm/hydo.h b/arch/x86/include/asm/hydo.h
+--- /dev/null
++++ b/arch/x86/include/asm/hydo.h
+@@ -0,0 +1,91 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * The guest side of hydo's KVM engine (hydo/crates/hydo-kvm): the engine's
++ * exit clock and its devices on I/O ports. Every value read here is a pure
++ * function of the guest's own execution, so the kernel never reads the TSC.
++ *
++ *   HYDO_PORT_CLOCK  IN, two dwords with `rep insl`: the low and the high half
++ *                    of the clock in nanoseconds, both of the same VM exit.
++ *   HYDO_PORT_WALL   IN, two dwords with `rep insl`: the wall clock at boot,
++ *                    in seconds since the epoch (a constant of the engine).
++ *   HYDO_PORT_TIMER  OUT dword: raise IRQ 0 when the clock has advanced by
++ *                    this many nanoseconds (one shot); 0 disarms. The engine
++ *                    disarms it when it delivers the interrupt.
++ *   HYDO_PORT_CTL    OUT dword: 1 powers the machine off, 2 resets it.
++ */
++#ifndef _ASM_X86_HYDO_H
++#define _ASM_X86_HYDO_H
++
++#include <linux/types.h>
++
++#define HYDO_CPUID_SIGNATURE	"hydo-kvm-x86"
++#define HYDO_PORT_CLOCK		0x5e0
++#define HYDO_PORT_WALL		0x5e4
++#define HYDO_PORT_TIMER		0x5e8
++#define HYDO_PORT_CTL		0x5ec
++
++/* Two dwords from one port in one instruction, so in one VM exit. */
++static __always_inline u64 hydo_read_pair(u16 port)
++{
++	u32 v[2] __attribute__((aligned(8)));
++	void *p = v;
++	unsigned long n = 2;
++
++	asm volatile("rep insl"
++		     : "+D" (p), "+c" (n), "=m" (v)
++		     : "d" (port)
++		     : "memory");
++	return ((u64)v[1] << 32) | v[0];
++}
++
++/* The engine's clock in nanoseconds: every read is one VM exit. */
++static __always_inline u64 hydo_clock(void)
++{
++	return hydo_read_pair(HYDO_PORT_CLOCK);
++}
++
++struct pt_regs;
++
++#ifdef CONFIG_HYDO_KVM_GUEST
++extern bool hydo_guest;
++extern bool hydo_tsd_on;
++static inline bool hydo_tsd_forced(void)
++{
++	return hydo_tsd_on;
++}
++/*
++ * Flush the TLB at every change of a present page-table entry, also when x86 would rely on a
++ * spurious fault instead (a permission upgrade): whether a stale entry is still cached when the
++ * guest uses it depends on the host (TLB size, eviction), and the spurious fault it causes is
++ * counted by the guest (vm events, a task's minor faults).
++ */
++static inline bool hydo_strict_tlb(void)
++{
++	return hydo_guest;
++}
++/* The kernel runs as hydo's guest (detected at boot). */
++static inline bool hydo_active(void)
++{
++	return hydo_guest;
++}
++bool hydo_emulate_rdtsc(struct pt_regs *regs);
++#else
++static inline bool hydo_tsd_forced(void)
++{
++	return false;
++}
++static inline bool hydo_strict_tlb(void)
++{
++	return false;
++}
++static inline bool hydo_active(void)
++{
++	return false;
++}
++static inline bool hydo_emulate_rdtsc(struct pt_regs *regs)
++{
++	return false;
++}
++#endif
++
++#endif /* _ASM_X86_HYDO_H */
+diff -ruN a/arch/x86/include/asm/hypervisor.h b/arch/x86/include/asm/hypervisor.h
+--- a/arch/x86/include/asm/hypervisor.h
++++ b/arch/x86/include/asm/hypervisor.h
+@@ -30,6 +30,7 @@
+ 	X86_HYPER_KVM,
+ 	X86_HYPER_JAILHOUSE,
+ 	X86_HYPER_ACRN,
++	X86_HYPER_HYDO,
+ };
+ 
+ #ifdef CONFIG_HYPERVISOR_GUEST
+@@ -64,6 +65,7 @@
+ extern const struct hypervisor_x86 x86_hyper_kvm;
+ extern const struct hypervisor_x86 x86_hyper_jailhouse;
+ extern const struct hypervisor_x86 x86_hyper_acrn;
++extern const struct hypervisor_x86 x86_hyper_hydo;
+ extern struct hypervisor_x86 x86_hyper_xen_hvm;
+ 
+ extern bool nopv;
+diff -ruN a/arch/x86/include/asm/msr.h b/arch/x86/include/asm/msr.h
+--- a/arch/x86/include/asm/msr.h
++++ b/arch/x86/include/asm/msr.h
+@@ -6,6 +6,8 @@
+ 
+ #ifndef __ASSEMBLY__
+ 
++#include <asm/hydo.h>
++
+ #include <asm/asm.h>
+ #include <asm/errno.h>
+ #include <asm/cpumask.h>
+@@ -179,11 +181,16 @@
+  */
+ static __always_inline unsigned long long rdtsc(void)
+ {
++#ifdef CONFIG_HYDO_KVM_GUEST
++	/* hydo's KVM engine: the exit clock, never the TSC */
++	return hydo_clock();
++#else
+ 	DECLARE_ARGS(val, low, high);
+ 
+ 	asm volatile("rdtsc" : EAX_EDX_RET(val, low, high));
+ 
+ 	return EAX_EDX_VAL(val, low, high);
++#endif
+ }
+ 
+ /**
+@@ -196,6 +203,9 @@
+  */
+ static __always_inline unsigned long long rdtsc_ordered(void)
+ {
++#ifdef CONFIG_HYDO_KVM_GUEST
++	return hydo_clock();
++#else
+ 	DECLARE_ARGS(val, low, high);
+ 
+ 	/*
+@@ -220,6 +230,7 @@
+ 			:: "ecx");
+ 
+ 	return EAX_EDX_VAL(val, low, high);
++#endif
+ }
+ 
+ static inline unsigned long long native_read_pmc(int counter)
+diff -ruN a/arch/x86/include/asm/tlbflush.h b/arch/x86/include/asm/tlbflush.h
+--- a/arch/x86/include/asm/tlbflush.h
++++ b/arch/x86/include/asm/tlbflush.h
+@@ -355,6 +355,10 @@
+ 	if (!(pte_flags(oldpte) & _PAGE_PRESENT))
+ 		return false;
+ 
++	/* hydo: no stale entry may outlive a change (a spurious fault is host-dependent) */
++	if (hydo_strict_tlb())
++		return true;
++
+ 	/* PFN changed ; needs flush */
+ 	if (pte_pfn(oldpte) != pte_pfn(newpte))
+ 		return true;
+@@ -377,6 +381,9 @@
+ 	/* !PRESENT -> * ; no need for flush */
+ 	if (!(pmd_flags(oldpmd) & _PAGE_PRESENT))
+ 		return false;
++
++	if (hydo_strict_tlb())
++		return true;
+ 
+ 	/* PFN changed ; needs flush */
+ 	if (pmd_pfn(oldpmd) != pmd_pfn(newpmd))
+diff -ruN a/arch/x86/kernel/Makefile b/arch/x86/kernel/Makefile
+--- a/arch/x86/kernel/Makefile
++++ b/arch/x86/kernel/Makefile
+@@ -115,6 +115,7 @@
+ obj-$(CONFIG_DEBUG_NMI_SELFTEST) += nmi_selftest.o
+ 
+ obj-$(CONFIG_KVM_GUEST)		+= kvm.o kvmclock.o
++obj-$(CONFIG_HYDO_KVM_GUEST)	+= hydo.o
+ obj-$(CONFIG_PARAVIRT)		+= paravirt.o
+ obj-$(CONFIG_PARAVIRT_SPINLOCKS)+= paravirt-spinlocks.o
+ obj-$(CONFIG_PARAVIRT_CLOCK)	+= pvclock.o
+diff -ruN a/arch/x86/kernel/cpu/hypervisor.c b/arch/x86/kernel/cpu/hypervisor.c
+--- a/arch/x86/kernel/cpu/hypervisor.c
++++ b/arch/x86/kernel/cpu/hypervisor.c
+@@ -45,6 +45,9 @@
+ #ifdef CONFIG_ACRN_GUEST
+ 	&x86_hyper_acrn,
+ #endif
++#ifdef CONFIG_HYDO_KVM_GUEST
++	&x86_hyper_hydo,
++#endif
+ };
+ 
+ enum x86_hypervisor_type x86_hyper_type;
+diff -ruN a/arch/x86/kernel/hydo.c b/arch/x86/kernel/hydo.c
+--- /dev/null
++++ b/arch/x86/kernel/hydo.c
+@@ -0,0 +1,198 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * The guest of hydo's KVM engine (hydo/crates/hydo-kvm, docs/design/kvm-engine.md).
++ *
++ * The engine runs one vCPU on stock KVM with no in-kernel interrupt
++ * controller and counts the VM exits that reach it: that count is the
++ * machine's only clock, and every interrupt is delivered at such an exit.
++ * This file makes Linux take all of its time from that clock:
++ *
++ *  - a clocksource and sched_clock that read HYDO_PORT_CLOCK (asm/hydo.h);
++ *  - a one-shot clock event device on IRQ 0 of the 8259 PIC, armed through
++ *    HYDO_PORT_TIMER (the engine's CPUID hides the local APIC, the TSC,
++ *    the TSC deadline timer, kvmclock and every other KVM feature);
++ *  - the wall clock at boot from HYDO_PORT_WALL, no CMOS RTC;
++ *  - a preset delay loop (the calibration would spin without an exit);
++ *  - CR4.TSD, so user-space RDTSC faults and is emulated with the same
++ *    clock in the #GP handler (hydo_emulate_rdtsc);
++ *  - power off and reset through HYDO_PORT_CTL;
++ *  - a TLB flush at every change of a present page-table entry, so no
++ *    spurious page fault depends on what the host's TLB kept (asm/hydo.h);
++ *  - a clock read (an exit) in every sched_yield, so a thread that yields
++ *    while it waits sees time move (kernel/sched/core.c).
++ *
++ * rdtsc() and rdtsc_ordered() themselves read HYDO_PORT_CLOCK in this
++ * configuration (asm/msr.h), so no kernel path reads the TSC.
++ */
++
++#include <linux/init.h>
++#include <linux/clocksource.h>
++#include <linux/clockchips.h>
++#include <linux/interrupt.h>
++#include <linux/delay.h>
++#include <linux/jiffies.h>
++#include <linux/pm.h>
++#include <linux/uaccess.h>
++#include <linux/sched.h>
++#include <asm/cpuid.h>
++#include <asm/hypervisor.h>
++#include <asm/hydo.h>
++#include <asm/io.h>
++#include <asm/paravirt.h>
++#include <asm/x86_init.h>
++#include <asm/time.h>
++#include <asm/tlbflush.h>
++#include <asm/reboot.h>
++
++/* loops_per_jiffy of the delay loop: a fixed value instead of a calibration */
++#define HYDO_LPJ	100000
++
++bool hydo_guest __read_mostly;
++bool hydo_tsd_on __read_mostly;
++
++static u64 hydo_cs_read(struct clocksource *cs)
++{
++	return hydo_clock();
++}
++
++static struct clocksource hydo_cs = {
++	.name	= "hydo",
++	.rating	= 450,
++	.read	= hydo_cs_read,
++	.mask	= CLOCKSOURCE_MASK(64),
++	.flags	= CLOCK_SOURCE_IS_CONTINUOUS,
++};
++
++static noinstr u64 hydo_sched_clock(void)
++{
++	return hydo_clock();
++}
++
++static int hydo_set_next_event(unsigned long delta, struct clock_event_device *evt)
++{
++	outl((u32)delta, HYDO_PORT_TIMER);
++	return 0;
++}
++
++static int hydo_timer_shutdown(struct clock_event_device *evt)
++{
++	outl(0, HYDO_PORT_TIMER);
++	return 0;
++}
++
++static struct clock_event_device hydo_ce = {
++	.name			= "hydo",
++	.features		= CLOCK_EVT_FEAT_ONESHOT,
++	.rating			= 400,
++	.irq			= 0,
++	.set_next_event		= hydo_set_next_event,
++	.set_state_shutdown	= hydo_timer_shutdown,
++	.set_state_oneshot_stopped = hydo_timer_shutdown,
++};
++
++static irqreturn_t hydo_timer_interrupt(int irq, void *dev_id)
++{
++	/* the engine disarmed the timer when it delivered this interrupt */
++	hydo_ce.event_handler(&hydo_ce);
++	return IRQ_HANDLED;
++}
++
++static void __init hydo_time_init(void)
++{
++	clocksource_register_hz(&hydo_cs, NSEC_PER_SEC);
++	if (request_irq(0, hydo_timer_interrupt,
++			IRQF_NOBALANCING | IRQF_IRQPOLL | IRQF_TIMER, "timer", NULL))
++		pr_err("hydo: cannot get IRQ 0 for the timer\n");
++	hydo_ce.cpumask = cpumask_of(0);
++	clockevents_config_and_register(&hydo_ce, NSEC_PER_SEC, 1000, 0xffffffffUL);
++	global_clock_event = &hydo_ce;
++}
++
++static void hydo_get_wallclock(struct timespec64 *ts)
++{
++	ts->tv_sec = hydo_read_pair(HYDO_PORT_WALL);
++	ts->tv_nsec = 0;
++}
++
++static int hydo_set_wallclock(const struct timespec64 *ts)
++{
++	return -ENODEV;
++}
++
++static unsigned long hydo_calibrate(void)
++{
++	return 0;
++}
++
++static void hydo_power_off(void)
++{
++	outl(1, HYDO_PORT_CTL);
++	for (;;)
++		native_halt();
++}
++
++static void hydo_restart(char *cmd)
++{
++	outl(2, HYDO_PORT_CTL);
++	for (;;)
++		native_halt();
++}
++
++bool hydo_emulate_rdtsc(struct pt_regs *regs)
++{
++	unsigned char b[2];
++	u64 t;
++
++	if (!hydo_tsd_on || test_thread_flag(TIF_NOTSC))
++		return false;
++	if (copy_from_user(b, (const void __user *)regs->ip, 2))
++		return false;
++	if (b[0] != 0x0f || b[1] != 0x31)
++		return false;
++	t = hydo_clock();
++	regs->ax = (u32)t;
++	regs->dx = t >> 32;
++	regs->ip += 2;
++	return true;
++}
++
++static int __init hydo_tsd_init(void)
++{
++	if (!hypervisor_is_type(X86_HYPER_HYDO))
++		return 0;
++	cr4_set_bits(X86_CR4_TSD);
++	hydo_tsd_on = true;
++	return 0;
++}
++early_initcall(hydo_tsd_init);
++
++static uint32_t __init hydo_detect(void)
++{
++	return hypervisor_cpuid_base(HYDO_CPUID_SIGNATURE, 0);
++}
++
++static void __init hydo_init_platform(void)
++{
++	hydo_guest = true;
++	x86_init.timers.timer_init = hydo_time_init;
++	x86_platform.calibrate_tsc = hydo_calibrate;
++	x86_platform.calibrate_cpu = hydo_calibrate;
++	x86_platform.get_wallclock = hydo_get_wallclock;
++	x86_platform.set_wallclock = hydo_set_wallclock;
++	x86_platform.legacy.rtc = 0;
++	x86_platform.legacy.i8042 = X86_LEGACY_I8042_PLATFORM_ABSENT;
++	x86_platform.legacy.no_vga = 1;
++	paravirt_set_sched_clock(hydo_sched_clock);
++	preset_lpj = HYDO_LPJ;
++	pm_power_off = hydo_power_off;
++	machine_ops.restart = hydo_restart;
++	pr_info("hydo: the exit clock is the only clock\n");
++}
++
++const __initconst struct hypervisor_x86 x86_hyper_hydo = {
++	.name			= "hydo",
++	.detect			= hydo_detect,
++	.type			= X86_HYPER_HYDO,
++	.init.init_platform	= hydo_init_platform,
++	.ignore_nopv		= true,
++};
+diff -ruN a/arch/x86/kernel/process.c b/arch/x86/kernel/process.c
+--- a/arch/x86/kernel/process.c
++++ b/arch/x86/kernel/process.c
+@@ -295,7 +295,7 @@
+ static void enable_TSC(void)
+ {
+ 	preempt_disable();
+-	if (test_and_clear_thread_flag(TIF_NOTSC))
++	if (test_and_clear_thread_flag(TIF_NOTSC) && !hydo_tsd_forced())
+ 		/*
+ 		 * Must flip the CPU state synchronously with
+ 		 * TIF_NOTSC in the current running context.
+@@ -711,7 +711,7 @@
+ 		wrmsrl(MSR_IA32_DEBUGCTLMSR, debugctl);
+ 	}
+ 
+-	if ((tifp ^ tifn) & _TIF_NOTSC)
++	if (((tifp ^ tifn) & _TIF_NOTSC) && !hydo_tsd_forced())
+ 		cr4_toggle_bits_irqsoff(X86_CR4_TSD);
+ 
+ 	if ((tifp ^ tifn) & _TIF_NOCPUID)
+diff -ruN a/arch/x86/kernel/traps.c b/arch/x86/kernel/traps.c
+--- a/arch/x86/kernel/traps.c
++++ b/arch/x86/kernel/traps.c
+@@ -663,6 +663,9 @@
+ 	}
+ 
+ 	if (user_mode(regs)) {
++		if (hydo_emulate_rdtsc(regs))
++			goto exit;
++
+ 		if (fixup_iopl_exception(regs))
+ 			goto exit;
+ 
+diff -ruN a/arch/x86/mm/pgtable.c b/arch/x86/mm/pgtable.c
+--- a/arch/x86/mm/pgtable.c
++++ b/arch/x86/mm/pgtable.c
+@@ -502,8 +502,15 @@
+ {
+ 	int changed = !pte_same(*ptep, entry);
+ 
+-	if (changed && dirty)
++	if (changed && dirty) {
+ 		set_pte(ptep, entry);
++		/*
++		 * hydo: a stale entry would give a spurious fault later, or not, depending on
++		 * how long the TLB kept it (host-dependent): flush it now.
++		 */
++		if (hydo_strict_tlb())
++			flush_tlb_page(vma, address);
++	}
+ 
+ 	return changed;
+ }
+@@ -607,7 +614,15 @@
+ 	 * shouldn't really matter because there's no real memory
+ 	 * pressure for swapout to react to. ]
+ 	 */
+-	return ptep_test_and_clear_young(vma, address, ptep);
++	int young = ptep_test_and_clear_young(vma, address, ptep);
++
++	/*
++	 * hydo: whether the next access sets the accessed bit again depends on whether the TLB
++	 * still holds the entry (host-dependent), and reclaim decides by that bit: flush it now.
++	 */
++	if (young && hydo_strict_tlb())
++		flush_tlb_page(vma, address);
++	return young;
+ }
+
+ #ifdef CONFIG_TRANSPARENT_HUGEPAGE
+diff -ruN a/kernel/sched/core.c b/kernel/sched/core.c
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -96,6 +96,10 @@
+ #include "../../io_uring/io-wq.h"
+ #include "../smpboot.h"
+ 
++#ifdef CONFIG_HYDO_KVM_GUEST
++#include <asm/hydo.h>
++#endif
++
+ EXPORT_TRACEPOINT_SYMBOL_GPL(ipi_send_cpu);
+ EXPORT_TRACEPOINT_SYMBOL_GPL(ipi_send_cpumask);
+ 
+@@ -8531,6 +8535,15 @@
+ 	struct rq_flags rf;
+ 	struct rq *rq;
+ 
++#ifdef CONFIG_HYDO_KVM_GUEST
++	/*
++	 * hydo: a yield reads the engine's clock, which is an exit, so a thread that yields
++	 * while it waits for a timeout sees the time move and the timer comes (the clock only
++	 * advances at exits, and a yield alone makes none).
++	 */
++	if (hydo_active())
++		hydo_clock();
++#endif
+ 	rq = this_rq_lock_irq(&rf);
+ 
+ 	schedstat_inc(rq->yld_count);

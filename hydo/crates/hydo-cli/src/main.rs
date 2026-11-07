@@ -115,8 +115,15 @@ fn main() {
     unsafe {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
-    let argv: Vec<String> = std::env::args().collect();
-    let ctx = Ctx::new(hydo_config::Config::process());
+    let mut argv: Vec<String> = std::env::args().collect();
+    let mut ctx = Ctx::new(hydo_config::Config::process());
+    // the engine of the commands that run guests (Linux: hvx, or KVM with --backend kvm)
+    if matches!(
+        argv.get(1).map(String::as_str),
+        Some("run" | "repro" | "explore" | "doctor")
+    ) {
+        ctx.take_backend(&mut argv);
+    }
     std::process::exit(dispatch(&ctx, &argv));
 }
 

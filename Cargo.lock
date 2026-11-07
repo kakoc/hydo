@@ -361,6 +361,7 @@ dependencies = [
  "hydo-explore",
  "hydo-history",
  "hydo-image",
+ "hydo-kvm",
  "hydo-manifest",
  "hydo-results",
  "hydo-schedule",
@@ -431,6 +432,7 @@ dependencies = [
  "hydo-hvm",
  "hydo-hvx",
  "hydo-image",
+ "hydo-kvm",
  "hydo-schedule",
  "libc",
  "sha2",
@@ -550,6 +552,18 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "hydo-kvm"
+version = "0.1.0"
+dependencies = [
+ "hydo-config",
+ "hydo-engine-proto",
+ "hydo-hvm",
+ "hydo-hvx",
+ "hydo-schedule",
+ "libc",
 ]
 
 [[package]]

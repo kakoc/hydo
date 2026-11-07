@@ -178,7 +178,7 @@ pub struct ServiceImage {
 /// The engine and the machine it gave the guest.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Engine {
-    /// `hvx` (the Linux kernel module) or `hvm` (Hypervisor.framework on the Mac).
+    /// `hvx` (the Linux kernel module), `hvm` (Hypervisor.framework on the Mac) or `kvm` (stock Linux KVM).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend: Option<String>,
     /// The options passed to the engine (`--ram-mib`, `--vcpus`, `--cpu`).

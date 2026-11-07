@@ -3,7 +3,7 @@
 //! default any more: without it the pool is sized from the machine ([`hydo_engine::Engine::max_workers`]).
 
 pub const USAGE: &str = "usage: hydo explore [--seeds 1-200] [--strategy random|swarm|swarm-pos|process] [--workers N]
-       --image IMG --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm]
+       --image IMG --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm|kvm]
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
        [--freeze-call] [--protocol-faults] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail]
@@ -324,7 +324,7 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "fc-nmax" => a.fc_nmax = int("fc-nmax", v)?,
             "cf-range" => a.cf_range = val,
             "pct-exits" => a.pct_exits = val,
-            "backend" => a.backend = choice("backend", v, &["hvx", "hvm"])?,
+            "backend" => a.backend = choice("backend", v, &["hvx", "hvm", "kvm"])?,
             "hvm-kernel" => a.hvm_kernel = Some(val),
             "manifest" => a.manifest = Some(val),
             "cpu" => a.cpu = Some(choice("cpu", v, &["v2", "v3"])?),

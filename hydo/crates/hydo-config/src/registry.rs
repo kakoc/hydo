@@ -27,6 +27,8 @@ pub enum Group {
     Build,
     /// [`crate::hvm::Engine`] and [`crate::hvm::Options`]: the Mac engine (hydo-engine, hydo-hvm).
     Hvm,
+    /// [`crate::kvm::Engine`] and [`crate::kvm::Options`]: the KVM engine (hydo-engine, hydo-kvm).
+    Kvm,
     /// [`crate::run::Control`]: the host controller of agent images (hydo-control).
     Control,
     /// [`crate::run::Cli`]: the `hydo` command.
@@ -313,6 +315,41 @@ variables! {
     /// Set: do not mlock guest RAM.
     HVMX_NO_MLOCK: Hvm, Developer, "flag: set", "", "hydo-hvm";
 
+    // ------------------------------------------------------------------ Kvm
+    /// Where the KVM engine runs: `process` as the program `hydo-kvm`; else on a thread of this
+    /// process (KVM allows several VMs in one process).
+    HYDO_KVM: Kvm, User, "word: process", "in this process", "hydo-engine";
+    /// The KVM engine program (an empty value means the default).
+    HYDO_KVM_ENGINE: Kvm, Developer, "path", "<root>/target/release/hydo-kvm, else <root>/bin/hydo-kvm", "hydo-engine";
+    /// The KVM engine's guest kernel (else the twin of the image's recorded x86_64 kernel,
+    /// `bzImage-kvm`, found by sha256 where the image's kernel is looked up).
+    HYDO_KVM_KERNEL: Kvm, User, "path", "bzImage-kvm, by sha256", "hydo-engine, hydo-cli";
+    /// The KVM device.
+    HYDO_KVM_DEV: Kvm, Developer, "path", "/dev/kvm", "hydo-kvm, hydo-cli";
+    /// Nanoseconds of the guest's clock per VM exit.
+    HYDO_KVM_STEP: Kvm, Developer, "number", "2500", "hydo-kvm";
+    /// The engine's exit budget per phase of a run.
+    HYDO_KVM_RUN_EXITS: Kvm, Developer, "number", "50000000", "hydo-kvm";
+    /// Seconds of host time without a VM exit after which the run ends as a SPIN.
+    HYDO_KVM_SPIN_SECS: Kvm, Developer, "number", "10", "hydo-kvm";
+    /// Milliseconds of host time without a VM exit before the spin observer looks for a cycle
+    /// (a hint only: what it decides does not depend on when it looks).
+    HYDO_KVM_SPIN_MS: Kvm, Developer, "number", "5", "hydo-kvm";
+    /// One line per VM exit into this file.
+    HYDO_KVM_TRACE: Kvm, Developer, "path", "", "hydo-kvm";
+    /// Set: copy the console to stdout as it is written (the program).
+    HYDO_KVM_ECHO: Kvm, Developer, "flag: set", "", "hydo-kvm";
+    /// Set: per-component hashes of a run's end state into `<outdir>/<tag>.diag`.
+    HYDO_KVM_DIAG: Kvm, Developer, "flag: set", "", "hydo-kvm";
+    /// With HYDO_KVM_DIAG: the first this many MiB of guest RAM are written next to each
+    /// fingerprint (`<outdir>/<tag>.<phase>.ram`).
+    HYDO_KVM_DIAG_RAM: Kvm, Developer, "number", "0", "hydo-kvm";
+    /// Set: log every MSR access and I/O port the engine's model does not know.
+    HYDO_KVM_TRACE_UNKNOWN: Kvm, Developer, "flag: set", "", "hydo-kvm";
+    /// `kvm`: the `hydo` command runs x86_64 images on the KVM engine instead of hvx (Linux;
+    /// `--backend kvm` does the same for one command).
+    HYDO_BACKEND: Kvm, User, "word: hvx | kvm", "hvx", "hydo-cli";
+
     // ------------------------------------------------------------------ Control
     /// `0`: the host does not run a SPIN of an agent image on hvm again in the rewind mode
     /// (`hydo-hvm hvm` reads it too: `1` turns the rewind mode on).
@@ -389,6 +426,8 @@ variables! {
     HYDO_RELEASE_SCHEMA: Tests, Test, "flag", "off", "hydo-results, hydo-agent-proto tests";
     /// Keep the Compose test's scratch files here.
     HYDO_COMPOSE_KEEP: Tests, Test, "path", "", "hydo-compose tests";
+    /// Where the KVM ABI probe finds `linux/kvm.h` (the Linux UAPI headers).
+    HYDO_KVM_HEADERS: Tests, Test, "path", "/usr/include", "hydo-kvm tests";
     /// Dump the controller tests' transcripts here.
     HYDO_CONTROL_DUMP: Tests, Test, "path", "", "hydo-control tests";
     /// Set: the controller tests' full seed ranges.
@@ -604,6 +643,10 @@ pub fn inventory_markdown() -> String {
         (
             Group::Hvm,
             "The Mac engine (`hydo_config::hvm::Engine`, `hydo_config::hvm::Options`)",
+        ),
+        (
+            Group::Kvm,
+            "The KVM engine (`hydo_config::kvm::Engine`, `hydo_config::kvm::Options`)",
         ),
         (
             Group::Control,
