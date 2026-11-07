@@ -1,5 +1,8 @@
 [package]
 name = "hydo-grpc-gen"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo-grpc-gen: gRPC drivers for a hydo project from its .proto files, a descriptor set or a server's reflection"
 version.workspace = true
 edition.workspace = true
@@ -16,6 +19,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "hydo-grpc-gen"
 path = "src/bin/hydo-grpc-gen.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 [dependencies]
 hydo-config = { workspace = true }
@@ -32,3 +37,15 @@ serde_json = { workspace = true }
 h2 = "0.4"
 http = "1"
 bytes = "1"
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"
+
+# its own test program (ci/consolidate-tests.sh): it sets HYDO_SEED, HYDO_OUTCOMES, HYDO_ACKED
+# and HYDO_GRPC_CONSOLE in the process environment (under its own lock); the other tests of the
+# crate would see them under cargo test, which runs one program's tests as threads of one process
+[[test]]
+name = "client"
+path = "tests/client.rs"

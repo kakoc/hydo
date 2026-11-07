@@ -1,5 +1,8 @@
 [package]
 name = "hydo-hvx"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "The hvx run engine in Rust: drives /dev/hvx through its ioctls (hv/hvx/hvx_abi.h); in-process or as the hydo-hvx program (the C hvx_explore's command line and protocol)"
 version.workspace = true
 edition.workspace = true
@@ -33,6 +36,13 @@ cc = { version = "1", optional = true }
 [[bin]]
 name = "hydo-hvx"
 path = "src/bin/hydo-hvx.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 [dev-dependencies]
 sha2 = { workspace = true }
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

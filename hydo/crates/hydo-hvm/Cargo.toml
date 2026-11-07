@@ -28,3 +28,5 @@ hydo-config = { workspace = true }
 [[bin]]
 name = "hydo-hvm"
 path = "src/bin/hydo-hvm.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false

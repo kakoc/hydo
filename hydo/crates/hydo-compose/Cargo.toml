@@ -1,5 +1,8 @@
 [package]
 name = "hydo-compose"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo compose: a docker-compose.yaml becomes a starting hydo.yaml (images pinned by digest)"
 version.workspace = true
 edition.workspace = true
@@ -18,10 +21,14 @@ doctest = false
 [[bin]]
 name = "hydo-compose"
 path = "src/bin/hydo-compose.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 [[bin]]
 name = "hydo-fetch-image"
 path = "src/bin/hydo-fetch-image.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 [dependencies]
 hydo-manifest = { workspace = true }
@@ -36,3 +43,8 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 [dev-dependencies]
 serde = { workspace = true }
 libc = "0.2"
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

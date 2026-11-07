@@ -11,7 +11,7 @@
 //!   folder, or one `*.yaml` / `*.json` file) and `model.json`, the model it reads into. `INDEX`
 //!   lists every case; a case is never removed or changed, a later format adds its own.
 //!
-//! `HYDO_BLESS=1 cargo test -p hydo-manifest --test format` rewrites the schema and writes the
+//! `HYDO_BLESS=1 cargo test -p hydo-manifest --test it format::` rewrites the schema and writes the
 //! `model.json` of a NEW case (one listed in INDEX without a model.json); a model.json that exists
 //! is never rewritten.
 
@@ -54,7 +54,7 @@ fn schema_file_is_generated_from_the_model() {
     let committed = std::fs::read_to_string(&p).unwrap_or_default();
     assert!(
         committed == now,
-        "{} is not the schema of the model in src/model.rs; HYDO_BLESS=1 cargo test -p hydo-manifest --test format rewrites it (and the additions-only test then checks the change)",
+        "{} is not the schema of the model in src/model.rs; HYDO_BLESS=1 cargo test -p hydo-manifest --test it format:: rewrites it (and the additions-only test then checks the change)",
         p.display()
     );
 }

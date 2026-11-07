@@ -11,7 +11,7 @@
 //! - Every message kind round-trips through the codec with every field and with the required
 //!   fields only, and what the codec writes is valid by the schema.
 
-mod common;
+use crate::common;
 
 use common::{sample, schema_dir, validate};
 use hydo_agent_proto::json::{self, Value};
@@ -57,7 +57,7 @@ fn the_committed_schema_is_the_generated_one() {
     assert!(
         want == current(),
         "{} differs from the schema generated from the types; review the change and rewrite it \
-         with HYDO_BLESS=1 cargo test -p hydo-agent-proto --test schema",
+         with HYDO_BLESS=1 cargo test -p hydo-agent-proto --test it schema::",
         p.display()
     );
 }

@@ -8,6 +8,9 @@
 # on its own.
 [package]
 name = "hydo-agent-proto"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo's host-agent protocol: messages, canonical JSON, console framing, the host session with the version rule, the generated schema and the example transcripts"
 version = "0.1.0"
 edition = "2021"
@@ -28,3 +31,8 @@ doctest = false
 [dev-dependencies]
 hydo-schema-compat = { path = "../hydo-schema-compat" }
 serde_json = { version = "1", features = ["preserve_order"] }
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

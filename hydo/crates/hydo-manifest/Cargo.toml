@@ -1,5 +1,8 @@
 [package]
 name = "hydo-manifest"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo's project format as types: hydo.yaml, a plan's test: section and the hydo/ folder"
 version.workspace = true
 edition.workspace = true
@@ -27,3 +30,8 @@ serde_path_to_error = "0.1.20"
 
 [dev-dependencies]
 hydo-schema-compat = { path = "../hydo-schema-compat" }
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

@@ -7,7 +7,7 @@
 //! - together they show every op, every reply, every error code the agent can give for a host line
 //!   and every event, apart from the ones named in [`NOT_YET`] (they need a guest; see there).
 
-mod common;
+use crate::common;
 
 use std::collections::BTreeSet;
 

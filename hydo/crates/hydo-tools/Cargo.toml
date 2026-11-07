@@ -17,6 +17,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "hydo-nar-extract"
 path = "src/bin/hydo-nar-extract.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 # hydo/dist/linux/nix_cache_fetch.py (the only program here that needs the network, so the only one
 # that needs a C compiler for the target: rustls's ring; the others build with
@@ -24,27 +26,37 @@ path = "src/bin/hydo-nar-extract.rs"
 [[bin]]
 name = "hydo-nix-fetch"
 path = "src/bin/hydo-nix-fetch.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 required-features = ["fetch"]
 
 # hydo/dist/mac/cpio_extract.py
 [[bin]]
 name = "hydo-cpio-extract"
 path = "src/bin/hydo-cpio-extract.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 # hv/hvm/services/elfdeps.py
 [[bin]]
 name = "hydo-elfdeps"
 path = "src/bin/hydo-elfdeps.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 # hydo/grpcgen/build-client.sh: the linker's line in .comment (Milestone 113)
 [[bin]]
 name = "hydo-elf-comment"
 path = "src/bin/hydo-elf-comment.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 # hydo/dist/skill/build-skill-release.sh: the onboarding skill's release assets (Milestone 170)
 [[bin]]
 name = "hydo-skill-pack"
 path = "src/bin/hydo-skill-pack.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 [dependencies]
 hydo-agents = { workspace = true }

@@ -1,5 +1,8 @@
 [package]
 name = "hydo-composer"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "The test composer, host side: the plan's W= token in its seed, resolved and saved forms, the shrinker's candidates, saved regressions, and the files a plan stages into an image"
 version.workspace = true
 edition.workspace = true
@@ -22,3 +25,8 @@ libc = "0.2"
 
 [dev-dependencies]
 sha2 = { workspace = true }
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

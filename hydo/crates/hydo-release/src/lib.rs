@@ -22,7 +22,7 @@
 //!   the same inputs give the same bytes on Linux and on a Mac.
 //!
 //! It also checks that the crates `cargo install hydo` builds can be published to crates.io and
-//! build from there alone ([`publish`], Milestone 169; `cargo test -p hydo-release --test crates`).
+//! build from there alone ([`publish`], Milestone 169; `cargo test -p hydo-release --test it crates::`).
 //!
 //! And it carries the Mac release's signatures apart from its programs ([`signatures`], Milestone
 //! 172): `hydo-release signatures extract` writes the signatures asset from an unsigned and a signed

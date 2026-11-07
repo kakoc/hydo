@@ -26,8 +26,8 @@ path = "junit.xml"
 # not run, and why"); their output is shown at the end of the run.
 [[profile.ci.overrides]]
 filter = '''
-  binary_id(hydo-agents::public_content) | binary_id(hydo-agents::skill_check)
+  (binary_id(hydo-agents::it) & (test(/^public_content::/) | test(/^skill_check::/)))
   | (binary_id(hydo-errors::equivalence) & test(=recorded_files))
-  | (binary_id(hydo::equivalence) & test(=cli_matches_golden))
+  | (binary_id(hydo::it) & test(=equivalence::cli_matches_golden))
 '''
 success-output = "final"

@@ -88,6 +88,9 @@ jobs:
           echo "HYDO_SKILLS_REF=$RUNNER_TEMP/skills-ref/bin/agentskills" >> "$GITHUB_ENV"
       - name: cargo fmt --check
         run: cargo fmt --all --check
+      # every crate's integration tests are one program (docs/CI.md, "One test program per crate")
+      - name: One test program per crate
+        run: sh ci/consolidate-tests.sh --check
       - name: cargo clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Which packages the change can affect

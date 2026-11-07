@@ -27,7 +27,7 @@
 //! (`hydo/onboard/tests`) are not in the pinned set.
 //!
 //! From now on Rust is the reference: after a deliberate change, `HYDO_BLESS=1 cargo test -p
-//! hydo-manifest --test equivalence` rewrites the golden from the Rust answers (the pinned list
+//! hydo-manifest --test it equivalence::` rewrites the golden from the Rust answers (the pinned list
 //! from the tracked files as they are now); review the diff of `tests/golden/answers.txt` before
 //! committing.
 

@@ -10,14 +10,20 @@
 //!   `cargo test --locked --release --workspace`.
 //!
 //! The ids: `<package>` for a library's unit tests, `<package>::bin/<name>` for a program's,
-//! `<package>::<name>` for an integration test (tests/<name>.rs), `<package>::example/<name>` and
-//! `<package>::bench/<name>` for an example or bench with `test = true`, and `<package>::doctest`
-//! for a library's documentation examples (cargo-nextest does not run those, so they are `full`).
+//! `<package>::<name>` for an integration test (tests/<name>.rs: its own test program, or, in a
+//! crate whose integration tests are one program, the module <name> of its program `it`;
+//! ci/consolidate-tests.sh, docs/CI.md "One test program per crate"), `<package>::example/<name>`
+//! and `<package>::bench/<name>` for an example or bench with `test = true`, and
+//! `<package>::doctest` for a library's documentation examples (cargo-nextest does not run those,
+//! so they are `full`).
 //!
-//! This test fails when a test binary of the workspace has no line (a new tests/<name>.rs, a new
-//! program), when a line names a binary that does not exist, when a line is doubled or its tier is
-//! unknown, and when a library with `doctest = false` has a documentation example that rustdoc
-//! would test (it would never run).
+//! This test fails when a test binary or folded test file of the workspace has no line (a new
+//! tests/<name>.rs, a new program), when a line names one that does not exist, when a line is
+//! doubled or its tier is unknown, when a library with `doctest = false` has a documentation
+//! example that rustdoc would test (it would never run), when a tests/*.rs of a workspace crate is
+//! in no test program (a crate with `autotests = false` compiles only the files it names), when a
+//! folded program's tests/main.rs holds a test of its own (no tier line would name it), and when a
+//! program or library with `test = false` has a unit test (it would never run).
 
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -60,8 +66,26 @@ fn kinds(t: &Value) -> Vec<&str> {
         .collect()
 }
 
-/// The test binaries of the workspace (nextest's ids) and, per library with `doctest = false`,
-/// its source directory.
+/// The modules a folded test program's tests/main.rs declares that are test files (tests/<m>.rs),
+/// not support directories (tests/<m>/mod.rs).
+fn folded_modules(main: &Path) -> Vec<String> {
+    let dir = main.parent().unwrap();
+    std::fs::read_to_string(main)
+        .unwrap()
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("mod ")?.strip_suffix(';'))
+        .filter(|m| dir.join(format!("{m}.rs")).is_file())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Whether a target is a crate's one integration-test program (tests/main.rs).
+fn is_folded_program(t: &Value) -> bool {
+    kinds(t).contains(&"test") && t["src_path"].as_str().unwrap().ends_with("/tests/main.rs")
+}
+
+/// The test binaries of the workspace (nextest's ids; for a folded program, its test files'
+/// modules) and, per library with `doctest = false`, its source directory.
 fn binaries(meta: &Value) -> (Vec<String>, Vec<(String, PathBuf)>) {
     let members: Vec<&str> = meta["workspace_members"]
         .as_array()
@@ -82,7 +106,10 @@ fn binaries(meta: &Value) -> (Vec<String>, Vec<(String, PathBuf)>) {
             let lib = k
                 .iter()
                 .any(|k| matches!(*k, "lib" | "rlib" | "proc-macro" | "dylib"));
-            if t["test"].as_bool().unwrap_or(false) {
+            if t["test"].as_bool().unwrap_or(false) && is_folded_program(t) {
+                let main = Path::new(t["src_path"].as_str().unwrap());
+                ids.extend(folded_modules(main).iter().map(|m| format!("{pkg}::{m}")));
+            } else if t["test"].as_bool().unwrap_or(false) {
                 let id = if lib {
                     pkg.to_string()
                 } else if k.contains(&"bin") {
@@ -151,10 +178,10 @@ fn every_test_binary_is_in_a_tier() {
     let stale: Vec<&String> = t.keys().filter(|i| !ids.contains(i)).collect();
     assert!(
         missing.is_empty() && stale.is_empty(),
-        "ci/test-tiers.txt is not the workspace's list of test binaries.\n\
+        "ci/test-tiers.txt is not the workspace's list of test binaries and folded test files.\n\
          Not in a tier (add a line `<id> fast`, or `full` for a slow test whose code rarely \
          changes; docs/CI.md \"Test tiers\"): {missing:?}\n\
-         Listed but not a test binary any more (remove the line): {stale:?}"
+         Listed but not a test binary or folded test file any more (remove the line): {stale:?}"
     );
     for (id, tier) in &t {
         if id.ends_with("::doctest") {
@@ -233,6 +260,136 @@ fn no_documentation_example_is_switched_off() {
         "documentation examples in libraries with `doctest = false` (they would never run): \
          {found:#?}\nRemove `doctest = false` from the package's [lib] and add `<package>::doctest \
          full` to ci/test-tiers.txt, or mark the block `text` or `ignore`."
+    );
+}
+
+/// The workspace members: name, directory and targets.
+fn member_targets(meta: &Value) -> Vec<(String, PathBuf, Vec<Value>)> {
+    let members: Vec<&str> = meta["workspace_members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m.as_str().unwrap())
+        .collect();
+    meta["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| members.contains(&p["id"].as_str().unwrap()))
+        .map(|p| {
+            let dir = Path::new(p["manifest_path"].as_str().unwrap())
+                .parent()
+                .unwrap()
+                .to_path_buf();
+            let targets = p["targets"].as_array().unwrap().clone();
+            (p["name"].as_str().unwrap().to_string(), dir, targets)
+        })
+        .collect()
+}
+
+/// Whether Rust source holds a test (`#[test]`, or a `#[cfg(test)]` item).
+fn has_test(text: &str) -> bool {
+    text.lines().any(|l| {
+        let l = l.trim_start();
+        l.starts_with("#[test]") || l.starts_with("#[cfg(test)]")
+    })
+}
+
+#[test]
+fn every_test_file_is_in_a_test_program() {
+    let meta = metadata();
+    let mut lost = Vec::new();
+    let mut own_tests = Vec::new();
+    for (pkg, dir, targets) in member_targets(&meta) {
+        let tests = dir.join("tests");
+        let Ok(rd) = std::fs::read_dir(&tests) else {
+            continue;
+        };
+        let mut covered: Vec<PathBuf> = Vec::new();
+        for t in &targets {
+            let src = PathBuf::from(t["src_path"].as_str().unwrap());
+            if is_folded_program(t) {
+                for m in folded_modules(&src) {
+                    covered.push(tests.join(format!("{m}.rs")));
+                }
+                if has_test(&std::fs::read_to_string(&src).unwrap()) {
+                    own_tests.push(src.display().to_string());
+                }
+            }
+            covered.push(src);
+        }
+        let mut files: Vec<PathBuf> = rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "rs"))
+            .collect();
+        files.sort();
+        for f in files {
+            if !covered.contains(&f) {
+                lost.push(format!("{pkg}: {}", f.display()));
+            }
+        }
+    }
+    assert!(
+        lost.is_empty(),
+        "integration-test files in no test program (their crate has `autotests = false`, so \
+         Cargo compiles only the files tests/main.rs or a [[test]] names): {lost:#?}\nRun \
+         ci/consolidate-tests.sh, then cargo fmt (docs/CI.md \"One test program per crate\")."
+    );
+    assert!(
+        own_tests.is_empty(),
+        "a crate's tests/main.rs is written by ci/consolidate-tests.sh and holds only module \
+         declarations; move these tests into a tests/<name>.rs: {own_tests:#?}"
+    );
+}
+
+#[test]
+fn no_unit_test_is_switched_off() {
+    let meta = metadata();
+    let mut found = Vec::new();
+    for (pkg, _dir, targets) in member_targets(&meta) {
+        let bins: Vec<PathBuf> = targets
+            .iter()
+            .filter(|t| kinds(t).contains(&"bin"))
+            .map(|t| PathBuf::from(t["src_path"].as_str().unwrap()))
+            .collect();
+        for t in &targets {
+            if t["test"].as_bool().unwrap_or(false) {
+                continue;
+            }
+            let k = kinds(t);
+            let src = PathBuf::from(t["src_path"].as_str().unwrap());
+            let name = t["name"].as_str().unwrap();
+            if k.contains(&"bin") {
+                // a program with `test = false` is one file: modules of its own could hold tests
+                let text = std::fs::read_to_string(&src).unwrap();
+                let modules = text.lines().any(|l| {
+                    let l = l.trim_start();
+                    (l.starts_with("mod ") || l.starts_with("pub mod ")) && l.ends_with(';')
+                });
+                if has_test(&text) || modules {
+                    found.push(format!("{pkg} program {name}: {}", src.display()));
+                }
+            } else if k.iter().any(|k| matches!(*k, "lib" | "rlib")) {
+                // a library with `test = false`: every file of its directory but the programs'
+                let mut files = Vec::new();
+                rust_files(src.parent().unwrap(), &mut files);
+                for f in files {
+                    if bins.contains(&f) || f.components().any(|c| c.as_os_str() == "bin") {
+                        continue;
+                    }
+                    if has_test(&std::fs::read_to_string(&f).unwrap()) {
+                        found.push(format!("{pkg} library: {}", f.display()));
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "unit tests in a program or library with `test = false` (they would never run): \
+         {found:#?}\nRemove `test = false` from its [[bin]] or [lib] in Cargo.toml and add its \
+         line to ci/test-tiers.txt (`<package>::bin/<name> fast` or `<package> fast`)."
     );
 }
 

@@ -17,7 +17,7 @@ The `hydo` program itself is published through the GitHub release (docs/RELEASIN
 
 Every package has the version of `hydo/VERSION` (and of the Cargo workspace), the license
 Apache-2.0, a copy of the repository's `LICENSE` and the repository `https://github.com/kakoc/hydo`.
-The test `cargo test -p hydo-release --test sdks` checks this, and that the Go module `sdk/go`
+The test `cargo test -p hydo-release --test it sdks::` checks this, and that the Go module `sdk/go`
 holds the same code as the frozen copy in `hydo/stack` apart from the documented differences
 (`sdk/go/README.md`, "Two copies").
 
@@ -94,7 +94,7 @@ registry and PyPI twine's default repository; the commands name them anyway.
 ## Before publishing (on the release commit)
 
 ```sh
-cargo test --locked --release -p hydo-release --test sdks              # names, versions, licenses, Go copies
+cargo test --locked --release -p hydo-release --test it sdks::              # names, versions, licenses, Go copies
 (cd sdk/rust && cargo test)                                            # the Rust SDK and its shared cases
 (cd sdk/rust-test && cargo test --workspace)                           # unpublished, but it uses hydo-assert
 (cd sdk/go && go vet ./... && go test ./...)                            # and GOTOOLCHAIN=go1.26.5 go test ./...
@@ -294,7 +294,7 @@ change would move the agent's bytes and every image; at a later release it is pu
 only when its version changed. Its `HYDO_VERSION` (in the host's messages about agent versions)
 is its package version, so those messages name 0.1.0 until it is bumped.
 
-The check `cargo test -p hydo-release --test crates` fails when any crate the `hydo` package
+The check `cargo test -p hydo-release --test it crates::` fails when any crate the `hydo` package
 depends on is not publishable: missing metadata, a version other than `hydo/VERSION`, a
 dependency without its version, a dev-dependency with a version, tests in the package, a file
 it includes from outside its directory, a build script that names a path outside the crate (one
@@ -325,7 +325,7 @@ or a commit message.
 
 ```sh
 cargo fmt --check && cargo clippy --locked --release --workspace --all-targets -- -D warnings
-cargo test --locked --release --workspace                  # includes -p hydo-release --test crates
+cargo test --locked --release --workspace                  # includes -p hydo-release --test it crates::
 hydo/dist/crates/rehearse.sh                               # the dry run, below
 HYDO_REHEARSAL_LINUX=1 hydo/dist/crates/rehearse.sh         # also checks the Linux code (musl target)
 ```

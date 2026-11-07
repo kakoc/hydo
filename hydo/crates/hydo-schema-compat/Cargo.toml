@@ -3,6 +3,9 @@
 # uses it as a dev-dependency, so no format crate depends on another one.
 [package]
 name = "hydo-schema-compat"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo's additions-only rule as a check of two JSON Schemas: the released schema of a format version and the one generated now"
 version.workspace = true
 edition.workspace = true
@@ -14,6 +17,13 @@ publish = false
 [lib]
 # no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)
 doctest = false
+# no unit test, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 [dependencies]
 serde_json = { workspace = true }
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

@@ -28,13 +28,13 @@
 //! ident.py: hvm never gets cf= (restore the script with
 //! `git show 2a58c4b:hydo/crates/hydo-explore/tests/ident.py`). The example manifests (and their
 //! `hydo/` folders) are pinned in the golden; if one changes or a new one appears, the test says so,
-//! and after the new answers are checked, `HYDO_BLESS=1 cargo test -p hydo-explore --test identity`
+//! and after the new answers are checked, `HYDO_BLESS=1 cargo test -p hydo-explore --test it identity::`
 //! (once more with HYDO_IDENT_FULL=1) re-records the goldens from the Rust output, which is the
 //! reference from now on. By default the quick stream runs (ident.py --quick: the first four
 //! groups and every fifth after them, 40 seeds); HYDO_IDENT_FULL=1 runs the full one (300 seeds,
 //! every group).
 
-mod support;
+use crate::support;
 
 use hydo_explore::compose;
 use hydo_explore::gen::{fc_value, Backend, Ex};
