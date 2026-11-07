@@ -1,6 +1,6 @@
 //! The repository check of the skills in `skills/` (it replaced skills/check.py in M108): the
-//! Agent Skills specification (https://agentskills.io/specification) and the copies the skill keeps
-//! of repository files.
+//! Agent Skills specification (https://agentskills.io/specification), the skill's version and its
+//! Claude Code plugin entry, and the guide (hydo/guide/) the skill relies on (Milestone 170).
 //!
 //! 1. skills-ref (https://github.com/agentskills/agentskills/tree/main/skills-ref), when
 //!    `$HYDO_SKILLS_REF` names it or `skills-ref` is on PATH: `skills-ref validate <skill>` must
@@ -10,7 +10,13 @@
 //!    1-1024 chars; compatibility 1-500 chars; metadata a map of strings; only the allowed
 //!    frontmatter keys; SKILL.md under 500 lines; every relative file it links exists and is one
 //!    level deep (references/x.md, assets/x, scripts/x).
-//! 3. Copies stay in sync: assets/example-redis-composed/hydo/ equals
+//! 3. The skill's own release: `metadata.version` and `metadata.hydo-min` are versions, the
+//!    marketplace `.claude-plugin/marketplace.json` lists `./skills/<name>` as a plugin of the same
+//!    version, and the folder holds nothing Claude Code would load as another plugin component.
+//! 4. Every `hydo guide <topic>` that the skill or the guide names is a topic of hydo/guide/ (or
+//!    manifest, schema, skill, examples/..., init/...), so the process never points at a fact the
+//!    guide lacks.
+//! 5. Copies stay in sync: hydo/guide/examples/example-redis-composed/hydo/ equals
 //!    hydo/onboard/examples/redis-composed/hydo/ (bytes and executable bits), and the tool
 //!    directories .claude/skills/<name> and .agents/skills/<name> are symlinks to skills/<name>.
 //!
@@ -253,6 +259,120 @@ fn same_tree(a: &Path, b: &Path) -> Vec<String> {
     diff
 }
 
+/// The names `hydo guide` answers: the guide's top-level topics, the built-in ones, and the
+/// `examples/` and `init/` paths.
+fn guide_names(root: &Path) -> Vec<String> {
+    let mut v: Vec<String> = names(&root.join("hydo/guide"))
+        .into_keys()
+        .filter_map(|n| n.strip_suffix(".md").map(str::to_string))
+        .collect();
+    v.extend(["manifest", "schema", "skill", "examples", "init"].map(String::from));
+    v
+}
+
+/// Every `hydo guide <name>` written in the files below `dir` names something the guide has.
+fn guide_mentions(root: &Path, dir: &Path, what: &str, r: &mut Report) {
+    let known = guide_names(root);
+    let re = Regex::new(r"hydo guide ([a-z][a-z0-9-]*)").unwrap();
+    let mut stack = vec![dir.to_path_buf()];
+    let mut n = 0;
+    while let Some(d) = stack.pop() {
+        for (name, p) in names(&d) {
+            if p.is_dir() {
+                stack.push(p);
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&p) else {
+                continue;
+            };
+            for c in re.captures_iter(&text) {
+                n += 1;
+                if !known.iter().any(|k| *k == c[1]) {
+                    r.bad.push(format!(
+                        "{what}/{}: `hydo guide {}` is not a topic of hydo/guide/",
+                        p.strip_prefix(dir).unwrap_or(Path::new(&name)).display(),
+                        &c[1]
+                    ));
+                }
+            }
+        }
+    }
+    r.info.push(format!(
+        "topics: {what}: {n} `hydo guide <topic>` mentions, all known"
+    ));
+}
+
+/// The skill's version and the oldest hydo it supports (`metadata.version`, `metadata.hydo-min`)
+/// are dotted numbers, and the Claude Code marketplace lists the skill folder as a plugin of the
+/// same version, with nothing in the folder that Claude Code would load as another component.
+fn check_plugin(root: &Path, d: &Path, r: &mut Report) {
+    let name = d.file_name().unwrap().to_string_lossy().into_owned();
+    let text = std::fs::read_to_string(d.join("SKILL.md")).unwrap_or_default();
+    let fm = frontmatter(&text).unwrap_or_default();
+    let meta = match get(&fm, "metadata") {
+        Some(V::M(m)) => m.clone(),
+        _ => BTreeMap::new(),
+    };
+    let num = Regex::new(r"^[0-9]+\.[0-9]+\.[0-9]+$").unwrap();
+    for k in ["version", "hydo-min"] {
+        match meta.get(k) {
+            Some(v) if num.is_match(v) => {}
+            v => r.bad.push(format!(
+                "{name}: metadata.{k} must be a version like 1.0.0 (got {v:?})"
+            )),
+        }
+    }
+    for c in [
+        "skills",
+        "commands",
+        "agents",
+        "hooks",
+        "bin",
+        ".claude-plugin",
+        ".mcp.json",
+    ] {
+        if d.join(c).exists() {
+            r.bad.push(format!(
+                "{name}: {c} in the skill folder would be loaded by Claude Code as a plugin component"
+            ));
+        }
+    }
+    let mp = root.join(".claude-plugin/marketplace.json");
+    let Ok(m) = std::fs::read(&mp)
+        .map_err(|e| e.to_string())
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).map_err(|e| e.to_string()))
+    else {
+        r.bad
+            .push(".claude-plugin/marketplace.json is missing or not JSON".into());
+        return;
+    };
+    let src = format!("./skills/{name}");
+    let entry = m["plugins"].as_array().and_then(|a| {
+        a.iter()
+            .find(|p| p["source"].as_str() == Some(src.as_str()))
+    });
+    match entry {
+        None => r.bad.push(format!(
+            ".claude-plugin/marketplace.json has no plugin with source {src}"
+        )),
+        Some(e) => {
+            if e["version"].as_str() != meta.get("version").map(String::as_str) {
+                r.bad.push(format!(
+                    ".claude-plugin/marketplace.json gives {name} version {}, its SKILL.md {:?}",
+                    e["version"],
+                    meta.get("version")
+                ));
+            }
+            r.info.push(format!(
+                "plugin: {}@{} from {src}, version {}",
+                e["name"].as_str().unwrap_or("?"),
+                m["name"].as_str().unwrap_or("?"),
+                e["version"]
+            ));
+        }
+    }
+}
+
 fn check(root: &Path, exe: Option<&Path>) -> Report {
     let mut r = Report::default();
     let here = root.join("skills");
@@ -268,7 +388,9 @@ fn check(root: &Path, exe: Option<&Path>) -> Report {
             ),
         }
         check_skill(d, &mut r);
+        check_plugin(root, d, &mut r);
         let n = d.file_name().unwrap().to_string_lossy().into_owned();
+        guide_mentions(root, d, &format!("skills/{n}"), &mut r);
         for tool in [".claude/skills", ".agents/skills"] {
             let p = root.join(tool).join(&n);
             let link = std::fs::symlink_metadata(&p).is_ok_and(|m| m.file_type().is_symlink());
@@ -278,16 +400,17 @@ fn check(root: &Path, exe: Option<&Path>) -> Report {
             }
         }
     }
-    let ex = here.join("hydo-onboard/assets/example-redis-composed/hydo");
+    guide_mentions(root, &root.join("hydo/guide"), "hydo/guide", &mut r);
+    let ex = root.join("hydo/guide/examples/example-redis-composed/hydo");
     let src = root.join("hydo/onboard/examples/redis-composed/hydo");
     let d = same_tree(&src, &ex);
     if d.is_empty() {
         r.info.push(
-            "sync: assets/example-redis-composed/hydo equals hydo/onboard/examples/redis-composed/hydo".into(),
+            "sync: hydo/guide/examples/example-redis-composed/hydo equals hydo/onboard/examples/redis-composed/hydo".into(),
         );
     } else {
         r.bad.push(format!(
-            "assets/example-redis-composed/hydo differs from hydo/onboard/examples/redis-composed/hydo: {} (copy it again: rm -r {} && cp -Rp {} {})",
+            "hydo/guide/examples/example-redis-composed/hydo differs from hydo/onboard/examples/redis-composed/hydo: {} (copy it again: rm -r {} && cp -Rp {} {})",
             d.join(", "),
             ex.display(),
             src.display(),
@@ -317,8 +440,8 @@ fn the_skills_hold_the_specification_and_their_copies() {
 
 // ---------------------------------------------------------------- the check fails when it should
 
-/// A scratch copy of what the check reads: skills/, the two tool symlinks (relative, so they
-/// point into the copy) and the example the skill copies.
+/// A scratch copy of what the check reads: skills/, the guide, the marketplace file, the two
+/// tool symlinks (relative, so they point into the copy) and the example the guide copies.
 fn copy_tree() -> PathBuf {
     static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let d = std::env::temp_dir().join(format!(
@@ -331,6 +454,8 @@ fn copy_tree() -> PathBuf {
     std::fs::create_dir_all(d.join("hydo/onboard/examples/redis-composed")).unwrap();
     for (from, to) in [
         ("skills", "."),
+        (".claude-plugin", "."),
+        ("hydo/guide", "hydo"),
         (
             "hydo/onboard/examples/redis-composed/hydo",
             "hydo/onboard/examples/redis-composed",
@@ -371,6 +496,8 @@ fn edit_skill(d: &Path, f: impl FnOnce(String) -> String) {
     std::fs::write(&p, f(t)).unwrap();
 }
 
+const EXAMPLE: &str = "hydo/guide/examples/example-redis-composed/hydo";
+
 #[test]
 fn a_broken_link_fails() {
     let bad = bad_after(|d| edit_skill(d, |t| t + "\nSee [gone](references/no-such-file.md).\n"));
@@ -394,23 +521,26 @@ fn a_link_two_levels_deep_fails() {
 }
 
 #[test]
-fn a_changed_asset_byte_fails() {
+fn a_changed_example_byte_fails() {
     let bad = bad_after(|d| {
-        let p = d.join("skills/hydo-onboard/assets/example-redis-composed/hydo/hydo.yaml");
+        let p = d.join(EXAMPLE).join("hydo.yaml");
         let mut b = std::fs::read(&p).unwrap();
         b[0] ^= 0x20;
         std::fs::write(&p, b).unwrap();
     });
     assert_eq!(bad.len(), 1, "{bad:?}");
-    assert!(bad[0].starts_with(
-        "assets/example-redis-composed/hydo differs from hydo/onboard/examples/redis-composed/hydo: hydo.yaml (copy it again"
-    ), "{bad:?}");
+    assert!(
+        bad[0].starts_with(&format!(
+        "{EXAMPLE} differs from hydo/onboard/examples/redis-composed/hydo: hydo.yaml (copy it again"
+    )),
+        "{bad:?}"
+    );
 }
 
 #[test]
 fn a_lost_executable_bit_fails() {
     let bad = bad_after(|d| {
-        let root = d.join("skills/hydo-onboard/assets/example-redis-composed/hydo");
+        let root = d.join(EXAMPLE);
         // the first executable file of the copy
         let mut stack = vec![root.clone()];
         while let Some(x) = stack.pop() {
@@ -455,5 +585,49 @@ fn a_wrong_name_and_a_missing_symlink_fail() {
             "hydo-onboard: name 'Hydo_Onboard' is not the directory name",
             ".agents/skills/hydo-onboard is not a symlink to skills/hydo-onboard",
         ]
+    );
+}
+
+#[test]
+fn a_skill_version_the_plugin_does_not_have_fails() {
+    let bad = bad_after(|d| {
+        edit_skill(d, |t| {
+            t.replacen("  version: \"1.0.0\"", "  version: \"1.0.1\"", 1)
+        })
+    });
+    assert_eq!(bad.len(), 1, "{bad:?}");
+    assert!(
+        bad[0].starts_with(".claude-plugin/marketplace.json gives hydo-onboard version \"1.0.0\""),
+        "{bad:?}"
+    );
+    let bad = bad_after(|d| edit_skill(d, |t| t.replacen("  hydo-min: \"0.1.0\"\n", "", 1)));
+    assert_eq!(
+        bad,
+        ["hydo-onboard: metadata.hydo-min must be a version like 1.0.0 (got None)"]
+    );
+}
+
+#[test]
+fn a_plugin_component_in_the_skill_folder_fails() {
+    let bad = bad_after(|d| {
+        std::fs::create_dir_all(d.join("skills/hydo-onboard/hooks")).unwrap();
+    });
+    assert_eq!(
+        bad,
+        ["hydo-onboard: hooks in the skill folder would be loaded by Claude Code as a plugin component"]
+    );
+}
+
+#[test]
+fn a_guide_topic_that_does_not_exist_fails() {
+    let bad = bad_after(|d| edit_skill(d, |t| t + "\nRead `hydo guide no-such-topic`.\n"));
+    assert_eq!(
+        bad,
+        ["skills/hydo-onboard/SKILL.md: `hydo guide no-such-topic` is not a topic of hydo/guide/"]
+    );
+    let bad = bad_after(|d| std::fs::remove_file(d.join("hydo/guide/services.md")).unwrap());
+    assert!(
+        !bad.is_empty() && bad.iter().all(|b| b.contains("`hydo guide services`")),
+        "{bad:?}"
     );
 }

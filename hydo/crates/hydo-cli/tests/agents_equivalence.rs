@@ -116,6 +116,7 @@ fn skill() -> Skill {
     let r = repo();
     let mut files = Vec::new();
     walk(&r.join("skills/hydo-onboard"), &r, &mut files);
+    walk(&r.join("hydo/guide"), &r, &mut files);
     let man = "hydo/onboard/MANIFEST.md".to_string();
     files.push((man.clone(), std::fs::read(r.join(&man)).unwrap()));
     let mut h = Sha256::new();
@@ -279,6 +280,17 @@ fn cases(topics: &[String]) -> Vec<Case> {
         s(&["guide", "references/../SKILL.md"]),
         s(&["guide", "composer.md"]),
         s(&["guide", "SKILL.md"]),
+        // Milestone 170: the guide holds the facts, the skill the process
+        s(&["guide", "skill"]),
+        s(&["guide", "overview"]),
+        s(&["guide", "references/composer.md"]),
+        s(&["guide", "references/install.md"]),
+        s(&["guide", "examples/example-redis-composed/README.md"]),
+        s(&[
+            "guide",
+            "examples/example-redis-composed/hydo/workload/parallel_driver_set",
+        ]),
+        s(&["guide", "init/agents-section.md"]),
     ];
     for t in topics {
         guide.push(s(&["guide", t]));
@@ -300,6 +312,8 @@ fn cases(topics: &[String]) -> Vec<Case> {
             s(&["skill", "install", "--to", "out"]),
             s(&["skill", "install", "--to", "~/elsewhere"]),
             s(&["skill", "install", "--bogus"]),
+            s(&["skill", "update", "--offline", "--to", "out"]),
+            s(&["skill", "update", "--bogus"]),
         ],
     ));
     for a in [
@@ -379,11 +393,11 @@ fn cases(topics: &[String]) -> Vec<Case> {
 }
 
 fn topics() -> Vec<String> {
-    let mut t: Vec<String> = std::fs::read_dir(repo().join("skills/hydo-onboard/references"))
+    let mut t: Vec<String> = std::fs::read_dir(repo().join("hydo/guide"))
         .unwrap()
         .filter_map(Result::ok)
         .map(|e| e.file_name().to_string_lossy().into_owned())
-        .filter(|n| n.ends_with(".md"))
+        .filter(|n| n.ends_with(".md") && n != "overview.md")
         .map(|n| n[..n.len() - 3].to_string())
         .collect();
     t.sort();
@@ -409,10 +423,15 @@ fn rows(root: &Path, paths: bool, sk: &Skill) -> Vec<(String, Value)> {
     }
     if paths {
         let cwd = scratch("paths");
-        let cmds: Vec<Vec<String>> = [["guide", "--path"], ["guide", "--list"], ["skill", "path"]]
-            .iter()
-            .map(|c| c.iter().map(|x| x.to_string()).collect())
-            .collect();
+        let cmds: Vec<Vec<String>> = [
+            ["guide", "--path"],
+            ["guide", "--list"],
+            ["skill", "path"],
+            ["skill", "version"],
+        ]
+        .iter()
+        .map(|c| c.iter().map(|x| x.to_string()).collect())
+        .collect();
         for (k, r) in run_seq(root, &cwd, &cmds, nothing, sk)
             .into_iter()
             .enumerate()

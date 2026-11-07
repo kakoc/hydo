@@ -80,9 +80,10 @@ else
 fi
 ```
 
-More, in a complete folder: `assets/example-redis-composed/hydo/` (SETs, transfers between
+More, in a complete folder (print each file with `hydo guide examples/example-redis-composed/hydo/<file>`;
+`hydo guide examples/example-redis-composed/README.md` lists them): SETs, transfers between
 accounts, an AOF rewrite as a serial driver, a read as an anytime command, seed accounts as a
-`first_` command, a saved regression).
+`first_` command, a saved regression.
 
 ## Options in hydo.yaml
 

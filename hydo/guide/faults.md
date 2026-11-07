@@ -17,7 +17,7 @@ in `hydo guide manifest`.
 | `clock` | step the realtime clock (like an NTP step) | `T=<round>:<seconds>` |
 | `disk` | I/O errors, a lying disk that drops acknowledged writes | host `disk=ioerr:<p>`, `disk=lying:<p>` |
 | `freeze` | stop a service at the n-th packet it sends to or receives from a peer (on a Mac: a release with the second guest kernel) | `F=<svc>><peer>@<round>#<n>:<ms>` |
-| `protocol` | faults on fakes and proxies (outside-services.md) | `H=...` |
+| `protocol` | faults on fakes and proxies (`hydo guide outside-services`) | `H=...` |
 
 Leave out kinds that cannot apply (no `network` for a project whose services have no port).
 A schedule looks like `disk=none dseed=1 | run K=db@5+2 C=12 W=0000002a,p4,q2,r200`: host tokens
@@ -56,7 +56,7 @@ report a false violation.
 
 `buggify: true` says the programs carry BUGGIFY fault points from an assertion SDK
 (FoundationDB style: the code takes its own error path at chosen points). The explorer's
-`--buggify` then draws the seed token `B=`. See sdks.md.
+`--buggify` then draws the seed token `B=`. See `hydo guide sdks`.
 
 ## Exploring
 

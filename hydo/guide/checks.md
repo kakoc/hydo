@@ -2,7 +2,7 @@
 
 The full reference: the sections "Invariants", "Liveness", "History checks", "Reading the stores"
 and "Side-effect checks" of `hydo guide manifest`. Shell templates for common properties:
-[invariant-patterns.md](invariant-patterns.md).
+`hydo guide invariant-patterns`.
 
 ## Check files
 
@@ -58,7 +58,7 @@ final check after recovery where an unreadable store is itself lost data.
 
 hydo stages `/bin/hydo-read` and `/bin/hydo-check` only when a command or check file mentions
 them. The arm64 build stages the arm64 binary; whether a release bundles them is in
-capabilities.md.
+`hydo guide capabilities`.
 
 ## History checks (linearizability, list-append)
 
@@ -83,7 +83,7 @@ format and the models: `hydo/HISTORIES.md` in hydo's repository. Example:
 
 ## Side effects at fake outside services
 
-When the system talks to a fake (outside-services.md), its record answers "what did the outside
+When the system talks to a fake (`hydo guide outside-services`), its record answers "what did the outside
 world see?":
 
 ```sh
@@ -100,7 +100,7 @@ cancellation; the workload adds events with `hydo-world event <name> <ref>`), `c
 ## Assertions inside the program
 
 The services themselves can state properties with an assertion SDK (always, sometimes,
-reachable, unreachable, eventually), and both kinds of record mix on the console. See sdks.md.
+reachable, unreachable, eventually), and both kinds of record mix on the console. See `hydo guide sdks`.
 
 ## What not to check
 

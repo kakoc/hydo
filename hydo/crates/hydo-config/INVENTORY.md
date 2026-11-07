@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-47 user-facing and 86 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 0 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+48 user-facing and 86 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 0 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -152,8 +152,9 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 |---|---|---|---|---|---|
 | `HYDO_CLI_PLATFORM` | developer | word: linux \| mac | this binary's platform | hydo-cli | `linux` or `mac`: run the `hydo` command as the other platform's (the CLI test checks the other platform's commands that need no engine). |
 | `HYDO_HOME` | user | path | ~/.hydo | hydo-cli | The install cache (Milestone 162, docs/design/install-cache.md): `store/` (release archives and guest kernels by sha256), `versions/<version>/` (releases `hydo setup --get` installed), `bin/hydo` (the current one). An empty value means the default. |
-| `HYDO_RELEASE_URL` | user | URL | https://github.com/kakoc/hydo/releases/download | hydo-cli | Where releases are fetched from: `<value>/v<version>/<file>`. HTTPS only (plain `http://` only to a loopback host). An empty value means the default. |
-| `HYDO_OFFLINE` | user | flag: set and not `0` | - | hydo-cli | Set and not `0`: never use the network (`hydo setup`, and the kernel lookup of runs); what the install cache does not have is refused with its URL (`--offline` does the same). |
+| `HYDO_RELEASE_URL` | user | URL | https://github.com/kakoc/hydo/releases/download | hydo-cli | Where releases are fetched from: `<value>/v<version>/<file>` (hydo), and `<value>/skill-v<version>/<file>` (the onboarding skill, `hydo skill update`). HTTPS only (plain `http://` only to a loopback host). An empty value means the default. |
+| `HYDO_RELEASE_API` | user | URL | https://api.github.com/repos/kakoc/hydo/releases | hydo-cli | Where `hydo skill update` lists the releases to find the newest skill release (tags `skill-v<version>`): a GitHub releases API URL answering a JSON list. HTTPS only (plain `http://` only to a loopback host). An empty value means the default. |
+| `HYDO_OFFLINE` | user | flag: set and not `0` | - | hydo-cli | Set and not `0`: never use the network (`hydo setup`, the kernel lookup of runs, `hydo skill update`); what the install cache does not have is refused with its URL (`--offline` does the same). |
 
 ## Image builds (`hydo_config::build::Build`)
 

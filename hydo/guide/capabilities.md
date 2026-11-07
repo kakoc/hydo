@@ -48,6 +48,6 @@ shell-init images, which still run but follow neither key.
 | `hydo-grpc-gen` generated drivers | not shipped (generate in the repository, then copy the output) | not shipped (generate with `--arch amd64,arm64` in the repository, copy `hydo-grpc.arm64`) | yes |
 
 Where a feature is missing, say so in the report and offer the closest substitute: a shell
-read-back loop instead of `hydo-check` (invariant-patterns.md), a hand-written driver instead of
+read-back loop instead of `hydo-check` (`hydo guide invariant-patterns`), a hand-written driver instead of
 a generated one, a port fault instead of a link fault, `--no-addr` (one shared loopback
 network) instead of `network: bridge`.

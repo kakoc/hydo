@@ -28,5 +28,5 @@ invariants:                               # the checks, as shell commands (same 
 Step `i` does a fixed operation derived from `i` (no random data, no wall-clock values), appends
 `i` to `$HYDO_ACKED` on success and `i ack|failed|unknown` to `$HYDO_OUTCOMES`. 20–50 steps is a
 good size. A workload must not have both `workload.run` and commands in `hydo/workload/`.
-`assets/example-miniflux.yaml` is a complete example of this form for a project that hydo's
+`hydo guide examples/example-miniflux.yaml` prints a complete example of this form for a project that hydo's
 authors did not write (miniflux with PostgreSQL).
