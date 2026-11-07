@@ -18,21 +18,34 @@ One command per platform, on the machine of that platform (docs/HISTORY.md "Mile
     cargo build --release --locked -p hydo -p hydo-hvm -p hydo-build -p hydo-compose -p hydo-bench -p hydo-grpc-gen -p hydo-tools
     # then, from the tree:
     target/release/hydo-bench rebaseline --release <an unpacked hydo release of the platform> \
-      --work <a work folder> [--jobs 2] --check        # or --write
+      --work <a work folder> --check        # or --write; --thorough before a release
 
-It stages each image's inputs (`hydo/onboard/rebaseline/stage.sh`), builds each image twice from
-the tree, runs every recorded schedule twice from fresh boots and writes `<work>/report.md`: first
-the verdict changes, the runs whose two repetitions differ and the images that did not build twice
-to the same bytes, then every run's recorded and new values. `--check` writes nothing and exits 3
-when only values moved; `--write` writes the new values into the list (a run whose verdict changed
-only with `--accept-verdicts`); exit status 1 always means a verdict change, a nondeterminism or a
-failed step. `--only <image or stage>,...` limits it; `--changed-only` runs only the images whose
-bytes changed (enough when only image inputs changed; after an engine, controller, agent or kernel
-change run everything, and raise `hydo_image::EPOCH`); finished runs are cached in the work folder,
-so an interrupted rebaseline resumes. After `--write`, review the list's diff and commit it with
-the change that moved the values. What the stages need (Go 1.26.5 as `HYDO_GO`, the network once
-for the downloads they check by sha256, on Linux the pinned Nix store paths and `sudo -n setpriv`
-for the uid 1000 builds) is in `stage.sh`'s comments.
+The default mode is the fast one, because these are tests: an image whose inputs (the tree's
+paths its stage reads, `stage.sh sources`, with the recipe, the staging script, the image builder
+and the release) are those of the build kept in the work folder is neither staged nor built again;
+otherwise it is staged and built once. A schedule whose result for the image's bytes and the engine
+(the platform, the fingerprint epoch, the engine program, the loaded module) is in the work
+folder's cache is not run. The others run once: one fresh boot per image (`hydo run`, so that path
+stays checked) and the rest in a worker pool that boots once per worker and starts every run from
+the provisioned snapshot (at most `--jobs` VMs: 2 on Linux, 4 on a Mac; a big image alone). A run
+whose values are the recorded ones repeats the recorded run, so it proves determinism; a run whose
+values differ runs a second time from a fresh boot, to tell a real change from a nondeterminism.
+So a run with nothing changed boots nothing, and a change re-runs only the images whose bytes
+changed. `--thorough` (before a release, nightly) is the complete mode: every image staged and
+built twice and compared, every schedule run twice from fresh boots, nothing reused.
+
+It writes `<work>/report.md`: first the verdict changes, the runs whose values differ between
+repetitions and the images that did not build twice to the same bytes, then every run's recorded
+and new values. `--check` writes nothing and exits 3 when only values moved; `--write` writes the
+new values into the list (a run whose verdict changed only with `--accept-verdicts`); exit status 1
+always means a verdict change, a nondeterminism or a failed step. `--only <image or stage>,...`
+limits it; `--changed-only` skips the images whose bytes are the recorded ones even without a
+cache. The run cache trusts the fingerprint epoch: after a change of an engine, the controller,
+the agent pin or a guest kernel, raise `hydo_image::EPOCH` (AGENTS.md "The image records") or run
+`--thorough`. After `--write`, review the list's diff and commit it with the change that moved the
+values. What the stages need (Go 1.26.5 as `HYDO_GO`, the network once for the downloads they
+check by sha256, on Linux the pinned Nix store paths and `sudo -n setpriv` for the uid 1000
+builds) is in `stage.sh`'s comments.
 
 > Note (M107): `explore.py` and `hydo_build_arm64.py` named below were the Python explorer and
 > arm64 builder of the time, replaced by the hydo-explore and hydo-build crates (`hydo explore`,

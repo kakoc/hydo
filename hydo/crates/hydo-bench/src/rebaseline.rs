@@ -26,12 +26,14 @@
 //! `MemAvailable` for it (6 GiB for a big image, 3 GiB otherwise).
 
 use crate::recorded::{self, Image};
+use hydo_explore::pool::{Host, Pool};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// The options (`hydo-bench rebaseline --help` in [`crate::cli::USAGE`]).
@@ -52,6 +54,11 @@ pub struct Opts {
     pub no_build: bool,
     /// Build and compare the images only (no runs).
     pub build_only: bool,
+    /// The slow, complete mode (releases, nightly): every image built twice and compared, every
+    /// schedule run twice from fresh boots, nothing taken from earlier builds or runs.
+    pub thorough: bool,
+    /// The configuration the program read at its start (the worker pools use it).
+    pub config: hydo_config::Config,
     pub timeout: u64,
     pub quiet_file: Option<PathBuf>,
     pub extra_env: Vec<(String, String)>,
@@ -78,6 +85,8 @@ struct Built {
     differ: Vec<String>,
     error: Option<String>,
     secs: f64,
+    /// Taken from an earlier build with the same inputs (or --reuse-builds).
+    reused: bool,
 }
 
 /// What one run gave.
@@ -248,12 +257,17 @@ fn outputs(dir: &Path) -> BTreeMap<String, String> {
 
 /// Build one image twice; the first build stays (`img/<slug>/b1`), the second's files are
 /// compared and deleted.
-fn build(o: &Opts, img: &Image) -> Built {
+fn build(o: &Opts, img: &Image, key: &str) -> Built {
     let t0 = Instant::now();
     let base = o.work.join("img").join(slug(&img.id));
     let b1 = base.join("b1");
     let done = base.join("b1.done");
-    if (o.reuse_builds || o.no_build) && done.is_file() {
+    let keyf = base.join("b1.key");
+    // the default mode: the same inputs (the key) as the build kept here give that build again
+    let same_inputs = !o.thorough
+        && std::fs::read_to_string(&keyf).ok().as_deref() == Some(key)
+        && done.is_file();
+    if (o.reuse_builds || o.no_build || same_inputs) && done.is_file() {
         if let Some(i) = image_in(&b1, &img.platform) {
             let r = std::fs::read_to_string(&done).unwrap_or_default();
             let differ: Vec<String> = r
@@ -261,13 +275,19 @@ fn build(o: &Opts, img: &Image) -> Built {
                 .filter_map(|l| l.strip_prefix("differs "))
                 .map(str::to_string)
                 .collect();
+            let sha = std::fs::read_to_string(base.join("b1.sha256"))
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| s.len() == 64)
+                .unwrap_or_else(|| sha_file(&i));
             return Built {
-                sha256: sha_file(&i),
+                sha256: sha,
                 image: i,
                 reproducible: differ.is_empty(),
                 differ,
                 error: None,
                 secs: 0.0,
+                reused: true,
             };
         }
     }
@@ -281,6 +301,8 @@ fn build(o: &Opts, img: &Image) -> Built {
         };
     }
     let _ = std::fs::remove_file(&done);
+    let _ = std::fs::remove_file(&keyf);
+    let _ = std::fs::remove_file(base.join("b1.sha256"));
     let dir = o.work.join("tree").join(&img.dir);
     let inputs = o.inputs.display().to_string();
     let args: Vec<String> = img
@@ -289,7 +311,9 @@ fn build(o: &Opts, img: &Image) -> Built {
         .map(|a| a.replace("{inputs}", &inputs))
         .collect();
     let mut sums = Vec::new();
-    for k in ["b1", "b2"] {
+    let builds: &[&str] = if o.thorough { &["b1", "b2"] } else { &["b1"] };
+    for k in builds {
+        let k = *k;
         let out = base.join(k);
         let mut a = vec![
             "build".to_string(),
@@ -316,33 +340,39 @@ fn build(o: &Opts, img: &Image) -> Built {
         };
     };
     let mut differ = Vec::new();
-    for (name, s1) in &sums[0] {
-        match sums[1].get(name) {
-            Some(s2) if s2 == s1 => {}
-            Some(_) => differ.push(name.clone()),
-            None => differ.push(format!("{name} (only in the first build)")),
+    if sums.len() == 2 {
+        for (name, s1) in &sums[0] {
+            match sums[1].get(name) {
+                Some(s2) if s2 == s1 => {}
+                Some(_) => differ.push(name.clone()),
+                None => differ.push(format!("{name} (only in the first build)")),
+            }
         }
-    }
-    for name in sums[1].keys() {
-        if !sums[0].contains_key(name) {
-            differ.push(format!("{name} (only in the second build)"));
+        for name in sums[1].keys() {
+            if !sums[0].contains_key(name) {
+                differ.push(format!("{name} (only in the second build)"));
+            }
         }
-    }
-    if differ.is_empty() {
-        let _ = std::fs::remove_dir_all(base.join("b2"));
+        if differ.is_empty() {
+            let _ = std::fs::remove_dir_all(base.join("b2"));
+        }
     }
     let mut stamp = String::new();
     for d in &differ {
         let _ = writeln!(stamp, "differs {d}");
     }
+    let sha256 = sha_file(&image);
     let _ = std::fs::write(&done, stamp);
+    let _ = std::fs::write(base.join("b1.sha256"), &sha256);
+    let _ = std::fs::write(&keyf, key);
     Built {
-        sha256: sha_file(&image),
+        sha256,
         image,
         reproducible: differ.is_empty(),
         differ,
         error: None,
         secs: t0.elapsed().as_secs_f64(),
+        reused: false,
     }
 }
 
@@ -482,6 +512,421 @@ fn run_vm(o: &Opts, image: &Path, schedule: &str, dir: &Path) -> Ran {
     }
 }
 
+/// Hash a file tree into `h`: every path (sorted), its kind, executable bit and contents; a
+/// symbolic link by its target; `target` and `.git` folders left out.
+fn hash_tree(h: &mut sha2::Sha256, root: &Path, rel: &Path) {
+    use sha2::Digest;
+    use std::os::unix::fs::PermissionsExt;
+    let p = root.join(rel);
+    let Ok(m) = std::fs::symlink_metadata(&p) else {
+        h.update(format!("missing {}\n", rel.display()));
+        return;
+    };
+    if m.file_type().is_symlink() {
+        let t = std::fs::read_link(&p).unwrap_or_default();
+        h.update(format!("link {} {}\n", rel.display(), t.display()));
+    } else if m.is_dir() {
+        h.update(format!("dir {}\n", rel.display()));
+        let mut names: Vec<_> = std::fs::read_dir(&p)
+            .map(|rd| rd.flatten().map(|e| e.file_name()).collect())
+            .unwrap_or_default();
+        names.sort();
+        for n in names {
+            if n == "target" || n == ".git" {
+                continue;
+            }
+            hash_tree(h, root, &rel.join(n));
+        }
+    } else {
+        let exec = m.permissions().mode() & 0o111 != 0;
+        h.update(format!("file {} {exec} {}\n", rel.display(), m.len()));
+        if let Ok(b) = std::fs::read(&p) {
+            h.update(&b);
+        }
+    }
+}
+
+/// What an image's build depends on, as one hash: the build recipe, the staging script, the
+/// tree's paths the image's stage reads (`stage.sh sources <stage>`), the image builder (the
+/// prefix's `hydo-build`), the release's guest files (its `SHA256SUMS`), and the platform. The
+/// same key means the same inputs, so a kept build is the build again (the default mode).
+fn input_key(o: &Opts, img: &Image) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let lp = o.log(&format!("sources-{}.log", img.stage));
+    let out = Command::new("bash")
+        .arg(o.stage_script())
+        .args(["sources", &img.stage])
+        .env("HYDO_ROOT", &o.root)
+        .env("HYDO_REBASE_WORK", &o.work)
+        .env("HYDO_REBASE_INPUTS", &o.inputs)
+        .env("HYDO_REBASE_PLATFORM", &o.platform)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("stage.sh sources: {e}"))?;
+    let _ = std::fs::write(&lp, &out.stdout);
+    if !out.status.success() {
+        return Err(format!(
+            "stage.sh sources {}: {}",
+            img.stage,
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let mut h = Sha256::new();
+    h.update(format!(
+        "{}\n{}\n{}\n{}\n{}\n{:?}\n{}\n",
+        o.platform,
+        img.stage,
+        img.dir,
+        img.manifest,
+        img.keep_owners,
+        img.args,
+        o.inputs.display()
+    ));
+    h.update(sha_file(&o.stage_script()));
+    h.update(sha_file(&o.prefix().join("bin").join("hydo-build")));
+    if let Some(r) = &o.release {
+        h.update(sha_file(&r.join("SHA256SUMS")));
+    }
+    for rel in ["hydo/history", "hydo/VERSION"] {
+        hash_tree(&mut h, &o.root, Path::new(rel));
+    }
+    for l in String::from_utf8_lossy(&out.stdout).lines() {
+        let l = l.trim();
+        if !l.is_empty() {
+            hash_tree(&mut h, &o.root, Path::new(l));
+        }
+    }
+    Ok(hex(&h.finalize()))
+}
+
+/// What decides a run's values in the default mode, for the run cache: the platform, the
+/// fingerprint epoch (raised with every change of an engine, the controller, the agent pin or a
+/// guest kernel that moves a fingerprint, AGENTS.md "The image records"), the engine program and,
+/// on Linux, the loaded module. `--thorough` keys by every program instead ([`engine_id`]).
+fn run_identity(o: &Opts) -> String {
+    let mut parts = vec![
+        format!("platform={}", o.platform),
+        format!("epoch={}", hydo_image::EPOCH),
+    ];
+    for p in ["hydo-hvx", "hydo-hvm", "hydo-kvm"] {
+        let f = o.prefix().join("bin").join(p);
+        if f.is_file() {
+            parts.push(format!("{p}={}", sha_file(&f)));
+        }
+    }
+    if let Ok(v) = std::fs::read_to_string("/sys/module/hvx/srcversion") {
+        parts.push(format!("hvx.ko={}", v.trim()));
+    }
+    for (k, v) in &o.extra_env {
+        parts.push(format!("{k}={v}"));
+    }
+    parts.join(" ")
+}
+
+/// A worker pool over the image (the explorer's: each worker boots once, every run starts from
+/// the provisioned snapshot S1 in a fresh VM), with the prefix's engine and the release's kernels.
+fn pool_for(o: &Opts, image: &Path, workers: usize, outdir: &Path) -> Result<Pool, String> {
+    use hydo_engine::{BootSpec, ControlledEngine, CpuLevel, SnapshotStore};
+    let cfg = &o.config;
+    let rel = o
+        .release
+        .clone()
+        .ok_or("--release is needed for the worker pools")?;
+    let (ram_mib, cpu) = guest_of(image);
+    let (engine, kernel, initrd): (
+        Arc<dyn ControlledEngine + Send + Sync>,
+        PathBuf,
+        Option<PathBuf>,
+    ) = match o.platform.as_str() {
+        "hvx" => {
+            let b = hydo_engine::image::boot_files(
+                image,
+                &rel.join("guest").join("bzImage"),
+                Some(&rel.join("guest").join("initramfs-kafka.cpio.gz")),
+                None,
+                &[],
+            )?;
+            let e = hydo_engine::hvx::Hvx {
+                engine: o.prefix().join("bin").join("hydo-hvx"),
+                hvx_run: Some(o.prefix().join("libexec").join("hvx-run")),
+                extra_env: o
+                    .extra_env
+                    .iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect(),
+                env: hydo_engine::hvx::wrapper_env(&cfg.engine),
+                config: cfg.env.clone(),
+            };
+            (Arc::new(e), b.kernel, b.initrd)
+        }
+        "hvm" => {
+            let out = rel.join("hv").join("hvm").join("explore").join("out");
+            let b = hydo_engine::image::boot_files(
+                image,
+                &out.join("Image-explore"),
+                None,
+                None,
+                std::slice::from_ref(&out),
+            )?;
+            let e = hydo_engine::hvm::Hvm {
+                hvmx: o.prefix().join("bin").join("hydo-hvm"),
+                env: o.extra_env.clone(),
+                config: cfg.env.clone(),
+            };
+            (Arc::new(e), b.kernel, None)
+        }
+        p => return Err(format!("no worker pool for the platform {p}")),
+    };
+    let spec = BootSpec {
+        image: image.to_path_buf(),
+        ram_mib,
+        vcpus: 1,
+        cpu: if cpu { CpuLevel::V3 } else { CpuLevel::V2 },
+        kernel,
+        initrd,
+        outdir: outdir.join("consoles"),
+        snapshots: SnapshotStore::Files,
+    };
+    let engine: Arc<dyn hydo_engine::Engine + Send + Sync> = Arc::new(
+        hydo_control::agent::AgentEngine::for_image(engine, image)
+            .map_err(|e| e.to_string())?
+            .with_control(&cfg.control),
+    );
+    let _ = std::fs::create_dir_all(outdir);
+    let host = Host {
+        outdir: outdir.to_path_buf(),
+        onboard: o.root.join("hydo").join("onboard"),
+        known: None,
+        pool: cfg.pool.clone(),
+    };
+    Ok(Pool::new(
+        engine,
+        spec,
+        workers.max(1),
+        host,
+        image.display().to_string(),
+        String::new(),
+    ))
+}
+
+/// The guest's RAM and whether it asks for x86-64-v3, from the manifest the image carries.
+fn guest_of(image: &Path) -> (u32, bool) {
+    let Ok(text) = hydo_engine::image::embedded_manifest(image) else {
+        return (1024, false);
+    };
+    let Ok(m) = hydo_manifest::from_embedded(&text, None) else {
+        return (1024, false);
+    };
+    let g = &m.data["guest"];
+    (
+        g["ram_mib"].as_u64().map_or(1024, |r| r as u32),
+        g["cpu"].as_str() == Some("v3"),
+    )
+}
+
+/// A pool's answer as a [`Ran`].
+fn ran_of(r: &hydo_explore::pool::Res, secs: f64, dir: &Path) -> Ran {
+    let s = |k: &str| r.get(k).and_then(Value::as_str).map(str::to_string);
+    let verdict = s("verdict").unwrap_or_default();
+    let fp = s("fp").unwrap_or_default();
+    let error = if verdict.starts_with("ERROR worker") || fp.len() != 16 {
+        Some(format!("worker pool: {verdict}"))
+    } else {
+        None
+    };
+    Ran {
+        verdict: recorded::verdict_line(&verdict, None),
+        fp,
+        ctl: s("ctl"),
+        wfp: s("wfp"),
+        secs,
+        cached: false,
+        error,
+        dir: dir.to_path_buf(),
+    }
+}
+
+/// Whether a run gave the recorded values (fingerprint, and ctl and wfp where recorded, and the
+/// verdict's class).
+fn as_recorded(r: &recorded::Run, a: &Ran) -> bool {
+    a.error.is_none()
+        && r.fp == a.fp
+        && r.ctl.as_ref().is_none_or(|x| a.ctl.as_ref() == Some(x))
+        && r.wfp.as_ref().is_none_or(|x| a.wfp.as_ref() == Some(x))
+        && recorded::same_verdict(&r.verdict, &a.verdict)
+}
+
+/// The default mode's runs: per image, the schedules without a cached result run once, the
+/// first from a fresh boot (`hydo run`, so that path stays checked) and the others in a worker
+/// pool that boots once per worker; a run that does not give the recorded values runs a second
+/// time from a fresh boot, to tell a real change from a nondeterminism. A big image's VMs go
+/// alone; otherwise at most `--jobs` VMs at a time.
+fn fast_runs(o: &Opts, selected: &[Image], outcomes: &mut [Outcome]) -> Result<(), String> {
+    let ident = run_identity(o);
+    let key = |sha: &str, sched: &str, rep: usize| {
+        sha_text(&format!("fast\n{sha}\n{sched}\n{rep}\n{ident}"))
+    };
+    let load = |k: &str| {
+        std::fs::read_to_string(o.work.join("cache").join(format!("{k}.json")))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|v| Ran::from_json(&v))
+    };
+    let save = |k: &str, r: &Ran| {
+        if r.error.is_none() {
+            let _ = std::fs::write(
+                o.work.join("cache").join(format!("{k}.json")),
+                r.to_json().to_string(),
+            );
+        }
+    };
+    let mut made = 0usize;
+    for (ii, img) in selected.iter().enumerate() {
+        let oc = &mut outcomes[ii];
+        if oc.built.error.is_some() || oc.skipped {
+            continue;
+        }
+        let sha = oc.built.sha256.clone();
+        let mut todo = Vec::new();
+        for (ri, r) in img.runs.iter().enumerate() {
+            match load(&key(&sha, &r.schedule, 0)) {
+                Some(c) => {
+                    let second = if as_recorded(r, &c) {
+                        None
+                    } else {
+                        load(&key(&sha, &r.schedule, 1))
+                    };
+                    oc.ran.insert(ri, [Some(c), second]);
+                }
+                None => todo.push(ri),
+            }
+        }
+        if !todo.is_empty() {
+            if !wait_to_start(o, img.big) {
+                return Err("waited 6 hours for the quiet file to go or for memory".into());
+            }
+            let rd = o.work.join("runs").join(slug(&img.id));
+            let first = todo[0];
+            let rest: Vec<usize> = todo[1..].to_vec();
+            let image = oc.built.image.clone();
+            let fresh_dir = rd.join(format!("r{first}-1"));
+            let sched0 = img.runs[first].schedule.clone();
+            // the fresh boot alongside the pool (a big image: before it, alone)
+            let oo = o.clone();
+            let (img0, dir0) = (image.clone(), fresh_dir.clone());
+            let fresh = std::thread::spawn(move || run_vm(&oo, &img0, &sched0, &dir0));
+            let fresh = if img.big || o.jobs <= 1 {
+                Some(fresh.join().map_err(|_| "the fresh-boot run panicked")?)
+            } else {
+                oc.ran.insert(first, [None, None]);
+                let r = pool_runs(o, img, &image, &rest, &rd)?;
+                for (ri, a) in r {
+                    oc.ran.insert(ri, [Some(a), None]);
+                }
+                let f = fresh.join().map_err(|_| "the fresh-boot run panicked")?;
+                oc.ran.insert(first, [Some(f), None]);
+                None
+            };
+            if let Some(f) = fresh {
+                oc.ran.insert(first, [Some(f), None]);
+                for (ri, a) in pool_runs(o, img, &image, &rest, &rd)? {
+                    oc.ran.insert(ri, [Some(a), None]);
+                }
+            }
+            made += todo.len();
+            for &ri in &todo {
+                let r = &img.runs[ri];
+                if let Some(Some(a)) = oc.ran.get(&ri).map(|p| p[0].clone()) {
+                    save(&key(&sha, &r.schedule, 0), &a);
+                    eprintln!(
+                        "rebaseline: {} `{}` {} {}",
+                        img.id,
+                        r.schedule,
+                        if a.error.is_some() { "FAILED" } else { &a.fp },
+                        if as_recorded(r, &a) {
+                            "as recorded"
+                        } else {
+                            "NOT as recorded"
+                        }
+                    );
+                }
+            }
+        }
+        // the second run of every schedule whose first run is not the recorded one
+        for (ri, r) in img.runs.iter().enumerate() {
+            let p = oc.ran.get(&ri).cloned().unwrap_or([None, None]);
+            let Some(a) = &p[0] else { continue };
+            if as_recorded(r, a) || p[1].is_some() {
+                continue;
+            }
+            if !wait_to_start(o, img.big) {
+                return Err("waited 6 hours for the quiet file to go or for memory".into());
+            }
+            let d = o
+                .work
+                .join("runs")
+                .join(slug(&img.id))
+                .join(format!("r{ri}-2"));
+            let c = run_vm(o, &oc.built.image, &r.schedule, &d);
+            made += 1;
+            eprintln!(
+                "rebaseline: {} `{}` second run {} ({})",
+                img.id,
+                r.schedule,
+                if c.error.is_some() { "FAILED" } else { &c.fp },
+                if c.fp == a.fp {
+                    "the same as the first"
+                } else {
+                    "DIFFERS from the first"
+                }
+            );
+            save(&key(&oc.built.sha256, &r.schedule, 1), &c);
+            oc.ran.insert(ri, [Some(a.clone()), Some(c)]);
+        }
+    }
+    eprintln!("rebaseline: {made} runs made");
+    Ok(())
+}
+
+/// Some schedules of one image in a worker pool (each worker boots once).
+fn pool_runs(
+    o: &Opts,
+    img: &Image,
+    image: &Path,
+    which: &[usize],
+    rd: &Path,
+) -> Result<Vec<(usize, Ran)>, String> {
+    if which.is_empty() {
+        return Ok(Vec::new());
+    }
+    let workers = if img.big {
+        1
+    } else {
+        o.jobs.saturating_sub(1).max(1)
+    }
+    .min(which.len());
+    let t0 = Instant::now();
+    let pd = rd.join("pool");
+    let pool = pool_for(o, image, workers, &pd)?;
+    let items: Vec<(String, String)> = which
+        .iter()
+        .map(|ri| (format!("r{ri}"), img.runs[*ri].schedule.clone()))
+        .collect();
+    let res = pool.run_all(&items, false);
+    pool.close();
+    let secs = t0.elapsed().as_secs_f64() / which.len() as f64;
+    Ok(which
+        .iter()
+        .map(|ri| {
+            let r = res
+                .get(&format!("r{ri}"))
+                .map(|x| x.1.clone())
+                .unwrap_or_default();
+            (*ri, ran_of(&r, secs, &pd))
+        })
+        .collect())
+}
+
 struct Job {
     image: usize,
     run: usize,
@@ -560,7 +1005,23 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
     let mut failed: HashMap<String, String> = HashMap::new();
     let mut last = String::new();
     for img in &selected {
-        let st = if o.no_build {
+        let key = if o.no_build {
+            String::new()
+        } else {
+            match input_key(o, img) {
+                Ok(k) => k,
+                Err(e) => {
+                    eprintln!("rebaseline: {}: {e}", img.id);
+                    String::new()
+                }
+            }
+        };
+        let base = o.work.join("img").join(slug(&img.id));
+        let kept = !o.thorough
+            && !key.is_empty()
+            && std::fs::read_to_string(base.join("b1.key")).ok().as_deref() == Some(key.as_str())
+            && base.join("b1.done").is_file();
+        let st = if o.no_build || kept {
             Ok(())
         } else if let Some(e) = failed.get(&img.stage) {
             Err(e.clone())
@@ -587,8 +1048,14 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
                 ..Built::default()
             },
             Ok(()) => {
-                eprintln!("rebaseline: build {} twice", img.id);
-                build(o, img)
+                if !kept {
+                    eprintln!(
+                        "rebaseline: build {} {}",
+                        img.id,
+                        if o.thorough { "twice" } else { "once" }
+                    );
+                }
+                build(o, img, &key)
             }
         };
         if let Some(e) = &built.error {
@@ -598,7 +1065,11 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
                 "rebaseline: {} {} {} ({:.0} s)",
                 img.id,
                 &built.sha256[..16],
-                if built.reproducible {
+                if built.reused {
+                    "(kept: the same inputs)"
+                } else if !o.thorough {
+                    "(built once)"
+                } else if built.reproducible {
                     "(two builds identical)"
                 } else {
                     "(BUILDS DIFFER)"
@@ -620,7 +1091,13 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
     // runs
     let t_runs = Instant::now();
     let mut queue: VecDeque<Job> = VecDeque::new();
+    if !o.thorough && !o.build_only {
+        fast_runs(o, &selected, &mut outcomes)?;
+    }
     for (ii, img) in selected.iter().enumerate() {
+        if !o.thorough {
+            break;
+        }
         let oc = &mut outcomes[ii];
         if oc.built.error.is_some() || oc.skipped || o.build_only {
             continue;
@@ -756,7 +1233,16 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
         for (ri, r) in img.runs.iter().enumerate() {
             let pair = oc.ran.get(&ri);
             let a = pair.and_then(|p| p[0].clone());
-            let c = pair.and_then(|p| p[1].clone());
+            // the default mode runs a schedule a second time only when the first run did not
+            // give the recorded values: once as recorded is the recorded run repeated
+            let once = !o.thorough
+                && pair.is_some_and(|p| p[1].is_none())
+                && a.as_ref().is_some_and(|a| as_recorded(r, a));
+            let c = if once {
+                a.clone()
+            } else {
+                pair.and_then(|p| p[1].clone())
+            };
             let (Some(a), Some(c)) = (a, c) else {
                 rep.failures
                     .push(format!("{} `{}`: not run", img.id, r.schedule));
@@ -776,7 +1262,12 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
                 continue;
             }
             rep.runs += 1;
-            rep.cached += [&a, &c].iter().filter(|x| x.cached).count();
+            rep.made += if once { 1 } else { 2 };
+            rep.cached += if once {
+                usize::from(a.cached)
+            } else {
+                [&a, &c].iter().filter(|x| x.cached).count()
+            };
             let twice = a.fp == c.fp && a.ctl == c.ctl && a.verdict == c.verdict;
             if !twice {
                 rep.nondeterministic
@@ -817,42 +1308,47 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
                     (Some(x), Some(y)) if x != y => format!(" (ctl `{x}` -> `{y}`)"),
                     _ => String::new(),
                 },
-                if twice { "yes" } else { "NO" },
+                if once {
+                    "once, as recorded"
+                } else if twice {
+                    "yes"
+                } else {
+                    "NO"
+                },
                 if verdict_same { "" } else { ", VERDICT" }
             );
             // --write
+            // --write changes only what moved: a run whose values are the recorded ones keeps its
+            // entry word for word (also a recorded line that left words out)
             let writable = twice && (verdict_same || o.accept_verdicts);
-            if o.write && writable {
+            if o.write && writable && (moved || !verdict_same) {
                 let rv = &mut doc["images"][img.index]["runs"][ri];
-                if rv["fp"] != json!(a.fp)
-                    || rv["verdict"] != json!(a.verdict)
-                    || a.ctl.as_ref().is_some_and(|x| rv["ctl"] != json!(x))
-                    || (rv.get("wfp").is_some() && rv["wfp"] != json!(a.wfp))
-                {
-                    wrote_any = true;
-                }
                 rv["verdict"] = json!(a.verdict);
                 rv["fp"] = json!(a.fp);
-                if let Some(x) = &a.ctl {
-                    rv["ctl"] = json!(x);
+                match &a.ctl {
+                    Some(x) => rv["ctl"] = json!(x),
+                    None => {
+                        if let Some(m) = rv.as_object_mut() {
+                            m.remove("ctl");
+                        }
+                    }
                 }
                 if rv.get("wfp").is_some() {
                     rv["wfp"] = json!(a.wfp);
                 }
+                wrote_any = true;
             } else if o.write && moved {
                 rep.not_written += 1;
             }
         }
-        if o.write && b.reproducible {
-            let iv = &mut doc["images"][img.index];
-            if iv["sha256"] != json!(b.sha256) {
-                wrote_any = true;
-                iv["sha256"] = json!(b.sha256);
-            }
-            if wrote_any {
-                iv["recorded"] = json!(format!("hydo-bench rebaseline --write, {}", today()));
-                changed_images += 1;
-            }
+        if o.write && b.reproducible && !recorded::same_hex(&img.sha256, &b.sha256) {
+            doc["images"][img.index]["sha256"] = json!(b.sha256);
+            wrote_any = true;
+        }
+        if o.write && wrote_any {
+            doc["images"][img.index]["recorded"] =
+                json!(format!("hydo-bench rebaseline --write, {}", today()));
+            changed_images += 1;
         }
     }
     let bad = !rep.failures.is_empty()
@@ -895,6 +1391,7 @@ struct Report {
     skipped: Vec<String>,
     table: String,
     runs: usize,
+    made: usize,
     cached: usize,
     moved: usize,
     not_written: usize,
@@ -923,13 +1420,13 @@ impl Report {
         let _ = writeln!(t, "Programs: {engine}.  ");
         let _ = writeln!(
             t,
-            "Time: builds {:.0} s, runs {:.0} s, all {:.0} s; {} schedules twice ({} of the {} runs from the cache).\n",
+            "Time: builds {:.0} s, runs {:.0} s, all {:.0} s; {} schedules, {} runs ({} of them from the cache, not booted).\n",
             secs[0],
             secs[1],
             secs[2],
             self.runs,
-            self.cached,
-            2 * self.runs
+            self.made,
+            self.cached
         );
         let _ = writeln!(t, "## Summary\n");
         let line = |n: usize, none: &str, some: &str| {
@@ -949,7 +1446,11 @@ impl Report {
             "- Determinism: {}.",
             line(
                 self.nondeterministic.len(),
-                "every run twice identical",
+                if o.thorough {
+                    "every run twice identical"
+                } else {
+                    "every run as recorded, or run twice with one result"
+                },
                 "runs whose two repetitions DIFFER (below)"
             )
         );
@@ -958,7 +1459,11 @@ impl Report {
             "- Builds: {}.",
             line(
                 self.unreproducible.len(),
-                "every image built twice with the same bytes",
+                if o.thorough {
+                    "every image built twice with the same bytes"
+                } else {
+                    "built once or kept (--thorough builds twice and compares)"
+                },
                 "images NOT byte-reproducible (below)"
             )
         );

@@ -23,7 +23,8 @@ docs/PUBLISHING.md lists every place hydo is published.
      repository, and the Go module `sdk/go` holds the frozen copy's code.
 3. `git grep -i` the competitor names AGENTS.md "No other product in hydo's space" names: only
    citations in research notes.
-4. The recorded example values are those of the final commit: `hydo-bench rebaseline --check` on
+4. The recorded example values are those of the final commit: `hydo-bench rebaseline --check --thorough`
+   (every image built twice, every schedule run twice from fresh boots, nothing reused) on
    the bare-metal machine (every `hvx` image of `hydo/onboard/recorded.json`) and on a Mac (every
    `hvm` image) exits 0 (docs/REBASELINE.md "How to re-baseline"). Exit status 1 is a verdict
    change, a run whose two repetitions differ or an image that does not build twice to the same

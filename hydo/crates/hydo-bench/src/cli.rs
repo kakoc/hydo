@@ -27,15 +27,20 @@ pub const USAGE: &str = "usage: hydo-bench <command> [options]   (hydo/bench/REA
   depth1map DEFECT-SWEEP-DIR CONTROL-SWEEP-DIR [--sig REGEX] [--json FILE]
   d7prob   [--seeds 200000]
   addbuggify MAIN.GO [--check]
-  rebaseline [--check | --write [--accept-verdicts]] [--only NAME[,NAME...]] [--platform hvx|hvm|kvm]
-           [--jobs 1] [--changed-only] [--build-only] [--reuse-builds | --no-build] [--work DIR] [--inputs DIR]
-           [--release DIR] [--list FILE] [--timeout 3600] [--env K=V]...
-               every recorded example run of this machine's platform (hydo/onboard/recorded.json):
-               each image built twice from the tree, each schedule run twice from fresh boots, a
-               report of verdict changes, nondeterminism and unreproducible builds
-               (docs/REBASELINE.md \"How to re-baseline\"); exit 1 on any of those, 3 when only
-               values moved and --check did not write them
-
+  rebaseline [--check | --write [--accept-verdicts]] [--thorough] [--only NAME[,NAME...]]
+           [--platform hvx|hvm|kvm] [--jobs 2 (Linux) | 4 (Mac)] [--changed-only] [--build-only]
+           [--reuse-builds | --no-build] [--work DIR] [--inputs DIR] [--release DIR] [--list FILE]
+           [--timeout 3600] [--env K=V]...
+               every recorded example run of this machine's platform (hydo/onboard/recorded.json).
+               Default (fast): an image whose inputs are those of the build kept in the work
+               folder is not built again, else built once; a schedule with a cached result for
+               the image's bytes and the engine is not run; the others run once (one fresh boot
+               per image, the rest in a worker pool from the provisioned snapshot), a second
+               time only when the first did not give the recorded values. --thorough (releases,
+               nightly): every image built twice and compared, every schedule run twice from
+               fresh boots, nothing reused. A report of verdict changes, nondeterminism and
+               unreproducible builds (docs/REBASELINE.md \"How to re-baseline\"); exit 1 on
+               any of those, 3 when only values moved and --check did not write them
 Images are read from $HYDO_BUILD (default ~/hydo/build): the manifest-built agent images
 explore-ob-bench-<defect>-agent-disk.img (hydo/bench/build-bench-manifest.sh). --kind takes only agent (the
 build-stack.sh images, --kind stack, were deleted in Milestone 145; --kind shell in Milestone 136).
@@ -48,7 +53,7 @@ struct Opts {
     free: Vec<String>,
 }
 
-const FLAGS: [&str; 17] = [
+const FLAGS: [&str; 18] = [
     "--new-faults",
     "--buggify",
     "--bg-images",
@@ -66,6 +71,7 @@ const FLAGS: [&str; 17] = [
     "--reuse-builds",
     "--no-build",
     "--build-only",
+    "--thorough",
 ];
 
 fn parse(argv: &[String]) -> Result<Opts, String> {
@@ -358,6 +364,7 @@ fn cmd_rebaseline(root: &Path, cfg: &hydo_config::Config, o: &Opts) -> Result<i3
         "--reuse-builds",
         "--no-build",
         "--build-only",
+        "--thorough",
         "--work",
         "--inputs",
         "--release",
@@ -430,11 +437,14 @@ fn cmd_rebaseline(root: &Path, cfg: &hydo_config::Config, o: &Opts) -> Result<i3
             .unwrap_or_default(),
         write: o.flag("--write"),
         accept_verdicts: o.flag("--accept-verdicts"),
-        jobs: o.num("--jobs", 1)?,
+        // at most two VMs at a time on Linux (the bare-metal machine's rule), four on a Mac
+        jobs: o.num("--jobs", if cfg!(target_os = "macos") { 4 } else { 2 })?,
         changed_only: o.flag("--changed-only"),
         reuse_builds: o.flag("--reuse-builds"),
         no_build: o.flag("--no-build"),
         build_only: o.flag("--build-only"),
+        thorough: o.flag("--thorough"),
+        config: cfg.clone(),
         timeout: o.num("--timeout", 3600)?,
         quiet_file: cfg.pool.quiet_file.clone(),
         extra_env,

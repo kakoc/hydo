@@ -409,9 +409,40 @@ build() {   # normal|keep <dir> <manifest> <out> [args]
   fi
 }
 
+# the tree's paths a stage reads (relative to the tree), one per line: hydo-bench hashes them with
+# the recipe, this script, the image builder and the release, and an image whose hash is the one
+# of the build it kept is not staged or built again (the default mode). Inputs fetched by digest
+# or pinned by sha256 are named by the files that pin them; a stage's outside inputs that are not
+# pinned that way must be listed here too, or a change of them goes unseen until --thorough.
+sources() {
+  case $1 in
+    redis) echo "$X/redis $X/redis-ram $X/redis-composed $X/redis-composed-hist $X/redis-composed-read $X/redis-errors $X/redis-bridge";;
+    voting|mac-voting) echo "$X/compose-voting";;
+    stack-old|stack-fix) echo "$X/stack";;
+    miniflux) echo "$X/miniflux";;
+    etcd) echo "$X/etcd";;
+    shop|mac-shop) echo "$X/shop";;
+    stack-grpc-cur|stack-grpc-old|stack-grpc-planted) echo "$X/stack-grpc hydo/stack hydo/bench/base";;
+    stackgen) echo "$X/stack hydo/stack hydo/bench/build-order-services.sh hydo/bench/base hydo/bench/patches hydo/bench/patches-m59 hydo/grpcgen target/release/hydo-grpc-gen";;
+    rust-kv|mac-rust-kv) echo "$X/rust-kv sdk/rust";;
+    avx2) echo "$X/avx2";;
+    redis-oci|mac-redis-oci) echo "$X/redis-oci";;
+    restate-oci) echo "$X/restate-oci";;
+    release) echo "";;
+    mac-redis) echo "$XM/redis $XM/redis-ram $XM/redis-bridge $XM/redis-composed $X/redis-composed";;
+    mac-redis-racy) echo "$XM/redis-composed $X/redis-composed";;
+    mac-ledger) echo "$XM/ledger $XM/ledger-spin";;
+    mac-node-kv) echo "$X/node-kv sdk/js";;
+    mac-python-kv) echo "$X/python-kv sdk/python";;
+    mac-grpc) echo "hydo/grpcgen target/release/hydo-grpc-gen";;
+    *) die "unknown stage $1";;
+  esac | tr ' ' '\n'
+}
+
 cmd=${1:-}; shift || true
 case $cmd in
   prefix) prefix;;
+  sources) [ $# = 1 ] || die "sources <stage>"; sources "$1";;
   prepare)
     [ $# = 1 ] || die "prepare <stage>"
     case $PLAT in hvm) mac_prepare "$1";; *) linux_prepare "$1";; esac;;
