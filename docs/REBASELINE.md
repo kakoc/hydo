@@ -1,5 +1,52 @@
 # Re-baseline after the hvx_seedrng stand-in (2026-10-21/22)
 
+## How to re-baseline (since Milestone 164)
+
+The recorded values of every example run are in **`hydo/onboard/recorded.json`**, not in this
+file: per image how it is built from the tree, its sha256, and per schedule the verdict, the
+fingerprint and (where recorded) ctl and wfp, for the platforms `hvx` (x86_64, the bare-metal
+machine), `hvm` (arm64, a Mac) and `kvm`. It was generated once from this file's latest tables
+(13.1–13.4, 14, 15, 16, and docs/HISTORY.md Milestone 159 for KVM); the format is described in
+`hydo/crates/hydo-bench/src/recorded.rs`. This file keeps the history of how each re-baseline was
+made (sections 1–14 below); a new re-baseline adds a short section here only when it decides
+something (a new epoch, an accepted verdict change).
+
+One command per platform, on the machine of that platform (docs/HISTORY.md "Milestone 164"):
+
+    # the bare-metal machine (. ~/hydo-rust/env.sh first), or a Mac:
+    cargo build --release --locked -p hydo -p hydo-hvx -p hydo-build -p hydo-compose -p hydo-bench -p hydo-grpc-gen
+    cargo build --release --locked -p hydo -p hydo-hvm -p hydo-build -p hydo-compose -p hydo-bench -p hydo-grpc-gen -p hydo-tools
+    # then, from the tree:
+    target/release/hydo-bench rebaseline --release <an unpacked hydo release of the platform> \
+      --work <a work folder> --check        # or --write; --thorough before a release
+
+The default mode is the fast one, because these are tests: an image whose inputs (the tree's
+paths its stage reads, `stage.sh sources`, with the recipe, the staging script, the image builder
+and the release) are those of the build kept in the work folder is neither staged nor built again;
+otherwise it is staged and built once. A schedule whose result for the image's bytes and the engine
+(the platform, the fingerprint epoch, the engine program, the loaded module) is in the work
+folder's cache is not run. The others run once: one fresh boot per image (`hydo run`, so that path
+stays checked) and the rest in a worker pool that boots once per worker and starts every run from
+the provisioned snapshot (at most `--jobs` VMs: 2 on Linux, 4 on a Mac; a big image alone). A run
+whose values are the recorded ones repeats the recorded run, so it proves determinism; a run whose
+values differ runs a second time from a fresh boot, to tell a real change from a nondeterminism.
+So a run with nothing changed boots nothing, and a change re-runs only the images whose bytes
+changed. `--thorough` (before a release, nightly) is the complete mode: every image staged and
+built twice and compared, every schedule run twice from fresh boots, nothing reused.
+
+It writes `<work>/report.md`: first the verdict changes, the runs whose values differ between
+repetitions and the images that did not build twice to the same bytes, then every run's recorded
+and new values. `--check` writes nothing and exits 3 when only values moved; `--write` writes the
+new values into the list (a run whose verdict changed only with `--accept-verdicts`); exit status 1
+always means a verdict change, a nondeterminism or a failed step. `--only <image or stage>,...`
+limits it; `--changed-only` skips the images whose bytes are the recorded ones even without a
+cache. The run cache trusts the fingerprint epoch: after a change of an engine, the controller,
+the agent pin or a guest kernel, raise `hydo_image::EPOCH` (AGENTS.md "The image records") or run
+`--thorough`. After `--write`, review the list's diff and commit it with the change that moved the
+values. What the stages need (Go 1.26.5 as `HYDO_GO`, the network once for the downloads they
+check by sha256, on Linux the pinned Nix store paths and `sudo -n setpriv` for the uid 1000
+builds) is in `stage.sh`'s comments.
+
 > Note (M107): `explore.py` and `hydo_build_arm64.py` named below were the Python explorer and
 > arm64 builder of the time, replaced by the hydo-explore and hydo-build crates (`hydo explore`,
 > `hydo-build`, the same options) and deleted in M107; the commands below are records of how the

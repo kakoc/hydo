@@ -354,6 +354,7 @@ dependencies = [
  "hydo-control",
  "hydo-engine",
  "hydo-explore",
+ "hydo-image",
  "hydo-manifest",
  "hydo-results",
  "regex",

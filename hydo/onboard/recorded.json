@@ -1,0 +1,2144 @@
+{
+  "v": 1,
+  "type": "recorded-runs",
+  "about": "Every recorded example run: the image (how it is built from the tree), each schedule, the recorded verdict and values. The source of the recorded values since Milestone 164 (docs/REBASELINE.md keeps the history). hydo-bench rebaseline checks and rewrites it.",
+  "epoch": 1,
+  "images": [
+    {
+      "id": "hvm/redis",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-redis",
+        "dir": "hydo/onboard/examples-mac/redis",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "da37b9ad9b9a76ae24951eae202c946114dae58d5dcef20d39fd903ab29520c6",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "25b1201e4067fa47",
+          "ctl": "0b9e60d528cc2dc7"
+        },
+        {
+          "schedule": "disk=none | run K=redis@5+2",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)",
+          "fp": "2ab0f6beb9b1bd6b",
+          "ctl": "ff4caa09a583ed70"
+        },
+        {
+          "schedule": "disk=none | run P=redis@5+2",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)",
+          "fp": "75579009064a763d",
+          "ctl": "a30845edf992e360"
+        },
+        {
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "verdict": "VIOLATION [redis.acked_writes_survive] key k:0 lost",
+          "fp": "793ebdf0717899ec",
+          "ctl": "c1c6baa6a88a32a5"
+        },
+        {
+          "schedule": "disk=cut | run C=12 R=always",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)",
+          "fp": "18ed9ff59e7ad7fa",
+          "ctl": "b4f7adea42cc337b"
+        },
+        {
+          "schedule": "disk=none | run O=redis@5-8:resp:loss,100%",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=17 all present)",
+          "fp": "61c5de2f05839067",
+          "ctl": "99bc0f20aeb15106"
+        },
+        {
+          "schedule": "disk=none | run N=redis@5-10:loss,60%",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=17 all present)",
+          "fp": "8b3a42bb0df08d7e",
+          "ctl": "1ba0f7a39eb8e843"
+        },
+        {
+          "schedule": "disk=none | run T=10:3600",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "933427bb2819f822",
+          "ctl": "12b5294b6b4cadc3"
+        }
+      ]
+    },
+    {
+      "id": "hvm/redis-hist",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-redis",
+        "dir": "hydo/onboard/examples-mac/redis",
+        "manifest": "hydo-hist.yaml",
+        "args": []
+      },
+      "sha256": "ad5c41a6737aca5589d93a4463b6ed19953675962d9ed098c9a6750f29aea6ac",
+      "runs": [
+        {
+          "schedule": "disk=cut dseed=1 | run C=12",
+          "verdict": "OK invariants=0 held (); history OK",
+          "fp": "0b3af533ea748e5f",
+          "ctl": "625922e1528c1e3c"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run C=12 R=everysec",
+          "verdict": "OK invariants=0 held (); history VIOLATION [redis.kv_linearizable]",
+          "fp": "a33fd1d16cdc3728",
+          "ctl": "037a11f0d411212e"
+        }
+      ]
+    },
+    {
+      "id": "hvm/redis-read",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-redis",
+        "dir": "hydo/onboard/examples-mac/redis",
+        "manifest": "hydo-read.yaml",
+        "args": []
+      },
+      "sha256": "22b42bca27a28109a8afbe8660a37d0144b152750059b2350d9b57611834409f",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: subset holds: all 20 items of acked are in redis (redis h...",
+          "fp": "22331a2dab9a2dfe",
+          "ctl": "8476030a9d80c61e"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run C=12 R=everysec",
+          "verdict": "VIOLATION [redis.acked_writes_survive] subset violated: 12 items of 12 in acked not in redis: k:0=v0, k:1=v...",
+          "fp": "f95fb7be44801a83",
+          "ctl": "19138a12b5ab46af"
+        }
+      ]
+    },
+    {
+      "id": "hvm/redis-ram",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-redis",
+        "dir": "hydo/onboard/examples-mac/redis-ram",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "d4a9bdc87d401810ce6c7f8aa63b1af79c188a89a739182ed077e0890f19e673",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=2 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "d9a41c337d7b63bf",
+          "ctl": "23d53d97e4d64efa"
+        },
+        {
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "verdict": "VIOLATION [redis.acked_writes_survive] key k:0 lost",
+          "fp": "01dcdc20e141301b",
+          "ctl": "93ebd8cf695051da"
+        }
+      ]
+    },
+    {
+      "id": "hvm/redis-bridge",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-redis",
+        "dir": "hydo/onboard/examples-mac/redis-bridge",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "bec8a25f149afbf430ca2237be445e9525d10f00872d4d9a8186b34d327828b9",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
+          "fp": "2370cbe14fdd9697",
+          "ctl": "6a8e130bfbf9fef2"
+        },
+        {
+          "schedule": "disk=none | run N=primary-replica@5-10:loss,100%",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
+          "fp": "3d41fb4244f6c723",
+          "ctl": "bb902d00160d7286"
+        },
+        {
+          "schedule": "disk=none | run O=primary-replica@5-10:req:loss,100%",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
+          "fp": "a716b817bd8af377",
+          "ctl": "f2d609514474f032"
+        },
+        {
+          "schedule": "disk=none | run O=primary@5-8:resp:delay,300ms",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
+          "fp": "029ef58ab82151a6",
+          "ctl": "ab4e21b1c8e8ce83"
+        },
+        {
+          "schedule": "disk=none | run K=replica@5+3",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
+          "fp": "5959be48d244f62b",
+          "ctl": "38e15c68d9963cda"
+        },
+        {
+          "schedule": "disk=cut | run C=8",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary)",
+          "fp": "432a95ba85834fbb",
+          "ctl": "1ac708d19e5718f8"
+        },
+        {
+          "schedule": "disk=none | run F=replica<primary@5#3:2000",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
+          "fp": "ccf16aceb5c5066f",
+          "ctl": "db293b879f216430"
+        },
+        {
+          "schedule": "disk=none | run F=primary<workload@5#2:1000",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
+          "fp": "578bf6fe0f4f4bac",
+          "ctl": "4ff9110839ed6dfd"
+        },
+        {
+          "schedule": "disk=none | run H=redisp@3-6:drop",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary)",
+          "fp": "44da508e705c7aca",
+          "ctl": "a31807d7688f461c"
+        }
+      ]
+    },
+    {
+      "id": "hvm/ledger",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-ledger",
+        "dir": "hydo/onboard/examples-mac/ledger",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "c4ddd14aacc10fbe8ec38330806ffb66e6b21e113dfb2bc81d194ad366ffb721",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=2 held (ledger.acked_exactly_once: acked=30 each stored once)",
+          "fp": "de32ee8c5ee6f69a",
+          "ctl": "c9fd7b0f480180cd"
+        },
+        {
+          "schedule": "disk=none | run O=front@5-8:resp:loss,100%",
+          "verdict": "OK invariants=2 held (ledger.acked_exactly_once: acked=30 each stored once)",
+          "fp": "6f14d9d934c84dc0",
+          "ctl": "c15ce94773db279a"
+        },
+        {
+          "schedule": "disk=none | run O=front@0-30:resp:loss,70%",
+          "verdict": "VIOLATION [ledger.acked_exactly_once] entry 1 stored 2 times",
+          "fp": "a897f325702de127",
+          "ctl": "aea4258f9a112981"
+        },
+        {
+          "schedule": "disk=none | run O=front@0-30:resp:loss,50%",
+          "verdict": "VIOLATION [ledger.acked_exactly_once] entry 10 stored 2 times",
+          "fp": "6da86067e774a48d",
+          "ctl": "8552ef571c61fb8f"
+        },
+        {
+          "schedule": "disk=none | run N=front@0-30:loss,60%",
+          "verdict": "VIOLATION [ledger.acked_exactly_once] entry 9 stored 2 times",
+          "fp": "a18e3e452a41ba3e",
+          "ctl": "e50f44fc62acc4da"
+        },
+        {
+          "schedule": "disk=none | run P=front@10+2",
+          "verdict": "VIOLATION [ledger.acked_exactly_once] entry 10 stored 2 times",
+          "fp": "6abc98fcb198db88",
+          "ctl": "382b70a8955072c9"
+        }
+      ]
+    },
+    {
+      "id": "hvm/ledger-spin",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-ledger",
+        "dir": "hydo/onboard/examples-mac/ledger-spin",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "f5d34550e7a94e316f82e263c7aa75f29111cf291387708b206c228595694c9f",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=2 held (ledger.acked_exactly_once: acked=30 each stored once)",
+          "fp": "e32475acef7341b4",
+          "ctl": "930f998155f77b29"
+        },
+        {
+          "schedule": "disk=none | run P=front@10+2",
+          "verdict": "VIOLATION [ledger.acked_exactly_once] entry 10 stored 2 times",
+          "fp": "0caf9beb9125978d",
+          "ctl": "012f769bba1db408"
+        }
+      ]
+    },
+    {
+      "id": "hvm/redis-composed",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-redis",
+        "dir": "hydo/onboard/examples-mac/redis-composed/hydo",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "bca39f97dcf6138cf98e68abd3975ad5a93867508d61f919f6fd3b1c5225b674",
+      "runs": [
+        {
+          "schedule": "disk=none | run W=0000002a,p4,q2,r100",
+          "verdict": "OK invariants=5 held (compose.commands: started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0)",
+          "fp": "adfdd1128b47b2e1",
+          "ctl": "64228edfdcc3de50"
+        }
+      ]
+    },
+    {
+      "id": "hvm/redis-composed-racy",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-redis-racy",
+        "dir": "hydo/onboard/examples-mac/redis-composed-racy/hydo",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "e7630a982d125490a9e476d78dc68137eee6e5e4d5aeaa21392fdccd6c51fceb",
+      "runs": [
+        {
+          "schedule": "disk=none | run W=0000002a,p4,q2,r100",
+          "verdict": "VIOLATION [total_conserved] balances sum to 503, not 500",
+          "fp": "9bcde106d244c7c8",
+          "ctl": "cc25282fa6ee57cf"
+        }
+      ]
+    },
+    {
+      "id": "hvm/node-kv",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 16",
+      "build": {
+        "stage": "mac-node-kv",
+        "dir": "hydo/onboard/examples/node-kv",
+        "manifest": "hydo-mac.yaml",
+        "args": []
+      },
+      "sha256": "39d38e81ed7c16c393b852429f1a663fd97a7a37ce8c9f28ab4e725590bd8537",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (nkv.oracle: acked=20 all present)",
+          "fp": "9a4166f95ce564f1",
+          "ctl": "0141194b466e3bd9"
+        },
+        {
+          "schedule": "disk=cut | run C=12 S=never",
+          "verdict": "VIOLATION [nkv.oracle] key k:0 lost (got null)",
+          "fp": "eae9b3e9d9df7262",
+          "ctl": "bfdec020a46f3dcf"
+        },
+        {
+          "schedule": "disk=cut | run C=12",
+          "verdict": "OK invariants=1 held (nkv.oracle: acked=12 all present)",
+          "fp": "db0ced2ee18e2182",
+          "ctl": "202dcc1810826541"
+        },
+        {
+          "schedule": "disk=none | run K=nkv@8+2 B=1234",
+          "verdict": "OK invariants=1 held (nkv.oracle: acked=18 all present)",
+          "fp": "258c878ca6f94d50",
+          "ctl": "0c5914e7cd7b1a58"
+        }
+      ]
+    },
+    {
+      "id": "hvm/python-kv",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 16",
+      "build": {
+        "stage": "mac-python-kv",
+        "dir": "hydo/onboard/examples/python-kv",
+        "manifest": "hydo-mac.yaml",
+        "args": []
+      },
+      "sha256": "0796b2166f663d8be289517d28cf817ee45dba0ab677335a48d4cf2ae3842420",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (pykv.oracle: acked=20 all present)",
+          "fp": "77662a4dc66660b4",
+          "ctl": "99d3a6c9bcab4d75"
+        },
+        {
+          "schedule": "disk=none | run K=pykv@8+2",
+          "verdict": "OK invariants=1 held (pykv.oracle: acked=18 all present)",
+          "fp": "d218c9200955852c",
+          "ctl": "9dac63ed9843b10c"
+        },
+        {
+          "schedule": "disk=cut | run C=12 S=never",
+          "verdict": "VIOLATION [pykv.oracle] key k:0 lost (got 'NONE')",
+          "fp": "67c1be61543262ec",
+          "ctl": "3b8233343cb49963"
+        },
+        {
+          "schedule": "disk=none | run B=1234",
+          "verdict": "OK invariants=1 held (pykv.oracle: acked=18 all present)",
+          "fp": "9de124f239acb2d2",
+          "ctl": "ece160c3964f7f03"
+        }
+      ]
+    },
+    {
+      "id": "hvm/python-kv-hist",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 16",
+      "build": {
+        "stage": "mac-python-kv",
+        "dir": "hydo/onboard/examples/python-kv",
+        "manifest": "hydo-mac-hist.yaml",
+        "args": []
+      },
+      "sha256": "08d77aa7933e01f2b22f7a5aa34ded346809aec2fd53e707477194e18b55854d",
+      "runs": [
+        {
+          "schedule": "disk=cut | run C=12",
+          "verdict": "OK invariants=0 held (); history OK",
+          "fp": "c784a2d6d224eb47",
+          "ctl": "133c9c994223dbe4"
+        },
+        {
+          "schedule": "disk=cut | run C=12 S=never",
+          "verdict": "OK invariants=0 held (); history VIOLATION [kv.linearizable]",
+          "fp": "4e0ea385f449db81",
+          "ctl": "4a799f3170dcb41b"
+        }
+      ]
+    },
+    {
+      "id": "hvm/rust-kv",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 16",
+      "build": {
+        "stage": "mac-rust-kv",
+        "dir": "hydo/onboard/examples/rust-kv",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "c450aacb054240740d4a14dcbe314fa3b0c04e7a68db5c99c7391ddca4b4bace",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present)",
+          "fp": "5e1d844bdf412e73",
+          "ctl": "bc6fe53352fa8359"
+        },
+        {
+          "schedule": "disk=cut | run C=12",
+          "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present)",
+          "fp": "ac2bfa6ddc729e9f",
+          "ctl": "ded68d8cdfcf34f0"
+        },
+        {
+          "schedule": "disk=cut | run C=12 S=never",
+          "verdict": "VIOLATION [rkv.oracle] rkv check: acked=12 lost=12",
+          "fp": "3a4be66e14c4c051",
+          "ctl": "22168eb0b60f5ac1"
+        },
+        {
+          "schedule": "disk=none | run K=rkv@8+2",
+          "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present)",
+          "fp": "bf97e6e506a17a14",
+          "ctl": "0ad74bffbfd87b1f"
+        },
+        {
+          "schedule": "disk=none | run B=5abc,1000,500",
+          "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=2 all present)",
+          "fp": "839345b237fb6bef",
+          "ctl": "d20fa8483538cd42"
+        },
+        {
+          "schedule": "disk=none | run B=1234",
+          "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present)",
+          "fp": "1f691ae7e24d1f34",
+          "ctl": "243f271a5911baf1"
+        },
+        {
+          "schedule": "disk=none | run K=rkv@8+2 B=1234",
+          "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present)",
+          "fp": "aa0b8c437f8b33f4",
+          "ctl": "31ca45bf4f0d1dfe"
+        },
+        {
+          "schedule": "disk=none | run P=rkv@5+3",
+          "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=17 all present)",
+          "fp": "a55085a1fe310ad9",
+          "ctl": "53e69be30dff5ad1"
+        }
+      ]
+    },
+    {
+      "id": "hvm/shop-buggy",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-shop",
+        "dir": "hydo/onboard/examples/shop",
+        "manifest": "hydo.yaml",
+        "args": [
+          "--set",
+          "variant=buggy"
+        ]
+      },
+      "sha256": "85a735afd7c08029f22dff69f9e4359bdb83a3233333e953f45e8f2cb1b946d6",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
+          "fp": "61ffe63cbc129405",
+          "ctl": "826e4ec0225b2c54"
+        },
+        {
+          "schedule": "disk=none dseed=efb4cfbc49052179 | run H=payments.charge@0-1:drop",
+          "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3)",
+          "fp": "9d1af8f92957f335",
+          "ctl": "5dc99b20820664bb"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run H=payments.charge@0-1:drop C=6",
+          "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3)",
+          "fp": "1091377a63d61bd8",
+          "ctl": "f013583309d54686"
+        },
+        {
+          "schedule": "disk=none | run H=payments.charge@6-9:reset,p=50",
+          "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 23,26)",
+          "fp": "bc0b730de9eca400",
+          "ctl": "f5397144a2781746"
+        }
+      ]
+    },
+    {
+      "id": "hvm/shop-fixed",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-shop",
+        "dir": "hydo/onboard/examples/shop",
+        "manifest": "hydo.yaml",
+        "args": [
+          "--set",
+          "variant=fixed"
+        ]
+      },
+      "sha256": "a64ef81490fd1a5303da34a2789c2dc29dec04a9e9c6125538762f764aa1efc1",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
+          "fp": "4fe68ccdf8a48174",
+          "ctl": "597c4a89c39ff4f7"
+        },
+        {
+          "schedule": "disk=none dseed=efb4cfbc49052179 | run H=payments.charge@0-1:drop",
+          "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
+          "fp": "7863ce11fc7b8b77",
+          "ctl": "fed12be8a59f8f63"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run H=payments.charge@0-1:drop C=6",
+          "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once)",
+          "fp": "bd59301989bf12b0",
+          "ctl": "b86e3f5a800e5cc0"
+        }
+      ]
+    },
+    {
+      "id": "hvm/grpc-buggy",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-grpc",
+        "dir": "hydo/grpcgen/demo",
+        "manifest": "hydo-mac.yaml",
+        "args": [
+          "--set",
+          "mode=buggy"
+        ]
+      },
+      "sha256": "a2418d0953443beb23d6fdd5899d7171b9c7be0a4fba73e9fbd46f919919d1d3",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=d7071eb1f9d436b9 | run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3",
+          "verdict": "VIOLATION [orders.consistent] VIOLATION request_id r1 created 5 orders: o11 o1 o2 o3 o4",
+          "fp": "28417fb1c34bcfac",
+          "ctl": "e6766eac8f5475fc"
+        }
+      ]
+    },
+    {
+      "id": "hvm/grpc-fixed",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-grpc",
+        "dir": "hydo/grpcgen/demo",
+        "manifest": "hydo-mac.yaml",
+        "args": [
+          "--set",
+          "mode=fixed"
+        ]
+      },
+      "sha256": "fc1e3e19ef5bd30da0594597ddd140311e77e48f59e4124bad3a0f91b98f26d2",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=d7071eb1f9d436b9 | run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3",
+          "verdict": "OK invariants=2 held (compose.commands: started=2 ok=1 failed=1 timeout=0 violation=0 killed=0 skipped=0)",
+          "fp": "ec450ee463da3f5d",
+          "ctl": "9fcb1c71aa47fc8b"
+        }
+      ]
+    },
+    {
+      "id": "hvm/voting",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-voting",
+        "dir": "hydo/onboard/examples/compose-voting",
+        "manifest": "hydo-mac.yaml",
+        "args": []
+      },
+      "sha256": "9d97d9622e8db395a1f2bb030f9342b1601cd6b21e2797f61d67b59bd1eef82c",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (votes.counted: all 20 acknowledged votes counted)",
+          "fp": "43733e843f702aac",
+          "ctl": "f4a6471774a0d569"
+        },
+        {
+          "schedule": "disk=none | run K=worker@5+5",
+          "verdict": "OK invariants=1 held (votes.counted: all 20 acknowledged votes counted)",
+          "fp": "51104aebf127569b",
+          "ctl": "f530e788c6cc833f"
+        },
+        {
+          "schedule": "disk=cut | run C=12",
+          "verdict": "VIOLATION [votes.counted_soon] not satisfied 60.64s after heal, deadline 60s (last check rc=1: too few vote...",
+          "fp": "0933dc3789d8653a",
+          "ctl": "36baf4229229cd1c"
+        },
+        {
+          "schedule": "disk=none | run N=vote-redis@5-12:loss,100%",
+          "verdict": "OK invariants=1 held (votes.counted: all 13 acknowledged votes counted)",
+          "fp": "d4b302ed2c44ceca",
+          "ctl": "720f005b311db7de"
+        }
+      ]
+    },
+    {
+      "id": "hvm/redis-oci",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.1",
+      "build": {
+        "stage": "mac-redis-oci",
+        "dir": "hydo/onboard/examples/redis-oci",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "8364b670defa9a51f05b5ade18f7973dad758e62a1250cf582cafaaa0ff46259",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "fbbf1515e8aaf063",
+          "ctl": "f7161ddb8479f702"
+        },
+        {
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "verdict": "VIOLATION [redis.acked_writes_survive] key k:1 lost",
+          "fp": "7b97be9a18a42f3c",
+          "ctl": "a8dee7e04969f117"
+        },
+        {
+          "schedule": "disk=none | run K=redis@5+2",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)",
+          "fp": "fed9f1895e37e2f6",
+          "ctl": "cd6f8435f894b551"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "eb8a9cb19ccedc96df2f584b5958e05ea3708a24328860930079b8f2367de547",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "37fcf7394c6d8099"
+        },
+        {
+          "schedule": "disk=none | run K=redis@5+2",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)",
+          "fp": "002ee5dae3a491cf"
+        },
+        {
+          "schedule": "disk=none | run P=redis@5+2",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)",
+          "fp": "726798145db9e2f9"
+        },
+        {
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "verdict": "VIOLATION [redis.acked_writes_survive] key k:1 lost",
+          "fp": "5c245487b5f1b4f8"
+        },
+        {
+          "schedule": "disk=cut | run C=12 R=always",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)",
+          "fp": "238e54a7507a11d2"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=redis@5+3 P=redis@12+2 T=8:-86400",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=15 all present)",
+          "fp": "068a688045997d87"
+        },
+        {
+          "schedule": "disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no",
+          "verdict": "VIOLATION [redis.acked_writes_survive] key k:0 lost",
+          "fp": "88473d78441a2ef0"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-netem",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis",
+        "manifest": "hydo-netem.yaml",
+        "args": []
+      },
+      "sha256": "a7df2d6aea53645e5185322fd20ae23465fd7e2e1aa70fee2d68eb25823d28b6",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=2 held (net.no_retransmission: retrans=0 timeouts=0 uptime=8.05)",
+          "fp": "0c1ab03e91f01184"
+        },
+        {
+          "schedule": "disk=none | run N=redis@5-10:loss,60%",
+          "verdict": "VIOLATION [net.no_retransmission] retrans=12 timeouts=9 uptime=16.34",
+          "fp": "12bef4fa21a9cca9"
+        },
+        {
+          "schedule": "disk=none | run O=redis@5-8:resp:loss,100%",
+          "verdict": "VIOLATION [net.no_retransmission] retrans=11 timeouts=8 uptime=14.15",
+          "fp": "63e8785c9e26a9cc"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-freeze",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis",
+        "manifest": "hydo-freeze.yaml",
+        "args": []
+      },
+      "sha256": "f109500ae5a4c476989ad36a96e5ee647b22c0e259f238c7e368e05f9c2351a3",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "c54a1256c7219eef"
+        },
+        {
+          "schedule": "disk=none dseed=0 | run F=redis<workload@5#1:150000",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=5 all present)",
+          "fp": "722243ef48894ba4"
+        },
+        {
+          "schedule": "disk=none dseed=0 | run F=redis<workload@12#0:1",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "594ee228b16f2ca2"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-hist",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis",
+        "manifest": "hydo-hist.yaml",
+        "args": []
+      },
+      "sha256": "8cad29c95d5ee7fb5a2b947c32e6f626c84178bb7e5267230fb78f07f3bd29b4",
+      "runs": [
+        {
+          "schedule": "disk=cut dseed=1 | run C=12",
+          "verdict": "OK checks=2 held (redis.kv_linearizable: 32 operations on 20 keys linearizable)",
+          "fp": "e8ad171a302c2cb8"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run C=12 R=everysec",
+          "verdict": "VIOLATION [redis.kv_linearizable] key k:1: an acknowledged write is lost or a read is stale: a read that be...",
+          "fp": "1f6af4c6d0049ca5"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-live",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis",
+        "manifest": "hydo-live.yaml",
+        "args": []
+      },
+      "sha256": "6d70f80569eeb80077f5e139c2f8694e7e37eb7881841197d84dcfc2d03d99eb",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "ebdc9f149aaa9f90"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=redis@5+3",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "b4388cf37bd1ca81"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run P=redis@18~0:20000",
+          "verdict": "VIOLATION [redis.pending_resolved] not satisfied 10.16s after heal, deadline 10s (last check rc=1: pending=1)",
+          "fp": "d97ccc5bfc664c68"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-proxy",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis",
+        "manifest": "hydo-proxy.yaml",
+        "args": []
+      },
+      "sha256": "8ae51a080bac376b7eb9b7e836957bf264889ede016366cdca1703b39d3b82fc",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "ca9f41a4ba161da6"
+        },
+        {
+          "schedule": "disk=none | run H=redisp@2-5:drop",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=17 all present)",
+          "fp": "d849b15699b028f4"
+        },
+        {
+          "schedule": "disk=none | run H=redisp@1-3:reset K=redis@4+2",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=16 all present)",
+          "fp": "348442b1011e7081"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-ram",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis-ram",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "34d774146ef73acb7728f06fd5bae67f3b6f7f6055206a027ae7a85c9f1a423b",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=2 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "a0835b988223f147"
+        },
+        {
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "verdict": "VIOLATION [redis.acked_writes_survive] key k:1 lost",
+          "fp": "b41c79d047e98358"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-composed",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis-composed/hydo",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "e419d321de1d681a4e3e7e9459696b734b2b1d807901ce3aa35a3ea9de4816ef",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run W=0000002a,p4,q2,r100",
+          "verdict": "OK invariants=5 held (compose.commands: started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0)",
+          "fp": "96023abe8675ca7b"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run C=12 R=everysec W=85ebca77,p4,q2,r100",
+          "verdict": "VIOLATION [acked_writes_survive] key k:21 lost",
+          "fp": "c0daeb01f242ebb7"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-composed-hist",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis-composed-hist/hydo",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "777366e0e8547419308b317c1ff29e284c135ea584971fd01de817b08d070184",
+      "runs": [
+        {
+          "schedule": "disk=cut dseed=1 | run C=12 W=0000002a,p4,q2,r100",
+          "verdict": "OK invariants=1 held (compose.commands: no composed workload ran in this boot) | checks=2 held (redis.kv_li...",
+          "fp": "1c36820149f28af3"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run C=12 R=everysec W=0000002a,p4,q2,r100",
+          "verdict": "VIOLATION [redis.kv_linearizable] key k:12: an acknowledged write is lost or a read is stale: a read that b...",
+          "fp": "9acfad5318e6d3b8"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-composed-read",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis-composed-read/hydo",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "c059e1520ea261ccb6ae3b636874e864f23cd67889fb6e5f63a32fdd9d339e99",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run W=0000002a,p4,q2,r100",
+          "verdict": "OK invariants=6 held (compose.commands: started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0)",
+          "fp": "6f32919d10ab40a5"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run C=12 R=everysec W=0000002a,p4,q2,r100",
+          "verdict": "OK invariants=6 held (compose.commands: no composed workload ran in this boot)",
+          "fp": "f10eda1b5db0ea3a"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-errors",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis-errors/hydo",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "7a2ba166094b37f0949d56b69aebb6678dbbf1944c5fc7eec395c86764fbce1f",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run W=0000002a,p4,q2,r100",
+          "verdict": "OK invariants=5 held (compose.commands: started=34 ok=34 failed=0 timeout=0 violation=0 killed=0 skipped=0)",
+          "fp": "21bbdabe5ad64801"
+        },
+        {
+          "schedule": "disk=ioerr:1 dseed=281cc34161f446f4 | run K=redis@1+1 W=6311ab23,p1,q2,r100,n6,oanytime_read",
+          "verdict": "OK invariants=5 held (compose.commands: started=6 ok=4 failed=2 timeout=0 violation=0 killed=0 skipped=0)",
+          "fp": "7fc3174b9b541522"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-bridge",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis",
+        "dir": "hydo/onboard/examples/redis-bridge",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "8ecaee354130f88385c2ea73cb583472750afe5cc3e79079dcd439ef4aff09e3",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
+          "fp": "c69c6175a12c2b34"
+        },
+        {
+          "schedule": "disk=none | run N=primary-replica@5-10:loss,100%",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
+          "fp": "b88ae0563c9149f8"
+        },
+        {
+          "schedule": "disk=none | run K=replica@5+3",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
+          "fp": "07f944e0703ecd6a"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run C=8",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary)",
+          "fp": "3e52d47fb9193f55"
+        },
+        {
+          "schedule": "disk=none | run F=replica<primary@5#3:2000",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
+          "fp": "2c2b25bc68bb109b"
+        },
+        {
+          "schedule": "disk=none | run H=redisp@3-6:drop",
+          "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary)",
+          "fp": "a085504c6559a1d1"
+        }
+      ]
+    },
+    {
+      "id": "hvx/rust-kv",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 16",
+      "build": {
+        "stage": "rust-kv",
+        "dir": "hydo/onboard/examples/rust-kv",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "ef1b4c5d079a19a6321d53fc9d29a56dced928c4cc4a9fba1fc7cf97a8994882",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present)",
+          "fp": "d184b981aeb40784",
+          "ctl": "f8463ecaf1560f12"
+        },
+        {
+          "schedule": "disk=cut | run C=12",
+          "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present)",
+          "fp": "a9cdd32d8953d7f2",
+          "ctl": "9003b2c60348a405"
+        },
+        {
+          "schedule": "disk=cut | run C=12 S=never",
+          "verdict": "VIOLATION [rkv.oracle] rkv check: acked=12 lost=12",
+          "fp": "9e590e418c25edae",
+          "ctl": "50d7001af4588bc1"
+        },
+        {
+          "schedule": "disk=none | run K=rkv@8+2 B=1234",
+          "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present)",
+          "fp": "eb37594cfd033c85",
+          "ctl": "20741d9f13ac3585"
+        }
+      ]
+    },
+    {
+      "id": "hvx/avx2",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "avx2",
+        "dir": "hydo/onboard/examples/avx2",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "2dcb4305ed69216c65c3a317e2800c1a79b25e588cef8566f757e1d5dc5a6892",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=2 held (avx.results_match_scalar: steps=8 all AVX2 results equal the scalar ones)",
+          "fp": "7f10bb98d687cd55"
+        }
+      ]
+    },
+    {
+      "id": "hvx/redis-oci",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "redis-oci",
+        "dir": "hydo/onboard/examples/redis-oci",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "7943f914a7256af195d1d5b3fed40a0152f5bcac410920fdc24faa6dfd350872",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "06ab4f8912337f8d"
+        },
+        {
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "verdict": "VIOLATION [redis.acked_writes_survive] key k:1 lost",
+          "fp": "1aa183891c2f6193"
+        },
+        {
+          "schedule": "disk=none | run K=redis@5+2",
+          "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)",
+          "fp": "e441d37bf94ee8c7"
+        }
+      ]
+    },
+    {
+      "id": "hvx/restate-oci",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "restate-oci",
+        "dir": "hydo/onboard/examples/restate-oci",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "77978db52a0425220287fb9410b1578cdd22edc9ba02dbc15db136185614f52d",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (restate.answers: answers; steps answered=6 of 6)",
+          "fp": "2a48fbc111b3c0f0"
+        },
+        {
+          "schedule": "disk=none | run K=restate@2+2",
+          "verdict": "OK invariants=1 held (restate.answers: answers; steps answered=4 of 6)",
+          "fp": "9e67b3758a478c4c"
+        },
+        {
+          "schedule": "disk=cut | run C=4",
+          "verdict": "OK invariants=1 held (restate.answers: answers; steps answered=4 of 6)",
+          "fp": "ce7d75cfa286f1b2"
+        }
+      ]
+    },
+    {
+      "id": "hvx/shop-buggy",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "note": "the image carries the folder of its program (--set bin=, in /etc/hydo/params): these values were recorded with the inputs folder ~/hydo-m155-work/in on the bare-metal machine; another inputs folder gives other bytes and fingerprints",
+      "build": {
+        "stage": "shop",
+        "dir": "hydo/onboard/examples/shop",
+        "manifest": "hydo.yaml",
+        "args": [
+          "--set",
+          "variant=buggy",
+          "--set",
+          "bin={inputs}/shop"
+        ],
+        "owners": "keep"
+      },
+      "sha256": "0d62722969e1a88375c2875b2f8d23be4b392de2892bbd3370a22845213d6f11",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
+          "fp": "09ae7938ecf3bea1"
+        },
+        {
+          "schedule": "disk=none dseed=efb4cfbc49052179 | run H=payments.charge@0-1:drop",
+          "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3)",
+          "fp": "9ef09b5fe0d3a244"
+        },
+        {
+          "schedule": "disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50",
+          "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 25,26)",
+          "fp": "62a2cd4d5c3ed5c3"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run H=payments.charge@0-1:drop C=6",
+          "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3)",
+          "fp": "c9ae5f3ea2da0df3"
+        }
+      ]
+    },
+    {
+      "id": "hvx/shop-fixed",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "note": "the image carries the folder of its program (--set bin=, in /etc/hydo/params): these values were recorded with the inputs folder ~/hydo-m155-work/in on the bare-metal machine; another inputs folder gives other bytes and fingerprints",
+      "build": {
+        "stage": "shop",
+        "dir": "hydo/onboard/examples/shop",
+        "manifest": "hydo.yaml",
+        "args": [
+          "--set",
+          "variant=fixed",
+          "--set",
+          "bin={inputs}/shop"
+        ],
+        "owners": "keep"
+      },
+      "sha256": "6624e195215755f9ca24d81b09c0ebc5ec65ad8bcf9d06be88a5492583a94816",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
+          "fp": "d779faa3dbb1199c"
+        },
+        {
+          "schedule": "disk=none dseed=efb4cfbc49052179 | run H=payments.charge@0-1:drop",
+          "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
+          "fp": "f159969cab5825c6"
+        },
+        {
+          "schedule": "disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50",
+          "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
+          "fp": "cc26d265f48957ca"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run H=payments.charge@0-1:drop C=6",
+          "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once)",
+          "fp": "309a10a5cc83c3b5"
+        }
+      ]
+    },
+    {
+      "id": "hvx/etcd-3.5.5",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "etcd",
+        "dir": "hydo/onboard/examples/etcd",
+        "manifest": "hydo.yaml",
+        "args": [
+          "--set",
+          "version=3.5.5"
+        ],
+        "owners": "keep"
+      },
+      "sha256": "24df9e713ee37853c9b853de5c5107c75a08791b036c5d6636db0a35b79754ff",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable)",
+          "fp": "2a17ced62ad6a7db"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run C=30",
+          "verdict": "VIOLATION [etcd.members_agree] members disagree: revisions 99 98 98; k89 mod_revisions 97 97 97",
+          "fp": "6ffb0aa93ceef86e"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1",
+          "verdict": "VIOLATION [client.revisions_monotonic] /tmp/hydo/rev.2: revision 82 (get-k80@127.0.0.12:12379) after 83 (ge...",
+          "fp": "0967af85386e3b6f"
+        }
+      ]
+    },
+    {
+      "id": "hvx/etcd-3.5.6",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "etcd",
+        "dir": "hydo/onboard/examples/etcd",
+        "manifest": "hydo.yaml",
+        "args": [
+          "--set",
+          "version=3.5.6"
+        ],
+        "owners": "keep"
+      },
+      "sha256": "da477dd1ba1d7125f56af2dc40a88cbaedae26224fff028fee4cff00619c5c07",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable)",
+          "fp": "e0e0a2756b78e8fa"
+        },
+        {
+          "schedule": "disk=cut dseed=1 | run C=30",
+          "verdict": "OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable)",
+          "fp": "151706a66875664b"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1",
+          "verdict": "OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable)",
+          "fp": "942bb76fd89ceda3"
+        }
+      ]
+    },
+    {
+      "id": "hvx/etcd-hc-3.5.5",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "etcd",
+        "dir": "hydo/onboard/examples/etcd",
+        "manifest": "hydo-hist.yaml",
+        "args": [
+          "--set",
+          "version=3.5.5"
+        ],
+        "owners": "keep"
+      },
+      "sha256": "93d39cd085a6234a7889171f09cc95746731068d0341248650d4b3a84dc518ae",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable)",
+          "fp": "784287e70cae4395"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1",
+          "verdict": "OK checks=1 held (etcd.kv_linearizable: 189 operations on 90 keys linearizable)",
+          "fp": "d47eb5a57df4dc44"
+        }
+      ]
+    },
+    {
+      "id": "hvx/etcd-hc-3.5.6",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "etcd",
+        "dir": "hydo/onboard/examples/etcd",
+        "manifest": "hydo-hist.yaml",
+        "args": [
+          "--set",
+          "version=3.5.6"
+        ],
+        "owners": "keep"
+      },
+      "sha256": "3afb6e7313f3f10b72c1a9bace7d70828ab440daa745701d3a95a849267a89b0",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable)",
+          "fp": "06f59cfe18040d1d"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1",
+          "verdict": "OK checks=1 held (etcd.kv_linearizable: 187 operations on 90 keys linearizable)",
+          "fp": "7cf68773b8ba60da"
+        }
+      ]
+    },
+    {
+      "id": "hvx/voting",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "voting",
+        "dir": "hydo/onboard/examples/compose-voting",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "2ac9257b331c788bc9c281117e4939f9c84f7a98a95dd25658272fbe4afa3961",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=1 held (votes.counted: all 20 acknowledged votes counted)",
+          "fp": "8b1cab74b5df78ee"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=worker@5+5",
+          "verdict": "OK invariants=1 held (votes.counted: all 20 acknowledged votes counted)",
+          "fp": "35353f1cca523a17"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run C=12",
+          "verdict": "VIOLATION [votes.counted_soon] not satisfied 60.70s after heal, deadline 60s (last check rc=1: too few vote...",
+          "fp": "5af8f850f95131e7"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run N=vote-redis@5-12:loss,100%",
+          "verdict": "OK invariants=1 held (votes.counted: all 13 acknowledged votes counted)",
+          "fp": "b5d3770c329759f3"
+        }
+      ]
+    },
+    {
+      "id": "hvx/voting-generated",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "voting",
+        "dir": "hydo/onboard/examples/compose-voting",
+        "manifest": "hydo.generated.yaml",
+        "args": []
+      },
+      "sha256": "6d6fe82dfcf4fec7b35ae006388115f2d989e7a4823208158a74ae924b3f1aff",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "ERROR invariant todo.acked_operations_survive could not be evaluated: TODO: write the invariants (hydo.yaml)",
+          "fp": "3dc653254503ef08"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=worker@5+5",
+          "verdict": "ERROR invariant todo.acked_operations_survive could not be evaluated: TODO: write the invariants (hydo.yaml)",
+          "fp": "6912170e3ec0c396"
+        }
+      ]
+    },
+    {
+      "id": "hvx/voting-loopback",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "voting",
+        "dir": "hydo/onboard/examples/compose-voting",
+        "manifest": "hydo-loopback.yaml",
+        "args": []
+      },
+      "sha256": "2adc16fa36191449df36512eb99ecd8bc775c18128794905b9926d2e88bede25",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=1 held (votes.counted: all 20 acknowledged votes counted)",
+          "fp": "14cb5f53eff7257c"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=worker@5+5",
+          "verdict": "OK invariants=1 held (votes.counted: all 20 acknowledged votes counted)",
+          "fp": "483eb5d5d556df17"
+        }
+      ]
+    },
+    {
+      "id": "hvx/stack-fix",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2, 13.3",
+      "build": {
+        "stage": "stack-fix",
+        "dir": "hydo/onboard/examples/stack",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "1de40b6a2681530ddf197d511589ad5639afcabe956ba65edc41453921b6f9ed",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "97ce3e6d46f5ce0e"
+        },
+        {
+          "schedule": "disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "ba0aa0612502a1df",
+          "wfp": "30130050db038e08",
+          "ctl": "07c598044a68e5be",
+          "pinned": true
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=kafka@10+3 P=mysql@15~100:400",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "85f7864ee2cb0498"
+        },
+        {
+          "schedule": "disk=cut dseed=45e6d4ac0682d6a9 | run K=redis@6+4 N=mysql@20-26:delay,48ms C=13",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "3c5a25d843be6824"
+        },
+        {
+          "schedule": "disk=cut dseed=676bcff7dd7d00ca | run K=kafka@1+2 C=23",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "5425fcdfa4c733d4"
+        },
+        {
+          "schedule": "disk=cut dseed=cf949e8cc47e94d2 | run K=kafka@5+3 N=redis@19-30:delay,80ms C=28",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "db59edc566b6d68d"
+        },
+        {
+          "schedule": "disk=cut dseed=787cfeea930dd7c3 | run K=redis@8+1 N=kafka@25-30:delay,20ms,reorder,45% C=24",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "ed665f5ba4bc103c"
+        },
+        {
+          "schedule": "disk=cut dseed=3e46da0b0d53091a | run K=kafka@12+1 N=mysql@0-13:delay,20ms,reorder,39%,corrupt,3% C=18",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "ff4d2334d4f78c19"
+        },
+        {
+          "schedule": "disk=cut dseed=4631de84f54a4a77 | run K=kafka@17+2 N=kafka@27-29:corrupt,4% C=21",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "a2832854d50437f6"
+        },
+        {
+          "schedule": "disk=cut dseed=31aad0ceab8015ae | run K=redis@1+3 N=mysql@20-29:delay,20ms,reorder,43%,duplicate,46% C=11",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "b68c443ab45f1fbb"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run N=kafka@5-10:delay,300ms",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "b6f42bbe48756cf3"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run O=mysql@5-10:resp:delay,1000ms",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "572c1c379f7cb926"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run N=mysql@3-8:delay,50ms,loss,20%",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "6889998299a21eca"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/stack-old",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2, 13.3",
+      "build": {
+        "stage": "stack-old",
+        "dir": "hydo/onboard/examples/stack",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "dc8f8a89e9a758a8be5c25f58768beddddf4f820b938a2a3adea7bb5df11303a",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "8cb4443bf2524d35"
+        },
+        {
+          "schedule": "disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24",
+          "verdict": "VIOLATION [stack.exactly_once] order=11 is in kafka (1 times) but the client was never ACKed",
+          "fp": "1dc3677fb94053cf",
+          "wfp": "dc9321d7bad3e2a5",
+          "ctl": "e873020651036931",
+          "pinned": true
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=kafka@10+3 P=mysql@15~100:400",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "41e3226fcc52d1df"
+        },
+        {
+          "schedule": "disk=cut dseed=45e6d4ac0682d6a9 | run K=redis@6+4 N=mysql@20-26:delay,48ms C=13",
+          "verdict": "VIOLATION [stack.exactly_once] order=6 is in kafka (1 times) but the client was never ACKed",
+          "fp": "f50afc416d3acbe2"
+        },
+        {
+          "schedule": "disk=cut dseed=676bcff7dd7d00ca | run K=kafka@1+2 C=23",
+          "verdict": "VIOLATION [stack.exactly_once] order=1 is in kafka (1 times) but the client was never ACKed",
+          "fp": "8bc7bcc2b42956eb"
+        },
+        {
+          "schedule": "disk=cut dseed=cf949e8cc47e94d2 | run K=kafka@5+3 N=redis@19-30:delay,80ms C=28",
+          "verdict": "VIOLATION [stack.exactly_once] order=5 is in kafka (1 times) but the client was never ACKed",
+          "fp": "4f1e6500e20b772b"
+        },
+        {
+          "schedule": "disk=cut dseed=787cfeea930dd7c3 | run K=redis@8+1 N=kafka@25-30:delay,20ms,reorder,45% C=24",
+          "verdict": "VIOLATION [stack.exactly_once] order=8 is in kafka (1 times) but the client was never ACKed",
+          "fp": "7dd5adec02004a39"
+        },
+        {
+          "schedule": "disk=cut dseed=3e46da0b0d53091a | run K=kafka@12+1 N=mysql@0-13:delay,20ms,reorder,39%,corrupt,3% C=18",
+          "verdict": "VIOLATION [stack.exactly_once] order=12 is in kafka (1 times) but the client was never ACKed",
+          "fp": "27ddc2209f0f6895"
+        },
+        {
+          "schedule": "disk=cut dseed=4631de84f54a4a77 | run K=kafka@17+2 N=kafka@27-29:corrupt,4% C=21",
+          "verdict": "VIOLATION [stack.exactly_once] order=17 is in kafka (1 times) but the client was never ACKed",
+          "fp": "1d644aaf66d60da8"
+        },
+        {
+          "schedule": "disk=cut dseed=31aad0ceab8015ae | run K=redis@1+3 N=mysql@20-29:delay,20ms,reorder,43%,duplicate,46% C=11",
+          "verdict": "VIOLATION [stack.exactly_once] order=1 is in kafka (1 times) but the client was never ACKed",
+          "fp": "bb80cd2d1a09be2b"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/stack-read-fix",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "stack-fix",
+        "dir": "hydo/onboard/examples/stack",
+        "manifest": "hydo-read.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "2932045aacf685f0ec33f09211830b8e1c0068a0d3b474f1fc525e6eae423c09",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=7 held (mysql.amounts_valid: count holds: wrong_amount has 0 records (want == 0))",
+          "fp": "2b44d170d8b45013"
+        },
+        {
+          "schedule": "disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24",
+          "verdict": "OK invariants=7 held (mysql.amounts_valid: count holds: wrong_amount has 0 records (want == 0))",
+          "fp": "bbe5b38ca4cbd2b8"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/stack-read-old",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "stack-old",
+        "dir": "hydo/onboard/examples/stack",
+        "manifest": "hydo-read.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "11f9e4192848c1a1201faca81e811c15ee7294114e38a5d39cff048471f1f68f",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=7 held (mysql.amounts_valid: count holds: wrong_amount has 0 records (want == 0))",
+          "fp": "73634cec66706c6e"
+        },
+        {
+          "schedule": "disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24",
+          "verdict": "VIOLATION [order.told_failed_not_applied] disjoint violated: 1 item of told_failed is also in kafka: 11",
+          "fp": "0e848bdfb5567c10"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/stack-errors-fix",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "stack-fix",
+        "dir": "hydo/onboard/examples/stack",
+        "manifest": "hydo-errors.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "005b7a8af3b03c533ef1d1455adcca6711c44287d87df681ae01a9cbab9287b7",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "1a56a26c0fcc566e"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=kafka@10+3 P=mysql@15~100:400",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "21e99ebd08442e3f"
+        },
+        {
+          "schedule": "disk=ioerr:5 dseed=1 | run",
+          "verdict": "ERROR restart after the faults (mysql)",
+          "fp": "3dee52a138056f08"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/stack-errors-old",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "stack-old",
+        "dir": "hydo/onboard/examples/stack",
+        "manifest": "hydo-errors.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "168ad0d28b51e6fca04e434f9aaac410332aa4bee5219d1e1c0a3614253f9353",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24",
+          "verdict": "VIOLATION [stack.exactly_once] order=11 is in kafka (1 times) but the client was never ACKed",
+          "fp": "d4ee59df9b431dbb"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/miniflux",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "miniflux",
+        "dir": "hydo/onboard/examples/miniflux",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "a8b5f3e3700985c4886d500b622498bbb8c35a17bf420b53aaa6b336990e4984",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
+          "fp": "7301f204913837cb"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=postgres@10+3",
+          "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
+          "fp": "c804c5804ce61e8d"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run K=front@10+3",
+          "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
+          "fp": "97e2f8fc21e1070c"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run P=postgres@10+3",
+          "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
+          "fp": "85fbb1faee5d700f"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run P=postgres@10~50:4000",
+          "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
+          "fp": "9b40d31136f91705"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run O=postgres@10-15:resp:loss,100%",
+          "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
+          "fp": "81be562fa8a81dd1"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run O=front@10-15:resp:loss,100%",
+          "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
+          "fp": "2ef7ada1e02f09e0"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run O=front@10-15:req:loss,100%",
+          "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
+          "fp": "05d52161ce0f0dcd"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run C=20",
+          "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=20 exactly once)",
+          "fp": "f1921822ccac9894"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run C=20 S=off",
+          "verdict": "VIOLATION [categories.acked_exactly_once] category c17 stored 0 times",
+          "fp": "b01b60dc7e763c6f"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/miniflux-read",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "miniflux",
+        "dir": "hydo/onboard/examples/miniflux",
+        "manifest": "hydo-read.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "4bac2fe3ad374188a67f90eae7c60044ecbdd7565c76c89b528ccd6f3cc7bbb9",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=2 held (categories.acked_exactly_once: exactly-once holds: each of the 30 items of acked occu...",
+          "fp": "96d6e0b2584542bd"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run C=20 S=off",
+          "verdict": "VIOLATION [categories.acked_exactly_once] exactly-once violated: acked c17 is in categories 0 times (of 20 ...",
+          "fp": "d35d0fb81ca11ed4"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/stack-grpc-cur",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "stack-grpc-cur",
+        "dir": "hydo/onboard/examples/stack-grpc",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "b47fdf019b8f37875a36a24217ecfb0663d2841013db5634ae6c5713924ce9e8",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "1727a83353d9d2be"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run H=orders.place@10-13:drop",
+          "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "ad2d115c82989fda"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/stack-grpc-old",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "stack-grpc-old",
+        "dir": "hydo/onboard/examples/stack-grpc",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "7e5159f3124be6cda511f1fb2e8012c5a68be28f3b00ed5bca6d5b48a00b4b5f",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "d0f18e1652e0e731"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run H=orders.place@10-13:drop",
+          "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "b77a87a60dc14f6c"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/stack-grpc-planted",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "stack-grpc-planted",
+        "dir": "hydo/onboard/examples/stack-grpc",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "6d3e4cfc86f8b715d751fff81202523ca7f0dd647f71864ffcb87bc26933b197",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=1 | run",
+          "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "47055f125f26994f"
+        },
+        {
+          "schedule": "disk=none dseed=1 | run H=orders.place@10-13:drop",
+          "verdict": "VIOLATION [stack.exactly_once] kafka order=10 present 2 times (must be exactly once)",
+          "fp": "8786ec4211bfbecd"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/stackgen",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.2",
+      "build": {
+        "stage": "stackgen",
+        "dir": "hydo/onboard/examples/stackgen",
+        "manifest": "hydo-grpcgen.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "3ca09cc84191b18fc4436de1ce0929e9c36624c8792d12cef0e008832da9447a",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "42c34b875d91ad13"
+        },
+        {
+          "schedule": "disk=none | run K=front@10+2",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "34b626826e68fe5f"
+        },
+        {
+          "schedule": "disk=cut | run C=15",
+          "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
+          "fp": "4103289e58dd5177"
+        }
+      ],
+      "big": true
+    },
+    {
+      "id": "hvx/release-redis",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.4",
+      "build": {
+        "stage": "release",
+        "dir": "release/examples/redis",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "d255fb2bff5209bce7d85633a41a1e40493ed83b39de5645392f44a14a76735c",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK (acked=20 all present)",
+          "fp": "1893d8c55d7704d9"
+        },
+        {
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "verdict": "VIOLATION key k:1 lost",
+          "fp": "3520af95868b4e8f"
+        },
+        {
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20",
+          "verdict": "VIOLATION",
+          "fp": "747a6fbfbceecaa3"
+        },
+        {
+          "schedule": "disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no",
+          "verdict": "VIOLATION",
+          "fp": "89105a398516a2ea"
+        }
+      ]
+    },
+    {
+      "id": "hvx/release-redis-netem",
+      "platform": "hvx",
+      "recorded": "docs/REBASELINE.md 13.4",
+      "build": {
+        "stage": "release",
+        "dir": "release/examples/redis",
+        "manifest": "hydo-netem.yaml",
+        "args": []
+      },
+      "sha256": "bd4c979f8d6a448d0b3875c3f675c38c57a9dd74c621b535fbe515cbe59f749e",
+      "runs": [
+        {
+          "schedule": "disk=none | run N=redis@3-6:delay,300ms",
+          "verdict": "OK (retrans=0)",
+          "fp": "0a706d74e43f2f4b"
+        }
+      ]
+    },
+    {
+      "id": "hvm/release-redis",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.4",
+      "build": {
+        "stage": "release",
+        "dir": "release/examples/redis",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "a34476147cda279ad4a6d39436b3c83fc9c2ddceafaf2a66ec7643b653c0a08f",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK (acked=20 all present)",
+          "fp": "67e5d6469f1a90a5"
+        },
+        {
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "verdict": "VIOLATION key k:0 lost",
+          "fp": "a6870a92a1bbf0ae"
+        },
+        {
+          "schedule": "disk=none | run O=redis@5-10:resp:loss,100%",
+          "verdict": "OK (acked=15)",
+          "fp": "ed3651af0bf0fb7e"
+        },
+        {
+          "schedule": "disk=none tj=7 tjpm=500 tjmax=500 | run",
+          "verdict": "OK (acked=20)",
+          "fp": "aad758f1a6d55892"
+        },
+        {
+          "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20",
+          "verdict": "VIOLATION key k:6 lost",
+          "fp": "0441476f5fd74d0b"
+        },
+        {
+          "schedule": "disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no",
+          "verdict": "VIOLATION",
+          "fp": "d6120f56fdef3f28"
+        }
+      ]
+    },
+    {
+      "id": "hvm/release-ledger-spin",
+      "platform": "hvm",
+      "recorded": "docs/REBASELINE.md 13.4",
+      "build": {
+        "stage": "release",
+        "dir": "release/examples/ledger-spin",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "c2840c669e605eee94808f1087b0fcdbdd68cd504511f946bf8a0f626de83316",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK (acked=30)",
+          "fp": "aa732142c0f5567f"
+        },
+        {
+          "schedule": "disk=none | run P=front@10+2",
+          "verdict": "VIOLATION entry 10 stored 2 times",
+          "fp": "3b4dd4910d2a6123"
+        }
+      ]
+    },
+    {
+      "id": "kvm/release-redis",
+      "platform": "kvm",
+      "recorded": "docs/HISTORY.md Milestone 159",
+      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); not checked since",
+      "build": {
+        "stage": "release",
+        "dir": "release/examples/redis",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "d255fb2bff5209bce7d85633a41a1e40493ed83b39de5645392f44a14a76735c",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK (acked=20)",
+          "fp": "bfa03053d51bec8a"
+        },
+        {
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "verdict": "VIOLATION key k:1 lost",
+          "fp": "8ed16d6da60c34c6"
+        },
+        {
+          "schedule": "disk=none | run K=redis@5+2",
+          "verdict": "OK (acked=18)",
+          "fp": "818c50920c9ced38"
+        },
+        {
+          "schedule": "disk=none | run P=redis@4+3",
+          "verdict": "OK (acked=17)",
+          "fp": "b72c5c7732e6a67f"
+        },
+        {
+          "schedule": "disk=none | run T=6:3600",
+          "verdict": "OK",
+          "fp": "49a776b9f1c8febd"
+        },
+        {
+          "schedule": "disk=ioerr:20 dseed=7 | run",
+          "verdict": "ERROR restart after the faults",
+          "fp": "b059f4d71358bc4d"
+        },
+        {
+          "schedule": "disk=none tj=1234 tjpm=300 | run",
+          "verdict": "OK",
+          "fp": "06ee67ef4d1a50b2"
+        },
+        {
+          "schedule": "disk=none pct=99 pctn=4 | run",
+          "verdict": "OK",
+          "fp": "aec48eb5ca42eca3"
+        }
+      ]
+    },
+    {
+      "id": "kvm/release-redis-netem",
+      "platform": "kvm",
+      "recorded": "docs/HISTORY.md Milestone 159",
+      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); not checked since",
+      "build": {
+        "stage": "release",
+        "dir": "release/examples/redis",
+        "manifest": "hydo-netem.yaml",
+        "args": []
+      },
+      "sha256": "bd4c979f8d6a448d0b3875c3f675c38c57a9dd74c621b535fbe515cbe59f749e",
+      "runs": [
+        {
+          "schedule": "disk=none | run N=redis@3-6:delay,300ms",
+          "verdict": "OK (retrans=0)",
+          "fp": "0fcb6905c8f54cd1"
+        }
+      ]
+    },
+    {
+      "id": "kvm/stack-old",
+      "platform": "kvm",
+      "recorded": "docs/HISTORY.md Milestone 159",
+      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); not checked since; the image is the pinned reproducer of docs/REBASELINE.md 13.3 (hvx/stack-old)",
+      "build": {
+        "stage": "stack-old",
+        "dir": "hydo/onboard/examples/stack",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "dc8f8a89e9a758a8be5c25f58768beddddf4f820b938a2a3adea7bb5df11303a",
+      "big": true,
+      "runs": [
+        {
+          "schedule": "disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24",
+          "verdict": "VIOLATION [stack.exactly_once] order=11 is in kafka (1 times) but the client was never ACKed",
+          "fp": "c3419179cf1a55ba"
+        }
+      ]
+    },
+    {
+      "id": "kvm/stack-fix",
+      "platform": "kvm",
+      "recorded": "docs/HISTORY.md Milestone 159",
+      "note": "recorded on the build machine with hv/kvm/kvm-check.sh (docs/HISTORY.md Milestone 159, kernel bzImage-kvm d50fbc67...); not checked since; the image is the pinned reproducer of docs/REBASELINE.md 13.3 (hvx/stack-fix)",
+      "build": {
+        "stage": "stack-fix",
+        "dir": "hydo/onboard/examples/stack",
+        "manifest": "hydo.yaml",
+        "args": [],
+        "owners": "keep"
+      },
+      "sha256": "1de40b6a2681530ddf197d511589ad5639afcabe956ba65edc41453921b6f9ed",
+      "big": true,
+      "runs": [
+        {
+          "schedule": "disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24",
+          "verdict": "OK invariants=3 held",
+          "fp": "c0746a7568ccf3b8"
+        }
+      ]
+    }
+  ]
+}
