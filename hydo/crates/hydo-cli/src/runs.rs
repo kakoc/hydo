@@ -168,34 +168,17 @@ pub fn mac_kernel_for(ctx: &Ctx, image: &Path, quiet: bool) -> PathBuf {
     k
 }
 
-/// One schedule from a fresh boot on this platform's engine. Writes `engine.log` (everything the
-/// engine printed) into outdir. Returns the RESULT, or None (the engine's output is returned too).
-/// Every image is an agent image (`/etc/hydo/control`, M126; a shell-init image is refused since
-/// M145) and runs under the host controller: `policy` is the schedule's, or recorded transcripts
-/// typed again (`hydo repro --transcript`).
-fn run_engine(
+/// This platform's engine for `image` and the boot spec of a run into `outdir` with the engine
+/// options `eargs` (`hydo run`'s choice: hvx, or KVM with `--backend kvm`, on Linux; hvm on the
+/// Mac). Dies with `hydo: ` when the engine or the image's kernel is missing.
+pub fn controlled_engine(
     ctx: &Ctx,
     image: &Path,
-    sched: &str,
     outdir: &Path,
     eargs: &[String],
     quiet: bool,
-    policy: &Policy,
-) -> (Option<RunResult>, String) {
-    let _ = std::fs::create_dir_all(outdir);
-    let s = schedule(sched);
-    // the engine and the boot spec of this platform, then the run under the host controller
-    let one = |eng: Arc<dyn ControlledEngine + Send + Sync>, spec: &BootSpec| {
-        let a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));
-        if !quiet {
-            println!(
-                "hydo: an agent image: the host controller drives the run (/etc/hydo/control)"
-            );
-        }
-        a.with_control(&ctx.config.control)
-            .one_with(spec, &s, policy)
-    };
-    let run = match ctx.platform {
+) -> (Arc<dyn ControlledEngine + Send + Sync>, BootSpec) {
+    match ctx.platform {
         Platform::Linux if ctx.kvm => {
             // the KVM build of the image's recorded kernel, and the image's initramfs
             let dirs = [ctx.guest(), ctx.p("build"), ctx.p("hv/kvm/linux/out")];
@@ -209,7 +192,7 @@ fn run_engine(
                 die("the KVM engine runs one vCPU at the v2 CPU level (--vcpus and guest.cpu: v3 need hvx)");
             }
             let k = hydo_engine::kvm::Kvm::for_release(&ctx.root, ctx.config.env.clone());
-            one(Arc::new(k), &spec)
+            (Arc::new(k), spec)
         }
         Platform::Linux => {
             let hvx = Hvx {
@@ -238,15 +221,44 @@ fn run_engine(
                 eprintln!("hydo: {n}");
             }
             let spec = spec_from_args(eargs, image, b.kernel, b.initrd, &abspath(outdir));
-            one(Arc::new(hvx), &spec)
+            (Arc::new(hvx), spec)
         }
         Platform::Mac => {
             let kernel = mac_kernel_for(ctx, image, quiet);
             let spec = spec_from_args(eargs, image, kernel, None, outdir);
-            one(Arc::new(Hvm::for_release(&ctx.root, ctx.config.env.clone())), &spec)
+            (
+                Arc::new(Hvm::for_release(&ctx.root, ctx.config.env.clone())),
+                spec,
+            )
         }
     }
-    .unwrap_or_else(|e| die(&format!("cannot start the engine: {e}")));
+}
+
+/// One schedule from a fresh boot on this platform's engine. Writes `engine.log` (everything the
+/// engine printed) into outdir. Returns the RESULT, or None (the engine's output is returned too).
+/// Every image is an agent image (`/etc/hydo/control`, M126; a shell-init image is refused since
+/// M145) and runs under the host controller: `policy` is the schedule's, or recorded transcripts
+/// typed again (`hydo repro --transcript`).
+fn run_engine(
+    ctx: &Ctx,
+    image: &Path,
+    sched: &str,
+    outdir: &Path,
+    eargs: &[String],
+    quiet: bool,
+    policy: &Policy,
+) -> (Option<RunResult>, String) {
+    let _ = std::fs::create_dir_all(outdir);
+    let s = schedule(sched);
+    let (eng, spec) = controlled_engine(ctx, image, outdir, eargs, quiet);
+    let a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));
+    if !quiet {
+        println!("hydo: an agent image: the host controller drives the run (/etc/hydo/control)");
+    }
+    let run = a
+        .with_control(&ctx.config.control)
+        .one_with(&spec, &s, policy)
+        .unwrap_or_else(|e| die(&format!("cannot start the engine: {e}")));
     let _ = std::fs::write(outdir.join("engine.log"), &run.output);
     if !quiet {
         // the spin observer's notes (hvm: a run ended at a counter loop and ran again)
@@ -494,6 +506,13 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     let outdir = take(&mut args, "--out");
     let known = take(&mut args, "--known-errors");
+    let no_diagnose = match args.iter().position(|a| a == "--no-diagnose") {
+        Some(i) => {
+            args.remove(i);
+            true
+        }
+        None => false,
+    };
     let image = find_image(ctx, &mut args);
     if args.len() != 1 {
         die("usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE]   e.g. hydo run \"disk=cut | run C=12 R=everysec\"");
@@ -527,6 +546,24 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         ctx.backend_name(),
     );
     write_run_document(&outdir, &run);
+    // M178: why a failed run failed, after everything the run recorded is written (the
+    // evidence is read by a separate replay; `--no-diagnose` skips it)
+    if run.verdict.kind != "ok" {
+        if let Some(d) = crate::inspect::diagnose::for_run(ctx, &outdir, !no_diagnose) {
+            println!("hydo: diagnosis: {}", d.summary);
+            if let Some(l) = d.likely.first() {
+                println!("hydo: likely: {l}");
+            }
+            println!(
+                "hydo: details in {} (\"diagnosis\"); look inside: hydo inspect start {} --at end",
+                outdir.join(hydo_results::RUN_DOC).display(),
+                outdir.display()
+            );
+            let mut run = run;
+            run.diagnosis = Some(d);
+            write_run_document(&outdir, &run);
+        }
+    }
     println!(
         "hydo: run directory {}   (hydo repro {}  runs it again and compares fp=)",
         outdir.display(),

@@ -1,0 +1,92 @@
+{
+  "v": 1,
+  "type": "diagnosis",
+  "run_dir": "runs/badconf",
+  "verdict": {
+    "kind": "error",
+    "text": "HYDO-ORACLE: ERROR service start (redis)"
+  },
+  "diagnosis": {
+    "summary": "redis exited while it started, before its readiness check passed (exit status 1); its log ends: Reading the configuration file, at line 10 | >>> 'appendfsync \"sometimes\"' | argument(s) must be one of the following: everysec, always, no",
+    "failure": "service-exited",
+    "service": "redis",
+    "verdict_at": {
+      "point": "boot:22257",
+      "conversation": "boot",
+      "stop": 22257,
+      "at": 828915
+    },
+    "process": {
+      "handle": "redis",
+      "command": "/bin/redis-server /etc/redis.conf --appendfsync sometimes",
+      "status": 1,
+      "at": {
+        "point": "boot:22247",
+        "conversation": "boot",
+        "stop": 22247
+      }
+    },
+    "probe": {
+      "service": "redis",
+      "command": "/bin/redis-cli ping | grep -q PONG",
+      "why": "died",
+      "tries": 1,
+      "last_status": 1,
+      "deadline_s": 120
+    },
+    "exits": [
+      {
+        "handle": "redis",
+        "command": "/bin/redis-server /etc/redis.conf --appendfsync sometimes",
+        "status": 1,
+        "at": {
+          "point": "boot:22247",
+          "conversation": "boot",
+          "stop": 22247
+        }
+      }
+    ],
+    "likely": [],
+    "kernel": [],
+    "evidence_status": "collected",
+    "evidence_note": "read in the guest at boot:22257 by a replay of the run (the recorded run is unchanged)",
+    "evidence": [
+      {
+        "what": "the log of redis",
+        "source": "/tmp/hydo/redis.log",
+        "text": "\n*** FATAL CONFIG FILE ERROR (Redis 7.2.4) ***\nReading the configuration file, at line 10\n>>> 'appendfsync \"sometimes\"'\nargument(s) must be one of the following: everysec, always, no\n",
+        "bytes": 183,
+        "truncated": false
+      },
+      {
+        "what": "the kernel's messages",
+        "source": "dmesg | grep -E 'Out of memory|oom-kill|Killed process|segfault|general protection|Kernel panic|BUG:|Oops|blocked for more than|page allocation failure' | tail -n 20; echo '--- the last lines'; dmesg | tail -n 15",
+        "text": "--- the last lines\n[   11.297611] Run /init as init process\n[   11.297857]   with arguments:\n[   11.297939]     /init\n[   11.298020]     nokaslr\n[   11.298102]   with environment:\n[   11.298184]     HOME=/\n[   11.298266]     TERM=linux\n[   11.413593] virtio-pci 0000:00:03.0: enabling device (0000 -> 0002)\n[   11.414085] virtio-pci 0000:00:03.0: can't find IRQ for PCI INT A; probably buggy MP table\n[   11.431591] virtio_blk virtio0: 1/0/0 default/read/poll queues\n[   11.443589] virtio_blk virtio0: [vda] 264192 512-byte logical blocks (135 MB/129 MiB)\n[   11.450161]  vda: vda1 vda2\n[   11.821531] EXT4-fs (vda1): mounted filesystem 54b90306-aa67-c92b-6f79-e6c3a3587479 ro without journal. Quota mode: none.\n[   11.861263] random: crng init done\n[   11.924516] EXT4-fs (vda2): mounted filesystem aae5c0b3-a9f9-58fb-5d68-78331d279273 r/w with ordered data mode. Quota mode: none.\n",
+        "bytes": 883,
+        "truncated": false,
+        "status": 0
+      },
+      {
+        "what": "memory",
+        "source": "free -m",
+        "text": "              total        used        free      shared  buff/cache   available\nMem:            969          28         935           0           6         869\nSwap:             0           0           0\n",
+        "bytes": 204,
+        "truncated": false,
+        "status": 0
+      },
+      {
+        "what": "processes",
+        "source": "ps -o pid,ppid,stat,rss,args",
+        "text": "PID   PPID  STAT RSS  COMMAND\n    1     0 S     512 /sbin/init\n    2     0 SW      0 [kthreadd]\n    3     2 SW      0 [pool_workqueue_]\n    4     2 IW<     0 [kworker/R-rcu_g]\n    5     2 IW<     0 [kworker/R-rcu_p]\n    6     2 IW<     0 [kworker/R-slub_]\n    7     2 IW<     0 [kworker/R-netns]\n    8     2 IW      0 [kworker/0:0-rcu]\n    9     2 IW      0 [kworker/0:1-eve]\n   10     2 IW<     0 [kworker/0:0H-ev]\n   11     2 IW      0 [kworker/u2:0-ft]\n   12     2 IW      0 [kworker/u2:1-ev]\n   13     2 IW<     0 [kworker/R-mm_pe]\n   14     2 IW      0 [rcu_tasks_kthre]\n   15     2 IW      0 [rcu_tasks_rude_]\n   16     2 IW      0 [rcu_tasks_trace]\n   17     2 SW      0 [ksoftirqd/0]\n   18     2 RW      0 [rcu_preempt]\n   19     2 SW      0 [migration/0]\n   20     2 SW      0 [idle_inject/0]\n   21     2 SW      0 [cpuhp/0]\n   22     2 SW      0 [kdevtmpfs]\n   23     2 IW<     0 [kworker/R-inet_]\n   24     2 SW      0 [kauditd]\n   25     2 SW      0 [khungtaskd]\n   26     2 SW      0 [oom_reaper]\n   27     2 IW      0 [kworker/u2:2-ev]\n   28     2 IW<     0 [kworker/R-write]\n   29     2 IW      0 [kworker/u2:3-ev]\n   30     2 SW      0 [kcompactd0]\n   31     2 SWN     0 [ksmd]\n   32     2 SWN     0 [khugepaged]\n   33     2 IW<     0 [kworker/R-kinte]\n   34     2 IW<     0 [kworker/R-kbloc]\n   35     2 IW<     0 [kworker/R-blkcg]\n   36     2 IW<     0 [kworker/R-devfr]\n   37     2 IW<     0 [kworker/0:1H-kb]\n   38     2 SW      0 [kswapd0]\n   39     2 IW<     0 [kworker/R-kthro]\n   40     2 IW<     0 [kworker/R-mld]\n   41     2 IW<     0 [kworker/R-ipv6_]\n   48     2 IW<     0 [kworker/R-kstrp]\n   49     2 IW<     0 [kworker/u3:0]\n   69     2 IW<     0 [kworker/R-ext4-]\n   75     2 SW      0 [jbd2/vda2-8]\n   76     2 IW<     0 [kworker/R-ext4-]\n   77     2 SW      0 [ext4lazyinit]\n   91     1 S     512 /bin/busybox sh -c /bin/busybox mkdir -p /tmp/hydo-inspect; ( ps -o pid,ppid,stat,rss,args 2>/dev/null || ps ) >/tmp/hydo-inspect/104.out 2>/tmp/hydo-inspect/104.err </dev/null\n   93    91 R     512 ps -o pid,ppid,stat,rss,args\n",
+        "bytes": 2059,
+        "truncated": false,
+        "status": 0
+      }
+    ],
+    "next": [
+      "hydo inspect logs runs/badconf redis --lines 80",
+      "hydo inspect start runs/badconf --at end",
+      "hydo inspect events runs/badconf --kind exit,probe,fault,verdict"
+    ]
+  }
+}

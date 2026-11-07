@@ -1,0 +1,43 @@
+{
+  "v": 1,
+  "type": "inspect",
+  "op": "ls",
+  "at": {
+    "point": "run:23170",
+    "conversation": "run",
+    "stop": 23170,
+    "at": 853693
+  },
+  "path": "/data/redis/appendonlydir",
+  "entries": [
+    {
+      "name": "appendonly.aof.1.base.rdb",
+      "kind": "file",
+      "bytes": 88,
+      "mode": "644",
+      "owner": "root",
+      "mtime": 1767225600
+    },
+    {
+      "name": "appendonly.aof.1.incr.aof",
+      "kind": "file",
+      "bytes": 387,
+      "mode": "644",
+      "owner": "root",
+      "mtime": 1767225601
+    },
+    {
+      "name": "appendonly.aof.manifest",
+      "kind": "file",
+      "bytes": 88,
+      "mode": "644",
+      "owner": "root",
+      "mtime": 1767225600
+    }
+  ],
+  "truncated": false,
+  "cost": {
+    "wall_ms": 383,
+    "stops": 65
+  }
+}

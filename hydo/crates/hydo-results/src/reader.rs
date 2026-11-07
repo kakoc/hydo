@@ -13,7 +13,9 @@
 //! 6. A stream's last line without its newline (a stream still being written, or cut off) is
 //!    ignored; any other line that is not JSON is an error.
 
-use crate::v1::{Diff, End, Exploration, Run, Shrink, Start};
+use crate::v1::{
+    DiagnosisDoc, Diff, End, Exploration, Inspect, InspectError, Run, Shrink, Start, Timeline,
+};
 use crate::{EVENTS, EXPLORATION_DOC, RUN_DOC};
 use serde_json::Value;
 use std::fmt;
@@ -32,6 +34,13 @@ pub enum Record {
     Exploration(Box<Exploration>),
     /// `diff.json` (`hydo diff`, added in M165).
     Diff(Box<Diff>),
+    /// `hydo inspect diagnose` (added in M178).
+    Diagnosis(Box<DiagnosisDoc>),
+    /// `hydo inspect events` (added in M178).
+    Timeline(Box<Timeline>),
+    /// `hydo inspect`'s answers (added in M178).
+    Inspect(Box<Inspect>),
+    InspectError(Box<InspectError>),
 }
 
 /// A record the reader skipped (rule 3).
@@ -129,6 +138,10 @@ pub fn record(v: Value) -> Result<Option<Record>, String> {
         "end" => Record::End(de(v, &ty)?),
         "exploration" => Record::Exploration(de(v, &ty)?),
         "diff" => Record::Diff(de(v, &ty)?),
+        "diagnosis" => Record::Diagnosis(de(v, &ty)?),
+        "timeline" => Record::Timeline(de(v, &ty)?),
+        "inspect" => Record::Inspect(de(v, &ty)?),
+        "inspect-error" => Record::InspectError(de(v, &ty)?),
         _ => return Ok(None),
     }))
 }

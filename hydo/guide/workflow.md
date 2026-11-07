@@ -102,5 +102,8 @@ hydo save <explore dir>                       # the minimal schedules -> hydo/re
 ```
 
 On the Mac a schedule without host tokens is `disk=none | run`. If the first run without faults
-fails, the cause is the folder or a real bug: read the console files that `hydo run` names. The
+fails, the cause is the folder or a real bug: read the `hydo: diagnosis:` lines and the
+`diagnosis` in the run directory's `result.json` (which process ended how, its log, the kernel's
+messages), then look inside the run with `hydo inspect` (`hydo guide inspect`) before changing
+the image. The
 full build also checks the backend's limits (the arm64 build refuses `guest.cpu: v3`).

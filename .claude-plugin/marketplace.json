@@ -9,7 +9,7 @@
       "name": "hydo-onboard",
       "source": "./skills/hydo-onboard",
       "description": "Writes a project's hydo/ folder (services, workload commands, checked properties) so hydo can run the whole system under seeded faults and replay every failure. The process only: every hydo fact comes from the installed hydo (hydo guide).",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "license": "Apache-2.0",
       "homepage": "https://github.com/kakoc/hydo",
       "repository": "https://github.com/kakoc/hydo",

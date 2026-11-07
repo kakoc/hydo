@@ -598,12 +598,12 @@ fn a_wrong_name_and_a_missing_symlink_fail() {
 fn a_skill_version_the_plugin_does_not_have_fails() {
     let bad = bad_after(|d| {
         edit_skill(d, |t| {
-            t.replacen("  version: \"1.0.0\"", "  version: \"1.0.1\"", 1)
+            t.replacen("  version: \"1.1.0\"", "  version: \"1.1.1\"", 1)
         })
     });
     assert_eq!(bad.len(), 1, "{bad:?}");
     assert!(
-        bad[0].starts_with(".claude-plugin/marketplace.json gives hydo-onboard version \"1.0.0\""),
+        bad[0].starts_with(".claude-plugin/marketplace.json gives hydo-onboard version \"1.1.0\""),
         "{bad:?}"
     );
     let bad = bad_after(|d| edit_skill(d, |t| t.replacen("  hydo-min: \"0.1.0\"\n", "", 1)));

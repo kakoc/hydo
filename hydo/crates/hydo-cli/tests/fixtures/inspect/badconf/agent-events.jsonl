@@ -1,0 +1,4 @@
+{"conversation":"boot","stop":22101,"at":820302,"line":{"ev":"done","id":5,"out":"","out_len":0,"v":1,"status":0}}
+{"conversation":"boot","stop":22121,"at":822656,"line":{"ev":"done","id":6,"out":"","out_len":0,"v":1,"status":0}}
+{"conversation":"boot","stop":22247,"at":828755,"line":{"ev":"exit","h":"redis","id":10,"v":1,"status":1}}
+{"conversation":"boot","stop":22257,"at":828915,"line":{"ev":"probe","id":11,"ok":false,"why":"died","status":1,"tries":1,"v":1}}
