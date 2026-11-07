@@ -6,7 +6,9 @@ the same schedule give the same run, every time. On top of that it injects fault
 process kills and pauses, network loss and delay, one-way partitions, power cuts at a chosen disk
 flush, disk errors and lying disks, clock jumps, and faults in fake outside services. It explores
 many such schedules, checks the system's properties after each run, and shrinks every failure to
-a minimal schedule that replays exactly, on any machine with the same engine.
+a minimal schedule that replays exactly. A replay needs the same engine and the same image: a
+failure found on Linux (x86_64) cannot be replayed on a Mac (arm64), and replay on a second
+machine of the same kind is expected but not yet tested (hydo/PRODUCT.md, "Where hydo runs").
 
 Software runs unmodified. hydo has found, for example, etcd 3.5.5's member-revision divergence
 (issue 14685) without being told about it, MySQL showing a commit before its redo log was flushed
