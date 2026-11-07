@@ -239,3 +239,18 @@ services").
   The run engine keeps its snapshots in memory (it writes no snapshot directory).
 - To remove hydo: `hydo module uninstall`, then `chmod -R u+w ~/.hydo && rm -rf ~/.hydo` (the guest
   tool tree is read-only).
+
+## Licenses and source code
+
+hydo is licensed under the Apache License 2.0 (`LICENSE`); the kernel module's source in
+`module/` is licensed under GPL-2.0-only (`licenses/hydo/hv/hvx/`). The release also contains
+third-party software: the guest kernel and its modules, busybox, the iproute2 and iptables tools
+with their libraries, e2fsprogs and libfaketime with their glibc, the Redis example's binaries,
+the Rust standard library and the Rust crates compiled into hydo's programs. `THIRD-PARTY.md`
+lists each one with its version, license, the files it is in and where its source is, and
+`licenses/` holds the full text of every license.
+
+The archive `hydo-linux-0.1.0-sources.tar.gz` accompanies this release (it is published next to
+the tarball, with the same `SHA256SUMS`). It contains the corresponding source: the exact
+upstream source archives of every third-party component, including every GPL- and LGPL-licensed
+one, the patches and configurations applied to them, and the build recipes.

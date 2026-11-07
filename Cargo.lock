@@ -568,6 +568,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hydo-release"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tar",
+]
+
+[[package]]
 name = "hydo-results"
 version = "0.1.0"
 dependencies = [

@@ -195,3 +195,18 @@ The release carries every guest file the arm64 build stages, so these work from 
   time, or only counters that never feed back). Any other loop that never makes a system call
   marks its run invalid instead of giving a wrong result.
 - One virtual CPU, and guest RAM up to a few GiB.
+
+## Licenses and source code
+
+hydo is licensed under the Apache License 2.0 (`LICENSE`). The release also contains
+third-party software: the two arm64 guest kernels, busybox, mke2fs, the tc, ip and iptables tools
+with their libraries, the Redis example's binaries, the GNU C library and GCC runtime linked
+into `guest/hydo_fc`, the Rust standard library and the Rust crates compiled into hydo's
+programs. `THIRD-PARTY.md` lists each one with its version, license, the files it is in and where
+its source is, and `licenses/` holds the full text of every license.
+
+The archive `hydo-mac-0.1.0-sources.tar.gz` accompanies this release (it is published next to
+the tarball, with the same `SHA256SUMS`). It contains the corresponding source: the exact
+upstream source archives of every third-party component, including every GPL- and LGPL-licensed
+one (among them the Arm GNU Toolchain's source snapshot for the C library in `guest/hydo_fc`),
+our kernel patches and configurations, and the build recipes.

@@ -391,3 +391,32 @@ has no dependencies.
   with a warning, for work on the agent). The two sha256 values are also in
   `hydo/crates/hydo-build/src/agent.rs` (`AGENT_SHA256_X86_64`, `AGENT_SHA256_ARM64`); a new agent
   changes this table and those constants together, and every agent image's bytes with them.
+
+## The sources archives (Milestone 158)
+
+Every source archive the releases' sources archives include is pinned by sha256 in
+`hydo/dist/<platform>/third-party.json` (the component lists; `hydo-release`, docs/RELEASING.md).
+They were obtained on the bare-metal machine in Milestone 158, with its Nix and the pinned
+nixpkgs (NixOS 24.05 at `89c49874`):
+
+- the source archives and fetched patches of every Nix-built component: the fixed-output inputs
+  of each package's derivation, realised by Nix (most from cache.nixos.org); a fixed-output
+  directory (a GitHub archive nixpkgs unpacks) is packed as a `.tar.gz` with GNU tar, sorted,
+  time 1, owner 0:0 and `gzip -n -9`, named `<name>-<version>.tar.gz`;
+- the guest kernel's configuration as nixpkgs generated it, `linux-6.6.35-nixpkgs.config`
+  (`974062fc…`, the output `nqw0fhjq…-linux-config-6.6.35` read from cache.nixos.org);
+- the nixpkgs tree itself, `nixpkgs-89c49874fb15.tar.gz` (`e168ee61…`, the store path
+  `f0ddmw6s…-source` packed the same way);
+- from upstream: `busybox-1.37.0.tar.bz2` (`3311dff3…`, equal to busybox.net's `.sha256`),
+  `musl-1.2.6.tar.gz` (`d585fd3b…`) and the Arm GNU Toolchain 13.3.Rel1 source snapshot
+  `arm-gnu-toolchain-src-snapshot-13.3.rel1.tar.xz` (`8fd5babb…`, 311,296,788 bytes, equal to
+  Arm's `.sha256asc`; it holds glibc 2.38 and GCC 13.3.1, whose libraries `guest/hydo_fc` of the
+  Mac release links statically).
+
+`hydo/dist/fetch-sources.sh` fetches them again the same way (every file checked by its sha256).
+Checked in Milestone 158: the guest kernel `guest/bzImage` (`0a9ede35…`) and its modules are
+nixpkgs's `linux_6_6` output (`rp8637p7…-linux-6.6.35`) byte for byte. Two store paths of the
+Linux release come from a newer nixpkgs revision that was not recorded: busybox 1.37.0
+(`ahw5fkq0…`) and musl 1.2.6 (`0nlqfwsn…`), both substituted from cache.nixos.org; their upstream
+archives are included, and their recipe is nixpkgs's (the pinned tree has the busybox 1.36.1 and
+musl 1.2.3 versions of it).

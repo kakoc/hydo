@@ -39,6 +39,14 @@ const ALLOWED: &[(&str, &str)] = &[
         "hydo/crates/hydo-control/tests/m123.rs",
         "the composer's resolved W=: entries (dotted round, command and seed numbers) look like addresses",
     ),
+    (
+        "hydo/dist/linux/third-party.json",
+        "the name and URL of nixpkgs's bzip2 patch carry its four-part version number, which looks like an address",
+    ),
+    (
+        "hydo/dist/mac/third-party.json",
+        "the name and URL of nixpkgs's bzip2 patch carry its four-part version number, which looks like an address",
+    ),
 ];
 
 const BEGIN: &str = "<!-- public-content-forbidden: begin -->";

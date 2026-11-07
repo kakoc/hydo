@@ -1,0 +1,21 @@
+[package]
+name = "hydo-release"
+description = "The releases' third-party notices and corresponding-source archives, generated from hydo/dist/<platform>/third-party.json; not shipped in a release"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hydo-release"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+flate2 = { workspace = true }
+tar = { version = "0.4", default-features = false }
