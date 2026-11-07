@@ -383,6 +383,29 @@
   "raw": false
  },
  {
+  "name": "unit-dataroot-default",
+  "fixture": "hydo/onboard/tests/compose/dataroot",
+  "compose": "docker-compose.yml",
+  "args": [],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "unit-dataroot-loopback",
+  "fixture": "hydo/onboard/tests/compose/dataroot",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--network",
+   "loopback"
+  ],
+  "lock": "unit",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
   "name": "unit-envfiles-shellenv",
   "fixture": "hydo/onboard/tests/compose/envfiles",
   "compose": "docker-compose.yml",

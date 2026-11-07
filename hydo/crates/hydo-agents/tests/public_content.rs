@@ -9,7 +9,7 @@
 //!    only through `machines.sh`, whose details live in the git-ignored `machines.local.sh`);
 //! 2. an IPv4 address outside the ranges that name no machine: 0.0.0.0/8, 10.0.0.0/8 (the
 //!    guests' own networks), 127.0.0.0/8, the netmasks 255.x.x.x and the documentation ranges of
-//!    RFC 5737;
+//!    RFC 5737, and not counting an image tag (`alpine/socat:1.8.0.3`: right after a name and `:`);
 //! 3. the words for the company that rents a machine out.
 //!
 //! Concrete values: the git-ignored `AGENTS.local.md` (at the repository root, or in a git
@@ -157,7 +157,15 @@ impl Rules {
         }
         for c in self.ipv4.captures_iter(line) {
             let o = [2, 3, 4, 5].map(|i| c[i].parse::<u32>().unwrap_or(999));
-            if o.iter().all(|&x| x <= 255) && !harmless_ipv4(o) {
+            // an image tag such as `alpine/socat:1.8.0.3`: a dotted quad right after a name and
+            // a colon is a version, not an address (`host:path` copies have the address first)
+            let start = c.get(1).map_or(0, |m| m.start());
+            let tag = &c[1] == ":"
+                && line[..start]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-');
+            if !tag && o.iter().all(|&x| x <= 255) && !harmless_ipv4(o) {
                 return Some("an IPv4 address");
             }
         }
@@ -231,6 +239,7 @@ fn rules_catch_what_they_should() {
         format!("{}p -q a b:c", "sc"),
         format!("copy it to 198.18.{}.7 first", 4),
         format!("someone@172.31.{}.9", 9),
+        format!("connect to :172.31.{}.9 now", 9),
         format!("the hosting {} panel", "provider"),
     ] {
         assert!(r.check(&bad).is_some(), "not caught: {bad}");
@@ -241,6 +250,7 @@ fn rules_catch_what_they_should() {
         "netmask 255.255.255.0",
         "example 192.0.2.7",
         "version 1.2.3 and v6.10.20.29",
+        "image alpine/socat:1.8.0.3 by digest",
         "/etc/ssh/sshd_config and ~/.ssh/config are files",
         "on_bare_metal \"uptime\"",
         "the bare-metal machine and the build machine",

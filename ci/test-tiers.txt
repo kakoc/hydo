@@ -95,6 +95,7 @@ hydo-kvm::bin/hydo-kvm                   fast
 hydo-kvm::engine                         fast
 hydo-manifest                            fast
 hydo-manifest::equivalence               full
+hydo-manifest::extractors                fast
 hydo-manifest::format                    fast
 hydo-release                             fast
 hydo-release::bin/hydo-release           fast

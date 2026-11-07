@@ -1,0 +1,43 @@
+# Known error kinds: lines a service writes to its log that are expected (hydo/onboard/MANIFEST.md,
+# "Error logs as findings"). Each entry needs a reason; `hydo errors accept` appends them.
+#   sig:    the kind's signature (or match: a regular expression on its template)
+#   with:   only in runs whose schedule has one of these faults (K=mysql, C, disk, R=everysec)
+#   during: only for lines written while one of these faults was on
+format: 1
+unknown: report       # report: a new kind is a finding; fail: it also fails the run
+known:
+  - sig: 473b1408993e
+    service: redis
+    tpl: "#:M <date> <time> # You requested maxclients of # requiring at least # max file descriptors."
+    example: "204:M 01 Jan 2026 00:00:08.433 # You requested maxclients of 10000 requiring at least 10032 max file descriptors."
+    reason: "Redis 7 start-up warnings in a guest: no config file, overcommit off, a lower file-descriptor limit; harmless for the test"
+    by: "example"
+    date: "2026-11-07"
+  - sig: 6795e8f26473
+    service: redis
+    tpl: "#:M <date> <time> # Current maximum open files is #. maxclients has been reduced to # to compensate for low ulimit. If you need higher maxclients increase 'ulimit -n'."
+    example: "204:M 01 Jan 2026 00:00:08.433 # Current maximum open files is 4096. maxclients has been reduced to 4064 to compensate for low ulimit. If you need higher maxclients increase 'ulimit -n'."
+    reason: "Redis 7 start-up warnings in a guest: no config file, overcommit off, a lower file-descriptor limit; harmless for the test"
+    by: "example"
+    date: "2026-11-07"
+  - sig: 95710d8899bc
+    service: redis
+    tpl: "#:C <date> <time> # Warning: no config file specified, using the default config. In order to specify a config file use redis-server /path/to/redis.conf"
+    example: "204:C 01 Jan 2026 00:00:08.433 # Warning: no config file specified, using the default config. In order to specify a config file use redis-server /path/to/redis.conf"
+    reason: "Redis 7 start-up warnings in a guest: no config file, overcommit off, a lower file-descriptor limit; harmless for the test"
+    by: "example"
+    date: "2026-11-07"
+  - sig: e95c6cefbead
+    service: redis
+    tpl: "#:M <date> <time> # Server can't set maximum open files to # because of OS error: Operation not permitted."
+    example: "204:M 01 Jan 2026 00:00:08.433 # Server can't set maximum open files to 10032 because of OS error: Operation not permitted."
+    reason: "Redis 7 start-up warnings in a guest: no config file, overcommit off, a lower file-descriptor limit; harmless for the test"
+    by: "example"
+    date: "2026-11-07"
+  - sig: f0c792251150
+    service: redis
+    tpl: "#:C <date> <time> # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low "
+    example: "204:C 01 Jan 2026 00:00:08.433 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures"
+    reason: "Redis 7 start-up warnings in a guest: no config file, overcommit off, a lower file-descriptor limit; harmless for the test"
+    by: "example"
+    date: "2026-11-07"

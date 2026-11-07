@@ -70,12 +70,12 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "e0d83916edbe5164fa0509bb77ce71fae39a810bbaee9601bb5339c3ee7b125f",
+    "790cc90a4e0be908aaee79419fc439cf101d61514d5eaf24aeb14aec4a92470c",
     "0o644"
    ]
   },
   "rc": 0,
-  "stderr": "hydo-compose: warning: service gitea: volume git_data on /data: the image's /data is already the data disk's root (shared by every service); the mount was not added\nhydo-compose: wrote proj/hydo.yaml (2 services, 1 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
+  "stderr": "hydo-compose: wrote proj/hydo.yaml (2 services, 0 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -86,12 +86,12 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "d02e73c71cfe259ab1e8859501057f9ff64433f9e486deff880aa35d23890625",
+    "38910ec1ea14087f9d9c9e25388b650ab55fc8d53c468dec892a48bfa2bf4bea",
     "0o644"
    ]
   },
   "rc": 0,
-  "stderr": "hydo-compose: warning: service gitea: volume git_data on /data: the image's /data is already the data disk's root (shared by every service); the mount was not added\nhydo-compose: wrote proj/hydo.yaml (2 services, 1 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
+  "stderr": "hydo-compose: wrote proj/hydo.yaml (2 services, 0 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -102,12 +102,12 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "7cd9c34fe6e2efdb161225718974cd6f40167a5e25766e5063998bf6f407ea65",
+    "26b0e6d0a9cab43680a0044b902031e365f67e4c177ab562560e2c8c369f2fbe",
     "0o644"
    ]
   },
   "rc": 0,
-  "stderr": "hydo-compose: warning: service gitea: volume git_data on /data: the image's /data is already the data disk's root (shared by every service); the mount was not added\nhydo-compose: wrote proj/hydo.yaml (2 services, 1 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
+  "stderr": "hydo-compose: wrote proj/hydo.yaml (2 services, 0 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -118,12 +118,12 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "80b2347ef840d236a5d68493fea4bd381edac0c743ca25bbc94726456fff5ce3",
+    "ab375cc259e2e336ede10b133cfea3207141e804bdc1a803d66de25c6981f444",
     "0o644"
    ]
   },
   "rc": 0,
-  "stderr": "hydo-compose: warning: service gitea: image gitea/gitea:latest is not pinned by digest (--no-resolve)\nhydo-compose: warning: service gitea: volume git_data on /data: the image's /data is already the data disk's root (shared by every service); the mount was not added\nhydo-compose: warning: service db: image postgres:alpine is not pinned by digest (--no-resolve)\nhydo-compose: wrote proj/hydo.yaml (2 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
+  "stderr": "hydo-compose: warning: service gitea: image gitea/gitea:latest is not pinned by digest (--no-resolve)\nhydo-compose: warning: service db: image postgres:alpine is not pinned by digest (--no-resolve)\nhydo-compose: wrote proj/hydo.yaml (2 services, 2 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n",
   "stdlib_same": true,
   "stdout": ""
  },
@@ -2446,5 +2446,35 @@
   "rc": 0,
   "stdout": "",
   "stderr": "hydo-compose: warning: service backup: bind mount source ./missing does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/bind-missing\nhydo-compose: warning: service backup: bind ./missing on /data: the image's /data is already the data disk's root (shared by every service); the mount was not added\nhydo-compose: warning: services node1, node2, node3, backup all use container port 6379. In Compose each has its own network; in the guest they share one, so if they listen on 0.0.0.0:6379 only the first starts. Make each listen on its own addr: (node1=127.0.0.11, node2=127.0.0.12, node3=127.0.0.13, backup=127.0.0.14) or move one to another port, e.g. with env:/cmd:\nhydo-compose: wrote proj/hydo.yaml (4 services, 3 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n"
+ },
+ "unit-dataroot-default": {
+  "files": {
+   "proj/fetch-images.sh": [
+    "48e9a52542f18a7097dd2a406b66b4a6b788f6e9b73684dcbcb3e587e1465425",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "4bfbfa3094dd1b7930fa21103ea3a728f189e5709ec5e052038f6fe8f583f819",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stdout": "",
+  "stderr": "hydo-compose: wrote proj/hydo.yaml (2 services, 0 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n"
+ },
+ "unit-dataroot-loopback": {
+  "files": {
+   "proj/fetch-images.sh": [
+    "48e9a52542f18a7097dd2a406b66b4a6b788f6e9b73684dcbcb3e587e1465425",
+    "0o755"
+   ],
+   "proj/hydo.yaml": [
+    "18499248bb50d167cd94f9966497a8c4634944ce131777fda5e363ac11d94b67",
+    "0o644"
+   ]
+  },
+  "rc": 0,
+  "stdout": "",
+  "stderr": "hydo-compose: wrote proj/hydo.yaml (2 services, 0 warnings), <DIR>/proj/fetch-images.sh\nhydo-compose: next: sh <DIR>/proj/fetch-images.sh; then write the workload and the invariants (TODO in proj/hydo.yaml)\n"
  }
 }

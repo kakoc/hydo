@@ -172,7 +172,9 @@ pub(crate) const KNOWN_HOOK: &[&str] = &[
     "retries",
     "description",
 ];
-const EXTRACT_RE: &str = r"(header:[A-Za-z0-9-]+|json:[A-Za-z0-9_.]+|query:[A-Za-z0-9_-]+|form:[A-Za-z0-9_-]+|path:[A-Za-z0-9_]+|pb:[1-9][0-9]*|body)";
+// `query:` and `form:` names may carry brackets: the nested form encoding that Stripe, Rails and
+// PHP use (`metadata[order_id]=o7`); hydo-world matches the decoded key as written.
+const EXTRACT_RE: &str = r"(header:[A-Za-z0-9-]+|json:[A-Za-z0-9_.]+|query:[A-Za-z0-9_.\[\]-]+|form:[A-Za-z0-9_.\[\]-]+|path:[A-Za-z0-9_]+|pb:[1-9][0-9]*|body)";
 const HOOK_VARS: &[&str] = &["seq", "ref", "idem", "fake", "route"];
 pub(crate) const KNOWN_CHECK: &[&str] = &[
     "id",

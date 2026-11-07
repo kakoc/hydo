@@ -1,0 +1,17 @@
+#!/bin/sh
+# hydo: timeout=90
+# One guest checkout of the scarce hoodie through Medusa's store API (helper_client.mjs): a cart,
+# one unit, an address, shipping, a Stripe payment session, then "complete" (clicked again up to
+# twice when it got no answer). The operation id is the cart id: acknowledged = the client got an
+# order back for that cart.
+out=$(hydo-oci medusa node /hydo/workload/helper_client.mjs checkout "$HYDO_SEED" 2>&1); rc=$?
+echo "$out"
+# one short line on the console: a command's own output stays in the guest
+echo "checkout $HYDO_CMD_ID: rc=$rc $(echo "$out" | tail -1 | cut -c1-160)" > /dev/console
+cart=$(echo "$out" | sed -n 's/^cart=//p' | head -1)
+id=${cart:-c$HYDO_CMD_ID}
+case $rc in
+  0) echo "$id" >> "$HYDO_ACKED"; echo "$id ack" >> "$HYDO_OUTCOMES" ;;
+  1) echo "$id failed" >> "$HYDO_OUTCOMES"; exit 1 ;;      # refused (out of stock), or never completed
+  *) echo "$id unknown" >> "$HYDO_OUTCOMES"; exit 1 ;;     # complete got no answer: maybe an order
+esac
