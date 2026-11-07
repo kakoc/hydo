@@ -13,7 +13,8 @@
 //!   staged tree, the manifest is built from), `manifest`, `args` (more `hydo build` arguments;
 //!   `{inputs}` is the staging inputs folder), `owners` (`keep`: built as uid 1000, gid 100 with
 //!   the staged files' owners kept, as the images with Nix store paths are; absent: normalised);
-//! - `sha256`: the image's sha256 (or the prefix that was recorded); on the Mac the initramfs's;
+//! - `sha256`: the image's full sha256 (on the Mac the initramfs's), so that the exact image
+//!   behind every recorded value can be found again;
 //! - `big`: a stack-sized guest (its runs go alone);
 //! - `runs`: `schedule`, `verdict` (the verdict line as recorded, without `HYDO-ORACLE: `; a long
 //!   one may end in `...`; on the Mac a run whose history check replaced the guest's verdict reads

@@ -36,6 +36,11 @@ fn reads_and_keeps_its_form() {
     assert_eq!(count("hvx"), (39, 131));
     assert_eq!(count("kvm"), (4, 11));
     for i in &images {
+        assert!(
+            i.sha256.len() == 64 && i.sha256.bytes().all(|c| c.is_ascii_hexdigit()),
+            "{}: the image's full sha256",
+            i.id
+        );
         for r in &i.runs {
             let (class, _) = recorded::verdict_key(&r.verdict);
             assert!(

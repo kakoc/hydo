@@ -583,7 +583,7 @@ fn input_key(o: &Opts, img: &Image) -> Result<String, String> {
         o.inputs.display()
     ));
     h.update(sha_file(&o.stage_script()));
-    h.update(sha_file(&o.prefix().join("bin").join("hydo-build")));
+    h.update(builder_id(o));
     if let Some(r) = &o.release {
         h.update(sha_file(&r.join("SHA256SUMS")));
     }
@@ -597,6 +597,46 @@ fn input_key(o: &Opts, img: &Image) -> Result<String, String> {
         }
     }
     Ok(hex(&h.finalize()))
+}
+
+/// The image builder's identity: the sha256 of the prefix's `hydo-build` with the commit it was
+/// built from blanked out. The commit is compiled in (for the build record next to an image, never
+/// inside it), so without this every new commit, even one of documentation only, would rebuild
+/// every image. The commit is the tree's `hydo/COMMIT`, else `git rev-parse HEAD`, as
+/// `hydo-image`'s build script takes it.
+fn builder_id(o: &Opts) -> String {
+    use sha2::{Digest, Sha256};
+    let Ok(mut b) = std::fs::read(o.prefix().join("bin").join("hydo-build")) else {
+        return String::new();
+    };
+    let commit = std::fs::read_to_string(o.root.join("hydo").join("COMMIT"))
+        .ok()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .or_else(|| {
+            Command::new("git")
+                .arg("-C")
+                .arg(&o.root)
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .ok()
+                .filter(|x| x.status.success())
+                .map(|x| String::from_utf8_lossy(&x.stdout).trim().to_string())
+        })
+        .unwrap_or_default();
+    let c = commit.as_bytes();
+    if c.len() >= 12 {
+        let mut i = 0;
+        while i + c.len() <= b.len() {
+            if &b[i..i + c.len()] == c {
+                b[i..i + c.len()].fill(b'0');
+                i += c.len();
+            } else {
+                i += 1;
+            }
+        }
+    }
+    hex(&Sha256::digest(&b))
 }
 
 /// What decides a run's values in the default mode, for the run cache: the platform, the
