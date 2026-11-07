@@ -30,8 +30,12 @@ fn here() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests")
 }
 
+/// Copy a fixture tree with the modes git gives a checkout under umask 022 (directories 0755,
+/// files 0755 with an execute bit, else 0644), the modes the golden was recorded with, whatever
+/// the modes of this checkout (M167).
 fn copytree(src: &Path, dst: &Path) {
     std::fs::create_dir_all(dst).unwrap();
+    std::fs::set_permissions(dst, std::fs::Permissions::from_mode(0o755)).unwrap();
     let mut v: Vec<_> = std::fs::read_dir(src)
         .unwrap()
         .filter_map(Result::ok)
@@ -46,6 +50,12 @@ fn copytree(src: &Path, dst: &Path) {
             copytree(&s, &d);
         } else {
             std::fs::copy(&s, &d).unwrap();
+            let mode = if md.permissions().mode() & 0o111 != 0 {
+                0o755
+            } else {
+                0o644
+            };
+            std::fs::set_permissions(&d, std::fs::Permissions::from_mode(mode)).unwrap();
         }
     }
 }
@@ -159,6 +169,12 @@ fn argv(case: &serde_json::Value) -> Vec<String> {
 
 #[test]
 fn compose_equals_python() {
+    // The golden's modes are those of files made under umask 022; a umask of 002 (common for
+    // users on Linux) gave other modes (M167).
+    // SAFETY: umask only sets the process's file creation mask.
+    unsafe {
+        libc::umask(0o022);
+    }
     let cases: Vec<serde_json::Value> =
         serde_json::from_slice(&std::fs::read(here().join("cases.json")).unwrap()).unwrap();
     let mut gold: serde_json::Value =

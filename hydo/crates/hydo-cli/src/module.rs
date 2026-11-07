@@ -12,6 +12,25 @@ use std::process::{Command, Stdio};
 
 const UDEV_DIR: &str = "/etc/udev/rules.d";
 
+/// The directory that stands for `/` when hydo reads the host's kernel-module state
+/// (`HYDO_CLI_HOST_ROOT`; `/` when unset). Set once by [`set_host_root`] from the configuration.
+static HOST_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+pub fn set_host_root(root: Option<PathBuf>) {
+    let _ = HOST_ROOT.set(root.unwrap_or_else(|| PathBuf::from("/")));
+}
+
+/// Where hydo reads the host file `path` (absolute): under the host root. Printed paths and
+/// writes keep `path` itself; the CLI test points the root at an empty directory, so its
+/// answers do not depend on which modules, devices and rules the machine running it has.
+pub fn host(path: impl AsRef<Path>) -> PathBuf {
+    let p = path.as_ref();
+    match HOST_ROOT.get() {
+        Some(r) if r != Path::new("/") => r.join(p.strip_prefix("/").unwrap_or(p)),
+        _ => p.to_path_buf(),
+    }
+}
+
 fn is_name(s: &str) -> bool {
     let mut c = s.chars();
     matches!(c.next(), Some('a'..='z'))
@@ -19,7 +38,7 @@ fn is_name(s: &str) -> bool {
 }
 
 pub fn loaded_modules() -> Vec<String> {
-    std::fs::read_to_string("/proc/modules")
+    std::fs::read_to_string(host("/proc/modules"))
         .map(|t| {
             t.lines()
                 .filter_map(|l| l.split_whitespace().next().map(str::to_string))
@@ -33,7 +52,7 @@ pub fn module_ko(ctx: &Ctx, name: &str) -> PathBuf {
 }
 
 pub fn srcversion_loaded(name: &str) -> Option<String> {
-    std::fs::read_to_string(format!("/sys/module/{name}/srcversion"))
+    std::fs::read_to_string(host(format!("/sys/module/{name}/srcversion")))
         .ok()
         .map(|s| s.trim().to_string())
 }
@@ -61,7 +80,7 @@ pub fn lock_holders(path: &str) -> usize {
     };
     let (maj, min) = (dev_major(st.dev()), dev_minor(st.dev()));
     let ino = st.ino();
-    let Ok(text) = std::fs::read_to_string("/proc/locks") else {
+    let Ok(text) = std::fs::read_to_string(host("/proc/locks")) else {
         return 0;
     };
     let mut n = 0;
@@ -205,7 +224,7 @@ fn module_load(ctx: &Ctx, name: &str, dry: bool, params: &[String]) -> i32 {
     let p: String = params.iter().map(|p| format!(" {p}")).collect();
     steps.push(format!("sudo insmod {}{}", ko.display(), p));
     steps.push(format!("test -c /dev/{name}"));
-    if udev_rule_path(name).exists() {
+    if host(udev_rule_path(name)).exists() {
         steps.push("sudo udevadm settle".into());
     }
     let lk = module_lock(&ctx.config.engine, name);
@@ -313,7 +332,7 @@ fn module_install(ctx: &Ctx, name: &str, dry: bool, params: &[String]) -> i32 {
         println!(
             "hydo: {name} is installed: loaded from this release's build (srcversion {}), /dev/{name} {}",
             live.unwrap_or_default(),
-            if Path::new(&format!("/dev/{name}")).exists() {
+            if host(format!("/dev/{name}")).exists() {
                 "present"
             } else {
                 "missing"
@@ -347,7 +366,7 @@ fn module_uninstall(ctx: &Ctx, name: &str, dry: bool) -> i32 {
             }
         }
     }
-    if udev_rule_path(name).exists() {
+    if host(udev_rule_path(name)).exists() {
         println!(
             "hydo: the udev rule {} stays (`hydo module udev remove{}` deletes it)",
             udev_rule_path(name).display(),
@@ -396,7 +415,7 @@ fn module_status(ctx: &Ctx, name: &str) -> i32 {
         );
     }
     let dev = format!("/dev/{name}");
-    if Path::new(&dev).exists() {
+    if host(&dev).exists() {
         println!("  {}", dev_line(&dev));
     }
     println!(
@@ -478,12 +497,12 @@ fn in_group(gid: u32) -> bool {
 
 /// One line about who can open the device: mode, group, and whether runs need sudo.
 pub fn dev_line(dev: &str) -> String {
-    let Ok(st) = std::fs::metadata(dev) else {
+    let Ok(st) = std::fs::metadata(host(dev)) else {
         return format!("{dev}: cannot stat");
     };
     let g = group_name(st.gid());
     let mode = st.permissions().mode();
-    let who = if dev_usable_at(dev) == Some(true) {
+    let who = if dev_usable_at(&host(dev).to_string_lossy()) == Some(true) {
         "you can open it: runs need no sudo".to_string()
     } else if mode & 0o060 == 0o060 && !in_group(st.gid()) {
         format!(
@@ -570,8 +589,8 @@ fn module_udev(verb: &str, name: &str, group: &str, mode: &str, dry: bool, addus
     let rule = udev_rule_path(name);
     let dev = format!("/dev/{name}");
     if verb == "status" {
-        if rule.exists() {
-            let text = std::fs::read_to_string(&rule).unwrap_or_default();
+        if host(&rule).exists() {
+            let text = std::fs::read_to_string(host(&rule)).unwrap_or_default();
             let line = text.lines().find(|l| l.starts_with("KERNEL=="));
             println!(
                 "udev rule {}: {}",
@@ -588,7 +607,7 @@ fn module_udev(verb: &str, name: &str, group: &str, mode: &str, dry: bool, addus
         }
         println!(
             "  {}",
-            if Path::new(&dev).exists() {
+            if host(&dev).exists() {
                 dev_line(&dev)
             } else {
                 format!("{dev}: not present (module {name} not loaded)")
@@ -632,7 +651,7 @@ fn module_udev(verb: &str, name: &str, group: &str, mode: &str, dry: bool, addus
             "reload the udev rules".into(),
             s(&["sudo", "udevadm", "control", "--reload-rules"]),
         ));
-        if Path::new(&dev).exists() {
+        if host(&dev).exists() {
             steps.push((
                 format!("apply it to {dev}"),
                 s(&[
@@ -657,7 +676,7 @@ fn module_udev(verb: &str, name: &str, group: &str, mode: &str, dry: bool, addus
             ));
         }
     } else {
-        if !rule.exists() {
+        if !host(&rule).exists() {
             println!("hydo: no udev rule {}; nothing to remove", rule.display());
             return 0;
         }
@@ -669,7 +688,7 @@ fn module_udev(verb: &str, name: &str, group: &str, mode: &str, dry: bool, addus
             "reload the udev rules".into(),
             s(&["sudo", "udevadm", "control", "--reload-rules"]),
         ));
-        if Path::new(&dev).exists() {
+        if host(&dev).exists() {
             steps.push((
                 format!("give {dev} back to root"),
                 s(&["sudo", "chown", "root:root", &dev]),
@@ -701,7 +720,7 @@ fn module_udev(verb: &str, name: &str, group: &str, mode: &str, dry: bool, addus
         if dry {
             return 0;
         }
-        if Path::new(&dev).exists() {
+        if host(&dev).exists() {
             println!("hydo: {}", dev_line(&dev));
         } else {
             println!(

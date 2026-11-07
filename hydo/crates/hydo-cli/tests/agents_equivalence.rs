@@ -200,20 +200,46 @@ fn run_seq(
 
 /// A release-like root for the binary: bin/hydo and, when `with_skill`, skill/hydo-onboard and
 /// hydo/onboard/MANIFEST.md (else the built-in copies are used).
+///
+/// The recorded modes are those of umask 022 and of a checkout made with it (M167): every
+/// test starts here, so the process's umask is set to 022 and the skill folder is a copy with
+/// the modes git records (directories 0755, files 0755 or 0644), whatever the machine's umask
+/// and the checkout's modes (a umask of 002, common for users on Linux, gave other modes).
 fn release(with_skill: bool) -> PathBuf {
+    // SAFETY: umask only sets the process's file creation mask (every test sets the same).
+    unsafe {
+        libc::umask(0o022);
+    }
     let r = scratch(if with_skill { "rel" } else { "bare" });
     std::fs::create_dir_all(r.join("bin")).unwrap();
     std::fs::copy(env!("CARGO_BIN_EXE_hydo"), r.join("bin/hydo")).unwrap();
     if with_skill {
         std::fs::create_dir_all(r.join("skill")).unwrap();
-        std::os::unix::fs::symlink(
-            repo().join("skills/hydo-onboard"),
-            r.join("skill/hydo-onboard"),
-        )
-        .unwrap();
+        copy_as_checked_out(
+            &repo().join("skills/hydo-onboard"),
+            &r.join("skill/hydo-onboard"),
+        );
         std::os::unix::fs::symlink(repo().join("hydo"), r.join("hydo")).unwrap();
     }
     r
+}
+
+/// Copy a tree with the modes git gives a checkout under umask 022.
+fn copy_as_checked_out(src: &Path, dst: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::create_dir_all(dst).unwrap();
+    for e in std::fs::read_dir(src).unwrap().filter_map(Result::ok) {
+        let (p, to) = (e.path(), dst.join(e.file_name()));
+        if p.is_dir() {
+            copy_as_checked_out(&p, &to);
+        } else {
+            std::fs::copy(&p, &to).unwrap();
+            let x = std::fs::metadata(&p).unwrap().permissions().mode() & 0o111 != 0;
+            let mode = if x { 0o755 } else { 0o644 };
+            std::fs::set_permissions(&to, std::fs::Permissions::from_mode(mode)).unwrap();
+        }
+    }
+    std::fs::set_permissions(dst, std::fs::Permissions::from_mode(0o755)).unwrap();
 }
 
 fn nothing(_: &Path) {}
