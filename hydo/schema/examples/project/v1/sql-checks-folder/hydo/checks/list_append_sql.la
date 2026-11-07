@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: history=la consistency=strict-serializable
+# hydo-msg: the SQL list-append transactions are strict-serializable (no lost, aborted or duplicated append, no dependency cycle)
+# History la holds every transaction; one primary serves them all, so real time is claimed:
+# an acknowledged append missing from a later read is a lost write, also across a power cut.
+# The final read-back: every list, in one transaction on db.
+exec hydo-sql list-append read-all db 9999

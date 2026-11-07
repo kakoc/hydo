@@ -12,14 +12,15 @@
 use std::path::{Path, PathBuf};
 
 pub const USAGE: &str = "usage: hydo sql-gen --dialect postgres|mysql|libsql --endpoint NAME=ADDRESS[,replica]...
-                    [--workloads bank,list-append,register,set,counter] [--shapes batch,interactive]
+                    [--workloads bank,list-append,register,set,counter | none] [--shapes batch,interactive]
                     [--route NAME,...] [--isolation serializable|repeatable-read|read-committed]
                     [--accounts N] [--balance N] [--keys N] [--timeout-ms N] [--retries N]
                     [--out DIR] [--force]
 Writes ready-made SQL workloads and checks into a project's hydo/ folder (DIR, default ./hydo):
 workload/helper_sql.conf (what hydo-sql reads), workload/first_sql_init, one parallel_driver per
 workload and transaction shape, and the checks each workload has (bank totals, history checks,
-set and counter read-backs, replica convergence, a .sql check). The address of an endpoint is
+set and counter read-backs, replica convergence, a .sql check); --workloads none writes only the
+configuration, for SQL checks and hydo-sql check sources of a project's own tables. The address of an endpoint is
 host:port for libsql (sqld's HTTP API) and a DSN for postgres and mysql, as the guest reaches it
 (postgres://user:pw@10.89.0.2:5432/db?sslmode=disable, user:pw@tcp(10.89.0.3:3306)/db).
 Existing files are kept unless --force. MANIFEST.md, \"SQL systems: ready-made workloads and checks\".";
@@ -122,7 +123,7 @@ pub fn parse(argv: &[String]) -> Result<(Spec, PathBuf, bool), String> {
                 s.endpoints.push((name.into(), addr, replica));
             }
             "--workloads" => {
-                s.workloads = list(&v);
+                s.workloads = if v == "none" { Vec::new() } else { list(&v) };
                 for w in &s.workloads {
                     if !WORKLOADS.contains(&w.as_str()) {
                         return Err(format!(
@@ -246,6 +247,10 @@ impl Spec {
         let mut f: Vec<(String, String, bool)> = Vec::new();
         let sh = |hdr: &str, body: &str| format!("#!/bin/sh\n{hdr}{body}\n");
         f.push(("workload/helper_sql.conf".into(), self.conf(), false));
+        if self.workloads.is_empty() {
+            // only the endpoints, for SQL checks and `hydo-sql check` sources
+            return f;
+        }
         f.push((
             "workload/first_sql_init".into(),
             sh(
@@ -641,6 +646,37 @@ mod tests {
             .any(|c| c["kind"] == "list_append" && c["history"] == "lap"));
         let cmds = folder["commands"].as_array().unwrap();
         assert_eq!(cmds.len(), 5, "{cmds:?}");
+        // an executable .sql file stays an ordinary check (a program), as before Milestone 177
+        use std::os::unix::fs::PermissionsExt;
+        let ex = dir.join("checks/final_prog.sql");
+        std::fs::write(&ex, "#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::set_permissions(&ex, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // a bad header key is refused with the allowed ones
+        std::fs::write(
+            dir.join("checks/always_bad.sql"),
+            "-- hydo: store=primary speed=3\nSELECT 1\n",
+        )
+        .unwrap();
+        let e = hydo_manifest::composer::scan_folder(&dir.to_string_lossy()).unwrap_err();
+        assert!(
+            format!("{e:?}").contains("allowed here: store, every, within, after, poll"),
+            "{e:?}"
+        );
+        std::fs::remove_file(dir.join("checks/always_bad.sql")).unwrap();
+        let folder = hydo_manifest::composer::scan_folder(&dir.to_string_lossy())
+            .unwrap()
+            .unwrap();
+        let prog = folder["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "prog.sql")
+            .unwrap()
+            .clone();
+        assert_eq!(
+            prog["run"],
+            serde_json::json!(["/hydo/checks/final_prog.sql"])
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

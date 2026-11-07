@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=90
+# The workloads' tables and first rows on the primary (idempotent), then a wait until every
+# endpoint serves them, so the workload starts from the same state everywhere.
+exec hydo-sql init --wait 60

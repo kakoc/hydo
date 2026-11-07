@@ -1,0 +1,73 @@
+# PostgreSQL 15 (the voting app's database, ../compose-voting: the same image by digest, the
+# same settings) under hydo's ready-made SQL workloads, written by
+#   hydo sql-gen --dialect postgres --workloads bank,list-append,register,set,counter \
+#     --endpoint 'db=postgres://postgres:postgres@10.89.0.15:5432/postgres?sslmode=disable'
+# No client and no check was written by hand: workload/ and checks/ are the generator's output
+# (RESULTS.md). The knob S is PostgreSQL's synchronous_commit.
+format: 1
+name: postgres-sql
+description: "PostgreSQL 15 with hydo's ready-made SQL workloads: bank transfers, list-append transactions, registers, a set and a counter, checked by the generated checks and hydo's history checkers"
+hydo_version: "0.1"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 1024
+
+data:
+  size_mib: 512   # the data disk: PostgreSQL's data directory lives here (the fault target)
+  dirs: [vol/db-data]
+
+root:
+  text:
+    /etc/hosts: |
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.15 db
+    # PostgreSQL's synchronous_commit, set with ALTER SYSTEM and a reload (the knob S)
+    /etc/pg-sync-commit.sh: |
+      exec timeout 30 hydo-oci db psql -X -q -U postgres -h 127.0.0.1 -c "ALTER SYSTEM SET synchronous_commit = '$1'" -c "SELECT pg_reload_conf()"
+
+services:
+  # image postgres:15-alpine = docker.io/library/postgres (the voting app's, ../compose-voting/fetch-images.sh)
+  #   linux/amd64: sha256:1d4031d6ed0a9b774b365f99a3c16127217eb19f699d8d43fc43b732748601ef
+  #   linux/arm64: sha256:188e422ad801eaf156d9b9e276064d931553a81f4281a18db98752178dbc061d
+  - name: db
+    image: {x86_64: images/postgres-15-alpine-amd64.docker.tar, arm64: images/postgres-15-alpine-arm64-oci}
+    image_ref: "postgres:15-alpine"
+    env:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+    port: 5432
+    addr: 10.89.0.15
+    ready: "timeout 10 hydo-oci db pg_isready -q -U postgres -h 127.0.0.1"
+    ready_timeout: 120
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/db-data, dst: /var/lib/postgresql/data, copy_up: true}
+
+workload:
+  steps: 60
+  timeout: 300
+
+test:
+  parallel: 6
+  per_round: 3
+  round_ms: 300
+  command_timeout: 30
+  drain_timeout: 30
+  check_every: 2
+
+# synchronous_commit: on (the default) waits for the WAL flush before acknowledging a commit;
+# off acknowledges first, so a power cut may lose the last acknowledged transactions (documented
+# by PostgreSQL).
+knobs:
+  - token: S
+    name: postgres synchronous_commit
+    default: "on"
+    values: ["on", "off"]
+    set: sh /etc/pg-sync-commit.sh $HYDO_VALUE
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

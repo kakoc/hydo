@@ -450,33 +450,49 @@ fn txn(c: Conf, a: &[String], out: &mut dyn Write) -> i32 {
         Err(e) => return usage_err(out, &e),
     };
     let n = 1 + x.rng.below(4);
-    let mut mops = Vec::new();
+    // (append?, key, the append's index); an element is unique per attempt: the checker wants
+    // every element appended once, also when an attempt failed and was retried
+    let mut shape = Vec::new();
     for i in 0..n {
         let k = x.rng.below(x.c.keys);
-        if x.rng.below(2) == 0 {
-            mops.push((true, k, x.id * 10 + i));
-        } else {
-            mops.push((false, k, 0));
-        }
+        shape.push((x.rng.below(2) == 0, k, i));
     }
-    let inv: Vec<String> = mops
-        .iter()
-        .map(|(ap, k, e)| {
-            if *ap {
-                hist::append_mop(*k, *e)
-            } else {
-                hist::read_mop(*k)
-            }
-        })
-        .collect();
+    let id = x.id;
+    let mops_of = |attempt: u32| -> Vec<(bool, u64, u64)> {
+        shape
+            .iter()
+            .map(|(ap, k, i)| {
+                (
+                    *ap,
+                    *k,
+                    if *ap {
+                        id * 100 + attempt as u64 * 10 + i
+                    } else {
+                        0
+                    },
+                )
+            })
+            .collect()
+    };
     let c = &x.c;
     let proc_ = x.id.to_string();
     let mut done = Vec::new();
     let mut attempt_op: Option<Op> = None;
-    let r = with_retries(c, |_| {
+    let r = with_retries(c, |attempt| {
         if let Some(op) = attempt_op.take() {
             op.fail();
         }
+        let mops = mops_of(attempt);
+        let inv: Vec<String> = mops
+            .iter()
+            .map(|(ap, k, e)| {
+                if *ap {
+                    hist::append_mop(*k, *e)
+                } else {
+                    hist::read_mop(*k)
+                }
+            })
+            .collect();
         let op = Op::invoke(la_views(c, &ep), &proc_, "txn", &inv);
         let res = if inter {
             interactive(c, &ep, |s: &mut Session| {

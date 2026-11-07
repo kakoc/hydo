@@ -57,3 +57,4 @@ skill-example-miniflux
 skill-example-redis-composed-folder
 restart-policies
 restart-may-fail
+sql-checks-folder

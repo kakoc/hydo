@@ -126,6 +126,7 @@ jobs:
           workspaces: |
             hydo/crates/hydo-agent -> target
             hydo/crates/hydo-read -> target
+            hydo/crates/hydo-sql -> target
       - name: hydo-agent (the guest agent's native tests, as an unprivileged user)
         working-directory: hydo/crates/hydo-agent
         run: cargo test --locked
@@ -141,6 +142,11 @@ jobs:
         run: |
           cargo test --locked
           cargo test --locked --test stores -- --nocapture --test-threads=1 2>&1 | grep 'skipped'
+      # The outcome rules against scripted sqld and PostgreSQL servers, the configuration, the
+      # SQL of each dialect, the world source (no database needed).
+      - name: hydo-sql (the ready-made SQL workloads and checks)
+        working-directory: hydo/crates/hydo-sql
+        run: cargo test --locked
 
   sdks:
     name: sdks

@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=20
+# One bank transfer as a transaction whose statements are decided before it starts (one request):
+# the debit only when the balance allows it, the credit only when the debit happened.
+# The endpoint comes from the route; outcomes go to $HYDO_OUTCOMES and $HYDO_ACKED.
+exec hydo-sql bank transfer --shape batch

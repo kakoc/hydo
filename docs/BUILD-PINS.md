@@ -335,6 +335,28 @@ repository's workspace), so no dependency update elsewhere changes it. The pins:
   The x86_64 images of Milestone 112 carry the first, the Mac images the third. The Go program
   it replaced was 10.3 MB, and nixpkgs Go and upstream Go built different bytes of it (M96).
 
+## hydo-sql: the ready-made SQL workloads and checks (Milestone 177)
+
+`hydo/crates/hydo-sql` (the program `hydo sql-gen`'s commands call; docs/design/workloads.md) is
+staged into an image only when a command or a folder file names `hydo-sql`, so its bytes are
+inside those images' fingerprints. Like hydo-read it keeps its own Cargo workspace and lock file
+(started from hydo-read's: the same versions of the same crates, no other crate) and builds with
+`hydo/crates/hydo-sql/build.sh [x86_64|aarch64|all] [OUTDIR]` (Rust 1.90.0, both musl targets,
+rust-lld, the checkout path and `$CARGO_HOME` remapped) into `build/hydo-sql` and
+`build/hydo-sql-arm64`, the names `hydo-build` looks for (`HYDO_SQL_BIN`, `HYDO_SQL_BIN_ARM64`).
+Its build script copies hydo-read's `pg.rs`, `mysql.rs` and `check.rs` into the build (their
+`//!` lines blanked, so line numbers stay), so a change of those three files changes hydo-sql's
+bytes too, while hydo-read's own bytes stay untouched by hydo-sql. As for hydo-read, the build
+host's kind is in the bytes. The values for Milestone 177:
+
+| target | built on | size | sha256 |
+|---|---|---|---|
+| x86_64 | aarch64-apple-darwin (the Mac; built twice, the same bytes) | 1,716,032 | `0bb5bc8fc29b0adb9879bcd687a2b50e92edbef3e6cd6a63752555afadb6348d` |
+| aarch64 | aarch64-apple-darwin (the Mac) | 1,414,240 | `5e5544d679f1e4a6642b0b97af7265141702120ccba6e0a48c7f010abb695228` |
+
+The images of `examples/libsql-replica` and `examples/postgres-sql` in their RESULTS.md carry the
+first. No release ships `guest/hydo-sql` yet (a release-script change, AGENTS.md open item 56).
+
 ## hydo-agent: the guest agent (Milestone 117)
 
 `hydo/crates/hydo-agent` is the program that will run as the guest's first process under host
