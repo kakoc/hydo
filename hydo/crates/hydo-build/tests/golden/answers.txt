@@ -2830,13 +2830,13 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case366.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[0].webhook: unknown field(s) bog…#8de9b80b3768ef99"
+R	^	<tmp>/case366.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[0].webhook: unknown field(s) bog…#a8c7e43e219116d5"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case367.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[0]: unknown field(s) bogus (know…#62ff3c205d8f33b7"
+R	^	<tmp>/case367.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[0]: unknown field(s) bogus (know…#2109c1286f8b4215"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -6025,7 +6025,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01022.json --arch x86_64 --check	run	0	#081856e3f9e167f4/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#9bb13f63e6581ad7/3267	^
 R	^	^ --arch x86_64 --print-world	run	0	#b7a7a45974e3be0e/1153	^
-R	^	<tmp>/mutant01023.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[1].routes[0]: unknown field(s) bogus (know…#0d7f03631efd8564"
+R	^	<tmp>/mutant01023.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[1].routes[0]: unknown field(s) bogus (know…#552ac4ea2a5cd649"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01024.json --arch arm64 --check	run	1	""	"hydo-build: invariants[0].msg: a string (or a whole number),…#0fbc4209784e5b0c"

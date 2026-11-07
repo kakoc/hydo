@@ -36,6 +36,14 @@ templates: `{seq}`, `{ref}`, `{idem}`, `{json:a.b}`, `{header:X}`, `{query:x}`, 
 `protocol: grpc` makes a cleartext HTTP/2 gRPC fake (`path` is `/pkg.Service/Method`, the answer
 is `message:` in hex protobuf and `code:`).
 
+When the system reads back what it created (a payment's currency, its status after a capture),
+give the creating route `save: {key: 'pi_{seq}', fields: {currency: '{form:currency}'}}` and the
+reading route `load: '{path:id}'`; its answer then uses `{obj:currency}` (an unknown id is
+answered 404). When the system checks the provider's webhook signature, give the webhook
+`sign: {header: <its header>, secret: <the endpoint secret the system is configured with>}`
+(HMAC-SHA256 of `{ts}.{body}`, value `t={ts},v1={hmac}`; `payload:`, `value:` and
+`encoding: base64` change the scheme). `hydo guide manifest` has the details.
+
 Find the outside services in the project's configuration (base URLs, API keys, webhook
 endpoints) and point each base URL at its fake. Ask the user which answers each route gives, or
 take them from the provider's API documentation.

@@ -167,8 +167,12 @@ pub(crate) const KNOWN_ROUTE: &[&str] = &[
     "effect",
     "idempotent",
     "webhook",
+    "save",
+    "load",
     "description",
 ];
+pub(crate) const KNOWN_SAVE: &[&str] = &["key", "fields"];
+pub(crate) const KNOWN_SIGN: &[&str] = &["header", "secret", "payload", "value", "encoding"];
 pub(crate) const KNOWN_PROXY_ROUTE: &[&str] =
     &["name", "method", "path", "ref", "effect", "description"];
 pub(crate) const KNOWN_HOOK: &[&str] = &[
@@ -178,6 +182,7 @@ pub(crate) const KNOWN_HOOK: &[&str] = &[
     "headers",
     "delay_ms",
     "retries",
+    "sign",
     "description",
 ];
 // `query:` and `form:` names may carry brackets: the nested form encoding that Stripe, Rails and
@@ -1084,6 +1089,7 @@ fn validate_world(m: &Value) -> R<()> {
                         "{rw}: idempotent: true needs the fake's idempotency: (where the key is)"
                     )));
                 }
+                validate_objects(r, &rw)?;
                 let wh_ = obj_get(r, "webhook").cloned().unwrap_or(Value::Null);
                 if !wh_.is_null() {
                     let hw = format!("{rw}.webhook");
@@ -1139,8 +1145,94 @@ fn validate_world(m: &Value) -> R<()> {
                             }
                         }
                     }
+                    validate_sign(&wh_, &hw)?;
                 }
             }
+        }
+    }
+    Ok(())
+}
+
+/// A fake route's `save:` (key and fields, templates) and `load:` (a template): hydo-world's
+/// objects (hydo/crates/hydo-world/src/objects.rs).
+fn validate_objects(r: &Value, rw: &str) -> R<()> {
+    if let Some(s) = obj_get(r, "save") {
+        let sw = format!("{rw}.save");
+        if !s.is_object() {
+            return Err(err(format!("{sw}: must be a mapping (key: and fields:)")));
+        }
+        unknown(s, KNOWN_SAVE, &sw)?;
+        match obj_get(s, "key") {
+            Some(Value::String(k)) if !k.is_empty() => {}
+            _ => {
+                return Err(err(format!(
+                    "{sw}: key: the object's key, a template (e.g. 'pi_{{seq}}' or '{{path:id}}')"
+                )))
+            }
+        }
+        if let Some(f) = obj_get(s, "fields") {
+            let Value::Object(o) = f else {
+                return Err(err(format!("{sw}.fields: a mapping of field: template")));
+            };
+            for (k, x) in o {
+                if pyre::match_dollar(r"[A-Za-z_][A-Za-z0-9_.-]*", k).is_none() {
+                    return Err(err(format!(
+                        "{sw}.fields: field name {}: letters, digits, _ . -",
+                        repr_str(k)
+                    )));
+                }
+                if !(x.is_string() || x.is_i64() || x.is_u64()) {
+                    return Err(err(format!("{sw}.fields.{k}: a string (a template)")));
+                }
+            }
+        }
+    }
+    if let Some(l) = obj_get(r, "load") {
+        if !matches!(l, Value::String(s) if !s.is_empty()) {
+            return Err(err(format!(
+                "{rw}: load: the key of the object the request is about, a template (e.g. '{{path:id}}')"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// A webhook's `sign:` (hydo/crates/hydo-world/src/sign.rs).
+fn validate_sign(wh: &Value, hw: &str) -> R<()> {
+    let Some(s) = obj_get(wh, "sign") else {
+        return Ok(());
+    };
+    let sw = format!("{hw}.sign");
+    if !s.is_object() {
+        return Err(err(format!("{sw}: must be a mapping (header:, secret:)")));
+    }
+    unknown(s, KNOWN_SIGN, &sw)?;
+    match obj_get(s, "header") {
+        Some(Value::String(h)) if pyre::match_dollar("[A-Za-z0-9-]+", h).is_some() => {}
+        _ => return Err(err(format!("{sw}: header: the header's name"))),
+    }
+    match obj_get(s, "secret") {
+        Some(Value::String(x)) if !x.is_empty() => {}
+        _ => return Err(err(format!("{sw}: secret: the endpoint secret (a string)"))),
+    }
+    for k in ["payload", "value"] {
+        if let Some(x) = obj_get(s, k) {
+            if !x.is_string() {
+                return Err(err(format!("{sw}: {k}: a string (a template)")));
+            }
+        }
+    }
+    if let Some(Value::String(v)) = obj_get(s, "value") {
+        if !v.contains("{hmac}") {
+            return Err(err(format!("{sw}: value: must contain {{hmac}}")));
+        }
+    }
+    if let Some(e) = obj_get(s, "encoding") {
+        if !in_strs(e, &["hex", "base64"]) {
+            return Err(err(format!(
+                "{sw}: encoding: hex or base64 (got {})",
+                repr(e)
+            )));
         }
     }
     Ok(())
