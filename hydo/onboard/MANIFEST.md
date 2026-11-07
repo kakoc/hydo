@@ -819,8 +819,10 @@ proxies:
 ```
 
 **Extractors** (`idempotency:`, `ref:`): `header:<Name>`, `json:<field>` (dotted path into a JSON
-body), `query:<name>`, `form:<name>`, `path:<name or 1-based segment>`, `pb:<field number>` (a
-top-level field of the first gRPC message: a string or a varint), `body` (a hash of the body).
+body), `query:<name>`, `form:<name>` (a bracketed name too: Stripe and Rails send
+`metadata[order]=o7`, read with `form:metadata[order]`), `path:<name or 1-based segment>`,
+`pb:<field number>` (a top-level field of the first gRPC message: a string or a varint), `body`
+(a hash of the body).
 
 **Templates** (answer bodies, header values, webhook url/body/headers): `{seq}` (the record number
 of the request; replays use the original's), `{ref}`, `{idem}`, `{fake}`, `{route}`; in answers
