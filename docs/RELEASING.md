@@ -1,8 +1,9 @@
 # Releasing hydo
 
 The steps of a release, in order. Each release is two tarballs and the two sources archives that
-accompany them; nothing is published until the last step. The history of how each step was first
-done is in docs/HISTORY.md (Milestones 149, 150, 153–158).
+accompany them; nothing is published until step 7, and step 8 points the Homebrew tap at the new
+Mac tarball. The history of how each step was first done is in docs/HISTORY.md (Milestones 149,
+150, 153–158 and 168).
 
 ## 1. Before building
 
@@ -102,3 +103,20 @@ Create the GitHub release for the tag of the final commit and upload all four fi
 third-party software in the tarballs. Keep every sources archive available for as long as its
 tarball is offered (and at least three years after the last download of it, as GPL-2.0 section 3
 asks of a written offer).
+
+## 8. Update the Homebrew tap (after the release is published)
+
+`brew install kakoc/tap/hydo` installs the Mac tarball of the release the formula names
+(https://github.com/kakoc/homebrew-tap, `Formula/hydo.rb`; Milestone 168). After step 7, in a
+clone of the tap repository:
+
+1. `sh hydo/dist/mac/update-homebrew.sh <version> <tap clone>` writes the formula's `url` and
+   `sha256` for `hydo-mac-<version>.tar.gz` from the release's `SHA256SUMS` and checks the
+   published tarball against it (Homebrew reads the version from the url).
+2. `brew style Formula/hydo.rb`, then commit (`hydo <version>`) and push the tap.
+3. On a Mac: `brew update`, then `brew upgrade kakoc/tap/hydo` (or `brew install
+   kakoc/tap/hydo`); `hydo doctor` must pass every check, the quickstart's Redis example must give
+   the Mac values of docs/REBASELINE.md, and `brew test hydo` and `brew audit --strict --online
+   kakoc/tap/hydo` must pass.
+
+If this step is skipped, `brew install kakoc/tap/hydo` keeps installing the previous release.
