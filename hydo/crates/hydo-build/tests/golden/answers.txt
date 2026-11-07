@@ -2422,7 +2422,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case298.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) nope (known: description,…#27b2978c511b516d"
+R	^	<tmp>/case298.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) nope (known: description,…#3f34b2d67b5a7a79"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -3031,7 +3031,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00024.json --arch arm64 --check	run	0	#65e37ff649a1afc3/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#6f59decd5f0b4b72/1832	^
 R	^	^ --arch arm64 --print-world	run	0	#a5847e82365a65b2/234	^
-R	^	<tmp>/mutant00025.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s)  , 7 (known: description,…#c5baa33f1cdbb41f"
+R	^	<tmp>/mutant00025.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s)  , 7 (known: description,…#bb4493f75ffc5f73"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00026.json --arch x86_64 --check	run	1	""	"hydo-build: proxies[0]: must be a mapping\n"
@@ -4177,7 +4177,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00406.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].dst: a string (or a whole number),…#88cc6ebeb70a4c3d"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00407.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) a (known: description, di…#fd810b4d68de8367"
+R	^	<tmp>/mutant00407.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) a (known: description, di…#6a742cb8822b6593"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00408.json --arch arm64 --check	run	0	#7dc618b83c3f346d/84	""
@@ -4246,7 +4246,7 @@ R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00429.json --arch x86_64 --check	run	0	#e7f0006b06250f74/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#4e018560477e4ce4/1941	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00430.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) freeze, kill (known: desc…#d8db3be7629753c6"
+R	^	<tmp>/mutant00430.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) freeze, kill (known: desc…#c1dae9dabf1172c7"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00431.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[1]: unknown field(s) bogus (known: af…#6dcb78a6f79e4190"
@@ -4417,7 +4417,7 @@ R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00486.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[26].dst: a string (or a whole number)…#05e693957560700d"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00487.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) bogus (known: description…#066ee0b521c45f5a"
+R	^	<tmp>/mutant00487.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) bogus (known: description…#d13109515803d301"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00488.json --arch arm64 --check	run	0	#9e9f3550b097451f/103	""
@@ -4570,7 +4570,7 @@ R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00537.json --arch x86_64 --check	run	0	#8a56a64e0da0f616/83	""
 R	^	^ --arch x86_64 --print-shell	run	0	#1015a3b98c18be01/1879	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00538.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) bogus (known: description…#066ee0b521c45f5a"
+R	^	<tmp>/mutant00538.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) bogus (known: description…#d13109515803d301"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00539.json --arch x86_64 --check	run	1	""	"hydo-build: data.size_mib: invalid type: string \"x\", expecte…#1f7a119983971fe8"
@@ -4636,7 +4636,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00559.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: unhashable type in faults:\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00560.json --arch arm64 --check	run	1	""	"hydo-build: root: unknown field(s) bogus (known: description…#066ee0b521c45f5a"
+R	^	<tmp>/mutant00560.json --arch arm64 --check	run	1	""	"hydo-build: root: unknown field(s) bogus (known: description…#d13109515803d301"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00561.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#3fc1eb5c73b15672"

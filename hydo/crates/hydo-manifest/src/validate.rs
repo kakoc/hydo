@@ -86,7 +86,15 @@ pub const LIVE_ANCHORS: &[&str] = &["heal", "start"];
 pub(crate) const KNOWN_WORKLOAD: &[&str] =
     &["steps", "run", "retry", "process", "timeout", "description"];
 pub(crate) const KNOWN_DATA: &[&str] = &["size_mib", "mount", "dirs", "description"];
-pub(crate) const KNOWN_ROOT: &[&str] = &["size_mib", "nix", "files", "text", "dirs", "description"];
+pub(crate) const KNOWN_ROOT: &[&str] = &[
+    "size_mib",
+    "nix",
+    "files",
+    "text",
+    "dirs",
+    "share_images",
+    "description",
+];
 pub(crate) const KNOWN_GUEST: &[&str] = &[
     "ram_mib",
     "clock_start",
@@ -647,6 +655,11 @@ pub fn validate(m: &mut Value) -> R<()> {
     unknown(&data, KNOWN_DATA, "data")?;
     let root = or_map(obj_get(m, "root"));
     unknown(&root, KNOWN_ROOT, "root")?;
+    if let Some(v) = obj_get(&root, "share_images") {
+        if !v.is_boolean() {
+            return Err(err("root.share_images: must be true or false"));
+        }
+    }
     let guest = or_map(obj_get(m, "guest"));
     unknown(&guest, KNOWN_GUEST, "guest")?;
     if has(&guest, "clock_after_cut")? {

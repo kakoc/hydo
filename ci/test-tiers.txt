@@ -28,6 +28,7 @@ hydo-build::equivalence                  full
 hydo-build::errlog                       fast
 hydo-build::netns                        fast
 hydo-build::oci                          fast
+hydo-build::oci_share                    fast
 hydo-compose                             fast
 hydo-compose::bin/hydo-compose           fast
 hydo-compose::bin/hydo-fetch-image       fast

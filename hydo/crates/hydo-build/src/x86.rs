@@ -633,6 +633,7 @@ pub fn build(
         Path::new(&busybox),
         &bdir.join(format!("{out}-oci-tmp")),
         netns,
+        pyv::get(rootsec, "share_images")? == Some(&serde_json::Value::Bool(true)),
         io,
     )?;
     fsx::fix_mtimes(&r)?;

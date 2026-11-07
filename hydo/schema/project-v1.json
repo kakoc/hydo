@@ -419,6 +419,14 @@
             "$ref": "#/$defs/Text"
           }
         },
+        "share_images": {
+          "description": "Image services with the same image (by config digest) share one unpacked tree; each still\nhas its own mount of it, with its own /tmp, /data, volumes and tmpfs mounts. Off by\ndefault (it changes the image's bytes).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
         "description": {
           "anyOf": [
             {

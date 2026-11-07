@@ -157,6 +157,9 @@ root:                          # what goes on the read-only root filesystem
     /etc/myapp.conf: |
       port 8080
   dirs: [/etc/myapp]           # empty directories to create
+  share_images: true           # image services with the same image (config digest) share one
+                               # unpacked tree, each on its own mount of it with its own /tmp,
+                               # /data and mounts (default false: one copy per service)
 
 data:                          # the read-write disk, mounted on /data; the fault target
   size_mib: 512                # default 512
@@ -1541,7 +1544,9 @@ image keeps working after hydo is upgraded").
 - The kernel command line is the explorer's. Guest RAM is per image (`guest.ram_mib`), at most
   3072 MiB on x86_64 (hvx keeps RAM below the 4th-GiB MMIO hole) and 4096 MiB on arm64.
 - Images are files on the build machine (no registry pulls); one root per image service, not
-  a merged root; no xattrs/capabilities, devices or FIFOs from layers; no zstd layers.
+  a merged root (with `root.share_images: true`, services of one image share its unpacked
+  tree; it is opt-in because it changes the image's bytes); no xattrs/capabilities, devices or
+  FIFOs from layers; no zstd layers.
 - The guest console keeps 64 KiB per VM on hvx (the kernel module's buffer; `hydo run` warns
   when a run wrote more) and 4 MiB on the KVM engine and the Mac: a workload that prints every
   acknowledged id should print short ids, or the done marker can be lost.

@@ -607,6 +607,12 @@ pub struct Root {
     /// Empty directories to create.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dirs: Option<Vec<Text>>,
+    /// Image services with the same image (by config digest) share one unpacked tree; each still
+    /// has its own mount of it, with its own /tmp, /data, volumes and tmpfs mounts. Off by
+    /// default (it changes the image's bytes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub share_images: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
