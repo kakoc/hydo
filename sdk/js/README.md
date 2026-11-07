@@ -212,8 +212,8 @@ tx.ok(hh.append('x', '1'), hh.readResult('y', '1', '2'));
 - `package.json`, `index.js` and `index.mjs` are copied into the node-kv example's images, so
   a change to any of them changes those images' bytes and every node-kv fingerprint (the last
   such change, the `Apache-2.0` license field and the removed `conformance` script of the
-  deleted Go-binary harnesses, re-recorded them in milestone 152; docs/REBASELINE.md has the
-  values).
+  deleted Go-binary harnesses, re-recorded them in milestone 152, and a reworded comment in
+  `index.js` in milestone 157; docs/REBASELINE.md has the values).
 
 ## Example
 

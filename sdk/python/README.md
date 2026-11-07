@@ -200,6 +200,10 @@ writing `.pyc` files on the guest's read-only root.
   recorder's own unit test, the encoding of every byte class, the argument checks, the sink
   settings, one `os.write` per record, 8 threads writing 400 records each without an
   interleaved line, and fork.
+- The files of `src/hydo_assert/` are copied into the python-kv example's images, so a change
+  to any of them changes those images' bytes and every python-kv fingerprint (the last such
+  change, a reworded comment in `_core.py`, re-recorded them in milestone 157;
+  docs/REBASELINE.md has the values).
 
 ## Limits
 

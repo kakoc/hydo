@@ -2448,7 +2448,7 @@ Initramfs sha256 prefixes (each built twice; "identical" = initramfs, root disk,
 |---|---|---|---|---|
 | `disk=none \| run W=0000002a,p4,q2,r100` | VIOLATION [total_conserved] balances sum to 503, not 500 | `9bcde106d244c7c8` | `cc25282fa6ee57cf` | yes |
 
-#### node-kv
+#### node-kv (superseded by section 14, M157)
 
 | schedule | verdict | fingerprint | ctl | twice |
 |---|---|---|---|---|
@@ -2457,7 +2457,7 @@ Initramfs sha256 prefixes (each built twice; "identical" = initramfs, root disk,
 | `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `f9847e1a9e687a15` | `202dcc1810826541` | yes |
 | `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `9e6672f7f7f52ff7` | `39129eaa9b7e2227` | yes |
 
-#### python-kv
+#### python-kv (superseded by section 14, M157)
 
 | schedule | verdict | fingerprint | ctl | twice |
 |---|---|---|---|---|
@@ -2466,7 +2466,7 @@ Initramfs sha256 prefixes (each built twice; "identical" = initramfs, root disk,
 | `disk=cut \| run C=12 S=never` | VIOLATION [pykv.oracle] key k:0 lost (got 'NONE') | `fc139f93a791ec46` | `3b8233343cb49963` | yes |
 | `disk=none \| run B=1234` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `ed2d03a6970eb0bd` | `ece160c3964f7f03` | yes |
 
-#### python-kv-hist
+#### python-kv-hist (superseded by section 14, M157)
 
 | schedule | verdict | fingerprint | ctl | twice |
 |---|---|---|---|---|
@@ -2947,3 +2947,67 @@ built from `e744b8c` (`e9538ed9…`, `098c8773…`; docs/HISTORY.md "Milestone 1
 | Mac | `examples/redis` | `disk=cut dseed=1f16055b6d41c6d9 \| run C=9 R=no` (minimal) | VIOLATION | `d6120f56fdef3f28` |
 | Mac | `examples/ledger-spin` (`c2840c669e605eee…`) | `disk=none \| run` | OK (acked=30) | `aa732142c0f5567f` |
 | Mac | `examples/ledger-spin` | `disk=none \| run P=front@10+2` | VIOLATION entry 10 stored 2 times | `3b4dd4910d2a6123` |
+
+## 14. node-kv and python-kv with the SDK comments reworded (M157, 2026-11-07)
+
+Milestone 157 reworded one comment in `sdk/js/index.js` and one in
+`sdk/python/src/hydo_assert/_core.py` (the comparison helpers' comment; the code is unchanged).
+Both files are copied into images: `index.js` into node-kv's
+(`/app/node_modules/hydo-assert/index.js`), `_core.py` into python-kv's and python-kv-hist's
+(`/opt/pykv/hydo_assert/_core.py`). These three images therefore have new bytes and new
+fingerprints; no other image contains either file. The engines, the controller, the agent and the
+guest kernels did not change, so the fingerprint epoch stays 1 (an image built before M157 still
+gives its section 13 values). These values supersede section 13.1's node-kv, python-kv and
+python-kv-hist tables.
+
+How: M155's Mac staging (section 13: its release prefix, which has the same image builder as
+`main` = `3aa43c6`, and its staged Node.js, CPython and SDK inputs), copied into a new directory
+twice: once as it was ("before") and once with the two files of this milestone ("after").
+`hydo build` of the three manifests, once before and twice after; then every recorded schedule twice
+with `hydo run --image` from a fresh boot, one VM at a time, on both.
+
+Images: the before builds are byte for byte section 13.1's (initramfs node-kv `51d67eb22c8a1956…`,
+python-kv `4bf7513bebe38613…`, python-kv-hist `4f4a31973168823e…`) and give section 13.1's ten
+fingerprints and ctl values again, each twice. The after builds (two builds byte-identical each):
+node-kv initramfs `ae2bbb9b231f295c…`, python-kv `3d7c2130b76cdd8e…`, python-kv-hist
+`1c03cd40f532ac95…`; the root disks (`d031f382…`, `93c5d2ca…`, `03d395df…`) and the data disks are
+the same before and after. Unpacked, each after initramfs has the same paths, modes and owners as
+its before initramfs, and only the reworded file differs.
+
+The verdict lines and the ctl values are section 13.1's word for word; only the fingerprints moved.
+
+#### node-kv
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (nkv.oracle: acked=20 all present) | `5f47c9a775cd40a8` | `0141194b466e3bd9` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [nkv.oracle] key k:0 lost (got null) | `3146b75677356b19` | `8de6e3d2ba8ff5d8` | yes |
+| `disk=cut \| run C=12` | OK invariants=1 held (nkv.oracle: acked=12 all present) | `1cbb888242587805` | `202dcc1810826541` | yes |
+| `disk=none \| run K=nkv@8+2 B=1234` | OK invariants=1 held (nkv.oracle: acked=18 all present) | `772d0ca8f633d3be` | `39129eaa9b7e2227` | yes |
+
+#### python-kv
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=none \| run` | OK invariants=1 held (pykv.oracle: acked=20 all present) | `f37f7b2513c61d0c` | `99d3a6c9bcab4d75` | yes |
+| `disk=none \| run K=pykv@8+2` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `0dc1f942d30494c2` | `9dac63ed9843b10c` | yes |
+| `disk=cut \| run C=12 S=never` | VIOLATION [pykv.oracle] key k:0 lost (got 'NONE') | `bd9cb77e5587ec31` | `3b8233343cb49963` | yes |
+| `disk=none \| run B=1234` | OK invariants=1 held (pykv.oracle: acked=18 all present) | `5bf4fc7e7881d4d9` | `ece160c3964f7f03` | yes |
+
+#### python-kv-hist
+
+| schedule | verdict | fingerprint | ctl | twice |
+|---|---|---|---|---|
+| `disk=cut \| run C=12` | OK invariants=0 held (); history OK | `618b9d4430b2089e` | `133c9c994223dbe4` | yes |
+| `disk=cut \| run C=12 S=never` | OK invariants=0 held (); history VIOLATION [kv.linearizable] | `78c99aebf1097a15` | `4a799f3170dcb41b` | yes |
+
+Fingerprint by fingerprint (section 13.1, M155 → M157): node-kv `eb0811dba0a01354` →
+`5f47c9a775cd40a8`, `846b02b08b161419` → `3146b75677356b19`, `f9847e1a9e687a15` →
+`1cbb888242587805`, `9e6672f7f7f52ff7` → `772d0ca8f633d3be`; python-kv `a7f4b2de5ba82687` →
+`f37f7b2513c61d0c`, `5b58d933c00349b6` → `0dc1f942d30494c2`, `fc139f93a791ec46` →
+`bd9cb77e5587ec31`, `ed2d03a6970eb0bd` → `5bf4fc7e7881d4d9`; python-kv-hist `ee666af6229fc2e5` →
+`618b9d4430b2089e`, `458abf5f089819cb` → `78c99aebf1097a15`.
+
+No other recorded value moved: the other source files M157 changed are compiled into recorded
+programs or modules, and each gives the same bytes before and after (docs/HISTORY.md
+"Milestone 157").
