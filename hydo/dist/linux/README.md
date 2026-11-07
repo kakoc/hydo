@@ -152,7 +152,22 @@ Since M153 the five host programs are compiled with the tree and the Cargo home 
 their panic messages name no directory of the machine that built them; before, they carried
 the builder's home directory. This changes only those programs' bytes, no image.
 
-**The current tarball and its sources archive (M158)**, built twice on the bare-metal machine from
+**The current tarball and its sources archive (the Milestone 158 addendum)**, built twice on the
+bare-metal machine from commit `1a88c31`, from clean Rust targets, with the same bytes both times:
+`hydo-linux-0.1.0.tar.gz`, 59,913,512 bytes, sha256
+`58aab3b1898826d4ec9c892445099352a0b666fd11a74feee33c98129d4c491c`, and
+`hydo-linux-0.1.0-sources.tar.gz`, 482,534,984 bytes, sha256
+`ea8a62f326442fd451e91024fc174818fe89946e775bd9df88fc0f9531c34b8f` (127 entries; 93 source files
+under `upstream/`). The sources archive now holds busybox 1.37.0's exact build recipe: the
+nixpkgs tree that built it (`nixpkgs-f13ff45afd1b.tar.gz`), its whole derivation closure
+(`busybox-1.37.0-nix-recipe.tar.gz`), its four fetched patches and Debian's packaging
+(docs/BUILD-PINS.md "The sources archives"). Against M158's tarball only `THIRD-PARTY.md`,
+`SHA256SUMS` and the commit compiled into `bin/hydo` and `bin/hydo-build` (38 bytes each) differ;
+no guest file or asset. `hydo module build` from it gives srcversion `14D39A96F319623EC2AD8D1`;
+installed with `--no-module` into clean prefixes it gave every value of docs/REBASELINE.md 13.4,
+twice, as the user and as root (docs/HISTORY.md, "Milestone 158", the addendum).
+
+**The tarball and sources archive of M158 (superseded by the addendum)**, built twice on the bare-metal machine from
 commit `e29c664` (M158's license work), from clean Rust targets, with the same bytes both times:
 `hydo-linux-0.1.0.tar.gz`, 59,912,364 bytes, sha256
 `6afadef4889a8a91e31024269b4c23fa00b35ee21aa7fc8a96dfc098a5364ff1`, and

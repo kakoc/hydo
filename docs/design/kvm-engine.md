@@ -1,0 +1,508 @@
+# The KVM engine (hydo-kvm)
+
+Status: built, run end to end on a KVM machine (the build machine, "Phase 2" below), reviewed
+and verified again in Milestone 159 ("Milestone 159: the review and the second verification"
+at the end); on a branch for after the first release, not merged. Crate `hydo/crates/hydo-kvm`;
+guest kernel recipe `hv/kvm/linux/`; end-to-end check `hv/kvm/kvm-check.sh`.
+
+What a user needs to know, in short: the KVM engine runs hydo's x86_64 images on any x86_64
+Linux machine where the user can open `/dev/kvm` (a cloud VM with nested virtualization, a CI
+runner, a laptop), with no kernel module and no root (`--backend kvm`). It gives the guest one
+vCPU at the x86-64-v2 level (images that ask for several vCPUs or `guest.cpu: v3` are refused).
+Guest time is counted in VM exits that reach the engine, not in instructions, so a stretch of
+guest code that makes no exit takes no guest time and gets no timer interrupt; a loop that spins
+without exits is resolved only when it is an exact cycle of register states, and a counting loop
+without exits ends the run as invalid (SPIN). Its fingerprints are its own: they compare with
+runs of this engine with the same guest kernel on the same kind of host CPU, never with hvx's or
+the Mac engine's (across engines only verdicts compare, and `hydo repro` says so). It has run on
+one Intel machine only (no AMD host yet).
+
+## Why
+
+hydo's x86_64 engine, hvx, is our own VT-x hypervisor in a kernel module. It needs bare metal (or
+nested VT-x), an Intel CPU, root to load the module, and no running KVM. Most Linux machines
+people test on are not like that: cloud VMs and CI runners offer KVM through nested
+virtualization, many machines are AMD, and loading a module is often not allowed. The KVM engine
+runs the same x86_64 agent images on stock Linux KVM (`/dev/kvm`), without a module and without
+root, with the trade-offs the Mac engine (hvm) makes on Hypervisor.framework: the clock counts VM
+exits, every interrupt is delivered at such an exit, one vCPU, and a guest that computes without
+exits is handled by a spin observer (exact cycles) or ends the run as invalid (anything else).
+
+The first Rust KVM monitor (removed in M100) failed because stock KVM cannot trap RDTSC and Linux
+calibrates its clocks with it: two boots stayed bit-identical for about 730 million instructions
+and then diverged at the RDTSC in `native_calibrate_cpu_early` (docs/HISTORY.md, the notes before
+Milestone 1). This engine does not try to trap RDTSC. It makes the guest kernel never execute it:
+a small kernel patch takes every clock of the guest from the engine's exit clock, and the guest's
+CPUID says the CPU has no TSC.
+
+## The design in one page
+
+- **One vCPU on KVM with no in-kernel interrupt controller and no in-kernel PIT.** Every port I/O,
+  MMIO access, HLT, MSR access the filter sends out, and interrupt window comes to the engine.
+- **The clock is the number of those exits** (`vtime` in nanoseconds advances by
+  `HYDO_KVM_STEP`, default 2500, per exit). Exits KVM handles in the kernel (EPT faults, host
+  interrupts, PAUSE-loop exits) are not counted: they depend on the host. The engine's own kicks
+  and single steps are not counted.
+- **The guest kernel reads the clock on an I/O port** (each read is an exit, so a guest polling
+  the time sees it move) and arms a one-shot timer on another port; the timer's interrupt is IRQ 0
+  of an 8259 PIC the engine emulates. `rdtsc()` and `rdtsc_ordered()` in the kernel return the
+  exit clock; user-space RDTSC faults (CR4.TSD) and the kernel emulates it with the same clock.
+- **Interrupts are decided only at exits**, injected with `KVM_INTERRUPT` when the vCPU takes them
+  before its next instruction, else at the interrupt-window exit KVM gives at the exact instruction
+  where the guest can take one.
+- **Nothing of the host reaches the guest**: one fixed CPUID table (the same on every host), KVM's
+  paravirtual interface hidden behind another signature, every MSR KVM would answer from the host
+  sent to the engine's fixed model, the PMU off, and no TLB-dependent spurious page faults (the
+  guest kernel flushes at every page-table change).
+- **The devices are the Mac engine's**: its virtio-mmio block device with hvx's seeded disk faults
+  and its network device (hydo-hvm's `virtio` module, used as it is), its 16550 model; the
+  lock-step protocol is the Mac engine's, so the host controller, agent images and the explorer
+  work unchanged.
+- **The images are hvx's**: the same disk image and initramfs, booted with the KVM build of the
+  image's recorded kernel. No image changes, no recorded fingerprint moves.
+- **Fingerprints are this engine's own** (prefix `hydo-kvm-v1`); they compare with runs of this
+  engine on the same kind of host, never with hvx's or hvm's.
+
+## What was reused, and what was replaced
+
+From the removed KVM monitor (`git show 9c5e41f^:src/vmm.rs`, `detlinux.rs`, `linux.rs`):
+
+| reused | where now |
+|---|---|
+| VM and vCPU setup: `KVM_CREATE_VM`, guest RAM as one memory slot from GPA 0, `KVM_SET_TSS_ADDR` and `KVM_SET_IDENTITY_MAP_ADDR` at `0xfffbd000`/`0xfffbc000`, the vCPU and its `kvm_run` page | `src/sys.rs` (`Kvm::fresh`) |
+| long-mode entry state (page tables, GDT, segments, CR0/CR4/EFER) and the bzImage loader | already ported into hydo-hvx's boot recipe in M14; called as it is (`src/boot.rs`) |
+| interrupt injection with `KVM_INTERRUPT`, `ready_for_interrupt_injection` and `request_interrupt_window` | `src/vmm.rs` (`deliver`), as the delivery rule |
+| finishing an I/O instruction with a `KVM_RUN` that has `immediate_exit` set (the monitor's `drain_pending_io`) | `Cpu::complete`, now after every exit that needs it, not only before a snapshot (see "Completion") |
+| single-stepping with `KVM_SET_GUEST_DEBUG` (its instruction clock) | the spin observer's steps (`src/spin.rs`) |
+| the snapshot's parts: regs, sregs, FPU, `kvm_vcpu_events`, RAM, device state | `CpuState` (`src/cpu.rs`), plus the KVM-owned MSRs and the debug registers |
+| the CPUID masking of RDRAND and RDSEED and the dropped kvmclock leaf | replaced by one fixed table (`src/cpuid.rs`) |
+| per-VM device state, never process-global (its port-0x61 bug: two boots in one process shared state and diverged) | every device's state is in `Mach` and saved with the snapshot |
+
+Replaced: the `kvm-ioctls`/`kvm-bindings` crates (hand-written ABI types in `src/abi.rs` with
+a C probe against `<linux/kvm.h>`, as hydo-hvx does for `hvx_abi.h`; no new dependency), the
+in-kernel irqchip of its Linux boot (an engine PIC), the instruction clock with single-step and the
+PMU fast path (an exit-count clock; the PMU skid and descheduling problems it fought are gone with
+it), and the host's supported CPUID (a fixed table).
+
+Every point where the monitor lost determinism, from its history and code, and what this engine
+does about each:
+
+1. **RDTSC in Linux's calibration** (`native_calibrate_cpu_early`): the TSC rate is host time and
+   KVM cannot trap RDTSC. Closed: the guest's CPUID has no TSC, `rdtsc()` and `rdtsc_ordered()`
+   read the exit clock, and `vmlinux` contains no RDTSC, RDTSCP or RDPID instruction at all
+   (`hv/kvm/linux/audit-rdtsc.sh`).
+2. **kvmclock** (the shared page KVM stamps with host time): closed by the hypervisor signature
+   (`hydo-kvm-x86`, not `KVMKVMKVM`), so the guest never enables any KVM paravirtual feature, and
+   by the guest config (`CONFIG_KVM_GUEST=n`).
+3. **RDRAND/RDSEED**: hidden in CPUID; on Intel KVM also makes them fault (`RDRAND exiting` when
+   the guest's CPUID lacks them).
+4. **The in-kernel LAPIC timer and PIT** fire on host time: no in-kernel irqchip and no PIT are
+   created; the guest's timer is the engine's.
+5. **PMU overflow skid and descheduling** (the instruction clock's fast path): no PMU clock; KVM's
+   PMU is disabled for the VM where the host allows it, and hidden in CPUID either way.
+6. **A snapshot between the two halves of an I/O instruction**: every such instruction is
+   completed before the engine looks at the guest again.
+7. **Process-global device state** shared by two VMs of one process: none.
+8. **The IA32_TSC write** it used to reset the TSC: not needed; the MSR is the engine's (reads
+   give the exit clock, writes are ignored).
+
+## The clock and the guest kernel
+
+`hv/kvm/linux/hydo-kvm-guest.patch` (C, against Linux 6.6.35) adds `CONFIG_HYDO_KVM_GUEST` and
+`arch/x86/kernel/hydo.c`, a hypervisor platform detected by the CPUID signature:
+
+- I/O ports (`arch/x86/include/asm/hydo.h`): `0x5e0` the clock (read with `rep insl` of two
+  dwords: one instruction, one exit, the low and high half of the same exit's value), `0x5e4` the
+  wall clock at boot (a constant of the engine, 2026-01-01T00:00:00Z), `0x5e8` the one-shot timer
+  (nanoseconds from now; 0 disarms; the engine disarms it when it delivers its interrupt), `0x5ec`
+  power off (1) and reset (2).
+- A clocksource `hydo` (rating 450, 1 GHz), `sched_clock` through `paravirt_set_sched_clock`, a
+  one-shot clock event device on IRQ 0 of the 8259 (the APIC is hidden, so Linux keeps the PIC),
+  `get_wallclock`, a preset `loops_per_jiffy` (100,000: the calibration loop would wait for a
+  jiffy without making an exit and spin forever), no CMOS RTC, no i8042, power off and restart.
+- `rdtsc()` and `rdtsc_ordered()` (`asm/msr.h`) return the exit clock. With the TSC hidden in
+  CPUID almost nothing calls them; `random_get_entropy()` and `get_cycles()` do, at every
+  interrupt, and now read the exit clock (an exit each).
+- CR4.TSD is set at boot and kept set across context switches (the per-task `PR_SET_TSC` toggle
+  no longer clears it); user-space RDTSC faults with #GP, and the #GP handler emulates it with the
+  exit clock (a task that asked for `PR_TSC_SIGSEGV` still gets its signal).
+- **A TLB flush at every change of a present page-table entry** (`pte_needs_flush` and
+  `huge_pmd_needs_flush` return true; `ptep_set_access_flags` flushes the page). x86 Linux skips
+  the flush when it only adds permissions (`mprotect` to writable, a fault or GUP that makes a
+  PTE writable) and relies on the CPU to fault on the stale entry and find nothing to do. Whether
+  the stale entry is still cached depends on the host (the TLB's size, what the host evicted), and
+  the spurious fault is counted by the guest (`vm_event_states` PGFAULT, a task's `min_flt`):
+  found in phase 2 as two bytes of guest RAM that differed in 4 of 100 runs on the efficiency
+  cores of a hybrid CPU, gone with the flush (0 of 150).
+- **A TLB flush when the accessed bit is cleared** (`ptep_clear_flush_young`, Milestone 159):
+  x86 Linux clears a page's accessed bit for reclaim without a flush, and the CPU sets the bit
+  again only on a TLB miss, so whether the next access marks the page young depends on what the
+  host's TLB kept, and with it which pages reclaim keeps (only under memory pressure in the
+  guest). Found in the review, not in a run.
+- **A clock read in every `sched_yield`**, so a thread that yields while it waits for a timeout
+  sees the time move (a yield alone is no exit).
+
+Why port reads and not a page the engine updates: a value written into guest memory at each exit
+would let a guest read the time without an exit, but a loop that polls the time until it passes a
+deadline would then never see it move (no exit, no tick) and would spin. With a port read each
+observation is an exit, which advances the clock, as the Mac engine's trapped counter reads do.
+
+The configuration (`hv/kvm/linux/hydo-kvm.config`, on top of allnoconfig) builds every driver in
+(`CONFIG_MODULES=n`): virtio-mmio (devices named on the command line), virtio-blk and -net, ext4,
+the 8250, network namespaces, veth, bridge, IPv6, policy routing, iptables with NFQUEUE, the
+netem, prio and u32 schedulers: the features the Mac guest kernels have for the same images. One
+CPU (`CONFIG_SMP=n`), no ACPI, no PCI, HZ 250, no stack protector (its canary would come from the
+random pool before it is seeded).
+
+The kernel command line: hydo-hvx's without the words this kernel does not know (an unknown word
+would reach the image's `/init` as an argument), plus `io_delay=none` and one
+`virtio_mmio.device=512@<base>:<irq>` per device, and ` quiet loglevel=1` as on the other engines.
+
+### The build (pinned, reproducible)
+
+`hv/kvm/linux/kernel.nix` builds it with the pinned nixpkgs (NixOS 24.05 `89c49874`, the one
+docs/BUILD-PINS.md uses everywhere) from kernel.org's `linux-6.6.35.tar.xz` (sha256
+`fce3ee72…`, the tarball of the Mac netns kernel); `hv/kvm/linux/build-kernel.sh` runs it with
+`nice -n 19`, at most 8 jobs, and `CHECK=1` rebuilds it with `nix-build --check`. Fixed
+`KBUILD_BUILD_*` values, and no build-id notes: the kernel's is hashed before `scripts/sorttable`
+sorts the exception and ORC tables in place, and the vDSO's (20 bytes of `raw_data` in the
+kernel's `.rodata`) differed in a build outside Nix's sandbox.
+
+| output | sha256 |
+|---|---|
+| `bzImage-kvm` | `d50fbc67261a2544404d7a5f3e7a79cabe3b0a2e1f455158ccc5369d878d6207` |
+| `bzImage-kvm.config` | `412c482c740b37f05c68d951b0b358775d4f72cb54b1e1948eaf7c6a81f564e5` |
+
+The pin is Milestone 159's (store path `7hqyd9n0…-hydo-kvm-guest-kernel-6.6.35`, the recipe with
+the accessed-bit flush): built with `nix-build` and rebuilt with `nix-build --check` on the build
+machine, sandboxed, with the same bytes. The previous pin, `319b234e…` (store path `5kp5mg03…`,
+the recipe without that flush), was rebuilt from the transplanted recipe in Milestone 159 with
+`nix-build --check` too and gave its pinned bytes again.
+
+Reproducibility: every version of the recipe was built twice on the build machine (`nix-build`
+and `nix-build --check`, sandboxed) with the same bytes; before Milestone 159 the same store path
+also came out of the bare-metal machine's single-user Nix (no sandbox) with the same bytes on its
+first build (the current pin was not built there). Its
+`--check` rebuilds without a sandbox differed: first in the vDSO's build-id (removed), then, with
+equal `vmlinux` bytes, in the compressed payload of `bzImage`; a pin should be made with a
+sandboxed Nix (the default of a multi-user installation).
+
+`hv/kvm/linux/audit-rdtsc.sh` disassembles `vmlinux` and lists every RDTSC, RDTSCP, RDPID,
+RDRAND, RDSEED and RDPMC (10 sites in the pinned kernel, checked again in Milestone 159): there
+is no RDTSC, RDTSCP or RDPID; RDRAND and RDSEED appear only in
+`x86_init_rdrand`, `extract_entropy` and `random_init_early`, each behind its CPUID feature bit,
+which the guest does not have; RDPMC only in the perf PMU driver, which does not start without the
+architectural PMU leaf (family 6 model 15 has no P6 PMU driver either).
+
+## Images and the kernel an image names
+
+An x86_64 image records the kernel its root and initramfs were made for (M155,
+`/etc/hydo/image.json`: hvx's `bzImage` by sha256). Decision: `hydo build` does not change. The
+engine pairs each recorded kernel with its KVM build (`hydo_kvm::kernel::TWINS`, today one pair:
+hvx's `0a9ede35…` with `bzImage-kvm` `d50fbc67…`) and looks the KVM build up by sha256 where the
+image's files are looked up (the release's `guest/`, a tree's `build/` and `hv/kvm/linux/out/`);
+`HYDO_KVM_KERNEL` names another file. Why: a new field in the record would change the bytes of
+every image built afterwards (the record is inside the image), and so every recorded fingerprint
+of the other engines; with a pairing table every existing image runs on the KVM engine as it is,
+and the record keeps meaning "the kernel lineage this image was built for". When a later hydo
+changes the guest kernel, the new kernel gets its KVM twin in the same table.
+
+The image's initramfs is used as it is: it insmods hvx's kernel's modules, which fail on this
+kernel (it has every driver built in), and it goes on to mount `/dev/vda1` and switch to it, as it
+was written to do (its errors are ignored by design). The host controller's own `insmod`s of
+network modules are ignored the same way.
+
+## Devices and layout
+
+| what | where |
+|---|---|
+| guest RAM | GPA 0, 256..3072 MiB (below the devices), e820 as hvx |
+| 8259 PIC pair | ports `0x20/0x21`, `0xa0/0xa1`; every line level-triggered, fixed priorities |
+| hydo clock, wall clock, timer, power | ports `0x5e0`, `0x5e4`, `0x5e8` (IRQ 0), `0x5ec` |
+| 16550 UART (the console, the agent's channel) | ports `0x3f8..0x3ff`, IRQ 4 |
+| virtio-mmio block (the image's disk) | `0xd0000000`, IRQ 5 |
+| virtio-mmio network (when asked) | `0xd0000200`, IRQ 6 |
+| KVM's TSS and identity map | `0xfffbc000..0xfffc0000` |
+| any other port | reads all ones, writes ignored (`HYDO_KVM_TRACE_UNKNOWN=1` lists them) |
+| any other MMIO | reads zero, writes ignored |
+
+The PIC (`src/pic.rs`) treats every line as level-triggered: a line's request bit is its device's
+level, recomputed at every exit, as the Mac engine's GIC pending bits are. So a device that keeps
+its line up after an EOI interrupts again, and the virtio devices' level semantics (the line stays
+up until the driver acknowledges) need no edge logic. The commands Linux's i8259 driver uses are
+emulated (ICW1-4, masks, specific and non-specific EOI, IRR/ISR reads, poll, auto-EOI).
+
+The virtio devices are hydo-hvm's (`virtio::Virtio`), unchanged: the engine translates their
+guest addresses (`0xd0000000 + i*0x200` to the Mac's `0x0a000000 + i*0x200`) and gives them guest
+RAM from address 0. The disk is the whole image file (the root on `vda1`, the data on `vda2`), with
+the flush-aware fault class at probability 0 at boot so the guest negotiates FLUSH, and the
+schedule's `disk=`/`dseed=` arming hvx's seeded classes. A power cut keeps only the flushed bytes
+and runs the recovery boot from the host's S0, as on the Mac. Snapshots keep RAM and the disk in
+memory (a 2.4 GB stack image costs 2.4 GB per snapshot; sharing unchanged pages is future work).
+
+## The interrupt delivery rule and completion
+
+At the top of the run loop (after the lock-step stop hook) the engine recomputes the device
+levels; if the PIC has a vector:
+
+- if KVM says the vCPU can take an external interrupt now (`ready_for_interrupt_injection`: IF
+  set, no STI or MOV SS shadow, nothing already being injected), the engine acknowledges it (the
+  PIC's INTA: ISR set, the timer disarmed when it is IRQ 0) and injects it with `KVM_INTERRUPT`;
+  the CPU takes it at VM entry, before the next guest instruction;
+- else it sets `request_interrupt_window`, and KVM exits to the engine at the first instruction
+  boundary where the guest can take one: an architectural VM exit, as exact as any other; that
+  exit is counted, and the decision is made again there.
+
+**Completion.** KVM finishes an I/O, MMIO or MSR instruction only on the next `KVM_RUN`. The engine
+finishes it at once, with a `KVM_RUN` that has `immediate_exit` set (KVM completes the instruction
+and returns without entering the guest), before the stop hook and the interrupt decision run. Why
+always, not only before a snapshot: KVM's readiness depends on whether the instruction is finished
+(an `IN` right after `STI` is in the STI shadow until it completes), so a decision made before the
+completion in one run and after it in a resumed one would differ. A string I/O instruction longer
+than one batch gives its next exit from the completion; it is counted and handled at once.
+
+**Idle.** KVM returns HLT to the engine. With interrupts on and nothing pending, the clock jumps
+to the next event the guest can wait for (the timer's deadline with its tick-jitter delay, a
+device's completion), as on the Mac; with nothing armed the run stops (`guest idle with no
+timer`); a HLT with interrupts off is a halted machine.
+
+## Exit-free loops: the spin observer
+
+A guest that computes without an exit gets no interrupt and no time. On one vCPU, a thread that
+spins on a flag another thread must set waits forever: found in phase 2, where `mysqld
+--initialize` spun in `mov rax,[rdi+0x10]; test; jz; mov eax,[rax]; cmp eax,2; jne; pause; jnz`
+(waiting for another thread to change a state word) and the stack image's boot ended as a SPIN.
+
+`src/spin.rs` ports the Mac engine's rule "a provable cycle is idle" to x86 and KVM. On a kick (no
+exit for `HYDO_KVM_SPIN_MS`, default 5 ms of host time, doubled after each look that proved
+nothing) the engine steps the vCPU one instruction at a time, but only over instructions
+`spin::decode` accepts before each step: loads, compares, tests, register arithmetic, jumps,
+PAUSE, which write only general registers and flags (no store, no push, no I/O, no LOCK, no
+SYSCALL). A step is a run to hardware instruction breakpoints (`KVM_GUESTDBG_USE_HW_BP`, DR0 and
+DR1) at the addresses where the instruction can end: the next instruction, and a jump's target
+(`spin::decode` computes the instruction's length and its relative target; RFLAGS.RF lets a jump
+to itself run once). Until Milestone 159 a step was a trap-flag single step
+(`KVM_GUESTDBG_SINGLESTEP`), and the review found that it leaked: a stepped load that faults (a
+page the guest has not mapped in yet) has its exception delivered with the trap flag set in the
+RFLAGS image the CPU pushes, so that image lands in guest RAM, and the handler's IRET could even
+restore the trap flag after the observer had stopped (a SIGTRAP in the guest) — all depending on
+when the host-timed kick came. With breakpoints, a fault is delivered exactly as in free running
+and its handler runs as it would have; the observer does not step at all when the guest uses the
+trap flag or breakpoints of its own, or runs outside 64-bit mode. After each step it hashes the general registers, RIP and RFLAGS; when
+two full periods of states repeat, the loop is proven infinite (nothing else changes memory on one
+vCPU without an exit), the vCPU is stepped to the cycle's canonical state (the smallest hash among
+the states with interrupts enabled), the clock jumps to the next event as at an idle HLT, and the
+interrupt is delivered at the next entry. Every iteration is the same state, so the delivery state
+does not depend on when the kick came. Anything else (an instruction outside the set, a real exit
+while stepping, which is then handled as any exit, no repeat within 4096 steps) leaves the guest
+where free running would have taken it; a guest that stays without exits for
+`HYDO_KVM_SPIN_SECS` (default 10) ends the run as a SPIN (invalid). A proven cycle that no
+interrupt can end (nothing armed, or the due event's line masked) ends the run at once as a
+deadlock (Milestone 159; before, a due but masked event kept the engine resolving the same cycle
+forever). Not resolved, as on the Mac without its rewind mode: counter loops (`while (!flag)
+n++`), whose state never repeats.
+
+## Nondeterminism under KVM, and how each source is closed
+
+| source | how it is closed | test |
+|---|---|---|
+| RDTSC/RDTSCP in the kernel | no TSC in CPUID; `rdtsc()` is the exit clock; none in `vmlinux` | `audit-rdtsc.sh`; boots twice identical |
+| RDTSC in user space | CR4.TSD; #GP emulation with the exit clock | runs twice identical (MySQL reads the TSC) |
+| RDTSCP, RDPID | hidden; KVM makes RDTSCP fault without the CPUID bit | `cpuid::tests::hides_every_host_leak` |
+| kvmclock, steal time, async page faults, PV EOI, PV TLB flush, PV spinlocks, PV send-IPI, PV sched yield, poll control | another signature (`hydo-kvm-x86`), leaf `0x40000001` zero, `CONFIG_KVM_GUEST=n` | `cpuid` tests |
+| invariant TSC, TSC deadline, TSC_ADJUST | hidden in CPUID; TSC MSRs are the engine's | `cpuid` and `msr` tests |
+| the local APIC timer, the in-kernel PIT and IOAPIC | not created; APIC hidden (and APIC_BASE set to 0, so KVM keeps the APIC CPUID bit clear) | `boot::tests`; the guest boots in PIC mode |
+| host interrupts, EPT faults, PAUSE-loop exits, preemption of the vCPU thread | handled inside KVM, not counted, invisible to the guest | runs twice identical, pinned and under load |
+| when an injected interrupt lands | only at exits; injected only where the CPU takes it before the next instruction, else at the architectural interrupt-window exit | `tests/engine.rs`; runs twice identical |
+| an unfinished I/O/MMIO/MSR instruction at a decision or snapshot | completed at every exit with `immediate_exit` | `snap_and_resume_continue_the_same_run`; S1 run equals fresh boot |
+| MSRs KVM answers from the host (IA32_TSC, PLATFORM_INFO, ARCH_CAPABILITIES, UCODE_REV, MISC_ENABLE, the PMU's, KVM's own) | MSR filter with default deny, every denied access to the engine's fixed model, unknown MSRs #GP | `msr` tests; `HYDO_KVM_TRACE_UNKNOWN` lists the guest's accesses (one at boot: 0x140) |
+| CPUID (vendor, model, features, caches, topology, the hybrid core-type leaf 0x1A) | one fixed table on every host, checked against what the host's KVM supports | `cpuid` tests; P-core and E-core runs equal |
+| the PMU (RDPMC, counters) | leaf 0xA zero; KVM's PMU disabled where `KVM_CAP_PMU_CAPABILITY` allows; CR4.PCE clear | `cpuid` tests |
+| RDRAND, RDSEED | hidden; on Intel KVM makes them fault | `cpuid` tests; audit |
+| MONITOR/MWAIT, WAITPKG (TPAUSE, UMWAIT) | hidden; KVM intercepts MWAIT | `cpuid` tests |
+| XSAVE state size and features, AVX | hidden (x86-64-v2 as hvx's default); FXSAVE state only | `cpuid` tests |
+| stale TLB entries after a permission upgrade (spurious page faults the guest counts) | the guest kernel flushes at every change of a present entry | 4 of 100 E-core runs differed before, 0 of 150 after |
+| accessed bits cleared without a flush (reclaim decides by them; the CPU sets them again only on a TLB miss) | the guest kernel flushes the page in `ptep_clear_flush_young` (M159) | the patch (found in the review; it needs memory pressure in the guest) |
+| a thread that yields while it waits for a timeout | every `sched_yield` reads the clock (an exit) | the patch |
+| a thread that spins without exits on a flag another thread sets | the spin observer: proven exact cycles become idle, deterministically | `an_exit_free_spin_is_resolved...`; the stack boots |
+| the observer's own steps (a fault while stepping pushed the trap flag into guest RAM, until M159) | steps run to hardware instruction breakpoints, so a fault is delivered as in free running; no stepping when the guest uses TF or DR7 | `spin::tests::lengths_and_ends`; the stack's spins resolved, runs twice identical |
+| the FPU state in a snapshot (`KVM_SET_FPU` does not set the XSAVE header's component bits, so a fresh vCPU could load the x87/SSE initial state instead; `KVM_GET_FPU` reads the raw buffer) | `KVM_GET_XSAVE`/`KVM_SET_XSAVE`; the fingerprint hashes the canonical legacy area without MXCSR_MASK (M159) | S1 run equals fresh boot |
+| KVM's paravirtual hypercalls (`KVM_HC_CLOCK_PAIRING` writes the host's clock into guest memory) | `KVM_CAP_ENFORCE_PV_FEATURE_CPUID`: with no KVM leaf in the table, none is offered (M159) | the capability is required |
+| the wall clock (CMOS RTC) | a constant from the engine's port | the patch |
+| the kernel's delay-loop calibration | preset `loops_per_jiffy` | boots finish |
+| the random pool | seeded only from the exit clock and the guest's own inputs; RDRAND/RDSEED absent | runs twice identical |
+| guest RAM's initial contents | anonymous zero pages | — |
+| a kick (the watchdog's signal) | not an exit: nothing changes in the guest, nothing is counted | the run loop |
+| the host's KVM version and CPU microarchitecture (undefined flag results, FPU pointers) | not closed: a fingerprint is this engine's on one kind of host; verdicts compare everywhere | see "Where fingerprints compare" |
+| counter loops without exits | not closed (the Mac's rewind mode is not ported): the run ends as a SPIN (invalid) | — |
+
+## Where fingerprints compare
+
+A run's fingerprint hashes the console, every vCPU register (with the FPU's last-instruction
+pointers), the engine's machine state, the devices (the disk with its volatile write cache) and
+all guest RAM. Two runs compare when they ran on this engine with the same kernel, the same CPUID
+table and step, on hosts whose CPUs execute the guest's instructions alike. Instructions with
+architecturally undefined results (flags after MUL or a shift, BSF of zero) and the FPU's
+last-instruction pointers can differ between CPU microarchitectures and vendors; compilers do not
+rely on the former, and the latter are saved by the guest's context switches into its RAM. So:
+within one host, and between the cores of a hybrid CPU (measured below), fingerprints compare;
+across vendors or generations, compare verdicts (as `hydo repro` does across fingerprint epochs).
+Other host differences the guest can see and CPUID cannot hide: the MXCSR_MASK the guest's own
+FXSAVE writes into its RAM (the engine leaves it out of the vCPU part of the fingerprint, but not
+out of RAM), and how a KVM version batches string I/O and splits MMIO accesses (the number of
+exits, so the clock, could change with the host kernel's KVM). A fingerprint of this engine never
+compares with one of hvx or the Mac engine: `hydo repro` of a run or an exploration recorded by
+another engine compares verdicts and says why (Milestone 159), and refuses to type another
+engine's control transcript (its stops are counted in that engine's clock).
+
+Everything that defines the guest's state is in a snapshot and in the fingerprint: the general
+registers, the segment registers with their hidden parts, the descriptor tables, CR0, CR2-CR4,
+CR8, EFER and APIC_BASE (`kvm_sregs`, with the pending-interrupt bitmap), the x87, SSE and MXCSR
+state (from `KVM_GET_XSAVE`; XCR0 stays at its reset value 1, since the guest cannot enable
+XSAVE), the KVM-owned MSRs (SYSENTER, PAT, STAR, LSTAR, CSTAR, SFMASK, KERNEL_GS_BASE; FS and GS
+bases are in the segments), the pending events (exception, interrupt, NMI, the interrupt shadow,
+a pending triple fault), the debug registers, the engine's machine state (the clock, the exit
+count, the timer, the PIC, the UART, the MSR model), the devices with the disk's volatile cache,
+and all guest RAM. The guest's TSC is not (the guest never reads it), and neither are SMM state
+and SIPI (no SMM, one vCPU).
+
+## The protocol
+
+`src/serve.rs` is the Mac engine's `serve` with this machine: the controlled boot (the host's
+SNAP S0/S1, READY), CTL, RESUME, the lock-step stops (EVENT, SENT, STOP; SEND, ACK, SNAP, CONT,
+END), DISKOFF and CUT with the recovery boot, the same RESULT lines with `stops=`, `typed=`,
+`inh=`. Differences: the cadence stop is due when the exit count crosses a multiple of `rb=`
+(an instruction that needs two exits can step over one); `spin=` is refused (no rewind mode); the
+default cadence of agent images is 64 exits, as on the Mac. A run from the worker's S1 and the same
+schedule from a fresh boot give the same fingerprint (tested on the scripted vCPU and on KVM).
+
+## Using it
+
+- `hydo run --backend kvm …`, `hydo repro --backend kvm …`, `hydo explore --backend kvm …`,
+  `hydo doctor --backend kvm`, or `HYDO_BACKEND=kvm` for all of them (Linux). The Mac has one
+  engine.
+- `hydo doctor --backend kvm` checks x86_64 Linux, VT-x or AMD-V, `/dev/kvm` and that this user can
+  open it, what KVM offers (it opens the device and asks; no VM is made), the guest kernel by
+  sha256 and the initramfs.
+- The engine runs on a thread of the `hydo` process (KVM allows several VMs in one process);
+  `HYDO_KVM=process` runs the program `hydo-kvm` instead, with the Mac engine's command line plus
+  the disk: `hydo-kvm [--ram-mib N] --control boot serve|one <bzImage-kvm> <initramfs> <disk|->
+  <outdir> ["<schedule>"]`.
+- The explorer draws schedules for it as for the Mac (the tokens both apply: no `cf=`, `pp=`,
+  `xt*`; forced preemption points `pct=` instead), with hvx's images.
+- An image that asks for several vCPUs or `guest.cpu: v3` is refused by the engine itself (for
+  `hydo run`, the explorer and hydo-bench alike), not run on less (Milestone 159).
+- `hydo repro` without `--backend kvm` of a KVM run (or with it, of an hvx run) runs the other
+  engine and compares verdicts, not fingerprints, and says so; a control transcript is typed
+  again only by the engine that recorded it.
+- Where it runs: x86_64 Linux with `/dev/kvm` openable by the user and KVM from Linux 5.10 on
+  (the user-space MSR exits and the MSR filter; `KVM_CAP_XSAVE` and
+  `KVM_CAP_ENFORCE_PV_FEATURE_CPUID` too). In a VM, the provider must expose nested
+  virtualization. It is not in either release tarball yet: a release needs `bzImage-kvm` in its
+  `guest/`.
+- Variables (hydo-config's registry, group `Kvm`): `HYDO_BACKEND`, `HYDO_KVM`, `HYDO_KVM_ENGINE`,
+  `HYDO_KVM_KERNEL`, `HYDO_KVM_DEV`, `HYDO_KVM_STEP`, `HYDO_KVM_RUN_EXITS`, `HYDO_KVM_SPIN_SECS`,
+  `HYDO_KVM_SPIN_MS`, `HYDO_KVM_TRACE`, `HYDO_KVM_ECHO`, `HYDO_KVM_DIAG`, `HYDO_KVM_DIAG_RAM`,
+  `HYDO_KVM_TRACE_UNKNOWN`; the ABI probe's `HYDO_KVM_HEADERS` (tests).
+
+## One vCPU
+
+Several vCPUs need turns of an exact length of guest work (hvx counts retired branches with the
+PMU, M66); KVM gives no instruction-exact clock, and the exit count is not one. The engine has
+one vCPU; `--vcpus` and the v3 CPU level stay hvx options.
+
+## AMD hosts
+
+The table says `GenuineIntel` on every host, so the guest runs the same kernel paths everywhere.
+On AMD, KVM's cross-vendor support covers what a 64-bit Linux guest with this table could hit
+(SYSENTER in 64-bit mode is not used: no 32-bit compatibility). The differences that remain are
+the hardware's (undefined flags, as above) and one gap: AMD has no RDRAND or RDSEED exiting, so a
+user program that executes RDRAND without checking CPUID gets hardware random bits there (glibc,
+OpenSSL and the Go and Rust runtimes check CPUID first). The KVM engine has not run on an AMD host
+yet.
+
+## Code structure
+
+- `abi.rs` the KVM ABI subset (pure; `tests/abi.rs` compares it with `<linux/kvm.h>`);
+- `sys.rs` the ioctls, the `kvm_run` page, kicks: with `mem.rs` the only `unsafe` code;
+- `cpu.rs` the `Cpu` and `Hypervisor` traits and `CpuState`; `script.rs` a scripted vCPU;
+- `cpuid.rs`, `msr.rs`, `pic.rs`, `uart.rs`, `machine.rs`, `layout.rs`, `boot.rs`, `kernel.rs`;
+- `vmm.rs` the machine and the run loop (generic over the vCPU); `spin.rs` the spin observer's
+  rules;
+- `serve.rs` the protocol; `bin/hydo-kvm.rs` the program.
+
+Everything but `sys.rs` builds and is tested on any system: the run loop, devices, interrupt rule,
+snapshots, fingerprints, the spin observer and the protocol run on the scripted vCPU in
+`tests/engine.rs`.
+
+## The check on a KVM machine
+
+`hv/kvm/kvm-check.sh` does it end to end on any x86_64 Linux machine where the user can open
+`/dev/kvm` (no root, no module): the doctor; the quickstart's Redis image built by the release; two
+boots from scratch identical; the quickstart's two schedules each twice identical; a run from the
+worker's S1 equal to the fresh boot; the power-cut schedule ten times on each listed CPU; an
+exploration of 20 seeds with 2 workers and `hydo repro` of it; a kill, a pause, a clock step, an
+I/O error, tick jitter and forced preemption points, each twice; a network fault (the release's
+`hydo-netem.yaml`) twice. It needs: nested virtualization when the machine is a VM (Intel VT-x
+or AMD-V exposed to the guest), the Linux release unpacked, `bzImage-kvm` in its `guest/`, and this
+tree's `hydo`. On the build machine it takes about 2 minutes.
+
+## Phase 2: the runs on the build machine
+
+The build machine: a 13th Gen Intel Core i7-13700HX (hybrid: performance cores are CPUs 0-15 with
+Hyper-Threading, efficiency cores CPUs 16-23), NixOS, Linux 6.6.35, `/dev/kvm` usable by the login
+user (no root used). Release `hydo-linux-0.1.0` (`e9538ed9…`), the Redis image built by it
+(`d255fb2b…`, the quickstart's bytes); final kernel of phase 2 `319b234e…` (Milestone 159 pinned `d50fbc67…`; its values are in the last section).
+
+| check | result |
+|---|---|
+| `hydo doctor --backend kvm` | all checks passed |
+| `disk=none \| run`, two fresh boots | `e83662dd590459b9` twice, OK acked=20 |
+| `disk=cut \| run C=12 R=everysec`, 10 runs on CPU 0 and 10 on CPU 16 | `3d182f077f11bd93` all 22, VIOLATION key k:1 lost (hvx: the same verdict) |
+| `disk=none dseed=1 \| run` from the worker's S1 and from a fresh boot | `54b23fde79633d11` both |
+| `K=redis@5+2`, `P=redis@4+3`, `T=6:3600`, `disk=ioerr:20 dseed=7`, `tj=1234 tjpm=300`, `pct=99 pctn=4`, each twice | `1ac74b78a5d8b93d`, `3aab5eacc751c221`, `cd8bb36b76e0330f`, `f497abecdf327a82`, `68743a7fd3d5357b`, `21c58cec1be78116`, each twice the same |
+| netem image, `N=redis@3-6:delay,300ms`, twice | `ff5b507ffd7ddda5` twice, OK retrans=0 |
+| exploration, seeds 1-20, swarm, 2 workers | 38 runs in 17 s (4,435 runs/hour, 0.7 s per run, worker boot 1.2 s); 9 failures (io-errors 3, lying-disk 4, unsafe-knob 2), all reproduced; minimal schedules `disk=lying:3 dseed=eac0b527c5ac67d9 \| run C=20` and `disk=cut dseed=1f16055b6d41c6d9 \| run C=9 R=no`, hvx's two, each twice identical; `hydo repro` 11 of 11 with the recorded fingerprint |
+| the same exploration twice (earlier kernel) | the same 40 fingerprints and the same report |
+| the pinned reproducer schedule `disk=none dseed=4d5cb825dfaab05b \| run K=redis@11+1 C=24` on the stack images (MySQL 8.4, Kafka 3.5 on the JVM, Redis, the Go order service), twice on CPU 2 and twice on CPU 18 | old order service: `fa7e8cd18379d640` four times, VIOLATION order=11 is in kafka but the client was never ACKed (hvx: the same verdict); fixed one: `ac8e66b59f4f7a38` four times, OK |
+| an exploration of the stack image (old order service), seeds 1-6, one worker | 6 schedules in 46 s (4.8 s per run, worker boot 12.8 s); 1 failure (io-errors, `ERROR front restart failed`), reproduced |
+
+## Milestone 159: the review and the second verification
+
+The engine was transplanted onto the rewritten history (first verified unchanged: with the phase-2
+kernel `319b234e…` rebuilt from the transplanted recipe, every value of the table above came out
+again), then reviewed with the code read on its own. What the review changed (docs/HISTORY.md
+"Milestone 159" has each finding with its reasoning):
+
+1. The spin observer steps to hardware instruction breakpoints instead of the trap flag ("Exit-free
+   loops"): a fault during a step had left TF in an exception frame in guest RAM, depending on
+   when the kick came.
+2. The guest kernel flushes the TLB entry when it clears an accessed bit (a new kernel pin).
+3. Snapshots take the FPU state with `KVM_GET_XSAVE`/`KVM_SET_XSAVE`; `KVM_SET_FPU` did not mark
+   the x87/SSE components present in the XSAVE header.
+4. `KVM_CAP_ENFORCE_PV_FEATURE_CPUID`: no KVM hypercall or PV MSR reaches the guest.
+5. A bounds check in the guest page-table walk (a guest could panic the engine thread).
+6. Several vCPUs and `guest.cpu: v3` are refused by the engine for every caller; `hydo repro` and
+   `--transcript` know the engine a run was recorded by.
+
+The values with the code and kernel of this milestone (the build machine, a 13th Gen Intel Core
+i7-13700HX: performance cores CPUs 0-15, efficiency cores CPUs 16-23; Linux 6.6.35; the Linux
+release of M158 for the guest files; nothing as root, no module touched):
+
+| check | phase 2 (kernel `319b234e…`) | Milestone 159 (kernel `d50fbc67…`) |
+|---|---|---|
+| `hv/kvm/kvm-check.sh` | 15 of 15 | 15 of 15 |
+| `disk=none \| run`, two fresh boots | `e83662dd590459b9` | `bfa03053d51bec8a`, OK acked=20 |
+| `disk=cut \| run C=12 R=everysec` | `3d182f077f11bd93`, 22 runs | `8ed16d6da60c34c6`, 122 runs (60 on performance cores 0 and 2, 60 on efficiency cores 16 and 18, 2 unpinned), VIOLATION k:1 lost |
+| S1 against a fresh boot | `54b23fde79633d11` | `ac512c2616cef6a4` |
+| kill, pause, clock step, I/O error, tick jitter, preemption points | six values, each twice | `818c50920c9ced38`, `b72c5c7732e6a67f`, `49a776b9f1c8febd`, `b059f4d71358bc4d`, `06ee67ef4d1a50b2`, `aec48eb5ca42eca3`, each twice, the same verdicts |
+| netem delay | `ff5b507ffd7ddda5` | `0fcb6905c8f54cd1`, OK retrans=0 |
+| exploration, 20 seeds, 2 workers | 38 runs, 9 failures | 46 runs, 11 failures (hvx's classes and counts), hvx's two minimal schedules plus a third (data disk unmountable), repro 14 of 14; run twice: the same 46 fingerprints, reports equal but for wall-clock lines |
+| stack, pinned reproducers' schedule, CPUs 2 and 18, twice each | old `fa7e8cd18379d640`, fixed `ac8e66b59f4f7a38` | old `c3419179cf1a55ba` VIOLATION order 11, fixed `c0746a7568ccf3b8` OK; 90 and 98 spins resolved per run with breakpoint steps |
+
+Every fingerprint moved (the guest kernel's bytes and the hashed FPU state changed); every
+verdict is the one of phase 2 and of hvx.
+
+Left: an AMD host (never run; RDRAND, RDSEED and TSX cannot be made to fault there); several
+vCPUs (no instruction-exact clock on KVM); counting loops without exits (the Mac's rewind mode is
+not ported); snapshots keep the whole disk in memory; the engine is in neither release tarball.

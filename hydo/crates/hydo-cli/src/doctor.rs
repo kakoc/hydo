@@ -55,7 +55,101 @@ fn rel(ctx: &Ctx, p: &Path) -> String {
     p.strip_prefix(&ctx.root).unwrap_or(p).display().to_string()
 }
 
+/// `hydo doctor --backend kvm` (or with `HYDO_BACKEND=kvm`): the checks of the KVM engine
+/// (docs/design/kvm-engine.md): x86_64 Linux, `/dev/kvm` usable with what the engine needs
+/// (it opens the device and asks KVM; no VM is made), the guest kernel and the initramfs.
+pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
+    let mut c = Checks { fails: 0, warns: 0 };
+    let (sys, mach) = uname_sys_machine();
+    c.check(
+        sys == "Linux" && mach == "x86_64",
+        &format!("x86_64 Linux (found {sys} {mach})"),
+        "the KVM engine needs x86_64 Linux",
+        false,
+    );
+    let cpu = std::fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
+    let flags: Vec<&str> = cpu
+        .lines()
+        .find(|l| l.starts_with("flags"))
+        .and_then(|l| l.split_once(':'))
+        .map(|(_, f)| f.split_whitespace().collect())
+        .unwrap_or_default();
+    let model = cpu
+        .lines()
+        .find(|l| l.starts_with("model name"))
+        .and_then(|l| l.split_once(':'))
+        .map(|(_, m)| m.trim().to_string())
+        .unwrap_or_else(|| "?".into());
+    println!("     CPU: {model}");
+    c.check(
+        flags.contains(&"vmx") || flags.contains(&"svm"),
+        "hardware virtualization (vmx or svm in /proc/cpuinfo)",
+        "enable VT-x or AMD-V in the firmware; in a cloud VM, choose an instance type with nested virtualization",
+        false,
+    );
+    if flags.contains(&"hypervisor") {
+        println!("     inside a VM: the KVM engine runs on nested virtualization (slower; results are this host's)");
+    }
+    let dev = ctx.config.kvm.dev();
+    c.check(
+        dev.exists(),
+        &format!("{} exists", dev.display()),
+        "load the KVM module of the CPU (kvm_intel or kvm_amd), or enable nested virtualization",
+        false,
+    );
+    if dev.exists() {
+        c.check(
+            access(&dev, libc::R_OK | libc::W_OK),
+            &format!("{} is usable by this user", dev.display()),
+            "add the user to the group that owns the device (often kvm)",
+            false,
+        );
+        match hydo_kvm::probe(&dev.display().to_string()) {
+            Ok(line) => {
+                c.check(true, "KVM has what the engine needs (API 12, user-space MSRs and the MSR filter, the CPUID)", "", false);
+                println!("     {line}");
+            }
+            Err(e) => c.check(false, "KVM has what the engine needs", &e, false),
+        }
+    }
+    let dirs = [ctx.guest(), ctx.p("build"), ctx.p("hv/kvm/linux/out")];
+    let k = hydo_kvm::kernel::KERNEL;
+    let want = hydo_image::FileRef {
+        file: k.file.into(),
+        sha256: k.sha256.into(),
+    };
+    let found = match &ctx.config.kvm.kernel {
+        Some(p) => Some(p.clone()),
+        None => hydo_image::kernels::locate(&want, hydo_image::kernels::Role::Kernel, &dirs),
+    };
+    c.check(
+        found.is_some(),
+        &format!(
+            "the KVM guest kernel {} (sha256 {}){}",
+            k.file,
+            &k.sha256[..16],
+            found
+                .as_ref()
+                .map(|p| format!(": {}", rel(ctx, p)))
+                .unwrap_or_default()
+        ),
+        "build it with hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) and put it in guest/, or name it with HYDO_KVM_KERNEL",
+        false,
+    );
+    c.check(
+        ctx.guest().join("initramfs-kafka.cpio.gz").is_file()
+            || ctx.p("build/initramfs-kafka.cpio.gz").is_file(),
+        "the x86_64 initramfs (initramfs-kafka.cpio.gz)",
+        "install the Linux release (guest/)",
+        false,
+    );
+    c.summary()
+}
+
 pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
+    if ctx.kvm {
+        return cmd_doctor_kvm(ctx);
+    }
     let mut c = Checks { fails: 0, warns: 0 };
     let (sys, mach) = uname_sys_machine();
     c.check(

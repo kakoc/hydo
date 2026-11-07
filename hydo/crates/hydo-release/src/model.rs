@@ -131,11 +131,39 @@ pub struct Source {
 #[serde(deny_unknown_fields)]
 pub struct NixRef {
     pub system: String,
+    /// The nixpkgs attribute that built it, in the list's pinned nixpkgs or in `nixpkgs`.
     #[serde(default)]
     pub attr: Option<String>,
     pub out: Vec<String>,
+    /// The derivation (`/nix/store/….drv`) that built `out`, when it is not from the pinned
+    /// nixpkgs.
+    #[serde(default)]
+    pub drv: Option<String>,
+    /// The included source file holding the nixpkgs tree that built it, when that is not the
+    /// list's pinned nixpkgs.
+    #[serde(default)]
+    pub nixpkgs: Option<String>,
+    /// The included source file holding the derivation's closure (fetch-sources.sh's
+    /// `nix-recipe:`): every .drv file, every non-derivation input and `nix derivation show -r`.
+    #[serde(default)]
+    pub recipe: Option<String>,
     #[serde(default)]
     pub note: Option<String>,
+}
+
+impl NixRef {
+    /// The included files that hold this store path's build recipe: its nixpkgs tree (the pinned
+    /// one unless `nixpkgs` names another) and its derivation closure, if recorded.
+    pub fn recipe_files<'a>(&'a self, list: &'a List) -> Vec<&'a str> {
+        let mut v = vec![self
+            .nixpkgs
+            .as_deref()
+            .unwrap_or(list.nixpkgs.archive.as_str())];
+        if let Some(r) = &self.recipe {
+            v.push(r);
+        }
+        v
+    }
 }
 
 impl Component {
@@ -149,6 +177,16 @@ impl Component {
     }
     pub fn covers(&self, path: &str) -> bool {
         self.files.iter().any(|p| crate::glob::matches(p, path))
+    }
+    /// The included files that hold the build recipes of its Nix-built store paths, each once.
+    pub fn recipe_files<'a>(&'a self, list: &'a List) -> Vec<&'a str> {
+        let mut v: Vec<&str> = Vec::new();
+        for f in self.nix.iter().flat_map(|n| n.recipe_files(list)) {
+            if !v.contains(&f) {
+                v.push(f);
+            }
+        }
+        v
     }
     pub fn included_sources(&self) -> impl Iterator<Item = (&str, &str)> {
         self.sources

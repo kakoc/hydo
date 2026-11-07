@@ -37,34 +37,40 @@ pub fn included(list: &List) -> BTreeMap<String, String> {
     m
 }
 
-/// The lines fetch-sources.sh reads: `<file>\t<sha256>\t<from>\t<first url>`.
+/// The lines fetch-sources.sh reads: `<file>\t<sha256>\t<from>\t<first url>`, the pinned nixpkgs
+/// first, and `nix:<system>:…` written as `nix-in:<pinned nixpkgs store path>:<system>:…`.
 pub fn fetch_list(list: &List, cache: Option<&Path>) -> String {
     let have = |f: &str, h: &str| {
         cache.is_some_and(|c| crate::sha256_file(&c.join(f)).is_ok_and(|g| g == h))
     };
     let mut seen = BTreeSet::new();
     let mut s = String::new();
-    for c in &list.components {
-        for x in &c.sources {
-            if let (Some(f), Some(h)) = (&x.file, &x.sha256) {
-                if seen.insert(f.clone()) && !have(f, h) {
-                    let _ = writeln!(
-                        s,
-                        "{f}\t{h}\t{}\t{}",
-                        x.from.as_deref().unwrap_or("url"),
-                        x.url.first().map(String::as_str).unwrap_or("-")
-                    );
-                }
-            }
-        }
-    }
     let n = &list.nixpkgs;
+    seen.insert(n.archive.clone());
     if !have(&n.archive, &n.sha256) {
         let _ = writeln!(
             s,
             "{}\t{}\tnix-pack:{}\t{}",
             n.archive, n.sha256, n.store_path, n.url
         );
+    }
+    for c in &list.components {
+        for x in &c.sources {
+            if let (Some(f), Some(h)) = (&x.file, &x.sha256) {
+                if seen.insert(f.clone()) && !have(f, h) {
+                    let from = x.from.as_deref().unwrap_or("url");
+                    let from = match from.strip_prefix("nix:") {
+                        Some(rest) => format!("nix-in:{}:{rest}", n.store_path),
+                        None => from.to_string(),
+                    };
+                    let _ = writeln!(
+                        s,
+                        "{f}\t{h}\t{from}\t{}",
+                        x.url.first().map(String::as_str).unwrap_or("-")
+                    );
+                }
+            }
+        }
     }
     s
 }
@@ -104,11 +110,39 @@ fn readme(p: Platform, list: &List, version: &str) -> String {
         p.name()
     );
     let _ = writeln!(s, "- `upstream/`: the exact upstream source archives and patch files, each pinned by sha256 in `third-party.json`;");
+    let mut trees = BTreeSet::new();
+    let mut closures = BTreeSet::new();
+    for n in list.components.iter().flat_map(|c| c.nix.iter()) {
+        if let Some(t) = &n.nixpkgs {
+            trees.insert(t.as_str());
+        }
+        if let Some(r) = &n.recipe {
+            closures.insert(r.as_str());
+        }
+    }
     let _ = writeln!(
         s,
-        "- `upstream/{}`: the nixpkgs tree (revision `{}`) whose recipes, patches and kernel configuration generator built every component that `third-party.json` says was built by Nix;",
-        list.nixpkgs.archive, list.nixpkgs.rev
+        "- `upstream/{}`: the nixpkgs tree (revision `{}`) whose recipes, patches and kernel configuration generator built every component that `third-party.json` says was built by Nix{};",
+        list.nixpkgs.archive,
+        list.nixpkgs.rev,
+        if trees.is_empty() {
+            ""
+        } else {
+            " (except those that name another tree)"
+        }
     );
+    for t in trees {
+        let _ = writeln!(
+            s,
+            "- `upstream/{t}`: another nixpkgs tree, whose recipes built the components below that name it;"
+        );
+    }
+    for r in closures {
+        let _ = writeln!(
+            s,
+            "- `upstream/{r}`: the whole derivation closure of a component below (`derivations.json` as `nix derivation show -r` prints it, every `.drv` file under `drv/` and every builder script, setup hook, patch and other non-derivation input under `inputs/`);"
+        );
+    }
     let _ = writeln!(s, "- `hydo/`: hydo's own files that built or configured them (our kernel patches and configurations, the build scripts, and the sources of the static helper programs);");
     let _ = writeln!(s, "- `third-party.json`: the component list these files and THIRD-PARTY.md are generated from.\n");
     let _ = writeln!(s, "## By component\n");
@@ -132,7 +166,12 @@ fn readme(p: Platform, list: &List, version: &str) -> String {
             parts.push(repo.join(", "));
         }
         if !c.nix.is_empty() {
-            parts.push(format!("recipe in `upstream/{}`", list.nixpkgs.archive));
+            let r: Vec<String> = c
+                .recipe_files(list)
+                .iter()
+                .map(|f| format!("`upstream/{f}`"))
+                .collect();
+            parts.push(format!("recipe in {}", r.join(", ")));
         }
         if !refs.is_empty() {
             parts.push(format!("source published at {}", refs.join(", ")));
