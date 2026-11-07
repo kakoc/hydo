@@ -261,8 +261,9 @@ fn setup(a: Args, env: &Env) -> Cx {
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let named =
-        a.manifest.is_some() || a.image.starts_with("explore-ob-") || base.starts_with("explore-ob-");
+    let named = a.manifest.is_some()
+        || a.image.starts_with("explore-ob-")
+        || base.starts_with("explore-ob-");
     // Every image hydo build makes carries its manifest (M136), whatever the file is called: an
     // image copied or renamed away from its explore-ob-* name keeps its own fault space instead
     // of silently getting the built-in one (whose services the image does not have).
@@ -271,7 +272,13 @@ fn setup(a: Args, env: &Env) -> Cx {
     } else if cx.arm() {
         hydo_engine::image::embedded_manifest(&cx.hvm_image())
             .ok()
-            .map(|t| (t, hydo_engine::image::embedded_file(&cx.hvm_image(), "etc/hydo/compose.json").ok()))
+            .map(|t| {
+                (
+                    t,
+                    hydo_engine::image::embedded_file(&cx.hvm_image(), "etc/hydo/compose.json")
+                        .ok(),
+                )
+            })
     } else {
         let img = cx.build.join(&a.image);
         hydo_engine::image::debugfs_cat(&img, "etc/hydo/hydo.yaml")
