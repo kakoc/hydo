@@ -12,6 +12,10 @@ homepage.workspace = true
 include = ["/src/**", "/Cargo.toml", "/LICENSE", "/build.rs", "/pins/**"]
 build = "build.rs"
 
+[lib]
+# no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)
+doctest = false
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }

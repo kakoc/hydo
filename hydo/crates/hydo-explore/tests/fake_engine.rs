@@ -48,13 +48,37 @@ fn main() {
         engine::main();
         return;
     }
-    let only: Vec<String> = std::env::args()
-        .skip(1)
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let flag = |f: &str| args.iter().any(|a| a == f);
+    // libtest's listing, as cargo-nextest asks for it (`--list --format terse`, and `--ignored`
+    // for the ignored tests: none); nextest then runs one scenario as `--exact <name>`
+    // (Milestone 171)
+    if flag("--list") {
+        if !flag("--ignored") {
+            for (n, _) in SCENARIOS {
+                println!("{n}: test");
+            }
+        }
+        return;
+    }
+    let exact = flag("--exact");
+    let only: Vec<String> = args
+        .iter()
         .filter(|a| !a.starts_with('-'))
+        .cloned()
         .collect();
     let list: Vec<&(&str, &[&str])> = SCENARIOS
         .iter()
-        .filter(|(n, _)| only.is_empty() || only.iter().any(|o| n.contains(o.as_str())))
+        .filter(|(n, _)| {
+            only.is_empty()
+                || only.iter().any(|o| {
+                    if exact {
+                        n == o
+                    } else {
+                        n.contains(o.as_str())
+                    }
+                })
+        })
         .collect();
     let par = std::thread::available_parallelism()
         .map(|n| n.get())

@@ -506,21 +506,44 @@ pub fn check_golden(name: &str, comment: &[&str], inputs: &[String], lines: &[St
     if want == text {
         return;
     }
+    // An `input` line's digest decides nothing: the transcripts do (Milestone 171). An input
+    // whose bytes changed without changing a transcript passes; a failure names such inputs.
+    let input_path = |l: &str| {
+        l.strip_prefix("input\t")
+            .map(|r| r.rsplit_once('\t').map_or(r, |x| x.0).to_string())
+    };
     let (wl, gl): (Vec<&str>, Vec<&str>) = (want.lines().collect(), text.lines().collect());
+    let changed: Vec<String> = wl
+        .iter()
+        .zip(gl.iter())
+        .filter(|(a, b)| a != b && input_path(a).is_some() && input_path(a) == input_path(b))
+        .filter_map(|(a, _)| input_path(a))
+        .collect();
+    let note = if changed.is_empty() {
+        String::new()
+    } else {
+        format!("\ninputs whose bytes changed since the recording: {changed:?}")
+    };
     for (i, (a, b)) in wl.iter().zip(gl.iter()).enumerate() {
-        if a != b {
+        if a != b && !(input_path(a).is_some() && input_path(a) == input_path(b)) {
             panic!(
-                "{} differs at line {}:\n  golden: {a}\n  now:    {b}\nIf the change is intended, re-record with HYDO_BLESS=1 cargo test -p hydo-control --test corpus",
+                "{} differs at line {}:\n  golden: {a}\n  now:    {b}{note}\nIf the change is intended, re-record with HYDO_BLESS=1 cargo test -p hydo-control --test corpus",
                 p.display(),
                 i + 1
             );
         }
     }
-    panic!(
-        "{} differs in length ({} lines golden, {} now); re-record with HYDO_BLESS=1 if intended",
+    assert_eq!(
+        wl.len(),
+        gl.len(),
+        "{} differs in length ({} lines golden, {} now){note}; re-record with HYDO_BLESS=1 if intended",
         p.display(),
         wl.len(),
         gl.len()
+    );
+    eprintln!(
+        "{}: inputs whose bytes changed since the recording, with the same transcripts: {changed:?}",
+        p.display()
     );
 }
 

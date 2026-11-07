@@ -12,6 +12,10 @@ homepage.workspace = true
 include = ["/src/**", "/Cargo.toml", "/LICENSE", "/build.rs", "/pt/**"]
 build = "build.rs"
 
+[lib]
+# no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)
+doctest = false
+
 [features]
 # coverage decoding with libipt (pt/ptedges.c; Linux, libipt-dev): off by default, so the default
 # build needs no libipt. Without it a traced run still writes its stats, with edges=-1.

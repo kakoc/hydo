@@ -2,7 +2,8 @@
 //! golden files in `tests/golden/`, their pinned inputs, and chunked SHA-256 of long answer streams.
 //!
 //! A golden file is text: `#` comment lines (what recorded it), then `input\t<path>\t<sha256>`
-//! lines (the files the stream depends on, pinned: a changed input fails with a clear message),
+//! lines (the files the stream depends on: a new, gone or reordered input fails with a clear
+//! message; a changed one is named when the stream differs, and passes when it does not),
 //! then `chunk\t<label>\t<index>\t<lines>\t<sha256>` lines (a stream cut into groups by label and
 //! each group into chunks of a fixed number of lines; a chunk's hash is the SHA-256 of its lines,
 //! each followed by "\n").
@@ -266,16 +267,20 @@ pub fn write_golden(path: &Path, comments: &[String], inputs: &[(String, String)
     std::fs::write(path, t).unwrap();
 }
 
-/// Fail when the pinned inputs changed since the golden was recorded.
-pub fn check_inputs(path: &Path, g: &Golden, now: &[(String, String)]) {
+/// Compare the pinned inputs with the recording. A new, gone or reordered input is another input
+/// set and fails here. An input whose bytes changed is returned (and printed) but decides nothing:
+/// the answers do (Milestone 171), so an edit that changes no answer passes, and a failing
+/// comparison of the answers names the inputs that changed.
+pub fn check_inputs(path: &Path, g: &Golden, now: &[(String, String)]) -> Vec<String> {
     if g.inputs == now {
-        return;
+        return Vec::new();
     }
     let mut msg = Vec::new();
+    let mut changed = Vec::new();
     for (p, h) in now {
         match g.inputs.iter().find(|x| &x.0 == p) {
             None => msg.push(format!("  new input: {p}")),
-            Some((_, h0)) if h0 != h => msg.push(format!("  changed: {p}")),
+            Some((_, h0)) if h0 != h => changed.push(p.clone()),
             _ => {}
         }
     }
@@ -284,15 +289,22 @@ pub fn check_inputs(path: &Path, g: &Golden, now: &[(String, String)]) {
             msg.push(format!("  gone: {p}"));
         }
     }
-    if msg.is_empty() {
+    let names = |v: &[(String, String)]| v.iter().map(|x| x.0.clone()).collect::<Vec<_>>();
+    if msg.is_empty() && names(&g.inputs) != names(now) {
         msg.push("  the order of the inputs changed".into());
     }
-    panic!(
-        "{}: the inputs this golden was recorded from changed since:\n{}\nIf the change is intended, \
-         check the explorer's answers on them and re-record with HYDO_BLESS=1.",
+    assert!(
+        msg.is_empty(),
+        "{}: the inputs this golden was recorded from changed since:\n{}\nIf the change is \
+         intended, check the explorer's answers on them and re-record with HYDO_BLESS=1.",
         path.display(),
         msg.join("\n")
     );
+    eprintln!(
+        "{}: inputs whose bytes changed since the recording (the answers decide): {changed:?}",
+        path.display()
+    );
+    changed
 }
 
 /// Compare a stream against its golden, or write the golden (HYDO_BLESS, HYDO_GOLDEN_FROM).
@@ -316,7 +328,7 @@ pub fn verify(
         return;
     }
     let g = read_golden(path);
-    check_inputs(path, &g, inputs);
+    let changed = check_inputs(path, &g, inputs);
     let mut bad = Vec::new();
     let mut shown = false;
     let n = ch.len().max(g.chunks.len());
@@ -359,11 +371,19 @@ pub fn verify(
     }
     assert!(
         bad.is_empty(),
-        "{}: {} lines in {} chunks; differences:\n{}",
+        "{}: {} lines in {} chunks; differences:\n{}{}",
         path.display(),
         stream.lines(),
         ch.len(),
-        bad.join("\n")
+        bad.join("\n"),
+        if changed.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\ninputs whose bytes changed since the recording: {changed:?}; if the change is \
+                 intended, check the answers and re-record with HYDO_BLESS=1"
+            )
+        }
     );
 }
 

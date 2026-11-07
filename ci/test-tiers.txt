@@ -1,0 +1,126 @@
+# The test tiers of the workspace (Milestone 171; docs/CI.md "Test tiers"). One line per test
+# binary, as cargo-nextest names it, and its tier:
+#
+#   fast  run on every push and pull request (ci.yml, for the packages the change can affect:
+#         ci/affected-packages.sh) and in the full tier;
+#   full  run in the full tier (ci-full.yml every night, on demand and before a release:
+#         `cargo test --locked --release --workspace`, docs/RELEASING.md step 1), and on a push
+#         that changes a file of the binary's own package (ci/tier-filter.sh).
+#
+# `full` is for the large equivalence corpora against recorded answers (thousands of cases, ten
+# seconds or more each) and for documentation examples (cargo-nextest does not run those).
+# hydo-release's test_tiers fails when a test binary of the workspace has no line here or a line
+# names none; add a new binary as `fast` unless it is such a corpus.
+hydo-agent-proto                         fast
+hydo-agent-proto::examples               fast
+hydo-agent-proto::schema                 fast
+hydo-agents                              fast
+hydo-agents::public_content              fast
+hydo-agents::skill_check                 fast
+hydo-bench                               fast
+hydo-bench::bin/hydo-bench               fast
+hydo-bench::golden                       fast
+hydo-bench::recorded                     fast
+hydo-build                               fast
+hydo-build::bin/hydo-build               fast
+hydo-build::control                      fast
+hydo-build::equivalence                  full
+hydo-build::errlog                       fast
+hydo-build::netns                        fast
+hydo-build::oci                          fast
+hydo-compose                             fast
+hydo-compose::bin/hydo-compose           fast
+hydo-compose::bin/hydo-fetch-image       fast
+hydo-compose::equivalence                fast
+hydo-compose::pycheck                    fast
+hydo-compose::registry                   fast
+hydo-composer                            fast
+hydo-composer::compositions              fast
+hydo-composer::equivalence               full
+hydo-composer::ids                       fast
+hydo-config                              fast
+hydo-config::inventory                   fast
+hydo-control                             fast
+hydo-control::conversations              fast
+hydo-control::corpus                     full
+hydo-control::corpus_net                 full
+hydo-control::drive                      fast
+hydo-control::fakes                      fast
+hydo-control::features                   full
+hydo-control::m123                       full
+hydo-control::react                      fast
+hydo-control::restart                    fast
+hydo-control::restart_may_fail           fast
+hydo-engine                              fast
+hydo-engine-proto                        fast
+hydo-engine::lockstep                    fast
+hydo-errors                              fast
+hydo-errors::equivalence                 fast
+hydo-explore                             fast
+hydo-explore::bin/hydo-explore           fast
+hydo-explore::corpus                     full
+hydo-explore::fake_engine                fast
+hydo-explore::identity                   fast
+hydo-explore::netns_links                fast
+hydo-explore::reactive                   fast
+hydo-grpc                                fast
+hydo-grpc-gen                            fast
+hydo-grpc-gen::bin/hydo-grpc-gen         fast
+hydo-grpc-gen::client                    fast
+hydo-grpc-gen::golden                    fast
+hydo-grpc-gen::units                     fast
+hydo-grpc::bin/hydo-grpc                 fast
+hydo-grpc::streams                       full
+hydo-history                             fast
+hydo-history::bin/hydo-hist-check        fast
+hydo-history::checkers                   fast
+hydo-history::doctest                    full
+hydo-history::equiv                      fast
+hydo-hvm                                 fast
+hydo-hvm::bin/hydo-hvm                   fast
+hydo-hvm::c_layout                       fast
+hydo-hvx                                 fast
+hydo-hvx::abi                            fast
+hydo-hvx::bin/hydo-hvx                   fast
+hydo-hvx::options                        fast
+hydo-hvx::parse_vs_c                     fast
+hydo-image                               fast
+hydo-image::examples                     fast
+hydo-image::kernels                      fast
+hydo-image::obtain                       fast
+hydo-image::schema                       fast
+hydo-kvm                                 fast
+hydo-kvm::abi                            fast
+hydo-kvm::bin/hydo-kvm                   fast
+hydo-kvm::engine                         fast
+hydo-manifest                            fast
+hydo-manifest::equivalence               full
+hydo-manifest::format                    fast
+hydo-release                             fast
+hydo-release::bin/hydo-release           fast
+hydo-release::crates                     fast
+hydo-release::sdks                       fast
+hydo-release::test_tiers                 fast
+hydo-release::third_party                fast
+hydo-results                             fast
+hydo-results::examples                   fast
+hydo-results::reader                     fast
+hydo-results::schema                     fast
+hydo-schedule                            fast
+hydo-schedule::language                  fast
+hydo-schema-compat                       fast
+hydo-schema-compat::real_schemas         fast
+hydo-schema-compat::rules                fast
+hydo-tools                               fast
+hydo-tools::bin/hydo-cpio-extract        fast
+hydo-tools::bin/hydo-elf-comment         fast
+hydo-tools::bin/hydo-elfdeps             fast
+hydo-tools::bin/hydo-nar-extract         fast
+hydo-tools::bin/hydo-nix-fetch           fast
+hydo-tools::bin/hydo-skill-pack          fast
+hydo-world::bin/hydo-world               fast
+hydo-world::xcheck                       full
+hydo::agents_equivalence                 fast
+hydo::bin/hydo                           fast
+hydo::equivalence                        fast
+hydo::migrate                            fast

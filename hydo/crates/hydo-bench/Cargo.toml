@@ -9,6 +9,8 @@ rust-version.workspace = true
 publish = false
 
 [lib]
+# no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)
+doctest = false
 path = "src/lib.rs"
 
 # A development tool, not part of either release: the benchmark images are built on the build

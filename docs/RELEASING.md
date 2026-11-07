@@ -13,7 +13,10 @@ docs/PUBLISHING.md lists every place hydo is published.
    item 40 says what a version change moves). The SDKs carry the same version (docs/PUBLISHING.md,
    "The next version", lists the files and the images a version change moves).
 2. On the final commit: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`
-   and `cargo test --locked --release --workspace` pass. Among them:
+   and `cargo test --locked --release --workspace` pass: the full test tier, every test of the
+   workspace and not only the per-push tier's (docs/CI.md "Test tiers"); the `ci-full` workflow
+   runs it on GitHub's Linux and macOS runners (`gh workflow run ci-full.yml --ref <branch>`).
+   Among them:
    - `public_content` (no machine details, no value of the local list, in any tracked file);
    - `hydo-release`'s `third_party` tests: the component lists `hydo/dist/<platform>/third-party.json`
      are complete (every file of `assets.sha256` and `guest-programs.sha256` and every literal

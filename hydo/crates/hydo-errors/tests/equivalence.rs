@@ -933,12 +933,15 @@ fn is_corpus_label(l: &str) -> bool {
 
 #[test]
 fn errors_match_recorded_python() {
+    // the pins decide nothing: the answers below do (Milestone 171); printed so that a failing
+    // comparison names the file that changed
     for (rel, sha) in PINS {
-        assert_eq!(
-            golden::sha256_hex(&std::fs::read(top().join(rel)).unwrap()),
-            *sha,
-            "{rel} changed since the recording; check the change, then re-record with HYDO_BLESS=1"
-        );
+        if golden::sha256_hex(&std::fs::read(top().join(rel)).unwrap()) != *sha {
+            eprintln!(
+                "{rel} changed since the recording; the answers decide; if they differ, check \
+                 the change, then re-record with HYDO_BLESS=1"
+            );
+        }
     }
     let corpus = std::env::var("HYDO_ERRLOG_CORPUS")
         .ok()

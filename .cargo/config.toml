@@ -1,3 +1,11 @@
+# The compile cache (Milestone 171; docs/CI.md "The compile cache"): every rustc call of this
+# repository and its worktrees goes through .cargo/rustc-wrapper.sh, which uses sccache with this
+# repository's own cache (.sccache/ of the main checkout) when sccache is installed, and runs
+# rustc itself otherwise or with HYDO_SCCACHE=0. The release profile never uses the cache.
+# RUSTC_WRAPPER in the environment replaces it (CI sets sccache with the Actions cache).
+[build]
+rustc-wrapper = ".cargo/rustc-wrapper.sh"
+
 # The Linux release's `hydo` is a static musl binary. Rust's bundled lld links it from any host
 # (the musl target ships its own crt objects and libc), so a Mac can build it too.
 [target.x86_64-unknown-linux-musl]
