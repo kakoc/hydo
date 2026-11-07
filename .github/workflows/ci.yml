@@ -70,9 +70,10 @@ jobs:
         run: |
           # --workspace (not -p) keeps the features of the run above, so nothing is rebuilt
           t="cargo test --locked --release --workspace -q"
-          $t --test public_content -- --nocapture 2>&1 | grep '^public_content: '
+          # (-q prints a progress dot in front of a line a test prints: grep -o drops it)
+          $t --test public_content -- --nocapture 2>&1 | grep -o 'public_content: .*'
           $t --test skill_check -- --nocapture 2>&1 | grep -o 'skills-ref: .*'
-          $t --test equivalence -- --nocapture --exact recorded_files cli_matches_golden 2>&1 | grep -E '^(SKIPPED|cli): '
+          $t --test equivalence -- --nocapture --exact recorded_files cli_matches_golden 2>&1 | grep -oE '(SKIPPED|cli): .*'
 
   guest-programs:
     name: guest programs (ubuntu-24.04)
