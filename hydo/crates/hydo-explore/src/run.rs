@@ -407,6 +407,7 @@ fn setup(a: Args, env: &Env) -> Cx {
     cx.ex.knob_rule_any = a.knob_rule == "any";
     cx.ex.concurrency = a.concurrency;
     cx.ex.more_faults = a.more_faults;
+    cx.ex.storage_faults = a.storage_faults;
     // M139: reactions (A=) from their own stream
     if let Some(r) = &a.reactive {
         cx.ex.react_fault = r == "fault" || r == "both";

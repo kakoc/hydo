@@ -69,6 +69,7 @@ pub const KNOWN_SVC: &[&str] = &[
     "mounts",
     "restart",
     "restart_may_fail",
+    "storage",
 ];
 pub const KNOWN_INV: &[&str] = &[
     "id",
@@ -104,7 +105,17 @@ pub const KNOWN_KNOB: &[&str] = &[
     "description",
 ];
 pub const FAULT_KINDS: &[&str] = &[
-    "kill", "pause", "network", "oneway", "cut", "clock", "disk", "freeze", "protocol",
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "disk",
+    "freeze",
+    "protocol",
+    "corrupt",
+    "powerloss",
 ];
 pub const NET_MODES: &[&str] = &["loopback", "bridge"];
 pub const NET_BRIDGE: &str = "10.89.0.0/16";
@@ -467,6 +478,9 @@ pub fn validate(m: &mut Value) -> R<()> {
                 )));
             }
         }
+        if let Some(st) = obj_get(s, "storage") {
+            crate::storage::Storage::of(st).map_err(|m| err(format!("{wh}: storage: {m}")))?;
+        }
         for dep in or_iter(obj_get(s, "depends_on"))? {
             let mut names = Vec::new();
             for x in &svcs {
@@ -481,6 +495,7 @@ pub fn validate(m: &mut Value) -> R<()> {
             }
         }
     }
+    crate::storage::check_distinct(m).map_err(err)?;
     let wl = obj_get(m, "workload").cloned().unwrap_or(Value::Null);
     if !wl.is_object() {
         return Err(err("workload: required (steps + run)"));

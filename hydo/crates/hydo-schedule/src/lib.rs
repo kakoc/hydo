@@ -50,6 +50,7 @@ mod compose;
 mod guest;
 mod host;
 mod num;
+mod storage;
 
 pub use compose::{Compose, Omit, RangeItem, RangeList, ResolvedField, SeedField, WORKLOAD_KINDS};
 pub use guest::{
@@ -57,6 +58,7 @@ pub use guest::{
     React, ReactAction, ResetKind, Rule, Status, RESERVED,
 };
 pub use host::{Disk, HostToken, MAX_EXPLICIT};
+pub use storage::{mix, CorruptKind, Corruption, Edit, MAX_FLIPS, MAX_LEN};
 
 use num::err;
 use std::fmt;

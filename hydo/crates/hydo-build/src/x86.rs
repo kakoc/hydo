@@ -262,6 +262,37 @@ pub fn under(r: &Path, rel: &str) -> PathBuf {
     }
 }
 
+/// The services' own file systems (services[].storage with size_mib), each an empty journaled
+/// ext4 image `<prefix>-<service>.img` in the build directory, in the manifest's order: the
+/// logical partitions /dev/vda5, /dev/vda6, ... of the data disk (docs/design/storage-faults.md).
+pub fn volume_images(
+    ctx: &Ctx,
+    mk: &MkfsTools,
+    m: &Value,
+    name: &str,
+    bdir: &Path,
+    prefix: &str,
+) -> Result<Vec<(PathBuf, u64)>, Fail> {
+    let mut out = Vec::new();
+    for (svc, st, _) in hydo_manifest::storage::volumes(m) {
+        let mib = st.size_mib.unwrap_or(0);
+        let img = bdir.join(format!("{prefix}-{svc}.img"));
+        image::mkfs(
+            ctx,
+            mk,
+            &img,
+            mib,
+            &image::uuid_from(name, &format!("vol-{svc}")),
+            &image::uuid_from(name, &format!("vol-{svc}-hash")),
+            None,
+            true,
+        )?;
+        image::zero_times(&img, true)?;
+        out.push((img, mib));
+    }
+    Ok(out)
+}
+
 /// The base directories, then root.dirs.
 pub fn make_dirs(m: &Value, r: &Path) -> Result<(), Fail> {
     let root = section(m, "root")?;
@@ -699,12 +730,29 @@ pub fn build(
     image::zero_times(&data, true)?;
     let (p1, n1) = (2048u64, rmib as u64 * 2048);
     let (p2, n2) = (p1 + n1, dmib as u64 * 2048);
-    image::assemble_disk(
-        &disk,
-        p2 + n2,
-        &[(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
-        &[(&ext4, p1), (&data, p2)],
-    )?;
+    let vols = volume_images(ctx, &mk, &m, &name, bdir, &format!("{out}-vol"))?;
+    if vols.is_empty() {
+        image::assemble_disk(
+            &disk,
+            p2 + n2,
+            &[(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
+            &[(&ext4, p1), (&data, p2)],
+        )?;
+    } else {
+        let v: Vec<(&Path, u64)> = vols.iter().map(|(p, n)| (p.as_path(), *n)).collect();
+        image::assemble_disk_volumes(
+            &disk,
+            [(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
+            &[(&ext4, p1), (&data, p2)],
+            &v,
+        )?;
+        for (p, n) in &vols {
+            outln(
+                io,
+                &format!("hydo-build: {} (own file system, {n} MiB)", p.display()),
+            );
+        }
+    }
     outln(
         io,
         &format!(

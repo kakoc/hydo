@@ -391,12 +391,23 @@ pub fn build(
     let disk = bdir.join(format!("{out}-arm64-disk.img"));
     let (p1, n1) = (2048u64, 2048u64);
     let (p2, n2) = (p1 + n1, dmib as u64 * 2048);
-    image::assemble_disk(
-        &disk,
-        p2 + n2,
-        &[(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
-        &[(&data, p2)],
-    )?;
+    let vols = crate::x86::volume_images(ctx, &mk, &m, &name, bdir, &format!("{out}-arm64-vol"))?;
+    if vols.is_empty() {
+        image::assemble_disk(
+            &disk,
+            p2 + n2,
+            &[(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
+            &[(&data, p2)],
+        )?;
+    } else {
+        let v: Vec<(&Path, u64)> = vols.iter().map(|(p, n)| (p.as_path(), *n)).collect();
+        image::assemble_disk_volumes(
+            &disk,
+            [(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
+            &[(&data, p2)],
+            &v,
+        )?;
+    }
     fsx::fix_mtimes(&r)?;
     let cpio = bdir.join(format!("{out}-arm64.cpio.gz"));
     let meta = (!oci_meta.is_empty()).then(|| crate::oci::cpio_meta(&oci_meta));

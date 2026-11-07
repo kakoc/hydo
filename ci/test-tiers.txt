@@ -63,6 +63,7 @@ hydo-explore::fake_engine                fast
 hydo-explore::identity                   fast
 hydo-explore::netns_links                fast
 hydo-explore::reactive                   fast
+hydo-explore::storage_faults             fast
 hydo-grpc                                fast
 hydo-grpc-gen                            fast
 hydo-grpc-gen::bin/hydo-grpc-gen         fast

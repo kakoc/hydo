@@ -362,6 +362,147 @@ fn reactions() {
     refused("disk=none | run A=a/b:cut", "not an assertion id");
 }
 
+/// The storage faults of one service (docs/design/storage-faults.md): G= corrupts files in its
+/// storage directory, L= is its own power loss.
+#[test]
+fn storage_faults() {
+    for s in [
+        "disk=none dseed=0 | run G=n1@10+2:flip",
+        "disk=none dseed=0 | run G=n1@10:flip,n=8,file=.blk,seed=1f",
+        "disk=none dseed=0 | run G=tigerbeetle_0@5+3:zero,len=65536,seed=a",
+        "disk=none dseed=0 | run G=n2@0+1:trunc",
+        "disk=none dseed=0 | run G=n2@7+1:trunc,len=100,file=msgs/1.blk",
+        "disk=none dseed=0 | run G=n2@7+1:zero,len=512,range=0-65536,seed=4",
+        "disk=none dseed=0 | run G=n2@7:flip,n=2,range=4096-8192",
+        "disk=none dseed=0 | run L=n1@12+3",
+        "disk=cut dseed=0 | run L=n1@12+3 P=n2@13+2 C=20",
+    ] {
+        round_trip(s);
+    }
+    let s = Schedule::parse("disk=none | run G=n1@4+2:flip,n=3,seed=b L=n2@6+1").unwrap();
+    assert_eq!(
+        s.guest,
+        vec![
+            GuestToken::Corrupt {
+                svc: "n1".into(),
+                at: 4,
+                down: Some(2),
+                how: Corruption {
+                    kind: CorruptKind::Flip,
+                    n: Some(3),
+                    len: None,
+                    range: None,
+                    file: None,
+                    seed: Some(11),
+                },
+            },
+            GuestToken::PowerLoss {
+                svc: "n2".into(),
+                at: 6,
+                down: 1,
+            },
+        ]
+    );
+    assert_eq!(s.guest[0].letter(), 'G');
+    assert_eq!(s.guest[1].letter(), 'L');
+    assert!(RESERVED.contains('G') && RESERVED.contains('L'));
+    refused("disk=none | run G=n1@4", "<svc>@<at>");
+    refused("disk=none | run G=n1@4:melt", "flip, zero or trunc");
+    refused(
+        "disk=none | run G=n1@4:flip,len=3",
+        "len= is for zero and trunc",
+    );
+    refused("disk=none | run G=n1@4:zero,n=3", "n= is for flip only");
+    refused("disk=none | run G=n1@4:flip,n=0", "n= is 1 to");
+    refused("disk=none | run G=n1@4:flip,n=65", "n= is 1 to");
+    refused("disk=none | run G=n1@4:zero,len=0", "len= is 1 to");
+    refused("disk=none | run G=n1@4:flip,seed=1,n=2", "in the order");
+    refused("disk=none | run G=n1@4:flip,seed=A", "lower-case hex");
+    refused("disk=none | run G=n1@4:flip,file=a*b", "file=");
+    refused("disk=none | run G=n1@4:flip,file=", "file=");
+    refused("disk=none | run G=n1@4:flip,size=1", "unknown key");
+    refused("disk=none | run G=n1@4:flip,range=9-9", "from < to");
+    refused("disk=none | run G=n1@4:flip,range=9", "range=<from>-<to>");
+    refused(
+        "disk=none | run G=n1@4:flip,file=x,range=0-9",
+        "in the order",
+    );
+    refused("disk=none | run G=n1@04:flip", "leading zero");
+    refused("disk=none | run G=N1@4:flip", "not a service name");
+    refused("disk=none | run L=n1@4", "<svc>@<at>+<n>");
+    refused("disk=none | run L=n1", "<svc>@<at>+<n>");
+}
+
+/// A corruption's file and places are a pure function of the token and the directory's files.
+#[test]
+fn corruption_plans() {
+    let files = vec![
+        ("msgs/1.blk".to_string(), 1000u64),
+        ("meta.inf".to_string(), 10),
+        ("empty".to_string(), 0),
+        ("msgs/2.blk".to_string(), 50),
+    ];
+    let c = |t: &str| match GuestToken::parse(t).unwrap() {
+        GuestToken::Corrupt { how, .. } => how,
+        _ => unreachable!(),
+    };
+    let flip = c("G=n1@1:flip,n=4,file=.blk,seed=7");
+    let (f, e) = flip.plan(&files).unwrap();
+    assert!(f.ends_with(".blk"), "{f}");
+    assert_eq!(e.len(), 4);
+    let mut rev = files.clone();
+    rev.reverse();
+    assert_eq!(
+        flip.plan(&rev),
+        flip.plan(&files),
+        "the listing order does not matter"
+    );
+    for e in &e {
+        let Edit::Flip { off, bit } = e else {
+            panic!("{e:?}")
+        };
+        assert!(*bit < 8);
+        assert!(*off < if f == "msgs/1.blk" { 1000 } else { 50 });
+    }
+    assert_eq!(c("G=n1@1:flip,file=nothing").plan(&files), None);
+    assert_eq!(
+        c("G=n1@1:flip,file=empty").plan(&files),
+        None,
+        "an empty file has no bits"
+    );
+    let (f, e) = c("G=n1@1:zero,len=4096,file=meta").plan(&files).unwrap();
+    assert_eq!(
+        (f.as_str(), e),
+        ("meta.inf", vec![Edit::Zero { off: 0, len: 10 }])
+    );
+    let (_, e) = c("G=n1@1:trunc,len=3,file=meta").plan(&files).unwrap();
+    assert_eq!(e, vec![Edit::Trunc { size: 7 }]);
+    // range=: the places within [from, to); a file no longer than from does not qualify
+    let (f, e) = c("G=n1@1:flip,n=16,range=100-200,seed=9")
+        .plan(&files)
+        .unwrap();
+    assert_eq!(f, "msgs/1.blk");
+    for e in &e {
+        let Edit::Flip { off, .. } = e else { panic!() };
+        assert!((100..200).contains(off), "{off}");
+    }
+    let (_, e) = c("G=n1@1:zero,len=4096,range=900-2000,file=1.blk")
+        .plan(&files)
+        .unwrap();
+    assert_eq!(e, vec![Edit::Zero { off: 900, len: 100 }]);
+    let (_, e) = c("G=n1@1:trunc,len=10,range=0-500,file=1.blk")
+        .plan(&files)
+        .unwrap();
+    assert_eq!(e, vec![Edit::Trunc { size: 490 }]);
+    assert_eq!(c("G=n1@1:flip,range=1000-2000").plan(&files), None);
+    let (_, e) = c("G=n1@1:trunc,file=meta,seed=5").plan(&files).unwrap();
+    let Edit::Trunc { size } = e[0] else { panic!() };
+    assert!(size < 10);
+    // another seed may choose another file; the same seed always the same one
+    let a = c("G=n1@1:flip,seed=1").plan(&files);
+    assert_eq!(a, c("G=n1@1:flip,seed=1").plan(&files));
+}
+
 /// `<seed>`, `<outdir>` or an ellipsis: a pattern in the text, not a schedule.
 fn placeholder(s: &str) -> bool {
     if s.contains('…') || s.contains("...") {

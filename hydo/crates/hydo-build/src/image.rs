@@ -440,6 +440,107 @@ pub fn assemble_disk(
     Ok(())
 }
 
+/// The largest disk an engine maps (hvx's page-array disk; the other engines follow it).
+pub const DISK_MAX_BYTES: u64 = 4 << 30;
+
+/// The services' own file systems (services[].storage.size_mib; docs/design/storage-faults.md):
+/// the disk of [`assemble_disk`] with the root and data partitions p1 and p2 as before, then an
+/// extended partition p3 that holds one logical partition per file system, in the order given
+/// (Linux names them p5, p6, ...). Each logical partition is preceded by its extended boot record
+/// and starts 1 MiB after it.
+pub fn assemble_disk_volumes(
+    disk: &Path,
+    parts: [(u32, u32); 2],
+    images: &[(&Path, u64)],
+    vols: &[(&Path, u64)],
+) -> Result<u64, Fail> {
+    let ext_start = parts[1].0 as u64 + parts[1].1 as u64;
+    let mut ebrs: Vec<(u64, u64)> = Vec::new(); // (EBR lba, logical partition sectors)
+    let mut at = ext_start;
+    for (_, mib) in vols {
+        let n = mib * 2048;
+        ebrs.push((at, n));
+        at += 2048 + n;
+    }
+    let total = at;
+    if total * 512 > DISK_MAX_BYTES {
+        return Err(Fail::Exit(format!(
+            "hydo-build: the disk with the services' own file systems is {} MiB, more than the {} MiB an engine maps; make data.size_mib or the storage size_mib values smaller",
+            total / 2048,
+            DISK_MAX_BYTES >> 20
+        )));
+    }
+    let u32_of = |v: u64| -> Result<u32, Fail> {
+        u32::try_from(v).map_err(|_| Fail::Exit("hydo-build: the disk is too large".into()))
+    };
+    {
+        let f = fs::File::create(disk).map_err(|e| io_fail("cannot write", disk, e))?;
+        f.set_len(total * 512)
+            .map_err(|e| io_fail("cannot size", disk, e))?;
+    }
+    let ext = (u32_of(ext_start)?, u32_of(total - ext_start)?);
+    let mut fo = fs::OpenOptions::new()
+        .write(true)
+        .open(disk)
+        .map_err(|e| io_fail("cannot open", disk, e))?;
+    let entry = |rec: &mut [u8; 512], k: usize, kind: u8, lba: u32, n: u32| {
+        let off = 0x1BE + 16 * k;
+        rec[off] = 0;
+        rec[off + 1..off + 4].copy_from_slice(b"\xfe\xff\xff");
+        rec[off + 4] = kind;
+        rec[off + 5..off + 8].copy_from_slice(b"\xfe\xff\xff");
+        rec[off + 8..off + 12].copy_from_slice(&lba.to_le_bytes());
+        rec[off + 12..off + 16].copy_from_slice(&n.to_le_bytes());
+    };
+    let mut mbr = [0u8; 512];
+    mbr[0x1B8..0x1BC].copy_from_slice(b"\x0b\xd0\xea\x1d");
+    entry(&mut mbr, 0, 0x83, parts[0].0, parts[0].1);
+    entry(&mut mbr, 1, 0x83, parts[1].0, parts[1].1);
+    entry(&mut mbr, 2, 0x05, ext.0, ext.1);
+    mbr[0x1FE] = 0x55;
+    mbr[0x1FF] = 0xAA;
+    let mut put = |lba: u64, bytes: &[u8]| -> Result<(), Fail> {
+        fo.seek(SeekFrom::Start(lba * 512))
+            .map_err(|e| io_fail("cannot seek", disk, e))?;
+        fo.write_all(bytes)
+            .map_err(|e| io_fail("cannot write", disk, e))
+    };
+    put(0, &mbr)?;
+    for (k, (lba, n)) in ebrs.iter().enumerate() {
+        let mut ebr = [0u8; 512];
+        // entry 1: the logical partition, relative to this record
+        entry(&mut ebr, 0, 0x83, 2048, u32_of(*n)?);
+        // entry 2: the next record, relative to the extended partition's start
+        if let Some((next, nn)) = ebrs.get(k + 1) {
+            entry(
+                &mut ebr,
+                1,
+                0x05,
+                u32_of(next - ext_start)?,
+                u32_of(2048 + nn)?,
+            );
+        }
+        ebr[0x1FE] = 0x55;
+        ebr[0x1FF] = 0xAA;
+        put(*lba, &ebr)?;
+    }
+    let mut copy = |img: &Path, lba: u64| -> Result<(), Fail> {
+        fo.seek(SeekFrom::Start(lba * 512))
+            .map_err(|e| io_fail("cannot seek", disk, e))?;
+        let mut fi = fs::File::open(img).map_err(|e| io_fail("cannot read", img, e))?;
+        std::io::copy(&mut fi, &mut fo)
+            .map(|_| ())
+            .map_err(|e| io_fail("cannot copy into", disk, e))
+    };
+    for (img, lba) in images {
+        copy(img, *lba)?;
+    }
+    for ((img, _), (lba, _)) in vols.iter().zip(&ebrs) {
+        copy(img, lba + 2048)?;
+    }
+    Ok(total)
+}
+
 /// The `sha256(<name>)=<hex>` lines a build ends with.
 pub fn print_shas(io: &mut Io, paths: &[&Path]) -> Result<(), Fail> {
     for p in paths {
