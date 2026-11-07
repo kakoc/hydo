@@ -126,12 +126,26 @@ engines and the hvx module (open items).
 ### The disk layout
 
 `services[].storage: {dir: <dir under /data>, size_mib: <16..3072>}` makes the directory the
-service's own file system. hydo-build (`image::assemble_disk_volumes`) keeps the root (p1) and
-data (p2) partitions as they are and adds an extended partition p3 that holds one logical
-partition per own file system, in the manifest's order of the services: `/dev/vda5`, `/dev/vda6`,
-... Each is an empty journaled ext4 made with the image builder's pinned `mke2fs` under the frozen
-build clock (the data disk's recipe, its own UUIDs), 1 MiB after its extended boot record. The
-whole disk stays within the 4 GiB an engine maps (hydo-build refuses more). The guest kernels of
+service's own file system. hydo-build (`image::assemble_disk_volumes`) keeps the root partition
+(p1) and the data file system at the start of p2 as they are and adds an extended partition p3
+after the data file system that holds one logical partition per own file system, in the
+manifest's order of the services: `/dev/vda5`, `/dev/vda6`, ... Each is an empty journaled ext4
+made with the image builder's pinned `mke2fs` under the frozen build clock (the data disk's
+recipe, its own UUIDs), 1 MiB after its extended boot record. The whole disk stays within the
+4 GiB an engine maps (hydo-build refuses more).
+
+**p2 spans the own file systems.** The hvx engine treats MBR entry 2 as the data partition: it
+keeps p2 in its snapshots (S0, S1), fills a fresh VM's p2 from them, hashes p2 into the
+fingerprint and carries the flushed p2 into the recovery boot after a power cut; the rest of the
+disk comes from the image file. (hvm and KVM keep the whole disk copy-on-write.) A first version
+put p3 after p2: in an exploration every run from S1 then saw the own file systems as built (an
+empty ext4 under a page cache that held the service's files: TigerBeetle panicked with
+`superblock not found` after a plain kill and restart), and after a whole-guest power cut the
+recovery boot found them empty (TigerBeetle formatted a new data file); `hydo run` from a fresh
+boot without a cut hid it, because the one VM keeps its disk. So p2's entry now runs to the end of
+the disk, over p3 (the data file system is smaller than its partition, which ext4 allows, and
+Linux reads overlapping MBR entries as written): the own file systems travel with p2 on every
+engine, with no engine change. The guest kernels of
 all three engines read MBR logical partitions (`CONFIG_MSDOS_PARTITION`), have ext4 and sysfs,
 and the agent mounts devtmpfs, so the device nodes exist.
 
