@@ -353,22 +353,36 @@ const TX_SALT: u64 = 0x0054_0000_0000_0000;
 pub struct Ram<'a> {
     pub b: &'a mut [u8],
     pub base: u64,
+    /// RAM in two blocks (the KVM engine's guests of more than 3 GiB): `Some((split, at))` puts
+    /// the buffer's bytes from `split` on at guest-physical `at` (the bytes before `split` stay
+    /// at `base`); None: one block. The KVM engine's `layout::ram_offset` is the same rule.
+    pub high: Option<(u64, u64)>,
     /// When set, the index (offset / 4096) of every page a device writes is appended (the KVM
     /// engine's rewind mode keeps a copy of guest RAM in step with the pages written).
     pub dirty: Option<&'a mut Vec<u64>>,
 }
 
 impl Ram<'_> {
-    fn ok(&self, gpa: u64, len: u64) -> Option<usize> {
-        let size = self.b.len() as u64;
-        if gpa < self.base || gpa - self.base > size || len > size - (gpa - self.base) {
+    /// The offset in `b` of the `len` guest-physical bytes at `gpa`, or None when they are not
+    /// all inside one block of RAM.
+    pub fn offset(&self, gpa: u64, len: u64) -> Option<usize> {
+        let all = self.b.len() as u64;
+        let (size, high) = match self.high {
+            Some((split, at)) if split < all => (split, Some((split, at, all - split))),
+            _ => (all, None),
+        };
+        if gpa >= self.base && gpa - self.base <= size && len <= size - (gpa - self.base) {
+            return Some((gpa - self.base) as usize);
+        }
+        let (split, at, hsize) = high?;
+        if gpa < at || gpa - at > hsize || len > hsize - (gpa - at) {
             return None;
         }
-        Some((gpa - self.base) as usize)
+        Some((split + (gpa - at)) as usize)
     }
     /// guest -> buf
     fn read(&self, gpa: u64, buf: &mut [u8]) -> bool {
-        match self.ok(gpa, buf.len() as u64) {
+        match self.offset(gpa, buf.len() as u64) {
             Some(o) => {
                 buf.copy_from_slice(&self.b[o..o + buf.len()]);
                 true
@@ -378,7 +392,7 @@ impl Ram<'_> {
     }
     /// buf -> guest
     fn write(&mut self, gpa: u64, buf: &[u8]) -> bool {
-        match self.ok(gpa, buf.len() as u64) {
+        match self.offset(gpa, buf.len() as u64) {
             Some(o) => {
                 self.b[o..o + buf.len()].copy_from_slice(buf);
                 if let (Some(d), false) = (self.dirty.as_mut(), buf.is_empty()) {

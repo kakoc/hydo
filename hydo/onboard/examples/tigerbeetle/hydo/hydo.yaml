@@ -24,8 +24,9 @@
 #
 # MEMORY: one replica of the release binary allocates 2.1 GiB at start (1.4 GiB with
 # --development, which also turns direct I/O off) whatever --cache-grid says, so three replicas
-# need more RAM than hydo's x86_64 guest has (3072 MiB). This manifest boots and runs out of
-# memory; hydo-single.yaml runs one replica. RESULTS.md, "Memory".
+# need more than the 3072 MiB a guest had before Milestone 179 (it ran out of memory then);
+# hand: 8192 MiB now, so the host needs about 9 GiB free per running guest. hydo-single.yaml runs
+# one replica in 3072 MiB. RESULTS.md, "Memory".
 format: 1
 name: tigerbeetle
 description: "TigerBeetle, three replicas: every acknowledged transfer survives crashes, pauses, partitions, clock jumps and power cuts, and balances stay the sum of their transfers"
@@ -37,7 +38,7 @@ params:
 network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
 
 guest:
-  ram_mib: 3072   # hand: the most hydo's x86_64 guest has; not enough for three replicas (above)
+  ram_mib: 8192   # hand: three replicas of about 2.1 GiB each (above)
   cpu: v3         # hand: the release binary is built for x86-64-v3 with AES-NI
 
 data:

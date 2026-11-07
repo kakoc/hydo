@@ -184,6 +184,15 @@ fn run_engine(
 ) -> (Option<RunResult>, String) {
     let _ = std::fs::create_dir_all(outdir);
     let s = schedule(sched);
+    // M179: a guest may have up to 8 GiB; refuse before the engine fails to make the VM
+    let ram = eargs
+        .windows(2)
+        .find(|w| w[0] == "--ram-mib")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(1024);
+    if let Err(e) = hydo_engine::guest_fits(ram) {
+        die(&e);
+    }
     // the engine and the boot spec of this platform, then the run under the host controller
     let one = |eng: Arc<dyn ControlledEngine + Send + Sync>, spec: &BootSpec| {
         let a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));

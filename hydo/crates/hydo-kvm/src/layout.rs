@@ -1,12 +1,45 @@
-//! The machine's layout and constants: guest RAM from physical address 0 (at most 3 GiB, below
-//! the devices), the virtio-mmio devices at 0xd000_0000 (the Mac engine's devices, moved), the
+//! The machine's layout and constants: guest RAM from physical address 0 (the low block, at most
+//! 3 GiB, below the devices) and, for a guest of more than 3 GiB, the rest from 4 GiB (the high
+//! block; [`ram_blocks`], [`ram_offset`]), the virtio-mmio devices at 0xd000_0000 (the Mac engine's devices, moved), the
 //! KVM scratch pages Intel needs, the I/O ports of hydo's clock (hv/kvm/linux/hydo-kvm-guest.patch,
 //! `asm/hydo.h`), the PIC and the UART, and the IRQ lines.
 
-/// Guest RAM in MiB: the bounds and the default (hvx's: below the 0xC000_0000 hole).
+/// Guest RAM in MiB: the bounds and the default.
 pub const RAM_MIN_MIB: u64 = 256;
-pub const RAM_MAX_MIB: u64 = 3072;
+pub const RAM_MAX_MIB: u64 = 8192;
 pub const RAM_DEFAULT_MIB: u64 = 1024;
+
+/// Guest RAM is one host buffer. Its first [`RAM_LOW_TOP`] bytes (all of it for a guest of 3 GiB
+/// or less, whose layout is the one it always was) are at guest-physical 0, below the devices;
+/// the rest is at guest-physical [`RAM_HIGH_BASE`] (hvx's layout: the hole 3..4 GiB holds the
+/// devices, KVM's pages and, on hvx, the PCI and APIC windows).
+pub const RAM_LOW_TOP: u64 = 0xC000_0000;
+pub const RAM_HIGH_BASE: u64 = 0x1_0000_0000;
+
+/// The blocks of `len` bytes of guest RAM: (guest-physical address, offset in the buffer, size).
+/// One block for a guest of 3 GiB or less, two above.
+pub fn ram_blocks(len: u64) -> Vec<(u64, u64, u64)> {
+    if len <= RAM_LOW_TOP {
+        vec![(0, 0, len)]
+    } else {
+        vec![
+            (0, 0, RAM_LOW_TOP),
+            (RAM_HIGH_BASE, RAM_LOW_TOP, len - RAM_LOW_TOP),
+        ]
+    }
+}
+
+/// The offset in the RAM buffer (of `len` bytes) of the `n` guest-physical bytes at `gpa`, or
+/// None when they are not all inside one block of RAM. Every translation of a guest-physical
+/// address to the buffer goes through this.
+pub fn ram_offset(len: u64, gpa: u64, n: u64) -> Option<usize> {
+    for (at, off, size) in ram_blocks(len) {
+        if gpa >= at && gpa - at <= size && n <= size - (gpa - at) {
+            return Some((off + (gpa - at)) as usize);
+        }
+    }
+    None
+}
 
 /// The virtio-mmio devices (hydo-hvm's `virtio`, with its 0x200-byte stride): device i at
 /// `VIRTIO_BASE + i * 0x200`, on IRQ `VIRTIO_IRQ[i]`.
@@ -62,13 +95,57 @@ pub const STOP_IDLE: i32 = 3;
 pub const STOP_LIMIT: i32 = 4;
 pub const STOP_SPIN: i32 = 5;
 
-// RAM never reaches the devices, and the devices never reach KVM's pages
-const _: () = assert!(RAM_MAX_MIB << 20 <= VIRTIO_BASE);
+// the low block never reaches the devices, the devices never reach KVM's pages, and those stay
+// below the high block
+const _: () = assert!(RAM_LOW_TOP <= VIRTIO_BASE);
+const _: () = assert!(KVM_TSS_ADDR + 3 * 4096 <= RAM_HIGH_BASE);
+const _: () = assert!((RAM_MAX_MIB << 20) - RAM_LOW_TOP <= (1 << 36) - RAM_HIGH_BASE);
 const _: () = assert!(VIRTIO_BASE + 2 * 0x200 <= KVM_IDENTITY_MAP_ADDR);
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ram_up_to_3_gib_is_one_block_from_0() {
+        for mib in [256u64, 1024, 3072] {
+            let len = mib << 20;
+            assert_eq!(ram_blocks(len), vec![(0, 0, len)]);
+            assert_eq!(ram_offset(len, 0, len), Some(0));
+            assert_eq!(ram_offset(len, len - 8, 8), Some(len as usize - 8));
+            assert_eq!(ram_offset(len, len - 4, 8), None);
+            assert_eq!(ram_offset(len, len, 1), None);
+            assert_eq!(ram_offset(len, RAM_HIGH_BASE, 1), None);
+        }
+    }
+
+    #[test]
+    fn ram_above_3_gib_continues_at_4_gib() {
+        let len = 8192u64 << 20;
+        let hi = len - RAM_LOW_TOP;
+        assert_eq!(
+            ram_blocks(len),
+            vec![(0, 0, RAM_LOW_TOP), (RAM_HIGH_BASE, RAM_LOW_TOP, hi)]
+        );
+        assert_eq!(ram_offset(len, 0x1000, 8), Some(0x1000));
+        assert_eq!(
+            ram_offset(len, RAM_LOW_TOP - 8, 8),
+            Some(RAM_LOW_TOP as usize - 8)
+        );
+        // nothing in the hole, and no range across it
+        assert_eq!(ram_offset(len, RAM_LOW_TOP, 1), None);
+        assert_eq!(ram_offset(len, VIRTIO_BASE, 4), None);
+        assert_eq!(ram_offset(len, RAM_LOW_TOP - 4, 8), None);
+        assert_eq!(ram_offset(len, RAM_HIGH_BASE - 1, 2), None);
+        assert_eq!(
+            ram_offset(len, RAM_HIGH_BASE, 8),
+            Some(RAM_LOW_TOP as usize)
+        );
+        let last = RAM_HIGH_BASE + hi - 4096;
+        assert_eq!(ram_offset(len, last, 4096), Some(len as usize - 4096));
+        assert_eq!(ram_offset(len, last, 4097), None);
+        assert_eq!(ram_offset(len, RAM_HIGH_BASE + hi, 1), None);
+    }
 
     #[test]
     fn devices_are_named_on_the_command_line() {

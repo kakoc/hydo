@@ -171,7 +171,7 @@ variables! {
     HVX_EXPLORE_CMDLINE_EXTRA: HvxEngine, Developer, "text", "", "hydo-hvx";
     /// Set: keep the disk's volatile write cache out of snapshots (no HVX_GET/SET_UNSYNC).
     HVX_EXPLORE_NO_UNSYNC: HvxEngine, Developer, "flag: set (any value)", "off", "hydo-hvx";
-    /// The guest RAM in MiB when `--ram-mib` is not given (256-3072).
+    /// The guest RAM in MiB when `--ram-mib` is not given (256-8192).
     HVX_EXPLORE_RAM_MIB: HvxEngine, Developer, "integer", "1024", "hydo-hvx";
     /// The vCPU count when `--vcpus` is not given.
     HVX_EXPLORE_VCPUS: HvxEngine, Developer, "integer", "1", "hydo-hvx";
@@ -247,7 +247,7 @@ variables! {
     HVM_DISK: Hvm, User, "path", "", "hydo-hvm (set by hydo-engine)";
     /// `hydo-hvm hvm` writes the durable disk image here at its end (flushed bytes only).
     HVM_DISK_OUT: Hvm, Developer, "path", "", "hydo-hvm hvm";
-    /// Guest RAM in MiB (the engine: 256..4096, default 1024; `hydo-hvm hvm`: default 256);
+    /// Guest RAM in MiB (the engine: 256..8192, default 1024; `hydo-hvm hvm`: default 256);
     /// `--ram-mib` wins.
     HVM_MEM_MB: Hvm, User, "number", "1024 (hydo-hvm hvm: 256)", "hydo-hvm";
     /// Virtual ticks of the 24 MHz counter per VM exit.

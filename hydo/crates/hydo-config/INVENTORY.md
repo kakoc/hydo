@@ -37,7 +37,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HVX_QUANTUM_AFTER` | developer | flag: set (any value) | off | hydo-hvx | Set: apply `HVX_QUANTUM` after the boot only. |
 | `HVX_EXPLORE_CMDLINE_EXTRA` | developer | text | - | hydo-hvx | Extra words on the guest kernel's command line. |
 | `HVX_EXPLORE_NO_UNSYNC` | developer | flag: set (any value) | off | hydo-hvx | Set: keep the disk's volatile write cache out of snapshots (no HVX_GET/SET_UNSYNC). |
-| `HVX_EXPLORE_RAM_MIB` | developer | integer | 1024 | hydo-hvx | The guest RAM in MiB when `--ram-mib` is not given (256-3072). |
+| `HVX_EXPLORE_RAM_MIB` | developer | integer | 1024 | hydo-hvx | The guest RAM in MiB when `--ram-mib` is not given (256-8192). |
 | `HVX_EXPLORE_VCPUS` | developer | integer | 1 | hydo-hvx | The vCPU count when `--vcpus` is not given. |
 
 ## The hvx engine's diagnostics (`hydo_config::hvx::Options`)
@@ -87,7 +87,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_HVM_ENGINE` | user | path | <root>/target/release/hydo-hvm, else <root>/bin/hydo-hvm | hydo-engine | The Mac engine program (an empty value means the default). |
 | `HVM_DISK` | user | path | - | hydo-hvm (set by hydo-engine) | The data disk (virtio-blk); hydo-engine sets it for an image with a `-disk.img`. |
 | `HVM_DISK_OUT` | developer | path | - | hydo-hvm hvm | `hydo-hvm hvm` writes the durable disk image here at its end (flushed bytes only). |
-| `HVM_MEM_MB` | user | number | 1024 (hydo-hvm hvm: 256) | hydo-hvm | Guest RAM in MiB (the engine: 256..4096, default 1024; `hydo-hvm hvm`: default 256); `--ram-mib` wins. |
+| `HVM_MEM_MB` | user | number | 1024 (hydo-hvm hvm: 256) | hydo-hvm | Guest RAM in MiB (the engine: 256..8192, default 1024; `hydo-hvm hvm`: default 256); `--ram-mib` wins. |
 | `HVM_STEP` | developer | number | 64 | hydo-hvm | Virtual ticks of the 24 MHz counter per VM exit. |
 | `HVM_MAX_EXITS` | developer | number | 200000000 | hydo-hvm hvm | The exit budget of `hydo-hvm hvm`. |
 | `HVM_RUN_EXITS` | developer | number | 50000000 | hydo-hvm | The engine's exit budget per phase of a run. |

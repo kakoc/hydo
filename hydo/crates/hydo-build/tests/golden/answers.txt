@@ -216,7 +216,7 @@ I	sdk/cases/programs/rust.json	4c01f91f15d568be3e4f150f4bee16987a4134680de0980f2
 I	sdk/js/package.json	76379c03e5a2cc2f14ea6ecd26655185e77b7e79df7a552a0d632d5bebe53547
 I	hydo/guide/examples/example-miniflux.yaml	056fe1ea51d103145f0db56f65c550c83bd6a87b491b2cdbad74509dd3a2ee57
 I	hydo/guide/examples/example-redis-composed/hydo/hydo.yaml	a5d2effbdf6ba22a31cbbfbc07d1e52127834fa5ce4e1e14c5db619e2cb339b5
-I	hydo/guide/init/hydo/hydo.yaml	4f2ae608d43856af3e036e9b34f9738ae0893127472f3fa22b6a74fa0ba5d9d9
+I	hydo/guide/init/hydo/hydo.yaml	71d48d173247cc4651c5ac0b1896b0af8eb67461a12a15d2bc70b22f0d2ba9cc
 G	hydo/history/hydo_hist.sh	1ea4d05fad96aafe522a14608702de49eccbdbe8bd57228966c5bf9b901da8a7
 R	--set and flag combinations	<root>/hydo/bench/m56/map-d0.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
@@ -2476,15 +2476,15 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case307.json --arch x86_64 --check	run	1	""	"hydo-build: guest.ram_mib: a whole number of MiB in [256, 40…#a4c86346d50aa790"
+R	^	<tmp>/case307.json --arch x86_64 --check	run	1	""	"hydo-build: guest.ram_mib: a whole number of MiB in [256, 8192] (got 255)\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case308.json --arch x86_64 --check	run	1	""	"hydo-build: guest.ram_mib: 4096 MiB is more than --arch x86_…#b9937c29360705b5"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/case308.json --arch x86_64 --check	run	0	"hydo-build: <tmp>/case308.json OK (1 services, 1 invariants, 2 workload steps)\n"	""
+R	^	^ --arch x86_64 --print-shell	run	0	#eb18f6d3c2e95b43/743	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case308.json OK (1 services, 1 invariants, 2 workload steps)\n"	""
 R	^	^ --arch arm64 --print-shell	run	0	#eb18f6d3c2e95b43/743	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
@@ -2500,13 +2500,13 @@ R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case310.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
 R	^	^ --arch arm64 --print-shell	run	0	#eb18f6d3c2e95b43/743	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case311.json --arch x86_64 --check	run	1	""	"hydo-build: guest.ram_mib: a whole number of MiB in [256, 40…#b943dc8411d6f8b4"
+R	^	<tmp>/case311.json --arch x86_64 --check	run	1	""	"hydo-build: guest.ram_mib: a whole number of MiB in [256, 8192] (got '1024')\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case312.json --arch x86_64 --check	run	1	""	"hydo-build: guest.ram_mib: a whole number of MiB in [256, 40…#48caf21c3f900d0a"
+R	^	<tmp>/case312.json --arch x86_64 --check	run	1	""	"hydo-build: guest.ram_mib: a whole number of MiB in [256, 8192] (got True)\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -4771,7 +4771,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00604.json --arch arm64 --check	run	1	""	"hydo-build: the manifest cannot be read: bool object is not iterable\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00605.json --arch x86_64 --check	run	1	""	"hydo-build: guest.ram_mib: a whole number of MiB in [256, 40…#bfcca7ff5d68bcf6"
+R	^	<tmp>/mutant00605.json --arch x86_64 --check	run	1	""	"hydo-build: guest.ram_mib: a whole number of MiB in [256, 8192] (got '12')\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00606.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#3fc1eb5c73b15672"

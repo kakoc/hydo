@@ -33,7 +33,7 @@ use std::time::Instant;
 
 const EXP_MEM_MIB: u64 = 1024;
 const EXP_MEM_MIN_MIB: u64 = 256;
-const EXP_MEM_MAX_MIB: u64 = 3072;
+const EXP_MEM_MAX_MIB: u64 = boot::RAM_MAX >> 20; // 8192 since M179 (3072 before)
 const BOOT_TSC_STEP: u64 = 0x10000;
 
 /// The engine's options (the variables hvx_explore and hvx_stack_verify.c read, and hydo-hvx's
@@ -2748,6 +2748,17 @@ fn create_vm(
     if let Err(e) = first {
         if vcpus > 1 && e.raw_os_error() == Some(libc::ENODEV) {
             say!("hvx_stack_verify: {vcpus} vCPUs need the PMU clock; this host has no usable PMU");
+            return None;
+        }
+        if e.raw_os_error() == Some(libc::EINVAL) && cfg.mem_size > boot::RAM_LOW_MAX {
+            // M179: a module older than the split takes at most 3 GiB
+            say!(
+                "HVX_CREATE_VM: {e}: this hvx.ko takes at most {} MiB of guest RAM (asked for {} MiB); \
+                 a guest above {} MiB needs a module with the split RAM (Milestone 179)",
+                boot::RAM_LOW_MAX >> 20,
+                cfg.mem_size >> 20,
+                boot::RAM_LOW_MAX >> 20
+            );
             return None;
         }
         if e.raw_os_error() != Some(libc::ENODEV) || cfg.flags & HVX_VM_PMU_CLOCK == 0 {

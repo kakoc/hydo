@@ -82,7 +82,7 @@ still need sudo. `hydo module udev status` shows the rule and the device;
 `hydo module udev remove` deletes the rule and gives the device back to root.
 
 What this means for security: **anyone in the group can run guests through the hvx kernel
-module.** The module runs in the kernel; each guest takes a CPU and up to 3 GiB of memory, and
+module.** The module runs in the kernel; each guest takes a CPU and up to 8 GiB of memory (its `guest.ram_mib`), and
 the module is a test tool that was not hardened against hostile users, so a bug in it could let
 a group member crash the machine or worse. Give the group only to people you would also give
 sudo on that machine.

@@ -211,7 +211,7 @@ I	sdk/cases/programs/rust.json	4c01f91f15d568be3e4f150f4bee16987a4134680de0980f2
 I	sdk/js/package.json	76379c03e5a2cc2f14ea6ecd26655185e77b7e79df7a552a0d632d5bebe53547
 I	hydo/guide/examples/example-miniflux.yaml	056fe1ea51d103145f0db56f65c550c83bd6a87b491b2cdbad74509dd3a2ee57
 I	hydo/guide/examples/example-redis-composed/hydo/hydo.yaml	a5d2effbdf6ba22a31cbbfbc07d1e52127834fa5ce4e1e14c5db619e2cb339b5
-I	hydo/guide/init/hydo/hydo.yaml	4f2ae608d43856af3e036e9b34f9738ae0893127472f3fa22b6a74fa0ba5d9d9
+I	hydo/guide/init/hydo/hydo.yaml	71d48d173247cc4651c5ac0b1896b0af8eb67461a12a15d2bc70b22f0d2ba9cc
 R	--set	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch x86_64 [("transfer", "racy")]	ok	d:fd5beb70 w:4f53cda1 c:3f730dfc m:74234e98
 R	^	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch x86_64 [("nope", "1")]	err	"--set nope: the manifest declares no parameter 'nope' (params: transfer)"
 R	^	<root>/hydo/onboard/examples/redis/hydo.yaml --arch x86_64 [("x", "1")]	err	"--set x: the manifest declares no parameter 'x' (params: none)"
@@ -832,18 +832,18 @@ R	^	<tmp>/cases/v-guest-5.json --arch x86_64 []	ok	d:91610522 w:4f53cda1 c:02b9d
 R	^	<tmp>/cases/v-guest-5.json --arch arm64 []	err	"guest.cpu: v3 (AVX/AVX2) is an x86_64 option; --arch arm64 cannot use it"
 R	^	<tmp>/cases/v-guest-6.json --arch x86_64 []	err	"guest.cpu: v2 (the default: x86-64-v2, no AVX) or v3 (adds A…#2e97827ad9a9019e"
 R	^	<tmp>/cases/v-guest-6.json --arch arm64 []	err	"guest.cpu: v2 (the default: x86-64-v2, no AVX) or v3 (adds A…#2e97827ad9a9019e"
-R	^	<tmp>/cases/v-guest-7.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got 255…#0478669bfda6e4d1"
-R	^	<tmp>/cases/v-guest-7.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got 255…#0478669bfda6e4d1"
-R	^	<tmp>/cases/v-guest-8.json --arch x86_64 []	err	"guest.ram_mib: 4096 MiB is more than --arch x86_64 runs (at most 3072)"
+R	^	<tmp>/cases/v-guest-7.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got 255)"
+R	^	<tmp>/cases/v-guest-7.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got 255)"
+R	^	<tmp>/cases/v-guest-8.json --arch x86_64 []	ok	d:16beae09 w:4f53cda1 c:7e1201bb m:74234e98
 R	^	<tmp>/cases/v-guest-8.json --arch arm64 []	ok	d:16beae09 w:4f53cda1 c:7e1201bb m:74234e98
 R	^	<tmp>/cases/v-guest-9.json --arch x86_64 []	ok	d:0e7ac760 w:4f53cda1 c:39646dc2 m:74234e98
 R	^	<tmp>/cases/v-guest-9.json --arch arm64 []	ok	d:0e7ac760 w:4f53cda1 c:39646dc2 m:74234e98
 R	^	<tmp>/cases/v-guest-10.json --arch x86_64 []	ok	d:b1f74369 w:4f53cda1 c:f55967ee m:74234e98
 R	^	<tmp>/cases/v-guest-10.json --arch arm64 []	ok	d:b1f74369 w:4f53cda1 c:f55967ee m:74234e98
-R	^	<tmp>/cases/v-guest-11.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got '10…#9061ecd0b80cf7d0"
-R	^	<tmp>/cases/v-guest-11.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got '10…#9061ecd0b80cf7d0"
-R	^	<tmp>/cases/v-guest-12.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got Tru…#05488a9cbfc06117"
-R	^	<tmp>/cases/v-guest-12.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got Tru…#05488a9cbfc06117"
+R	^	<tmp>/cases/v-guest-11.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got '1024')"
+R	^	<tmp>/cases/v-guest-11.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got '1024')"
+R	^	<tmp>/cases/v-guest-12.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got True)"
+R	^	<tmp>/cases/v-guest-12.json --arch arm64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got True)"
 R	^	<tmp>/cases/v-guest-13.json --arch x86_64 []	err	"guest.clock_start: invalid type: string \"2024-01-01\", expect…#9360a251e9555bb9"
 R	^	<tmp>/cases/v-guest-13.json --arch arm64 []	err	"guest.clock_start: invalid type: string \"2024-01-01\", expect…#9360a251e9555bb9"
 R	^	<tmp>/cases/v-guest-14.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: list object i…#dab5e50983647e36"
@@ -2801,7 +2801,7 @@ R	^	<tmp>/mutants/m1769.json --arch x86_64 []	crash	"hydo-build stops here with 
 R	^	<tmp>/mutants/m1770.json --arch x86_64 []	err	"invariants[1]: field 'id' must be a str"
 R	^	<tmp>/mutants/m1771.json --arch x86_64 []	ok	d:9d5f8edb w:4f53cda1 c:f040946b m:74234e98
 R	^	<tmp>/mutants/m1772.json --arch x86_64 []	err	"services[0]: field 'ready' must be a str"
-R	^	<tmp>/mutants/m1773.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got Fal…#7d9fd25a8623f783"
+R	^	<tmp>/mutants/m1773.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got False)"
 R	^	<tmp>/mutants/m1774.json --arch x86_64 []	err	"services[0]: field 'name' must be a str"
 R	^	<tmp>/mutants/m1775.json --arch x86_64 []	err	"knobs[0].values[1]: a string, a number or true/false, not []…#509ddf1feb16b91a"
 R	^	<tmp>/mutants/m1776.json --arch x86_64 []	err	"data.size_mib: {{p}} is not a declared parameter"
@@ -4695,7 +4695,7 @@ R	^	<tmp>/mutants/m3663.json --arch x86_64 []	err	"workload: field 'steps' must 
 R	^	<tmp>/mutants/m3664.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m3665.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m3666.json --arch x86_64 []	err	"invariants[0]: missing required field 'id'"
-R	^	<tmp>/mutants/m3667.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got Tru…#05488a9cbfc06117"
+R	^	<tmp>/mutants/m3667.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got True)"
 R	^	<tmp>/mutants/m3668.json --arch x86_64 []	err	"workload: field 'run' must be a str"
 R	^	<tmp>/mutants/m3669.json --arch x86_64 []	err	"faults: unknown kind True (known: clock, cut, disk, freeze, …#4a1b72c8e9ec157e"
 R	^	<tmp>/mutants/m3670.json --arch x86_64 []	err	"services[0]: missing required field 'name'"
@@ -4704,7 +4704,7 @@ R	^	<tmp>/mutants/m3672.json --arch x86_64 []	err	"services[0] (restate): image 
 R	^	<tmp>/mutants/m3673.json --arch x86_64 []	err	"invariants[0]: unknown field(s)  , A, b (known: after, cmd, …#ec0b01ef97503f22"
 R	^	<tmp>/mutants/m3674.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
 R	^	<tmp>/mutants/m3675.json --arch x86_64 []	err	"workload: field 'run' must be a str"
-R	^	<tmp>/mutants/m3676.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got Fal…#7d9fd25a8623f783"
+R	^	<tmp>/mutants/m3676.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got False)"
 R	^	<tmp>/mutants/m3677.json --arch x86_64 []	err	"workload: field 'steps' must be a int"
 R	^	<tmp>/mutants/m3678.json --arch x86_64 []	err	"services[0]: port must be a number"
 R	^	<tmp>/mutants/m3679.json --arch x86_64 []	err	"invariants[0]: unknown field(s) x (known: after, cmd, descri…#8532948b04f8db6c"
@@ -4717,7 +4717,7 @@ R	^	<tmp>/mutants/m3685.json --arch x86_64 []	err	"services[0] (restate): image 
 R	^	<tmp>/mutants/m3686.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#c519b6971eb3ecd1"
 R	^	<tmp>/mutants/m3687.json --arch x86_64 []	err	"services: must be a list (it may be empty: a project that is only a workload)"
 R	^	<tmp>/mutants/m3688.json --arch x86_64 []	err	"services[0]: missing required field 'cmd'"
-R	^	<tmp>/mutants/m3689.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got ['x…#7f8da8a2a0397006"
+R	^	<tmp>/mutants/m3689.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got ['x'])"
 R	^	<tmp>/mutants/m3690.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m3691.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m3692.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
@@ -5117,7 +5117,7 @@ R	^	<tmp>/mutants/m4085.json --arch x86_64 []	ok	d:88705a32 w:4f53cda1 c:69a2dc3
 R	^	<tmp>/mutants/m4086.json --arch x86_64 []	ok	d:ea62d236 w:4f53cda1 c:6e447343 m:74234e98
 R	^	<tmp>/mutants/m4087.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m4088.json --arch x86_64 []	err	"services[0]: field 'cmd' must be a str"
-R	^	<tmp>/mutants/m4089.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 4096] (got {'a…#918305611d4c5994"
+R	^	<tmp>/mutants/m4089.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got {'a': 1})"
 R	^	<tmp>/mutants/m4090.json --arch x86_64 []	ok	d:a85fc173 w:4f53cda1 c:e3f315f0 m:74234e98
 R	^	<tmp>/mutants/m4091.json --arch x86_64 []	ok	d:5525975e w:4f53cda1 c:08ccb237 m:74234e98
 R	^	<tmp>/mutants/m4092.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
@@ -5879,6 +5879,7 @@ R	^	embedded <tmp>/cases/v-fm-10.json None	ok	d:abfd7b82 w:74234e98 c:74234e98 m
 R	^	embedded <tmp>/cases/v-fm-freeze-10.json None	ok	d:ea388e51 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-guest-1.json None	ok	d:c879d842 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-guest-5.json None	ok	d:91610522 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/cases/v-guest-8.json None	ok	d:16beae09 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-guest-9.json None	ok	d:0e7ac760 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-guest-10.json None	ok	d:b1f74369 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-check-0.json None	ok	d:e098c44d w:74234e98 c:74234e98 m:74234e98

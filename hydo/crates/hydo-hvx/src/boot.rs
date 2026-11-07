@@ -198,6 +198,38 @@ pub fn build_mptable_n(mem: &mut [u8], ncpus: u32, w: &mut Written) -> Result<()
     Ok(())
 }
 
+/// Guest RAM above this many bytes sits at [`RAM_HIGH_BASE`] (Milestone 179; `hvx_abi.h`'s
+/// `HVX_RAM_LOW_MAX`): the low block ends below the MMIO hole, so a guest of 3 GiB or less is laid
+/// out exactly as before.
+pub const RAM_LOW_MAX: u64 = 0xc000_0000;
+/// Where the high block of guest RAM starts (`HVX_RAM_HIGH_BASE`, 4 GiB).
+pub const RAM_HIGH_BASE: u64 = 0x1_0000_0000;
+/// The most guest RAM the module takes (`HVX_RAM_MAX`, 8 GiB).
+pub const RAM_MAX: u64 = 8 << 30;
+
+/// The guest-physical address of byte `off` of the RAM buffer (the module's mmap window).
+pub fn ram_gpa(off: u64) -> u64 {
+    if off < RAM_LOW_MAX {
+        off
+    } else {
+        off - RAM_LOW_MAX + RAM_HIGH_BASE
+    }
+}
+
+/// The e820 map of a guest with `mem_size` bytes of RAM: conventional memory, the low block from
+/// 1 MiB, and (above [`RAM_LOW_MAX`]) the high block from [`RAM_HIGH_BASE`].
+pub fn e820_map(mem_size: u64) -> Vec<(u64, u64, u32)> {
+    let low = mem_size.min(RAM_LOW_MAX);
+    let mut e820: Vec<(u64, u64, u32)> = vec![(0, EBDA_START, E820_RAM)];
+    if low > HIMEM_START {
+        e820.push((HIMEM_START, low - HIMEM_START, E820_RAM));
+    }
+    if mem_size > low {
+        e820.push((RAM_HIGH_BASE, mem_size - low, E820_RAM));
+    }
+    e820
+}
+
 /// `load_bzimage_n`. Returns the line the C prints on stderr.
 pub fn load_bzimage_n(
     mem: &mut [u8],
@@ -262,12 +294,9 @@ pub fn load_bzimage_n(
         wr32(&mut bp, OFF_RAMDISK_IMAGE, addr as u32);
         wr32(&mut bp, OFF_RAMDISK_SIZE, initrd.len() as u32);
     }
-    let mut e820: Vec<(u64, u64, u32)> = vec![(0, EBDA_START, E820_RAM)];
-    if mem_size > HIMEM_START {
-        e820.push((HIMEM_START, mem_size - HIMEM_START, E820_RAM));
-    }
-    bp[OFF_E820_ENTRIES] = e820.len() as u8;
-    for (i, (a, s, t)) in e820.iter().enumerate() {
+    bp[OFF_E820_ENTRIES] = 0;
+    for (i, (a, s, t)) in e820_map(mem_size).iter().enumerate() {
+        bp[OFF_E820_ENTRIES] += 1;
         let base = OFF_E820_TABLE + i * 20;
         wr64(&mut bp, base, *a);
         wr64(&mut bp, base + 8, *s);
@@ -379,6 +408,37 @@ pub fn exit_reason_name(r: u32) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn e820_small_guests_unchanged_big_guests_split() {
+        // up to 3 GiB: the two entries every recorded boot had
+        for mib in [256u64, 1024, 3072] {
+            let m = mib << 20;
+            assert_eq!(
+                e820_map(m),
+                vec![
+                    (0, EBDA_START, E820_RAM),
+                    (HIMEM_START, m - HIMEM_START, E820_RAM)
+                ]
+            );
+        }
+        // above: the low block ends at 3 GiB, the rest from 4 GiB
+        assert_eq!(
+            e820_map(8 << 30),
+            vec![
+                (0, EBDA_START, E820_RAM),
+                (HIMEM_START, RAM_LOW_MAX - HIMEM_START, E820_RAM),
+                (RAM_HIGH_BASE, (8 << 30) - RAM_LOW_MAX, E820_RAM)
+            ]
+        );
+        assert_eq!(ram_gpa(0x1000), 0x1000);
+        assert_eq!(ram_gpa(RAM_LOW_MAX - 1), RAM_LOW_MAX - 1);
+        assert_eq!(ram_gpa(RAM_LOW_MAX), RAM_HIGH_BASE);
+        assert_eq!(
+            ram_gpa(RAM_MAX - 1),
+            RAM_HIGH_BASE + RAM_MAX - RAM_LOW_MAX - 1
+        );
+    }
 
     #[test]
     fn mptable_checksums() {

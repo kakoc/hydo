@@ -535,7 +535,7 @@ fn udev_rule_text(name: &str, group: &str, mode: &str) -> String {
         "# Installed by `hydo module udev install`; `hydo module udev remove` deletes it.\n\
          # /dev/{name} (the hvx kernel module) belongs to group {group} with mode {mode}, so members of the group\n\
          # run hydo guests without sudo. Anyone in the group can run guests through the module: it\n\
-         # runs in the kernel, takes a CPU and up to 3 GiB of memory per guest, and is a test tool that\n\
+         # runs in the kernel, takes a CPU and up to 8 GiB of memory per guest, and is a test tool that\n\
          # was not hardened against hostile users. Give the group only to people you would give sudo.\n\
          KERNEL==\"{name}\", SUBSYSTEM==\"misc\", GROUP=\"{group}\", MODE=\"{mode}\"\n"
     )

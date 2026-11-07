@@ -34,7 +34,7 @@ rules that matter most:
 - Images: `image:` plus `mounts:` (bind, volume, tmpfs) and `user:`; tools inside an image run as
   `hydo-oci <service> <command>`.
 
-Guest settings: `guest.ram_mib` (default 1024) must hold every service; `guest.cpu: v3` when a
+Guest settings: `guest.ram_mib` (default 1024, at most 8192) must hold every service; `guest.cpu: v3` when a
 binary needs AVX or AVX2 (x86_64 only); `guest.clock_after_cut: 60` when a check compares times
 written before and after a power cut.
 
