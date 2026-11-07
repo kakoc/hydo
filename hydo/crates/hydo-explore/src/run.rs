@@ -141,9 +141,11 @@ impl Cx {
     }
 
     fn parse(&self, t: &str) -> S {
-        self.ex
-            .parse(t)
-            .unwrap_or_else(|e| die(&format!("explore.py: cannot read the schedule {t:?}: {e}")))
+        self.ex.parse(t).unwrap_or_else(|e| {
+            die(&format!(
+                "hydo explore: cannot read the schedule {t:?}: {e}"
+            ))
+        })
     }
 
     fn compose_meta(&self) -> Option<&Value> {
@@ -179,7 +181,7 @@ pub fn main_with(argv: &[String], env: &Env) -> i32 {
     let a = match args::parse(argv) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("{}\nexplore.py: error: {e}", args::USAGE);
+            eprintln!("{}\nhydo explore: error: {e}", args::USAGE);
             return 2;
         }
     };
@@ -190,12 +192,12 @@ pub fn main_with(argv: &[String], env: &Env) -> i32 {
 
 fn setup(a: Args, env: &Env) -> Cx {
     let mut known = errlog::load(a.known_errors.as_deref())
-        .unwrap_or_else(|e| die(&format!("explore.py: --known-errors: {e}")));
+        .unwrap_or_else(|e| die(&format!("hydo explore: --known-errors: {e}")));
     if let Some(e) = &a.errors {
         known.unknown = e.clone();
     }
     if a.fc_adaptive && a.sweep.as_deref() != Some("freeze") {
-        die("explore.py: --fc-adaptive goes with --sweep freeze");
+        die("hydo explore: --fc-adaptive goes with --sweep freeze");
     }
     let kvm = a.backend == "kvm";
     let ex = Ex {
@@ -267,23 +269,30 @@ fn setup(a: Args, env: &Env) -> Cx {
     // Every image hydo build makes carries its manifest (M136), whatever the file is called: an
     // image copied or renamed away from its explore-ob-* name keeps its own fault space instead
     // of silently getting the built-in one (whose services the image does not have).
+    // An image without a manifest gets no fault space by default: the built-in one is the stack
+    // example's (kafka, mysql, redis, front), and exploring it on another system's image tests
+    // nothing and ends OK (the libSQL onboarding's friction item 6). Only the scripted engine of
+    // the tests explores the built-in space without a manifest.
     let carried = if named || cx.env.config.pool.scripted_engine.is_some() {
         None
-    } else if cx.arm() {
-        hydo_engine::image::embedded_manifest(&cx.hvm_image())
-            .ok()
-            .map(|t| {
+    } else {
+        let got = if cx.arm() {
+            hydo_engine::image::embedded_manifest(&cx.hvm_image()).map(|t| {
                 (
                     t,
                     hydo_engine::image::embedded_file(&cx.hvm_image(), "etc/hydo/compose.json")
                         .ok(),
                 )
             })
-    } else {
-        let img = cx.build.join(&a.image);
-        hydo_engine::image::debugfs_cat(&img, "etc/hydo/hydo.yaml")
-            .ok()
-            .map(|t| (t, hydo_engine::image::embedded_compose(&img)))
+        } else {
+            let img = cx.build.join(&a.image);
+            hydo_engine::image::debugfs_cat(&img, "etc/hydo/hydo.yaml")
+                .map(|t| (t, hydo_engine::image::embedded_compose(&img)))
+        };
+        match got {
+            Ok(x) => Some(x),
+            Err(e) => die(&no_manifest(&a.image, &e.to_string())),
+        }
     };
     if named || carried.is_some() {
         let sp = if let Some(m) = &a.manifest {
@@ -318,7 +327,7 @@ fn setup(a: Args, env: &Env) -> Cx {
             cx.build.join(&a.image)
         };
         if cx.env.config.pool.scripted_engine.is_none() {
-            agent_space(&img);
+            agent_space(&img, a.schedule.as_deref());
         }
         eprintln!("fault space: {}", dumps_line(&sp.describe()));
         sp.apply(&mut cx.ex);
@@ -350,7 +359,7 @@ fn setup(a: Args, env: &Env) -> Cx {
     match v.as_i64() {
         Some(r) if (lo..=hi).contains(&r) && !v.is_boolean() => cx.ram_mib = r,
         _ => die(&format!(
-            "explore.py: {src}={}: guest RAM must be a whole number of MiB in [{lo}, {hi}] on --backend {}",
+            "hydo explore: {src}={}: guest RAM must be a whole number of MiB in [{lo}, {hi}] on --backend {}",
             hydo_manifest::py::repr(&v),
             a.backend
         )),
@@ -366,13 +375,13 @@ fn setup(a: Args, env: &Env) -> Cx {
     match cpu.as_str() {
         Some(c @ ("v2" | "v3")) => cx.cpu = c.to_string(),
         _ => die(&format!(
-            "explore.py: guest CPU {}: expected v2 or v3",
+            "hydo explore: guest CPU {}: expected v2 or v3",
             hydo_manifest::py::repr(&cpu)
         )),
     }
     if cx.cpu == "v3" && cx.ex.backend != Backend::Hvx {
         die(&format!(
-            "explore.py: guest CPU v3 (AVX) is an x86_64 option; --backend {} cannot run it",
+            "hydo explore: guest CPU v3 (AVX) is an x86_64 option; --backend {} cannot run it",
             a.backend
         ));
     }
@@ -384,28 +393,46 @@ fn setup(a: Args, env: &Env) -> Cx {
     }
     cx.vcpus = a.vcpus;
     if !(1..=8).contains(&a.vcpus) {
-        die("explore.py: --vcpus must be 1..8 (hvx's HVX_MAX_VCPUS)");
+        die("hydo explore: --vcpus must be 1..8 (hvx's HVX_MAX_VCPUS)");
     }
     if a.vcpus > 1 && cx.ex.backend == Backend::Hvm {
-        die("explore.py: --vcpus > 1 needs --backend hvx (the Mac VMM has one vCPU and no PMU clock)");
+        die("hydo explore: --vcpus > 1 needs --backend hvx (the Mac VMM has one vCPU and no PMU clock)");
     }
     if a.turns && a.vcpus < 2 {
-        die("explore.py: --turns needs --vcpus N > 1 (turn tokens on a one-vCPU VM are an ERROR)");
+        die(
+            "hydo explore: --turns needs --vcpus N > 1 (turn tokens on a one-vCPU VM are an ERROR)",
+        );
     }
     cx.ex.turns = a.turns;
     cx.ex.bursts = a.bursts;
     if a.bursts && !a.turns {
-        die("explore.py: --bursts needs --turns (and --vcpus N > 1)");
+        die("hydo explore: --bursts needs --turns (and --vcpus N > 1)");
     }
     if let Some(tm) = a.turn_margin {
         if a.vcpus < 2 || !(8..=(1 << 20)).contains(&tm) {
-            die("explore.py: --turn-margin needs --vcpus N > 1 and a value in [8, 2^20]");
+            die("hydo explore: --turn-margin needs --vcpus N > 1 and a value in [8, 2^20]");
         }
     }
     cx.ex.new_faults = a.new_faults;
     cx.ex.compose = !a.no_compose;
     cx.ex.knob_rule_any = a.knob_rule == "any";
     cx.ex.concurrency = a.concurrency;
+    // Q= and B= name a knob and BUGGIFY: an image without them would refuse every run
+    // (hydo_control::names), so the options are refused here, once
+    if let Some(m) = m.as_ref() {
+        let has_knob = |t: &str| {
+            m.get("knobs").and_then(Value::as_array).is_some_and(|ks| {
+                ks.iter()
+                    .any(|k| k.get("token").and_then(Value::as_str) == Some(t))
+            })
+        };
+        if a.concurrency && !has_knob("Q") {
+            die("hydo explore: --concurrency draws Q=, and this image's manifest has no knob Q to take it (the workload's own commands decide how many requests run at once)");
+        }
+        if a.buggify && !m.get("buggify").is_some_and(hydo_manifest::py::truthy) {
+            die("hydo explore: --buggify draws B=, and this image's manifest does not say buggify: true");
+        }
+    }
     cx.ex.more_faults = a.more_faults;
     // M139: reactions (A=) from their own stream
     if let Some(r) = &a.reactive {
@@ -422,18 +449,18 @@ fn setup(a: Args, env: &Env) -> Cx {
     if let Some(v) = &a.react_events {
         cx.ex.react_events = ids(v);
     } else if m.is_some() && cx.ex.react_fault {
-        die("explore.py: --reactive fault|both on a manifest needs --react-events (the assertion ids of the system's SDK records to react to; the defaults are the stack's)");
+        die("hydo explore: --reactive fault|both on a manifest needs --react-events (the assertion ids of the system's SDK records to react to; the defaults are the stack's)");
     }
     if let Some(v) = &a.heal_events {
         cx.ex.heal_events = ids(v);
     } else if m.is_some() && cx.ex.react_heal {
-        die("explore.py: --reactive heal|both on a manifest needs --heal-events (the assertion ids that mean a client request made no progress; the defaults are the stack's)");
+        die("hydo explore: --reactive heal|both on a manifest needs --heal-events (the assertion ids that mean a client request made no progress; the defaults are the stack's)");
     }
     cx.ex.freeze_call = a.freeze_call;
     cx.ex.fc_nmax = a.fc_nmax;
     cx.ex.protocol_faults = a.protocol_faults;
     if a.protocol_faults && cx.ex.pf_targets.is_empty() {
-        die("explore.py: --protocol-faults needs an image whose manifest has fakes: or proxies: (and allows `protocol` in faults:, or has no faults: list)");
+        die("hydo explore: --protocol-faults needs an image whose manifest has fakes: or proxies: (and allows `protocol` in faults:, or has no faults: list)");
     }
     cx.ex.grpc_on = a.grpc_faults;
     cx.ex.grpc_targets = if a.grpc_faults {
@@ -442,13 +469,18 @@ fn setup(a: Args, env: &Env) -> Cx {
         Vec::new()
     };
     if a.grpc_faults && cx.ex.grpc_targets.is_empty() {
-        die("explore.py: --grpc-faults needs an image whose manifest has a proxy with protocol: grpc (and allows `protocol` in faults:, or has no faults: list)");
+        die("hydo explore: --grpc-faults needs an image whose manifest has a proxy with protocol: grpc (and allows `protocol` in faults:, or has no faults: list)");
     }
     if a.freeze_call && cx.ex.fc_pairs.is_empty() {
-        die("explore.py: --freeze-call needs an image whose manifest lists `freeze` in faults: and has two services that talk (manifest_space.py)");
+        die("hydo explore: --freeze-call needs an image whose manifest lists `freeze` in faults: and has two services that talk");
     }
     if a.more_faults && cx.ex.backend == Backend::Hvm {
-        die("explore.py: --more-faults needs --backend hvx (X= and cf= are stack/hvx_explore tokens)");
+        die(&format!(
+            "hydo explore: --more-faults draws cf= (a power cut at the k-th disk FLUSH), which only \
+             the hvx engine applies (x86_64 Linux with hydo's kernel module); --backend {} cannot \
+             (hydo guide capabilities); explore without it, for example --strategy process",
+            if cx.kvm { "kvm" } else { "hvm" }
+        ));
     }
     if a.more_faults && a.cf_range != "auto" {
         let r: Vec<i64> = a
@@ -458,7 +490,7 @@ fn setup(a: Args, env: &Env) -> Cx {
             .collect();
         if r.len() != 2 {
             die(&format!(
-                "explore.py: --cf-range {}: lo-hi or auto",
+                "hydo explore: --cf-range {}: lo-hi or auto",
                 a.cf_range
             ));
         }
@@ -480,19 +512,38 @@ fn setup(a: Args, env: &Env) -> Cx {
     cx
 }
 
+/// The refusal for an image whose manifest cannot be read (and no `--manifest`): the explorer
+/// would otherwise explore the built-in fault space of hydo's stack example, whose services the
+/// image does not have.
+pub fn no_manifest(image: &str, why: &str) -> String {
+    format!(
+        "hydo: {image}: cannot read the image's manifest (/etc/hydo/hydo.yaml: {why}), so there \
+         is no fault space to explore; every image hydo build makes carries one: build the \
+         image with hydo build, or name its manifest with --manifest <hydo.yaml>"
+    )
+}
+
 /// The image of a manifest's space (M126): an agent image, whose manifest must be one the
 /// controller drives. Every fault kind of the space is driven since the clock seam (M122: `T=`,
 /// `guest.clock_after_cut`) and BUGGIFY (`B=`, `--buggify`) landed. A shell-init image is refused
 /// (Milestone 145).
-fn agent_space(img: &Path) {
+fn agent_space(img: &Path, schedule: Option<&str>) {
     if let Err(e) = hydo_engine::image::control(img) {
         die(&format!("hydo: {e}"));
     }
-    if let Err(e) = hydo_control::agent::plan_of_image(img) {
-        die(&format!(
+    let plan = match hydo_control::agent::plan_of_image(img) {
+        Ok(p) => p,
+        Err(e) => die(&format!(
             "hydo: {}: an agent image whose manifest the host controller cannot drive yet: {e}",
             img.display()
-        ));
+        )),
+    };
+    // `--schedule`: a token naming what the image does not have is refused before any VM
+    // (hydo_control::names), as `hydo run` refuses it
+    if let Some(Ok(s)) = schedule.map(hydo_schedule::Schedule::parse) {
+        if let Err(e) = hydo_control::names::check(&plan, &s) {
+            die(&format!("hydo explore: --schedule: {e}"));
+        }
     }
     eprintln!(
         "agent image: the host controller drives {} (/etc/hydo/control)",
@@ -818,13 +869,14 @@ fn run(mut cx: Cx) -> i32 {
             (seeds, items, pre, info, Some(labels))
         }
         None => {
-            let (lo, hi) =
-                cx.a.seeds
-                    .split_once('-')
-                    .and_then(|(l, h)| {
-                        Some((l.trim().parse::<i64>().ok()?, h.trim().parse::<i64>().ok()?))
-                    })
-                    .unwrap_or_else(|| die(&format!("explore.py: --seeds {}: lo-hi", cx.a.seeds)));
+            let (lo, hi) = cx
+                .a
+                .seeds
+                .split_once('-')
+                .and_then(|(l, h)| {
+                    Some((l.trim().parse::<i64>().ok()?, h.trim().parse::<i64>().ok()?))
+                })
+                .unwrap_or_else(|| die(&format!("hydo explore: --seeds {}: lo-hi", cx.a.seeds)));
             let seeds: Vec<i64> = (lo..=hi).collect();
             if cx.ex.more_faults && cx.ex.cf_range.is_none() {
                 let r = measure_cf_range(&cx, &pool);
@@ -835,7 +887,7 @@ fn run(mut cx: Cx) -> i32 {
                     }
                     None => {
                         pool.close();
-                        die("explore.py: --cf-range auto: no FLUSH count from the cfn probe (see worker-*.err)");
+                        die("hydo explore: --cf-range auto: no FLUSH count from the cfn probe (see worker-*.err)");
                     }
                 }
             }
@@ -1483,6 +1535,25 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
         cache_hits: (cache_hits > 0).then_some(cache_hits as u64),
         ..Summary::default()
     };
+    // first runs that passed but may have checked nothing (results::vacuous)
+    let vacuous = seeds
+        .iter()
+        .filter(|sd| {
+            let tag = format!("seed-{sd}");
+            res_all.get(&tag).is_some_and(|x| {
+                let r = results::run_of(&tag, "", &x.1, &results::explorer_consoles(&cx.out, &tag));
+                !r.warnings.is_empty()
+            })
+        })
+        .count() as u64;
+    if vacuous > 0 {
+        summary.vacuous_passes = Some(vacuous);
+        eprintln!(
+            "hydo: warning: {vacuous} passing first runs may have checked nothing (the workload \
+             acknowledged nothing, or a history was empty): their run records in events.jsonl \
+             have warnings"
+        );
+    }
     let mut error_kinds = None;
     if let Some((agg, an_runs, _)) = &errors {
         summary.error_kinds_new = Some(agg.iter().filter(|x| x.new_runs > 0).count() as u64);

@@ -440,6 +440,11 @@ pub struct Run {
     /// Runs on agent images: the control transcript of each conversation (added in M120).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub control: Vec<Control>,
+    /// Why a passing run may have checked nothing (added after 0.1.0): the workload acknowledged
+    /// nothing, or a history check judged an empty history. One sentence each; absent when
+    /// there is none. A run with warnings still passed: the verdict is unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// One property over the runs of a table.
@@ -743,6 +748,10 @@ pub struct Summary {
     pub error_kinds_new: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runs_with_new_error_kinds: Option<u64>,
+    /// First runs that passed with a warning that they may have checked nothing (their run
+    /// records' `warnings`; added after 0.1.0).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vacuous_passes: Option<u64>,
 }
 
 /// Where an exploration's files are, relative to its directory.

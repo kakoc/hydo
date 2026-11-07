@@ -635,6 +635,9 @@ pub fn build(
         netns,
         io,
     )?;
+    for w in crate::oci::ready_warnings(&p.oci, &r, &m) {
+        crate::errln(io, &format!("hydo-build: warning: {w}"));
+    }
     fsx::fix_mtimes(&r)?;
 
     let ext4 = bdir.join(format!("{out}-ext4.img"));

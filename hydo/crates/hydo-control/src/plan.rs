@@ -176,6 +176,10 @@ pub struct Plan {
     /// `guest.clock_after_cut`: seconds the machine is off at a power cut; the recovery boot's
     /// clock continues from the first boot's (features/clock.rs).
     pub clock_after_cut: Option<i64>,
+    /// `guest.outcomes_after_cut: true`: the recovery boot after a power cut starts with the
+    /// first boot's last outcome of every id in `$HYDO_OUTCOMES` (without it that file starts
+    /// empty there).
+    pub outcomes_after_cut: bool,
     pub invariants: Vec<PlanInvariant>,
     pub knobs: Vec<PlanKnob>,
     /// `buggify: true`: a B= token is then written to /tmp/hydo-buggify (features/buggify.rs);
@@ -481,6 +485,7 @@ impl Plan {
                 None => None,
                 Some(c) => Some(int(c, "guest.clock_after_cut")?),
             },
+            outcomes_after_cut: get(guest, "outcomes_after_cut").is_some_and(py::truthy),
             invariants,
             knobs,
             buggify: m.buggify,

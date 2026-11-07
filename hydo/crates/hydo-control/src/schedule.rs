@@ -388,6 +388,21 @@ impl ScheduleController {
         schedule: &Schedule,
         s1: &GuestState,
     ) -> Result<ScheduleController, Unsupported> {
+        crate::names::check(&plan, schedule).map_err(Unsupported::other)?;
+        Self::run_unchecked(plan, schedule, s1)
+    }
+
+    /// [`ScheduleController::run`] without the check of what the schedule names
+    /// ([`crate::names`]): a token for a service, link, fake or knob the image lacks is ignored
+    /// with a log line, as before that check. Only the identity corpora use it, so that their
+    /// recorded transcripts keep covering those paths; every product path refuses such a
+    /// schedule.
+    #[doc(hidden)]
+    pub fn run_unchecked(
+        plan: Plan,
+        schedule: &Schedule,
+        s1: &GuestState,
+    ) -> Result<ScheduleController, Unsupported> {
         let cfg = run_cfg(&plan, schedule)?;
         Self::new(plan, Conversation::Run, cfg, Some(s1))
     }
@@ -433,6 +448,7 @@ impl ScheduleController {
             .expect("a new controller")
             .carried = recovery::Carried {
             clock: inputs.clock,
+            outcomes: inputs.outcomes.clone(),
         };
         Ok(c.with_world(&inputs.world))
     }
@@ -492,7 +508,8 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
         guest_text: s.guest_text(),
         ..RunCfg::default()
     };
-    // (no driven token depends on the plan since T= and B= are; the remaining seams may)
+    // (a token naming what the image does not have is refused before, by ScheduleController::run
+    // with names.rs; here it is ignored with a log line, for the identity corpora)
     let _ = plan;
     if let Some(l) = repeated_fault(s) {
         return Err(Unsupported::other(format!(
@@ -1786,9 +1803,72 @@ fn retry_workload(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 
 /// failed_ids: the ids whose last outcome is `failed`, written to $HYDO_FAILED; its text.
 fn failed_ids(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
+    failed_ids_outcomes(fx, ctx).map(|(f, _)| f)
+}
+
+/// The last outcome of every id of an outcomes file, as `<id> <outcome>` lines in the order of
+/// [`failed_of`] (`sort -n`); the outcome is the second word of the id's last line ("" when the
+/// line has one word).
+pub fn last_outcomes(outcomes: &str) -> Vec<String> {
+    let mut o: BTreeMap<String, String> = BTreeMap::new();
+    for l in lines(outcomes) {
+        let f: Vec<&str> = l.split([' ', '\t']).filter(|x| !x.is_empty()).collect();
+        if let Some(id) = f.first() {
+            o.insert(id.to_string(), f.get(1).copied().unwrap_or("").to_string());
+        }
+    }
+    let mut v: Vec<(String, String)> = o.into_iter().collect();
+    v.sort_by(|(a, _), (b, _)| {
+        num_key(a)
+            .partial_cmp(&num_key(b))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.as_bytes().cmp(b.as_bytes()))
+    });
+    v.into_iter()
+        .map(|(id, o)| {
+            if o.is_empty() {
+                id
+            } else {
+                format!("{id} {o}")
+            }
+        })
+        .collect()
+}
+
+/// The report line that carries the last outcomes across a power cut
+/// (`guest.outcomes_after_cut: true`): `hydo-explore-outcomes: <id>=<outcome> ...`.
+pub const OUTCOMES_PREFIX: &str = "hydo-explore-outcomes:";
+
+/// The words of the outcomes report line: `<id>=<outcome>` (`<id>` alone without an outcome).
+fn outcomes_words(o: &[String]) -> String {
+    o.iter()
+        .map(|l| l.replacen(' ', "=", 1))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The `<id> <outcome>` lines of the outcomes report line's words.
+pub fn outcomes_of_words(words: &[String]) -> Vec<String> {
+    words
+        .iter()
+        .map(|w| match w.rsplit_once('=') {
+            Some((id, o)) => format!("{id} {o}"),
+            None => w.clone(),
+        })
+        .collect()
+}
+
+/// [`failed_ids`], and the last outcomes when the plan carries them across a power cut
+/// (`guest.outcomes_after_cut`; empty otherwise).
+fn failed_ids_outcomes(fx: &mut F<'_>, ctx: &Ctx) -> Step<(String, Vec<String>)> {
     let l = &ctx.plan.layout;
     let outcomes = read_all(fx, &l.outcomes())?;
     let failed = failed_of(&outcomes);
+    let last = if ctx.plan.outcomes_after_cut {
+        last_outcomes(&outcomes)
+    } else {
+        Vec::new()
+    };
     // `... | sort -n > $HYDO_FAILED`
     let parts = chunks(&failed);
     post(
@@ -1802,7 +1882,7 @@ fn failed_ids(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
     for p in parts.iter().skip(1) {
         post(fx, write_cmd(&l.failed(), p, true))?;
     }
-    Ok(failed)
+    Ok((failed, last))
 }
 
 /// provision: the provisioning command, sync, the setup marker.
@@ -2030,6 +2110,17 @@ fn main_recovery(fx: &mut F<'_>, ctx: &Ctx, acked: &[String], failed: &[String])
         for c in chunks(&text) {
             post(fx, write_cmd(&file, &c, true))?;
         }
+    }
+    // guest.outcomes_after_cut: the first boot's last outcomes (nothing is written without
+    // the key, so such a plan's recovery boot is the same as before it)
+    let text: String = ctx
+        .carried
+        .outcomes
+        .iter()
+        .map(|o| format!("{o}\n"))
+        .collect();
+    for c in chunks(&text) {
+        post(fx, write_cmd(&l.outcomes(), &c, true))?;
     }
     // SEAM(Clock): hydo-init-clock.sh's mount_data: the clock continues from the first boot's
     clock::recovery_clock(fx, ctx)?;
@@ -2263,7 +2354,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         // SEAM(Freeze): stop_periodic's wrapper: the helper must not continue the service
         freeze::kill(fx)?;
         stop_periodic(fx);
-        let failed = failed_ids(fx, ctx)?;
+        let (failed, outcomes) = failed_ids_outcomes(fx, ctx)?;
         // SEAM(Clock): hydo-init-clock.sh's failed_ids appends clock=<epoch> to the acked file
         let at_cut = clock::at_cut(fx, ctx)?;
         // SEAM(Fakes): the world frozen, dumped (fakes wraps the clock's failed_ids, so its
@@ -2281,12 +2372,17 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             "hydo-explore-failed: {}",
             failed.replace('\n', " ")
         ));
+        // guest.outcomes_after_cut: the last outcomes, for the recovery boot
+        if ctx.plan.outcomes_after_cut {
+            fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
+        }
         // SEAM(RecoveryInputs): what the recovery conversation is given
-        let ending = fakes::power_cut(ctx, &acked, &failed);
+        let ending = fakes::power_cut(ctx, &acked, &failed, outcomes);
         let Ending::PowerCut {
             acked: a,
             failed: f,
             world: w,
+            outcomes: o,
         } = &ending
         else {
             unreachable!("fakes::power_cut gives a power cut")
@@ -2296,6 +2392,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             failed: f.clone(),
             clock: at_cut.flatten(),
             world: w.clone(),
+            outcomes: o.clone(),
         };
         fx.effect(|h, _| {
             h.cut = Some(inputs);
@@ -2344,13 +2441,17 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     }
     freeze::kill(fx)?;
     stop_periodic(fx);
-    let failed = failed_ids(fx, ctx)?;
+    let (failed, outcomes) = failed_ids_outcomes(fx, ctx)?;
     let acked = read_all(fx, &l.acked())?;
     fx.report(format!("hydo-explore-acked: {}", acked.replace('\n', " ")));
     fx.report(format!(
         "hydo-explore-failed: {}",
         failed.replace('\n', " ")
     ));
+    // guest.outcomes_after_cut: a cf= power cut at the workload's end hands these over
+    if ctx.plan.outcomes_after_cut {
+        fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
+    }
     fx.report("hydo-explore-workload-done");
     // explore_read: "go" -- the host switches the disk faults off
     fx.engine(EngineAction::DiskFaultsOff);

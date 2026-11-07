@@ -230,6 +230,7 @@ pub fn run(
             acked,
             failed,
             world,
+            outcomes,
         }) => {
             let h = header("recovery", Some(schedule), "resume S0");
             let start = Start::Resume(b.s0.0.clone());
@@ -246,6 +247,7 @@ pub fn run(
                             failed: failed.clone(),
                             clock: None,
                             world: world.clone(),
+                            outcomes: outcomes.clone(),
                         },
                     );
                     let mut ctl =

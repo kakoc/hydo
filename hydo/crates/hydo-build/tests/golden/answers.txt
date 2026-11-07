@@ -2428,7 +2428,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case299.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) ram (known: clock_after_…#4e2ecab348f2b224"
+R	^	<tmp>/case299.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) ram (known: clock_after_…#a491511b8c4676b0"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -2524,7 +2524,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case315.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: clock_after_cu…#a501f21a710ee27f"
+R	^	<tmp>/case315.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: clock_after_cu…#7397226bcd4711a4"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -4735,7 +4735,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00592.json --arch arm64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#4ac2013f364b3092"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00593.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: clock_afte…#7efefe09bc8c6e13"
+R	^	<tmp>/mutant00593.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: clock_afte…#4858d6d5424d9e05"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00594.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#3fc1eb5c73b15672"
@@ -5896,7 +5896,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00979.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) 3, v (known: aft…#6b08fe13863aa0fe"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00980.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s)  , A, b (known: clock_af…#b3bb72eaead73aa0"
+R	^	<tmp>/mutant00980.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s)  , A, b (known: clock_af…#95b3cffa73099d3c"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00981.json --arch x86_64 --check	run	1	""	"hydo-build: guest.cpu: v2 (the default: x86-64-v2, no AVX) o…#ceb6c11722a18820"
@@ -6037,7 +6037,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01026.json --arch x86_64 --check	run	0	#653b749c4139b0f6/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#ea41428d777ea15a/4696	^
 R	^	^ --arch x86_64 --print-world	run	0	#d1f698326c9c1e7b/333	^
-R	^	<tmp>/mutant01027.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: clock_afte…#7efefe09bc8c6e13"
+R	^	<tmp>/mutant01027.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: clock_afte…#4858d6d5424d9e05"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01028.json --arch arm64 --check	run	0	#ba6f23da7309a9f3/84	""
@@ -6247,7 +6247,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01096.json --arch arm64 --check	run	0	#d4a44dcc0f08b8a6/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#7805944aa9f6e837/4304	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant01097.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) 3, v (known: clock_after…#0ae6ef1045ddc006"
+R	^	<tmp>/mutant01097.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) 3, v (known: clock_after…#7ed4f6eb64e2dfb6"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01098.json --arch x86_64 --check	run	0	#677b6df4f32cf7f8/84	""

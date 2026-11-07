@@ -404,7 +404,7 @@ pub struct Ran {
 }
 
 pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
-    let mut ctl = ScheduleController::run(b.plan.clone(), s, &b.s1.2)?;
+    let mut ctl = ScheduleController::run_unchecked(b.plan.clone(), s, &b.s1.2)?;
     let salt = s.to_string();
     let cad = cadence(Some(s));
     let h = header("run", Some(s), "resume S1");
@@ -429,6 +429,7 @@ pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
             acked,
             failed,
             world,
+            ..
         }) => {
             let i = inputs.as_ref().expect("a power cut hands its inputs over");
             assert_eq!((&i.acked, &i.failed, &i.world), (acked, failed, world));

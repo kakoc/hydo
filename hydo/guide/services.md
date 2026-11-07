@@ -36,7 +36,8 @@ rules that matter most:
 
 Guest settings: `guest.ram_mib` (default 1024) must hold every service; `guest.cpu: v3` when a
 binary needs AVX or AVX2 (x86_64 only); `guest.clock_after_cut: 60` when a check compares times
-written before and after a power cut.
+written before and after a power cut; `guest.outcomes_after_cut: true` when a check reads
+`$HYDO_OUTCOMES` (without it that file is empty in the recovery boot after a power cut).
 
 Other top-level keys: `knobs:` (settings that trade durability for speed: the safe value as
 `default`, a `set` command that changes it at run time, one capital letter as `token`; `hydo

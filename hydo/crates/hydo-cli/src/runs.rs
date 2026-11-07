@@ -363,6 +363,26 @@ fn host_checks(outdir: &Path, mut res: Map<String, Value>, quiet: bool) -> Map<S
     res
 }
 
+fn verdict_of(res: &Map<String, Value>) -> String {
+    res.get("verdict")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
+/// The run's final verdict, when the host's checks (history checks, error logs) changed the one
+/// the `RESULT` line printed: the guest's checks only. A script that reads the `RESULT` line
+/// would otherwise report a lost write that a history check found as OK (the libSQL
+/// onboarding's friction item 8).
+fn final_verdict_line(printed: &str, last: &str) -> Option<String> {
+    (printed != last).then(|| {
+        format!(
+            "hydo: VERDICT {last}   (the run's verdict with the host's checks, as result.json \
+             has it; the RESULT line above has the guest's checks only)"
+        )
+    })
+}
+
 /// The known-errors list a run's error kinds were compared with (result.json `error_logs`).
 const ERRLOG_KNOWN: &str = "_errlog_known";
 
@@ -514,8 +534,12 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         }
     }
     let res = run_one(ctx, &image, &sched, &outdir, &eargs, false);
+    let printed = verdict_of(&res);
     let res = host_checks(&outdir, res, false);
     let res = errors_one(&outdir, &sched, res, known.as_deref());
+    if let Some(line) = final_verdict_line(&printed, &verdict_of(&res)) {
+        println!("{line}");
+    }
     let sha = sha256_file(&image).unwrap_or_else(|e| die(&format!("{}: {e}", image.display())));
     let run = run_document(
         &outdir,
@@ -527,6 +551,9 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         ctx.backend_name(),
     );
     write_run_document(&outdir, &run);
+    for w in &run.warnings {
+        println!("hydo: warning: {w}");
+    }
     println!(
         "hydo: run directory {}   (hydo repro {}  runs it again and compares fp=)",
         outdir.display(),
@@ -1142,4 +1169,24 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
     }
     println!("hydo: {n} regressions saved; `hydo build` stages them, `hydo repro --regressions` replays them");
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::final_verdict_line;
+
+    /// The RESULT line prints the guest's checks only; when the host's checks change the verdict,
+    /// `hydo run` prints the final one (the libSQL onboarding's friction item 8).
+    #[test]
+    fn the_final_verdict_is_printed_when_the_hosts_checks_changed_it() {
+        let g = "HYDO-ORACLE: OK invariants=1 held (x)";
+        assert_eq!(final_verdict_line(g, g), None);
+        let v = "HYDO-ORACLE: VIOLATION [sql.lap] lost-append";
+        assert_eq!(
+            final_verdict_line(g, v).unwrap(),
+            "hydo: VERDICT HYDO-ORACLE: VIOLATION [sql.lap] lost-append   (the run's verdict \
+             with the host's checks, as result.json has it; the RESULT line above has the \
+             guest's checks only)"
+        );
+    }
 }

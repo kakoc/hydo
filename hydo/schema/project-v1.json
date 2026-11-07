@@ -316,6 +316,14 @@
           ],
           "format": "int64"
         },
+        "outcomes_after_cut": {
+          "description": "After a power cut the recovery boot's $HYDO_OUTCOMES starts with the first boot's last\noutcome of every id (without it the file starts empty there).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
         "cpu": {
           "anyOf": [
             {

@@ -141,6 +141,7 @@ fn ending_value(e: &Ending) -> Value {
             acked,
             failed,
             world,
+            outcomes,
         } => {
             let mut c = Obj::new();
             c.insert("acked".into(), strs(acked));
@@ -148,6 +149,10 @@ fn ending_value(e: &Ending) -> Value {
             // an addition (M125): only a cut that carries a fake world has it
             if !world.is_empty() {
                 c.insert("world".into(), strs(world));
+            }
+            // an addition (guest.outcomes_after_cut): only a cut that carries outcomes has it
+            if !outcomes.is_empty() {
+                c.insert("outcomes".into(), strs(outcomes));
             }
             m.insert("cut".into(), Value::Obj(c));
         }
@@ -187,6 +192,10 @@ fn ending_of(v: &Value) -> Result<Ending, String> {
             world: match c.get("world") {
                 None => Vec::new(),
                 Some(_) => list("world")?,
+            },
+            outcomes: match c.get("outcomes") {
+                None => Vec::new(),
+                Some(_) => list("outcomes")?,
             },
         });
     }

@@ -70,13 +70,17 @@ hydo save <explore dir>                          # minimal schedules -> hydo/reg
 ```
 
 Useful options (`hydo explore` passes them to the explorer): `--more-faults` (timed kills and
-k-th-flush cuts; x86_64 only, the explorer refuses it on a Mac), `--new-faults` (pauses, clock jumps, one-way loss), `--timing` (thread-timing
-jitter), `--concurrency`, `--durable-only` (only durable settings and an honest disk),
+k-th-flush cuts; the hvx engine only: the explorer refuses it with `--backend kvm` and on a Mac,
+`hydo guide capabilities`), `--new-faults` (pauses, clock jumps, one-way loss), `--timing`
+(thread-timing jitter), `--concurrency` (a manifest knob `Q`), `--durable-only` (only durable settings and an honest disk),
 `--protocol-faults`, `--grpc-faults`, `--buggify`, `--workers N`. The lesson of hydo's own
 benchmark: where and in what combination faults land matters more than how the next schedule is
-chosen, so prefer `--strategy process` with `--more-faults` (on a Mac, `--new-faults`).
+chosen, so prefer `--strategy process` with `--more-faults` (with `--backend kvm` and on a Mac,
+`--new-faults`).
 
-One schedule holds one `K=`, one `P=` and one `X=` (a second one is refused). To crash or stop
+One schedule holds one `K=`, one `P=` and one `X=` (a second one is refused), and every token
+names what the image has: a service, a link between services with `addr:`, a fake or proxy, a
+knob of `knobs:` (a token for anything else is refused before the run, naming what the image has). To crash or stop
 several services at once (every node of a cluster), use reactions: `A=<event>:kill-<svc>` once
 per service, where `<event>` is the id of an assertion record the system writes to the console
 (`hydo guide manifest`, "Reactions"); `hydo explore --reactive fault --react-events <id>` draws

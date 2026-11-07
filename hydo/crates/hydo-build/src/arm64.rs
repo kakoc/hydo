@@ -366,6 +366,9 @@ pub fn build(
         netns,
         io,
     )?;
+    for w in crate::oci::ready_warnings(&p.oci, &r, &m) {
+        crate::errln(io, &format!("hydo-build: warning: {w}"));
+    }
     // the agent is the kernel's first process itself (rdinit=/init): no shell before it
     crate::agent::install(&agent_bin, &agent_sha, &r, "/init", io)?;
     crate::record::write_inside(&r, "arm64", netns_k)?;

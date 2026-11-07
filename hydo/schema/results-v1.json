@@ -234,6 +234,13 @@
           "items": {
             "$ref": "#/$defs/Control"
           }
+        },
+        "warnings": {
+          "description": "Why a passing run may have checked nothing (added after 0.1.0): the workload acknowledged\nnothing, or a history check judged an empty history. One sentence each; absent when\nthere is none. A run with warnings still passed: the verdict is unchanged.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -1229,6 +1236,15 @@
           "minimum": 0
         },
         "runs_with_new_error_kinds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "vacuous_passes": {
+          "description": "First runs that passed with a warning that they may have checked nothing (their run\nrecords' `warnings`; added after 0.1.0).",
           "type": [
             "integer",
             "null"
