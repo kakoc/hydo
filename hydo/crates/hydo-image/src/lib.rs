@@ -31,11 +31,15 @@
 //! **The kernel an image names** ([`kernels`]): the engines boot the kernel whose sha256 the image
 //! records, found among the kernels this hydo has (a release's `guest/` kernels, a tree's build
 //! outputs); a missing one is refused with a message that names it, its version and the hydo that
-//! built the image. [`kernels::obtain`] is the place where a later store or download plugs in.
+//! built the image. [`kernels::obtain`] asks the source a program registers: the `hydo` command's
+//! install cache (Milestone 162), which uses this crate's [`store`] (the cache's layout and
+//! content store) and [`releases`] (the release index: which release shipped which kernel).
 //! An image without the record (built before Milestone 155) boots today's default kernel, with a
 //! one-line warning.
 
 pub mod kernels;
+pub mod releases;
+pub mod store;
 
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

@@ -8,9 +8,12 @@
 //!
 //! A run looks the image's kernel up by sha256 ([`find`]): among the files with a known kernel
 //! name (and the name the image records) in the directories the caller gives (a release's
-//! `guest/`, a tree's `build/` or `hv/hvm/explore/out/`); then [`obtain`], the place where a later
-//! store or download of a version's kernels plugs in (it finds nothing today); else the run is
-//! refused with a message that names the kernel and the hydo that built the image.
+//! `guest/`, a tree's `build/` or `hv/hvm/explore/out/`); then [`obtain`], which asks the
+//! [`Source`] the program registered with [`set_source`] (the `hydo` command registers its
+//! install cache, Milestone 162: the content store, then the release that shipped a file with
+//! that sha256, fetched by its pinned archive; docs/design/install-cache.md); else the run is
+//! refused with a message that names the kernel, the hydo that built the image and why the
+//! source could not provide it.
 
 use crate::{read_sidecar, FileRef, ImageRecord, Kernel, EPOCH};
 use sha2::{Digest, Sha256};
@@ -163,16 +166,47 @@ pub fn sha256_of(p: &Path) -> std::io::Result<String> {
     Ok(s)
 }
 
-/// The plug-in point for a later store or download of a hydo version's kernels (like
-/// `obtain_assets` in `hydo setup`): a path to a file with this name and sha256, or None. Today
-/// it finds nothing.
-pub fn obtain(_want: &FileRef) -> Option<PathBuf> {
-    None
+/// Where a guest file that is not in the searched directories comes from (Milestone 162): a
+/// program registers one with [`set_source`]. The `hydo` command's is its install cache
+/// (hydo-cli `src/cache.rs`).
+pub trait Source: Send + Sync {
+    /// A path to a file with `want`'s sha256 (its name may differ), or why there is none (one
+    /// or two sentences, for the refusal's message).
+    fn obtain(&self, want: &FileRef) -> Result<PathBuf, String>;
+}
+
+static SOURCE: std::sync::OnceLock<Box<dyn Source>> = std::sync::OnceLock::new();
+
+/// Register this process's [`Source`] (once, at a program's start; a second call is ignored and
+/// returns false).
+pub fn set_source(s: Box<dyn Source>) -> bool {
+    SOURCE.set(s).is_ok()
+}
+
+/// A file with `want`'s sha256 from the registered [`Source`]. Err holds why there is none
+/// (empty when no source is registered: programs other than `hydo`, and tests).
+pub fn obtain(want: &FileRef) -> Result<PathBuf, String> {
+    match SOURCE.get() {
+        Some(s) => s.obtain(want),
+        None => Err(String::new()),
+    }
 }
 
 /// The first file in `dirs` with one of the known names for `role` (or `want.file`) whose sha256
-/// is `want.sha256`, else [`obtain`].
+/// is `want.sha256`, else [`obtain`]'s, else why there is none ([`obtain`]'s reason).
+pub fn locate_or_why(want: &FileRef, role: Role, dirs: &[PathBuf]) -> Result<PathBuf, String> {
+    match search(want, role, dirs) {
+        Some(p) => Ok(p),
+        None => obtain(want),
+    }
+}
+
+/// [`locate_or_why`] without the reason.
 pub fn locate(want: &FileRef, role: Role, dirs: &[PathBuf]) -> Option<PathBuf> {
+    locate_or_why(want, role, dirs).ok()
+}
+
+fn search(want: &FileRef, role: Role, dirs: &[PathBuf]) -> Option<PathBuf> {
     let mut names: Vec<&str> = vec![want.file.as_str()];
     for k in KNOWN.iter().filter(|k| k.role == role) {
         if !names.contains(&k.file) {
@@ -187,7 +221,7 @@ pub fn locate(want: &FileRef, role: Role, dirs: &[PathBuf]) -> Option<PathBuf> {
             }
         }
     }
-    obtain(want)
+    None
 }
 
 /// The kernel (and the x86_64 initramfs) a run boots an image with.
@@ -259,6 +293,24 @@ pub fn missing_message(
     )
 }
 
+/// [`missing_message`] with why the registered [`Source`] could not provide the file (nothing
+/// is added when there is no reason).
+pub fn missing_message_why(
+    image: &Path,
+    what: &str,
+    want: &FileRef,
+    version: &str,
+    dirs: &[PathBuf],
+    why: &str,
+) -> String {
+    let m = missing_message(image, what, want, version, dirs);
+    if why.is_empty() {
+        m
+    } else {
+        format!("{m} The install cache could not provide it: {why}")
+    }
+}
+
 /// The kernel (and initramfs) of `image` from its record `rec`, looked up in `dirs`; `given` is a
 /// kernel the user named (it must be the recorded one).
 pub fn find(
@@ -288,14 +340,15 @@ pub fn find(
             }
             k.to_path_buf()
         }
-        None => locate(&want, Role::Kernel, dirs)
-            .ok_or_else(|| missing_message(image, "kernel", &want, &rec.kernel.version, dirs))?,
+        None => locate_or_why(&want, Role::Kernel, dirs).map_err(|why| {
+            missing_message_why(image, "kernel", &want, &rec.kernel.version, dirs, &why)
+        })?,
     };
     let initrd = match &rec.initrd {
         None => None,
         Some(i) => Some(
-            locate(i, Role::Initrd, dirs)
-                .ok_or_else(|| missing_message(image, "initramfs", i, "", dirs))?,
+            locate_or_why(i, Role::Initrd, dirs)
+                .map_err(|why| missing_message_why(image, "initramfs", i, "", dirs, &why))?,
         ),
     };
     Ok(Found { kernel, initrd })

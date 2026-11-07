@@ -12,9 +12,11 @@
 //! explore (hydo-explore). No command runs Python.
 
 mod build;
+mod cache;
 mod ctx;
 mod delegated;
 mod doctor;
+mod fetch;
 mod hvxenv;
 mod migrate;
 mod module;
@@ -30,8 +32,12 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
     hydo guide   [TOPIC | --list]                  print the onboarding guide for any AI tool (the skill's SKILL.md)
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
-    hydo setup   [--check | --verify] [--add-to-path]
-                                                   make this unpacked release usable (install.sh runs it)
+    hydo setup   [--check | --verify] [--add-to-path] [--offline]
+                                                   make this unpacked release usable (install.sh runs it);
+                                                   a damaged file is restored from the release's archive
+    hydo setup   --get [VERSION] [--add-to-path] | --archive FILE
+                                                   install a version from its release into ~/.hydo (verified
+                                                   by sha256), or put a downloaded archive into that cache
     hydo doctor                                    check this machine and the installation
     hydo module install|uninstall|build|load|unload|status [--name NAME] [--dry-run]
                                                    build for this kernel and load (install), or unload
@@ -76,8 +82,12 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
     hydo guide   [TOPIC | --list]                  print the onboarding guide for any AI tool (the skill's SKILL.md)
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
-    hydo setup   [--check | --verify] [--add-to-path]
-                                                   make this unpacked release usable (install.sh runs it)
+    hydo setup   [--check | --verify] [--add-to-path] [--offline]
+                                                   make this unpacked release usable (install.sh runs it);
+                                                   a damaged file is restored from the release's archive
+    hydo setup   --get [VERSION] [--add-to-path] | --archive FILE
+                                                   install a version from its release into ~/.hydo (verified
+                                                   by sha256), or put a downloaded archive into that cache
     hydo doctor                                    check this Mac and the installation
     hydo compose <docker-compose.yaml> [--out hydo.yaml] [hydo-compose options]
                                                    start a hydo.yaml from a Compose file (MANIFEST.md)
@@ -124,6 +134,9 @@ fn main() {
     ) {
         ctx.take_backend(&mut argv);
     }
+    // a guest kernel an image names that this release lacks comes from the install cache
+    // (Milestone 162: the store, else the release that shipped it, fetched by its pinned sha256)
+    hydo_image::kernels::set_source(Box::new(setup::cache_of(&ctx, false)));
     std::process::exit(dispatch(&ctx, &argv));
 }
 

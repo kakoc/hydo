@@ -350,6 +350,7 @@ dependencies = [
 name = "hydo-cli"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "hydo-agents",
  "hydo-build",
  "hydo-compose",
@@ -368,6 +369,8 @@ dependencies = [
  "libc",
  "serde_json",
  "sha2",
+ "tar",
+ "ureq",
 ]
 
 [[package]]
