@@ -1,0 +1,110 @@
+{
+  "format": 1,
+  "name": "tls-and-writable",
+  "description": "a shop whose payment provider is HTTPS and whose server writes into its own image",
+  "network": "bridge",
+  "services": [
+    {
+      "name": "shop",
+      "ready": "hydo-oci shop wget -q -O- http://localhost:9000/health",
+      "port": 9000,
+      "addr": "10.89.0.11",
+      "image": {
+        "x86_64": "images/shop-amd64.docker.tar"
+      },
+      "image_ref": "shop:test",
+      "writable": true
+    },
+    {
+      "name": "db",
+      "ready": "hydo-oci db pg_isready",
+      "port": 5432,
+      "addr": "10.89.0.12",
+      "image": {
+        "x86_64": "images/postgres-amd64.docker.tar"
+      },
+      "writable": false
+    },
+    {
+      "name": "cache",
+      "ready": "hydo-oci cache redis-cli ping",
+      "port": 6379,
+      "addr": "10.89.0.13",
+      "image": {
+        "x86_64": "images/redis-amd64.docker.tar"
+      }
+    }
+  ],
+  "workload": {
+    "steps": 4,
+    "run": "true"
+  },
+  "invariants": [
+    {
+      "id": "ok",
+      "cmd": "true",
+      "final": true
+    }
+  ],
+  "fakes": [
+    {
+      "name": "payments",
+      "port": 9101,
+      "routes": [
+        {
+          "name": "charge",
+          "method": "POST",
+          "path": "/v1/charges",
+          "body": "{\"id\":\"ch_{seq}\"}"
+        }
+      ],
+      "tls": {
+        "hosts": [
+          "api.payments.example"
+        ]
+      }
+    },
+    {
+      "name": "mail",
+      "port": 9102,
+      "routes": [
+        {
+          "name": "send",
+          "method": "POST",
+          "path": "/v3/send"
+        }
+      ],
+      "tls": {
+        "hosts": [
+          "smtp-api.mail.example",
+          "mail.example"
+        ],
+        "port": 8443
+      }
+    },
+    {
+      "name": "plain",
+      "port": 9103,
+      "routes": [
+        {
+          "name": "ping",
+          "path": "/ping"
+        }
+      ]
+    }
+  ],
+  "proxies": [
+    {
+      "name": "cache_front",
+      "port": 6380,
+      "protocol": "tcp",
+      "service": "cache",
+      "tls": {
+        "hosts": [
+          "cache.internal.example"
+        ],
+        "port": 6390
+      }
+    }
+  ]
+}

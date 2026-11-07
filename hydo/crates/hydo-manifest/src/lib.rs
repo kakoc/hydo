@@ -184,6 +184,7 @@ pub fn validator_keys() -> Vec<(&'static str, Vec<&'static str>)> {
         ("FakeRoute", v::KNOWN_ROUTE.to_vec()),
         ("ProxyRoute", v::KNOWN_PROXY_ROUTE.to_vec()),
         ("Webhook", v::KNOWN_HOOK.to_vec()),
+        ("Tls", v::KNOWN_TLS.to_vec()),
         ("HistoryCheck", v::KNOWN_CHECK.to_vec()),
         ("Test", composer::known_test()),
         ("TestCommand", composer::KNOWN_CMD.to_vec()),

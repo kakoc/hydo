@@ -706,6 +706,11 @@ pub struct Service {
     /// Bind, volume and tmpfs mounts of an image service.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mounts: Option<Vec<Mount>>,
+    /// true: the image service's root is writable, as a container's: a copy of the image on the
+    /// data disk (its layer), kept when the service is killed and restarted, and after a power
+    /// cut as far as it was flushed (MANIFEST.md "A writable root for image services").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writable: Option<bool>,
 }
 
 /// A Docker/OCI image: a `docker save` tar or an OCI layout directory, or one per architecture.
@@ -905,6 +910,24 @@ pub struct Fake {
     pub reference: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routes: Option<Vec<FakeRoute>>,
+    /// HTTPS: the fake also answers TLS for these host names, with a certificate of the image's
+    /// own test CA, which the guest and every image service trust.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<Tls>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
+}
+
+/// HTTPS for a fake or a proxy (MANIFEST.md "HTTPS for fakes and proxies").
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct Tls {
+    /// The host names the system calls (e.g. api.stripe.com); /etc/hosts sends them here.
+    pub hosts: Vec<String>,
+    /// The TLS port on the endpoint's address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 443))]
+    pub port: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
@@ -987,6 +1010,9 @@ pub struct Proxy {
     /// The service (with a port:) the proxy stands in front of.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service: Option<Text>,
+    /// HTTPS: the proxy also answers TLS for these host names (and forwards in plain text).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<Tls>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

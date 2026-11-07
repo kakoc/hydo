@@ -269,6 +269,13 @@ the `hydo` command of both releases. The pins:
   item 40) the pins are x86_64 `bdafadb3…` (`bdafadb3d65b0e742c1b0b238fab8c95f8f8f20d65efa4f27249a613006cb08c`)
   and arm64 `60c7c9c4…` (`60c7c9c4f92ac7cb1af94189a64485169e6b186ee174777656a184bf0e2613e1`),
   the same sizes, built on this Mac and on the bare-metal machine.
+  `hydo-world-tls` (Milestone 180: the same program with the cargo feature `tls`, the TLS front of
+  `tls:` fakes and proxies, `HYDO_WORLD_TLS=1 hydo/crates/hydo-world/build.sh`; staged only for
+  manifests with `tls:`): pure Rust (rustls 0.23 with its own RustCrypto provider: p256 0.13,
+  aes-gcm 0.10, hmac 0.12), so the same recipe gives host-independent bytes: at 0.1.0 x86_64
+  `63320b8c…` on this Mac and on the bare-metal machine alike; at 0.2.0 x86_64 `69b2828f…`
+  (`69b2828f6d47b431…`, 2,977,080 bytes) and arm64 `e288d4e9…` (`e288d4e93f532232…`, 2,492,000
+  bytes), built on this Mac. Not in the releases yet (AGENTS.md open item 58).
   Extra crates (Cargo.lock): tokio 1.54.1 (current-thread runtime), h2 0.4.20, http 1.5.0,
   bytes 1.12.1, httparse 1.10.1. It replaces the Go program of `hydo/onboard/world/` (Go 1.26.5,
   `2da400f3…` x86_64), whose bytes are in the images built before M111.

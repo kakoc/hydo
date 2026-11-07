@@ -73,6 +73,10 @@ pub struct Build {
     pub worldbin: Input,
     /// `HYDO_WORLDBIN_ARM64`.
     pub worldbin_arm64: Input,
+    /// `HYDO_WORLDBIN_TLS`.
+    pub worldbin_tls: Input,
+    /// `HYDO_WORLDBIN_TLS_ARM64`.
+    pub worldbin_tls_arm64: Input,
     /// `HYDO_READ_BIN`.
     pub read_bin: Input,
     /// `HYDO_READ_BIN_ARM64`.
@@ -120,6 +124,8 @@ impl Build {
             fcbin_arm64: Input::read(e, HYDO_FCBIN_ARM64),
             worldbin: Input::read(e, HYDO_WORLDBIN),
             worldbin_arm64: Input::read(e, HYDO_WORLDBIN_ARM64),
+            worldbin_tls: Input::read(e, HYDO_WORLDBIN_TLS),
+            worldbin_tls_arm64: Input::read(e, HYDO_WORLDBIN_TLS_ARM64),
             read_bin: Input::read(e, HYDO_READ_BIN),
             read_bin_arm64: Input::read(e, HYDO_READ_BIN_ARM64),
             agent_bin: Input::read(e, HYDO_AGENT_BIN),

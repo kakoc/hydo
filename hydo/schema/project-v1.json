@@ -711,6 +711,13 @@
           "items": {
             "$ref": "#/$defs/Mount"
           }
+        },
+        "writable": {
+          "description": "true: the image service's root is writable, as a container's: a copy of the image on the\ndata disk (its layer), kept when the service is killed and restarted, and after a power\ncut as far as it was flushed (MANIFEST.md \"A writable root for image services\").",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,
@@ -1498,6 +1505,17 @@
             "$ref": "#/$defs/FakeRoute"
           }
         },
+        "tls": {
+          "description": "HTTPS: the fake also answers TLS for these host names, with a certificate of the image's\nown test CA, which the guest and every image service trust.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tls"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -1712,6 +1730,42 @@
         "url"
       ]
     },
+    "Tls": {
+      "description": "HTTPS for a fake or a proxy (MANIFEST.md \"HTTPS for fakes and proxies\").",
+      "type": "object",
+      "properties": {
+        "hosts": {
+          "description": "The host names the system calls (e.g. api.stripe.com); /etc/hosts sends them here.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "port": {
+          "description": "The TLS port on the endpoint's address.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 443
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "hosts"
+      ]
+    },
     "Proxy": {
       "description": "A fault proxy in front of a real service.",
       "type": "object",
@@ -1796,6 +1850,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tls": {
+          "description": "HTTPS: the proxy also answers TLS for these host names (and forwards in plain text).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tls"
             },
             {
               "type": "null"

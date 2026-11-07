@@ -199,12 +199,21 @@ pub fn build(
     let mke2fs = tool(&ctx.inputs.mke2fs, x86::MKE2FS, isfile)?;
     let faketime = tool(&ctx.inputs.faketime, x86::FAKETIME, isfile)?;
     let m = p.data.clone();
+    let tls_eps = crate::tls::endpoints(&m);
     let world = if shell::has_world(&m) {
-        Some(aarch64_tool(
-            &bt,
-            &ctx.inputs.worldbin_arm64,
-            &bdir.join("hydo-world-arm64").to_string_lossy(),
-        )?)
+        Some(if tls_eps.is_empty() {
+            aarch64_tool(
+                &bt,
+                &ctx.inputs.worldbin_arm64,
+                &bdir.join("hydo-world-arm64").to_string_lossy(),
+            )?
+        } else {
+            aarch64_tool(
+                &bt,
+                &ctx.inputs.worldbin_tls_arm64,
+                &bdir.join("hydo-world-tls-arm64").to_string_lossy(),
+            )?
+        })
     } else {
         None
     };
@@ -312,6 +321,7 @@ pub fn build(
         "127.0.0.1 localhost\n".to_string()
     };
     x86::default_etc(&r, &hosts)?;
+    let trust = x86::tls_stage(&mut p.data, &tls_eps, &r, io)?;
     let tc = match &ctx.inputs.tc_arm64.value {
         Some(v) => v.clone(),
         None => TC_ARM64.to_string(),
@@ -358,14 +368,29 @@ pub fn build(
     x86::write_compiled(ctx, p, manifest_path, &r, &tools)?;
     let (agent_bin, agent_sha) = crate::agent::binary(ctx, bdir, true, io)?;
     crate::stage::compose_stage(&m, &r)?;
-    let oci_meta = crate::oci::stage(
+    let (oci_meta, _) = crate::oci::stage_with(
         &mut p.oci,
         &r,
         Path::new(&busybox),
         &bdir.join(format!("{out}-arm64-oci-tmp")),
         netns,
+        None,
+        trust.as_ref(),
         io,
     )?;
+    // `writable: true`: the launcher copies the tree to the data disk at the first start, so the
+    // data disk gets room for it besides data.size_mib
+    let mut layer_mib: i128 = 0;
+    for o in p.oci.iter().filter(|o| o.writable) {
+        let d = r.join("oci").join(&o.svc);
+        let du = run_ok(Command::new("du").arg("-sm").arg(&d), "du -sm")?;
+        let used: i128 = String::from_utf8_lossy(&du.stdout)
+            .split_whitespace()
+            .next()
+            .and_then(|x| x.parse().ok())
+            .ok_or_else(|| Fail::Exit("hydo-build: du -sm printed no size".into()))?;
+        layer_mib += (used * 13 / 10 + 63) / 64 * 64;
+    }
     // the agent is the kernel's first process itself (rdinit=/init): no shell before it
     crate::agent::install(&agent_bin, &agent_sha, &r, "/init", io)?;
     crate::record::write_inside(&r, "arm64", netns_k)?;
@@ -373,7 +398,8 @@ pub fn build(
     let dmib = pyv::get(dsec, "size_mib")?
         .map(|v| pyv::int(v, "data.size_mib"))
         .transpose()?
-        .unwrap_or(64);
+        .unwrap_or(64)
+        + layer_mib;
     let name = py::str_of(&m["name"]);
     let data = bdir.join(format!("{out}-arm64-data.img"));
     let mk = MkfsTools { mke2fs, faketime };

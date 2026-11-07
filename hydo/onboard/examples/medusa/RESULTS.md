@@ -64,8 +64,7 @@ an operator account.
 |---|---|
 | `docker-compose.yaml` | the shop as its team runs it, after Medusa's Docker guide: `postgres:15-alpine`, `redis:7-alpine`, the Medusa backend built from `app/`, migrations before the server starts |
 | `app/` | the backend image: Medusa's starter (`medusa-starter-default` at a pinned commit, Medusa 2.18.0) with a production `medusa-config.ts` (Redis event bus, workflow engine and locking; the Stripe provider; admin dashboard off) and the test's seed script; `build-app.sh` builds it with Docker and saves it into `hydo/images/` |
-| `hydo/hydo.yaml` | from `hydo compose ../docker-compose.yaml --no-resolve`, hand changes marked `hand:` |
-| `hydo/tls/` | a test CA and a certificate for `api.stripe.com` signed by it (made for this example, valid 2025 to 2044; never a real key) |
+| `hydo/hydo.yaml` | from `hydo compose ../docker-compose.yaml --no-resolve`, hand changes marked `hand:`; since Milestone 180 the fake Stripe has `tls: {hosts: [api.stripe.com]}` and Medusa `writable: true` (until then `hydo/tls/` held a hand-made test CA, a TLS front ran as the service `stripe_tls`, and Medusa had 15 tmpfs mounts: "Milestone 180" below) |
 | `hydo/workload/`, `hydo/checks/` | the commands and checks above; `helper_sql.sh` holds the SQL and record helpers |
 | `hydo/known-errors.yaml` | the error kinds every boot prints (Redis's start-up warnings) |
 
@@ -73,7 +72,7 @@ Build and run (Linux, the KVM engine; Docker only to build the shop's image):
 
 ```sh
 sh app/build-app.sh                               # medusa-shop:hydo -> hydo/images/ (network)
-cd hydo && sh fetch-images.sh                     # postgres, redis, socat by digest (network)
+cd hydo && sh fetch-images.sh                     # postgres, redis by digest (network)
 hydo build hydo.yaml
 hydo run --backend kvm "disk=none | run"          # twice: the same fp=
 hydo explore --backend kvm --seeds 1-20 --strategy process --protocol-faults --workers 2
@@ -83,13 +82,16 @@ The Medusa image is pinned by its id (`image_ref:`); `build-app.sh` resolves the
 again on every build, so a rebuild gives other bytes and needs the new id in `hydo.yaml`.
 `hydo.yaml` needs a `hydo` with this example's bracketed-name fix (hydo 0.1.0 refuses
 `form:metadata[session_id]`; `header:Idempotency-Key` works there too, since Medusa sets the
-key to the session id).
+key to the session id), and, since Milestone 180, a `hydo` that knows `tls:` and `writable:` with
+`hydo-world-tls` next to its guest files (`HYDO_WORLD_TLS=1 hydo/crates/hydo-world/build.sh`;
+the releases up to 0.2.0 do not ship it).
 
-## Stripe over HTTPS: what a user has to build today
+## Stripe over HTTPS: what a user had to build before Milestone 180
 
 Medusa's Stripe provider (`@medusajs/payment-stripe`, stripe-node) calls
 `https://api.stripe.com/v1/...`, checks the certificate, and has no option for another base URL.
-hydo's fakes speak plain HTTP on an address of their own. What it took:
+hydo's fakes spoke plain HTTP on an address of their own. What it took (since Milestone 180 one
+line does it: "Milestone 180" below):
 
 1. A test CA and a leaf certificate for `api.stripe.com` (`openssl`, 4 commands). The leaf must be
    valid at the **guest's** clock, which starts at 2026-01-01 and can be stepped by `T=`: a
@@ -109,7 +111,8 @@ says how. The front is itself a service, so the explorer kills and pauses it (th
 "Stripe unreachable", which is a fair fault) and its traffic is not under `H=` (the rules act
 behind it, at the fake).
 
-**The minimal fix in hydo** (not built here): `fakes[].tls: {hosts: [api.stripe.com]}`. hydo-build
+**The minimal fix in hydo** (built in Milestone 180, as described here, with the trust added to
+the bundles' rebuild directories and `NIX_SSL_CERT_FILE`): `fakes[].tls: {hosts: [api.stripe.com]}`. hydo-build
 makes a CA and a leaf for those names with a key derived from the manifest (reproducible images),
 valid from before `guest.clock_start` for decades; hydo-world terminates TLS itself (rustls) on
 443 at the fake's address; `/etc/hosts` maps the names to it (the bridge's hosts file already maps
@@ -120,7 +123,8 @@ service. The `H=` rules and the record are unchanged, because they act after TLS
 
 ## Without faults
 
-The final image (`explore-ob-medusa-disk.img` sha256 `ee5bd528…`, built by this tree's `hydo`),
+(The values of this section and of "What was found" are those of the M174 image, with the TLS
+front and the tmpfs mounts; the image of Milestone 180 has its own, below.) The final image (`explore-ob-medusa-disk.img` sha256 `ee5bd528…`, built by this tree's `hydo`),
 `disk=none | run`, twice: OK `8ef4e08e458e310b` (ctl `67b938a198eb2492`), 20
 commands: 5 checkouts ordered (the stock), the rest refused for stock at the cart or at
 "complete", 6 back-office capture-and-refund operations, every check holding (5 orders paid once,
@@ -210,7 +214,9 @@ and deletes the row if the call fails; with the answers being lost the calls wer
 was a `final_` check and so judged a moment, which was wrong for a property that may lag: it is
 now `eventually_money_matches_stripe` (within 120 s after the heal), and the same schedule passes.
 A kill of Medusa inside that window would leave a refund in the books that Stripe never made;
-no schedule of this session hit it.
+no schedule of this session hit it. (The schedule below acts on the link to the TLS front
+service, which the example no longer has since Milestone 180: the fake is reached on the bridge's
+own address, and `H=stripe...` rules, which act after TLS, delay or lose its answers instead.)
 
 On the final image, twice: OK `859b807cb16aed51` (ctl `1ed6608c41421120`):
 
@@ -308,7 +314,8 @@ changed in hydo in their own commit, with a test.
    by hand: a tmpfs on `/root` and fourteen tmpfs mounts, one per module, found by trial (two
    rebuilds; the list came from `docker run` of the image). The guide's hazards say only "the
    root filesystem is read-only"; an image that writes into its own install directory is not
-   mentioned.
+   mentioned. FIXED in Milestone 180: `writable: true` gives an image service a container's
+   writable root (its layer on the data disk); the 15 mounts are gone.
 4. **Redis took PostgreSQL's files.** Next, every connection to PostgreSQL failed with
    `could not open file "global/pg_filenode.map": Permission denied`. The import had mapped
    Redis's `redis_data:/data` to the data disk's root ("shared by every service"), and the Redis
@@ -320,7 +327,8 @@ changed in hydo in their own commit, with a test.
    still sees the shared root.
 5. **Stripe over HTTPS.** The section above: a TLS front, a test CA valid at the guest's clock,
    `/etc/hosts`, `NODE_EXTRA_CA_CERTS`. Nothing in `hydo guide outside-services` says what to do
-   when the provider's SDK cannot be pointed at plain HTTP, which is the normal case.
+   when the provider's SDK cannot be pointed at plain HTTP, which is the normal case. FIXED in
+   Milestone 180: `tls: {hosts: [api.stripe.com]}` on the fake, and the guide's topic says so.
 6. **Stripe's form fields.** stripe-node sends `metadata[session_id]=...`; `ref:
    form:metadata[session_id]` was refused ("is not an extractor"). FIXED (commit "Fakes:
    bracketed form and query names are extractors"); before the fix the idempotency key, which
@@ -373,7 +381,7 @@ changed in hydo in their own commit, with a test.
    be pointed elsewhere; a user must build a CA, a front and trust settings per runtime (section
    "Stripe over HTTPS"). The minimal fix is described there: a `tls:` list of host names on a
    fake, a generated CA installed into the guest and every image root, termination inside
-   hydo-world.
+   hydo-world. BUILT in Milestone 180 (below).
 3. **Looking at a run's final state without changing the image.** Explaining finding 1 needed
    the database rows behind the verdict; adding a query to the image changed the timing and lost
    the reproduction (friction item 12). A way to run a read-only command against a finished run
@@ -384,6 +392,9 @@ changed in hydo in their own commit, with a test.
    directories (Medusa: `~/.config`, migration snapshots in `node_modules`), which Docker allows
    and hydo's read-only image root does not. Fifteen tmpfs mounts found by trial. An opt-in
    overlay (`writable: true`, upper directory on a tmpfs) would make an image behave as in Docker.
+   BUILT in Milestone 180 as `writable: true`, but as a full copy of the image on the data disk
+   rather than an overlay (no guest kernel of every engine has overlayfs), so it survives a kill
+   and a power cut (as far as flushed) as a container's layer does.
 5. **A payment-provider fake with memory and signed webhooks.** hydo-world answers from the
    request only, so a retrieved object cannot carry what was created (the currency had to be hard
    coded; amounts are not returned at all), and its webhooks cannot carry Stripe's
@@ -405,3 +416,62 @@ changed in hydo in their own commit, with a test.
    `--no-resolve`, unpin every image (friction item 1).
 8. **Command output in the run directory.** Workload commands' logs stay in the guest; only what
    they write to the console comes out.
+
+## Milestone 180: the fake Stripe over `tls:`, Medusa with `writable: true`
+
+Two of the gaps above were built into hydo (MANIFEST.md "HTTPS for fakes and proxies" and "A
+writable root for image services") and this example was rewritten to use them. What the manifest
+lost: the service `stripe_tls` (the `alpine/socat` image), the folder `hydo/tls/` with its
+hand-made CA, three `root.files`, two `/etc/hosts` lines, `NODE_EXTRA_CA_CERTS`, the mount of the
+CA and the 15 tmpfs mounts of Medusa (`/root` and 14 migration folders). What it gained, two
+lines:
+
+```yaml
+  - name: medusa
+    writable: true                     # Medusa writes ~/.config and node_modules, as in Docker
+fakes:
+  - name: stripe
+    tls: {hosts: [api.stripe.com]}     # HTTPS on 10.89.0.1:443 for the name stripe-node calls
+```
+
+hydo-build makes the image's test CA and a certificate for `api.stripe.com`, maps the name to the
+bridge's address in `/etc/hosts` (the manifest's own hosts file gets the line appended), appends
+the CA to the system bundle of every image (Medusa's Alpine `/etc/ssl/certs/ca-certificates.crt`
+among them) and sets `NODE_EXTRA_CA_CERTS`, which stripe-node's runtime reads; `hydo-world-tls`
+terminates TLS 1.3 at `10.89.0.1:443` and hands the requests to the fake. Medusa's tree (1152 MiB
+with the layer's margin) is on the data disk, `/data/.hydo/layers/medusa`, bound over its root.
+
+Everything on the build machine with the KVM engine, the tree's `hydo` over the Linux release
+candidate's guest files, plus `hydo-world-tls` (sha256 `63320b8c…`, the same bytes built on this
+Mac and on the bare-metal machine). The shop's image was rebuilt (`app/build-app.sh` resolves
+the npm dependencies again: image id `5b952a43…`, so every fingerprint below is new); the hydo
+image was built on the bare-metal machine twice with the same bytes (`explore-ob-medusa-disk.img`
+`9f0668e4…`, root 576 MiB, data 2432 MiB), each schedule twice where it says so:
+
+| schedule | verdict | fp | ctl |
+|---|---|---|---|
+| `disk=none \| run` (twice) | OK, 20 commands, "5 payments: 3 captures and 6 refunds at Stripe, as in Medusa" | `4b07c58beaa6fd5c` | `bd824264a88d5309` |
+| `disk=none \| run H=stripe.intent_capture@0-12:status=500,effect=yes` (twice; finding 2) | VIOLATION [money_matches_stripe] 3 disagreements over 5 payments | `2d8daafea4e389f4` | `bfd0428f6dd0947c` |
+| the first exploration's seed 1, `disk=cut dseed=4127cc1347fae6ba \| run K=medusa@0+2 N=redis-medusa@10-11:loss,72% C=12 P=redis@3+2 T=7:30 W=3e71cf9e,p2,q2,r2000` (twice; finding 1) | VIOLATION [stock_not_oversold] sold=5 stocked=5 reserved=4 reservations=4 | `ddabd0b859a810ba` | `a073a27d7dbcc7a6` |
+| the second exploration's minimal schedule (`K=medusa@0+2 P=redis@3+2 W=:...`, above) | OK (the guest's timing moved: no two refunds of one order overlap) | `9a422bb2617ca8fd` | `0b2fa1b8ae37e941` |
+| `disk=none \| run K=medusa@4+2` (the layer kept across a kill; Medusa's restart runs its migrations again into it) | OK | `e40d19bf1c78a266` | `77bdd8327420410a` |
+| `disk=cut \| run C=8` (the recovery boot binds the layer as the disk kept it) | OK | `8c803ee45b5e6599` | `338345fe497d24c1` |
+| `disk=cut \| run K=medusa@2+2 C=8` | OK | `da0d184080b17c88` | `46d8e22ac7588b05` |
+
+A run takes 38 to 57 s, as before. Both findings were also found blind again
+(`hydo explore --backend kvm --strategy process --protocol-faults --workers 2 --errors-shrink 0`):
+seeds 1 to 20 found nothing (245 s); seeds 21 to 80 (1176 s, 184 runs an hour) found three
+failures, all reproduced:
+
+- `money_matches_stripe` (seeds 52 and 64; finding 2's family), shrunk in 90 runs to
+  `disk=none dseed=4745106db7fdc25e | run H=stripe.intent_capture@0-12:reset H=stripe.intent_cancel@10-12:status=500 W=:p2,r500,cparallel_driver_capture_refund+parallel_driver_checkout,0.0.0.2116393074,1.1.0.1987793828,2.2.1.647859549,3.3.0.1440783945,4.4.1.54239457,5.5.1.1670639316,6.6.0.477404641,7.7.1.1408698898,8.8.1.902105084,9.9.0.1145656850,10.10.1.1175202143,11.11.0.1004297808`,
+  twice `e09a37fec3a25f27`: a capture whose connection is reset after Stripe acted (`reset` keeps
+  the effect) stays out of Medusa's books, as a 500 does;
+- `stock_not_oversold` (seed 69; finding 1), shrunk in 46 runs to
+  `disk=none dseed=a7b6a8effd8b1e8d | run P=medusa@1+1 T=3:300 O=postgres@6-7:req:loss,48% H=stripe.intent_get@1-3:status=429,retry-after=2,p=25 W=:p2,r2000,cparallel_driver_capture_refund+parallel_driver_checkout,0.0.0.46293696,1.0.0.753303122,2.1.1.18134727,3.2.0.704739967,4.3.1.486965657,5.4.0.1153323400,6.5.1.780701343,7.6.1.1262413356,8.6.0.1056841611,9.7.0.392360314,10.8.0.101060845,11.8.0.349740133,12.9.0.351350258,13.10.0.58512317,14.10.0.1330516783,15.11.0.1880335487`,
+  twice `ea66d1122593413e` (`sold=5 stocked=5 reserved=4 reservations=4`): the faults move the
+  back office's requests until two refunds of one order overlap.
+
+The exploration's fault space is smaller by the TLS front's service and links (`stripe_tls`,
+`stripe_tls-medusa`); faults on the way to Stripe are now only the `H=` rules at the fake (they
+act after TLS) and the network faults of Medusa's own link.

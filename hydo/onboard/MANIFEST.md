@@ -212,6 +212,8 @@ services:                      # may be empty ([] or left out): a project that i
     env: {TZ: UTC}             # optional: added to / overriding the image's Env
     workdir: /data             # optional: default the image's WorkingDir
     user: "999:999"            # optional: default the image's User ("" = root)
+    writable: true             # optional: a container's writable root, a layer on the data disk
+                               #   (default false: read-only; "A writable root for image services")
     ready: hydo-oci cache redis-cli ping | grep -q PONG
 
 provision: /bin/myapp-admin create-schema   # once, after all services are ready, before S1
@@ -313,7 +315,8 @@ What the build does:
 
 - **A root per service, not a merged root.** The layers are applied in order (whiteouts
   `.wh.<name>` and opaque directories `.wh..wh..opq` honoured) into `/oci/<service>` on the
-  read-only root, and the service runs chrooted there, as in Docker. Images with different C
+  read-only root (or, with `writable: true`, into the service's writable layer: below), and the
+  service runs chrooted there, as in Docker. Images with different C
   libraries can coexist, and busybox, `/sbin/init` and the rest of the hydo root are untouched.
 - `/proc`, `/sys`, `/dev`, `/tmp` and `/data` of the guest are bind-mounted into that root.
   `/data` is the data disk (the fault target): point the program's data directory there (it
@@ -346,6 +349,44 @@ What the build does:
   default x86_64 build, `arm64` for `--arch arm64`); anything else is refused with an error.
 - Inside the image: `/etc/hydo/oci/<service>/run` (the launcher), `exec` (used by `hydo-oci`),
   `image.json` (digests, layers, the image config and the effective command/env/workdir/user).
+
+### A writable root for image services (`services[].writable`)
+
+Docker gives every container a writable layer over its image, and many programs rely on it: they
+write a cache into their home directory, generate files into their own install directory (Medusa
+writes `~/.config` and schema snapshots into `node_modules` at start), or keep a pid file next to
+their binary. On hydo an image root is read-only, and such a program fails (often with `ENOENT`
+or "Read-only file system"). One line gives the service a container's writable root:
+
+```yaml
+services:
+  - name: medusa
+    image: {x86_64: images/medusa-shop-amd64.docker.tar}
+    writable: true      # default false: the image root stays read-only, mounts: are the only writes
+```
+
+- **Where the layer lives: on the data disk**, at `/data/.hydo/layers/<service>` (the image's whole
+  tree, copied there; hydo has no overlay filesystem in every guest kernel, so the layer is a full
+  copy rather than the changes only). The launcher binds it over `/oci/<service>` before the first
+  start of every boot (and before any `hydo-oci` call), under a lock; `mounts:` and the binds of
+  `/proc`, `/sys`, `/dev`, `/tmp` and `/data` are made on top of it as before. An x86_64 image
+  carries the tree on its data partition from the build (nothing is copied in the guest); an
+  arm64 image copies its root (in the initramfs) to the data disk at the service's first start,
+  syncs it and marks it whole (`<layer>.done`), so a power cut during the copy starts it again.
+- **A kill keeps the layer**, as Docker keeps a container's layer across restarts: the restarted
+  process finds what it wrote.
+- **A power cut keeps the layer as far as it was flushed**, like everything else on the data disk
+  (Docker's layer is on the host's disk too): the recovery boot sees the layer as the disk kept
+  it. A program that relies on files it wrote into its own root without `fsync` can see them
+  missing or torn after a cut, exactly as with its data directory. The data disk's faults (`disk=`
+  I/O errors, lying disk, torn writes) and its request order now include reading the program's
+  own files.
+- **Cost:** the data disk grows by the image's size (hydo-build adds it to `data.size_mib`, rounded
+  up, and prints it); x86_64 KVM and hvx map the disk image, so the layer costs disk, not guest
+  RAM. The layer is visible to every service under `/data/.hydo/layers/` (a service whose own
+  volume is the data disk's root, `{src: /data, ...}`, sees it there too).
+- `writable:` is for image services only (refused without `image:`). A service of the hydo root
+  (`root.nix`, `root.files`) keeps the read-only root: give it a directory under `/data` or `/tmp`.
 
 ### Restart policies (`services[].restart`)
 
@@ -795,6 +836,8 @@ fakes:
     protocol: http             # http (default: HTTP/1.1 and cleartext HTTP/2) | grpc (see below)
     idempotency: header:Idempotency-Key   # where a request's idempotency key is (extractor)
     ref: json:order            # the business reference a request is about (extractor); per route too
+    tls: {hosts: [api.payments.example]}   # optional: also HTTPS on port 443 for these names, with a
+                               #   certificate the guest trusts ("HTTPS for fakes and proxies")
     routes:                    # required for a fake; the first match wins
       - name: charge           # [a-z][a-z0-9_]*; the target <fake>.<route> of H= and of checks
         method: POST           # default: any
@@ -834,6 +877,80 @@ Single braces: `{{name}}` is a build parameter (`params:`). A webhook may use on
 (`/pkg.Service/Method`), its answer `message:` (hex protobuf bytes, default empty) and `code:`
 (gRPC status, default 0); an error rule answers trailers-only with `grpc-status`. Status codes in
 `H=` rules may be numbers or names (`status=UNAVAILABLE`).
+
+### HTTPS for fakes and proxies (`tls:`)
+
+Real providers speak HTTPS only, and their SDKs usually call one fixed host name and check its
+certificate (Stripe's SDKs call `https://api.stripe.com` and have no plain-HTTP option). `tls:`
+makes a fake (or a proxy) answer HTTPS for those names, with a certificate the guest trusts:
+
+```yaml
+fakes:
+  - name: stripe
+    port: 9101                 # the plain listener stays (http://<addr>:9101)
+    tls:
+      hosts: [api.stripe.com]  # the names the system calls (lower case, no wildcard)
+      port: 443                # default 443, on the fake's address
+    routes: [...]
+```
+
+What the build does (nothing of it for a manifest without `tls:`):
+
+- **A test CA of the image's own, and a certificate per endpoint** for its host names (also in
+  the subject alternative names), ECDSA P-256 with SHA-256. Reproducible: every key is derived
+  from the manifest (the project's name, the endpoint's name, its host names), the signatures are
+  deterministic (RFC 6979), the validity is fixed (2000-01-01 to 2099-12-31, so any guest clock,
+  `guest.clock_start` and `T=` steps included, is inside it), and two builds give the same
+  bytes. The keys protect nothing outside the guest: only the guest trusts this CA. Files:
+  `/etc/hydo/tls/ca.pem`, `/etc/hydo/tls/<endpoint>.pem` (its certificate and the CA's),
+  `/etc/hydo/tls/<endpoint>.key`.
+- **Names:** each host name goes into `/etc/hosts` (the guest's, also one the manifest writes
+  itself in `root.text`, and every image service's own) with the endpoint's address (`addr:`, else
+  the bridge's 10.89.0.1 with `network: bridge`, else 127.0.0.1). An image service that mounts
+  the guest's `/etc/hosts` (`hydo compose` writes that mount) sees the same lines.
+- **Trust, the guest root:** the CA is appended to `/etc/ssl/certs/ca-certificates.crt` (made if
+  missing, with `/etc/ssl/cert.pem` pointing at it), and the manifest's `env:` gets the variables
+  below (a value the manifest sets wins).
+- **Trust, every image service:** the CA is appended to each system bundle the image has
+  (`/etc/ssl/certs/ca-certificates.crt`, `/etc/pki/tls/certs/ca-bundle.crt`,
+  `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem`, `/etc/ssl/ca-bundle.pem`,
+  `/etc/ssl/cert.pem`; each real file once, symlinks followed inside the image), made at the first
+  path when it has none, copied to `/.hydo/tls-ca.pem`, and put where the distribution's own tool
+  finds it when an entrypoint rebuilds the bundle (`/usr/local/share/ca-certificates/` for
+  `update-ca-certificates`, `/etc/pki/ca-trust/source/anchors/` for `update-ca-trust`, when the
+  image has those directories). The service's environment gets the variables below unless the
+  image or the manifest sets them.
+
+| variable | read by | value |
+|---|---|---|
+| `SSL_CERT_FILE` | OpenSSL, Go, Ruby, curl, Python's `httpx` | the bundle with the CA |
+| `REQUESTS_CA_BUNDLE` | Python's `requests` (it ignores the system bundle otherwise) | the bundle with the CA |
+| `NODE_EXTRA_CA_CERTS` | Node.js (added to its built-in list) | the CA alone (`/.hydo/tls-ca.pem`; `/etc/hydo/tls/ca.pem` in the guest root) |
+| `NIX_SSL_CERT_FILE` | programs built by Nix | the bundle with the CA |
+
+Programs that use the system bundle need nothing more (Go, curl, OpenSSL, .NET on Linux, Rust with
+`rustls-native-certs` or `native-tls`). Not covered: **Java** keeps its own `cacerts`, which hydo
+does not change (import `/.hydo/tls-ca.pem` with `keytool -importcert -cacerts` in the service's
+`setup:` with `writable: true`; Eclipse Temurin images also offer `USE_SYSTEM_CA_CERTS=1`, not
+tried); a program with its own copy of the public CA list that no variable replaces (Rust's
+`webpki-roots`, Python's `certifi` used directly); a program that pins the provider's certificate
+or key cannot be faked this way at all.
+
+- **The server:** `hydo-world-tls` (hydo-world built with its TLS front, `HYDO_WORLD_TLS=1
+  hydo/crates/hydo-world/build.sh`; hydo-build stages it as `/bin/hydo-world` for a manifest with
+  `tls:`, from `<build dir>/hydo-world-tls`, `$HYDO_WORLDBIN_TLS`, or a release's
+  `guest/hydo-world-tls`) listens at `<addr>:<tls port>`, decrypts, and carries each connection
+  to the endpoint's plain listener, so routes, templates, the record, `H=` rules (they act after
+  TLS) and webhooks are unchanged. Fakes and proxies on one address and TLS port share one
+  listener and are told apart by the name the client asks for (SNI); a client that sends no name
+  gets the first. TLS 1.3 only (every current runtime has it), the cipher suite
+  `TLS_AES_128_GCM_SHA256`, the group secp256r1 (a client that offers only X25519 is asked again
+  for P-256 with a HelloRetryRequest), ALPN `h2` and `http/1.1`: HTTP/2 and gRPC over TLS work
+  (a `protocol: grpc` fake with `tls:` is a gRPC-over-TLS server). The cryptography is pure Rust
+  (RustCrypto), the randomness the guest kernel's, which hydo makes deterministic.
+- **What differs from plain HTTP:** a request's `from` in the record is hydo-world's own address
+  (the plain connection starts there), not the client's. A `reset` rule resets the client's TLS
+  connection too.
 
 ### The record (what the outside world saw)
 
@@ -1646,7 +1763,9 @@ its own volume on `/data`, do not share one directory (`{src: /data/vol/n1-data,
   (on a Mac too, with the second guest kernel); with `--network loopback` or `--no-addr` link
   faults between services act on nothing.
 - The image roots are read-only except for the `mounts:`: a program that writes elsewhere fails
-  with "Read-only file system"; add a `mounts:` entry (a volume or a tmpfs) for that path.
+  with "Read-only file system" (or `ENOENT`); add a `mounts:` entry (a volume or a tmpfs) for that
+  path, or give the service a container's writable root with `writable: true` ("A writable root
+  for image services").
 - Healthchecks run through `hydo-oci`, as root unless the service has a `user:`; the image's own
   user for a healthcheck (Docker runs it as the container's user) is not looked up.
 - No `build:`, no registry pulls at build time, no Swarm (`deploy:`), no GPUs or host devices.

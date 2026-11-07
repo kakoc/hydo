@@ -69,6 +69,7 @@ pub const KNOWN_SVC: &[&str] = &[
     "mounts",
     "restart",
     "restart_may_fail",
+    "writable",
 ];
 pub const KNOWN_INV: &[&str] = &[
     "id",
@@ -135,6 +136,7 @@ pub(crate) const KNOWN_FAKE: &[&str] = &[
     "idempotency",
     "ref",
     "routes",
+    "tls",
     "description",
 ];
 pub(crate) const KNOWN_PROXY: &[&str] = &[
@@ -147,8 +149,12 @@ pub(crate) const KNOWN_PROXY: &[&str] = &[
     "routes",
     "to",
     "service",
+    "tls",
     "description",
 ];
+pub(crate) const KNOWN_TLS: &[&str] = &["hosts", "port", "description"];
+/// A host name a `tls:` endpoint answers for (lower case, as DNS names are compared).
+const HOST_RE: &str = r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*";
 pub(crate) const KNOWN_ROUTE: &[&str] = &[
     "name",
     "method",
@@ -468,6 +474,11 @@ pub fn validate(m: &mut Value) -> R<()> {
                 return Err(err(format!(
                     "{wh}: restart_may_fail: must be true or false"
                 )));
+            }
+        }
+        if let Some(b) = obj_get(s, "writable") {
+            if !b.is_boolean() {
+                return Err(err(format!("{wh}: writable: must be true or false")));
             }
         }
         for dep in or_iter(obj_get(s, "depends_on"))? {
@@ -890,6 +901,9 @@ fn validate_world(m: &Value) -> R<()> {
         .map(|s| str_of(obj_get(s, "addr").unwrap_or(&Value::Null)))
         .collect();
     let mut names: Vec<String> = Vec::new();
+    // `tls:` listeners: endpoints may share one (address, port), told apart by host name
+    let mut tls_lis: Vec<((String, i128), String)> = Vec::new();
+    let mut tls_hosts: Vec<String> = Vec::new();
     for (kind, lst, known) in [
         ("fakes", &fakes, KNOWN_FAKE),
         ("proxies", &proxies, KNOWN_PROXY),
@@ -930,13 +944,63 @@ fn validate_world(m: &Value) -> R<()> {
                     wh, ap.0, singular
                 )));
             }
-            if let Some((_, who)) = used.iter().find(|(k, _)| *k == ap) {
+            if let Some((_, who)) = used.iter().chain(tls_lis.iter()).find(|(k, _)| *k == ap) {
                 return Err(err(format!(
                     "{}: {}:{} is already used by {}",
                     wh, ap.0, pnum, who
                 )));
             }
-            used.push((ap, format!("{singular} {n}")));
+            used.push((ap.clone(), format!("{singular} {n}")));
+            if let Some(t) = obj_get(e, "tls") {
+                let tw = format!("{wh}.tls");
+                if !t.is_object() {
+                    return Err(err(format!(
+                        "{tw}: a mapping {{hosts: [<host name>, ...], port: <default 443>}}"
+                    )));
+                }
+                unknown(t, KNOWN_TLS, &tw)?;
+                let hosts = match obj_get(t, "hosts") {
+                    Some(Value::Array(a)) if !a.is_empty() => a.clone(),
+                    _ => {
+                        return Err(err(format!(
+                            "{tw}: hosts: a list of the host names the system calls (e.g. [api.stripe.com])"
+                        )))
+                    }
+                };
+                for h in &hosts {
+                    let hs = match h {
+                        Value::String(s) => s.clone(),
+                        _ => String::new(),
+                    };
+                    if hs.len() > 253 || !pyre::fullmatch(HOST_RE, &hs) {
+                        return Err(err(format!(
+                            "{}: hosts: {} is not a host name (lower-case letters, digits, '-' and '.'; no wildcard)",
+                            tw,
+                            repr(h)
+                        )));
+                    }
+                    if tls_hosts.contains(&hs) || svcs.contains_key(&hs) || names.contains(&hs) {
+                        return Err(err(format!(
+                            "{}: hosts: {} is already the name of a service or of another tls: endpoint",
+                            tw,
+                            repr_str(&hs)
+                        )));
+                    }
+                    tls_hosts.push(hs);
+                }
+                let tp = obj_get(t, "port").cloned().unwrap_or(Value::from(443));
+                if !int_in(&tp, 1, 65535) {
+                    return Err(err(format!("{tw}: port: a TCP port number (default 443)")));
+                }
+                let tap = (ap.0.clone(), py::int_of(&tp).unwrap_or(443));
+                if let Some((_, who)) = used.iter().find(|(k, _)| *k == tap) {
+                    return Err(err(format!(
+                        "{}: {}:{} is already used by {}",
+                        tw, tap.0, tap.1, who
+                    )));
+                }
+                tls_lis.push((tap, format!("the tls: listener of {singular} {n}")));
+            }
             let proto = obj_get(e, "protocol")
                 .cloned()
                 .unwrap_or(Value::String("http".into()));
@@ -1477,4 +1541,143 @@ pub fn apply_params(m: &mut Value, overrides: &[(String, String)]) -> R<Vec<(Str
         obj.insert(k, v);
     }
     Ok(vals)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// A bridge project with one service on 10.89.0.11:443, and these fakes and proxies.
+    fn project(fakes: Value, proxies: Value, svc: Value) -> Value {
+        let mut s = json!({"name": "web", "cmd": "/bin/web", "ready": "true", "port": 443,
+                           "addr": "10.89.0.11"});
+        if let (Some(o), Value::Object(extra)) = (s.as_object_mut(), svc) {
+            o.extend(extra);
+        }
+        json!({"name": "p", "network": "bridge", "services": [s],
+               "workload": {"steps": 1, "run": "true"},
+               "invariants": [{"id": "ok", "cmd": "true"}],
+               "fakes": fakes, "proxies": proxies})
+    }
+
+    fn fake(name: &str, port: i64, tls: Value) -> Value {
+        json!({"name": name, "port": port, "tls": tls, "routes": [{"name": "r", "path": "/"}]})
+    }
+
+    fn check(m: Value) -> Result<(), String> {
+        let mut m = m;
+        validate(&mut m).map_err(|e| e.message)
+    }
+
+    #[test]
+    fn tls_accepted() {
+        // two fakes share 10.89.0.1:443 (told apart by name), a third has its own port
+        check(project(
+            json!([
+                fake("a", 9101, json!({"hosts": ["api.a.example"]})),
+                fake(
+                    "b",
+                    9102,
+                    json!({"hosts": ["api.b.example", "b.example"], "port": 443})
+                ),
+                fake("c", 9103, json!({"hosts": ["c.example"], "port": 8443})),
+            ]),
+            json!([{"name": "front", "port": 9200, "protocol": "tcp", "service": "web",
+                    "tls": {"hosts": ["web.example"], "port": 9443}}]),
+            json!({}),
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn tls_refusals() {
+        let cases = [
+            (
+                json!("api.a.example"),
+                "fakes[0].tls: a mapping {hosts: [<host name>, ...], port: <default 443>}",
+            ),
+            (
+                json!({"port": 443}),
+                "fakes[0].tls: hosts: a list of the host names the system calls (e.g. [api.stripe.com])",
+            ),
+            (
+                json!({"hosts": []}),
+                "fakes[0].tls: hosts: a list of the host names the system calls (e.g. [api.stripe.com])",
+            ),
+            (
+                json!({"hosts": ["API.example"]}),
+                "fakes[0].tls: hosts: 'API.example' is not a host name (lower-case letters, digits, '-' and '.'; no wildcard)",
+            ),
+            (
+                json!({"hosts": ["*.example"]}),
+                "fakes[0].tls: hosts: '*.example' is not a host name (lower-case letters, digits, '-' and '.'; no wildcard)",
+            ),
+            (
+                json!({"hosts": ["web"]}),
+                "fakes[0].tls: hosts: 'web' is already the name of a service or of another tls: endpoint",
+            ),
+            (
+                json!({"hosts": ["a.example"], "port": 0}),
+                "fakes[0].tls: port: a TCP port number (default 443)",
+            ),
+            (
+                json!({"hosts": ["a.example"], "bogus": 1}),
+                "fakes[0].tls: unknown field(s) bogus (known: description, hosts, port)",
+            ),
+        ];
+        for (tls, want) in cases {
+            assert_eq!(
+                check(project(json!([fake("a", 9101, tls)]), json!([]), json!({}))).unwrap_err(),
+                want
+            );
+        }
+        // the same host name twice
+        assert_eq!(
+            check(project(
+                json!([
+                    fake("a", 9101, json!({"hosts": ["x.example"]})),
+                    fake("b", 9102, json!({"hosts": ["x.example"]})),
+                ]),
+                json!([]),
+                json!({})
+            ))
+            .unwrap_err(),
+            "fakes[1].tls: hosts: 'x.example' is already the name of a service or of another tls: endpoint"
+        );
+        // a TLS port on another fake's plain port, and a plain port on an earlier TLS listener
+        assert_eq!(
+            check(project(
+                json!([
+                    fake("a", 9101, json!({"hosts": ["x.example"]})),
+                    fake("b", 9102, json!({"hosts": ["y.example"], "port": 9101})),
+                ]),
+                json!([]),
+                json!({})
+            ))
+            .unwrap_err(),
+            "fakes[1].tls: 10.89.0.1:9101 is already used by fake a"
+        );
+        assert_eq!(
+            check(project(
+                json!([
+                    fake("a", 9101, json!({"hosts": ["x.example"]})),
+                    {"name": "b", "port": 443, "routes": [{"name": "r", "path": "/"}]},
+                ]),
+                json!([]),
+                json!({})
+            ))
+            .unwrap_err(),
+            "fakes[1]: 10.89.0.1:443 is already used by the tls: listener of fake a"
+        );
+    }
+
+    #[test]
+    fn writable_is_a_boolean() {
+        check(project(json!([]), json!([]), json!({"writable": false}))).unwrap();
+        assert_eq!(
+            check(project(json!([]), json!([]), json!({"writable": "yes"}))).unwrap_err(),
+            "services[0]: writable: must be true or false"
+        );
+    }
 }

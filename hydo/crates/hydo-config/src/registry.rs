@@ -412,6 +412,11 @@ variables! {
     HYDO_WORLDBIN: Build, User, "path; empty = default", "<build dir>/hydo-world", "hydo-build";
     /// The arm64 `hydo-world`.
     HYDO_WORLDBIN_ARM64: Build, User, "path; empty = default", "<build dir>/hydo-world-arm64", "hydo-build";
+    /// The x86_64 `hydo-world-tls` (hydo-world with the TLS front), staged instead of
+    /// `hydo-world` for manifests whose fakes or proxies have `tls:`.
+    HYDO_WORLDBIN_TLS: Build, User, "path; empty = default", "<build dir>/hydo-world-tls", "hydo-build";
+    /// The arm64 `hydo-world-tls`.
+    HYDO_WORLDBIN_TLS_ARM64: Build, User, "path; empty = default", "<build dir>/hydo-world-tls-arm64", "hydo-build";
     /// The x86_64 `hydo-read`.
     HYDO_READ_BIN: Build, User, "path; empty = default", "<build dir>/hydo-read", "hydo-build";
     /// The arm64 `hydo-read`.

@@ -2,7 +2,8 @@
 
 The guest is one Linux virtual machine: one virtual CPU by default, `guest.ram_mib` of RAM
 (default 1024 MiB), no network outside the guest (loopback, or with `network: bridge` one
-bridge between the services' own namespaces), a read-only root, one data disk on `/data`, and a
+bridge between the services' own namespaces), a read-only root (an image service can have a
+writable one, `writable: true`), one data disk on `/data`, and a
 clock and a random generator that hydo makes deterministic. Check each item and report what you
 found.
 

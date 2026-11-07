@@ -10,10 +10,21 @@
 #   hydo/crates/hydo-world/build.sh [out]     (default: build/hydo-world, from the repository root)
 # HYDO_WORLD_ARCH=arm64 builds the arm64 binary for hydo-build --arch arm64, which stages
 # <build dir>/hydo-world-arm64 (or $HYDO_WORLDBIN_ARM64); default amd64.
+# HYDO_WORLD_TLS=1 builds hydo-world-tls instead (the cargo feature `tls`: the TLS front of `tls:`
+# fakes and proxies, pure Rust like the rest), which hydo-build stages in place of hydo-world for
+# manifests that use `tls:`: <build dir>/hydo-world-tls and hydo-world-tls-arm64 (or
+# $HYDO_WORLDBIN_TLS and $HYDO_WORLDBIN_TLS_ARM64). The plain hydo-world is built without it, so
+# its bytes (inside every recorded image with fakes or proxies) do not change.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TOP="$(cd "$HERE/../../.." && pwd)"
-OUT="${1:-build/hydo-world}"
+TLS="${HYDO_WORLD_TLS:-0}"
+case "$TLS" in
+  0) PROG=hydo-world; FEATURES=() ;;
+  1) PROG=hydo-world-tls; FEATURES=(--features tls) ;;
+  *) echo "error: HYDO_WORLD_TLS=$TLS: 0 or 1" >&2; exit 1 ;;
+esac
+OUT="${1:-build/$PROG}"
 ARCH="${HYDO_WORLD_ARCH:-amd64}"
 case "$ARCH" in
   amd64 | x86_64) TARGET=x86_64-unknown-linux-musl ;;
@@ -28,8 +39,8 @@ export RUSTFLAGS="-C target-feature=+crt-static --remap-path-prefix=$TOP=/hydo -
 HYDO_REAL_RUSTC="$(cd "$TOP" && rustup which rustc 2>/dev/null || command -v rustc)"
 export HYDO_REAL_RUSTC
 export RUSTC="$HERE/rustc-host.sh"
-( cd "$TOP" && cargo build --release --locked -p hydo-world --target "$TARGET" \
-    --target-dir "$TOP/target/hydo-world" ) >&2
+( cd "$TOP" && cargo build --release --locked -p hydo-world ${FEATURES[@]+"${FEATURES[@]}"} \
+    --target "$TARGET" --target-dir "$TOP/target/$PROG" ) >&2
 mkdir -p "$(dirname "$OUT")"
 # rust-lld writes its own identification into the unloaded .comment section, and the Mac's and
 # Linux's rust-lld of the same LLVM commit name their source differently there: drop the section
@@ -39,6 +50,6 @@ HOST="$("$HYDO_REAL_RUSTC" -vV | sed -n 's/^host: //p')"
 # (on Linux it loads the toolchain's libLLVM, as when rustc itself runs it)
 LD_LIBRARY_PATH="$SYSROOT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   "$SYSROOT/lib/rustlib/$HOST/bin/rust-objcopy" --remove-section=.comment \
-  "$TOP/target/hydo-world/$TARGET/release/hydo-world" "$OUT"
+  "$TOP/target/$PROG/$TARGET/release/hydo-world" "$OUT"
 if command -v sha256sum > /dev/null; then SHA="$(sha256sum "$OUT" | cut -c1-16)"; else SHA="$(shasum -a 256 "$OUT" | cut -c1-16)"; fi
 echo "built $OUT ($(wc -c < "$OUT" | tr -d ' ') bytes, static Rust $TARGET, sha256 $SHA)"

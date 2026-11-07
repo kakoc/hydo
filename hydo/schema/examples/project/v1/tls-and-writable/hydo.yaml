@@ -1,0 +1,53 @@
+# HTTPS for a fake and a proxy (fakes[].tls, proxies[].tls) and a writable root for an image
+# service (services[].writable): with and without each, and the TLS port's default (absent).
+format: 1
+name: tls-and-writable
+description: "a shop whose payment provider is HTTPS and whose server writes into its own image"
+network: bridge
+services:
+  - name: shop
+    image: {x86_64: images/shop-amd64.docker.tar}
+    image_ref: "shop:test"
+    writable: true        # writes go to the service's own layer on the data disk
+    addr: 10.89.0.11
+    port: 9000
+    ready: "hydo-oci shop wget -q -O- http://localhost:9000/health"
+  - name: db
+    image: {x86_64: images/postgres-amd64.docker.tar}
+    writable: false
+    addr: 10.89.0.12
+    port: 5432
+    ready: "hydo-oci db pg_isready"
+  - name: cache
+    image: {x86_64: images/redis-amd64.docker.tar}
+    addr: 10.89.0.13
+    port: 6379
+    ready: "hydo-oci cache redis-cli ping"
+fakes:
+  - name: payments
+    port: 9101
+    tls: {hosts: [api.payments.example]}          # 443, the default
+    routes:
+      - {name: charge, method: POST, path: /v1/charges, body: '{"id":"ch_{seq}"}'}
+  - name: mail
+    port: 9102
+    tls: {hosts: [smtp-api.mail.example, mail.example], port: 8443}
+    routes:
+      - {name: send, method: POST, path: /v3/send}
+  - name: plain
+    port: 9103
+    routes:
+      - {name: ping, path: /ping}
+proxies:
+  - name: cache_front
+    port: 6380
+    protocol: tcp
+    service: cache
+    tls: {hosts: [cache.internal.example], port: 6390}
+workload:
+  steps: 4
+  run: "true"
+invariants:
+  - id: ok
+    final: true
+    cmd: "true"
