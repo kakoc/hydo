@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo-control: the host side of guest control (docs/design/guest-control.md; docs/HISTORY.md
 //! M120, step B1). In an agent image the guest's first process, `hydo-agent`, only carries out
 //! commands; every decision is made here, on the host, as a pure function of the schedule, its

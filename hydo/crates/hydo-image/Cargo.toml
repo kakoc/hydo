@@ -4,6 +4,7 @@ name = "hydo-image"
 # ci/consolidate-tests.sh)
 autotests = false
 description = "hydo's image record: what shapes an image's runs but is not inside it (the guest kernel by sha256, the fingerprint epoch) in /etc/hydo/image.json, and the build record <image>.json next to it; the kernels this hydo knows and how a run finds the one an image names"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +13,7 @@ repository.workspace = true
 homepage.workspace = true
 # What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests and their
 # recorded answers stay in the repository.
-include = ["/src/**", "/Cargo.toml", "/LICENSE", "/build.rs", "/pins/**"]
+include = ["/src/**", "/Cargo.toml", "/LICENSE", "/README.md", "/build.rs", "/pins/**"]
 build = "build.rs"
 
 [lib]

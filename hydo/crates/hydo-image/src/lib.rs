@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo's image record (Milestone 155): every image records what shapes its runs but is not
 //! inside it, so an image built today still runs, and reproduces, after hydo is upgraded.
 //!

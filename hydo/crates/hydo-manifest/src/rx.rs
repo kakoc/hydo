@@ -1,7 +1,7 @@
 //! Does Python's `re.compile` accept a pattern? hydo-build checks the `errors:` regular expressions
 //! of a manifest with it, and prints its message. This is a port of the checks of Python's regex
 //! parser (`re/_parser.py`, CPython 3.11 to 3.15): groups, escapes, character sets, repeats,
-//! extensions and inline flags, with its messages and positions ("<msg> at position <n>").
+//! extensions and inline flags, with its messages and positions ("`<msg>` at position `<n>`").
 //! Not checked here: `\N{name}` (any name is accepted), repeat counts above the engine's limit,
 //! and the checks Python makes only when it compiles the parsed pattern (look-behind width).
 

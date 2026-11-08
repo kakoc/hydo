@@ -3,7 +3,7 @@
 //!
 //! It does what `hydo/onboard/hydo-init.sh` does, in the same order, with the shell's blocking
 //! steps turned into commands and the answers awaited: one function per init function, under the
-//! same name, written with [`crate::flow`] so that the code reads like the shell. The background
+//! same name, written with `crate::flow` so that the code reads like the shell. The background
 //! jobs of the shell (`periodic_loop`, `pause_timer`) are threads of the flow; their order against
 //! the main sequence depends on guest timing, as it does in the shell.
 //!

@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo-kvm: the third run engine (docs/design/kvm-engine.md). It runs hydo's x86_64 agent images
 //! deterministically on stock Linux KVM (`/dev/kvm`), so hydo runs where the hvx kernel module
 //! cannot be loaded: cloud VMs and CI runners with nested virtualization, and AMD machines. It is

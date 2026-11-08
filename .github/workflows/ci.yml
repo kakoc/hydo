@@ -8,7 +8,7 @@
 #   neither the hvx kernel module nor access to Hypervisor.framework.
 # - guest-programs: the guest agent and the store reader, which keep their own Cargo
 #   workspaces and lock files (their bytes are inside recorded images), on Linux.
-# - sdks: the assertion SDKs: the Rust reference, the Rust test SDK, and the Go (sdk/go and the
+# - sdks: the assertion SDKs and their READMEs' examples: the Rust reference, the Rust test SDK, and the Go (sdk/go and the
 #   order service's copy), Python and JavaScript SDKs against the shared cases in sdk/cases.
 #
 # Every action is pinned by commit. The workflow needs no secret and only reads the repository.

@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! The test composer, host side (the Rust port of `hydo/onboard/hydo_composer.py`; MANIFEST.md
 //! "The test composer" and "Stable compositions (command ids)").
 //!

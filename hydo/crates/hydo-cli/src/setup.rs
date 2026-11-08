@@ -772,7 +772,7 @@ pub fn inspect(root: &Path, p: Platform, pins: &[Pin], host: &dyn Host) -> Repor
 /// each restored file must be.
 pub trait Assets {
     /// Where the files would come from, in words ("hydo-linux-0.1.0.tar.gz in the install
-    /// cache", "…, fetched from <url>"), or why they cannot come from anywhere now (offline).
+    /// cache", "…, fetched from `<url>`"), or why they cannot come from anywhere now (offline).
     fn plan(&self) -> Result<String, String>;
     /// Write each (path, sha256) into the release tree `root`, verified. Returns the source in
     /// words.

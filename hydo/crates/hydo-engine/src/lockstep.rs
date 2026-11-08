@@ -72,7 +72,7 @@ pub enum SnapAnswer {
 /// the design's `Worker::run_controlled(tag, ctl)` (docs/design/guest-control.md "Explorer API").
 /// The controller itself (`hydo_control::Controller`) lives in a crate that depends on this one,
 /// so the engines take this object-safe trait instead; `hydo_control` implements it for its
-/// conversations ([`crate::Worker::run_controlled`], [`crate::Worker::resume`]).
+/// conversations ([`crate::ControlledWorker::run_controlled`], [`crate::ControlledWorker::resume`]).
 pub trait Driver {
     fn drive(&mut self, ls: &mut Lockstep<'_>) -> Result<RunResult, EngineError>;
 }

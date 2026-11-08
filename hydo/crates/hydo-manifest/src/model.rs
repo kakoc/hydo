@@ -14,6 +14,11 @@
 //! Every string value may carry a `{{param}}` reference (`params:`), so a field with a fixed set
 //! of values also takes a string that contains one ([`Param`]).
 
+// The doc comments below are also the descriptions of the generated JSON Schema, written in
+// the format's own notation (`<name>`, `sha256:<digest>`); rustdoc would read that notation
+// as HTML tags, and quoting it would change the schema.
+#![allow(rustdoc::invalid_html_tags)]
+
 use indexmap::IndexMap;
 use schemars::{json_schema, JsonSchema, Schema, SchemaGenerator};
 use serde::de::{DeserializeOwned, Error as _};

@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! Error logs as findings, the host side (the Rust port of `hydo/onboard/hydo_errors.py`;
 //! MANIFEST.md "Error logs as findings", docs/HISTORY.md M94).
 //!
@@ -10,7 +14,7 @@
 //! HYDO-ERRLOG-SUM {"boot":"first","steps":20,"lines":5,"kinds":3,"shown":3}
 //! ```
 //!
-//! A kind's [`signature`] is the first 12 hex digits of sha256("<service>\n<template>"). The
+//! A kind's [`signature`] is the first 12 hex digits of `sha256("<service>\n<template>")`. The
 //! project's reviewed list `hydo/known-errors.yaml` ([`load_known`]) says which kinds are expected
 //! (by `sig:` or by a `match:` regular expression on the template), optionally only in runs with a
 //! fault (`with:`) or only for lines written while it was on (`during:`). Every other kind is NEW.
@@ -89,7 +93,7 @@ fn eerr(m: impl Into<String>) -> ErrorsError {
     ErrorsError(m.into())
 }
 
-/// `signature(svc, tpl)`: the first 12 hex digits of sha256("<svc>\n<tpl>").
+/// `signature(svc, tpl)`: the first 12 hex digits of `sha256("<svc>\n<tpl>")`.
 pub fn signature(svc: &str, tpl: &str) -> String {
     let d = Sha256::digest(format!("{svc}\n{tpl}").as_bytes());
     d.iter().take(6).map(|b| format!("{b:02x}")).collect()

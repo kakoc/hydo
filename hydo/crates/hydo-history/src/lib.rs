@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo-history: operation histories recorded by guest programs, and the host-side checkers
 //! (format and semantics: hydo/HISTORIES.md). It replaces hydo/history/hydohist.py and the
 //! `hydo-check` script around it, with the same verdicts, witnesses, records and texts.

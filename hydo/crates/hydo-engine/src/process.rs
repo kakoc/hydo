@@ -158,7 +158,7 @@ impl ControlledRun {
 }
 
 /// A `serve` engine booting an agent image under lock-step control (M121, `--control boot
-/// serve`; [`crate::Engine::start_controlled`]). [`ControlledBoot::session`] is the boot's
+/// serve`; [`crate::ControlledEngine::start_controlled`]). [`ControlledBoot::session`] is the boot's
 /// lock-step session (tag `boot`, stops `phase=boot`): the host takes the snapshots `S0` and
 /// `S1` where it decides and ends the boot with END (RESULT `boot`). [`ControlledBoot::ready`]
 /// then reads READY and returns the worker, whose CTL runs restore the host's S1.

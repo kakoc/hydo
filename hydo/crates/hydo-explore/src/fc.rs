@@ -3,8 +3,8 @@
 //!
 //! Every packet point of a run's traffic is one schedule `F=<svc><dir><peer>@<step>#<n>[:<match>]:<dur>`.
 //! The points come from the run itself: for each (pair, direction, match) stream and each step s,
-//! one `#0` trace run makes the guest print "freeze never fired: <N> of 0 matching events after
-//! step <s>"; step s then holds N(s) - N(s+1) packets (+ a margin where step s+1 is not swept).
+//! one `#0` trace run makes the guest print "freeze never fired: `<N>` of 0 matching events after
+//! step `<s>`"; step s then holds N(s) - N(s+1) packets (+ a margin where step s+1 is not swept).
 //! The adaptive sweep runs a cheap stage 1 (the manifest's freeze_match: streams, or every k-th
 //! packet) and then every packet in a widening window around each stage-1 failure.
 

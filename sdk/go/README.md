@@ -1,125 +1,242 @@
-# hydo's Go SDK: `hydoassert` and `hydohist`
+# hydo-assert for Go
 
-A Go program running under hydo (the deterministic hypervisor in this repository) uses these
-packages to say what must be true and what should happen at least once (`hydoassert`), and to
-record the operations a workload client performs so that the host can check the history after
-the run (`hydohist`). The wire format and the verdict rules are in
-[`hydo/ASSERTIONS.md`](https://github.com/kakoc/hydo/blob/main/hydo/ASSERTIONS.md) and
-[`hydo/HISTORIES.md`](https://github.com/kakoc/hydo/blob/main/hydo/HISTORIES.md). The packages
-use only the standard library and need Go 1.22 or later (Go 1.21's `encoding/json` writes
-`\b` and `\f` as `\u0008` and `\u000c`, which are not the SDK's bytes).
+[hydo](https://github.com/kakoc/hydo) runs a whole system in a deterministic virtual machine,
+injects faults (process kills, network faults, power cuts, disk errors) and replays every
+failure bit for bit. This module lets a Go program that runs under hydo say, from the inside,
+what must be true and what should happen. hydo collects what the program reports, and an
+exploration (many runs with different faults) reports each property as passed, failed (with a
+schedule that replays the failure) or never exercised.
+
+The module has two packages: `hydoassert` for properties and fault points, and `hydohist` for
+operation histories. It uses only the standard library and needs Go 1.22 or later. Outside hydo
+it does almost nothing: the records go to standard error (or nowhere), and fault points stay
+off.
+
+## Install
 
 ```sh
 go get github.com/kakoc/hydo/sdk/go@v0.2.0
 ```
 
+## A complete program
+
+A small key/value store that declares three properties and checks them:
+
 ```go
-import (
-	"github.com/kakoc/hydo/sdk/go/hydoassert"
-	"github.com/kakoc/hydo/sdk/go/hydohist"
+package main
+
+import "github.com/kakoc/hydo/sdk/go/hydoassert"
+
+var (
+	readBack  = hydoassert.Always("kv.read_back", "every acknowledged write reads back with its value")
+	overwrite = hydoassert.Sometimes("kv.overwrite", "a write replaced an existing value")
+	lostReply = hydoassert.Buggify("kv.lost_reply", "the write lands but its reply is lost")
 )
 
-var acked = hydoassert.Always("kv.acked_durable", "every acknowledged write reads back with its value")
-var back = hydoassert.Eventually("kv.back", "the server answers within 5 s", 5*time.Second)
-var lostReply = hydoassert.Buggify("kv.put.lost_reply", "the write lands but the reply is lost")
-
 func main() {
-	hydoassert.Catalog()                                   // once, early: the HYDO-ASSERT-DECL lines
-	acked.Check(got == want, hydoassert.D{"key": k, "got": got})
-	if lostReply.Fire(hydoassert.D{"key": k}) { return }
-	back.Await(func() bool { return ping() == nil }, 100*time.Millisecond, nil)
-	hydoassert.SetupComplete()                             // HYDO-SETUP-COMPLETE
+	hydoassert.Catalog() // list every property, also the ones that never run
+	store := map[string]int{}
+	hydoassert.SetupComplete() // the system is ready: hydo may start injecting faults
 
-	kv := hydohist.New("kv")
-	op := kv.Invoke(3, "write", "k1", "v1")                // process 3, before the request
-	if err := put("k1", "v1"); err == nil { op.Ok("k1", "v1") } else { op.Info() }
+	for _, w := range []struct {
+		key   string
+		value int
+	}{{"a", 1}, {"b", 2}, {"a", 3}} {
+		_, existed := store[w.key]
+		store[w.key] = w.value
+		overwrite.Check(existed, hydoassert.D{"key": w.key})
+		if lostReply.Fire(hydoassert.D{"key": w.key}) {
+			continue // the client never hears back (only when hydo turns this point on)
+		}
+		acked := store[w.key] == w.value
+		readBack.Check(acked, hydoassert.D{"key": w.key, "value": w.value})
+	}
 }
 ```
 
-Each package's documentation (`go doc github.com/kakoc/hydo/sdk/go/hydoassert`) describes every
-call, the records and the environment variables (`HYDO_ASSERT_OUT`, `HYDO_BUGGIFY`,
-`HYDO_BUGGIFY_FILE`, `HYDO_HIST_OUT`).
+Run it with `HYDO_ASSERT_OUT=stderr` to see what it reports. It writes these lines (under hydo
+they go to the guest's console, where hydo reads them):
 
-## Names
-
-The packages are `hydoassert` and `hydohist`, not `hydo-assert`: a Go identifier cannot contain
-a hyphen, and Go's convention is that a package's name is its directory's name. The registry
-names of the other SDKs are `hydo-assert` (crates.io, PyPI and npm), and their names in code are
-`hydo_assert` (Rust and Python) or the package `hydo-assert` (JavaScript); so the code-level
-name, "hydo assert", is the same in every language, spelled as each language allows.
-
-## Two copies: this module and the frozen copy in `hydo/stack`
-
-The same code lives in two places:
-
-- **`sdk/go` (this module, `github.com/kakoc/hydo/sdk/go`)**: the public module that users
-  import.
-- **`hydo/stack/hydoassert` and `hydo/stack/hydohist`** (inside the module `hydostack`): a
-  frozen copy. The order service of the stack example and the bug benchmark imports it, and
-  that service's compiled bytes are inside recorded guest images. Changing that module's path or
-  those files would change the order service's bytes and move recorded fingerprints, so the
-  copy there stays as it is.
-
-The test `cargo test -p hydo-release --test sdks` (in the repository's Cargo workspace) fails
-when the two copies differ in anything but these documented differences. Exactly these may
-differ, and nothing else (a file on one side only fails too, except the shell SDK):
-
-1. Three lines of `hydoassert/cases_test.go`, each exactly once in each copy:
-
-   | `hydo/stack` | `sdk/go` | why |
-   |---|---|---|
-   | `"hydostack/hydoassert"`, `"hydostack/hydohist"` | `"github.com/kakoc/hydo/sdk/go/hydoassert"`, `.../hydohist` | the module path |
-   | `const casesDir = "../../../sdk/cases"` | `const casesDir = "../../cases"` | where the shared cases are from the package directory |
-   | `(in hydo/stack/hydoassert)` | `(in sdk/go)` | the comment that says where to run the tests |
-
-2. Seven identifiers in every file of `hydoassert` (Milestone 163): the public module keeps
-   unexported what no call of its API takes or returns, so the assertion type and its
-   constants are lower case here and exported in the frozen copy:
-
-   | `hydo/stack` | `sdk/go` |
-   |---|---|
-   | `Type` | `kind` |
-   | `TAlways`, `TAlwaysOrUnreachable`, `TSometimes`, `TReachable`, `TUnreachable`, `TEventually` | `tAlways`, `tAlwaysOrUnreachable`, `tSometimes`, `tReachable`, `tUnreachable`, `tEventually` |
-
-   The test maps every whole-word occurrence of the `sdk/go` names back to the frozen names
-   before it compares the files byte for byte, so the copies may differ only by the rename
-   (also in comments). It also fails when a frozen name is still a word in `sdk/go` (the rename
-   must be complete, so the public module never exports them) and when an `sdk/go` name is a
-   word in `hydo/stack` (so the mapping stays one to one).
-
-The public API is therefore: `Always`, `AlwaysOrUnreachable`, `Sometimes`, `Reachable`,
-`Unreachable` (an `*Assertion` with `Check`, `Hit`, `Cmp`), `Eventually` (a `*Liveness` with
-`Await` and `Begin`, a `*Watch` with `Done` and `Expire`), `Buggify` (a `*Point` with `Fire`),
-`Catalog`, `SetupComplete` and the details type `D`; and in `hydohist` `New`, `History`
-(`Invoke`, `Record`), `Op` (`Ok`, `Fail`, `Info`), `Nil` and the token functions `Enc`, `Ver`,
-`ValOrNil`, `List`, `Append`, `Read`, `ReadResult`. A comparison has one form, `Cmp` with its
-operator, as in the other SDKs.
-
-`hydo/stack/hydoassert/hydo_assert.sh` (the shell SDK) is not part of this module. A change to the
-Go SDK is made in both places in one commit; a change to the frozen copy changes the order
-service's bytes, so it needs a re-baseline of the images that contain it (docs/REBASELINE.md).
-
-## Tests
-
-```sh
-go vet ./... && go test ./...           # in sdk/go
-GOTOOLCHAIN=go1.26.5 go test ./...      # the Go of the guest images: also the invalid-UTF-8 cases
+```text
+HYDO-ASSERT-DECL {"t":"always","id":"kv.read_back","msg":"every acknowledged write reads back with its value"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"kv.overwrite","msg":"a write replaced an existing value"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.kv.lost_reply","msg":"fault point fired: the write lands but its reply is lost"}
+HYDO-SETUP-COMPLETE
+HYDO-ASSERT {"t":"always","id":"kv.read_back","ok":true,"msg":"every acknowledged write reads back with its value","details":{"key":"a","value":1}}
+HYDO-ASSERT {"t":"sometimes","id":"kv.overwrite","ok":true,"msg":"a write replaced an existing value","details":{"key":"a"}}
 ```
 
-`hydoassert/cases_test.go` runs every shared case of `sdk/cases` (written by the Rust SDK's tests,
-the reference; [`sdk/rust/README.md`](../rust/README.md), "The shared cases") and compares the
-bytes this SDK writes. Go 1.27 and later write invalid UTF-8 as a raw U+FFFD instead of `�`,
-so with them the cases that need invalid UTF-8 are skipped (and reported).
+A process writes each outcome of a property once: the first pass and the first failure, with
+the details of that evaluation. That is why the later passes of `kv.read_back` write nothing.
 
-## Publishing
+## How to
 
-Go has no registry upload: a version is a git tag on the repository, `sdk/go/v<version>` for a
-module in the `sdk/go` directory (for example `sdk/go/v0.2.0`), and the Go module proxy fetches
-it from GitHub on the first `go get`. A tag, once fetched, is cached by the proxy for good: a
-release cannot be replaced, only retracted with a `retract` directive in a later version.
-[`docs/PUBLISHING.md`](../../docs/PUBLISHING.md) has the steps.
+### Declare properties and check them
+
+A property has an id (stable across versions of your program) and a message for people. Its
+kind says what hydo expects:
+
+| kind | the property holds when | hydo reports a failure when |
+|---|---|---|
+| `Always` | the condition is true every time, and it is checked at least once | it is false once, or never checked |
+| `AlwaysOrUnreachable` | the condition is true every time it is checked | it is false once |
+| `Sometimes` | the condition is true at least once in an exploration | it is never true |
+| `Reachable` | the code is reached at least once in an exploration | it is never reached |
+| `Unreachable` | the code is never reached | it is reached |
+
+Declare properties as package-level variables, so that the catalog lists them before `main`
+runs (the snippets below declare them inside a function only to be short):
+
+```go
+stored := hydoassert.Always("kv.stored", "every acknowledged write is stored")
+parses := hydoassert.AlwaysOrUnreachable("kv.log_parses", "every complete log line parses")
+retried := hydoassert.Sometimes("kv.retried", "a client retried a request")
+recovered := hydoassert.Reachable("kv.recovered", "the server replayed a non-empty log")
+unknown := hydoassert.Unreachable("kv.unknown_command", "the server got a command it does not know")
+
+fmt.Println(stored.Check(true, hydoassert.D{"key": "a"})) // returns the condition
+parses.Check(true, nil)                                   // the details may be nil
+retried.Check(false, nil)                                 // a false Sometimes writes nothing
+recovered.Hit(hydoassert.D{"entries": 3})
+command := "GET"
+if command != "GET" && command != "SET" {
+	unknown.Hit(hydoassert.D{"command": command})
+}
+```
+
+### Compare two values
+
+`Cmp` checks `left op right` and puts both values and the operator into the details, so a
+failure shows them:
+
+```go
+logSize := hydoassert.Always("kv.log_size", "the log stays under its cap")
+size := int64(12)
+fmt.Println(logSize.Cmp(size, "<=", 10000, nil)) // details: {"left":12,"op":"<=","right":10000}
+```
+
+The operator is one of `<`, `<=`, `==`, `!=`, `>=` and `>`; the values are `int64`.
+
+### Check that something happens in time (eventually)
+
+An `Eventually` property says "after this point, the condition becomes true within a
+deadline", for example "after a restart the server answers within 5 seconds". Time inside a
+hydo guest is deterministic, so the verdict is the same on every replay.
+
+```go
+back := hydoassert.Eventually("kv.back", "the server answers within 5 s of its start", 5*time.Second)
+started := time.Now()
+answers := func() bool { return time.Since(started) >= 20*time.Millisecond } // stands for a real request
+fmt.Println(back.Await(answers, 5*time.Millisecond, nil))                    // polls every 5 ms
+
+// Or mark the start and the end yourself:
+watch := back.Begin()
+// ... the server comes up ...
+watch.Done(nil) // or watch.Expire(nil) when you know it will not
+```
+
+`Await` blocks the goroutine that calls it.
+
+### Add a fault point (BUGGIFY)
+
+A fault point is a place where your program misbehaves on purpose: it drops a reply, fails a
+write, waits too long. Normally the point does nothing (`Fire` returns false). hydo can turn
+points on for a run, so that faults happen where only your program can make them. FoundationDB
+calls this technique BUGGIFY.
+
+```go
+lostReply := hydoassert.Buggify("kv.lost_reply_point", "the write lands but its reply is lost")
+slowDisk := hydoassert.Buggify("kv.slow_disk", "a write takes 10 ms longer")
+
+reply := "OK"
+if lostReply.Fire(nil) {
+	reply = "" // misbehave: the client never gets the reply
+}
+if slowDisk.Fire(hydoassert.D{"key": "a"}) {
+	time.Sleep(10 * time.Millisecond)
+}
+```
+
+To let hydo turn the points on, add `buggify: true` to the project's `hydo.yaml` and explore
+with `hydo explore --buggify`. Each run then gets a seed that turns some points on, and a point
+that is on fires on some of its calls. To try it outside hydo, set
+`HYDO_BUGGIFY=<seed in hex>,<points on, per mille>,<calls that fire, per mille>`; for example
+`HYDO_BUGGIFY=2a,1000,1000` makes every point fire every time.
+
+### Record an operation history
+
+hydo can check a whole history of operations after a run: is every read consistent with the
+writes before it (linearizability per key), or do list appends ever go missing? Your workload's
+client records each operation twice: when it starts (`Invoke`) and when the outcome is known.
+
+```go
+kv := hydohist.New("kv")
+write := kv.Invoke(3, "write", "k1", hydohist.Enc("v1")) // client 3, before the request
+// ... send the request, then record the outcome:
+write.Ok() // it happened; Fail(): it did not; Info(): the outcome is unknown
+read := kv.Invoke(3, "read", "k1")
+read.Ok("k1", hydohist.ValOrNil("v1", true))
+```
+
+Then name the history in the project's `hydo.yaml`:
+
+```yaml
+checks:
+  - id: kv.linearizable
+    type: linearizable
+    model: register
+    history: kv
+    msg: every read sees the latest acknowledged write
+```
+
+`hydo guide checks` describes the checks and their options.
+
+### Choose where the records go
+
+Under hydo the records go to the guest's console (`/dev/ttyS0` for properties, `/dev/console`
+for histories), which hydo reads even when the program's standard output goes to a log file.
+Outside hydo, where the console cannot be opened, they go to standard error. Two variables
+change this, and each is read once, at the first record:
+
+- `HYDO_ASSERT_OUT`: a path of an existing file, `stderr`, or `off` for the properties;
+- `HYDO_HIST_OUT`: a path (created if missing), `stderr`, or `off` for the histories.
+
+### Build a program for a hydo guest
+
+A hydo guest runs static Linux programs:
+
+```sh
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o server .
+```
+
+Use `GOARCH=arm64` for hydo on a Mac. A complete project is the stack example, an order
+service on MySQL, Kafka and Redis:
+<https://github.com/kakoc/hydo/tree/main/hydo/onboard/examples/stack>.
+
+## Reference
+
+- The API and its examples: <https://pkg.go.dev/github.com/kakoc/hydo/sdk/go/hydoassert> and
+  <https://pkg.go.dev/github.com/kakoc/hydo/sdk/go/hydohist>.
+- The records and how hydo judges each kind of property:
+  <https://github.com/kakoc/hydo/blob/main/hydo/ASSERTIONS.md>.
+- The history format and the checkers:
+  <https://github.com/kakoc/hydo/blob/main/hydo/HISTORIES.md>.
+- The same SDK for Rust, Python and JavaScript writes the same records, byte for byte:
+  <https://github.com/kakoc/hydo/tree/main/sdk>.
+
+Rules of this module:
+
+- The catalog (`Catalog()`) lists the properties in the order they were declared. Call it once,
+  early, in the process whose console hydo reads.
+- Details are encoded by `encoding/json`, which writes map keys in sorted order. A record whose
+  details cannot be encoded (a NaN, an infinity) is not written.
+- Every call is safe from several goroutines: one lock, held only while a record is written.
+- The packages are named `hydoassert` and `hydohist` because a Go package name cannot contain a
+  hyphen.
+- A history's process is an int; its arguments are tokens (encode free-form values with `Enc`).
+  A process has at most one operation in flight: give each goroutine that acts as a client its
+  own process number.
 
 ## License
 
-Apache-2.0 ([`LICENSE`](LICENSE), a copy of the repository's, so that the module's zip carries
-it; the test above checks that the copy is the same).
+Apache-2.0.

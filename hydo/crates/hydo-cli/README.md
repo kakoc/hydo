@@ -1,58 +1,111 @@
-# hydo
+# hydo: deterministic fault testing of whole systems
 
-hydo runs your software in a deterministic virtual machine and injects faults: process kills,
-pauses, network faults, power cuts, clock jumps, disk errors and a disk that loses acknowledged
-writes. Every run is deterministic, so each failure it finds comes back as a short schedule
-string that replays bit for bit.
+hydo runs your system inside a deterministic virtual machine and injects faults into it. You
+describe the system once: its services, a workload that uses them, and checks of what must
+stay true (for example "every write the client saw acknowledged can still be read"). hydo then
+runs the workload under process kills and pauses, network faults, power cuts, clock jumps,
+disk errors and a disk that loses writes it acknowledged.
 
-It runs on an Apple Silicon Mac (Hypervisor.framework, no root) and on x86_64 Linux (its own
-VT-x kernel module on bare metal, or stock KVM).
+Every run is deterministic: the same *schedule* (a one-line description of a run and its
+faults) gives the same run, bit for bit. So when hydo finds a failure, it gives you a short
+schedule that replays it exactly, as often as you need while you debug it.
+
+The services run unmodified, from their own binaries or from Docker images. hydo runs on an
+Apple Silicon Mac (macOS 13 or later, no root needed) and on x86_64 Linux (with hydo's own
+kernel module on an Intel machine, or with stock KVM).
 
 ## Install
 
 ```sh
 cargo install hydo
 hydo setup
-```
-
-`cargo install hydo` builds the `hydo` command. The rest of a hydo installation is not Rust
-code and is not built by cargo: the guest kernels, the guest tools and programs, and the run
-engine as its own program (`hydo-hvm` on a Mac, which must carry the hypervisor entitlement;
-`hydo-hvx` and `hydo-kvm` on Linux). `hydo setup` (for a `hydo` installed by cargo the same as
-`hydo setup --get`) downloads them once from the GitHub release of the same version, checks every file by sha256, signs the Mac engine on your Mac,
-and keeps them in `~/.hydo/versions/<version>` (`$HYDO_HOME` names another place). The installed
-`hydo` uses that directory as its installation. Nothing is downloaded again on later runs, and
-`hydo setup` on a complete installation does nothing.
-
-Then check the machine:
-
-```sh
 hydo doctor
 ```
 
-`hydo guide`, `hydo init` and `hydo skill install` work right after `cargo install`, before
-anything is downloaded: the onboarding guide is built into the program.
+`cargo install hydo` builds only the `hydo` command. `hydo setup` downloads the rest of the
+installation from the GitHub release of the same version: the guest kernels, the programs that
+run inside the virtual machine, the examples and the engine program. It checks every file by
+sha256 and keeps them in `~/.hydo/versions/<version>` (set `HYDO_HOME` to use another
+directory). Running it again does nothing. `hydo doctor` checks the machine and the
+installation, and names the fix for anything that is missing.
 
-## First run
+Other ways to install: Homebrew on a Mac (`brew install kakoc/tap/hydo`), or the release
+archive for your platform from <https://github.com/kakoc/hydo/releases>.
+
+## A first run
+
+The installation contains a ready example: Redis with its append-only log on a virtual disk, a
+workload that writes 20 keys, and one check, "every write the client saw acknowledged is still
+there afterwards". Copy it, build its guest image and run two schedules:
 
 ```sh
 cp -R ~/.hydo/versions/0.2.0/examples/redis ~/hydo-redis && cd ~/hydo-redis
 hydo build hydo.yaml
 hydo run "disk=none | run"
 hydo run "disk=cut | run C=12 R=everysec"
+```
+
+- `disk=none | run` runs the workload without faults. The run passes.
+- `disk=cut | run C=12 R=everysec` sets Redis to write its log to disk once a second
+  (`R=everysec`) and cuts the power after write 12 (`C=12`). `disk=cut` makes the disk lose
+  every write it had not flushed. The check fails: a key that the client saw acknowledged is
+  gone. This is the loss window that Redis documents for `everysec`.
+
+Each run prints a `RESULT` line with the verdict and a fingerprint of the run (`fp=`). Run
+either command again and the fingerprint is the same.
+
+Then let hydo look for failures by itself:
+
+```sh
 hydo explore --seeds 1-20 --strategy swarm
 hydo report
 ```
 
-The first run passes; the second shows Redis's documented `everysec` window (an acknowledged
-key lost at a power cut), and running it again gives the same fingerprint (`fp=`).
+`hydo explore` makes one schedule from each seed, runs them all, runs every failure again to
+confirm that it replays, and shrinks each kind of failure to a minimal schedule. `hydo report`
+prints what it found.
 
-## More
+On Linux, a run uses hydo's kernel module (`hydo module install` builds and loads it, with
+sudo). Without the module, add `--backend kvm` to `hydo run` and `hydo explore` to use stock
+KVM instead.
 
-The project's repository has the manuals: the project format (`hydo.yaml`), the faults, the
-schedule language, the assertion SDKs and the onboarding guide for AI tools
-(`hydo guide`). The tarball releases on the same GitHub page are the other way to install: one
-archive per platform with everything in it.
+## Test your own system
 
-License: Apache-2.0 (this crate and the other hydo crates). The Linux kernel module that a
-Linux installation can build is GPL-2.0 and is not part of this crate.
+```sh
+cd your-repository
+hydo init
+hydo build hydo/hydo.yaml --check
+```
+
+`hydo init` starts a `hydo/` folder: `hydo/hydo.yaml` names the services and how to start
+them, `hydo/workload/` holds the commands that use the system, and `hydo/checks/` holds the
+checks. `hydo build hydo/hydo.yaml --check` checks the folder without building an image. If
+the system has a Docker Compose file, `hydo compose docker-compose.yaml` writes a starting
+`hydo.yaml` from it.
+
+The guide built into `hydo` has every fact you need to fill the folder: start with
+`hydo guide workflow`, and `hydo guide` lists the other topics. An AI coding tool can do the
+work: `hydo skill install --agent claude` (or `codex`, `cursor`, `copilot`, `gemini`) installs
+hydo's onboarding skill where the tool reads skills.
+
+Programs can also describe what must hold from the inside, with hydo's assertion SDKs for Rust
+([hydo-assert](https://crates.io/crates/hydo-assert)), Python
+([hydo-assert](https://pypi.org/project/hydo-assert/)), JavaScript
+([hydo-assert](https://www.npmjs.com/package/hydo-assert)) and Go
+([github.com/kakoc/hydo/sdk/go](https://pkg.go.dev/github.com/kakoc/hydo/sdk/go)).
+`hydo guide sdks` says how.
+
+## Reference
+
+- `hydo --help` lists every command, and `hydo guide` the guide's topics.
+- The project format (`hydo.yaml` and the `hydo/` folder):
+  <https://github.com/kakoc/hydo/blob/main/hydo/onboard/MANIFEST.md>
+- The faults and the schedule language: `hydo guide faults`.
+- What the assertion records mean and how hydo judges them:
+  <https://github.com/kakoc/hydo/blob/main/hydo/ASSERTIONS.md>
+- The source code, the issues and the releases: <https://github.com/kakoc/hydo>
+
+## License
+
+Apache-2.0, for this crate and every other hydo crate. A Linux installation can also build
+hydo's kernel module, which is GPL-2.0 and is not part of this crate.

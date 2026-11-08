@@ -114,7 +114,7 @@ pub struct PlanService {
     pub restart_may_fail: bool,
 }
 
-/// One invariant (manifest.sh's HYDO_INV_<k>_*).
+/// One invariant (manifest.sh's `HYDO_INV_<k>_*`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlanInvariant {
     /// The init's key (`i0`, `i1`, ...).
@@ -129,7 +129,7 @@ pub struct PlanInvariant {
     /// Checked for the verdict (never for an `eventually` invariant).
     pub final_: bool,
     /// `type: eventually`: its deadline, anchor and poll interval (manifest.sh's
-    /// HYDO_INV_<k>_within/after/poll; hydo-liveness.sh).
+    /// `HYDO_INV_<k>_within/after/poll`; hydo-liveness.sh).
     pub live: Option<PlanLive>,
 }
 
@@ -144,7 +144,7 @@ pub struct PlanLive {
     pub poll: i64,
 }
 
-/// One knob (manifest.sh's HYDO_KNOB_<token>_*).
+/// One knob (manifest.sh's `HYDO_KNOB_<token>_*`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlanKnob {
     pub token: String,

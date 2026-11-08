@@ -1,216 +1,272 @@
-# hydo-assert: the Python assertion SDK
+# hydo-assert for Python
 
-A Python program running under hydo (the deterministic hypervisor of
-[github.com/kakoc/hydo](https://github.com/kakoc/hydo)) uses this package to say what must be
-true and what should happen at least once. It writes the same console records as the Go SDK
-(`sdk/go`), byte for byte, with the same deduplication rules, so `hydo run` and the explorer
-(`hydo explore`) read them unchanged. The wire format and the verdict
-rules are in `hydo/ASSERTIONS.md` of that repository; paths below are relative to it.
+[hydo](https://github.com/kakoc/hydo) runs a whole system in a deterministic virtual machine,
+injects faults (process kills, network faults, power cuts, disk errors) and replays every
+failure bit for bit. This package lets a Python program that runs under hydo say, from the
+inside, what must be true and what should happen. hydo collects what the program reports, and
+an exploration (many runs with different faults) reports each property as passed, failed (with
+a schedule that replays the failure) or never exercised.
 
-- Distribution name `hydo-assert`, import name `hydo_assert`.
-- Standard library only; Python 3.8 or later; thread-safe and safe to call from asyncio code.
-- Install it from PyPI (`pip install hydo-assert`), or from a checkout (`pip install ./sdk/python`),
-  or put `sdk/python/src` on `PYTHONPATH`, or copy `src/hydo_assert/` into the guest image (the
-  `hydo/onboard/examples/python-kv` example does that).
+The package uses only the standard library and needs Python 3.8 or later. Outside hydo it does
+almost nothing: the records go to standard error (or nowhere), and fault points stay off.
 
-## Use
+## Install
+
+```sh
+pip install hydo-assert
+```
+
+The distribution is `hydo-assert`; the module is `hydo_assert`. In a guest image without pip,
+copy the folder `hydo_assert` onto the program's `PYTHONPATH`.
+
+## A complete program
+
+A small key/value store that declares three properties and checks them:
 
 ```python
 import hydo_assert as ha
 
-# Declare at module level: the catalog is complete once the module is imported.
-ACKED = ha.always("kv.acked_durable", "every acknowledged PUT reads back with its value")
-PARSES = ha.always_or_unreachable("kv.log_parses", "every complete log line parses on replay")
-SIZE = ha.always("kv.log_size", "the log holds at most 10000 entries")
-REPLAYED = ha.sometimes("kv.recovered", "the server replayed a non-empty log at start")
-TORN = ha.reachable("kv.torn_tail", "the log ended in a partial line")
-BAD = ha.unreachable("kv.bad_command", "the server got a command it does not know")
-BACK = ha.eventually("kv.back", "the server answers within 5 s", 5.0)        # seconds or timedelta
-LOST = ha.buggify("kv.put.lost_reply", "the PUT is logged but its reply is lost")
+READ_BACK = ha.always("kv.read_back", "every acknowledged write reads back with its value")
+OVERWRITE = ha.sometimes("kv.overwrite", "a write replaced an existing value")
+LOST_REPLY = ha.buggify("kv.lost_reply", "the write lands but its reply is lost")
 
-ha.catalog()                                       # once, early: the HYDO-ASSERT-DECL lines
-ACKED.check(got == want, {"key": k, "got": got})   # returns bool(cond)
-REPLAYED.check(n > 0, {"entries": n})
-TORN.hit({"bytes": len(tail)})
-BAD.hit()
-SIZE.cmp(n, "<=", 10000)                           # details: left, op, right
-if LOST.fire({"key": k}):                          # BUGGIFY fault point
-    return
-BACK.await_cond(lambda: ping() == "PONG", poll=0.2)   # blocks; one record
-w = BACK.begin(); ...; w.done()                    # or: anchor now, condition true now / w.expire()
-ha.setup_complete()                                # HYDO-SETUP-COMPLETE
+
+def main():
+    ha.catalog()  # list every property, also the ones that never run
+    store = {}
+    ha.setup_complete()  # the system is ready: hydo may start injecting faults
+
+    for key, value in [("a", 1), ("b", 2), ("a", 3)]:
+        old = store.get(key)
+        store[key] = value
+        OVERWRITE.check(old is not None, {"key": key})
+        if LOST_REPLY.fire({"key": key}):
+            continue  # the client never hears back (only when hydo turns this point on)
+        acked = store.get(key) == value
+        READ_BACK.check(acked, {"key": key, "value": value})
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-In asyncio code use `await BACK.await_async(cond, poll)`: `cond` may be a plain function or an
-`async def`, and the wait between checks is `asyncio.sleep`. Every other call is a short write
-to the console under one process-wide lock that is never held across a blocking call or an
-`await`, so it is safe from coroutines and from threads.
+Run it with `HYDO_ASSERT_OUT=stderr` to see what it reports. It writes these lines (under hydo
+they go to the guest's console, where hydo reads them):
 
-| Go SDK (`hydoassert`) | Python (`hydo_assert`) |
-|---|---|
-| `Always(id, msg)`, `AlwaysOrUnreachable`, `Sometimes`, `Reachable`, `Unreachable` | `always(id, msg)`, `always_or_unreachable`, `sometimes`, `reachable`, `unreachable` (return an `Assertion`) |
-| `a.Check(cond, d)`, `a.Hit(d)` | `a.check(cond, details=None)`, `a.hit(details=None)` |
-| `a.Cmp(left, op, right, d)` | `a.cmp(left, op, right, details=None)` (`op` is one of `<`, `<=`, `==`, `!=`, `>=`, `>`) |
-| `Eventually(id, msg, within)`, `l.Await(cond, poll, d)`, `l.Begin()`, `w.Done(d)`, `w.Expire(d)` | `eventually(id, msg, within)`, `l.await_cond(cond, poll, details=None)`, `await l.await_async(cond, poll, details=None)`, `l.begin()`, `w.done(details=None)`, `w.expire(details=None)` |
-| `Buggify(id, msg)`, `p.Fire(d)` | `buggify(id, msg)`, `p.fire(details=None)` |
-| `Catalog()`, `SetupComplete()` | `catalog()`, `setup_complete()` |
-| `D{...}` | any mapping (a `dict`); `hydo_assert.D` is `dict` |
+```text
+HYDO-ASSERT-DECL {"t":"always","id":"kv.read_back","msg":"every acknowledged write reads back with its value"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"kv.overwrite","msg":"a write replaced an existing value"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.kv.lost_reply","msg":"fault point fired: the write lands but its reply is lost"}
+HYDO-SETUP-COMPLETE
+HYDO-ASSERT {"t":"always","id":"kv.read_back","ok":true,"msg":"every acknowledged write reads back with its value","details":{"key":"a","value":1}}
+HYDO-ASSERT {"t":"sometimes","id":"kv.overwrite","ok":true,"msg":"a write replaced an existing value","details":{"key":"a"}}
+```
 
-The naming follows the other SDKs (`sdk/js`, `sdk/rust`): the Go names in Python's snake case,
-and `await_cond` / `await_async` for Go's `Await`. That table, `Liveness`, `Watch` and `Point`
-(the classes the calls return) and the history recorder below are the whole API: a comparison
-has one form, `cmp` with its operator, and names that start with `_` (the modules `_core`,
-`_buggify`, `_eventually`, `_json`, `_sink`) are the package's own.
+A process writes each outcome of a property once: the first pass and the first failure, with
+the details of that evaluation. That is why the later passes of `kv.read_back` write nothing.
 
-## Records, deduplication, catalog
+## How to
 
-- Records go to `/dev/ttyS0` (opened once, `O_WRONLY|O_APPEND|O_NOCTTY`, one `write` per
-  record). `HYDO_ASSERT_OUT=<path>` writes to that existing file, `stderr` to standard error
-  (plain logging outside hydo), `off` nowhere, and `logging` (Python only) logs each record line
-  at INFO on the logger `hydo_assert`. If the file cannot be opened, standard error is used.
-- A process writes each (assertion, outcome) pair once: the first pass and the first failure,
-  with the details of that evaluation. A `sometimes` that evaluated false is never written.
-  `unreachable` is written with `ok:false`. A record whose details hold a NaN or an infinity is
-  not written at all, but still counts as written (as in Go, where `json.Marshal` fails after
-  the pair was marked).
-- The catalog (`catalog()`) lists every declared assertion in declaration order: the order in
-  which the declaring statements ran, which for module-level declarations is the import order.
-  A module that is never imported contributes nothing; import it before calling `catalog()`.
-  Call `catalog()` in the process whose console output is collected for each run (for a
-  server started before the explorer's snapshot point, that is a client or the oracle, not the
-  server; see the example).
-- Details are encoded exactly as Go's `encoding/json` encodes the equivalent Go value: keys in
-  UTF-8 byte order, `<`, `>`, `&`, U+2028 and U+2029 escaped, other non-ASCII text raw, Go's
-  float format (`1e+21`, `1.5e-7`, `3` for `3.0`, `-0`). The caller's dict is never changed
-  (Go adds `left`/`op`/`right`, `hit`, `elapsed_ms` to the caller's map; Python adds them to a
-  copy, which gives the same record).
-- Python values Go has no form for: a tuple is an array; `bytes` is a base64 string (as Go
-  encodes `[]byte`); a set is an array sorted by encoded element; integer dict keys are written
-  in decimal; any other object is the string `str(obj)`. A lone surrogate (an undecodable byte
-  read with `surrogateescape`) is written as `\ufffd`, as the pinned guest Go 1.26.5 writes an
-  invalid UTF-8 byte (Go 1.27 writes a raw U+FFFD instead).
-- `details` that is not a mapping is wrapped as `{"value": details}`.
-- After `os.fork()` the child keeps the parent's deduplication state (it is one program's
-  history) and gets fresh locks.
+### Declare properties and check them
 
-## BUGGIFY
+A property has an id (stable across versions of your program) and a message for people. Its
+kind says what hydo expects:
 
-Same decisions as the Go SDK: configured by `$HYDO_BUGGIFY`, or else the file
-`$HYDO_BUGGIFY_FILE` (default `/tmp/hydo-buggify`), holding
-`<seed-hex>[,<enable-permille>[,<fire-permille>]]` (defaults 250 and 250, FoundationDB's
-values), parsed as Go's `strconv.ParseUint` does (no `0x`, no sign, no spaces inside a field;
-an unparsable seed leaves BUGGIFY off, an unparsable permille keeps its default). It is read
-once, at the first evaluation of any point, which also writes
-`HYDO-BUGGIFY {"seed":..,"enable_pm":..,"fire_pm":..,"enabled":[..]}`. A point is enabled
-for the run when `splitmix64(seed ^ fnv1a(id)) % 1000 < enable`; its k-th evaluation fires
-when `splitmix64(splitmix64(seed ^ fnv1a(id)) + k·0x9e3779b97f4a7c15) % 1000 < fire`. Each
-point is also a `sometimes` property `buggify.<id>` ("fault point fired: <msg>"), recorded at
-its first firing with `{"hit": k}`. Without a configuration every point returns False and has
-no other effect. Under hydo the schedule token `B=<seed>` (`hydo explore --buggify`) reaches the
-file through the guest init: an onboarded project gets it with `buggify: true` in its
-`hydo.yaml` (`hydo/onboard/MANIFEST.md`).
+| kind | the property holds when | hydo reports a failure when |
+|---|---|---|
+| `always` | the condition is true every time, and it is checked at least once | it is false once, or never checked |
+| `always_or_unreachable` | the condition is true every time it is checked | it is false once |
+| `sometimes` | the condition is true at least once in an exploration | it is never true |
+| `reachable` | the code is reached at least once in an exploration | it is never reached |
+| `unreachable` | the code is never reached | it is reached |
 
-## History recorder
+Declare properties at module level, so that the catalog lists them once the module is
+imported:
 
-The module `hydo_assert.history` records operation histories for hydo's host-side checkers
-(linearizability of a register or compare-and-set object per key, and Elle-style list-append;
-the format and the checkers are in `hydo/HISTORIES.md`). It writes the same `HYDO-HIST` lines as
-the Go recorder (`sdk/go/hydohist`), byte for byte except the time field. It is a separate
-module: `import hydo_assert` does not load it, so the assertion records are unchanged.
+```python
+import hydo_assert as ha
+
+STORED = ha.always("kv.stored", "every acknowledged write is stored")
+PARSES = ha.always_or_unreachable("kv.log_parses", "every complete log line parses")
+RETRIED = ha.sometimes("kv.retried", "a client retried a request")
+RECOVERED = ha.reachable("kv.recovered", "the server replayed a non-empty log")
+UNKNOWN = ha.unreachable("kv.unknown_command", "the server got a command it does not know")
+
+STORED.check(True, {"key": "a"})  # returns the condition
+PARSES.check(True)  # the details are optional
+RETRIED.check(False)  # a false `sometimes` writes nothing
+RECOVERED.hit({"entries": 3})
+command = "GET"
+if command not in ("GET", "SET"):
+    UNKNOWN.hit({"command": command})
+```
+
+### Compare two values
+
+`cmp` checks `left op right` and puts both values and the operator into the details, so a
+failure shows them:
+
+```python
+import hydo_assert as ha
+
+LOG_SIZE = ha.always("kv.log_size", "the log stays under its cap")
+size = 12
+LOG_SIZE.cmp(size, "<=", 10000)  # details: {"left":12,"op":"<=","right":10000}
+```
+
+The operator is one of `<`, `<=`, `==`, `!=`, `>=` and `>`.
+
+### Check that something happens in time (eventually)
+
+An `eventually` property says "after this point, the condition becomes true within a deadline",
+for example "after a restart the server answers within 5 seconds". Time inside a hydo guest is
+deterministic, so the verdict is the same on every replay.
+
+```python
+import time
+
+import hydo_assert as ha
+
+BACK = ha.eventually("kv.back", "the server answers within 5 s of its start", 5.0)  # seconds
+started = time.monotonic()
+
+
+def answers():
+    return time.monotonic() - started >= 0.02  # stands for a real request
+
+
+assert BACK.await_cond(answers, poll=0.005)  # polls every 5 ms
+
+# Or mark the start and the end yourself:
+watch = BACK.begin()
+# ... the server comes up ...
+watch.done()  # or watch.expire() when you know it will not
+```
+
+`await_cond` blocks the thread. In asyncio code use `await_async`, whose condition may be a
+plain function or a coroutine function:
+
+```python
+import asyncio
+
+import hydo_assert as ha
+
+BACK = ha.eventually("kv.back_async", "the server answers within 5 s", 5.0)
+
+
+async def answers():
+    return True
+
+
+async def main():
+    assert await BACK.await_async(answers, 0.1)
+
+
+asyncio.run(main())
+```
+
+### Add a fault point (BUGGIFY)
+
+A fault point is a place where your program misbehaves on purpose: it drops a reply, fails a
+write, waits too long. Normally the point does nothing (`fire` returns false). hydo can turn
+points on for a run, so that faults happen where only your program can make them. FoundationDB
+calls this technique BUGGIFY.
+
+```python
+import time
+
+import hydo_assert as ha
+
+LOST_REPLY = ha.buggify("kv.lost_reply_point", "the write lands but its reply is lost")
+SLOW_DISK = ha.buggify("kv.slow_disk", "a write takes 10 ms longer")
+
+reply = "OK"
+if LOST_REPLY.fire():
+    reply = None  # misbehave: the client never gets the reply
+if SLOW_DISK.fire({"key": "a"}):
+    time.sleep(0.01)
+print(reply)
+```
+
+To let hydo turn the points on, add `buggify: true` to the project's `hydo.yaml` and explore
+with `hydo explore --buggify`. Each run then gets a seed that turns some points on, and a point
+that is on fires on some of its calls. To try it outside hydo, set
+`HYDO_BUGGIFY=<seed in hex>,<points on, per mille>,<calls that fire, per mille>`; for example
+`HYDO_BUGGIFY=2a,1000,1000` makes every point fire every time.
+
+### Record an operation history
+
+hydo can check a whole history of operations after a run: is every read consistent with the
+writes before it (linearizability per key), or do list appends ever go missing? Your workload's
+client records each operation twice: when it starts (`invoke`) and when the outcome is known.
 
 ```python
 from hydo_assert import history as hh
 
 kv = hh.History("kv")
-op = kv.invoke(3, "write", "k1", hh.enc(v))      # process 3, before the request
-try:
-    rev = put("k1", v)
-    op.ok("k1", hh.ver(v, rev))                  # the version the store assigned, if any
-except Rejected:
-    op.fail()                                    # it definitely had no effect
-except Exception:
-    op.info()                                    # a timeout: the outcome is unknown
-kv.invoke(3, "read", "k1").ok("k1", hh.value_or_nil(get("k1")))   # None means absent
-
-la = hh.History("la")
-tx = la.invoke(4, "txn", hh.append_mop("x", "1"), hh.read_mop("y"))
-tx.ok(hh.append_mop("x", "1"), hh.read_result_mop("y", "1", "2"))
+write = kv.invoke(3, "write", "k1", hh.enc("v1"))  # client 3, before the request
+# ... send the request, then record the outcome:
+write.ok()  # it happened; fail(): it did not; info(): the outcome is unknown
+read = kv.invoke(3, "read", "k1")
+read.ok("k1", hh.value_or_nil("v1"))
 ```
 
-| Go (`hydohist`) | Python (`hydo_assert.history`) |
-|---|---|
-| `New(name)` | `History(name)` |
-| `h.Invoke(proc, f, args...)`, `h.Record(proc, typ, f, args...)` | `h.invoke(proc, f, *args)`, `h.record(proc, typ, f, *args)` |
-| `op.Ok(args...)`, `op.Fail()`, `op.Info()` | `op.ok(*args)` (no args repeats the invocation's), `op.fail()`, `op.info()` |
-| `Enc`, `Ver`, `ValOrNil(v, ok)`, `List` | `enc`, `ver`, `value_or_nil(v)` (None means absent), `list_value` |
-| `Append`, `Read`, `ReadResult`, `Nil` | `append_mop`, `read_mop`, `read_result_mop`, `NIL` |
+Then name the history in the project's `hydo.yaml`:
 
-- `list_value` has a longer name than Go's `List` so that it does not hide the builtin `list`
-  for a program that uses `from hydo_assert.history import *`. The micro-op helpers have the
-  Rust SDK's names.
-- A process is an int or a token without spaces. Arguments are tokens: a `str` is written as
-  it is (encode free-form values with `enc`), an `int` is written in decimal, and `bytes` are
-  written as they are. Versions are int64 values; a value outside that range raises
-  `ValueError`, and a value that is not an int (including `bool`) raises `TypeError`.
-- Records go to `/dev/console`. `HYDO_HIST_OUT=<path>` appends to that file and creates it if
-  it is missing (mode 0644), `stderr` writes to standard error, and `off` writes nothing. If the
-  file cannot be opened, standard error is used. The setting is read once, at the first record,
-  and is separate from `HYDO_ASSERT_OUT`.
-- Each record is one `os.write` call made under a lock, so threads never interleave lines. The
-  time field is `time.monotonic_ns()` (CLOCK_MONOTONIC on Linux, deterministic under hydo). It
-  is read under the lock, so the times of successive lines never decrease; Go reads it just
-  before its lock, and the line format is the same. A forked child gets a new lock and keeps the
-  descriptor.
-- Text is written as UTF-8. A `str` is encoded with the `surrogateescape` rule, so a string
-  that came from bytes that way (`os.fsdecode`, `sys.argv`, `os.environ`, or `enc` of bytes)
-  gives back its original bytes. Any other lone surrogate is written as U+FFFD. `enc` of
-  `bytes` keeps invalid UTF-8 bytes as they are, as Go's `Enc` does, and returns them as
-  surrogateescape characters.
-- A process has at most one operation in flight: give each concurrent client (thread or task)
-  its own process number. Record the invocation before sending the request and the completion
-  after the reply, because the checkers order operations by the position of their records.
+```yaml
+checks:
+  - id: kv.linearizable
+    type: linearizable
+    model: register
+    history: kv
+    msg: every read sees the latest acknowledged write
+```
 
-## Determinism
+`hydo guide checks` describes the checks and their options.
 
-The records are a pure function of the program's evaluation sequence: no clocks (except the
-guest's monotonic clock for `eventually`, which hvx makes deterministic), no host state,
-catalog in declaration order, sorted keys. A Python program is itself deterministic under hydo:
-the guest CRNG is seeded identically every run, so even the hash seed is the same; setting
-`PYTHONHASHSEED=0` makes that independent of the CRNG. `PYTHONDONTWRITEBYTECODE=1` avoids
-writing `.pyc` files on the guest's read-only root.
+### Choose where the records go
 
-## Tests
+Under hydo the records go to the guest's console (`/dev/ttyS0` for properties, `/dev/console`
+for histories), which hydo reads even when the program's standard output goes to a log file.
+Outside hydo, where the console cannot be opened, they go to standard error. Two variables
+change this, and each is read once, at the first record:
 
-- `python3 -m unittest discover -s sdk/python/tests`: the encoder (Go's float and string
-  forms), deduplication, details not mutated, NaN, catalog order, 16 threads writing 2000
-  evaluations each without an interleaved line, asyncio `eventually`, fork, BUGGIFY decisions
-  and rates. Passes on Python 3.8.20 and 3.15.0.
-- `tests/test_cases.py` (run by the same `unittest` command): the shared cases (`sdk/cases`,
-  written by the reference SDK, `sdk/rust`; format and rules in `sdk/rust/README.md`, "The
-  shared cases"). For every case and run it starts itself as a child process, makes the
-  case's calls with this package and `hydo_assert.history`, and compares the bytes the sink
-  received and the calls' results with the case's files: every assertion type, comparisons,
-  details with tricky values (invalid UTF-8 as `surrogateescape` characters), the catalog,
-  `eventually`, BUGGIFY under 18 configurations, `HYDO_ASSERT_OUT`, and the
-  history records with every helper and `HYDO_HIST_OUT` setting. Cases that need a float32
-  (`f32`) are skipped and listed. To add a case, add it to the Rust SDK's
-  `tests/cases/defs.rs` and run `HYDO_BLESS=1 cargo test --test cases` there; this test then
-  runs it. A format change starts in the Rust SDK too: after it is blessed, this test fails on
-  the lines this package must change. No other language is needed to run it. Passes on Python
-  3.8.20 and 3.15.0.
-- `tests/test_history.py` (run by the same `unittest` command): the exact lines of the Go
-  recorder's own unit test, the encoding of every byte class, the argument checks, the sink
-  settings, one `os.write` per record, 8 threads writing 400 records each without an
-  interleaved line, and fork.
-- The files of `src/hydo_assert/` are copied into the python-kv example's images, so a change
-  to any of them changes those images' bytes and every python-kv fingerprint (the last such
-  change, a reworded comment in `_core.py`, re-recorded them in milestone 157;
-  docs/REBASELINE.md has the values).
+- `HYDO_ASSERT_OUT`: a path of an existing file, `stderr`, `off`, or `logging` (each record
+  logged at INFO on the logger `hydo_assert`) for the properties;
+- `HYDO_HIST_OUT`: a path (created if missing), `stderr`, or `off` for the histories.
 
-## Limits
+### Run a Python program in a hydo guest
 
-- No call-site form that registers itself before it runs (the Rust SDK's macros do that with a
-  linker section). A Python assertion is in the catalog once the statement that declares it has
-  run, so declare at module level.
-- `cmp` compares any two Python values that support the operator; values that cannot be
-  compared evaluate to false. Go's `Cmp` takes only `int64`.
+Set `PYTHONHASHSEED=0` so that the program does not depend on a random hash seed, and
+`PYTHONDONTWRITEBYTECODE=1` because the guest's root file system is read-only. A complete
+project with a `hydo.yaml` is the python-kv example:
+<https://github.com/kakoc/hydo/tree/main/hydo/onboard/examples/python-kv>.
+
+## Reference
+
+- The API: the docstrings of `hydo_assert` and `hydo_assert.history` (`help(hydo_assert)`).
+- The records and how hydo judges each kind of property:
+  <https://github.com/kakoc/hydo/blob/main/hydo/ASSERTIONS.md>.
+- The history format and the checkers:
+  <https://github.com/kakoc/hydo/blob/main/hydo/HISTORIES.md>.
+- The same SDK for Rust, JavaScript and Go writes the same records, byte for byte:
+  <https://github.com/kakoc/hydo/tree/main/sdk>.
+
+Rules of this package:
+
+- The catalog (`catalog()`) lists the properties in the order they were declared, which for
+  module-level declarations is the import order. Call it once, early, in the process whose
+  console hydo reads.
+- Details are encoded as Go's `encoding/json` encodes the same values: keys in UTF-8 byte
+  order, a tuple or a set as an array, `bytes` as base64, any other object as `str(obj)`.
+  Details that are not a mapping are wrapped as `{"value": ...}`. A record whose details hold a
+  NaN or an infinity is not written. The caller's dict is never changed.
+- Every call is safe from threads and from asyncio code: one lock, never held across a blocking
+  call or an `await`. After `os.fork()` the child keeps the parent's record of what was written.
+- A history's process is an int or a token without spaces; its arguments are tokens (encode
+  free-form values with `enc`). Versions are int64 values. A process has at most one operation
+  in flight.
+
+## License
+
+Apache-2.0.

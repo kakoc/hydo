@@ -609,16 +609,66 @@ and audit. Other CI systems then need only a few lines around the same commands.
   ones once, in a recorded ledger event, instead of letting every finding look new.
 - `ci-run.json`, the ledger events and `ci.yaml` are versioned formats with schemas and the
   additions-only check of `hydo-schema-compat`, like every other hydo format.
-- Other CI systems (GitLab, Buildkite, Jenkins) come later, on demand: they run the same commands;
-  only the comment and the cache steps differ. Whether their hosted runners expose `/dev/kvm` was
-  not checked; self-hosted runners always work.
+- Other CI systems use the same command and files from the start (section 8.4); only the comment
+  and the cache steps differ. Whether their hosted runners expose `/dev/kvm` was not checked;
+  self-hosted runners always work.
+
+### 8.4 Every CI system, with no per-system logic (user, 2026-11-08)
+
+Teams use many CI systems (GitHub Actions, GitLab CI, CircleCI, Jenkins, Buildkite, Azure
+Pipelines, Tekton and others), each with its own interface, and real projects have complicated
+pipelines. hydo supports all of them without duplicating work, by keeping every decision in one
+command and making the per-system parts as small as possible.
+
+1. **One command, the same everywhere.** `hydo ci run` builds or reuses the image, explores,
+   compares with the base by replay, replays the regressions and decides pass or fail. It takes
+   its inputs from flags (`--commit`, `--base`, `--change`, `--mode`, `--project`) and
+   `hydo/ci.yaml`, and it writes only files and an exit code:
+   - `report.md`: the summary a person reads (a pull-request comment or a job summary).
+   - `junit.xml`: every finding and every regression as a test case, with the minimal schedule
+     and the reproduce command in its message. JUnit XML is the one test-report format that
+     GitLab, CircleCI, Jenkins, Azure Pipelines, Buildkite and GitHub all show without extra
+     code, as failed tests with their history.
+   - `ci-run.json`: the record that history and later comparisons read (section 4.1).
+   - the exit code: 0 or 1 by the team's `fail_on` policy, 2 for a run error.
+
+   A CI system that runs a shell command and keeps files works with this alone. That is the
+   generic recipe, and it covers every system hydo has no adapter for.
+2. **The only per-system code is a table of environment variables.** Each CI system names the
+   commit, the base branch, the change number and the run's URL in its own variables
+   (`GITHUB_SHA` and `GITHUB_BASE_REF`; `CI_COMMIT_SHA` and `CI_MERGE_REQUEST_TARGET_BRANCH_NAME`;
+   `CIRCLE_SHA1`; and so on). `hydo ci run` reads them from one table with a few lines per system,
+   and the flags always win. Adding a CI system means adding its lines to the table.
+3. **Comments and status checks stay outside hydo.** Posting a comment differs on every platform,
+   so hydo never calls a platform's API. A thin adapter, about 30 to 50 lines with no decisions in
+   it, posts `report.md`: the GitHub composite action (section 8.1), and a GitLab CI template as
+   the second adapter. Any other adapter can be written by a user, because it contains no logic.
+4. **History is independent of the CI system.** The store backends are a git branch (any git
+   host), a directory (any cache or mounted volume) and S3-compatible object storage (available
+   almost everywhere). None of them uses a CI system's API.
+5. **Complicated pipelines.** hydo does not take part in how a team builds or deploys. It tests
+   the system that the repository's `hydo/` folder describes, from the service images the team's
+   pipeline already builds: `hydo ci run` is one more job after the build job, and it takes the
+   image digests that job produced (`--image <service>=<digest>`, or the `build:` step of
+   `ci.yaml`). A monorepo with several systems runs `hydo ci run --project <dir>` once per system.
+   Argo CD deploys and does not test, so it is out of scope; Kubernetes-based CI (Argo Workflows,
+   Tekton, Jenkins on Kubernetes) runs hydo as a pod.
+6. **The real limit is the runner, not the interface.** hydo needs `/dev/kvm` (or the hvx module)
+   on the runner. GitHub's standard Linux runners have it (proven on 2026-11-08). On other hosted
+   CI it often needs a self-hosted runner, a larger machine type, or a Kubernetes node with a KVM
+   device plugin. The documentation states this per platform, with the command that checks it
+   (`hydo doctor --backend kvm`), so nobody has to find it out by trial.
+
+What hydo's maintainers build and test: `hydo ci run` with its environment table, the generic
+recipe as a documented page, the GitHub Action and the GitLab template. Everything else uses the
+generic recipe.
 
 ## 9. The evolution in stages
 
 | Stage | What a team gets | What hydo must add | Size |
 |---|---|---|---|
 | 0. Today, by hand | Install a release in a workflow, `hydo build`, `hydo explore --backend kvm`, `hydo repro --regressions`, upload `hydo-out/`. A red check on any failure. No comparison, no history, every pre-existing bug fails every pull request. | A documented example workflow. | Small: an example and a guide page. |
-| 1. A useful pull-request check | One comment per pull request: findings new to the change (proven on the base), fixed by it, still open; saved regressions; what ran (fault kinds, services, properties never reached, runs, time); the `hydo diff` of each new finding against the base; fails only by policy. KVM on standard runners, images reused by input key, two shards at most. | `engine.host_cpu`; the explorer cache key fixed; the finding key; `ci-run.json`; `hydo ci run` and `hydo ci compare` (base-image replay, regressions, report); `hydo/ci.yaml`; the image input key; the composite action. The base's open findings come from the base's last `ci-run.json` artifact. | Medium: about 3 milestones (roughly 3,000 to 4,000 lines of Rust with tests, plus the action). |
+| 1. A useful pull-request check | One comment per pull request: findings new to the change (proven on the base), fixed by it, still open; saved regressions; what ran (fault kinds, services, properties never reached, runs, time); the `hydo diff` of each new finding against the base; fails only by policy. KVM on standard runners, images reused by input key, two shards at most. | `engine.host_cpu`; the explorer cache key fixed; the finding key; `ci-run.json`; `hydo ci run` and `hydo ci compare` (base-image replay, regressions, `report.md`, `junit.xml`, the CI environment table: section 8.4); `hydo/ci.yaml`; the image input key; the composite action and the generic recipe. The base's open findings come from the base's last `ci-run.json` artifact. | Medium: about 3 milestones (roughly 3,000 to 4,000 lines of Rust with tests, plus the action). |
 | 2. History | The `hydo-history` branch: the ledger with new, present, fixed, reappeared, unverified and accepted; nightly deep runs with rotating seeds whose findings every pull request replays; `known-findings.yaml`; the history page (open findings, timeline, coverage trend, runs, hydo's health); proposed regression files when a finding is fixed. | `hydo ci record` and `page`; the store interface with the `dir:` backend; the ledger fold; the `workflow_run` recorder; budgets from history and `--time-limit`. | Medium: about 3 milestones. |
 | 3. Scale and depth | Many-shard nightly runs merged and shrunk once; the commit that introduced each new finding (bisection); `hydo ci reproduce` on a laptop; targeting changed services (once measured); self-hosted hvx runners for several vCPUs; an object-store backend. | `--shrink none`, `hydo ci merge`, `--shrink-from`; `hydo bisect`; `hydo ci reproduce`; `--focus` with a benchmark measurement; the object-store backend; the shared run cache. | Large: about 4 to 6 milestones, mostly independent of each other. |
 | 4. A hosted service | Cross-repository dashboards, a fleet of managed runners, a database, access control. | A server, its operation, its security, billing. | Very large, and a different kind of work. Not worth building until many teams use stages 2 and 3 and ask for it; the GitHub-native design covers a single team fully. |

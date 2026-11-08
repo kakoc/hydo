@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo-hvm: the Mac run engine in Rust (M143). It is `hv/hvm/hvm.c` (the deterministic arm64 VMM
 //! on Hypervisor.framework: the exit-count clock, the GICv2, the UART, PSCI, the interrupt
 //! delivery rule, tick jitter and forced preemption points), `hv/hvm/virtio*.c` (the block and

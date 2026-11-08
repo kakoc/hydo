@@ -281,8 +281,11 @@ failed (`docs/design/inspect.md`).
 
 **Onboarding and SDKs.** The skill `skills/hydo-onboard/` holds the process; every hydo fact is
 in the guide `hydo/guide/`, printed by `hydo guide <topic>`. The assertion SDKs are in `sdk/`
-(Rust is the reference), with the shared cases in `sdk/cases/`. The examples are in
-`hydo/onboard/examples/`; `hydo/onboard/MANIFEST.md` is the project format's reference.
+(Rust is the reference), with the shared cases in `sdk/cases/`. `sdk/README.md` is for SDK
+maintainers: the shared cases, and the Go module with its frozen copy in `hydo/stack` (section
+"The Go module and the frozen copy in `hydo/stack`"). Every code example on the package pages is a
+test in its language (M188). The examples are in `hydo/onboard/examples/`;
+`hydo/onboard/MANIFEST.md` is the project format's reference.
 
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
@@ -585,6 +588,7 @@ build machine, before 2026-10-13.
 - M185: one test program per crate
 - M186: registry packages published from GitHub Actions with trusted publishing
 - M187: the writing standard, Vale, a shorter AGENTS.md and a new README
+- M188: the package pages rewritten, every code example a test; `sdk/README.md` for SDK maintainers
 
 ## Where to look
 

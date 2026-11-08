@@ -1,231 +1,285 @@
-# hydo-assert: the Rust assertion SDK
+# hydo-assert for Rust
 
-A Rust program running under hydo (the deterministic hypervisor of
-[github.com/kakoc/hydo](https://github.com/kakoc/hydo)) uses this crate to say what must be true
-and what should happen at least once. It writes the same console records as the Go SDK
-(`sdk/go`), byte for byte, with the same deduplication rules, so `hydo run` and the explorer
-(`hydo explore`) read them unchanged. The wire format and the verdict
-rules are in `hydo/ASSERTIONS.md` of that repository; paths below are relative to it.
+[hydo](https://github.com/kakoc/hydo) runs a whole system in a deterministic virtual machine,
+injects faults (process kills, network faults, power cuts, disk errors) and replays every
+failure bit for bit. This crate lets a Rust program that runs under hydo say, from the inside,
+what must be true and what should happen. hydo collects what the program reports, and an
+exploration (many runs with different faults) reports each property as passed, failed (with a
+schedule that replays the failure) or never exercised.
 
-The crate uses only the standard library:
+The crate has no dependencies. Outside hydo it does almost nothing: the records go to standard
+error (or nowhere), and fault points stay off.
+
+## Install
 
 ```toml
 [dependencies]
-hydo-assert = "0.1"                                  # or { path = "../hydo/sdk/rust" } from a checkout
+hydo-assert = "0.2"
 ```
 
-## Use
+## A complete program
+
+A small key/value store that declares three properties and checks them:
 
 ```rust
-use hydo_assert::{declare, details, hydo_always, hydo_always_cmp, hydo_buggify, hydo_reachable, hydo_sometimes};
-use std::time::Duration;
+use hydo_assert::{declare, details};
+use std::collections::HashMap;
 
-declare! {   // named properties, in the catalog before main, in this order
-    static ACKED: always("kv.acked_durable", "every acknowledged write reads back with its value");
-    static RECOVERED: sometimes("kv.recovered", "the server replayed a non-empty log");
-    static BACK: eventually("kv.back", "the server answers within 5 s", Duration::from_secs(5));
-    static LOST_REPLY: buggify("kv.put.lost_reply", "the write lands but the reply is lost");
+declare! {
+    static READ_BACK: always("kv.read_back", "every acknowledged write reads back with its value");
+    static OVERWRITE: sometimes("kv.overwrite", "a write replaced an existing value");
+    static LOST_REPLY: buggify("kv.lost_reply", "the write lands but its reply is lost");
 }
 
 fn main() {
-    hydo_assert::catalog();                      // once, early, in one process: HYDO-ASSERT-DECL lines
-    ACKED.check(got == want, details! {"key": k, "got": got});
-    hydo_always!(len <= cap, "kv.log_size" => "the log stays under its cap", {"len": len});
-    hydo_sometimes!(retried, "a request needed a retry");      // no id given: the message is the id
-    hydo_reachable!("kv.torn_tail" => "the log ended in a partial line");
-    hydo_always_cmp!(len, "<=", cap, "kv.log_cap" => "len <= cap");   // details: left, op, right
-    if LOST_REPLY.fire(()) { return; }          // or inline: hydo_buggify!("id" => "message")
-    BACK.await_cond(|| ping().is_ok(), Duration::from_millis(100), ());
-    hydo_assert::setup_complete();               // HYDO-SETUP-COMPLETE
+    hydo_assert::catalog(); // list every property, also the ones that never run
+    let mut store = HashMap::new();
+    hydo_assert::setup_complete(); // the system is ready: hydo may start injecting faults
+
+    for (key, value) in [("a", 1), ("b", 2), ("a", 3)] {
+        let old = store.insert(key, value);
+        OVERWRITE.check(old.is_some(), details! {"key": key});
+        if LOST_REPLY.fire(details! {"key": key}) {
+            continue; // the client never hears back (only when hydo turns this point on)
+        }
+        let acked = store.get(key) == Some(&value);
+        READ_BACK.check(acked, details! {"key": key, "value": value});
+    }
 }
 ```
 
-| Go SDK (`hydoassert`) | Rust (`hydo_assert`) |
-|---|---|
-| `Always(id, msg)`, `AlwaysOrUnreachable`, `Sometimes`, `Reachable`, `Unreachable` | the same names in lower case (run-time declaration, registered at once), `declare!` entries, or the call-site macros `hydo_always!`, `hydo_always_or_unreachable!`, `hydo_sometimes!`, `hydo_reachable!`, `hydo_unreachable!` |
-| `a.Check(cond, d)`, `a.Hit(d)` | `a.check(cond, d)`, `a.hit(d)`; `d` is a `Details`, `details!{..}`, `()` or `None` |
-| `a.Cmp(left, op, right, d)` | `a.cmp(left, op, right, d)` (any ordered value, not only `i64`; `op` is one of `<`, `<=`, `==`, `!=`, `>=`, `>`), or the call-site macros `hydo_always_cmp!(left, op, right, ..)` and `hydo_sometimes_cmp!(..)` |
-| `Eventually(id, msg, within)`, `l.Await(cond, poll, d)`, `l.Begin()`, `w.Done(d)`, `w.Expire(d)` | `eventually(..)`, `declare!{.. eventually(..)}` or `hydo_eventually!(within, "id" => "msg")`; `l.await_cond(cond, poll, d)`, `l.await_async(cond, poll, sleep, d).await`, `l.begin()`, `w.done(d)`, `w.expire(d)` |
-| `Buggify(id, msg)`, `p.Fire(d)` | `buggify(..)`, `declare!{.. buggify(..)}`, `p.fire(d)`, or inline `hydo_buggify!("id" => "msg")` |
-| `Catalog()`, `SetupComplete()` | `catalog()`, `setup_complete()` |
-| `D{...}` | `details!{...}`, `Details`, alias `D` |
+Run it with `HYDO_ASSERT_OUT=stderr` to see what it reports. It writes these lines (under hydo
+they go to the guest's console, where hydo reads them):
 
-That table is the whole API, plus `register(&STATIC)` for a `static` built with
-`Assertion::always(..)` and friends outside `declare!`, and the history recorder below. Items
-marked `#[doc(hidden)]` (the `__`-prefixed functions, the assertion type `Type`, `to_json`) are
-public only because the macros expand in your crate or the SDK's own tests call them; they are
-not part of the API and may change in any version. A comparison has one form, `cmp` with its
-operator (the SDK has no separate "greater than" or "less than" calls).
+```text
+HYDO-ASSERT-DECL {"t":"always","id":"kv.read_back","msg":"every acknowledged write reads back with its value"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"kv.overwrite","msg":"a write replaced an existing value"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.kv.lost_reply","msg":"fault point fired: the write lands but its reply is lost"}
+HYDO-SETUP-COMPLETE
+HYDO-ASSERT {"t":"always","id":"kv.read_back","ok":true,"msg":"every acknowledged write reads back with its value","details":{"key":"a","value":1}}
+HYDO-ASSERT {"t":"sometimes","id":"kv.overwrite","ok":true,"msg":"a write replaced an existing value","details":{"key":"a"}}
+```
 
-## Records, deduplication, catalog
+A process writes each outcome of a property once: the first pass and the first failure, with
+the details of that evaluation. That is why the later passes of `kv.read_back` write nothing.
 
-- Records go to `/dev/ttyS0` (opened once, `O_APPEND|O_NOCTTY`, one `write` per record).
-  `HYDO_ASSERT_OUT=<path>` writes to that existing file, `stderr` to standard error (plain
-  logging outside hydo), `off` nowhere. If the file cannot be opened, standard error is used.
-- A process writes each (assertion, outcome) pair once: the first pass and the first failure,
-  with the details of that evaluation. A `sometimes` that evaluated false is never written.
-  `unreachable` is written with `ok:false`. A record whose details hold a NaN or an infinity
-  is not written at all (as Go's `json.Marshal` fails on it).
-- Details are JSON objects with keys in bytewise order, encoded exactly as Go's
-  `encoding/json` encodes them (HTML characters and U+2028/U+2029 escaped, Go's float format;
-  `f32` values as Go encodes a `float32`).
-- The catalog (`catalog()`) lists, in this order: every `declare!` entry and every call-site
-  macro, sorted by where it is written (file, line, column, then the order inside one
-  `declare!`), and then the assertions declared at run time, in declaration order. The
-  `declare!` entries and macro sites are registered before `main` by a constructor
-  (`.init_array` on ELF, `__mod_init_func` on Mach-O; no allocation, no lock), so a property
-  in code that never runs is still listed and reported as never evaluated.
-- Call-site macros add `"loc":"<file>:<line>"` as the last field of their records (the
-  parsers ignore unknown fields; ASSERTIONS.md allows new ones). Run-time and `declare!`
-  assertions carry no `loc`, so their records are identical to the Go SDK's.
+## How to
 
-## BUGGIFY
+### Declare properties and check them
 
-Same decisions as the Go SDK: configured by `$HYDO_BUGGIFY`, or else the file
-`$HYDO_BUGGIFY_FILE` (default `/tmp/hydo-buggify`), holding
-`<seed-hex>[,<enable-permille>[,<fire-permille>]]` (defaults 250 and 250, FoundationDB's
-values). It is read once, at the first evaluation of any point, which also writes
-`HYDO-BUGGIFY {"seed":..,"enable_pm":..,"fire_pm":..,"enabled":[..]}`. A point is enabled
-for the run when `splitmix64(seed ^ fnv1a(id)) % 1000 < enable`; its k-th evaluation fires
-when `splitmix64(splitmix64(seed ^ fnv1a(id)) + k·0x9e3779b97f4a7c15) % 1000 < fire`. Each
-point is also a `sometimes` property `buggify.<id>` ("fault point fired: <msg>"), recorded at
-its first firing with `{"hit": k}`. Without a configuration every point returns false and has
-no other effect. Under hydo the schedule token `B=<seed>` (`hydo explore --buggify`) reaches the
-file through the host controller: an onboarded project gets it with `buggify: true` in its
-`hydo.yaml` (`hydo/onboard/MANIFEST.md`).
+A property has an id (stable across versions of your program) and a message for people. Its
+kind says what hydo expects:
 
-## Eventually, async code
+| kind | the property holds when | hydo reports a failure when |
+|---|---|---|
+| `always` | the condition is true every time, and it is checked at least once | it is false once, or never checked |
+| `always_or_unreachable` | the condition is true every time it is checked | it is false once |
+| `sometimes` | the condition is true at least once in an exploration | it is never true |
+| `reachable` | the code is reached at least once in an exploration | it is never reached |
+| `unreachable` | the code is never reached | it is reached |
 
-`await_cond` blocks the thread (it sleeps `poll` between checks). In async code use
-`await_async`, which takes a closure returning the check's future and a closure returning a
-sleep future, so it does not depend on a runtime:
+Declare properties with `declare!`, so that the catalog lists them before `main` runs:
 
 ```rust
-live.await_async(|| async { client.ping().await.is_ok() }, Duration::from_millis(100),
-                 |d| tokio::time::sleep(d), ()).await;
+use hydo_assert::{declare, details};
+
+declare! {
+    static STORED: always("kv.stored", "every acknowledged write is stored");
+    static PARSES: always_or_unreachable("kv.log_parses", "every complete log line parses");
+    static RETRIED: sometimes("kv.retried", "a client retried a request");
+    static RECOVERED: reachable("kv.recovered", "the server replayed a non-empty log");
+    static UNKNOWN: unreachable("kv.unknown_command", "the server got a command it does not know");
+}
+
+fn main() {
+    STORED.check(true, details! {"key": "a"}); // returns the condition
+    PARSES.check(true, ());                    // `()` means no details
+    RETRIED.check(false, ());                  // a false `sometimes` writes nothing
+    RECOVERED.hit(details! {"entries": 3});
+    let command = "GET";
+    if command != "GET" && command != "SET" {
+        UNKNOWN.hit(details! {"command": command});
+    }
+}
 ```
 
-Every other call is a short, non-blocking-in-practice write to the console and is safe from
-async tasks and threads (one global lock, held only while a record is formatted and written).
+Or declare and check in one place with the macros. Their records also carry the file and line:
 
-## Features
+```rust
+use hydo_assert::{hydo_always, hydo_reachable, hydo_sometimes};
 
-- `noop`: every record, catalog and lifecycle call compiles to nothing and every BUGGIFY point
-  returns false. Conditions are still evaluated and returned. Use it for builds that must not
-  touch the console; at run time `HYDO_ASSERT_OUT=off` does the same for the records (but
-  leaves BUGGIFY working).
-- `serde_json`: `From<serde_json::Value>` for `Value` and `Details`, so
-  `a.check(ok, serde_json::json!({"k": v}))` works.
+let (len, cap) = (12, 10_000);
+hydo_always!(len <= cap, "kv.log_size" => "the log stays under its cap", {"len": len});
+hydo_sometimes!(len > 10, "the log holds more than ten entries"); // no id: the message is the id
+hydo_reachable!("kv.compacted" => "the log was compacted");
+```
 
-## Operation histories (`hydo_assert::history`)
+`hydo_always_or_unreachable!` and `hydo_unreachable!` work the same way. A property can also be
+declared at run time with `hydo_assert::always(id, message)` and the other functions of the same
+names; it joins the catalog when the call runs.
 
-The typed recorder for hydo's host-side history checkers (`hydo/HISTORIES.md`): `History::new("kv")`,
-`.invoke(proc, f, &args) -> Op`, then `op.ok(&results)` / `op.ok_same()` / `op.fail()` /
-`op.info()`; `.record_raw(proc, type, f, &args)` writes one record without an `Op` (for a
-program that completes operations elsewhere than where it invoked them; Go's `Record`). The
-arguments are tokens, and these functions make them: `enc` (any value as one token),
-`ver(v, version)`, `value_or_nil`, `list`, and the txn micro-ops `append_mop`, `read_mop`,
-`read_result_mop`; a program needs them to write values the checkers can read back. Its lines are not JSON
-(`HYDO-HIST <history> <process> <type> <time-ns> <f> <args>`), so it has its own sink: one write
-per record to `/dev/console`, `HYDO_HIST_OUT=<path>|stderr|off`; `noop` turns it off.
-`tests/history.rs` checks the exact lines (the same as the Go recorder's test).
+### Compare two values
 
-## Building a static binary for a hydo guest
+`cmp` checks `left op right` and puts both values and the operator into the details, so a
+failure shows them:
 
-The guest runs any static x86_64 Linux binary. Rust's `x86_64-unknown-linux-musl` target
-links one without a C toolchain (pinned: Rust 1.90.0):
+```rust
+use hydo_assert::{always, hydo_always_cmp};
+
+let log_size = always("kv.log_size_cmp", "the log stays under its cap");
+let size = 12_u64;
+log_size.cmp(size, "<=", 10_000, ()); // details: {"left":12,"op":"<=","right":10000}
+hydo_always_cmp!(size, "<=", 10_000, "kv.log_cap" => "the log stays under its cap");
+```
+
+The operator is one of `<`, `<=`, `==`, `!=`, `>=` and `>`.
+
+### Check that something happens in time (eventually)
+
+An `eventually` property says "after this point, the condition becomes true within a deadline",
+for example "after a restart the server answers within 5 seconds". Time inside a hydo guest is
+deterministic, so the verdict is the same on every replay.
+
+```rust
+use hydo_assert::eventually;
+use std::time::{Duration, Instant};
+
+let back = eventually("kv.back", "the server answers within 5 s of its start", Duration::from_secs(5));
+let started = Instant::now();
+let answers = || started.elapsed() >= Duration::from_millis(20); // stands for a real request
+assert!(back.await_cond(answers, Duration::from_millis(5), ())); // polls every 5 ms
+
+// Or mark the start and the end yourself:
+let mut watch = back.begin();
+// ... the server comes up ...
+watch.done(()); // or watch.expire(()) when you know it will not
+```
+
+`await_cond` blocks the thread. In async code use `await_async`, which takes the check as a
+closure that returns a future and works with any runtime:
+
+```rust
+use hydo_assert::eventually;
+use std::time::Duration;
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    let back = eventually("kv.back_async", "the server answers within 5 s", Duration::from_secs(5));
+    let in_time = back
+        .await_async(|| async { true }, Duration::from_millis(100), tokio::time::sleep, ())
+        .await;
+    assert!(in_time);
+}
+```
+
+### Add a fault point (BUGGIFY)
+
+A fault point is a place where your program misbehaves on purpose: it drops a reply, fails a
+write, waits too long. Normally the point does nothing (`fire` returns false). hydo can turn
+points on for a run, so that faults happen where only your program can make them. FoundationDB
+calls this technique BUGGIFY.
+
+```rust
+use hydo_assert::{buggify, hydo_buggify};
+use std::time::Duration;
+
+let lost_reply = buggify("kv.lost_reply_point", "the write lands but its reply is lost");
+let mut reply = Some("OK");
+if lost_reply.fire(()) {
+    reply = None; // misbehave: the client never gets the reply
+}
+if hydo_buggify!("kv.slow_disk" => "a write takes 10 ms longer") {
+    std::thread::sleep(Duration::from_millis(10));
+}
+println!("{reply:?}");
+```
+
+To let hydo turn the points on, add `buggify: true` to the project's `hydo.yaml` and explore
+with `hydo explore --buggify`. Each run then gets a seed that turns some points on, and a point
+that is on fires on some of its calls. To try it outside hydo, set
+`HYDO_BUGGIFY=<seed in hex>,<points on, per mille>,<calls that fire, per mille>`; for example
+`HYDO_BUGGIFY=2a,1000,1000` makes every point fire every time.
+
+### Record an operation history
+
+hydo can check a whole history of operations after a run: is every read consistent with the
+writes before it (linearizability per key), or do list appends ever go missing? Your workload's
+client records each operation twice: when it starts (`invoke`) and when the outcome is known.
+
+```rust
+use hydo_assert::history::{enc, value_or_nil, History};
+
+let kv = History::new("kv");
+let write = kv.invoke(3, "write", &["k1", &enc("v1")]); // client 3, before the request
+// ... send the request, then record the outcome:
+write.ok_same(); // it happened; `fail()`: it did not; `info()`: the outcome is unknown
+let read = kv.invoke(3, "read", &["k1"]);
+read.ok(&["k1", &value_or_nil(Some("v1"))]);
+```
+
+Then name the history in the project's `hydo.yaml`:
+
+```yaml
+checks:
+  - id: kv.linearizable
+    type: linearizable
+    model: register
+    history: kv
+    msg: every read sees the latest acknowledged write
+```
+
+`hydo guide checks` describes the checks and their options.
+
+### Choose where the records go
+
+Under hydo the records go to the guest's console (`/dev/ttyS0` for properties, `/dev/console`
+for histories), which hydo reads even when the program's standard output goes to a log file.
+Outside hydo, where the console cannot be opened, they go to standard error. Two variables
+change this, and each is read once, at the first record:
+
+- `HYDO_ASSERT_OUT`: a path of an existing file, `stderr`, or `off` for the properties;
+- `HYDO_HIST_OUT`: a path (created if missing), `stderr`, or `off` for the histories.
+
+The cargo feature `noop` compiles every record to nothing and makes every fault point return
+false, for builds that must not write to the console at all.
+
+### Build a program for a hydo guest
+
+A hydo guest runs static Linux programs. Rust's musl targets build one without a C toolchain:
 
 ```sh
-rustup target add x86_64-unknown-linux-musl --toolchain 1.90.0
+rustup target add x86_64-unknown-linux-musl
 RUSTFLAGS="-C linker=rust-lld -C link-self-contained=yes -C target-feature=+crt-static" \
-  cargo +1.90.0 build --release --target x86_64-unknown-linux-musl
+  cargo build --release --target x86_64-unknown-linux-musl
 ```
 
-`hydo/onboard/examples/rust-kv/` is a complete example: a key/value server using this crate,
-its `build-rkv.sh` (two clean builds give the same sha256), and a `hydo.yaml`.
+Use `aarch64-unknown-linux-musl` for hydo on a Mac. A complete project with a `hydo.yaml` is
+the rust-kv example:
+<https://github.com/kakoc/hydo/tree/main/hydo/onboard/examples/rust-kv>.
 
-## Tests
+## Reference
 
-- `cargo test` (also with `--features noop` and `--features serde_json`): the encoder, the
-  BUGGIFY decisions and rates, the macros, the catalog order, the async eventually, and the
-  shared cases below.
+- The API: <https://docs.rs/hydo-assert>.
+- The records and how hydo judges each kind of property:
+  <https://github.com/kakoc/hydo/blob/main/hydo/ASSERTIONS.md>.
+- The history format and the checkers:
+  <https://github.com/kakoc/hydo/blob/main/hydo/HISTORIES.md>.
+- The same SDK for Python, JavaScript and Go writes the same records, byte for byte:
+  <https://github.com/kakoc/hydo/tree/main/sdk>.
 
-## The shared cases (this crate is the reference for every SDK)
+Rules of this crate:
 
-`sdk/cases/` holds example files that say "this call, under this configuration, writes exactly
-these bytes". This crate's test `tests/cases/` writes them; the Go, Python and JavaScript SDKs
-each have a test that reads every case, makes the same calls with its own API and compares the
-bytes (`go test ./...` in `sdk/go` and in its frozen copy `hydo/stack/hydoassert`, `python3 -m unittest discover -s
-sdk/python/tests`, `node --test` in `sdk/js`). No SDK test needs another language installed.
+- The catalog (`catalog()`) lists the properties of `declare!` and of the macros first, sorted by
+  where they are written (file, line, column), and then the ones declared at run time, in the
+  order they were declared. Call it once, early, in the process whose console hydo reads.
+- Details are JSON objects with their keys in byte order. A record whose details hold a NaN or
+  an infinity is not written.
+- Every call is safe from threads and async tasks: one lock, held only while a record is
+  written.
+- The macros register their properties before `main` on Linux, Android, the BSDs, illumos and
+  Apple targets. On other targets a property joins the catalog at its first check.
+- The feature `serde_json` converts `serde_json` values into details.
 
-```sh
-cargo test --test cases                # sdk/cases must equal what this crate writes
-HYDO_BLESS=1 cargo test --test cases   # rewrite sdk/cases (and remove files no case writes)
-```
+## License
 
-**A format change starts here:** change this crate, run with `HYDO_BLESS=1`, commit the changed
-files in `sdk/cases`; the other SDKs' case tests then fail on exactly the lines they must change.
-**To add a case:** add a program to `tests/cases/defs.rs` (the builder `Prog` checks the calls),
-bless, commit. `tests/cases/programs.rs` holds the call sequences of the Go-binary conformance
-programs these cases replaced (M110); their outputs equal Go 1.26.5's.
-
-**Files.** `sdk/cases/<area>/<name>.json` is one case; each of its runs has an output file,
-`<name>.out` (a case with one unnamed run) or `<name>.<run>.out`. Areas: `assert` (the types and
-deduplication), `compare`, `details` (the JSON encoding), `catalog`, `eventually`, `buggify`,
-`output` (`HYDO_ASSERT_OUT`), `history` (`HYDO-HIST` records and
-`HYDO_HIST_OUT`), `programs`. A case file has:
-
-- `about`: what the case shows.
-- `needs`: features a language may lack: `f32` (a float32 value), `bytes` (a byte string,
-  Go's `[]byte`), `invalid_utf8` (invalid UTF-8 in an assertion string), `raw_hist` (invalid
-  UTF-8 in a history record). A reader skips, and reports, a case that needs what
-  its language cannot express, and fails on a need it does not know.
-- `steps`: the calls, in order. Declarations `always`, `always_or_unreachable`, `sometimes`,
-  `reachable`, `unreachable` (`id`, `msg`), `eventually` (`within_ms`) and `buggify` are
-  numbered from 0 in the order they appear and named by `a`; then `check` (`cond`), `hit`,
-  `cmp` (`left`, `op`, `right`), `begin` (its watches are numbered and named by `w`), `done`, `expire`, `await`
-  (the condition is true at once; `async`: the async form), `fire`, `catalog`,
-  `setup_complete`. Any of them may carry `details` (a map
-  value). History steps: `history` (`name`; numbered, named by `h`), `invoke` (`proc`, `f`,
-  `args`; numbered, named by `o`), `ok` (`args`; empty only for an operation without
-  arguments), `ok_same` (the invocation's arguments: Go's, JavaScript's and Python's `ok()`),
-  `fail`, `info`, `record` (`proc`, `type`, `f`, `args`).
-- Values carry their Go type: `null`, `true`/`false`, a JSON string, a list, and the objects
-  `{"int": "<decimal>"}` (int64), `{"uint": ...}` (uint64), `{"f64": "<number>"}` and
-  `{"f32": ...}` (with `NaN`, `+Inf`, `-Inf`), `{"bytes": "<hex>"}`, `{"map": [[key, value],
-  ...]}`, and `{"raw": ["text", 255, ...]}` for a string with invalid UTF-8 bytes (each number
-  one byte; Python passes it as `chr(0xDC00 + byte)`, JavaScript as that lone surrogate). A
-  history argument is a token (a string or `raw`) or a helper: `{"enc": s}`, `{"ver": [s,
-  "<version>"]}`, `{"value_or_nil": s or null}`, `{"list": [...]}`, `{"append_mop": [k, e]}`,
-  `{"read_mop": k}`, `{"read_result_mop": [k, [...]]}`, `{"nil": true}` (the constant).
-- `runs`: each with `out` (where assertion records go: `file` = an empty file, `append` = a
-  file holding the line `PRE existing line`, `stderr`, `missing` = a path that does not exist,
-  `off`), `hist_out` (the same for history records, with `create` = a missing file and
-  `fallback` = a path in a missing directory), `buggify_env` (`HYDO_BUGGIFY`, null = unset),
-  `buggify_file` (the content of the file `HYDO_BUGGIFY_FILE` names; null = it names a missing
-  file), `output` (the file with the expected bytes) and `returns` (the results of `check`,
-  `cmp`, `done`, `await` and `fire`, `1`/`0` in order).
-
-**Reading a run.** Start a fresh process (SDK state is per process), set the four variables,
-make the calls, then take what the one sink that is not `off` received (the file, or standard
-error for `stderr`, `missing` and `fallback`), which must equal the output file byte for byte;
-standard error must stay empty otherwise. In a `HYDO-HIST` record the time field (the fifth)
-is `*` in the output file: replace it before comparing, and check that the times are decimal
-integers that never decrease (the Rust recorder writes `-` where `/proc/uptime` is missing).
-
-**Stand-ins in the Rust runner.** Rust has neither `[]byte` nor strings with invalid UTF-8: it
-passes a byte string as its base64 text (what Go writes for `[]byte`) and each invalid byte as
-the character U+10FF00 + byte, which the test turns into what Go 1.26 writes (`\ufffd` inside
-JSON, the raw byte in a history record). Keys with invalid bytes are chosen so that every SDK
-sorts them the same (the builder checks it). The history `ver` takes a `u64`, so the cases
-have no negative versions (the other SDKs' unit tests cover those).
-
-## Limits
-
-- Constructors exist on Linux, Android, the BSDs, illumos/Solaris and Apple targets. Elsewhere
-  (Windows, wasm) a static assertion joins the catalog only at its first evaluation.
-- A macro site in a function the linker drops (an unused function in a dependency's object
-  file that nothing references) is not registered; code that can run is always registered.
-- The catalog order differs from Go's "declaration order" for `declare!`/macro sites across
-  files (it is sorted by file and line, which is a pure function of the source); run-time
-  declarations keep Go's order.
+Apache-2.0.
