@@ -320,3 +320,68 @@ fn no_recorded_fault_starts_after_the_last_step() {
         }
     }
 }
+
+/// A `regressions/` or `checks/` folder beside a manifest whose workload is its own
+/// `workload.run` gives the image a plan without composer commands (`composed: false`): the
+/// controller must still run the manifest's workload. Until the fix it ran the composer's empty
+/// rounds instead (a `sleep` per round and no request), so every check passed: the shop's saved
+/// double-charge regression passed on the buggy build (found by the CI stage 1 agent,
+/// 2026-11-08).
+#[test]
+fn a_plan_without_commands_keeps_the_manifests_own_workload() {
+    let top = support::top();
+    let src = top.join("hydo/onboard/examples/shop/hydo.yaml");
+    let sched = Schedule::parse("disk=none | run H=payments.charge@3-4:delay=3000").unwrap();
+    for sub in ["regressions", "checks"] {
+        let dir =
+            std::env::temp_dir().join(format!("hydo-control-silent-{}-{sub}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(sub)).unwrap();
+        std::fs::copy(&src, dir.join("hydo.yaml")).unwrap();
+        if sub == "regressions" {
+            std::fs::write(
+                dir.join(sub).join("double-charge.schedule"),
+                format!("# expect: violation\n{sched}\n"),
+            )
+            .unwrap();
+        } else {
+            let f = dir.join(sub).join("final_ok");
+            std::fs::write(&f, "#!/bin/sh\ntrue\n").unwrap();
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let (mut data, meta) = hydo_manifest::for_explorer(&dir.join("hydo.yaml")).unwrap();
+        let meta = meta.expect("the folder gives the image a plan");
+        assert_eq!(meta["composed"], serde_json::json!(false), "{sub}");
+        data["_compose"] = meta;
+        let p = Plan::from_manifest(&hydo_manifest::Manifest::from_validated(data)).unwrap();
+        assert!(p.compose.as_ref().is_some_and(|c| !c.composed), "{sub}");
+        // a composition needs commands to compose
+        let e = refused(&p, "disk=none | run W=0000002a,p4,q2,r100");
+        assert!(e.contains("no test composer commands"), "{sub}: {e}");
+        let b = support::boot(&p, "silent").unwrap();
+        let ran = support::run_schedule(&b, &sched).unwrap();
+        let spawned: Vec<String> = ran
+            .run
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                Item::Send {
+                    cmd: Command::Spawn(s),
+                    ..
+                } => Some(s.argv.join(" ")),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            spawned.iter().any(|a| a.contains("shop place")),
+            "{sub}: the manifest's workload never ran: {spawned:?}"
+        );
+        let reports = ran.run.fin.transcript.report_lines().join("\n");
+        assert!(
+            !reports.contains("HYDO-COMPOSE"),
+            "{sub}: the composer ran: {reports}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

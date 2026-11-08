@@ -153,7 +153,7 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
     // manifest declares Q (the order service's concurrency) as a knob.
     let knob = plan.knob(&t.letter().to_string()).is_some();
     match t {
-        GuestToken::Compose(_) if plan.compose.is_none() && knob => return Ok(()),
+        GuestToken::Compose(_) if !plan.composed() && knob => return Ok(()),
         GuestToken::Buggify(_) if !plan.buggify && knob => return Ok(()),
         GuestToken::Freeze(_) if !plan.freeze && knob => return Ok(()),
         GuestToken::Protocol(_) if plan.world.is_none() && knob => return Ok(()),
@@ -233,8 +233,14 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
             }
         },
         GuestToken::Compose(_) => {
-            if plan.compose.is_some() {
+            if plan.composed() {
                 Ok(())
+            } else if plan.compose.is_some() {
+                Err(format!(
+                    "{t} is a test composer composition, and this image's plan has no test \
+                     composer commands (only checks or regressions; its workload is the \
+                     manifest's workload.run)"
+                ))
             } else {
                 Err(format!(
                     "{t} is a test composer composition, and this image has no test composer \
