@@ -102,6 +102,8 @@ pub struct Options {
     pub diag_ram: Option<String>,
     /// `HYDO_KVM_TRACE_UNKNOWN`, set: log MSRs and ports the engine's model does not know.
     pub trace_unknown: bool,
+    /// `HYDO_KVM_NO_FP`, set: no fingerprints (they read as 0), to measure what they cost.
+    pub no_fp: bool,
 }
 
 impl Options {
@@ -118,6 +120,7 @@ impl Options {
             diag: e.is_set(HYDO_KVM_DIAG),
             diag_ram: t(HYDO_KVM_DIAG_RAM),
             trace_unknown: e.is_set(HYDO_KVM_TRACE_UNKNOWN),
+            no_fp: e.is_set(HYDO_KVM_NO_FP),
         }
     }
 }

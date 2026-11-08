@@ -75,6 +75,15 @@ pub const MAX_BYTES_LIMIT: u64 = 1024 * 1024;
 /// A command's default time limit, guest milliseconds.
 pub const TIMEOUT_MS: u64 = 10_000;
 
+/// A named branch of a snapshot session (docs/design/agent-environments.md): a call on it
+/// starts from the branch's state (or, for a new branch, from `from`: another branch, or the
+/// session's stop when `None`) and leaves its state after the call as the branch's new state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Branch {
+    pub name: String,
+    pub from: Option<String>,
+}
+
 /// One call on a held stop.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Req {
@@ -84,6 +93,9 @@ pub enum Req {
         service: Option<String>,
         timeout_ms: u64,
         max_bytes: u64,
+        /// Opt-in (docs/design/agent-environments.md): run on a named branch of the session's
+        /// stop and keep the state after the command as that branch.
+        branch: Option<Branch>,
     },
     Read {
         path: String,
@@ -139,8 +151,16 @@ impl Req {
                 service,
                 timeout_ms,
                 max_bytes,
-            } => json!({"op": "exec", "argv": argv, "sh": sh, "service": service,
-                         "timeout_ms": timeout_ms, "max_bytes": max_bytes}),
+                branch,
+            } => {
+                let mut v = json!({"op": "exec", "argv": argv, "sh": sh, "service": service,
+                         "timeout_ms": timeout_ms, "max_bytes": max_bytes});
+                if let Some(b) = branch {
+                    v["branch"] = json!(b.name);
+                    v["from"] = json!(b.from);
+                }
+                v
+            }
             Req::Read {
                 path,
                 offset,
@@ -186,6 +206,10 @@ impl Req {
                 service: s("service"),
                 timeout_ms: u("timeout_ms", TIMEOUT_MS),
                 max_bytes: u("max_bytes", MAX_BYTES),
+                branch: s("branch").map(|name| Branch {
+                    name,
+                    from: s("from"),
+                }),
             },
             "read" => Req::Read {
                 path: need("path")?,
@@ -241,6 +265,18 @@ impl Req {
             "exec" => {
                 let sh = a.val("--sh")?;
                 let service = a.val("--service")?;
+                let branch = a.val("--branch")?;
+                let from = a.val("--from")?;
+                if from.is_some() && branch.is_none() {
+                    return Err(Problem::new(
+                        "usage",
+                        "--from needs --branch (the new branch's name)",
+                        vec![
+                            "hydo inspect exec <session> --branch b2 --from b1 -- make test".into(),
+                        ],
+                    ));
+                }
+                let branch = branch.map(|name| Branch { name, from });
                 let timeout_ms = a.num("--timeout")?.unwrap_or(TIMEOUT_MS);
                 let max_bytes = max(&mut a)?;
                 let argv = a.rest_after_dashes();
@@ -260,6 +296,7 @@ impl Req {
                     service,
                     timeout_ms,
                     max_bytes,
+                    branch,
                 }
             }
             "read" => {
@@ -466,6 +503,7 @@ pub fn work_for(req: &Req, plan: &Plan, k: u64) -> Result<Work, Problem> {
             service,
             timeout_ms,
             max_bytes,
+            ..
         } => {
             let ns = netns_of(plan, service.as_deref())?;
             ex(
@@ -970,6 +1008,13 @@ second to a few seconds each):
   hydo inspect sockets <id> [--service S]
   hydo inspect advance <id> [--ms N]            let the guest run N ms further; later calls start there
 
+Branches (a snapshot session only; docs/design/agent-environments.md):
+  hydo inspect exec <id> --branch NAME [--from OTHER] ... -- <program> <args...>
+                                                 run on branch NAME and keep the state after it as
+                                                 NAME; a new branch starts from OTHER (another
+                                                 branch) or from the stop; the answer's state_fp is
+                                                 the guest's whole state after the call
+
 <id> may also be a run directory: then the call replays to --at (default end), does the one
 thing and ends (no session; each such call costs a replay). --service runs in that service's
 network namespace (network: bridge). Stops after the workload's end, in a recovery boot or under
@@ -1105,6 +1150,18 @@ mod tests {
                 service: Some("db".into()),
                 timeout_ms: 5,
                 max_bytes: 9,
+                branch: None,
+            },
+            Req::Exec {
+                argv: vec!["true".into()],
+                sh: None,
+                service: None,
+                timeout_ms: 5,
+                max_bytes: 9,
+                branch: Some(Branch {
+                    name: "b2".into(),
+                    from: Some("b1".into()),
+                }),
             },
             Req::Read {
                 path: "/x".into(),
@@ -1147,7 +1204,8 @@ mod tests {
                 sh: None,
                 service: Some("db".into()),
                 timeout_ms: 500,
-                max_bytes: MAX_BYTES
+                max_bytes: MAX_BYTES,
+                branch: None,
             }
         );
         let e = Req::from_args("exec", &[]).unwrap_err();

@@ -727,31 +727,89 @@ impl Machine {
         work: &mut Work,
         keep: bool,
         stop_limit: u64,
-    ) -> Result<(), Problem> {
+    ) -> Result<Called, Problem> {
+        let from = point.clone();
+        let c = self.call_from(
+            worker,
+            (SNAP, &from),
+            keep.then_some(SNAP),
+            rec,
+            work,
+            stop_limit,
+        )?;
+        if let Some(p) = &c.point {
+            *point = p.clone();
+        }
+        Ok(c)
+    }
+
+    /// One call from the engine's snapshot `from` (its name and the agent's position there): a
+    /// conversation resumed from it that does `work`, then ends; with `keep_as`, the state after
+    /// it is kept as the snapshot of that name (docs/design/agent-environments.md: a branch).
+    pub fn call_from(
+        &self,
+        worker: &mut Box<dyn ControlledWorker>,
+        from: (&str, &AgentPoint),
+        keep_as: Option<&str>,
+        rec: &Recorded,
+        work: &mut Work,
+        stop_limit: u64,
+    ) -> Result<Called, Problem> {
         let start = LockstepStart::Resume {
             tag: "inspect".into(),
-            snapshot: SNAP.into(),
+            snapshot: from.0.into(),
         };
         let mut ls = worker.lockstep(&start, None).map_err(link_err)?;
         let mut link = InspectLink::new(&mut ls);
         let mut ctl = WorkCtl {
             work,
-            keep,
+            keep: keep_as,
             stop_limit,
         };
         let f = run_conv(
             &mut link,
             &mut ctl,
-            Start::Resume(point.clone()),
-            header(Conv::Run, &rec.schedule, "resume hydo-inspect"),
+            Start::Resume(from.1.clone()),
+            header(Conv::Run, &rec.schedule, &format!("resume {}", from.0)),
         )?;
-        if keep {
-            if let Some(p) = f.snapshots.iter().rev().find(|p| p.snapshot == SNAP) {
-                *point = p.clone();
-            }
+        let point = keep_as.and_then(|name| {
+            f.snapshots
+                .iter()
+                .rev()
+                .find(|p| p.snapshot == name)
+                .cloned()
+        });
+        if keep_as.is_some() && point.is_none() && work.failed.is_none() {
+            return Err(Problem::new(
+                "engine",
+                format!(
+                    "the engine kept no snapshot {} ({})",
+                    keep_as.unwrap_or_default(),
+                    f.result
+                ),
+                vec![],
+            ));
         }
-        Ok(())
+        Ok(Called {
+            point,
+            fp: result_fp(&f.result),
+        })
     }
+}
+
+/// What one call left.
+pub struct Called {
+    /// The agent's position at the kept snapshot (`keep_as`).
+    pub point: Option<AgentPoint>,
+    /// The engine's fingerprint of the state at the call's end (the RESULT line's `fp=`).
+    pub fp: Option<String>,
+}
+
+/// `fp=<hex>` of an engine's RESULT line.
+pub fn result_fp(line: &str) -> Option<String> {
+    line.split_whitespace()
+        .find_map(|w| w.strip_prefix("fp="))
+        .map(str::to_string)
 }
 
 fn s_first(f: &Finished) -> u64 {
@@ -772,14 +830,14 @@ fn divergence(rec: &Recorded, v: &str) -> Problem {
     )
 }
 
-/// A conversation that does one call's work and ends.
-struct WorkCtl<'w> {
+/// A conversation that does one call's work and ends (at the snapshot `keep`, when given).
+struct WorkCtl<'w, 'k> {
     work: &'w mut Work,
-    keep: bool,
+    keep: Option<&'k str>,
     stop_limit: u64,
 }
 
-impl Controller for WorkCtl<'_> {
+impl Controller for WorkCtl<'_, '_> {
     fn name(&self) -> &str {
         "inspect"
     }
@@ -792,9 +850,9 @@ impl Controller for WorkCtl<'_> {
                     self.stop_limit
                 ));
             }
-            if self.keep && self.work.failed.is_none() {
-                out.snapshot(SNAP);
-                out.end(Ending::AtSnapshot(SNAP.into()));
+            if let (Some(name), None) = (self.keep, &self.work.failed) {
+                out.snapshot(name);
+                out.end(Ending::AtSnapshot(name.into()));
             } else {
                 out.end(Ending::Verdict("HYDO-ORACLE: OK inspect".into()));
             }

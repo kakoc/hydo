@@ -55,7 +55,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 const CTL_MAX_SENDS: usize = 1024;
-const CTL_MAX_SNAPS: usize = 8;
+/// Named snapshots a worker keeps (the host's S0 and S1, an inspection's stop and its branches,
+/// docs/design/agent-environments.md). A free slot costs nothing; a used one what its state
+/// differs from the RAM base and the disk image by.
+const CTL_MAX_SNAPS: usize = 64;
 const CTL_SEND_MAX: usize = crate::uart::RXQ;
 const CTL_RB_DEFAULT: u64 = 65536;
 
@@ -207,6 +210,8 @@ pub struct Opts {
     pub diag: bool,
     /// HYDO_KVM_DIAG_RAM: the first this many MiB of guest RAM written next to each fingerprint
     pub diag_ram_mib: u64,
+    /// HYDO_KVM_NO_FP: no fingerprints (0), to measure their cost
+    pub no_fp: bool,
 }
 
 struct Host {
@@ -841,7 +846,7 @@ impl Engine {
     fn agent_boot_result(&mut self, tag: &str, r: i32, why: i32, t0: Instant) {
         let mut wfp = 0;
         let verdict = if r == -3 {
-            wfp = self.vm.xfp();
+            wfp = self.xfp();
             self.h.ctl_verdict(&self.vm, r, 0)
         } else {
             format!("ERROR boot: {}", stop_name(why))
@@ -858,6 +863,15 @@ impl Engine {
             &verdict,
         );
         self.h.ctl_finish();
+    }
+
+    /// The VM's fingerprint, or 0 with HYDO_KVM_NO_FP.
+    fn xfp(&self) -> u64 {
+        if self.h.o.no_fp {
+            0
+        } else {
+            self.vm.xfp()
+        }
     }
 
     fn result(&mut self, tag: &str, fp: u64, wfp: u64, secs: f64, extras: &str, verdict: &str) {
@@ -1001,7 +1015,7 @@ impl Engine {
                 verdict = format!("ERROR workload: {}", stop_name(why));
                 break 'out;
             }
-            wfp = self.vm.xfp();
+            wfp = self.xfp();
             self.diag(&tag, "w");
             if r == -3 {
                 verdict = self.h.ctl_verdict(&self.vm, r, from);
@@ -1019,7 +1033,7 @@ impl Engine {
                     verdict = format!("ERROR check: {}", stop_name(why));
                     break 'out;
                 }
-                ffp = self.vm.xfp();
+                ffp = self.xfp();
                 self.diag(&tag, "f");
                 verdict = self.h.ctl_verdict(&self.vm, r, from);
                 break 'out;
@@ -1047,7 +1061,7 @@ impl Engine {
             if r < 0 && r != -3 {
                 verdict = format!("ERROR recovery: {}", stop_name(why));
             } else {
-                ffp = self.vm.xfp();
+                ffp = self.xfp();
                 self.diag(&tag, "f");
                 verdict = self.h.ctl_verdict(&self.vm, r, from);
             }
@@ -1305,6 +1319,7 @@ fn engine_main(
             .clone()
             .map(|v| cstr::strtoull0(v.as_bytes()))
             .unwrap_or(0),
+        no_fp: o.no_fp,
     };
     let echo = if o.echo { echo } else { None };
     let vm = Vmm::new(&vo, &kernel, &initrd, hv, diag.clone(), echo);

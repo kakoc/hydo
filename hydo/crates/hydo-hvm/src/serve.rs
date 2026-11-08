@@ -83,7 +83,10 @@ use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex};
 
 const CTL_MAX_SENDS: usize = 1024;
-const CTL_MAX_SNAPS: usize = 8;
+/// Named snapshots a worker keeps (the host's S0 and S1, an inspection's stop and its branches,
+/// docs/design/agent-environments.md). A free slot costs nothing; a used one what its state
+/// differs from the RAM base and the disk image by.
+const CTL_MAX_SNAPS: usize = 64;
 /// the UART receive queue
 const CTL_SEND_MAX: usize = 4096;
 /// the cadence without rb=: hvx's run calls return every 2^16 retired exits

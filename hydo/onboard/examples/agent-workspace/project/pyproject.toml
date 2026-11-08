@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stockbook"
+version = "0.3.1"
+description = "A small inventory ledger with first-in, first-out costing"
+requires-python = ">=3.9"
+
+[tool.setuptools]
+packages = ["stockbook"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
