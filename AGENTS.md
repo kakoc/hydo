@@ -62,7 +62,8 @@ It stops with a message that names the file when the file is missing (M151).
 - The regression suite: run `hv/hvx/deploy-metal.sh [load] [flagships]` from the Mac. It syncs the
   userspace sources and the Rust workspace to `~/$HVX_METAL_TREE` (default `hydo`), builds there,
   runs the module tests and the two pinned reproducers through `hvx-run`, and compares each result
-  with its baseline. Today it prints `ALL PASS (33 checks)`.
+  with its baseline. Today it prints `ALL PASS (33 checks)`. Since M192 it also runs
+  `hvx_hugeram_test 8192` (RAM hash `b71aaf1096f96f02`), so its next run prints 34 checks.
   - It syncs `hvx.c` and `hvx_abi.h` only with `load`, which also rebuilds and reloads the main
     module. `load` refuses when `~/bin/hvx-reload` does not build in `~/$HVX_METAL_TREE/hv/hvx`.
   - `flagships` also runs every real-service verify.
@@ -409,8 +410,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 52. The skill: `hydo skill update` never ran against the real GitHub API (M170).
 53. The benchmark images and the browser example are not in `recorded.json` (M164, M177).
 55. [user decision] The label `full-ci` does not exist on GitHub yet (M171).
-56. `hydo inspect` was not run on KVM; no MCP server (M178).
-57. `hvx_hugeram_test` should join `deploy-metal.sh` (M179).
+56. `hydo inspect` was not run on KVM; no MCP server; the diagnosis's replay into a recovery
+    boot ran on the Mac only, not on hvx (M178, M192).
+57. `deploy-metal.sh` with `hvx_hugeram_test 8192` has not run yet (M179, M192).
 58. `tls:` and `writable:` were not run on hvx or arm64 (M180).
 60. Ready-made SQL workloads: the MySQL dialect and arm64 ran only in unit tests (M182).
 61. Storage faults: `L=` keeps writes the disk had not flushed (M183).
@@ -617,6 +619,9 @@ build machine, before 2026-10-13.
   `hydo-sql` in both releases, every example re-recorded, both releases built twice and verified)
 - M191: a plan of only `checks/` or `regressions/` keeps the manifest's own `workload.run` (before, its
   saved regressions passed without running it); `W=` is refused on such an image
+- M192 (tentative number): small fixes from the onboardings (`explore --schedule` without `dseed=`,
+  the diagnosis of a service that was down or did not come back after a power cut, a failing `.sql`
+  check's rows in the verdict, `hvx_hugeram_test` in `deploy-metal.sh`); nothing recorded moved
 
 ## Where to look
 

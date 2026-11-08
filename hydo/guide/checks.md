@@ -113,5 +113,10 @@ reachable, unreachable, eventually), and both kinds of record mix on the console
 - Properties the system documents as weaker under a relaxed setting. Keep the check; the
   explorer records the knob in the schedule and classifies the finding as an unsafe setting.
 - Timing (latency bounds): guest time is virtual and faults stretch it on purpose.
+- The order of events by the system's own timestamps (a `created_at` column, a log time, a
+  message's time field). A clock fault (`T=`) steps the realtime clock, so a later event can
+  carry an earlier time. Order the events as the client saw them: the order of its outcome
+  lines, or a sequence number the client writes. A check that sorts by the system's times fails
+  under a clock fault without a bug, or misses a bug.
 - Anything that depends on operations marked `unknown`: the system may or may not have applied
   them, and either is correct.

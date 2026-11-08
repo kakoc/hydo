@@ -34,6 +34,8 @@ REL=${REL:?REL=<unpacked Linux release>}
 OUT=${OUT:-$PWD/kvm-check}
 CPUS=${CPUS:-"0 1"}
 T=${T:-1800}
+# this script's folder, found before the cd below (a relative $0 would then point elsewhere)
+here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$OUT"
 cd "$OUT" || exit 2
 LOG=$OUT/kvm-check.log
@@ -148,7 +150,6 @@ if [ -n "${SPIN_BIN:-}" ]; then
   LS=$OUT/ledger-spin
   LIMG=$LS/hydo-out/explore-ob-ledger-spin-disk.img
   if [ ! -f "$LIMG" ]; then
-    here=$(cd "$(dirname "$0")" && pwd)
     mkdir -p "$LS/bin"
     cp -R "$here/spin/ledger-spin/hydo.yaml" "$here/spin/ledger-spin/www" "$LS/"
     cp "$SPIN_BIN/spin_load" "$SPIN_BIN/spin_count" "$LS/bin/"

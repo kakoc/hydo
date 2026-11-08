@@ -19,9 +19,16 @@ use serde_json::Value;
 use std::path::Path;
 
 /// The service a verdict names: `ERROR service start (S)`, `ERROR S restart failed`,
-/// `ERROR restart after the faults (S)`.
+/// `ERROR restart after the faults (S)`, and the violations of a service that did not start
+/// again: `VIOLATION service cannot recover (committed data unrecoverable) (S)` (the recovery
+/// boot after a power cut) and `VIOLATION service cannot recover after the faults (S)`.
 pub fn verdict_service(v: &str) -> Option<String> {
     let v = v.trim_start_matches("HYDO-ORACLE: ");
+    if v.starts_with("VIOLATION service cannot recover") {
+        let r = v.strip_suffix(')')?;
+        let (_, s) = r.rsplit_once(" (")?;
+        return (!s.is_empty() && !s.contains(' ')).then(|| s.to_string());
+    }
     if let Some(r) = v.strip_prefix("ERROR service start (") {
         return r.split(')').next().map(str::to_string);
     }
@@ -65,7 +72,7 @@ fn process_ends(rec: &Recorded, evs: &[AgentEv]) -> Vec<ProcessEnd> {
         if status == 0 {
             continue;
         }
-        let cmds = sends(rec, a.conv);
+        let cmds = sends_seen(rec, a.conv);
         let id = u("id").unwrap_or(0);
         let sent = cmds.get(&id);
         let handle = a
@@ -206,7 +213,9 @@ fn host_from(rec: &Recorded, evs: Vec<AgentEv>) -> Option<Diagnosis> {
             }
         });
         let _ = last_spawn;
-        let what = if core.contains("restart") {
+        let what = if conv == Conv::Recovery {
+            "while it started in the recovery boot after the power cut"
+        } else if core.contains("restart") || core.contains("after the faults") {
             "while it was restarted"
         } else {
             "while it started"
@@ -256,6 +265,16 @@ fn host_from(rec: &Recorded, evs: Vec<AgentEv>) -> Option<Diagnosis> {
             }
             .into();
             d.summary = format!("{core}: no exit or readiness result of {s} was recorded");
+            if !evs
+                .iter()
+                .any(|a| matches!(a.kind, "exit" | "done" | "probe"))
+            {
+                d.summary.push_str(&format!(
+                    " (the run's consoles carry no agent lines: on hvx they go over the host-call \
+                     port; `hydo inspect diagnose {} --evidence` replays the run and reads them)",
+                    rec.dir.display()
+                ));
+            }
         }
     } else if core.starts_with("ERROR provision failed") {
         d.failure = "provision".into();
@@ -287,9 +306,58 @@ fn host_from(rec: &Recorded, evs: Vec<AgentEv>) -> Option<Diagnosis> {
         d.summary = core.clone();
     } else if kind == "violation" {
         d.failure = "violation".into();
-        d.summary = format!(
-            "a check failed: {core}. No process failed; look at the state behind it with hydo inspect"
-        );
+        let has_agent = evs
+            .iter()
+            .any(|a| matches!(a.kind, "exit" | "done" | "probe"));
+        if let Some(down) = service_down(rec, &evs, &exits, conv) {
+            // a service that was down when the check ran (Milestone 192): a check that reads
+            // it cannot tell its data from its absence, so "lost" may mean "not answering"
+            d.service = Some(down.service.clone());
+            let wh = conv_words(down.conv);
+            match (down.process, down.probe) {
+                (Some(p), probe) => {
+                    d.failure = "service-exited".into();
+                    d.summary = format!(
+                        "a check failed: {core}. But {} exited {wh} before the verdict ({}), so \
+                         the check may have read a service that was down rather than lost or \
+                         wrong data; look at its log",
+                        down.service,
+                        exit_words(&p)
+                    );
+                    d.process = Some(p);
+                    d.probe = probe;
+                }
+                (None, Some(pe)) => {
+                    d.failure = "service-not-ready".into();
+                    d.summary = format!(
+                        "a check failed: {core}. But the readiness check of {} ended `{}` {wh} \
+                         ({} tries{}), so the check may have read a service that was not \
+                         answering rather than lost or wrong data; look at its log",
+                        down.service,
+                        pe.why,
+                        pe.tries,
+                        pe.last_status
+                            .map(|x| format!(", last status {x}"))
+                            .unwrap_or_default()
+                    );
+                    d.probe = Some(pe);
+                }
+                (None, None) => {}
+            }
+        } else if has_agent {
+            d.summary = format!(
+                "a check failed: {core}. No service exited and every readiness check passed; \
+                 look at the state behind it with hydo inspect"
+            );
+        } else {
+            d.summary = format!(
+                "a check failed: {core}. The run's consoles carry no process ends (on hvx the \
+                 agent's lines go over the host-call port), so whether a service was down is not \
+                 known here: `hydo inspect diagnose {} --evidence` replays the run and reads \
+                 them",
+                rec.dir.display()
+            );
+        }
     } else {
         d.failure = "other".into();
         d.summary = core.clone();
@@ -320,6 +388,150 @@ fn host_from(rec: &Recorded, evs: Vec<AgentEv>) -> Option<Diagnosis> {
             .insert(1, format!("hydo inspect logs {dir} {s} --lines 80"));
     }
     Some(d)
+}
+
+/// A service that was down in the verdict's conversation: its process ended (by itself, not by
+/// a signal hydo sent) and was not started again, or its last readiness check did not pass.
+struct Down {
+    service: String,
+    conv: Conv,
+    process: Option<ProcessEnd>,
+    probe: Option<ProbeEnd>,
+}
+
+/// The commands a conversation's agent events can name: its own, and for the workload the boot's
+/// too (the services the boot started run on from snapshot S1 with the boot's command numbers).
+fn sends_seen(
+    rec: &Recorded,
+    conv: Conv,
+) -> std::collections::BTreeMap<u64, super::timeline::Sent> {
+    let mut m = sends(rec, conv);
+    if conv == Conv::Run {
+        for (id, c) in sends(rec, Conv::Boot) {
+            m.entry(id).or_insert(c);
+        }
+    }
+    m
+}
+
+/// The services of the run: the handles of commands started with `HYDO_SVC=<handle>` and the
+/// processes readiness checks watch.
+fn service_names(rec: &Recorded) -> Vec<String> {
+    let mut v: Vec<String> = Vec::new();
+    for c in Conv::ALL {
+        for s in sends(rec, c).values() {
+            let name = if s.op == "spawn" {
+                s.h.clone().filter(|h| {
+                    s.json
+                        .get("env")
+                        .and_then(Value::as_array)
+                        .is_some_and(|e| {
+                            e.iter()
+                                .any(|x| x.as_str() == Some(&format!("HYDO_SVC={h}")))
+                        })
+                })
+            } else if s.op == "probe" {
+                s.json
+                    .get("alive")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            } else {
+                None
+            };
+            if let Some(n) = name {
+                if !v.contains(&n) {
+                    v.push(n);
+                }
+            }
+        }
+    }
+    v
+}
+
+/// The first service that was down in conversation `conv` when the verdict was given.
+fn service_down(rec: &Recorded, evs: &[AgentEv], exits: &[ProcessEnd], conv: Conv) -> Option<Down> {
+    let services = service_names(rec);
+    let cmds = sends_seen(rec, conv);
+    let probe_of = |a: &AgentEv| -> Option<ProbeEnd> {
+        let id = a.json.get("id").and_then(Value::as_u64)?;
+        let c = cmds.get(&id)?;
+        let s = c.json.get("alive").and_then(Value::as_str)?;
+        Some(ProbeEnd {
+            service: s.to_string(),
+            command: c.text.clone(),
+            why: a
+                .json
+                .get("why")
+                .and_then(Value::as_str)
+                .unwrap_or("?")
+                .into(),
+            tries: a.json.get("tries").and_then(Value::as_u64).unwrap_or(0),
+            last_status: a.json.get("status").and_then(Value::as_u64),
+            deadline_s: c
+                .json
+                .get("deadline_ms")
+                .and_then(Value::as_u64)
+                .map(|ms| ms / 1000),
+        })
+    };
+    // the last readiness result of each service in the conversation
+    let last_probe = |s: &str| {
+        evs.iter()
+            .rev()
+            .filter(|a| a.conv == conv && a.kind == "probe")
+            .filter_map(probe_of)
+            .find(|p| p.service == s)
+    };
+    for s in &services {
+        let last_spawn = cmds
+            .iter()
+            .rev()
+            .find(|(_, c)| c.op == "spawn" && c.h.as_deref() == Some(s))
+            .map(|(id, _)| *id);
+        let exit = evs.iter().rev().find(|a| {
+            a.conv == conv
+                && a.kind == "exit"
+                && a.json.get("h").and_then(Value::as_str) == Some(s)
+                && a.json.get("id").and_then(Value::as_u64) == last_spawn
+        });
+        if let (Some(a), Some(spawn)) = (exit, last_spawn) {
+            let signalled = cmds
+                .range(spawn + 1..)
+                .any(|(_, c)| c.op == "signal" && c.h.as_deref() == Some(s));
+            let p = exits.iter().find(|p| {
+                p.handle == *s
+                    && p.at.as_ref().map(|x| x.conversation.as_str()) == Some(conv.name())
+                    && p.at.as_ref().map(|x| x.stop) == a.stop
+            });
+            if let (false, Some(p)) = (signalled, p) {
+                if p.signal_by_hydo != Some(true) {
+                    return Some(Down {
+                        service: s.clone(),
+                        conv,
+                        process: Some(p.clone()),
+                        probe: last_probe(s).filter(|pe| pe.why != "ok"),
+                    });
+                }
+            }
+        }
+        if let Some(pe) = last_probe(s).filter(|pe| pe.why != "ok") {
+            return Some(Down {
+                service: s.clone(),
+                conv,
+                process: None,
+                probe: Some(pe),
+            });
+        }
+    }
+    None
+}
+
+fn conv_words(c: Conv) -> &'static str {
+    match c {
+        Conv::Boot => "while the image booted",
+        Conv::Run => "during the workload",
+        Conv::Recovery => "in the recovery boot after the power cut",
+    }
 }
 
 fn exit_words(p: &ProcessEnd) -> String {
@@ -640,7 +852,18 @@ pub fn cmd(ctx: &Ctx, rest: &[String]) -> Result<Value, Problem> {
 pub fn for_run(ctx: &Ctx, dir: &Path, evidence_on: bool) -> Option<Diagnosis> {
     let rec = Recorded::load(dir).ok()?;
     let mut d = host(&rec)?;
-    if evidence_on && rec.doc.verdict.kind == "error" {
+    // a violation in the recovery boot whose consoles carry no agent lines (hvx): only the
+    // replay can tell a service that did not come back from lost data (Milestone 192)
+    let blind_recovery = rec.doc.verdict.kind == "violation"
+        && rec.end().map(|t| t.conv) == Some(Conv::Recovery)
+        && !agent_events(&rec)
+            .iter()
+            .any(|a| a.conv == Conv::Recovery && matches!(a.kind, "exit" | "done" | "probe"));
+    // a violation that names a service which did not start again (`service cannot recover ...
+    // (S)`): its log says why, and only the replay reads it
+    let named =
+        rec.doc.verdict.kind == "violation" && verdict_service(&rec.doc.verdict.text).is_some();
+    if evidence_on && (rec.doc.verdict.kind == "error" || blind_recovery || named) {
         let (d2, ev) = with_evidence(ctx, &rec, d);
         d = d2;
         d.next.retain(|n| !n.contains("--evidence"));
@@ -678,6 +901,24 @@ mod tests {
         assert_eq!(
             verdict_service("HYDO-ORACLE: ERROR restart after the faults (redis)").as_deref(),
             Some("redis")
+        );
+        assert_eq!(
+            verdict_service(
+                "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (tb_0)"
+            )
+            .as_deref(),
+            Some("tb_0")
+        );
+        assert_eq!(
+            verdict_service("HYDO-ORACLE: VIOLATION service cannot recover after the faults (db)")
+                .as_deref(),
+            Some("db")
+        );
+        assert_eq!(
+            verdict_service(
+                "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable)"
+            ),
+            None
         );
         assert_eq!(verdict_service("HYDO-ORACLE: ERROR provision failed"), None);
         assert_eq!(verdict_service("HYDO-ORACLE: VIOLATION [x] y"), None);
@@ -820,5 +1061,123 @@ mod fixtures {
         assert_eq!(page["truncated"], true);
         assert!(page["next"].as_str().unwrap().contains("--offset 2"));
         assert_eq!(files(&d), before);
+        // hvx: no agent line in the consoles, so the host layer cannot claim no process failed
+        assert!(
+            g.summary.contains("--evidence") && !g.summary.contains("No service exited"),
+            "{}",
+            g.summary
+        );
+    }
+
+    /// The power-cut run with the agent events a replay would keep (`agent-events.jsonl`), in a
+    /// copy of the fixture.
+    fn cut_with_events(name: &str, events: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("hydo-diagnose-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        for e in std::fs::read_dir(fixture("cut")).unwrap().flatten() {
+            std::fs::copy(e.path(), d.join(e.file_name())).unwrap();
+        }
+        std::fs::write(d.join(super::super::timeline::AGENT_EVENTS), events).unwrap();
+        d
+    }
+
+    /// Milestone 192: the recovery boot's start of a service fails (its process exits with
+    /// status 2 and its readiness check sees it die): the host controller's verdict is
+    /// `VIOLATION service cannot recover (committed data unrecoverable) (redis)`, and the
+    /// diagnosis names redis, its exit and its readiness check instead of "No process failed".
+    #[test]
+    fn a_service_that_does_not_start_in_the_recovery_boot_is_named() {
+        let d = cut_with_events(
+            "nostart",
+            concat!(
+                r#"{"conversation":"recovery","stop":23300,"at":824500,"line":{"ev":"exit","h":"redis","id":12,"v":1,"status":2}}"#,
+                "\n",
+                r#"{"conversation":"recovery","stop":23306,"at":824608,"line":{"ev":"probe","id":13,"ok":false,"why":"died","status":1,"tries":1,"v":1}}"#,
+                "\n"
+            ),
+        );
+        let v =
+            "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (redis)";
+        let p = d.join(hydo_results::RUN_DOC);
+        let mut doc: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+        doc["verdict"]["text"] = Value::String(v.into());
+        std::fs::write(&p, serde_json::to_string(&doc).unwrap()).unwrap();
+        let rec = Recorded::load(&d).unwrap();
+        let g = host(&rec).unwrap();
+        assert_eq!(g.failure, "service-exited", "{}", g.summary);
+        assert_eq!(g.service.as_deref(), Some("redis"));
+        let pe = g.process.as_ref().unwrap();
+        assert_eq!((pe.status, pe.signal), (2, None));
+        assert_eq!(g.probe.as_ref().unwrap().why, "died");
+        assert!(
+            g.summary
+                .contains("in the recovery boot after the power cut")
+                && g.summary.contains("exit status 2"),
+            "{}",
+            g.summary
+        );
+        // without the replayed events (hvx), the summary says where to get them
+        std::fs::remove_file(d.join(super::super::timeline::AGENT_EVENTS)).unwrap();
+        let g2 = host(&Recorded::load(&d).unwrap()).unwrap();
+        assert!(g2.summary.contains("--evidence"), "{}", g2.summary);
+        let _ = std::fs::remove_dir_all(d);
+    }
+
+    /// Milestone 192: a service that exits by itself in the recovery boot is named, so that a
+    /// "lost" verdict is not read as data loss (it said "No process failed" before).
+    #[test]
+    fn a_service_that_dies_in_the_recovery_boot_is_named() {
+        // redis (spawned as command 12 in the recovery boot) passed its readiness check
+        // (command 13), then exited with status 2 before the check (command 14) read it
+        let d = cut_with_events(
+            "died",
+            concat!(
+                r#"{"conversation":"recovery","stop":23999,"at":841857,"line":{"ev":"probe","id":13,"ok":true,"why":"ok","status":0,"tries":1,"v":1}}"#,
+                "\n",
+                r#"{"conversation":"recovery","stop":24019,"at":842175,"line":{"ev":"exit","h":"redis","id":12,"v":1,"status":2}}"#,
+                "\n"
+            ),
+        );
+        let rec = Recorded::load(&d).unwrap();
+        let g = host(&rec).unwrap();
+        assert_eq!(g.failure, "service-exited", "{}", g.summary);
+        assert_eq!(g.service.as_deref(), Some("redis"));
+        let p = g.process.as_ref().unwrap();
+        assert_eq!((p.handle.as_str(), p.status, p.signal), ("redis", 2, None));
+        assert_eq!(p.at.as_ref().unwrap().point, "recovery:24019");
+        assert!(p.command.as_deref().unwrap().contains("redis-server"));
+        assert!(
+            g.summary.contains("in the recovery boot") && g.summary.contains("exit status 2"),
+            "{}",
+            g.summary
+        );
+        assert_eq!(g.probe, None, "its readiness check passed");
+        // a readiness check that never passed in the recovery boot, and no exit
+        let d2 = cut_with_events(
+            "notready",
+            concat!(
+                r#"{"conversation":"recovery","stop":23999,"at":841857,"line":{"ev":"probe","id":13,"ok":false,"why":"deadline","status":1,"tries":120,"v":1}}"#,
+                "\n"
+            ),
+        );
+        let g2 = host(&Recorded::load(&d2).unwrap()).unwrap();
+        assert_eq!(g2.failure, "service-not-ready", "{}", g2.summary);
+        assert_eq!(g2.probe.as_ref().unwrap().why, "deadline");
+        assert_eq!(g2.service.as_deref(), Some("redis"));
+        // every service up: the old words, now saying what was checked
+        let d3 = cut_with_events(
+            "fine",
+            concat!(
+                r#"{"conversation":"recovery","stop":23999,"at":841857,"line":{"ev":"probe","id":13,"ok":true,"why":"ok","status":0,"tries":1,"v":1}}"#,
+                "\n"
+            ),
+        );
+        let g3 = host(&Recorded::load(&d3).unwrap()).unwrap();
+        assert_eq!(g3.failure, "violation");
+        assert!(g3.summary.contains("No service exited"), "{}", g3.summary);
+        for x in [d, d2, d3] {
+            let _ = std::fs::remove_dir_all(x);
+        }
     }
 }
