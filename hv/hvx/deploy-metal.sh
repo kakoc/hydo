@@ -44,13 +44,15 @@ hvx_input_test hvx_smp_test hvx_virtio_iso_test hvx_virtio_pci_test hvx_fault_te
 hvx_net_fault_test hvx_bug_f0_test hvx_fuzzresume_test hvx_pmu_test hvx_bigram_test hvx_avx_test"
 # several vCPUs (CLAUDE.md M66/M69): hand-written tests, run with a longer timeout below
 SMPTESTS="hvx_sched_pmu_test hvx_sched_race_test hvx_sipi_test hvx_sched_sweep_test"
+# guest RAM above 4 GiB (M179; in the main module since 2026-11-08): an 8 GiB guest, three rounds
+BIGTESTS="hvx_hugeram_test"
 HARNESSES="hvx_boot_verify hvx_disk_boot_verify hvx_smp_boot_verify hvx_bug_verify hvx_sqlite_verify hvx_redis_verify
 hvx_rootfs_verify hvx_system_verify hvx_jvm_verify hvx_kafka_verify hvx_mysql_verify"
 
 # Explicit file list: userspace sources only. hvx.c/hvx_abi.h go over only with `load`,
 # so a plain run never overwrites a newer module source that is being worked on on the bare-metal machine.
 FILES="hvx_boot.h hvx_sched_util.h"
-for t in $TESTS $SMPTESTS $HARNESSES; do FILES="$FILES $t.c"; done
+for t in $TESTS $SMPTESTS $BIGTESTS $HARNESSES; do FILES="$FILES $t.c"; done
 [ $LOAD = 1 ] && FILES="$FILES hvx.c hvx_abi.h Makefile"
 echo ">> syncing to ~/$TREE/hv/hvx/ on the bare-metal machine ($([ $LOAD = 1 ] && echo 'with' || echo 'without') module sources) and the Rust workspace"
 on_bare_metal "mkdir -p $TREE/hv/hvx"
@@ -64,7 +66,7 @@ on_bare_metal "mkdir -p $TREE/hv/hvx"
     hydo/dist/linux/assets.sha256 hydo/dist/linux/guest-programs.sha256 \
     hydo/dist/mac/assets.sha256 hydo/dist/mac/guest-programs.sha256 "$BOX:$TREE/")
 
-on_bare_metal "TREE=$TREE LOAD=$LOAD FLAG=$FLAG TESTS='$TESTS' SMPTESTS='$SMPTESTS' HARNESSES='$HARNESSES' bash -s" <<'REMOTE'
+on_bare_metal "TREE=$TREE LOAD=$LOAD FLAG=$FLAG TESTS='$TESTS' SMPTESTS='$SMPTESTS' BIGTESTS='$BIGTESTS' HARNESSES='$HARNESSES' bash -s" <<'REMOTE'
 set -u
 cd ~/$TREE/hv/hvx
 B=~/hydo/build
@@ -82,7 +84,7 @@ lsmod | grep -q '^hvx' || { echo "FAIL: hvx module is not loaded (run with 'load
 
 echo ">> compiling userspace tests + harnesses"
 cfail=0
-for t in $TESTS $SMPTESTS $HARNESSES; do
+for t in $TESTS $SMPTESTS $BIGTESTS $HARNESSES; do
   # build to a temp name and rename: a harness that is running right now keeps its old
   # inode instead of failing the build with "Text file busy"
   if cc -O2 -Wall -o "$t.new" "$t.c" 2> "/tmp/cc-$t.log"; then mv -f "$t.new" "$t"
@@ -108,6 +110,7 @@ declare -A EXP=(
   [hvx_sched_race_test]="8cb7c61a2393f44e"
   [hvx_sipi_test]="eef5c1ebd4df2e7d c8d015ab3b57252d"
   [hvx_sched_sweep_test]="39971eed9c2f35fe"
+  [hvx_hugeram_test]="b71aaf1096f96f02"
 )
 pass=0; fail=0; failed=""
 check() {   # name rc output expected...
@@ -133,6 +136,13 @@ echo ">> several-vCPU suite"
 for t in $SMPTESTS; do
   a=""; [ "$t" = hvx_sched_sweep_test ] && a=2000
   out=$($R sudo timeout 900 ./$t $a 2>&1); rc=$?
+  check "$t" "$rc" "$out" ${EXP[$t]:-}
+done
+
+echo ">> guest RAM above 4 GiB (8 GiB guests, one at a time; waits for 9 GiB of free memory)"
+for t in $BIGTESTS; do
+  n=0; while [ $n -lt 1800 ] && [ "$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)" -lt 9216 ]; do sleep 30; n=$((n+30)); done
+  out=$($R sudo timeout 900 ./$t 8192 2>&1); rc=$?
   check "$t" "$rc" "$out" ${EXP[$t]:-}
 done
 
