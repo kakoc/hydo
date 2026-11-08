@@ -511,9 +511,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     builds and reloads the module from `~/hydo/hv/hvx` and expects `ALL PASS (35 checks)` (M203).
 73. [user decision] `guest.cpu_cache` stays opt-in. Making it the default moves every recorded
     x86_64 fingerprint, so it needs a fingerprint epoch bump and a re-baseline (M203).
-74. Several vCPUs and the turn sweep (M205). No several-vCPU run is in `recorded.json`. The sweep bisects only between the lengths it ran, so a
-    narrow band between two grid points stays hidden. Not run: KVM and the Mac (one vCPU),
-    `--turn-margin` in a VM, and a test workload with services or with `faults:`.
+74. Several vCPUs and the turn sweep (M205). No several-vCPU run is in `recorded.json`. The
+    sweep bisects only between the lengths it ran, so a narrow band between two grid points
+    stays hidden. A test workload with services or with `faults:` was not run.
 
 ## Milestone index
 
