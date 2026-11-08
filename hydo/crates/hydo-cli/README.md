@@ -39,7 +39,7 @@ workload that writes 20 keys, and one check, "every write the client saw acknowl
 there afterwards". Copy it, build its guest image and run two schedules:
 
 ```sh
-cp -R ~/.hydo/versions/0.2.0/examples/redis ~/hydo-redis && cd ~/hydo-redis
+cp -R ~/.hydo/versions/0.3.0/examples/redis ~/hydo-redis && cd ~/hydo-redis
 hydo build hydo.yaml
 hydo run "disk=none | run"
 hydo run "disk=cut | run C=12 R=everysec"

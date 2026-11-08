@@ -27,8 +27,8 @@ Without Homebrew, unpack the release and run its installer. It copies hydo into 
 runs `hydo setup` there, then `hydo doctor`.
 
 ```sh
-tar xzf hydo-mac-0.2.0.tar.gz
-./hydo-mac-0.2.0/install.sh
+tar xzf hydo-mac-0.3.0.tar.gz
+./hydo-mac-0.3.0/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -221,7 +221,7 @@ into `guest/hydo_fc`, the Rust standard library and the Rust crates compiled int
 programs. `THIRD-PARTY.md` lists each one with its version, license, the files it is in and where
 its source is, and `licenses/` holds the full text of every license.
 
-The archive `hydo-mac-0.2.0-sources.tar.gz` accompanies this release (it is published next to
+The archive `hydo-mac-0.3.0-sources.tar.gz` accompanies this release (it is published next to
 the tarball, with the same `SHA256SUMS`). It contains the corresponding source: the exact
 upstream source archives of every third-party component, including every GPL- and LGPL-licensed
 one (among them the Arm GNU Toolchain's source snapshot for the C library in `guest/hydo_fc`),

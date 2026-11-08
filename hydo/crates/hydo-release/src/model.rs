@@ -77,6 +77,11 @@ pub struct RustProgram {
     pub manifest: String,
     pub packages: Vec<String>,
     pub target: String,
+    /// Cargo features the build turns on (`package/feature`, as `cargo metadata --features`
+    /// takes them), so that their optional dependencies are listed too: `hydo-world/tls` for
+    /// `guest/hydo-world-tls`.
+    #[serde(default)]
+    pub features: Vec<String>,
 }
 
 /// What the list says about a crate whose registry source lacks a license field or texts.

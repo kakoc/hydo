@@ -26,8 +26,8 @@ installing to your first exploration and a reproduced failure.
 ## 1. Install
 
 ```sh
-tar xzf hydo-linux-0.2.0.tar.gz
-./hydo-linux-0.2.0/install.sh                 # or: --prefix DIR (default ~/.hydo), --add-to-path
+tar xzf hydo-linux-0.3.0.tar.gz
+./hydo-linux-0.3.0/install.sh                 # or: --prefix DIR (default ~/.hydo), --add-to-path
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -49,7 +49,7 @@ The run engine needs no compiling: it is Rust, and it runs inside `hydo` itself 
 `/dev/hvx` (as root, or after `hydo module udev install`), or as the program `bin/hydo-hvx` under
 `sudo` when you cannot. The installer writes nothing outside `~/.hydo` except your shell startup
 file (only with `--add-to-path`) and the udev rule (only with `--udev`). If the module is already
-loaded (a machine where someone else manages it), `./hydo-linux-0.2.0/install.sh --no-module`
+loaded (a machine where someone else manages it), `./hydo-linux-0.3.0/install.sh --no-module`
 skips `hydo module install`; `hydo doctor` then warns that `hvx.ko` was not built by this
 release. If the module could not be installed (for example without kernel headers or a C
 compiler), fix what the message says, then run:
@@ -240,7 +240,7 @@ machines). It needs x86_64 Linux 5.10 or later with `/dev/kvm` usable by your us
 the group `kvm`); it has so far been run on Intel CPUs only.
 
 ```sh
-./hydo-linux-0.2.0/install.sh --no-module     # nothing to build or load
+./hydo-linux-0.3.0/install.sh --no-module     # nothing to build or load
 hydo doctor --backend kvm
 cd ~/hydo-redis && hydo build hydo.yaml        # the same image as above
 hydo run --backend kvm "disk=none | run"
@@ -282,7 +282,7 @@ the Rust standard library and the Rust crates compiled into hydo's programs. `TH
 lists each one with its version, license, the files it is in and where its source is, and
 `licenses/` holds the full text of every license.
 
-The archive `hydo-linux-0.2.0-sources.tar.gz` accompanies this release (it is published next to
+The archive `hydo-linux-0.3.0-sources.tar.gz` accompanies this release (it is published next to
 the tarball, with the same `SHA256SUMS`). It contains the corresponding source: the exact
 upstream source archives of every third-party component, including every GPL- and LGPL-licensed
 one, the patches and configurations applied to them, and the build recipes.

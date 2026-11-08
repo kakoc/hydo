@@ -4,7 +4,7 @@
 #   hvx/onboard/hydo-build <this> --arch arm64 --build-dir <dir>      (--set transfer=racy: the race)
 name: redis-composed
 description: Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).
-hydo_version: "0.2"
+hydo_version: "0.3"
 format: 1
 
 root:

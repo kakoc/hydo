@@ -32,13 +32,13 @@
 # Users of the release need no Nix.
 # Everything else is built here from this tree with the pinned Rust toolchain: the programs
 # (bin/), the guest agent (guest/hydo-agent, checked against its pin by hydo-build), hydo-world,
-# hydo-read and the gRPC client hydo-grpc. The tarball's bytes depend only on the inputs (fixed
+# hydo-world-tls, hydo-read, hydo-sql and the gRPC client hydo-grpc. The tarball's bytes depend only on the inputs (fixed
 # file times, owners and order; gzip without a time stamp).
 set -e
 umask 022
 D=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$D/../../.." && pwd)
-VERSION=${HYDO_VERSION:-0.2.0}
+VERSION=${HYDO_VERSION:-0.3.0}
 OUTDIR=${1:-$D/out}
 A=$D/assets
 GB=$TOP/target/dist-linux     # the guest programs built from this tree (not assets: they are not pinned here)
@@ -185,11 +185,22 @@ else
 fi
 file -L "$REL/guest/hydo-world" | grep -q 'x86-64.*static' || { echo "guest/hydo-world is not a static x86_64 binary" >&2; exit 1; }
 chmod 755 "$REL/guest/hydo-world"
+# guest/hydo-world-tls (since 0.3.0): hydo-world with the TLS front of `tls:` fakes and proxies
+# (the cargo feature `tls`, M180), staged by `hydo build` instead of hydo-world only for manifests
+# with `tls:`; pure Rust, the same bytes on a Mac and on Linux (docs/BUILD-PINS.md "hydo-world")
+HYDO_WORLD_TLS=1 bash "$TOP/hydo/crates/hydo-world/build.sh" "$REL/guest/hydo-world-tls" >&2
+chmod 755 "$REL/guest/hydo-world-tls"
 # guest/hydo-read (also hydo-check): the ready-made store readers (hydo/crates/hydo-read, its own
 # Cargo workspace; MANIFEST.md "Store readers"), staged by `hydo build` only for manifests that
 # call them; its bytes depend on the kind of host that builds it (docs/BUILD-PINS.md "hydo-read")
 "$TOP/hydo/crates/hydo-read/build.sh" x86_64 "$GB/read" >&2
 cp "$GB/read/hydo-read" "$REL/guest/hydo-read"; chmod 755 "$REL/guest/hydo-read"
+# guest/hydo-sql (since 0.3.0): the ready-made SQL workloads and checks of `hydo sql-gen`
+# (hydo/crates/hydo-sql, its own Cargo workspace, M182), staged by `hydo build` only for
+# manifests whose commands call it; as for hydo-read, the kind of building host is in its bytes
+# (docs/BUILD-PINS.md "hydo-sql")
+"$TOP/hydo/crates/hydo-sql/build.sh" x86_64 "$GB/sql" >&2
+cp "$GB/sql/hydo-sql" "$REL/guest/hydo-sql"; chmod 755 "$REL/guest/hydo-sql"
 # guest/hydo-grpc: the generated drivers' static client (hydo/crates/hydo-grpc; the same bytes on a
 # Mac and on Linux, docs/BUILD-PINS.md "The gRPC client"), copied into a project by hydo-grpc-gen
 "$TOP/hydo/grpcgen/build-client.sh" --out "$GB/grpc" amd64 >&2

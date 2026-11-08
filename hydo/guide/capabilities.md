@@ -4,7 +4,7 @@ hydo runs a guest on one of three engines. Check this table before using a featu
 build --check` validates the schema only, the full `hydo build` refuses a feature the
 architecture lacks, and a run refuses a schedule token its engine cannot apply (`UNSUPPORTED on
 kvm: host token cf=20 needs hvx`) or one that names a service, link, fake or knob the image does
-not have. State of hydo after 0.2.0 (2026-11-08).
+not have. State of hydo 0.3.0 (2026-11-08).
 
 - **hvx** (the Linux release, `hydo-linux-<version>`): x86_64 guests on an Intel VT-x machine,
   through hydo's kernel module (`hydo module install`). The reference engine: every feature.

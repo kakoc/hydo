@@ -46,6 +46,19 @@
     },
     {
       "files": [
+        "guest/hydo-world-tls"
+      ],
+      "manifest": "Cargo.toml",
+      "packages": [
+        "hydo-world"
+      ],
+      "target": "x86_64-unknown-linux-musl",
+      "features": [
+        "hydo-world/tls"
+      ]
+    },
+    {
+      "files": [
         "guest/hydo-grpc"
       ],
       "manifest": "Cargo.toml",
@@ -71,6 +84,16 @@
       "manifest": "hydo/crates/hydo-read/Cargo.toml",
       "packages": [
         "hydo-read"
+      ],
+      "target": "x86_64-unknown-linux-musl"
+    },
+    {
+      "files": [
+        "guest/hydo-sql"
+      ],
+      "manifest": "hydo/crates/hydo-sql/Cargo.toml",
+      "packages": [
+        "hydo-sql"
       ],
       "target": "x86_64-unknown-linux-musl"
     }
@@ -106,7 +129,9 @@
         "examples/redis/hydo-netem.yaml",
         "guest/hydo-agent",
         "guest/hydo-world",
+        "guest/hydo-world-tls",
         "guest/hydo-read",
+        "guest/hydo-sql",
         "guest/hydo-grpc",
         "guest/hydo_fc",
         "guest/hvx_seedrng",
@@ -170,7 +195,9 @@
         "libexec/hydo-grpc-gen",
         "guest/hydo-agent",
         "guest/hydo-world",
+        "guest/hydo-world-tls",
         "guest/hydo-read",
+        "guest/hydo-sql",
         "guest/hydo-grpc"
       ],
       "texts": [
@@ -201,7 +228,9 @@
         "libexec/hydo-grpc-gen",
         "guest/hydo-agent",
         "guest/hydo-world",
+        "guest/hydo-world-tls",
         "guest/hydo-read",
+        "guest/hydo-sql",
         "guest/hydo-grpc"
       ],
       "texts": [
@@ -233,7 +262,9 @@
         "libexec/hydo-grpc-gen",
         "guest/hydo-agent",
         "guest/hydo-world",
+        "guest/hydo-world-tls",
         "guest/hydo-read",
+        "guest/hydo-sql",
         "guest/hydo-grpc"
       ],
       "texts": [

@@ -89,7 +89,7 @@ accounts, an AOF rewrite as a serial driver, a read as an anytime command, seed 
 
 ```yaml
 format: 1                    # the project format (a newer one is refused; hydo guide schema)
-hydo_version: "0.2"          # the hydo this plan was written for (hydo build refuses another major.minor)
+hydo_version: "0.3"          # the hydo this plan was written for (hydo build refuses another major.minor)
 workload:
   steps: 20                  # rounds; faults are placed at round numbers. No run: here.
   timeout: 300

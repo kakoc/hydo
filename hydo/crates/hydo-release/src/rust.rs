@@ -59,6 +59,11 @@ fn metadata(repo: &Path, prog: &RustProgram) -> Result<Value, String> {
             "--filter-platform",
         ])
         .arg(&prog.target)
+        .args(if prog.features.is_empty() {
+            vec![]
+        } else {
+            vec!["--features".to_string(), prog.features.join(",")]
+        })
         .arg("--manifest-path")
         .arg(&manifest)
         .current_dir(repo)

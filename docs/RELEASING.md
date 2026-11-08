@@ -71,7 +71,7 @@ filled once from the machine with the Nix store paths).
   low-priority work pauses while it exists) and remove it when done. Check `free -m`. Build in
   an own tree made from an archive of the commit's tracked files, with `hydo/COMMIT` holding the
   full commit hash, from clean Rust targets (`target/`, `hydo/crates/hydo-agent/target/`,
-  `hydo/crates/hydo-read/target/` removed):
+  `hydo/crates/hydo-read/target/` and, since 0.3.0, `hydo/crates/hydo-sql/target/` removed):
   `HYDO_ASSETS_FROM=<assets> HYDO_SOURCES_FROM=<cache> sh hydo/dist/linux/build-release.sh <out>`,
   with `~/hydo-rust/env.sh` sourced. Twice, into two output directories. The assets directory
   must hold every file of `assets.sha256` and nothing else: since 0.2.0 that includes the KVM
