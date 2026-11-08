@@ -51,6 +51,8 @@ pub struct Args {
     /// `--storage-faults`: draw G= (corruption) and L= (one service's power loss) for the
     /// services with `storage:` (docs/design/storage-faults.md).
     pub storage_faults: bool,
+    /// `--cluster-faults` (M195): draw kills, pauses and partitions of the manifest's `groups:`.
+    pub cluster_faults: bool,
     pub freeze_call: bool,
     pub protocol_faults: bool,
     pub grpc_faults: bool,
@@ -116,6 +118,7 @@ impl Default for Args {
             concurrency: false,
             more_faults: false,
             storage_faults: false,
+            cluster_faults: false,
             freeze_call: false,
             protocol_faults: false,
             grpc_faults: false,
@@ -144,7 +147,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 17] = [
+const FLAGS: [&str; 18] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -154,6 +157,7 @@ const FLAGS: [&str; 17] = [
     "concurrency",
     "more-faults",
     "storage-faults",
+    "cluster-faults",
     "freeze-call",
     "protocol-faults",
     "grpc-faults",
@@ -291,6 +295,7 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "concurrency" => a.concurrency = true,
             "more-faults" => a.more_faults = true,
             "storage-faults" => a.storage_faults = true,
+            "cluster-faults" => a.cluster_faults = true,
             "freeze-call" => a.freeze_call = true,
             "protocol-faults" => a.protocol_faults = true,
             "grpc-faults" => a.grpc_faults = true,

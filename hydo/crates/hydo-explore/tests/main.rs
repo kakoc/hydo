@@ -5,6 +5,7 @@
 
 mod support;
 
+mod cluster_faults;
 mod corpus;
 mod identity;
 mod liveness_deadline;

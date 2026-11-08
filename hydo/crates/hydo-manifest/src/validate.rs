@@ -47,7 +47,10 @@ pub const KNOWN_TOP: &[&str] = &[
     "checks",
     "network",
     "errors",
+    "groups",
 ];
+/// The keys of a `groups:` entry (Milestone 195).
+pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "description"];
 pub const KNOWN_SVC: &[&str] = &[
     "name",
     "cmd",
@@ -736,6 +739,7 @@ pub fn validate(m: &mut Value) -> R<()> {
         }
     }
     validate_network(m)?;
+    validate_groups(m)?;
     validate_checks(m, &ids)?;
     validate_world(m)?;
     validate_errors(m)?;
@@ -757,6 +761,78 @@ fn validate_network(m: &Value) -> R<()> {
             if !has(s, "addr")? {
                 return Err(err(format!(
                     "services[{i}]: network: bridge gives every service its own network namespace and address: addr: required (an address in {NET_BRIDGE} other than {NET_GW})"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `groups:` (Milestone 195): named sets of services that fault tokens select from.
+fn validate_groups(m: &Value) -> R<()> {
+    let Some(gs) = obj_get(m, "groups") else {
+        return Ok(());
+    };
+    let Value::Array(gs) = gs else {
+        return Err(err(
+            "groups: a list of {name:, services: [...], primary:} entries",
+        ));
+    };
+    let svcs: Vec<String> = iter_of(&m["services"])?
+        .iter()
+        .map(|s| str_of(obj_get(s, "name").unwrap_or(&Value::Null)))
+        .collect();
+    let mut names: Vec<String> = Vec::new();
+    for (i, g) in gs.iter().enumerate() {
+        let wh = format!("groups[{i}]");
+        if !g.is_object() {
+            return Err(err(format!("{wh}: must be a mapping")));
+        }
+        unknown(g, KNOWN_GROUP, &wh)?;
+        let n = need_str(g, "name", &wh)?;
+        if pyre::match_dollar(NAME_RE, &n).is_none() {
+            return Err(err(format!(
+                "{wh}: name: lowercase letters, digits and '_', starting with a letter (got {})",
+                repr_str(&n)
+            )));
+        }
+        if names.contains(&n) {
+            return Err(err(format!(
+                "{wh}: the group {} is declared twice",
+                repr_str(&n)
+            )));
+        }
+        names.push(n.clone());
+        let Some(Value::Array(members)) = obj_get(g, "services") else {
+            return Err(err(format!(
+                "{wh} ({n}): services: a list of the group's services"
+            )));
+        };
+        if members.is_empty() {
+            return Err(err(format!("{wh} ({n}): services: at least one service")));
+        }
+        let mut seen: Vec<String> = Vec::new();
+        for s in members {
+            let s = str_of(s);
+            if !svcs.contains(&s) {
+                return Err(err(format!(
+                    "{wh} ({n}): services: {} is not a service of this manifest",
+                    repr_str(&s)
+                )));
+            }
+            if seen.contains(&s) {
+                return Err(err(format!(
+                    "{wh} ({n}): services: {} is listed twice",
+                    repr_str(&s)
+                )));
+            }
+            seen.push(s);
+        }
+        if let Some(p) = obj_get(g, "primary") {
+            if !p.is_string() || str_of(p).trim().is_empty() {
+                return Err(err(format!(
+                    "{wh} ({n}): primary: a shell command that prints the current primary's \
+                     service name"
                 )));
             }
         }

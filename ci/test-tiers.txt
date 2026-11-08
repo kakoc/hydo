@@ -49,6 +49,7 @@ hydo-control::corpus                     full
 hydo-control::corpus_net                 full
 hydo-control::drive                      fast
 hydo-control::fakes                      fast
+hydo-control::groups                     fast
 hydo-control::features                   full
 hydo-control::m123                       full
 hydo-control::react                      fast
@@ -62,6 +63,7 @@ hydo-engine::lockstep                    fast
 hydo-errors                              fast
 hydo-errors::equivalence                 fast
 hydo-explore                             fast
+hydo-explore::cluster_faults             fast
 hydo-explore::corpus                     full
 hydo-explore::fake_engine                fast
 hydo-explore::identity                   fast

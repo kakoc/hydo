@@ -562,6 +562,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | token | effect |
 |---|---|
 | `K=<svc>@<at>+<down>` | SIGKILL the service before step `at`; restart it (setup + cmd + ready) before step `at+down` |
+| `K=<a>,<b>@...`, `K=<group>.<selector>@...` | the same for every service of the list, or for the members of a group that the selector picks (`one`, `minority`, `majority`, `all`, `primary`); also for `P=` and `X=`; see "Groups of services and partitions" |
 | `P=<svc>@<at>+<n>` | SIGSTOP before step `at`, SIGCONT before step `at+n` |
 | `P=<svc>@<at>~<off>:<dur>` | pause after `off` ms of guest time for `dur` ms, while steps run; `off` may have a fraction down to microseconds (`60589.25`) |
 | `N=<svc>@<from>-<to>:<netem>` | `tc netem` on traffic to the service's `port` for steps `[from,to)` |
@@ -570,6 +571,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `T=<at>:<delta>` | step the realtime clock by `delta` seconds |
 | `N=<a>-<b>@...`, `N=<a>-*@...` | netem on the link between two services with `addr:` (or between `a` and every other one); see "Link faults" |
 | `O=<a>-<b>@<from>-<to>:req\|resp:<netem>` | one direction of a link: `req` = packets from `a` to `b`, `resp` = from `b` to `a` |
+| `N=<a>,<b>/<c>@...`, `N=<group>.<shape>@...` | a partition: netem on every link between two components, or the links that a shape over a group cuts (`halves`, `isolate`, `ring`, `bridge`, `primary`); see "Groups of services and partitions" |
 | `F=<svc>><peer>@<step>[#<n>][:<match>]:<dur>` | freeze `<svc>` at the n-th packet it **sends** to `<peer>` (`<` = **receives** from) at/after step `<step>`, for `<dur>` ms; only with `freeze` in `faults:` (see "Freeze at a call") |
 | `H=<target>@<from>-<to>:<rule>[,<rule>...]` | a protocol fault on a fake or proxy for steps `[from,to)`: an error, slow, missing or reset answer, or a duplicated / reordered / late / lost webhook; see "Fake outside services" |
 | `A=<event>[@<step>][+<ms>]:<action>` | a reaction (M139): from before step `step` (0 when not written) the host watches the console for the first SDK assertion record of `event` (`ok:true` of a `sometimes`/`reachable`, `ok:false` of the others), waits `ms` of guest time and does `<action>`: `cut` (a power cut at that instant: the workload and every service frozen, then the recovery boot), `kill-<svc>` (down until the heal), `stop-<svc>-<ms>` or `cont-<svc>` (resume a paused service: a pause healed at the first sign of no progress); reactions live during the steps only; see "Reactions" below |
@@ -586,9 +588,17 @@ them in order), waits until the queue is empty (at most the largest delay in for
 `network fault lifted: queued=<n> drained_ms=<ms> left=<n>`. Before 2026-10-23 the qdisc was
 deleted at once and every queued packet was lost, so TCP retransmitted after a timeout.
 
-A schedule holds at most one `K=`, one `P=`, one `X=`, one `G=` and one `L=`: a second one is refused (Milestone
-141; before, it silently replaced the first). To crash or stop several services at once, use
-reactions (`A=<event>:kill-<svc>`, one per service, below).
+A schedule holds at most one `K=`, one `P=`, one `X=`, one `G=`, one `L=` and one `C=`. A
+second one is refused (Milestone 141, and Milestone 195 for `C=`). Before Milestone 141 a second
+token replaced the first without a message. To crash or stop several services at once, name
+them in one token (`K=n1,n2,n3@5+2`) or select them from a group (`K=nodes.majority@5+2`).
+
+Several `N=` tokens, or several `O=` tokens, are one network fault when they have the same
+window and the same netem arguments and each names a link or a partition (Milestone 195). A
+second `N=` with another window or other netem arguments is refused, because each device has
+one netem queue. A `N=` on a service's port (`N=redis@...`) cannot be in force beside another
+`N=`. Two tokens with the same target are the exception that hydo keeps for its recorded
+schedules: the later token replaces the earlier one. A second `T=` also replaces the first.
 
 A token naming a service the manifest does not have is ignored. `hydo explore` draws its
 faults from the manifest (the hydo-explore crate's `space.rs`): kills and pauses from all
@@ -785,6 +795,84 @@ On one shared loopback network a program's outgoing connections leave from `127.
 is made to do otherwise, so most programs need the uid recipe above before a link fault touches
 them. `network: bridge` (next section) removes that condition: every service's packets carry its
 own address because the service has nothing else.
+
+### Groups of services and partitions (`groups:`)
+
+A cluster's nodes are often faulted together: all of them at once, a majority, the current
+leader, or two halves that cannot reach each other. `groups:` names such a set of services, and
+the fault tokens `K=`, `P=`, `X=` and `N=` take the group as their target (Milestone 195).
+
+```yaml
+groups:
+  - name: nodes                 # [a-z][a-z0-9_]*, the name the tokens use
+    services: [n1, n2, n3]      # services of this manifest, each once; the order counts
+    primary: |                  # optional: prints the current leader's service name
+      for n in n1 n2 n3; do
+        l=$(timeout 3 wget -q -T 2 -O - "http://$n:8222/jsz" | sed -n 's/.*"leader": *"\([a-z0-9_]*\)".*/\1/p')
+        if [ -n "$l" ]; then echo "$l"; exit 0; fi
+      done
+      exit 1
+```
+
+`K=`, `P=` and `X=` take a list or a selector in place of the service:
+
+| target | the services it acts on |
+|---|---|
+| `n1,n3` | every service of the list |
+| `nodes.all` | every member |
+| `nodes.majority[.<i>]` | floor(n/2)+1 members |
+| `nodes.minority[.<i>]` | floor(n/2) members |
+| `nodes.one[.<i>]` | one member |
+| `nodes.primary` | the member that `primary:` prints when the fault starts |
+
+The selectors `one`, `minority` and `majority` choose a subset of the members. hydo counts the
+subsets of that size in the lexicographic order of the members' positions in `services:`. `<i>`
+is the subset's number modulo the number of subsets, and 0 when it is not written. So
+`nodes.majority.2` of three members is `n2,n3`, in every run.
+
+`primary` runs the group's `primary:` command in the guest before the fault's step. The command
+prints the service name of the current primary on its first line and exits 0. hydo asks it up to
+10 times, one second of guest time apart. If no answer names a member, the run ends with
+`HYDO-ORACLE: ERROR <group>.primary: the group's primary: command named no member`.
+
+The host controller writes each resolution to the guest's log and to the control transcript,
+for example `K: nodes.primary = n2`. The schedule keeps the selector's text, and the transcript
+records which services the selector meant in that run. `hydo repro --transcript` replays the
+same services.
+
+`N=` takes a partition in place of the link:
+
+| target | the links it cuts, in both directions unless stated |
+|---|---|
+| `n1/n2,n3` | every link between two components (components separated by `/`, members by `,`) |
+| `nodes.halves[.<i>]` | the i-th subset of floor(n/2) members against the other members |
+| `nodes.isolate[.<i>]` | the i-th member against the other members |
+| `nodes.primary` | the primary against the other members |
+| `nodes.bridge[.<i>]` | the i-th member is the bridge. The other members, in their order, form a first half of floor((n-1)/2) members and a second half. The halves cannot reach each other; the bridge reaches both |
+| `nodes.ring` | one way: each member hears itself and the next floor(n/2) members around the list, so every member hears a majority and no two hear the same majority |
+
+A partition needs `addr:` on every service it names, as a link fault does. With
+`network: bridge` hydo puts the filters on the receiving service's veth; on one loopback network
+it puts them on `lo`. The fault starts before step `<from>` and is lifted before step `<to>`,
+or at the end of the workload, with the queue drained as for every network fault. The guest's
+log shows the links, for example
+`PARTITION nodes.ring (n3>n1 n1>n2 n2>n3): netem loss 100% on -:hv-n1 -:hv-n2 -:hv-n3`.
+`O=` does not take a partition.
+
+hydo refuses a target before the run when it names a group, a member, or a primary probe that the
+image does not have. The message names the groups that the image has. hydo also refuses a group
+that is too small for its selector or shape. A ring and a bridge need 3 members. Halves and an
+isolation need 2.
+
+`hydo explore --cluster-faults` draws these targets for a manifest with `groups:`. The draws
+come from their own random stream, so a seed without the option gives the schedule it gave
+before. In 50% of the schedules a kill takes a group selector, in 30% a pause does, and in 50%
+a partition shape replaces the schedule's network fault. The shrinker moves a selector towards
+one member (`nodes.majority` becomes `nodes.one`, then the member itself), a list towards fewer
+services, and a shape towards `isolate`.
+
+`hydo/onboard/examples/nats-jetstream/hydo/hydo-groups.yaml` declares the three NATS nodes as
+the group `nodes`; its `primary:` command asks the JetStream meta leader.
 
 ### Service networks (`network: bridge`)
 

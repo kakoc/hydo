@@ -26,6 +26,9 @@ const PRIOMAP: [&str; 16] = ["1"; 16];
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct NetTok {
     pub target: NetTarget,
+    /// More targets in force together with `target` (several N= or O= tokens with one window and
+    /// one netem list, M195; `targets::merge_net`). Empty for a single token.
+    pub more: Vec<NetTarget>,
     pub from: u64,
     pub to: u64,
     pub dir: Option<Direction>,
@@ -216,7 +219,7 @@ fn has_links(ctx: &Ctx) -> bool {
 /// only the services' addresses are looked at here.
 fn link_ends(ctx: &Ctx, t: &NetTarget) -> Option<Vec<String>> {
     let a = match t {
-        NetTarget::Service(_) => return None,
+        NetTarget::Service(_) | NetTarget::Partition(_) | NetTarget::Shape { .. } => return None,
         NetTarget::Link(a, _) | NetTarget::LinkAll(a) => a,
     };
     if svc_addr(ctx, a).is_empty() {
@@ -240,15 +243,40 @@ fn link_ends(ctx: &Ctx, t: &NetTarget) -> Option<Vec<String>> {
             }
             out.push(b.to_string());
         }
-        NetTarget::Service(_) => unreachable!(),
+        _ => unreachable!(),
     }
     Some(out)
 }
 
 /// known_svc (hydo-init-links.sh's, which also knows links, when the image has it). The shell
-/// looks the target's text up as a service name first.
+/// looks the target's text up as a service name first. A partition is known when its services
+/// (or its group) are (M195).
 fn known(ctx: &Ctx, t: &NetTarget) -> bool {
-    ctx.plan.service(&t.to_string()).is_some() || (has_links(ctx) && link_ends(ctx, t).is_some())
+    match t {
+        NetTarget::Partition(c) => c.iter().flatten().all(|s| ctx.plan.service(s).is_some()),
+        NetTarget::Shape { group, .. } => ctx.plan.group(group).is_some(),
+        _ => {
+            ctx.plan.service(&t.to_string()).is_some()
+                || (has_links(ctx) && link_ends(ctx, t).is_some())
+        }
+    }
+}
+
+impl NetTok {
+    /// Whether the fault is a set of links cut together (a partition, a group's shape, or
+    /// several tokens): [`Net::net_on_links`] puts it on.
+    fn is_many(&self) -> bool {
+        !self.more.is_empty() || self.target.is_partition()
+    }
+
+    /// The targets, as the log lines show them.
+    fn text(&self) -> String {
+        std::iter::once(&self.target)
+            .chain(self.more.iter())
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
 }
 
 fn tc_words(ctx: &Ctx) -> Vec<String> {
@@ -344,8 +372,11 @@ impl Net {
         self.n = Some(v.clone());
         self.nfrom = step_of(v.from);
         self.nto = step_of(v.to);
-        if !known(ctx, &v.target) {
-            log(fx, format!("N: no service {}, ignored", v.target));
+        if let Some(t) = std::iter::once(&v.target)
+            .chain(v.more.iter())
+            .find(|t| !known(ctx, t))
+        {
+            log(fx, format!("N: no service {t}, ignored"));
             (self.nfrom, self.nto) = (-1, -1);
         }
     }
@@ -356,8 +387,11 @@ impl Net {
         self.o = Some(v.clone());
         self.ofrom = step_of(v.from);
         self.oto = step_of(v.to);
-        if !known(ctx, &v.target) {
-            log(fx, format!("O: no service {}, ignored", v.target));
+        if let Some(t) = std::iter::once(&v.target)
+            .chain(v.more.iter())
+            .find(|t| !known(ctx, t))
+        {
+            log(fx, format!("O: no service {t}, ignored"));
             (self.ofrom, self.oto) = (-1, -1);
         }
     }
@@ -381,7 +415,12 @@ impl Net {
     pub(super) fn at(&mut self, fx: &mut F<'_>, ctx: &Ctx, p: i64) -> Step<()> {
         if p == self.nfrom && self.nfrom < self.nto {
             let n = self.n.clone().expect("nfrom >= 0 only with an N= token");
-            if self.net_on(fx, ctx, &n.target, "dport", &n.netem)? {
+            let on = if n.is_many() {
+                self.net_on_links(fx, ctx, &n, "dport")?
+            } else {
+                self.net_on(fx, ctx, &n.target, "dport", &n.netem)?
+            };
+            if on {
                 self.netup = true;
             }
         }
@@ -399,7 +438,12 @@ impl Net {
                 Some(Direction::Resp) => ("sport", "resp"),
                 None => unreachable!("an O= token has a direction"),
             };
-            if self.net_on(fx, ctx, &o.target, om, &o.netem)? {
+            let on = if o.is_many() {
+                self.net_on_links(fx, ctx, &o, om)?
+            } else {
+                self.net_on(fx, ctx, &o.target, om, &o.netem)?
+            };
+            if on {
                 self.oneup = true;
                 xassert(
                     fx,
@@ -618,6 +662,139 @@ impl Net {
             );
         }
         self.net_args = netem.to_vec();
+        Ok(true)
+    }
+
+    /// The directed links a fault of several links cuts, as (from, to) service names, each once,
+    /// in the order of the targets (M195). A group's shape is resolved here (the primary by its
+    /// probe) and logged with what it meant.
+    fn links_of(
+        &self,
+        fx: &mut F<'_>,
+        ctx: &Ctx,
+        tok: &NetTok,
+        m: &str,
+    ) -> Step<Vec<(String, String)>> {
+        let letter = if tok.dir.is_some() { 'O' } else { 'N' };
+        let mut out: Vec<(String, String)> = Vec::new();
+        let add = |out: &mut Vec<(String, String)>, a: &str, b: &str| {
+            let p = (a.to_string(), b.to_string());
+            if !out.contains(&p) {
+                out.push(p);
+            }
+        };
+        for t in std::iter::once(&tok.target).chain(tok.more.iter()) {
+            match t {
+                NetTarget::Link(..) | NetTarget::LinkAll(_) => {
+                    let Some(ends) = link_ends(ctx, t) else {
+                        continue;
+                    };
+                    let dir = self.link_dir(t, m);
+                    for b in &ends[1..] {
+                        if dir != "sport" {
+                            add(&mut out, &ends[0], b);
+                        }
+                        if dir != "dport" {
+                            add(&mut out, b, &ends[0]);
+                        }
+                    }
+                }
+                NetTarget::Partition(_) => {
+                    for (a, b) in t.component_links().unwrap_or_default() {
+                        add(&mut out, &a, &b);
+                    }
+                }
+                NetTarget::Shape { group, shape } => {
+                    let members = ctx
+                        .plan
+                        .group(group)
+                        .map(|g| g.services.clone())
+                        .unwrap_or_default();
+                    let p = match shape {
+                        hydo_schedule::Shape::Primary => {
+                            Some(super::targets::primary(fx, ctx, group)?)
+                        }
+                        _ => None,
+                    };
+                    let Some(links) = shape.links(&members, p.as_deref()) else {
+                        return die_oracle(
+                            fx,
+                            format!(
+                                "HYDO-ORACLE: ERROR {letter}={t}: the group {group} has {} \
+                                 members, too few for {}",
+                                members.len(),
+                                shape.word()
+                            ),
+                        );
+                    };
+                    let cut: Vec<String> = links.iter().map(|(a, b)| format!("{a}>{b}")).collect();
+                    log(fx, format!("{letter}: {t} = {}", cut.join(" ")));
+                    for (a, b) in links {
+                        add(&mut out, &a, &b);
+                    }
+                }
+                NetTarget::Service(_) => {} // targets::merge_net keeps ports out
+            }
+        }
+        // a service without addr: has no link to cut (the names check refuses such a target)
+        out.retain(|(a, b)| !svc_addr(ctx, a).is_empty() && !svc_addr(ctx, b).is_empty());
+        Ok(out)
+    }
+
+    /// A fault of several links at once (M195: a partition, a group's shape, several N= or O=
+    /// tokens): one netem queue per device, one filter per directed link, the per-link filters of
+    /// `N=a-b` (on lo with `addr:`, on the receiving service's veth with `network: bridge`). It is
+    /// lifted as every network fault is (net_off).
+    fn net_on_links(&mut self, fx: &mut F<'_>, ctx: &Ctx, tok: &NetTok, m: &str) -> Step<bool> {
+        let text = tok.text();
+        let args = netem_text(&tok.netem);
+        if ctx.plan.layout.tc.is_empty() {
+            log(fx, format!("network fault on {text} skipped (no tc)"));
+            return Ok(false);
+        }
+        let links = self.links_of(fx, ctx, tok, m)?;
+        if links.is_empty() {
+            log(
+                fx,
+                format!("network fault on {text} skipped (no link with addr:)"),
+            );
+            return Ok(false);
+        }
+        insmods(fx, ctx, &["sch_prio", "sch_netem", "cls_u32"])?;
+        let mut this: Vec<String> = Vec::new();
+        if ctx.plan.bridge {
+            for (a, b) in &links {
+                let d = netns::veth(ctx, b);
+                let mt = pair_match(&svc_addr(ctx, a), &svc_addr(ctx, b));
+                self.fault_dev(fx, ctx, &mut this, "-", &d, &tok.netem, mt)?;
+            }
+        } else {
+            let ok = tc_ok(fx, ctx, "-", root_args("lo"))?
+                && tc_ok(fx, ctx, "-", netem_args("lo", &tok.netem))?;
+            if !ok {
+                return die_oracle(fx, TC_FAILED.into());
+            }
+            for (a, b) in &links {
+                let mt = pair_match(&svc_addr(ctx, a), &svc_addr(ctx, b));
+                if !tc_ok(fx, ctx, "-", filter_args("lo", &mt))? {
+                    return die_oracle(fx, TC_FAILED.into());
+                }
+            }
+        }
+        self.net_args = tok.netem.clone();
+        let cut: Vec<String> = links.iter().map(|(a, b)| format!("{a}>{b}")).collect();
+        log(
+            fx,
+            format!(
+                "PARTITION {text} ({}): netem {args}{}",
+                cut.join(" "),
+                if this.is_empty() {
+                    String::new()
+                } else {
+                    format!(" on{}", spaced(&this))
+                }
+            ),
+        );
         Ok(true)
     }
 

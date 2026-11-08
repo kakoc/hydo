@@ -184,6 +184,7 @@ pub fn validator_keys() -> Vec<(&'static str, Vec<&'static str>)> {
         ("Guest", v::KNOWN_GUEST.to_vec()),
         ("ErrorsConfig", v::KNOWN_ERRORS_TOP.to_vec()),
         ("ServiceErrors", v::KNOWN_ERRORS_SVC.to_vec()),
+        ("Group", v::KNOWN_GROUP.to_vec()),
         ("Fake", v::KNOWN_FAKE.to_vec()),
         ("Proxy", v::KNOWN_PROXY.to_vec()),
         ("FakeRoute", v::KNOWN_ROUTE.to_vec()),

@@ -1,7 +1,7 @@
 # Faults, knobs, and exploring
 
 The full reference is in `hydo guide manifest`, in the sections `Fault tokens`, `Freeze at a
-call`, `Clock after a power cut`, and `Link faults`.
+call`, `Clock after a power cut`, `Link faults`, and `Groups of services and partitions`.
 
 ## Which faults a project allows
 
@@ -53,6 +53,35 @@ The host tokens set up the machine the guest runs on. Each is one `key=value` wo
 
 The explorer and `hydo explore --sweep` write the other host tokens themselves (inserted ticks
 `pp=` and `xt…` on hvx, vCPU turns `q=` with several vCPUs, the run budget `rb=`).
+
+## Faults on a cluster
+
+Declare a cluster's nodes as a group, so that one token acts on several of them:
+
+```yaml
+groups:
+  - name: nodes
+    services: [n1, n2, n3]
+    primary: /bin/print-leader     # optional: prints the current leader's service name
+```
+
+| token | what it does |
+|---|---|
+| `K=n1,n2,n3@5+2` | kills the three services before round 5, restarts them before round 7 |
+| `K=nodes.all@5+2` | the same, for every member of the group |
+| `K=nodes.majority@5+2` | kills floor(n/2)+1 members (`nodes.majority.1` picks the next subset) |
+| `K=nodes.primary@5+1` | kills the member that `primary:` prints before round 5 |
+| `P=nodes.minority@3+2` | pauses floor(n/2) members; `X=` takes the same targets |
+| `N=nodes.halves@3-9:loss,100%` | cuts the links between two halves of the group (both ways) |
+| `N=nodes.isolate.2@3-9:loss,100%` | cuts the third member off from the others |
+| `N=nodes.primary@3-9:loss,100%` | cuts the leader off from the others |
+| `N=nodes.ring@3-9:loss,100%` | each member hears only a majority, a different one for each member |
+| `N=nodes.bridge@3-9:loss,100%` | two halves that reach each other only through one member |
+| `N=n1/n2,n3@3-9:loss,100%` | cuts every link between the components `n1` and `n2,n3` |
+
+A partition needs `addr:` on its services. The run's log names the services each selector chose
+(`K: nodes.primary = n2`), and the schedule keeps the selector. `hydo explore --cluster-faults`
+draws these tokens for a manifest with `groups:` and shrinks a selector towards one member.
 
 ## Knobs (durability settings the explorer may relax)
 
@@ -113,18 +142,21 @@ Useful options of `hydo explore`:
 - `--durable-only`: only durable settings and an honest disk.
 - `--protocol-faults`, `--grpc-faults`, `--buggify`.
 - `--storage-faults`: `G=` and `L=` for services with `storage:`.
+- `--cluster-faults`: kills, pauses, and partitions of the services of `groups:`.
 - `--workers N`.
 
 hydo's own benchmark showed that where faults land, and in what combination, matters more than
 how the next schedule is chosen. So prefer `--strategy process` with `--more-faults`. With
 `--backend kvm` and on a Mac, use `--new-faults` instead.
 
-One schedule holds one `K=`, one `P=`, and one `X=`; a second one is refused. Every token names
-something the image has: a service, a link between services with `addr:`, a fake or proxy, or a
-knob of `knobs:`. A token for anything else is refused before the run, with a message that names
-what the image has.
+One schedule holds one `K=`, one `P=`, one `X=`, and one `C=`; a second one is refused. Several
+`N=` tokens are one fault when they share the window and the netem arguments. Every token names
+something the image has: a service, a group, a link between services with `addr:`, a fake or
+proxy, or a knob of `knobs:`. A token for anything else is refused before the run, with a message
+that names what the image has.
 
-To crash or stop several services at once, for example every node of a cluster, use reactions.
-Write `A=<event>:kill-<svc>` once per service. `<event>` is the id of an assertion record that the
+To crash or stop several services at once, name them in one token (`K=n1,n2@5+2`) or select them
+from a group (section "Faults on a cluster"). To act at the moment the system reports an event,
+use reactions: write `A=<event>:kill-<svc>`. `<event>` is the id of an assertion record that the
 system writes to the console (`hydo guide manifest`, section `Reactions`).
 `hydo explore --reactive fault --react-events <id>` draws them.

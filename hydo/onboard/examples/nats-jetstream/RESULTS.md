@@ -226,12 +226,36 @@ boots: 15 of 15 reproduced with the recorded fingerprint (the minimal schedule
 `8c81413d2915448a`). Every schedule in the tables above ran twice from a fresh boot with the same
 fp and ctl.
 
+## The nodes as a group (Milestone 195)
+
+`hydo/hydo-groups.yaml` is `hydo/hydo.yaml` with the three nodes declared as the group `nodes`.
+Its `primary:` command prints the JetStream meta leader's name from any node's `/jsz`. The
+fault tokens then aim at the cluster: `K=nodes.all@1+2` kills every node at once, which needed
+three reactions above. Images built from Milestone 195's tree: 2.10.22 `46d0108f…`, 2.10.23
+(`--set nats=2.10.23`) `53b8fc64…`. Each schedule ran twice from a fresh boot with one fingerprint:
+
+| schedule | 2.10.22 | 2.10.23 |
+|---|---|---|
+| `disk=none \| run K=nodes.all@1+2` | stream lost (acked=2) `10afd1c5d6170bd2` | OK `25a3d38b0c8dc3d2` |
+| `disk=none \| run K=nodes.primary@5+1` | stream lost (acked=19) `e97d8040917cb5db` | OK `4b9dc76af77a1164` |
+| `disk=none \| run N=nodes.halves@3-9:loss,100%` | lost 9 of 38 acknowledged messages `956df32ad9956f56` | OK `05c5a0496fb0aea0` |
+| `disk=none \| run N=nodes.ring@3-9:loss,100%` | OK `d9a6f7a30e7eb49a` | OK `f20f9d1d0b87dd8d` |
+
+`hydo explore --seeds 1-30 --strategy process --cluster-faults` on 2.10.22 found 11 failures,
+against 9 without the option (all with a power cut). Two of the 11 have no power cut: seed 18,
+whose kill of every node alone (`disk=none dseed=f92a9eae7103378b | run K=nodes.all@19+3
+W=06dd08ca,p2,q1,r500`) loses the stream, and seed 22, shrunk to `disk=none dseed=d9f3d4e02b8520f9
+| run N=nodes.isolate@2-10:loss,100% T=11:-18 W=e195e771,p4,q2,r500` (lost 5 of 34
+acknowledged messages, `e6b474bf9a8a5c14`; 2.10.23 passes it). docs/HISTORY.md "Milestone 195
+(tentative)" has every value.
+
 ## What the explorer lacked
 
 - **One kill per schedule.** Jepsen's harness kills several nodes; PR 5946's reproducer kills all
   three at once. The process strategy draws one `K=` (and a second `K=` is now refused), so it
   reached 3.1 through power cuts and, on b22a, through one kill combined with a pause or a clock
-  step. Several kills at once had to be written by hand as reactions.
+  step. Several kills at once had to be written by hand as reactions (until Milestone 195:
+  `K=nodes.all@...` and `--cluster-faults`, above).
 - **Shrinking a chosen failure.** The explorer shrinks the first failure of each signature; the
   crash-only failures shared the power cut's signature and were shrunk by hand.
   `hydo explore --schedule` runs a schedule once without shrinking it.

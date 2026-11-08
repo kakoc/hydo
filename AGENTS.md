@@ -305,6 +305,14 @@ crates. The project format (`hydo/schema/project-v1.json`), the results format
 (`docs/design/explain.md`). `hydo inspect` and the diagnosis in `result.json` show why a run
 failed (`docs/design/inspect.md`).
 
+**Faults on several services (M195).** A manifest's `groups:` names a set of services, with an
+optional `primary:` command that prints the current primary. `K=`, `P=` and `X=` take a list
+(`K=n1,n2@5+2`) or a selector over a group (`K=nodes.majority@5+2`, `K=nodes.primary@5+1`), and
+`N=` takes a partition (`N=n1/n2,n3@...`) or a group's shape (`halves`, `isolate`, `ring`,
+`bridge`, `primary`). The control transcript records each resolution. `hydo explore
+--cluster-faults` draws them from their own stream. The reference is `hydo/onboard/MANIFEST.md`,
+section "Groups of services and partitions".
+
 **Onboarding and SDKs.** The skill `skills/hydo-onboard/` holds the process; every hydo fact is
 in the guide `hydo/guide/`, printed by `hydo guide <topic>`. The assertion SDKs are in `sdk/`
 (Rust is the reference), with the shared cases in `sdk/cases/`. `sdk/README.md` is for SDK
@@ -434,6 +442,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `GLIBC_TUNABLES`); readiness gates deadlock a cluster whose health check needs its peers; the
     diagnosis reads only a service's stdout; the recovery clock after a `cf=` cut restarts at
     `clock_start`; the explorer never cuts links between peers of one cluster (M193).
+65. [user decision] Two identity-corpus schedules keep "the last token wins": a second `N=` on
+    one target and a second `T=`. Refusing them, or applying several clock steps, re-records one
+    case each. Also left: `G=` and `L=` lists, `O=` partitions, several `N=` windows at once, a
+    primary followed during the fault, and runs on hvx and KVM (M195).
 
 ## Milestone index
 
@@ -642,6 +654,8 @@ build machine, before 2026-10-13.
 - M194: guest loops without VM exits on KVM: research (a host branch counter, the guest kernel)
   and the opt-in full-state cycle prototype `HYDO_KVM_SPIN_STATE=1`; TigerBeetle's single replica
   runs on KVM; the first v3 guest on AMD
+- M195: lists and group selectors for `K=`, `P=` and `X=`, partition shapes for `N=`, and
+  `--cluster-faults`; NATS 2.10.22 loses its stream to `K=nodes.all@1+2` without reactions
 
 ## Where to look
 

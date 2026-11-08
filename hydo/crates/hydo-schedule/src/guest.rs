@@ -10,6 +10,7 @@
 use crate::compose::Compose;
 use crate::num::{dec, err, hex, name, sdec};
 use crate::storage::Corruption;
+use crate::target::{component_links, parse_components, parse_shape, Shape, Target};
 use crate::ParseError;
 use std::fmt;
 
@@ -90,16 +91,32 @@ fn write_netem(f: &mut fmt::Formatter<'_>, l: &[Netem]) -> fmt::Result {
 }
 
 /// What a network fault acts on: a service's port, or a link between services with `addr:`
-/// (`a-b`, or `a-*` = a against every other; manifest_space.py, hydo-init-links.sh).
+/// (`a-b`, or `a-*` = a against every other; manifest_space.py, hydo-init-links.sh), and since
+/// Milestone 195 a partition (`a,b/c`: every link between two components) or a shape over a group
+/// (`<group>.<shape>`, `target.rs`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum NetTarget {
     Service(String),
     Link(String, String),
     LinkAll(String),
+    /// `a[,b...]/c[,d...][/...]`: the components of a partition.
+    Partition(Vec<Vec<String>>),
+    /// `<group>.<shape>`: a partition shape over a group's members.
+    Shape {
+        group: String,
+        shape: Shape,
+    },
 }
 
 impl NetTarget {
     fn parse(s: &str, what: &str) -> Result<NetTarget, ParseError> {
+        if s.contains('/') {
+            return Ok(NetTarget::Partition(parse_components(s, what)?));
+        }
+        if s.contains('.') {
+            let (group, shape) = parse_shape(s, what)?;
+            return Ok(NetTarget::Shape { group, shape });
+        }
         match s.split_once('-') {
             None => {
                 name(s, what)?;
@@ -116,6 +133,20 @@ impl NetTarget {
             }
         }
     }
+
+    /// Whether the target is a partition (components or a group's shape): a set of links cut
+    /// together.
+    pub fn is_partition(&self) -> bool {
+        matches!(self, NetTarget::Partition(_) | NetTarget::Shape { .. })
+    }
+
+    /// The directed links a partition of components cuts (None for the other targets).
+    pub fn component_links(&self) -> Option<Vec<(String, String)>> {
+        match self {
+            NetTarget::Partition(c) => Some(component_links(c)),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for NetTarget {
@@ -124,6 +155,11 @@ impl fmt::Display for NetTarget {
             NetTarget::Service(s) => f.write_str(s),
             NetTarget::Link(a, b) => write!(f, "{a}-{b}"),
             NetTarget::LinkAll(a) => write!(f, "{a}-*"),
+            NetTarget::Partition(c) => {
+                let t: Vec<String> = c.iter().map(|x| x.join(",")).collect();
+                f.write_str(&t.join("/"))
+            }
+            NetTarget::Shape { group, shape } => write!(f, "{group}.{shape}"),
         }
     }
 }
@@ -131,11 +167,12 @@ impl fmt::Display for NetTarget {
 /// `P=`: a pause (SIGSTOP .. SIGCONT).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Pause {
-    /// `P=<svc>@<at>+<n>`: stopped before step at, continued before step at+n.
-    Steps { svc: String, at: u64, steps: u64 },
-    /// `P=<svc>@<at>~<off>:<dur>`: a timer armed before step at stops it after off ms, for dur ms.
+    /// `P=<target>@<at>+<n>`: stopped before step at, continued before step at+n.
+    Steps { target: Target, at: u64, steps: u64 },
+    /// `P=<target>@<at>~<off>:<dur>`: a timer armed before step at stops it after off ms, for
+    /// dur ms.
     Timer {
-        svc: String,
+        target: Target,
         at: u64,
         off_ms: u64,
         dur_ms: u64,
@@ -637,8 +674,9 @@ impl fmt::Display for React {
 /// One guest token (after `run`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum GuestToken {
-    /// `K=<svc>@<at>+<down>`: SIGKILL before step at, restart before step at+down.
-    Kill { svc: String, at: u64, down: u64 },
+    /// `K=<target>@<at>+<down>`: SIGKILL before step at, restart before step at+down. The
+    /// target is a service, a list or a group selector (`target.rs`).
+    Kill { target: Target, at: u64, down: u64 },
     /// `P=`: a pause.
     Pause(Pause),
     /// `N=<target>@<from>-<to>:<netem>`: netem on a service's port or a link for steps [from, to).
@@ -662,8 +700,12 @@ pub enum GuestToken {
     Clock { at: u64, delta: i64 },
     /// `Q=<n>[d]`: n concurrent requests; `d` = every request sent twice (the stack's client).
     Concurrency { n: u64, double: bool },
-    /// `X=<svc>@<at>~<off>`: a timer armed before step at kills svc after off ms.
-    TimedKill { svc: String, at: u64, off_ms: u64 },
+    /// `X=<target>@<at>~<off>`: a timer armed before step at kills the target after off ms.
+    TimedKill {
+        target: Target,
+        at: u64,
+        off_ms: u64,
+    },
     /// `B=`: the BUGGIFY configuration.
     Buggify(Buggify),
     /// `H=`: a protocol fault.
@@ -704,6 +746,18 @@ fn at_plus(v: &str, what: &str) -> Result<(String, u64, u64), ParseError> {
         .split_once('+')
         .ok_or_else(|| err(format!("{what}: <svc>@<at>+<n>")))?;
     Ok((svc.to_string(), dec(a, what)?, dec(n, what)?))
+}
+
+/// `<target>@<at>+<n>` (K=, P=).
+fn target_at_plus(v: &str, what: &str) -> Result<(Target, u64, u64), ParseError> {
+    let (t, r) = v
+        .split_once('@')
+        .ok_or_else(|| err(format!("{what}: <svc>@<at>+<n>")))?;
+    let target = Target::parse(t, what)?;
+    let (a, n) = r
+        .split_once('+')
+        .ok_or_else(|| err(format!("{what}: <svc>@<at>+<n>")))?;
+    Ok((target, dec(a, what)?, dec(n, what)?))
 }
 
 fn window(r: &str, what: &str) -> Result<(u64, u64), ParseError> {
@@ -755,15 +809,15 @@ impl GuestToken {
         let what = word;
         Ok(match letter {
             'K' => {
-                let (svc, at, down) = at_plus(v, what)?;
-                GuestToken::Kill { svc, at, down }
+                let (target, at, down) = target_at_plus(v, what)?;
+                GuestToken::Kill { target, at, down }
             }
             'P' => {
                 if v.contains('~') {
-                    let (svc, r) = v
+                    let (t, r) = v
                         .split_once('@')
                         .ok_or_else(|| err(format!("{what}: <svc>@<at>~<off>:<dur>")))?;
-                    name(svc, what)?;
+                    let target = Target::parse(t, what)?;
                     let (a, r) = r
                         .split_once('~')
                         .ok_or_else(|| err(format!("{what}: <svc>@<at>~<off>:<dur>")))?;
@@ -771,14 +825,14 @@ impl GuestToken {
                         .split_once(':')
                         .ok_or_else(|| err(format!("{what}: <svc>@<at>~<off>:<dur>")))?;
                     GuestToken::Pause(Pause::Timer {
-                        svc: svc.to_string(),
+                        target,
                         at: dec(a, what)?,
                         off_ms: dec(o, what)?,
                         dur_ms: dec(d, what)?,
                     })
                 } else {
-                    let (svc, at, steps) = at_plus(v, what)?;
-                    GuestToken::Pause(Pause::Steps { svc, at, steps })
+                    let (target, at, steps) = target_at_plus(v, what)?;
+                    GuestToken::Pause(Pause::Steps { target, at, steps })
                 }
             }
             'N' => {
@@ -816,8 +870,15 @@ impl GuestToken {
                     // hydo-init.sh: die_oracle "bad one-way direction"
                     _ => return Err(err(format!("{what}: the direction is req or resp"))),
                 };
+                let target = NetTarget::parse(t, what)?;
+                if target.is_partition() {
+                    return Err(err(format!(
+                        "{what}: a partition is cut both ways; write it as N= (a ring shape \
+                         cuts one way already)"
+                    )));
+                }
                 GuestToken::OneWay {
-                    target: NetTarget::parse(t, what)?,
+                    target,
                     from,
                     to,
                     dir,
@@ -845,15 +906,15 @@ impl GuestToken {
                 }
             }
             'X' => {
-                let (svc, r) = v
+                let (t, r) = v
                     .split_once('@')
                     .ok_or_else(|| err(format!("{what}: <svc>@<at>~<ms>")))?;
-                name(svc, what)?;
+                let target = Target::parse(t, what)?;
                 let (a, o) = r
                     .split_once('~')
                     .ok_or_else(|| err(format!("{what}: <svc>@<at>~<ms>")))?;
                 GuestToken::TimedKill {
-                    svc: svc.to_string(),
+                    target,
                     at: dec(a, what)?,
                     off_ms: dec(o, what)?,
                 }
@@ -916,14 +977,16 @@ impl GuestToken {
 impl fmt::Display for GuestToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GuestToken::Kill { svc, at, down } => write!(f, "K={svc}@{at}+{down}"),
-            GuestToken::Pause(Pause::Steps { svc, at, steps }) => write!(f, "P={svc}@{at}+{steps}"),
+            GuestToken::Kill { target, at, down } => write!(f, "K={target}@{at}+{down}"),
+            GuestToken::Pause(Pause::Steps { target, at, steps }) => {
+                write!(f, "P={target}@{at}+{steps}")
+            }
             GuestToken::Pause(Pause::Timer {
-                svc,
+                target,
                 at,
                 off_ms,
                 dur_ms,
-            }) => write!(f, "P={svc}@{at}~{off_ms}:{dur_ms}"),
+            }) => write!(f, "P={target}@{at}~{off_ms}:{dur_ms}"),
             GuestToken::Net {
                 target,
                 from,
@@ -952,7 +1015,9 @@ impl fmt::Display for GuestToken {
             GuestToken::Concurrency { n, double } => {
                 write!(f, "Q={n}{}", if *double { "d" } else { "" })
             }
-            GuestToken::TimedKill { svc, at, off_ms } => write!(f, "X={svc}@{at}~{off_ms}"),
+            GuestToken::TimedKill { target, at, off_ms } => {
+                write!(f, "X={target}@{at}~{off_ms}")
+            }
             GuestToken::Buggify(b) => {
                 write!(f, "B={:x}", b.seed)?;
                 if let Some(e) = b.enable_permille {

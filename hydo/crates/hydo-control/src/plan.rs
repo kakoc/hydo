@@ -203,7 +203,40 @@ pub struct Plan {
     /// `services[].storage` (docs/design/storage-faults.md), in the manifest's order: the
     /// directories G= corrupts and the own file systems L= takes away (schedule/storage.rs).
     pub storage: Vec<PlanStorage>,
+    /// `groups:` (Milestone 195): named sets of services that fault targets select from
+    /// (`K=<group>.majority`, `N=<group>.halves`), in the manifest's order.
+    pub groups: Vec<PlanGroup>,
     pub layout: Layout,
+}
+
+/// One group of services (`groups:`): its members in the manifest's order and the command that
+/// prints the current primary's service name ("" = none).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanGroup {
+    pub name: String,
+    pub services: Vec<String>,
+    pub primary: String,
+}
+
+impl PlanGroup {
+    fn of(d: &Value) -> Vec<PlanGroup> {
+        d.get("groups")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|g| PlanGroup {
+                name: py::str_of(&g["name"]),
+                services: g
+                    .get("services")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .map(py::str_of)
+                    .collect(),
+                primary: get(g, "primary").map(py::str_of).unwrap_or_default(),
+            })
+            .collect()
+    }
 }
 
 /// One service's storage: its directory, and its own file system's partition when it has one.
@@ -539,12 +572,17 @@ impl Plan {
                     })
                     .collect()
             },
+            groups: PlanGroup::of(d),
             layout,
         })
     }
 
     pub fn service(&self, name: &str) -> Option<&PlanService> {
         self.services.iter().find(|s| s.name == name)
+    }
+
+    pub fn group(&self, name: &str) -> Option<&PlanGroup> {
+        self.groups.iter().find(|g| g.name == name)
     }
 
     pub fn storage_of(&self, svc: &str) -> Option<&PlanStorage> {

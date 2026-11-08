@@ -11,6 +11,7 @@ mod corpus_net;
 mod drive;
 mod fakes;
 mod features;
+mod groups;
 mod m123;
 mod react;
 mod restart;

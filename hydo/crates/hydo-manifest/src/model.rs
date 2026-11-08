@@ -537,6 +537,11 @@ pub struct Project {
     /// The long-running processes, started in dependency order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub services: Option<Vec<Service>>,
+    /// Named sets of services (the nodes of a cluster) that fault tokens aim at as a whole:
+    /// K=<group>.majority@..., P=<group>.primary@..., N=<group>.halves@... (MANIFEST.md
+    /// "Groups of services").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub groups: Option<Vec<Group>>,
     /// Run once after every service is ready, before the snapshot every schedule starts from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provision: Option<Text>,
@@ -938,6 +943,22 @@ pub struct FreezeSplit {
     pub replies: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requests: Option<Vec<String>>,
+}
+
+/// A group of services that fault tokens select from.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct Group {
+    /// [a-z][a-z0-9_]*: the name fault tokens use (K=<name>.majority@...).
+    pub name: String,
+    /// The members, services of this manifest, each once. Selectors count them in this order.
+    pub services: Vec<Text>,
+    /// A command that prints the service name of the group's current primary (leader) on its
+    /// first line and exits 0; run in the guest when a fault aims at <name>.primary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary: Option<Text>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
 }
 
 /// A fake outside service (HTTP, or cleartext HTTP/2 gRPC).
