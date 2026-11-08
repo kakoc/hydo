@@ -43,6 +43,7 @@ pub mod equiv;
 pub mod events;
 mod fx;
 pub mod listappend;
+pub mod messages;
 pub mod py;
 pub mod register;
 mod unitab;
@@ -162,6 +163,11 @@ pub struct Checks {
     pub warnings: Vec<String>,
     /// Each check as the results format reports it (one per id, in the order of `results`).
     pub checks: Vec<CheckInfo>,
+    /// Each `type: messages` check's report, as JSON (sorted keys): `id`, `history`, the
+    /// `declaration` with every default, each claim's `status`, `judged`, `undecided` and
+    /// `summary`, the `measures`, `ops` and `warnings` (or `error` when the declaration cannot be
+    /// read). Its claims are also in `checks`, each under the id `<id>.<claim>`.
+    pub messages: Vec<String>,
 }
 
 /// One check of [`Checks`]: what its spec says and what it found.
@@ -222,6 +228,7 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
             report: String::new(),
             warnings: warn,
             checks: Vec::new(),
+            messages: Vec::new(),
         });
     }
     let mut infos: Vec<CheckInfo> = Vec::new();
@@ -232,129 +239,147 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
     let mut first_bad: Option<(PyVal, String)> = None;
     let mut first_err: Option<(PyVal, String)> = None;
     let mut oks: Vec<(PyVal, String)> = Vec::new();
-    for sp in &specs {
-        let mut r = run_check(&ev, sp, budget)?;
-        let id = sp
+    let mut messages_out: Vec<String> = Vec::new();
+    let clock = messages::hist::clock_positions(&ev, &messages::hist::clock_lines(sources));
+    for decl_sp in &specs {
+        // A messages check is one property per claim (`<id>.<claim>`); the others are one each.
+        let parts: Vec<(PyVal, CheckResult)> = if is_messages(decl_sp) {
+            let (parts, json) = messages_parts(&ev, decl_sp, &clock)?;
+            messages_out.push(json);
+            parts
+        } else {
+            vec![(decl_sp.clone(), run_check(&ev, decl_sp, budget)?)]
+        };
+        let zero = PyVal::Int(py::BigInt::from_i64(0));
+        // the final: read-back's status, found by the declared check's id
+        let id0 = decl_sp
             .get("id")
             .cloned()
             .ok_or_else(|| Crash("KeyError: 'id'".into()))?;
-        let key = id.key()?;
-        let zero = PyVal::Int(py::BigInt::from_i64(0));
+        let key0 = id0.key()?;
         let frc = if own_finals {
-            sp.get("_final_rc").unwrap_or(&zero)
+            decl_sp.get("_final_rc").unwrap_or(&zero)
         } else {
             finals
                 .iter()
-                .find(|(k, _)| *k == key)
+                .find(|(k, _)| *k == key0)
                 .map(|(_, v)| v)
                 .unwrap_or(&zero)
         };
-        if frc.truthy() && r.status == Outcome::Ok {
-            // the read-back did not complete: the history may miss the reads that matter
-            r = CheckResult {
-                status: Outcome::Error,
-                summary: format!(
+        for (sp, mut r) in parts {
+            let sp = &sp;
+            let id = sp
+                .get("id")
+                .cloned()
+                .ok_or_else(|| Crash("KeyError: 'id'".into()))?;
+            let key = id.key()?;
+            if frc.truthy() && r.status == Outcome::Ok {
+                // the read-back did not complete: the history may miss the reads that matter
+                r = CheckResult {
+                    status: Outcome::Error,
+                    summary: format!(
                     "its final: read-back exited with status {}, so the history is incomplete ({})",
                     frc.fmt_d()?,
                     r.summary
                 ),
-                explanation: String::new(),
-                details: r.details,
-                warnings: r.warnings,
-            };
-        }
-        let typ = sp.get("type").cloned().unwrap_or(PyVal::None);
-        let hist = sp.get("history").cloned().unwrap_or(PyVal::None);
-        let msg = match sp.get("msg") {
-            Some(m) if m.truthy() => m.clone(),
-            _ => {
-                let mc = sp
-                    .get("model")
-                    .or_else(|| sp.get("consistency"))
-                    .map(PyVal::str_of)
-                    .unwrap_or_default();
-                PyVal::Str(format!(
-                    "{} history {} is {}",
-                    typ.str_of(),
-                    hist.str_of(),
-                    mc
-                ))
+                    explanation: String::new(),
+                    details: r.details,
+                    warnings: r.warnings,
+                };
             }
-        };
-        recs.push(format!(
-            "HYDO-ASSERT-DECL {}",
-            py::dumps_sorted(&dict(vec![
-                ("t", PyVal::str("always")),
-                ("id", id.clone()),
-                ("msg", msg.clone()),
-            ]))
-        ));
-        let mut det = PyVal::Dict(r.details.clone());
-        det.set("check", typ.clone());
-        det.set("out", PyVal::str(py::head(&r.summary, 400)));
-        let info = CheckInfo {
-            id: id.str_of(),
-            check: typ.str_of(),
-            history: hist.str_of(),
-            msg: msg.str_of(),
-            status: r.status,
-            summary: r.summary.clone(),
-            explanation: r.explanation.clone(),
-            warnings: r.warnings.clone(),
-            details: py::dumps_sorted(&det),
-        };
-        if matches!(r.status, Outcome::Ok | Outcome::Violation) {
+            let typ = sp.get("type").cloned().unwrap_or(PyVal::None);
+            let hist = sp.get("history").cloned().unwrap_or(PyVal::None);
+            let msg = match sp.get("msg") {
+                Some(m) if m.truthy() => m.clone(),
+                _ => {
+                    let mc = sp
+                        .get("model")
+                        .or_else(|| sp.get("consistency"))
+                        .map(PyVal::str_of)
+                        .unwrap_or_default();
+                    PyVal::Str(format!(
+                        "{} history {} is {}",
+                        typ.str_of(),
+                        hist.str_of(),
+                        mc
+                    ))
+                }
+            };
             recs.push(format!(
-                "HYDO-ASSERT {}",
+                "HYDO-ASSERT-DECL {}",
                 py::dumps_sorted(&dict(vec![
                     ("t", PyVal::str("always")),
                     ("id", id.clone()),
-                    ("ok", PyVal::Bool(r.status == Outcome::Ok)),
-                    ("msg", msg),
-                    ("details", det),
+                    ("msg", msg.clone()),
                 ]))
             ));
-        }
-        rep.push(format!(
-            "== {} ({}, history {}): {}",
-            id.str_of(),
-            typ.str_of(),
-            hist.str_of(),
-            r.status.name().to_uppercase()
-        ));
-        rep.push(r.summary.clone());
-        if !r.explanation.is_empty() {
-            rep.push(r.explanation.clone());
-        }
-        for w in r.warnings.iter().take(20) {
-            rep.push(format!("warning: {w}"));
-        }
-        rep.push(String::new());
-        match r.status {
-            Outcome::Violation if first_bad.is_none() => {
-                first_bad = Some((id.clone(), r.summary.clone()))
+            let mut det = PyVal::Dict(r.details.clone());
+            det.set("check", typ.clone());
+            det.set("out", PyVal::str(py::head(&r.summary, 400)));
+            let info = CheckInfo {
+                id: id.str_of(),
+                check: typ.str_of(),
+                history: hist.str_of(),
+                msg: msg.str_of(),
+                status: r.status,
+                summary: r.summary.clone(),
+                explanation: r.explanation.clone(),
+                warnings: r.warnings.clone(),
+                details: py::dumps_sorted(&det),
+            };
+            if matches!(r.status, Outcome::Ok | Outcome::Violation) {
+                recs.push(format!(
+                    "HYDO-ASSERT {}",
+                    py::dumps_sorted(&dict(vec![
+                        ("t", PyVal::str("always")),
+                        ("id", id.clone()),
+                        ("ok", PyVal::Bool(r.status == Outcome::Ok)),
+                        ("msg", msg),
+                        ("details", det),
+                    ]))
+                ));
             }
-            Outcome::Violation => {}
-            Outcome::Undecided | Outcome::Error => {
-                if first_err.is_none() {
-                    first_err = Some((id.clone(), r.summary.clone()))
+            rep.push(format!(
+                "== {} ({}, history {}): {}",
+                id.str_of(),
+                typ.str_of(),
+                hist.str_of(),
+                r.status.name().to_uppercase()
+            ));
+            rep.push(r.summary.clone());
+            if !r.explanation.is_empty() {
+                rep.push(r.explanation.clone());
+            }
+            for w in r.warnings.iter().take(20) {
+                rep.push(format!("warning: {w}"));
+            }
+            rep.push(String::new());
+            match r.status {
+                Outcome::Violation if first_bad.is_none() => {
+                    first_bad = Some((id.clone(), r.summary.clone()))
                 }
+                Outcome::Violation => {}
+                Outcome::Undecided | Outcome::Error => {
+                    if first_err.is_none() {
+                        first_err = Some((id.clone(), r.summary.clone()))
+                    }
+                }
+                Outcome::Ok => oks.push((id.clone(), r.summary.clone())),
             }
-            Outcome::Ok => oks.push((id.clone(), r.summary.clone())),
-        }
-        match result_keys.iter().position(|k| *k == key) {
-            Some(i) => {
-                results[i].1 = r;
-                // the result keeps the earlier spec's place and id (a dict key)
-                infos[i] = CheckInfo {
-                    id: infos[i].id.clone(),
-                    ..info
-                };
-            }
-            None => {
-                result_keys.push(key);
-                results.push((id, r));
-                infos.push(info);
+            match result_keys.iter().position(|k| *k == key) {
+                Some(i) => {
+                    results[i].1 = r;
+                    // the result keeps the earlier spec's place and id (a dict key)
+                    infos[i] = CheckInfo {
+                        id: infos[i].id.clone(),
+                        ..info
+                    };
+                }
+                None => {
+                    result_keys.push(key);
+                    results.push((id, r));
+                    infos.push(info);
+                }
             }
         }
     }
@@ -389,7 +414,133 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
         report: rep.join("\n"),
         warnings: warn,
         checks: infos,
+        messages: messages_out,
     })
+}
+
+/// Whether a spec is a `type: messages` check.
+fn is_messages(sp: &PyVal) -> bool {
+    sp.get("type")
+        .is_some_and(|t| t.eq_str(messages::decl::TYPE))
+}
+
+/// A messages check as one result per claim, each under the id `<id>.<claim>` (a spec view with
+/// that id, the type, the history and a message), and its report for the results (JSON: the
+/// declaration with defaults, each claim's status, the measures, the warnings). A declaration
+/// this hydo cannot read (an unknown key, a contradiction) is one ERROR under the check's id.
+fn messages_parts(
+    ev: &Events,
+    sp: &PyVal,
+    clock: &[usize],
+) -> Result<(Vec<(PyVal, CheckResult)>, String), Crash> {
+    let id = sp
+        .get("id")
+        .cloned()
+        .ok_or_else(|| Crash("KeyError: 'id'".into()))?;
+    let hist = sp.get("history").cloned().unwrap_or(PyVal::None);
+    let msg = sp
+        .get("msg")
+        .filter(|m| m.truthy())
+        .map(PyVal::str_of)
+        .unwrap_or_else(|| format!("messages history {}", hist.str_of()));
+    let view = |cid: String, cmsg: String| {
+        PyVal::Dict(vec![
+            ("id".into(), PyVal::Str(cid)),
+            ("type".into(), PyVal::str(messages::decl::TYPE)),
+            ("history".into(), hist.clone()),
+            ("msg".into(), PyVal::Str(cmsg)),
+        ])
+    };
+    let n = |x: u64| PyVal::Int(py::BigInt::from_i64(x as i64));
+    let decl = messages::decl::from_spec(sp).and_then(|d| {
+        let c = messages::decl::conflicts(&d, None);
+        match c.first() {
+            Some(e) => Err(e.clone()),
+            None => Ok(d),
+        }
+    });
+    let d = match decl {
+        Ok(d) => d,
+        Err(e) => {
+            let s = format!("the declaration cannot be checked by this hydo: {e}");
+            let json = py::dumps_sorted(&dict(vec![
+                ("id", PyVal::Str(id.str_of())),
+                ("history", hist.clone()),
+                ("error", PyVal::Str(s.clone())),
+            ]));
+            let r = CheckResult {
+                status: Outcome::Error,
+                details: Vec::new(),
+                summary: s.clone(),
+                explanation: s,
+                warnings: Vec::new(),
+            };
+            return Ok((vec![(view(id.str_of(), msg), r)], json));
+        }
+    };
+    let name = hist.as_str().unwrap_or("");
+    let rep = messages::check(ev, name, &d, clock);
+    let mut parts = Vec::new();
+    let mut claims_json = Vec::new();
+    for (k, c) in rep.claims.iter().enumerate() {
+        let cid = format!("{}.{}", id.str_of(), c.name);
+        let status = match c.status {
+            messages::Status::Held => Outcome::Ok,
+            messages::Status::Violated => Outcome::Violation,
+            messages::Status::Undecided => Outcome::Undecided,
+        };
+        let mut details = vec![
+            ("ops".to_string(), n(rep.ops as u64)),
+            ("claim".to_string(), PyVal::str(c.name)),
+            ("judged".to_string(), n(c.judged)),
+            ("undecided".to_string(), n(c.undecided)),
+        ];
+        if let Some((_, w)) = rep.witness_records.iter().find(|(x, _)| x == c.name) {
+            details.push(("witness".to_string(), w.clone()));
+        }
+        let explanation = rep
+            .explanations
+            .iter()
+            .find(|(x, _)| x == c.name)
+            .map(|(_, e)| e.clone())
+            .unwrap_or_default();
+        claims_json.push(dict(vec![
+            ("claim", PyVal::str(c.name)),
+            ("id", PyVal::Str(cid.clone())),
+            ("status", PyVal::str(c.status.name())),
+            ("judged", n(c.judged)),
+            ("undecided", n(c.undecided)),
+            ("summary", PyVal::Str(c.summary.clone())),
+        ]));
+        parts.push((
+            view(cid, format!("{msg}: {}", c.name)),
+            CheckResult {
+                status,
+                details,
+                summary: c.summary.clone(),
+                explanation,
+                // the history's warnings once, with the first claim
+                warnings: if k == 0 {
+                    rep.warnings.clone()
+                } else {
+                    Vec::new()
+                },
+            },
+        ));
+    }
+    let json = py::dumps_sorted(&dict(vec![
+        ("id", PyVal::Str(id.str_of())),
+        ("history", hist.clone()),
+        ("declaration", rep.declaration.clone()),
+        ("claims", PyVal::List(claims_json)),
+        ("measures", rep.measures.clone()),
+        ("ops", n(rep.ops as u64)),
+        (
+            "warnings",
+            PyVal::List(rep.warnings.iter().map(|w| PyVal::str(w)).collect()),
+        ),
+    ]));
+    Ok((parts, json))
 }
 
 /// A console file as Python's `open(p, errors="replace").read()` reads it: UTF-8 with invalid

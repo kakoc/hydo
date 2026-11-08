@@ -1,0 +1,36 @@
+{
+  "format": 1,
+  "name": "messages-keyed-log",
+  "services": [
+    {
+      "name": "log",
+      "cmd": "/bin/log-server --data /data/log",
+      "ready": "/bin/events-client ping"
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "run": "/bin/events-client produce-and-consume --from $HYDO_FROM --to $HYDO_TO"
+  },
+  "checks": [
+    {
+      "id": "events",
+      "type": "messages",
+      "history": "ev",
+      "final": "/bin/events-client drain",
+      "retention_ms": 604800000,
+      "claims": {
+        "delivery": "at-least-once",
+        "duplicates": {
+          "by": "message",
+          "window_ms": 0
+        },
+        "order": {
+          "kind": "log",
+          "scope": "key"
+        },
+        "fan_out": "every-group"
+      }
+    }
+  ]
+}

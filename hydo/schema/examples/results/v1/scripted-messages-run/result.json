@@ -1,0 +1,344 @@
+{
+  "v": 1,
+  "type": "run",
+  "tag": "one",
+  "schedule": "disk=cut | run C=12",
+  "verdict": {
+    "kind": "violation",
+    "text": "HYDO-ORACLE: VIOLATION [jobs.no-loss] m3 was acknowledged to process 3 at 1.012 s and never delivered in channel jobs, which was drained",
+    "guest": "HYDO-ORACLE: OK invariants=0 held ()"
+  },
+  "fingerprints": {
+    "fp": "0000000000000000"
+  },
+  "findings": [
+    {
+      "kind": "assertion",
+      "id": "jobs.no-loss",
+      "status": "violation",
+      "message": "the job queue loses no job and leases them: no-loss",
+      "details": {
+        "assertion": "always",
+        "details": {
+          "check": "messages",
+          "claim": "no-loss",
+          "judged": 3,
+          "ops": 6,
+          "out": "m3 was acknowledged to process 3 at 1.012 s and never delivered in channel jobs, which was drained",
+          "undecided": 0,
+          "witness": [
+            {
+              "boot": 0,
+              "channel": "jobs",
+              "done": 3,
+              "done_ns": 1012000000,
+              "group": "-",
+              "items": [
+                "m3;o=3"
+              ],
+              "op": "send",
+              "outcome": "ok",
+              "position": 2,
+              "process": "3",
+              "time_ns": 1010000000
+            },
+            {
+              "channel": "jobs",
+              "group": "-",
+              "op": "drained",
+              "position": 10,
+              "process": "9"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "history-check",
+      "id": "jobs.no-phantom",
+      "status": "ok",
+      "message": "every delivered message was sent before it was delivered (2 judged, 0 undecided)",
+      "details": {
+        "check": "messages",
+        "history": "jobs",
+        "description": "the job queue loses no job and leases them: no-phantom",
+        "details": {
+          "check": "messages",
+          "claim": "no-phantom",
+          "judged": 2,
+          "ops": 6,
+          "out": "every delivered message was sent before it was delivered (2 judged, 0 undecided)",
+          "undecided": 0
+        },
+        "warnings": [
+          "claim lease: nothing to judge (0 undecided); it holds vacuously"
+        ]
+      }
+    },
+    {
+      "kind": "history-check",
+      "id": "jobs.no-loss",
+      "status": "violation",
+      "message": "m3 was acknowledged to process 3 at 1.012 s and never delivered in channel jobs, which was drained",
+      "details": {
+        "check": "messages",
+        "history": "jobs",
+        "description": "the job queue loses no job and leases them: no-loss",
+        "details": {
+          "check": "messages",
+          "claim": "no-loss",
+          "judged": 3,
+          "ops": 6,
+          "out": "m3 was acknowledged to process 3 at 1.012 s and never delivered in channel jobs, which was drained",
+          "undecided": 0,
+          "witness": [
+            {
+              "boot": 0,
+              "channel": "jobs",
+              "done": 3,
+              "done_ns": 1012000000,
+              "group": "-",
+              "items": [
+                "m3;o=3"
+              ],
+              "op": "send",
+              "outcome": "ok",
+              "position": 2,
+              "process": "3",
+              "time_ns": 1010000000
+            },
+            {
+              "channel": "jobs",
+              "group": "-",
+              "op": "drained",
+              "position": 10,
+              "process": "9"
+            }
+          ]
+        },
+        "explanation": "  process 3 send jobs m3;o=3 -> ok (t=1.010-1.012s, positions 2-3)\n  process 9 drained jobs - (t=2.002s, position 10)"
+      }
+    },
+    {
+      "kind": "history-check",
+      "id": "jobs.after-ack",
+      "status": "ok",
+      "message": "no message was delivered again after its acknowledgement completed (2 judged, 0 undecided)",
+      "details": {
+        "check": "messages",
+        "history": "jobs",
+        "description": "the job queue loses no job and leases them: after-ack",
+        "details": {
+          "check": "messages",
+          "claim": "after-ack",
+          "judged": 2,
+          "ops": 6,
+          "out": "no message was delivered again after its acknowledgement completed (2 judged, 0 undecided)",
+          "undecided": 0
+        }
+      }
+    },
+    {
+      "kind": "history-check",
+      "id": "jobs.lease",
+      "status": "ok",
+      "message": "no message was delivered again in its group while a lease on it held (0 judged, 0 undecided)",
+      "details": {
+        "check": "messages",
+        "history": "jobs",
+        "description": "the job queue loses no job and leases them: lease",
+        "details": {
+          "check": "messages",
+          "claim": "lease",
+          "judged": 0,
+          "ops": 6,
+          "out": "no message was delivered again in its group while a lease on it held (0 judged, 0 undecided)",
+          "undecided": 0
+        }
+      }
+    }
+  ],
+  "artifacts": {
+    "consoles": [
+      "one.log"
+    ]
+  },
+  "messages": [
+    {
+      "id": "jobs",
+      "history": "jobs",
+      "declaration": {
+        "acknowledgement": "explicit",
+        "claims": {
+          "after_ack": "no-redelivery",
+          "dead_letter": "none",
+          "delay": "none",
+          "delivery": "at-least-once",
+          "duplicates": "allowed",
+          "fan_out": "none",
+          "lease": {
+            "ms": 30000
+          },
+          "linearizable": "none",
+          "members": "any",
+          "order": {
+            "batch": "unordered",
+            "kind": "none",
+            "scope": "key"
+          },
+          "processing": "any"
+        },
+        "clock_steps": "undecided",
+        "measures": {
+          "channels": "all",
+          "quantiles": [
+            0.5,
+            0.95,
+            0.99,
+            1
+          ],
+          "windows": true
+        }
+      },
+      "claims": [
+        {
+          "claim": "no-phantom",
+          "id": "jobs.no-phantom",
+          "status": "held",
+          "judged": 2,
+          "undecided": 0,
+          "summary": "every delivered message was sent before it was delivered (2 judged, 0 undecided)"
+        },
+        {
+          "claim": "no-loss",
+          "id": "jobs.no-loss",
+          "status": "violated",
+          "judged": 3,
+          "undecided": 0,
+          "summary": "m3 was acknowledged to process 3 at 1.012 s and never delivered in channel jobs, which was drained"
+        },
+        {
+          "claim": "after-ack",
+          "id": "jobs.after-ack",
+          "status": "held",
+          "judged": 2,
+          "undecided": 0,
+          "summary": "no message was delivered again after its acknowledgement completed (2 judged, 0 undecided)"
+        },
+        {
+          "claim": "lease",
+          "id": "jobs.lease",
+          "status": "held",
+          "judged": 0,
+          "undecided": 0,
+          "summary": "no message was delivered again in its group while a lease on it held (0 judged, 0 undecided)"
+        }
+      ],
+      "measures": {
+        "sends": {
+          "fail": 0,
+          "info": 0,
+          "invoked": 3,
+          "ok": 3,
+          "recovered": 0
+        },
+        "lost": [
+          {
+            "channel": "jobs",
+            "group": "-",
+            "count": 1,
+            "first": [
+              "m3"
+            ]
+          }
+        ],
+        "excused": {
+          "dead-lettered": 0,
+          "expired": 0,
+          "possibly-consumed": 0,
+          "rejected": 0,
+          "undecided": 0
+        },
+        "unexpected": 0,
+        "aborted": 0,
+        "deliveries": {
+          "total": 2,
+          "messages": 2,
+          "duplicate_rate": 0.0,
+          "max_per_message": 1,
+          "histogram": {
+            "1": 2,
+            "2": 0,
+            "3": 0,
+            "4+": 0
+          }
+        },
+        "redeliveries": {
+          "after-ack": 0,
+          "after-lease": 0,
+          "after-nack": 0,
+          "during-lease": 0,
+          "undecided": 0
+        },
+        "stored_copies": 0,
+        "processing": 0,
+        "group_overlap": 0,
+        "reorders": [],
+        "latency": {
+          "final_ack": {
+            "count": 2.0,
+            "q0.5": 98.0,
+            "q0.95": 98.0,
+            "q0.99": 98.0,
+            "q1": 98.0
+          },
+          "first_delivery": {
+            "count": 2.0,
+            "q0.5": 21.0,
+            "q0.95": 21.0,
+            "q0.99": 21.0,
+            "q1": 21.0
+          }
+        },
+        "held": {
+          "count": 2.0,
+          "q0.5": 77.0,
+          "q0.95": 77.0,
+          "q0.99": 77.0,
+          "q1": 77.0
+        },
+        "invisible": {
+          "lease_ratio": {
+            "count": 0.0
+          },
+          "ms": {
+            "count": 0.0
+          }
+        },
+        "unseen": 1,
+        "availability": {
+          "ack": {
+            "fail": 0,
+            "info": 0,
+            "ok": 1
+          },
+          "recv": {
+            "fail": 0,
+            "info": 0,
+            "ok": 2
+          },
+          "send": {
+            "fail": 0,
+            "info": 0,
+            "ok": 2
+          }
+        },
+        "across_boots": 0
+      },
+      "ops": 6,
+      "warnings": [
+        "claim lease: nothing to judge (0 undecided); it holds vacuously"
+      ]
+    }
+  ]
+}

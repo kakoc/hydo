@@ -1,0 +1,54 @@
+{
+  "format": 1,
+  "name": "messages-ordered-groups",
+  "services": [
+    {
+      "name": "queue",
+      "cmd": "/bin/queue-server --data /data/queue",
+      "ready": "/bin/pay-client ping"
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "run": "/bin/pay-client run --from $HYDO_FROM --to $HYDO_TO"
+  },
+  "checks": [
+    {
+      "id": "payments",
+      "type": "messages",
+      "history": "pay",
+      "msg": "payments are processed once, in order per group",
+      "final": "/bin/pay-client drain",
+      "clock_steps": "strict",
+      "claims": {
+        "delivery": "at-least-once",
+        "duplicates": {
+          "by": "dedup-id",
+          "window_ms": 300000
+        },
+        "after_ack": "no-redelivery",
+        "processing": "once",
+        "lease": {
+          "ms": "per-delivery"
+        },
+        "order": {
+          "kind": "fifo-blocking",
+          "scope": "key",
+          "batch": "ordered"
+        },
+        "members": "exclusive"
+      },
+      "measures": {
+        "windows": false,
+        "quantiles": [
+          "0.5",
+          "0.9",
+          1.0
+        ],
+        "channels": [
+          "payments"
+        ]
+      }
+    }
+  ]
+}

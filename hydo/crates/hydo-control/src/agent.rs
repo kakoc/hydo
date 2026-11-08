@@ -163,6 +163,21 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
         if let Ok(sh) = hydo_engine::image::embedded_file(image, "etc/hydo/manifest.sh") {
             plan.history = history_of_manifest_sh(&sh);
         }
+    } else if plan
+        .history
+        .iter()
+        .any(|c| c.json.contains("\"type\":\"messages\""))
+    {
+        // a messages check's include: bundles are not in the image: the compiled manifest has
+        // the declaration hydo build resolved (docs/design/messaging.md "Bundles")
+        if let Ok(sh) = hydo_engine::image::embedded_file(image, "etc/hydo/manifest.sh") {
+            let built = history_of_manifest_sh(&sh);
+            for c in plan.history.iter_mut() {
+                if let Some(b) = built.iter().find(|b| b.id == c.id) {
+                    c.json = b.json.clone();
+                }
+            }
+        }
     }
     Ok(plan)
 }

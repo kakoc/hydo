@@ -1,0 +1,30 @@
+# Ordered message groups that block while a message is out, with a deduplication window
+# (docs/design/messaging.md "Examples"), and the measures' options.
+format: 1
+name: messages-ordered-groups
+services:
+  - name: queue
+    cmd: /bin/queue-server --data /data/queue
+    ready: /bin/pay-client ping
+workload:
+  steps: 20
+  run: /bin/pay-client run --from $HYDO_FROM --to $HYDO_TO
+checks:
+  - id: payments
+    type: messages
+    history: pay
+    final: /bin/pay-client drain
+    msg: payments are processed once, in order per group
+    clock_steps: strict
+    claims:
+      delivery: at-least-once
+      duplicates: {by: dedup-id, window_ms: 300000}
+      order: {kind: fifo-blocking, scope: key, batch: ordered}
+      lease: {ms: per-delivery}
+      after_ack: no-redelivery
+      processing: once
+      members: exclusive
+    measures:
+      windows: false
+      quantiles: [0.5, 0.9, 1]
+      channels: [payments]

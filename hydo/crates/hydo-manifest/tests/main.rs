@@ -8,3 +8,4 @@ mod equivalence;
 mod extractors;
 mod fake_objects;
 mod format;
+mod messages;

@@ -1,0 +1,8 @@
+# A work queue with leases: what such a system typically promises. A project file like any
+# other: hydo resolves it at build time and depends on no bundle.
+acknowledgement: explicit
+claims:
+  delivery: at-least-once
+  lease: {ms: 30000}
+  after_ack: no-redelivery
+  processing: once

@@ -4,6 +4,7 @@
 
 use serde_json::{Map, Value};
 
+use crate::messages;
 use crate::py::{
     self, crash, d, eq, get, has, in_strs, index, is_int, is_plain_int, repr, repr_str, str_of,
     truthy,
@@ -222,6 +223,13 @@ pub(crate) const KNOWN_CHECK: &[&str] = &[
     "description",
 ];
 const CHECK_TYPES: &[&str] = &["linearizable", "list-append"];
+
+/// The keys of a history check of any type: [`KNOWN_CHECK`] and a messages check's own.
+pub(crate) fn known_check_all() -> Vec<&'static str> {
+    let mut v = KNOWN_CHECK.to_vec();
+    v.extend(messages::KEYS);
+    v
+}
 const CHECK_LEVELS: &[&str] = &[
     "strict-serializable",
     "strong-session-serializable",
@@ -787,7 +795,13 @@ fn validate_checks(m: &Value, inv_ids: &[String]) -> R<()> {
         if !c.is_object() {
             return Err(err(format!("{wh}: must be a mapping")));
         }
-        unknown(c, KNOWN_CHECK, &wh)?;
+        // a messages check has its own keys (docs/design/messaging.md); the others keep theirs
+        let is_messages = obj_get(c, "type").and_then(Value::as_str) == Some(messages::TYPE);
+        if is_messages {
+            unknown(c, &known_check_all(), &wh)?;
+        } else {
+            unknown(c, KNOWN_CHECK, &wh)?;
+        }
         let cid = need_str(c, "id", &wh)?;
         if !pyre::fullmatch(r"[A-Za-z0-9_.\-]+", &cid) {
             return Err(err(format!(
@@ -805,7 +819,8 @@ fn validate_checks(m: &Value, inv_ids: &[String]) -> R<()> {
         }
         ids.push(cid);
         let t = need_str(c, "type", &wh)?;
-        if !CHECK_TYPES.contains(&t.as_str()) {
+        // (the message keeps its recorded words: a messages check is told apart above)
+        if !CHECK_TYPES.contains(&t.as_str()) && t != messages::TYPE {
             return Err(err(format!(
                 "{}: type must be one of {}",
                 wh,
@@ -820,7 +835,9 @@ fn validate_checks(m: &Value, inv_ids: &[String]) -> R<()> {
                 repr_str(&h)
             )));
         }
-        if t == "linearizable" {
+        if t == messages::TYPE {
+            messages::validate(c, &wh)?;
+        } else if t == "linearizable" {
             let model = obj_get(c, "model")
                 .cloned()
                 .unwrap_or(Value::String("register".into()));

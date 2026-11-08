@@ -419,7 +419,99 @@ choice!(
 );
 choice!(
     /// A ready-made history checker.
-    HistoryType { Linearizable = "linearizable", ListAppend = "list-append" }
+    HistoryType {
+        Linearizable = "linearizable",
+        ListAppend = "list-append",
+        Messages = "messages",
+    }
+);
+choice!(
+    /// type: messages: how consumers acknowledge deliveries.
+    MsgAcknowledgement {
+        Explicit = "explicit",
+        OnReceive = "on-receive",
+        None = "none",
+    }
+);
+choice!(
+    /// type: messages: whether time-dependent claims judge pairs whose interval contains a T=
+    /// clock step (undecided: they are counted, never judged).
+    MsgClockSteps { Undecided = "undecided", Strict = "strict" }
+);
+choice!(
+    /// type: messages: what delivery the system claims.
+    MsgDelivery {
+        None = "none",
+        AtMostOnce = "at-most-once",
+        AtLeastOnce = "at-least-once",
+        ExactlyOnce = "exactly-once",
+    }
+);
+choice!(
+    /// type: messages: whether a message may be stored twice.
+    MsgDuplicates { Allowed = "allowed", Forbidden = "forbidden" }
+);
+choice!(
+    /// type: messages: what a deduplication window compares.
+    MsgDedupBy { DedupId = "dedup-id", Message = "message" }
+);
+choice!(
+    /// type: messages: whether an acknowledged message may come again.
+    MsgAfterAck { Allowed = "allowed", NoRedelivery = "no-redelivery" }
+);
+choice!(
+    /// type: messages: whether a message may be processed (acknowledged and accepted) twice.
+    MsgProcessing { Any = "any", Once = "once" }
+);
+choice!(
+    /// type: messages: no claim.
+    MsgNone { None = "none" }
+);
+choice!(
+    /// type: messages: the lease each delivery records (v=).
+    MsgPerDelivery { PerDelivery = "per-delivery" }
+);
+choice!(
+    /// type: messages: the order the system claims.
+    MsgOrderKind {
+        None = "none",
+        Fifo = "fifo",
+        FifoBlocking = "fifo-blocking",
+        Log = "log",
+        Causal = "causal",
+    }
+);
+choice!(
+    /// type: messages: the scope of an order claim.
+    MsgOrderScope { Key = "key", Channel = "channel" }
+);
+choice!(
+    /// type: messages: whether the items of one send are in order.
+    MsgBatch { Ordered = "ordered", Unordered = "unordered" }
+);
+choice!(
+    /// type: messages: when a message may be delivered.
+    MsgDelay { None = "none", PerMessage = "per-message" }
+);
+choice!(
+    /// type: messages: whether every group that must receive a message receives it.
+    MsgFanOut { None = "none", EveryGroup = "every-group" }
+);
+choice!(
+    /// type: messages: whether two members of a group may hold one message at once.
+    MsgMembers { Any = "any", Exclusive = "exclusive" }
+);
+choice!(
+    /// type: messages: the queue the sends and receives are linearizable as.
+    MsgLinearizable {
+        None = "none",
+        Fifo = "fifo",
+        Unordered = "unordered",
+    }
+);
+choice!(
+    /// type: messages: every channel.
+    MsgAllChannels { All = "all" }
 );
 choice!(
     /// The object a linearizable history is checked against.
@@ -895,11 +987,197 @@ pub struct HistoryCheck {
     pub consistency: Option<Param<Consistency>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msg: Option<Text>,
-    /// A shell command that reads the final state back into the history.
+    /// A shell command that reads the final state back into the history (type: messages: the
+    /// drain, which reads every message at the end and records `drained <channel> <group>`).
     #[serde(rename = "final", default, skip_serializing_if = "Option::is_none")]
     pub final_: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
+    /// type: messages: bundles of declarations (YAML files of the project, relative to the
+    /// manifest), merged in order, then this entry's own keys; hydo build resolves them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include: Option<Vec<String>>,
+    /// type: messages: how consumers acknowledge deliveries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "explicit"))]
+    pub acknowledgement: Option<Param<MsgAcknowledgement>>,
+    /// type: messages: a message may legitimately disappear this many milliseconds after it was
+    /// sent (an excuse for a missing message, not a claim).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retention_ms: Option<i64>,
+    /// type: messages: whether time-dependent claims judge pairs across a T= clock step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "undecided"))]
+    pub clock_steps: Option<Param<MsgClockSteps>>,
+    /// type: messages: what the system promises; every default claims nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claims: Option<MessageClaims>,
+    /// type: messages: what the measures cover.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measures: Option<MessageMeasures>,
+}
+
+/// type: messages: the claims (docs/design/messaging.md). Each claim is checked and reported on
+/// its own, as `<check id>.<claim>`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct MessageClaims {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "none"))]
+    pub delivery: Option<Param<MsgDelivery>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duplicates: Option<MsgDuplicatesClaim>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "allowed"))]
+    pub after_ack: Option<Param<MsgAfterAck>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "any"))]
+    pub processing: Option<Param<MsgProcessing>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease: Option<MsgLeaseClaim>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<MsgOrderClaim>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dead_letter: Option<MsgDeadLetterClaim>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delay: Option<MsgDelayClaim>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "none"))]
+    pub fan_out: Option<Param<MsgFanOut>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "any"))]
+    pub members: Option<Param<MsgMembers>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "none"))]
+    pub linearizable: Option<Param<MsgLinearizable>>,
+}
+
+/// allowed, forbidden, or a deduplication window.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    untagged,
+    expecting = "allowed, forbidden, or a mapping with by: and window_ms:"
+)]
+pub enum MsgDuplicatesClaim {
+    Word(Param<MsgDuplicates>),
+    Window(MsgDedupWindow),
+}
+
+/// Sends with one id within the window are stored once (window_ms: 0 means always).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct MsgDedupWindow {
+    pub by: Param<MsgDedupBy>,
+    pub window_ms: i64,
+}
+
+/// none, or the lease's length.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged, expecting = "none, or a mapping with ms:")]
+pub enum MsgLeaseClaim {
+    Word(Param<MsgNone>),
+    Lease(MsgLease),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct MsgLease {
+    /// Milliseconds, or per-delivery (each delivery records its lease as v=).
+    pub ms: MsgLeaseLength,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged, expecting = "a number of milliseconds, or per-delivery")]
+pub enum MsgLeaseLength {
+    Ms(i64),
+    PerDelivery(Param<MsgPerDelivery>),
+}
+
+/// An order kind, or a mapping with kind:, scope: and batch:.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    untagged,
+    expecting = "none, fifo, fifo-blocking, log, causal, or a mapping with kind:, scope: and batch:"
+)]
+pub enum MsgOrderClaim {
+    Kind(Param<MsgOrderKind>),
+    Spec(MsgOrder),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct MsgOrder {
+    pub kind: Param<MsgOrderKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "key"))]
+    pub scope: Option<Param<MsgOrderScope>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "unordered"))]
+    pub batch: Option<Param<MsgBatch>>,
+}
+
+/// none, or after how many deliveries without an acknowledgement a message stops (and where it
+/// goes).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged, expecting = "none, or a mapping with after: and to:")]
+pub enum MsgDeadLetterClaim {
+    Word(Param<MsgNone>),
+    Spec(MsgDeadLetter),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct MsgDeadLetter {
+    pub after: i64,
+    /// The dead-letter channel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<Text>,
+}
+
+/// none, per-message (each send records its delay as d=), or one delay for every message.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged, expecting = "none, per-message, or a mapping with ms:")]
+pub enum MsgDelayClaim {
+    Word(Param<MsgDelay>),
+    Ms(MsgDelayMs),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct MsgDelayMs {
+    pub ms: i64,
+}
+
+/// type: messages: what the measures cover.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct MessageMeasures {
+    /// Also per window of the run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
+    pub windows: Option<bool>,
+    /// The quantiles of every distribution, from 0 to 1 (hydo's YAML reads 0.5 as the text
+    /// "0.5", which is taken as the number).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quantiles: Option<Vec<MsgQuantile>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channels: Option<MsgChannels>,
+}
+
+/// A quantile: a number from 0 to 1, or its text.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged, expecting = "a number from 0 to 1")]
+pub enum MsgQuantile {
+    Number(f64),
+    Text(String),
+}
+
+/// all, or a list of channels.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged, expecting = "all, or a list of channel names")]
+pub enum MsgChannels {
+    All(Param<MsgAllChannels>),
+    List(Vec<Text>),
 }
 
 impl Default for Param<HistoryType> {

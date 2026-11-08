@@ -1391,7 +1391,7 @@
           ]
         },
         "final": {
-          "description": "A shell command that reads the final state back into the history.",
+          "description": "A shell command that reads the final state back into the history (type: messages: the\ndrain, which reads every message at the end and records `drained <channel> <group>`).",
           "type": [
             "string",
             "null"
@@ -1401,6 +1401,84 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "include": {
+          "description": "type: messages: bundles of declarations (YAML files of the project, relative to the\nmanifest), merged in order, then this entry's own keys; hydo build resolves them.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "acknowledgement": {
+          "description": "type: messages: how consumers acknowledge deliveries.",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgAcknowledgement"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "explicit"
+        },
+        "retention_ms": {
+          "description": "type: messages: a message may legitimately disappear this many milliseconds after it was\nsent (an excuse for a missing message, not a claim).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "clock_steps": {
+          "description": "type: messages: whether time-dependent claims judge pairs across a T= clock step.",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgClockSteps"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "undecided"
+        },
+        "claims": {
+          "description": "type: messages: what the system promises; every default claims nothing.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MessageClaims"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "measures": {
+          "description": "type: messages: what the measures cover.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MessageMeasures"
             },
             {
               "type": "null"
@@ -1420,7 +1498,8 @@
       "type": "string",
       "enum": [
         "linearizable",
-        "list-append"
+        "list-append",
+        "messages"
       ]
     },
     "HistoryModel": {
@@ -1449,6 +1528,617 @@
         "strong-snapshot-isolation",
         "strong-session-snapshot-isolation",
         "snapshot-isolation"
+      ]
+    },
+    "MsgAcknowledgement": {
+      "description": "type: messages: how consumers acknowledge deliveries.",
+      "type": "string",
+      "enum": [
+        "explicit",
+        "on-receive",
+        "none"
+      ]
+    },
+    "MsgClockSteps": {
+      "description": "type: messages: whether time-dependent claims judge pairs whose interval contains a T=\nclock step (undecided: they are counted, never judged).",
+      "type": "string",
+      "enum": [
+        "undecided",
+        "strict"
+      ]
+    },
+    "MessageClaims": {
+      "description": "type: messages: the claims (docs/design/messaging.md). Each claim is checked and reported on\nits own, as `<check id>.<claim>`.",
+      "type": "object",
+      "properties": {
+        "delivery": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgDelivery"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "none"
+        },
+        "duplicates": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDuplicatesClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after_ack": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgAfterAck"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "allowed"
+        },
+        "processing": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgProcessing"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "any"
+        },
+        "lease": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgLeaseClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "order": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgOrderClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dead_letter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDeadLetterClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delay": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDelayClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fan_out": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgFanOut"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "none"
+        },
+        "members": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgMembers"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "any"
+        },
+        "linearizable": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgLinearizable"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "none"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MsgDelivery": {
+      "description": "type: messages: what delivery the system claims.",
+      "type": "string",
+      "enum": [
+        "none",
+        "at-most-once",
+        "at-least-once",
+        "exactly-once"
+      ]
+    },
+    "MsgDuplicatesClaim": {
+      "description": "allowed, forbidden, or a deduplication window.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDuplicates"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgDedupWindow"
+        }
+      ]
+    },
+    "MsgDuplicates": {
+      "description": "type: messages: whether a message may be stored twice.",
+      "type": "string",
+      "enum": [
+        "allowed",
+        "forbidden"
+      ]
+    },
+    "MsgDedupWindow": {
+      "description": "Sends with one id within the window are stored once (window_ms: 0 means always).",
+      "type": "object",
+      "properties": {
+        "by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDedupBy"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        "window_ms": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "by",
+        "window_ms"
+      ]
+    },
+    "MsgDedupBy": {
+      "description": "type: messages: what a deduplication window compares.",
+      "type": "string",
+      "enum": [
+        "dedup-id",
+        "message"
+      ]
+    },
+    "MsgAfterAck": {
+      "description": "type: messages: whether an acknowledged message may come again.",
+      "type": "string",
+      "enum": [
+        "allowed",
+        "no-redelivery"
+      ]
+    },
+    "MsgProcessing": {
+      "description": "type: messages: whether a message may be processed (acknowledged and accepted) twice.",
+      "type": "string",
+      "enum": [
+        "any",
+        "once"
+      ]
+    },
+    "MsgLeaseClaim": {
+      "description": "none, or the lease's length.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgNone"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgLease"
+        }
+      ]
+    },
+    "MsgNone": {
+      "description": "type: messages: no claim.",
+      "type": "string",
+      "enum": [
+        "none"
+      ]
+    },
+    "MsgLease": {
+      "type": "object",
+      "properties": {
+        "ms": {
+          "description": "Milliseconds, or per-delivery (each delivery records its lease as v=).",
+          "$ref": "#/$defs/MsgLeaseLength"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ms"
+      ]
+    },
+    "MsgLeaseLength": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "int64"
+        },
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgPerDelivery"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        }
+      ]
+    },
+    "MsgPerDelivery": {
+      "description": "type: messages: the lease each delivery records (v=).",
+      "type": "string",
+      "enum": [
+        "per-delivery"
+      ]
+    },
+    "MsgOrderClaim": {
+      "description": "An order kind, or a mapping with kind:, scope: and batch:.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgOrderKind"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgOrder"
+        }
+      ]
+    },
+    "MsgOrderKind": {
+      "description": "type: messages: the order the system claims.",
+      "type": "string",
+      "enum": [
+        "none",
+        "fifo",
+        "fifo-blocking",
+        "log",
+        "causal"
+      ]
+    },
+    "MsgOrder": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgOrderKind"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgOrderScope"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "key"
+        },
+        "batch": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgBatch"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "unordered"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ]
+    },
+    "MsgOrderScope": {
+      "description": "type: messages: the scope of an order claim.",
+      "type": "string",
+      "enum": [
+        "key",
+        "channel"
+      ]
+    },
+    "MsgBatch": {
+      "description": "type: messages: whether the items of one send are in order.",
+      "type": "string",
+      "enum": [
+        "ordered",
+        "unordered"
+      ]
+    },
+    "MsgDeadLetterClaim": {
+      "description": "none, or after how many deliveries without an acknowledgement a message stops (and where it\ngoes).",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgNone"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgDeadLetter"
+        }
+      ]
+    },
+    "MsgDeadLetter": {
+      "type": "object",
+      "properties": {
+        "after": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "to": {
+          "description": "The dead-letter channel.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "after"
+      ]
+    },
+    "MsgDelayClaim": {
+      "description": "none, per-message (each send records its delay as d=), or one delay for every message.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDelay"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgDelayMs"
+        }
+      ]
+    },
+    "MsgDelay": {
+      "description": "type: messages: when a message may be delivered.",
+      "type": "string",
+      "enum": [
+        "none",
+        "per-message"
+      ]
+    },
+    "MsgDelayMs": {
+      "type": "object",
+      "properties": {
+        "ms": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ms"
+      ]
+    },
+    "MsgFanOut": {
+      "description": "type: messages: whether every group that must receive a message receives it.",
+      "type": "string",
+      "enum": [
+        "none",
+        "every-group"
+      ]
+    },
+    "MsgMembers": {
+      "description": "type: messages: whether two members of a group may hold one message at once.",
+      "type": "string",
+      "enum": [
+        "any",
+        "exclusive"
+      ]
+    },
+    "MsgLinearizable": {
+      "description": "type: messages: the queue the sends and receives are linearizable as.",
+      "type": "string",
+      "enum": [
+        "none",
+        "fifo",
+        "unordered"
+      ]
+    },
+    "MessageMeasures": {
+      "description": "type: messages: what the measures cover.",
+      "type": "object",
+      "properties": {
+        "windows": {
+          "description": "Also per window of the run.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "quantiles": {
+          "description": "The quantiles of every distribution, from 0 to 1 (hydo's YAML reads 0.5 as the text\n\"0.5\", which is taken as the number).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/MsgQuantile"
+          }
+        },
+        "channels": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgChannels"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "MsgQuantile": {
+      "description": "A quantile: a number from 0 to 1, or its text.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "MsgChannels": {
+      "description": "all, or a list of channels.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgAllChannels"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        }
+      ]
+    },
+    "MsgAllChannels": {
+      "description": "type: messages: every channel.",
+      "type": "string",
+      "enum": [
+        "all"
       ]
     },
     "FaultKind": {

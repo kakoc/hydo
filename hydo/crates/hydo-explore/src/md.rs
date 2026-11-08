@@ -317,9 +317,97 @@ pub fn run_report(r: &hydo_results::Run) -> String {
             ));
         }
     }
+    for m in &r.messages {
+        l.push(String::new());
+        l.extend(messages_lines(m));
+    }
     if let Some(t) = &r.properties {
         l.push(String::new());
         l.push(render_properties(t).trim_end().to_string());
     }
     l.join("\n") + "\n"
+}
+
+/// A messages check of a run for people: each claim's status, then the measures in a few lines.
+pub fn messages_lines(m: &hydo_results::MessagesCheck) -> Vec<String> {
+    let mut l = vec![format!("messages check {} (history {}):", m.id, m.history)];
+    if let Some(e) = &m.error {
+        l.push(format!("  error: {e}"));
+        return l;
+    }
+    for c in &m.claims {
+        l.push(format!(
+            "  {:<13} {:<9} judged {}, undecided {}{}",
+            c.claim,
+            c.status,
+            c.judged,
+            c.undecided,
+            if c.status == "held" {
+                String::new()
+            } else {
+                format!(": {}", head(&c.summary, 160))
+            }
+        ));
+    }
+    let Some(x) = &m.measures else { return l };
+    let get = |b: &Option<std::collections::BTreeMap<String, u64>>, k: &str| {
+        b.as_ref()
+            .and_then(|b| b.get(k).copied())
+            .unwrap_or_default()
+    };
+    l.push(format!(
+        "  sends: {} ok, {} failed, {} unknown ({} recovered); lost {}; unexpected {}, aborted {}",
+        get(&x.sends, "ok"),
+        get(&x.sends, "fail"),
+        get(&x.sends, "info"),
+        get(&x.sends, "recovered"),
+        x.lost
+            .as_ref()
+            .map(|v| v.iter().map(|g| g.count).sum::<u64>())
+            .unwrap_or_default(),
+        x.unexpected.unwrap_or_default(),
+        x.aborted.unwrap_or_default()
+    ));
+    if let Some(d) = &x.deliveries {
+        l.push(format!(
+            "  deliveries: {} of {} messages, duplicate rate {}, at most {} of one; redeliveries {}",
+            d.total,
+            d.messages,
+            d.duplicate_rate,
+            d.max_per_message,
+            x.redeliveries
+                .as_ref()
+                .map(|r| r
+                    .iter()
+                    .filter(|(_, n)| **n > 0)
+                    .map(|(k, n)| format!("{k} {n}"))
+                    .collect::<Vec<_>>()
+                    .join(", "))
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "none".into())
+        ));
+    }
+    if let Some(lat) = x.latency.as_ref().and_then(|t| t.get("first_delivery")) {
+        let q: Vec<String> = lat
+            .iter()
+            .filter(|(k, _)| k.as_str() != "count")
+            .map(|(k, v)| format!("{k} {v} ms"))
+            .collect();
+        l.push(format!(
+            "  first delivery after the send: {} measured{}",
+            lat.get("count").copied().unwrap_or_default(),
+            if q.is_empty() {
+                String::new()
+            } else {
+                format!(", {}", q.join(", "))
+            }
+        ));
+    }
+    for r in x.reorders.iter().flatten() {
+        l.push(format!(
+            "  reorders in {}/{}: {} inverted pairs, largest distance {}",
+            r.channel, r.group, r.inverted_pairs, r.max_distance
+        ));
+    }
+    l
 }

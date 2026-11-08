@@ -7,3 +7,4 @@ mod gen;
 
 mod checkers;
 mod equiv;
+mod messages;
