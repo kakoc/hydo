@@ -53,6 +53,7 @@ hydo-control::corpus_net                 full
 hydo-control::drive                      fast
 hydo-control::fakes                      fast
 hydo-control::groups                     fast
+hydo-control::image_guest                fast
 hydo-control::features                   full
 hydo-control::m123                       full
 hydo-control::react                      fast

@@ -111,28 +111,26 @@ impl Engines {
 }
 
 /// The guest's RAM, CPU level and CPU cache leaves from the manifest an image carries
-/// (`guest.ram_mib`, `guest.cpu`, `guest.cpu_cache`, as the explorer picks them for `--image`;
+/// (`guest.ram_mib`, `guest.cpu`, `guest.cpu_cache`, as `hydo run` and the explorer pick them;
 /// M136: `list` on the onboarding examples needs them, the benchmark's own manifest has the
 /// defaults); 1024 MiB and v2 for an image without the keys, and the cache leaves as the image's
-/// fingerprint epoch decides (M204).
+/// fingerprint epoch decides (M204). Read with the plan meta, as the host controller reads it
+/// (M207: without it a composed plan's manifest did not read and the pool booted without the
+/// cache leaves); a manifest that cannot be read ends the program.
 fn guest_of(image: &Path) -> (u32, CpuLevel, bool) {
-    let Ok(text) = hydo_engine::image::embedded_manifest(image) else {
-        return (1024, CpuLevel::V2, false);
-    };
-    let Ok(m) = hydo_manifest::from_embedded(&text, None) else {
-        return (1024, CpuLevel::V2, false);
-    };
-    let g = &m.data["guest"];
-    let ram = g["ram_mib"].as_u64().map_or(1024, |r| r as u32);
-    let cpu = if g["cpu"].as_str() == Some("v3") {
+    let g = hydo_control::agent::image_guest(image).unwrap_or_else(|e| {
+        eprintln!("hydo-bench: {e}");
+        std::process::exit(2)
+    });
+    let cpu = if g.cpu == "v3" {
         CpuLevel::V3
     } else {
         CpuLevel::V2
     };
     (
-        ram,
+        g.ram_mib,
         cpu,
-        hydo_engine::image::cpu_cache_of(image, g["cpu_cache"].as_bool()),
+        hydo_engine::image::cpu_cache_of(image, g.cpu_cache),
     )
 }
 

@@ -17,7 +17,8 @@
 //! `--check` (the default) writes nothing into the list; `--write` writes the new image hashes,
 //! fingerprints and verdict lines into it (a run whose verdict changed only with
 //! `--accept-verdicts`). Exit status: 0 everything as recorded (or, with `--write`, written);
-//! 1 a verdict change, a nondeterministic run or build, or a step that failed; 2 a usage error;
+//! 1 a verdict change, a nondeterministic run or build, a schedule whose worker-pool run differs
+//! from its fresh boot (the default mode), or a step that failed; 2 a usage error;
 //! 3 only values moved and `--check` did not write them.
 //!
 //! On a shared machine: every VM goes through the prefix's `libexec/hvx-run` (the shared module
@@ -689,7 +690,7 @@ fn pool_for(o: &Opts, image: &Path, workers: usize, outdir: &Path) -> Result<Poo
         .release
         .clone()
         .ok_or("--release is needed for the worker pools")?;
-    let (ram_mib, cpu, cpu_cache) = guest_of(image);
+    let (ram_mib, cpu, cpu_cache) = guest_of(image)?;
     let (engine, kernel, initrd): (
         Arc<dyn ControlledEngine + Send + Sync>,
         PathBuf,
@@ -769,20 +770,15 @@ fn pool_for(o: &Opts, image: &Path, workers: usize, outdir: &Path) -> Result<Poo
 }
 
 /// The guest's RAM, whether it asks for x86-64-v3, and its CPU cache leaves (an absent key as the
-/// image's fingerprint epoch decides, M204), from the manifest the image carries.
-fn guest_of(image: &Path) -> (u32, bool, bool) {
-    let Ok(text) = hydo_engine::image::embedded_manifest(image) else {
-        return (1024, false, false);
-    };
-    let Ok(m) = hydo_manifest::from_embedded(&text, None) else {
-        return (1024, false, false);
-    };
-    let g = &m.data["guest"];
-    (
-        g["ram_mib"].as_u64().map_or(1024, |r| r as u32),
-        g["cpu"].as_str() == Some("v3"),
-        hydo_engine::image::cpu_cache_of(image, g["cpu_cache"].as_bool()),
-    )
+/// image's fingerprint epoch decides, M204), from the manifest the image carries, read as `hydo
+/// run` reads it (with the plan meta: M207).
+fn guest_of(image: &Path) -> Result<(u32, bool, bool), String> {
+    let g = hydo_control::agent::image_guest(image)?;
+    Ok((
+        g.ram_mib,
+        g.cpu == "v3",
+        hydo_engine::image::cpu_cache_of(image, g.cpu_cache),
+    ))
 }
 
 /// A pool's answer as a [`Ran`].
@@ -822,8 +818,11 @@ fn as_recorded(r: &recorded::Run, a: &Ran) -> bool {
 /// The default mode's runs: per image, the schedules without a cached result run once, the
 /// first from a fresh boot (`hydo run`, so that path stays checked) and the others in a worker
 /// pool that boots once per worker; a run that does not give the recorded values runs a second
-/// time from a fresh boot, to tell a real change from a nondeterminism. A big image's VMs go
-/// alone; otherwise at most `--jobs` VMs at a time.
+/// time from a fresh boot, to tell a real change from a nondeterminism. The first schedule runs
+/// in the pool as well, and its two results must be one (M207: a pool that boots another guest
+/// than `hydo run` gives other values for the pool's schedules only, which looked like a
+/// nondeterminism of those schedules). A big image's VMs go alone; otherwise at most `--jobs`
+/// VMs at a time.
 fn fast_runs(o: &Opts, selected: &[Image], outcomes: &mut [Outcome]) -> Result<(), String> {
     let ident = run_identity(o);
     let key = |sha: &str, sched: &str, rep: usize| {
@@ -894,19 +893,22 @@ fn fast_runs(o: &Opts, selected: &[Image], outcomes: &mut [Outcome]) -> Result<(
                 Some(fresh.join().map_err(|_| "the fresh-boot run panicked")?)
             } else {
                 oc.ran.insert(first, [None, None]);
-                let r = pool_runs(o, img, &image, &rest, &rd)?;
+                let (r, twin) = pool_runs(o, img, &image, &rest, first, &rd)?;
                 for (ri, a) in r {
                     oc.ran.insert(ri, [Some(a), None]);
                 }
+                oc.pooled_twin = Some((first, twin));
                 let f = fresh.join().map_err(|_| "the fresh-boot run panicked")?;
                 oc.ran.insert(first, [Some(f), None]);
                 None
             };
             if let Some(f) = fresh {
                 oc.ran.insert(first, [Some(f), None]);
-                for (ri, a) in pool_runs(o, img, &image, &rest, &rd)? {
+                let (r, twin) = pool_runs(o, img, &image, &rest, first, &rd)?;
+                for (ri, a) in r {
                     oc.ran.insert(ri, [Some(a), None]);
                 }
+                oc.pooled_twin = Some((first, twin));
             }
         }
         if !todo.is_empty() {
@@ -965,43 +967,47 @@ fn fast_runs(o: &Opts, selected: &[Image], outcomes: &mut [Outcome]) -> Result<(
     Ok(())
 }
 
-/// Some schedules of one image in a worker pool (each worker boots once).
+/// The pool's runs by run index, and the pool's run of the schedule that also ran from a fresh
+/// boot.
+type PoolRuns = (Vec<(usize, Ran)>, Ran);
+
+/// Some schedules of one image in a worker pool (each worker boots once), and the schedule
+/// `twin`, which also runs from a fresh boot, once more in the pool (tag `x<twin>`): the second
+/// value is the pool's run of `twin`, which the report compares with its fresh boot (M207).
 fn pool_runs(
     o: &Opts,
     img: &Image,
     image: &Path,
     which: &[usize],
+    twin: usize,
     rd: &Path,
-) -> Result<Vec<(usize, Ran)>, String> {
-    if which.is_empty() {
-        return Ok(Vec::new());
-    }
+) -> Result<PoolRuns, String> {
+    let mut items: Vec<(String, String)> = which
+        .iter()
+        .map(|ri| (format!("r{ri}"), img.runs[*ri].schedule.clone()))
+        .collect();
+    items.push((format!("x{twin}"), img.runs[twin].schedule.clone()));
     let workers = if img.big {
         1
     } else {
         o.jobs.saturating_sub(1).max(1)
     }
-    .min(which.len());
+    .min(items.len());
     let t0 = Instant::now();
     let pd = rd.join("pool");
     let pool = pool_for(o, image, workers, &pd)?;
-    let items: Vec<(String, String)> = which
-        .iter()
-        .map(|ri| (format!("r{ri}"), img.runs[*ri].schedule.clone()))
-        .collect();
     let res = pool.run_all(&items, false);
     pool.close();
-    let secs = t0.elapsed().as_secs_f64() / which.len() as f64;
-    Ok(which
+    let secs = t0.elapsed().as_secs_f64() / items.len() as f64;
+    let of = |tag: &str| {
+        let r = res.get(tag).map(|x| x.1.clone()).unwrap_or_default();
+        ran_of(&r, secs, &pd)
+    };
+    let runs = which
         .iter()
-        .map(|ri| {
-            let r = res
-                .get(&format!("r{ri}"))
-                .map(|x| x.1.clone())
-                .unwrap_or_default();
-            (*ri, ran_of(&r, secs, &pd))
-        })
-        .collect())
+        .map(|ri| (*ri, of(&format!("r{ri}"))))
+        .collect();
+    Ok((runs, of(&format!("x{twin}"))))
 }
 
 struct Job {
@@ -1022,6 +1028,9 @@ struct Outcome {
     built: Built,
     /// (run index) -> [rep 1, rep 2]
     ran: HashMap<usize, [Option<Ran>; 2]>,
+    /// The default mode's cross-check (M207): the run index of the schedule that ran both from a
+    /// fresh boot and in the worker pool, and the pool's run.
+    pooled_twin: Option<(usize, Ran)>,
     skipped: bool,
 }
 
@@ -1162,6 +1171,7 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
         outcomes.push(Outcome {
             built,
             ran: HashMap::new(),
+            pooled_twin: None,
             skipped,
         });
     }
@@ -1313,6 +1323,33 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
         if o.build_only {
             continue;
         }
+        // the pool's run of the schedule that also ran from a fresh boot (M207)
+        if let Some((ri, x)) = &oc.pooled_twin {
+            let r = &img.runs[*ri];
+            match (x.error.as_ref(), oc.ran.get(ri).and_then(|p| p[0].as_ref())) {
+                (Some(e), _) => rep.failures.push(format!(
+                    "{} `{}` in the worker pool: {e} ({})",
+                    img.id,
+                    r.key(),
+                    x.dir.display()
+                )),
+                (None, Some(f)) if f.error.is_none() => {
+                    if !(x.fp == f.fp && x.ctl == f.ctl && x.verdict == f.verdict) {
+                        rep.pool_differs.push(format!(
+                            "{} `{}`: fresh boot {} (ctl {}), worker pool {} (ctl {})",
+                            img.id,
+                            r.key(),
+                            f.fp,
+                            f.ctl.as_deref().unwrap_or("-"),
+                            x.fp,
+                            x.ctl.as_deref().unwrap_or("-")
+                        ));
+                    }
+                    rep.pool_checked += 1;
+                }
+                _ => {}
+            }
+        }
         let mut wrote_any = false;
         for (ri, r) in img.runs.iter().enumerate() {
             let pair = oc.ran.get(&ri);
@@ -1444,6 +1481,7 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
     let bad = !rep.failures.is_empty()
         || !rep.unreproducible.is_empty()
         || !rep.nondeterministic.is_empty()
+        || !rep.pool_differs.is_empty()
         || !rep.verdicts.is_empty();
     let moved_any = rep.moved > 0 || !rep.new_images.is_empty();
     if o.write && changed_images > 0 {
@@ -1475,6 +1513,10 @@ struct Report {
     failures: Vec<String>,
     unreproducible: Vec<String>,
     nondeterministic: Vec<String>,
+    /// Schedules whose worker-pool run differs from their fresh boot (M207).
+    pool_differs: Vec<String>,
+    /// How many images had a schedule run both ways.
+    pool_checked: usize,
     verdicts: Vec<String>,
     texts: Vec<String>,
     new_images: Vec<String>,
@@ -1544,6 +1586,26 @@ impl Report {
                 "runs whose two repetitions DIFFER (below)"
             )
         );
+        if !o.thorough {
+            let _ = writeln!(
+                t,
+                "- The worker pool against a fresh boot: {}.",
+                if !self.pool_differs.is_empty() {
+                    format!(
+                        "{} of {} schedules run both ways DIFFER (below)",
+                        self.pool_differs.len(),
+                        self.pool_checked
+                    )
+                } else if self.pool_checked == 0 {
+                    "no schedule ran both ways (every result from the cache)".to_string()
+                } else {
+                    format!(
+                        "{} schedules (one per image) run both ways, each with one result",
+                        self.pool_checked
+                    )
+                }
+            );
+        }
         let _ = writeln!(
             t,
             "- Builds: {}.",
@@ -1605,6 +1667,11 @@ impl Report {
             &mut t,
             "Runs whose two repetitions differ",
             &self.nondeterministic,
+        );
+        sec(
+            &mut t,
+            "Schedules whose worker-pool run differs from their fresh boot",
+            &self.pool_differs,
         );
         sec(
             &mut t,

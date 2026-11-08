@@ -30,6 +30,10 @@ stays checked) and the rest in a worker pool that boots once per worker and star
 the provisioned snapshot (at most `--jobs` VMs: 2 on Linux, 4 on a Mac; a big image alone). A run
 whose values are the recorded ones repeats the recorded run, so it proves determinism; a run whose
 values differ runs a second time from a fresh boot, to tell a real change from a nondeterminism.
+The image's first schedule also runs in the pool, and the pool's run must give the values of the
+fresh boot. Otherwise the report names the schedule and the check exits 1 (Milestone 207: the
+pool had booted another guest than `hydo run`, which showed up only as other values for the
+pool's schedules).
 So a run with nothing changed boots nothing, and a change re-runs only the images whose bytes
 changed. `--thorough` (before a release, nightly) is the complete mode: every image staged and
 built twice and compared, every schedule run twice from fresh boots, nothing reused.
@@ -3401,5 +3405,7 @@ nats-flaky-8363 example is in the list with its epoch-2 boundary: `hvx/nats-flak
 in the worker pool (from S1) differs from a fresh boot: the three composed Redis images'
 `disk=cut dseed=1 | run C=12 R=everysec W=...` and redis-errors' `disk=ioerr:1 ... W=...` (the
 same verdicts; AGENTS.md open item 76). The list keeps the fresh boots' values, and `--thorough`
-gives them. It also reports new bytes for the shop's two images when the inputs folder is not
+gives them. Milestone 207 found the cause in hydo-bench, not in the engine: its pools booted
+those composed images without the CPUID cache leaves. Since then the pool gives the recorded
+values, and the fast check runs each image's first schedule both ways. It also reports new bytes for the shop's two images when the inputs folder is not
 M164's, as the list's note says; their runs give the recorded values.

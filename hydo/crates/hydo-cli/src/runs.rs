@@ -13,7 +13,7 @@ use hydo_control::agent::AgentEngine;
 use hydo_control::drive::Policy;
 use hydo_engine::hvm::Hvm;
 use hydo_engine::hvx::Hvx;
-use hydo_engine::image::{boot_files, embedded_compose, embedded_manifest, sha256_file};
+use hydo_engine::image::{boot_files, embedded_compose, sha256_file};
 use hydo_engine::protocol::verdict_kind;
 use hydo_engine::{BootSpec, ControlledEngine, CpuLevel, RunResult};
 use hydo_manifest::Guest;
@@ -66,18 +66,10 @@ pub fn find_image(ctx: &Ctx, args: &mut Vec<String>) -> PathBuf {
 }
 
 /// The `guest:` section of the manifest an image carries (defaults when it cannot be read: the
-/// Python CLIs fell back the same way when the image had no manifest).
+/// Python CLIs fell back the same way when the image had no manifest). The one reading every
+/// boot path uses ([`hydo_control::agent::image_guest`], M207).
 pub fn image_guest(image: &Path) -> Guest {
-    let Ok(text) = embedded_manifest(image) else {
-        return Guest::from_value(&Value::Null);
-    };
-    // manifest_space.load(image_path=...): the manifest with the plan meta the image carries,
-    // expanded and validated as hydo-build did when it built the image
-    let meta: Option<Value> = embedded_compose(image).and_then(|t| serde_json::from_str(&t).ok());
-    match hydo_manifest::from_embedded(&text, meta.as_ref()) {
-        Ok(m) => Guest::from_value(&m.data),
-        Err(_) => Guest::from_value(&Value::Null),
-    }
+    hydo_control::agent::image_guest(image).unwrap_or_else(|_| Guest::from_value(&Value::Null))
 }
 
 /// The engine options the explorer passes for this image (explore.py's engine_args_for). The

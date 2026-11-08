@@ -105,6 +105,43 @@ pub fn rewind_again(
     Some(again)
 }
 
+/// The `guest:` section of the manifest an image carries (`guest.ram_mib`, `guest.cpu`,
+/// `guest.cpu_cache`), read as the host controller reads the manifest: with the test composer's
+/// plan meta (`/etc/hydo/compose.json`) and the image's parameter values. Every path that boots
+/// an image takes its engine options from here or from [`guest_of_embedded`], so that a worker
+/// pool and a fresh boot boot the same guest (M207: hydo-bench read a composed plan's manifest
+/// without its meta, the reading failed, and its pools booted without the CPUID cache leaves).
+/// An image without a manifest gives the defaults; a manifest that cannot be read is an error.
+pub fn image_guest(image: &Path) -> Result<hydo_manifest::Guest, String> {
+    let Ok(text) = hydo_engine::image::embedded_manifest(image) else {
+        return Ok(hydo_manifest::Guest::from_value(&serde_json::Value::Null));
+    };
+    let compose = hydo_engine::image::embedded_compose(image);
+    let params = hydo_engine::image::embedded_file(image, "etc/hydo/params")
+        .map(|t| hydo_manifest::parse_params_file(&t))
+        .unwrap_or_default();
+    guest_of_embedded(&text, compose.as_deref(), &params)
+        .map_err(|e| format!("{}: /etc/hydo/hydo.yaml: {e}", image.display()))
+}
+
+/// [`image_guest`] from the image's files: the manifest text, its plan meta and its parameter
+/// values.
+pub fn guest_of_embedded(
+    text: &str,
+    compose: Option<&str>,
+    params: &[(String, String)],
+) -> Result<hydo_manifest::Guest, String> {
+    let meta: Option<serde_json::Value> = match compose {
+        None => None,
+        Some(c) => {
+            Some(serde_json::from_str(c).map_err(|e| format!("etc/hydo/compose.json: {e}"))?)
+        }
+    };
+    let m =
+        hydo_manifest::from_embedded_params(text, meta.as_ref(), params).map_err(|e| e.message)?;
+    Ok(hydo_manifest::Guest::from_value(&m.data))
+}
+
 /// The core plan of an agent image's manifest (`/etc/hydo/hydo.yaml`); a manifest that needs a
 /// wave-3 feature is refused with its seam.
 pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {

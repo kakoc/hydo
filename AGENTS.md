@@ -520,15 +520,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     so a narrow band between two grid points stays hidden. At epoch 2 the dense sweep of the
     nats-server image stepped over the failing `q=18140`. A test workload with services or with
     `faults:` was not run.
-76. At the fingerprint epoch 2 four hvx schedules give another fingerprint from the worker pool's
-    S1 snapshot than from a fresh boot, with the same verdict: `hvx/redis-composed`,
-    `hvx/redis-composed-hist` and `hvx/redis-composed-read` `disk=cut dseed=1 | run C=12
-    R=everysec W=...`, and `hvx/redis-errors`' `disk=ioerr:1 ... W=...`. M204's programs give the
-    same, and a fresh boot of an epoch-1 image gives the pool's value. The list keeps the fresh
-    boots' values, so the fast `hydo-bench rebaseline --check` on hvx reports these four as
-    differing between two runs; `--thorough` (fresh boots only) passes. The cause was not looked
-    for. If it is not found, the explorer's and the fast check's runs of such schedules do not
-    reproduce with `hydo run` bit for bit (M206).
 
 ## Milestone index
 
@@ -766,6 +757,11 @@ build machine, before 2026-10-13.
 - M206: the three epoch-2 verdict changes decided. stack-errors-fix's is accepted (the same
   class), etcd 14685 has a new schedule (`K=etcd2@20+1 P=etcd1@26+1`), and miniflux's API check
   was too strict and is fixed. `recorded.json` takes `vcpus`, and the nats-flaky-8363 pair is in it
+- M207 (tentative number): open item 76 explained and fixed. hydo-bench's worker pools read a
+  composed plan's manifest without its plan meta, the reading failed, and at epoch 2 their guests
+  booted without the CPUID cache leaves. Every boot path now reads the guest's settings with
+  `hydo_control::agent::image_guest`, and the fast rebaseline also runs each image's first schedule
+  in the pool and requires the fresh boot's values. Nothing recorded moved
 
 ## Where to look
 

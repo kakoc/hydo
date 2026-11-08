@@ -13,6 +13,7 @@ mod drive;
 mod fakes;
 mod features;
 mod groups;
+mod image_guest;
 mod m123;
 mod react;
 mod restart;

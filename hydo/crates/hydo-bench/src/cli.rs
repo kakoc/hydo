@@ -35,7 +35,8 @@ pub const USAGE: &str = "usage: hydo-bench <command> [options]   (hydo/bench/REA
                Default (fast): an image whose inputs are those of the build kept in the work
                folder is not built again, else built once; a schedule with a cached result for
                the image's bytes and the engine is not run; the others run once (one fresh boot
-               per image, the rest in a worker pool from the provisioned snapshot), a second
+               per image, the rest in a worker pool from the provisioned snapshot, where the
+               first schedule runs too and must give its fresh boot's values), a second
                time only when the first did not give the recorded values. --thorough (releases,
                nightly): every image built twice and compared, every schedule run twice from
                fresh boots, nothing reused. A report of verdict changes, nondeterminism and
