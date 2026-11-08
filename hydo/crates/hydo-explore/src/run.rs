@@ -117,7 +117,7 @@ impl Cx {
             a.push("--vcpus".into());
             a.push(self.vcpus.to_string());
         }
-        if self.cpu == "v3" && self.ex.backend == Backend::Hvx {
+        if self.cpu == "v3" && (self.ex.backend == Backend::Hvx || self.kvm) {
             a.push("--cpu".into());
             a.push("v3".into());
         }
@@ -375,7 +375,7 @@ fn setup(a: Args, env: &Env) -> Cx {
             hydo_manifest::py::repr(&cpu)
         )),
     }
-    if cx.cpu == "v3" && cx.ex.backend != Backend::Hvx {
+    if cx.cpu == "v3" && cx.ex.backend != Backend::Hvx && !cx.kvm {
         die(&format!(
             "hydo explore: guest CPU v3 (AVX) is an x86_64 option; --backend {} cannot run it",
             a.backend
@@ -567,7 +567,11 @@ fn make_pool(cx: &Cx) -> Pool {
             image,
             ram_mib: cx.ram_mib as u32,
             vcpus: 1,
-            cpu: CpuLevel::V2,
+            cpu: if cx.cpu == "v3" {
+                CpuLevel::V3
+            } else {
+                CpuLevel::V2
+            },
             kernel: PathBuf::new(),
             initrd: None,
             outdir: consoles,

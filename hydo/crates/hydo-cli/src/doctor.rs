@@ -111,6 +111,12 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
             Ok(line) => {
                 c.check(true, "KVM has what the engine needs (API 12, user-space MSRs and the MSR filter, the CPUID)", "", false);
                 println!("     {line}");
+                // not a check: only images with guest.cpu: v3 need it
+                match hydo_kvm::probe_level(&dev.display().to_string(), hydo_kvm::cpuid::Level::V3)
+                {
+                    Ok(_) => println!("     guest.cpu: v3 (x86-64-v3, AVX2) can run here"),
+                    Err(e) => println!("     guest.cpu: v3 cannot run here: {e}"),
+                }
             }
             Err(e) => c.check(false, "KVM has what the engine needs", &e, false),
         }

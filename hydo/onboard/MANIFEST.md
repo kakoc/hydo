@@ -1730,8 +1730,9 @@ includes it; `hydo-hvx` is the run engine as a program, M137).
 Out-of-range values are rejected by `hydo-build`, the explorer and both engines.
 
 Guest CPU: `guest.cpu: v3` makes the explorer start the engine with `--cpu v3` (hvx flag
-`HVX_VM_X86_64_V3`): the guest sees AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE and XSAVE (x87|SSE|AVX
-only, no AVX-512), which prebuilt x86-64-v3 binaries and images built for Haswell/Broadwell need.
+`HVX_VM_X86_64_V3`; on the KVM engine its v3 CPUID, on a host with AVX2): the guest sees AVX/AVX2,
+FMA, BMI1/2, F16C, LZCNT, MOVBE and XSAVE (x87|SSE|AVX only, no AVX-512), which prebuilt x86-64-v3
+binaries and images built for Haswell/Broadwell need.
 `hydo explore --cpu v3|v2` overrides it. Like the RAM size it is not in the schedule, so a hand run
 needs `--cpu v3` too (the report's repro line includes it). Without the key nothing changes.
 

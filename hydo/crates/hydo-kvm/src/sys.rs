@@ -14,6 +14,7 @@
 
 use crate::abi::*;
 use crate::cpu::{Cpu, CpuState, Exit, Hypervisor, Reply};
+use crate::cpuid::Level;
 use std::fs::File;
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -76,6 +77,15 @@ pub struct Kvm {
     run_size: usize,
     pmu_off: bool,
     desc: String,
+    /// what the host's KVM supports (`KVM_GET_SUPPORTED_CPUID`)
+    supported: Vec<kvm_cpuid_entry2>,
+    /// `KVM_CAP_XCRS`
+    xcrs: bool,
+    /// the guest CPU level ([`Kvm::with_level`])
+    level: Level,
+    /// v3 on a hybrid CPU: the CPUs of one kind of core every vCPU thread runs on
+    /// ([`crate::hybrid`])
+    pin: Option<Vec<usize>>,
 }
 
 /// What the host is, for the diagnostics and the doctor.
@@ -141,7 +151,9 @@ impl Kvm {
             )
         })?;
         let n = (c.h.nent as usize).min(CPUID_MAX);
-        crate::cpuid::check(&c.entries[..n])?;
+        crate::cpuid::check(&c.entries[..n], Level::V2)?;
+        // SAFETY: as above
+        let xcrs = unsafe { ioctl(fd, KVM_CHECK_EXTENSION, KVM_CAP_XCRS as u64) } > 0;
         let desc = format!(
             "hydo-kvm: {dev}, KVM API {v}, {}{}",
             host_line(),
@@ -156,8 +168,86 @@ impl Kvm {
             run_size,
             pmu_off: pmu as u64 & KVM_PMU_CAP_DISABLE != 0,
             desc,
+            supported: c.entries[..n].to_vec(),
+            xcrs,
+            level: Level::V2,
+            pin: None,
         })
     }
+
+    /// The guest CPU level of every VM this makes (x86-64-v2 unless set): Err when the host's KVM
+    /// cannot give it (the features of [`crate::cpuid::table_for`], and for v3 the guest's XCR0
+    /// in snapshots, `KVM_CAP_XCRS`).
+    pub fn with_level(mut self, level: Level) -> Result<Kvm, String> {
+        crate::cpuid::check(&self.supported, level).map_err(|e| format!("hydo-kvm: {e}"))?;
+        if level == Level::V3 && !self.xcrs {
+            return Err(
+                "hydo-kvm: this host's KVM lacks KVM_CAP_XCRS (the guest's XCR0 at x86-64-v3)"
+                    .into(),
+            );
+        }
+        if level != Level::V2 {
+            self.desc = format!("{}; guest CPU {}", self.desc, level.name());
+        }
+        if level == Level::V3 {
+            self.pin = one_kind_of_core();
+            if let Some(p) = &self.pin {
+                self.desc = format!(
+                    "{}, on one kind of core of this hybrid CPU: CPUs {}",
+                    self.desc,
+                    p.iter()
+                        .map(|c| c.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                );
+            }
+        }
+        self.level = level;
+        Ok(self)
+    }
+}
+
+/// The CPU list of a sysfs file (empty when it is not there).
+fn sys_cpus(path: &str) -> Vec<usize> {
+    std::fs::read_to_string(path)
+        .map(|s| crate::hybrid::cpulist(&s))
+        .unwrap_or_default()
+}
+
+/// The CPUs this thread may use now.
+fn allowed_cpus() -> Vec<usize> {
+    // SAFETY: a zeroed cpu_set_t is a valid empty set; sched_getaffinity fills it
+    let mut set: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+    let r = unsafe { libc::sched_getaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &mut set) };
+    if r != 0 {
+        return Vec::new();
+    }
+    // SAFETY: CPU_ISSET reads the set within its size
+    (0..libc::CPU_SETSIZE as usize)
+        .filter(|&c| unsafe { libc::CPU_ISSET(c, &set) })
+        .collect()
+}
+
+/// On a hybrid Intel CPU, the CPUs of one kind of core this process may use
+/// ([`crate::hybrid::choose`]); None elsewhere.
+fn one_kind_of_core() -> Option<Vec<usize>> {
+    crate::hybrid::choose(
+        &allowed_cpus(),
+        &sys_cpus("/sys/devices/cpu_core/cpus"),
+        &sys_cpus("/sys/devices/cpu_atom/cpus"),
+    )
+}
+
+/// Bind the calling thread to `cpus`.
+fn bind_thread(cpus: &[usize]) -> Result<(), String> {
+    // SAFETY: a zeroed cpu_set_t is a valid empty set; CPU_SET writes within it
+    let mut set: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+    for &c in cpus {
+        unsafe { libc::CPU_SET(c, &mut set) };
+    }
+    // SAFETY: the set lives across the call
+    let r = unsafe { libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &set) };
+    chk("sched_setaffinity (one kind of core of a hybrid CPU)", r).map(|_| ())
 }
 
 fn new_fd(r: i32) -> File {
@@ -264,9 +354,11 @@ impl Hypervisor for Kvm {
             ram: ram as u64,
             ram_len: len,
             dirty: None,
+            v3: self.level == Level::V3,
+            pin: self.pin.clone(),
         };
         let mut c = Box::<kvm_cpuid2>::default();
-        let t = crate::cpuid::table();
+        let t = crate::cpuid::table_for(self.level);
         c.h.nent = t.len() as u32;
         c.entries[..t.len()].copy_from_slice(&t);
         chk(
@@ -321,6 +413,11 @@ pub struct KvmCpu {
     ram_len: usize,
     /// the dirty-page log's bitmap while the log is on ([`Cpu::dirty_log`])
     dirty: Option<Vec<u64>>,
+    /// x86-64-v3: the guest enables XSAVE components itself, so its XCR0 is part of the state
+    /// ([`CpuState::xcr0`])
+    v3: bool,
+    /// the CPUs the vCPU's thread is bound to at its first run (v3 on a hybrid CPU)
+    pin: Option<Vec<usize>>,
 }
 
 // SAFETY: the kvm_run page is owned by this value and used by one thread at a time (the engine's)
@@ -384,6 +481,18 @@ impl KvmCpu {
     }
     fn fd(&self) -> RawFd {
         self.vcpu.as_raw_fd()
+    }
+
+    /// The guest's XCR0 (`KVM_GET_XCRS`).
+    fn xcr0(&self) -> u64 {
+        let x: kvm_xcrs = self.get(KVM_GET_XCRS, "KVM_GET_XCRS");
+        match x.xcrs[..(x.nr_xcrs as usize).min(16)]
+            .iter()
+            .find(|r| r.xcr == 0)
+        {
+            Some(r) => r.value,
+            None => crate::fatal(1, "hydo-kvm: KVM_GET_XCRS gave no XCR0"),
+        }
     }
 
     fn get<T: Default>(&self, req: u64, what: &str) -> T {
@@ -512,6 +621,11 @@ impl Cpu for KvmCpu {
             let t = unsafe { libc::pthread_self() } as u64;
             unblock_kick();
             self.thread.store(t, Ordering::Relaxed);
+            if let Some(p) = &self.pin {
+                if let Err(e) = bind_thread(p) {
+                    crate::fatal(1, &e);
+                }
+            }
         }
         match self.kvm_run() {
             Ok(true) => self.decode(),
@@ -613,12 +727,27 @@ impl Cpu for KvmCpu {
                 .collect(),
             events: self.get(KVM_GET_VCPU_EVENTS, "KVM_GET_VCPU_EVENTS"),
             debugregs: self.get(KVM_GET_DEBUGREGS, "KVM_GET_DEBUGREGS"),
+            xcr0: if self.v3 { self.xcr0() } else { 0 },
         }
     }
 
     fn load(&mut self, s: &CpuState) {
         self.set(KVM_SET_SREGS, &s.sregs, "KVM_SET_SREGS");
         self.set(KVM_SET_REGS, &s.regs, "KVM_SET_REGS");
+        if self.v3 && s.xcr0 != 0 {
+            // before the XSAVE image: KVM checks XCR0 against the guest's CPUID only, and the
+            // image's components against what the CPUID allows
+            let mut x = kvm_xcrs {
+                nr_xcrs: 1,
+                ..kvm_xcrs::default()
+            };
+            x.xcrs[0] = kvm_xcr {
+                xcr: 0,
+                reserved: 0,
+                value: s.xcr0,
+            };
+            self.set(KVM_SET_XCRS, &x, "KVM_SET_XCRS");
+        }
         if s.xsave.len() == 1024 {
             let mut xs = kvm_xsave::default();
             xs.region.copy_from_slice(&s.xsave);

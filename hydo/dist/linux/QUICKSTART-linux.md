@@ -252,8 +252,9 @@ hydo explore --backend kvm --seeds 1-20 --strategy swarm --workers 2
 `hydo` (or as `bin/hydo-kvm` with `HYDO_KVM=process`) and boots its own build of the guest kernel,
 `guest/bzImage-kvm`, which takes all its time from the engine's clock. Runs are deterministic, with
 the same verdicts as with hvx, but they are counted differently: guest time advances with the
-virtual machine's exits to the engine (there is no PMU clock), every guest has one virtual CPU at
-the x86-64-v2 level (an image with several CPUs or `guest.cpu: v3` is refused), and the
+virtual machine's exits to the engine (there is no PMU clock), every guest has one virtual CPU, at
+the x86-64-v2 level or, with `guest.cpu: v3`, at x86-64-v3 (AVX2) on a host that has it (an image
+with several CPUs is refused), and the
 fingerprints are this engine's own. `hydo repro` of an hvx run with `--backend kvm` (or the other
 way round) compares verdicts, not fingerprints, and says so. A host power cut at the k-th disk
 flush (`cf=`) and inserted ticks (`pp=`, `xt…`) are hvx's alone; the explorer draws the faults both

@@ -3,7 +3,7 @@
 //! one process), or as the program `hydo-kvm` with `HYDO_KVM=process`:
 //!
 //! ```text
-//! hydo-kvm [--ram-mib N] --control boot serve|one <bzImage-kvm> <initramfs> <disk> <outdir> ["<schedule>"]
+//! hydo-kvm [--ram-mib N] [--cpu v3] --control boot serve|one <bzImage-kvm> <initramfs> <disk> <outdir> ["<schedule>"]
 //! ```
 //!
 //! It boots the same images as hvx (the image's disk and its recorded initramfs) with its own
@@ -202,8 +202,9 @@ fn spawn(
     let e = k.engine_env();
     let o = hydo_config::kvm::Options::from_env(&e);
     let dev = hydo_config::kvm::Engine::from_env(&e).dev();
-    let hv =
-        hydo_kvm::sys::Kvm::open(&dev.display().to_string()).map_err(EngineError::Unsupported)?;
+    let hv = hydo_kvm::sys::Kvm::open(&dev.display().to_string())
+        .and_then(|k| k.with_level(level_of(spec.cpu)))
+        .map_err(EngineError::Unsupported)?;
     let initrd = spec.initrd.clone().ok_or_else(|| {
         EngineError::Unsupported("the KVM engine needs the image's initramfs".into())
     })?;
@@ -253,20 +254,23 @@ fn spawn(
     ))
 }
 
-/// The machine the KVM engine gives every guest: one vCPU at the v2 level. An image that asks
-/// for more (several vCPUs, `guest.cpu: v3`) is refused rather than run on less (an AVX2 program
-/// would fault in the guest).
+/// The KVM engine's guest CPU level for `guest.cpu`.
+pub fn level_of(cpu: crate::CpuLevel) -> hydo_kvm::cpuid::Level {
+    match cpu {
+        crate::CpuLevel::V2 => hydo_kvm::cpuid::Level::V2,
+        crate::CpuLevel::V3 => hydo_kvm::cpuid::Level::V3,
+    }
+}
+
+/// The machine the KVM engine gives every guest: one vCPU, at the image's CPU level (v2, or v3
+/// on a host whose KVM has AVX2: the engine refuses the run otherwise). An image that asks for
+/// several vCPUs is refused rather than run on fewer.
 fn check_machine(spec: &BootSpec) -> Result<(), EngineError> {
-    if spec.vcpus != 1 || spec.cpu != crate::CpuLevel::V2 {
+    if spec.vcpus != 1 {
         return Err(EngineError::Unsupported(format!(
-            "the KVM engine runs one vCPU at the v2 CPU level; {} asks for {} vCPU(s) at {} \
-             (several vCPUs and guest.cpu: v3 need the hvx engine)",
+            "the KVM engine runs one vCPU; {} asks for {} vCPUs (several vCPUs need the hvx engine)",
             spec.image.display(),
             spec.vcpus,
-            match spec.cpu {
-                crate::CpuLevel::V2 => "v2",
-                crate::CpuLevel::V3 => "v3",
-            }
         )));
     }
     Ok(())
@@ -356,9 +360,19 @@ mod tests {
         );
         assert!(k.in_process());
         assert!(check_machine(&spec).is_ok());
-        for (vcpus, cpu) in [(2, crate::CpuLevel::V2), (1, crate::CpuLevel::V3)] {
+        let v3 = BootSpec {
+            cpu: crate::CpuLevel::V3,
+            ..spec.clone()
+        };
+        assert!(check_machine(&v3).is_ok());
+        assert_eq!(
+            k.argv(&v3, "one", &s).join(" "),
+            "/r/bin/hydo-kvm --ram-mib 2048 --cpu v3 --control boot one /g/bzImage-kvm \
+             /g/initramfs-kafka.cpio.gz /i/x-disk.img /o rb=64 | run"
+        );
+        for cpu in [crate::CpuLevel::V2, crate::CpuLevel::V3] {
             let more = BootSpec {
-                vcpus,
+                vcpus: 2,
                 cpu,
                 ..spec.clone()
             };
