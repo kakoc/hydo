@@ -1,0 +1,24 @@
+# A system that promises nothing yet: the check only measures the history (and every delivered
+# message must have been sent, which every messages check claims). An auto-acknowledging queue
+# whose sends and receives are linearizable as one FIFO queue is a second check.
+format: 1
+name: messages-measure-only
+services:
+  - name: bus
+    cmd: /bin/bus-server
+    ready: /bin/bus-client ping
+workload:
+  steps: 10
+  run: /bin/bus-client run --from $HYDO_FROM --to $HYDO_TO
+checks:
+  - id: bus
+    type: messages
+    history: bus
+    final: /bin/bus-client drain
+  - id: inbox
+    type: messages
+    history: inbox
+    acknowledgement: on-receive
+    claims:
+      linearizable: fifo
+      delivery: at-most-once

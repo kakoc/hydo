@@ -1,0 +1,19 @@
+# A declaration from a bundle of the project (include:), with one claim of the bundle changed
+# by the entry's own claims: hydo build merges the bundles in order, then the entry's keys.
+format: 1
+name: messages-include
+services:
+  - name: jobs
+    cmd: /bin/jobs-server --data /data/jobs
+    ready: /bin/jobs-client ping
+workload:
+  steps: 20
+  run: /bin/jobs-client work --from $HYDO_FROM --to $HYDO_TO
+checks:
+  - id: jobs
+    type: messages
+    history: jobs
+    final: /bin/jobs-client drain
+    include: [bundles/work-queue-with-leases.yaml]
+    claims:
+      lease: {ms: 60000}

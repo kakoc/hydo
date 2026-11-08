@@ -549,6 +549,12 @@ verdict rules are in `hydo/HISTORIES.md`.
   run's record in `events.jsonl`; the results format, `hydo/PRODUCT.md`).
 - Only manifests with `checks:` get the recorder (and the host controller's history lines);
   every other image builds as before.
+- `type: messages` checks a message-passing system (a queue, a log, publish-subscribe). The check
+  declares the claims (`claims:`, `acknowledgement:`, `retention_ms:`, `clock_steps:`,
+  `measures:`, and `include:` bundles of the project, which `hydo build` resolves); hydo checks
+  exactly those and measures the history. Each claim is reported as `<id>.<claim>`. Its `final:`
+  is the drain, which writes `drained <channel> <group>`. Keys, records and refused combinations:
+  `hydo guide messages`.
 - Examples: `examples/redis/hydo-hist.yaml` (SET/GET as registers and RPUSH/LRANGE as
   list-append: `R=everysec` + a power cut loses an acknowledged write, both checks see it) and
   `examples/etcd/hydo-hist.yaml` (puts and gets with etcd's mod_revision, read back through every

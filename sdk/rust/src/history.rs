@@ -206,3 +206,9 @@ pub fn read_mop(k: &str) -> String {
 pub fn read_result_mop(k: &str, l: &[&str]) -> String {
     format!("r:{}:{}", enc(k), list(l))
 }
+
+/// Messaging histories: send, receive, acknowledge, give back, extend, commit, subscribe, and
+/// the drain's end (docs/design/messaging.md). Behind the feature `messages` and declared last,
+/// so that the programs built without it keep their bytes.
+#[cfg(feature = "messages")]
+pub mod messages;

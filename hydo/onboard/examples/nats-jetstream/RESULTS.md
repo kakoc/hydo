@@ -246,8 +246,8 @@ against 9 without the option (all with a power cut). Two of the 11 have no power
 whose kill of every node alone (`disk=none dseed=f92a9eae7103378b | run K=nodes.all@19+3
 W=06dd08ca,p2,q1,r500`) loses the stream, and seed 22, shrunk to `disk=none dseed=d9f3d4e02b8520f9
 | run N=nodes.isolate@2-10:loss,100% T=11:-18 W=e195e771,p4,q2,r500` (lost 5 of 34
-acknowledged messages, `e6b474bf9a8a5c14`; 2.10.23 passes it). docs/HISTORY.md "Milestone 195
-(tentative)" has every value.
+acknowledged messages, `e6b474bf9a8a5c14`; 2.10.23 passes it). docs/HISTORY.md "Milestone 195"
+has every value.
 
 ## What the explorer lacked
 

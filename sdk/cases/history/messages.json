@@ -1,0 +1,35 @@
+{
+  "about": "messaging records (docs/design/messaging.md): send, recv, ack, nack, extend, commit, sub and drained, with items m;k=;x=;d=;o=;n=;h=;v=;s=;r= in one fixed order and their values encoded with enc plus ; and = (the tokens are the Rust Item's; tests/history.rs checks that the Messages recorder writes exactly these lines)",
+  "needs": [],
+  "steps": [
+    {"do":"history","name":"q"},
+    {"do":"invoke","h":0,"proc":{"int":"3"},"f":"send","args":["orders","m17;k=g2","m18;k=g2"]},
+    {"do":"ok","o":0,"args":["orders","m17;k=g2;o=81","m18;k=g2;o=82"]},
+    {"do":"invoke","h":0,"proc":{"int":"3"},"f":"send","args":["orders","m19;k=g%3B2;x=d%3D1;d=5000"]},
+    {"do":"info","o":1},
+    {"do":"invoke","h":0,"proc":{"int":"3"},"f":"send","args":["orders","m19;k=g%3B2;x=d%3D1;d=5000"]},
+    {"do":"ok","o":2,"args":["orders","m19;k=g%3B2;x=d%3D1;d=5000;o=83;s=ok"]},
+    {"do":"invoke","h":0,"proc":{"int":"4"},"f":"send","args":["orders","m%2020"]},
+    {"do":"fail","o":3},
+    {"do":"invoke","h":0,"proc":{"int":"5"},"f":"recv","args":["orders","-"]},
+    {"do":"ok","o":4,"args":["orders","-","m17;k=g2;o=81;n=1;h=a91f;v=30000"]},
+    {"do":"invoke","h":0,"proc":{"int":"5"},"f":"recv","args":["orders","-"]},
+    {"do":"ok","o":5,"args":["orders","-"]},
+    {"do":"invoke","h":0,"proc":{"int":"5"},"f":"ack","args":["orders","-","m17;h=a91f"]},
+    {"do":"ok_same","o":6},
+    {"do":"invoke","h":0,"proc":{"int":"6"},"f":"nack","args":["orders","-","m18;h=b2;r=0"]},
+    {"do":"info","o":7},
+    {"do":"invoke","h":0,"proc":{"int":"7"},"f":"extend","args":["orders","-","m19;h=c3;v=60000"]},
+    {"do":"ok_same","o":8},
+    {"do":"invoke","h":0,"proc":{"int":"8"},"f":"commit","args":["events","g1","k1@41","k%202@7"]},
+    {"do":"ok_same","o":9},
+    {"do":"invoke","h":0,"proc":{"int":"8"},"f":"sub","args":["events","g1","from=start"]},
+    {"do":"ok_same","o":10},
+    {"do":"invoke","h":0,"proc":{"int":"8"},"f":"sub","args":["events","g2","from=now"]},
+    {"do":"fail","o":11},
+    {"do":"record","h":0,"proc":{"int":"9"},"type":"ok","f":"drained","args":["orders","-"]}
+  ],
+  "runs": [
+    {"name": "", "out": "off", "hist_out": "file", "buggify_env": null, "buggify_file": null, "output": "messages.out", "returns": ""}
+  ]
+}

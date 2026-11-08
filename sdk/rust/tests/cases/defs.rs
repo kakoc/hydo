@@ -607,6 +607,57 @@ fn output_cases() -> Vec<Case> {
 
 // ---- history records ----
 
+/// The messaging case: generic records whose item tokens the Rust `Item` makes (so every SDK
+/// replays them with its generic recorder; `tests/history.rs` checks that the Rust `Messages`
+/// recorder writes the same lines).
+fn messages_prog() -> Prog {
+    use hydo_assert::history::messages::{item_enc, Item, Outcome};
+    let t = |items: &[Item]| -> Vec<Arg> { items.iter().map(|i| Arg::Tok(i.token().into())).collect() };
+    let with = |head: &[&str], items: &[Item]| -> Vec<Arg> {
+        let mut a: Vec<Arg> = head.iter().map(|h| Arg::Tok(item_enc(h).into())).collect();
+        a.extend(t(items));
+        a
+    };
+    let mut p = Prog::new();
+    let q = p.history("q");
+    let m17 = || Item::new("m17").key("g2");
+    let m18 = || Item::new("m18").key("g2");
+    let o = p.invoke(q, 3, "send", with(&["orders"], &[m17(), m18()]));
+    p.ok(o, with(&["orders"], &[m17().id(81), m18().id(82)]));
+    let m19 = || Item::new("m19").key("g;2").dedup("d=1").delay_ms(5000);
+    let o = p.invoke(q, 3, "send", with(&["orders"], &[m19()]));
+    p.info(o);
+    let o = p.invoke(q, 3, "send", with(&["orders"], &[m19()]));
+    p.ok(o, with(&["orders"], &[m19().id("83").outcome(Outcome::Ok)]));
+    let o = p.invoke(q, 4, "send", with(&["orders"], &[Item::new("m 20")]));
+    p.fail(o);
+    let o = p.invoke(q, 5, "recv", with(&["orders", "-"], &[]));
+    p.ok(o, with(&["orders", "-"], &[m17().id(81).attempt(1).handle("a91f").lease_ms(30000)]));
+    let o = p.invoke(q, 5, "recv", with(&["orders", "-"], &[]));
+    p.ok(o, with(&["orders", "-"], &[]));
+    let o = p.invoke(q, 5, "ack", with(&["orders", "-"], &[Item::new("m17").handle("a91f")]));
+    p.ok_same(o);
+    let o = p.invoke(q, 6, "nack", with(&["orders", "-"], &[Item::new("m18").handle("b2").reject()]));
+    p.info(o);
+    let o = p.invoke(q, 7, "extend", with(&["orders", "-"], &[Item::new("m19").handle("c3").lease_ms(60000)]));
+    p.ok_same(o);
+    let mut c = with(&["events", "g1"], &[]);
+    c.push(Arg::Tok(format!("{}@41", item_enc("k1")).into()));
+    c.push(Arg::Tok(format!("{}@7", item_enc("k 2")).into()));
+    let o = p.invoke(q, 8, "commit", c);
+    p.ok_same(o);
+    let mut a = with(&["events", "g1"], &[]);
+    a.push("from=start".into());
+    let o = p.invoke(q, 8, "sub", a);
+    p.ok_same(o);
+    let mut a = with(&["events", "g2"], &[]);
+    a.push("from=now".into());
+    let o = p.invoke(q, 8, "sub", a);
+    p.fail(o);
+    p.record(q, 9, "ok", "drained", with(&["orders", "-"], &[]));
+    p
+}
+
 fn hcase(name: &'static str, about: &'static str, p: Prog) -> Case {
     case("history", name, about, p, vec![Run::hist("")])
 }
@@ -763,6 +814,12 @@ fn history_cases() -> Vec<Case> {
     let o = p.invoke(kv, 5, "noop", vec![]);
     p.info(o);
     v.push(hcase("empty_arguments", "empty arguments are % and an operation may have no arguments", p));
+
+    v.push(hcase(
+        "messages",
+        "messaging records (docs/design/messaging.md): send, recv, ack, nack, extend, commit, sub and drained, with items m;k=;x=;d=;o=;n=;h=;v=;s=;r= in one fixed order and their values encoded with enc plus ; and = (the tokens are the Rust Item's; tests/history.rs checks that the Messages recorder writes exactly these lines)",
+        messages_prog(),
+    ));
 
     let mut p = Prog::new();
     let kv = p.history("kv");

@@ -321,6 +321,13 @@ maintainers: the shared cases, and the Go module with its frozen copy in `hydo/s
 test in its language (M188). The examples are in `hydo/onboard/examples/`;
 `hydo/onboard/MANIFEST.md` is the project format's reference.
 
+**Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
+message-passing system. The project declares the claims; hydo checks exactly those and measures
+the history, and it knows no messaging system or API. The checker is the module `messages` of
+`hydo-history`. Each claim is reported as `<id>.<claim>`, and `result.json` has `messages`. The
+Rust SDK records with `hydo_assert::history::messages`. Reference: `hydo guide messages`; design:
+`docs/design/messaging.md`; evidence and decisions: `docs/HISTORY.md` Milestone 196.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -446,6 +453,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     one target and a second `T=`. Refusing them, or applying several clock steps, re-records one
     case each. Also left: `G=` and `L=` lists, `O=` partitions, several `N=` windows at once, a
     primary followed during the fault, and runs on hvx and KVM (M195).
+66. Messaging checks: no VM ran one yet, and per-window measures, `Exploration.messages` and the
+    other SDKs' helpers are not built. The planted-bug example and the real-system onboardings
+    come next (M196).
 
 ## Milestone index
 
@@ -656,6 +666,8 @@ build machine, before 2026-10-13.
   runs on KVM; the first v3 guest on AMD
 - M195: lists and group selectors for `K=`, `P=` and `X=`, partition shapes for `N=`, and
   `--cluster-faults`; NATS 2.10.22 loses its stream to `K=nodes.all@1+2` without reactions
+- M196: messaging checks, `type: messages` (the checker, the declaration with
+  `include:` bundles, `Run.messages`, the Rust recorder)
 
 ## Where to look
 

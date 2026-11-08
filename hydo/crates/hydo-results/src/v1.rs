@@ -15,6 +15,7 @@ use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 
 /// The version field of every version-1 record and document: always 1.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -455,6 +456,158 @@ pub struct Run {
     /// verdict was given. `hydo run` writes it; the fingerprints never depend on it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diagnosis: Option<Diagnosis>,
+    /// Each `type: messages` check of the run (added after 0.2.0, docs/design/messaging.md):
+    /// its declaration, each claim's status and the measures of the history. Each claim is also
+    /// a `history-check` finding, under the id `<check>.<claim>`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub messages: Vec<MessagesCheck>,
+}
+
+// ------------------------------------------------------------------ messaging checks
+
+/// One `type: messages` check of a run: what the project declared its system promises, what
+/// held, and what was measured.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MessagesCheck {
+    /// The check's id.
+    pub id: String,
+    /// The history its client records.
+    pub history: String,
+    /// The declaration with every default filled in (the claims, `acknowledgement`,
+    /// `retention_ms`, `clock_steps`, the measures' options).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration: Option<Map<String, Value>>,
+    /// Each claim the declaration makes, in the order reported (`no-phantom` first).
+    #[serde(default)]
+    pub claims: Vec<MessageClaim>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measures: Option<MessageMeasures>,
+    /// The history's operations and drained records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ops: Option<u64>,
+    /// Records the checker could not read, claims that judged nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+    /// Why the declaration could not be checked (a key this hydo does not know); then there are
+    /// no claims and no measures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// One claim's status.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MessageClaim {
+    /// The claim (`no-loss`, `lease`, `order`, ...).
+    pub claim: String,
+    /// The property id, `<check>.<claim>` (the finding's id).
+    pub id: String,
+    /// `held`, `violated` or `undecided`.
+    pub status: String,
+    /// Candidates judged (messages, pairs or deliveries, by claim).
+    #[serde(default)]
+    pub judged: u64,
+    /// Candidates the history could not decide (a clock step inside, two boots, no time).
+    #[serde(default)]
+    pub undecided: u64,
+    /// One sentence; a violation's names its witness.
+    #[serde(default)]
+    pub summary: String,
+}
+
+/// The measures of a messages history (every one optional: a measure added later is an
+/// addition). Durations are guest milliseconds between records of one boot.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MessageMeasures {
+    /// Send items invoked, and their outcomes; `recovered`: messages whose sends were all
+    /// unknown and that were delivered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sends: Option<BTreeMap<String, u64>>,
+    /// Acknowledged messages never delivered to a drained group that had to receive them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lost: Option<Vec<MessageLoss>>,
+    /// Missing messages excused, by reason (`expired`, `dead-lettered`, `possibly-consumed`,
+    /// `rejected`) and those `undecided` (across a power cut).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub excused: Option<BTreeMap<String, u64>>,
+    /// Deliveries of messages nobody sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unexpected: Option<u64>,
+    /// Deliveries of messages whose every send failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aborted: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deliveries: Option<MessageDeliveries>,
+    /// Extra deliveries by cause: `after-ack`, `after-nack`, `after-lease`, `during-lease`,
+    /// `undecided`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub redeliveries: Option<BTreeMap<String, u64>>,
+    /// Messages with more than one system id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stored_copies: Option<u64>,
+    /// Messages with accepted acknowledgements of two deliveries in one group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processing: Option<u64>,
+    /// Messages two members of a group surely held at once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_overlap: Option<u64>,
+    /// Per group with any: first deliveries against the order of the sends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reorders: Option<Vec<MessageReorders>>,
+    /// `first_delivery` and `final_ack`: from the send's completion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency: Option<BTreeMap<String, BTreeMap<String, f64>>>,
+    /// From a receive's completion to its delivery's acknowledgement's completion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held: Option<BTreeMap<String, f64>>,
+    /// Deliveries not acknowledged that came back: the time until (`ms`) and its ratio to the
+    /// declared lease (`lease_ratio`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invisible: Option<BTreeMap<String, BTreeMap<String, f64>>>,
+    /// Acknowledged messages never delivered to some group that had to receive them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unseen: Option<u64>,
+    /// Per operation: `ok`, `fail` and `info` counts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub availability: Option<BTreeMap<String, BTreeMap<String, u64>>>,
+    /// Durations left out because their records are in two boots.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub across_boots: Option<u64>,
+}
+
+/// Lost messages of one group.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MessageLoss {
+    pub channel: String,
+    pub group: String,
+    pub count: u64,
+    /// The first 20 message ids.
+    #[serde(default)]
+    pub first: Vec<String>,
+}
+
+/// Deliveries per message and group.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MessageDeliveries {
+    pub total: u64,
+    /// (message, group) pairs delivered at least once.
+    pub messages: u64,
+    /// (total - messages) / messages.
+    pub duplicate_rate: f64,
+    pub max_per_message: u64,
+    /// Pairs delivered 1, 2, 3, `4+` times.
+    #[serde(default)]
+    pub histogram: BTreeMap<String, u64>,
+}
+
+/// Reorders of one group.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MessageReorders {
+    pub channel: String,
+    pub group: String,
+    /// Pairs whose sends were ordered and whose first deliveries were not.
+    pub inverted_pairs: u64,
+    /// The most messages that followed one message and were first delivered before it.
+    pub max_distance: u64,
 }
 
 // ------------------------------------------------------------------ diagnosis and inspection

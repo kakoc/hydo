@@ -240,6 +240,9 @@ fn check_spec(c: &Value) -> String {
             "initial".into(),
             c.get("initial").cloned().unwrap_or("nil".into()),
         );
+    } else if c["type"].as_str() == Some(hydo_manifest::messages::TYPE) {
+        // the resolved declaration (docs/design/messaging.md), as given
+        hydo_manifest::messages::spec_fields(c, &mut sp);
     } else {
         sp.insert(
             "consistency".into(),

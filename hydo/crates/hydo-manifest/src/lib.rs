@@ -26,6 +26,7 @@
 //! input is refused here too, with a message that starts with [`py::CRASH_PREFIX`].
 
 pub mod composer;
+pub mod messages;
 pub mod migrate;
 pub mod model;
 mod oci;
@@ -191,7 +192,7 @@ pub fn validator_keys() -> Vec<(&'static str, Vec<&'static str>)> {
         ("ProxyRoute", v::KNOWN_PROXY_ROUTE.to_vec()),
         ("Webhook", v::KNOWN_HOOK.to_vec()),
         ("Tls", v::KNOWN_TLS.to_vec()),
-        ("HistoryCheck", v::KNOWN_CHECK.to_vec()),
+        ("HistoryCheck", v::known_check_all()),
         ("Test", composer::known_test()),
         ("TestCommand", composer::KNOWN_CMD.to_vec()),
         ("TestCheck", composer::KNOWN_CHECK.to_vec()),
@@ -249,6 +250,9 @@ fn load_inner(
     if let Some(c) = comp.as_mut() {
         c["_folder"] = folder.unwrap_or(Value::Null);
     }
+    // a messages check's include: bundles, relative to the manifest (the image carries the
+    // resolved declaration)
+    messages::resolve_includes(&mut m, &py::dirname(&py::abspath(&p)))?;
     validate::validate(&mut m)?;
     if let Some(c) = &comp {
         m["_compose"] = c.clone();
@@ -411,6 +415,24 @@ pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
             n("checks"),
             n("regressions")
         ));
+    }
+    // each messages check's resolved declaration (what the image will claim)
+    for c in m
+        .get("checks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if c.get("type").and_then(Value::as_str) == Some(messages::TYPE) {
+            let mut sp = serde_json::Map::new();
+            messages::spec_fields(c, &mut sp);
+            out.push(format!(
+                "hydo-build: check {} (messages, history {}) declares {}",
+                py::str_of(&c["id"]),
+                py::str_of(&c["history"]),
+                serde_json::to_string(&Value::Object(sp)).unwrap_or_default()
+            ));
+        }
     }
     out
 }

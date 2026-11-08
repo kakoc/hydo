@@ -9,6 +9,7 @@ Porcupine (linearizability) and Elle (transactional isolation):
 |---|---|---|
 | `linearizable` | the operations can be ordered, consistently with real time, as a single copy of a key-value register (or compare-and-set object) would execute them; checked per key | `register` (read, write) or `cas` (read, write, cas); optional store-assigned versions |
 | `list-append` | lists that clients append unique elements to and read whole lose no acknowledged append, never show an element twice or an element nobody appended, agree on one order per key, and (depending on `consistency:`) never let a process's reads go back in time; plus a dependency-graph search for G0 / G1c / G-single / G2 cycles | `append`, `read`, multi-key `txn` |
+| `messages` | exactly the claims the project declares for a message-passing system (no loss, at most once, no second stored copy, no redelivery after an acknowledgement, processed once, leases, order, dead-letter limits, delays, fan-out, exclusive members, a linearizable queue), each reported as `<id>.<claim>`, and the measures of the history | `send`, `recv`, `ack`, `nack`, `extend`, `commit`, `sub`, `drained` (section "`messages`" below) |
 
 This replaces hand-written invariant scripts for the properties infrastructure systems must
 keep. A hand-written "every acknowledged key is readable" check misses stale reads, reads that
@@ -181,6 +182,32 @@ under the serializable levels — and anomalies that need predicates or deletes.
 **Explanation:** each anomaly with the transactions involved (process, micro-ops, outcome, guest
 time); a cycle lists every edge with its reason ("T3 read x=[1], missing 2, which T1 appended
 next; T1 completed before T2 began; ...").
+
+### `messages`
+
+The checker for message-passing systems (crate `hydo-history`, module `messages`; design
+`docs/design/messaging.md`; keys, records and examples: `hydo guide messages`). hydo knows no
+messaging system: the check's declaration says what the system promises, and the checker judges
+those claims only. The HYDO-CHECK line carries the declaration as `hydo build` resolved it; a
+claim key this hydo does not know makes the check an ERROR that names the key.
+
+- **Unknown outcomes.** An `info` send may be accepted at any later time, so no loss is claimed
+  for it and its delivery is not a phantom. An `info` receive may have delivered messages the
+  client never saw; with `acknowledgement: on-receive` a message missing at the end is then
+  excused as `possibly-consumed`. An `info` acknowledgement may or may not have been applied.
+- **Order and time.** Precedence is by the records' positions ("Ordering, power cuts, determinism"). Durations (leases,
+  delays, windows, retention) use guest time between records of one boot, with 10 ms added to
+  every completion (the coarsest recorder's resolution). A pair across a power cut, or with a
+  `T=` step between its records (unless `clock_steps: strict`), is counted as undecided.
+- **Statuses.** Each claim is held, violated (with a witness: the records that together prove
+  it) or undecided (the records it needs are missing: no `drained` record, no system ids `o=`,
+  no offsets). An undecided claim makes the check an ERROR; a claim with nothing to judge holds
+  and the run warns.
+- **The queue claim** (`linearizable`) uses four patterns of queue histories with unique values.
+  The patterns are: a value received but not sent, a value received twice, values received out
+  of FIFO order, and an empty receive while values were surely in the queue. Each witness is confirmed by an
+  exhaustive search over its operations; a test compares the patterns with the search on 20,000
+  generated small histories.
 
 ## Verdicts and where they appear
 

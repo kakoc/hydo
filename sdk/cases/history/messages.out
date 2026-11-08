@@ -1,0 +1,25 @@
+HYDO-HIST q 3 invoke * send orders m17;k=g2 m18;k=g2
+HYDO-HIST q 3 ok * send orders m17;k=g2;o=81 m18;k=g2;o=82
+HYDO-HIST q 3 invoke * send orders m19;k=g%3B2;x=d%3D1;d=5000
+HYDO-HIST q 3 info * send orders m19;k=g%3B2;x=d%3D1;d=5000
+HYDO-HIST q 3 invoke * send orders m19;k=g%3B2;x=d%3D1;d=5000
+HYDO-HIST q 3 ok * send orders m19;k=g%3B2;x=d%3D1;d=5000;o=83;s=ok
+HYDO-HIST q 4 invoke * send orders m%2020
+HYDO-HIST q 4 fail * send orders m%2020
+HYDO-HIST q 5 invoke * recv orders -
+HYDO-HIST q 5 ok * recv orders - m17;k=g2;o=81;n=1;h=a91f;v=30000
+HYDO-HIST q 5 invoke * recv orders -
+HYDO-HIST q 5 ok * recv orders -
+HYDO-HIST q 5 invoke * ack orders - m17;h=a91f
+HYDO-HIST q 5 ok * ack orders - m17;h=a91f
+HYDO-HIST q 6 invoke * nack orders - m18;h=b2;r=0
+HYDO-HIST q 6 info * nack orders - m18;h=b2;r=0
+HYDO-HIST q 7 invoke * extend orders - m19;h=c3;v=60000
+HYDO-HIST q 7 ok * extend orders - m19;h=c3;v=60000
+HYDO-HIST q 8 invoke * commit events g1 k1@41 k%202@7
+HYDO-HIST q 8 ok * commit events g1 k1@41 k%202@7
+HYDO-HIST q 8 invoke * sub events g1 from=start
+HYDO-HIST q 8 ok * sub events g1 from=start
+HYDO-HIST q 8 invoke * sub events g2 from=now
+HYDO-HIST q 8 fail * sub events g2 from=now
+HYDO-HIST q 9 ok * drained orders -

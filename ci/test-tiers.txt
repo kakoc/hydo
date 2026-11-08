@@ -68,6 +68,7 @@ hydo-explore::corpus                     full
 hydo-explore::fake_engine                fast
 hydo-explore::identity                   fast
 hydo-explore::liveness_deadline          fast
+hydo-explore::messages_results           fast
 hydo-explore::names                      fast
 hydo-explore::netns_links                fast
 hydo-explore::reactive                   fast
@@ -82,6 +83,7 @@ hydo-history                             fast
 hydo-history::checkers                   fast
 hydo-history::doctest                    full
 hydo-history::equiv                      fast
+hydo-history::messages                   fast
 hydo-hvm                                 fast
 hydo-hvm::c_layout                       fast
 hydo-hvx                                 fast
@@ -102,6 +104,7 @@ hydo-manifest::equivalence               full
 hydo-manifest::extractors                fast
 hydo-manifest::fake_objects              fast
 hydo-manifest::format                    fast
+hydo-manifest::messages                  fast
 hydo-release                             fast
 hydo-release::crates                     fast
 hydo-release::sdks                       fast

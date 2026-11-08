@@ -64,6 +64,8 @@ pub fn this_epoch() -> Option<u64> {
 pub const CHECKS: &str = "_checks";
 pub const CHECK_RECORDS: &str = "_check_records";
 pub const ERRLOG: &str = "_errlog";
+/// The messages checks' reports (hydo_history::Checks::messages, as JSON values).
+pub const MESSAGES: &str = "_messages";
 
 /// A result without the host-only keys (what a tool that prints a result map shows).
 pub fn public(r: &Res) -> Res {
@@ -229,6 +231,17 @@ pub fn keep_checks(res: &mut Res, c: &hydo_history::Checks) {
         CHECK_RECORDS.into(),
         Value::Array(c.records.iter().cloned().map(Value::String).collect()),
     );
+    if !c.messages.is_empty() {
+        res.insert(
+            MESSAGES.into(),
+            Value::Array(
+                c.messages
+                    .iter()
+                    .filter_map(|j| serde_json::from_str::<Value>(j).ok())
+                    .collect(),
+            ),
+        );
+    }
 }
 
 /// The error kinds of a run's analysis (hydo_errors::Analysis::to_json) as findings, and the
@@ -359,8 +372,16 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
         Vec::new()
     };
     warnings.extend(unseen_events(text, consoles));
+    let messages: Vec<hydo_results::MessagesCheck> = match r.get(MESSAGES) {
+        Some(Value::Array(a)) => a
+            .iter()
+            .filter_map(|x| serde_json::from_value(x.clone()).ok())
+            .collect(),
+        _ => Vec::new(),
+    };
     Run {
         tag: Some(tag.to_string()),
+        messages,
         schedule: text.to_string(),
         warnings,
         verdict,
@@ -443,6 +464,16 @@ pub fn vacuous(consoles: &[(String, String)], findings: &[Finding]) -> Vec<Strin
                  recorded with hydo_hist",
                 f.id
             ));
+        } else if f.status == status::OK {
+            // a messages claim that had nothing to judge holds vacuously
+            let d = f.details.get("details");
+            let judged = d.and_then(|d| d.get("judged")).and_then(Value::as_u64);
+            if d.and_then(|d| d.get("claim")).is_some() && judged == Some(0) {
+                out.push(format!(
+                    "the messages claim {} had nothing to judge: it holds vacuously",
+                    f.id
+                ));
+            }
         }
     }
     out

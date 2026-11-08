@@ -65,6 +65,10 @@ fn spec(c: &Value) -> String {
             "initial".into(),
             c.get("initial").cloned().unwrap_or("nil".into()),
         );
+    } else if c["type"].as_str() == Some(hydo_manifest::messages::TYPE) {
+        // the declaration as the manifest has it; an image's compiled manifest (manifest.sh)
+        // carries it with its include: bundles resolved, and agent::plan_of_image takes that one
+        hydo_manifest::messages::spec_fields(c, &mut sp);
     } else {
         sp.insert(
             "consistency".into(),

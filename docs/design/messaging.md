@@ -1,7 +1,10 @@
 # Properties and measures of message-passing systems (design)
 
-Status: proposal, nothing built. User request, 2026-11-08: "it's for testing a system which
-passes messages, and we want to measure various characteristics of those messages."
+Status: steps 1 to 3 of the proof plan are built (Milestone 196: the checker,
+the declaration and its plumbing, the Rust recorder). `docs/HISTORY.md` Milestone 196 lists the
+choices this text left open and how they were decided. User request, 2026-11-08: "it's for
+testing a system which passes messages, and we want to measure various characteristics of those
+messages."
 
 Scope: any system where a producer hands messages to the system and consumers get them: queues,
 logs and streams, publish-subscribe, event buses, mailboxes. The checks work on a **history**

@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "name": "messages-work-queue",
+  "services": [
+    {
+      "name": "jobs",
+      "cmd": "/bin/jobs-server --data /data/jobs",
+      "ready": "/bin/jobs-client ping"
+    }
+  ],
+  "workload": {
+    "steps": 20,
+    "run": "/bin/jobs-client work --from $HYDO_FROM --to $HYDO_TO"
+  },
+  "checks": [
+    {
+      "id": "jobs",
+      "type": "messages",
+      "history": "jobs",
+      "final": "/bin/jobs-client drain",
+      "claims": {
+        "delivery": "at-least-once",
+        "after_ack": "no-redelivery",
+        "lease": {
+          "ms": 30000
+        },
+        "dead_letter": {
+          "after": 5,
+          "to": "jobs-dead"
+        },
+        "delay": "per-message"
+      }
+    }
+  ]
+}

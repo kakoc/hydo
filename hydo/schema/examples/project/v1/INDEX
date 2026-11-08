@@ -60,3 +60,8 @@ restart-may-fail
 tls-and-writable
 sql-checks-folder
 groups-and-shapes
+messages-work-queue
+messages-keyed-log
+messages-ordered-groups
+messages-measure-only
+messages-include

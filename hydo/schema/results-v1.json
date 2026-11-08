@@ -265,6 +265,13 @@
               "type": "null"
             }
           ]
+        },
+        "messages": {
+          "description": "Each `type: messages` check of the run (added after 0.2.0, docs/design/messaging.md):\nits declaration, each claim's status and the measures of the history. Each claim is also\na `history-check` finding, under the id `<check>.<claim>`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MessagesCheck"
+          }
         }
       },
       "required": [
@@ -1248,6 +1255,407 @@
         "text",
         "bytes",
         "truncated"
+      ]
+    },
+    "MessagesCheck": {
+      "description": "One `type: messages` check of a run: what the project declared its system promises, what\nheld, and what was measured.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The check's id.",
+          "type": "string"
+        },
+        "history": {
+          "description": "The history its client records.",
+          "type": "string"
+        },
+        "declaration": {
+          "description": "The declaration with every default filled in (the claims, `acknowledgement`,\n`retention_ms`, `clock_steps`, the measures' options).",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "claims": {
+          "description": "Each claim the declaration makes, in the order reported (`no-phantom` first).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MessageClaim"
+          },
+          "default": []
+        },
+        "measures": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MessageMeasures"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ops": {
+          "description": "The history's operations and drained records.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "warnings": {
+          "description": "Records the checker could not read, claims that judged nothing.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "error": {
+          "description": "Why the declaration could not be checked (a key this hydo does not know); then there are\nno claims and no measures.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "history"
+      ]
+    },
+    "MessageClaim": {
+      "description": "One claim's status.",
+      "type": "object",
+      "properties": {
+        "claim": {
+          "description": "The claim (`no-loss`, `lease`, `order`, ...).",
+          "type": "string"
+        },
+        "id": {
+          "description": "The property id, `<check>.<claim>` (the finding's id).",
+          "type": "string"
+        },
+        "status": {
+          "description": "`held`, `violated` or `undecided`.",
+          "type": "string"
+        },
+        "judged": {
+          "description": "Candidates judged (messages, pairs or deliveries, by claim).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "undecided": {
+          "description": "Candidates the history could not decide (a clock step inside, two boots, no time).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "summary": {
+          "description": "One sentence; a violation's names its witness.",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "claim",
+        "id",
+        "status"
+      ]
+    },
+    "MessageMeasures": {
+      "description": "The measures of a messages history (every one optional: a measure added later is an\naddition). Durations are guest milliseconds between records of one boot.",
+      "type": "object",
+      "properties": {
+        "sends": {
+          "description": "Send items invoked, and their outcomes; `recovered`: messages whose sends were all\nunknown and that were delivered.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "lost": {
+          "description": "Acknowledged messages never delivered to a drained group that had to receive them.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/MessageLoss"
+          }
+        },
+        "excused": {
+          "description": "Missing messages excused, by reason (`expired`, `dead-lettered`, `possibly-consumed`,\n`rejected`) and those `undecided` (across a power cut).",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "unexpected": {
+          "description": "Deliveries of messages nobody sent.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "aborted": {
+          "description": "Deliveries of messages whose every send failed.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "deliveries": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MessageDeliveries"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "redeliveries": {
+          "description": "Extra deliveries by cause: `after-ack`, `after-nack`, `after-lease`, `during-lease`,\n`undecided`.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "stored_copies": {
+          "description": "Messages with more than one system id.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "processing": {
+          "description": "Messages with accepted acknowledgements of two deliveries in one group.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "group_overlap": {
+          "description": "Messages two members of a group surely held at once.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reorders": {
+          "description": "Per group with any: first deliveries against the order of the sends.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/MessageReorders"
+          }
+        },
+        "latency": {
+          "description": "`first_delivery` and `final_ack`: from the send's completion.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        },
+        "held": {
+          "description": "From a receive's completion to its delivery's acknowledgement's completion.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "invisible": {
+          "description": "Deliveries not acknowledged that came back: the time until (`ms`) and its ratio to the\ndeclared lease (`lease_ratio`).",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        },
+        "unseen": {
+          "description": "Acknowledged messages never delivered to some group that had to receive them.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "availability": {
+          "description": "Per operation: `ok`, `fail` and `info` counts.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          }
+        },
+        "across_boots": {
+          "description": "Durations left out because their records are in two boots.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      }
+    },
+    "MessageLoss": {
+      "description": "Lost messages of one group.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "first": {
+          "description": "The first 20 message ids.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "channel",
+        "group",
+        "count"
+      ]
+    },
+    "MessageDeliveries": {
+      "description": "Deliveries per message and group.",
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "messages": {
+          "description": "(message, group) pairs delivered at least once.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "duplicate_rate": {
+          "description": "(total - messages) / messages.",
+          "type": "number",
+          "format": "double"
+        },
+        "max_per_message": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "histogram": {
+          "description": "Pairs delivered 1, 2, 3, `4+` times.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "total",
+        "messages",
+        "duplicate_rate",
+        "max_per_message"
+      ]
+    },
+    "MessageReorders": {
+      "description": "Reorders of one group.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "inverted_pairs": {
+          "description": "Pairs whose sends were ordered and whose first deliveries were not.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_distance": {
+          "description": "The most messages that followed one message and were first delivered before it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "channel",
+        "group",
+        "inverted_pairs",
+        "max_distance"
       ]
     },
     "Exploration": {
