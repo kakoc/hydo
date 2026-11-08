@@ -711,3 +711,15 @@ fn the_pull_request_form_asks_for_the_docs() {
         "CONTRIBUTING.md does not mention the pull-request form"
     );
 }
+
+/// `hydo run --help` prints the run's usage and exits 0 (before 0.3.0 it looked for an image and
+/// failed with "no image given"); the usage states the exit-status rule the quickstarts give.
+#[test]
+fn run_help_prints_the_usage() {
+    let d = scratch("run-help");
+    let (ok, out) = run_hydo(&d, &["run", "--help"]);
+    assert!(ok, "{out}");
+    assert!(out.starts_with("usage: hydo run "), "{out}");
+    assert!(out.contains("verdict.kind"), "{out}");
+    let _ = std::fs::remove_dir_all(&d);
+}

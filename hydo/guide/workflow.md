@@ -40,7 +40,7 @@ hydo init
 ```
 
 It creates `hydo/hydo.yaml` (a skeleton with `TODO` markers), `hydo/workload/`, `hydo/checks/` and
-`hydo/regressions/`, adds `.hydo/` and `hydo/images/` to `.gitignore`, and adds a short hydo
+`hydo/regressions/`, adds `.hydo/`, `hydo/images/` and `hydo-out/` to `.gitignore`, and adds a short hydo
 section to `AGENTS.md` between marker comments. It never overwrites a file, so it is safe to run
 again. The skeleton's two placeholder files (`workload/parallel_driver_todo`, `checks/final_todo`)
 make every run fail on purpose until they are replaced.

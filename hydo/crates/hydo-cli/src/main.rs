@@ -148,6 +148,25 @@ fn main() {
     ) {
         ctx.take_backend(&mut argv);
     }
+    // repro and inspect of a recorded run follow the engine it recorded (`hydo repro <dir>`,
+    // `hydo inspect <sub> <dir>` and `hydo inspect start <dir>`), unless one was chosen
+    match argv.get(1).map(String::as_str) {
+        Some("repro") => {
+            if let Some(d) = argv.get(2).filter(|a| !a.starts_with('-')) {
+                ctx.follow_recorded_backend(std::path::Path::new(d));
+            }
+        }
+        Some("inspect") => {
+            if let Some(d) = argv
+                .iter()
+                .skip(2)
+                .find(|a| std::path::Path::new(a.as_str()).is_dir())
+            {
+                ctx.follow_recorded_backend(std::path::Path::new(d));
+            }
+        }
+        _ => {}
+    }
     // a guest kernel an image names that this release lacks comes from the install cache
     // (Milestone 162: the store, else the release that shipped it, fetched by its pinned sha256)
     hydo_image::kernels::set_source(Box::new(setup::cache_of(&ctx, false)));

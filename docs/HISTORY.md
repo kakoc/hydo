@@ -4329,3 +4329,20 @@ schedules; 13 images and 30 runs moved; a first pass named Go's directory instea
 for six stages, rerun), KVM on the build machine with `--thorough` (4 images, 11 schedules, every
 value as recorded). Every verdict unchanged, every moved run the same twice. After the merges of
 M187 and M191, `--check` from the merged tree on the Mac gave every value as recorded.
+
+**Release step 6a (the docs review) on the first candidate (`a9cebed7`).** Two fresh readers
+followed README.md and the quickstarts with the candidate tarballs, one on the Mac and one with
+the KVM engine on the build machine; every recorded value they ran matched. Their findings were
+fixed before the final build: `hydo repro` and `hydo inspect` follow the engine a run recorded;
+KVM explorations' report commands and the build's `next:` line carry `--backend kvm` where it
+is needed, and the `next:` line names the image when there are two; `install.sh --no-module`
+ends with `hydo doctor --backend kvm` on a machine that has only `/dev/kvm`; `hydo run --help`;
+`hydo init` adds `hydo-out/` to `.gitignore`; the report cites `hydo/ASSERTIONS.md`; the Mac's
+rewind-mode message; a table of host tokens in `hydo guide faults`; and the pages define their
+words, cite only recorded values, and say what each command prints. Three runs the pages now
+cite were added to `recorded.json`: the release example's `disk=cut | run C=12` (OK, acked=12)
+on hvx `5cfee0d955a38b78`, the Mac `1785bbb72e7ffba2` and KVM `c5b4f7cbd0ec3ac7`, and the KVM
+exploration's third minimal schedule `disk=lying:6 dseed=b3c3d806a5d34604 | run C=5`
+(`72764bbb630728d2`). Deferred, with the reasons in the release notes: exit codes per verdict,
+the Compose import header's old path, and hiding the property table of projects without SDK
+assertions (each moves recorded answers or an exit status).

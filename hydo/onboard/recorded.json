@@ -1949,6 +1949,11 @@
           "fp": "3520af95868b4e8f"
         },
         {
+          "schedule": "disk=cut | run C=12",
+          "verdict": "OK (acked=12 all present)",
+          "fp": "5cfee0d955a38b78"
+        },
+        {
           "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20",
           "verdict": "VIOLATION",
           "fp": "747a6fbfbceecaa3"
@@ -2000,6 +2005,11 @@
           "schedule": "disk=cut | run C=12 R=everysec",
           "verdict": "VIOLATION key k:0 lost",
           "fp": "a6870a92a1bbf0ae"
+        },
+        {
+          "schedule": "disk=cut | run C=12",
+          "verdict": "OK (acked=12 all present)",
+          "fp": "1785bbb72e7ffba2"
         },
         {
           "schedule": "disk=none | run O=redis@5-10:resp:loss,100%",
@@ -2071,6 +2081,11 @@
           "fp": "8ed16d6da60c34c6"
         },
         {
+          "schedule": "disk=cut | run C=12",
+          "verdict": "OK (acked=12 all present)",
+          "fp": "c5b4f7cbd0ec3ac7"
+        },
+        {
           "schedule": "disk=none | run K=redis@5+2",
           "verdict": "OK (acked=18)",
           "fp": "818c50920c9ced38"
@@ -2099,6 +2114,11 @@
           "schedule": "disk=none pct=99 pctn=4 | run",
           "verdict": "OK",
           "fp": "aec48eb5ca42eca3"
+        },
+        {
+          "schedule": "disk=lying:6 dseed=b3c3d806a5d34604 | run C=5",
+          "verdict": "VIOLATION data disk unmountable",
+          "fp": "72764bbb630728d2"
         }
       ]
     },

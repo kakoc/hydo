@@ -13,7 +13,8 @@
 #                         0660, so runs need no sudo. Anyone in that group can run guests through
 #                         the kernel module: give it only to people you would give sudo.
 #                         --udev-name N does the same for a side module's device /dev/N;
-#   hydo doctor           checks this machine and the installation.
+#   hydo doctor           checks this machine and the installation (with --no-module on a machine
+#                         where only /dev/kvm is usable: hydo doctor --backend kvm).
 set -e
 SRC=$(cd "$(dirname "$0")" && pwd)
 PREFIX="$HOME/.hydo"
@@ -52,8 +53,17 @@ P=$(cd "$PREFIX" && pwd)
 [ $MODULE = 0 ] || "$P/bin/hydo" module install || echo "the kernel module was not installed (see above); fix it, then: hydo module install"
 [ $UDEV = 0 ] || "$P/bin/hydo" module udev install --name "$UDEV_NAME" --group "$UDEV_GROUP" || echo "the udev rule was not installed (see above); runs keep using sudo"
 echo
-"$P/bin/hydo" doctor || true
+# with --no-module on a machine where only KVM is usable (no /dev/hvx, /dev/kvm open to this user),
+# check for the KVM engine, the one this machine can run (since 0.3.0)
+if [ $MODULE = 0 ] && [ ! -e /dev/hvx ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+  "$P/bin/hydo" doctor --backend kvm || true
+  KVM_ONLY=1
+else
+  "$P/bin/hydo" doctor || true
+  KVM_ONLY=0
+fi
 echo
 echo "hydo $(cat "$P/VERSION") is installed in $P."
 echo "Next: export PATH=\"$P/bin:\$PATH\"; then follow $P/README.md"
 echo "(first step: cp -R \"$P/examples/redis\" ~/hydo-redis && cd ~/hydo-redis && hydo build hydo.yaml)"
+[ $KVM_ONLY = 0 ] || echo "(this machine runs the KVM engine: add --backend kvm to hydo run, repro and explore, or export HYDO_BACKEND=kvm)"

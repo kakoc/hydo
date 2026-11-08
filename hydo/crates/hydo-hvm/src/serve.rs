@@ -1241,8 +1241,11 @@ impl Engine {
         }
         self.save_log(&log_tag, from);
         if rewound {
-            self.h
-                .say(&format!("hvmx: {tag}: reported from a rewind-mode run"));
+            self.h.say(&format!(
+                "hydo-hvm: {tag}: the first run ended at a counter loop (a busy wait with no VM \
+                 exits), so this result is from the run again in rewind mode, which ends such \
+                 waits deterministically"
+            ));
         }
         if self.h.c.on {
             let k = &self.h.c.k;

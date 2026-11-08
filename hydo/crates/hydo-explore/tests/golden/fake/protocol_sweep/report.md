@@ -33,7 +33,7 @@
 - fingerprint, two runs: `41947dc896f68534` / `41947dc896f68534` (identical)
 - by hand: `hydo run --image <dir>/scripted-disk.img "disk=none dseed=0 | run H=payments.charge@0-1:drop"`
 
-## Property table over every schedule (hvx/ASSERTIONS.md)
+## Property table over every schedule (hydo/ASSERTIONS.md)
 
 ```
 type                   id                                    ok    fail  verdict                  first failure / description
@@ -43,7 +43,7 @@ liveness: 1 eventually properties, 0 missed a deadline
 runs=228 (setup-complete seen in 0); properties=2; violations=0
 ```
 
-## Liveness (eventually properties, hvx/ASSERTIONS.md)
+## Liveness (eventually properties, hydo/ASSERTIONS.md)
 
 | property | held in time | missed deadline | slowest in time | deadline | slowest held late | first miss |
 |---|---|---|---|---|---|---|

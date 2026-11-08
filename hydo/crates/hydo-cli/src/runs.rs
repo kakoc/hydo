@@ -25,7 +25,7 @@ use std::sync::Arc;
 // ---------------------------------------------------------------- images and engine options
 
 /// The image file names of this platform: (what `hydo build` writes, a positional image's suffix).
-fn image_pattern(ctx: &Ctx) -> (&'static str, &'static str) {
+pub(crate) fn image_pattern(ctx: &Ctx) -> (&'static str, &'static str) {
     match ctx.platform {
         Platform::Linux => ("-disk.img", ".img"),
         Platform::Mac => ("-arm64.cpio.gz", ".cpio.gz"),
@@ -581,6 +581,23 @@ fn new_run_dir() -> PathBuf {
 }
 
 pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
+    if argv.iter().any(|a| a == "-h" || a == "--help") {
+        println!(
+            "usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE] \
+             [--no-diagnose]{}\n  runs one schedule from a fresh boot, e.g. hydo run \"disk=cut | run C=12 \
+             R=everysec\".\n  IMG defaults to the one image `hydo build` wrote in ./hydo-out (or ./.hydo). \
+             The run's\n  directory (result.json, consoles) is printed; `hydo repro <run dir>` repeats it.\n  \
+             The exit status is 0 whenever the run finished, whatever its verdict (OK, VIOLATION or\n  \
+             ERROR); a script reads the verdict from result.json (verdict.kind). `hydo guide faults` lists the\n  \
+             schedule tokens.",
+            if ctx.platform == Platform::Linux {
+                " [--backend hvx|kvm]"
+            } else {
+                ""
+            }
+        );
+        return 0;
+    }
     let mut args = argv.to_vec();
     let outdir = take(&mut args, "--out");
     let known = take(&mut args, "--known-errors");

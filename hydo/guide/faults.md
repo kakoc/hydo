@@ -32,6 +32,28 @@ a file system of its own.
 A schedule looks like `disk=none dseed=1 | run K=db@5+2 C=12 W=0000002a,p4,q2,r200`: host tokens
 before the `|`, guest tokens after `run`.
 
+## Host tokens
+
+The host tokens set up the machine the guest runs on. Each is one `key=value` word before the
+`|`; a schedule without one uses its default.
+
+| token | what it does |
+|---|---|
+| `disk=none` | The default. The data disk has no write cache: a write reaches the disk when the guest writes it. A power cut (`C=`) then loses only what the guest still held in memory, never a write the disk took. |
+| `disk=cut` | The data disk keeps a volatile write cache, as real disks do. A power cut (`C=` or `cf=`) loses every write the guest did not flush (`fsync`). Use it to test durability. |
+| `disk=ioerr:<p>` | Seeded I/O errors on the data disk; `<p>` is the error rate in the engine's units (larger means more errors). |
+| `disk=lying:<p>` | A disk that drops some writes it acknowledged; a power cut then loses them even when they were flushed. |
+| `dseed=<hex>` | The seed of the disk's decisions: which requests fail or are dropped (default 0). The same seed gives the same decisions. |
+| `cf=<k>` | A power cut at the k-th disk flush of the workload, instead of `C=` (hvx only; needs `disk=cut`). |
+| `tj=<hex>` | Seeded tick jitter: some timer ticks come late, which changes thread interleavings. On hvx a delay counts guest branches; on the Mac and on KVM it counts VM exits. |
+| `tjpm=<n>` | With `tj=`: how many ticks per 1,000 are delayed (default 10). |
+| `tjmax=<n>` | With `tj=`: the longest delay (default 500,000 branches on hvx, 1,000 exits on the Mac and KVM). |
+| `pct=<hex>`, `pctn=<n>` | The Mac and KVM: `<n>` forced preemption points at seeded VM exits. |
+| `spin=rewind` | The Mac and KVM: run the schedule in rewind mode, which ends busy waits that make no VM exits deterministically. hydo switches to it by itself when a run needs it. |
+
+The explorer and `hydo explore --sweep` write the other host tokens themselves (inserted ticks
+`pp=` and `xt…` on hvx, vCPU turns `q=` with several vCPUs, the run budget `rb=`).
+
 ## Knobs (durability settings the explorer may relax)
 
 ```yaml

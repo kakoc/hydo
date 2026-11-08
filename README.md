@@ -1,17 +1,17 @@
 # hydo
 
 hydo tests a distributed system under faults and replays every failure exactly. It runs your
-services, their databases, and their client in one virtual machine. The execution is
-deterministic: the same image and the same schedule give a bit-identical run. From many
-generated schedules, hydo finds the runs that break an invariant of your system. It shrinks each
-failure to a minimal schedule that you can replay.
+services, their databases, and their client in one virtual machine, and injects faults such as
+crashes and power cuts. The execution is deterministic: the same inputs give a bit-identical run.
+hydo finds the runs that break a property your system must keep, and shrinks each failure to the
+fewest faults that still cause it. The list below defines the words the rest of this page uses.
 
 The words this page uses:
 
 - Guest: the Linux system that runs inside the virtual machine, with your services in it.
 - Engine: the part of hydo that runs the guest. Linux has two engines: hydo's own kernel module
   `hvx.ko` and the KVM engine. The Mac has one.
-- Image: what `hydo build` makes from your project's `hydo.yaml`. On Linux it is one disk; on a
+- Image: what `hydo build` makes from your project's description file, `hydo.yaml`. On Linux it is one disk; on a
   Mac it is a root file system loaded into memory plus a data disk. It holds your services and
   the commands that drive them.
 - Workload: the commands that act as your system's client during a run. A workload is split into
@@ -22,7 +22,9 @@ The words this page uses:
   `<host tokens> | run <guest tokens>`. Host tokens are faults of the whole machine, such as
   `disk=cut` (the disk keeps only data that was flushed when the power is cut) or `disk=none` (no
   disk faults). Guest tokens place faults before a step, and change settings of your services.
-  `hydo guide faults` lists every token.
+  `hydo guide faults` lists the tokens.
+- Verdict: the outcome of a run: `OK`, `VIOLATION` (an invariant failed), or `ERROR` (the run
+  could not finish its workload).
 - Seed: a number that starts hydo's pseudo-random choices. The same seed gives the same schedules.
 - Fingerprint: a hash of the virtual machine's whole final state.
 
@@ -41,28 +43,31 @@ versions.
   - errors from fake outside services. A fake outside service is a program in the guest that
     stands in for a service your system calls, such as a payment API. It can serve HTTPS.
 - It runs your software unmodified. A service is a Linux program, a set of files, or a Docker or
-  OCI image.
+  OCI image (OCI is the open standard format of container images).
 - It explores. `hydo explore` generates schedules from seeds, runs each failure again to check
   that it reproduces, and shrinks it. In the Linux quickstart (section 3), an exploration of the
   Redis example with 20 seeds found 11 failures in 14 seconds. All 11 are of the expected kinds:
   a disk that drops writes, disk errors, and a relaxed sync setting. Each one reproduced.
 - It shows why a run failed. A failed run names the failing service and process, and
   `hydo inspect` opens a recorded run at any point to read its files, logs, and processes.
-- It has ready-made checks and workloads: linearizability and list-append checks of recorded
-  histories, readers for MySQL, PostgreSQL, Kafka, Redis, and etcd, and `hydo sql-gen`, which
-  writes SQL workloads and their checks. Assertion SDKs exist for Rust, Go, Python, and
-  JavaScript (`hydo guide sdks`).
+- It has ready-made checks and workloads: checks of recorded histories of operations, readers for
+  MySQL, PostgreSQL, Kafka, Redis, and etcd, and `hydo sql-gen`, which
+  writes SQL workloads and their checks. A linearizability check finds a read that no order of
+  the operations explains; a list-append check finds anomalies between transactions that append
+  to lists. Assertion SDKs exist for Rust, Go, Python, and JavaScript (`hydo guide sdks`).
 
 hydo reproduced two known upstream bugs. `hydo explore` found each one, with no hand-written
 schedule:
 
 - etcd 3.5.5: member revisions diverge after an online defragmentation and a crash
-  ([etcd issue 14685](https://github.com/etcd-io/etcd/issues/14685)). It is absent in 3.5.6. The
-  project is [hydo/onboard/examples/etcd/](hydo/onboard/examples/etcd/).
+  ([etcd issue 14685](https://github.com/etcd-io/etcd/issues/14685)). `hydo explore --strategy
+  process --new-faults --timing` failed 19 of 100 seeds on 3.5.5 and none on 3.5.6. The runs are in
+  [hydo/onboard/examples/etcd/RESULTS.md](hydo/onboard/examples/etcd/RESULTS.md).
 - NATS 2.10.22: a JetStream stream is deleted when every node stops shortly after the stream was
-  created ([nats-server issue 6888](https://github.com/nats-io/nats-server/issues/6888)). It is
-  fixed in 2.10.23. The project is
-  [hydo/onboard/examples/nats-jetstream/](hydo/onboard/examples/nats-jetstream/).
+  created ([nats-server issue 6888](https://github.com/nats-io/nats-server/issues/6888)). The
+  process strategy found it in 14 of 50 schedules, the first at seed 1; it is fixed in 2.10.23.
+  The runs are in
+  [hydo/onboard/examples/nats-jetstream/RESULTS.md](hydo/onboard/examples/nats-jetstream/RESULTS.md).
 
 ## Limits
 
@@ -118,7 +123,7 @@ CPUs, a power cut at an exact disk flush, or inserted timer ticks. Those need th
 your own Intel machine.
 
 - The KVM engine uses the KVM that comes with Linux. It runs on Intel and AMD CPUs, and on a cloud
-  VM with nested virtualization. It has one virtual CPU.
+  VM with nested virtualization (a VM that can run VMs itself). It has one virtual CPU.
 - The kernel module `hvx.ko` needs an Intel CPU with VT-x and sudo. It has the PMU branch clock:
   the CPU's performance-monitoring unit counts the guest's conditional branches, so a timer tick
   lands at an exact instruction.
@@ -132,14 +137,17 @@ sha256sum -c --ignore-missing SHA256SUMS
 tar xzf hydo-linux-0.3.0.tar.gz
 ```
 
-For the KVM engine, your user must be in the group that owns `/dev/kvm`, often `kvm`. This needs
-root once: run `sudo usermod -aG kvm "$USER"`, then log in again. Then:
+For the KVM engine, your user must be able to open `/dev/kvm`. Install, then let
+`hydo doctor --backend kvm` check it:
 
 ```sh
 ./hydo-linux-0.3.0/install.sh --no-module
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor --backend kvm
 ```
+
+Only if it says that `/dev/kvm` is not usable, add yourself to the group that owns it, often
+`kvm`: `sudo usermod -aG kvm "$USER"`, then log in again.
 
 Add `--backend kvm` to `hydo run`, `hydo repro`, and `hydo explore`, or set `HYDO_BACKEND=kvm`
 once.
@@ -163,7 +171,8 @@ hydo doctor
 ```
 
 `cargo install` builds only the `hydo` command. `hydo setup` downloads the release for your
-platform into `~/.hydo/versions/0.3.0` and checks every file by sha256. On Linux, this path was
+platform into `~/.hydo/versions/0.3.0` (`HYDO_HOME` names another folder than `~/.hydo`) and
+checks every file by sha256. On Linux, this path was
 only compiled, not run; use the tarball there.
 
 ## An example: Redis loses an acknowledged write
@@ -199,8 +208,10 @@ RESULT one fp=1893d8c55d7704d9 … verdict=HYDO-ORACLE: OK … (… acked=20 all
 RESULT one fp=3520af95868b4e8f … verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 ```
 
-The power cut lost key `k:1`, which Redis had acknowledged. This is the documented window of
-Redis's `appendfsync everysec` setting. `fp=` is the fingerprint.
+The power cut lost the keys from `k:1` on, which Redis had acknowledged (only `k:0` survived);
+the verdict names the first. This is the documented window of Redis's `appendfsync everysec`
+setting. `fp=` is the fingerprint. With Redis's default setting, `appendfsync always`, the same
+cut loses nothing: `hydo run "disk=cut | run C=12"` ends `OK` with `acked=12 all present`.
 
 Each run writes a directory under `hydo-out/runs/`. `hydo repro` runs it again from a fresh boot
 and compares the fingerprints:
@@ -212,14 +223,11 @@ REPRODUCED   run  fp=3520af95868b4e8f (recorded 3520af95868b4e8f)  disk=cut | ru
 hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under …)
 ```
 
-The values come from a run on an Intel Xeon E3-1270 v6 with the PMU branch clock, in the Linux
-quickstart (section 2). On another CPU or engine your fingerprints differ, and the verdict is the
-same. On a Mac the same schedule loses key `k:0`.
 
 ## Test your own project
 
 1. Run `hydo init` in your repository. It creates `hydo/hydo.yaml`, `hydo/workload/`,
-   `hydo/checks/`, and `hydo/regressions/`. It adds `.hydo/` and `hydo/images/` to `.gitignore`,
+   `hydo/checks/`, and `hydo/regressions/`. It adds `.hydo/`, `hydo/images/`, and `hydo-out/` to `.gitignore`,
    and a hydo section to `AGENTS.md`. Its two placeholder files make every run fail until you
    replace them.
 2. If your system has a Docker Compose file, import it instead of the skeleton's `hydo.yaml`. The
@@ -230,8 +238,12 @@ same. On a Mac the same schedule loses key `k:0`.
    sh hydo/fetch-images.sh
    ```
 
-   The import writes a placeholder workload and invariant. Replace them with commands in
-   `hydo/workload/` and checks in `hydo/checks/`; until then the check in step 4 fails.
+   The import writes a `workload:` and an `invariants:` section with placeholders. Delete both
+   sections from `hydo/hydo.yaml`: the commands in `hydo/workload/` are the workload, and the
+   checks in `hydo/checks/` are the invariants. Then replace `hydo init`'s placeholders
+   `hydo/workload/parallel_driver_todo` and `hydo/checks/final_todo` with your own commands and
+   checks. Until you delete the two sections, the check in step 4 fails with `workload.run/process:
+   the test composer runs the workload`.
 
 3. Read `hydo guide workflow`. It says what to put in each file.
 4. Run `hydo build hydo/hydo.yaml --check` after each change. It checks the folder without
