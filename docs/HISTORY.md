@@ -3743,3 +3743,18 @@ With the mode off `hv/kvm/kvm-check.sh` 16 of 16, every fingerprint equal to M18
 **Left** (AGENTS.md open item 45 (c) and (h)): a review of the proof and a run on AMD before the
 mode is on by default; loops that count in memory; the stale event fields in the default
 fingerprint; option 1 as a later opt-in clock.
+
+**Addendum: on GitHub's AMD runners** (user approval 2026-11-08; a temporary workflow on the branch
+`tmp-amd-check`, removed from the public repository after the runs). Three workflow runs of three `ubuntu-24.04` jobs
+each, this branch's static `hydo` and the published 0.2.0 release, CPUs AMD EPYC 7763, 9V74 and 9V45
+(nested virtualization): `hv/kvm/kvm-check.sh` with `HYDO_KVM_SPIN_STATE` off 16 of 16 on every
+model (Redis `93da6e186fe00d1a` and `ea0afd368b0ab9b1`, the published 0.2.0's AMD values; S1
+`c38398d54f65b65a`; ledger-spin `0ee1692e3f434c9a` through the rewind mode); `hv/kvm/v3-check.sh` 5 of
+5 (`bbe57a517805cd64`, `T=4:3600` `6b7c5fa1ce83371c`: the first v3 guest on AMD, AGENTS.md open item
+45 (g) closed); TigerBeetle's single replica with the mode on `adf23d40c773219d` (clean, twice and
+from S1), `abc2842bcb614ec0` (kill, twice), `37e02cc8895a8935` (cut, twice). Every value was the same
+on all three models. Found on the way and fixed: `kvm-check.sh` started by a relative path did not
+find the ledger-spin example (it changed directory first). Values and details:
+docs/design/kvm-engine.md "On an AMD host". The user decided (2026-11-08) that leaving KVM's stale
+event fields out of the default fingerprint goes into the later change that turns the mode on by
+default (one re-recording).

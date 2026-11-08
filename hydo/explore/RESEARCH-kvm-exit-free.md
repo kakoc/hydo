@@ -223,8 +223,8 @@ none of them. What was considered:
 1. Take option 2 now. It is enough for TigerBeetle's single replica (prototype below), it changes
    no valid run, needs nothing of the host, and fits the engine's rule that exit-free loops are
    resolved at points the guest alone fixes. Before making it the default: review the soundness
-   argument, run it on an AMD host, and run the recorded checks with it on (they should not change,
-   since it only acts where a run would end as SPIN).
+   argument and run the recorded checks with it on (they should not change, since it only acts
+   where a run would end as SPIN). It already ran on AMD (below).
 2. Extend the counter proof to memory next (loops that keep a counter in memory) if a program needs
    it.
 3. Keep option 1 as the general answer for later, as its own opt-in clock with its own values, and
@@ -257,8 +257,16 @@ In short, on the build machine:
 - The performance counter adds nothing measurable to an exit: 1,000,000 exits took 1.06 µs each
   with the counter and 1.08 µs without on a performance core (1.95 and 1.91 µs on an efficiency
   core), so option 1's cost would be in its stops, not in normal running.
+- On AMD (GitHub's `ubuntu-24.04` runners, EPYC 7763, 9V74 and 9V45, nested virtualization), the
+  same image with the mode on gave `disk=none | run` OK `adf23d40c773219d`, a kill OK
+  `abc2842bcb614ec0` and a power cut OK `37e02cc8895a8935`, each twice on every runner and the
+  same on all three models, and the clean run from the worker's S1 gave the fresh boot's
+  `adf23d40c773219d`; 120 to 200 s per run. With the mode off `kvm-check.sh` gave
+  16 of 16 there. Details: docs/design/kvm-engine.md "On an AMD host".
 
 ## What a check on AMD would need
+
+The prototype's check below was run on 2026-11-08 (the results above); option 1's was not.
 
 - For option 2 (the prototype): a host with AMD-V and `/dev/kvm` for the user, AVX2 and AES-NI
   for TigerBeetle's binary, and the steps of docs/design/kvm-engine.md "On an AMD host" with this
