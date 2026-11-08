@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: every acknowledged insert is in the set on n1
+exec hydo-sql set check n1

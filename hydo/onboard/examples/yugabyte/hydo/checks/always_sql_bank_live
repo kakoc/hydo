@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: every=2
+# hydo-msg: the bank's total never changes and no balance is negative, on n1 and n2 and n3
+# Exit 2 (cannot judge now) when a node does not answer: a killed or paused node is no violation.
+exec hydo-sql bank check n1 n2 n3

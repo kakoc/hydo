@@ -187,3 +187,46 @@ fn a_kill_and_a_storage_fault_on_one_service_restart_it_once() {
         notes(&r.run.items)
     );
 }
+
+/// An image service has its storage directory bound into its root (`mounts:`); that bind kept the
+/// shut-down file system alive, and mounting the device again failed with "Resource busy" (the
+/// YugabyteDB onboarding). Its power loss unmounts every mount of the device and the launcher's
+/// once-per-boot marker; a plain service's unmounts only its directory, as before.
+#[test]
+fn a_power_loss_of_an_image_service_unmounts_its_binds_too() {
+    let text = "name: storage-image
+data:
+  dirs: [db]
+services:
+  - name: db
+    image: images/db.tar
+    ready: \"true\"
+    storage: {dir: db, size_mib: 64}
+    mounts:
+      - {src: /data/db, dst: /var/lib/db}
+workload:
+  steps: 8
+  run: client
+invariants:
+  - id: all.done
+    final: true
+    cmd: final-check
+faults: [kill, powerloss]
+";
+    let m = hydo_manifest::from_embedded(text, None)
+        .unwrap_or_else(|e| panic!("the manifest: {e}\n{text}"));
+    let p = Plan::from_manifest(&m).unwrap();
+    let r = run(&p, "disk=none | run L=db@2+2");
+    let cs = runs(&r.run.items);
+    assert!(
+        cs.iter().any(|c| c.contains("awk '$1 == \"/dev/vda5\"")
+            && c.contains("rm -f /tmp/hydo/oci-mnt.db.done")),
+        "{cs:#?}"
+    );
+    assert!(has(&notes(&r.run.items), "POWER LOSS of db before step 2"));
+    // a service that is not an image's keeps the plain unmount of its directory
+    let r = run(&plan(), "disk=none | run L=db@2+2");
+    let cs = runs(&r.run.items);
+    assert!(cs.iter().any(|c| c.contains("umount")), "{cs:#?}");
+    assert!(!cs.iter().any(|c| c.contains("oci-mnt")), "{cs:#?}");
+}

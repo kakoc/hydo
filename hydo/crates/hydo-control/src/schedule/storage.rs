@@ -279,15 +279,30 @@ pub(super) fn power_loss(fx: &mut F<'_>, ctx: &Ctx, svc: &str, p: i64) -> Step<b
     }
     svc_sig(fx, svc, Sig::Kill)?;
     fx.until(|h, f| !super::running(h, f, svc))?;
-    // the dead tree's mount namespace may hold the file system for a moment
+    // the dead tree's mount namespace may hold the file system for a moment; an image service
+    // also has the directory bound into its root (`mounts:`), and that bind keeps the shut-down
+    // file system alive, so mounting the device again failed with "Resource busy" (found by the
+    // YugabyteDB onboarding): every mount of the device goes, the deepest first, and the
+    // launcher's once-per-boot marker with them, so the restart binds the new mount again
     let r = run(
         fx,
         sh(
             ctx,
-            format!(
-                "n=0; until {b} umount {d} 2>/dev/null; do n=$((n+1)); [ $n -ge 100 ] && {{ {b} umount {d}; exit 1; }}; {b} usleep 50000; done",
-                d = q(&st.dir)
-            ),
+            // an image service's command is its launcher (plan.rs)
+            if ctx
+                .plan
+                .service(svc)
+                .is_some_and(|s| s.cmd == format!("/etc/hydo/oci/{svc}/run"))
+            {
+                format!(
+                    "n=0; while {b} grep -q '^{dev} ' /proc/mounts; do for m in $({b} awk '$1 == \"{dev}\" {{ print $2 }}' /proc/mounts | {b} sort -r); do {b} umount $m 2>/dev/null; done; n=$((n+1)); [ $n -ge 100 ] && {{ {b} grep '^{dev} ' /proc/mounts; exit 1; }}; {b} grep -q '^{dev} ' /proc/mounts && {b} usleep 50000; done; {b} rm -f /tmp/hydo/oci-mnt.{svc}.done"
+                )
+            } else {
+                format!(
+                    "n=0; until {b} umount {d} 2>/dev/null; do n=$((n+1)); [ $n -ge 100 ] && {{ {b} umount {d}; exit 1; }}; {b} usleep 50000; done",
+                    d = q(&st.dir)
+                )
+            },
         ),
         Vec::new(),
         Some(512),

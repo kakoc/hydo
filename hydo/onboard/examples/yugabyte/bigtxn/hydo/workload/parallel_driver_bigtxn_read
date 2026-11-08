@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: timeout=60
+# A read while the faults happen: the large update is atomic, so no row may still have v=0.
+. /hydo/workload/helper_bigtxn.sh
+n=$(timeout 30 hydo-oci yb_tserver_1 /home/yugabyte/postgres/bin/ysqlsh -h yb-tserver-1 -U yugabyte -X -q -At -c "SELECT count(*) FROM big WHERE v = 0" 2>/dev/null) || exit 0
+[ "$n" = 0 ] || { echo "a read saw $n rows without the acknowledged large update" > /dev/console; exit 100; }
+exit 0

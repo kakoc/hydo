@@ -237,8 +237,12 @@ fn parse_pax(b: &[u8]) -> Result<Vec<(String, String)>, String> {
             .position(|&c| c == b'=')
             .ok_or("invalid header")?;
         let k = String::from_utf8_lossy(&rec[..eq]).into_owned();
-        let v = String::from_utf8(rec[eq + 1..].to_vec())
-            .map_err(|_| "a PAX value that is not UTF-8".to_string())?;
+        // Python's tarfile decodes a value that is not UTF-8 with its fallback encoding instead
+        // of failing: a binary value (an extended attribute such as SCHILY.xattr.security.capability,
+        // which Docker writes for setcap programs like newuidmap) is normal. An error here used
+        // to end the layer silently at that member (members() ends an archive at the first bad
+        // member after the first), so every later file of the layer was missing from the image.
+        let v = String::from_utf8_lossy(&rec[eq + 1..]).into_owned();
         out.push((k, v));
         pos += len;
     }
@@ -339,5 +343,64 @@ fn read_member(
             }
             Ok(Some(m))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    /// One 512-byte ustar header with a correct checksum.
+    fn header(name: &str, kind: u8, size: usize) -> Vec<u8> {
+        let mut h = vec![0u8; 512];
+        h[..name.len()].copy_from_slice(name.as_bytes());
+        h[100..107].copy_from_slice(b"0000644");
+        h[108..115].copy_from_slice(b"0000000");
+        h[116..123].copy_from_slice(b"0000000");
+        h[124..135].copy_from_slice(format!("{size:011o}").as_bytes());
+        h[136..147].copy_from_slice(b"00000000000");
+        h[156] = kind;
+        h[257..263].copy_from_slice(b"ustar\0");
+        h[263..265].copy_from_slice(b"00");
+        h[148..156].copy_from_slice(b"        ");
+        let sum: u32 = h.iter().map(|&b| b as u32).sum();
+        h[148..155].copy_from_slice(format!("{sum:06o}\0").as_bytes());
+        h
+    }
+
+    fn padded(mut v: Vec<u8>) -> Vec<u8> {
+        v.resize(v.len().div_ceil(512) * 512, 0);
+        v
+    }
+
+    /// A PAX header whose value is not UTF-8 (a file capability, as Docker writes for setcap
+    /// programs) must not end the archive: every later member is still read.
+    #[test]
+    fn binary_pax_value_does_not_end_the_archive() {
+        let mut rec = b"SCHILY.xattr.security.capability=".to_vec();
+        rec.extend_from_slice(&[0x01, 0x00, 0x00, 0x02, 0xc0, 0xff, 0x00, 0x00, b'\n']);
+        let len = rec.len() + 3; // the "NN " prefix: two digits and a space
+        let mut pax = format!("{len} ").into_bytes();
+        pax.extend_from_slice(&rec);
+        assert_eq!(pax.len(), len);
+        let mut tar = Vec::new();
+        tar.extend(header("PaxHeaders/newuidmap", XHDTYPE, pax.len()));
+        tar.extend(padded(pax));
+        tar.extend(header("usr/bin/newuidmap", REGTYPE, 3));
+        tar.extend(padded(b"abc".to_vec()));
+        tar.extend(header("usr/lib64/ld-2.28.so", REGTYPE, 2));
+        tar.extend(padded(b"ld".to_vec()));
+        tar.extend(vec![0u8; 1024]);
+        let path =
+            std::env::temp_dir().join(format!("hydo-tarball-pax-{}.tar", std::process::id()));
+        File::create(&path).unwrap().write_all(&tar).unwrap();
+        let names: Vec<String> = members(&mut File::open(&path).unwrap())
+            .unwrap()
+            .into_iter()
+            .map(|m| m.name)
+            .collect();
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(names, ["usr/bin/newuidmap", "usr/lib64/ld-2.28.so"]);
     }
 }
