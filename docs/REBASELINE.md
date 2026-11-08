@@ -3282,3 +3282,34 @@ recorded other words than a fresh boot of the same run (`hydo-bench` now takes t
 `guest_verdict`), and `stage.sh` called `sudo` to delete every build output (it now deletes the
 user's own files without it, so the KVM entries run on a machine without sudo). `hydo-bench`'s
 default mode has no worker pool for the KVM engine, so the KVM entries run with `--thorough`.
+
+## 18. hydo 0.3.0 (2026-11-08)
+
+Made with `hydo-bench rebaseline` on the three engines (docs/HISTORY.md "Milestone 190"); the
+values are in `hydo/onboard/recorded.json`, and this section records only the decisions.
+
+**The fingerprint epoch stays 1.** Since 0.2.0 the engines, the host controller and the
+recorded images' kernels changed (M178–M184, M189, M191), but every change is opt-in or inert for
+the recorded images: M179's RAM above 3 GiB is used only by guests larger than 3 GiB, M183's
+storage faults only by images with `storage:`, M184's checks refuse only schedules that name what
+an image lacks, M189's v3 vCPU only by `guest.cpu: v3` on KVM, M191 only by plans without
+commands beside a `workload.run`; the guest agent's pin (`398f297e…`, `099e5444…`) did not move.
+Every image whose bytes did not change gives its recorded values on 0.3.0 (checked on all three
+engines), so no engine, controller, agent or kernel moved a recorded fingerprint, which is the
+rule for raising the epoch. What moved is the bytes of images, as for 0.2.0: the workspace version
+is in Cargo's `-C metadata` of `guest/hydo-world` and `guest/hydo-grpc` (and `hydo-grpc` sends
+`hydo-grpc/0.3.0` as its user agent), `hydo-world`'s sources changed with M180 and M181 (AGENTS.md
+open item 59), the SDK versions are in rust-kv's and redis-composed-rs's programs, node-kv's
+`package.json` and python-kv's `__init__.py`, and the composed plans pin `hydo_version: "0.3"`.
+An image built by 0.2.0 still gives its own values under 0.3.0.
+
+**What moved.** The Mac (`hvm`): 11 of 21 images have new bytes, 38 of 75 runs new values. The
+bare-metal machine (`hvx`): 13 of 39 images, 30 of 131 runs. KVM (`kvm`, the build machine): none
+of 4 images and none of 11 runs. Every verdict is unchanged; every moved run gave the same values
+twice. The images that moved are the same as for 0.2.0, for the same reasons.
+
+**The new guest programs.** Both releases ship `guest/hydo-world-tls` and `guest/hydo-sql` since
+0.3.0. No image of the list carries either (the examples with `tls:` or `hydo-sql`, medusa,
+libsql-replica and postgres-sql, are recorded in their own RESULTS.md), so they moved no recorded
+value. `hydo-sql`'s build gives the same bytes in any checkout path since 0.3.0 (docs/BUILD-PINS.md
+"hydo-sql").

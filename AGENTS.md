@@ -222,7 +222,8 @@ packages on every pull request that changes one. The user is doing the one-time 
 registry (open item 63); until it is done, a release is published by hand. The details are in
 `docs/PUBLISHING.md`, section "Publishing from GitHub Actions" (M186).
 
-**Since 0.2.0 on `main`, not released.**
+**hydo 0.3.0: prepared, not published (M190).** The version is 0.3.0 everywhere it lives. The
+release adds M178–M189 and M191 to 0.2.0:
 
 - `hydo inspect` and the failure diagnosis (M178).
 - Guest RAM up to 8 GiB (M179).
@@ -231,9 +232,13 @@ registry (open item 63); until it is done, a release is published by hand. The d
 - `hydo sql-gen` and the guest program `hydo-sql` (M182).
 - Storage faults of one service, `G=` and `L=` (M183).
 - The check that a schedule names only what its image has (M184).
+- The KVM engine at x86-64-v3 (M189), and a plan of only checks or regressions keeps the
+  manifest's own workload (M191).
 
-The pins of `guest/hydo-world` were not moved, and neither release ships `hydo-world-tls` or
-`hydo-sql` yet (open item 59).
+Both releases ship `guest/hydo-world` (re-pinned), `guest/hydo-world-tls` and `guest/hydo-sql`,
+pinned in `hydo/dist/<platform>/guest-programs.sha256` (`docs/BUILD-PINS.md`). Every example was
+re-recorded; the fingerprint epoch stays 1 (`docs/REBASELINE.md` section 18). The release files,
+their checksums and the publishing steps are in `docs/HISTORY.md` Milestone 190.
 
 **Fingerprints.** The fingerprint epoch is 1. The pinned reproducers are
 `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` under `hydo run`: `1dc3677fb94053cf`
@@ -393,8 +398,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 56. `hydo inspect` was not run on KVM; no MCP server (M178).
 57. `hvx_hugeram_test` should join `deploy-metal.sh` (M179).
 58. `tls:` and `writable:` were not run on hvx or arm64 (M180).
-59. [user decision] The next release must build and pin `hydo-world`, `hydo-world-tls` and
-    `hydo-sql`, and re-baseline every image with fakes (M180–M182).
 60. Ready-made SQL workloads: the MySQL dialect and arm64 ran only in unit tests (M182).
 61. Storage faults: `L=` keeps writes the disk had not flushed (M183).
 62. [user decision] `guest.outcomes_after_cut` stays opt-in until an epoch change (M184).
@@ -596,6 +599,8 @@ build machine, before 2026-10-13.
 - M187: the writing standard, Vale, a shorter AGENTS.md and a new README
 - M188: the package pages rewritten, every code example a test; `sdk/README.md` for SDK maintainers
 - M189: the KVM engine at x86-64-v3 (`guest.cpu: v3` on KVM; every v2 value unchanged)
+- M190: hydo 0.3.0 prepared for publication (the version, the guest programs `hydo-world-tls` and
+  `hydo-sql` in both releases, every example re-recorded, both releases built twice and verified)
 - M191: a plan of only `checks/` or `regressions/` keeps the manifest's own `workload.run` (before, its
   saved regressions passed without running it); `W=` is refused on such an image
 

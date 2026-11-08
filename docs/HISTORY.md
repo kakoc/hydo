@@ -4296,3 +4296,36 @@ KVM; VT-x cannot make XSAVEOPT, XSAVEC or XGETBV1 fault.
 **Test** `hydo-control/tests/silent.rs` `a_plan_without_commands_keeps_the_manifests_own_workload`: the shop's manifest copied beside a `regressions/` folder (and, second, a `checks/` folder), the plan from `hydo_manifest::for_explorer`, a run of the double-charge schedule on the scripted agent; it requires the workload's `shop place` to be spawned and no `HYDO-COMPOSE` report, and `W=` to be refused. Before the fix it failed: the run spawned only the service, timers and the world's summary.
 
 **Nothing recorded moved.** No tracked manifest has a plan without commands next to its own `workload.run` (every tracked YAML and JSON manifest checked with `hydo-build --print-shell`: each that stages a plan has `compose.sh step` as its workload; the only folder without `workload/` is hydo-manifest's `regressions-only` fixture, which has no `workload.run` and is refused). hydo-manifest and hydo-build did not change, so no image byte changed; the controller's recorded transcripts (`hydo-control`'s corpora, features, fakes and `m123` tests) are unchanged.
+
+### Milestone 190 — hydo 0.3.0 prepared for publication, nothing published (2026-11-08)
+
+User decision 2026-11-08: release 0.3.0 with what `main` has since 0.2.0 (M178–M186, M188), the
+repository-docs branch (M187), the KVM engine at x86-64-v3 (M189) and M191's fix, up to and not
+including a publishing step. Branch `worktree-agent-aecf7367c993bd231`.
+
+**The version.** As M177 did: `hydo/VERSION`, the workspace version and every `hydo-*` entry of
+`[workspace.dependencies]` (not `hydo-agent-proto`, which keeps 0.1.0), both release scripts'
+default, the SDKs and the unpublished Rust test SDK, the examples' lock files of `hydo-assert`,
+every plan the tree builds (`hydo_version: "0.3"`, also `hydo init`'s template and the Rust test
+SDK), the quickstarts, MANIFEST.md, the capabilities topic and docs/PUBLISHING.md's commands.
+
+**The guest programs (open items 58–60).** Both release scripts now build and ship
+`guest/hydo-world-tls` (hydo-world with the feature `tls`) and `guest/hydo-sql`, beside the
+re-pinned `guest/hydo-world`; `hydo build` from a release stages them from `guest/` (it already
+looked there). Both third-party lists name them; `hydo-release`'s Rust program entries take cargo
+features (`"features": ["hydo-world/tls"]`), so the TLS build's optional crates (rustls, p256,
+aes-gcm and their RustCrypto dependencies) are listed with their licenses. Building the Linux
+candidate in a new tree found that `hydo-sql`'s bytes depended on the checkout path (Cargo's
+`-C metadata` hashes the path of its path dependency `hydo-read`); its `build.sh` now uses the gRPC
+client's recipe (`rustc-stable`, `hydo-elf-comment`), and two paths give the same bytes on the Mac
+and on the bare-metal machine. The pins are in docs/BUILD-PINS.md.
+
+**The fingerprint epoch stays 1** (docs/REBASELINE.md section 18): no engine, controller, agent or
+kernel change moved a recorded value; only image bytes moved.
+
+**Re-recording.** `hydo-bench rebaseline --write` with 0.3.0 candidates as `--release`: the Mac
+(21 images, 75 schedules; 11 images and 38 runs moved), the bare-metal machine (39 images, 131
+schedules; 13 images and 30 runs moved; a first pass named Go's directory instead of its program
+for six stages, rerun), KVM on the build machine with `--thorough` (4 images, 11 schedules, every
+value as recorded). Every verdict unchanged, every moved run the same twice. After the merges of
+M187 and M191, `--check` from the merged tree on the Mac gave every value as recorded.
