@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: no acknowledged increment of the counter on n1 is lost
+exec hydo-sql counter check n1

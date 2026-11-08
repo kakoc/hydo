@@ -1,0 +1,105 @@
+{
+ "generated_by": "hvx/onboard/hydo-compose",
+ "images": {
+  "yugabytedb/yugabyte:2025.2.8.1-b8": {
+   "index_digest": "sha256:98a1d6ab0076f3d2192f586aa5f8edbfb967d802ad6a495e45f47d2dfe3ef588",
+   "name": "yugabytedb/yugabyte",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/sbin/tini",
+       "--"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "container=yugabyte-db",
+       "YB_HOME=/home/yugabyte",
+       "YB_MANAGED_DEVOPS_USE_PYTHON3=1",
+       "YB_DEVOPS_USE_PYTHON3=1",
+       "BOTO_PATH=/home/yugabyte/.boto/config",
+       "AZCOPY_JOB_PLAN_LOCATION=/tmp/azcopy/jobs-plan",
+       "AZCOPY_LOG_LOCATION=/tmp/azcopy/logs"
+      ],
+      "ExposedPorts": {
+       "10100/tcp": {},
+       "11000/tcp": {},
+       "12000/tcp": {},
+       "18018/tcp": {},
+       "5433/tcp": {},
+       "6379/tcp": {},
+       "7000/tcp": {},
+       "7100/tcp": {},
+       "7200/tcp": {},
+       "9000/tcp": {},
+       "9042/tcp": {},
+       "9100/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "root",
+      "Volumes": {
+       "/mnt/disk0": {},
+       "/mnt/disk1": {}
+      },
+      "WorkingDir": "/home/yugabyte"
+     },
+     "digest": "sha256:de5340a195f290ec241f877db0f6d9b3d56bdb515f0051d348e793849623ccf3",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/sbin/tini",
+       "--"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "container=yugabyte-db",
+       "YB_HOME=/home/yugabyte",
+       "YB_MANAGED_DEVOPS_USE_PYTHON3=1",
+       "YB_DEVOPS_USE_PYTHON3=1",
+       "BOTO_PATH=/home/yugabyte/.boto/config",
+       "AZCOPY_JOB_PLAN_LOCATION=/tmp/azcopy/jobs-plan",
+       "AZCOPY_LOG_LOCATION=/tmp/azcopy/logs"
+      ],
+      "ExposedPorts": {
+       "10100/tcp": {},
+       "11000/tcp": {},
+       "12000/tcp": {},
+       "18018/tcp": {},
+       "5433/tcp": {},
+       "6379/tcp": {},
+       "7000/tcp": {},
+       "7100/tcp": {},
+       "7200/tcp": {},
+       "9000/tcp": {},
+       "9042/tcp": {},
+       "9100/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "root",
+      "Volumes": {
+       "/mnt/disk0": {},
+       "/mnt/disk1": {}
+      },
+      "WorkingDir": "/home/yugabyte"
+     },
+     "digest": "sha256:ba23ef3605acfb5c8f983ded0edc00c73296820c34886c960b1cab894e1de516",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "yugabytedb/yugabyte:2025.2.8.1-b8",
+   "registry": "docker.io",
+   "repo": "yugabytedb/yugabyte",
+   "tag": "2025.2.8.1-b8"
+  }
+ }
+}

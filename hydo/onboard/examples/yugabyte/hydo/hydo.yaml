@@ -1,0 +1,211 @@
+# A three-node YugabyteDB cluster (docker-compose.yaml: three yb-masters and three yb-tservers,
+# replication factor 3, YSQL on every tserver), onboarded into hydo. Started from
+#   hydo compose docker-compose.yaml --out hydo/hydo.yaml --images-dir images
+# (its comments that say where each value came from are kept); the hand changes are marked
+# "hand:". The workload and the checks are hydo sql-gen's (RESULTS.md, "The project").
+#
+#   sh hydo/fetch-images.sh                    # the image by digest (network, once)
+#   hydo build hydo/hydo.yaml                  # durable_wal_write=false, YugabyteDB's default
+#   hydo build hydo/hydo.yaml --set wal=true --out .hydo-wal   # the documented single-AZ setting
+#
+# Compose import notes, and what was done about them:
+# - every service runs the same image: hand: root.share_images, else six copies of the 0.9 GB
+#   image tree do not fit hydo's disk (the whole disk image stays under 4 GiB);
+# - the masters got port 5433 (the image's first EXPOSE): hand: 7100, their RPC port;
+# - hand: guest.ram_mib 8192 and guest.cpu v3 (yb-server uses AVX2);
+# - hand: the tservers' readiness is their web server (port 9000), not the Compose healthcheck
+#   (pg_isready): hydo starts the services one after the other and waits for each one's
+#   readiness before it starts the next, where Docker Compose starts them all and only reports
+#   health. A tserver's PostgreSQL answers only once YSQL works, which needs the transaction
+#   table, which needs two live tservers: with pg_isready the first tserver waits for the second,
+#   which is never started. The wait for YSQL is the first command (workload/first_00_wait_ysql);
+# - hand: GLIBC_TUNABLES in every service: hvx's virtual CPU reports no cache sizes (CPUID leaf 4
+#   is empty), and the image's glibc 2.28 (AlmaLinux 8) then takes 0 for its non-temporal copy
+#   threshold, so memcpy's large-copy loop runs for every copy and crashes (yb-master and curl
+#   ended with SIGSEGV in libc at once); the tunables give it ordinary cache sizes;
+# - hand: --reject_writes_min_disk_space_mb=32: YugabyteDB keeps 3 GB free by default, and with
+#   less it refuses writes and remote bootstraps ("Not enough disk space for bootstrap"), so the
+#   transaction table never got its three replicas and YSQL never answered; hydo's whole disk is
+#   under 4 GiB;
+# - hand: guest.clock_start after the release's build date (2026-11-08 instead of hydo's default
+#   2026-01-01): YugabyteDB starts its catalog from a snapshot made when the release was built,
+#   whose hybrid times are then in the guest's future, and the masters cannot read the catalog
+#   versions ("Could not get YSQL db catalog versions"), so YSQL never answers;
+# - hand: guest.clock_after_cut: 60: after a power cut the recovery boot's clock otherwise
+#   starts at clock_start again, a minute behind the hybrid times on disk, and a tserver stops
+#   at once ("Too big clock skew is detected: 58.980s, while max allowed is: 0.500s");
+# - hand: storage: per service (each its own file system) for the storage faults G= and L=.
+format: 1
+name: yugabyte
+description: "YugabyteDB, three nodes (RF 3): bank transfers, list-append transactions, registers, a set and a counter over YSQL on all three tservers, under crashes, pauses, partitions, clock jumps, power cuts and storage faults of one node"
+hydo_version: "0.2"
+
+params:
+  wal: "false"   # hand: yb-tserver/yb-master --durable_wal_write (default false; needs a restart, so a build parameter, not a knob)
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 8192   # hand: three masters and three tservers with their PostgreSQL processes
+  cpu: v3         # hand: yb-server contains AVX2 code
+  clock_start: 1794096000   # hand: 2026-11-08; see the notes at the top
+  clock_after_cut: 60       # hand: see the notes at the top
+
+data:
+  size_mib: 256   # hand: the volumes live on the services' own file systems (storage:), which come on top of it; the whole disk stays under 4 GiB
+  dirs: [vol/master-1, vol/anon-yb-master-1-mnt-disk0, vol/anon-yb-master-1-mnt-disk1, vol/master-2, vol/anon-yb-master-2-mnt-disk0, vol/anon-yb-master-2-mnt-disk1, vol/master-3, vol/anon-yb-master-3-mnt-disk0, vol/anon-yb-master-3-mnt-disk1, vol/tserver-1, vol/anon-yb-tserver-1-mnt-disk0, vol/anon-yb-tserver-1-mnt-disk1, vol/tserver-2, vol/anon-yb-tserver-2-mnt-disk0, vol/anon-yb-tserver-2-mnt-disk1, vol/tserver-3, vol/anon-yb-tserver-3-mnt-disk0, vol/anon-yb-tserver-3-mnt-disk1]
+
+root:
+  share_images: true   # hand: the six services share one image tree
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 yb-master-1
+      10.89.0.12 yb-master-2
+      10.89.0.13 yb-master-3
+      10.89.0.14 yb-tserver-1
+      10.89.0.15 yb-tserver-2
+      10.89.0.16 yb-tserver-3
+
+services:
+  # Compose service yb-master-1
+  # image yugabytedb/yugabyte:2025.2.8.1-b8 = docker.io/yugabytedb/yugabyte@sha256:98a1d6ab0076f3d2192f586aa5f8edbfb967d802ad6a495e45f47d2dfe3ef588
+  #   linux/amd64: sha256:de5340a195f290ec241f877db0f6d9b3d56bdb515f0051d348e793849623ccf3
+  #   linux/arm64/v8: sha256:ba23ef3605acfb5c8f983ded0edc00c73296820c34886c960b1cab894e1de516
+  # ready: from Compose healthcheck
+  # restart: unless-stopped: an agent image starts the service again when its process ends by itself while the test runs (MANIFEST.md "Restart policies"); hydo's kill faults keep their own restart points
+  # the image declares VOLUME /mnt/disk0: an anonymous volume on the data disk
+  # the image declares VOLUME /mnt/disk1: an anonymous volume on the data disk
+  - name: yb_master_1
+    image: {x86_64: images/yugabytedb-yugabyte-2025.2.8.1-b8-amd64.docker.tar, arm64: images/yugabytedb-yugabyte-2025.2.8.1-b8-arm64-oci}
+    image_ref: "yugabytedb/yugabyte:2025.2.8.1-b8"
+    cmd: [/home/yugabyte/bin/yb-master, "--fs_data_dirs=/mnt/master", "--master_addresses=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100", "--rpc_bind_addresses=yb-master-1:7100", "--replication_factor=3", "--durable_wal_write={{wal}}", "--reject_writes_min_disk_space_mb=32"]
+    port: 7100   # hand: the master's RPC port (the import took the image's first EXPOSE, 5433)
+    addr: 10.89.0.11
+    ready: "timeout 30 hydo-oci yb_master_1 curl -fsS -o /dev/null http://yb-master-1:7000/"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    env: {GLIBC_TUNABLES: "glibc.cpu.x86_data_cache_size=0x8000:glibc.cpu.x86_shared_cache_size=0x100000:glibc.cpu.x86_non_temporal_threshold=0xc0000"}   # hand: see the notes at the top
+    storage: {dir: vol/master-1, size_mib: 192}   # hand: for G= and L=
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/master-1, dst: /mnt/master, copy_up: true}
+      - {src: /data/vol/anon-yb-master-1-mnt-disk0, dst: /mnt/disk0, copy_up: true}
+      - {src: /data/vol/anon-yb-master-1-mnt-disk1, dst: /mnt/disk1, copy_up: true}
+  # Compose service yb-master-2 (as yb-master-1)
+  - name: yb_master_2
+    image: {x86_64: images/yugabytedb-yugabyte-2025.2.8.1-b8-amd64.docker.tar, arm64: images/yugabytedb-yugabyte-2025.2.8.1-b8-arm64-oci}
+    image_ref: "yugabytedb/yugabyte:2025.2.8.1-b8"
+    cmd: [/home/yugabyte/bin/yb-master, "--fs_data_dirs=/mnt/master", "--master_addresses=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100", "--rpc_bind_addresses=yb-master-2:7100", "--replication_factor=3", "--durable_wal_write={{wal}}", "--reject_writes_min_disk_space_mb=32"]
+    port: 7100   # hand
+    addr: 10.89.0.12
+    ready: "timeout 30 hydo-oci yb_master_2 curl -fsS -o /dev/null http://yb-master-2:7000/"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    env: {GLIBC_TUNABLES: "glibc.cpu.x86_data_cache_size=0x8000:glibc.cpu.x86_shared_cache_size=0x100000:glibc.cpu.x86_non_temporal_threshold=0xc0000"}   # hand: see the notes at the top
+    storage: {dir: vol/master-2, size_mib: 192}   # hand
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/master-2, dst: /mnt/master, copy_up: true}
+      - {src: /data/vol/anon-yb-master-2-mnt-disk0, dst: /mnt/disk0, copy_up: true}
+      - {src: /data/vol/anon-yb-master-2-mnt-disk1, dst: /mnt/disk1, copy_up: true}
+  # Compose service yb-master-3 (as yb-master-1)
+  - name: yb_master_3
+    image: {x86_64: images/yugabytedb-yugabyte-2025.2.8.1-b8-amd64.docker.tar, arm64: images/yugabytedb-yugabyte-2025.2.8.1-b8-arm64-oci}
+    image_ref: "yugabytedb/yugabyte:2025.2.8.1-b8"
+    cmd: [/home/yugabyte/bin/yb-master, "--fs_data_dirs=/mnt/master", "--master_addresses=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100", "--rpc_bind_addresses=yb-master-3:7100", "--replication_factor=3", "--durable_wal_write={{wal}}", "--reject_writes_min_disk_space_mb=32"]
+    port: 7100   # hand
+    addr: 10.89.0.13
+    ready: "timeout 30 hydo-oci yb_master_3 curl -fsS -o /dev/null http://yb-master-3:7000/"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    env: {GLIBC_TUNABLES: "glibc.cpu.x86_data_cache_size=0x8000:glibc.cpu.x86_shared_cache_size=0x100000:glibc.cpu.x86_non_temporal_threshold=0xc0000"}   # hand: see the notes at the top
+    storage: {dir: vol/master-3, size_mib: 192}   # hand
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/master-3, dst: /mnt/master, copy_up: true}
+      - {src: /data/vol/anon-yb-master-3-mnt-disk0, dst: /mnt/disk0, copy_up: true}
+      - {src: /data/vol/anon-yb-master-3-mnt-disk1, dst: /mnt/disk1, copy_up: true}
+  # Compose service yb-tserver-1
+  # image as yb-master-1
+  # restart: unless-stopped (as yb-master-1)
+  - name: yb_tserver_1
+    image: {x86_64: images/yugabytedb-yugabyte-2025.2.8.1-b8-amd64.docker.tar, arm64: images/yugabytedb-yugabyte-2025.2.8.1-b8-arm64-oci}
+    image_ref: "yugabytedb/yugabyte:2025.2.8.1-b8"
+    cmd: [/home/yugabyte/bin/yb-tserver, "--fs_data_dirs=/mnt/tserver", "--tserver_master_addrs=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100", "--rpc_bind_addresses=yb-tserver-1:9100", "--enable_ysql=true", "--pgsql_proxy_bind_address=yb-tserver-1:5433", "--durable_wal_write={{wal}}", "--reject_writes_min_disk_space_mb=32"]
+    port: 5433
+    addr: 10.89.0.14
+    depends_on: [yb_master_1, yb_master_2, yb_master_3]
+    ready: "timeout 30 hydo-oci yb_tserver_1 curl -fsS -o /dev/null http://yb-tserver-1:9000/"   # hand: see the notes at the top
+    ready_timeout: 120
+    restart: "unless-stopped"
+    env: {GLIBC_TUNABLES: "glibc.cpu.x86_data_cache_size=0x8000:glibc.cpu.x86_shared_cache_size=0x100000:glibc.cpu.x86_non_temporal_threshold=0xc0000"}   # hand: see the notes at the top
+    storage: {dir: vol/tserver-1, size_mib: 512}   # hand
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/tserver-1, dst: /mnt/tserver, copy_up: true}
+      - {src: /data/vol/anon-yb-tserver-1-mnt-disk0, dst: /mnt/disk0, copy_up: true}
+      - {src: /data/vol/anon-yb-tserver-1-mnt-disk1, dst: /mnt/disk1, copy_up: true}
+  # Compose service yb-tserver-2 (as yb-tserver-1)
+  - name: yb_tserver_2
+    image: {x86_64: images/yugabytedb-yugabyte-2025.2.8.1-b8-amd64.docker.tar, arm64: images/yugabytedb-yugabyte-2025.2.8.1-b8-arm64-oci}
+    image_ref: "yugabytedb/yugabyte:2025.2.8.1-b8"
+    cmd: [/home/yugabyte/bin/yb-tserver, "--fs_data_dirs=/mnt/tserver", "--tserver_master_addrs=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100", "--rpc_bind_addresses=yb-tserver-2:9100", "--enable_ysql=true", "--pgsql_proxy_bind_address=yb-tserver-2:5433", "--durable_wal_write={{wal}}", "--reject_writes_min_disk_space_mb=32"]
+    port: 5433
+    addr: 10.89.0.15
+    depends_on: [yb_master_1, yb_master_2, yb_master_3]
+    ready: "timeout 30 hydo-oci yb_tserver_2 curl -fsS -o /dev/null http://yb-tserver-2:9000/"   # hand: see the notes at the top
+    ready_timeout: 120
+    restart: "unless-stopped"
+    env: {GLIBC_TUNABLES: "glibc.cpu.x86_data_cache_size=0x8000:glibc.cpu.x86_shared_cache_size=0x100000:glibc.cpu.x86_non_temporal_threshold=0xc0000"}   # hand: see the notes at the top
+    storage: {dir: vol/tserver-2, size_mib: 512}   # hand
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/tserver-2, dst: /mnt/tserver, copy_up: true}
+      - {src: /data/vol/anon-yb-tserver-2-mnt-disk0, dst: /mnt/disk0, copy_up: true}
+      - {src: /data/vol/anon-yb-tserver-2-mnt-disk1, dst: /mnt/disk1, copy_up: true}
+  # Compose service yb-tserver-3 (as yb-tserver-1)
+  - name: yb_tserver_3
+    image: {x86_64: images/yugabytedb-yugabyte-2025.2.8.1-b8-amd64.docker.tar, arm64: images/yugabytedb-yugabyte-2025.2.8.1-b8-arm64-oci}
+    image_ref: "yugabytedb/yugabyte:2025.2.8.1-b8"
+    cmd: [/home/yugabyte/bin/yb-tserver, "--fs_data_dirs=/mnt/tserver", "--tserver_master_addrs=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100", "--rpc_bind_addresses=yb-tserver-3:9100", "--enable_ysql=true", "--pgsql_proxy_bind_address=yb-tserver-3:5433", "--durable_wal_write={{wal}}", "--reject_writes_min_disk_space_mb=32"]
+    port: 5433
+    addr: 10.89.0.16
+    depends_on: [yb_master_1, yb_master_2, yb_master_3]
+    ready: "timeout 30 hydo-oci yb_tserver_3 curl -fsS -o /dev/null http://yb-tserver-3:9000/"   # hand: see the notes at the top
+    ready_timeout: 120
+    restart: "unless-stopped"
+    env: {GLIBC_TUNABLES: "glibc.cpu.x86_data_cache_size=0x8000:glibc.cpu.x86_shared_cache_size=0x100000:glibc.cpu.x86_non_temporal_threshold=0xc0000"}   # hand: see the notes at the top
+    storage: {dir: vol/tserver-3, size_mib: 512}   # hand
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/tserver-3, dst: /mnt/tserver, copy_up: true}
+      - {src: /data/vol/anon-yb-tserver-3-mnt-disk0, dst: /mnt/disk0, copy_up: true}
+      - {src: /data/vol/anon-yb-tserver-3-mnt-disk1, dst: /mnt/disk1, copy_up: true}
+
+workload:
+  steps: 40
+  timeout: 600
+
+test:
+  parallel: 3
+  per_round: 3
+  round_ms: 500
+  command_timeout: 90   # hand: after a power cut the cluster elects its tablet leaders first (the read-backs retry)
+  drain_timeout: 60
+  check_every: 4
+
+faults: [kill, pause, network, oneway, cut, clock, disk, corrupt, powerloss]

@@ -1,0 +1,20 @@
+#!/bin/sh
+# hydo-msg: a newer update is not undone by the rows of an earlier, larger transaction (YugabyteDB issue 30772)
+# After the faults (in the recovery boot after a power cut: every tserver replayed its WAL),
+# 100 rows from the end of the large transaction get a newer value, the table is flushed and
+# compacted, and the 100 rows must keep the newer value. Before the fix, a restart replayed only
+# the first 100,000 records of the large transaction; the rest stayed as intents and, after a
+# flush and compaction, came back as the newest version (YugabyteDB technical advisory TA-30772).
+. /hydo/workload/helper_bigtxn.sh
+wait_ysql 300 || { echo "YSQL does not answer"; exit 2; }
+old=$(q "SELECT count(*) FROM big WHERE v <> 1") || { echo "cannot read"; exit 2; }
+[ "$old" = 0 ] || { echo "the acknowledged large update is missing on $old rows"; exit 1; }
+q "UPDATE big SET v = 2 WHERE id > 119900" || { echo "the newer update failed"; exit 2; }
+admin flush_table ysql.yugabyte big >/dev/null || { echo "flush_table failed"; exit 2; }
+admin compact_table ysql.yugabyte big >/dev/null || { echo "compact_table failed"; exit 2; }
+bad=$(q "SELECT count(*) FROM big WHERE id > 119900 AND v <> 2") || { echo "cannot read"; exit 2; }
+ids=$(q "SELECT string_agg(id::text || '=' || v::text, ' ') FROM (SELECT id, v FROM big WHERE id > 119900 AND v <> 2 ORDER BY id LIMIT 5) s")
+[ "$bad" = 0 ] && { echo "the newer update kept on 100 of 100 rows"; exit 0; }
+echo "rows: $ids"
+echo "the newer update was undone on $bad of 100 rows after a flush and compaction"
+exit 1

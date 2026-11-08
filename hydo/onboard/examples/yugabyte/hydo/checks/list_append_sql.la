@@ -1,0 +1,16 @@
+#!/bin/sh
+# hydo: history=la consistency=strict-serializable
+# hydo-msg: the SQL list-append transactions are strict-serializable (no lost, aborted or duplicated append, no dependency cycle)
+# History la holds every transaction; every node is a primary (its reads are current), so real
+# time is claimed: an acknowledged append missing from a later read is a lost write, also across
+# a power cut. (sql-gen wrote "one primary serves them all"; with three it is the same claim.)
+# The final read-back: every list, in one transaction on n1. hand: tried up to 10 times, 3 s
+# apart: right after a power cut the cluster is still electing its tablet leaders, and one
+# failed read left the history incomplete (a failed attempt is recorded as a failed read, which
+# the checker ignores).
+i=0
+while :; do
+  hydo-sql list-append read-all n1 9999 && exit 0
+  i=$((i + 1)); [ "$i" -lt 10 ] || exit 2
+  sleep 3
+done
