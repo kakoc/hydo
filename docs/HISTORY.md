@@ -4346,3 +4346,89 @@ exploration's third minimal schedule `disk=lying:6 dseed=b3c3d806a5d34604 | run 
 (`72764bbb630728d2`). Deferred, with the reasons in the release notes: exit codes per verdict,
 the Compose import header's old path, and hiding the property table of projects without SDK
 assertions (each moves recorded answers or an exit status).
+
+**The release commit** is `2aa54fa49a7a94639e4e03cd03776762e80ae190` (the 0.3.0 changes, the merges of
+M187, M189 and M191, and step 6a's fixes); the commit after it (this text, AGENTS.md) is
+documentation only. A first set of release files from `a9cebed7`, which step 6a reviewed, was set
+aside.
+
+**Checks on the release commit** (this Mac): `cargo fmt --check`, `cargo clippy --locked
+--workspace --all-targets -- -D warnings`, `cargo test --locked --release --workspace`
+(every test program passed), `sh ci/vale.sh` with no findings and `cargo test -p hydo --test it docs::`; the SDK
+checks of docs/PUBLISHING.md (the Rust SDK and test SDK, Go 1.26.5 and the installed Go vet and
+tests of `sdk/go` and the frozen copy, Python, JavaScript); `hydo/dist/registries.sh versions
+0.3.0` (the release workflow's version check) passes; `HYDO_REHEARSAL_LINUX=1
+hydo/dist/crates/rehearse.sh <a folder outside the repository>` packed the 20 crates, installed
+`hydo 0.3.0` offline from the stand-in registry and checked the musl target (inside the
+repository, `target/crates-rehearsal`, its step 5 fails: cargo takes the packed crate for a member
+of the workspace).
+
+**The release files** (each platform built twice from clean targets with the same bytes):
+- Linux, on the bare-metal machine (`~/hydo-r030f1`, `~/hydo-r030f2`, `/var/tmp/hydo-QUIET`
+  while building, `HYDO_ASSETS_FROM=~/hydo-m172-assets HYDO_SOURCES_FROM=~/hydo-m159-sources`):
+  `hydo-linux-0.3.0.tar.gz` 66,720,142 bytes `2af98e9fbc2d2067b28e7550d8bffd75869f53143ad0c3a82357cd9f210c03ba`,
+  `hydo-linux-0.3.0-sources.tar.gz` 482,554,675 bytes
+  `00a4c143184199b652216ea6ef201ba17dd43e60c7d5d5b492c8205980e3c4c8`.
+- Mac, on this Mac (one fixed tree path in the session's scratch folder): unsigned
+  `hydo-mac-0.3.0.tar.gz` `d860aae91ea569fbfaab9db0b5682c8250842e9eaaf4ba597a03a209caf830d1` (not published),
+  `hydo-mac-0.3.0-sources.tar.gz` 690,045,715 bytes
+  `b294cca72f5ad2563798a89ca19f7c224e61f8baef9c36df5bba68925cfa29b1`. `sign-release.sh` on the first
+  build (codesign asked nothing): notarization `b88e6e94-3cc3-43cb-bc1e-441ac113e6df` Accepted; the
+  signatures asset `hydo-mac-0.3.0-signatures.tar.gz`
+  `2f193ddbe018dbca913169ea5f218c76a8c8a81a4b56890f19215d2d13a8a647`; the signed tarball (33,090,388 bytes)
+  `c89d51ba0d3b879ad46aaf61ab5f2376bebd1ace17a03c82422b49dcadf535ae`; `attach-signatures.sh` with
+  the asset on the second build gave it byte for byte.
+- All five and `SHA256SUMS` are in `hydo/dist/out/0.3.0/` of the main checkout; the prepared
+  material (release notes, the Homebrew formula, the release-index patch, the notary answer and
+  log, the skill release `hydo-skill-1.2.0.tar.gz`
+  `b05f98d053c3afb35caba6b95ffd158dabd701a0a8dda4ab047c3ac77b867f76`) in `prepared/`.
+- Against 0.2.0's tarballs: both add `guest/hydo-world-tls` and `guest/hydo-sql` (and the license
+  texts of the TLS build's crates), and differ in the programs, `guest/hydo-world`, (Linux)
+  `guest/hydo-grpc` and `libexec/hydo-grpc-gen`, `install.sh`, the documents, `SHA256SUMS`,
+  `THIRD-PARTY.md`, `VERSION` and (Linux) the module's sources (M179). No guest kernel, no pinned
+  asset and no other guest program changed.
+
+**Verified from clean prefixes.**
+- hvx (the bare-metal machine, PATH without Python, Go, Rust, Nix, compilers and make, no trap
+  called; the module `869F246124D8A3F84879E74` before and after): `install.sh --no-module`;
+  `hydo doctor` 0 failed, 2 warnings; the Redis image `d255fb2b…`, `1893d8c55d7704d9` OK,
+  `3520af95868b4e8f` VIOLATION k:1 and `disk=cut | run C=12` `5cfee0d955a38b78` OK, netem
+  `bd4c979f…` `0a706d74e43f2f4b`, each twice; `hydo repro` reproduced; the exploration 11
+  failures with the two minimal schedules, `hydo repro hydo-out/explore` 13 of 13; the same as
+  root (in-process engine); `hydo init` (`hydo_version: "0.3"`) and `hydo build --check`; one
+  8 GiB guest (the Redis example with `guest.ram_mib: 8192`, image `3b008fe6…`) OK
+  `6c2206c48c95c9cf` twice; `hydo module build` from another prefix: srcversion
+  `869F246124D8A3F84879E74` (built only).
+- KVM (the build machine): `install.sh --no-module` ends with `hydo doctor --backend kvm`, all
+  checks passed, and the line about `--backend kvm`; `bfa03053d51bec8a`, `8ed16d6da60c34c6`,
+  `c5b4f7cbd0ec3ac7`, each twice; `HYDO_BACKEND=kvm` and `HYDO_KVM=process` the same; `hydo
+  repro` of a KVM run and of the exploration without `--backend` reproduced (1 of 1, 14 of 14);
+  the exploration 11 failures with three minimal schedules, its report's commands carry
+  `--backend kvm`; netem `0fcb6905c8f54cd1` twice; the build's `next:` line carries
+  `--backend kvm` and, with two images, `--image`; `hv/kvm/v3-check.sh` 5 of 5 (with a static
+  `hydoavx` built on the bare-metal machine: the build machine's `cc` has no static libc).
+- Mac (the signed tarball, the quarantine attribute on `bin/*`, stubs for Python, pip, Go, cargo,
+  rustc, rustup, Nix, the compilers, make, xcrun and Docker, none called): setup's record has no
+  `signed` line, `hydo setup --check` and a second setup do nothing; `hydo doctor` all checks
+  passed, naming the Developer ID; the four programs `codesign --verify --strict` valid,
+  `flags=0x10000(runtime)`, timestamps, `spctl` "accepted, source=Notarized Developer ID"; every
+  Mac value twice (`67e5d6469f1a90a5`, `a6870a92a1bbf0ae`, `1785bbb72e7ffba2`,
+  `ed3651af0bf0fb7e`, `aad758f1a6d55892`, ledger-spin `aa732142c0f5567f`, `3b4dd4910d2a6123`);
+  `hydo repro` reproduced; the exploration 11 failures, 13 of 13 reproduced; `hydo init` and
+  `hydo build --check`.
+
+**Re-baseline checks on the release commit** (docs/RELEASING.md step 1.4): `hydo-bench rebaseline
+--check --thorough` exits 0 on all three engines, from the release commit's tree with the final
+release files: the bare-metal machine (39 images each built twice with the same bytes, 132
+schedules each run twice from fresh boots, every value as recorded; 7,637 s; at most two VMs,
+the module `869F246124D8A3F84879E74` before and after), this Mac (21 images, 76 schedules; 1,528 s)
+and the build machine with KVM (4 images, 13 schedules; the two stack images taken from the
+bare-metal machine's builds). So M191's controller change and the merged branches moved no
+recorded value, and the epoch stays 1.
+
+**Content scans** (as M177's): the Linux tarball: the GitHub owner only in the project's public
+names, the hosting company's letters as accidental bytes of binary third-party files, the
+time-zone name in libstdc++'s table; no home path; remote-shell words only in library strings and
+third-party files; no competitor name. The signed Mac tarball: the owner in the public names and
+the time-zone name in libstdc++. The signatures asset: nothing. Both sources archives' own files:
+the owner in RELEASING.md's tap name only.

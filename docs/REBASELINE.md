@@ -3313,3 +3313,9 @@ twice. The images that moved are the same as for 0.2.0, for the same reasons.
 libsql-replica and postgres-sql, are recorded in their own RESULTS.md), so they moved no recorded
 value. `hydo-sql`'s build gives the same bytes in any checkout path since 0.3.0 (docs/BUILD-PINS.md
 "hydo-sql").
+
+**Runs added for 0.3.0.** The quickstarts cite the release example's `disk=cut | run C=12` (OK,
+acked=12), so it is recorded on each engine (hvx `5cfee0d955a38b78`, the Mac `1785bbb72e7ffba2`, KVM
+`c5b4f7cbd0ec3ac7`), and the KVM exploration's third minimal schedule
+`disk=lying:6 dseed=b3c3d806a5d34604 | run C=5` (`72764bbb630728d2`). `--check --thorough` from the
+release commit gave every value of the list on all three engines.
