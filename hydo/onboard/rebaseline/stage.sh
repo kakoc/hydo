@@ -193,7 +193,7 @@ linux_prepare() {
         bash "$T/hydo/bench/build-order-services.sh" "$IN/orders" fix
       install -m 0755 "$IN/orders/fix-hydostack" "$ST/$X/stackgen/front-door"
       mkdir -p "$IN/grpc-client"
-      have "$IN/grpc-client/hydo-grpc" f2ad5e72e59dfd02f950fd55757ef799a2b76141d8112159354a0be734019aa6 \
+      have "$IN/grpc-client/hydo-grpc" a2b7f6daea04b60d63edc97fb4c4cab873575fc78cfd58b4943827dca8dc24ff \
         || "$T/hydo/grpcgen/build-client.sh" --out "$IN/grpc-client" amd64
       ( cd "$T" && HYDO_GRPC_CLIENT=$IN/grpc-client "$T/target/release/hydo-grpc-gen" hydo/stack/proto \
           --hints hydo/stack/grpc-hints.yaml --out "$ST/$X/stackgen/grpcgen" );;
@@ -340,7 +340,7 @@ mac_prepare() {
       copy $X/shop; mkdir -p "$ST/build"
       gobuild "$ST/$X/shop/src" "$ST/build/shop-buggy" arm64
       gobuild "$ST/$X/shop/src" "$ST/build/shop-fixed" arm64 -tags=fixed;;
-    mac-grpc)   # orderd for arm64, the generated drivers with the arm64 client (pinned 55445870...)
+    mac-grpc)   # orderd for arm64, the generated drivers with the arm64 client (pinned d2d41ea4...)
       copy hydo/grpcgen; mac_redis_files hydo/grpcgen/demo
       mkdir -p "$ST/hydo/grpcgen/demo/build"
       ( cd "$ST/hydo/grpcgen" && GOPATH=$W/go GOMODCACHE=$IN/gomod GOCACHE=$W/go-cache GOFLAGS=-mod=readonly GOTOOLCHAIN=local \
@@ -348,9 +348,9 @@ mac_prepare() {
           -o demo/build/orderd-arm64 ./demo/orderd )
       say "orderd-arm64 sha256 $(sha "$ST/hydo/grpcgen/demo/build/orderd-arm64" | cut -c1-16)"
       mkdir -p "$IN/grpc-client"
-      [ -f "$IN/grpc-client/hydo-grpc.arm64" ] && [ "$(sha "$IN/grpc-client/hydo-grpc.arm64" | cut -c1-8)" = 55445870 ] \
+      [ -f "$IN/grpc-client/hydo-grpc.arm64" ] && [ "$(sha "$IN/grpc-client/hydo-grpc.arm64" | cut -c1-8)" = d2d41ea4 ] \
         || "$T/hydo/grpcgen/build-client.sh" --out "$IN/grpc-client" amd64 arm64
-      [ "$(sha "$IN/grpc-client/hydo-grpc.arm64" | cut -c1-8)" = 55445870 ] || die "the arm64 gRPC client is not the pinned 55445870..."
+      [ "$(sha "$IN/grpc-client/hydo-grpc.arm64" | cut -c1-8)" = d2d41ea4 ] || die "the arm64 gRPC client is not the pinned d2d41ea4..."
       ( cd "$ST" && HYDO_GRPC_CLIENT=$IN/grpc-client "$T/target/release/hydo-grpc-gen" hydo/grpcgen/demo/proto \
           --hints hydo/grpcgen/demo/hints.yaml --out hydo/grpcgen/demo/build/gen --arch amd64,arm64 );;
     mac-voting)   # the arm64 images as docker save archives (fetch-images-mac.sh, network once)
