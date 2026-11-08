@@ -1482,7 +1482,12 @@ fn check_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize, exports: &BTreeMap<String, Str
     // check's command has no redirection of its own: compose.sh's shell writes its line after a
     // signal to its error output, which eval_inv's `> $H/inv.$i.out 2>&1` made that file too,
     // between the check's output and the timeout line
-    let out = busybox::with_signal_line(r.out, r.sig);
+    let mut out = busybox::with_signal_line(r.out, r.sig);
+    if r.status == 1 {
+        if let Some(o) = sql_rows_in_last_line(&c.cmd, &out) {
+            out = o;
+        }
+    }
     Ok(match r.status {
         0..=2 => Ran {
             out,
@@ -1502,9 +1507,89 @@ fn check_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize, exports: &BTreeMap<String, Str
     })
 }
 
+/// How many of a failing `.sql` check's rows go into its verdict line, and how long that part
+/// may be.
+const SQL_ROWS: usize = 3;
+const SQL_ROWS_BYTES: usize = 400;
+
+/// A failing `.sql` check (`checks/<kind>_<name>.sql`, run as `hydo-sql none --file ...`) prints
+/// up to five offending rows, one per line, and then its summary line; the verdict and the
+/// check's finding keep only the last line. Milestone 192: the first rows are appended to that
+/// line (bounded), so they reach `result.json`, the report and the printed verdict instead of
+/// staying only in the agent's console frame. None for any other check, or without row lines.
+pub(super) fn sql_rows_in_last_line(cmd: &str, out: &str) -> Option<String> {
+    if !cmd.starts_with("exec hydo-sql none --file ") {
+        return None;
+    }
+    let ls: Vec<&str> = out.lines().filter(|l| !l.trim().is_empty()).collect();
+    let (last, rows) = ls.split_last()?;
+    let rows: Vec<String> = rows
+        .iter()
+        .filter(|l| !l.starts_with("HYDO-"))
+        .take(SQL_ROWS)
+        .map(|l| cut(l.trim(), 160))
+        .collect();
+    if rows.is_empty() {
+        return None;
+    }
+    let more = ls.len() - 1 > rows.len();
+    let mut tail = rows.join(" | ");
+    if tail.len() > SQL_ROWS_BYTES {
+        tail = cut(&tail, SQL_ROWS_BYTES);
+    }
+    let lead: String = ls[..ls.len() - 1].join("\n");
+    Some(format!(
+        "{lead}\n{last}; first rows: {tail}{}\n",
+        if more { " | ..." } else { "" }
+    ))
+}
+
+/// At most `n` bytes of `s`, on a character boundary, with `...` when cut.
+fn cut(s: &str, n: usize) -> String {
+    if s.len() <= n {
+        return s.to_string();
+    }
+    let mut i = n.saturating_sub(3);
+    while !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    format!("{}...", &s[..i])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failing_sql_check_keeps_its_first_rows_in_the_verdict() {
+        let cmd = "exec hydo-sql none --file /hydo/checks/final_no_negative.sql --on primary";
+        let out = "primary: id=3 bal=-20\nprimary: id=7 bal=-5\nprimary: id=9 bal=-1\nprimary: id=11 bal=-2\nno negative balance: primary: 4 rows where none may be\n";
+        let o = sql_rows_in_last_line(cmd, out).unwrap();
+        let d = crate::schedule::inv_detail(&o);
+        assert_eq!(
+            d,
+            "no negative balance: primary: 4 rows where none may be; first rows: primary: id=3 bal=-20 | primary: id=7 bal=-5 | primary: id=9 bal=-1 | ..."
+        );
+        // the row lines stay where they were
+        assert!(o.starts_with("primary: id=3 bal=-20\n"));
+        // one row, no ellipsis
+        let o1 = sql_rows_in_last_line(cmd, "p: k=1\np: 1 rows where none may be\n").unwrap();
+        assert_eq!(
+            crate::schedule::inv_detail(&o1),
+            "p: 1 rows where none may be; first rows: p: k=1"
+        );
+        // long rows are cut
+        let long = format!("p: v={}\np: 1 rows where none may be\n", "x".repeat(1000));
+        let d = crate::schedule::inv_detail(&sql_rows_in_last_line(cmd, &long).unwrap());
+        assert!(d.len() < 300 && d.ends_with("..."), "{d}");
+        // other checks, and an output without rows, are left alone
+        assert_eq!(sql_rows_in_last_line("exec hydo-sql bank-total", out), None);
+        assert_eq!(sql_rows_in_last_line("exec ./checks/final_x", out), None);
+        assert_eq!(
+            sql_rows_in_last_line(cmd, "p: cannot run the query: boom\n"),
+            None
+        );
+    }
 
     #[test]
     fn awk_numbers() {
