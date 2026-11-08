@@ -93,7 +93,10 @@ fn storage_faults_name_a_service_with_storage() {
     assert!(e.contains("has no file system of its own"), "{e}");
     let s = plan("hydo/onboard/examples/redis/storage-faults.yaml");
     accepted(&s, "disk=none dseed=1 | run L=redis@10+2");
-    accepted(&s, "disk=none dseed=1 | run G=redis@10+2:trunc,len=40,file=.incr.aof");
+    accepted(
+        &s,
+        "disk=none dseed=1 | run G=redis@10+2:trunc,len=40,file=.incr.aof",
+    );
     let e = refused(&s, "disk=none | run L=nosuch@10+2");
     assert!(e.contains("which this image does not have"), "{e}");
 }

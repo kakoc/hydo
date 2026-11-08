@@ -816,8 +816,8 @@ R	^	<tmp>/cases/v-data-int.json --arch x86_64 []	crash	"hydo-build stops here wi
 R	^	<tmp>/cases/v-data-int.json --arch arm64 []	crash	"hydo-build stops here with a Python exception: int object is not iterable"
 R	^	<tmp>/cases/v-root-unknown.json --arch x86_64 []	err	"root: unknown field(s) nope (known: description, dirs, files…#d29eba71102dc6a8"
 R	^	<tmp>/cases/v-root-unknown.json --arch arm64 []	err	"root: unknown field(s) nope (known: description, dirs, files…#d29eba71102dc6a8"
-R	^	<tmp>/cases/v-guest-unknown.json --arch x86_64 []	err	"guest: unknown field(s) ram (known: clock_after_cut, clock_s…#18faba428de757f9"
-R	^	<tmp>/cases/v-guest-unknown.json --arch arm64 []	err	"guest: unknown field(s) ram (known: clock_after_cut, clock_s…#18faba428de757f9"
+R	^	<tmp>/cases/v-guest-unknown.json --arch x86_64 []	err	"guest: unknown field(s) ram (known: clock_after_cut, clock_s…#648d368a27507384"
+R	^	<tmp>/cases/v-guest-unknown.json --arch arm64 []	err	"guest: unknown field(s) ram (known: clock_after_cut, clock_s…#648d368a27507384"
 R	^	<tmp>/cases/v-guest-0.json --arch x86_64 []	err	"guest.clock_after_cut: whole seconds in [1, 315360000] (got 0)"
 R	^	<tmp>/cases/v-guest-0.json --arch arm64 []	err	"guest.clock_after_cut: whole seconds in [1, 315360000] (got 0)"
 R	^	<tmp>/cases/v-guest-1.json --arch x86_64 []	ok	d:c879d842 w:4f53cda1 c:fa1f878c m:74234e98
@@ -2986,7 +2986,7 @@ R	^	<tmp>/mutants/m1954.json --arch x86_64 []	err	"root.files[7].src: {{p}} is n
 R	^	<tmp>/mutants/m1955.json --arch x86_64 []	err	"root.files[7].dst: a string (or a whole number), not ['x'] (…#bbfec952768722ed"
 R	^	<tmp>/mutants/m1956.json --arch x86_64 []	err	"services[0]: must be a mapping"
 R	^	<tmp>/mutants/m1957.json --arch x86_64 []	err	"root.files[12].src: a string (or a whole number), not None (…#a60d5b144b162e69"
-R	^	<tmp>/mutants/m1958.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: clock_after_cut, clock…#5e2623dff4ec2b85"
+R	^	<tmp>/mutants/m1958.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: clock_after_cut, clock…#55f76c2e671fca32"
 R	^	<tmp>/mutants/m1959.json --arch x86_64 []	err	"root.files[20]: missing field `dst` (project format 1; the s…#7acd1a4df93b68d9"
 R	^	<tmp>/mutants/m1960.json --arch x86_64 []	ok	d:bf28f1bd w:4f53cda1 c:0e13c9eb m:74234e98
 R	^	<tmp>/mutants/m1961.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
@@ -4484,7 +4484,7 @@ R	^	<tmp>/mutants/m3452.json --arch x86_64 []	ok	d:d22cfcf6 w:4f53cda1 c:e1dbb06
 R	^	<tmp>/mutants/m3453.json --arch x86_64 []	err	"root.files[0]: invalid type: integer `5000`, expected a mapp…#974cd2ce01c5decf"
 R	^	<tmp>/mutants/m3454.json --arch x86_64 []	ok	d:5266da1e w:4f53cda1 c:698cc8c4 m:74234e98
 R	^	<tmp>/mutants/m3455.json --arch x86_64 []	err	"faults: unknown kind '127.0.0.1' (known: clock, corrupt, cut…#1cf6dbcc44f68306"
-R	^	<tmp>/mutants/m3456.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: clock_after_cut, clock…#5e2623dff4ec2b85"
+R	^	<tmp>/mutants/m3456.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: clock_after_cut, clock…#55f76c2e671fca32"
 R	^	<tmp>/mutants/m3457.json --arch x86_64 []	ok	d:469d53a5 w:4f53cda1 c:85c7a76f m:74234e98
 R	^	<tmp>/mutants/m3458.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m3459.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
@@ -4868,7 +4868,7 @@ R	^	<tmp>/mutants/m3836.json --arch x86_64 []	err	"invariants[0].msg: a string (
 R	^	<tmp>/mutants/m3837.json --arch x86_64 []	err	"services[0]: must be a mapping"
 R	^	<tmp>/mutants/m3838.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: int object is not iterable"
 R	^	<tmp>/mutants/m3839.json --arch x86_64 []	err	"invariants[0]: unknown field(s) ., 0, 1, 7, 8, 9 (known: aft…#c0753051c3a60945"
-R	^	<tmp>/mutants/m3840.json --arch x86_64 []	err	"guest: unknown field(s) 3, v (known: clock_after_cut, clock_…#63ad27eb5d576a74"
+R	^	<tmp>/mutants/m3840.json --arch x86_64 []	err	"guest: unknown field(s) 3, v (known: clock_after_cut, clock_…#95dfdfb9452518c5"
 R	^	<tmp>/mutants/m3841.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m3842.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m3843.json --arch x86_64 []	err	"data: unknown field(s) bogus (known: description, dirs, mount, size_mib)"
@@ -4882,7 +4882,7 @@ R	^	<tmp>/mutants/m3850.json --arch x86_64 []	err	"services[0] (restate): image 
 R	^	<tmp>/mutants/m3851.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m3852.json --arch x86_64 []	err	"top level: missing required field 'name'"
 R	^	<tmp>/mutants/m3853.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
-R	^	<tmp>/mutants/m3854.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: clock_after_cut, clock…#5e2623dff4ec2b85"
+R	^	<tmp>/mutants/m3854.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: clock_after_cut, clock…#55f76c2e671fca32"
 R	^	<tmp>/mutants/m3855.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m3856.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m3857.json --arch x86_64 []	err	"faults: unknown kind 'x' (known: clock, corrupt, cut, disk, …#8b86476f0798524a"
@@ -4927,7 +4927,7 @@ R	^	<tmp>/mutants/m3895.json --arch x86_64 []	err	"invariants[0]: unknown field(
 R	^	<tmp>/mutants/m3896.json --arch x86_64 []	err	"faults: unknown kind '10.89.0.7' (known: clock, corrupt, cut…#9d7311355e24eaaf"
 R	^	<tmp>/mutants/m3897.json --arch x86_64 []	err	"invariants[0]: missing required field 'id'"
 R	^	<tmp>/mutants/m3898.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#72658585ca95ef3d"
-R	^	<tmp>/mutants/m3899.json --arch x86_64 []	err	"guest: unknown field(s)  , A, b (known: clock_after_cut, clo…#67db5134191363a7"
+R	^	<tmp>/mutants/m3899.json --arch x86_64 []	err	"guest: unknown field(s)  , A, b (known: clock_after_cut, clo…#5c45d5d6fcf4ca78"
 R	^	<tmp>/mutants/m3900.json --arch x86_64 []	err	"root.files[0].dst: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m3901.json --arch x86_64 []	err	"knobs[0].values: invalid type: boolean `false`, expected a l…#90664fa2704d092f"
 R	^	<tmp>/mutants/m3902.json --arch x86_64 []	ok	d:631b80e0 w:4f53cda1 c:81e0b8cc m:74234e98

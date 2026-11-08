@@ -4528,7 +4528,7 @@ R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00523.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[2].bogus: unknown field `bogus`, expe…#390af1ba10645716"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00524.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s) a (known: clock_after_cu…#b3b1fd273e72a188"
+R	^	<tmp>/mutant00524.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s) a (known: clock_after_cu…#a0ae44a70b579672"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00525.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[2].bogus: unknown field `bogus`, expe…#390af1ba10645716"
@@ -4708,7 +4708,7 @@ R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00583.json --arch x86_64 --check	run	1	""	"hydo-build: faults: invalid type: mapping, expected a list (…#23cd05090705e606"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00584.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: clock_after_cu…#a501f21a710ee27f"
+R	^	<tmp>/mutant00584.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: clock_after_cu…#7397226bcd4711a4"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00585.json --arch x86_64 --check	run	1	""	"hydo-build: guest.cpu: v2 (the default: x86-64-v2, no AVX) o…#58bb5df045c3d480"
@@ -4906,7 +4906,7 @@ R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00649.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#3fc1eb5c73b15672"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00650.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) 1, 2 (known: clock_after…#144458e6bfae3a17"
+R	^	<tmp>/mutant00650.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) 1, 2 (known: clock_after…#42c74d945011b771"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00651.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vote): image <tmp>/images/dockersam…#3fc1eb5c73b15672"
@@ -6070,7 +6070,7 @@ R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01037.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (restate): image <tmp>/restate-1.7.1…#63f64a86a74fdc92"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01038.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: clock_afte…#7efefe09bc8c6e13"
+R	^	<tmp>/mutant01038.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: clock_afte…#4858d6d5424d9e05"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01039.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#2bfb77ed4e92bf87"
@@ -6322,7 +6322,7 @@ R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant01121.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]: unknown field(s) k (known: default, de…#72b3eb0b6f52dfd7"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01122.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: clock_after_cu…#a501f21a710ee27f"
+R	^	<tmp>/mutant01122.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: clock_after_cu…#7397226bcd4711a4"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01123.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[6]: unknown field(s) bogus (known: af…#0430fc6222bdb73c"
