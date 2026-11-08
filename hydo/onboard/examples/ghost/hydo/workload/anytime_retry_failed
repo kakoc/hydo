@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=90
+# The operator presses "retry" on every newsletter Ghost reports as failed.
+exec hydo-oci ghost node /hydo/workload/helper_client.mjs retry

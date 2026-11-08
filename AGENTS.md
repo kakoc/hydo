@@ -468,6 +468,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 68. Agent environments: no network in the guest, no incremental state hash (the full
     fingerprint costs about 0.8 s per call), one vCPU, no way to drop a snapshot, and a session on hvx
     holds only 5 branches (M199).
+69. The KVM engine gave two fingerprints for one Ghost schedule
+    (`H=mailgun.messages@0-12:status=500,effect=yes`) with the same transcript, consoles and
+    verdict; not investigated (M200).
 
 ## Milestone index
 
@@ -689,6 +692,8 @@ build machine, before 2026-10-13.
 - M199: deterministic, branchable environments for AI agents, a spike (`hydo inspect exec
   --branch`, `state_fp`, 64 snapshots on KVM and the Mac, the agent-workspace example;
   `docs/design/agent-environments.md`)
+- M200: Ghost onboarded on KVM (Mailgun and Stripe faked over HTTPS); a donation is recorded once
+  per webhook delivery (known upstream), a newsletter batch whose answer is lost goes out again
 
 ## Where to look
 

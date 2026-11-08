@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=60
+# The audience changes: a new member joins, or one of the first 15 members leaves every
+# newsletter (chosen by the seed).
+exec hydo-oci ghost node /hydo/workload/helper_client.mjs audience "$HYDO_SEED"

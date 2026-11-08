@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: within=180 after=heal poll=5
+# hydo-msg: a batch Ghost recorded as sent never reached Mailgun
+# Ghost keeps Mailgun's message id per batch; the fake answers <seq>@mg.example.com.
+exec hydo-sql check subset \
+  --left "ghost=sql db \"SELECT mailgun_message_id FROM email_batches WHERE status = 'submitted'\"" \
+  --right "mailgun=world mailgun.messages --item {seq}@mg.example.com"

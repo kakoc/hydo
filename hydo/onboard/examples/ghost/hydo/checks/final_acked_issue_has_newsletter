@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo-msg: an issue whose publication Ghost acknowledged has no newsletter
+# $HYDO_ACKED holds the slugs (p-<n>) of acknowledged publications.
+exec hydo-sql check subset --left "acked=hydo acked" \
+  --right "ghost=sql db \"SELECT p.slug FROM posts p JOIN emails e ON e.post_id = p.id\""

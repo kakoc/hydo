@@ -4879,3 +4879,47 @@ about 1 MB after a trivial command and about 46 MB after a test run.
 **Missing for real agent use:** the network (a local mirror in the image, or record and replay
 at the edge), an incremental state hash, an API made for agents with fewer stops per call, more
 than one vCPU, and dropping a snapshot (open item 68).
+
+### Milestone 200 — DONE (Ghost onboarded on the KVM engine as an outside user would; 2026-11-08)
+
+The second onboarding of the second round: **Ghost 6.75.0** (publishing and newsletters, Node.js,
+MySQL 8) from its official Docker image, with both outside providers faked over HTTPS (`tls:`):
+Mailgun for newsletters and Stripe for readers' donations, Stripe's checkout webhook signed
+(`sign:`) and the webhook endpoint kept as a fake object (`save:`/`load:`). The business rules are
+`.sql` checks and `hydo-sql check` comparisons between MySQL and the fakes' record. Everything ran
+on the build machine with the KVM engine; the images were built on the bare-metal machine. The
+example is `hydo/onboard/examples/ghost/`; its `RESULTS.md` has every table, the friction log and
+the comparison with Medusa's onboarding (Milestone 174).
+
+**Did the first round's fixes remove its friction?** Mostly. HTTPS to both providers was two
+`tls:` lines and worked at the first run; no image needed a writable root or a tmpfs; the first
+run of the first image passed. Where a run failed for a reason its verdict did not give,
+`hydo inspect` found the cause in one or two calls without a rebuild.
+
+**Found:**
+
+1. **A donation is recorded once per webhook delivery** (known upstream: Ghost pull request
+   30118, open, not in 6.75.0). With Ghost's Docker defaults (no mail server), the staff e-mail
+   fails after the row is saved, the handler answers 500, and each of Stripe's retries saves the
+   donation again: six times, with no fault (`9ed2444c91345b13`, twice). The same with the mail
+   provider failing (`H=mailgun.transactional@0-12:status=500`, `6774796b63f455e5`) or a
+   duplicated webhook (`H=stripe.checkout_session@0-12:dup`, `e5fec8e77b90eadb`). The exploration
+   found it blind at seed 20 and shrank it to one protocol fault.
+2. **A newsletter batch whose acceptance answer is lost goes out again** (by design): Mailgun has
+   no idempotency key and Ghost retries a failed send up to six times
+   (`H=mailgun.messages@0-12:reset`, `4fdb7b1ae7053e88`, 8 extra messages for 36 batches).
+
+Not found: no check of Ghost's crash-resumable sending failed under kills, pauses, power cuts,
+clock steps and protocol faults, though few faults landed inside a send. Two false findings on the
+way were the onboarding's own mistakes (a plain-http site URL that Ghost refuses at its next start
+once Stripe is connected; a check that ordered events by Ghost's timestamps under a clock step).
+
+**What hydo lacked**, ranked: the diagnosis of a service that dies in the recovery boot (fixed
+since by Milestone 192); request fields and multipart bodies in the fake's record (open item 60
+(c)); a KVM fingerprint difference on one schedule with identical transcripts, consoles and
+verdicts (`e922311754d0d30c` three times and `c7393aac8517f6ee` twice in five fresh boots;
+open item 69); a release buildable from the tree with `hydo-world-tls` and `hydo-sql` (done in
+0.3.0, Milestone 190); a failing check's rows in the results (Milestone 192).
+
+The example's manifest joined the identity corpora (`hydo-control` `corpus-quick.txt`,
+`hydo-explore` `corpus-full.txt` and `identity-quick.txt`).

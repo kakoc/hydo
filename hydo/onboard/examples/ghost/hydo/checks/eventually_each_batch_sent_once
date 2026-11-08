@@ -1,0 +1,16 @@
+#!/bin/sh
+# hydo: within=180 after=heal poll=5
+# hydo-msg: Mailgun accepted more messages than Ghost has batches: some members got an issue twice
+# Every message Mailgun accepted goes to one batch's recipients. A batch is sent at most once, so
+# Mailgun can have accepted at most one message per batch that Ghost sent or was sending
+# (`submitting`: cut off between Mailgun's answer and Ghost's write). The fake does not read the
+# recipients out of mailgun.js's multipart body, so the comparison is by count.
+batches=$(hydo-sql read sql db "SELECT id FROM email_batches WHERE status IN ('submitted', 'submitting')") || exit 2
+sends=$(hydo-sql read world mailgun.messages) || exit 2
+nb=$(printf '%s' "$batches" | grep -c .)
+ns=$(printf '%s' "$sends" | grep -c .)
+if [ "$ns" -gt "$nb" ]; then
+  echo "HYDO-ORACLE: Mailgun accepted $ns messages for $nb batches sent or being sent: $((ns - nb)) extra"
+  exit 1
+fi
+echo "HYDO-ORACLE: Mailgun accepted $ns messages for $nb batches sent or being sent"

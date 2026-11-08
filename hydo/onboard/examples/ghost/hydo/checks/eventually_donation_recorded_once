@@ -1,0 +1,8 @@
+#!/bin/sh
+# hydo: within=180 after=heal poll=5
+# hydo-msg: a donation Stripe completed is not in Ghost's books exactly once
+# Every checkout session the fake Stripe completed (its reference: the donor's e-mail, one per
+# donation) is one row of Ghost's donation_payment_events.
+exec hydo-sql check exactly-once \
+  --left "stripe=world stripe.checkout_session --field ref" \
+  --right "ghost=sql db \"SELECT email FROM donation_payment_events\""

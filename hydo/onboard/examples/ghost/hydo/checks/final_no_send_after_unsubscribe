@@ -1,0 +1,18 @@
+#!/bin/sh
+# hydo-msg: a member whose unsubscribe Ghost had acknowledged before an issue's publication started is among that issue's recipients
+# /data/test/order.log is the order the clients saw: "u <email>" once Ghost acknowledged an
+# unsubscribe, "p <slug>" just before the publish request. (Ghost's own timestamps cannot order
+# the two: a clock step moves them; the first version of this check used them, and failed on a
+# step back of a day.) Ghost prepares the recipients after the publish request, so a member
+# who left before the request started must not be one.
+log=/data/test/order.log
+[ -f "$log" ] || { echo "HYDO-ORACLE: no unsubscribe or publication recorded"; exit 0; }
+rows=$(hydo-sql read sql db "SELECT CONCAT(p.slug, ' ', r.member_email) AS x FROM email_recipients r JOIN emails e ON e.id = r.email_id JOIN posts p ON p.id = e.post_id") || exit 2
+printf '%s\n' "$rows" | sed -n 's/.*"x":"\([^"]*\)".*/R \1/p' | cat "$log" - | awk '
+  $1 == "u" { left[$2] = 1; next }
+  $1 == "p" { for (m in left) gone[$2 " " m] = 1; next }
+  $1 == "R" && (($2 " " $3) in gone) { bad++; if (bad <= 5) print "issue " $2 " went to " $3 ", who had left before it was published" }
+  END {
+    if (bad) { print "HYDO-ORACLE: " bad " recipients had unsubscribed before the issue was published"; exit 1 }
+    print "HYDO-ORACLE: no recipient had unsubscribed before the issue was published"
+  }'

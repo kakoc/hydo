@@ -1,0 +1,196 @@
+# Ghost 6.75.0 (publishing and newsletters) on MySQL 8.0, newsletters sent through Mailgun's
+# HTTPS API, which is a fake inside the guest. From `hydo compose ../docker-compose.yaml
+# --out hydo.yaml --images-dir images`; hand changes are marked `hand:`. RESULTS.md (next to
+# this folder) says what was hunted and found.
+#
+#   sh fetch-images.sh                       # the two images by digest (network, once)
+#   hydo build hydo.yaml
+#   hydo run --backend kvm "disk=none | run"
+#   hydo explore --backend kvm --seeds 1-20 --strategy process --protocol-faults --workers 2
+format: 1
+hydo_version: "0.2"
+name: ghost   # hand: the importer named it after the folder it ran in
+description: "Ghost publishing newsletters to its members through Mailgun: each issue reaches every subscriber exactly once, and Ghost's books agree with what Mailgun accepted"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 2048   # hand: the importer's guess (1280) left too little for MySQL 8 and Ghost's Node.js
+
+data:
+  size_mib: 1536   # the data disk: every volume lives here (the fault target)
+  dirs: [vol/ghost, vol/db, test]   # hand: test/ holds the client's admin key
+
+root:
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 ghost
+      10.89.0.12 db
+
+services:
+  # Compose service ghost
+  # image ghost:6.75.0-alpine = docker.io/library/ghost@sha256:3af1575bb8917c6c0057beff85db92a4ac650f726956fd9de96932fea01c397c
+  #   linux/amd64: sha256:9c4d6d91fdae425b5d75675a46ac16a53286c1f53eb05bf37902a5668726e04b
+  #   linux/arm64/v8: sha256:12ede333deb590bb1476056857f4028bfa26bdaade15f2cf5c40e6165d7e4123
+  # restart: always: an agent image starts the service again when its process ends by itself while the test runs (MANIFEST.md "Restart policies"); hydo's kill faults keep their own restart points
+  - name: ghost
+    image: {x86_64: images/ghost-6.75.0-alpine-amd64.docker.tar, arm64: images/ghost-6.75.0-alpine-arm64-oci}
+    image_ref: "ghost:6.75.0-alpine"
+    env:
+      url: "https://ghost:2368"
+      NODE_ENV: "production"
+      database__client: "mysql"
+      database__connection__host: "db"
+      database__connection__user: "root"
+      database__connection__password: "example"
+      database__connection__database: "ghost"
+      bulkEmail__mailgun__apiKey: "key-0000000000000000000000000000hydo"
+      bulkEmail__mailgun__domain: "mg.example.com"
+      bulkEmail__mailgun__baseUrl: "https://api.mailgun.net/v3"
+      privacy__useTinfoil: "true"
+      mail__transport: "Mailgun"
+      mail__from: "Ghost <noreply@mail.example.com>"
+      mail__options__auth__api_key: "key-0000000000000000000000000000hydo"
+      mail__options__auth__domain: "mail.example.com"
+      bulkEmail__batchSize: "5"   # hand: Mailgun takes 1000 recipients per request; 5 makes a 15-member list three batches
+      security__staffDeviceVerification: "false"   # hand: a staff login on a new device would wait for an e-mailed code
+    port: 2368
+    addr: 10.89.0.11
+    depends_on: [db]
+    # hand: Ghost opens its port while it still boots (and answers 503); the site API answers 200 once
+    # it serves. The header is what the TLS proxy in front of Ghost adds (Ghost redirects plain http).
+    ready: "wget -q -T 5 -O /dev/null --header 'X-Forwarded-Proto: https' http://10.89.0.11:2368/ghost/api/admin/site/"
+    ready_timeout: 300
+    restart: "always"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/ghost, dst: /var/lib/ghost/content, copy_up: true}
+      - {src: /hydo/workload, dst: /hydo/workload}   # hand: the test client runs with Ghost's node
+      - {src: /data/test, dst: /data/test}            # hand: the client's admin key
+  # Compose service db
+  # image mysql:8.0.44 = docker.io/library/mysql@sha256:9c3380eac945af0736031b200027f581925927c81e010056214a4bd6b6693714
+  #   linux/amd64: sha256:f7878bec832c6be5e61c39d3949651be8aa977daf875089b4560ae1434d2cb9c
+  #   linux/arm64/v8: sha256:2c4989e05aa3ceb8cb6eb8a1b1f38ffa361eac2fec96ec67705d1b21c6390527
+  # port from the image's EXPOSE [3306, 33060]
+  # ready: from Compose healthcheck
+  - name: db
+    image: {x86_64: images/mysql-8.0.44-amd64.docker.tar, arm64: images/mysql-8.0.44-arm64-oci}
+    image_ref: "mysql:8.0.44"
+    env:
+      MYSQL_ROOT_PASSWORD: "example"
+    port: 3306
+    addr: 10.89.0.12
+    ready: "timeout 5 hydo-oci db mysqladmin ping -h 127.0.0.1 -pexample"
+    ready_timeout: 210
+    restart: "always"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/db, dst: /var/lib/mysql, copy_up: true}
+
+# hand: Mailgun, as Ghost's mailgun.js client calls it (HTTPS to api.mailgun.net, the domain in
+# the path). A message gets the id <seq>@mg.example.com, which Ghost keeps per batch, so the
+# checks can match Ghost's batches with what Mailgun accepted.
+fakes:
+  - name: mailgun
+    port: 9201
+    tls: {hosts: [api.mailgun.net]}
+    routes:
+      - name: messages
+        method: POST
+        path: /v3/mg.example.com/messages
+        headers: {Content-Type: application/json}
+        body: '{"id":"<{seq}@mg.example.com>","message":"Queued. Thank you."}'
+      - name: events
+        method: GET
+        path: /v3/mg.example.com/events
+        headers: {Content-Type: application/json}
+        body: '{"items":[],"paging":{}}'
+      - name: transactional          # Ghost's own mail (staff notifications), domain mail.example.com
+        method: POST
+        path: /v3/mail.example.com/messages
+        headers: {Content-Type: application/json}
+        body: '{"id":"<t{seq}@mail.example.com>","message":"Queued. Thank you."}'
+
+  # hand: Stripe, for readers' donations (Ghost's "tips"). Ghost's stripe-node calls
+  # https://api.stripe.com with form bodies. When the operator enters the keys, Ghost registers
+  # its webhook endpoint (the fake answers its signing secret), a billing portal configuration,
+  # then at the first donation a product and a price. A checkout session is "paid" at once: the
+  # fake sends Stripe's signed checkout.session.completed to Ghost's webhook, the donor's e-mail
+  # (the session's customer_email) as the reference.
+  - name: stripe
+    port: 9202
+    tls: {hosts: [api.stripe.com]}
+    idempotency: header:Idempotency-Key
+    routes:
+      - name: webhook_create
+        method: POST
+        path: /v1/webhook_endpoints
+        headers: {Content-Type: application/json}
+        body: '{"id":"we_{seq}","object":"webhook_endpoint","secret":"whsec_hydotest","status":"enabled","url":"{form:url}"}'
+        save: {key: 'we_{seq}', fields: {url: '{form:url}'}}
+      - name: webhook_update
+        method: POST
+        path: /v1/webhook_endpoints/{id}
+        load: '{path:id}'
+        headers: {Content-Type: application/json}
+        body: '{"id":"{path:id}","object":"webhook_endpoint","status":"enabled","url":"{obj:url}"}'
+      - name: portal_create
+        method: POST
+        path: /v1/billing_portal/configurations
+        headers: {Content-Type: application/json}
+        body: '{"id":"bpc_{seq}","object":"billing_portal.configuration","active":true}'
+      - name: portal_update
+        method: POST
+        path: /v1/billing_portal/configurations/{id}
+        headers: {Content-Type: application/json}
+        body: '{"id":"{path:id}","object":"billing_portal.configuration","active":true}'
+      - name: product_create
+        method: POST
+        path: /v1/products
+        headers: {Content-Type: application/json}
+        body: '{"id":"prod_{seq}","object":"product","active":true,"name":"{form:name}"}'
+        save: {key: 'prod_{seq}', fields: {name: '{form:name}'}}
+      - name: product_get
+        method: GET
+        path: /v1/products/{id}
+        load: '{path:id}'
+        headers: {Content-Type: application/json}
+        body: '{"id":"{path:id}","object":"product","active":true,"name":"{obj:name}"}'
+      - name: price_create
+        method: POST
+        path: /v1/prices
+        headers: {Content-Type: application/json}
+        body: '{"id":"price_{seq}","object":"price","active":true,"type":"one_time","currency":"{form:currency}","nickname":"{form:nickname}","product":"{form:product}","unit_amount":null,"recurring":null}'
+      - name: checkout_session
+        method: POST
+        path: /v1/checkout/sessions
+        ref: form:customer_email
+        headers: {Content-Type: application/json}
+        body: '{"id":"cs_{seq}","object":"checkout.session","mode":"{form:mode}","url":"https://checkout.stripe.com/c/pay/cs_{seq}"}'
+        webhook:
+          url: http://10.89.0.11:2368/members/webhooks/stripe/   # an address: the build refuses a name here
+          headers: {Content-Type: application/json, X-Forwarded-Proto: https}   # through the TLS proxy
+          body: '{"id":"evt_{seq}","object":"event","api_version":"2020-08-27","type":"checkout.session.completed","data":{"object":{"id":"cs_{seq}","object":"checkout.session","mode":"payment","payment_status":"paid","status":"complete","amount_total":500,"currency":"usd","customer":null,"customer_details":{"email":"{ref}","name":"Reader"},"metadata":{"ghost_donation":"true"},"custom_fields":[]}}}'
+          delay_ms: 500
+          retries: 5
+          sign: {header: Stripe-Signature, secret: whsec_hydotest}
+
+workload:
+  steps: 12
+  timeout: 600
+
+test:
+  parallel: 3
+  per_round: 2
+  round_ms: 2000
+  command_timeout: 90
+  drain_timeout: 180
+  check_within: 180
+
+faults: [kill, pause, network, oneway, cut, clock, disk, protocol]

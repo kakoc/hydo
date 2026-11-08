@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=60
+# An editor publishes a post and sends it as a newsletter to every member.
+exec hydo-oci ghost node /hydo/workload/helper_client.mjs publish "$HYDO_CMD_ID"
