@@ -4845,3 +4845,37 @@ recorded value comes back.
 **Recommendation:** worth building as a small, opt-in part of CI stage 2: device counts and
 engine clocks per schedule against the base commit, only changes above a threshold, never shown
 as latency (the design note's section 6). Nothing of it is built beyond the probe.
+
+### Milestone 199 — DONE (deterministic, branchable environments for AI agents: a spike; 2026-11-08)
+
+The user asked (2026-11-08) whether hydo can serve as an environment for AI agents that is
+exactly reproducible and can be branched, so that several actions can be tried from one state.
+The answer, with every number, is `docs/design/agent-environments.md`. It was measured on the
+build machine with the KVM engine.
+
+**Built** (opt-in; no recorded value moves):
+
+- `hydo inspect exec <session> --branch NAME [--from OTHER] -- <command>`: runs the command from
+  the branch's state and keeps the state after it as the branch (the engine's snapshot
+  `b:NAME`). A branch call writes the command's output to one fixed file name, so the same
+  command from the same state leaves the same state on any branch.
+- `state_fp` in every `exec` answer: the engine's fingerprint of the whole guest state after the
+  call. Results format additions: `Inspect.branch`, `Inspect.state_fp`, `InspectBranch`.
+- The KVM and Mac engines keep 64 named snapshots instead of 8, so a session holds 61 branches.
+- `HYDO_KVM_NO_FP` (developer): the KVM engine computes no fingerprint, to measure its cost.
+- The example `hydo/onboard/examples/agent-workspace/`: a Git repository of a small Python
+  project with 20 tests and a planted bug, an agent's session as six numbered steps, and
+  `branch-demo.sh`.
+
+**Found.** From one stop of the workspace, 16 calls on 13 branches: the same action on two
+branches gave the same output and the same `state_fp`; different actions differed only by their
+effect; the same sequence reached the same state on two branches, in two sessions and in three
+fresh boots. `random.random()`, a UUID, `os.urandom` and the time were the same on every branch,
+and a wheel built on two branches had the same bytes (natively, two builds differ). A call costs
+about 30 to 50 ms plus about twice the command's native time without the fingerprint; with it,
+every call costs about 0.8 s more, almost all of it hashing the 739 MB disk image. A branch keeps
+about 1 MB after a trivial command and about 46 MB after a test run.
+
+**Missing for real agent use:** the network (a local mirror in the image, or record and replay
+at the edge), an incremental state hash, an API made for agents with fewer stops per call, more
+than one vCPU, and dropping a snapshot (open item 68).

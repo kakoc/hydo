@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-52 user-facing and 89 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+52 user-facing and 90 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -139,6 +139,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_KVM_DIAG_RAM` | developer | number | 0 | hydo-kvm | With HYDO_KVM_DIAG: the first this many MiB of guest RAM are written next to each fingerprint (`<outdir>/<tag>.<phase>.ram`). |
 | `HYDO_KVM_TRACE_UNKNOWN` | developer | flag: set | - | hydo-kvm | Set: log every MSR access and I/O port the engine's model does not know. |
 | `HYDO_KVM_SPIN_STATE` | developer | flag: set | - | hydo-kvm | Set (a prototype, off by default): the spin observer also proves loops that store to memory and use the vector registers, when the whole machine state repeats (every store rewrites the bytes that are there), and resolves them like an exact cycle. |
+| `HYDO_KVM_NO_FP` | developer | flag: set | - | hydo-kvm | Set: the engine computes no fingerprint (`fp=0000000000000000`), which on a large image is most of the cost of a short conversation (docs/design/agent-environments.md); for measuring that cost only. |
 | `HYDO_BACKEND` | user | word: hvx \| kvm | hvx | hydo-cli | `kvm`: the `hydo` command runs x86_64 images on the KVM engine instead of hvx (Linux; `--backend kvm` does the same for one command). |
 
 ## The host controller (`hydo_config::run::Control`)

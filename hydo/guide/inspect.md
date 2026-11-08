@@ -115,6 +115,22 @@ Limits:
 - `--service` runs in the service's own network namespace (`network: bridge`).
 - A program inside an image service's root runs with `hydo-oci <svc> <program>`.
 
+## 4. Try several things from one state (branches)
+
+In a `snapshot` session, `exec --branch NAME` runs the command on a branch of the stop and keeps
+the state after it as `NAME`; the next call with `--branch NAME` starts there. `--from OTHER` makes
+a new branch from another branch instead of the stop. Every answer has `state_fp`, the guest's
+whole state after the call: two branches with the same `state_fp` are in the same state.
+
+```sh
+hydo inspect exec <session> --branch fix --sh 'cd /data/ws && sed -i s/a/b/ app.py'
+hydo inspect exec <session> --branch fix --sh 'cd /data/ws && python -m pytest -q'
+hydo inspect exec <session> --branch other --sh 'cd /data/ws && python -m pytest -q'
+```
+
+A session holds at most 61 branches on the KVM and Mac engines (5 on hvx), and a branch cannot be
+dropped yet.
+
 ## A worked example
 
 An image whose provisioning fills memory ends with `ERROR provision failed`:

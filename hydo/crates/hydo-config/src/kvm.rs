@@ -104,6 +104,8 @@ pub struct Options {
     pub trace_unknown: bool,
     /// `HYDO_KVM_SPIN_STATE`, set: the spin observer's full-state cycles (a prototype).
     pub spin_state: bool,
+    /// `HYDO_KVM_NO_FP`, set: no fingerprints (they read as 0), to measure what they cost.
+    pub no_fp: bool,
 }
 
 impl Options {
@@ -121,6 +123,7 @@ impl Options {
             diag_ram: t(HYDO_KVM_DIAG_RAM),
             trace_unknown: e.is_set(HYDO_KVM_TRACE_UNKNOWN),
             spin_state: e.is_set(HYDO_KVM_SPIN_STATE),
+            no_fp: e.is_set(HYDO_KVM_NO_FP),
         }
     }
 }

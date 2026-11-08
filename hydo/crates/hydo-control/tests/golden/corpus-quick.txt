@@ -1,5 +1,6 @@
 # The core controller's transcripts on the identity corpus of the core manifests
 # (hydo/crates/hydo-control/tests/corpus.rs). Re-record: HYDO_BLESS=1 cargo test -p hydo-control --test corpus
+input	hydo/onboard/examples/agent-workspace/hydo.yaml	4dc6d76eb4536726474b0b2b735846925a0d13be3a69c9898b315de80ffbceee
 input	hydo/onboard/examples/avx2/hydo.yaml	c0d18567ef65d9300820b8944ffcee57cd228512eedf147ac7e624b8eff2592a
 input	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	a4ba83796fb727145d516a32229c1896e3fffcbfcfb0ee40b6f447ea4e093ab4
 input	hydo/onboard/examples/compose-voting/hydo-mac.yaml	f31a88f96297c1b4a0de709926c3ac420bce149c69248ff064f54b661c63aac1
@@ -31,15 +32,15 @@ input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8
 input	hydo/onboard/examples/stack/hydo-grpcgen.yaml	72b3a42760bb79db3be04fe34d4e7a55645ed133e86008b059f0935cd3f247cf
 input	hydo/onboard/examples/stack/hydo-read.yaml	d3899b9ac926be02576d0f8e9b950bcc174682dc727791d4f1309294b3a1fb68
 input	hydo/onboard/examples/stack/hydo.yaml	369ed2074d0024dcbb5bf2218731bee7526fa006ff0e900aef339cc6cf69fb24
-input	hydo/onboard/examples/libsql-replica/hydo/hydo.yaml	5f014d32cfd6b4ee0abee6127c26fd0b35d34f76ba4b72f893d676386660e746
-input	hydo/onboard/examples/medusa/hydo/hydo.yaml	3c1bbf890f4bda462b3c0fe9bc1ee5cdbf39792463b19c9d9db59d858b2eefd8
+input	hydo/onboard/examples/libsql-replica/hydo/hydo.yaml	e9675d508c22631f89dfe6fe2c719a96e98ffade48092f1738748187814357fd
+input	hydo/onboard/examples/medusa/hydo/hydo.yaml	6e1a65dbb528ebc030ab84acad7e095324263ae3b2d4d30a4e0956d3168675c8
 input	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	a7e19bf3c01be56d464b7a6e443792caee1ad45e29fa7ea8be9801cf05965719
 input	hydo/onboard/examples/postgres-sql/hydo/hydo.yaml	f6ceeb30a54343c50cd46e85a57e34d3bc1b576857d163ef11561c7a5025733c
-input	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	d8c924f5de6093c0e1f52b2733682fbd4bab850f162a22c443b53fecefe1d900
-input	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	b99571f53a01990549bd599721b01d85a127e59154dc209de1afa0ad3123b946
-input	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	b344fa1f5be236c5a4ad91a58223a3384024e44fede6213d7b276957463e2798
-input	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	07525fcfc18578bc7276dbc99774d5eb1a1e0f511506fb5d7c6f472f5000e070
-input	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	8315d20511432b934f32e1c212add7da36e3ca827f8af14a0a648d076bcfd8cb
+input	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	88fe4f02ad242c2a7c1905488abf07586e407f736f67eca9be5a0ca79ea3048d
+input	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	b97a539c43ee5a1703876b471476e355c3d9e5fced762ab414d37630c4023fbf
+input	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	15783ea6b8ce52f11642a06b2c38b082baa91e3ac54ca60a1bb8751eac61a9b9
+input	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	f27eb816afc247ea09f68cffe3dec794847ce42cc37ee96c405f4b817c8b215e
+input	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	a086da4ba80162d1d64ee8cab48d67d6e04c078c1857db90c5c1e529d64cab3c
 input	hydo/onboard/examples/yugabyte/hydo/hydo.yaml	49b022282c7f370ee71d4be2a804c2439d3654c18a2061c4645037e460b7747a
 input	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	97abb5b0751d76f6e9793ab4076e25b3d10ce4b3ae2e98529192eb234ac12917
 input	hydo/onboard/examples-mac/ledger/hydo.yaml	01cf6c04e2c7c83d49bbca58d5c8ff4efb95539bbb472a7a2d7f649995765184
@@ -48,6 +49,17 @@ input	hydo/onboard/examples-mac/redis-ram/hydo.yaml	8cf023cbdd0b096987f1389f758c
 input	hydo/onboard/examples-mac/redis/hydo-hist.yaml	03c50c67f26c1d2ce24f345a8a1d7a7cf46d343abdf65a96f0b4b76e13394f72
 input	hydo/onboard/examples-mac/redis/hydo-read.yaml	160a4c0a430464a37fd4ea0af6ebff72b451a402be1eb8ac28efc9440c0c85a8
 input	hydo/onboard/examples-mac/redis/hydo.yaml	4b085420e84e6e845bb37c4522dedba95fcd50c8d41ca20d8c3c5b68691fd388
+manifest	hydo/onboard/examples/agent-workspace/hydo.yaml	core
+boot	hydo/onboard/examples/agent-workspace/hydo.yaml	hydo/onboard/examples/agent-workspace/hydo.yaml#0	snapshot	fb57d38f5fc670e7
+counts	hydo/onboard/examples/agent-workspace/hydo.yaml	identity=57 recovery:error=2 recovery:ok=21 recovery:violation=4 refused=1 run:cut=27 run:error=5 run:ok=34 run:violation=1 token:C=28 token:K=3 token:P=4 token:Q=1 token:T=50 token:X=4 token:Z=1 written=10
+boot-transcript	hydo/onboard/examples/agent-workspace/hydo.yaml	fb57d38f5fc670e7
+chunk	hydo/onboard/examples/agent-workspace/hydo.yaml	0	500	091fbc8ab0f613d29551cfa4d19a818e87e0522c2ceefe6544ddfe9a49699385
+chunk	hydo/onboard/examples/agent-workspace/hydo.yaml	1	500	eb92fcb04ca4d1b4bee2f13430fc61f2a6ecc32dfbd57608bc959526041a59f6
+chunk	hydo/onboard/examples/agent-workspace/hydo.yaml	2	500	58c367f68280af4cea9d6e49193d4bbf1ad58d1dd5dde4f30a806701b8c0c69c
+chunk	hydo/onboard/examples/agent-workspace/hydo.yaml	3	500	ff131cdaaf40b1de16a87cb16f0c573ae8d8a8dc220c5a2c2ebe677c16ccf595
+chunk	hydo/onboard/examples/agent-workspace/hydo.yaml	4	500	d77d205f40069766102a360e739624c49e0e99d9201862e30a65f007c4623b5b
+chunk	hydo/onboard/examples/agent-workspace/hydo.yaml	5	500	823fd57691bf04991f5294dc0136cb747b19fcc48420cf7e0950ebc509240a81
+chunk	hydo/onboard/examples/agent-workspace/hydo.yaml	6	273	d4e33838134e39aec64c58342ecc133a990f917537dd203f60c03a1137e91aac
 manifest	hydo/onboard/examples/avx2/hydo.yaml	core
 boot	hydo/onboard/examples/avx2/hydo.yaml	hydo/onboard/examples/avx2/hydo.yaml#0	snapshot	9293286b9cdaec81
 counts	hydo/onboard/examples/avx2/hydo.yaml	identity=33 recovery:ok=4 refused=1 run:cut=4 run:error=3 run:ok=29 run:violation=8 token:C=4 token:K=3 token:P=4 token:Q=1 token:T=32 token:X=4 token:Z=1 written=11
@@ -7210,4 +7222,4 @@ chunk	hydo/onboard/examples-mac/redis/hydo.yaml	53	500	9d16a9d87dc69ea84ea4ea3ff
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	54	500	14aa44ab99b7756c616ff8c107fb1360d28daf729b1143813204139133ca9e45
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	55	500	a74630e03585b2643266eb7c566668ae1d1306a637a4c7ba99ce61dcf61d59a9
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	56	474	3a5f262dc5e763308883e17eadbf9c26e92fe8519be03e7199869bef5a36cfb2
-refused	other=44
+refused	other=45

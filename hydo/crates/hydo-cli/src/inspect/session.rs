@@ -208,6 +208,19 @@ impl Taker for LiveTaker<'_> {
                     let s = self.status.clone();
                     self.calls.answer(s);
                 }
+                Some(Req::Exec {
+                    branch: Some(_), ..
+                }) => {
+                    self.calls.answer(err_doc(
+                        "exec",
+                        &Problem::new(
+                            "usage",
+                            "--branch needs a snapshot session (hydo inspect start at a stop that \
+                             can be kept as a snapshot); this one is live or one-shot",
+                            vec!["hydo inspect start <run dir> --at run:<stop before the workload's end>".into()],
+                        ),
+                    ));
+                }
                 Some(req) => {
                     self.k += 1;
                     match work_for(&req, &self.plan, self.k) {
@@ -667,6 +680,8 @@ pub fn serve(ctx: &Ctx, id: &str) -> i32 {
             };
             ready(&mut daemon, reach.stops, Vec::new());
             let mut k = 0;
+            let mut branches = Branches::new();
+            let max_branches = max_branches(ctx.backend_name());
             while let Some(req) = daemon.next() {
                 if req == Req::Stop {
                     daemon.answer(json!({"v": 1, "type": "inspect", "op": "stop",
@@ -676,13 +691,35 @@ pub fn serve(ctx: &Ctx, id: &str) -> i32 {
                 k += 1;
                 let t0 = Instant::now();
                 let keep = matches!(req, Req::Advance { .. });
+                if let Req::Exec {
+                    branch: Some(b), ..
+                } = &req
+                {
+                    let v = branch_call(
+                        &m,
+                        &mut worker,
+                        &point,
+                        &mut branches,
+                        max_branches,
+                        &rec,
+                        &req,
+                        b,
+                        &pt,
+                        t0,
+                    );
+                    daemon.answer(v);
+                    continue;
+                }
                 let v = match work_for(&req, &m.plan, k) {
                     Err(p) => err_doc(req.op(), &p),
                     Ok(mut w) => {
                         match m.call(&mut worker, &mut point, &rec, &mut w, keep, CALL_STOPS) {
                             Err(p) => err_doc(req.op(), &p),
-                            Ok(()) => match answer(&req, &w, &pt, "snapshot", now_ms(t0)) {
-                                Ok(a) => to_value!(&a),
+                            Ok(c) => match answer(&req, &w, &pt, "snapshot", now_ms(t0)) {
+                                Ok(mut a) => {
+                                    a.state_fp = c.fp;
+                                    to_value!(&a)
+                                }
                                 Err(p) => err_doc(req.op(), &p),
                             },
                         }
@@ -723,6 +760,133 @@ pub fn serve(ctx: &Ctx, id: &str) -> i32 {
                     0
                 }
                 Err(p) => fail(&p),
+            }
+        }
+    }
+}
+
+/// The named branches of a snapshot session: each the agent's position at the engine's snapshot
+/// [`branch_snap`] of its name (docs/design/agent-environments.md).
+type Branches = std::collections::BTreeMap<String, hydo_control::AgentPoint>;
+
+/// How many branches a session can hold: the engine's named snapshots (64 on kvm and hvm, 8 on
+/// hvx) less the host's S0 and S1 and the session's stop. The engines have no way yet to drop a
+/// snapshot, so a name stays taken until the session ends.
+fn max_branches(backend: &str) -> usize {
+    if backend == "hvx" {
+        5
+    } else {
+        61
+    }
+}
+
+/// The engine's snapshot that holds a branch.
+fn branch_snap(name: &str) -> String {
+    format!("b:{name}")
+}
+
+/// `exec --branch NAME [--from OTHER]` in a snapshot session: the command runs from the branch's
+/// state (a new branch starts from `OTHER`, or from the session's stop), and the state after it
+/// is kept as the branch. The output files have one name on every branch (`k` = 0), so the same
+/// command from the same state leaves the same state on any branch.
+#[allow(clippy::too_many_arguments)]
+fn branch_call(
+    m: &Machine,
+    worker: &mut Box<dyn hydo_engine::ControlledWorker>,
+    root: &hydo_control::AgentPoint,
+    branches: &mut Branches,
+    max_branches: usize,
+    rec: &Recorded,
+    req: &Req,
+    b: &super::Branch,
+    pt: &RunPoint,
+    t0: Instant,
+) -> Value {
+    let op = req.op();
+    let usage = |msg: String| {
+        err_doc(
+            op,
+            &Problem::new(
+                "usage",
+                msg,
+                vec!["hydo inspect exec <session> --branch b1 -- <command>".into()],
+            ),
+        )
+    };
+    let ok_name = |n: &str| {
+        !n.is_empty()
+            && n.len() <= 48
+            && n.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+    };
+    if !ok_name(&b.name) {
+        return usage(format!(
+            "branch name {:?}: 1 to 48 letters, digits, '-', '_' or '.'",
+            b.name
+        ));
+    }
+    let exists = branches.contains_key(&b.name);
+    if !exists && branches.len() >= max_branches {
+        return usage(format!(
+            "this session holds {max_branches} branches already, the most the engine keeps; \
+             go on with one of them, or start another session"
+        ));
+    }
+    let (from_snap, from_point) = if exists {
+        if b.from.is_some() {
+            return usage(format!(
+                "branch {} exists; --from only makes a new branch",
+                b.name
+            ));
+        }
+        (branch_snap(&b.name), branches[&b.name].clone())
+    } else {
+        match &b.from {
+            None => (SNAP.to_string(), root.clone()),
+            Some(f) => match branches.get(f) {
+                Some(p) => (branch_snap(f), p.clone()),
+                None => {
+                    return usage(format!(
+                        "no branch {f:?} in this session (its branches: {})",
+                        branches.keys().cloned().collect::<Vec<_>>().join(", ")
+                    ))
+                }
+            },
+        }
+    };
+    let mut w = match work_for(req, &m.plan, 0) {
+        Ok(w) => w,
+        Err(p) => return err_doc(op, &p),
+    };
+    let keep = branch_snap(&b.name);
+    match m.call_from(
+        worker,
+        (&from_snap, &from_point),
+        Some(&keep),
+        rec,
+        &mut w,
+        CALL_STOPS,
+    ) {
+        Err(p) => err_doc(op, &p),
+        Ok(c) => {
+            if let Some(p) = c.point {
+                branches.insert(b.name.clone(), p);
+            }
+            match answer(req, &w, pt, "snapshot", now_ms(t0)) {
+                Ok(mut a) => {
+                    a.branch = Some(hydo_results::InspectBranch {
+                        name: b.name.clone(),
+                        from: if exists { None } else { b.from.clone() },
+                        created: !exists,
+                    });
+                    a.state_fp = c.fp;
+                    a.notes.push(format!(
+                        "branch {}: later calls with --branch {} start from the state this call left",
+                        b.name, b.name
+                    ));
+                    to_value!(&a)
+                }
+                Err(p) => err_doc(op, &p),
             }
         }
     }

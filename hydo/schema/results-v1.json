@@ -3222,6 +3222,24 @@
             }
           ]
         },
+        "branch": {
+          "description": "`exec --branch`: the branch the call ran on (added for agent environments).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectBranch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state_fp": {
+          "description": "The engine's fingerprint of the guest's whole state when the call ended (registers,\ndevices, the disk, all of RAM, the console), as in a run's RESULT line: two calls whose\nvalues are equal left the guest in the same state (added for agent environments).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "notes": {
           "description": "Remarks for the caller (what the state is, what to try next).",
           "type": "array",
@@ -3542,6 +3560,30 @@
       "required": [
         "wall_ms",
         "stops"
+      ]
+    },
+    "InspectBranch": {
+      "description": "The named branch an `exec` ran on (added for agent environments,\ndocs/design/agent-environments.md).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "from": {
+          "description": "The branch this one was made from, when the call made it (`None`: the session's stop).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created": {
+          "description": "The call made the branch (it did not exist before).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "created"
       ]
     },
     "InspectError": {

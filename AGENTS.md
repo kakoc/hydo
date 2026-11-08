@@ -465,6 +465,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 67. `hydo ci run` ran only on this Mac: not on Linux, and the action and the GitLab template never
     ran on GitHub or GitLab (a trial needs a throwaway public repository, the user's decision).
     Stage 2 (history, accepted findings, budgets, sharding) is not built (M197).
+68. Agent environments: no network in the guest, no incremental state hash (the full
+    fingerprint costs about 0.8 s per call), one vCPU, no way to drop a snapshot, and a session on hvx
+    holds only 5 branches (M199).
 
 ## Milestone index
 
@@ -683,6 +686,9 @@ build machine, before 2026-10-13.
 - M198: cost tracking as deterministic work counts, an experiment (the opt-in probe `HYDO_COST`;
   counts exactly stable on every engine, sensitive to durability settings and faults; CPU work
   visible only on hvx; `docs/design/cost-tracking.md`)
+- M199: deterministic, branchable environments for AI agents, a spike (`hydo inspect exec
+  --branch`, `state_fp`, 64 snapshots on KVM and the Mac, the agent-workspace example;
+  `docs/design/agent-environments.md`)
 
 ## Where to look
 

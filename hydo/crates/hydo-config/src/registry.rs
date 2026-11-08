@@ -350,6 +350,10 @@ variables! {
     /// memory and use the vector registers, when the whole machine state repeats (every store
     /// rewrites the bytes that are there), and resolves them like an exact cycle.
     HYDO_KVM_SPIN_STATE: Kvm, Developer, "flag: set", "", "hydo-kvm";
+    /// Set: the engine computes no fingerprint (`fp=0000000000000000`), which on a large image
+    /// is most of the cost of a short conversation (docs/design/agent-environments.md); for
+    /// measuring that cost only.
+    HYDO_KVM_NO_FP: Kvm, Developer, "flag: set", "", "hydo-kvm";
     /// `kvm`: the `hydo` command runs x86_64 images on the KVM engine instead of hvx (Linux;
     /// `--backend kvm` does the same for one command).
     HYDO_BACKEND: Kvm, User, "word: hvx | kvm", "hvx", "hydo-cli";

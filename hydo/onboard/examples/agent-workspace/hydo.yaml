@@ -1,0 +1,56 @@
+# An AI agent's workspace as a hydo image (docs/design/agent-environments.md): a Git repository
+# of a small Python project with its tests (project/, one planted bug), Python 3.11 with pytest,
+# pip, setuptools and wheel, Git and make, no network. The tools are one Nix store path, built
+# on an x86_64 Linux machine with Nix (nixpkgs 24.05) as:
+#   nix-build -E 'with import <nixpkgs> {}; buildEnv { name = "agentws-tools"; paths = [
+#     (python3.withPackages (p: [ p.pytest p.pip p.setuptools p.wheel ])) gitMinimal gnumake ]; }'
+# then: hydo build hydo.yaml; hydo run --backend kvm --image <image> "disk=none | run"
+# The workload is an agent's session as numbered steps (agent-steps.sh): test, fix, test,
+# commit, build the wheel, print what it left. `hydo inspect start <run dir> --at run:<stop>`
+# holds the workspace before the session, and `hydo inspect exec <session> --branch <name> ...`
+# runs other actions on branches of that state.
+format: 1
+name: agent-workspace
+description: an AI agent's workspace (a Git repository of a Python project with its tests), branched and replayed
+
+guest:
+  ram_mib: 1024
+
+root:
+  nix: [/nix/store/cm7675rcpqkbdgm5v8y937xhjabwlhha-agentws-tools]
+  files:
+    - {src: project, dst: /opt/stockbook}
+    - {src: agent-steps.sh, dst: /opt/agent-steps.sh, mode: "0755"}
+
+data:
+  size_mib: 256
+
+env:
+  GIT_AUTHOR_NAME: agent
+  GIT_AUTHOR_EMAIL: agent@example.invalid
+  GIT_COMMITTER_NAME: agent
+  GIT_COMMITTER_EMAIL: agent@example.invalid
+  GIT_CONFIG_NOSYSTEM: "1"
+  PIP_NO_CACHE_DIR: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+shell: |
+  export PATH=/nix/store/cm7675rcpqkbdgm5v8y937xhjabwlhha-agentws-tools/bin:$PATH
+
+provision: |
+  rm -rf /data/ws /data/agent.log
+  cp -R /opt/stockbook /data/ws
+  cd /data/ws && git init -q -b main && git add -A && git commit -q -m "stockbook 0.3.1"
+
+workload:
+  steps: 6
+  run: /opt/agent-steps.sh $HYDO_FROM $HYDO_TO
+  timeout: 600
+  process: agent-steps
+
+invariants:
+  - id: workspace.tests_pass_and_wheel_built
+    msg: after the session the tests pass and the wheel is built
+    cmd: |
+      cd /data/ws && python -m pytest -q -p no:cacheprovider > /tmp/t.out 2>&1
+      s=$?; tail -1 /tmp/t.out; ls dist/*.whl && [ $s = 0 ]

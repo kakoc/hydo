@@ -954,6 +954,18 @@ pub struct InspectCost {
     pub stops: u64,
 }
 
+/// The named branch an `exec` ran on (added for agent environments,
+/// docs/design/agent-environments.md).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InspectBranch {
+    pub name: String,
+    /// The branch this one was made from, when the call made it (`None`: the session's stop).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    /// The call made the branch (it did not exist before).
+    pub created: bool,
+}
+
 /// One answer of `hydo inspect` (added in M178): `op` says which; the members of that op are set.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Inspect {
@@ -994,6 +1006,14 @@ pub struct Inspect {
     pub truncated: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost: Option<InspectCost>,
+    /// `exec --branch`: the branch the call ran on (added for agent environments).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<InspectBranch>,
+    /// The engine's fingerprint of the guest's whole state when the call ended (registers,
+    /// devices, the disk, all of RAM, the console), as in a run's RESULT line: two calls whose
+    /// values are equal left the guest in the same state (added for agent environments).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_fp: Option<String>,
     /// Remarks for the caller (what the state is, what to try next).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
