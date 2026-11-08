@@ -90,6 +90,8 @@ pub struct VmOpts {
     pub spin_look: f64,
     pub trace: Option<String>,
     pub trace_unknown: bool,
+    /// HYDO_KVM_SPIN_STATE: the spin observer's full-state cycles ([`Vmm::observe_state`])
+    pub spin_state: bool,
     pub cmdline: String,
     pub virtio: virtio::Config,
 }
@@ -142,6 +144,14 @@ pub struct Vmm {
     pub stops: u64,
     /// console bytes echoed so far (a replay of the rewind mode does not echo them again)
     echoed: u64,
+    /// HYDO_KVM_SPIN_STATE: the observer also proves full-state cycles ([`Vmm::observe_state`])
+    spin_state: bool,
+    /// full-state cycles proven and resolved (statistics)
+    pub state_cycles: u64,
+    /// full-state looks that proved nothing (statistics)
+    pub state_gave_up: u64,
+    /// why the last full-state look proved nothing (the trace)
+    state_why: &'static str,
 }
 
 /// A snapshot of the machine (the vCPU, the engine's state, RAM, the devices, the console). RAM
@@ -298,6 +308,10 @@ impl Vmm {
             rw: Rewind::default(),
             stops: 0,
             echoed: 0,
+            spin_state: o.spin_state,
+            state_cycles: 0,
+            state_gave_up: 0,
+            state_why: "",
         };
         let cmdline = cmdline(&o.cmdline, vm.vio.ndev());
         match crate::boot::load(vm.ram.bytes_mut(), kernel, initrd, &cmdline) {
@@ -779,7 +793,12 @@ impl Vmm {
                     return STOP_SPIN;
                 }
                 // the spin observer (crate::spin): is this a provable cycle?
-                match self.observe() {
+                let mut seen = self.observe();
+                if seen == crate::spin::Outcome::GaveUp && self.spin_state {
+                    // HYDO_KVM_SPIN_STATE: a loop that stores, when the whole machine repeats
+                    seen = self.observe_state();
+                }
+                match seen {
                     crate::spin::Outcome::Resolved => {
                         self.m.n_spin += 1;
                         self.set_wait(self.spin_look);
@@ -1183,6 +1202,269 @@ impl Vmm {
         out
     }
 
+    /// The full-state cycle (HYDO_KVM_SPIN_STATE, a prototype; docs/design/kvm-engine.md, "Loops
+    /// that store: full-state cycles"), tried when [`Vmm::observe`] proved nothing. A loop that
+    /// stores to memory (a call's return address, a buffer filled with the same bytes in every
+    /// pass) or uses instructions the decoder does not know (VEX) is infinite when the whole
+    /// machine returns to a state it was in: on one vCPU without an exit nothing else changes
+    /// RAM or the devices, so the next pass is the same computation again.
+    ///
+    /// The proof: the vCPU's whole state at the kick (`s0`: registers, segment and control
+    /// registers, the XSAVE image, the KVM-owned MSRs, the pending events) and a hardware
+    /// breakpoint at its instruction; at each arrival whose whole vCPU state equals `s0`, KVM's
+    /// dirty-page log names the pages written since the arrival before, and their bytes are
+    /// compared with a copy taken then. When every page written since was in the copy with the
+    /// same bytes, RAM is what it was at the arrival before, so the machine state repeats
+    /// exactly. Then one period is walked with trap-flag single steps (no instruction of the
+    /// period saves RFLAGS: [`crate::spin::saves_flags`]; no fault or exception can be in it,
+    /// since the guest kernel's handlers count them in memory) and the vCPU is stepped to the
+    /// period's canonical state: the smallest register-state hash among the states with
+    /// interrupts enabled; when that hash occurs at several points, the whole vCPU state and the
+    /// pages the period writes tell them apart ([`Vmm::state_walk`]). That state is a function of
+    /// the cycle alone, not of where the kick came.
+    pub fn observe_state(&mut self) -> crate::spin::Outcome {
+        use crate::spin::{Outcome, Step};
+        /// arrivals at the kick's instruction before giving up
+        const ARRIVALS: u64 = 200_000;
+        /// pages a pass may write (a larger loop is not a polling loop)
+        const MAX_PAGES: usize = 1024;
+        /// matches (passes) before giving up: the first pass may write pages the next do not
+        const MATCHES: u32 = 8;
+        if !self.cpu().can_single_step() || !self.cpu().may_step() {
+            self.state_why = "the vCPU cannot be stepped";
+            return Outcome::GaveUp;
+        }
+        let t0 = Instant::now();
+        let budget = (self.spin_secs / 4.0).clamp(0.05, 2.0);
+        self.state_why = "";
+        // the rewind mode's log when it is on (its checkpoint then gets the pages too)
+        let shared = self.rw.on && self.rw.valid;
+        if !shared {
+            self.cpu_mut().dirty_log(true);
+        }
+        let _ = self.state_dirty(shared);
+        let s0 = self.cpu().save();
+        let r0 = s0.regs.rip;
+        let mut copy: std::collections::BTreeMap<u64, Vec<u8>> = Default::default();
+        let mut matches = 0u32;
+        let mut arrivals = 0u64;
+        let mut period: Vec<u64> = Vec::new();
+        let mut out = loop {
+            self.cpu_mut().step_to(Some(&Step { at: [r0, 0], n: 1 }));
+            self.watch.armed.store(true, Ordering::Relaxed);
+            let e = self.cpu_mut().run();
+            self.watch.armed.store(false, Ordering::Relaxed);
+            match e {
+                Exit::Debug => {}
+                Exit::Kick => {
+                    if t0.elapsed().as_secs_f64() > budget {
+                        self.state_why = "out of time";
+                        break Outcome::GaveUp;
+                    }
+                    continue;
+                }
+                e => break Outcome::Exit(e),
+            }
+            arrivals += 1;
+            if arrivals > ARRIVALS || t0.elapsed().as_secs_f64() > budget {
+                self.state_why = "no repeat in time";
+                break Outcome::GaveUp;
+            }
+            if self.cpu().regs() != s0.regs || self.cpu().save() != s0 {
+                continue;
+            }
+            let d = self.state_dirty(shared);
+            if d.len() > MAX_PAGES {
+                self.state_why = "a pass wrote too many pages";
+                break Outcome::GaveUp;
+            }
+            let ram = self.ram.bytes();
+            let page = |p: u64| &ram[p as usize * PAGE..(p as usize + 1) * PAGE];
+            if matches > 0
+                && d.iter()
+                    .all(|p| copy.get(p).is_some_and(|c| c[..] == *page(*p)))
+            {
+                period = d;
+                break Outcome::Resolved; // proven; the walk below finds the canonical state
+            }
+            for &p in &d {
+                copy.insert(p, page(p).to_vec());
+            }
+            matches += 1;
+            if matches > MATCHES {
+                self.state_why = "RAM did not repeat";
+                break Outcome::GaveUp;
+            }
+        };
+        self.cpu_mut().step_to(None);
+        if out == Outcome::Resolved {
+            out = self.state_walk(&s0, &period, t0, budget);
+        }
+        let _ = self.state_dirty(shared);
+        if !shared {
+            self.cpu_mut().dirty_log(false);
+        }
+        match out {
+            Outcome::Resolved => self.state_cycles += 1,
+            Outcome::GaveUp => self.state_gave_up += 1,
+            _ => {}
+        }
+        if self.trace.is_some() {
+            let (ex, rip) = (self.m.exits, self.cpu().rip());
+            self.trace_line(&format!(
+                "STATE-CYCLE {out:?} at exit {ex}: kick at {r0:x}, {arrivals} arrivals, {matches} matches, now at {rip:x} {}",
+                self.state_why
+            ));
+        }
+        out
+    }
+
+    /// The pages the guest wrote since the last call (KVM's log), sorted, once each; with the
+    /// rewind mode's log (`shared`) they are kept for its next checkpoint too.
+    fn state_dirty(&mut self, shared: bool) -> Vec<u64> {
+        let mut d = Vec::new();
+        self.cpu_mut().take_dirty(&mut d);
+        if shared {
+            self.rw.dev_dirty.extend_from_slice(&d);
+        }
+        d.sort_unstable();
+        d.dedup();
+        let n = (self.ram.len() / PAGE) as u64;
+        d.retain(|&p| p < n);
+        d
+    }
+
+    /// One period of a proven full-state cycle from `s0` (where the vCPU is), by single steps,
+    /// then on to the period's canonical state ([`Vmm::observe_state`]).
+    fn state_walk(
+        &mut self,
+        s0: &CpuState,
+        pages: &[u64],
+        t0: Instant,
+        budget: f64,
+    ) -> crate::spin::Outcome {
+        use crate::spin::{saves_flags, state_hash, syscall_len, Outcome};
+        /// instructions in one period at most
+        const WALK: usize = 1 << 20;
+        let cr3 = self.cpu().cr3();
+        let mut hs: Vec<u64> = Vec::new();
+        let mut ifs: Vec<bool> = Vec::new();
+        self.cpu_mut().single_step(true);
+        // one step; Err(the outcome) when the walk ends here
+        let step = |v: &mut Vmm| -> Result<(), Outcome> {
+            let rip = v.cpu().regs().rip;
+            let mut code = Vec::with_capacity(15);
+            for k in 0..15 {
+                match translate(v.ram.bytes(), cr3, rip.wrapping_add(k)) {
+                    Some(pa) => code.push(v.ram.bytes()[pa as usize]),
+                    None => break,
+                }
+            }
+            if let Some(n) = syscall_len(&code) {
+                // over the system call to the instruction after it (the kernel's part of the
+                // period is not walked; it is the same in every pass)
+                v.cpu_mut().step_to(Some(&crate::spin::Step {
+                    at: [rip.wrapping_add(n), 0],
+                    n: 1,
+                }));
+                let r = loop {
+                    v.watch.armed.store(true, Ordering::Relaxed);
+                    let e = v.cpu_mut().run();
+                    v.watch.armed.store(false, Ordering::Relaxed);
+                    match e {
+                        Exit::Debug => break Ok(()),
+                        Exit::Kick if t0.elapsed().as_secs_f64() <= budget * 4.0 => continue,
+                        Exit::Kick => break Err(Outcome::GaveUp),
+                        e => break Err(Outcome::Exit(e)),
+                    }
+                };
+                v.cpu_mut().step_to(None);
+                v.cpu_mut().single_step(true);
+                return r;
+            }
+            if code.is_empty() || saves_flags(&code) {
+                v.state_why = "an instruction that saves RFLAGS";
+                return Err(Outcome::GaveUp);
+            }
+            loop {
+                match v.cpu_mut().run() {
+                    Exit::Debug => return Ok(()),
+                    Exit::Kick => continue, // a late kick: nothing ran
+                    e => return Err(Outcome::Exit(e)),
+                }
+            }
+        };
+        let out = 'walk: {
+            loop {
+                let r = self.cpu().regs();
+                if !hs.is_empty() && r == s0.regs && self.cpu().save() == *s0 {
+                    break; // a whole period
+                }
+                hs.push(state_hash(&r));
+                ifs.push(r.rflags & (1 << 9) != 0);
+                if hs.len() > WALK || t0.elapsed().as_secs_f64() > budget * 4.0 {
+                    self.state_why = "the period is too long";
+                    break 'walk Outcome::GaveUp;
+                }
+                if let Err(o) = step(self) {
+                    break 'walk o;
+                }
+            }
+            let canon = hs
+                .iter()
+                .zip(&ifs)
+                .filter(|(_, &i)| i)
+                .map(|(&h, _)| h)
+                .min();
+            let Some(c) = canon else {
+                break 'walk Outcome::Deadlock;
+            };
+            // the vCPU is at s0 again, the start of the period: index 0
+            let tied: Vec<usize> = (0..hs.len()).filter(|&i| hs[i] == c && ifs[i]).collect();
+            let target = if tied.len() == 1 {
+                tied[0]
+            } else {
+                // the same registers at several points of the period (a function called twice
+                // from one frame): those points differ in the rest of the vCPU's state or in
+                // the pages the period writes, so a second walk tells them apart by both
+                let mut keys: Vec<(u64, usize)> = Vec::with_capacity(tied.len());
+                for i in 0..hs.len() {
+                    if tied.contains(&i) {
+                        let mut k = self.cpu().save().without_stale_events().hash(OFFSET);
+                        let ram = self.ram.bytes();
+                        for &p in pages {
+                            let o = p as usize * PAGE;
+                            k = mix64(&ram[o..o + PAGE], k);
+                        }
+                        keys.push((k, i));
+                    }
+                    if let Err(o) = step(self) {
+                        break 'walk o;
+                    }
+                }
+                keys.sort_unstable();
+                if keys.len() < 2 || keys[0].0 == keys[1].0 {
+                    self.state_why = "no single canonical state";
+                    break 'walk Outcome::GaveUp; // two points with one state: no canonical point
+                }
+                keys[0].1
+            };
+            for _ in 0..target {
+                if let Err(o) = step(self) {
+                    break 'walk o;
+                }
+            }
+            if state_hash(&self.cpu().regs()) != c {
+                // the walk is deterministic: never expected
+                self.state_why = "the second walk differs";
+                break 'walk Outcome::GaveUp;
+            }
+            Outcome::Resolved
+        };
+        self.cpu_mut().single_step(false);
+        out
+    }
+
     /// What the vCPU was doing in an exit-free stretch (HYDO_KVM_TRACE_UNKNOWN, at a SPIN): the
     /// sampled instruction pointers, the registers, and the code and stack bytes through the
     /// guest's page tables.
@@ -1360,7 +1642,11 @@ impl Vmm {
     /// The run engine's fingerprint (hydo-hvm's `xfp` with this machine's parts): the console,
     /// the vCPU, the machine state without statistics, the RAM size, the devices and all RAM.
     pub fn xfp(&self) -> u64 {
-        let s = self.cpu().save();
+        let mut s = self.cpu().save();
+        if self.spin_state {
+            // the mode turns the dirty-page log on at host-timed kicks (CpuState docs)
+            s = s.without_stale_events();
+        }
         let mut h = fnv(b"hydo-kvm-v1", OFFSET);
         h = fnv_u64(self.m.console_len, h);
         h = fnv(&self.console[..self.m.console_len as usize], h);
@@ -1388,6 +1674,16 @@ impl Vmm {
         let _ = writeln!(t, "{phase} regs {:?}", s.regs);
         let _ = writeln!(
             t,
+            "{phase} sregs {:016x} xsave {:016x} xcr0 {:#x} msrs {:x?}",
+            fnv(format!("{:?}", s.sregs).as_bytes(), OFFSET),
+            fnv(format!("{:?}", s.xsave).as_bytes(), OFFSET),
+            s.xcr0,
+            s.msrs
+        );
+        let _ = writeln!(t, "{phase} events {:?}", s.events);
+        let _ = writeln!(t, "{phase} debugregs {:x?}", s.debugregs);
+        let _ = writeln!(
+            t,
             "{phase} mach {:016x} exits {} vtime {}",
             fnv(&self.m.without_stats().bytes(), OFFSET),
             self.m.exits,
@@ -1411,6 +1707,12 @@ impl Vmm {
             m.exits, m.n_io, m.n_mmio, m.n_msr, m.n_hlt, m.n_hlt_jump, m.n_window, m.n_irq,
             m.n_clock, m.n_unknown, self.kicks, m.n_spin
         );
+        if self.spin_state {
+            t.push_str(&format!(
+                " full-state cycles resolved {} (looks that proved nothing {})",
+                self.state_cycles, self.state_gave_up
+            ));
+        }
         if self.rw.on || self.rw.proven != 0 {
             let r = &self.rw;
             t.push_str(&format!(

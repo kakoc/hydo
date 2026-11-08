@@ -21,8 +21,8 @@ fingerprints are its own: they compare with
 runs of this engine with the same guest kernel on the same kind of host CPU, never with hvx's or
 the Mac engine's (across engines only verdicts compare, and `hydo repro` says so); a v3 guest's
 fingerprints also differ between the performance and the efficiency cores of a hybrid CPU, so its
-vCPU runs on one kind ("x86-64-v3"). It has run on an Intel machine (the build machine) and, at v2,
-on GitHub's AMD runners.
+vCPU runs on one kind ("x86-64-v3"). It has run on an Intel machine (the build machine) and, at v2 and
+v3, on GitHub's AMD runners (EPYC 7763, 9V74 and 9V45: one set of fingerprints on all three).
 
 ## Why
 
@@ -437,6 +437,89 @@ fault on a guest write). The proof is register data flow over x86 instructions i
 Mac's "only `add`/`sub` of an induction register reads it", which also accepts the x86 forms
 where the counter's flags are written and never read.
 
+## Loops that store: full-state cycles (Milestone 194, a prototype, off by default)
+
+Why: a program that busy-polls memory from user space makes no exit while it waits, and the
+event it waits for comes only at an exit. TigerBeetle polls io_uring's completion queue like this
+(`while (!done) io.tick()`, no system call when nothing is to be submitted), so its `format`
+waited forever on this engine (Milestone 189). Its loop stores to memory in every pass (its calls'
+return addresses, a 4 KiB array filled with `0xaa`) and uses AVX2, so neither the exact rule nor
+the counter proof applies. The research behind the choice is in
+`hydo/explore/RESEARCH-kvm-exit-free.md` (an interrupt from the host's branch counter, help from
+the guest kernel, and this).
+
+What it does (`Vmm::observe_state`, `HYDO_KVM_SPIN_STATE=1`): when the observer's look proved
+nothing, it proves that the whole machine repeats, then resolves the loop like an exact cycle.
+
+1. The proof. It saves the vCPU's whole state at the kick (registers, segment and control
+   registers, the XSAVE image, the KVM-owned MSRs, the pending events, the debug registers), turns
+   KVM's dirty-page log on (or shares the rewind mode's), and runs to a hardware breakpoint at the
+   kick's instruction. At each arrival whose whole vCPU state equals the saved one, the log names
+   the pages written since the previous such arrival, and their bytes are compared with a copy
+   taken then. When every page written since was in the copy with the same bytes, RAM and the vCPU
+   are what they were one pass earlier. On one vCPU without an exit nothing else writes RAM or
+   touches the devices, so the pass repeats forever.
+2. The canonical state. One period is walked with trap-flag single steps; the canonical state is
+   the smallest general-register hash among the states with interrupts enabled. When that hash
+   occurs at more than one point of the period (TigerBeetle calls one `memset` twice from one
+   frame), a second walk tells the points apart by the whole vCPU state and the bytes of the pages
+   the period writes; two points that are equal in both give up. The vCPU is stepped to the
+   canonical state, the clock jumps to the next event as at an idle HLT, and the interrupt is
+   delivered at the next entry. The point depends on the cycle alone, not on when the kick came.
+3. Why single steps are safe there: a fault or exception cannot be in a proven cycle (the guest
+   kernel counts faults in memory, so a pass with one would not repeat); the walk does not step an
+   instruction that saves or reloads RFLAGS (`spin::saves_flags`: PUSHF, POPF, IRET, INT, UD2,
+   SYSRET, SYSENTER), and it runs over a SYSCALL to a breakpoint at the next instruction
+   (`spin::syscall_len`), so the trap flag never reaches the guest's memory or registers.
+4. Limits: a pass may write at most 1024 pages; the proof has a quarter of `HYDO_KVM_SPIN_SECS`
+   (at most 2 s) and 200,000 arrivals; a loop that keeps a counter in memory is not a cycle (the
+   counter proof covers registers only). Anything it cannot prove is left where free running would
+   have taken it, and the run ends as SPIN as before.
+
+**The fingerprint in this mode.** `KVM_GET_VCPU_EVENTS` reports the vector and error code of the
+last exception KVM re-injected, and the last interrupt's vector, even when nothing is injected or
+pending. KVM re-injects a guest's own page fault when a VM exit interrupts its delivery, for
+example an EPT fault on a page the dirty-page log write-protected. The mode turns the log on at
+kicks, whose timing is the host's, so these leftovers differed between runs: the first two runs of
+TigerBeetle gave two fingerprints that differed only in the stale error code of a page fault (6 or
+20) in the vCPU part. The guest never sees them. With the mode on the fingerprint hashes the vCPU
+state without them (`CpuState::without_stale_events`). The default fingerprint keeps hashing them,
+so that no recorded value moves; whether they can also differ without the mode (an EPT fault
+during the delivery of an exception happens at host-chosen moments whenever the host drops EPT
+entries, for page reclaim, compaction or huge-page collapse) is open (AGENTS.md open item 45 (h)).
+
+**Measured** (the build machine, TigerBeetle 0.17.9's single-replica image,
+`hydo/onboard/examples/tigerbeetle/hydo/hydo-single.yaml`, built by the 0.2.0 candidate release,
+image `9bb2da8a…`, v3, 3072 MiB; one VM at a time, the vCPU on the performance cores):
+
+| schedule | without the mode | with `HYDO_KVM_SPIN_STATE=1` |
+|---|---|---|
+| `disk=none \| run` | `ERROR boot: SPIN` (format never finishes) | OK, 33 of 33 commands, invariants held; `3a4bc40c537fa2e5` six times from fresh boots and once from the explorer's worker S1; about 20 s of wall time per run |
+| `disk=none \| run K=tigerbeetle_0@5+3` | — | OK (30 commands ok, 3 failed while the replica was down), `f0d41a5e0ec01857` twice |
+| `disk=cut \| run C=10` | — | OK (the recovery boot), `ee29f74b535be5d7` twice |
+| `disk=none \| run P=tigerbeetle_0@5+5` | — | OK (29 ok, 4 failed), `c81750124e391266` twice |
+| `disk=none \| run T=6:3600` | — | OK, `f836467eda6c12ad` twice |
+
+A clean run resolves 205 full-state cycles (`format` waiting for its disk writes, then `start`
+opening the data file); 12 to 16 looks proved nothing (a kick inside a computation that ends with an
+exit, or out of the look's time). Before the canonical state broke ties by the whole vCPU state and
+the written pages, `start`'s loop gave up at every look ("no single canonical state") and the run
+ended as SPIN.
+
+**Inert when off.** Without `HYDO_KVM_SPIN_STATE` the observer does what it did and the fingerprint
+is the same function: `hv/kvm/kvm-check.sh` with this branch's `hydo` gave 16 of 16 on the build
+machine, every value equal to Milestone 189's run (Redis `bfa03053d51bec8a` and `8ed16d6da60c34c6`,
+ten runs each on CPUs 0 and 16, S1 `ac512c2616cef6a4`, the exploration's 46 runs and `hydo repro`
+14 of 14, the kill, pause, clock, I/O-error, tick-jitter and preemption schedules, netem
+`0fcb6905c8f54cd1`, ledger-spin `f796ae624a9473d1` through the rewind mode).
+
+**What would make it the default.** It changes no valid run: it acts only where the run would
+otherwise end as SPIN. On AMD (GitHub's runners, EPYC 7763, 9V74 and 9V45, "On an AMD host"
+below) TigerBeetle's single replica gave one fingerprint per schedule on every model, with the
+Intel verdicts. Before it is on by default: a review of the proof. The user decided (2026-11-08)
+that leaving the stale event fields out of the default fingerprint goes into the same later change
+that turns the mode on by default, so that the KVM values are re-recorded once.
+
 ## Nondeterminism under KVM, and how each source is closed
 
 | source | how it is closed | test |
@@ -471,6 +554,8 @@ where the counter's flags are written and never read.
 | a kick (the watchdog's signal) | not an exit: nothing changes in the guest, nothing is counted | the run loop |
 | the host's KVM version and CPU microarchitecture (undefined flag results, FPU pointers) | not closed: a fingerprint is this engine's on one kind of host; verdicts compare everywhere | see "Where fingerprints compare" |
 | counter loops without exits (the state at a kick depends on when it came) | the rewind mode: back to a checkpoint, the same exits again, the interrupt at the first arrival at the loop's canonical instruction (M161); without the mode the run ends at once as a SPIN and the host runs it again in the mode | `counter_loop` tests; `a_counter_loop_is_...`; ledger-spin on KVM, each schedule twice on a performance and an efficiency core |
+| loops without exits that store (a polling loop that rewrites the same bytes, calls functions, uses AVX) | with `HYDO_KVM_SPIN_STATE` (M194, a prototype): proven when the whole vCPU state and every page written in a pass repeat, resolved at the period's canonical state as an exact cycle; without it the run ends as SPIN | `saves_flags` test; TigerBeetle's single replica, five schedules twice each and from S1 |
+| what KVM keeps of a finished event (the last re-injected exception's vector and error code, the last interrupt's vector, reported with nothing injected or pending) | with `HYDO_KVM_SPIN_STATE` left out of the fingerprint (`CpuState::without_stale_events`); in the default fingerprint still hashed (open: AGENTS.md open item 45 (h)) | TigerBeetle: two fingerprints differing only there before, one after |
 | what the host's memory holds for a snapshot | not the guest's: RAM bases, private pages and the copy-on-write disk give the same bytes as full copies; the fingerprint reads every byte (zero pages of a base without reading them) | `mem` and `disk` tests; every M159 fingerprint again |
 
 ## Where fingerprints compare
@@ -551,7 +636,7 @@ the stop where the host took S1).
 - Variables (hydo-config's registry, group `Kvm`): `HYDO_BACKEND`, `HYDO_KVM`, `HYDO_KVM_ENGINE`,
   `HYDO_KVM_KERNEL`, `HYDO_KVM_DEV`, `HYDO_KVM_STEP`, `HYDO_KVM_RUN_EXITS`, `HYDO_KVM_SPIN_SECS`,
   `HYDO_KVM_SPIN_MS`, `HYDO_KVM_TRACE`, `HYDO_KVM_ECHO`, `HYDO_KVM_DIAG`, `HYDO_KVM_DIAG_RAM`,
-  `HYDO_KVM_TRACE_UNKNOWN`; the ABI probe's `HYDO_KVM_HEADERS` (tests).
+  `HYDO_KVM_TRACE_UNKNOWN`, `HYDO_KVM_SPIN_STATE` (a prototype: "Loops that store"); the ABI probe's `HYDO_KVM_HEADERS` (tests).
 
 ## x86-64-v3 (`guest.cpu: v3`, Milestone 189)
 
@@ -651,10 +736,12 @@ calls functions and uses VEX instructions), so it is the class "anything else th
 exits ends the run as invalid" (AGENTS.md open item 45 (c)), not a v3 problem. A remedy needs an
 exit at a point the guest alone fixes inside such a loop: a proof of exact cycles that also
 covers stores (writes that put back the same bytes) and AVX registers, or a branch-counting
-interrupt as hvx's.
+interrupt as hvx's. Milestone 194 built the first as a prototype (`HYDO_KVM_SPIN_STATE=1`, "Loops
+that store: full-state cycles"); with it the single-replica image runs on this engine.
 
-**On an AMD host (GitHub's runners).** Not run yet. The steps, on `ubuntu-24.04` (AMD EPYC there
-on 2026-11-08), with the branch checked out:
+**On an AMD host (GitHub's runners).** Run on 2026-11-08 (Milestone 194, a temporary workflow on a
+branch deleted afterwards; the results are below the steps). The steps, on `ubuntu-24.04` (AMD EPYC
+there), with the branch checked out:
 
 1. Give the runner's user `/dev/kvm`: write the udev rule
    `KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"` to
@@ -671,13 +758,38 @@ on 2026-11-08), with the branch checked out:
    and builds the image with the release), and keep `$RUNNER_TEMP/v3/v3-check.log` as an artifact,
    with `grep -m1 'model name' /proc/cpuinfo`.
 
-Expected: 5 of 5, with fingerprints of their own (AMD's XINUSE tracking and MXCSR_MASK are its
-own, as v2's fingerprints already differ by vendor). Running `hv/kvm/kvm-check.sh` there as well
-shows the v2 values unchanged (`93da6e186fe00d1a` and `ea0afd368b0ab9b1` on the Redis image).
+On the runners the release assets were downloaded with `gh release download` (the plain download
+URLs answered 504 that day), `kvm-check.sh` was started by its absolute path (before the fix in
+Milestone 194 it found the ledger-spin example only that way), and the ledger-spin programs were
+compiled with the runner's gcc 13.3 (`GCC=gcc sh hv/kvm/spin/build.sh`), so that image has other
+bytes than the pinned build.
 
-Left: no AMD host has run a v3 guest yet (AMD's XINUSE tracking and its MXCSR_MASK will give
-other fingerprints, as v2's already differ by vendor; the verdicts should be equal); several vCPUs
-stay hvx's.
+**Results** (this branch's static `hydo`, the code of Milestone 194 at `e38b6e4d`; the published
+0.2.0 release; nested virtualization in the runners' VMs, Linux 7.0.0-1017-azure, 4 vCPUs; nine
+runner jobs over three workflow runs on three CPU models: AMD EPYC 7763, 9V74 and 9V45; a run whose
+release download failed with 504 is not counted). `hydo explore --schedule "disk=none | run"`
+printed the run's result and then exited 1 with "cannot read the schedule ...: no dseed=" (a
+schedule without `dseed=`; not looked into, the result line was read):
+
+| check | result on every runner and CPU model |
+|---|---|
+| `kvm-check.sh`, `HYDO_KVM_SPIN_STATE` off | 16 of 16 on all three models (the first run, before the path fix, 15 of 16 with only the ledger-spin image missing, on 9V74 and 7763) |
+| Redis (`d255fb2b…`) `disk=none \| run` | OK `93da6e186fe00d1a` (the published 0.2.0's value on these runners) |
+| `disk=cut \| run C=12 R=everysec` | VIOLATION k:1 `ea0afd368b0ab9b1`, also 10 of 10 on each of CPUs 0 and 1 |
+| from S1 | `c38398d54f65b65a`, the fresh boot's |
+| `K=redis@5+2`, `P=redis@4+3`, `T=6:3600`, `disk=ioerr:20 dseed=7`, `tj=1234 tjpm=300`, `pct=99 pctn=4` | `b0ded09c81feee03`, `3e24cfb5426583f9`, `af721c855db6470c`, `d7f681e813a3d913`, `a00ee8a0780e05c3`, `ed578e96dad5e3e8`, each twice (the Intel verdicts) |
+| exploration, seeds 1-20, 2 workers | 46 runs, `hydo repro` 14 of 14 with the recorded fingerprint |
+| netem image (`bd4c979f…`) | OK `0ae295b2d6b8280e` twice |
+| ledger-spin (`ef05d20c…`, the runner's gcc) | OK `0ee1692e3f434c9a`, 4 of 4 through the rewind mode |
+| `v3-check.sh` (image `1ae6a578…`, the build machine's bytes) | 5 of 5: `disk=none \| run` OK `bbe57a517805cd64` from fresh boots and from S1, `T=4:3600` `6b7c5fa1ce83371c` twice, the v2 control fails (Intel: `856667408ac3beaa`) |
+| TigerBeetle's single replica (`9bb2da8a…`, the build machine's bytes) with `HYDO_KVM_SPIN_STATE=1` | `disk=none \| run` OK `adf23d40c773219d` twice; `K=tigerbeetle_0@5+3` OK `abc2842bcb614ec0` twice; `disk=cut \| run C=10` OK `37e02cc8895a8935` twice; from the worker's S1 (a third workflow run, on 7763, 9V74 and 7763) `adf23d40c773219d`, the fresh boot's; 120 to 200 s of wall time per run (about 20 s on the build machine) |
+
+Every value was the same on all three CPU models: on these
+runners an AMD host gives one set of fingerprints for v2 and for v3 alike, other than Intel's and
+with Intel's verdicts. The XINUSE tracking that splits a v3 guest's fingerprints between the two
+core types of the build machine's hybrid Intel CPU does not differ between these AMD models.
+
+Left: several vCPUs stay hvx's.
 
 ## One vCPU
 
@@ -697,8 +809,9 @@ OpenSSL and the Go and Rust runtimes check CPUID first). GitHub's AMD runners ra
 2026-11-08 (AGENTS.md, open item 45): the same verdicts as on Intel, fingerprints of their own. At
 v3 the standard XSAVE format is the same on both vendors (the engine checks the AVX offset on the
 host); which components a core tracks as initial, and MXCSR_MASK, are the core's, so a v3 guest's
-fingerprints are per CPU kind there too. No AMD host has run a v3 guest yet (`hv/kvm/v3-check.sh`
-does it).
+fingerprints are per CPU kind there too. A v3 guest ran on AMD in Milestone 194 (GitHub's runners,
+EPYC 7763, 9V74 and 9V45: `hv/kvm/v3-check.sh` 5 of 5, one fingerprint on all three models;
+"On an AMD host" above).
 
 ## Code structure
 

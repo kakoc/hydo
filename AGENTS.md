@@ -282,7 +282,11 @@ x86-64-v2 level, or at x86-64-v3 for `guest.cpu: v3` on a host whose KVM has AVX
 `hv/kvm/v3-check.sh`). It runs on Intel and on AMD (GitHub's ubuntu-24.04 runners, 2026-11-08).
 Its fingerprints are its own and differ between CPU vendors; the verdicts are the same. Details:
 `docs/design/kvm-engine.md`, Milestones 159, 161, 175 and 189, and open item 45 in
-`docs/HISTORY.md` Milestone 187.
+`docs/HISTORY.md` Milestone 187. A guest loop without VM exits that stores (TigerBeetle polling
+io_uring) runs with the opt-in prototype `HYDO_KVM_SPIN_STATE=1`, which proves such a loop by the
+whole vCPU state and a dirty-page compare (M194; `hydo/explore/RESEARCH-kvm-exit-free.md`). With it
+off, every recorded KVM value is unchanged; with it on, TigerBeetle's single replica gives one
+fingerprint per schedule on Intel and on three AMD EPYC models.
 
 **Guest control.** Every image is an agent image. The guest agent `hydo-agent` (0.3.0) is PID 1
 and runs only primitives. The host controller (`hydo/crates/hydo-control`) drives services,
@@ -400,6 +404,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     expressions are approximations; a lawyer's review is open (M158).
 45. The KVM engine: one vCPU only. On AMD, RDRAND, RDSEED and TSX cannot be made to fault, so a
     guest program that uses them without checking CPUID sees the host (M159, M161).
+    `HYDO_KVM_SPIN_STATE` stays off until its proof is reviewed; the user decided (2026-11-08)
+    that turning it on goes together with leaving KVM's stale event fields out of the default
+    fingerprint, in one re-recording (item 45 (c) and (h)). A loop that counts in memory is still
+    never proven (M194).
 46. Homebrew: no Linux formula (M168).
 47. The install cache: no pruning; the Linux side ran only against a local server (M162).
 48. [user decision] The Rust test SDK is unpublished until the user decides about code-first
@@ -631,6 +639,9 @@ build machine, before 2026-10-13.
 - M193: YugabyteDB onboarded on hvx (three nodes; the default WAL setting loses acknowledged
   writes at a power cut; a backward clock step stops the tservers); fixes to `hydo-build`'s PAX
   reader, the `debugfs` message and `L=` of an image service
+- M194: guest loops without VM exits on KVM: research (a host branch counter, the guest kernel)
+  and the opt-in full-state cycle prototype `HYDO_KVM_SPIN_STATE=1`; TigerBeetle's single replica
+  runs on KVM; the first v3 guest on AMD
 
 ## Where to look
 

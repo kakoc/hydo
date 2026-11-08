@@ -90,6 +90,32 @@ pub struct CpuState {
 }
 
 impl CpuState {
+    /// The state without what KVM keeps of an event it has finished with: `KVM_GET_VCPU_EVENTS`
+    /// reports the vector and error code of the last exception (and the vector of the last
+    /// interrupt) KVM injected or re-injected even when nothing is injected or pending any more.
+    /// A re-injection happens when a VM exit (an EPT fault, which the dirty-page log causes at
+    /// writes) interrupts the delivery of the guest's own exception, so those leftovers depend on
+    /// the host; the guest never sees them. The fingerprint with HYDO_KVM_SPIN_STATE hashes this
+    /// form ([`crate::vmm::Vmm::xfp`]); the default fingerprint keeps hashing them, so that no
+    /// recorded value moves (docs/design/kvm-engine.md, "Loops that store").
+    pub fn without_stale_events(&self) -> CpuState {
+        let mut s = self.clone();
+        let e = &mut s.events;
+        if e.exception.injected == 0 && e.exception.pending == 0 {
+            e.exception.nr = 0;
+            e.exception.has_error_code = 0;
+            e.exception.error_code = 0;
+            if e.exception_has_payload == 0 {
+                e.exception_payload = 0;
+            }
+        }
+        if e.interrupt.injected == 0 {
+            e.interrupt.nr = 0;
+            e.interrupt.soft = 0;
+        }
+        s
+    }
+
     /// The fingerprint of the state: every architectural field, in a fixed order, no padding.
     pub fn hash(&self, mut h: u64) -> u64 {
         let r = &self.regs;
@@ -280,6 +306,15 @@ pub trait Cpu: Send {
         [0; 3]
     }
     fn set_run_flags(&mut self, _f: [u8; 3]) {}
+    /// Whether [`Cpu::single_step`] works (KVM's vCPU; not the scripted one).
+    fn can_single_step(&self) -> bool {
+        false
+    }
+    /// Trap-flag single steps on or off (`KVM_GUESTDBG_SINGLESTEP`): while on, every run stops
+    /// after one instruction with [`Exit::Debug`]. Only for code the caller has checked: the
+    /// flag is visible to an instruction that saves RFLAGS (PUSHF, SYSCALL, an exception's
+    /// frame). [`Cpu::step_to`] turns it off.
+    fn single_step(&mut self, _on: bool) {}
     /// Start (or stop) KVM's dirty-page log of guest RAM (the rewind mode).
     fn dirty_log(&mut self, _on: bool) {}
     /// Append the pages the guest wrote since the last call (or since the log started), and
