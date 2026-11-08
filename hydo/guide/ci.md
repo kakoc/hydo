@@ -16,8 +16,8 @@ system. The CI system only runs it, keeps its files and, if you want, posts its 
 6. It writes `ci-run.json`, `report.md` and `junit.xml` into its output directory (default
    `hydo-ci`).
 
-Its exit status is 0 when the run passed, 1 when it failed by the project's policy (`fail_on`),
-and 2 when it could not complete (for example, the image did not build).
+Its exit status is 0 when the run passed and 1 when it failed by the project's policy
+(`fail_on`). It is 2 when the run could not complete, for example when the image did not build.
 
 ## 1. Try it on your machine
 
@@ -86,10 +86,10 @@ jobs:
           hydo-version: 0.3.0
 ```
 
-The action installs that hydo release (checked against the release's `SHA256SUMS`), caches
-`~/.hydo` (the release and the image cache), fetches the pull request's base commit, runs
-`hydo ci run`, keeps its output directory as an artifact, writes the report into the job
-summary, and posts it as one pull-request comment that it edits on every push. The job fails with
+The action installs that hydo release, checked against the release's `SHA256SUMS`. It caches
+`~/.hydo` (the release and the image cache), fetches the pull request's base commit and runs
+`hydo ci run`. It keeps the output directory as an artifact and writes the report into the job
+summary. It also posts the report as one pull-request comment, which it edits on every push. The job fails with
 `hydo ci run`'s exit status. A pull request from a fork gets a read-only token: the comment is
 then skipped with a warning, and the report is still in the job summary.
 
@@ -99,7 +99,7 @@ Inputs: `hydo-version` (required), `project` (the directory that holds `hydo/hyd
 ## 4. GitLab CI
 
 Copy hydo's template, `action/gitlab/hydo.gitlab-ci.yml` of https://github.com/kakoc/hydo at an
-`action-v1.*` tag, into the repository (here as `ci/hydo.gitlab-ci.yml`), include it and extend
+`action-v1.*` tag, into the repository (here as `ci/hydo.gitlab-ci.yml`). Include it, and extend
 its hidden job:
 
 ```yaml
@@ -130,7 +130,7 @@ Every other system uses the same command and files:
 7. Fail the job with `hydo ci run`'s exit status.
 
 Every finding and every saved regression is one test case in `junit.xml`. A finding in a state
-that `fail_on` names is a failed test, a finding already on the base is a skipped test, and the
+that `fail_on` names is a failed test, and a finding already on the base is a skipped test. The
 test's text has the minimal schedule and the command that reproduces it.
 
 `hydo ci run` reads the commit, the base, the change number and the job's link from these

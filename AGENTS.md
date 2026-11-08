@@ -283,11 +283,12 @@ x86-64-v2 level, or at x86-64-v3 for `guest.cpu: v3` on a host whose KVM has AVX
 `hv/kvm/v3-check.sh`). It runs on Intel and on AMD (GitHub's ubuntu-24.04 runners, 2026-11-08).
 Its fingerprints are its own and differ between CPU vendors; the verdicts are the same. Details:
 `docs/design/kvm-engine.md`, Milestones 159, 161, 175 and 189, and open item 45 in
-`docs/HISTORY.md` Milestone 187. A guest loop without VM exits that stores (TigerBeetle polling
-io_uring) runs with the opt-in prototype `HYDO_KVM_SPIN_STATE=1`, which proves such a loop by the
-whole vCPU state and a dirty-page compare (M194; `hydo/explore/RESEARCH-kvm-exit-free.md`). With it
-off, every recorded KVM value is unchanged; with it on, TigerBeetle's single replica gives one
-fingerprint per schedule on Intel and on three AMD EPYC models.
+`docs/HISTORY.md` Milestone 187. Some guest loops make no VM exits and store to memory, for
+example TigerBeetle's polling of io_uring. They run with the opt-in prototype
+`HYDO_KVM_SPIN_STATE=1`, which proves such a loop by the whole vCPU state and a dirty-page compare
+(M194; `hydo/explore/RESEARCH-kvm-exit-free.md`). With it off, every recorded KVM value is
+unchanged. With it on, TigerBeetle's single replica gives one fingerprint per schedule on Intel
+and on three AMD EPYC models.
 
 **The CPU's caches (M203).** By default the guest's CPUID describes no caches
 on hvx and KVM. The key `guest.cpu_cache: true` is a format-1 addition and is off by default. It
@@ -321,8 +322,8 @@ optional `primary:` command that prints the current primary. `K=`, `P=` and `X=`
 (`K=n1,n2@5+2`) or a selector over a group (`K=nodes.majority@5+2`, `K=nodes.primary@5+1`), and
 `N=` takes a partition (`N=n1/n2,n3@...`) or a group's shape (`halves`, `isolate`, `ring`,
 `bridge`, `primary`). The control transcript records each resolution. `hydo explore
---cluster-faults` draws them from their own stream. The reference is `hydo/onboard/MANIFEST.md`,
-section "Groups of services and partitions".
+--cluster-faults` draws them from their own stream. The reference is the section `Groups of
+services and partitions` of `hydo/onboard/MANIFEST.md`.
 
 **Onboarding and SDKs.** The skill `skills/hydo-onboard/` holds the process; every hydo fact is
 in the guide `hydo/guide/`, printed by `hydo guide <topic>`. The assertion SDKs are in `sdk/`
@@ -351,11 +352,11 @@ boot's clock too. `hydo init` and `hydo compose` write `guest.clock_start` as th
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
 
 **hydo in a team's CI (stage 1 built, M197).** `docs/design/ci.md` designs hydo as part of a team's
-own continuous integration in stages 0 to 4; stage 1 is built. `hydo ci run` builds the image (or
-takes it from the image cache by input key), explores it with the mode's fixed seeds, decides every
-finding against the base commit by replay (`new`, `pre-existing`, `present`, `changed`, `fixed`,
-`unverified`), replays the saved regressions, and writes `ci-run.json`, `report.md` and
-`junit.xml`. `hydo ci compare` compares two recorded runs offline. The settings are in
+own continuous integration in stages 0 to 4; stage 1 is built. `hydo ci run` builds the image, or
+takes it from the image cache by input key, and explores it with the mode's fixed seeds. It decides
+every finding against the base commit by replay: `new`, `pre-existing`, `present`, `changed`,
+`fixed` or `unverified`. It replays the saved regressions and writes `ci-run.json`, `report.md`
+and `junit.xml`. `hydo ci compare` compares two recorded runs offline. The settings are in
 `hydo/ci.yaml` (format 1, `hydo/schema/ci-v1.json`). The adapters are the GitHub composite action
 `action/action.yml` and the GitLab template `action/gitlab/hydo.gitlab-ci.yml`; `hydo guide ci`
 is the recipe for other systems.
@@ -443,10 +444,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     expressions are approximations; a lawyer's review is open (M158).
 45. The KVM engine: one vCPU only. On AMD, RDRAND, RDSEED and TSX cannot be made to fault, so a
     guest program that uses them without checking CPUID sees the host (M159, M161).
-    `HYDO_KVM_SPIN_STATE` stays off until its proof is reviewed; the user decided (2026-11-08)
-    that turning it on goes together with leaving KVM's stale event fields out of the default
-    fingerprint, in one re-recording (item 45 (c) and (h)). A loop that counts in memory is still
-    never proven (M194).
+    `HYDO_KVM_SPIN_STATE` stays off until its proof is reviewed. The user decided (2026-11-08)
+    to turn it on together with a default fingerprint without KVM's stale event fields, in one
+    re-recording. A loop that counts in memory is still never proven (M194).
 46. Homebrew: no Linux formula (M168).
 47. The install cache: no pruning; the Linux side ran only against a local server (M162).
 48. [user decision] The Rust test SDK is unpublished until the user decides about code-first
@@ -479,12 +479,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 66. Messaging checks: no VM ran one yet, and per-window measures, `Exploration.messages` and the
     other SDKs' helpers are not built. The planted-bug example and the real-system onboardings
     come next (M196).
-67. `hydo ci run` ran only on this Mac: not on Linux, and the action and the GitLab template never
-    ran on GitHub or GitLab (a trial needs a throwaway public repository, the user's decision).
+67. `hydo ci run` ran only on this Mac, not on Linux. The action and the GitLab template never
+    ran on GitHub or GitLab; a trial needs a throwaway public repository, the user's decision.
     Stage 2 (history, accepted findings, budgets, sharding) is not built (M197).
-68. Agent environments: no network in the guest, no incremental state hash (the full
-    fingerprint costs about 0.8 s per call), one vCPU, no way to drop a snapshot, and a session on hvx
-    holds only 5 branches (M199).
+68. Agent environments: the guest has no network and one vCPU. There is no incremental state
+    hash, so the full fingerprint costs about 0.8 s per call. A snapshot cannot be dropped, and a
+    session on hvx holds only 5 branches (M199).
 69. The KVM engine gave two fingerprints for one Ghost schedule
     (`H=mailgun.messages@0-12:status=500,effect=yes`) with the same transcript, consoles and
     verdict; not investigated (M200).
@@ -698,34 +698,27 @@ build machine, before 2026-10-13.
   `hydo-sql` in both releases, every example re-recorded, both releases built twice and verified)
 - M191: a plan of only `checks/` or `regressions/` keeps the manifest's own `workload.run` (before, its
   saved regressions passed without running it); `W=` is refused on such an image
-- M192: small fixes from the onboardings (`hydo explore --schedule` without `dseed=`, the
-  diagnosis of a service that is down or does not recover, a failing `.sql` check's rows in the
-  verdict, the guide on ordering by the system's own times, `kvm-check.sh` by a relative path,
-  `hvx_hugeram_test` in `deploy-metal.sh`)
-- M193: YugabyteDB onboarded on hvx (three nodes; the default WAL setting loses acknowledged
-  writes at a power cut; a backward clock step stops the tservers); fixes to `hydo-build`'s PAX
-  reader, the `debugfs` message and `L=` of an image service
-- M194: guest loops without VM exits on KVM: research (a host branch counter, the guest kernel)
-  and the opt-in full-state cycle prototype `HYDO_KVM_SPIN_STATE=1`; TigerBeetle's single replica
-  runs on KVM; the first v3 guest on AMD
+- M192: small fixes from the onboardings: `hydo explore --schedule` without `dseed=`, the
+  diagnosis of a service that is down, a failing `.sql` check's rows, and `hvx_hugeram_test` in
+  `deploy-metal.sh`
+- M193: the YugabyteDB onboarding on hvx, with three hydo fixes. The default WAL setting loses
+  acknowledged writes at a power cut, and a backward clock step stops the tservers
+- M194: guest loops without VM exits on KVM: research, and the opt-in prototype
+  `HYDO_KVM_SPIN_STATE=1`, with which TigerBeetle's single replica runs on KVM
 - M195: lists and group selectors for `K=`, `P=` and `X=`, partition shapes for `N=`, and
-  `--cluster-faults`; NATS 2.10.22 loses its stream to `K=nodes.all@1+2` without reactions
+  `--cluster-faults`
 - M196: messaging checks, `type: messages` (the checker, the declaration with
   `include:` bundles, `Run.messages`, the Rust recorder)
 - M197: hydo in a team's CI, stage 1: `hydo ci run` and `hydo ci compare`, `hydo/ci.yaml`,
-  `ci-run.json`, `report.md` and `junit.xml`, the GitHub action and the GitLab template,
-  `hydo guide ci`
-- M198: cost tracking as deterministic work counts, an experiment (the opt-in probe `HYDO_COST`;
-  counts exactly stable on every engine, sensitive to durability settings and faults; CPU work
-  visible only on hvx; `docs/design/cost-tracking.md`)
+  the GitHub action and the GitLab template, `hydo guide ci`
+- M198: cost tracking as deterministic work counts, an experiment with the opt-in probe
+  `HYDO_COST` (`docs/design/cost-tracking.md`)
 - M199: deterministic, branchable environments for AI agents, a spike (`hydo inspect exec
-  --branch`, `state_fp`, 64 snapshots on KVM and the Mac, the agent-workspace example;
-  `docs/design/agent-environments.md`)
-- M200: Ghost onboarded on KVM (Mailgun and Stripe faked over HTTPS); a donation is recorded once
-  per webhook delivery (known upstream), a newsletter batch whose answer is lost goes out again
-- M201: flaky test verdicts of 31 SWE-bench Lite tasks: no verdict flipped natively or under
-  hydo; native logs differed in 27 of 31 tasks, hydo's never; stale `.pyc` caches from the fixed
-  file times (`docs/design/flaky-verdicts.md`)
+  --branch`, `state_fp`, `docs/design/agent-environments.md`)
+- M200: the Ghost onboarding on KVM. A donation is recorded once per webhook delivery (known
+  upstream), and a newsletter batch whose answer is lost goes out again
+- M201: flaky test verdicts of 31 SWE-bench Lite tasks. No verdict flipped natively or under
+  hydo, and stale `.pyc` caches came from the fixed file times (`docs/design/flaky-verdicts.md`)
 - M202: seven fixes from the YugabyteDB onboarding: `services[].start_after`, the `cf=` clock
   carry under `guest.clock_after_cut`, `services[].logs`, `clock_start` in new projects,
   `root.fix_pyc`, fixed `hydo inspect` output names, and the Compose importer's header and

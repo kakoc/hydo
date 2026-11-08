@@ -27,3 +27,5 @@ SMIs
 SQL
 TigerBeetle
 VMXON
+GitHub Actions
+GitLab CI

@@ -4503,7 +4503,7 @@ Tests: `services_in_verdicts` and three fixture tests on copies of the power-cut
 
 **Nothing recorded moved.** The workspace's fast test tier passed on this Mac (556 tests), and so did the full `cargo test --locked --release --workspace`. `hydo-bench rebaseline --check` on this Mac, from a new work folder with Go 1.26.5 from go.dev (sha256 `efb87ff2…`, checked against go.dev's list), built all 21 images once with their recorded bytes and ran all 75 schedules: every verdict, fingerprint and ctl value as recorded (560 s). The re-baseline was not run on hvx or KVM. The two changes that act during a run (the explorer's class of a hand-given schedule, and the `.sql` check's verdict line) touch no recorded schedule: none is a `--schedule` exploration and no recorded image has a `.sql` check.
 
-**Not checked with Vale.** `docs/STYLE.md` and `ci/vale.sh` are not on this branch's base yet, so the new text follows the standard by hand (read from the commit that adds it) and was not run through Vale.
+**Vale.** `docs/STYLE.md` and `ci/vale.sh` were not on this milestone's base, so its text was first written to the standard by hand; at the integration `sh ci/vale.sh` ran on every listed document with no findings.
 
 ### Milestone 193 — DONE (YugabyteDB onboarded on hvx as an outside user would; three hydo fixes; 2026-11-08)
 
