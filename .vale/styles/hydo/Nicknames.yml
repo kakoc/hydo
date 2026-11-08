@@ -1,0 +1,9 @@
+# docs/STYLE.md "No project nicknames": call a thing by what it is.
+extends: substitution
+message: "Use '%s' instead of the nickname '%s'."
+level: error
+ignorecase: true
+swap:
+  front door: the order service
+  metal box: the bare-metal machine
+  build box: the build machine

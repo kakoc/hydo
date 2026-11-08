@@ -1,0 +1,26 @@
+# docs/STYLE.md "No hedging": state what is known and what was measured. When something is not
+# known, say what was not checked.
+extends: existence
+message: "Do not hedge with '%s'. State the fact, or say what was not checked."
+level: error
+ignorecase: true
+tokens:
+  - perhaps
+  - might
+  - probably
+  - possibly
+  - arguably
+  - presumably
+  - somewhat
+  - fairly
+  - quite
+  - rather
+  - seems? to
+  - appears? to
+  - more or less
+  - to some extent
+  - in some sense
+  - kind of
+  - sort of
+  - it is likely that
+  - tends? to

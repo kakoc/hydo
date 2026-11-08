@@ -1,0 +1,9 @@
+# docs/STYLE.md: no rhetorical questions. A heading may ask what its section answers; body text
+# states facts.
+extends: existence
+message: "No questions in body text. State the answer."
+level: error
+scope: paragraph
+nonword: true
+raw:
+  - '[A-Za-z)\]]\?(?:\s|$)'

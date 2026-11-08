@@ -1,7 +1,7 @@
 # Continuous integration
 
-Two workflows (Milestone 167; split into two tiers in Milestone 171). Neither needs a secret;
-both read the repository only (`permissions: contents: read`, the checkout keeps no
+Three workflows (Milestone 167; split into two tiers in Milestone 171; the documentation check
+since Milestone 186). None needs a secret; each reads the repository only (`permissions: contents: read`, the checkout keeps no
 credentials), pin every action by commit, and run every step with `bash -eo pipefail`.
 
 - `.github/workflows/ci.yml`, the **per-push tier**, on every push and pull request: formatting,
@@ -11,6 +11,12 @@ credentials), pin every action by commit, and run every step with `bash -eo pipe
   `cargo test --locked --release --workspace`, as docs/RELEASING.md step 1 asks before a release,
   every night (02:17 UTC, on the default branch), on demand (Actions, `ci-full`, Run workflow, or
   `gh workflow run ci-full.yml --ref <branch>`), and on a pull request labelled `full-ci`.
+- `.github/workflows/docs.yml`, the **documentation check**, on a push or pull request that
+  changes a Markdown file, `.vale.ini`, `.vale/` or `ci/vale.sh`: `sh ci/vale.sh`, which runs
+  Vale 3.25.1 with the Google and proselint packages and the project's own style on the
+  documents docs/STYLE.md covers (docs/STYLE.md "How the standard is checked"). Vale and the two
+  packages are downloaded and checked by sha256 in the script; every warning and error fails
+  it. Locally the same command works on a Mac (Apple Silicon) or Linux (x86_64).
 
 ## What runs
 

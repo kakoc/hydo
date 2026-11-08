@@ -1,0 +1,9 @@
+# docs/STYLE.md "Short sentences": at most 20 words in an instruction and 25 in a description
+# (ASD-STE100). Vale cannot tell an instruction from a description, so it checks the outer
+# limit of 30 words. Code spans are not counted.
+extends: occurrence
+message: "This sentence has more than 30 words. Split it."
+level: error
+scope: sentence
+max: 30
+token: '\b[\w''’-]+\b'
