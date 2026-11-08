@@ -145,7 +145,8 @@ hydo has found upstream bugs without being told where to look:
 - A failure replays exactly only with the same engine, the same image, and the same hydo
   version. A failure found on Linux does not replay on a Mac.
 - The kernel module supports Intel VT-x only, not AMD. The KVM engine has run only on Intel CPUs.
-- In 0.2.0 a guest has at most 3 GiB of RAM on Linux and 4 GiB on a Mac.
+- In 0.2.0 a guest has at most 3 GiB of RAM on Linux and 4 GiB on a Mac. The next release raises
+  the limit to 8 GiB on every engine.
 - Time inside the virtual machine is virtual, so hydo does not measure performance.
 - The kernel module runs with the rights of the kernel. Anyone who can open `/dev/hvx` can run
   guests through it, so give that access only to people you would give sudo.

@@ -69,7 +69,7 @@ It stops with a message that names the file when the file is missing (M151).
 - The main module loaded now is M179's: guest RAM up to 8 GiB, with M156's PMU-clock guard. Its
   srcversion is `869F246124D8A3F84879E74`. The user loaded it on 2026-11-08 with
   `deploy-metal.sh load`. The earlier modules are in `docs/HISTORY.md` (Milestones 140, 156 and
-  186).
+  187).
 - Rust: run `. ~/hydo-rust/env.sh` first (rustup with Rust 1.90.0 and the musl target). Build the
   run engine in a tree with `cargo build --release -p hydo-hvx`.
 - Nix (since M140): run `. ~/hydo-nixb-work/nixenv.sh` to put Nix 2.18.9 and the pinned nixpkgs
@@ -215,6 +215,13 @@ The release index `hydo/dist/releases.txt` pins every published archive. Since 0
 release ships the KVM engine, and the Mac programs are signed and notarized. Checksums and verification:
 `docs/HISTORY.md` Milestone 177. How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`.
 
+**Registry publishing from GitHub Actions.** From the next release on, a tag `v<version>`
+starts `.github/workflows/release.yml`. It publishes the crates, the PyPI and npm packages, and the
+Go tag with each registry's trusted publishing, so no token is stored. `packages.yml` dry-runs the
+packages on every pull request that changes one. The user is doing the one-time setup on each
+registry (open item 63); until it is done, a release is published by hand. The details are in
+`docs/PUBLISHING.md`, section "Publishing from GitHub Actions" (M186).
+
 **Since 0.2.0 on `main`, not released.**
 
 - `hydo inspect` and the failure diagnosis (M178).
@@ -279,15 +286,19 @@ in the guide `hydo/guide/`, printed by `hydo guide <topic>`. The assertion SDKs 
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
 
+**hydo in a team's CI (design only).** `docs/design/ci.md` designs hydo as part of a team's own
+continuous integration: findings proven new or fixed by replay, a small history per run, and
+seed ranges split across runners. It plans stages 0 to 4. None of it is built yet.
+
 **Documentation.** `docs/STYLE.md` is the writing standard, checked by `sh ci/vale.sh`. Before
-M186 this file held the full current state; that text is kept verbatim in `docs/HISTORY.md`
-Milestone 186.
+M187 this file held the full current state; that text is kept verbatim in `docs/HISTORY.md`
+Milestone 187.
 
 ## Open items
 
 Items marked [user decision] need the user before anyone acts on them. Each item names the
 milestone where it is described. The full text of each item as of 2026-11-08 is in
-`docs/HISTORY.md` Milestone 186.
+`docs/HISTORY.md` Milestone 187.
 
 2. [user decision] The single-Kafka image and the onboarding stack example keep Kafka's default
    retention and `skip-log-bin`; fixing them moves unrelated baselines (M63).
@@ -375,6 +386,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 60. Ready-made SQL workloads: the MySQL dialect and arm64 ran only in unit tests (M182).
 61. Storage faults: `L=` keeps writes the disk had not flushed (M183).
 62. [user decision] `guest.outcomes_after_cut` stays opt-in until an epoch change (M184).
+63. [user decision] Trusted publishing needs the user's one-time setup on GitHub, crates.io, PyPI
+    and npm. The npm entry expires after two days unused, so add it just before a release. No
+    run of `release.yml` or `packages.yml` has happened yet. A crate new to `cargo install hydo`
+    needs its first version published by hand (M186).
 
 ## Milestone index
 
@@ -565,7 +580,8 @@ build machine, before 2026-10-13.
 - M183: storage faults of one service
 - M184: no silent passes
 - M185: one test program per crate
-- M186: the writing standard, Vale, a shorter AGENTS.md and a new README
+- M186: registry packages published from GitHub Actions with trusted publishing
+- M187: the writing standard, Vale, a shorter AGENTS.md and a new README
 
 ## Where to look
 

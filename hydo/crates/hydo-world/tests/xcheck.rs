@@ -11,7 +11,7 @@
 //! version of hydo-world (M111; its source, `hydo/onboard/world/`, was deleted after the proofs
 //! and is in git at dd2ea9c) and is now the reference. `HYDO_WORLD_BIN` runs it against
 //! another binary (the Go one, for example); `HYDO_BLESS=1` rewrites the golden file. The ports
-//! are fixed (base `HYDO_XCHECK_PORT`, default 38600) because they appear in error texts.
+//! are fixed (base `HYDO_XCHECK_PORT`, default 28600, below Linux's ephemeral port range 32768-60999 so that no outgoing connection on the machine can hold one) because they appear in error texts.
 //!
 //! A step whose records race on the host (a duplicated webhook is delivered twice at once) is
 //! marked, and its records are compared as a sorted set.
@@ -1041,7 +1041,7 @@ async fn scenario() {
     let base: u16 = std::env::var("HYDO_XCHECK_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(38600);
+        .unwrap_or(28600);
     let p = Ports::new(base);
     let bin = std::env::var_os("HYDO_WORLD_BIN")
         .map(PathBuf::from)

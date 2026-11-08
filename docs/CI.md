@@ -1,7 +1,7 @@
 # Continuous integration
 
 Three workflows (Milestone 167; split into two tiers in Milestone 171; the documentation check
-since Milestone 186). None needs a secret; each reads the repository only (`permissions: contents: read`, the checkout keeps no
+since Milestone 187). None needs a secret; each reads the repository only (`permissions: contents: read`, the checkout keeps no
 credentials), pin every action by commit, and run every step with `bash -eo pipefail`.
 
 - `.github/workflows/ci.yml`, the **per-push tier**, on every push and pull request: formatting,
@@ -17,6 +17,14 @@ credentials), pin every action by commit, and run every step with `bash -eo pipe
   documents docs/STYLE.md covers (docs/STYLE.md "How the standard is checked"). Vale and the two
   packages are downloaded and checked by sha256 in the script; every warning and error fails
   it. Locally the same command works on a Mac (Apple Silicon) or Linux (x86_64).
+
+Two more workflows concern releases (Milestone 186; docs/PUBLISHING.md "Publishing from GitHub
+Actions"): `.github/workflows/packages.yml` packs and checks every registry package (the crates
+of `cargo install hydo` with `hydo/dist/crates/rehearse.sh` on Linux and macOS, the Python sdist
+and wheel with `twine check --strict`, `npm pack --dry-run`) on every pull request and push to
+main that changes a package, without a secret; `.github/workflows/release.yml` publishes them
+from a version tag with each registry's trusted publishing, its publishing jobs in the GitHub
+environment `release` and the only jobs that may ask for an OIDC token.
 
 ## What runs
 
