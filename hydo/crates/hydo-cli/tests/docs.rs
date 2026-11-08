@@ -687,3 +687,27 @@ fn the_release_docs_review_is_a_release_step_with_one_prompt() {
         );
     }
 }
+
+// ---------------------------------------------------------------- the pull-request form
+
+/// The pull-request form asks, with one checkbox, whether the documentation is updated or why
+/// no page needs a change, and CONTRIBUTING.md points to it.
+#[test]
+fn the_pull_request_form_asks_for_the_docs() {
+    let form = read(".github/pull_request_template.md");
+    let boxes: Vec<&str> = form.lines().filter(|l| l.starts_with("- [ ]")).collect();
+    assert_eq!(
+        boxes.len(),
+        1,
+        "the form must have exactly one checkbox: {boxes:?}"
+    );
+    assert!(
+        boxes[0].contains("documentation") && boxes[0].contains("Reason"),
+        "the checkbox must ask about the documentation and for a reason: {}",
+        boxes[0]
+    );
+    assert!(
+        read("CONTRIBUTING.md").contains(".github/pull_request_template.md"),
+        "CONTRIBUTING.md does not mention the pull-request form"
+    );
+}

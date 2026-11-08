@@ -152,9 +152,12 @@ argument.
 ## Submit a change
 
 1. Open a pull request against `main` on https://github.com/kakoc/hydo.
-2. Make sure that CI passes. The `ci` workflow runs on every push, and `docs` runs when a document
+2. Tick the documentation box of the pull-request form
+   ([.github/pull_request_template.md](.github/pull_request_template.md)): the documentation is
+   updated, or no page needs a change. If no page needs a change, give the reason.
+3. Make sure that CI passes. The `ci` workflow runs on every push, and `docs` runs when a document
    changes.
-3. Your contribution is licensed under the license of each file that you change. A new file is
+4. Your contribution is licensed under the license of each file that you change. A new file is
    licensed under Apache-2.0, except in [hv/hvx/](hv/hvx/), where
    [hv/hvx/LICENSE.md](hv/hvx/LICENSE.md) says which license applies. `hvx.c` is licensed under
    GPL-2.0-only.
