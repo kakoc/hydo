@@ -3319,3 +3319,46 @@ acked=12), so it is recorded on each engine (hvx `5cfee0d955a38b78`, the Mac `17
 `c5b4f7cbd0ec3ac7`), and the KVM exploration's third minimal schedule
 `disk=lying:6 dseed=b3c3d806a5d34604 | run C=5` (`72764bbb630728d2`). `--check --thorough` from the
 release commit gave every value of the list on all three engines.
+
+## 19. The fingerprint epoch 2 (M204, 2026-11-08)
+
+Made with `hydo-bench rebaseline --write --thorough` on the three engines (docs/HISTORY.md
+"Milestone 204"); the values are in `hydo/onboard/recorded.json` (its `epoch` is 2), and this
+section records only the decisions.
+
+**The fingerprint epoch is 2.** The user decided (2026-11-08) to make five fixes the default in
+one change: `guest.cpu_cache` for x86_64 images, `root.fix_pyc`, the KVM engine's full-state
+cycles, a KVM fingerprint without KVM's leftover event fields, and Compose's short-form
+`depends_on` with restart policies in force from a service's start. The first four move recorded
+fingerprints, so `hydo_image::EPOCH` is 2, and every image built at epoch 2 records it in
+`/etc/hydo/image.json`, which moves every image's bytes once. The defaults that act at run time
+are taken from the epoch in the image's record (`hydo_image::defaults`), so an image built at
+epoch 1 gives its epoch-1 values under this hydo, as checked on all three engines.
+
+**What moved.** The Mac (`hvm`): 21 of 21 images and 76 of 76 runs (fingerprints only: every
+recorded ctl value is the same). KVM (`kvm`, the build machine): 4 of 4 images and 13 of 13 runs
+(fingerprints only; the two stack images were built on the bare-metal machine and run with
+`--no-build`). hvx (`hvx`): 39 of 39 images and 129 of 132 runs written, with 32 recorded ctl
+values moved, because the CPUID cache leaves change the guest's timing. Every run gave the same
+values twice from fresh boots, and every image built twice to the same bytes.
+
+**Three hvx verdicts changed, and the list keeps their epoch-1 values until the user decides**
+(AGENTS.md open item 74): `hvx/etcd-3.5.5` `disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1`
+(recorded VIOLATION, revision 82 after 83; now OK `aef7cfa89a40a28a`), `hvx/miniflux`
+`disk=none dseed=1 | run P=postgres@10~50:4000` (recorded OK; now VIOLATION, acked c14 missing
+from the API, `7b12415767cbb079`) and `hvx/stack-errors-fix` `disk=ioerr:5 dseed=1 | run`
+(recorded ERROR restart after the faults (mysql); now (redis), `4d9d5f493f30d060`). The etcd and
+miniflux images built with `guest.cpu_cache: false` give the recorded verdicts (docs/HISTORY.md
+"Milestone 204"; the stack variant was not built). Until then, `hydo-bench rebaseline --check` on hvx reports these three; `--write
+--accept-verdicts` writes them.
+
+**Runs added.** `hvx/release-redis` `disk=lying:2 dseed=17144527b62d669c | run C=17` (VIOLATION
+key k:2 lost, `32676d17c82aa953`): at epoch 2 the Linux quickstart's exploration shrinks its
+lying-disk failures to this schedule, and the quickstart cites it.
+
+**The pinned reproducers** are the stack example's epoch-2 images (`~/hydo/build/m204` on the
+bare-metal machine; `hydo/onboard/examples/stack/build-reproducers.sh` rebuilds them):
+`a76d7fe857fdb37c` (VIOLATION, order 11) on `explore-ob-stack-old-disk.img` (`dab0e76c…`) and
+`efbde7b57264be0f` (OK) on `explore-ob-stack-fix-disk.img` (`d61cbf00…`); on KVM
+`c586a0079f931135` and `32c826fd530a6c6d`. The epoch-1 images in `~/hydo/build/m155` still give
+`1dc3677fb94053cf` and `ba0aa0612502a1df` under this hydo.

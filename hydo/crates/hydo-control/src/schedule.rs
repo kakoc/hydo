@@ -1378,24 +1378,27 @@ fn mount_data(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
 /// supervisor and the main sequence may both start one); a plan without a restart policy has only
 /// the main sequence's starts, which never wait here.
 fn start_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
+    start_svc_with(fx, ctx, s, false)
+}
+
+/// `start_svc`; `policy`: [`start_all`]'s start, in which the service's restart policy is in
+/// force during its readiness check ([`await_ready_starting`], M204).
+fn start_svc_with(fx: &mut F<'_>, ctx: &Ctx, s: &str, policy: bool) -> Step<bool> {
     fx.until(|h, _| !h.starting.contains(s))?;
     fx.effect(|h, _| {
         h.starting.insert(s.to_string());
         Memo::Unit
     });
-    let up = start_svc_once(fx, ctx, s)?;
+    let up = match launch_svc(fx, ctx, s)? {
+        Some(e) if policy => await_ready_starting(fx, ctx, s, e)?,
+        Some(e) => await_ready(fx, ctx, s, e)?,
+        None => false,
+    };
     fx.effect(|h, _| {
         h.starting.remove(s);
         Memo::Unit
     });
     Ok(up)
-}
-
-fn start_svc_once(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
-    match launch_svc(fx, ctx, s)? {
-        Some(e) => await_ready(fx, ctx, s, e),
-        None => Ok(false),
-    }
 }
 
 /// `start_svc` without its readiness check (`start_after: started` of the next service): the
@@ -1425,7 +1428,7 @@ fn await_launched(
     pending: &mut Vec<(String, Vec<String>)>,
 ) -> Step<()> {
     for (s, e) in std::mem::take(pending) {
-        let up = await_ready(fx, ctx, &s, e)?;
+        let up = await_ready_starting(fx, ctx, &s, e)?;
         fx.effect(|h, _| {
             h.starting.remove(&s);
             Memo::Unit
@@ -1516,6 +1519,117 @@ fn launch_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<Option<Vec<String>>> {
 /// [`launch_svc`] gave its commands.
 fn await_ready(fx: &mut F<'_>, ctx: &Ctx, s: &str, e: Vec<String>) -> Step<bool> {
     let sv = ctx.plan.service(s).expect("a service of the plan");
+    let deadline = (sv.timeout.max(0) as u64) * 1000;
+    Ok(probe_ready(fx, ctx, s, e, deadline)?.0 == Probed::Up)
+}
+
+/// How a readiness check ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Probed {
+    Up,
+    /// The service's process ended during the check.
+    Died,
+    /// The check did not pass in time (or could not start).
+    NotReady,
+}
+
+/// A service's readiness check as [`start_all`] makes it (M204): its restart policy
+/// (`services[].restart`) is in force from the service's start, as under Docker Compose. When the
+/// process ends during the check and the policy restarts it (Docker's decision, as the workload's
+/// supervisor makes it: `always` and `unless-stopped` after every exit, `on-failure` after a
+/// status that is not 0, at most `<max>` times), it is started again after Docker's delay (100 ms,
+/// doubled after each restart up to 60 s) and checked again. The restarts share the check's time
+/// limit: each try of a check counts one second and each delay its milliseconds. A service
+/// without a policy, or one that does not end during its check, gets [`await_ready`]'s commands,
+/// command for command.
+fn await_ready_starting(fx: &mut F<'_>, ctx: &Ctx, s: &str, e: Vec<String>) -> Step<bool> {
+    let sv = ctx.plan.service(s).expect("a service of the plan");
+    let pol = sv.restart;
+    if !pol.restarts() {
+        return await_ready(fx, ctx, s, e);
+    }
+    let name = pol.name();
+    let budget = (sv.timeout.max(0) as u64) * 1000;
+    let (mut used, mut delay, mut count, mut e) = (0u64, 0u64, 0u64, e);
+    loop {
+        let (r, tries) = probe_ready(fx, ctx, s, e.clone(), budget.saturating_sub(used))?;
+        if r != Probed::Died {
+            return Ok(r == Probed::Up);
+        }
+        used += tries.max(1) * 1000;
+        // the exit status of the process that ended (127: its start was refused)
+        fx.until(|h, f| {
+            h.services.get(s).is_some_and(|v| {
+                f.exits.contains_key(&v.spawn) || matches!(f.replies.get(&v.spawn), Some(Err(_)))
+            })
+        })?;
+        let status = match fx.effect(|h, f| {
+            let id = h.services[s].spawn;
+            Memo::Text(
+                f.exits
+                    .get(&id)
+                    .map(|x| x.status)
+                    .unwrap_or(127)
+                    .to_string(),
+            )
+        }) {
+            Memo::Text(t) => t.parse::<u32>().unwrap_or(127),
+            m => unreachable!("memo out of step: {m:?}"),
+        };
+        let again = match pol {
+            hydo_manifest::Restart::No => false,
+            hydo_manifest::Restart::Always | hydo_manifest::Restart::UnlessStopped => true,
+            hydo_manifest::Restart::OnFailure { max } => status != 0 && (max == 0 || count < max),
+        };
+        if !again {
+            log(
+                fx,
+                format!("{s} exited (status {status}) while it started; not restarted (restart: {name})"),
+            );
+            return Ok(false);
+        }
+        delay = if delay == 0 {
+            restart::FIRST_MS
+        } else {
+            (delay * 2).min(restart::MAX_MS)
+        };
+        used += delay;
+        if used >= budget {
+            log(
+                fx,
+                format!("{s} exited (status {status}) while it started; no time left of its {}s readiness limit for a restart (restart: {name})", sv.timeout),
+            );
+            return Ok(false);
+        }
+        log(
+            fx,
+            format!(
+                "{s} exited (status {status}) while it started; restarting it in {delay} ms (restart: {name})"
+            ),
+        );
+        let env = self::env(fx, ctx, &[]);
+        run(fx, vec![bb(ctx), "sleep".into(), secs(delay, 3)], env, None)?;
+        count += 1;
+        log(
+            fx,
+            format!("restarting {s} (restart: {name}, restart {count} while it started)"),
+        );
+        match launch_svc(fx, ctx, s)? {
+            Some(n) => e = n,
+            None => return Ok(false),
+        }
+    }
+}
+
+/// One readiness check of a started service within `deadline_ms`: how it ended, and its tries.
+fn probe_ready(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    s: &str,
+    e: Vec<String>,
+    deadline_ms: u64,
+) -> Step<(Probed, u64)> {
+    let sv = ctx.plan.service(s).expect("a service of the plan");
     let ns = netns::of(ctx, s);
     // the readiness loop: `ready` once a second, at most `timeout` times, while the service
     // lives (AMBIGUOUS: the shell starts poll k one second after poll k-1 ENDED; the agent at k
@@ -1528,14 +1642,15 @@ fn await_ready(fx: &mut F<'_>, ctx: &Ctx, s: &str, e: Vec<String>) -> Step<bool>
         gid: None,
         netns: ns,
         every_ms: 1000,
-        deadline_ms: (sv.timeout.max(0) as u64) * 1000,
+        deadline_ms,
         alive: Some(s.to_string()),
     }))?;
     if fx.reply(pid)?.is_err() {
         log(fx, format!("{s} NOT ready after {}s", sv.timeout));
-        return Ok(false);
+        return Ok((Probed::NotReady, 0));
     }
     let p = fx.probe_done(pid)?;
+    let tries = p.tries;
     match p.why {
         ProbeEnd::Ok => {
             // AMBIGUOUS: the shell also prints its uptime here; the host has no such clock.
@@ -1543,15 +1658,15 @@ fn await_ready(fx: &mut F<'_>, ctx: &Ctx, s: &str, e: Vec<String>) -> Step<bool>
                 fx,
                 format!("{s} ready after {} polls", p.tries.saturating_sub(1)),
             );
-            Ok(true)
+            Ok((Probed::Up, tries))
         }
         ProbeEnd::Died => {
             log(fx, format!("{s} DIED"));
-            Ok(false)
+            Ok((Probed::Died, tries))
         }
         ProbeEnd::Deadline => {
             log(fx, format!("{s} NOT ready after {}s", sv.timeout));
-            Ok(false)
+            Ok((Probed::NotReady, tries))
         }
     }
 }
@@ -1583,7 +1698,7 @@ fn start_all(fx: &mut F<'_>, ctx: &Ctx, verdict: &str, recovery: bool) -> Step<(
                 Some(e) => pending.push((s.name.clone(), e)),
                 None => return die_oracle(fx, format!("{verdict} ({})", s.name)),
             }
-        } else if !start_svc(fx, ctx, &s.name)? {
+        } else if !start_svc_with(fx, ctx, &s.name, true)? {
             return die_oracle(fx, format!("{verdict} ({})", s.name));
         }
     }

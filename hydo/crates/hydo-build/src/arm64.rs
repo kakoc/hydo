@@ -463,8 +463,9 @@ pub fn build(
             &v,
         )?;
     }
-    // root.fix_pyc (Milestone 202): Python's bytecode caches point at the fixed time below
-    if pyv::get(rootsec, "fix_pyc")? == Some(&serde_json::Value::Bool(true)) {
+    // root.fix_pyc (Milestone 202): Python's bytecode caches point at the fixed time below; on
+    // unless the manifest says false (fingerprint epoch 2, Milestone 204)
+    if pyv::get(rootsec, "fix_pyc")? != Some(&serde_json::Value::Bool(false)) {
         crate::pyc::fix_tree(&r, fsx::FIXED_MTIME)?;
     }
     fsx::fix_mtimes(&r)?;

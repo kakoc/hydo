@@ -1605,10 +1605,11 @@ pub fn ready_warnings(
 }
 
 /// Image services whose image has the glibc 2.28 of Red Hat Enterprise Linux 8 and its rebuilds
-/// (AlmaLinux 8, Rocky Linux 8, UBI 8, CentOS 8), in a manifest with `guest.cpu: v3` and without
-/// `guest.cpu_cache: true` (M203, no silent passes): that glibc takes its copy thresholds from
-/// the CPUID cache leaves, which are empty without the key, and its AVX `memcpy` then fails at
-/// once (a segfault in `libc-2.28.so`; at v2 it uses another copy, which works). x86_64 only
+/// (AlmaLinux 8, Rocky Linux 8, UBI 8, CentOS 8), in a manifest with `guest.cpu: v3` and
+/// `guest.cpu_cache: false` (M203, no silent passes): that glibc takes its copy thresholds from
+/// the CPUID cache leaves, which are empty with the key off, and its AVX `memcpy` then fails at
+/// once (a segfault in `libc-2.28.so`; at v2 it uses another copy, which works). An image built
+/// by this hydo has the leaves when the key is absent (fingerprint epoch 2, M204). x86_64 only
 /// (the caller's). Called as [`ready_warnings`].
 pub fn cpu_cache_warnings(
     oci: &[OciService],
@@ -1623,7 +1624,7 @@ pub fn cpu_cache_warnings(
 /// [`cpu_cache_warnings`] for image services given as (service, the image's PATH, its tree).
 fn cpu_cache_warnings_in(paths: &[(String, String, PathBuf)], m: &Value) -> Vec<String> {
     let g = m.get("guest");
-    let on = g.and_then(|g| g.get("cpu_cache")).and_then(Value::as_bool) == Some(true);
+    let on = g.and_then(|g| g.get("cpu_cache")).and_then(Value::as_bool) != Some(false);
     let v3 = g.and_then(|g| g.get("cpu")).and_then(Value::as_str) == Some("v3");
     if on || !v3 {
         return Vec::new();
@@ -1637,9 +1638,9 @@ fn cpu_cache_warnings_in(paths: &[(String, String, PathBuf)], m: &Value) -> Vec<
             out.push(format!(
                 "services: {svc}: its image has the glibc 2.28 of Red Hat Enterprise Linux 8's \
                  family (/{libc}), whose AVX memcpy fails when CPUID describes no caches, and \
-                 this manifest has guest.cpu: v3 without guest.cpu_cache: true: its programs \
-                 would end with a segfault in libc-2.28.so; add guest.cpu_cache: true \
-                 (MANIFEST.md \"The CPU's caches\")"
+                 this manifest has guest.cpu: v3 with guest.cpu_cache: false: its programs \
+                 would end with a segfault in libc-2.28.so; remove guest.cpu_cache: false (the \
+                 default gives the cache leaves; MANIFEST.md \"The CPU's caches\")"
             ));
         }
     }
@@ -2248,8 +2249,8 @@ mod tests {
     }
 
     /// M203: an image with the glibc 2.28 of Red Hat Enterprise Linux 8's family is named when the
-    /// manifest has guest.cpu: v3 and lacks guest.cpu_cache: true; with the key, at v2, or for
-    /// another glibc or distribution, nothing is said.
+    /// manifest has guest.cpu: v3 and guest.cpu_cache: false; without the key (on by default
+    /// since M204), with it on, at v2, or for another glibc or distribution, nothing is said.
     #[test]
     fn rhel8_glibc_without_the_cache_leaves_is_named() {
         let root = std::env::temp_dir().join(format!("hydo-cpucache-{}", std::process::id()));
@@ -2277,7 +2278,8 @@ mod tests {
                 )
             })
             .collect();
-        let w = cpu_cache_warnings_in(&paths, &json!({"guest": {"cpu": "v3"}}));
+        let off = json!({"guest": {"cpu": "v3", "cpu_cache": false}});
+        let w = cpu_cache_warnings_in(&paths, &off);
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(
             w[0].starts_with(
@@ -2287,9 +2289,14 @@ mod tests {
             "{}",
             w[0]
         );
-        assert!(w[0].contains("add guest.cpu_cache: true"), "{}", w[0]);
+        assert!(w[0].contains("remove guest.cpu_cache: false"), "{}", w[0]);
         let on = json!({"guest": {"cpu": "v3", "cpu_cache": true}});
         assert!(cpu_cache_warnings_in(&paths, &on).is_empty());
+        let absent = json!({"guest": {"cpu": "v3"}});
+        assert!(
+            cpu_cache_warnings_in(&paths, &absent).is_empty(),
+            "on by default (M204)"
+        );
         assert!(
             cpu_cache_warnings_in(&paths, &json!({})).is_empty(),
             "v2 copies work"

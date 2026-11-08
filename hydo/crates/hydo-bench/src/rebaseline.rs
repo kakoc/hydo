@@ -739,6 +739,7 @@ fn pool_for(o: &Opts, image: &Path, workers: usize, outdir: &Path) -> Result<Poo
         vcpus: 1,
         cpu: if cpu { CpuLevel::V3 } else { CpuLevel::V2 },
         cpu_cache,
+        epoch: hydo_engine::image::image_epoch(image).0,
         kernel,
         initrd,
         outdir: outdir.join("consoles"),
@@ -766,7 +767,8 @@ fn pool_for(o: &Opts, image: &Path, workers: usize, outdir: &Path) -> Result<Poo
     ))
 }
 
-/// The guest's RAM and whether it asks for x86-64-v3, from the manifest the image carries.
+/// The guest's RAM, whether it asks for x86-64-v3, and its CPU cache leaves (an absent key as the
+/// image's fingerprint epoch decides, M204), from the manifest the image carries.
 fn guest_of(image: &Path) -> (u32, bool, bool) {
     let Ok(text) = hydo_engine::image::embedded_manifest(image) else {
         return (1024, false, false);
@@ -778,7 +780,7 @@ fn guest_of(image: &Path) -> (u32, bool, bool) {
     (
         g["ram_mib"].as_u64().map_or(1024, |r| r as u32),
         g["cpu"].as_str() == Some("v3"),
-        g["cpu_cache"].as_bool() == Some(true),
+        hydo_engine::image::cpu_cache_of(image, g["cpu_cache"].as_bool()),
     )
 }
 

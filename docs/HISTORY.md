@@ -5127,3 +5127,196 @@ An earlier probe (three steps) gave the same picture and showed the v2 control: 
 **Proof on KVM** (the build machine, 13th Gen Intel Core i7-13700HX, through `on_build_machine`, no sudo, one hydo run at a time): the example's images, each twice from a fresh boot: with the key OK `340a37f2e67f9270` (ctl `52b4d6abce332870`; `getconf` 32768 32768 262144 8388608), without it VIOLATION `8373565567212627` (ctl `ee4aaaad1ec44ec2`; `getconf` 0 0 0 0); with the key from the worker's S1 `dbf9804d5480ba0a`, the fresh boot of the same schedule (`disk=none dseed=1 | run`) the same. The first probe's images gave OK `9037e4e693bab2e0` and VIOLATION `06e3244d55cdbe7e`, each twice. `hv/kvm/kvm-check.sh` with the key off: 16 of 16 (Redis `bfa03053d51bec8a`, `8ed16d6da60c34c6`, S1 `ac512c2616cef6a4`, ten runs on each of CPU 0 and CPU 16 with one result, the exploration's 14 of 14 reproduced, netem `0fcb6905c8f54cd1`, ledger-spin `f796ae624a9473d1` through the rewind mode). The script's own folder is now taken before it changes folder: started as `sh hv/kvm/kvm-check.sh` with a relative path, its ledger-spin step had looked for its files under the output folder. `hydo-bench rebaseline --platform kvm --check --thorough`: the two Redis release images (`kvm/release-redis`, `kvm/release-redis-netem`) built twice with their recorded bytes, and their 11 schedules ran twice from fresh boots with the recorded values; no verdict changed. The stack images cannot be built there (their build needs `sudo` for the build machine's owners), so the pinned reproducer images were copied from the bare-metal machine and run with `hydo run --backend kvm`, twice each: `c3419179cf1a55ba` (VIOLATION, order 11) and `c0746a7568ccf3b8` (OK), the recorded values.
 
 **Left** (AGENTS.md open items 72 and 73): the main module's reload (the user's, with other sessions told); the decision about the default. Also: the engine's refusal on an old module reaches the user only through `engine.log` (the verdict says `ERROR harness boot vm`); hydo-build's warning looks only for the Red Hat family's glibc 2.28 (other C libraries that size copies from CPUID were not surveyed); no AMD host has run the key yet (the table does not depend on the host, so the same verdicts are expected); the key with several vCPUs on hvx (the sharing fields of leaf 4) ran in no guest; no hvx `hydo-bench rebaseline` ran (the side module's suite, `deploy-metal.sh` and the reproducers stand for it: with the key off the engines get the same arguments as before).
+
+### Milestone 204 — DONE but for one decision (the fingerprint epoch 2: five fixes made the default in one change, every example re-recorded; three hvx verdicts changed and wait for the user; 2026-11-08)
+
+The user decided (2026-11-08) to make several fixes the default in one change, with one raise of
+the fingerprint epoch (1 to 2) and one re-recording of every example. Branch of the worktree, from
+`main` at `8bcf6dc6` (Milestones 192 to 203 merged).
+
+**What became the default.**
+
+1. `guest.cpu_cache` (M203) for x86_64 images: the CPUID leaves 2, 4 and `0x80000006` describe the
+   fixed cache hierarchy. `cpu_cache: false` keeps the old behaviour. The main `hvx.ko` has had
+   the flag since the user's reload of 2026-11-08 (srcversion `91D86B693F4D4035C368F9B`, from
+   `main` at `8bcf6dc6`, `deploy-metal.sh` ALL PASS with 35 checks).
+2. The KVM engine's full-state cycles (`HYDO_KVM_SPIN_STATE`, M194). The variable still turns
+   them off (`0`) or on (any other value); unset, the image's epoch decides.
+3. The KVM fingerprint leaves out what KVM keeps of a finished event (the vector and error code of
+   the last re-injected exception and the last interrupt's vector, reported with nothing injected
+   or pending; `CpuState::without_stale_events`), with the full-state cycles on or off. This closes
+   AGENTS.md open item 45 (h).
+4. `root.fix_pyc` (M202): Python's timestamp-checked bytecode caches get the image's fixed file
+   time. `fix_pyc: false` keeps the old bytes. It is decided when an image is built.
+5. `hydo compose` imports Compose's short form of `depends_on` (and the long form with condition
+   `service_started`, as since M202) as `start_after: started`, Compose's own meaning; `condition:
+   service_healthy` stays `ready`. It prints one line per service that says how the service starts
+   and why, and the written `hydo.yaml` has a comment for the short form. A service's `restart:`
+   policy (M134) is in force from its start: while `start_all` starts the services (the boot and
+   the recovery boot), a process that ends during its readiness check is started again as the
+   policy says (Docker's decision and delays, the same as the workload's supervisor), within the
+   check's `ready_timeout`. Only future imports change; existing `hydo.yaml` files keep their text.
+
+**The schema, and why it stays additions-only.** The project format is additions-only within
+format 1, and `hydo-schema-compat` refuses a changed default. The check compares the generated
+schema with the last released one, `hydo/schema/released/project-v1.json` (the 0.1.0 release's,
+M149). `guest.cpu_cache` (M203) and `root.fix_pyc` (M202) are not in it: they came after the
+0.3.0 release commit (`76a51408`), so no published hydo knows them and their defaults are not yet
+part of a released format. Their `default` in the schema is now `true`, with a description that
+says the default holds for images built at the fingerprint epoch 2 and later; the schema test
+(`format::schema_changed_only_by_additions_since_the_release`) passes unchanged. The meaning of an
+image does not change: what an absent key means is taken from the epoch in the image's record
+(`/etc/hydo/image.json`), which every image carries since M155. `hydo_image::defaults(epoch, arch)`
+is the one table (`cpu_cache`: x86_64 and epoch 2 or later; `kvm_full_state`: epoch 2 or later;
+`kvm_stale_events`: before epoch 2), and `hydo_engine::image::cpu_cache_of` and `image_epoch` read
+the record. An image built at epoch 1 therefore keeps every default it was built with.
+`root.fix_pyc` needs no such table: hydo-build applies it when it builds, at this hydo's epoch, so
+an image built before keeps its bytes. The compose change is an importer change, and the restart
+change acts only when a service with a policy ends during its readiness check, where the run used
+to end in `ERROR service start`. No format change was needed for either.
+
+**How an old image keeps its values.**
+
+- `hydo run`, `repro`, `explore`, `inspect` and hydo-bench's pools resolve `guest.cpu_cache` per
+  image: the manifest's value, else the image epoch's default (`runs.rs`, `hydo-explore`'s
+  `run.rs`, `hydo-bench`'s `pools.rs` and `rebaseline.rs`).
+- `BootSpec` has the image's `epoch`. For an image of epoch 1 the KVM engine gets
+  `--image-epoch 1` (the program's option; `Start::image_epoch` in process): the full-state cycles
+  stay off unless `HYDO_KVM_SPIN_STATE` turns them on, and the fingerprint keeps the leftover event
+  fields unless the cycles run, as at epoch 1. `hydo repro` takes the epoch from the image, not
+  from the recorded engine arguments.
+- The host controller sends the same commands as before unless a service with a policy ends during
+  its readiness check (the identity corpora of `hydo-control` and the explorer gave every recorded
+  transcript; none of the recorded runs ends that way).
+- Checked by running images built at epoch 1 with this branch's `hydo`: on KVM (the build
+  machine) the 0.3.0 release's Redis image (`d255fb2b…`, built by the 0.3.0 release) gave
+  `bfa03053d51bec8a`, `8ed16d6da60c34c6` and `c5b4f7cbd0ec3ac7`, each twice, the recorded epoch-1
+  values; on the Mac the integration tree's `hvm/redis` (`da37b9ad…`) gave `25b1201e4067fa47` and
+  `793ebdf0717899ec`, and `hvm/voting` `43733e843f702aac` and `0933dc3789d8653a`, each twice;
+  on hvx the pinned reproducers' epoch-1 images in `~/hydo/build/m155` gave
+  `1dc3677fb94053cf` (ctl `e873020651036931`) and `ba0aa0612502a1df` (ctl `07c598044a68e5be`), each
+  twice. `hydo run` notes that the image was built at epoch 1 and `hydo repro` compares
+  verdicts across epochs, as the epoch rule says.
+
+**Tests.** `hydo-image` `epoch_defaults`; `hydo-engine` `the_program_command_line` (the
+`--image-epoch 1` argument); `hydo-build` `rhel8_glibc_without_the_cache_leaves_is_named` (the
+warning now names `cpu_cache: false`, and an absent key is on); `hydo-control`
+`start_after::a_restart_policy_is_in_force_while_the_service_starts` (a node of a cluster started
+together exits right after its spawn: without a policy `ERROR service start (n2)`; with
+`on-failure` it is started again after 100 ms and the boot reaches S1; status 0 under
+`on-failure` and a second exit under `on-failure:1` end the boot; `always` restarts twice with 100
+and 200 ms; a policy with nothing exiting sends the same commands as none); `hydo-compose`
+`start_and_clock` (the short form gives `start_after: started`). Re-recorded on purpose: the
+explorer's scripted-engine goldens (`fake_engine`: only `"epoch": 2` in `events.jsonl` and
+`exploration.json`), the Compose goldens (every import prints the start lines; imports with a
+short-form `depends_on` write the key and its comment), the CLI golden (`hydo guide manifest`,
+`hydo guide services`, `hydo guide hazards` print the changed text), the answers of `hydo-build`
+and `hydo-manifest` (`tests/golden/answers.txt`: the mutants drawn from the glibc-cache control
+manifest, which gained a line, and the digests of the changed inputs), the project schema and
+hydo-config's `INVENTORY.md`.
+
+**Re-recorded** with `hydo-bench rebaseline --write --thorough` (every image built twice and
+compared, every schedule run twice from fresh boots). docs/REBASELINE.md section 19 records the
+decisions; the values are in `hydo/onboard/recorded.json`, whose `epoch` is now 2.
+
+| platform | images (bytes moved) | runs (fingerprint moved) | recorded ctl values moved | verdicts |
+|---|---|---|---|---|
+| the Mac (`hvm`) | 21 (21) | 76 (76) | 0 | unchanged |
+| KVM (the build machine) | 4 (4) | 13 (13) | 0 | unchanged |
+| hvx (the bare-metal machine) | 39 (39) | 132 (129 written) | 32 | 3 changed (below) |
+
+- Every image was built twice with the same bytes, and every run gave the same values twice from
+  fresh boots, on all three engines. Every image's bytes moved because `/etc/hydo/image.json` now
+  says epoch 2; on the Mac and KVM that is all that moved (the control transcripts are the same).
+  On hvx the CPUID cache leaves also change the guest's timing, so 32 recorded control-transcript
+  hashes moved too.
+- Times: the Mac 742 s (builds 474 s, runs 267 s); KVM 67 s for the two release images (the two
+  stack images run with `--no-build` from the bare-metal machine's builds, 2 × 2 runs of about
+  23 s); hvx 7,938 s (builds 2,610 s, runs 5,327 s, two VMs at a time). The hvx module was
+  `91D86B693F4D4035C368F9B` before and after.
+- KVM: the build machine cannot build the stack images (their build keeps the owners with `sudo
+  setpriv`), so the bare-metal machine's epoch-2 builds (`dab0e76c…`, `d61cbf00…`) were copied into
+  its work folder and run with `--write --thorough --no-build`, as in Milestone 190. The epoch-2
+  Redis runs gave the same fingerprints pinned to a performance core (CPU 0) and to an efficiency
+  core (CPU 16).
+
+**Three verdicts changed on hvx, and they are not written** (a stop-and-report, the user's
+decision; AGENTS.md open item 74). Each new value is the same twice from fresh boots:
+
+| image | schedule | recorded (epoch 1) | now (epoch 2) |
+|---|---|---|---|
+| `hvx/etcd-3.5.5` | `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | VIOLATION `[client.revisions_monotonic]` revision 82 after 83 (etcd issue 14685's second symptom, M78) `0967af85386e3b6f` | OK `aef7cfa89a40a28a` |
+| `hvx/miniflux` | `disk=none dseed=1 \| run P=postgres@10~50:4000` | OK `9b40d31136f91705` | VIOLATION `[api.reads_acked_categories]` acked c14 missing from the API `7b12415767cbb079` |
+| `hvx/stack-errors-fix` | `disk=ioerr:5 dseed=1 \| run` | ERROR restart after the faults (mysql) `3dee52a138056f08` | ERROR restart after the faults (redis) `4d9d5f493f30d060` |
+
+The cause is the CPUID cache leaves: the same epoch-2 images built with `guest.cpu_cache: false`
+(every other epoch-2 default kept) gave the recorded verdicts again, each twice with one
+fingerprint (etcd-3.5.5 VIOLATION revision 82 after 83 `9e883134a7af0510`; miniflux OK
+`d698723e9c51401e`; the stack image's variant could not be built from the staged tree, whose
+`front-door` the stack stage moves). With the leaves, Linux and the programs that size buffers
+from them (glibc's copy thresholds among them) run other instruction streams, so a fault aimed at
+a step lands at another point of the work: the etcd schedule was found by a hand sweep for one
+timing (M78), the miniflux pause now catches a read of an acknowledged category, and under disk
+errors another service fails its restart first. Not investigated further. `hydo/onboard/recorded.json`
+keeps these three runs' epoch-1 values, so `hydo-bench rebaseline --check` on hvx reports them
+until the user decides (`--write --accept-verdicts` writes the values above, or the schedules are
+replaced by ones that reach the same symptoms at epoch 2).
+
+**The quickstart's exploration on hvx changed with them** (it is not in the list, only cited):
+`hydo explore --seeds 1-20 --strategy swarm --workers 2` on the release's Redis example finds 9
+failures in 16 s (io-errors 4, lying-disk 3, unsafe-knob 2; 11 at epoch 1, lying-disk 5), all
+reproduced; its minimal schedules are `disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no`
+(`d3c11e15f3835b06`) and the new `disk=lying:2 dseed=17144527b62d669c | run C=17` (VIOLATION key
+k:2 lost, `32676d17c82aa953` twice), which the list now records; `hydo repro hydo-out/explore` 11
+of 11. The epoch-1 minimal schedule `disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20` still
+violates (key k:15 lost, `90a90e3383d49647`). On the Mac and KVM the exploration gives epoch 1's
+result: 11 failures with the same minimal schedules, `hydo repro` 13 of 13 (the Mac) and 14 of 14
+(KVM). README.md and both quickstarts cite the epoch-2 values.
+
+**The pinned reproducers** at epoch 2 (the stack example's images built by the re-baseline,
+`dab0e76c…` and `d61cbf00…`, copied to `~/hydo/build/m204` on the bare-metal machine with their
+build records): `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` gives
+`a76d7fe857fdb37c` (VIOLATION, order 11 is in Kafka but was never acknowledged; ctl
+`84a3f0619a00b9e2`) on the old order service and `efbde7b57264be0f` (OK; ctl `087df49b7b36b10a`)
+on the fixed one, each twice. On KVM: `c586a0079f931135` (VIOLATION, order 11) and
+`32c826fd530a6c6d` (OK), each twice. `hv/hvx/deploy-metal.sh` and `hv/hvx/gc/side-suite.sh` expect
+the new values from `~/hydo/build/m204`. `deploy-metal.sh` from this branch
+(`HVX_METAL_TREE=hydo-m204d`, the main module `91D86B693F4D4035C368F9B`, not reloaded): `ALL PASS
+(35 checks)`, every hand-written fingerprint as recorded, `hvx_cpucache_test` both parts
+(`64329d56a2c9b638`, `1bd88c47553e9b3c`), `hvx_hugeram_test` `b71aaf1096f96f02`, the boots, and
+both reproducers with the epoch-2 values.
+
+**Also changed:** `hv/hvx/deploy-metal.sh` and `hv/hvx/gc/side-suite.sh` run the reproducers'
+epoch-2 images from `~/hydo/build/m204`; the glibc-cache example's control (`hydo-nocache.yaml`)
+says `cpu_cache: false`; MANIFEST.md ("The CPU's caches", "Python bytecode", "Restart policies",
+"Starting services together"), the guide (`hazards`, `services`, `capabilities`),
+docs/design/kvm-engine.md, docs/ARCHITECTURE.md, hydo/PRODUCT.md and the quickstarts' values.
+
+**Release notes for the next release** (what users see):
+
+> **New fingerprints (fingerprint epoch 2).** This release changes four defaults: the guest's CPUID
+> describes a fixed cache hierarchy on x86_64 (`guest.cpu_cache`), Python's bytecode caches are
+> made valid in the image (`root.fix_pyc`), and the KVM engine proves busy loops that store to
+> memory and leaves host-dependent leftovers out of its fingerprints. An image you build with this
+> release has new fingerprints. On the Mac and KVM every verdict of hydo's recorded examples is
+> unchanged; on hvx the cache leaves change the guest's timing, and three timing-sensitive
+> recorded schedules of hydo's own examples end differently. A schedule of yours whose fault is
+> aimed at one exact moment may need to be found again with `hydo explore`. An image
+> built by an earlier release keeps running as it did: hydo reads the epoch from the image's
+> record and keeps that epoch's defaults, so its fingerprints stay the same on hvx, the Mac and
+> KVM, and `hydo repro` of a run recorded by an earlier release compares verdicts. To keep the old
+> behaviour in a rebuilt image, set `guest.cpu_cache: false` or `root.fix_pyc: false`; on KVM,
+> `HYDO_KVM_SPIN_STATE=0` turns the busy-loop proof off.
+>
+> **Docker Compose imports.** `hydo compose` now reads `depends_on` as Compose does: the short
+> form (a list of names) and `condition: service_started` start the service once its
+> dependencies have started (`start_after: started`), and `condition: service_healthy` waits
+> until they are ready. It prints how each service starts and why. A service's `restart:` policy
+> now applies from its start, so a service that crashes because a dependency is not ready yet is
+> started again, as under Docker. Existing `hydo.yaml` files are not changed.
+
+**Left.** The three hvx verdict changes above wait for the user's decision (open item 74). The
+epoch-2 values have not run on an AMD host (open item 45). The restart of a service
+that ends during its readiness check ran on the scripted engine only; no recorded run takes that
+path (open item 71). `guest.outcomes_after_cut` stayed opt-in (open item 62: not among the
+defaults the user named).

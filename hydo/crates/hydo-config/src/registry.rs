@@ -348,10 +348,12 @@ variables! {
     HYDO_KVM_DIAG_RAM: Kvm, Developer, "number", "0", "hydo-kvm";
     /// Set: log every MSR access and I/O port the engine's model does not know.
     HYDO_KVM_TRACE_UNKNOWN: Kvm, Developer, "flag: set", "", "hydo-kvm";
-    /// Set (a prototype, off by default): the spin observer also proves loops that store to
-    /// memory and use the vector registers, when the whole machine state repeats (every store
-    /// rewrites the bytes that are there), and resolves them like an exact cycle.
-    HYDO_KVM_SPIN_STATE: Kvm, Developer, "flag: set", "", "hydo-kvm";
+    /// `0` turns off, and any other value turns on, the spin observer's full-state cycles: it
+    /// also proves loops that store to memory and use the vector registers, when the whole
+    /// machine state repeats (every store rewrites the bytes that are there), and resolves them
+    /// like an exact cycle. Unset: on for images built at fingerprint epoch 2 and later, off for
+    /// older images (Milestone 204).
+    HYDO_KVM_SPIN_STATE: Kvm, Developer, "flag: exactly `0` turns it off", "on (epoch 2 images)", "hydo-kvm";
     /// Set: the engine computes no fingerprint (`fp=0000000000000000`), which on a large image
     /// is most of the cost of a short conversation (docs/design/agent-environments.md); for
     /// measuring that cost only.

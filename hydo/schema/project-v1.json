@@ -353,12 +353,12 @@
           "default": "v2"
         },
         "cpu_cache": {
-          "description": "x86_64: the guest's CPUID describes a fixed cache hierarchy (32 KiB L1 data and\ninstruction caches, a 256 KiB L2, an 8 MiB L3), the same on every host and engine. Without\nit the cache leaves are empty, and at cpu v3 the glibc 2.28 of Red Hat Enterprise Linux 8\nand its rebuilds (AlmaLinux 8, Rocky Linux 8, UBI 8) crashes in memcpy.",
+          "description": "x86_64: the guest's CPUID describes a fixed cache hierarchy (32 KiB L1 data and\ninstruction caches, a 256 KiB L2, an 8 MiB L3), the same on every host and engine. On by\ndefault for images built at fingerprint epoch 2 and later; an image built earlier keeps it\noff. false: the cache leaves are empty, and at cpu v3 the glibc 2.28 of Red Hat Enterprise\nLinux 8 and its rebuilds (AlmaLinux 8, Rocky Linux 8, UBI 8) crashes in memcpy.",
           "type": [
             "boolean",
             "null"
           ],
-          "default": false
+          "default": true
         },
         "description": {
           "anyOf": [
@@ -454,12 +454,12 @@
           "default": false
         },
         "fix_pyc": {
-          "description": "true: timestamp-checked Python bytecode caches (__pycache__/*.pyc) get the image's fixed\nfile time and their source's size in their header, so Python uses them instead of\ncompiling the sources again in every run. Off by default (it changes the image's bytes).",
+          "description": "Timestamp-checked Python bytecode caches (__pycache__/*.pyc) get the image's fixed file\ntime and their source's size in their header, so Python uses them instead of compiling\nthe sources again in every run. On by default (images built at fingerprint epoch 2 and\nlater); false leaves the caches as the image has them.",
           "type": [
             "boolean",
             "null"
           ],
-          "default": false
+          "default": true
         },
         "description": {
           "anyOf": [

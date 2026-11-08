@@ -187,6 +187,35 @@ pub fn image_record(image: &Path) -> Result<Option<hydo_image::ImageRecord>, Str
     }
 }
 
+/// The fingerprint epoch an image was built at and its architecture, from its record (an image
+/// without a readable record: [`hydo_image::EPOCH_BEFORE_RECORDS`], the architecture by its file
+/// name).
+pub fn image_epoch(image: &Path) -> (u64, String) {
+    match image_record(image) {
+        Ok(Some(r)) => (r.epoch, r.arch),
+        _ => (
+            hydo_image::EPOCH_BEFORE_RECORDS,
+            if image.to_string_lossy().ends_with(".cpio.gz") {
+                "arm64".into()
+            } else {
+                "x86_64".into()
+            },
+        ),
+    }
+}
+
+/// The defaults that the image's own epoch decides (Milestone 204, [`hydo_image::defaults`]).
+pub fn image_defaults(image: &Path) -> (u64, hydo_image::EpochDefaults) {
+    let (epoch, arch) = image_epoch(image);
+    (epoch, hydo_image::defaults(epoch, &arch))
+}
+
+/// `guest.cpu_cache` of an image: the manifest's value, else what an absent key meant at the
+/// fingerprint epoch the image was built at (off before epoch 2, on from it on x86_64; M204).
+pub fn cpu_cache_of(image: &Path, manifest: Option<bool>) -> bool {
+    manifest.unwrap_or_else(|| image_defaults(image).1.cpu_cache)
+}
+
 /// The files a run boots an image with ([`boot_files`]).
 #[derive(Clone, Debug)]
 pub struct BootFiles {

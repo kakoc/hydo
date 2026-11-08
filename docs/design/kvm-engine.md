@@ -448,8 +448,10 @@ the counter proof applies. The research behind the choice is in
 `hydo/explore/RESEARCH-kvm-exit-free.md` (an interrupt from the host's branch counter, help from
 the guest kernel, and this).
 
-What it does (`Vmm::observe_state`, `HYDO_KVM_SPIN_STATE=1`): when the observer's look proved
-nothing, it proves that the whole machine repeats, then resolves the loop like an exact cycle.
+What it does (`Vmm::observe_state`; on by default since the fingerprint epoch 2, Milestone 204,
+for images built at that epoch; `HYDO_KVM_SPIN_STATE=0` turns it off): when the observer's look
+proved nothing, it proves that the whole machine repeats, then resolves the loop like an exact
+cycle.
 
 1. The proof. It saves the vCPU's whole state at the kick (registers, segment and control
    registers, the XSAVE image, the KVM-owned MSRs, the pending events, the debug registers), turns
@@ -482,11 +484,14 @@ pending. KVM re-injects a guest's own page fault when a VM exit interrupts its d
 example an EPT fault on a page the dirty-page log write-protected. The mode turns the log on at
 kicks, whose timing is the host's, so these leftovers differed between runs: the first two runs of
 TigerBeetle gave two fingerprints that differed only in the stale error code of a page fault (6 or
-20) in the vCPU part. The guest never sees them. With the mode on the fingerprint hashes the vCPU
-state without them (`CpuState::without_stale_events`). The default fingerprint keeps hashing them,
-so that no recorded value moves; whether they can also differ without the mode (an EPT fault
-during the delivery of an exception happens at host-chosen moments whenever the host drops EPT
-entries, for page reclaim, compaction or huge-page collapse) is open (AGENTS.md open item 45 (h)).
+20) in the vCPU part. The guest never sees them. Since the fingerprint epoch 2 (Milestone 204)
+every KVM fingerprint hashes the vCPU state without them (`CpuState::without_stale_events`), with
+the mode on or off: they can differ without the mode too, because an EPT fault during the delivery
+of an exception happens at host-chosen moments whenever the host drops EPT entries (page reclaim,
+compaction, huge-page collapse). An image built before epoch 2 is run as it was then (`hydo-kvm
+--image-epoch 1`, which `hydo` passes for such an image): the mode stays off unless
+`HYDO_KVM_SPIN_STATE` turns it on, and the fingerprint keeps the leftovers unless the mode is on,
+so the image's recorded values stay.
 
 **Measured** (the build machine, TigerBeetle 0.17.9's single-replica image,
 `hydo/onboard/examples/tigerbeetle/hydo/hydo-single.yaml`, built by the 0.2.0 candidate release,
@@ -506,19 +511,21 @@ exit, or out of the look's time). Before the canonical state broke ties by the w
 the written pages, `start`'s loop gave up at every look ("no single canonical state") and the run
 ended as SPIN.
 
-**Inert when off.** Without `HYDO_KVM_SPIN_STATE` the observer does what it did and the fingerprint
-is the same function: `hv/kvm/kvm-check.sh` with this branch's `hydo` gave 16 of 16 on the build
+**Inert when off** (Milestone 194, when the mode was opt-in). Without `HYDO_KVM_SPIN_STATE` the
+observer did what it did and the fingerprint was the same function: `hv/kvm/kvm-check.sh` with
+that branch's `hydo` gave 16 of 16 on the build
 machine, every value equal to Milestone 189's run (Redis `bfa03053d51bec8a` and `8ed16d6da60c34c6`,
 ten runs each on CPUs 0 and 16, S1 `ac512c2616cef6a4`, the exploration's 46 runs and `hydo repro`
 14 of 14, the kill, pause, clock, I/O-error, tick-jitter and preemption schedules, netem
 `0fcb6905c8f54cd1`, ledger-spin `f796ae624a9473d1` through the rewind mode).
 
-**What would make it the default.** It changes no valid run: it acts only where the run would
-otherwise end as SPIN. On AMD (GitHub's runners, EPYC 7763, 9V74 and 9V45, "On an AMD host"
-below) TigerBeetle's single replica gave one fingerprint per schedule on every model, with the
-Intel verdicts. Before it is on by default: a review of the proof. The user decided (2026-11-08)
-that leaving the stale event fields out of the default fingerprint goes into the same later change
-that turns the mode on by default, so that the KVM values are re-recorded once.
+**The default since the fingerprint epoch 2** (Milestone 204, the user's decision of 2026-11-08).
+It changes no valid run: it acts only where the run would otherwise end as SPIN. On AMD (GitHub's
+runners, EPYC 7763, 9V74 and 9V45, "On an AMD host" below) TigerBeetle's single replica gave one
+fingerprint per schedule on every model, with the Intel verdicts. The mode and the fingerprint
+without the stale event fields became the default together, so that the KVM values were
+re-recorded once (docs/REBASELINE.md section 19). The image's epoch decides both
+(`hydo_image::defaults`): an image built before keeps the mode off and the leftovers hashed.
 
 ## Nondeterminism under KVM, and how each source is closed
 
@@ -554,8 +561,8 @@ that turns the mode on by default, so that the KVM values are re-recorded once.
 | a kick (the watchdog's signal) | not an exit: nothing changes in the guest, nothing is counted | the run loop |
 | the host's KVM version and CPU microarchitecture (undefined flag results, FPU pointers) | not closed: a fingerprint is this engine's on one kind of host; verdicts compare everywhere | see "Where fingerprints compare" |
 | counter loops without exits (the state at a kick depends on when it came) | the rewind mode: back to a checkpoint, the same exits again, the interrupt at the first arrival at the loop's canonical instruction (M161); without the mode the run ends at once as a SPIN and the host runs it again in the mode | `counter_loop` tests; `a_counter_loop_is_...`; ledger-spin on KVM, each schedule twice on a performance and an efficiency core |
-| loops without exits that store (a polling loop that rewrites the same bytes, calls functions, uses AVX) | with `HYDO_KVM_SPIN_STATE` (M194, a prototype): proven when the whole vCPU state and every page written in a pass repeat, resolved at the period's canonical state as an exact cycle; without it the run ends as SPIN | `saves_flags` test; TigerBeetle's single replica, five schedules twice each and from S1 |
-| what KVM keeps of a finished event (the last re-injected exception's vector and error code, the last interrupt's vector, reported with nothing injected or pending) | with `HYDO_KVM_SPIN_STATE` left out of the fingerprint (`CpuState::without_stale_events`); in the default fingerprint still hashed (open: AGENTS.md open item 45 (h)) | TigerBeetle: two fingerprints differing only there before, one after |
+| loops without exits that store (a polling loop that rewrites the same bytes, calls functions, uses AVX) | the full-state cycles (M194; on by default since the fingerprint epoch 2, M204; `HYDO_KVM_SPIN_STATE=0` turns them off): proven when the whole vCPU state and every page written in a pass repeat, resolved at the period's canonical state as an exact cycle; without them the run ends as SPIN | `saves_flags` test; TigerBeetle's single replica, five schedules twice each and from S1 |
+| what KVM keeps of a finished event (the last re-injected exception's vector and error code, the last interrupt's vector, reported with nothing injected or pending) | left out of every fingerprint since the fingerprint epoch 2 (`CpuState::without_stale_events`, M204); an image built before is fingerprinted as it was then | TigerBeetle: two fingerprints differing only there before, one after |
 | what the host's memory holds for a snapshot | not the guest's: RAM bases, private pages and the copy-on-write disk give the same bytes as full copies; the fingerprint reads every byte (zero pages of a base without reading them) | `mem` and `disk` tests; every M159 fingerprint again |
 
 ## Where fingerprints compare
@@ -636,7 +643,10 @@ the stop where the host took S1).
 - Variables (hydo-config's registry, group `Kvm`): `HYDO_BACKEND`, `HYDO_KVM`, `HYDO_KVM_ENGINE`,
   `HYDO_KVM_KERNEL`, `HYDO_KVM_DEV`, `HYDO_KVM_STEP`, `HYDO_KVM_RUN_EXITS`, `HYDO_KVM_SPIN_SECS`,
   `HYDO_KVM_SPIN_MS`, `HYDO_KVM_TRACE`, `HYDO_KVM_ECHO`, `HYDO_KVM_DIAG`, `HYDO_KVM_DIAG_RAM`,
-  `HYDO_KVM_TRACE_UNKNOWN`, `HYDO_KVM_SPIN_STATE` (a prototype: "Loops that store"); the ABI probe's `HYDO_KVM_HEADERS` (tests).
+  `HYDO_KVM_TRACE_UNKNOWN`, `HYDO_KVM_SPIN_STATE` (`0` turns the full-state cycles off: "Loops
+  that store"); the ABI probe's `HYDO_KVM_HEADERS` (tests).
+- `--image-epoch N` (the program's option; `hydo` passes it for an image built before the
+  fingerprint epoch 2): run the image as that epoch did (Milestone 204).
 
 ## x86-64-v3 (`guest.cpu: v3`, Milestone 189)
 
@@ -793,14 +803,15 @@ Left: several vCPUs stay hvx's.
 
 ## The CPU's caches (`guest.cpu_cache`, Milestone 203)
 
-The table describes no caches by default: leaf 2 has no descriptors, leaf 4 ends at sub-leaf 0,
-and leaf 0x8000_0006 is zero. With `guest.cpu_cache: true` (`hydo-kvm --cpu-cache on`,
+Without the key the table describes no caches: leaf 2 has no descriptors, leaf 4 ends at sub-leaf
+0, and leaf 0x8000_0006 is zero. The key is on by default for images built at the fingerprint
+epoch 2 and later (Milestone 204). With it (`hydo-kvm --cpu-cache on`,
 `cpuid::table_with`) leaf 2 says "read leaf 4", leaf 4 lists a 32 KiB L1 data and instruction
 cache, a 256 KiB L2 and an 8 MiB L3, and leaf 0x8000_0006 gives the L2 again. The values are the
 hvx module's (`hydo_hvx::abi::HVX_CPUID4_SUB`, checked against `hvx_abi.h` by `hydo-hvx`'s ABI
 test), so both engines describe the same caches. Nothing in the table depends on the host, so it
 adds no source of nondeterminism. The table without the key is byte for byte the one before
-(`tests::table_is_fixed`), and every recorded KVM value stays.
+(`tests::table_is_fixed`), so an image built before epoch 2 keeps its recorded values.
 
 The key exists because the glibc 2.28 of Red Hat Enterprise Linux 8 and its rebuilds takes 0 as
 its non-temporal copy threshold when CPUID describes no caches, and its AVX `memcpy` then fails.

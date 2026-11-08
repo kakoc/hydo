@@ -27,7 +27,11 @@ rules that matter most:
   member after the first, the members start together and are checked afterwards, all before the
   workload (`hydo guide manifest`, section `Starting services together`). Alternatively, keep
   `ready` local (the member's own port or health page) and wait for the cluster in a `first_`
-  command.
+  command. `hydo compose` writes the key where Compose's `depends_on` means it: its short form,
+  and `condition: service_started`. It prints how each service starts, and why.
+- `restart:` (Compose's words) is in force from the service's start. A service that crashes
+  while it starts is started again within its `ready_timeout`, as under Docker. For example, it
+  crashed because a service it depends on was not ready yet.
 - `logs`: the service's own log files besides its output. Give absolute paths, or shell patterns
   (`/data/db/yb-data/tserver/logs/*.INFO`). Databases often write their real log there, not to
   their output. The diagnosis of a failed run and `hydo inspect logs` show their last lines too.
@@ -54,9 +58,9 @@ Guest settings:
 
 - `guest.ram_mib` (default 1024, at most 8192) must hold every service.
 - `guest.cpu: v3` when a binary needs AVX or AVX2 (x86_64 only).
-- `guest.cpu_cache: true` with `guest.cpu: v3` when an image is built on Red Hat Enterprise Linux
-  8 or a rebuild of it (AlmaLinux 8, Rocky Linux 8, UBI 8). Without it, that glibc's AVX `memcpy`
-  crashes, because CPUID describes no caches.
+- `guest.cpu_cache` is on by default (x86_64). Keep it on with `guest.cpu: v3` when an image is
+  built on Red Hat Enterprise Linux 8 or a rebuild of it (AlmaLinux 8, Rocky Linux 8, UBI 8).
+  Without it, that glibc's AVX `memcpy` crashes, because CPUID describes no caches.
 - `guest.clock_after_cut: 60` when a check compares times written before and after a power cut.
 - `guest.outcomes_after_cut: true` when a check reads `$HYDO_OUTCOMES`. Without it, that file is
   empty in the recovery boot after a power cut.

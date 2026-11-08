@@ -9,7 +9,11 @@
 //!   and in the recovery boot after `start_all`, until the conversation ends. A power cut stops
 //!   the supervisors before the services are frozen (nothing is started after the cut, as the
 //!   shell's `kill $ptimer`). The boot to S1 has none: a service that dies while it is being
-//!   provisioned is the start-up's failure.
+//!   provisioned is the start-up's failure. While `start_all` starts the services (the boot and
+//!   the recovery boot), the policy acts inside each service's readiness check instead
+//!   (`await_ready_starting`, Milestone 204): a process that ends during its check is restarted
+//!   as below, within the check's time limit, so a service that crashes because a dependency is
+//!   not ready yet comes up as under Docker.
 //! - **What it reacts to.** The exit of the service's current process that hydo did not cause:
 //!   a process that hydo's own faults killed (`K=`, `X=`) keeps the schedule's meaning (`K=`
 //!   restarts it before step at+down, the heal restarts the rest), whatever the policy. Pauses,
@@ -46,8 +50,8 @@ pub(super) fn label(svc: &str) -> String {
 }
 
 /// Docker's first delay, its multiplier's cap, and the run time that resets it.
-const FIRST_MS: u64 = 100;
-const MAX_MS: u64 = 60_000;
+pub(super) const FIRST_MS: u64 = 100;
+pub(super) const MAX_MS: u64 = 60_000;
 const RESET_MS: u64 = 10_000;
 
 /// Start a supervisor for every service with a policy (none for a plan without one).

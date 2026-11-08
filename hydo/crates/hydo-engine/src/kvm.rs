@@ -206,6 +206,7 @@ fn spawn(
         .and_then(|k| k.with_level(level_of(spec.cpu)))
         .map(|k| k.with_cache(spec.cpu_cache))
         .map_err(EngineError::Unsupported)?;
+    let image_epoch = Some(spec.epoch);
     let initrd = spec.initrd.clone().ok_or_else(|| {
         EngineError::Unsupported("the KVM engine needs the image's initramfs".into())
     })?;
@@ -222,6 +223,7 @@ fn spawn(
         disk: Some(spec.image.clone()),
         outdir: spec.outdir.clone(),
         ram_mib: Some(spec.ram_mib as u64),
+        image_epoch,
     };
     let diag: Box<dyn std::io::Write + Send> = Box::new(
         std::fs::OpenOptions::new()
@@ -349,6 +351,7 @@ mod tests {
             vcpus: 1,
             cpu: crate::CpuLevel::V2,
             cpu_cache: false,
+            epoch: 2,
             kernel: "/g/bzImage-kvm".into(),
             initrd: Some("/g/initramfs-kafka.cpio.gz".into()),
             outdir: "/o".into(),
@@ -380,6 +383,16 @@ mod tests {
         assert_eq!(
             k.argv(&cache, "one", &s).join(" "),
             "/r/bin/hydo-kvm --ram-mib 2048 --cpu v3 --cpu-cache on --control boot one \
+             /g/bzImage-kvm /g/initramfs-kafka.cpio.gz /i/x-disk.img /o rb=64 | run"
+        );
+        // M204: an image built at fingerprint epoch 1 runs as epoch 1 did
+        let old = BootSpec {
+            epoch: 1,
+            ..spec.clone()
+        };
+        assert_eq!(
+            k.argv(&old, "one", &s).join(" "),
+            "/r/bin/hydo-kvm --ram-mib 2048 --image-epoch 1 --control boot one \
              /g/bzImage-kvm /g/initramfs-kafka.cpio.gz /i/x-disk.img /o rb=64 | run"
         );
         for cpu in [crate::CpuLevel::V2, crate::CpuLevel::V3] {

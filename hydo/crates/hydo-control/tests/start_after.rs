@@ -145,3 +145,88 @@ fn the_recovery_boot_starts_them_the_same_way() {
         "{st:?}"
     );
 }
+
+/// Three nodes started together, the second with `restart:` `policy` (empty: none) and a
+/// command whose processes exit with `exit` (`HYDO_FAKE_EXIT=` of the scripted guest; empty:
+/// they never exit on their own).
+fn crashing(policy: &str, exit: &str) -> Plan {
+    let r = if policy.is_empty() {
+        String::new()
+    } else {
+        format!("    restart: \"{policy}\"\n")
+    };
+    let x = if exit.is_empty() {
+        String::new()
+    } else {
+        format!(" HYDO_FAKE_EXIT={exit}")
+    };
+    let text = format!(
+        "name: cluster\nservices:\n  - name: n1\n    cmd: node-1\n    ready: node-check\n\
+         \x20 - name: n2\n    cmd: node-2{x}\n    ready: node-check\n    start_after: started\n{r}\
+         \x20 - name: n3\n    cmd: node-3\n    ready: node-check\n    start_after: started\n\
+         workload:\n  steps: 4\n  run: client\ninvariants:\n  - id: all.done\n    final: true\n    cmd: final-check\n"
+    );
+    let m = hydo_manifest::from_embedded(&text, None)
+        .unwrap_or_else(|e| panic!("the manifest: {e}\n{text}"));
+    Plan::from_manifest(&m).unwrap()
+}
+
+/// Milestone 204: a service's restart policy is in force while it starts. The second node's first
+/// process exits (status 1) right after its spawn, as a service does whose dependency is not ready
+/// yet. Without a policy the boot ends at its readiness check; with `on-failure` it is started
+/// again after Docker's delay and the boot reaches S1; `on-failure:1` allows one restart, so a
+/// second exit ends the boot; and a policy changes no command when nothing exits.
+#[test]
+fn a_restart_policy_is_in_force_while_the_service_starts() {
+    match boot_ending(&crashing("", "1/+1/1")) {
+        Some(Ending::Verdict(v)) => assert_eq!(v, "HYDO-ORACLE: ERROR service start (n2)"),
+        e => panic!("{e:?}"),
+    }
+    let p = crashing("on-failure", "1/+1/1");
+    let b = support::boot(&p, "cluster").unwrap();
+    assert_eq!(
+        starts(&b.boot.items),
+        [
+            "spawn n1", "spawn n2", "spawn n3", "probe n1", "probe n2", "spawn n2", "probe n2",
+            "probe n3"
+        ]
+    );
+    let t = b.boot.fin.transcript.to_jsonl();
+    assert!(
+        t.contains(
+            "n2 exited (status 1) while it started; restarting it in 100 ms (restart: on-failure)"
+        ),
+        "{t}"
+    );
+    // the restart is part of the boot: a run from S1 goes on as usual
+    let s = Schedule::parse("disk=none | run").unwrap();
+    let r = support::run_schedule(&b, &s).unwrap();
+    assert!(
+        matches!(&r.run.fin.ending, Some(Ending::Verdict(v)) if v.starts_with("HYDO-ORACLE: OK")),
+        "{:?}",
+        r.run.fin.ending
+    );
+    // a status of 0 is no failure, and on-failure:1 allows one restart only
+    match boot_ending(&crashing("on-failure", "1/+1/0")) {
+        Some(Ending::Verdict(v)) => assert_eq!(v, "HYDO-ORACLE: ERROR service start (n2)"),
+        e => panic!("{e:?}"),
+    }
+    match boot_ending(&crashing("on-failure:1", "1/+1/1,2/+1/1")) {
+        Some(Ending::Verdict(v)) => assert_eq!(v, "HYDO-ORACLE: ERROR service start (n2)"),
+        e => panic!("{e:?}"),
+    }
+    // always: after every exit, status 0 too (two restarts, the second after 200 ms)
+    let b = support::boot(&crashing("always", "1/+1/0,2/+1/0"), "cluster").unwrap();
+    let st = starts(&b.boot.items);
+    assert_eq!(st.iter().filter(|s| *s == "spawn n2").count(), 3, "{st:?}");
+    let t = b.boot.fin.transcript.to_jsonl();
+    assert!(
+        t.contains("restarting it in 200 ms (restart: always)"),
+        "{t}"
+    );
+    // nothing exits: the policy sends the same commands as no policy
+    assert_eq!(
+        boot_items(&crashing("always", "")),
+        boot_items(&crashing("", ""))
+    );
+}

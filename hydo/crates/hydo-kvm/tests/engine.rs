@@ -87,6 +87,7 @@ impl Host {
             disk: None,
             outdir: dir.join("out"),
             ram_mib: Some(256),
+            image_epoch: None,
         };
         let (htx, hrx) = channel();
         let (etx, erx) = channel();

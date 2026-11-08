@@ -92,6 +92,9 @@ pub struct VmOpts {
     pub trace_unknown: bool,
     /// HYDO_KVM_SPIN_STATE: the spin observer's full-state cycles ([`Vmm::observe_state`])
     pub spin_state: bool,
+    /// The fingerprint keeps KVM's leftover event fields ([`CpuState::without_stale_events`]):
+    /// only for an image built before fingerprint epoch 2 (Milestone 204).
+    pub stale_events: bool,
     pub cmdline: String,
     pub virtio: virtio::Config,
 }
@@ -146,6 +149,8 @@ pub struct Vmm {
     echoed: u64,
     /// HYDO_KVM_SPIN_STATE: the observer also proves full-state cycles ([`Vmm::observe_state`])
     spin_state: bool,
+    /// [`VmOpts::stale_events`]
+    stale_events: bool,
     /// full-state cycles proven and resolved (statistics)
     pub state_cycles: u64,
     /// full-state looks that proved nothing (statistics)
@@ -309,6 +314,7 @@ impl Vmm {
             stops: 0,
             echoed: 0,
             spin_state: o.spin_state,
+            stale_events: o.stale_events,
             state_cycles: 0,
             state_gave_up: 0,
             state_why: "",
@@ -1643,8 +1649,10 @@ impl Vmm {
     /// the vCPU, the machine state without statistics, the RAM size, the devices and all RAM.
     pub fn xfp(&self) -> u64 {
         let mut s = self.cpu().save();
-        if self.spin_state {
-            // the mode turns the dirty-page log on at host-timed kicks (CpuState docs)
+        if !self.stale_events || self.spin_state {
+            // KVM's leftovers of a finished event depend on the host (CpuState docs): left out
+            // since fingerprint epoch 2; an epoch-1 image keeps them unless the full-state cycles
+            // (which turn the dirty-page log on at host-timed kicks) run, as at epoch 1
             s = s.without_stale_events();
         }
         let mut h = fnv(b"hydo-kvm-v1", OFFSET);

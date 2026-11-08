@@ -141,7 +141,7 @@ I	hydo/onboard/examples/ghost/hydo/hydo-compose.lock.json	21b147617f25aa780aa92d
 I	hydo/onboard/examples/ghost/hydo/hydo.yaml	b259a222d54902f1615105decfa1874e897c916651a8207376c4825b648095fb
 I	hydo/onboard/examples/glibc-cache/docker-compose.yaml	f445eace219a913dba1799bc8d27895837bac5875f7791a712f2ccdb785a757c
 I	hydo/onboard/examples/glibc-cache/hydo-compose.lock.json	ca1c555da6fa5231b7dfa580638a90995d43cde218f998346c8414d26cdeecf9
-I	hydo/onboard/examples/glibc-cache/hydo-nocache.yaml	f5feae8b8f7e2a89c51083be600b5a39419f88bea63fbb02747a92d3192cf411
+I	hydo/onboard/examples/glibc-cache/hydo-nocache.yaml	be53f51ea2b3b915a93d8c9cdcf0be568aca3b717a2e59c5a9feaa83ecac6a2d
 I	hydo/onboard/examples/glibc-cache/hydo.yaml	3792407d2f5087d38119939c54ebf86dd3afdb80dc6905e580bf4c4ab4652732
 I	hydo/onboard/examples/libsql-replica/docker-compose.yaml	1b9c0366646ae37319431a9cdc23fc8faa31eb8c609243e07cde38fc7c760dc3
 I	hydo/onboard/examples/libsql-replica/hydo/hydo-compose.lock.json	6010fd9d507077e1e1b144102263136df0f779929405d10352fb3020d91eeb19
@@ -196,7 +196,7 @@ I	hydo/onboard/examples/yugabyte/bigtxn/hydo/hydo.yaml	1ee55745c9b0a1e49fb32a498
 I	hydo/onboard/examples/yugabyte/docker-compose.yaml	bff78dc0085f9c3cd9a420ae0e1a6bf823b14156b172821896c9665efc37089e
 I	hydo/onboard/examples/yugabyte/hydo/hydo-compose.lock.json	1e110be98e1441c646ccbeae82e3e640f2628d71f1fc52c4c288e546c0e7ff9d
 I	hydo/onboard/examples/yugabyte/hydo/hydo.yaml	2a7bd08e0f305646485929ca38f3550e53044b60b0977b0c7bb9e9fbdc661014
-I	hydo/onboard/recorded.json	b6cdc1a8942446baf3ad64facaf1df21f52a1545ba1f70b90115f549258f761a
+I	hydo/onboard/recorded.json	4a69748c8c5f90510a0f0cdc1a5c5a6f4796f725fc20396fa2b33d7980a84df1
 I	hydo/stack/grpc-hints.yaml	14affe885365284f669ce608060c39376e7f7a6ee42df7ad4f1f46334ee465c9
 I	sdk/cases/assert/always.json	60ca493f4722fd2400e8f95141732ee6eb470e1807e815733c103f41493d2de1
 I	sdk/cases/assert/always_or_unreachable.json	7daf932e0a7d183e433eb83541c085ba951dda333380aa52a21656e4eb0c4e53
@@ -5467,31 +5467,31 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00786.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00787.json --arch x86_64 --check	run	1	""	"hydo-build: data: unknown field(s) ., 0, 1, 2, 7 (known: des…#755e306903c51666"
+R	^	<tmp>/mutant00787.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: name '127.0.0.1' must match [a-z][a…#47c9684e54791e97"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00788.json --arch arm64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
+R	^	<tmp>/mutant00788.json --arch arm64 --check	run	1	""	"hydo-build: guest.cpu: v3 (AVX/AVX2) is an x86_64 option; --…#b2d519f950a5ac0e"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00789.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) bogus (known: af…#0044df4d46759703"
+R	^	<tmp>/mutant00789.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#9d9b0492bff60cea"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00790.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (alma): image <tmp>/images/almalinux…#edec76e5e607be8e"
+R	^	<tmp>/mutant00790.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (v3): image <tmp>/images/almalinux-8…#24d3563a89ca1438"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00791.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: buggif…#c34a4b7e26112840"
+R	^	<tmp>/mutant00791.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (alma): image <tmp>/images/almalinux…#edec76e5e607be8e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00792.json --arch arm64 --check	run	1	""	"hydo-build: guest.cpu: v3 (AVX/AVX2) is an x86_64 option; --…#b2d519f950a5ac0e"
+R	^	<tmp>/mutant00792.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: clock_afte…#551508ffa20340cd"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00793.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0].msg: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant00793.json --arch x86_64 --check	run	1	""	"hydo-build: data.size_mib: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00794.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (alma): image <tmp>/images/almalinux…#edec76e5e607be8e"
+R	^	<tmp>/mutant00794.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00795.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (alma): image: a path to an OCI layo…#e4d994c30f3df931"
+R	^	<tmp>/mutant00795.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (alma): image <tmp>/images/almalinux…#edec76e5e607be8e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00796.json --arch arm64 --check	run	1	""	"hydo-build: format: this file is written in project format 4…#1d679fd03f9f9a03"
@@ -5503,7 +5503,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00798.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: buggif…#c34a4b7e26112840"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00799.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) bogus (known: af…#0044df4d46759703"
+R	^	<tmp>/mutant00799.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00800.json --arch arm64 --check	run	1	""	"hydo-build: services: must be a list (it may be empty: a pro…#a73c150f25d1fea2"
@@ -5542,7 +5542,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00811.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (alma): image <tmp>/images/almalinux…#edec76e5e607be8e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00812.json --arch arm64 --check	run	1	""	"hydo-build: guest.cpu_cache: true (the guest's CPUID describ…#f083b2def7dc7ca0"
+R	^	<tmp>/mutant00812.json --arch arm64 --check	run	1	""	"hydo-build: guest.cpu_cache: true (the guest's CPUID describ…#4e0b411b75947b8a"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00813.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'int' object is not iterable\n"
