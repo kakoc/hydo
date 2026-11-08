@@ -208,5 +208,7 @@ pub fn read_result_mop(k: &str, l: &[&str]) -> String {
 }
 
 /// Messaging histories: send, receive, acknowledge, give back, extend, commit, subscribe, and
-/// the drain's end (docs/design/messaging.md). Declared last, so that no line above moves.
+/// the drain's end (docs/design/messaging.md). Behind the feature `messages` and declared last,
+/// so that the programs built without it keep their bytes.
+#[cfg(feature = "messages")]
 pub mod messages;

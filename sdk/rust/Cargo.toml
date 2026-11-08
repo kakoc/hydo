@@ -26,9 +26,14 @@ default = []
 noop = []
 # `From<serde_json::Value>` for `Value` and `From<serde_json::Map>` for `Details`.
 serde_json = ["dep:serde_json"]
+# `history::messages`: the recorder of messaging histories (send, recv, ack, ...). Opt-in, so
+# that programs built without it keep their bytes.
+messages = []
 
 [dependencies]
 serde_json = { version = "1", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros", "time"] }
+# the tests use the messaging recorder (the feature `messages`)
+hydo-assert = { path = ".", features = ["messages"] }
