@@ -3,7 +3,7 @@ name: hydo-docs
 description: Write or edit documentation in the hydo repository to its writing standard (docs/STYLE.md). Use when you write or change any Markdown document, README, design note, guide topic or AGENTS.md text in this repository. Gives the rules in brief, the banned words, how to run the Vale check, and the newcomer test.
 license: Apache-2.0
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   audience: "contributors"
 ---
 
@@ -50,6 +50,26 @@ sh ci/vale.sh
 The command must print `ci/vale.sh: no findings`. To check another file, give its path as an
 argument. Fix each finding in the text. If a rule is wrong for one place, use the narrow exception
 that `docs/STYLE.md` describes.
+
+## The release docs review
+
+Before every release, a fresh reader checks `README.md` and both quickstarts
+(`hydo/dist/linux/QUICKSTART-linux.md`, `hydo/dist/mac/QUICKSTART-mac.md`) against the release
+candidate (`docs/RELEASING.md`, step 6a). Give the reader this prompt, and no other context:
+
+```text
+You are a developer who has never seen hydo. Read README.md, then the quickstart for your
+platform, as if you were deciding whether to use hydo and then trying it. Use the release
+candidate in <path to the unpacked tarballs>. Follow every command as written, in a scratch
+directory; do not run a command that needs sudo or loads a kernel module, and say which ones
+you skipped. For each place where you stopped, guessed, or found the page and the program
+disagree, report: the file and line, what you expected, what happened or what was missing, and
+a fix in one sentence. Also report every term used before it is defined, every claim without a
+command, an output, or a source, and every sentence that is not needed. Do not report style
+preferences. End with the findings ordered by how much each one would block a newcomer.
+```
+
+Fix each finding, or defer it with a reason in the release notes.
 
 ## Do the self-edit pass and the newcomer test
 

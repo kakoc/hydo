@@ -643,3 +643,47 @@ fn the_readme_commands_that_need_no_vm_run_as_written() {
     );
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// ---------------------------------------------------------------- the release's docs review
+
+/// docs/RELEASING.md has the docs review as a step before the tag, and the reviewer's prompt it
+/// points to is in the hydo-docs skill, so every release gives the reader the same prompt.
+#[test]
+fn the_release_docs_review_is_a_release_step_with_one_prompt() {
+    let releasing = read("docs/RELEASING.md");
+    let review = releasing
+        .find("## 6a. Docs review")
+        .expect("docs/RELEASING.md has no step `## 6a. Docs review`");
+    let publish = releasing
+        .find("## 7. Publish")
+        .expect("docs/RELEASING.md has no step 7");
+    assert!(
+        review < publish,
+        "the docs review must come before the tag (step 7)"
+    );
+    let step = &releasing[review..publish];
+    for want in [
+        "skills/hydo-docs/SKILL.md",
+        "The release docs review",
+        "release notes",
+        "docs::",
+    ] {
+        assert!(step.contains(want), "step 6a no longer names {want}");
+    }
+    let skill = read("skills/hydo-docs/SKILL.md");
+    let section = skill
+        .find("## The release docs review")
+        .expect("skills/hydo-docs/SKILL.md has no section `The release docs review`");
+    let rest = &skill[section..];
+    let prompt = rest
+        .split("```text\n")
+        .nth(1)
+        .and_then(|p| p.split("```").next())
+        .expect("the section has no ```text block with the prompt");
+    for want in ["README.md", "quickstart", "file and line"] {
+        assert!(
+            prompt.contains(want),
+            "the reviewer's prompt no longer says {want}"
+        );
+    }
+}
