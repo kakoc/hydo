@@ -238,15 +238,17 @@ release adds M178–M189 and M191 to 0.2.0:
 Both releases ship `guest/hydo-world` (re-pinned), `guest/hydo-world-tls` and `guest/hydo-sql`,
 pinned in `hydo/dist/<platform>/guest-programs.sha256` (`docs/BUILD-PINS.md`). Every example was
 re-recorded; the fingerprint epoch stays 1 (`docs/REBASELINE.md` section 18). The release commit
-is `2aa54fa4`. Its five files and `SHA256SUMS` are in `hydo/dist/out/0.3.0/` of the main checkout
-(git-ignored), each platform built twice to the same bytes:
+is `76a51408`. It adds the `rehearse.sh` fix that the release workflow needs to `2aa54fa4`, which
+the files were first built from (`docs/HISTORY.md` Milestone 190, the addendum). Its five files and
+`SHA256SUMS` are in `hydo/dist/out/0.3.0/` of the main checkout (git-ignored; the files built from
+`2aa54fa4` are in `before-2aa54fa4/`), each platform built twice to the same bytes:
 
-- `hydo-linux-0.3.0.tar.gz` `2af98e9fbc2d2067b28e7550d8bffd75869f53143ad0c3a82357cd9f210c03ba`;
+- `hydo-linux-0.3.0.tar.gz` `d274e519c53dda6b0512080cef0f96e90a86c042493f9da76bef79a6d2805680`;
 - `hydo-linux-0.3.0-sources.tar.gz` `00a4c143184199b652216ea6ef201ba17dd43e60c7d5d5b492c8205980e3c4c8`;
 - `hydo-mac-0.3.0.tar.gz`, signed and notarized,
-  `c89d51ba0d3b879ad46aaf61ab5f2376bebd1ace17a03c82422b49dcadf535ae`;
+  `6eb5ae166013b06be31b39cbd0b8b7e6b2491e53024dcd8af5bf6c95a9e8c55a`;
 - `hydo-mac-0.3.0-sources.tar.gz` `b294cca72f5ad2563798a89ca19f7c224e61f8baef9c36df5bba68925cfa29b1`;
-- `hydo-mac-0.3.0-signatures.tar.gz` `2f193ddbe018dbca913169ea5f218c76a8c8a81a4b56890f19215d2d13a8a647`.
+- `hydo-mac-0.3.0-signatures.tar.gz` `d93d46efe60b7b30ded96c760c1a4e9b131deeab69b9def2d404269551af8cf8`.
 
 The prepared material (release notes, the Homebrew formula, the release-index lines, the skill
 release `skill-v1.2.0`) is in `hydo/dist/out/0.3.0/prepared/`. The checks and the publishing

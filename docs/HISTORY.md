@@ -4432,3 +4432,48 @@ time-zone name in libstdc++'s table; no home path; remote-shell words only in li
 third-party files; no competitor name. The signed Mac tarball: the owner in the public names and
 the time-zone name in libstdc++. The signatures asset: nothing. Both sources archives' own files:
 the owner in RELEASING.md's tap name only.
+
+**Addendum: the release files rebuilt from `76a51408` (2026-11-08).** After the merge, CI showed
+that the `packages` workflow's macOS crates job failed on every run: `hydo/dist/crates/rehearse.sh`
+expanded an empty array under `set -u`, which macOS's bash 3.2 refuses. The release workflow needs
+that job and reads it from the tag's commit, so the tag must be on a commit with the fix. The fix
+is `76a51408` on `main`, and it is the new release commit. Each release program compiles in the
+commit it was built from, so every release file was built again from `76a51408`. Between
+`2aa54fa4` and `76a51408` only `AGENTS.md`, `docs/HISTORY.md`, `docs/REBASELINE.md` and that
+script changed.
+
+- Each platform was built twice from clean targets, with the same bytes. Linux was built on the
+  bare-metal machine in own trees, with the assets and the sources cache of the first builds. The
+  Mac was built on this Mac at the tree path of the first builds (the Mach-O `LC_UUID` depends on
+  it). The unsigned Mac tarball is
+  `ac08364877077a27315d78b6903e6e429a19c82ccb6b161918ce1d7186fabbbd` (not published).
+- `sign-release.sh`: notarization `937526e4-32a8-4747-bd1d-8c9cd68bdb3e` Accepted. Attaching the new
+  signatures asset to the second unsigned build gives the signed tarball byte for byte.
+- The new files:
+
+  | File | Bytes | sha256 |
+  | --- | --- | --- |
+  | `hydo-linux-0.3.0.tar.gz` | 66,720,623 | `d274e519c53dda6b0512080cef0f96e90a86c042493f9da76bef79a6d2805680` |
+  | `hydo-linux-0.3.0-sources.tar.gz` | 482,554,675 | `00a4c143184199b652216ea6ef201ba17dd43e60c7d5d5b492c8205980e3c4c8` |
+  | `hydo-mac-0.3.0.tar.gz` (signed) | 33,090,286 | `6eb5ae166013b06be31b39cbd0b8b7e6b2491e53024dcd8af5bf6c95a9e8c55a` |
+  | `hydo-mac-0.3.0-sources.tar.gz` | 690,045,715 | `b294cca72f5ad2563798a89ca19f7c224e61f8baef9c36df5bba68925cfa29b1` |
+  | `hydo-mac-0.3.0-signatures.tar.gz` | 82,922 | `d93d46efe60b7b30ded96c760c1a4e9b131deeab69b9def2d404269551af8cf8` |
+
+- Compared file by file with the files from `2aa54fa4`: both sources archives have the same
+  bytes. In the Linux tarball only `bin/hydo`, `bin/hydo-build` and `SHA256SUMS` differ, and the
+  two programs become equal when the commit hash is replaced. In the Mac tarball only the four
+  programs and `SHA256SUMS` differ. With their signatures removed, the four programs become equal
+  after the commit hash is replaced in `bin/hydo` and `bin/hydo-build`, and after `LC_UUID` and
+  the `__LINKEDIT` size that the removed signature leaves are masked. No guest file, asset or image
+  byte changed.
+- Checked from clean prefixes, once each: the Redis quickstart image `d255fb2b…` on hvx as the
+  user on the bare-metal machine (`--no-module`, module `869F246124D8A3F84879E74`):
+  `1893d8c55d7704d9`, `3520af95868b4e8f`, `5cfee0d955a38b78`. The same on KVM on the build
+  machine: `bfa03053d51bec8a`, `8ed16d6da60c34c6`, `c5b4f7cbd0ec3ac7`. On this Mac with the signed
+  tarball (`hydo doctor` names the Developer ID; every program "accepted, source=Notarized
+  Developer ID"): `67e5d6469f1a90a5`, `a6870a92a1bbf0ae`, `1785bbb72e7ffba2`. `hydo --version`
+  prints `hydo 0.3.0 (76a51408658413512f6e2b698a4a3d340bf44fd8)` on all three.
+- `hydo/dist/out/0.3.0/` of the main checkout holds the new files; the files from `2aa54fa4` are in
+  `before-2aa54fa4/`. In `prepared/`, the release notes name the release commit. The Homebrew
+  formula and the release-index patch carry the new archive sha256 values. The skill archive
+  `hydo-skill-1.2.0.tar.gz` packed from `76a51408` has the same bytes as before.
