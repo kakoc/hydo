@@ -23,8 +23,10 @@ step 8).
 | `hv/hvm/explore/out/Image-explore` | the arm64 kernel (`hv/hvm/explore/build-guest.sh`, HVC idle) |
 | `hv/hvm/explore/out/Image-explore-netns` | the second arm64 kernel (`hv/hvm/explore/build-guest-netns.sh`, `806807e7…`, docs/BUILD-PINS.md): `Image-explore` plus network namespaces, veth, bridge and NFQUEUE, for manifests with `network: bridge`, `addr:` or `faults: [freeze]` (Milestone 99; shipped since Milestone 150) |
 | `guest/hydo-agent` | the guest agent (`hydo/crates/hydo-agent`, 0.3.0, aarch64 `099e5444…`), every image's first process; built from the tree by `hydo/crates/hydo-agent/build.sh`, and `hydo build` checks its pinned sha256 |
-| `guest/hydo-world` | the in-guest program of `fakes:` and `proxies:` (`hydo/crates/hydo-world`, built from the tree, `60c7c9c4…` since 0.2.0) |
+| `guest/hydo-world` | the in-guest program of `fakes:` and `proxies:` (`hydo/crates/hydo-world`, built from the tree, `c247d595…` since 0.3.0) |
+| `guest/hydo-world-tls` | hydo-world with the TLS front of `tls:` fakes and proxies (the cargo feature `tls`, built from the tree, `ddb50605…`; shipped since 0.3.0), staged instead of hydo-world only for manifests with `tls:` |
 | `guest/hydo-read` | `hydo-read` and, through a link in the image, `hydo-check` (`hydo/crates/hydo-read`, built from the tree; `build-release.sh` and `hydo setup` check the pinned Mac build `88576fa8…` of `guest-programs.sha256`; shipped since Milestone 150) |
+| `guest/hydo-sql` | the ready-made SQL workloads and checks of `hydo sql-gen` (`hydo/crates/hydo-sql`, built from the tree, `3e8cd4fa…`; shipped since 0.3.0), staged only for manifests whose commands call it |
 | `guest/hydo_fc` | the freeze helper (`hydo/onboard/hydo_fc.c` built for aarch64 with the pinned Arm GNU toolchain, `499f654e…`), which `hydo build` stages for `faults: [freeze]` (an agent image freezes with the agent's own packet trigger; open item 30 in AGENTS.md; shipped since Milestone 150) |
 | `guest/busybox`, `guest/mke2fs` | static arm64 busybox 1.36.1 and e2fsprogs 1.47.0 (aarch64 nixpkgs) |
 | `guest/busybox-applets[.txt]` | the applet set to link, as the Linux build links it |
@@ -42,7 +44,8 @@ In the Mac release mode, `hydo build` takes its guest tools from the release (ea
 be replaced with its hydo-config variable, `hydo/crates/hydo-config/INVENTORY.md`): `guest/busybox`
 (`HYDO_BUSYBOX_ARM64`), `guest/busybox-applets` (`HYDO_BUSYBOX`), `guest/mke2fs` (`HYDO_MKE2FS`),
 `guest/hydo-agent` (`HYDO_AGENT_BIN_ARM64`), `guest/hydo-world` (`HYDO_WORLDBIN_ARM64`),
-`guest/hydo-read` (`HYDO_READ_BIN_ARM64`), `guest/hydo_fc` (`HYDO_FCBIN_ARM64`) and the store tree
+`guest/hydo-world-tls` (`HYDO_WORLDBIN_TLS_ARM64`), `guest/hydo-read` (`HYDO_READ_BIN_ARM64`),
+`guest/hydo-sql` (`HYDO_SQL_BIN_ARM64`), `guest/hydo_fc` (`HYDO_FCBIN_ARM64`) and the store tree
 `guest/tc` (`HYDO_ARM64_STORE`).
 
 ## How `hydo build` works without Linux

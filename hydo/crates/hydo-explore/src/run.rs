@@ -133,7 +133,14 @@ impl Cx {
         } else {
             self.build.join(&self.image)
         };
-        format!("`hydo run --image {} \"{}\"`", img.display(), sched)
+        // the KVM engine's runs are repeated on KVM (since 0.3.0; hvx's default would need the
+        // module and sudo on a machine that has only /dev/kvm)
+        let backend = if self.kvm { "--backend kvm " } else { "" };
+        format!(
+            "`hydo run {backend}--image {} \"{}\"`",
+            img.display(),
+            sched
+        )
     }
 
     fn render(&self, s: &S) -> String {

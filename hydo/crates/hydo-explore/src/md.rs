@@ -217,7 +217,7 @@ pub fn report(doc: &Exploration) -> String {
     }
     l.extend(
         [
-            "## Property table over every schedule (hvx/ASSERTIONS.md)",
+            "## Property table over every schedule (hydo/ASSERTIONS.md)",
             "",
         ]
         .map(String::from),

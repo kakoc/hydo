@@ -957,7 +957,7 @@ pub fn render_liveness(l: &[Liveness]) -> Vec<String> {
         return Vec::new();
     }
     let mut out = vec![
-        "## Liveness (eventually properties, hvx/ASSERTIONS.md)".to_string(),
+        "## Liveness (eventually properties, hydo/ASSERTIONS.md)".to_string(),
         String::new(),
         "| property | held in time | missed deadline | slowest in time | deadline | slowest held late | first miss |".into(),
         "|---|---|---|---|---|---|---|".into(),

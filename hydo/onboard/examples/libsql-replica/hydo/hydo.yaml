@@ -17,7 +17,7 @@
 format: 1
 name: libsql-replica
 description: "libSQL server (sqld): a primary and a read replica; seeded SQL transactions checked for a constant bank total, serializable list-append histories and replica convergence"
-hydo_version: "0.2"
+hydo_version: "0.3"
 
 # hand: what the primary's ready command runs after its health check. By default it sets sqld's
 # durability mode again after every start, because sqld keeps it only in memory (RESULTS.md,

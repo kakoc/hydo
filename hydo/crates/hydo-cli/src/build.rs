@@ -46,6 +46,7 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
     let manifest = argv[0].clone();
     let mut rest = argv[1..].to_vec();
     let out = take(&mut rest, "--out").unwrap_or_else(|| project_out(&manifest).to_string());
+    let out_dir = out.clone();
     let guest = ctx.guest();
     let mut inputs = ctx.config.build.clone();
     let (release, mut hb_argv) = match ctx.platform {
@@ -126,7 +127,40 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
     // every image is an agent image (M136): hydo run, repro and explore drive it through the host
     // controller (the image's /etc/hydo/control decides; older shell images still run)
     if rc == 0 && no_print_flag(&rest) {
-        println!("hydo: next:  hydo run \"disk=none | run\"     or     hydo explore --seeds 1-20");
+        println!("{}", next_hint(ctx, Path::new(&out_dir)));
     }
     rc
+}
+
+/// The `hydo: next:` line after a build. Since 0.3.0 it names the image when the output folder
+/// holds more than one (`hydo run` without `--image` then refuses), and on a Linux machine whose
+/// only engine is KVM (no `/dev/hvx`, a `/dev/kvm`) it carries `--backend kvm` (without it the
+/// commands run hvx, which needs the kernel module and sudo).
+fn next_hint(ctx: &Ctx, out: &Path) -> String {
+    let (built, _) = crate::runs::image_pattern(ctx);
+    let mut imgs: Vec<std::path::PathBuf> = std::fs::read_dir(out)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.path())
+                .filter(|p| p.to_string_lossy().ends_with(built))
+                .collect()
+        })
+        .unwrap_or_default();
+    // the newest is the one this build wrote
+    imgs.sort_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
+    let image = if imgs.len() > 1 {
+        imgs.last()
+            .map(|p| format!("--image {} ", p.display()))
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let kvm_only = ctx.platform == Platform::Linux
+        && !ctx.kvm
+        && !Path::new("/dev/hvx").exists()
+        && Path::new("/dev/kvm").exists();
+    let backend = if kvm_only { "--backend kvm " } else { "" };
+    format!(
+        "hydo: next:  hydo run {backend}{image}\"disk=none | run\"     or     hydo explore {backend}{image}--seeds 1-20"
+    )
 }

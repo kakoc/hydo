@@ -24,8 +24,9 @@
 #     machines.local.sh (machines.sh at the repository root).
 # Built from this tree on every run, with the workspace's pinned Rust toolchain: bin/hydo,
 # bin/hydo-build, bin/hydo-fetch-image and bin/hydo-hvm (aarch64-apple-darwin, or taken from
-# $HYDO_RUST_BIN_DIR), guest/hydo-agent (hydo-build checks its pinned sha256), guest/hydo-world
-# and guest/hydo-read (checked here against its pinned sha256, docs/BUILD-PINS.md "hydo-read").
+# $HYDO_RUST_BIN_DIR), guest/hydo-agent (hydo-build checks its pinned sha256), guest/hydo-world,
+# guest/hydo-world-tls, guest/hydo-read and guest/hydo-sql (each checked here against its pin in
+# guest-programs.sha256, docs/BUILD-PINS.md).
 # Once assets/ is filled, the release builds offline. Users of the release need no Linux machine.
 # Two runs give the same tarball: every file's time is set to 0, the archive lists the files in a
 # sorted order with no owner, extended attributes or ACLs, and gzip writes no name or time.
@@ -33,7 +34,7 @@ set -e
 umask 022
 D=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$D/../../.." && pwd)
-VERSION=${HYDO_VERSION:-0.2.0}
+VERSION=${HYDO_VERSION:-0.3.0}
 OUTDIR=${1:-$D/out}
 mkdir -p "$OUTDIR"
 OUTDIR=$(cd "$OUTDIR" && pwd)
@@ -166,6 +167,11 @@ cp "$A/busybox" "$A/mke2fs" "$REL/guest/"; chmod 755 "$REL/guest/busybox" "$REL/
 # M111), a static aarch64 musl build made here on the Mac; `hydo build` stages it
 HYDO_WORLD_ARCH=arm64 bash "$TOP/hydo/crates/hydo-world/build.sh" "$REL/guest/hydo-world" >&2
 chmod 755 "$REL/guest/hydo-world"
+# guest/hydo-world-tls (since 0.3.0): hydo-world with the TLS front of `tls:` fakes and proxies
+# (the cargo feature `tls`, M180), staged by `hydo build` instead of hydo-world only for manifests
+# with `tls:`
+HYDO_WORLD_TLS=1 HYDO_WORLD_ARCH=arm64 bash "$TOP/hydo/crates/hydo-world/build.sh" "$REL/guest/hydo-world-tls" >&2
+chmod 755 "$REL/guest/hydo-world-tls"
 cp "$A/busybox-applets.txt" "$A/tc-closure.txt" "$A/netns-closure.txt" "$REL/guest/"
 cp -R "$A/tc" "$REL/guest/tc"
 # ip and the iptables files go into the same tree: guest/tc is the Mac release's HYDO_ARM64_STORE,
@@ -182,6 +188,12 @@ cp "$A/hydo_fc" "$REL/guest/hydo_fc"; chmod 755 "$REL/guest/hydo_fc"
 bash "$TOP/hydo/crates/hydo-read/build.sh" aarch64 "$OUTDIR/.hydo-read" >&2
 cp "$OUTDIR/.hydo-read/hydo-read-arm64" "$REL/guest/hydo-read"; chmod 755 "$REL/guest/hydo-read"
 rm -rf "$OUTDIR/.hydo-read"
+# guest/hydo-sql (since 0.3.0): the ready-made SQL workloads and checks of `hydo sql-gen`
+# (hydo/crates/hydo-sql, its own Cargo workspace, M182), staged by `hydo build` only for
+# manifests whose commands call it; pure Rust, the pinned bytes on any Mac
+bash "$TOP/hydo/crates/hydo-sql/build.sh" aarch64 "$OUTDIR/.hydo-sql" >&2
+cp "$OUTDIR/.hydo-sql/hydo-sql-arm64" "$REL/guest/hydo-sql"; chmod 755 "$REL/guest/hydo-sql"
+rm -rf "$OUTDIR/.hydo-sql"
 # the guest agent, every image's first process (M136; driven by the host controller, M126): the
 # aarch64 build of hydo/crates/hydo-agent/build.sh (byte-reproducible, no C toolchain), as
 # guest/hydo-agent (the CLI's default HYDO_AGENT_BIN_ARM64); hydo-build checks its pinned sha256

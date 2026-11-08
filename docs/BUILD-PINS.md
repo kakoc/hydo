@@ -269,13 +269,23 @@ the `hydo` command of both releases. The pins:
   item 40) the pins are x86_64 `bdafadb3…` (`bdafadb3d65b0e742c1b0b238fab8c95f8f8f20d65efa4f27249a613006cb08c`)
   and arm64 `60c7c9c4…` (`60c7c9c4f92ac7cb1af94189a64485169e6b186ee174777656a184bf0e2613e1`),
   the same sizes, built on this Mac and on the bare-metal machine.
+  Since 0.3.0 (the version again, and the sources of M180's TLS front and M181's fake objects and
+  signed webhooks, AGENTS.md open item 59) the pins are x86_64 `9d36c8d2…`
+  (`9d36c8d2d3719741895e02e878550eb141d8a6f9035536fe6190030643ca9bc7`, 2,330,712 bytes) and arm64
+  `c247d595…` (`c247d59550363c0c6cfcc8aef11873eef8016be3a390686a40c36ae82ddca4df`, 1,935,760
+  bytes), built on this Mac (the Linux release builds the x86_64 one on the bare-metal machine and
+  checks it against the pin).
   `hydo-world-tls` (Milestone 180: the same program with the cargo feature `tls`, the TLS front of
   `tls:` fakes and proxies, `HYDO_WORLD_TLS=1 hydo/crates/hydo-world/build.sh`; staged only for
   manifests with `tls:`): pure Rust (rustls 0.23 with its own RustCrypto provider: p256 0.13,
   aes-gcm 0.10, hmac 0.12), so the same recipe gives host-independent bytes: at 0.1.0 x86_64
   `63320b8c…` on this Mac and on the bare-metal machine alike; at 0.2.0 x86_64 `69b2828f…`
   (`69b2828f6d47b431…`, 2,977,080 bytes) and arm64 `e288d4e9…` (`e288d4e93f532232…`, 2,492,000
-  bytes), built on this Mac. Not in the releases yet (AGENTS.md open item 58).
+  bytes), built on this Mac. In both releases since 0.3.0 (`guest/hydo-world-tls`, pinned in
+  `guest-programs.sha256`): x86_64 `4abc6182…`
+  (`4abc6182360ed2145b49a1bbf7185161dc707ec19dc7c366acf575a58528d2b6`, 3,021,784 bytes) and arm64
+  `ddb50605…` (`ddb50605027bbec0168e8815e0023195a6bed3b923777d066c952686e3cdcb8c`, 2,524,856
+  bytes).
   Extra crates (Cargo.lock): tokio 1.54.1 (current-thread runtime), h2 0.4.20, http 1.5.0,
   bytes 1.12.1, httparse 1.10.1. It replaces the Go program of `hydo/onboard/world/` (Go 1.26.5,
   `2da400f3…` x86_64), whose bytes are in the images built before M111.
@@ -312,7 +322,9 @@ from go.dev it still builds `orderd-arm64` `a87ca7fa…` (M96).
   Since 0.2.0 (the workspace version is in Cargo's `-C metadata`, and the client sends
   `hydo-grpc/<version>` as its user agent) the pins are `f2ad5e72…`
   (`f2ad5e72e59dfd02f950fd55757ef799a2b76141d8112159354a0be734019aa6`) and arm64 `55445870…`
-  (`55445870a2e1120481362224415877e90a45c9cd46195cff5c53dcb561cfa574`).
+  (`55445870a2e1120481362224415877e90a45c9cd46195cff5c53dcb561cfa574`). Since 0.3.0 they are
+  `a2b7f6da…` (`a2b7f6daea04b60d63edc97fb4c4cab873575fc78cfd58b4943827dca8dc24ff`) and arm64
+  `d2d41ea4…` (`d2d41ea491b0ccc30de56cfdf6dcb61ca87700b4d3c574451f9280c88b273b41`).
 - **Well-known imports:** `hydo/crates/hydo-grpc-gen/src/wkt.pb` holds the descriptors of
   `google/protobuf/*.proto` exactly as protocompile v0.14.1 with protobuf-go v1.35.2 produced them
   for the Go generator (sha256 `f9696902ad5a824e…`), so a schema that imports them is the same
@@ -357,7 +369,8 @@ staged into an image only when a command or a folder file names `hydo-sql`, so i
 inside those images' fingerprints. Like hydo-read it keeps its own Cargo workspace and lock file
 (started from hydo-read's: the same versions of the same crates, no other crate) and builds with
 `hydo/crates/hydo-sql/build.sh [x86_64|aarch64|all] [OUTDIR]` (Rust 1.90.0, both musl targets,
-rust-lld, the checkout path and `$CARGO_HOME` remapped) into `build/hydo-sql` and
+rust-lld, the checkout path and `$CARGO_HOME` remapped; since 0.3.0 through `rustc-stable`,
+below) into `build/hydo-sql` and
 `build/hydo-sql-arm64`, the names `hydo-build` looks for (`HYDO_SQL_BIN`, `HYDO_SQL_BIN_ARM64`).
 Its build script copies hydo-read's `pg.rs`, `mysql.rs` and `check.rs` into the build (their
 `//!` lines blanked, so line numbers stay), so a change of those three files changes hydo-sql's
@@ -370,7 +383,24 @@ host's kind is in the bytes. The values for Milestone 182:
 | aarch64 | aarch64-apple-darwin (the Mac) | 1,414,240 | `5e5544d679f1e4a6642b0b97af7265141702120ccba6e0a48c7f010abb695228` |
 
 The images of `examples/libsql-replica` and `examples/postgres-sql` in their RESULTS.md carry the
-first. No release ships `guest/hydo-sql` yet (a release-script change, AGENTS.md open item 60).
+first. Both releases ship `guest/hydo-sql` since 0.3.0, pinned in `guest-programs.sha256`.
+
+**The checkout path was in its bytes until 0.3.0.** Cargo's `-C metadata` hashes the path of the
+path dependency `hydo-read` (as for rust-kv, AGENTS.md open item 24), so the same commit built in
+two checkouts gave two programs: the Linux release built in a new tree did not give the bytes of
+the same commit built in another tree, and the Milestone 182 values above are those of one
+checkout. Since 0.3.0 `build.sh` uses the gRPC client's recipe (`hydo/grpcgen/rustc-stable` as
+`RUSTC_WRAPPER`, which replaces `-C metadata` with a hash of what each crate is, and
+`hydo-elf-comment` for the linker's line): two checkout paths give the same bytes (checked on this
+Mac and on the bare-metal machine). The kind of building host is still in the bytes (a Mac's and a
+Linux machine's x86_64 builds differ; the cause was not looked for), so, as for hydo-read, the Linux
+release pins the bare-metal machine's x86_64 build and the Mac release the Mac's arm64 build:
+
+| target | built on | size | sha256 |
+|---|---|---|---|
+| x86_64 | x86_64-unknown-linux-gnu (the bare-metal machine; the Linux release's) | 1,715,936 | `348af8b37a12be72344ec6ea96ef19e9d4dd6977138b328704c8f867b592626b` |
+| x86_64 | aarch64-apple-darwin (the Mac) | 1,715,936 | `4954b75f183f74efc07c25ea6d5fbcca088acd9a4d2bf438d8cf26528afa2d02` |
+| aarch64 | aarch64-apple-darwin (the Mac; the Mac release's) | 1,414,144 | `3e8cd4fa8073f94b7e21e4cd4cb5d53c4f719b83791ac897f0ec86b54da45587` |
 
 ## hydo-agent: the guest agent (Milestone 117)
 

@@ -1,7 +1,7 @@
 {
   "v": 1,
   "type": "exploration",
-  "hydo_version": "0.2.0",
+  "hydo_version": "0.3.0",
   "epoch": 1,
   "mode": "sweep",
   "config": {

@@ -7,8 +7,8 @@ inside, what must be true and what should happen. hydo collects what the program
 an exploration (many runs with different faults) reports each property as passed, failed (with
 a schedule that replays the failure) or never exercised.
 
-The package has no dependencies, works from CommonJS and from ES modules, ships TypeScript
-types and needs Node.js 16 or later. Outside hydo it does almost nothing: the records go to
+The package has no dependencies, and it works from CommonJS and from ES modules. It ships
+TypeScript types, and it needs Node.js 16 or later. Outside hydo it does almost nothing: the records go to
 standard error (or nowhere), and fault points stay off.
 
 ## Install
@@ -117,9 +117,9 @@ The operator is one of `<`, `<=`, `==`, `!=`, `>=` and `>`; the values are numbe
 
 ### Check that something happens in time (eventually)
 
-An `eventually` property says "after this point, the condition becomes true within a deadline",
-for example "after a restart the server answers within 5 seconds". Time inside a hydo guest is
-deterministic, so the verdict is the same on every replay.
+An `eventually` property says that after this point, the condition becomes true within a
+deadline. For example: after a restart, the server answers within 5 seconds. Time inside a hydo
+guest is deterministic, so the verdict is the same on every replay.
 
 ```js
 const ha = require('hydo-assert');
@@ -171,8 +171,9 @@ that is on fires on some of its calls. To try it outside hydo, set
 
 ### Record an operation history
 
-hydo can check a whole history of operations after a run: is every read consistent with the
-writes before it (linearizability per key), or do list appends ever go missing? Your workload's
+hydo can check a whole history of operations after a run. It checks that every read is
+consistent with the writes before it (linearizability per key), and that no list append goes
+missing. Your workload's
 client records each operation twice: when it starts (`invoke`) and when the outcome is known.
 
 ```js
@@ -218,7 +219,7 @@ A complete project with a `hydo.yaml` for hydo on a Mac is the node-kv example:
 
 - The API: the TypeScript declarations `index.d.ts` and `history.d.ts`, with a comment on every
   call (your editor shows them).
-- The records and how hydo judges each kind of property:
+- The records, and how hydo judges each property type:
   <https://github.com/kakoc/hydo/blob/main/hydo/ASSERTIONS.md>.
 - The history format and the checkers:
   <https://github.com/kakoc/hydo/blob/main/hydo/HISTORIES.md>.
@@ -229,11 +230,13 @@ Rules of this package:
 
 - The catalog (`catalog()`) lists the properties in the order they were declared. Call it
   once, early, in the process whose console hydo reads.
-- Details are encoded as Go's `encoding/json` encodes the same values: object and `Map` keys in
-  UTF-8 byte order, a `Set` or a typed array as an array, a `Uint8Array` or `Buffer` as base64,
-  a bigint as an integer, `undefined` and functions left out. Details that are not an object
-  are wrapped as `{"value": ...}`. A record whose details hold a NaN, an infinity or a cycle is
-  not written.
+- Details are encoded as Go's `encoding/json` encodes the same values:
+  - object and `Map` keys in UTF-8 byte order;
+  - a `Set` or a typed array as an array, and a `Uint8Array` or `Buffer` as base64;
+  - a bigint as an integer, with `undefined` and functions left out.
+
+  Details that are not an object are wrapped as `{"value": ...}`. A record whose details hold a
+  NaN, an infinity, or a cycle is not written.
 - Every record is one synchronous write, so it is on the console before the call returns. The
   ES module entry re-exports the CommonJS one, so a program that uses both has one state; a
   worker thread has its own.
