@@ -71,6 +71,8 @@ mod restart;
 mod react;
 // the storage faults of one service, G= and L= (docs/design/storage-faults.md)
 mod storage;
+// work counters of a run, HYDO_COST (an experiment, docs/design/cost-tracking.md)
+mod cost;
 
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
@@ -2156,6 +2158,7 @@ fn main_recovery(fx: &mut F<'_>, ctx: &Ctx, acked: &[String], failed: &[String])
         true,
     )?;
     restart::start(fx, ctx)?; // restart policies (M134): once every recovering service is up
+    cost::probe(fx, ctx, "recovery")?; // HYDO_COST: the recovery boot's counters
     finish(fx, ctx)
 }
 
@@ -2265,6 +2268,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     for f in [l.acked(), l.outcomes(), format!("{}/workload.log", l.dir)] {
         post(fx, write_cmd(&f, "", false))?;
     }
+    cost::probe(fx, ctx, "start")?; // HYDO_COST: the counters before the workload
     start_periodic(fx, ctx)?;
     restart::start(fx, ctx)?; // restart policies (M134): from the workload's start
     let (mut down, mut cut, mut paused) = (false, false, false);
@@ -2522,6 +2526,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
                 format!("POWER CUT before step {cat} (all services frozen)"),
             );
         }
+        cost::probe(fx, ctx, "end")?; // HYDO_COST: services frozen, before the cut
         fx.report("hydo-explore-workload-done cut");
         fx.settle()?;
         return fx.end(ending);
@@ -2560,6 +2565,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     if ctx.plan.outcomes_after_cut {
         fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
     }
+    cost::probe(fx, ctx, "end")?; // HYDO_COST: the counters after the workload
     fx.report("hydo-explore-workload-done");
     // explore_read: "go" -- the host switches the disk faults off
     fx.engine(EngineAction::DiskFaultsOff);

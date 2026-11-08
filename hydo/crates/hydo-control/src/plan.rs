@@ -204,6 +204,10 @@ pub struct Plan {
     /// directories G= corrupts and the own file systems L= takes away (schedule/storage.rs).
     pub storage: Vec<PlanStorage>,
     pub layout: Layout,
+    /// `HYDO_COST` (an experiment, docs/design/cost-tracking.md): read the guest's work counters
+    /// (`/proc`) at the workload's start and end and in a recovery boot, as `HYDO-COST` report
+    /// lines. Not a manifest key: the host's choice, off by default, so nothing changes without it.
+    pub cost: bool,
 }
 
 /// One service's storage: its directory, and its own file system's partition when it has one.
@@ -512,6 +516,7 @@ impl Plan {
                 Some(c) => Some(int(c, "guest.clock_after_cut")?),
             },
             outcomes_after_cut: get(guest, "outcomes_after_cut").is_some_and(py::truthy),
+            cost: false,
             invariants,
             knobs,
             buggify: m.buggify,

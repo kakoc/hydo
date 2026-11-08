@@ -354,6 +354,10 @@ variables! {
     /// `0`: the host does not run a SPIN of an agent image on hvm or kvm again in the rewind mode
     /// (`hydo-hvm hvm` reads it too: `1` turns the rewind mode on).
     HVM_SPIN_REWIND: Control, User, "flag: exactly `0` turns it off", "on", "hydo-control, hydo-hvm";
+    /// Not `0`: the host controller reads the guest's work counters (`/proc`: disk, network,
+    /// CPU, memory per process) at the workload's start and end and in a recovery boot, and
+    /// reports them as `HYDO-COST` lines (an experiment, docs/design/cost-tracking.md).
+    HYDO_COST: Control, Developer, "flag: set and not `0`", "off", "hydo-control";
 
     // ------------------------------------------------------------------ Cli
     /// `linux` or `mac`: run the `hydo` command as the other platform's (the CLI test checks
