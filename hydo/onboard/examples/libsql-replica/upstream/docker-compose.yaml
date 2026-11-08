@@ -1,0 +1,17 @@
+# Plain Docker Compose reproduction (no hydo): one sqld primary from the project's image, with its
+# admin API on port 9090. Host ports 18080 (Hrana over HTTP) and 19090 (admin).
+name: sqld-config-reset
+services:
+  sqld:
+    image: ghcr.io/tursodatabase/libsql-server:${SQLD_TAG:-v0.24.33}
+    environment:
+      SQLD_NODE: primary
+      SQLD_ADMIN_LISTEN_ADDR: 0.0.0.0:9090
+    ports:
+      - "127.0.0.1:18080:8080"
+      - "127.0.0.1:19090:9090"
+    volumes:
+      - sqld_data:/var/lib/sqld
+
+volumes:
+  sqld_data:

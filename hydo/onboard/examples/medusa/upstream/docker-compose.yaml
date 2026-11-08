@@ -1,0 +1,49 @@
+# Plain Docker Compose reproduction (no hydo): Medusa, PostgreSQL 15 and Redis 7 as Medusa's
+# Docker guide runs them. MEDUSA_VERSION picks the Medusa release the backend is built with.
+name: medusa-refund-race
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: medusa-store
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d medusa-store"]
+      interval: 2s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 30
+
+  medusa:
+    build:
+      context: .
+      args:
+        MEDUSA_VERSION: ${MEDUSA_VERSION:-2.18.0}
+    image: medusa-refund-race:${MEDUSA_VERSION:-2.18.0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/medusa-store
+      REDIS_URL: redis://redis:6379
+      STORE_CORS: http://localhost:8000
+      ADMIN_CORS: http://localhost:9000
+      AUTH_CORS: http://localhost:9000
+      JWT_SECRET: change-me
+      COOKIE_SECRET: change-me
+    volumes:
+      - ./race.mjs:/repro/race.mjs:ro
+    command: ["sh", "-c", "./node_modules/.bin/medusa db:migrate && exec ./node_modules/.bin/medusa start"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:9000/health"]
+      interval: 2s
+      retries: 90
+      start_period: 30s
