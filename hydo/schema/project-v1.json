@@ -726,6 +726,17 @@
             "boolean",
             "null"
           ]
+        },
+        "storage": {
+          "description": "Where the service keeps its data, for the faults that hit one service's storage\n(MANIFEST.md \"Storage faults of one service\"): a directory under /data (G= corrupts files\nthere), or {dir:, size_mib:} to make that directory the service's own file system on the\ndata disk (L=, a power loss of this service alone).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Storage"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -1812,6 +1823,89 @@
       "additionalProperties": false,
       "required": [
         "url"
+      ]
+    },
+    "WebhookSign": {
+      "description": "`sign:` of a webhook: an HMAC-SHA256 signature header on every delivery attempt.",
+      "type": "object",
+      "properties": {
+        "header": {
+          "description": "The header that carries the signature.",
+          "$ref": "#/$defs/Text"
+        },
+        "secret": {
+          "description": "The endpoint secret; its bytes are the HMAC key.",
+          "$ref": "#/$defs/Text"
+        },
+        "payload": {
+          "description": "What is signed: `{ts}` (the attempt's Unix seconds), `{body}` and the webhook's values.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "{ts}.{body}"
+        },
+        "value": {
+          "description": "The header's value; `{hmac}` is the signature.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "t={ts},v1={hmac}"
+        },
+        "encoding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignEncoding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "hex"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "header",
+        "secret"
+      ]
+    },
+    "SignEncoding": {
+      "type": "string",
+      "enum": [
+        "hex",
+        "base64"
+      ]
+    },
+    "FakeSave": {
+      "description": "`save:` of a fake's route: the object's key and the fields to store (templates).",
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/Text"
+        },
+        "fields": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key"
       ]
     },
     "Tls": {

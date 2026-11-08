@@ -2493,7 +2493,7 @@
       ]
     },
     "Timeline": {
-      "description": "`hydo inspect events <run dir>`: a run's events with their stops, filtered and paged (added in\nM177).",
+      "description": "`hydo inspect events <run dir>`: a run's events with their stops, filtered and paged (added in\nM178).",
       "type": "object",
       "properties": {
         "v": {
