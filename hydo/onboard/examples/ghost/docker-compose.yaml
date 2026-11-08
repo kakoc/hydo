@@ -1,0 +1,53 @@
+# Ghost (publishing and newsletters) as a team runs it with Docker, after the official image's
+# documentation: Ghost 6 on MySQL 8, newsletters sent through Mailgun's HTTPS API.
+# The Mailgun key and domain are placeholders: under hydo the API is a fake inside the guest.
+services:
+  ghost:
+    image: ghost:6.75.0-alpine
+    restart: always
+    ports:
+      - "8080:2368"
+    environment:
+      # Ghost serves behind the team's TLS proxy (Ghost refuses to boot with Stripe connected
+      # on a plain-http url); the proxy sends X-Forwarded-Proto: https
+      url: https://ghost:2368
+      NODE_ENV: production
+      database__client: mysql
+      database__connection__host: db
+      database__connection__user: root
+      database__connection__password: example
+      database__connection__database: ghost
+      # newsletters: Ghost's Mailgun client (mailgun.js) calls https://api.mailgun.net/v3
+      bulkEmail__mailgun__apiKey: key-0000000000000000000000000000hydo
+      bulkEmail__mailgun__domain: mg.example.com
+      bulkEmail__mailgun__baseUrl: https://api.mailgun.net/v3
+      # transactional mail (sign-in links, staff notifications) through Mailgun's API too
+      mail__transport: Mailgun
+      mail__from: "Ghost <noreply@mail.example.com>"
+      mail__options__auth__api_key: key-0000000000000000000000000000hydo
+      mail__options__auth__domain: mail.example.com
+      # paid features: Stripe keys are entered in Ghost Admin (Settings, Tips & donations)
+      # no calls home (update check, gravatar, explore pings)
+      privacy__useTinfoil: "true"
+    volumes:
+      - ghost:/var/lib/ghost/content
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.0.44
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: example
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-pexample"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  ghost:
+  db:

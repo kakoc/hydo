@@ -1,0 +1,16 @@
+#!/bin/sh
+# hydo: timeout=300
+# The site's starting state: the client's Admin API key (Ghost's built-in Zapier integration)
+# and 15 members, each subscribed to the default newsletter; the owner's staff session for the
+# operator's retries.
+set -e
+hydo-oci ghost node /hydo/workload/helper_client.mjs owner
+hydo-oci ghost node /hydo/workload/helper_client.mjs stripe
+hydo-oci db mysql -uroot -pexample -h 127.0.0.1 -N ghost -e \
+  "SELECT k.id, k.secret FROM api_keys k JOIN integrations i ON i.id = k.integration_id WHERE i.slug = 'zapier' AND k.type = 'admin'" 2>/dev/null |
+  hydo-oci ghost node /hydo/workload/helper_client.mjs key
+n=1
+while [ $n -le 15 ]; do
+  hydo-oci ghost node /hydo/workload/helper_client.mjs member $n
+  n=$((n + 1))
+done

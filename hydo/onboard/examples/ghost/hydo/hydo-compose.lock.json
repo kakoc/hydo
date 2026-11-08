@@ -1,0 +1,165 @@
+{
+ "generated_by": "hvx/onboard/hydo-compose",
+ "images": {
+  "ghost:6.75.0-alpine": {
+   "index_digest": "sha256:3af1575bb8917c6c0057beff85db92a4ac650f726956fd9de96932fea01c397c",
+   "name": "ghost",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "node",
+       "current/index.js"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "NODE_VERSION=22.23.4",
+       "YARN_VERSION=1.22.22",
+       "GOSU_VERSION=1.19",
+       "NODE_ENV=production",
+       "GHOST_CLI_VERSION=1.34.1",
+       "GHOST_CLI_SHA=3e98a8696fca1bb521f9cad633103f720d247d2a",
+       "GHOST_CLI_INSTALL=/usr/local/lib/ghost-cli",
+       "GHOST_INSTALL=/var/lib/ghost",
+       "GHOST_CONTENT=/var/lib/ghost/content",
+       "GHOST_VERSION=6.75.0"
+      ],
+      "ExposedPorts": {
+       "2368/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/ghost/content": {}
+      },
+      "WorkingDir": "/var/lib/ghost"
+     },
+     "digest": "sha256:9c4d6d91fdae425b5d75675a46ac16a53286c1f53eb05bf37902a5668726e04b",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "node",
+       "current/index.js"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "NODE_VERSION=22.23.4",
+       "YARN_VERSION=1.22.22",
+       "GOSU_VERSION=1.19",
+       "NODE_ENV=production",
+       "GHOST_CLI_VERSION=1.34.1",
+       "GHOST_CLI_SHA=3e98a8696fca1bb521f9cad633103f720d247d2a",
+       "GHOST_CLI_INSTALL=/usr/local/lib/ghost-cli",
+       "GHOST_INSTALL=/var/lib/ghost",
+       "GHOST_CONTENT=/var/lib/ghost/content",
+       "GHOST_VERSION=6.75.0"
+      ],
+      "ExposedPorts": {
+       "2368/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/ghost/content": {}
+      },
+      "WorkingDir": "/var/lib/ghost"
+     },
+     "digest": "sha256:12ede333deb590bb1476056857f4028bfa26bdaade15f2cf5c40e6165d7e4123",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "ghost:6.75.0-alpine",
+   "registry": "docker.io",
+   "repo": "library/ghost",
+   "tag": "6.75.0-alpine"
+  },
+  "mysql:8.0.44": {
+   "index_digest": "sha256:9c3380eac945af0736031b200027f581925927c81e010056214a4bd6b6693714",
+   "name": "mysql",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "mysqld"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GOSU_VERSION=1.19",
+       "MYSQL_MAJOR=8.0",
+       "MYSQL_VERSION=8.0.44-1.el9",
+       "MYSQL_SHELL_VERSION=8.0.44-1.el9"
+      ],
+      "ExposedPorts": {
+       "3306/tcp": {},
+       "33060/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/mysql": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:f7878bec832c6be5e61c39d3949651be8aa977daf875089b4560ae1434d2cb9c",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "mysqld"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GOSU_VERSION=1.19",
+       "MYSQL_MAJOR=8.0",
+       "MYSQL_VERSION=8.0.44-1.el9",
+       "MYSQL_SHELL_VERSION=8.0.44-1.el9"
+      ],
+      "ExposedPorts": {
+       "3306/tcp": {},
+       "33060/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/mysql": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:2c4989e05aa3ceb8cb6eb8a1b1f38ffa361eac2fec96ec67705d1b21c6390527",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "mysql:8.0.44",
+   "registry": "docker.io",
+   "repo": "library/mysql",
+   "tag": "8.0.44"
+  }
+ }
+}

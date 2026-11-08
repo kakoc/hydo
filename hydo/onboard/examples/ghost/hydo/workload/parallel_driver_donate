@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=60
+# A reader leaves a tip: Ghost creates a Stripe Checkout session; the reader pays (the fake
+# Stripe completes the session at once and sends Ghost the signed webhook).
+exec hydo-oci ghost node /hydo/workload/helper_client.mjs donate "$HYDO_CMD_ID"
