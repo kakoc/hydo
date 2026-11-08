@@ -306,6 +306,13 @@ maintainers: the shared cases, and the Go module with its frozen copy in `hydo/s
 test in its language (M188). The examples are in `hydo/onboard/examples/`;
 `hydo/onboard/MANIFEST.md` is the project format's reference.
 
+**Messaging checks (M193, tentative number).** A `checks:` entry of `type: messages` checks a
+message-passing system. The project declares the claims; hydo checks exactly those and measures
+the history, and it knows no messaging system or API. The checker is the module `messages` of
+`hydo-history`. Each claim is reported as `<id>.<claim>`, and `result.json` has `messages`. The
+Rust SDK records with `hydo_assert::history::messages`. Reference: `hydo guide messages`; design:
+`docs/design/messaging.md`; evidence and decisions: `docs/HISTORY.md` Milestone 193.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -417,6 +424,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     and npm. The npm entry expires after two days unused, so add it just before a release. No
     run of `release.yml` or `packages.yml` has happened yet. A crate new to `cargo install hydo`
     needs its first version published by hand (M186).
+64. Messaging checks: no VM ran one yet, and per-window measures, `Exploration.messages` and the
+    other SDKs' helpers are not built. The planted-bug example and the real-system onboardings
+    come next (M193).
 
 ## Milestone index
 
@@ -615,6 +625,8 @@ build machine, before 2026-10-13.
   `hydo-sql` in both releases, every example re-recorded, both releases built twice and verified)
 - M191: a plan of only `checks/` or `regressions/` keeps the manifest's own `workload.run` (before, its
   saved regressions passed without running it); `W=` is refused on such an image
+- M193 (tentative number): messaging checks, `type: messages` (the checker, the declaration with
+  `include:` bundles, `Run.messages`, the Rust recorder)
 
 ## Where to look
 

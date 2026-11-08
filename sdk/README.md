@@ -107,7 +107,10 @@ programs these cases replaced (M110); their outputs equal Go 1.26.5's.
 `<name>.out` (a case with one unnamed run) or `<name>.<run>.out`. Areas: `assert` (the types and
 deduplication), `compare`, `details` (the JSON encoding), `catalog`, `eventually`, `buggify`,
 `output` (`HYDO_ASSERT_OUT`), `history` (`HYDO-HIST` records and
-`HYDO_HIST_OUT`), `programs`. A case file has:
+`HYDO_HIST_OUT`), `programs`. The case `history/messages` holds messaging records written with
+generic steps, whose item tokens come from the Rust SDK's `history::messages::Item`. The other
+SDKs replay it with their generic recorders. `sdk/rust/tests/messages.rs` checks that the Rust
+`Messages` recorder writes the same lines. A case file has:
 
 - `about`: what the case shows.
 - `needs`: features a language may lack: `f32` (a float32 value), `bytes` (a byte string,
