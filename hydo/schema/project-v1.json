@@ -992,6 +992,48 @@
         "dst"
       ]
     },
+    "Storage": {
+      "description": "A service's storage: the directory under /data, or the directory with its own file system.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/StorageSpec"
+        }
+      ]
+    },
+    "StorageSpec": {
+      "type": "object",
+      "properties": {
+        "dir": {
+          "description": "The directory, relative to /data (or starting with /data/).",
+          "type": "string"
+        },
+        "size_mib": {
+          "description": "The size of the service's own file system (a partition of the data disk, ext4 with a\njournal, mounted on the directory), 16 to 3072 MiB. Without it the directory stays on the\nshared data file system.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "dir"
+      ]
+    },
     "Workload": {
       "type": "object",
       "properties": {
@@ -1402,7 +1444,9 @@
         "clock",
         "disk",
         "freeze",
-        "protocol"
+        "protocol",
+        "corrupt",
+        "powerloss"
       ]
     },
     "FreezeMatch": {

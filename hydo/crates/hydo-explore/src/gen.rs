@@ -58,6 +58,11 @@ pub const GF_SALT: u64 = 0x475250435F464C54;
 pub const HVM_TJ_MAX: i64 = 1000;
 /// M139: the reactions' own stream (`--reactive`).
 pub const REACT_SALT: u64 = 0xA5EAC7C0FFEEA5EA;
+/// The storage faults' own stream (`--storage-faults`, docs/design/storage-faults.md).
+pub const STORAGE_SALT: u64 = 0x5701A6EC0FFEE570;
+/// How many bits a drawn G=...:flip changes, and how many bytes a drawn zero clears.
+const G_FLIPS: [i64; 4] = [1, 1, 4, 32];
+const G_LENS: [i64; 3] = [512, 4096, 65536];
 /// The stack's assertion events a fault reaction waits for (the order service's and its client's
 /// `sometimes`/`reachable` assertions that fire during the workload; hydo/stack/main.go).
 pub const STACK_REACT_EVENTS: [&str; 9] = [
@@ -136,6 +141,8 @@ pub struct Ex {
     pub buggify: bool,
     pub concurrency: bool,
     pub more_faults: bool,
+    /// `--storage-faults`: G= and L= from their own stream (STORAGE_SALT).
+    pub storage_faults: bool,
     pub cf_range: Option<(i64, i64)>,
     pub backend: Backend,
     /// hvm: the image has a data disk / tc (hvm_backend.configure).
@@ -192,6 +199,7 @@ impl Default for Ex {
             buggify: false,
             concurrency: false,
             more_faults: false,
+            storage_faults: false,
             cf_range: None,
             backend: Backend::Hvx,
             hvm_disk: false,
@@ -984,6 +992,65 @@ impl Ex {
         s
     }
 
+    /// `--storage-faults`: a corruption (G=, 50% of the schedules) of a service with `storage:`
+    /// and a power loss (L=, 40%) of a service with its own file system, from their own stream
+    /// (STORAGE_SALT), so every other field of a seed's schedule stays as it was. Every draw is
+    /// made whether it is used or not. A corruption is made while its service is down (70%: it is
+    /// killed before step at and started again 1 to 3 steps later) or under the running service;
+    /// flips (half of them: 1, 4 or 32 bits), zeroed ranges and truncations, at a drawn seed.
+    pub fn add_storage_faults(&self, mut s: S, seed: u64) -> S {
+        if !self.storage_faults {
+            return s;
+        }
+        let Some(sp) = &self.space else {
+            return s;
+        };
+        let mut t = SplitMix::new(seed ^ STORAGE_SALT);
+        let g_on = t.below(100) < 50;
+        let g_svc = t.next();
+        let g_at = t.rng(1, (self.norders - 1).max(1));
+        let g_down = t.below(100) < 70;
+        let g_n = t.rng(1, 3);
+        let g_kind = t.below(4);
+        let g_flips = t.pick(&G_FLIPS);
+        let g_len = t.pick(&G_LENS);
+        let g_seed = t.next() & 0xffff_ffff;
+        let l_on = t.below(100) < 40;
+        let l_svc = t.next();
+        let l_at = t.rng(1, (self.norders - 1).max(1));
+        let l_n = t.rng(1, 3);
+        let pick = |l: &[String], r: u64| -> Option<String> {
+            (!l.is_empty()).then(|| l[(r % l.len() as u64) as usize].clone())
+        };
+        if g_on && sp.storage_fault_allowed("corrupt") {
+            if let Some(svc) = pick(&sp.storage_svcs, g_svc) {
+                let how = match g_kind {
+                    0 | 1 => {
+                        if g_flips == 1 {
+                            format!("flip,seed={g_seed:x}")
+                        } else {
+                            format!("flip,n={g_flips},seed={g_seed:x}")
+                        }
+                    }
+                    2 => format!("zero,len={g_len},seed={g_seed:x}"),
+                    _ => format!("trunc,seed={g_seed:x}"),
+                };
+                s.g = Some(crate::sched::Gz {
+                    svc,
+                    at: g_at,
+                    down: g_down.then_some(g_n),
+                    how,
+                });
+            }
+        }
+        if l_on && sp.storage_fault_allowed("powerloss") {
+            if let Some(svc) = pick(&sp.own_fs_svcs, l_svc) {
+                s.l = Some((svc, l_at, l_n));
+            }
+        }
+        s
+    }
+
     /// The composition explore.py main() applies to a generated schedule.
     pub fn compose_seed(&self, strategy: &str, seed: u64, durable_only: bool) -> S {
         let mut s = self.generator(strategy, seed);
@@ -995,6 +1062,7 @@ impl Ex {
         }
         s = self.add_more_faults(s, seed, strategy);
         s = self.add_reactive(s, seed);
+        s = self.add_storage_faults(s, seed);
         s = self.add_freeze_call(s, seed);
         s = self.add_protocol_faults(s, seed);
         s = self.add_grpc_faults(s, seed);
@@ -1124,6 +1192,12 @@ impl Ex {
         }
         for a in &s.a {
             g.push(render_a(a));
+        }
+        if let Some(z) = &s.g {
+            g.push(crate::sched::render_g(z));
+        }
+        if let Some((svc, at, down)) = &s.l {
+            g.push(format!("L={svc}@{at}+{down}"));
         }
         format!(
             "disk={} dseed={:x}{}{}{} | {}",
@@ -1303,6 +1377,25 @@ impl Ex {
                 "H" => s.h.push(parse_h(v)?),
                 "W" => s.w = Some(v.to_string()),
                 "A" => s.a.push(parse_a(v)?),
+                "G" => {
+                    let (svc, rest) = split2(v, '@')?;
+                    let (when, how) = split2(rest, ':')?;
+                    let (at, down) = match when.split_once('+') {
+                        Some((a, d)) => (pint(a)?, Some(pint(d)?)),
+                        None => (pint(when)?, None),
+                    };
+                    s.g = Some(crate::sched::Gz {
+                        svc: svc.into(),
+                        at,
+                        down,
+                        how: how.into(),
+                    });
+                }
+                "L" => {
+                    let (svc, rest) = split2(v, '@')?;
+                    let (at, down) = split2(rest, '+')?;
+                    s.l = Some((svc.into(), pint(at)?, pint(down)?));
+                }
                 k if self.knob_tokens.iter().any(|t| t == k) => {
                     s.set_knob(k, KV::Str(v.to_string()))
                 }
@@ -1320,6 +1413,10 @@ impl Ex {
         if s.disk_is("ioerr") {
             return "io-errors";
         }
+        // a service's files corrupted on purpose (G=): the system's own checks are under test
+        if s.g.is_some() {
+            return "corrupted-files";
+        }
         let relaxed = match &self.space {
             Some(sp) => sp.unsafe_knob(s),
             None => {
@@ -1335,7 +1432,7 @@ impl Ex {
                 m || r
             }
         };
-        if relaxed && (self.knob_rule_any || s.disk == "cut") {
+        if relaxed && (self.knob_rule_any || s.disk == "cut" || s.l.is_some()) {
             return "unsafe-knob";
         }
         "durable-defaults"
@@ -1413,6 +1510,34 @@ impl Ex {
             }
         }
         self.nf_candidates(s, &mut var);
+        // the storage faults: go, stay down one step, a single flip
+        if let Some(z) = &s.g {
+            var(&|t| t.g = None);
+            if z.down.is_some_and(|d| d > 1) {
+                var(&|t| {
+                    if let Some(z) = &mut t.g {
+                        z.down = Some(1);
+                    }
+                });
+            }
+            if let Some(rest) = z.how.strip_prefix("flip,n=") {
+                if let Some((_, tail)) = rest.split_once(',') {
+                    let how = format!("flip,{tail}");
+                    var(&|t| {
+                        if let Some(z) = &mut t.g {
+                            z.how = how.clone();
+                        }
+                    });
+                }
+            }
+        }
+        if let Some((svc, at, down)) = &s.l {
+            var(&|t| t.l = None);
+            if *down > 1 {
+                let l = (svc.clone(), *at, 1);
+                var(&|t| t.l = Some(l.clone()));
+            }
+        }
         if let Some((svc, at, off)) = &s.x {
             var(&|t| t.x = None);
             if *off > 0 {

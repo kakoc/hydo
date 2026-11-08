@@ -9,6 +9,7 @@
 
 use crate::compose::Compose;
 use crate::num::{dec, err, hex, name, sdec};
+use crate::storage::Corruption;
 use crate::ParseError;
 use std::fmt;
 
@@ -673,6 +674,18 @@ pub enum GuestToken {
     Compose(Compose),
     /// `A=`: a reaction to an assertion record (M139).
     React(React),
+    /// `G=<svc>@<at>[+<down>]:<corruption>`: change bytes of one file in the service's storage
+    /// directory before step at; with `+down` while the service is down (killed before, started
+    /// again before step at+down). See `storage.rs`.
+    Corrupt {
+        svc: String,
+        at: u64,
+        down: Option<u64>,
+        how: Corruption,
+    },
+    /// `L=<svc>@<at>+<down>`: a power loss of one service (its own file system shut down,
+    /// unwritten data lost) before step at; it starts again before step at+down.
+    PowerLoss { svc: String, at: u64, down: u64 },
     /// Any other single upper-case letter: a manifest knob (`M=`, `R=`, `S=`, ...), whose value
     /// the guest passes to the knob's `set:` command.
     Knob { letter: char, value: String },
@@ -680,7 +693,7 @@ pub enum GuestToken {
 
 /// The letters with a fixed meaning (manifest_space.RESERVED_TOKENS plus the stack's M/R knobs,
 /// which stay knobs).
-pub const RESERVED: &str = "KPNOCTQXBFHWA";
+pub const RESERVED: &str = "KPNOCTQXBFHWAGL";
 
 fn at_plus(v: &str, what: &str) -> Result<(String, u64, u64), ParseError> {
     let (svc, r) = v
@@ -717,6 +730,8 @@ impl GuestToken {
             GuestToken::Freeze(_) => 'F',
             GuestToken::Compose(_) => 'W',
             GuestToken::React(_) => 'A',
+            GuestToken::Corrupt { .. } => 'G',
+            GuestToken::PowerLoss { .. } => 'L',
             GuestToken::Knob { letter, .. } => *letter,
         }
     }
@@ -860,6 +875,31 @@ impl GuestToken {
             'F' => GuestToken::Freeze(Freeze::parse(v)?),
             'W' => GuestToken::Compose(Compose::parse(v)?),
             'A' => GuestToken::React(React::parse(v)?),
+            'L' => {
+                let (svc, at, down) = at_plus(v, what)?;
+                GuestToken::PowerLoss { svc, at, down }
+            }
+            'G' => {
+                let form =
+                    "<svc>@<at>[+<down>]:<flip|zero|trunc>[,n=][,len=][,range=][,file=][,seed=]";
+                let (svc, r) = v
+                    .split_once('@')
+                    .ok_or_else(|| err(format!("{what}: {form}")))?;
+                name(svc, what)?;
+                let (when, how) = r
+                    .split_once(':')
+                    .ok_or_else(|| err(format!("{what}: {form}")))?;
+                let (at, down) = match when.split_once('+') {
+                    Some((a, d)) => (dec(a, what)?, Some(dec(d, what)?)),
+                    None => (dec(when, what)?, None),
+                };
+                GuestToken::Corrupt {
+                    svc: svc.to_string(),
+                    at,
+                    down,
+                    how: Corruption::parse(how, what)?,
+                }
+            }
             _ => {
                 if v.is_empty() {
                     return Err(err(format!("{what}: a knob needs a value")));
@@ -927,6 +967,14 @@ impl fmt::Display for GuestToken {
             GuestToken::Freeze(x) => write!(f, "F={x}"),
             GuestToken::Compose(w) => write!(f, "W={w}"),
             GuestToken::React(r) => write!(f, "A={r}"),
+            GuestToken::Corrupt { svc, at, down, how } => {
+                write!(f, "G={svc}@{at}")?;
+                if let Some(d) = down {
+                    write!(f, "+{d}")?;
+                }
+                write!(f, ":{how}")
+            }
+            GuestToken::PowerLoss { svc, at, down } => write!(f, "L={svc}@{at}+{down}"),
             GuestToken::Knob { letter, value } => write!(f, "{letter}={value}"),
         }
     }

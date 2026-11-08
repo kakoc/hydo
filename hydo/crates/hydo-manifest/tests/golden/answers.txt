@@ -756,12 +756,12 @@ R	^	<tmp>/cases/v-knob-str.json --arch x86_64 []	err	"knobs[0]: unknown field(s)
 R	^	<tmp>/cases/v-knob-str.json --arch arm64 []	err	"knobs[0]: unknown field(s) Q (known: default, description, n…#9426325b94569e69"
 R	^	<tmp>/cases/v-faults-ok.json --arch x86_64 []	ok	d:5e5b2949 w:4f53cda1 c:e5dc9e94 m:74234e98
 R	^	<tmp>/cases/v-faults-ok.json --arch arm64 []	ok	d:5e5b2949 w:4f53cda1 c:e5dc9e94 m:74234e98
-R	^	<tmp>/cases/v-faults-bad.json --arch x86_64 []	err	"faults: unknown kind 'zap' (known: clock, cut, disk, freeze,…#4e8954a1abebe3b9"
-R	^	<tmp>/cases/v-faults-bad.json --arch arm64 []	err	"faults: unknown kind 'zap' (known: clock, cut, disk, freeze,…#4e8954a1abebe3b9"
-R	^	<tmp>/cases/v-faults-int.json --arch x86_64 []	err	"faults: unknown kind 1 (known: clock, cut, disk, freeze, kil…#ab92424233bb4b0c"
-R	^	<tmp>/cases/v-faults-int.json --arch arm64 []	err	"faults: unknown kind 1 (known: clock, cut, disk, freeze, kil…#ab92424233bb4b0c"
-R	^	<tmp>/cases/v-faults-str.json --arch x86_64 []	err	"faults: unknown kind 'k' (known: clock, cut, disk, freeze, k…#10d3e2603427206d"
-R	^	<tmp>/cases/v-faults-str.json --arch arm64 []	err	"faults: unknown kind 'k' (known: clock, cut, disk, freeze, k…#10d3e2603427206d"
+R	^	<tmp>/cases/v-faults-bad.json --arch x86_64 []	err	"faults: unknown kind 'zap' (known: clock, corrupt, cut, disk…#09451be2e8ffcbea"
+R	^	<tmp>/cases/v-faults-bad.json --arch arm64 []	err	"faults: unknown kind 'zap' (known: clock, corrupt, cut, disk…#09451be2e8ffcbea"
+R	^	<tmp>/cases/v-faults-int.json --arch x86_64 []	err	"faults: unknown kind 1 (known: clock, corrupt, cut, disk, fr…#3a62c32a716fb2af"
+R	^	<tmp>/cases/v-faults-int.json --arch arm64 []	err	"faults: unknown kind 1 (known: clock, corrupt, cut, disk, fr…#3a62c32a716fb2af"
+R	^	<tmp>/cases/v-faults-str.json --arch x86_64 []	err	"faults: unknown kind 'k' (known: clock, corrupt, cut, disk, …#add95818a7659c9f"
+R	^	<tmp>/cases/v-faults-str.json --arch arm64 []	err	"faults: unknown kind 'k' (known: clock, corrupt, cut, disk, …#add95818a7659c9f"
 R	^	<tmp>/cases/v-faults-list-item.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
 R	^	<tmp>/cases/v-faults-list-item.json --arch arm64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
 R	^	<tmp>/cases/v-fm-0.json --arch x86_64 []	err	"freeze_match: only with `freeze` in faults:"
@@ -1104,11 +1104,11 @@ R	^	<tmp>/mutants/m72.json --arch x86_64 []	err	"services[0]: missing required f
 R	^	<tmp>/mutants/m73.json --arch x86_64 []	ok	d:efb40b04 w:4f53cda1 c:d8b7a6cc m:74234e98
 R	^	<tmp>/mutants/m74.json --arch x86_64 []	ok	d:57587e7a w:4f53cda1 c:611478b8 m:74234e98
 R	^	<tmp>/mutants/m75.json --arch x86_64 []	err	"root.files[0]: missing field `src` (project format 1; the sc…#995df533c1ff08e2"
-R	^	<tmp>/mutants/m76.json --arch x86_64 []	err	"faults: unknown kind 1 (known: clock, cut, disk, freeze, kil…#ab92424233bb4b0c"
+R	^	<tmp>/mutants/m76.json --arch x86_64 []	err	"faults: unknown kind 1 (known: clock, corrupt, cut, disk, fr…#3a62c32a716fb2af"
 R	^	<tmp>/mutants/m77.json --arch x86_64 []	ok	d:05db7d65 w:4f53cda1 c:e22a44af m:74234e98
 R	^	<tmp>/mutants/m78.json --arch x86_64 []	err	"root.files: invalid type: integer `5000`, expected a list (p…#ae557dfc2a90b961"
 R	^	<tmp>/mutants/m79.json --arch x86_64 []	ok	d:77b4f0c9 w:4f53cda1 c:83b0f18c m:74234e98
-R	^	<tmp>/mutants/m80.json --arch x86_64 []	err	"faults: unknown kind 'A' (known: clock, cut, disk, freeze, k…#8b03904aadbacf82"
+R	^	<tmp>/mutants/m80.json --arch x86_64 []	err	"faults: unknown kind 'A' (known: clock, corrupt, cut, disk, …#660b9624d9968c63"
 R	^	<tmp>/mutants/m81.json --arch x86_64 []	err	"errors: true, or a mapping (level, max, services)"
 R	^	<tmp>/mutants/m82.json --arch x86_64 []	err	"invariants[1]: unknown field(s) bogus (known: after, cmd, de…#c22424a74973d803"
 R	^	<tmp>/mutants/m83.json --arch x86_64 []	ok	d:6dc1dd59 w:4f53cda1 c:faf74721 m:74234e98
@@ -2310,7 +2310,7 @@ R	^	<tmp>/mutants/m1278.json --arch x86_64 []	err	"services[1]: depends_on names
 R	^	<tmp>/mutants/m1279.json --arch x86_64 []	ok	d:5303184f w:4f53cda1 c:a8ba9eac m:74234e98
 R	^	<tmp>/mutants/m1280.json --arch x86_64 []	ok	d:7bec6f69 w:4f53cda1 c:f604d9bc m:74234e98
 R	^	<tmp>/mutants/m1281.json --arch x86_64 []	err	"services[1].cmd: {{mode}} is not a declared parameter"
-R	^	<tmp>/mutants/m1282.json --arch x86_64 []	err	"faults: unknown kind 'eventually' (known: clock, cut, disk, …#4e832b432aa0c2a5"
+R	^	<tmp>/mutants/m1282.json --arch x86_64 []	err	"faults: unknown kind 'eventually' (known: clock, corrupt, cu…#4b9d550fe5a2c2f0"
 R	^	<tmp>/mutants/m1283.json --arch x86_64 []	err	"env: invalid type: boolean `false`, expected a mapping (proj…#890606a7ce09667e"
 R	^	<tmp>/mutants/m1284.json --arch x86_64 []	err	"test.commands[0].run: an argv list of strings (exec'd, no sh…#df2444aeb15d6f05"
 R	^	<tmp>/mutants/m1285.json --arch x86_64 []	ok	d:08d67261 w:4f53cda1 c:21a35fdd m:74234e98

@@ -269,7 +269,7 @@ checks:                        # ready-made checkers for recorded histories (see
     consistency: strict-serializable   # list-append: the level the system claims (HISTORIES.md)
 
 faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make sense here (also
-                               # freeze, protocol; see their sections);
+                               # freeze, protocol, corrupt, powerloss; see their sections);
                                # network/oneway also pull iproute2 into the image
 
 errors: true                   # error logs as findings (see "Error logs as findings" below): scan
@@ -572,6 +572,8 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `F=<svc>><peer>@<step>[#<n>][:<match>]:<dur>` | freeze `<svc>` at the n-th packet it **sends** to `<peer>` (`<` = **receives** from) at/after step `<step>`, for `<dur>` ms; only with `freeze` in `faults:` (see "Freeze at a call") |
 | `H=<target>@<from>-<to>:<rule>[,<rule>...]` | a protocol fault on a fake or proxy for steps `[from,to)`: an error, slow, missing or reset answer, or a duplicated / reordered / late / lost webhook; see "Fake outside services" |
 | `A=<event>[@<step>][+<ms>]:<action>` | a reaction (M139): from before step `step` (0 when not written) the host watches the console for the first SDK assertion record of `event` (`ok:true` of a `sometimes`/`reachable`, `ok:false` of the others), waits `ms` of guest time and does `<action>`: `cut` (a power cut at that instant: the workload and every service frozen, then the recovery boot), `kill-<svc>` (down until the heal), `stop-<svc>-<ms>` or `cont-<svc>` (resume a paused service: a pause healed at the first sign of no progress); reactions live during the steps only; see "Reactions" below |
+| `G=<svc>@<at>[+<down>]:<kind>[,...]` | corrupt one file in the service's `storage:` directory before step `at` (`flip`, `zero` or `trunc`); with `+<down>` while the service is killed, started again before step `at+down`; see "Storage faults of one service" |
+| `L=<svc>@<at>+<down>` | a power loss of one service before step `at`: its own file system shut down (what was not written back is lost), the service killed and started again before step `at+down`; see "Storage faults of one service" |
 | `<X>=<value>` | a knob from `knobs:` |
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
 
@@ -583,7 +585,7 @@ them in order), waits until the queue is empty (at most the largest delay in for
 `network fault lifted: queued=<n> drained_ms=<ms> left=<n>`. Before 2026-10-23 the qdisc was
 deleted at once and every queued packet was lost, so TCP retransmitted after a timeout.
 
-A schedule holds at most one `K=`, one `P=` and one `X=`: a second one is refused (Milestone
+A schedule holds at most one `K=`, one `P=`, one `X=`, one `G=` and one `L=`: a second one is refused (Milestone
 141; before, it silently replaced the first). To crash or stop several services at once, use
 reactions (`A=<event>:kill-<svc>`, one per service, below).
 
@@ -595,6 +597,49 @@ services, network and one-way faults from services with a `port:`, knob values f
 any other image. A knob token that collides with a built-in token (K P N O C T Q X F) is
 rejected. `hydo explore --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`;
 `hydo explore --grpc-faults` draws gRPC-level `H=` tokens for a manifest with a gRPC proxy (see "gRPC faults").
+
+### Storage faults of one service (`services[].storage`, `G=`, `L=`)
+
+hydo's disk faults and its power cut act on the whole guest's data disk. Two faults hit one
+service's storage instead (docs/design/storage-faults.md has the options and the reasons):
+
+```yaml
+services:
+  - name: n1
+    storage: vol/n1-data                    # the directory under /data where n1 keeps its files
+  - name: n2
+    storage: {dir: vol/n2-data, size_mib: 256}   # ... on a file system of its own (16-3072 MiB)
+faults: [kill, cut, corrupt, powerloss]
+```
+
+- **Corruption, `G=<svc>@<at>[+<down>]:<kind>[,n=<count>][,len=<bytes>][,file=<text>][,seed=<hex>]`.**
+  Before step `at` the host changes one file under the service's `storage:` directory: `flip`
+  (`n` single-bit flips, default 1, at most 64), `zero` (`len` bytes set to zero, default 4096,
+  at most 1 MiB) or `trunc` (the file shortened by `len` bytes, or by a seeded number of bytes).
+  `file=` keeps only files whose path (relative to the directory) contains the text, for example
+  `file=.blk`; `seed=` (lower-case hex, default 0) chooses the file and the places. With
+  `+<down>` the service is killed first and started again before step `at+down` (the files change
+  while it is down); without it the files change under the running service. The choice is a pure
+  function of the token and the directory's files at that moment, so the run reproduces; the
+  console says what changed (`CORRUPTED n1's /data/vol/n1-data/... before step 8: bit 3 of byte
+  4096 (5a->52), ...`). The keys are written in this order, each at most once. A service that
+  does not start again after the corruption is `ERROR <svc> restart failed (its files were
+  corrupted)`.
+- **A power loss of one service, `L=<svc>@<at>+<down>`.** Only for a service whose `storage:`
+  has `size_mib`: its directory is then a journaled ext4 file system of its own (a partition of
+  the data disk, mounted on the directory after the data disk, in the recovery boot too). Before
+  step `at` the service's processes are stopped, the kernel is told that the file system failed
+  (nothing more of it reaches the disk), the service is killed and the file system mounted again
+  (its journal replayed). What the service wrote and the kernel had written back stays; what it
+  had not is lost, as at a power loss of that machine alone. The other services run on. The
+  service starts again before step `at+down`. Not taken away: writes the kernel had handed to the
+  disk but not flushed (a real disk's volatile cache could lose them; the whole-guest cut `C=`
+  does). The disk, with every own file system, stays within 4 GiB.
+
+`hydo explore --storage-faults` draws them (a `G=` in half of the schedules on a service with
+`storage:`, an `L=` in 40% on a service with its own file system) when the manifest's `faults:`
+lists `corrupt` / `powerloss`, or has no `faults:` list. A failure with `G=` has the class
+`corrupted-files`. The guest letters `G` and `L` are reserved: a knob may not use them.
 
 ### Reactions (`A=`, `hydo explore --reactive`)
 

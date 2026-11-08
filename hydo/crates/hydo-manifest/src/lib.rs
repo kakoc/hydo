@@ -29,6 +29,7 @@ pub mod py;
 mod pyre;
 pub mod restart;
 pub mod rx;
+pub mod storage;
 mod types;
 mod validate;
 pub mod yaml;

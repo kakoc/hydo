@@ -2248,19 +2248,19 @@ R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	^ --arch arm64 --check	run	0	"hydo-build: <tmp>/case268.json OK (1 services, 1 invariants, 2 workload steps)\n"	^
 R	^	^ --arch arm64 --print-shell	run	0	#eb18f6d3c2e95b43/743	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case269.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 'zap' (known: clock, cut, d…#edbf499ae1828838"
+R	^	<tmp>/case269.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 'zap' (known: clock, corrup…#27e24b6d3c952e01"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case270.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 1 (known: clock, cut, disk,…#bbdfe94188e5d1d5"
+R	^	<tmp>/case270.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 1 (known: clock, corrupt, c…#7f6bb34026da9ac6"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case271.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 'k' (known: clock, cut, dis…#0fe34c498b7a30f5"
+R	^	<tmp>/case271.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 'k' (known: clock, corrupt,…#339ab7ec30fac8bd"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -3025,7 +3025,7 @@ R	^	^ --arch x86_64 --print-world	run	0	#a5847e82365a65b2/234	^
 R	^	<tmp>/mutant00022.json --arch x86_64 --check	run	1	""	"hydo-build: errors: true, or a mapping (level, max, services)\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00023.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind '10.89.0.7' (known: clock, …#ee19fad40bd96fdf"
+R	^	<tmp>/mutant00023.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind '10.89.0.7' (known: clock, …#a96ca595e10265cf"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00024.json --arch arm64 --check	run	0	#65e37ff649a1afc3/84	""
@@ -3943,7 +3943,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00328.json --arch arm64 --check	run	0	#86e8c7e8d59cf33e/239	""
 R	^	^ --arch arm64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00329.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind None (known: clock, cut, di…#835f816dbc0db6ba"
+R	^	<tmp>/mutant00329.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind None (known: clock, corrupt…#b007da01ed159bd2"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00330.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: must be a mapping\n"
@@ -3976,7 +3976,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00339.json --arch x86_64 --check	run	1	""	"hydo-build: services[1].cmd: {{mode}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00340.json --arch arm64 --check	run	1	""	"hydo-build: faults: unknown kind '' (known: clock, cut, disk…#d7a262b40e172c7f"
+R	^	<tmp>/mutant00340.json --arch arm64 --check	run	1	""	"hydo-build: faults: unknown kind '' (known: clock, corrupt, …#fc3cbfafe677d09d"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00341.json --arch x86_64 --check	run	1	""	"hydo-build: test.commands[0].kind: {{p}} is not a declared parameter\n"
@@ -3997,7 +3997,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00346.json --arch x86_64 --check	run	0	#509688e20c5234be/239	""
 R	^	^ --arch x86_64 --print-shell	run	0	#aa69bf9b2e6a2a43/1921	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant00347.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind True (known: clock, cut, di…#2c0c96621b8a8068"
+R	^	<tmp>/mutant00347.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind True (known: clock, corrupt…#8494862c496b9359"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00348.json --arch arm64 --check	run	0	#478410691904e3fe/239	""
@@ -5989,7 +5989,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01010.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].bogus: unknown field `bogus`, expe…#fd9a461e72675b71"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01011.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 5000 (known: clock, cut, di…#eb46073c5a1e77a8"
+R	^	<tmp>/mutant01011.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 5000 (known: clock, corrupt…#73d0d18c45c2f327"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01012.json --arch arm64 --check	run	0	#ee126f1f9700ace6/84	""

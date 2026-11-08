@@ -396,6 +396,8 @@ choice!(
         Disk = "disk",
         Freeze = "freeze",
         Protocol = "protocol",
+        Corrupt = "corrupt",
+        Powerloss = "powerloss",
     }
 );
 choice!(
@@ -717,6 +719,37 @@ pub struct Service {
     /// cut as far as it was flushed (MANIFEST.md "A writable root for image services").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub writable: Option<bool>,
+    /// Where the service keeps its data, for the faults that hit one service's storage
+    /// (MANIFEST.md "Storage faults of one service"): a directory under /data (G= corrupts files
+    /// there), or {dir:, size_mib:} to make that directory the service's own file system on the
+    /// data disk (L=, a power loss of this service alone).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage: Option<Storage>,
+}
+
+/// A service's storage: the directory under /data, or the directory with its own file system.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    untagged,
+    expecting = "a directory under /data, or a mapping with dir: and size_mib:"
+)]
+pub enum Storage {
+    Dir(String),
+    Own(StorageSpec),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct StorageSpec {
+    /// The directory, relative to /data (or starting with /data/).
+    pub dir: String,
+    /// The size of the service's own file system (a partition of the data disk, ext4 with a
+    /// journal, mounted on the directory), 16 to 3072 MiB. Without it the directory stays on the
+    /// shared data file system.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_mib: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
 }
 
 /// A Docker/OCI image: a `docker save` tar or an OCI layout directory, or one per architecture.

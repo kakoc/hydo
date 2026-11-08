@@ -16,8 +16,8 @@ use std::path::Path;
 
 pub const FAULT_KINDS: [&str; 7] = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"];
 /// Guest tokens with a fixed meaning; a manifest knob may not reuse one.
-pub const RESERVED_TOKENS: [&str; 13] = [
-    "K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W", "A",
+pub const RESERVED_TOKENS: [&str; 15] = [
+    "K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W", "A", "G", "L",
 ];
 pub const PF_REQ_KINDS: [&str; 4] = ["status", "delay", "drop", "reset"];
 pub const PF_HOOK_KINDS: [&str; 4] = ["dup", "reorder", "late", "lost"];
@@ -48,6 +48,9 @@ pub struct Space {
     pub faults: Vec<String>,
     /// (token, safe value, relaxed values)
     pub knobs: Vec<(String, String, Vec<String>)>,
+    /// The services with `storage:` (G=), and those with their own file system (L=).
+    pub storage_svcs: Vec<String>,
+    pub own_fs_svcs: Vec<String>,
 }
 
 fn arr(v: Option<&Value>) -> Vec<Value> {
@@ -143,7 +146,16 @@ impl Space {
             knobs.push((tok, safe, vals));
         }
         let name = m.get("name").map(str_of).unwrap_or_else(|| "?".to_string());
+        let storage = hydo_manifest::storage::of_manifest(&m);
+        let storage_svcs: Vec<String> = storage.iter().map(|(n, _)| n.clone()).collect();
+        let own_fs_svcs: Vec<String> = storage
+            .iter()
+            .filter(|(_, s)| s.size_mib.is_some())
+            .map(|(n, _)| n.clone())
+            .collect();
         Ok(Space {
+            storage_svcs,
+            own_fs_svcs,
             m,
             name,
             compose,
@@ -173,6 +185,15 @@ impl Space {
 
     pub fn has_fault(&self, k: &str) -> bool {
         self.faults.iter().any(|f| f == k)
+    }
+
+    /// A storage fault kind (`corrupt`, `powerloss`) is drawn when the manifest's `faults:` lists
+    /// it, or when the manifest has no `faults:` list (its `storage:` is then the opt-in).
+    pub fn storage_fault_allowed(&self, k: &str) -> bool {
+        match self.m.get("faults") {
+            Some(v) if truthy(v) => self.has_fault(k),
+            _ => true,
+        }
     }
 
     /// freeze_match: as (string, direction): '<' replies, '>' requests, None either.
@@ -359,6 +380,16 @@ impl Space {
         }
         if s.x.as_ref().is_some_and(|x| x.0 == "-") {
             s.x = None;
+        }
+        if s.g.as_ref().is_some_and(|g| {
+            !self.storage_fault_allowed("corrupt") || !self.storage_svcs.contains(&g.svc)
+        }) {
+            s.g = None;
+        }
+        if s.l.as_ref().is_some_and(|l| {
+            !self.storage_fault_allowed("powerloss") || !self.own_fs_svcs.contains(&l.0)
+        }) {
+            s.l = None;
         }
         if (s.disk_is("lying") || s.disk_is("ioerr")) && !self.has_fault("disk") {
             s.disk = if s.disk_is("lying") && self.has_fault("cut") {

@@ -54,6 +54,7 @@ hydo-control::m123                       full
 hydo-control::react                      fast
 hydo-control::restart                    fast
 hydo-control::restart_may_fail           fast
+hydo-control::storage                    fast
 hydo-engine                              fast
 hydo-engine-proto                        fast
 hydo-engine::lockstep                    fast
@@ -67,6 +68,7 @@ hydo-explore::identity                   fast
 hydo-explore::liveness_deadline          fast
 hydo-explore::netns_links                fast
 hydo-explore::reactive                   fast
+hydo-explore::storage_faults             fast
 hydo-grpc                                fast
 hydo-grpc-gen                            fast
 hydo-grpc-gen::bin/hydo-grpc-gen         fast

@@ -1,7 +1,8 @@
 //! The check on the shapes the real generators write (schemars for the project and results
 //! formats, hydo-agent-proto's own generator for the agent protocol): every committed schema under
-//! `hydo/schema/` is an addition to itself and to its released copy for every kind of reader the
-//! check knows, and every removed key, every key made required, every required key made
+//! `hydo/schema/` is an addition to itself for every kind of reader the check knows and to its
+//! released copy for the readers its format has (the project format: readers of the current
+//! format), and every removed key, every key made required, every required key made
 //! optional and every removed enum value of a definition the root reaches is caught where it is.
 //! (Each format's own test checks it with that format's rules.)
 
@@ -66,7 +67,12 @@ fn every_committed_schema_is_an_addition_to_itself_and_to_its_release() {
                 vec![],
                 "{f} {readers:?}"
             );
-            assert_eq!(check(&released, &now, &rules), vec![], "{f} {readers:?}");
+            // against the release, each format with the readers it has: the project format's
+            // readers are hydo of the current format only, so a widening of it (a new enum value,
+            // as `faults:` gained) passes there and not for released readers
+            if *f != "project" || readers == Readers::Current {
+                assert_eq!(check(&released, &now, &rules), vec![], "{f} {readers:?}");
+            }
         }
     }
 }

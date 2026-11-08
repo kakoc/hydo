@@ -69,6 +69,8 @@ mod restart;
 // reactions, the schedule token A= (M139)
 #[path = "features/react.rs"]
 mod react;
+// the storage faults of one service, G= and L= (docs/design/storage-faults.md)
+mod storage;
 
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
@@ -141,6 +143,10 @@ struct RunCfg {
     o: Option<netfault::NetTok>,
     /// A= (M139): the reactions, in token order.
     a: Vec<hydo_schedule::React>,
+    /// G=: (svc, at, down, what) (docs/design/storage-faults.md).
+    z: Option<(String, i64, Option<i64>, hydo_schedule::Corruption)>,
+    /// L=: (svc, at, up).
+    l: Option<(String, i64, i64)>,
 }
 
 #[derive(Debug)]
@@ -475,7 +481,11 @@ fn repeated_fault(s: &Schedule) -> Option<char> {
     for t in &s.guest {
         if matches!(
             t,
-            GuestToken::Kill { .. } | GuestToken::Pause(_) | GuestToken::TimedKill { .. }
+            GuestToken::Kill { .. }
+                | GuestToken::Pause(_)
+                | GuestToken::TimedKill { .. }
+                | GuestToken::Corrupt { .. }
+                | GuestToken::PowerLoss { .. }
         ) {
             if seen.contains(&t.letter()) {
                 return Some(t.letter());
@@ -565,6 +575,18 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             GuestToken::Clock { at, delta } => c.t = Some((*at as i64, *delta)),
             // M139: reactions (features/react.rs)
             GuestToken::React(r) => c.a.push(r.clone()),
+            // the storage faults of one service (schedule/storage.rs)
+            GuestToken::Corrupt { svc, at, down, how } => {
+                c.z = Some((
+                    svc.clone(),
+                    *at as i64,
+                    down.map(|d| (*at + d) as i64),
+                    how.clone(),
+                ))
+            }
+            GuestToken::PowerLoss { svc, at, down } => {
+                c.l = Some((svc.clone(), *at as i64, (*at + *down) as i64))
+            }
             // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
             // branch with `buggify: true`, else an unknown knob), and H=, W=, Q= (core plans have
             // no fakes or composer; Q= is the stack's) are knobs the manifest does not have, so
@@ -1308,6 +1330,7 @@ fn mount_data(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
             l.data_dev, l.data_dir, ctx.plan.data_opts
         ),
     );
+    storage::mount_all(fx, ctx, verdict)?; // the services' own file systems (none: nothing sent)
     errlog::after_mount(fx, ctx) // SEAM(ErrorLogs): the data-disk files' line counts
 }
 
@@ -2062,6 +2085,14 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         let (t, id, msg) = KILL_TIMER_DECL;
         fx.report(decl(t, id, msg));
     }
+    if cfg.z.is_some() {
+        let (t, id, msg) = storage::CORRUPT_DECL;
+        fx.report(decl(t, id, msg));
+    }
+    if cfg.l.is_some() {
+        let (t, id, msg) = storage::POWER_LOSS_DECL;
+        fx.report(decl(t, id, msg));
+    }
     // M139: the reactions (A=), armed before their step
     let reactions = react::armed(fx, ctx);
     if !cfg.a.is_empty() {
@@ -2112,8 +2143,28 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             xat = -1;
         }
     }
+    // the storage faults (schedule/storage.rs): G= (zsvc, zat, zup) and L= (lsvc, lat, lup)
+    let (mut zsvc, mut zat, mut zup) = (String::new(), -1i64, -1i64);
+    if let Some((s, at, up, _)) = &cfg.z {
+        zsvc = s.clone();
+        (zat, zup) = (*at, up.unwrap_or(-1));
+        if !known(s) {
+            log(fx, format!("G: no service {s}, ignored"));
+            (zat, zup) = (-1, -1);
+        }
+    }
+    let (mut lsvc, mut lat, mut lup) = (String::new(), -1i64, -1i64);
+    if let Some((s, at, up)) = &cfg.l {
+        lsvc = s.clone();
+        (lat, lup) = (*at, *up);
+        if !known(s) {
+            log(fx, format!("L: no service {s}, ignored"));
+            (lat, lup) = (-1, -1);
+        }
+    }
     let mut pts: Vec<i64> = [0, kat, kup, cat, pat, pup, tat, xat, steps]
         .into_iter()
+        .chain([zat, zup, lat, lup])
         .chain(net.points())
         .chain(reactions.iter().map(|(_, r)| r.at as i64))
         .filter(|p| *p >= 0 && *p <= steps)
@@ -2126,6 +2177,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     start_periodic(fx, ctx)?;
     restart::start(fx, ctx)?; // restart policies (M134): from the workload's start
     let (mut down, mut cut, mut paused) = (false, false, false);
+    let (mut zdown, mut ldown) = (false, false);
     let (mut ptimer, mut xtimer): (Option<usize>, Option<usize>) = (None, None);
     let mut prev: Option<i64> = None;
     // M139: the reactions' threads, and whether a reaction's power cut ended the steps
@@ -2183,6 +2235,62 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             svc_sig(fx, &ksvc, Sig::Kill)?;
             down = true;
             log(fx, format!("KILLED {ksvc} before step {p}"));
+        }
+        // the storage faults of one service (schedule/storage.rs): restarts first, as K=
+        for (svc, up, is_down, why) in [
+            (&lsvc, lup, &mut ldown, "after its power loss"),
+            (&zsvc, zup, &mut zdown, "its files were corrupted"),
+        ] {
+            if p == up && *is_down {
+                *is_down = false;
+                // another fault on the same service (K=, or the other storage token) may have
+                // started it again already; its restart then stays the only one
+                fx.until(|h, _| !h.starting.contains(svc.as_str()))?;
+                if fx.effect_bool(|h, f| running(h, f, svc)) {
+                    log(
+                        fx,
+                        format!("{svc} is running before step {p}; not restarted again"),
+                    );
+                    continue;
+                }
+                log(fx, format!("restarting {svc} before step {p}"));
+                // K= on the same service would wait for this process to end before its restart
+                if *svc == ksvc {
+                    down = false;
+                }
+                if !start_svc(fx, ctx, svc)? {
+                    let after_faults =
+                        p == steps && ctx.plan.service(svc).is_some_and(|s| s.restart_may_fail);
+                    if !after_faults {
+                        return die_oracle(
+                            fx,
+                            format!("HYDO-ORACLE: ERROR {svc} restart failed ({why})"),
+                        );
+                    }
+                    log(
+                        fx,
+                        format!("{svc} restart failed after the last step (restart_may_fail): left to the heal"),
+                    );
+                }
+            }
+        }
+        if p == lat {
+            fx.until(|h, _| !h.starting.contains(&lsvc))?;
+            ldown = storage::power_loss(fx, ctx, &lsvc, p)?;
+        }
+        if p == zat {
+            let how = cfg.z.as_ref().map(|z| z.3.clone()).expect("G= read");
+            fx.until(|h, _| !h.starting.contains(&zsvc))?;
+            if zup >= 0 {
+                svc_sig(fx, &zsvc, Sig::Kill)?;
+                fx.until(|h, f| !running(h, f, &zsvc))?;
+                zdown = true;
+                log(
+                    fx,
+                    format!("KILLED {zsvc} before step {p} (to corrupt its files)"),
+                );
+            }
+            storage::corrupt(fx, ctx, &zsvc, &how, p)?;
         }
         // SEAM(NetFaults): `p == nfrom`: net_on; `p == oto && oneup`: heal; `p == ofrom`: one-way on.
         net.at(fx, ctx, p)?;
