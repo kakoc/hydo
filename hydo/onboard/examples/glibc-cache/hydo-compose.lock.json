@@ -1,0 +1,57 @@
+{
+ "generated_by": "hvx/onboard/hydo-compose",
+ "images": {
+  "almalinux:8.10": {
+   "index_digest": "sha256:2d0f2eb2a83cc09dbc2eb92fade4dbe8f709628149e81aa00aec70630406603b",
+   "name": "almalinux",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "/bin/bash"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:1965cb10f9c392766b2d544d3c1b997eb008d0e413c808e6a20086e87c802a80",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "/bin/bash"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:29fdedeed8a6707558c9e03b5d3e8f09eac5307cdd0811218d7d55a2cc9ae522",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "almalinux:8.10",
+   "registry": "docker.io",
+   "repo": "library/almalinux",
+   "tag": "8.10"
+  }
+ }
+}
