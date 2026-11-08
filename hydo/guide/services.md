@@ -3,7 +3,7 @@
 One `services:` entry for every long-running process. `hydo guide schema` lists every key; the
 rules that matter most:
 
-- `name`: lowercase. Fault tokens use it (`K=db@5+2` kills `db` before round 5).
+- `name`: lowercase. Fault tokens use it (`K=db@5+2` kills `db` before step 5).
 - `cmd`: runs in the foreground (no daemonizing, no `&`). Its data goes under `/data` (the
   persistent data disk and the fault target; list the directories in `data.dirs`), scratch files
   under `/tmp`. The root filesystem is read-only.

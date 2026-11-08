@@ -9,17 +9,21 @@ in `hydo guide manifest`.
 
 | kind | what happens | schedule token |
 |---|---|---|
-| `kill` | SIGKILL a service's whole process tree, restart it later (setup + cmd + ready) | `K=<svc>@<round>+<down>`, timed `X=` |
-| `pause` | SIGSTOP / SIGCONT, also in the middle of a request | `P=<svc>@<round>+<n>`, `P=<svc>@<round>~<ms>:<ms>` |
+| `kill` | SIGKILL a service's whole process tree, restart it later (setup + cmd + ready) | `K=<svc>@<step>+<down>`, timed `X=` |
+| `pause` | SIGSTOP / SIGCONT, also in the middle of a request | `P=<svc>@<step>+<n>`, `P=<svc>@<step>~<ms>:<ms>` |
 | `network` | netem delay, loss, duplication, reordering on traffic to a service's `port:` (or on a link between two services with `addr:`; with `network: bridge` the link carries their real traffic and the explorer draws only links between services that list each other in `depends_on`) | `N=<svc>@<from>-<to>:<netem>`, `N=a-b@...` |
 | `oneway` | the same in one direction only | `O=<svc>@<from>-<to>:req\|resp:<netem>` |
-| `cut` | power cut: only data that reached the disk survives; a fresh boot recovers and runs the final checks | `C=<round>`, host `cf=<k>` (at the k-th disk flush) |
-| `clock` | step the realtime clock (like an NTP step) | `T=<round>:<seconds>` |
+| `cut` | power cut: only data that reached the disk survives; a fresh boot recovers and runs the final checks | `C=<step>`, host `cf=<k>` (at the k-th disk flush) |
+| `clock` | step the realtime clock (like an NTP step) | `T=<step>:<seconds>` |
 | `disk` | I/O errors, a lying disk that drops acknowledged writes | host `disk=ioerr:<p>`, `disk=lying:<p>` |
-| `freeze` | stop a service at the n-th packet it sends to or receives from a peer (on a Mac: a release with the second guest kernel) | `F=<svc>><peer>@<round>#<n>:<ms>` |
+| `freeze` | stop a service at the n-th packet it sends to or receives from a peer (on a Mac: a release with the second guest kernel) | `F=<svc>><peer>@<step>#<n>:<ms>` |
 | `protocol` | faults on fakes and proxies (`hydo guide outside-services`) | `H=...` |
-| `corrupt` | bit flips, zeroed ranges or truncation of one file in a service's `storage:` directory, while the service runs or while it is down | `G=<svc>@<round>[+<down>]:flip\|zero\|trunc[,n=][,len=][,file=][,seed=]` |
-| `powerloss` | a power loss of one service: what it had not written back to its own file system (`storage: {dir:, size_mib:}`) is lost, the others run on | `L=<svc>@<round>+<down>` |
+| `corrupt` | bit flips, zeroed ranges or truncation of one file in a service's `storage:` directory, while the service runs or while it is down | `G=<svc>@<step>[+<down>]:flip\|zero\|trunc[,n=][,len=][,file=][,seed=]` |
+| `powerloss` | a power loss of one service: what it had not written back to its own file system (`storage: {dir:, size_mib:}`) is lost, the others run on | `L=<svc>@<step>+<down>` |
+
+`<step>` counts the workload's steps: a step is one numbered part of `workload.run`, or one round
+of commands of the test composer (`workload.steps` sets how many). A fault at step n happens
+before step n runs.
 
 Leave out kinds that cannot apply (no `network` for a project whose services have no port).
 `corrupt` and `powerloss` need `services[].storage` (`hydo guide manifest`, "Storage faults of

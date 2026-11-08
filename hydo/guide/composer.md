@@ -91,7 +91,7 @@ accounts, an AOF rewrite as a serial driver, a read as an anytime command, seed 
 format: 1                    # the project format (a newer one is refused; hydo guide schema)
 hydo_version: "0.2"          # the hydo this plan was written for (hydo build refuses another major.minor)
 workload:
-  steps: 20                  # rounds; faults are placed at round numbers. No run: here.
+  steps: 20                  # one round of commands per step; faults come before a step. No run: here.
   timeout: 300
   retry: /bin/my-retry       # optional: after the faults heal, re-send unknown operations
 test:
