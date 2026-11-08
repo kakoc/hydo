@@ -68,7 +68,13 @@ SELECT order_id, count(*) FROM payment WHERE status = 'captured' GROUP BY order_
 ```
 
 `store=` names an endpoint of `workload/helper_sql.conf` (the first primary when left out). Up to
-five offending rows are printed; the check fails when there is any. For a project's own tables
+five offending rows are printed; the check fails when there is any. The first three rows are
+also in the verdict line and in the check's finding in `result.json`.
+
+Do not order rows by a time the system wrote (`ORDER BY created_at`, `a.created_at <
+b.created_at`) in a rule about which event came first. A clock fault (`T=`) steps the realtime
+clock, so a later row can carry an earlier time. Compare the order the client saw instead: its
+outcome lines in `$HYDO_OUTCOMES`, or a sequence number the client writes into the row. For a project's own tables
 without the generated workloads, `hydo sql-gen --workloads none ...` writes only
 `workload/helper_sql.conf` (the `dialect` and `endpoint` lines).
 
