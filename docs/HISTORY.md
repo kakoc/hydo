@@ -3629,3 +3629,55 @@ Branch `worktree-agent-a1012231e943edabb` from `main` = `424a443a` (M176), merge
 ### Milestone 188 — DONE (the package pages rewritten, every example a test)
 
 User decision 2026-11-08: the pages registries show (crates.io and docs.rs, PyPI, npm, pkg.go.dev) were badly written. Rewritten after Diátaxis and the Rust API Guidelines' documentation chapter: the `hydo` crate (what hydo is, install with `cargo install hydo` and `hydo setup`, a first run with the Redis example, testing one's own system), the four assertion SDKs with one parallel structure (what it is, install, one complete program with the exact lines it writes, how-tos, reference), and the 19 internal crates as short pages ("This crate has no stable API", what it contains). Every library's README is its crate documentation (`#![doc = include_str!("../README.md")]`). Examples are tests: the `hydo` page's commands checked against both help texts and run where cheap (`hydo::readme`); the Rust SDK's blocks as doctests plus its complete program compared with `examples/kv_store.rs`; Python and JavaScript tests that run every README block; Go `Example` functions with `// Output:`. hydo-release's `crates` and `sdks` checks fail on a missing page, a relative link, a library whose documentation does not start with its README, an internal page without the stable-API sentence, or SDK pages that differ in structure. `#![warn(missing_docs)]` on `hydo-assert`, every public item documented, 73 rustdoc warnings fixed, `cargo doc` clean. SDK maintainer material moved to `sdk/README.md`. No file inside a recorded image changed (`rkv`, redis-composed-rs and `hydo-agent` byte-identical). The pages show on the registries from the next version.
+
+### Milestone 189 — DONE (the KVM engine at x86-64-v3: `guest.cpu: v3` on KVM; a v3 vCPU on one kind of core of a hybrid CPU; TigerBeetle found not to run on KVM; 2026-11-08)
+
+Branch `worktree-agent-aab5d4ece38bf00d9` from `main` (`f25c9e90`, rebased on `62e4db08`). Design,
+every nondeterminism source and the measurements: docs/design/kvm-engine.md, "x86-64-v3".
+
+**Why.** KVM is hydo's main Linux path (no kernel module), and programs built for newer CPUs need
+AVX2 at start (TigerBeetle's release binary, the official Restate image). The KVM engine refused
+`guest.cpu: v3`.
+
+**What.** `hydo-kvm/src/cpuid.rs`: `Level` and `table_for(level)`; the v3 table is hvx's v3 set
+(M68: FMA, MOVBE, XSAVE, AVX, F16C, BMI1, AVX2, BMI2, LZCNT; the XSAVE leaf for x87|SSE|AVX in the
+standard format, sub-leaf 1 zero), basic leaves up to 0xD, the same on every host; `check(level)`
+names what a host lacks and checks that the host's XSAVE layout puts AVX at 576; the v2 table and
+its recorded hash are unchanged. `sys.rs`: `Kvm::with_level` (and `KVM_CAP_XCRS`), XCR0 through
+`KVM_GET_XCRS`/`KVM_SET_XCRS` in a v3 vCPU's state (`CpuState.xcr0`, 0 at v2). `cpu.rs`: a v3 state's
+hash adds XCR0, XSTATE_BV & 7 and the AVX state; a v2 state hashes as before (a recorded test).
+`hybrid.rs`: on a hybrid Intel CPU a v3 vCPU thread is bound to the performance cores the process
+may use, else its efficiency cores. `hydo-kvm --cpu v3`; `hydo-engine` passes the image's level to
+the KVM engine (only several vCPUs are refused now); `hydo run`/`repro`, `hydo explore --backend
+kvm`; `hydo doctor --backend kvm` prints whether v3 can run. `hv/kvm/v3-check.sh` and
+`hv/kvm/v3/hydo.yaml`: the v3 check for any KVM host. The guide's capability table, the Linux
+QUICKSTART and MANIFEST.md (the CLI golden of `hydo guide manifest` re-recorded, two lines).
+
+**Found: the core decides what a v3 guest's XSAVE writes.** The first runs of the avx2 example on
+the build machine gave `963aa26e9b7a5a08` and once another value; pinned to CPU 0 (a performance
+core) always `963aa26e9b7a5a08`, pinned to CPU 16 (an efficiency core) always `2068294767586e14`,
+unpinned sometimes a third value. RAM dumps of the two kinds differed in two bytes, the low byte of
+XSTATE_BV in saved XSAVE areas (2 on the performance core, 3 on the efficiency core: the cores
+differ in whether they track the x87 state as initial). Bound to one kind, 20 unpinned runs of the
+clock schedule gave one value.
+
+**Checked on the build machine** (Core i7-13700HX, Linux 6.6.35; this tree's static `hydo` built on
+the bare-metal machine, in the M172 0.2.0 candidate's prefix): `hv/kvm/kvm-check.sh` 16 of 16 with
+every recorded KVM value (Redis's eight schedules, netem, S1 `ac512c2616cef6a4`, the exploration's
+46 runs and repro 14 of 14, ledger-spin `f796ae624a9473d1` through the rewind mode); the stack's
+pinned reproducers' schedule `c3419179cf1a55ba` and `c0746a7568ccf3b8`, each twice. At v3: the avx2
+example `2dcb4305…` OK, `963aa26e9b7a5a08` from fresh boots and from S1, `T=4:3600`
+`9da9f9e442eb9aa4`, the v2 control VIOLATION; restate-oci `77978db5…` `disk=none | run` OK 6 of 6
+`62acce98929d1369`, `K=restate@2+2` OK 4 of 6 `69c72be4dbd8e583`, `disk=cut | run C=4` OK 4 of 6
+`04f9abeff6e9c10b`, each twice (hvx's verdicts); `hv/kvm/v3-check.sh` 5 of 5.
+
+**TigerBeetle.** M179's three-replica image (`4dfaec44…`, 8 GiB, v3) ends `ERROR boot: SPIN` on
+KVM: `tigerbeetle format` (the first replica's `setup:`) runs its AVX2 code, then polls io_uring's
+completion queue from user space with no system call and no VM exit, so the disk completion (16
+exits after the request) never reaches it; with `HYDO_KVM_SPIN_SECS=600` it spun until stopped. The
+spin observer cannot prove such a loop (stores, calls, VEX instructions). This is open item 45 (c),
+not a v3 problem; the three-replica cluster runs only on hvx (M179).
+
+**Left** (AGENTS.md open items 5 and 45): a v3 guest on an AMD host (`hv/kvm/v3-check.sh` does the check;
+docs/design/kvm-engine.md "x86-64-v3" lists the steps for GitHub's runners); TigerBeetle and other io_uring busy-pollers on
+KVM; VT-x cannot make XSAVEOPT, XSAVEC or XGETBV1 fault.

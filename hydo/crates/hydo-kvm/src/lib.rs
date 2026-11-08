@@ -42,6 +42,7 @@ pub mod abi;
 pub mod boot;
 pub mod cpu;
 pub mod cpuid;
+pub mod hybrid;
 pub mod kernel;
 pub mod layout;
 pub mod machine;
@@ -110,14 +111,21 @@ pub fn catch_fatal(diag: &Diag, f: impl FnOnce() -> i32) -> i32 {
 /// Whether `/dev/kvm` (or `dev`) can be used here: Ok with the host's line, or why not. Opens the
 /// device and checks the API, the capabilities and the CPUID; creates no VM.
 pub fn probe(dev: &str) -> Result<String, String> {
+    probe_level(dev, cpuid::Level::V2)
+}
+
+/// As [`probe`], for guests at `level` (`guest.cpu: v3` needs the host's AVX2 and its XSAVE).
+pub fn probe_level(dev: &str, level: cpuid::Level) -> Result<String, String> {
     #[cfg(target_os = "linux")]
     {
         use cpu::Hypervisor;
-        sys::Kvm::open(dev).map(|k| k.describe())
+        sys::Kvm::open(dev)
+            .and_then(|k| k.with_level(level))
+            .map(|k| k.describe())
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = dev;
+        let _ = (dev, level);
         Err("the KVM engine needs Linux (/dev/kvm)".into())
     }
 }

@@ -75,8 +75,14 @@ pub struct CpuState {
     /// part (`xsave`), which KVM fills canonically, not with `KVM_GET_FPU`.
     pub fpu: kvm_fpu,
     /// KVM's XSAVE image of the FPU state (`KVM_GET_XSAVE`), restored with `KVM_SET_XSAVE`;
-    /// empty for the scripted vCPU.
+    /// empty for the scripted vCPU. At x86-64-v3 it holds the AVX state (the upper halves of
+    /// YMM0-15) too, in the standard format ([`AVX_WORDS`]).
     pub xsave: Vec<u32>,
+    /// The guest's XCR0 (`KVM_GET_XCRS`) at x86-64-v3, where the guest enables XSAVE components
+    /// itself (1, 3 or 7); 0 at v2, where it cannot (KVM keeps it at its reset value 1) and the
+    /// engine neither reads nor restores it. Only a non-zero value adds the XSAVE state beyond
+    /// the legacy area to [`CpuState::hash`], so a v2 fingerprint is the same as before v3 existed.
+    pub xcr0: u64,
     /// the KVM-owned MSRs of [`crate::msr::SNAPSHOT`], in that order
     pub msrs: Vec<(u32, u64)>,
     pub events: kvm_vcpu_events,
@@ -163,9 +169,31 @@ impl CpuState {
         for v in [d.db[0], d.db[1], d.db[2], d.db[3], d.dr6, d.dr7] {
             h = fnv_u64(v, h);
         }
+        if self.xcr0 != 0 {
+            // x86-64-v3: XCR0, which components the header says are not in their initial state
+            // (the guest's own XSAVE writes it into its RAM; only the components the guest may
+            // enable, not what the host's KVM adds such as PKRU), and the AVX state
+            h = fnv_u64(self.xcr0, h);
+            if self.xsave.len() >= AVX_WORDS.end {
+                let bv = self.xsave[XSTATE_BV_WORD] as u64 & XCR0_GUEST;
+                h = fnv_u64(bv, h);
+                for w in &self.xsave[AVX_WORDS] {
+                    h = fnv(&w.to_le_bytes(), h);
+                }
+            }
+        }
         h
     }
 }
+
+/// The XSAVE components a v3 guest may enable (x87, SSE, AVX: `crate::cpuid::XCR0_V3`).
+const XCR0_GUEST: u64 = crate::cpuid::XCR0_V3 as u64;
+/// The 32-bit word of a standard XSAVE image that holds the low half of the header's XSTATE_BV
+/// (byte 512).
+pub const XSTATE_BV_WORD: usize = 512 / 4;
+/// The words of a standard XSAVE image that hold the AVX state (bytes 576 to 831).
+pub const AVX_WORDS: std::ops::Range<usize> =
+    (crate::cpuid::XSAVE_AVX_OFFSET as usize / 4)..(crate::cpuid::XSAVE_SIZE_V3 as usize / 4);
 
 /// The x87 and SSE state in `kvm_fpu`'s form from the legacy (FXSAVE) part of an XSAVE image:
 /// FCW, FSW, the abridged tag byte, FOP, FIP, FDP, MXCSR, ST0-7 and XMM0-15 (MXCSR_MASK, a
@@ -270,4 +298,68 @@ pub trait Hypervisor: Send {
     unsafe fn fresh(&mut self, ram: *mut u8, len: usize) -> Result<Box<dyn Cpu>, String>;
     /// One line naming the host (its KVM and CPU), for the engine's diagnostics.
     fn describe(&self) -> String;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fnv::OFFSET;
+
+    fn with_xsave(xcr0: u64) -> CpuState {
+        let mut s = CpuState {
+            xsave: vec![0u32; 1024],
+            xcr0,
+            ..CpuState::default()
+        };
+        s.regs.rip = 0x1000;
+        s.xsave[6] = 0x1f80; // MXCSR
+        s.xsave[XSTATE_BV_WORD] = 3;
+        s
+    }
+
+    #[test]
+    fn a_v2_state_hashes_as_before_v3() {
+        // the hash of a v2 state (xcr0 0) reads no XSAVE byte beyond the legacy area, which it
+        // takes from `fpu`: whatever the image holds there, the hash is the recorded one
+        let a = with_xsave(0);
+        let mut b = a.clone();
+        b.xsave[AVX_WORDS.start] = 0xdead_beef;
+        b.xsave[XSTATE_BV_WORD] = 7;
+        assert_eq!(a.hash(OFFSET), b.hash(OFFSET));
+        assert_eq!(
+            format!("{:016x}", CpuState::default().hash(OFFSET)),
+            V2_DEFAULT
+        );
+    }
+
+    #[test]
+    fn a_v3_state_hashes_xcr0_the_header_and_the_avx_state() {
+        let a = with_xsave(7);
+        assert_ne!(a.hash(OFFSET), with_xsave(0).hash(OFFSET));
+        assert_ne!(a.hash(OFFSET), with_xsave(3).hash(OFFSET));
+        let changed = |f: &dyn Fn(&mut CpuState)| {
+            let mut b = a.clone();
+            f(&mut b);
+            b.hash(OFFSET) != a.hash(OFFSET)
+        };
+        assert!(
+            changed(&|b| b.xsave[AVX_WORDS.start] = 1),
+            "YMM0's upper half"
+        );
+        assert!(
+            changed(&|b| b.xsave[AVX_WORDS.end - 1] = 1),
+            "YMM15's upper half"
+        );
+        assert!(changed(&|b| b.xsave[XSTATE_BV_WORD] = 7), "AVX in use");
+        // what the guest cannot see: a component it cannot enable (PKRU, bit 9, which KVM adds
+        // on some hosts), the image beyond the AVX state, the header's other words
+        assert!(!changed(&|b| b.xsave[XSTATE_BV_WORD] |= 1 << 9));
+        assert!(!changed(&|b| b.xsave[AVX_WORDS.end] = 1));
+        assert!(!changed(&|b| b.xsave[XSTATE_BV_WORD + 2] = 1));
+        assert_eq!(AVX_WORDS, 144..208);
+    }
+
+    /// `CpuState::default().hash(OFFSET)` (recorded: the hash of a v2 state did not change when
+    /// v3 came).
+    const V2_DEFAULT: &str = "e29be6aad729e905";
 }

@@ -342,3 +342,16 @@ Memory on the host: the explorer's process held about 19 GB (the 8 GiB VM, the 3
 disk mapped, and S0 and S1 in memory: the hvx engine keeps both there), so one such worker
 needs a machine with about 20 GB free; `hydo explore` sizes its pool from the guest's RAM and the
 machine's available memory, and `hydo run` refuses a guest that does not fit.
+
+## On the KVM engine (Milestone 189)
+
+Since Milestone 189 the KVM engine runs `guest.cpu: v3` images, so the three-replica image above
+(`4dfaec44…`) was tried there (the build machine, `hydo run --backend kvm`, 8 GiB). It does not
+run: every schedule ends `ERROR boot: SPIN (guest loops without exits; run invalid)` during the
+first replica's `setup:`. `tigerbeetle format` starts, its AVX2 code runs, and it then waits for
+its disk writes by polling io_uring's completion queue from user space, with no system call and
+so no VM exit. The KVM engine delivers interrupts only at VM exits, so the disk's completion never
+reaches the guest; with `HYDO_KVM_SPIN_SECS=600` it spun until stopped. On hvx the PMU clock
+interrupts such a loop, which is why the cluster runs there. This is a limit of the KVM engine
+for any program that busy-polls without system calls (AGENTS.md open item 45 (c)), not of the v3
+CPU; TigerBeetle stays an hvx example (docs/design/kvm-engine.md, "x86-64-v3").

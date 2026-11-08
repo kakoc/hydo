@@ -154,6 +154,26 @@ impl Default for kvm_xsave {
     }
 }
 
+/// `struct kvm_xcr`: one extended control register (XCR0, the guest's enabled XSAVE features).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct kvm_xcr {
+    pub xcr: u32,
+    pub reserved: u32,
+    pub value: u64,
+}
+
+/// `struct kvm_xcrs` (`KVM_GET_XCRS`/`KVM_SET_XCRS`): the guest's XCRs; x86-64-v3 guests only
+/// (a v2 guest cannot enable XSAVE, its XCR0 stays at the reset value 1).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct kvm_xcrs {
+    pub nr_xcrs: u32,
+    pub flags: u32,
+    pub xcrs: [kvm_xcr; 16],
+    pub padding: [u64; 16],
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct kvm_msr_entry {
@@ -406,6 +426,7 @@ pub const KVM_CAP_SET_IDENTITY_MAP_ADDR: u32 = 37;
 pub const KVM_CAP_VCPU_EVENTS: u32 = 41;
 pub const KVM_CAP_DEBUGREGS: u32 = 50;
 pub const KVM_CAP_XSAVE: u32 = 55;
+pub const KVM_CAP_XCRS: u32 = 56;
 pub const KVM_CAP_IMMEDIATE_EXIT: u32 = 136;
 pub const KVM_CAP_X86_USER_SPACE_MSR: u32 = 188;
 pub const KVM_CAP_X86_MSR_FILTER: u32 = 189;
@@ -435,6 +456,8 @@ pub const KVM_GET_FPU: u64 = ior(0x8c, std::mem::size_of::<kvm_fpu>());
 pub const KVM_SET_FPU: u64 = iow(0x8d, std::mem::size_of::<kvm_fpu>());
 pub const KVM_GET_XSAVE: u64 = ior(0xa4, std::mem::size_of::<kvm_xsave>());
 pub const KVM_SET_XSAVE: u64 = iow(0xa5, std::mem::size_of::<kvm_xsave>());
+pub const KVM_GET_XCRS: u64 = ior(0xa6, std::mem::size_of::<kvm_xcrs>());
+pub const KVM_SET_XCRS: u64 = iow(0xa7, std::mem::size_of::<kvm_xcrs>());
 pub const KVM_SET_CPUID2: u64 = iow(0x90, std::mem::size_of::<kvm_cpuid2_header>());
 pub const KVM_GET_VCPU_EVENTS: u64 = ior(0x9f, std::mem::size_of::<kvm_vcpu_events>());
 pub const KVM_SET_VCPU_EVENTS: u64 = iow(0xa0, std::mem::size_of::<kvm_vcpu_events>());
@@ -494,5 +517,9 @@ mod tests {
         assert_eq!(KVM_SET_SREGS, 0x4138_ae84);
         assert_eq!(size_of::<kvm_dirty_log>(), 16);
         assert_eq!(KVM_GET_DIRTY_LOG, 0x4010_ae42);
+        assert_eq!(size_of::<kvm_xcr>(), 16);
+        assert_eq!(size_of::<kvm_xcrs>(), 392);
+        assert_eq!(KVM_GET_XCRS, 0x8188_aea6);
+        assert_eq!(KVM_SET_XCRS, 0x4188_aea7);
     }
 }
