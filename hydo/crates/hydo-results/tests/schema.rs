@@ -34,7 +34,7 @@ fn the_committed_schema_is_the_generated_one() {
     assert!(
         want == current(),
         "{} differs from the schema generated from the types; review the change and rewrite it \
-         with HYDO_BLESS=1 cargo test -p hydo-results --test schema",
+         with HYDO_BLESS=1 cargo test -p hydo-results --test it schema::",
         p.display()
     );
 }

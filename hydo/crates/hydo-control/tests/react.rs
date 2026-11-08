@@ -10,7 +10,7 @@
 //! that fails is), not at all when the event never comes, and a schedule whose reaction never
 //! fires runs the same commands as the schedule without it (only the declaration is added).
 
-mod support;
+use crate::support;
 
 use hydo_agent_proto::msg::{Command, Sig};
 use hydo_control::drive::{self, Policy, RunFrom};

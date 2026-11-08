@@ -1,15 +1,33 @@
 #!/bin/sh
 # ci/tier-filter.sh fast|full [PACKAGE...] -- the cargo-nextest filter expression of a test tier
 # (ci/test-tiers.txt; docs/CI.md "Test tiers").
-#   fast  every test binary except those whose tier is `full`, but with the `full` binaries of
-#         the PACKAGEs named (the packages a change touches directly: their own corpora run);
-#   full  every test binary (the full tier itself runs `cargo test --release --workspace`, which
-#         also runs the documentation examples, which cargo-nextest does not).
+#   fast  every test except those whose tier is `full`, but with the `full` tests of the PACKAGEs
+#         named (the packages a change touches directly: their own corpora run);
+#   full  every test (the full tier itself runs `cargo test --release --workspace`, which also
+#         runs the documentation examples, which cargo-nextest does not).
 #   cargo nextest run --cargo-profile ci -E "$(sh ci/tier-filter.sh fast hydo-build)"
+# A line `<package>::<name>` names the test program tests/<name>.rs or, in a crate whose
+# integration tests are one program (ci/consolidate-tests.sh), the module <name> of its program
+# `it`, whose tests are `<name>::<test>`: the filter is then
+# `(binary_id(<package>::it) & test(/^<name>::/))`.
 set -eu
 tier=${1:?usage: ci/tier-filter.sh fast|full [PACKAGE...]}
 shift
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(dirname "$here")
+
+# whether <package>'s tests/main.rs declares the module <name>
+folded() {
+  for c in "$root"/hydo/crates/*/Cargo.toml; do
+    d=$(dirname "$c")
+    [ -f "$d/tests/main.rs" ] || continue
+    p=$(sed -n 's/^name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' "$c" | head -n 1)
+    [ "$p" = "$1" ] || continue
+    grep -qx "mod $2;" "$d/tests/main.rs" && return 0
+  done
+  return 1
+}
+
 case $tier in
   full) echo 'all()' ;;
   fast)
@@ -21,7 +39,18 @@ case $tier in
     if [ -z "$ids" ]; then
       echo 'all()'
     else
-      printf 'not (%s)\n' "$(printf '%s\n' $ids | sed 's/.*/binary_id(&)/' | paste -sd'|' - | sed 's/|/ | /g')"
+      exprs=""
+      for id in $ids; do
+        pkg=${id%%::*}
+        name=${id#*::}
+        if folded "$pkg" "$name"; then
+          e="(binary_id($pkg::it) & test(/^$name::/))"
+        else
+          e="binary_id($id)"
+        fi
+        exprs="${exprs:+$exprs | }$e"
+      done
+      printf 'not (%s)\n' "$exprs"
     fi
     ;;
   *)

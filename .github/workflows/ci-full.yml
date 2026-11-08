@@ -72,9 +72,10 @@ jobs:
           # --workspace (not -p) keeps the features of the run above, so nothing is rebuilt
           t="cargo test --locked --release --workspace -q"
           # (-q prints a progress dot in front of a line a test prints: grep -o drops it)
-          $t --test public_content -- --nocapture 2>&1 | grep -o 'public_content: .*'
-          $t --test skill_check -- --nocapture 2>&1 | grep -o 'skills-ref: .*'
-          $t --test equivalence -- --nocapture --exact recorded_files cli_matches_golden 2>&1 | grep -oE '(SKIPPED|cli): .*'
+          # (hydo-agents' and hydo's integration tests are one program each, `it`: docs/CI.md)
+          $t --test it -- --nocapture public_content:: 2>&1 | grep -o 'public_content: .*'
+          $t --test it -- --nocapture skill_check:: 2>&1 | grep -o 'skills-ref: .*'
+          $t --test equivalence --test it -- --nocapture --exact recorded_files equivalence::cli_matches_golden 2>&1 | grep -oE '(SKIPPED|cli): .*'
       - name: sccache's statistics
         if: always()
         run: sccache --show-stats

@@ -242,7 +242,7 @@ Steps, on a commit of `main` that holds the new skill:
    `metadata.hydo-min` to that hydo's version and say in the step what the user should upgrade.
 2. Raise `metadata.version` in `skills/hydo-onboard/SKILL.md` and `version` of the plugin entry in
    `.claude-plugin/marketplace.json` to the same new version (a fix: the third number; a new step
-   or reference: the second). `cargo test -p hydo-agents --test skill_check` refuses different
+   or reference: the second). `cargo test -p hydo-agents --test it skill_check::` refuses different
    versions, an unknown `hydo guide` topic and anything in the folder that Claude Code would load
    as another plugin component; `claude plugin validate .` must pass.
 3. Commit and merge to `main`.

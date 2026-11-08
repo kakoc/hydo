@@ -1,5 +1,8 @@
 [package]
 name = "hydo-results"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo's results format: the run and exploration documents, the exploration's event stream, the lenient reader and the generated JSON Schema"
 version.workspace = true
 edition.workspace = true
@@ -14,6 +17,8 @@ include = ["/src/**", "/Cargo.toml", "/LICENSE"]
 [lib]
 # no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)
 doctest = false
+# no unit test, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 [dependencies]
 serde = { workspace = true }
@@ -23,3 +28,8 @@ schemars = "1"
 [dev-dependencies]
 hydo-schema-compat = { path = "../hydo-schema-compat" }
 
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

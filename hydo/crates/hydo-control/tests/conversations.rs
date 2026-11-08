@@ -2,7 +2,7 @@
 //! transcript for one scripted guest), the transcript file's round trip and its summary for the results document, determinism of two
 //! runs, and the lock-step adapter over a scripted hydo_engine::lockstep stream.
 
-mod support;
+use crate::support;
 
 use hydo_agent_proto::frame::frame;
 use hydo_agent_proto::line::AgentLine;

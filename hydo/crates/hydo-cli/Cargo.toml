@@ -2,6 +2,9 @@
 # command); its directory keeps the name hydo-cli (docs/PUBLISHING.md).
 [package]
 name = "hydo"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "Deterministic fault testing of whole systems: runs unmodified services in a deterministic hypervisor (Apple Silicon, x86_64 Linux) under process kills, pauses, network faults, power cuts, clock jumps and disk faults, and replays every failure bit for bit"
 version.workspace = true
 edition.workspace = true
@@ -49,3 +52,8 @@ libc = "0.2"
 
 [dev-dependencies]
 sha2 = { workspace = true }
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

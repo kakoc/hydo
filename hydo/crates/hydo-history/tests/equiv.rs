@@ -18,7 +18,7 @@
 //! `HYDO_BLESS=1` it rewrites the goldens from the Rust answers (the Rust crate is the reference
 //! from M107 on; bless only a deliberate change and say so in the commit).
 
-mod gen;
+use crate::gen;
 
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;

@@ -13,7 +13,7 @@
 //! hydo-init-fakes.sh, and a test showed that the model caught deliberate mistakes; both went with
 //! the shell init's images (`tests/support/mod.rs`).
 
-mod support;
+use crate::support;
 
 use hydo_agent_proto::msg::{Command, Reply};
 use hydo_control::plan::PlanWorld;

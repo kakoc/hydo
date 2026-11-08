@@ -528,7 +528,7 @@ pub fn check_golden(name: &str, comment: &[&str], inputs: &[String], lines: &[St
     for (i, (a, b)) in wl.iter().zip(gl.iter()).enumerate() {
         if a != b && !(input_path(a).is_some() && input_path(a) == input_path(b)) {
             panic!(
-                "{} differs at line {}:\n  golden: {a}\n  now:    {b}{note}\nIf the change is intended, re-record with HYDO_BLESS=1 cargo test -p hydo-control --test corpus",
+                "{} differs at line {}:\n  golden: {a}\n  now:    {b}{note}\nIf the change is intended, re-record with HYDO_BLESS=1 cargo test -p hydo-control --test it",
                 p.display(),
                 i + 1
             );

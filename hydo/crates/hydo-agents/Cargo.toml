@@ -1,5 +1,8 @@
 [package]
 name = "hydo-agents"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo's AI-facing commands: hydo guide, hydo skill install, hydo init (the onboarding skill is built in)"
 version.workspace = true
 edition.workspace = true
@@ -26,3 +29,8 @@ flate2 = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

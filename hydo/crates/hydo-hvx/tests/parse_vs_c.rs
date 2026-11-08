@@ -19,12 +19,12 @@
 //!
 //! ```text
 //! git show d9202e7:hv/hvx/hvx_explore.c > /tmp/hvx_explore.c   # and ptedges.h beside it
-//! HYDO_HVX_C_SRC=/tmp/hvx_explore.c [HYDO_BLESS=1] cargo test -p hydo-hvx --test parse_vs_c
+//! HYDO_HVX_C_SRC=/tmp/hvx_explore.c [HYDO_BLESS=1] cargo test -p hydo-hvx --test it parse_vs_c::
 //! ```
 //! (Linux with libipt; the C includes `hvx_stack_verify.c`, `hvx_boot.h` and `hvx_abi.h` from
 //! `hv/hvx`, which stay.)
 
-mod c_model;
+use crate::c_model;
 
 use c_model::CSched;
 use hydo_hvx::sched::Sched;

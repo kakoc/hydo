@@ -1,5 +1,8 @@
 [package]
 name = "hydo-explore"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo's fault explorer: schedules from seeds, a worker pool over one engine, re-runs, shrinking and reports"
 version.workspace = true
 edition.workspace = true
@@ -21,6 +24,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "hydo-explore"
 path = "src/bin/hydo-explore.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 [dependencies]
 hydo-config = { workspace = true }
@@ -45,3 +50,8 @@ libc = "0.2"
 name = "fake_engine"
 path = "tests/fake_engine.rs"
 harness = false
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

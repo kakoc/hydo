@@ -4,7 +4,7 @@
 //! fresh boot's run starts at S1's own stop. Checked against the conversations run one by one
 //! on separate scripted engines (tests/support, M120's proof), and against their replay.
 
-mod support;
+use crate::support;
 
 use hydo_control::drive::{self, Policy, RunFrom};
 use hydo_control::transcript::Record;

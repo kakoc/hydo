@@ -14,6 +14,8 @@ include = ["/src/**", "/Cargo.toml", "/LICENSE"]
 [lib]
 # no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)
 doctest = false
+# no unit test, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 [dependencies]
 

@@ -22,7 +22,7 @@
 //! deliberate mistakes; both went with the shell init's images (`tests/support/mod.rs`); the
 //! golden is the transcripts of those checked runs.
 
-mod support;
+use crate::support;
 
 use hydo_control::{Ending, Plan, Transcript};
 use hydo_explore::gen::{Backend, Ex};

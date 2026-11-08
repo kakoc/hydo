@@ -1,5 +1,8 @@
 [package]
 name = "hydo-bench"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "The bug benchmark runner: how well the explorer's strategies find the planted defects d0-d12 of hydo/bench"
 version.workspace = true
 edition.workspace = true
@@ -18,6 +21,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "hydo-bench"
 path = "src/bin/hydo-bench.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 [dependencies]
 hydo-config = { workspace = true }
@@ -30,3 +35,8 @@ hydo-results = { workspace = true }
 serde_json = { workspace = true }
 regex = "1"
 sha2 = { workspace = true }
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

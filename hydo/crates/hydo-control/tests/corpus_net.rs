@@ -20,7 +20,7 @@
 //! Goldens: `tests/golden/corpus-net.txt` (chunked SHA-256 of every transcript, per group) and a
 //! few readable transcripts in `tests/golden/examples-net/`. `HYDO_BLESS=1` re-records them.
 
-mod support;
+use crate::support;
 
 use hydo_control::{Ending, Plan, Transcript};
 use hydo_explore::gen::Ex;
