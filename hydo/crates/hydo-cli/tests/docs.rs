@@ -6,6 +6,11 @@
 //!   `#anchor` names a heading of the linked Markdown file (GitHub's anchor rules). External links
 //!   are checked only by the nightly job of `.github/workflows/docs.yml`, so that this test needs
 //!   no network.
+//! - The pages a user reads first (README.md and the two quickstarts) state facts of the tree:
+//!   every version they name as the current one is the workspace version (so a release that
+//!   raises the version must update them, or this test fails); every 16-digit hex value they cite
+//!   is in hydo/onboard/recorded.json or in `CITED_ELSEWHERE` with its source; every `hydo`
+//!   command they show is in a help text, with only options that help text names.
 
 use std::path::{Path, PathBuf};
 
@@ -235,4 +240,281 @@ fn anchors_follow_github() {
         "6-run-without-the-kernel-module-kvm"
     );
     assert_eq!(anchor(" `hydo diff`: two runs"), "hydo-diff-two-runs");
+}
+
+// ---------------------------------------------------------------- the facts of the user pages
+
+/// The pages a user reads first. Their facts are checked against the tree.
+const USER_PAGES: &[&str] = &[
+    "README.md",
+    "hydo/dist/linux/QUICKSTART-linux.md",
+    "hydo/dist/mac/QUICKSTART-mac.md",
+];
+
+/// 16-digit hex values the user pages cite that are not in hydo/onboard/recorded.json, each with
+/// where it is recorded. Add a value here only with its source.
+const CITED_ELSEWHERE: &[(&str, &str)] = &[
+    (
+        "1421b01fdc984975",
+        "wfp of the Redis example's clean run, recorded with fp 1893d8c55d7704d9 (Milestone 155)",
+    ),
+    (
+        "d38223b17189d9a9",
+        "ctl of the same run; docs/HISTORY.md, Milestone 155",
+    ),
+    (
+        "fce0cfbd850a0e9d",
+        "wfp of the Redis power cut; hydo/crates/hydo-cli/tests/fixtures/inspect/cut/result.json",
+    ),
+    (
+        "59ae8f3720816102",
+        "ctl of the Redis power cut; the same fixture",
+    ),
+    (
+        "93da6e186fe00d1a",
+        "KVM engine on AMD, Redis clean run; docs/HISTORY.md, open item 45 (Milestone 187)",
+    ),
+    (
+        "ea0afd368b0ab9b1",
+        "KVM engine on AMD, Redis power cut; the same open item",
+    ),
+];
+
+/// Options that the help text does not show because the command hands them to a program of its
+/// own (`hydo build` passes them to the image builder, whose usage is `hydo_build::HELP`).
+const DELEGATED: &[(&str, &str)] = &[("build", "--check")];
+
+const MAIN: &str = include_str!("../src/main.rs");
+
+/// The `hydo ...` commands of a page: shell-block lines (split at `&&`) and code spans.
+fn commands(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut fenced = None::<String>;
+    for line in text.lines() {
+        if let Some(info) = line.trim_start().strip_prefix("```") {
+            fenced = match fenced {
+                None => Some(info.to_string()),
+                Some(_) => None,
+            };
+            continue;
+        }
+        match &fenced {
+            Some(info) if info == "sh" => {
+                let code = line.split(" #").next().unwrap_or("");
+                for part in code.split("&&") {
+                    let part = part.trim();
+                    if part.starts_with("hydo ") {
+                        out.push(part.to_string());
+                    }
+                }
+            }
+            Some(_) => {}
+            None => {
+                for (i, span) in line.split('`').enumerate() {
+                    if i % 2 == 1 && span.starts_with("hydo ") {
+                        out.push(span.to_string());
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The lines of both help texts that belong to `hydo <sub>`: its lines and their continuations.
+/// A line for several commands names them with `|` (`hydo run|repro|explore ...`).
+fn help_lines(sub: &str) -> String {
+    let mut text = String::new();
+    let mut inside = false;
+    for line in MAIN.lines() {
+        let t = line.trim_start();
+        if let Some(rest) = t.strip_prefix("hydo ") {
+            let word = rest.split_whitespace().next().unwrap_or("");
+            inside = word.split('|').any(|w| w == sub);
+        } else if t.is_empty() || !line.starts_with(' ') {
+            inside = false;
+        }
+        if inside {
+            text.push_str(line);
+            text.push('\n');
+        }
+    }
+    text
+}
+
+/// What `hydo <sub> --help` prints, for the commands that have a help text of their own
+/// (`hydo inspect`, `hydo sql-gen`, `hydo compose`, ...).
+fn own_help(sub: &str) -> String {
+    let tmp = std::env::temp_dir().join(format!("hydo-docs-help-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&tmp);
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_hydo"))
+        .args([sub, "--help"])
+        .current_dir(&tmp)
+        .env("HYDO_HOME", &tmp)
+        .env("HYDO_OFFLINE", "1")
+        .output()
+        .unwrap();
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&o.stdout),
+        String::from_utf8_lossy(&o.stderr)
+    )
+}
+
+/// The versions a page names as the current one: release file names, download URLs, the
+/// install cache's directory, and the README's "The current release is hydo X".
+fn named_versions(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for marker in [
+        "hydo-linux-",
+        "hydo-mac-",
+        "/download/v",
+        "versions/",
+        "current release is hydo ",
+    ] {
+        let mut rest = text;
+        while let Some(i) = rest.find(marker) {
+            let after = &rest[i + marker.len()..];
+            let v: String = after
+                .chars()
+                .take_while(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            let v = v.trim_end_matches('.').to_string();
+            if v.split('.').count() == 3 && v.split('.').all(|p| !p.is_empty()) {
+                out.push(v);
+            }
+            rest = after;
+        }
+    }
+    out
+}
+
+/// The 16-digit lower-case hex words of a text (fingerprints, seeds, sha256 prefixes).
+fn hex16(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let b = text.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i].is_ascii_hexdigit() && (i == 0 || !b[i - 1].is_ascii_alphanumeric()) {
+            let mut j = i;
+            while j < b.len() && b[j].is_ascii_hexdigit() {
+                j += 1;
+            }
+            let word_end = j == b.len() || !b[j].is_ascii_alphanumeric();
+            let s = &text[i..j];
+            if j - i == 16 && word_end && !s.chars().any(|c| c.is_ascii_uppercase()) {
+                out.push(s.to_string());
+            }
+            i = j.max(i + 1);
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+#[test]
+fn the_user_pages_name_this_version() {
+    let want = env!("CARGO_PKG_VERSION");
+    let mut problems = Vec::new();
+    for page in USER_PAGES {
+        let named = named_versions(&read(page));
+        assert!(!named.is_empty(), "{page} names no version");
+        for v in named {
+            let p = format!("{page} names {v} as the current version; the workspace is {want}");
+            if v != want && !problems.contains(&p) {
+                problems.push(p);
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+#[test]
+fn every_cited_fingerprint_is_recorded() {
+    let recorded = read("hydo/onboard/recorded.json");
+    let mut problems = Vec::new();
+    let mut n = 0;
+    for page in USER_PAGES {
+        for v in hex16(&read(page)) {
+            n += 1;
+            if !recorded.contains(&v) && !CITED_ELSEWHERE.iter().any(|(x, _)| *x == v) {
+                problems.push(format!(
+                    "{page} cites {v}, which is neither in hydo/onboard/recorded.json nor in \
+                     CITED_ELSEWHERE (tests/docs.rs) with its source"
+                ));
+            }
+        }
+    }
+    assert!(n >= 10, "too few values found ({n})");
+    for (v, source) in CITED_ELSEWHERE {
+        assert!(
+            USER_PAGES.iter().any(|p| read(p).contains(v)),
+            "{v} ({source}) is cited by no page any more; remove it from CITED_ELSEWHERE"
+        );
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+#[test]
+fn every_command_on_the_user_pages_is_one_hydo_has() {
+    let mut problems = Vec::new();
+    let mut n = 0;
+    for page in USER_PAGES {
+        for c in commands(&read(page)) {
+            n += 1;
+            let words: Vec<&str> = c.split_whitespace().collect();
+            let sub = words[1];
+            if sub.starts_with('-') || sub.starts_with('<') || sub.starts_with('"') {
+                continue;
+            }
+            let mut help = help_lines(sub);
+            let missing = words[2..]
+                .iter()
+                .any(|w| w.starts_with("--") && !help.contains(*w));
+            if help.is_empty() || missing {
+                let own = own_help(sub);
+                if own.contains(&format!("hydo {sub}")) || own.contains(&format!("hydo-{sub}")) {
+                    help.push_str(&own);
+                }
+            }
+            // `hydo build` and `hydo explore` hand their options to the image builder and the
+            // explorer, whose own usage texts list them
+            if sub == "build" {
+                help.push_str(hydo_build::HELP);
+            }
+            if sub == "explore" {
+                help.push_str(hydo_explore::args::USAGE);
+            }
+            if help.is_empty() {
+                problems.push(format!("{page}: {c}: `hydo {sub}` is in no help text"));
+                continue;
+            }
+            for w in &words[2..] {
+                let w = w.trim_end_matches(['.', ',', ';', ')']);
+                let opt = w.split('=').next().unwrap_or(w);
+                if opt.starts_with("--") && !help.contains(opt) && !DELEGATED.contains(&(sub, opt))
+                {
+                    problems.push(format!(
+                        "{page}: {c}: the help of `hydo {sub}` has no {opt}"
+                    ));
+                }
+            }
+        }
+    }
+    assert!(n >= 20, "too few commands found ({n})");
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+#[test]
+fn the_fact_checks_see_what_a_page_says() {
+    let page = "Install `hydo-linux-9.9.9.tar.gz` from /download/v9.9.9/.\n\n\
+                ```sh\nhydo run --no-such-option \"disk=none | run\"  # a comment\n```\n\n\
+                It gave `0123456789abcdef` and fp=fedcba9876543210.\n";
+    assert_eq!(named_versions(page), ["9.9.9", "9.9.9"]);
+    assert_eq!(hex16(page), ["0123456789abcdef", "fedcba9876543210"]);
+    let c = commands(page);
+    assert_eq!(c, ["hydo run --no-such-option \"disk=none | run\""]);
+    assert!(!help_lines("run").contains("--no-such-option"));
+    assert!(help_lines("run").contains("--image"));
 }
