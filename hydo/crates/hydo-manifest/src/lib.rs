@@ -29,6 +29,7 @@ pub mod py;
 mod pyre;
 pub mod restart;
 pub mod rx;
+pub mod storage;
 mod types;
 mod validate;
 pub mod yaml;
@@ -43,6 +44,7 @@ pub use types::{
     CheckCmd, Command, Expect, Guest, HistoryCheck, Invariant, InvariantType, Knob, Manifest,
     Regression, Route, Run, Service, TestPlan, Workload, World,
 };
+pub use validate::RAM_MIB_MAX;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ManifestError {
@@ -183,6 +185,7 @@ pub fn validator_keys() -> Vec<(&'static str, Vec<&'static str>)> {
         ("FakeRoute", v::KNOWN_ROUTE.to_vec()),
         ("ProxyRoute", v::KNOWN_PROXY_ROUTE.to_vec()),
         ("Webhook", v::KNOWN_HOOK.to_vec()),
+        ("Tls", v::KNOWN_TLS.to_vec()),
         ("HistoryCheck", v::KNOWN_CHECK.to_vec()),
         ("Test", composer::known_test()),
         ("TestCommand", composer::KNOWN_CMD.to_vec()),

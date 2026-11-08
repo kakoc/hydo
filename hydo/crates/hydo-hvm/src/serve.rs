@@ -55,7 +55,7 @@
 //!   rewind). A SPIN under control is not re-run here: the host runs the schedule again with
 //!   `spin=rewind` (hydo-control, M130). A schedule that completes plainly gives the same
 //!   fingerprint with the rewind mode on.
-//! - **Guest RAM:** `--ram-mib N` before the mode, else `HVM_MEM_MB`, else 1024 MiB; 256..4096.
+//! - **Guest RAM:** `--ram-mib N` before the mode, else `HVM_MEM_MB`, else 1024 MiB; 256..8192.
 //!   Snapshots keep RAM in an unlinked file in `HVM_SNAP_DIR` (default `/tmp/hvm-snap`).
 //!
 //! Since M142's typed calls the engine core takes typed values: requests and commands at a stop
@@ -89,7 +89,9 @@ const CTL_SEND_MAX: usize = 4096;
 /// the cadence without rb=: hvx's run calls return every 2^16 retired exits
 const CTL_RB_DEFAULT: u64 = 65536;
 const RAM_MIN_MIB: u64 = 256;
-const RAM_MAX_MIB: u64 = 4096;
+/// 8 GiB since Milestone 179 (4096 before): RAM from 1 GiB to 9 GiB, far below the 36-bit IPA
+/// space `hv_vm_create(NULL)` gives (64 GiB).
+const RAM_MAX_MIB: u64 = 8192;
 
 /// Where the engine's lines go and where the host's come from.
 pub struct Io {
@@ -767,6 +769,19 @@ fn tick_jitter(s: &Schedule) -> Tjit {
     t
 }
 
+/// `dst = src`, writing only the 16 KiB pages that differ (Milestone 179): the same bytes as a
+/// plain copy, but a page the guest never touched stays a hole in the snapshot's file and is not
+/// faulted into guest RAM, so an 8 GiB guest's snapshots take the disk and memory its guest used,
+/// not 8 GiB each.
+fn copy_changed(dst: &mut [u8], src: &[u8]) {
+    assert_eq!(dst.len(), src.len());
+    for (d, s) in dst.chunks_mut(PG as usize).zip(src.chunks(PG as usize)) {
+        if d != s {
+            d.copy_from_slice(s);
+        }
+    }
+}
+
 /// `xsnap_take`
 fn xsnap_take(vm: &Vmm, s: &mut XSnap, name: &str, snap_dir: &str) {
     if s.ram.is_none() {
@@ -777,11 +792,7 @@ fn xsnap_take(vm: &Vmm, s: &mut XSnap, name: &str, snap_dir: &str) {
     }
     s.v = vm.vtake();
     s.m = vm.m;
-    s.ram
-        .as_mut()
-        .unwrap()
-        .bytes_mut()
-        .copy_from_slice(vm.ram.bytes());
+    copy_changed(s.ram.as_mut().unwrap().bytes_mut(), vm.ram.bytes());
     if vm.vio.attached() {
         s.vio = Some(vm.vio.save());
     }
@@ -792,9 +803,10 @@ fn xsnap_take(vm: &Vmm, s: &mut XSnap, name: &str, snap_dir: &str) {
 fn xsnap_restore(vm: &mut Vmm, s: &XSnap, check: bool) {
     vm.fresh_vm();
     vm.spin_reset();
-    vm.ram
-        .bytes_mut()
-        .copy_from_slice(s.ram.as_ref().expect("a snapshot").bytes());
+    copy_changed(
+        vm.ram.bytes_mut(),
+        s.ram.as_ref().expect("a snapshot").bytes(),
+    );
     let (p, n) = (vm.ram.ptr(), vm.ram.len());
     crate::hv::icache_invalidate(p, n);
     vm.vput(&s.v);

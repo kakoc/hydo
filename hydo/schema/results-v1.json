@@ -20,6 +20,19 @@
     },
     {
       "$ref": "#/$defs/Diff"
+    },
+    {
+      "description": "Added in M178.",
+      "$ref": "#/$defs/DiagnosisDoc"
+    },
+    {
+      "$ref": "#/$defs/Timeline"
+    },
+    {
+      "$ref": "#/$defs/Inspect"
+    },
+    {
+      "$ref": "#/$defs/InspectError"
     }
   ],
   "$defs": {
@@ -234,6 +247,24 @@
           "items": {
             "$ref": "#/$defs/Control"
           }
+        },
+        "warnings": {
+          "description": "Why a passing run may have checked nothing (added after 0.1.0): the workload acknowledged\nnothing, or a history check judged an empty history. One sentence each; absent when\nthere is none. A run with warnings still passed: the verdict is unchanged.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "diagnosis": {
+          "description": "Why the run failed, when it did not pass (added in M178): what the run's own files say\nand, when collected, what a replay of the run read in the guest at the stop where the\nverdict was given. `hydo run` writes it; the fingerprints never depend on it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Diagnosis"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -633,6 +664,14 @@
             "null"
           ],
           "format": "double"
+        },
+        "within_s": {
+          "description": "Eventually properties: the deadline in seconds after the anchor (the records' `within_s`,\nthe largest seen; added after M176).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
         }
       },
       "required": [
@@ -908,6 +947,307 @@
         "hash",
         "sends",
         "stops"
+      ]
+    },
+    "Diagnosis": {
+      "description": "Why a run failed (added in M178; `result.json`'s `diagnosis`, `hydo inspect diagnose`).\n\n`failure` names what failed (an open set): `service-exited` (a service's process ended\nwhile it started), `service-not-ready` (its readiness check did not pass in time),\n`service-setup`, `provision`, `restart` (a service did not come back after the faults),\n`mount`, `timeout` (a phase ran out of time), `vm` (the guest or the engine stopped),\n`control`, `violation` (a check failed; no process failed) or `other`.",
+      "type": "object",
+      "properties": {
+        "summary": {
+          "description": "One or two sentences for a reader who sees nothing else.",
+          "type": "string"
+        },
+        "failure": {
+          "type": "string"
+        },
+        "service": {
+          "description": "The service it concerns.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict_at": {
+          "description": "The stop where the verdict was given (`hydo inspect start <run dir> --at end` looks there).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "process": {
+          "description": "The process whose end caused the failure.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessEnd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "probe": {
+          "description": "The readiness check that failed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProbeEnd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exits": {
+          "description": "Every process the host started that ended before the verdict with a status other than 0.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProcessEnd"
+          },
+          "default": []
+        },
+        "likely": {
+          "description": "Conclusions drawn from the facts, each with its reason.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "kernel": {
+          "description": "The kernel's lines about crashes and memory (out of memory, segfault, panic), from the\nconsole and, when collected, from `dmesg`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "evidence_status": {
+          "description": "`collected` (a replay read `evidence` in the guest), `not-collected` (with the reason in\n`evidence_note`) or `failed`.",
+          "type": "string"
+        },
+        "evidence_note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "default": []
+        },
+        "next": {
+          "description": "Commands that look further, exactly as they can be run.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "summary",
+        "failure",
+        "evidence_status"
+      ]
+    },
+    "RunPoint": {
+      "description": "Where in a run something is (added in M178): its conversation (`boot`, `run`, `recovery`),\nthe number of the stop (the control transcript's `n`) and the engine's virtual clock there\n(hvx's instruction clock, hvm's and kvm's exit count). `point` is the two in the form\n`hydo inspect start --at` takes (`boot:172`).",
+      "type": "object",
+      "properties": {
+        "point": {
+          "type": "string"
+        },
+        "conversation": {
+          "type": "string"
+        },
+        "stop": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "point",
+        "conversation",
+        "stop"
+      ]
+    },
+    "ProcessEnd": {
+      "description": "How a process the host started ended (added in M178): the agent's `exit` (a service, the\nprovisioning) or `done` (a command) event.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "The service's or the command's name as the host started it (`redis`, `provision`,\n`setup:redis`, `workload`).",
+          "type": "string"
+        },
+        "command": {
+          "description": "The command, as text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "The exit status as a shell reports it (the code, or 128 + the signal).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "signal": {
+          "description": "The signal that ended it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "signal_name": {
+          "description": "The signal's name (`KILL`, `SEGV`, ...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timed_out": {
+          "description": "Its time limit ended it.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "signal_by_hydo": {
+          "description": "The host sent that signal itself (a kill of the schedule, the end of a check). False: a\nsignal hydo did not send (for SIGKILL usually the kernel's out-of-memory killer).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "output": {
+          "description": "What the agent kept of its output (commands only).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "at": {
+          "description": "Where it ended (the first recorded stop by which the host had seen the event).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "handle",
+        "status"
+      ]
+    },
+    "ProbeEnd": {
+      "description": "A readiness check's end (added in M178).",
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "why": {
+          "description": "`ok`, `deadline` (it did not pass in time) or `died` (the service's process ended first).",
+          "type": "string"
+        },
+        "tries": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "last_status": {
+          "description": "The last attempt's exit status.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "deadline_s": {
+          "description": "The time limit, in seconds of guest time.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "service",
+        "command",
+        "why",
+        "tries"
+      ]
+    },
+    "Evidence": {
+      "description": "Text read in the guest (added in M178): a log's tail, a command's output.",
+      "type": "object",
+      "properties": {
+        "what": {
+          "description": "What it is, in words (`the log of redis`, `the kernel's messages`).",
+          "type": "string"
+        },
+        "source": {
+          "description": "The file read, or the command run.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The text (invalid UTF-8 replaced by U+FFFD).",
+          "type": "string"
+        },
+        "bytes": {
+          "description": "The whole size in bytes (of the file, or of the command's output).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "truncated": {
+          "description": "Only the end (a log) or the start (a command's output) of it is in `text`.",
+          "type": "boolean"
+        },
+        "status": {
+          "description": "A command's exit status.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "what",
+        "source",
+        "text",
+        "bytes",
+        "truncated"
       ]
     },
     "Exploration": {
@@ -1229,6 +1569,15 @@
           "minimum": 0
         },
         "runs_with_new_error_kinds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "vacuous_passes": {
+          "description": "First runs that passed with a warning that they may have checked nothing (their run\nrecords' `warnings`; added after 0.1.0).",
           "type": [
             "integer",
             "null"
@@ -1676,7 +2025,29 @@
             "null"
           ]
         },
-        "first_miss": true
+        "first_miss": true,
+        "within_s": {
+          "description": "The property's deadline in seconds after its anchor (the records' `within_s`; the largest\nwhen runs differ), so that `slowest_s` can be read against it (added after M176).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "slowest_late_s": {
+          "description": "The slowest episode that held only after its deadline (the host's `satisfied only <t>s\nafter ...`): the guest time the property needed in that run, and the run (added after\nM176). A deadline of at least this would have held there.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "slowest_late_run": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
       "required": [
         "id",
@@ -2099,6 +2470,681 @@
         "level",
         "only_a",
         "only_b"
+      ]
+    },
+    "DiagnosisDoc": {
+      "description": "`hydo inspect diagnose <run dir>`: a run's [`Diagnosis`] as a document (added in M178).",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/DiagnosisType"
+        },
+        "run_dir": {
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "diagnosis": {
+          "$ref": "#/$defs/Diagnosis"
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "run_dir",
+        "verdict",
+        "diagnosis"
+      ]
+    },
+    "DiagnosisType": {
+      "description": "The `type` of this record: always `\"diagnosis\"`.",
+      "type": "string",
+      "enum": [
+        "diagnosis"
+      ]
+    },
+    "Timeline": {
+      "description": "`hydo inspect events <run dir>`: a run's events with their stops, filtered and paged (added in\nM178).",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/TimelineType"
+        },
+        "run_dir": {
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "conversations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimelineConversation"
+          },
+          "default": []
+        },
+        "total": {
+          "description": "Events matching the filters (before paging).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "offset": {
+          "description": "The index of the first event shown among them.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimelineEvent"
+          },
+          "default": []
+        },
+        "truncated": {
+          "description": "More events match than are shown.",
+          "type": "boolean"
+        },
+        "next": {
+          "description": "The command that shows the next page.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "run_dir",
+        "verdict",
+        "total",
+        "offset",
+        "truncated"
+      ]
+    },
+    "TimelineType": {
+      "description": "The `type` of this record: always `\"timeline\"`.",
+      "type": "string",
+      "enum": [
+        "timeline"
+      ]
+    },
+    "TimelineConversation": {
+      "description": "One conversation of a run in its timeline (added in M178).",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "type": "string"
+        },
+        "first_stop": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "last_stop": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "end": {
+          "description": "How it ended (`end at snapshot S1`, `end: HYDO-ORACLE: OK ...`, `power cut`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "snapshots": {
+          "description": "Whether `hydo inspect` can keep a snapshot at its stops (boot and the workload; not after\nthe workload's end, not in a recovery boot, not under timing schedules) or works on one\nlive branch there.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "conversation",
+        "first_stop",
+        "last_stop"
+      ]
+    },
+    "TimelineEvent": {
+      "description": "One event of a run's timeline (added in M178).",
+      "type": "object",
+      "properties": {
+        "point": {
+          "description": "`<conversation>:<stop>`, the form `hydo inspect start --at` takes; absent for the run's\nresult.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "conversation": {
+          "type": "string"
+        },
+        "stop": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "description": "The engine's virtual clock at the stop.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "An open set: `command` (the host typed an agent command), `exit` (a process the host\nstarted ended), `probe` (a readiness check ended), `done` (a command ended), `fault` (a\nfault applied or healed), `note` (the host controller's note), `report` (a line of the\nrun's report), `assertion`, `guest` (a line the guest printed), `snapshot`, `engine`,\n`end` (the end of a conversation), `verdict`.",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "service": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "details": {
+          "description": "The record behind it (an agent event, a command)."
+        }
+      },
+      "required": [
+        "conversation",
+        "kind",
+        "text"
+      ]
+    },
+    "Inspect": {
+      "description": "One answer of `hydo inspect` (added in M178): `op` says which; the members of that op are set.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/InspectType"
+        },
+        "op": {
+          "description": "`start`, `status`, `list`, `stop`, `exec`, `read`, `ls`, `logs`, `ps`, `sockets`,\n`advance`.",
+          "type": "string"
+        },
+        "session": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectSession"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sessions": {
+          "description": "`list`: every session of this user.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InspectSession"
+          }
+        },
+        "at": {
+          "description": "The state the call saw: the session's stop (`snapshot`), or the branch after the earlier\ncalls (`live`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exec": {
+          "description": "`exec`, `logs`, `ps`, `sockets`: the command and its output.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectExec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "description": "`read`: the file's bytes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entries": {
+          "description": "`ls`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InspectEntry"
+          }
+        },
+        "processes": {
+          "description": "`ps`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InspectProcess"
+          }
+        },
+        "sockets": {
+          "description": "`sockets`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InspectSocket"
+          }
+        },
+        "truncated": {
+          "description": "Lists shown in part (`--limit`).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "cost": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectCost"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "description": "Remarks for the caller (what the state is, what to try next).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "op"
+      ]
+    },
+    "InspectType": {
+      "description": "The `type` of this record: always `\"inspect\"`.",
+      "type": "string",
+      "enum": [
+        "inspect"
+      ]
+    },
+    "InspectSession": {
+      "description": "An inspection session (added in M178).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "run_dir": {
+          "type": "string"
+        },
+        "at": {
+          "description": "The stop the session looks at, and how: `snapshot` (every call starts from the stop's\nsnapshot, so each sees the same state) or `live` (calls run one after another on one\nbranch from the stop; each sees what the earlier ones left).",
+          "$ref": "#/$defs/RunPoint"
+        },
+        "state": {
+          "type": "string"
+        },
+        "status": {
+          "description": "`starting`, `ready` or `ended`.",
+          "type": "string"
+        },
+        "idle_timeout_s": {
+          "description": "It ends by itself after this many seconds without a call.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "frozen": {
+          "description": "Every process was stopped (SIGSTOP) at the stop (`--freeze`).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "engine": {
+          "description": "The engine (`hvx`, `hvm`, `kvm`).",
+          "type": "string"
+        },
+        "calls": {
+          "description": "Calls served so far.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "run_dir",
+        "at",
+        "state",
+        "status",
+        "idle_timeout_s",
+        "engine",
+        "calls"
+      ]
+    },
+    "InspectExec": {
+      "description": "A command run in the guest by `hydo inspect` (added in M178).",
+      "type": "object",
+      "properties": {
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "service": {
+          "description": "The service whose network namespace it ran in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "The exit status (the code, or 128 + the signal).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "signal": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "timed_out": {
+          "description": "Its time limit (`--timeout`, guest time) ended it.",
+          "type": "boolean"
+        },
+        "stdout": {
+          "$ref": "#/$defs/InspectText"
+        },
+        "stderr": {
+          "$ref": "#/$defs/InspectText"
+        }
+      },
+      "required": [
+        "argv",
+        "status",
+        "timed_out",
+        "stdout",
+        "stderr"
+      ]
+    },
+    "InspectText": {
+      "description": "Text read from the guest by `hydo inspect` (added in M178).",
+      "type": "object",
+      "properties": {
+        "text": {
+          "description": "The text (invalid UTF-8 replaced by U+FFFD), absent when `hex` is given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hex": {
+          "description": "The bytes in lower-case hex, when they are not UTF-8 text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bytes": {
+          "description": "The whole size in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "offset": {
+          "description": "The bytes shown start here.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "truncated": {
+          "description": "Fewer bytes are shown than there are (`--max-bytes`).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bytes",
+        "truncated"
+      ]
+    },
+    "InspectEntry": {
+      "description": "A file or directory entry (added in M178).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "`file`, `dir`, `link`, `socket`, `fifo`, `device` or `other`.",
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "mode": {
+          "description": "The permission bits in octal.",
+          "type": "string"
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mtime": {
+          "description": "Seconds since 1970 (the guest's clock).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "bytes",
+        "mode"
+      ]
+    },
+    "InspectProcess": {
+      "description": "A process in the guest (added in M178).",
+      "type": "object",
+      "properties": {
+        "pid": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "ppid": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "state": {
+          "description": "The kernel's state letter (`R`, `S`, `D`, `T` stopped, `Z` zombie).",
+          "type": "string"
+        },
+        "rss_kib": {
+          "description": "Resident memory in KiB.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "threads": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "command": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pid",
+        "ppid",
+        "state",
+        "rss_kib",
+        "threads",
+        "command"
+      ]
+    },
+    "InspectSocket": {
+      "description": "A socket in the guest (added in M178).",
+      "type": "object",
+      "properties": {
+        "proto": {
+          "description": "`tcp`, `tcp6`, `udp`, `udp6` or `unix`.",
+          "type": "string"
+        },
+        "local": {
+          "type": "string"
+        },
+        "remote": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "TCP's state (`LISTEN`, `ESTABLISHED`, ...).",
+          "type": "string"
+        },
+        "send_queue": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "recv_queue": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "proto",
+        "local",
+        "state",
+        "send_queue",
+        "recv_queue"
+      ]
+    },
+    "InspectCost": {
+      "description": "What a call cost (added in M178).",
+      "type": "object",
+      "properties": {
+        "wall_ms": {
+          "description": "Wall time of the call.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stops": {
+          "description": "Engine stops the call took (a replay to the stop counts every stop of it).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "wall_ms",
+        "stops"
+      ]
+    },
+    "InspectError": {
+      "description": "A call of `hydo inspect` that failed (added in M178): what was wrong and what would work.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/InspectErrorType"
+        },
+        "op": {
+          "type": "string"
+        },
+        "code": {
+          "description": "An open set: `usage`, `no-run`, `no-session`, `bad-point`, `engine`, `agent`,\n`timeout`, `refused`.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "try": {
+          "description": "Commands that would work, exactly as they can be run.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "op",
+        "code",
+        "message"
+      ]
+    },
+    "InspectErrorType": {
+      "description": "The `type` of this record: always `\"inspect-error\"`.",
+      "type": "string",
+      "enum": [
+        "inspect-error"
       ]
     }
   }

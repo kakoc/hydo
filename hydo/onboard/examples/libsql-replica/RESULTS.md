@@ -12,9 +12,13 @@ prefix; this tree's `hydo`, `hydo-kvm`, `hydo-build` and `hydo-fetch-image` repl
 tarball's programs there.
 
 The central question of this run: how does a user test an SQL system's logic with hydo without
-writing everything by hand? The answer here is a seeded SQL workload generator, `sqlgen`
-(`client/`, about 800 lines of Rust), that the example had to bring itself; what hydo would have
-to offer instead is in "What a ready-made SQL workload generator needs".
+writing everything by hand? The answer here was a seeded SQL workload generator, `sqlgen`
+(`client/`, about 850 lines of Rust), that the example had to bring itself; what hydo would have
+to offer instead is in "What a ready-made SQL workload generator needs". **Since Milestone 182
+hydo offers it** (`hydo sql-gen` and the guest program `hydo-sql`, docs/design/workloads.md):
+the example's `client/` and its hand-written commands and checks are gone, and the findings
+below reproduce with the generated files ("Milestone 182", at the end). The tables before that
+section are the Milestone 173 runs with `sqlgen`.
 
 ## Why sqld with a replica, and not `turso`
 
@@ -29,6 +33,9 @@ server and no replication to fault: its onboarding would be an embedded-database
 digest (`sha256:756fb4d3…` for amd64).
 
 ## The project
+
+Since Milestone 182 the folder is `hydo sql-gen`'s output plus one hand-written command (the
+section "Milestone 182" lists it); the table below is the folder of Milestone 173.
 
 | file | what it is |
 |---|---|
@@ -397,3 +404,59 @@ Not a lack of a feature, but found on the way and worth the KVM engine's attenti
 run that differs from a fresh boot on one image (friction 19, since explained and fixed), and one
 unexplained fingerprint difference between two simultaneous runs (friction 18). Neither changed a
 verdict.
+
+## Milestone 182: the ready-made SQL workloads instead of `sqlgen`
+
+The folder's workload and checks are now written by one command,
+
+```sh
+hydo sql-gen --dialect libsql --endpoint primary=10.89.0.11:8080 --endpoint replica=10.89.0.12:8080,replica
+```
+
+which writes `workload/helper_sql.conf` (the dialect, the two endpoints and their roles, the
+workloads `bank` and `list-append`), `workload/first_sql_init`, the four drivers
+`parallel_driver_sql_transfer`, `_itransfer`, `_txn`, `_itxn` (batch and interactive, routed to
+either node by the seed), and the checks `always_sql_bank_live`, `final_sql_bank_after`,
+`final_sql_no_negative_balance.sql` (a SQL check: the query must return no rows),
+`list_append_sql.la` (`serializable`, every transaction), `list_append_sql.lap`
+(`strict-serializable`: what the primary ran, and the appends of what the replica served) and
+`eventually_sql_replicas_converge`. The commands call the guest program `hydo-sql`, which `hydo
+build` stages because they name it.
+
+**What a user writes, before and after.**
+
+| | Milestone 173 (by hand) | Milestone 182 |
+|---|---|---|
+| the client | `client/`: 868 lines of Rust (`src/main.rs`), its `Cargo.toml`, lock file and `build.sh` (912 lines) | none (`hydo-sql`, shipped with hydo) |
+| commands and checks | 10 files, 101 lines, the two histories' projection worked out in three attempts (friction 11) | one `hydo sql-gen` command line (it writes 12 files, 73 lines) |
+| `hydo.yaml` | `root.files` for the client, `env:` with the two addresses | neither |
+| system-specific | the durability knob and `/etc/sqld-durability.sh` | the same, plus `workload/first_sqld_durability` (6 lines: set the mode once, which `sqlgen init`'s first command did) and `params: mode_on_start` (so the image of finding 3 is `hydo build --set 'mode_on_start=&& true'`) |
+
+The libSQL-specific parts that `sqlgen` had to contain (Hrana batches with conditional steps,
+streams with batons, the HTTP client, the outcome rules for sqld's answers, a 5xx from a replica
+that forwards a write being unknown) are `hydo-sql`'s `libsql` dialect now.
+
+**The findings with the generated files** (the build machine, the KVM engine, this tree's
+`hydo`; image `3867be63…`, each schedule twice from a fresh boot with the same `fp` and `ctl`):
+
+| schedule | image | verdict | fp | ctl |
+|---|---|---|---|---|
+| `disk=none \| run` | final | OK (117 commands; `la` and `lap` no anomaly) | `59ccffcb74436e29` | `351551269c523ab3` |
+| `disk=cut \| run C=12` | final | OK | `06b07cf174d4c9ed` | `f05583713cd7c7c9` |
+| `disk=cut \| run C=12 D=relaxed` | final | VIOLATION [sql.lap] lost-append: 0: T7 appended 801 and was acknowledged, but T15, which began after that, read [] without it (finding 1) | `24afec24a1bc023f` | `178d7451f1f62b26` |
+| `disk=cut \| run K=primary@10+2 C=20` | mode set once (`--set 'mode_on_start=&& true'`) | VIOLATION [sql.lap] lost-append: 0: T16 appended 2603 and was acknowledged, but T21, which began after that, read [801] without it (finding 3) | `6c8dbb133a032fe3` | `10a95001bfaa8ea2` |
+| the same | final | OK | `927fd73262522539` | `e5efc9c044a711ee` |
+
+**Finding 3 found blind again.** `hydo explore --backend kvm --seeds 1-100 --strategy process
+--new-faults --workers 2` on the image that sets the mode once: 100 schedules in 490 s, 4
+failures (seeds 49, 52, 86, 99), all reproduced, every minimal schedule a kill of the primary
+followed by a power cut, as in Milestone 173 (4 of 100 there too, seed 49 among them). Seed 49's
+minimal schedule `disk=cut dseed=894a9113a6ef9318 | run K=primary@24+1 C=60 W=:p1,r150,...`
+gives `VIOLATION [sql.lap] lost-append: 0: T12 appended 2603 and was acknowledged, but T14, which
+began after that, read [100,800,2202] without it` (`366ccaf17af20ca2` twice).
+
+One difference from `sqlgen`: a transaction that failed with `database is locked` is now retried
+as a new transaction (twice at most, each attempt with its own elements, as the list-append
+checker needs), so fewer commands fail in a clean run (117 of 117 succeeded, against 110 of 117
+with `sqlgen`).
+

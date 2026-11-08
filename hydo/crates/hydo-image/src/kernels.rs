@@ -206,6 +206,14 @@ pub fn locate(want: &FileRef, role: Role, dirs: &[PathBuf]) -> Option<PathBuf> {
     locate_or_why(want, role, dirs).ok()
 }
 
+/// The first file in `dirs` with one of the known names for `role` (or `want.file`) whose sha256
+/// is `want.sha256`, without asking the registered [`Source`]: nothing is fetched or taken out
+/// of an archive. `hydo doctor` looks with this one (it reports what is missing and never
+/// downloads).
+pub fn locate_here(want: &FileRef, role: Role, dirs: &[PathBuf]) -> Option<PathBuf> {
+    search(want, role, dirs)
+}
+
 fn search(want: &FileRef, role: Role, dirs: &[PathBuf]) -> Option<PathBuf> {
     let mut names: Vec<&str> = vec![want.file.as_str()];
     for k in KNOWN.iter().filter(|k| k.role == role) {

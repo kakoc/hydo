@@ -24,12 +24,25 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
+/*
+ * Guest RAM layout (milestone 179). The mmap window at offset 0 is guest RAM in one linear
+ * buffer of mem_size bytes; its byte o is guest-physical o while o < HVX_RAM_LOW_MAX (the low
+ * block: a guest of 3 GiB or less is laid out exactly as before), and guest-physical
+ * HVX_RAM_HIGH_BASE + (o - HVX_RAM_LOW_MAX) above that (the high block). A module older than
+ * milestone 179 refuses a mem_size above HVX_RAM_LOW_MAX with EINVAL. The boot's e820 map must
+ * describe the same two blocks (hvx_boot.h).
+ */
+#define HVX_RAM_LOW_MAX		0xc0000000ULL	/* 3 GiB, below the MMIO hole */
+#define HVX_RAM_HIGH_BASE	0x100000000ULL	/* 4 GiB */
+#define HVX_RAM_MAX		(8ULL << 30)	/* 8 GiB */
+
 struct hvx_config {
 	__u64 mem_size;		/* guest RAM in bytes; rounded up to pages,
-				 * 0 => default (256 KiB), max 3 GiB (milestone 28:
-				 * raised from 256 MiB via EPT PD fan-out; the ceiling
-				 * stays BELOW the 4th-GiB MMIO hole at 0xfe000000, see
-				 * MAX_GPAGES in hvx.c) */
+				 * 0 => default (256 KiB), max HVX_RAM_MAX (8 GiB since
+				 * milestone 179; 3 GiB from milestone 28). The first
+				 * HVX_RAM_LOW_MAX bytes sit at guest-physical 0, below
+				 * the 4th-GiB MMIO hole at 0xfe000000; the rest at
+				 * HVX_RAM_HIGH_BASE (see below). */
 	__u32 n_vcpus;		/* number of vCPUs (milestone 19); 0 or 1 => 1.
 				 * All vCPUs SHARE guest RAM/EPT, the console, the
 				 * serial input ring, and the IOAPIC/PIC/16550 device

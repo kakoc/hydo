@@ -4,7 +4,7 @@ description: Set up deterministic fault testing with hydo for a software project
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "1.0.0"
+  version: "1.2.0"
   hydo-min: "0.1.0"
 ---
 
@@ -52,8 +52,12 @@ Then run `hydo doctor`: it says whether this machine can build and run guests.
 
 Ask, in one short message: which services make up the system, which operations its clients
 perform, and what must never happen (lost acknowledged data, a double charge, an order stuck
-forever). If you cannot ask, read the project's documentation and state your assumptions in the
-report. Do not invent guarantees the project does not make.
+forever). Then name the project's domain (a shop, a bank, a booking system, a job queue) and ask
+which of that domain's standard rules hold for it: read the list for the domain in `hydo guide
+workloads`, "Business rules: ask the owner" (for a shop: units sold never exceed units stocked,
+refunded never exceeds captured, one payment per order, no money held without an order), and ask
+the owner to confirm, reject or add to them. If you cannot ask, read the project's documentation
+and state your assumptions in the report. Do not invent guarantees the project does not make.
 
 ## 2. Inventory the project
 
@@ -69,9 +73,16 @@ its data directory, its dependencies, and the file where you found each fact. Sh
    and the durability settings it has in production.
 4. One workload command per client operation (`hydo guide composer`). Each command records what
    the client saw: acknowledged, failed for certain, or unknown (a timeout is unknown). Derive
-   every choice from the seed hydo gives, never from the clock.
+   every choice from the seed hydo gives, never from the clock. **Before writing a client for a
+   SQL database** (PostgreSQL, MySQL, SQLite or libSQL behind sqld), run `hydo sql-gen` (`hydo
+   guide workloads`): it writes ready-made workloads with their checks and the outcome rules, and
+   claims what the endpoints' roles allow. Write your own commands only for the operations it does
+   not cover (the application's own API), and keep the generated ones beside them.
 5. Checks: choose them with [references/choosing-checks.md](references/choosing-checks.md), write
-   them as `hydo guide checks` says, and prefer hydo's ready-made checkers to hand-written loops.
+   them as `hydo guide checks` says, and prefer hydo's ready-made checkers to hand-written loops:
+   a business rule over SQL tables is a `.sql` check (a query that must return no rows), and a
+   rule that compares the books with what an outside service saw is one `hydo-sql check` line
+   over a `sql` and a `world` source (`hydo guide workloads`).
    Turn on error logs as findings (`hydo guide error-logs`).
 6. Outside services the system calls (payments, e-mail, webhooks) become fakes; durability
    settings become knobs; allow only the fault kinds that make sense for the project
@@ -85,8 +96,11 @@ It must print `OK` before you go on.
 
 Use the "Build and run" commands of `hydo guide workflow`: build the image, run one schedule
 without faults twice (it must pass, with the same fingerprint both times), then explore. A first
-run that fails points at the folder or at a real bug: read the console files that `hydo run`
-names before changing anything.
+run that fails points at the folder or at a real bug. Before changing anything, read why: the
+`hydo: diagnosis:` lines `hydo run` prints and the `diagnosis` in the run directory's
+`result.json`; then, when your hydo has `hydo inspect` (`hydo inspect --help`), look inside the
+failed run at the stop that matters (`hydo guide inspect`). Do not add debug commands to the
+image to find a cause: that changes the run's timing, and the failure can go away.
 
 ## 5. Report
 

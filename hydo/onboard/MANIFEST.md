@@ -69,6 +69,7 @@ model, exactly as these entries written in the file would:
 |---|---|
 | `workload/<kind>_<name>` | `test.commands[]`: `{name, kind, run: [/hydo/workload/<file>], content: <first 16 hex digits of the file's SHA-256>}`; a `# hydo: timeout=N` header gives `timeout` |
 | `checks/final_<name>`, `checks/always_<name>`, `checks/eventually_<name>` | `test.checks[]`: `{name, kind, run: [/hydo/checks/<file>]}`; the header gives `every` / `within`, `after`, `poll`, and `# hydo-msg:` gives `msg` |
+| `checks/final_<name>.sql`, `checks/always_<name>.sql`, `checks/eventually_<name>.sql`, not executable | `test.checks[]`: `{name, kind, run: [hydo-sql, none, --file, /hydo/checks/<file>, --on, <store>]}`: a query that must return no rows; the header (`--` comments) `-- hydo: store=<endpoint> every=N within=N after=... poll=N` and `-- hydo-msg:` (Milestone 182; an executable `.sql` file is an ordinary check, as before) |
 | `checks/linearizable_<name>`, `checks/list_append_<name>` | top-level `checks[]`: `{id: <name>, type: linearizable or list-append, history, msg, final: "exec '/hydo/checks/<file>'"}`; the header gives `history`, `model`, `initial`, `consistency` |
 | `regressions/<name>.schedule` | `test.regressions[]`: `{name, schedule, expect}` and, from its comment lines, `commands`, `compose`, `contents` |
 
@@ -137,9 +138,10 @@ name: myapp                    # required. lowercase letters, digits, '-'
 description: one line          # free text, anywhere below too
 
 guest:
-  ram_mib: 1024                # guest RAM in MiB (default 1024): 256..3072 on x86_64, 256..4096 on arm64
+  ram_mib: 1024                # guest RAM in MiB (default 1024): 256..8192
   clock_start: 1767225600      # unix seconds the realtime clock starts at (default 2026-01-01)
   clock_after_cut: 60          # optional: after a power cut the recovery boot's clock continues from the cut, + 60 s
+  outcomes_after_cut: true     # optional: after a power cut the recovery boot's $HYDO_OUTCOMES holds the first boot's last outcomes
   cpu: v3                      # guest CPU level (x86_64 only): v2 (default) = x86-64-v2, no AVX;
                                # v3 = adds AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE, XSAVE
 
@@ -157,6 +159,9 @@ root:                          # what goes on the read-only root filesystem
     /etc/myapp.conf: |
       port 8080
   dirs: [/etc/myapp]           # empty directories to create
+  share_images: true           # image services with the same image (config digest) share one
+                               # unpacked tree, each on its own mount of it with its own /tmp,
+                               # /data and mounts (default false: one copy per service)
 
 data:                          # the read-write disk, mounted on /data; the fault target
   size_mib: 512                # default 512
@@ -212,6 +217,8 @@ services:                      # may be empty ([] or left out): a project that i
     env: {TZ: UTC}             # optional: added to / overriding the image's Env
     workdir: /data             # optional: default the image's WorkingDir
     user: "999:999"            # optional: default the image's User ("" = root)
+    writable: true             # optional: a container's writable root, a layer on the data disk
+                               #   (default false: read-only; "A writable root for image services")
     ready: hydo-oci cache redis-cli ping | grep -q PONG
 
 provision: /bin/myapp-admin create-schema   # once, after all services are ready, before S1
@@ -263,7 +270,7 @@ checks:                        # ready-made checkers for recorded histories (see
     consistency: strict-serializable   # list-append: the level the system claims (HISTORIES.md)
 
 faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make sense here (also
-                               # freeze, protocol; see their sections);
+                               # freeze, protocol, corrupt, powerloss; see their sections);
                                # network/oneway also pull iproute2 into the image
 
 errors: true                   # error logs as findings (see "Error logs as findings" below): scan
@@ -313,7 +320,8 @@ What the build does:
 
 - **A root per service, not a merged root.** The layers are applied in order (whiteouts
   `.wh.<name>` and opaque directories `.wh..wh..opq` honoured) into `/oci/<service>` on the
-  read-only root, and the service runs chrooted there, as in Docker. Images with different C
+  read-only root (or, with `writable: true`, into the service's writable layer: below), and the
+  service runs chrooted there, as in Docker. Images with different C
   libraries can coexist, and busybox, `/sbin/init` and the rest of the hydo root are untouched.
 - `/proc`, `/sys`, `/dev`, `/tmp` and `/data` of the guest are bind-mounted into that root.
   `/data` is the data disk (the fault target): point the program's data directory there (it
@@ -346,6 +354,44 @@ What the build does:
   default x86_64 build, `arm64` for `--arch arm64`); anything else is refused with an error.
 - Inside the image: `/etc/hydo/oci/<service>/run` (the launcher), `exec` (used by `hydo-oci`),
   `image.json` (digests, layers, the image config and the effective command/env/workdir/user).
+
+### A writable root for image services (`services[].writable`)
+
+Docker gives every container a writable layer over its image, and many programs rely on it: they
+write a cache into their home directory, generate files into their own install directory (Medusa
+writes `~/.config` and schema snapshots into `node_modules` at start), or keep a pid file next to
+their binary. On hydo an image root is read-only, and such a program fails (often with `ENOENT`
+or "Read-only file system"). One line gives the service a container's writable root:
+
+```yaml
+services:
+  - name: medusa
+    image: {x86_64: images/medusa-shop-amd64.docker.tar}
+    writable: true      # default false: the image root stays read-only, mounts: are the only writes
+```
+
+- **Where the layer lives: on the data disk**, at `/data/.hydo/layers/<service>` (the image's whole
+  tree, copied there; hydo has no overlay filesystem in every guest kernel, so the layer is a full
+  copy rather than the changes only). The launcher binds it over `/oci/<service>` before the first
+  start of every boot (and before any `hydo-oci` call), under a lock; `mounts:` and the binds of
+  `/proc`, `/sys`, `/dev`, `/tmp` and `/data` are made on top of it as before. An x86_64 image
+  carries the tree on its data partition from the build (nothing is copied in the guest); an
+  arm64 image copies its root (in the initramfs) to the data disk at the service's first start,
+  syncs it and marks it whole (`<layer>.done`), so a power cut during the copy starts it again.
+- **A kill keeps the layer**, as Docker keeps a container's layer across restarts: the restarted
+  process finds what it wrote.
+- **A power cut keeps the layer as far as it was flushed**, like everything else on the data disk
+  (Docker's layer is on the host's disk too): the recovery boot sees the layer as the disk kept
+  it. A program that relies on files it wrote into its own root without `fsync` can see them
+  missing or torn after a cut, exactly as with its data directory. The data disk's faults (`disk=`
+  I/O errors, lying disk, torn writes) and its request order now include reading the program's
+  own files.
+- **Cost:** the data disk grows by the image's size (hydo-build adds it to `data.size_mib`, rounded
+  up, and prints it); x86_64 KVM and hvx map the disk image, so the layer costs disk, not guest
+  RAM. The layer is visible to every service under `/data/.hydo/layers/` (a service whose own
+  volume is the data disk's root, `{src: /data, ...}`, sees it there too).
+- `writable:` is for image services only (refused without `image:`). A service of the hydo root
+  (`root.nix`, `root.files`) keeps the read-only root: give it a directory under `/data` or `/tmp`.
 
 ### Restart policies (`services[].restart`)
 
@@ -527,6 +573,8 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `F=<svc>><peer>@<step>[#<n>][:<match>]:<dur>` | freeze `<svc>` at the n-th packet it **sends** to `<peer>` (`<` = **receives** from) at/after step `<step>`, for `<dur>` ms; only with `freeze` in `faults:` (see "Freeze at a call") |
 | `H=<target>@<from>-<to>:<rule>[,<rule>...]` | a protocol fault on a fake or proxy for steps `[from,to)`: an error, slow, missing or reset answer, or a duplicated / reordered / late / lost webhook; see "Fake outside services" |
 | `A=<event>[@<step>][+<ms>]:<action>` | a reaction (M139): from before step `step` (0 when not written) the host watches the console for the first SDK assertion record of `event` (`ok:true` of a `sometimes`/`reachable`, `ok:false` of the others), waits `ms` of guest time and does `<action>`: `cut` (a power cut at that instant: the workload and every service frozen, then the recovery boot), `kill-<svc>` (down until the heal), `stop-<svc>-<ms>` or `cont-<svc>` (resume a paused service: a pause healed at the first sign of no progress); reactions live during the steps only; see "Reactions" below |
+| `G=<svc>@<at>[+<down>]:<kind>[,...]` | corrupt one file in the service's `storage:` directory before step `at` (`flip`, `zero` or `trunc`); with `+<down>` while the service is killed, started again before step `at+down`; see "Storage faults of one service" |
+| `L=<svc>@<at>+<down>` | a power loss of one service before step `at`: its own file system shut down (what was not written back is lost), the service killed and started again before step `at+down`; see "Storage faults of one service" |
 | `<X>=<value>` | a knob from `knobs:` |
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
 
@@ -538,7 +586,7 @@ them in order), waits until the queue is empty (at most the largest delay in for
 `network fault lifted: queued=<n> drained_ms=<ms> left=<n>`. Before 2026-10-23 the qdisc was
 deleted at once and every queued packet was lost, so TCP retransmitted after a timeout.
 
-A schedule holds at most one `K=`, one `P=` and one `X=`: a second one is refused (Milestone
+A schedule holds at most one `K=`, one `P=`, one `X=`, one `G=` and one `L=`: a second one is refused (Milestone
 141; before, it silently replaced the first). To crash or stop several services at once, use
 reactions (`A=<event>:kill-<svc>`, one per service, below).
 
@@ -550,6 +598,49 @@ services, network and one-way faults from services with a `port:`, knob values f
 any other image. A knob token that collides with a built-in token (K P N O C T Q X F) is
 rejected. `hydo explore --freeze-call` draws `F=` for a manifest whose `faults:` lists `freeze`;
 `hydo explore --grpc-faults` draws gRPC-level `H=` tokens for a manifest with a gRPC proxy (see "gRPC faults").
+
+### Storage faults of one service (`services[].storage`, `G=`, `L=`)
+
+hydo's disk faults and its power cut act on the whole guest's data disk. Two faults hit one
+service's storage instead (docs/design/storage-faults.md has the options and the reasons):
+
+```yaml
+services:
+  - name: n1
+    storage: vol/n1-data                    # the directory under /data where n1 keeps its files
+  - name: n2
+    storage: {dir: vol/n2-data, size_mib: 256}   # ... on a file system of its own (16-3072 MiB)
+faults: [kill, cut, corrupt, powerloss]
+```
+
+- **Corruption, `G=<svc>@<at>[+<down>]:<kind>[,n=<count>][,len=<bytes>][,file=<text>][,seed=<hex>]`.**
+  Before step `at` the host changes one file under the service's `storage:` directory: `flip`
+  (`n` single-bit flips, default 1, at most 64), `zero` (`len` bytes set to zero, default 4096,
+  at most 1 MiB) or `trunc` (the file shortened by `len` bytes, or by a seeded number of bytes).
+  `file=` keeps only files whose path (relative to the directory) contains the text, for example
+  `file=.blk`; `seed=` (lower-case hex, default 0) chooses the file and the places. With
+  `+<down>` the service is killed first and started again before step `at+down` (the files change
+  while it is down); without it the files change under the running service. The choice is a pure
+  function of the token and the directory's files at that moment, so the run reproduces; the
+  console says what changed (`CORRUPTED n1's /data/vol/n1-data/... before step 8: bit 3 of byte
+  4096 (5a->52), ...`). The keys are written in this order, each at most once. A service that
+  does not start again after the corruption is `ERROR <svc> restart failed (its files were
+  corrupted)`.
+- **A power loss of one service, `L=<svc>@<at>+<down>`.** Only for a service whose `storage:`
+  has `size_mib`: its directory is then a journaled ext4 file system of its own (a partition of
+  the data disk, mounted on the directory after the data disk, in the recovery boot too). Before
+  step `at` the service's processes are stopped, the kernel is told that the file system failed
+  (nothing more of it reaches the disk), the service is killed and the file system mounted again
+  (its journal replayed). What the service wrote and the kernel had written back stays; what it
+  had not is lost, as at a power loss of that machine alone. The other services run on. The
+  service starts again before step `at+down`. Not taken away: writes the kernel had handed to the
+  disk but not flushed (a real disk's volatile cache could lose them; the whole-guest cut `C=`
+  does). The disk, with every own file system, stays within 4 GiB.
+
+`hydo explore --storage-faults` draws them (a `G=` in half of the schedules on a service with
+`storage:`, an `L=` in 40% on a service with its own file system) when the manifest's `faults:`
+lists `corrupt` / `powerloss`, or has no `faults:` list. A failure with `G=` has the class
+`corrupted-files`. The guest letters `G` and `L` are reserved: a knob may not use them.
 
 ### Reactions (`A=`, `hydo explore --reactive`)
 
@@ -652,6 +743,18 @@ the harness passes on in the recovery boot's `oracle` command, and the recovery 
 clock at that epoch plus `<seconds>` (the time the machine was off), as a real
 clock keeps running across a power loss. Opt-in: only for a manifest that sets it (the host
 controller reads the clock at the cut and hands it to the recovery boot).
+
+### Outcomes after a power cut (`guest.outcomes_after_cut`)
+
+The recovery boot after a power cut starts with the first boot's `$HYDO_ACKED` and `$HYDO_FAILED`,
+and with an empty `$HYDO_OUTCOMES`. A check that looks up the ids listed in `$HYDO_OUTCOMES` (to
+find the unknown outcomes, or every id the client sent) then looks up nothing after a power cut,
+and reports "every acknowledged id lost" or passes without checking anything. With
+`guest.outcomes_after_cut: true` the host controller reads the first boot's `$HYDO_OUTCOMES` at the
+cut and writes the last outcome of every id into the recovery boot's file (`<id> <outcome>`, one
+line per id, in numeric order of the ids); `hydo-read hydo unknown` and the checks then see what
+the client saw. Opt-in, so that images built before it keep their recorded fingerprints: a
+manifest without the key gets an empty file there, as before.
 
 ### Link faults (a network fault between two named services)
 
@@ -795,6 +898,8 @@ fakes:
     protocol: http             # http (default: HTTP/1.1 and cleartext HTTP/2) | grpc (see below)
     idempotency: header:Idempotency-Key   # where a request's idempotency key is (extractor)
     ref: json:order            # the business reference a request is about (extractor); per route too
+    tls: {hosts: [api.payments.example]}   # optional: also HTTPS on port 443 for these names, with a
+                               #   certificate the guest trusts ("HTTPS for fakes and proxies")
     routes:                    # required for a fake; the first match wins
       - name: charge           # [a-z][a-z0-9_]*; the target <fake>.<route> of H= and of checks
         method: POST           # default: any
@@ -809,6 +914,18 @@ fakes:
           body: '{"type":"charge.succeeded","id":"ch_{seq}","order":"{ref}"}'
           delay_ms: 20         # after the effect
           retries: 5           # a failed (non-2xx) delivery is retried after 0.5, 1, 2, ... s
+          sign:                # optional: an HMAC-SHA256 signature header on every attempt
+            header: Webhook-Signature
+            secret: whsec_test             # the endpoint secret (its bytes are the key)
+            payload: '{ts}.{body}'         # what is signed (default); {ts} = the attempt's Unix s
+            value: 't={ts},v1={hmac}'      # the header's value (default)
+            encoding: hex                  # hex (default) | base64
+        save: {key: 'ch_{seq}', fields: {amount: '{json:amount}', status: paid}}   # remember it
+      - name: get
+        method: GET
+        path: /v1/charges/{id}
+        load: '{path:id}'      # the object it is about: 404 and no effect when unknown
+        body: '{"id":"{path:id}","amount":{obj:amount},"status":"{obj:status}"}'
 proxies:
   - name: redisp               # a fault proxy in front of a real service
     port: 6380                 # the system talks to this port instead of the service's
@@ -830,10 +947,100 @@ also `{json:a.b}`, `{header:X}`, `{query:x}`, `{path:x}`, `{form:x}`, `{pb:n}` f
 Single braces: `{{name}}` is a build parameter (`params:`). A webhook may use only the first five
 (it can be re-sent after a power cut, without its request).
 
+**Objects** (`save:`, `load:` on a route): a fake remembers what it created, so a later read
+answers with it (a payment's currency and amount, its status after a capture). `save: {key:
+<template>, fields: {<field>: <template>}}` stores the fields under the key when the request takes
+effect (`fx=1`: not an idempotent replay, not an error rule without `effect=yes`), merging into an
+object already there. `load: <template>` names the object a request is about; a missing one is
+answered 404 (`{"error":"hydo fake: no object <key>"}`, gRPC NOT_FOUND) and takes no effect
+(`out=- obj=missing` in the record). Answers (body and headers) read `{obj:<field>}`: the loaded
+object after the route's own save, or on a route with only `save:` the saved one (a replay sees
+what the first request stored); a field the object lacks is empty. Objects are carried across a
+power cut with the rest of the world (within its 3000 bytes).
+
+**Signed webhooks** (`webhook.sign`): every delivery attempt carries the header `header:` with
+`value:`, where `{hmac}` is the HMAC-SHA256 of `payload:` under `secret:` (hex or base64);
+`{ts}` is the attempt's guest time in Unix seconds and `{body}` the webhook's body, so a
+provider's signature check (a timestamp, the body, the endpoint secret) passes.
+
 **gRPC** (`protocol: grpc`): cleartext HTTP/2 with prior knowledge. A route's `path` is the method
 (`/pkg.Service/Method`), its answer `message:` (hex protobuf bytes, default empty) and `code:`
 (gRPC status, default 0); an error rule answers trailers-only with `grpc-status`. Status codes in
 `H=` rules may be numbers or names (`status=UNAVAILABLE`).
+
+### HTTPS for fakes and proxies (`tls:`)
+
+Real providers speak HTTPS only, and their SDKs usually call one fixed host name and check its
+certificate (Stripe's SDKs call `https://api.stripe.com` and have no plain-HTTP option). `tls:`
+makes a fake (or a proxy) answer HTTPS for those names, with a certificate the guest trusts:
+
+```yaml
+fakes:
+  - name: stripe
+    port: 9101                 # the plain listener stays (http://<addr>:9101)
+    tls:
+      hosts: [api.stripe.com]  # the names the system calls (lower case, no wildcard)
+      port: 443                # default 443, on the fake's address
+    routes: [...]
+```
+
+What the build does (nothing of it for a manifest without `tls:`):
+
+- **A test CA of the image's own, and a certificate per endpoint** for its host names (also in
+  the subject alternative names), ECDSA P-256 with SHA-256. Reproducible: every key is derived
+  from the manifest (the project's name, the endpoint's name, its host names), the signatures are
+  deterministic (RFC 6979), the validity is fixed (2000-01-01 to 2099-12-31, so any guest clock,
+  `guest.clock_start` and `T=` steps included, is inside it), and two builds give the same
+  bytes. The keys protect nothing outside the guest: only the guest trusts this CA. Files:
+  `/etc/hydo/tls/ca.pem`, `/etc/hydo/tls/<endpoint>.pem` (its certificate and the CA's),
+  `/etc/hydo/tls/<endpoint>.key`.
+- **Names:** each host name goes into `/etc/hosts` (the guest's, also one the manifest writes
+  itself in `root.text`, and every image service's own) with the endpoint's address (`addr:`, else
+  the bridge's 10.89.0.1 with `network: bridge`, else 127.0.0.1). An image service that mounts
+  the guest's `/etc/hosts` (`hydo compose` writes that mount) sees the same lines.
+- **Trust, the guest root:** the CA is appended to `/etc/ssl/certs/ca-certificates.crt` (made if
+  missing, with `/etc/ssl/cert.pem` pointing at it), and the manifest's `env:` gets the variables
+  below (a value the manifest sets wins).
+- **Trust, every image service:** the CA is appended to each system bundle the image has
+  (`/etc/ssl/certs/ca-certificates.crt`, `/etc/pki/tls/certs/ca-bundle.crt`,
+  `/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem`, `/etc/ssl/ca-bundle.pem`,
+  `/etc/ssl/cert.pem`; each real file once, symlinks followed inside the image), made at the first
+  path when it has none, copied to `/.hydo/tls-ca.pem`, and put where the distribution's own tool
+  finds it when an entrypoint rebuilds the bundle (`/usr/local/share/ca-certificates/` for
+  `update-ca-certificates`, `/etc/pki/ca-trust/source/anchors/` for `update-ca-trust`, when the
+  image has those directories). The service's environment gets the variables below unless the
+  image or the manifest sets them.
+
+| variable | read by | value |
+|---|---|---|
+| `SSL_CERT_FILE` | OpenSSL, Go, Ruby, curl, Python's `httpx` | the bundle with the CA |
+| `REQUESTS_CA_BUNDLE` | Python's `requests` (it ignores the system bundle otherwise) | the bundle with the CA |
+| `NODE_EXTRA_CA_CERTS` | Node.js (added to its built-in list) | the CA alone (`/.hydo/tls-ca.pem`; `/etc/hydo/tls/ca.pem` in the guest root) |
+| `NIX_SSL_CERT_FILE` | programs built by Nix | the bundle with the CA |
+
+Programs that use the system bundle need nothing more (Go, curl, OpenSSL, .NET on Linux, Rust with
+`rustls-native-certs` or `native-tls`). Not covered: **Java** keeps its own `cacerts`, which hydo
+does not change (import `/.hydo/tls-ca.pem` with `keytool -importcert -cacerts` in the service's
+`setup:` with `writable: true`; Eclipse Temurin images also offer `USE_SYSTEM_CA_CERTS=1`, not
+tried); a program with its own copy of the public CA list that no variable replaces (Rust's
+`webpki-roots`, Python's `certifi` used directly); a program that pins the provider's certificate
+or key cannot be faked this way at all.
+
+- **The server:** `hydo-world-tls` (hydo-world built with its TLS front, `HYDO_WORLD_TLS=1
+  hydo/crates/hydo-world/build.sh`; hydo-build stages it as `/bin/hydo-world` for a manifest with
+  `tls:`, from `<build dir>/hydo-world-tls`, `$HYDO_WORLDBIN_TLS`, or a release's
+  `guest/hydo-world-tls`) listens at `<addr>:<tls port>`, decrypts, and carries each connection
+  to the endpoint's plain listener, so routes, templates, the record, `H=` rules (they act after
+  TLS) and webhooks are unchanged. Fakes and proxies on one address and TLS port share one
+  listener and are told apart by the name the client asks for (SNI); a client that sends no name
+  gets the first. TLS 1.3 only (every current runtime has it), the cipher suite
+  `TLS_AES_128_GCM_SHA256`, the group secp256r1 (a client that offers only X25519 is asked again
+  for P-256 with a HelloRetryRequest), ALPN `h2` and `http/1.1`: HTTP/2 and gRPC over TLS work
+  (a `protocol: grpc` fake with `tls:` is a gRPC-over-TLS server). The cryptography is pure Rust
+  (RustCrypto), the randomness the guest kernel's, which hydo makes deterministic.
+- **What differs from plain HTTP:** a request's `from` in the record is hydo-world's own address
+  (the plain connection starts there), not the client's. A `reset` rule resets the client's TLS
+  connection too.
 
 ### The record (what the outside world saw)
 
@@ -1018,7 +1225,8 @@ without a `hydo/` folder is not changed by it.
 hydo/
   hydo.yaml          services, data, knobs, allowed faults, guest settings (and test: options)
   workload/          commands: <kind>_<name> executables; helper_* files and dot files are ignored
-  checks/            properties: final_<name>, always_<name>, eventually_<name>
+  checks/            properties: final_<name>, always_<name>, eventually_<name>; <kind>_<name>.sql
+                     (not executable): a SQL query that must return no rows ("SQL systems")
   regressions/       <name>.schedule: saved minimal schedules, replayed by `hydo repro --regressions`
 .hydo/               build cache, git-ignored (`hydo build` writes here for a manifest in hydo/)
 ```
@@ -1539,11 +1747,18 @@ image keeps working after hydo is upgraded").
 ## Limits of v1
 
 - The kernel command line is the explorer's. Guest RAM is per image (`guest.ram_mib`), at most
-  3072 MiB on x86_64 (hvx keeps RAM below the 4th-GiB MMIO hole) and 4096 MiB on arm64.
+  8192 MiB on every engine. On x86_64 the first 3 GiB sit below the 4th-GiB MMIO hole and the
+  rest from 4 GiB (the guest's e820 map says so; Milestone 179). Each running guest takes its
+  whole `guest.ram_mib` of the host's memory: `hydo explore` sizes its pool from it and from the
+  host's available memory (and keeps snapshots in files when they do not fit), and `hydo run`
+  refuses a guest that does not fit.
 - Images are files on the build machine (no registry pulls); one root per image service, not
-  a merged root; no xattrs/capabilities, devices or FIFOs from layers; no zstd layers.
-- The guest console is 64 KiB: a workload that prints every acknowledged id should print
-  short ids, or the done marker can be lost.
+  a merged root (with `root.share_images: true`, services of one image share its unpacked
+  tree; it is opt-in because it changes the image's bytes); no xattrs/capabilities, devices or
+  FIFOs from layers; no zstd layers.
+- The guest console keeps 64 KiB per VM on hvx (the kernel module's buffer; `hydo run` warns
+  when a run wrote more) and 4 MiB on the KVM engine and the Mac: a workload that prints every
+  acknowledged id should print short ids, or the done marker can be lost.
 - One data disk, ext4. The workload's step count is the unit of fault placement.
 
 ## From Docker Compose
@@ -1591,13 +1806,18 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | `restart:`, `deploy.restart_policy` | `restart:` with the same words (see "Restart policies"; `deploy.restart_policy.condition` `none` -> `no`, `any` -> `always`, `on-failure` with `max_attempts` -> `on-failure:<max>`, and it wins over `restart:` as in Compose; its `delay` and `window` are ignored with a warning, hydo waits Docker's own delays); a value that is not a policy is left out with a warning. `restart: "no"` also gives `recovery: false` (not started again after a power cut, as Docker does not restart it after a reboot); every other policy -> started in crash recovery. hydo's kill faults keep their own restart points whatever the policy. |
 | `profiles:` | services in a profile are left out unless `--profile <p>` (as `docker compose up`) |
 | `mem_limit:`, `deploy.resources.limits.memory` | counted in the `guest.ram_mib` guess |
-| (images) | `guest.ram_mib`: 256 MiB + a per-image guess (PostgreSQL 384, MySQL/MongoDB 640, Redis 96, JVM services 1024, others 256), at least 1024, at most 3072. `guest.cpu: v3` when an image's linux/amd64 manifest has variant v3/v4 or the image is known to need AVX2 (restatedev/restate); otherwise a commented line to uncomment if a service stops with "invalid opcode". `data.size_mib` from the volumes. |
+| (images) | `guest.ram_mib`: 256 MiB + a per-image guess (PostgreSQL 384, MySQL/MongoDB 640, Redis 96, JVM services 1024, others 256), at least 1024, at most 8192. `guest.cpu: v3` when an image's linux/amd64 manifest has variant v3/v4 or the image is known to need AVX2 (restatedev/restate); otherwise a commented line to uncomment if a service stops with "invalid opcode". `data.size_mib` from the volumes. |
 | (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The hydo-onboard skill (`hydo guide skill`, `skills/hydo-onboard`) writes the real ones. |
 | `faults:` | all kinds except `freeze` |
 
-Reported as warnings, with what to do (the file's header repeats them): `build:` (with an image:
-the image is used; without one the import stops: build it, `docker save` it, set `image:`),
-non-default `networks:` (one bridge in the guest: isolation between Compose networks is not
+Reported as warnings, with what to do (the file's header repeats them): `build:` (a service
+built locally: its image is never pulled by its tag. An image file already at
+`images/<name>-<tag>-amd64.docker.tar` (or a lock entry) pins it by its content; a tag its
+registry has is pinned by digest as any image; otherwise it is imported as a local build, named
+as Docker Compose names it, `image:` or else `<project>-<service>`, and fetch-images.sh fetches
+nothing for it: it prints `docker build -t <tag> <context> && docker save -o <file> <tag>` (or an
+OCI layout at `images/<name>-<tag>-arm64-oci` for arm64) and stops while the file is missing; run
+`hydo compose` again once the file is there to pin it), non-default `networks:` (one bridge in the guest: isolation between Compose networks is not
 modelled), `network_mode` (for `host`, the warning says that peers named as
 `0.0.0.0:<port>` or `localhost:<port>` must become their `addr:`), `privileged`, `cap_add`/`cap_drop`, `devices`, `security_opt`,
 `pid`/`ipc`/`uts`/`userns_mode`, `sysctls`, `ulimits`, `dns*`, `init`, `volumes_from`, `extends`,
@@ -1642,10 +1862,116 @@ its own volume on `/data`, do not share one directory (`{src: /data/vol/n1-data,
   (on a Mac too, with the second guest kernel); with `--network loopback` or `--no-addr` link
   faults between services act on nothing.
 - The image roots are read-only except for the `mounts:`: a program that writes elsewhere fails
-  with "Read-only file system"; add a `mounts:` entry (a volume or a tmpfs) for that path.
+  with "Read-only file system" (or `ENOENT`); add a `mounts:` entry (a volume or a tmpfs) for that
+  path, or give the service a container's writable root with `writable: true` ("A writable root
+  for image services").
 - Healthchecks run through `hydo-oci`, as root unless the service has a `user:`; the image's own
   user for a healthcheck (Docker runs it as the container's user) is not looked up.
 - No `build:`, no registry pulls at build time, no Swarm (`deploy:`), no GPUs or host devices.
+
+## SQL systems: ready-made workloads and checks (`hydo sql-gen`, `hydo-sql`)
+
+A system with a SQL database needs no hand-written client for the classic transactional
+workloads, and no shell for its business rules over SQL tables. `hydo sql-gen` writes test-composer
+commands and checks into the `hydo/` folder; they call the static guest program `hydo-sql`
+(`hydo/crates/hydo-sql`, built like `hydo-read`, `docs/BUILD-PINS.md`), which `hydo build`
+stages as `/bin/hydo-sql` when a command or a folder file names it (`HYDO_SQL_BIN`, default the
+release's `guest/hydo-sql`; arm64 `HYDO_SQL_BIN_ARM64`). Design: docs/design/workloads.md
+(Milestone 182). `hydo guide workloads` is the short form of this section.
+
+```sh
+hydo sql-gen --dialect postgres|mysql|libsql --endpoint NAME=ADDRESS[,replica] ... \
+  [--workloads bank,list-append,register,set,counter|none] [--shapes batch,interactive] \
+  [--route NAME,...] [--isolation serializable|repeatable-read|read-committed] \
+  [--accounts 8] [--balance 100] [--keys 6] [--timeout-ms 3000] [--retries 2] [--out hydo] [--force]
+```
+
+**Endpoints.** The address is what the guest connects to: `host:port` of sqld's HTTP API (Hrana
+over HTTP) for `libsql` (SQLite and libSQL), a DSN for `postgres` and `mysql`, as `hydo-read` takes
+them. `,replica` marks an endpoint whose reads may be stale; every other endpoint is a primary.
+Operations go to the endpoints of `--route` (default every endpoint), the seed choosing.
+
+**Files written** (kept when they exist, unless `--force`):
+
+| file | what |
+|---|---|
+| `workload/helper_sql.conf` | the configuration `hydo-sql` reads (`/hydo/workload/helper_sql.conf`, or `$HYDO_SQL_CONF`): `dialect`, `endpoint <name> <address> primary\|replica`, `isolation`, `workloads`, `route <workload\|*> <endpoint>...`, `accounts`, `balance`, `keys`, `timeout_ms`, `retries` |
+| `workload/first_sql_init` | the workloads' tables (`hydo_accounts`, `hydo_lists`, `hydo_registers`, `hydo_set`, `hydo_counter`) and first rows on the first primary, then a wait until every endpoint has them |
+| `workload/parallel_driver_sql_transfer`, `_itransfer` | a bank transfer, batch or interactive |
+| `workload/parallel_driver_sql_txn`, `_itxn` | a list-append transaction (1 to 4 appends and whole-list reads), batch or interactive |
+| `workload/parallel_driver_sql_register` | a read, write or compare-and-set of a register |
+| `workload/parallel_driver_sql_set_add`, `_counter_add` | a unique insert; an increment |
+| `checks/always_sql_bank_live`, `final_sql_bank_after`, `final_sql_no_negative_balance.sql` | the bank's total and no negative balance: on every endpoint while the workload runs, on the primary after the faults |
+| `checks/list_append_sql.la` (and `.lap`) | hydo's list-append checker over history `la` (and `lap`) |
+| `checks/linearizable_sql.rg` | hydo's linearizability checker (model `cas`) over history `rg` |
+| `checks/final_sql_set`, `final_sql_counter` | every acknowledged element is there; the counter is at least the acknowledged increments |
+| `checks/eventually_sql_replicas_converge` | with replicas: within 120 s of the heal every replica holds the primary's rows |
+
+**Transaction shapes.** *batch*: statements fixed before the transaction starts, sent as one
+request (PostgreSQL: one simple-query message `BEGIN ISOLATION LEVEL ...; ...; COMMIT`; libSQL: one
+Hrana batch with conditional steps; MySQL's text protocol has none, so the statements follow each
+other on one connection and a transfer is one multi-table `UPDATE`). *interactive*: one statement
+per round trip, the client deciding in between (read both balances, write computed values).
+
+**Outcomes** (`<id> ack|failed|unknown` to `$HYDO_OUTCOMES`; acknowledgements to `$HYDO_ACKED`:
+`<id>`, `set-<element>`, `counter-<id>`): no connection = failed; a server error before or at
+COMMIT = failed, retried as a new transaction (`retries`) when it is a transient conflict
+(PostgreSQL 40001 and 40P01, MySQL 1213 and 1205, SQLite `SQLITE_BUSY`); an interactive
+transaction that lost its connection before COMMIT = failed; COMMIT (or a one-request
+transaction) sent and no complete answer (a timeout, a reset, an HTTP 5xx, PostgreSQL class
+08/57/58/XX at COMMIT) = unknown.
+
+**Histories and claims.** List-append transactions go to history `la`; with replicas on the route
+also to `lap`: what a primary ran whole, and only the appends of what a replica served. `la`
+claims the isolation level's real-time form when no replica is on the route
+(`strict-serializable` for `serializable`, `strong-snapshot-isolation` for `repeatable-read`),
+else the form without real time (`serializable`, `snapshot-isolation`), and `lap` the real-time
+form: only a real-time claim sees an acknowledged write lost at a power cut. Register operations go
+to history `rg`, without the reads a replica served. `read-committed` allows no list-append claim
+(`hydo sql-gen` refuses the pair). Each attempt of a retried transaction is its own operation with
+its own elements.
+
+**`hydo-sql`'s commands** (the generated files call them; usable by hand):
+
+| command | use |
+|---|---|
+| `hydo-sql init [--wait S]` | the tables and first rows; wait until every endpoint has them |
+| `hydo-sql bank transfer`, `list-append txn` `[--shape batch\|interactive\|seed] [--on <endpoint>\|seed]` | one operation; exit 0 acknowledged, 1 failed or unknown |
+| `hydo-sql register op`, `set add`, `counter add` `[--on ...]` | one operation |
+| `hydo-sql bank check [<endpoint>...]`, `set check [<endpoint>]`, `counter check [<endpoint>]` | the workload's property: 0 holds, 1 violated, 2 cannot evaluate |
+| `hydo-sql list-append read-all <endpoint> [process]`, `register read-all ...` | a history check's final read-back |
+| `hydo-sql none <endpoint>[,...] '<query>'`, `none --file F [--on <endpoint>] [--msg M]` | a query that must return no rows: up to 5 offending rows, exit 1 when any |
+| `hydo-sql dump <endpoint>` | the workloads' rows, one item per row |
+| `hydo-sql read <store> ...`, `hydo-sql check <check> ...` | `hydo-read` and `hydo-check` (below, "Reading the stores") with the sources `sql <endpoint> '<query>'`, `libsql <host:port> '<query>'`, `dump <endpoint>` and `world <ep>.<route>\|<route>\|* [--all] [--log PATH]` |
+
+**SQL checks.** A non-executable `checks/<final|always|eventually>_<name>.sql` file is a query
+that must return no rows on the store its header names (an endpoint of `helper_sql.conf`; default
+the first primary):
+
+```sql
+-- hydo: store=primary every=2
+-- hydo-msg: no order is paid twice
+SELECT order_id, count(*) FROM payment WHERE status = 'captured' GROUP BY order_id HAVING count(*) > 1
+```
+
+For a project's own tables, `hydo sql-gen --workloads none` writes only `helper_sql.conf`.
+
+**The outside world as a source.** `world <target>` reads the fake outside world's record
+(`/tmp/hydo/world.log`, "The record"): one record per request that took effect (`fx=1`) and per
+event, `--all` every request, each with its fields (`seq`, `ep`, `route`, `ref`, `idem`, `fx`,
+`out`, ...). So "the books and the provider agree" is one line:
+
+```sh
+hydo-sql check equal --left 'books=sql db "SELECT intent FROM payment WHERE captured"' \
+                     --right 'stripe=world stripe.capture --field ref'
+```
+
+The record keeps no request fields beyond `ref` and `idem` (a refund's amount is not there; adding
+fields changes `hydo-world`'s pinned bytes, so it waits for a release that re-pins it).
+
+**Examples.** `examples/libsql-replica/` (a primary and a replica, both shapes; it reproduces the
+durability findings of Milestone 173 with the generated files) and `examples/postgres-sql/` (the
+voting app's PostgreSQL with all five workloads).
 
 ## gRPC services: generated drivers (`hydo-grpc-gen`)
 
@@ -1711,7 +2037,7 @@ for an API that documents a stronger promise.
 **Records.** Every attempt is two lines in the history recorder's format (`HYDO-HIST`,
 `hydo/HISTORIES.md`), history `grpc` (`record.history:`), in `/tmp/hydo/grpc/calls`
 (`$HYDO_GRPC_CALLS`) with the bodies, and on the guest console without them (`record.console:
-brief`, the default; `full` or `off`), so a few hundred calls fit in the 64 KiB console:
+brief`, the default; `full` or `off`), so a few hundred calls fit in hvx's 64 KiB console:
 
 ```
 HYDO-HIST grpc <process> invoke <time> <rpc> <op> <request JSON>

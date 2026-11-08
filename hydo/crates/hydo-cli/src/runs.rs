@@ -168,34 +168,26 @@ pub fn mac_kernel_for(ctx: &Ctx, image: &Path, quiet: bool) -> PathBuf {
     k
 }
 
-/// One schedule from a fresh boot on this platform's engine. Writes `engine.log` (everything the
-/// engine printed) into outdir. Returns the RESULT, or None (the engine's output is returned too).
-/// Every image is an agent image (`/etc/hydo/control`, M126; a shell-init image is refused since
-/// M145) and runs under the host controller: `policy` is the schedule's, or recorded transcripts
-/// typed again (`hydo repro --transcript`).
-fn run_engine(
+/// This platform's engine for `image` and the boot spec of a run into `outdir` with the engine
+/// options `eargs` (`hydo run`'s choice: hvx, or KVM with `--backend kvm`, on Linux; hvm on the
+/// Mac). Dies with `hydo: ` when the engine or the image's kernel is missing.
+pub fn controlled_engine(
     ctx: &Ctx,
     image: &Path,
-    sched: &str,
     outdir: &Path,
     eargs: &[String],
     quiet: bool,
-    policy: &Policy,
-) -> (Option<RunResult>, String) {
-    let _ = std::fs::create_dir_all(outdir);
-    let s = schedule(sched);
-    // the engine and the boot spec of this platform, then the run under the host controller
-    let one = |eng: Arc<dyn ControlledEngine + Send + Sync>, spec: &BootSpec| {
-        let a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));
-        if !quiet {
-            println!(
-                "hydo: an agent image: the host controller drives the run (/etc/hydo/control)"
-            );
-        }
-        a.with_control(&ctx.config.control)
-            .one_with(spec, &s, policy)
-    };
-    let run = match ctx.platform {
+) -> (Arc<dyn ControlledEngine + Send + Sync>, BootSpec) {
+    // M179: a guest may have up to 8 GiB; refuse before the engine fails to make the VM
+    let ram = eargs
+        .windows(2)
+        .find(|w| w[0] == "--ram-mib")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(1024);
+    if let Err(e) = hydo_engine::guest_fits(ram) {
+        die(&e);
+    }
+    match ctx.platform {
         Platform::Linux if ctx.kvm => {
             // the KVM build of the image's recorded kernel, and the image's initramfs
             let dirs = [ctx.guest(), ctx.p("build"), ctx.p("hv/kvm/linux/out")];
@@ -209,7 +201,7 @@ fn run_engine(
                 die("the KVM engine runs one vCPU at the v2 CPU level (--vcpus and guest.cpu: v3 need hvx)");
             }
             let k = hydo_engine::kvm::Kvm::for_release(&ctx.root, ctx.config.env.clone());
-            one(Arc::new(k), &spec)
+            (Arc::new(k), spec)
         }
         Platform::Linux => {
             let hvx = Hvx {
@@ -238,15 +230,50 @@ fn run_engine(
                 eprintln!("hydo: {n}");
             }
             let spec = spec_from_args(eargs, image, b.kernel, b.initrd, &abspath(outdir));
-            one(Arc::new(hvx), &spec)
+            (Arc::new(hvx), spec)
         }
         Platform::Mac => {
             let kernel = mac_kernel_for(ctx, image, quiet);
             let spec = spec_from_args(eargs, image, kernel, None, outdir);
-            one(Arc::new(Hvm::for_release(&ctx.root, ctx.config.env.clone())), &spec)
+            (
+                Arc::new(Hvm::for_release(&ctx.root, ctx.config.env.clone())),
+                spec,
+            )
         }
     }
-    .unwrap_or_else(|e| die(&format!("cannot start the engine: {e}")));
+}
+
+/// One schedule from a fresh boot on this platform's engine. Writes `engine.log` (everything the
+/// engine printed) into outdir. Returns the RESULT, or None (the engine's output is returned too).
+/// Every image is an agent image (`/etc/hydo/control`, M126; a shell-init image is refused since
+/// M145) and runs under the host controller: `policy` is the schedule's, or recorded transcripts
+/// typed again (`hydo repro --transcript`).
+fn run_engine(
+    ctx: &Ctx,
+    image: &Path,
+    sched: &str,
+    outdir: &Path,
+    eargs: &[String],
+    quiet: bool,
+    policy: &Policy,
+) -> (Option<RunResult>, String) {
+    let _ = std::fs::create_dir_all(outdir);
+    let s = schedule(sched);
+    let (eng, spec) = controlled_engine(ctx, image, outdir, eargs, quiet);
+    let a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));
+    if !quiet {
+        println!("hydo: an agent image: the host controller drives the run (/etc/hydo/control)");
+    }
+    let run = a
+        .with_control(&ctx.config.control)
+        .one_with(&spec, &s, policy)
+        .unwrap_or_else(|e| match e {
+            // a schedule the host controller refuses (what it names, a seam): no VM was started
+            hydo_engine::EngineError::Unsupported(w) => {
+                die(&format!("not run (no VM was started): {w}"))
+            }
+            e => die(&format!("cannot start the engine: {e}")),
+        });
     let _ = std::fs::write(outdir.join("engine.log"), &run.output);
     if !quiet {
         // the spin observer's notes (hvm: a run ended at a counter loop and ran again)
@@ -363,6 +390,26 @@ fn host_checks(outdir: &Path, mut res: Map<String, Value>, quiet: bool) -> Map<S
     res
 }
 
+fn verdict_of(res: &Map<String, Value>) -> String {
+    res.get("verdict")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
+/// The run's final verdict, when the host's checks (history checks, error logs) changed the one
+/// the `RESULT` line printed: the guest's checks only. A script that reads the `RESULT` line
+/// would otherwise report a lost write that a history check found as OK (the libSQL
+/// onboarding's friction item 8).
+fn final_verdict_line(printed: &str, last: &str) -> Option<String> {
+    (printed != last).then(|| {
+        format!(
+            "hydo: VERDICT {last}   (the run's verdict with the host's checks, as result.json \
+             has it; the RESULT line above has the guest's checks only)"
+        )
+    })
+}
+
 /// The known-errors list a run's error kinds were compared with (result.json `error_logs`).
 const ERRLOG_KNOWN: &str = "_errlog_known";
 
@@ -405,6 +452,15 @@ fn run_document(
         }
     }
     let mut run = hydo_explore::results::run_of("one", sched, res, &consoles);
+    // faults after the workload's last step do nothing (hydo_control::names::step_warnings)
+    if let (Ok(plan), Ok(s)) = (
+        hydo_control::agent::plan_of_image(image),
+        hydo_schedule::Schedule::parse(sched),
+    ) {
+        let mut w = hydo_control::names::step_warnings(&plan, &s);
+        w.append(&mut run.warnings);
+        run.warnings = w;
+    }
     run.tag = None;
     run.hydo_version = Some(env!("CARGO_PKG_VERSION").into());
     run.epoch = hydo_explore::results::this_epoch();
@@ -476,6 +532,40 @@ pub fn run_to_dir(
     Some(run)
 }
 
+/// One line per eventually property that held in this run: how long after its anchor it held and
+/// its deadline, so that a deadline can be chosen from runs (the libSQL onboarding rebuilt its
+/// image with a longer one to learn this). `hydo report` shows the same in the property table.
+pub fn eventually_lines(run: &hydo_results::Run) -> Vec<String> {
+    let Some(t) = &run.properties else {
+        return Vec::new();
+    };
+    t.properties
+        .iter()
+        .filter(|p| p.assertion == "eventually" && p.fails == 0)
+        .filter_map(|p| {
+            let s = p.slowest_ok_s?;
+            Some(match p.within_s {
+                Some(w) => format!(
+                    "hydo: eventually {}: held {s:.2} s of guest time after its anchor (deadline {w} s)",
+                    p.id
+                ),
+                None => format!(
+                    "hydo: eventually {}: held {s:.2} s of guest time after its anchor",
+                    p.id
+                ),
+            })
+        })
+        .collect()
+}
+
+/// A run's warnings (results `warnings`: faults that do nothing, a pass that checked nothing, a
+/// reaction that never fired), one `hydo: warning:` line each.
+pub fn print_warnings(run: &hydo_results::Run) {
+    for w in &run.warnings {
+        println!("hydo: warning: {w}");
+    }
+}
+
 fn write_run_document(outdir: &Path, run: &hydo_results::Run) {
     let _ = hydo_results::write_document(&outdir.join(hydo_results::RUN_DOC), run);
 }
@@ -494,6 +584,13 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     let outdir = take(&mut args, "--out");
     let known = take(&mut args, "--known-errors");
+    let no_diagnose = match args.iter().position(|a| a == "--no-diagnose") {
+        Some(i) => {
+            args.remove(i);
+            true
+        }
+        None => false,
+    };
     let image = find_image(ctx, &mut args);
     if args.len() != 1 {
         die("usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE]   e.g. hydo run \"disk=cut | run C=12 R=everysec\"");
@@ -514,8 +611,12 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         }
     }
     let res = run_one(ctx, &image, &sched, &outdir, &eargs, false);
+    let printed = verdict_of(&res);
     let res = host_checks(&outdir, res, false);
     let res = errors_one(&outdir, &sched, res, known.as_deref());
+    if let Some(line) = final_verdict_line(&printed, &verdict_of(&res)) {
+        println!("{line}");
+    }
     let sha = sha256_file(&image).unwrap_or_else(|e| die(&format!("{}: {e}", image.display())));
     let run = run_document(
         &outdir,
@@ -527,6 +628,38 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         ctx.backend_name(),
     );
     write_run_document(&outdir, &run);
+    for l in eventually_lines(&run) {
+        println!("{l}");
+    }
+    // hvx keeps 64 KiB of a VM's console (the kernel module's buffer); hydo-hvx says in
+    // engine.log when a VM wrote more (hydo_hvx::engine::CONSOLE_FULL_MARK)
+    let elog = std::fs::read_to_string(outdir.join("engine.log")).unwrap_or_default();
+    if let Some(l) = elog.lines().find(|l| l.contains("hvx: console full")) {
+        println!(
+            "hydo: warning: {}. Print less (short history records, no per-id lines), or run on \
+             the KVM engine (--backend kvm), which keeps 4 MiB.",
+            l.trim()
+        );
+    }
+    print_warnings(&run);
+    // M178: why a failed run failed, after everything the run recorded is written (the
+    // evidence is read by a separate replay; `--no-diagnose` skips it)
+    if run.verdict.kind != "ok" {
+        if let Some(d) = crate::inspect::diagnose::for_run(ctx, &outdir, !no_diagnose) {
+            println!("hydo: diagnosis: {}", d.summary);
+            if let Some(l) = d.likely.first() {
+                println!("hydo: likely: {l}");
+            }
+            println!(
+                "hydo: details in {} (\"diagnosis\"); look inside: hydo inspect start {} --at end",
+                outdir.join(hydo_results::RUN_DOC).display(),
+                outdir.display()
+            );
+            let mut run = run;
+            run.diagnosis = Some(d);
+            write_run_document(&outdir, &run);
+        }
+    }
     println!(
         "hydo: run directory {}   (hydo repro {}  runs it again and compares fp=)",
         outdir.display(),
@@ -747,6 +880,7 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
                 ctx.backend_name(),
             );
             write_run_document(&dir, &run);
+            print_warnings(&run);
             let fp = py_str(&res["fp"]);
             let (ok, word) = repro_same(it, now, &fp, &py_str(&res["verdict"]));
             same += ok as usize;
@@ -1142,4 +1276,24 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
     }
     println!("hydo: {n} regressions saved; `hydo build` stages them, `hydo repro --regressions` replays them");
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::final_verdict_line;
+
+    /// The RESULT line prints the guest's checks only; when the host's checks change the verdict,
+    /// `hydo run` prints the final one (the libSQL onboarding's friction item 8).
+    #[test]
+    fn the_final_verdict_is_printed_when_the_hosts_checks_changed_it() {
+        let g = "HYDO-ORACLE: OK invariants=1 held (x)";
+        assert_eq!(final_verdict_line(g, g), None);
+        let v = "HYDO-ORACLE: VIOLATION [sql.lap] lost-append";
+        assert_eq!(
+            final_verdict_line(g, v).unwrap(),
+            "hydo: VERDICT HYDO-ORACLE: VIOLATION [sql.lap] lost-append   (the run's verdict \
+             with the host's checks, as result.json has it; the RESULT line above has the \
+             guest's checks only)"
+        );
+    }
 }

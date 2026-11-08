@@ -13,7 +13,7 @@
 //! `HYDO_BLESS=1` rewrites the golden from the Rust answers (the crate is the reference from M107
 //! on; bless only a deliberate change).
 
-mod common;
+use crate::common;
 
 use common::pyrandom::PyRandom;
 use hydo_compose::pyval::{repr, Y};

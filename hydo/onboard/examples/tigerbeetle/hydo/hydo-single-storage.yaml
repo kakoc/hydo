@@ -1,0 +1,54 @@
+# One TigerBeetle replica, as hydo-single.yaml, with its data file on a file system of its own so
+# that the storage faults of one service reach it (MANIFEST.md "Storage faults of one service";
+# docs/design/storage-faults.md): G= corrupts the data file, L= is a power loss of the replica.
+#
+#   sh fetch-tigerbeetle.sh
+#   hydo build hydo/hydo-single-storage.yaml
+#   hydo run "disk=none dseed=1 | run G=tigerbeetle_0@8+2:flip,n=32,seed=1"
+#   hydo explore --seeds 1-30 --strategy process --storage-faults
+format: 1
+name: tigerbeetle-single-storage
+description: "TigerBeetle, one replica, its data file on its own file system: what corruption and a power loss of the replica alone do"
+hydo_version: "0.1"
+
+params:
+  tb: "0.17.9"
+
+guest:
+  ram_mib: 3072   # the replica allocates 2.1 GiB at start
+  cpu: v3         # the release binary is built for x86-64-v3 with AES-NI
+
+data:
+  size_mib: 256   # the shared data disk: only the error-log scan's files live here now
+
+root:
+  files:
+    - {src: "../bin/{{tb}}/tigerbeetle", dst: /opt/tb/tigerbeetle, mode: "0755"}
+
+env:
+  TB_ADDRESSES: "127.0.0.1:3001"
+
+errors: true   # error logs as findings (see services)
+
+services:
+  - name: tigerbeetle_0
+    setup: "[ -f /data/tb/0_0.tigerbeetle ] || /opt/tb/tigerbeetle format --cluster=0 --replica=0 --replica-count=1 /data/tb/0_0.tigerbeetle"
+    cmd: /opt/tb/tigerbeetle start --addresses=127.0.0.1:3001 --cache-grid=64MiB /data/tb/0_0.tigerbeetle
+    port: 3001
+    ready: "nc -z -w 2 127.0.0.1 3001"
+    ready_timeout: 300
+    errors: {format: none, match: "error\\(|panic"}   # TigerBeetle logs error(<scope>): ... and panics
+    storage: {dir: tb, size_mib: 1280}   # the formatted data file is 1.06 GiB
+
+workload:
+  steps: 20
+  timeout: 300
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 500
+  command_timeout: 60
+  drain_timeout: 60
+
+faults: [kill, pause, cut, clock, disk, corrupt, powerloss]

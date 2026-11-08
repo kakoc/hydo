@@ -4,9 +4,10 @@
 //!
 //! A VM is set up the same way every time ([`Kvm::fresh`]): KVM's PMU off when the host can turn
 //! it off, every MSR exit to user space (`KVM_CAP_X86_USER_SPACE_MSR`) and the filter of
-//! [`crate::msr`], the TSS and identity-map pages, guest RAM as memory slot 0 from address 0, one
-//! vCPU, the CPUID of [`crate::cpuid`]. No in-kernel interrupt controller and no in-kernel PIT
-//! are created: the PIC and the timer are the engine's.
+//! [`crate::msr`], the TSS and identity-map pages, guest RAM as memory slot 0 from address 0 (and,
+//! for a guest of more than 3 GiB, slot 1 from 4 GiB: [`crate::layout::ram_blocks`]), one vCPU,
+//! the CPUID of [`crate::cpuid`]. No in-kernel interrupt controller and no in-kernel PIT are
+//! created: the PIC and the timer are the engine's.
 //!
 //! Kicks: the spin watchdog sends the vCPU's thread a real-time signal whose handler does
 //! nothing; `KVM_RUN` then returns `EINTR`, the guest having changed in no way.
@@ -218,17 +219,23 @@ impl Hypervisor for Kvm {
             "KVM_SET_IDENTITY_MAP_ADDR",
             ioctl(v, KVM_SET_IDENTITY_MAP_ADDR, &idmap as *const u64 as u64),
         )?;
-        let region = kvm_userspace_memory_region {
-            slot: 0,
-            flags: 0,
-            guest_phys_addr: 0,
-            memory_size: len as u64,
-            userspace_addr: ram as u64,
-        };
-        chk(
-            "KVM_SET_USER_MEMORY_REGION",
-            ioctl(v, KVM_SET_USER_MEMORY_REGION, &region as *const _ as u64),
-        )?;
+        // one memory slot per block of RAM (slot 0 from 0; slot 1 from 4 GiB above 3 GiB)
+        for (slot, (at, off, size)) in crate::layout::ram_blocks(len as u64)
+            .into_iter()
+            .enumerate()
+        {
+            let region = kvm_userspace_memory_region {
+                slot: slot as u32,
+                flags: 0,
+                guest_phys_addr: at,
+                memory_size: size,
+                userspace_addr: ram as u64 + off,
+            };
+            chk(
+                "KVM_SET_USER_MEMORY_REGION",
+                ioctl(v, KVM_SET_USER_MEMORY_REGION, &region as *const _ as u64),
+            )?;
+        }
         let vcpu = new_fd(chk("KVM_CREATE_VCPU", ioctl(v, KVM_CREATE_VCPU, 0))?);
         let p = libc::mmap(
             std::ptr::null_mut(),
@@ -309,7 +316,7 @@ pub struct KvmCpu {
     /// where the observer set RFLAGS.RF for a jump to itself (cleared again on disarming when the
     /// instruction did not run)
     rf_at: Option<u64>,
-    /// guest RAM (memory slot 0)
+    /// guest RAM (memory slot 0, and slot 1 above 3 GiB: `layout::ram_blocks`)
     ram: u64,
     ram_len: usize,
     /// the dirty-page log's bitmap while the log is on ([`Cpu::dirty_log`])
@@ -715,23 +722,28 @@ impl Cpu for KvmCpu {
     }
 
     fn dirty_log(&mut self, on: bool) {
-        let region = kvm_userspace_memory_region {
-            slot: 0,
-            flags: if on { KVM_MEM_LOG_DIRTY_PAGES } else { 0 },
-            guest_phys_addr: 0,
-            memory_size: self.ram_len as u64,
-            userspace_addr: self.ram,
-        };
-        // SAFETY: the region of `Kvm::fresh` again, with the log's flag
-        let r = unsafe {
-            ioctl(
-                self._vm.as_raw_fd(),
-                KVM_SET_USER_MEMORY_REGION,
-                &region as *const _ as u64,
-            )
-        };
-        if let Err(e) = chk("KVM_SET_USER_MEMORY_REGION (dirty log)", r) {
-            crate::fatal(1, &e);
+        for (slot, (at, off, size)) in crate::layout::ram_blocks(self.ram_len as u64)
+            .into_iter()
+            .enumerate()
+        {
+            let region = kvm_userspace_memory_region {
+                slot: slot as u32,
+                flags: if on { KVM_MEM_LOG_DIRTY_PAGES } else { 0 },
+                guest_phys_addr: at,
+                memory_size: size,
+                userspace_addr: self.ram + off,
+            };
+            // SAFETY: the region of `Kvm::fresh` again, with the log's flag
+            let r = unsafe {
+                ioctl(
+                    self._vm.as_raw_fd(),
+                    KVM_SET_USER_MEMORY_REGION,
+                    &region as *const _ as u64,
+                )
+            };
+            if let Err(e) = chk("KVM_SET_USER_MEMORY_REGION (dirty log)", r) {
+                crate::fatal(1, &e);
+            }
         }
         self.dirty = on.then(|| vec![0u64; (self.ram_len / 4096).div_ceil(64)]);
     }
@@ -740,28 +752,37 @@ impl Cpu for KvmCpu {
         let Some(bm) = self.dirty.as_mut() else {
             return;
         };
-        let log = kvm_dirty_log {
-            slot: 0,
-            padding1: 0,
-            dirty_bitmap: bm.as_mut_ptr() as u64,
-        };
-        // SAFETY: the bitmap has a bit for every page of the slot
-        let r = unsafe {
-            ioctl(
-                self._vm.as_raw_fd(),
-                KVM_GET_DIRTY_LOG,
-                &log as *const _ as u64,
-            )
-        };
-        if let Err(e) = chk("KVM_GET_DIRTY_LOG", r) {
-            crate::fatal(1, &e);
-        }
-        for (i, w) in bm.iter().enumerate() {
-            let mut w = *w;
-            while w != 0 {
-                let b = w.trailing_zeros() as u64;
-                out.push(i as u64 * 64 + b);
-                w &= w - 1;
+        // a bitmap per slot, its pages numbered from the slot's offset in the RAM buffer
+        for (slot, (_, off, size)) in crate::layout::ram_blocks(self.ram_len as u64)
+            .into_iter()
+            .enumerate()
+        {
+            let words = ((size / 4096) as usize).div_ceil(64);
+            let bm = &mut bm[..words];
+            let log = kvm_dirty_log {
+                slot: slot as u32,
+                padding1: 0,
+                dirty_bitmap: bm.as_mut_ptr() as u64,
+            };
+            // SAFETY: the bitmap has a bit for every page of the slot
+            let r = unsafe {
+                ioctl(
+                    self._vm.as_raw_fd(),
+                    KVM_GET_DIRTY_LOG,
+                    &log as *const _ as u64,
+                )
+            };
+            if let Err(e) = chk("KVM_GET_DIRTY_LOG", r) {
+                crate::fatal(1, &e);
+            }
+            let first = off / 4096;
+            for (i, w) in bm.iter().enumerate() {
+                let mut w = *w;
+                while w != 0 {
+                    let b = w.trailing_zeros() as u64;
+                    out.push(first + i as u64 * 64 + b);
+                    w &= w - 1;
+                }
             }
         }
     }

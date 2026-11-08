@@ -1,5 +1,8 @@
 [package]
 name = "hydo-world"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo-world: the fake outside services and fault proxies inside the guest (fakes:, proxies:, H= protocol faults)"
 version.workspace = true
 edition.workspace = true
@@ -22,3 +25,19 @@ http = "1"
 httparse = "1"
 h2 = "0.4"
 tokio = { version = "1", default-features = false, features = ["rt", "net", "time", "io-util", "sync"] }
+# The TLS front of `tls:` fakes and proxies (src/tls.rs), only in the build with the feature `tls`
+# (build.sh with HYDO_WORLD_TLS=1, the program hydo-world-tls). The default build leaves both out,
+# so its bytes, which are inside every recorded image with fakes or proxies, stay as they are.
+rustls = { version = "0.23", default-features = false, features = ["std"], optional = true }
+tokio-rustls = { version = "0.26", default-features = false, optional = true }
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "ecdh", "std"], optional = true }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes"], optional = true }
+hmac = { version = "0.12", optional = true }
+
+[features]
+tls = ["dep:rustls", "dep:tokio-rustls", "dep:p256", "dep:aes-gcm", "dep:hmac"]
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

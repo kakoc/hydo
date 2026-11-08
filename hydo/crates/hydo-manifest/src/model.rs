@@ -396,6 +396,8 @@ choice!(
         Disk = "disk",
         Freeze = "freeze",
         Protocol = "protocol",
+        Corrupt = "corrupt",
+        Powerloss = "powerloss",
     }
 );
 choice!(
@@ -571,7 +573,7 @@ pub struct Project {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, expecting = "a mapping")]
 pub struct Guest {
-    /// Guest RAM in MiB: 256..3072 on x86_64, 256..4096 on arm64.
+    /// Guest RAM in MiB: 256..8192 (every engine; the host needs that much free per running guest).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = 1024))]
     pub ram_mib: Option<i64>,
@@ -582,6 +584,11 @@ pub struct Guest {
     /// After a power cut the recovery boot's clock continues from the cut plus this many seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clock_after_cut: Option<i64>,
+    /// After a power cut the recovery boot's $HYDO_OUTCOMES starts with the first boot's last
+    /// outcome of every id (without it the file starts empty there).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub outcomes_after_cut: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = "v2"))]
     pub cpu: Option<Param<CpuLevel>>,
@@ -607,6 +614,12 @@ pub struct Root {
     /// Empty directories to create.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dirs: Option<Vec<Text>>,
+    /// Image services with the same image (by config digest) share one unpacked tree; each still
+    /// has its own mount of it, with its own /tmp, /data, volumes and tmpfs mounts. Off by
+    /// default (it changes the image's bytes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub share_images: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
@@ -706,6 +719,42 @@ pub struct Service {
     /// Bind, volume and tmpfs mounts of an image service.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mounts: Option<Vec<Mount>>,
+    /// true: the image service's root is writable, as a container's: a copy of the image on the
+    /// data disk (its layer), kept when the service is killed and restarted, and after a power
+    /// cut as far as it was flushed (MANIFEST.md "A writable root for image services").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writable: Option<bool>,
+    /// Where the service keeps its data, for the faults that hit one service's storage
+    /// (MANIFEST.md "Storage faults of one service"): a directory under /data (G= corrupts files
+    /// there), or {dir:, size_mib:} to make that directory the service's own file system on the
+    /// data disk (L=, a power loss of this service alone).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage: Option<Storage>,
+}
+
+/// A service's storage: the directory under /data, or the directory with its own file system.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    untagged,
+    expecting = "a directory under /data, or a mapping with dir: and size_mib:"
+)]
+pub enum Storage {
+    Dir(String),
+    Own(StorageSpec),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct StorageSpec {
+    /// The directory, relative to /data (or starting with /data/).
+    pub dir: String,
+    /// The size of the service's own file system (a partition of the data disk, ext4 with a
+    /// journal, mounted on the directory), 16 to 3072 MiB. Without it the directory stays on the
+    /// shared data file system.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_mib: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
 }
 
 /// A Docker/OCI image: a `docker save` tar or an OCI layout directory, or one per architecture.
@@ -905,6 +954,24 @@ pub struct Fake {
     pub reference: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routes: Option<Vec<FakeRoute>>,
+    /// HTTPS: the fake also answers TLS for these host names, with a certificate of the image's
+    /// own test CA, which the guest and every image service trust.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<Tls>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
+}
+
+/// HTTPS for a fake or a proxy (MANIFEST.md "HTTPS for fakes and proxies").
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct Tls {
+    /// The host names the system calls (e.g. api.stripe.com); /etc/hosts sends them here.
+    pub hosts: Vec<String>,
+    /// The TLS port on the endpoint's address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 443))]
+    pub port: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
@@ -941,8 +1008,53 @@ pub struct FakeRoute {
     pub idempotent: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webhook: Option<Webhook>,
+    /// Store fields of the object a request creates or changes, when it takes effect; later
+    /// answers read them as `{obj:<field>}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub save: Option<FakeSave>,
+    /// The key (a template) of the object a request is about; a missing one is answered 404 and
+    /// takes no effect. The answer reads its fields as `{obj:<field>}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub load: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
+}
+
+/// `save:` of a fake's route: the object's key and the fields to store (templates).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct FakeSave {
+    pub key: Text,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fields: Option<IndexMap<String, Text>>,
+}
+
+/// `sign:` of a webhook: an HMAC-SHA256 signature header on every delivery attempt.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct WebhookSign {
+    /// The header that carries the signature.
+    pub header: Text,
+    /// The endpoint secret; its bytes are the HMAC key.
+    pub secret: Text,
+    /// What is signed: `{ts}` (the attempt's Unix seconds), `{body}` and the webhook's values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "{ts}.{body}"))]
+    pub payload: Option<Text>,
+    /// The header's value; `{hmac}` is the signature.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "t={ts},v1={hmac}"))]
+    pub value: Option<Text>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "hex"))]
+    pub encoding: Option<SignEncoding>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum SignEncoding {
+    Hex,
+    Base64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -960,6 +1072,8 @@ pub struct Webhook {
     pub delay_ms: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retries: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sign: Option<WebhookSign>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
@@ -987,6 +1101,9 @@ pub struct Proxy {
     /// The service (with a port:) the proxy stands in front of.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service: Option<Text>,
+    /// HTTPS: the proxy also answers TLS for these host names (and forwards in plain text).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<Tls>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

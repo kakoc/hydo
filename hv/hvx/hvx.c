@@ -503,7 +503,17 @@ enum {
  * split (RAM below the hole + RAM above 4 GiB + a split e820), a deferred follow-on.
  */
 #define HVX_MMIO_HOLE_BASE 0xfe000000UL	/* 4th-GiB MMIO window base (must stay unbacked) */
-#define MAX_GPAGES 786432U		/* 3 GiB / 4 KiB (below the MMIO hole; EPT PD fan-out) */
+/*
+ * M179: guest RAM up to 8 GiB, split around the hole. RAM page index i (guest_pages[i], the
+ * mmap offset, the dirty log's bit) is guest-physical page i while i < n_low_pages (the low
+ * block, at most 3 GiB: every guest of 3 GiB or less is exactly as before), and guest-physical
+ * page HVX_RAM_HIGH_GFN + (i - n_low_pages) above that (the high block, from 4 GiB). The low
+ * block is full (3 GiB, a whole number of 2 MiB EPT PTs) whenever a high block exists, so EPT PT
+ * k (RAM block k) maps either GPA block k or GPA block (k - 1536) + 2048 (hvx_ept_gblock).
+ */
+#define HVX_RAM_LOW_PAGES 786432U	/* 3 GiB / 4 KiB: the low block's most (below the MMIO hole) */
+#define HVX_RAM_HIGH_GFN 0x100000UL	/* 4 GiB / 4 KiB: the high block's first guest-physical page */
+#define MAX_GPAGES 2097152U		/* 8 GiB / 4 KiB (M179; was the low block's 3 GiB) */
 #define EPT_PT_LEAVES 512		/* 4 KiB EPT leaves per PT page (also PD entries per PD page) */
 
 #define GDT_LIMIT  0x27			/* null + code + data + 16-byte TSS */
@@ -971,7 +981,8 @@ struct hvx_vm {
 
 	/* SHARED guest RAM + EPT (all vCPUs share one physical address space) */
 	unsigned int  n_guest_pages;		/* size of guest RAM in pages */
-	unsigned long *guest_pages;		/* host-virt of each guest page [n] */
+	unsigned int  n_low_pages;		/* of them below the hole, from GPA 0 (M179; the rest from 4 GiB) */
+	unsigned long *guest_pages;		/* host-virt of each guest page [n], by RAM page index */
 	unsigned long ept_pg[2];		/* EPT PML4, PDPT (fixed top two levels) */
 	unsigned long *ept_pd;			/* EPT PD pages [n_ept_pd] (M28 fan-out; 512 PT entries each = 1 GiB) */
 	unsigned int  n_ept_pd;
@@ -1445,7 +1456,35 @@ static void build_guest_page_tables(struct hvx_vm *vm)
  * page; used only for the low system pages, which always exist) */
 static inline void *gpa_host(struct hvx_vm *vm, unsigned long gpa)
 {
-	return (void *)(vm->guest_pages[gpa >> 12] + (gpa & (PAGE_SIZE - 1)));
+	unsigned long gfn = gpa >> 12;
+
+	if (gfn >= vm->n_low_pages)		/* the high block (M179) */
+		gfn = vm->n_low_pages + (gfn - HVX_RAM_HIGH_GFN);
+	return (void *)(vm->guest_pages[gfn] + (gpa & (PAGE_SIZE - 1)));
+}
+
+/* M179: the RAM page index of guest-physical page `gfn`, or -1 when it is not guest RAM (the
+ * hole between the low block's end and 4 GiB, or above the high block). */
+static inline long hvx_gfn_ram(const struct hvx_vm *vm, u64 gfn)
+{
+	if (gfn < vm->n_low_pages)
+		return (long)gfn;
+	if (gfn >= HVX_RAM_HIGH_GFN && gfn - HVX_RAM_HIGH_GFN < vm->n_guest_pages - vm->n_low_pages)
+		return (long)(vm->n_low_pages + (gfn - HVX_RAM_HIGH_GFN));
+	return -1;
+}
+
+static inline bool hvx_gpa_is_ram(const struct hvx_vm *vm, u64 gpa)
+{
+	return hvx_gfn_ram(vm, gpa >> PAGE_SHIFT) >= 0;
+}
+
+/* M179: the guest-physical 2 MiB block that EPT PT k (RAM pages k*512 ..) maps */
+static inline unsigned int hvx_ept_gblock(const struct hvx_vm *vm, unsigned int k)
+{
+	unsigned int low_pts = DIV_ROUND_UP(vm->n_low_pages, EPT_PT_LEAVES);
+
+	return k < low_pts ? k : k - low_pts + (unsigned int)(HVX_RAM_HIGH_GFN / EPT_PT_LEAVES);
 }
 
 /*
@@ -1504,8 +1543,9 @@ static void build_guest_system(struct hvx_vm *vm)
  * covers 512 pages (2 MiB); n_ept_pt = ceil(n/512) of them. Milestone 28: the PD
  * level FANS OUT -- one PD page holds 512 PT entries (1 GiB), so n_ept_pd =
  * ceil(n_ept_pt/512) PD pages hang off the single PDPT (PDPT entry p -> PD page p),
- * reaching up to 512 GiB of GPA (we cap RAM at 3 GiB below the MMIO hole). Returns
- * the EPTP (4-level walk, WB).
+ * reaching up to 512 GiB of GPA. M179: the PTs of RAM above the low block hang at 4 GiB
+ * (hvx_ept_gblock); the PD of the 4th GiB then has no entries. Returns the EPTP (4-level
+ * walk, WB).
  */
 static u64 build_ept(struct hvx_vm *vm)
 {
@@ -1517,10 +1557,11 @@ static u64 build_ept(struct hvx_vm *vm)
 	for (p = 0; p < vm->n_ept_pd; p++)
 		l3[p] = __pa((void *)vm->ept_pd[p]) | 0x7;
 	for (k = 0; k < vm->n_ept_pt; k++) {
-		u64 *l2 = (u64 *)vm->ept_pd[k / EPT_PT_LEAVES];
+		unsigned int g = hvx_ept_gblock(vm, k);	/* == k below the hole (M179) */
+		u64 *l2 = (u64 *)vm->ept_pd[g / EPT_PT_LEAVES];
 		u64 *l1 = (u64 *)vm->ept_pt[k];
 
-		l2[k % EPT_PT_LEAVES] = __pa((void *)vm->ept_pt[k]) | 0x7;
+		l2[g % EPT_PT_LEAVES] = __pa((void *)vm->ept_pt[k]) | 0x7;
 		for (i = 0; i < EPT_PT_LEAVES; i++) {
 			unsigned int pg = k * EPT_PT_LEAVES + i;
 
@@ -2848,12 +2889,16 @@ static enum vblk_fault vblk_fault_decide(struct hvx_vblk *d, u64 req_index,
  * VA). Bounds-checked against guest RAM; returns false on an out-of-range range. */
 static bool hvx_guest_rw(struct hvx_vm *vm, u64 gpa, void *buf, u64 len, bool to_guest)
 {
-	u64 limit = (u64)vm->n_guest_pages * PAGE_SIZE;
+	u64 low = (u64)vm->n_low_pages * PAGE_SIZE;
+	u64 high = (u64)(vm->n_guest_pages - vm->n_low_pages) * PAGE_SIZE;
+	u64 hb = HVX_RAM_HIGH_GFN << PAGE_SHIFT;
 	u8 *b = buf;
 
 	if (len == 0)
 		return true;
-	if (gpa >= limit || len > limit || gpa + len > limit)
+	/* the range lies in one block: the hole between them is not RAM (M179) */
+	if (!(gpa < low && len <= low && gpa + len <= low) &&
+	    !(gpa >= hb && len <= high && gpa - hb + len <= high))
 		return false;
 	while (len) {
 		u64 off = gpa & (PAGE_SIZE - 1);
@@ -2865,7 +2910,7 @@ static bool hvx_guest_rw(struct hvx_vm *vm, u64 gpa, void *buf, u64 len, bool to
 		if (to_guest) {
 			memcpy(host, b, chunk);
 			if (vm->dl_ram)		/* dirty log (M138): a module write into the guest */
-				__set_bit(gpa >> PAGE_SHIFT, vm->dl_ram);
+				__set_bit(hvx_gfn_ram(vm, gpa >> PAGE_SHIFT), vm->dl_ram);
 		} else {
 			memcpy(b, host, chunk);
 		}
@@ -3596,7 +3641,6 @@ static void hvx_pio(struct hvx_vcpu *vcpu)
 	bool is_in = q & (1U << 3);
 	bool is_string = q & (1U << 4);
 	bool is_rep = q & (1U << 5);
-	u64 limit = (u64)vm->n_guest_pages * PAGE_SIZE;
 
 	if (is_string) {
 		u64 count = is_rep ? vcpu->regs.rcx : 1;
@@ -3611,9 +3655,9 @@ static void hvx_pio(struct hvx_vcpu *vcpu)
 		 * a source address can only come back into RAM by wrapping past 2^64.
 		 */
 		for (i = 0; i < count && !is_in && port == UART_BASE &&
-			    vm->console_len < HVX_CONSOLE_SZ && addr < limit; i++, addr += size) {
+			    vm->console_len < HVX_CONSOLE_SZ && hvx_gpa_is_ram(vm, addr); i++, addr += size) {
 			for (b = 0; b < size; b++)
-				if (addr + b < limit && vm->console_len < HVX_CONSOLE_SZ)
+				if (hvx_gpa_is_ram(vm, addr + b) && vm->console_len < HVX_CONSOLE_SZ)
 					vm->console[vm->console_len++] =
 						*(u8 *)gpa_host(vm, addr + b);
 		}
@@ -3748,7 +3792,7 @@ static bool fetch_guest_insn(struct hvx_vm *vm, u64 rip, u8 *buf, int n)
 	for (i = 0; i < n; i++) {
 		u64 p = phys + i;
 
-		if ((p >> 12) >= vm->n_guest_pages)
+		if (!hvx_gpa_is_ram(vm, p))
 			return false;
 		buf[i] = *(u8 *)gpa_host(vm, p);
 	}
@@ -6702,6 +6746,7 @@ static void hvx_vm_free_pages(struct hvx_vm *vm)
 		vm->guest_pages = NULL;
 	}
 	vm->n_guest_pages = 0;
+	vm->n_low_pages = 0;
 	if (vm->ept_pt) {
 		for (i = 0; i < vm->n_ept_pt; i++)
 			if (vm->ept_pt[i]) free_page(vm->ept_pt[i]);
@@ -6758,7 +6803,7 @@ static void seed_vcpu(struct hvx_vcpu *vc, struct hvx_vm *vm, u32 index)
 
 	memset(&vc->regs, 0, sizeof(vc->regs));
 	vc->regs.rip    = GPA_CODE;
-	vc->regs.rsp    = (u64)vm->n_guest_pages * PAGE_SIZE - 16;
+	vc->regs.rsp    = (u64)vm->n_low_pages * PAGE_SIZE - 16;	/* the low block's top (M179) */
 	vc->regs.rflags = 0x2;		/* reserved bit set, IF=0 */
 	vc->tsc = 0;
 	vc->tsc_step = 1;		/* RDTSC returns 0, 1, 2, ... by default */
@@ -6782,7 +6827,7 @@ static void seed_vcpu(struct hvx_vcpu *vc, struct hvx_vm *vm, u32 index)
 
 static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 {
-	unsigned long n, npt, npd;
+	unsigned long n, nlow, npt, npd, gtop;
 	unsigned int i, nv;
 	int ok = 1;
 
@@ -6813,10 +6858,13 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	n = cfg->mem_size ? DIV_ROUND_UP(cfg->mem_size, PAGE_SIZE) : 64;
 	if (n < MIN_GPAGES)
 		n = MIN_GPAGES;
-	if (n > MAX_GPAGES)			/* > 3 GiB rejected (below the MMIO hole) */
+	if (n > MAX_GPAGES)			/* > 8 GiB rejected (M179; 3 GiB before) */
 		return -EINVAL;
-	npt = DIV_ROUND_UP(n, EPT_PT_LEAVES);	/* EPT PT pages (<= 1536 for 3 GiB) */
-	npd = DIV_ROUND_UP(npt, EPT_PT_LEAVES);	/* EPT PD pages (M28 fan-out; <= 3 for 3 GiB) */
+	nlow = min_t(unsigned long, n, HVX_RAM_LOW_PAGES);	/* the rest from 4 GiB (M179) */
+	npt = DIV_ROUND_UP(n, EPT_PT_LEAVES);	/* EPT PT pages (<= 1536 for 3 GiB, 4096 for 8 GiB) */
+	/* the guest-physical 2 MiB blocks the PTs reach: as many as the PTs below the hole */
+	gtop = n > nlow ? HVX_RAM_HIGH_GFN / EPT_PT_LEAVES + (npt - nlow / EPT_PT_LEAVES) : npt;
+	npd = DIV_ROUND_UP(gtop, EPT_PT_LEAVES);	/* EPT PD pages (M28 fan-out; 3 for 3 GiB, 9 for 8 GiB) */
 
 	/* compile-time ABI/layout checks (were in the old create path) */
 	BUILD_BUG_ON(SWMSR_COUNT != HVX_NR_SW_MSR);
@@ -6825,13 +6873,20 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	BUILD_BUG_ON(sizeof(((struct hvx_vcpu *)0)->lapic.reg) !=
 		     sizeof(((struct hvx_snapshot *)0)->lapic_reg));
 	BUILD_BUG_ON(sizeof(vm->ioapic.redir) != sizeof(((struct hvx_snapshot *)0)->ioapic_redir));
-	/* M28 guardrails. (1) Guest RAM must stay BELOW the 4th-GiB MMIO hole, else a
+	/* M28 guardrails. (1) Guest RAM must stay out of the 4th-GiB MMIO hole, else a
 	 * flat GPA space silently backs the LAPIC/IOAPIC/virtio BARs with RAM and breaks
-	 * every MMIO trap with no fault. (2) The EPT PD fan-out hangs off ONE PDPT page
-	 * (512 entries), so the whole PD level must fit in 512 pages. Both hold for 3 GiB;
-	 * a future >3.9 GiB config needs the PCI-hole split first. */
-	BUILD_BUG_ON((u64)MAX_GPAGES * PAGE_SIZE > HVX_MMIO_HOLE_BASE);
-	BUILD_BUG_ON(DIV_ROUND_UP(DIV_ROUND_UP(MAX_GPAGES, EPT_PT_LEAVES), EPT_PT_LEAVES) > EPT_PT_LEAVES);
+	 * every MMIO trap with no fault: the low block ends below it, the rest starts at
+	 * 4 GiB (M179). (2) The EPT PD fan-out hangs off ONE PDPT page (512 entries), so
+	 * the whole PD level must fit in 512 pages. (3) The low block is whole PTs. */
+	BUILD_BUG_ON((u64)HVX_RAM_LOW_PAGES * PAGE_SIZE > HVX_MMIO_HOLE_BASE);
+	BUILD_BUG_ON(HVX_RAM_LOW_PAGES % EPT_PT_LEAVES);
+	BUILD_BUG_ON((HVX_RAM_HIGH_GFN << PAGE_SHIFT) < 0x100000000ULL);
+	BUILD_BUG_ON(DIV_ROUND_UP(HVX_RAM_HIGH_GFN + MAX_GPAGES - HVX_RAM_LOW_PAGES,
+				  (u64)EPT_PT_LEAVES * EPT_PT_LEAVES) > EPT_PT_LEAVES);
+	BUILD_BUG_ON(HVX_DISK_MMAP_PGOFF <= MAX_GPAGES);	/* the two mmap windows stay apart */
+	BUILD_BUG_ON((u64)HVX_RAM_LOW_PAGES * PAGE_SIZE != HVX_RAM_LOW_MAX);	/* hvx_abi.h's layout */
+	BUILD_BUG_ON((u64)HVX_RAM_HIGH_GFN * PAGE_SIZE != HVX_RAM_HIGH_BASE);
+	BUILD_BUG_ON((u64)MAX_GPAGES * PAGE_SIZE != HVX_RAM_MAX);
 
 	vm->guest_pages = kvmalloc_array(n, sizeof(*vm->guest_pages),
 					 GFP_KERNEL | __GFP_ZERO);
@@ -6853,6 +6908,7 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->hc_on = !!(cfg->flags & HVX_VM_HOSTCALL);
 	vm->dl_on = !!(cfg->flags & HVX_VM_DIRTY_LOG);
 	vm->n_guest_pages = n;
+	vm->n_low_pages = nlow;
 	vm->n_ept_pt = npt;
 	vm->n_ept_pd = npd;
 	vm->n_vcpus = nv;

@@ -28,7 +28,7 @@
 //! are the transcripts of those checked runs. `HYDO_BLESS=1` re-records the goldens; `HYDO_CONTROL_FULL=1` uses the identity test's full
 //! 300 seeds instead of 40.
 
-mod support;
+use crate::support;
 
 use hydo_control::{Ending, Plan, Transcript};
 use hydo_explore::gen::{Backend, Ex};
@@ -373,6 +373,7 @@ fn the_core_controllers_transcripts_on_the_identity_corpus() {
                     acked: ids,
                     failed: f,
                     world,
+                    ..
                 }) = r.run.fin.ending.clone()
                 else {
                     unreachable!()

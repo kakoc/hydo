@@ -18,8 +18,13 @@ in `hydo guide manifest`.
 | `disk` | I/O errors, a lying disk that drops acknowledged writes | host `disk=ioerr:<p>`, `disk=lying:<p>` |
 | `freeze` | stop a service at the n-th packet it sends to or receives from a peer (on a Mac: a release with the second guest kernel) | `F=<svc>><peer>@<round>#<n>:<ms>` |
 | `protocol` | faults on fakes and proxies (`hydo guide outside-services`) | `H=...` |
+| `corrupt` | bit flips, zeroed ranges or truncation of one file in a service's `storage:` directory, while the service runs or while it is down | `G=<svc>@<round>[+<down>]:flip\|zero\|trunc[,n=][,len=][,file=][,seed=]` |
+| `powerloss` | a power loss of one service: what it had not written back to its own file system (`storage: {dir:, size_mib:}`) is lost, the others run on | `L=<svc>@<round>+<down>` |
 
 Leave out kinds that cannot apply (no `network` for a project whose services have no port).
+`corrupt` and `powerloss` need `services[].storage` (`hydo guide manifest`, "Storage faults of
+one service"): the directory under /data where the service keeps its files, with `size_mib` for
+a file system of its own.
 A schedule looks like `disk=none dseed=1 | run K=db@5+2 C=12 W=0000002a,p4,q2,r200`: host tokens
 before the `|`, guest tokens after `run`.
 
@@ -70,13 +75,18 @@ hydo save <explore dir>                          # minimal schedules -> hydo/reg
 ```
 
 Useful options (`hydo explore` passes them to the explorer): `--more-faults` (timed kills and
-k-th-flush cuts; x86_64 only, the explorer refuses it on a Mac), `--new-faults` (pauses, clock jumps, one-way loss), `--timing` (thread-timing
-jitter), `--concurrency`, `--durable-only` (only durable settings and an honest disk),
-`--protocol-faults`, `--grpc-faults`, `--buggify`, `--workers N`. The lesson of hydo's own
+k-th-flush cuts; the hvx engine only: the explorer refuses it with `--backend kvm` and on a Mac,
+`hydo guide capabilities`), `--new-faults` (pauses, clock jumps, one-way loss), `--timing`
+(thread-timing jitter), `--concurrency` (a manifest knob `Q`), `--durable-only` (only durable settings and an honest disk),
+`--protocol-faults`, `--grpc-faults`, `--buggify`, `--storage-faults` (`G=` and `L=` for
+services with `storage:`), `--workers N`. The lesson of hydo's own
 benchmark: where and in what combination faults land matters more than how the next schedule is
-chosen, so prefer `--strategy process` with `--more-faults` (on a Mac, `--new-faults`).
+chosen, so prefer `--strategy process` with `--more-faults` (with `--backend kvm` and on a Mac,
+`--new-faults`).
 
-One schedule holds one `K=`, one `P=` and one `X=` (a second one is refused). To crash or stop
+One schedule holds one `K=`, one `P=` and one `X=` (a second one is refused), and every token
+names what the image has: a service, a link between services with `addr:`, a fake or proxy, a
+knob of `knobs:` (a token for anything else is refused before the run, naming what the image has). To crash or stop
 several services at once (every node of a cluster), use reactions: `A=<event>:kill-<svc>` once
 per service, where `<event>` is the id of an assertion record the system writes to the console
 (`hydo guide manifest`, "Reactions"); `hydo explore --reactive fault --react-events <id>` draws

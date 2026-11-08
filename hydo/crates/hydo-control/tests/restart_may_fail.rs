@@ -11,7 +11,7 @@
 //! invariants do not run. A worker that does come back changes nothing. Each run is made twice
 //! (one transcript) and typed again from its transcript (the same transcript).
 
-mod support;
+use crate::support;
 
 use hydo_control::{Ending, Plan};
 use hydo_schedule::Schedule;

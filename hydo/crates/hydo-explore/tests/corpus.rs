@@ -23,7 +23,7 @@
 //! The example manifests are pinned in the golden. `HYDO_BLESS=1` re-records from the Rust output.
 //! Default: the full corpus; HYDO_CORPUS_QUICK=1 for about a tenth.
 
-mod support;
+use crate::support;
 
 use hydo_explore::compose::{self, OItem};
 use hydo_explore::gen::{Backend, Ex, TJ_MAX};

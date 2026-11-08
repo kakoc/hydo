@@ -10,7 +10,7 @@
 //! that fails is), not at all when the event never comes, and a schedule whose reaction never
 //! fires runs the same commands as the schedule without it (only the declaration is added).
 
-mod support;
+use crate::support;
 
 use hydo_agent_proto::msg::{Command, Sig};
 use hydo_control::drive::{self, Policy, RunFrom};
@@ -338,8 +338,14 @@ fn over_one_link_a_reactions_cut_reaches_the_recovery_and_replays() {
             &s,
             RunFrom::Restored,
             &Policy::Schedule,
-        )
-        .unwrap();
+        );
+        // a reaction on a service the image does not have is refused before the run
+        // (hydo_control::names); the conversations above keep its ignored path
+        if hydo_control::names::check(&plan, &s).is_err() {
+            assert!(got.is_err(), "{text}: driven");
+            continue;
+        }
+        let got = got.unwrap();
         let want = run_schedule(&sb, &s).unwrap();
         assert_eq!(got.run.transcript, want.run.fin.transcript, "{text}");
         assert_eq!(

@@ -69,6 +69,8 @@ mod restart;
 // reactions, the schedule token A= (M139)
 #[path = "features/react.rs"]
 mod react;
+// the storage faults of one service, G= and L= (docs/design/storage-faults.md)
+mod storage;
 
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
@@ -141,6 +143,10 @@ struct RunCfg {
     o: Option<netfault::NetTok>,
     /// A= (M139): the reactions, in token order.
     a: Vec<hydo_schedule::React>,
+    /// G=: (svc, at, down, what) (docs/design/storage-faults.md).
+    z: Option<(String, i64, Option<i64>, hydo_schedule::Corruption)>,
+    /// L=: (svc, at, up).
+    l: Option<(String, i64, i64)>,
 }
 
 #[derive(Debug)]
@@ -388,6 +394,21 @@ impl ScheduleController {
         schedule: &Schedule,
         s1: &GuestState,
     ) -> Result<ScheduleController, Unsupported> {
+        crate::names::check(&plan, schedule).map_err(Unsupported::other)?;
+        Self::run_unchecked(plan, schedule, s1)
+    }
+
+    /// [`ScheduleController::run`] without the check of what the schedule names
+    /// ([`crate::names`]): a token for a service, link, fake or knob the image lacks is ignored
+    /// with a log line, as before that check. Only the identity corpora use it, so that their
+    /// recorded transcripts keep covering those paths; every product path refuses such a
+    /// schedule.
+    #[doc(hidden)]
+    pub fn run_unchecked(
+        plan: Plan,
+        schedule: &Schedule,
+        s1: &GuestState,
+    ) -> Result<ScheduleController, Unsupported> {
         let cfg = run_cfg(&plan, schedule)?;
         Self::new(plan, Conversation::Run, cfg, Some(s1))
     }
@@ -433,6 +454,7 @@ impl ScheduleController {
             .expect("a new controller")
             .carried = recovery::Carried {
             clock: inputs.clock,
+            outcomes: inputs.outcomes.clone(),
         };
         Ok(c.with_world(&inputs.world))
     }
@@ -475,7 +497,11 @@ fn repeated_fault(s: &Schedule) -> Option<char> {
     for t in &s.guest {
         if matches!(
             t,
-            GuestToken::Kill { .. } | GuestToken::Pause(_) | GuestToken::TimedKill { .. }
+            GuestToken::Kill { .. }
+                | GuestToken::Pause(_)
+                | GuestToken::TimedKill { .. }
+                | GuestToken::Corrupt { .. }
+                | GuestToken::PowerLoss { .. }
         ) {
             if seen.contains(&t.letter()) {
                 return Some(t.letter());
@@ -492,7 +518,8 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
         guest_text: s.guest_text(),
         ..RunCfg::default()
     };
-    // (no driven token depends on the plan since T= and B= are; the remaining seams may)
+    // (a token naming what the image does not have is refused before, by ScheduleController::run
+    // with names.rs; here it is ignored with a log line, for the identity corpora)
     let _ = plan;
     if let Some(l) = repeated_fault(s) {
         return Err(Unsupported::other(format!(
@@ -565,6 +592,18 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             GuestToken::Clock { at, delta } => c.t = Some((*at as i64, *delta)),
             // M139: reactions (features/react.rs)
             GuestToken::React(r) => c.a.push(r.clone()),
+            // the storage faults of one service (schedule/storage.rs)
+            GuestToken::Corrupt { svc, at, down, how } => {
+                c.z = Some((
+                    svc.clone(),
+                    *at as i64,
+                    down.map(|d| (*at + d) as i64),
+                    how.clone(),
+                ))
+            }
+            GuestToken::PowerLoss { svc, at, down } => {
+                c.l = Some((svc.clone(), *at as i64, (*at + *down) as i64))
+            }
             // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
             // branch with `buggify: true`, else an unknown knob), and H=, W=, Q= (core plans have
             // no fakes or composer; Q= is the stack's) are knobs the manifest does not have, so
@@ -1308,6 +1347,7 @@ fn mount_data(fx: &mut F<'_>, ctx: &Ctx, verdict: &str) -> Step<()> {
             l.data_dev, l.data_dir, ctx.plan.data_opts
         ),
     );
+    storage::mount_all(fx, ctx, verdict)?; // the services' own file systems (none: nothing sent)
     errlog::after_mount(fx, ctx) // SEAM(ErrorLogs): the data-disk files' line counts
 }
 
@@ -1786,9 +1826,72 @@ fn retry_workload(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 
 /// failed_ids: the ids whose last outcome is `failed`, written to $HYDO_FAILED; its text.
 fn failed_ids(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
+    failed_ids_outcomes(fx, ctx).map(|(f, _)| f)
+}
+
+/// The last outcome of every id of an outcomes file, as `<id> <outcome>` lines in the order of
+/// [`failed_of`] (`sort -n`); the outcome is the second word of the id's last line ("" when the
+/// line has one word).
+pub fn last_outcomes(outcomes: &str) -> Vec<String> {
+    let mut o: BTreeMap<String, String> = BTreeMap::new();
+    for l in lines(outcomes) {
+        let f: Vec<&str> = l.split([' ', '\t']).filter(|x| !x.is_empty()).collect();
+        if let Some(id) = f.first() {
+            o.insert(id.to_string(), f.get(1).copied().unwrap_or("").to_string());
+        }
+    }
+    let mut v: Vec<(String, String)> = o.into_iter().collect();
+    v.sort_by(|(a, _), (b, _)| {
+        num_key(a)
+            .partial_cmp(&num_key(b))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.as_bytes().cmp(b.as_bytes()))
+    });
+    v.into_iter()
+        .map(|(id, o)| {
+            if o.is_empty() {
+                id
+            } else {
+                format!("{id} {o}")
+            }
+        })
+        .collect()
+}
+
+/// The report line that carries the last outcomes across a power cut
+/// (`guest.outcomes_after_cut: true`): `hydo-explore-outcomes: <id>=<outcome> ...`.
+pub const OUTCOMES_PREFIX: &str = "hydo-explore-outcomes:";
+
+/// The words of the outcomes report line: `<id>=<outcome>` (`<id>` alone without an outcome).
+fn outcomes_words(o: &[String]) -> String {
+    o.iter()
+        .map(|l| l.replacen(' ', "=", 1))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The `<id> <outcome>` lines of the outcomes report line's words.
+pub fn outcomes_of_words(words: &[String]) -> Vec<String> {
+    words
+        .iter()
+        .map(|w| match w.rsplit_once('=') {
+            Some((id, o)) => format!("{id} {o}"),
+            None => w.clone(),
+        })
+        .collect()
+}
+
+/// [`failed_ids`], and the last outcomes when the plan carries them across a power cut
+/// (`guest.outcomes_after_cut`; empty otherwise).
+fn failed_ids_outcomes(fx: &mut F<'_>, ctx: &Ctx) -> Step<(String, Vec<String>)> {
     let l = &ctx.plan.layout;
     let outcomes = read_all(fx, &l.outcomes())?;
     let failed = failed_of(&outcomes);
+    let last = if ctx.plan.outcomes_after_cut {
+        last_outcomes(&outcomes)
+    } else {
+        Vec::new()
+    };
     // `... | sort -n > $HYDO_FAILED`
     let parts = chunks(&failed);
     post(
@@ -1802,7 +1905,7 @@ fn failed_ids(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
     for p in parts.iter().skip(1) {
         post(fx, write_cmd(&l.failed(), p, true))?;
     }
-    Ok(failed)
+    Ok((failed, last))
 }
 
 /// provision: the provisioning command, sync, the setup marker.
@@ -2031,6 +2134,17 @@ fn main_recovery(fx: &mut F<'_>, ctx: &Ctx, acked: &[String], failed: &[String])
             post(fx, write_cmd(&file, &c, true))?;
         }
     }
+    // guest.outcomes_after_cut: the first boot's last outcomes (nothing is written without
+    // the key, so such a plan's recovery boot is the same as before it)
+    let text: String = ctx
+        .carried
+        .outcomes
+        .iter()
+        .map(|o| format!("{o}\n"))
+        .collect();
+    for c in chunks(&text) {
+        post(fx, write_cmd(&l.outcomes(), &c, true))?;
+    }
     // SEAM(Clock): hydo-init-clock.sh's mount_data: the clock continues from the first boot's
     clock::recovery_clock(fx, ctx)?;
     mount_data(fx, ctx, "HYDO-ORACLE: VIOLATION data disk unmountable")?;
@@ -2060,6 +2174,14 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     }
     if cfg.x.is_some() {
         let (t, id, msg) = KILL_TIMER_DECL;
+        fx.report(decl(t, id, msg));
+    }
+    if cfg.z.is_some() {
+        let (t, id, msg) = storage::CORRUPT_DECL;
+        fx.report(decl(t, id, msg));
+    }
+    if cfg.l.is_some() {
+        let (t, id, msg) = storage::POWER_LOSS_DECL;
         fx.report(decl(t, id, msg));
     }
     // M139: the reactions (A=), armed before their step
@@ -2112,8 +2234,28 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             xat = -1;
         }
     }
+    // the storage faults (schedule/storage.rs): G= (zsvc, zat, zup) and L= (lsvc, lat, lup)
+    let (mut zsvc, mut zat, mut zup) = (String::new(), -1i64, -1i64);
+    if let Some((s, at, up, _)) = &cfg.z {
+        zsvc = s.clone();
+        (zat, zup) = (*at, up.unwrap_or(-1));
+        if !known(s) {
+            log(fx, format!("G: no service {s}, ignored"));
+            (zat, zup) = (-1, -1);
+        }
+    }
+    let (mut lsvc, mut lat, mut lup) = (String::new(), -1i64, -1i64);
+    if let Some((s, at, up)) = &cfg.l {
+        lsvc = s.clone();
+        (lat, lup) = (*at, *up);
+        if !known(s) {
+            log(fx, format!("L: no service {s}, ignored"));
+            (lat, lup) = (-1, -1);
+        }
+    }
     let mut pts: Vec<i64> = [0, kat, kup, cat, pat, pup, tat, xat, steps]
         .into_iter()
+        .chain([zat, zup, lat, lup])
         .chain(net.points())
         .chain(reactions.iter().map(|(_, r)| r.at as i64))
         .filter(|p| *p >= 0 && *p <= steps)
@@ -2126,6 +2268,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     start_periodic(fx, ctx)?;
     restart::start(fx, ctx)?; // restart policies (M134): from the workload's start
     let (mut down, mut cut, mut paused) = (false, false, false);
+    let (mut zdown, mut ldown) = (false, false);
     let (mut ptimer, mut xtimer): (Option<usize>, Option<usize>) = (None, None);
     let mut prev: Option<i64> = None;
     // M139: the reactions' threads, and whether a reaction's power cut ended the steps
@@ -2183,6 +2326,62 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             svc_sig(fx, &ksvc, Sig::Kill)?;
             down = true;
             log(fx, format!("KILLED {ksvc} before step {p}"));
+        }
+        // the storage faults of one service (schedule/storage.rs): restarts first, as K=
+        for (svc, up, is_down, why) in [
+            (&lsvc, lup, &mut ldown, "after its power loss"),
+            (&zsvc, zup, &mut zdown, "its files were corrupted"),
+        ] {
+            if p == up && *is_down {
+                *is_down = false;
+                // another fault on the same service (K=, or the other storage token) may have
+                // started it again already; its restart then stays the only one
+                fx.until(|h, _| !h.starting.contains(svc.as_str()))?;
+                if fx.effect_bool(|h, f| running(h, f, svc)) {
+                    log(
+                        fx,
+                        format!("{svc} is running before step {p}; not restarted again"),
+                    );
+                    continue;
+                }
+                log(fx, format!("restarting {svc} before step {p}"));
+                // K= on the same service would wait for this process to end before its restart
+                if *svc == ksvc {
+                    down = false;
+                }
+                if !start_svc(fx, ctx, svc)? {
+                    let after_faults =
+                        p == steps && ctx.plan.service(svc).is_some_and(|s| s.restart_may_fail);
+                    if !after_faults {
+                        return die_oracle(
+                            fx,
+                            format!("HYDO-ORACLE: ERROR {svc} restart failed ({why})"),
+                        );
+                    }
+                    log(
+                        fx,
+                        format!("{svc} restart failed after the last step (restart_may_fail): left to the heal"),
+                    );
+                }
+            }
+        }
+        if p == lat {
+            fx.until(|h, _| !h.starting.contains(&lsvc))?;
+            ldown = storage::power_loss(fx, ctx, &lsvc, p)?;
+        }
+        if p == zat {
+            let how = cfg.z.as_ref().map(|z| z.3.clone()).expect("G= read");
+            fx.until(|h, _| !h.starting.contains(&zsvc))?;
+            if zup >= 0 {
+                svc_sig(fx, &zsvc, Sig::Kill)?;
+                fx.until(|h, f| !running(h, f, &zsvc))?;
+                zdown = true;
+                log(
+                    fx,
+                    format!("KILLED {zsvc} before step {p} (to corrupt its files)"),
+                );
+            }
+            storage::corrupt(fx, ctx, &zsvc, &how, p)?;
         }
         // SEAM(NetFaults): `p == nfrom`: net_on; `p == oto && oneup`: heal; `p == ofrom`: one-way on.
         net.at(fx, ctx, p)?;
@@ -2263,7 +2462,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         // SEAM(Freeze): stop_periodic's wrapper: the helper must not continue the service
         freeze::kill(fx)?;
         stop_periodic(fx);
-        let failed = failed_ids(fx, ctx)?;
+        let (failed, outcomes) = failed_ids_outcomes(fx, ctx)?;
         // SEAM(Clock): hydo-init-clock.sh's failed_ids appends clock=<epoch> to the acked file
         let at_cut = clock::at_cut(fx, ctx)?;
         // SEAM(Fakes): the world frozen, dumped (fakes wraps the clock's failed_ids, so its
@@ -2281,12 +2480,17 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             "hydo-explore-failed: {}",
             failed.replace('\n', " ")
         ));
+        // guest.outcomes_after_cut: the last outcomes, for the recovery boot
+        if ctx.plan.outcomes_after_cut {
+            fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
+        }
         // SEAM(RecoveryInputs): what the recovery conversation is given
-        let ending = fakes::power_cut(ctx, &acked, &failed);
+        let ending = fakes::power_cut(ctx, &acked, &failed, outcomes);
         let Ending::PowerCut {
             acked: a,
             failed: f,
             world: w,
+            outcomes: o,
         } = &ending
         else {
             unreachable!("fakes::power_cut gives a power cut")
@@ -2296,6 +2500,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             failed: f.clone(),
             clock: at_cut.flatten(),
             world: w.clone(),
+            outcomes: o.clone(),
         };
         fx.effect(|h, _| {
             h.cut = Some(inputs);
@@ -2344,13 +2549,17 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     }
     freeze::kill(fx)?;
     stop_periodic(fx);
-    let failed = failed_ids(fx, ctx)?;
+    let (failed, outcomes) = failed_ids_outcomes(fx, ctx)?;
     let acked = read_all(fx, &l.acked())?;
     fx.report(format!("hydo-explore-acked: {}", acked.replace('\n', " ")));
     fx.report(format!(
         "hydo-explore-failed: {}",
         failed.replace('\n', " ")
     ));
+    // guest.outcomes_after_cut: a cf= power cut at the workload's end hands these over
+    if ctx.plan.outcomes_after_cut {
+        fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
+    }
     fx.report("hydo-explore-workload-done");
     // explore_read: "go" -- the host switches the disk faults off
     fx.engine(EngineAction::DiskFaultsOff);

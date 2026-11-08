@@ -897,6 +897,11 @@ impl Fake {
         })
     }
 
+    /// A file of the guest as the conversation left it ("" when there is none).
+    pub fn world_file(&self, path: &str) -> String {
+        self.world.files.get(path).cloned().unwrap_or_default()
+    }
+
     pub fn state(&self) -> VmState {
         VmState {
             t: self.t,

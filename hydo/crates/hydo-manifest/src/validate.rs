@@ -69,6 +69,8 @@ pub const KNOWN_SVC: &[&str] = &[
     "mounts",
     "restart",
     "restart_may_fail",
+    "writable",
+    "storage",
 ];
 pub const KNOWN_INV: &[&str] = &[
     "id",
@@ -86,11 +88,20 @@ pub const LIVE_ANCHORS: &[&str] = &["heal", "start"];
 pub(crate) const KNOWN_WORKLOAD: &[&str] =
     &["steps", "run", "retry", "process", "timeout", "description"];
 pub(crate) const KNOWN_DATA: &[&str] = &["size_mib", "mount", "dirs", "description"];
-pub(crate) const KNOWN_ROOT: &[&str] = &["size_mib", "nix", "files", "text", "dirs", "description"];
+pub(crate) const KNOWN_ROOT: &[&str] = &[
+    "size_mib",
+    "nix",
+    "files",
+    "text",
+    "dirs",
+    "share_images",
+    "description",
+];
 pub(crate) const KNOWN_GUEST: &[&str] = &[
     "ram_mib",
     "clock_start",
     "clock_after_cut",
+    "outcomes_after_cut",
     "cpu",
     "description",
 ];
@@ -104,14 +115,27 @@ pub const KNOWN_KNOB: &[&str] = &[
     "description",
 ];
 pub const FAULT_KINDS: &[&str] = &[
-    "kill", "pause", "network", "oneway", "cut", "clock", "disk", "freeze", "protocol",
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "disk",
+    "freeze",
+    "protocol",
+    "corrupt",
+    "powerloss",
 ];
 pub const NET_MODES: &[&str] = &["loopback", "bridge"];
 pub const NET_BRIDGE: &str = "10.89.0.0/16";
 pub const NET_GW: &str = "10.89.0.1";
 pub const RAM_MIB_MIN: i128 = 256;
-pub const RAM_MIB_MAX_X86: i128 = 3072;
-pub const RAM_MIB_MAX_ARM: i128 = 4096;
+/// Guest RAM at most, in MiB (8 GiB on every engine since Milestone 179; before it 3072 on
+/// x86_64 and 4096 on arm64).
+pub const RAM_MIB_MAX: i128 = 8192;
+pub const RAM_MIB_MAX_X86: i128 = RAM_MIB_MAX;
+pub const RAM_MIB_MAX_ARM: i128 = RAM_MIB_MAX;
 pub(crate) const KNOWN_ERRORS_TOP: &[&str] = &["level", "max", "services", "description"];
 pub(crate) const KNOWN_ERRORS_SVC: &[&str] = &[
     "format",
@@ -132,6 +156,7 @@ pub(crate) const KNOWN_FAKE: &[&str] = &[
     "idempotency",
     "ref",
     "routes",
+    "tls",
     "description",
 ];
 pub(crate) const KNOWN_PROXY: &[&str] = &[
@@ -144,8 +169,12 @@ pub(crate) const KNOWN_PROXY: &[&str] = &[
     "routes",
     "to",
     "service",
+    "tls",
     "description",
 ];
+pub(crate) const KNOWN_TLS: &[&str] = &["hosts", "port", "description"];
+/// A host name a `tls:` endpoint answers for (lower case, as DNS names are compared).
+const HOST_RE: &str = r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*";
 pub(crate) const KNOWN_ROUTE: &[&str] = &[
     "name",
     "method",
@@ -159,8 +188,12 @@ pub(crate) const KNOWN_ROUTE: &[&str] = &[
     "effect",
     "idempotent",
     "webhook",
+    "save",
+    "load",
     "description",
 ];
+pub(crate) const KNOWN_SAVE: &[&str] = &["key", "fields"];
+pub(crate) const KNOWN_SIGN: &[&str] = &["header", "secret", "payload", "value", "encoding"];
 pub(crate) const KNOWN_PROXY_ROUTE: &[&str] =
     &["name", "method", "path", "ref", "effect", "description"];
 pub(crate) const KNOWN_HOOK: &[&str] = &[
@@ -170,6 +203,7 @@ pub(crate) const KNOWN_HOOK: &[&str] = &[
     "headers",
     "delay_ms",
     "retries",
+    "sign",
     "description",
 ];
 // `query:` and `form:` names may carry brackets: the nested form encoding that Stripe, Rails and
@@ -467,6 +501,14 @@ pub fn validate(m: &mut Value) -> R<()> {
                 )));
             }
         }
+        if let Some(b) = obj_get(s, "writable") {
+            if !b.is_boolean() {
+                return Err(err(format!("{wh}: writable: must be true or false")));
+            }
+        }
+        if let Some(st) = obj_get(s, "storage") {
+            crate::storage::Storage::of(st).map_err(|m| err(format!("{wh}: storage: {m}")))?;
+        }
         for dep in or_iter(obj_get(s, "depends_on"))? {
             let mut names = Vec::new();
             for x in &svcs {
@@ -481,6 +523,7 @@ pub fn validate(m: &mut Value) -> R<()> {
             }
         }
     }
+    crate::storage::check_distinct(m).map_err(err)?;
     let wl = obj_get(m, "workload").cloned().unwrap_or(Value::Null);
     if !wl.is_object() {
         return Err(err("workload: required (steps + run)"));
@@ -647,6 +690,11 @@ pub fn validate(m: &mut Value) -> R<()> {
     unknown(&data, KNOWN_DATA, "data")?;
     let root = or_map(obj_get(m, "root"));
     unknown(&root, KNOWN_ROOT, "root")?;
+    if let Some(v) = obj_get(&root, "share_images") {
+        if !v.is_boolean() {
+            return Err(err("root.share_images: must be true or false"));
+        }
+    }
     let guest = or_map(obj_get(m, "guest"));
     unknown(&guest, KNOWN_GUEST, "guest")?;
     if has(&guest, "clock_after_cut")? {
@@ -654,6 +702,15 @@ pub fn validate(m: &mut Value) -> R<()> {
         if !int_in(c, 1, 10 * 365 * 86400) {
             return Err(err(format!(
                 "guest.clock_after_cut: whole seconds in [1, 315360000] (got {})",
+                repr(c)
+            )));
+        }
+    }
+    if has(&guest, "outcomes_after_cut")? {
+        let c = index(&guest, "outcomes_after_cut")?;
+        if !c.is_boolean() {
+            return Err(err(format!(
+                "guest.outcomes_after_cut: true or false (got {})",
                 repr(c)
             )));
         }
@@ -669,13 +726,12 @@ pub fn validate(m: &mut Value) -> R<()> {
     }
     if has(&guest, "ram_mib")? {
         let r = index(&guest, "ram_mib")?;
-        if !int_in(r, RAM_MIB_MIN, RAM_MIB_MAX_ARM) {
+        if !int_in(r, RAM_MIB_MIN, RAM_MIB_MAX) {
             return Err(err(format!(
-                "guest.ram_mib: a whole number of MiB in [{}, {}] (got {}; x86_64 allows up to {})",
+                "guest.ram_mib: a whole number of MiB in [{}, {}] (got {})",
                 RAM_MIB_MIN,
-                RAM_MIB_MAX_ARM,
-                repr(r),
-                RAM_MIB_MAX_X86
+                RAM_MIB_MAX,
+                repr(r)
             )));
         }
     }
@@ -888,6 +944,9 @@ fn validate_world(m: &Value) -> R<()> {
         .map(|s| str_of(obj_get(s, "addr").unwrap_or(&Value::Null)))
         .collect();
     let mut names: Vec<String> = Vec::new();
+    // `tls:` listeners: endpoints may share one (address, port), told apart by host name
+    let mut tls_lis: Vec<((String, i128), String)> = Vec::new();
+    let mut tls_hosts: Vec<String> = Vec::new();
     for (kind, lst, known) in [
         ("fakes", &fakes, KNOWN_FAKE),
         ("proxies", &proxies, KNOWN_PROXY),
@@ -928,13 +987,63 @@ fn validate_world(m: &Value) -> R<()> {
                     wh, ap.0, singular
                 )));
             }
-            if let Some((_, who)) = used.iter().find(|(k, _)| *k == ap) {
+            if let Some((_, who)) = used.iter().chain(tls_lis.iter()).find(|(k, _)| *k == ap) {
                 return Err(err(format!(
                     "{}: {}:{} is already used by {}",
                     wh, ap.0, pnum, who
                 )));
             }
-            used.push((ap, format!("{singular} {n}")));
+            used.push((ap.clone(), format!("{singular} {n}")));
+            if let Some(t) = obj_get(e, "tls") {
+                let tw = format!("{wh}.tls");
+                if !t.is_object() {
+                    return Err(err(format!(
+                        "{tw}: a mapping {{hosts: [<host name>, ...], port: <default 443>}}"
+                    )));
+                }
+                unknown(t, KNOWN_TLS, &tw)?;
+                let hosts = match obj_get(t, "hosts") {
+                    Some(Value::Array(a)) if !a.is_empty() => a.clone(),
+                    _ => {
+                        return Err(err(format!(
+                            "{tw}: hosts: a list of the host names the system calls (e.g. [api.stripe.com])"
+                        )))
+                    }
+                };
+                for h in &hosts {
+                    let hs = match h {
+                        Value::String(s) => s.clone(),
+                        _ => String::new(),
+                    };
+                    if hs.len() > 253 || !pyre::fullmatch(HOST_RE, &hs) {
+                        return Err(err(format!(
+                            "{}: hosts: {} is not a host name (lower-case letters, digits, '-' and '.'; no wildcard)",
+                            tw,
+                            repr(h)
+                        )));
+                    }
+                    if tls_hosts.contains(&hs) || svcs.contains_key(&hs) || names.contains(&hs) {
+                        return Err(err(format!(
+                            "{}: hosts: {} is already the name of a service or of another tls: endpoint",
+                            tw,
+                            repr_str(&hs)
+                        )));
+                    }
+                    tls_hosts.push(hs);
+                }
+                let tp = obj_get(t, "port").cloned().unwrap_or(Value::from(443));
+                if !int_in(&tp, 1, 65535) {
+                    return Err(err(format!("{tw}: port: a TCP port number (default 443)")));
+                }
+                let tap = (ap.0.clone(), py::int_of(&tp).unwrap_or(443));
+                if let Some((_, who)) = used.iter().find(|(k, _)| *k == tap) {
+                    return Err(err(format!(
+                        "{}: {}:{} is already used by {}",
+                        tw, tap.0, tap.1, who
+                    )));
+                }
+                tls_lis.push((tap, format!("the tls: listener of {singular} {n}")));
+            }
             let proto = obj_get(e, "protocol")
                 .cloned()
                 .unwrap_or(Value::String("http".into()));
@@ -1071,6 +1180,7 @@ fn validate_world(m: &Value) -> R<()> {
                         "{rw}: idempotent: true needs the fake's idempotency: (where the key is)"
                     )));
                 }
+                validate_objects(r, &rw)?;
                 let wh_ = obj_get(r, "webhook").cloned().unwrap_or(Value::Null);
                 if !wh_.is_null() {
                     let hw = format!("{rw}.webhook");
@@ -1126,8 +1236,94 @@ fn validate_world(m: &Value) -> R<()> {
                             }
                         }
                     }
+                    validate_sign(&wh_, &hw)?;
                 }
             }
+        }
+    }
+    Ok(())
+}
+
+/// A fake route's `save:` (key and fields, templates) and `load:` (a template): hydo-world's
+/// objects (hydo/crates/hydo-world/src/objects.rs).
+fn validate_objects(r: &Value, rw: &str) -> R<()> {
+    if let Some(s) = obj_get(r, "save") {
+        let sw = format!("{rw}.save");
+        if !s.is_object() {
+            return Err(err(format!("{sw}: must be a mapping (key: and fields:)")));
+        }
+        unknown(s, KNOWN_SAVE, &sw)?;
+        match obj_get(s, "key") {
+            Some(Value::String(k)) if !k.is_empty() => {}
+            _ => {
+                return Err(err(format!(
+                    "{sw}: key: the object's key, a template (e.g. 'pi_{{seq}}' or '{{path:id}}')"
+                )))
+            }
+        }
+        if let Some(f) = obj_get(s, "fields") {
+            let Value::Object(o) = f else {
+                return Err(err(format!("{sw}.fields: a mapping of field: template")));
+            };
+            for (k, x) in o {
+                if pyre::match_dollar(r"[A-Za-z_][A-Za-z0-9_.-]*", k).is_none() {
+                    return Err(err(format!(
+                        "{sw}.fields: field name {}: letters, digits, _ . -",
+                        repr_str(k)
+                    )));
+                }
+                if !(x.is_string() || x.is_i64() || x.is_u64()) {
+                    return Err(err(format!("{sw}.fields.{k}: a string (a template)")));
+                }
+            }
+        }
+    }
+    if let Some(l) = obj_get(r, "load") {
+        if !matches!(l, Value::String(s) if !s.is_empty()) {
+            return Err(err(format!(
+                "{rw}: load: the key of the object the request is about, a template (e.g. '{{path:id}}')"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// A webhook's `sign:` (hydo/crates/hydo-world/src/sign.rs).
+fn validate_sign(wh: &Value, hw: &str) -> R<()> {
+    let Some(s) = obj_get(wh, "sign") else {
+        return Ok(());
+    };
+    let sw = format!("{hw}.sign");
+    if !s.is_object() {
+        return Err(err(format!("{sw}: must be a mapping (header:, secret:)")));
+    }
+    unknown(s, KNOWN_SIGN, &sw)?;
+    match obj_get(s, "header") {
+        Some(Value::String(h)) if pyre::match_dollar("[A-Za-z0-9-]+", h).is_some() => {}
+        _ => return Err(err(format!("{sw}: header: the header's name"))),
+    }
+    match obj_get(s, "secret") {
+        Some(Value::String(x)) if !x.is_empty() => {}
+        _ => return Err(err(format!("{sw}: secret: the endpoint secret (a string)"))),
+    }
+    for k in ["payload", "value"] {
+        if let Some(x) = obj_get(s, k) {
+            if !x.is_string() {
+                return Err(err(format!("{sw}: {k}: a string (a template)")));
+            }
+        }
+    }
+    if let Some(Value::String(v)) = obj_get(s, "value") {
+        if !v.contains("{hmac}") {
+            return Err(err(format!("{sw}: value: must contain {{hmac}}")));
+        }
+    }
+    if let Some(e) = obj_get(s, "encoding") {
+        if !in_strs(e, &["hex", "base64"]) {
+            return Err(err(format!(
+                "{sw}: encoding: hex or base64 (got {})",
+                repr(e)
+            )));
         }
     }
     Ok(())
@@ -1475,4 +1671,143 @@ pub fn apply_params(m: &mut Value, overrides: &[(String, String)]) -> R<Vec<(Str
         obj.insert(k, v);
     }
     Ok(vals)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// A bridge project with one service on 10.89.0.11:443, and these fakes and proxies.
+    fn project(fakes: Value, proxies: Value, svc: Value) -> Value {
+        let mut s = json!({"name": "web", "cmd": "/bin/web", "ready": "true", "port": 443,
+                           "addr": "10.89.0.11"});
+        if let (Some(o), Value::Object(extra)) = (s.as_object_mut(), svc) {
+            o.extend(extra);
+        }
+        json!({"name": "p", "network": "bridge", "services": [s],
+               "workload": {"steps": 1, "run": "true"},
+               "invariants": [{"id": "ok", "cmd": "true"}],
+               "fakes": fakes, "proxies": proxies})
+    }
+
+    fn fake(name: &str, port: i64, tls: Value) -> Value {
+        json!({"name": name, "port": port, "tls": tls, "routes": [{"name": "r", "path": "/"}]})
+    }
+
+    fn check(m: Value) -> Result<(), String> {
+        let mut m = m;
+        validate(&mut m).map_err(|e| e.message)
+    }
+
+    #[test]
+    fn tls_accepted() {
+        // two fakes share 10.89.0.1:443 (told apart by name), a third has its own port
+        check(project(
+            json!([
+                fake("a", 9101, json!({"hosts": ["api.a.example"]})),
+                fake(
+                    "b",
+                    9102,
+                    json!({"hosts": ["api.b.example", "b.example"], "port": 443})
+                ),
+                fake("c", 9103, json!({"hosts": ["c.example"], "port": 8443})),
+            ]),
+            json!([{"name": "front", "port": 9200, "protocol": "tcp", "service": "web",
+                    "tls": {"hosts": ["web.example"], "port": 9443}}]),
+            json!({}),
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn tls_refusals() {
+        let cases = [
+            (
+                json!("api.a.example"),
+                "fakes[0].tls: a mapping {hosts: [<host name>, ...], port: <default 443>}",
+            ),
+            (
+                json!({"port": 443}),
+                "fakes[0].tls: hosts: a list of the host names the system calls (e.g. [api.stripe.com])",
+            ),
+            (
+                json!({"hosts": []}),
+                "fakes[0].tls: hosts: a list of the host names the system calls (e.g. [api.stripe.com])",
+            ),
+            (
+                json!({"hosts": ["API.example"]}),
+                "fakes[0].tls: hosts: 'API.example' is not a host name (lower-case letters, digits, '-' and '.'; no wildcard)",
+            ),
+            (
+                json!({"hosts": ["*.example"]}),
+                "fakes[0].tls: hosts: '*.example' is not a host name (lower-case letters, digits, '-' and '.'; no wildcard)",
+            ),
+            (
+                json!({"hosts": ["web"]}),
+                "fakes[0].tls: hosts: 'web' is already the name of a service or of another tls: endpoint",
+            ),
+            (
+                json!({"hosts": ["a.example"], "port": 0}),
+                "fakes[0].tls: port: a TCP port number (default 443)",
+            ),
+            (
+                json!({"hosts": ["a.example"], "bogus": 1}),
+                "fakes[0].tls: unknown field(s) bogus (known: description, hosts, port)",
+            ),
+        ];
+        for (tls, want) in cases {
+            assert_eq!(
+                check(project(json!([fake("a", 9101, tls)]), json!([]), json!({}))).unwrap_err(),
+                want
+            );
+        }
+        // the same host name twice
+        assert_eq!(
+            check(project(
+                json!([
+                    fake("a", 9101, json!({"hosts": ["x.example"]})),
+                    fake("b", 9102, json!({"hosts": ["x.example"]})),
+                ]),
+                json!([]),
+                json!({})
+            ))
+            .unwrap_err(),
+            "fakes[1].tls: hosts: 'x.example' is already the name of a service or of another tls: endpoint"
+        );
+        // a TLS port on another fake's plain port, and a plain port on an earlier TLS listener
+        assert_eq!(
+            check(project(
+                json!([
+                    fake("a", 9101, json!({"hosts": ["x.example"]})),
+                    fake("b", 9102, json!({"hosts": ["y.example"], "port": 9101})),
+                ]),
+                json!([]),
+                json!({})
+            ))
+            .unwrap_err(),
+            "fakes[1].tls: 10.89.0.1:9101 is already used by fake a"
+        );
+        assert_eq!(
+            check(project(
+                json!([
+                    fake("a", 9101, json!({"hosts": ["x.example"]})),
+                    {"name": "b", "port": 443, "routes": [{"name": "r", "path": "/"}]},
+                ]),
+                json!([]),
+                json!({})
+            ))
+            .unwrap_err(),
+            "fakes[1]: 10.89.0.1:443 is already used by the tls: listener of fake a"
+        );
+    }
+
+    #[test]
+    fn writable_is_a_boolean() {
+        check(project(json!([]), json!([]), json!({"writable": false}))).unwrap();
+        assert_eq!(
+            check(project(json!([]), json!([]), json!({"writable": "yes"}))).unwrap_err(),
+            "services[0]: writable: must be true or false"
+        );
+    }
 }

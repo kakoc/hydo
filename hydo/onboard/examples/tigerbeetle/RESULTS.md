@@ -23,7 +23,9 @@ newest, 2026-07-06), 0.16.45 and 0.16.29, the static x86_64 binaries of the GitH
   documentation asks for at least 6 GiB per replica. hydo's x86_64 guest has at most 3072 MiB. In
   the guest the kernel's out-of-memory killer ends two of the three replicas during provisioning
   ("Memory" below). Every cluster finding of TigerBeetle's issue tracker that hydo's faults could
-  reach needs three replicas.
+  reach needs three replicas. **Since Milestone 179 it can:** with `guest.ram_mib: 8192` the
+  three replicas provision and serve, every schedule twice with one fingerprint, and a short
+  process exploration found nothing ("Three replicas in 8 GiB" at the end).
 - **Can it find anything?** Not on one replica. No acknowledged transfer was lost and no
   balance went wrong in 50 explored schedules on an honest disk (process strategy on 0.17.9 and
   0.16.29: kills, pauses, clock steps of up to a year either way, power cuts by round and at the
@@ -61,7 +63,7 @@ on 0.16.45 and 0.16.29.
 |---|---|
 | `docker-compose.yaml` | TigerBeetle's documented three-replica Compose file, the release pinned (`TB_VERSION`, default 0.17.9) |
 | `fetch-tigerbeetle.sh` | downloads the static x86_64 binary of each release from GitHub into `bin/<version>/tigerbeetle`, checked by sha256 |
-| `hydo/hydo.yaml` | three replicas (from `hydo compose`; hand changes marked `hand:`), `network: bridge`, `params: tb` chooses the release. Boots, and runs out of memory |
+| `hydo/hydo.yaml` | three replicas (from `hydo compose`; hand changes marked `hand:`), `network: bridge`, `params: tb` chooses the release, `guest.ram_mib: 8192` since Milestone 179 (with 3072 MiB it ran out of memory; "Three replicas in 8 GiB" below) |
 | `hydo/hydo-single.yaml` | one replica (a cluster of one), the same workload and checks: what fits |
 | `hydo/workload/helper_tb.sh` | the client: TigerBeetle's own REPL (`tigerbeetle repl --command=...`, built into the server binary, so there is no client to build), every call under `timeout`; parses both REPL answer formats (0.16 and 0.17 differ) |
 | `hydo/workload/first_accounts` | accounts 1..8 on ledger 700, before any fault |
@@ -77,7 +79,7 @@ hydo build hydo/hydo-single.yaml                          # one replica, 0.17.9
 hydo build hydo/hydo-single.yaml --set tb=0.16.29 --out img-0.16.29
 hydo run "disk=none dseed=1 | run"
 hydo explore --seeds 1-30 --strategy process --more-faults
-hydo build hydo/hydo.yaml                                 # three replicas: ERROR provision failed (memory)
+hydo build hydo/hydo.yaml                                 # three replicas, 8 GiB (Milestone 179: needs the module with the split RAM)
 ```
 
 ## Memory
@@ -279,7 +281,8 @@ changed in hydo on this branch (their own commit, with a test or a re-recorded g
 
 ## What hydo lacked, ranked by how much it blocked
 
-1. **More guest memory, or one guest per service.** The whole point of the Compose file, a
+1. **More guest memory, or one guest per service.** (Done in Milestone 179: guests of up to
+   8 GiB, "Three replicas in 8 GiB" below.) The whole point of the Compose file, a
    three-replica cluster, could not run: TigerBeetle allocates 2.1 GiB per replica at start
    (1.35 GiB in development mode) and hydo's x86_64 guest stops at 3072 MiB, so the out-of-memory
    killer ended two of three replicas. Every cluster finding a hydo fault could reach (#2739's
@@ -299,3 +302,43 @@ changed in hydo on this branch (their own commit, with a test or a re-recorded g
 6. **Running an image's tool from the workload's side.** `hydo-oci` runs only inside the
    service's namespace.
 7. **A usable `hydo` straight from a checkout** (friction 1).
+
+## Three replicas in 8 GiB (Milestone 179)
+
+The user chose a bigger single guest over one guest per service (2026-11-07). Since Milestone 179
+`guest.ram_mib` goes up to 8192 on every engine (on x86_64 the first 3 GiB below the 4th-GiB hole
+and the rest from 4 GiB), and `hydo/hydo.yaml` asks for 8192 MiB. Run on the bare-metal machine
+with hvx's side module `hvxbig` (this tree's `hvx.c`, `hv/hvx/m156/side.sh hvxbig <file> load`;
+the shared main module takes at most 3 GiB until it is reloaded with the change), the engine in
+`hydo`'s process as root (`HVX_DEV=/dev/hvxbig`, `HYDO_HVX_PREPARE=0` so that only one 8 GiB VM
+of this session existed at a time), one VM at a time. Image: `hydo build hydo/hydo.yaml`
+(0.17.9), disk image sha256 `4dfaec44…`.
+
+Every schedule twice from a fresh boot, the same fp and ctl both times; all three replicas
+provision and serve (no out-of-memory kill):
+
+| schedule | verdict | fp | ctl |
+|---|---|---|---|
+| `disk=none dseed=1 \| run` | OK, 33 transfers started, 33 ok | `03a1dc26eb38c91a` | `d7fab49379f54a52` |
+| `disk=cut dseed=1 \| run C=10` (power cut) | OK (recovery boot: every acknowledged transfer there) | `a250b2bea41e9672` | `8297acacb1bdd379` |
+| `disk=none dseed=1 \| run K=tigerbeetle_0@5+3` (kill one replica) | OK, 33 of 33 | `8e4f8468f12a7813` | `9508489d89c3f476` |
+| `disk=none dseed=1 \| run P=tigerbeetle_1@5+5` (pause one replica) | OK, 33 of 33 | `dd23cdddd0be2b78` | `d3ef0399ac20a801` |
+| `disk=none dseed=1 \| run T=5:-30` (clock 30 s back) | OK, 33 of 33 | `7b9185132f875605` | `addfa62b08c31696` |
+
+A run from the explorer's worker snapshot S1 (`hydo explore --schedule "disk=none dseed=1 | run"`)
+gives the fresh boot's `03a1dc26eb38c91a`. A fresh-boot run takes 56–160 s of wall time on the
+shared machine (18–30 s of guest time); the worker boots once in 80 s and a run from S1 takes
+21–29 s.
+
+Exploration: `hydo explore --seeds 1-10 --strategy process --more-faults --workers 1` (the
+`cf=` probe measured flushes 1–509): 10 schedules with kills, pauses, network loss and delay
+between replicas, one-way faults, clock steps from 30 s to 30 days back, power cuts by round and
+at the k-th flush: **0 failures**, every property held (`ledger` 10 of 10, `serves` within
+4.7 s). 349 s of sweep, 460 s in all. The cluster findings listed above (#2739's latency cascade
+needs a latency check; repair from a peer needs a fault on one replica's storage, which hydo does
+not have) were not hunted further.
+
+Memory on the host: the explorer's process held about 19 GB (the 8 GiB VM, the 3.5 GiB data
+disk mapped, and S0 and S1 in memory: the hvx engine keeps both there), so one such worker
+needs a machine with about 20 GB free; `hydo explore` sizes its pool from the guest's RAM and the
+machine's available memory, and `hydo run` refuses a guest that does not fit.

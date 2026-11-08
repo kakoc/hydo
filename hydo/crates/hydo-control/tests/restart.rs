@@ -10,7 +10,7 @@
 //! "no"`) gives today's behaviour: the worker that dies after the heal stays down. The identity
 //! corpora (corpus.rs, features.rs, ...) prove that plans without a policy are unchanged.
 
-mod support;
+use crate::support;
 
 use hydo_control::{Ending, Plan, ScheduleController, Start, Transcript};
 use hydo_schedule::Schedule;

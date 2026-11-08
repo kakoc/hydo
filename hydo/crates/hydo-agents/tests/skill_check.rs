@@ -23,7 +23,7 @@
 //! It is a test, not a `hydo` command: a release carries the skill inside the `hydo` binary
 //! (hydo-agents' build.rs), so there is no skill folder or repository copy for a user to check;
 //! this is the developers' check of the repository's folder. Run it with
-//! `cargo test -p hydo-agents --test skill_check -- --nocapture` to see what it checked.
+//! `cargo test -p hydo-agents --test it skill_check:: -- --nocapture` to see what it checked.
 //! The negative tests below run it on a copy of the relevant files with one thing broken.
 
 use hydo_manifest::py::repr_str;
@@ -598,12 +598,12 @@ fn a_wrong_name_and_a_missing_symlink_fail() {
 fn a_skill_version_the_plugin_does_not_have_fails() {
     let bad = bad_after(|d| {
         edit_skill(d, |t| {
-            t.replacen("  version: \"1.0.0\"", "  version: \"1.0.1\"", 1)
+            t.replacen("  version: \"1.2.0\"", "  version: \"1.2.1\"", 1)
         })
     });
     assert_eq!(bad.len(), 1, "{bad:?}");
     assert!(
-        bad[0].starts_with(".claude-plugin/marketplace.json gives hydo-onboard version \"1.0.0\""),
+        bad[0].starts_with(".claude-plugin/marketplace.json gives hydo-onboard version \"1.2.0\""),
         "{bad:?}"
     );
     let bad = bad_after(|d| edit_skill(d, |t| t.replacen("  hydo-min: \"0.1.0\"\n", "", 1)));

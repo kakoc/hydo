@@ -66,7 +66,7 @@ pub fn steps_of(a: &Args, norders: i64) -> Result<Vec<i64>, String> {
     };
     if steps.is_empty() || steps[0] < 0 || *steps.last().unwrap_or(&0) >= norders {
         return Err(format!(
-            "explore.py: --fc-steps must lie in 0..{}",
+            "hydo explore: --fc-steps must lie in 0..{}",
             norders - 1
         ));
     }
@@ -104,7 +104,7 @@ pub fn sweep_with(ex: &Ex, text: Option<&str>) -> Result<S, String> {
     };
     let s = ex.parse(&t)?;
     if s.f.is_some() {
-        return Err("explore.py: --sweep-with may not carry F= (the sweep places it)".into());
+        return Err("hydo explore: --sweep-with may not carry F= (the sweep places it)".into());
     }
     Ok(s)
 }
@@ -124,7 +124,7 @@ fn streams_of(ex: &Ex, a: &Args) -> Result<Vec<Stream>, String> {
                     .join(", ")
             };
             return Err(format!(
-                "explore.py: --fc-pairs {}: not freeze pairs of this manifest ({})",
+                "hydo explore: --fc-pairs {}: not freeze pairs of this manifest ({})",
                 j(bad),
                 j(pairs.iter().collect())
             ));
@@ -149,7 +149,7 @@ fn streams_of(ex: &Ex, a: &Args) -> Result<Vec<Stream>, String> {
         } else if !item.is_empty() {
             if item.contains(':') || item.contains(' ') {
                 return Err(format!(
-                    "explore.py: --fc-match {}: a match string may not contain ':' or a space",
+                    "hydo explore: --fc-match {}: a match string may not contain ':' or a space",
                     repr(item)
                 ));
             }
@@ -267,7 +267,10 @@ pub fn freeze_sweep(
     ev: &Events,
 ) -> Result<Vec<Point>, String> {
     if ex.fc_pairs.is_empty() {
-        return Err("explore.py: --sweep freeze needs an image whose manifest lists `freeze` in faults: (manifest_space.py gives the pairs)".into());
+        return Err(
+            "hydo explore: --sweep freeze needs an image whose manifest lists `freeze` in faults:"
+                .into(),
+        );
     }
     let steps = steps_of(a, ex.norders)?;
     let durs: Vec<i64> = a
@@ -279,7 +282,7 @@ pub fn freeze_sweep(
     let streams = streams_of(ex, a)?;
     if streams.is_empty() {
         return Err(
-            "explore.py: --sweep freeze: no streams (check --fc-pairs, --fc-dirs, --fc-match)"
+            "hydo explore: --sweep freeze: no streams (check --fc-pairs, --fc-dirs, --fc-match)"
                 .into(),
         );
     }
@@ -365,7 +368,7 @@ pub fn freeze_sweep(
         .collect();
     if !missing.is_empty() {
         return Err(format!(
-            "explore.py: --sweep freeze: no packet count in the console of {} (a trace run that never reached the end of fault injection -- e.g. a power cut in --sweep-with -- or an image without the freeze fault)",
+            "hydo explore: --sweep freeze: no packet count in the console of {} (a trace run that never reached the end of fault injection -- e.g. a power cut in --sweep-with -- or an image without the freeze fault)",
             missing.iter().take(6).cloned().collect::<Vec<_>>().join(", ")
         ));
     }
@@ -546,7 +549,7 @@ impl<'a> Adaptive<'a> {
             let (svc, peer, d, m, st) = key.clone();
             let path = self.out.join("consoles").join(format!("{tag}.log"));
             let n = read_text(&path).and_then(|t| trace_count(&t, st)).ok_or_else(|| {
-                format!("explore.py: --fc-adaptive: no packet count in the console of {tag} ({text})")
+                format!("hydo explore: --fc-adaptive: no packet count in the console of {tag} ({text})")
             })?;
             let mut rec = Map::new();
             rec.insert("tag".into(), json!(tag));
@@ -814,7 +817,7 @@ impl<'a> Adaptive<'a> {
                     }
                     other => {
                         return Err(format!(
-                            "explore.py: --fc-stage1 {}: expected auto, manifest, stride",
+                            "hydo explore: --fc-stage1 {}: expected auto, manifest, stride",
                             repr(other)
                         ))
                     }
@@ -822,7 +825,7 @@ impl<'a> Adaptive<'a> {
             }
         }
         if streams.is_empty() {
-            return Err("explore.py: --fc-adaptive: no stage-1 streams (check --fc-pairs, --fc-dirs, --fc-stage1; stage 1 'manifest' needs freeze_match: in the manifest)".into());
+            return Err("hydo explore: --fc-adaptive: no stage-1 streams (check --fc-pairs, --fc-dirs, --fc-stage1; stage 1 'manifest' needs freeze_match: in the manifest)".into());
         }
         let mut tsteps: BTreeSet<i64> = steps.iter().copied().collect();
         tsteps.extend(steps.iter().map(|s| s + 1).filter(|s| *s < ex.norders));
@@ -1071,10 +1074,13 @@ pub fn adaptive(
     ev: &Events,
 ) -> Result<AdaptiveOut, String> {
     if ex.fc_pairs.is_empty() {
-        return Err("explore.py: --sweep freeze needs an image whose manifest lists `freeze` in faults: (manifest_space.py gives the pairs)".into());
+        return Err(
+            "hydo explore: --sweep freeze needs an image whose manifest lists `freeze` in faults:"
+                .into(),
+        );
     }
     if a.sweep_dry {
-        return Err("explore.py: --fc-adaptive runs its points as it goes; --sweep-dry is for the full sweep".into());
+        return Err("hydo explore: --fc-adaptive runs its points as it goes; --sweep-dry is for the full sweep".into());
     }
     let mut ad = Adaptive {
         ex,

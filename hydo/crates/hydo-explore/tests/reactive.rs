@@ -12,7 +12,7 @@
 //! - The stream is pinned: `tests/golden/reactive.txt` has the count, the SHA-256 and the first
 //!   line of each configuration's schedules (`HYDO_BLESS=1` rewrites it).
 
-mod support;
+use crate::support;
 
 use hydo_explore::gen::Ex;
 use hydo_explore::sched::{Pause, S};

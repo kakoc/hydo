@@ -15,7 +15,7 @@
 //! checked against a shell model of the extensions, and a second test showed that the model
 //! caught deliberate mistakes; both went with the shell init's images (`tests/support/mod.rs`).
 
-mod support;
+use crate::support;
 
 use hydo_agent_proto::msg::{Command, Run};
 use hydo_control::plan::{PlanInvariant, PlanLive};

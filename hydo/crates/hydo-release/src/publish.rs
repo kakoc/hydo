@@ -4,7 +4,7 @@
 //! The package `hydo` (directory `hydo/crates/hydo-cli`) and every workspace crate it depends on
 //! (not counting dev-dependencies) are published to crates.io under their own names: the
 //! *closure*. [`check`] says what stops one of them from being published or from building from
-//! crates.io alone, so `cargo test -p hydo-release --test crates` fails before `cargo publish`
+//! crates.io alone, so `cargo test -p hydo-release --test it crates::` fails before `cargo publish`
 //! would, or before a published crate would fail to build on a user's machine:
 //!
 //! - its manifest: not `publish = false`; a description, the license Apache-2.0, the repository

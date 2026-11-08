@@ -169,7 +169,7 @@ pub struct BootSpec {
     /// hvx: the image's disk (`*-disk.img`, root + data partitions); hvm: the arm64 initramfs
     /// (`*-arm64.cpio.gz`), whose data disk `<same name>-disk.img` is attached when it exists.
     pub image: PathBuf,
-    /// Guest RAM in MiB (hydo.yaml `guest.ram_mib`; hvx 256..3072, hvm 256..4096; default 1024).
+    /// Guest RAM in MiB (hydo.yaml `guest.ram_mib`; 256..8192 on every engine; default 1024).
     pub ram_mib: u32,
     /// vCPUs (hvx only; default 1).
     pub vcpus: u32,
@@ -357,6 +357,21 @@ pub fn machine_workers(per_worker_mib: u64) -> usize {
         .map(|m| (m / per_worker_mib.max(1)) as usize)
         .unwrap_or(threads);
     threads.min(by_mem).max(1)
+}
+
+/// Whether one guest of `ram_mib` fits into the memory this machine has available now (Milestone
+/// 179: a guest may have up to 8 GiB, and every engine allocates all of it when the VM is made).
+/// Err with the sentence to print when it does not; Ok when it fits or the memory is unknown.
+pub fn guest_fits(ram_mib: u64) -> Result<(), String> {
+    match available_mib() {
+        Some(av) if av < ram_mib + 256 => Err(format!(
+            "one guest of {ram_mib} MiB (guest.ram_mib) needs about {} MiB of this machine's memory, \
+             and it has {av} MiB available now: free memory, or build the image with a smaller \
+             guest.ram_mib",
+            ram_mib + 256
+        )),
+        _ => Ok(()),
+    }
 }
 
 /// Memory available for new work, in MiB: `MemAvailable` on Linux; on macOS the free, inactive

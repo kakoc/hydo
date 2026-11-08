@@ -7,7 +7,8 @@ pub const USAGE: &str = "usage: hydo explore [--seeds 1-200] [--strategy random|
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
        [--freeze-call] [--protocol-faults] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail]
-       [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]] ... (explore.py's options)";
+       [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
+       [--storage-faults] ... (explore.py's options)";
 
 /// The refusal without `--image` (Milestone 146: explore.py's default, `explore-disk.img`, is a
 /// shell-init image, which hydo has not run since Milestone 145).
@@ -47,6 +48,9 @@ pub struct Args {
     pub new_faults: bool,
     pub concurrency: bool,
     pub more_faults: bool,
+    /// `--storage-faults`: draw G= (corruption) and L= (one service's power loss) for the
+    /// services with `storage:` (docs/design/storage-faults.md).
+    pub storage_faults: bool,
     pub freeze_call: bool,
     pub protocol_faults: bool,
     pub grpc_faults: bool,
@@ -111,6 +115,7 @@ impl Default for Args {
             new_faults: false,
             concurrency: false,
             more_faults: false,
+            storage_faults: false,
             freeze_call: false,
             protocol_faults: false,
             grpc_faults: false,
@@ -139,7 +144,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 16] = [
+const FLAGS: [&str; 17] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -148,6 +153,7 @@ const FLAGS: [&str; 16] = [
     "new-faults",
     "concurrency",
     "more-faults",
+    "storage-faults",
     "freeze-call",
     "protocol-faults",
     "grpc-faults",
@@ -284,6 +290,7 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "new-faults" => a.new_faults = true,
             "concurrency" => a.concurrency = true,
             "more-faults" => a.more_faults = true,
+            "storage-faults" => a.storage_faults = true,
             "freeze-call" => a.freeze_call = true,
             "protocol-faults" => a.protocol_faults = true,
             "grpc-faults" => a.grpc_faults = true,

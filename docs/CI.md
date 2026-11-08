@@ -16,9 +16,9 @@ credentials), pin every action by commit, and run every step with `bash -eo pipe
 
 | Job | Runner | What it runs | Time |
 |---|---|---|---|
-| `rust (ubuntu-24.04)` | GitHub's Linux x86_64 runner | `cargo fmt --all --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, then `ci/affected-packages.sh` and `cargo nextest run --cargo-profile ci` with the `fast` tier's filter (`ci/tier-filter.sh`) | about 3 minutes (169 s) with warm caches (6.5 minutes with none) |
+| `rust (ubuntu-24.04)` | GitHub's Linux x86_64 runner | `cargo fmt --all --check`, `sh ci/consolidate-tests.sh --check` (below, "One test program per crate"), `cargo clippy --locked --workspace --all-targets -- -D warnings`, then `ci/affected-packages.sh` and `cargo nextest run --cargo-profile ci` with the `fast` tier's filter (`ci/tier-filter.sh`) | about 3 minutes (169 s) with warm caches (6.5 minutes with none) |
 | `rust (macos-15)` | GitHub's macOS Apple Silicon runner | the same | about 4.5 minutes (257 s) with warm caches (8 minutes with none) |
-| `guest programs (ubuntu-24.04)` | Linux | the guest agent (`hydo/crates/hydo-agent`: its native tests, then the agent as PID 1 of its own PID and mount namespace, which needs `sudo -n` and runs because the runner has password-less sudo) and the store reader (`hydo/crates/hydo-read`); both keep their own Cargo workspaces and lock files | under 1 minute |
+| `guest programs (ubuntu-24.04)` | Linux | the guest agent (`hydo/crates/hydo-agent`: its native tests, then the agent as PID 1 of its own PID and mount namespace, which needs `sudo -n` and runs because the runner has password-less sudo) the store reader (`hydo/crates/hydo-read`) and the SQL workloads (`hydo/crates/hydo-sql`, Milestone 182); each keeps its own Cargo workspace and lock file | under 1 minute |
 | `sdks` | Linux | the Rust SDK (`sdk/rust`, the reference that writes `sdk/cases/`), the Rust test SDK (`sdk/rust-test`), the Go SDK (the public module `sdk/go`, and the frozen copy `hydo/stack/hydoassert` and `hydo/stack/hydohist` the order service builds with) with Go 1.26.5, the Python SDK with Python 3.9 and 3.13, the JavaScript SDK with Node 22 | about 1 minute |
 | `rust full (ubuntu-24.04)`, `rust full (macos-15)` (ci-full.yml) | Linux, macOS | `cargo test --locked --release --workspace --no-fail-fast` (every test, the documentation examples too), then a step that prints what the tests skipped | 18 minutes (Linux) and 29 minutes (macOS) with a warm cache, 23 and 31 with none |
 
@@ -94,7 +94,11 @@ cache at all 132 s; the release profile's 534 s are what a fresh worktree paid b
 
 Every test binary of the workspace is in `ci/test-tiers.txt`, as cargo-nextest names it
 (`<package>` for a library's unit tests, `<package>::bin/<name>`, `<package>::<test file>`,
-`<package>::doctest` for a library's documentation examples), with one of two tiers:
+`<package>::doctest` for a library's documentation examples), with one of two tiers. In a crate
+whose integration tests are one program (below, "One test program per crate") the line
+`<package>::<test file>` names that file's module of the program `it`: its tests are
+`<test file>::<test>`, and `ci/tier-filter.sh` turns the line into the filter
+`(binary_id(<package>::it) & test(/^<test file>::/))`. The tiers are:
 
 - `fast`: run by the per-push tier (for the affected packages, below) and by the full tier;
 - `full`: run by the full tier, and by the per-push tier only when the push changes a file of the
@@ -105,8 +109,10 @@ Every test binary of the workspace is in `ci/test-tiers.txt`, as cargo-nextest n
 So every test runs in the full tier, and none can be in neither: `hydo-release`'s `test_tiers`
 test (in the `fast` tier, and always run) fails when a test binary of the workspace has no line,
 when a line names no binary, when a line is doubled or names another tier, and when a library
-with `doctest = false` has a documentation example rustdoc would test. A new test file is added
-as `fast` unless it is such a corpus.
+with `doctest = false` has a documentation example rustdoc would test; since the consolidation
+also when a `tests/*.rs` is in no test program, when a `tests/main.rs` holds a test of its own,
+and when a program or library with `test = false` has a unit test. A new test file is added as
+`fast` unless it is such a corpus.
 
 Which packages a push tests: `ci/affected-packages.sh BASE` (BASE is the push's previous commit
 or the pull request's base) maps every changed file to the workspace member that owns it and
@@ -119,6 +125,86 @@ is unknown (a new branch, a force push). `hydo-release` and `hydo-agents` are al
 tier check and the tracked-files check). `ci/affected-packages.sh --direct BASE` lists the
 packages that own a changed file; their `full` binaries run too (`ci/tier-filter.sh fast
 <package>...`). What the selection misses, the full tier finds within a day.
+
+## One test program per crate
+
+Cargo makes every `tests/<name>.rs` its own test program and every library and program its own
+unit-test program, each compiled and linked against the crate and all its dependencies. Until
+this change the workspace had 113 test programs (cargo-nextest's count), and a build of them
+compiled the same support modules (hydo-control's scripted agent and engine, hydo-explore's
+corpus support) once per program. Now it has 51:
+
+- **One integration-test program per crate.** In every workspace crate with more than one
+  `tests/<name>.rs` (18 crates, 61 files), the files are modules of one program, `it`:
+  `tests/main.rs`, written by `ci/consolidate-tests.sh`, declares the shared support directories
+  (`tests/<dir>/mod.rs`) once and every `tests/<name>.rs` as the module `<name>`; the crate's
+  `Cargo.toml` has `autotests = false` and `[[test]] name = "it"`; a test is called
+  `<name>::<test>`. The files keep their paths, so the goldens, fixtures, `include_str!` paths and
+  the paths in comments stay as they are; in a folded file the line `mod <dir>;` naming a support
+  directory became `use crate::<dir>;`, and nothing else changed. One file's tests:
+  `cargo test -p <package> --test it <name>::`, or `cargo nextest run -p <package> -E
+  'test(/^<name>::/)'`. Re-record commands that are part of a golden's content (hydo-control's
+  and hydo-explore's golden headers, the `$comment` of the generated project schema) still say
+  `--test <name>` and were left as they are; Cargo answers such a command with the list of test
+  targets, `it` among them.
+- **No test program for a program or library without a unit test** (`test = false` on its
+  `[[bin]]` or `[lib]`): 18 programs and the libraries `hydo-results`, `hydo-schedule` and
+  `hydo-schema-compat`. Cargo still builds the programs the integration tests run.
+- **What stays its own program, and why:** hydo-explore's `fake_engine` (`harness = false`: the
+  test program is also the scripted engine it starts, with its own `main`); hydo-grpc-gen's
+  `client` (it sets `HYDO_SEED`, `HYDO_OUTCOMES`, `HYDO_ACKED` and `HYDO_GRPC_CONSOLE` in the
+  process environment, under its own lock; under `cargo test` the crate's other tests would run as
+  threads of the same process and see them); and the crates with a single test file (hydo-config,
+  hydo-engine, hydo-errors, hydo-grpc, hydo-hvm, hydo-schedule, hydo-world), which are one program
+  already. Under `cargo test` the folded files' tests now run as threads of one process
+  (cargo-nextest runs each test in a process of its own anyway). Checked for that: the tests that
+  set the umask (hydo-build's `oci`, hydo's `agents_equivalence`, hydo-compose's and
+  hydo-composer's `equivalence`) all set 022, the value the other tests assume; every temporary
+  directory carries its file's own prefix; no other test changes process-wide state.
+- **Adding a test file:** run `sh ci/consolidate-tests.sh` (idempotent; `--check` only reports what
+  it would change and exits 1), then `cargo fmt`, and add the file's `<package>::<name>` line to
+  `ci/test-tiers.txt`. With `autotests = false` Cargo would silently not compile a file that no
+  program names, so `hydo-release`'s `test_tiers` fails while a `tests/*.rs` of a workspace crate
+  is in no program, while a `tests/main.rs` holds a test of its own, and while a program or
+  library with `test = false` has a unit test. A file that must stay its own program goes into the
+  script's `SEPARATE` list with its reason.
+
+Measured on this Mac on 2026-11-07, `cargo test --profile ci --workspace --no-run`, with the
+shared compile cache warm, alternating before and after, two runs each after a priming run (load
+averages of 20 to 220 from other agents, so the ranges are wide):
+
+| | Before | After |
+|---|---|---|
+| Test programs (nextest) | 113 | 51 |
+| Programs linked per build | 164 | 102 |
+| Build with `target/ci` deleted | 60 to 71 s | 36 to 44 s |
+| Rebuild after touching `hydo-manifest` (68 / 31 links) | 27 to 46 s | 16 to 27 s |
+| Rebuild after touching `hydo-control` (32 / 15 links) | 23 to 32 s | 10 to 18 s |
+| CPU time of the test-program compilations (`--timings`) | 531 to 601 s | 287 to 327 s |
+| Time spent linking (all links, summed) | 23 to 28 s | 14 to 15 s |
+| `cargo nextest run` of every test | 112, 113 s | 111 s (192 s once under load) |
+| The `fast` tier | 35, 36 s | 39, 47 s |
+
+Every test is kept: the 482 tests before are the 482 after (compared name by name, `<file>`
+becoming the module `<file>::`), plus the two new checks of `test_tiers`. The test runs take as
+long as before: they are bound by the slowest single test (hydo-control's corpus, about 110 s),
+and the `fast` tier's few seconds more are within the load's noise. Most of the saving is
+compile time, not link time: Apple's linker linked each program in about 0.2 s.
+
+**The linker stays as it is.** On this Mac rustc links with the system linker (Apple's ld-1267,
+"ld-prime"). Rust's own LLD (`rust-lld` as `ld64.lld`, passed to `cc` with `-fuse-ld`) was
+slower on the same builds: 17 and 22 s of linking against 13 s, with the same wall times or
+worse. On Linux, Rust 1.90 already links `x86_64-unknown-linux-gnu` programs (the CI runner's
+and the bare-metal machine's tests) with its bundled LLD, and the release's static musl
+programs with `rust-lld` (`.cargo/config.toml`). Linking is about 4 % of the test build's CPU
+time, so no other linker was taken.
+
+The release builds do not change: `hydo`, `hydo-world` and `hydo-grpc` built with `--release`
+from main and from this change at one path (with one `hydo/COMMIT`, so that the compiled-in
+commit is the same) have the same bytes, and the pinned recipe of the guest gRPC client
+(`hydo/grpcgen/build-client.sh`, whose crate gained `test = false`) gives the pinned
+`3926d137…` and `fd762fa0…`. The full tier (`cargo test --locked --release --workspace`) passes:
+483 tests and 2 ignored in 52 programs (with the documentation example).
 
 ## The compile cache
 
@@ -262,6 +348,7 @@ on PATH) and, optionally, sccache 0.18.0 on PATH:
 
 ```sh
 cargo fmt --all --check
+sh ci/consolidate-tests.sh --check     # every crate's integration tests are one program
 cargo clippy --locked --workspace --all-targets -- -D warnings
 # the per-push tier's tests for every package (about a minute once built)
 cargo nextest run --locked --cargo-profile ci --workspace -E "$(sh ci/tier-filter.sh fast)"

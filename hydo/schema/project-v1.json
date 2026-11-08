@@ -291,7 +291,7 @@
       "type": "object",
       "properties": {
         "ram_mib": {
-          "description": "Guest RAM in MiB: 256..3072 on x86_64, 256..4096 on arm64.",
+          "description": "Guest RAM in MiB: 256..8192 (every engine; the host needs that much free per running guest).",
           "type": [
             "integer",
             "null"
@@ -315,6 +315,14 @@
             "null"
           ],
           "format": "int64"
+        },
+        "outcomes_after_cut": {
+          "description": "After a power cut the recovery boot's $HYDO_OUTCOMES starts with the first boot's last\noutcome of every id (without it the file starts empty there).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
         },
         "cpu": {
           "anyOf": [
@@ -418,6 +426,14 @@
           "items": {
             "$ref": "#/$defs/Text"
           }
+        },
+        "share_images": {
+          "description": "Image services with the same image (by config digest) share one unpacked tree; each still\nhas its own mount of it, with its own /tmp, /data, volumes and tmpfs mounts. Off by\ndefault (it changes the image's bytes).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
         },
         "description": {
           "anyOf": [
@@ -711,6 +727,24 @@
           "items": {
             "$ref": "#/$defs/Mount"
           }
+        },
+        "writable": {
+          "description": "true: the image service's root is writable, as a container's: a copy of the image on the\ndata disk (its layer), kept when the service is killed and restarted, and after a power\ncut as far as it was flushed (MANIFEST.md \"A writable root for image services\").",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "storage": {
+          "description": "Where the service keeps its data, for the faults that hit one service's storage\n(MANIFEST.md \"Storage faults of one service\"): a directory under /data (G= corrupts files\nthere), or {dir:, size_mib:} to make that directory the service's own file system on the\ndata disk (L=, a power loss of this service alone).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Storage"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -975,6 +1009,48 @@
       "additionalProperties": false,
       "required": [
         "dst"
+      ]
+    },
+    "Storage": {
+      "description": "A service's storage: the directory under /data, or the directory with its own file system.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/StorageSpec"
+        }
+      ]
+    },
+    "StorageSpec": {
+      "type": "object",
+      "properties": {
+        "dir": {
+          "description": "The directory, relative to /data (or starting with /data/).",
+          "type": "string"
+        },
+        "size_mib": {
+          "description": "The size of the service's own file system (a partition of the data disk, ext4 with a\njournal, mounted on the directory), 16 to 3072 MiB. Without it the directory stays on the\nshared data file system.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "dir"
       ]
     },
     "Workload": {
@@ -1387,7 +1463,9 @@
         "clock",
         "disk",
         "freeze",
-        "protocol"
+        "protocol",
+        "corrupt",
+        "powerloss"
       ]
     },
     "FreezeMatch": {
@@ -1497,6 +1575,17 @@
           "items": {
             "$ref": "#/$defs/FakeRoute"
           }
+        },
+        "tls": {
+          "description": "HTTPS: the fake also answers TLS for these host names, with a certificate of the image's\nown test CA, which the guest and every image service trust.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tls"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "description": {
           "anyOf": [
@@ -1630,6 +1719,28 @@
             }
           ]
         },
+        "save": {
+          "description": "Store fields of the object a request creates or changes, when it takes effect; later\nanswers read them as `{obj:<field>}`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FakeSave"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "load": {
+          "description": "The key (a template) of the object a request is about; a missing one is answered 404 and\ntakes no effect. The answer reads its fields as `{obj:<field>}`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -1696,6 +1807,16 @@
           ],
           "format": "int64"
         },
+        "sign": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WebhookSign"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -1710,6 +1831,125 @@
       "additionalProperties": false,
       "required": [
         "url"
+      ]
+    },
+    "WebhookSign": {
+      "description": "`sign:` of a webhook: an HMAC-SHA256 signature header on every delivery attempt.",
+      "type": "object",
+      "properties": {
+        "header": {
+          "description": "The header that carries the signature.",
+          "$ref": "#/$defs/Text"
+        },
+        "secret": {
+          "description": "The endpoint secret; its bytes are the HMAC key.",
+          "$ref": "#/$defs/Text"
+        },
+        "payload": {
+          "description": "What is signed: `{ts}` (the attempt's Unix seconds), `{body}` and the webhook's values.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "{ts}.{body}"
+        },
+        "value": {
+          "description": "The header's value; `{hmac}` is the signature.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "t={ts},v1={hmac}"
+        },
+        "encoding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignEncoding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "hex"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "header",
+        "secret"
+      ]
+    },
+    "SignEncoding": {
+      "type": "string",
+      "enum": [
+        "hex",
+        "base64"
+      ]
+    },
+    "FakeSave": {
+      "description": "`save:` of a fake's route: the object's key and the fields to store (templates).",
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/Text"
+        },
+        "fields": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key"
+      ]
+    },
+    "Tls": {
+      "description": "HTTPS for a fake or a proxy (MANIFEST.md \"HTTPS for fakes and proxies\").",
+      "type": "object",
+      "properties": {
+        "hosts": {
+          "description": "The host names the system calls (e.g. api.stripe.com); /etc/hosts sends them here.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "port": {
+          "description": "The TLS port on the endpoint's address.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 443
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "hosts"
       ]
     },
     "Proxy": {
@@ -1796,6 +2036,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tls": {
+          "description": "HTTPS: the proxy also answers TLS for these host names (and forwards in plain text).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tls"
             },
             {
               "type": "null"

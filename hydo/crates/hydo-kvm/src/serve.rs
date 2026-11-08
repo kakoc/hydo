@@ -32,7 +32,8 @@
 //!   fingerprint, stops and `inh=` with the mode on.
 //! - **Snapshots** share memory: RAM is a base (S0 and S1 each make one) and the pages that differ
 //!   from it, the disk a copy-on-write copy ([`crate::mem`], `hydo_hvm::disk`).
-//! - **Guest RAM**: `--ram-mib N`, 256..3072 (default 1024).
+//! - **Guest RAM**: `--ram-mib N`, 256..8192 (default 1024; above 3072 the rest of RAM is at 4 GiB,
+//!   `crate::layout::ram_blocks`).
 
 use crate::cpu::Hypervisor;
 use crate::fnv::{fnv, fnv_u64, OFFSET};

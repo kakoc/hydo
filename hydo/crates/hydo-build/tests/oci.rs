@@ -14,7 +14,7 @@
 //! staged, recorded at commit 2a58c4b (`git show 2a58c4b:hydo/crates/hydo-build/tests/py_oci.py`
 //! and `git show 2a58c4b:hydo/onboard/hydo_oci.py` restore them). Paths under the scratch
 //! directory are written `<tmp>`. From now on Rust is the reference: `HYDO_BLESS=1 cargo test -p
-//! hydo-build --test oci` rewrites `answers.json` from the Rust answers; review the diff.
+//! hydo-build --test it oci::` rewrites `answers.json` from the Rust answers; review the diff.
 
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
@@ -100,7 +100,15 @@ fn rust_case(mpath: &Path, arch: &str, rrs: &Path, busybox: &Path) -> Value {
         hydo_build::oci::prepare(&mut m, &mpath.to_string_lossy(), arch, &mut io).and_then(
             |mut svcs| {
                 let tmpd = PathBuf::from(format!("{}.tmp", rrs.display()));
-                hydo_build::oci::stage(&mut svcs, rrs, busybox, &tmpd, arch == "arm64", &mut io)
+                hydo_build::oci::stage(
+                    &mut svcs,
+                    rrs,
+                    busybox,
+                    &tmpd,
+                    arch == "arm64",
+                    false,
+                    &mut io,
+                )
             },
         )
     };

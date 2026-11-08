@@ -27,7 +27,7 @@
 //! (`hydo/onboard/tests`) are not in the pinned set.
 //!
 //! From now on Rust is the reference: after a deliberate change, `HYDO_BLESS=1 cargo test -p
-//! hydo-build --test equivalence` rewrites the golden from the Rust answers (the pinned list from
+//! hydo-build --test it equivalence::` rewrites the golden from the Rust answers (the pinned list from
 //! the files as they are now); review the diff of `tests/golden/answers.txt` before committing.
 
 use serde_json::{json, Value};

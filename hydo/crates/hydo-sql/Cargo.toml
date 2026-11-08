@@ -1,0 +1,43 @@
+# hydo-sql: ready-made SQL workloads and checks for hydo projects (docs/design/workloads.md,
+# hydo/onboard/MANIFEST.md "SQL systems: ready-made workloads and checks").
+#
+# A guest program, like hydo-read: static, byte-reproducible (build.sh), not a member of the
+# repository's workspace, its own lock file (started from hydo-read's, so both programs use the
+# same versions of the same crates). It reuses hydo-read's library (the JSON values, the
+# connection code, the readers) and compiles hydo-read's PostgreSQL, MySQL and hydo-check modules
+# into its own (build.rs), adding a session API beside them, so hydo-read's own sources, and the
+# bytes of the hydo-read inside recorded images, stay as they are.
+[package]
+name = "hydo-sql"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.90"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "hydo_sql"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hydo-sql"
+path = "src/main.rs"
+
+[dependencies]
+hydo-read = { path = "../hydo-read" }
+hmac = "0.12"
+md-5 = "0.10"
+rand_core = { version = "0.6", features = ["getrandom"] }
+rsa = { version = "0.9", default-features = false, features = ["std", "pem"] }
+sha1 = "0.10"
+sha2 = "0.10"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "unwind"
+
+[workspace]

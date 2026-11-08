@@ -224,6 +224,83 @@ fn executable(p: &Path) -> bool {
     unsafe { libc::access(c.as_ptr(), libc::X_OK) == 0 }
 }
 
+/// A SQL check (`checks/<final|always|eventually>_<name>.sql`, not executable): a query that
+/// must return no rows, run by hydo-sql (`hydo-sql none --file ... --on <store>`) on the store
+/// its header names. Header lines (`--` comments in the first 4 KiB): `-- hydo: store=<endpoint>
+/// every=N within=N after=heal|start poll=N` and `-- hydo-msg: <description>`. An executable
+/// `.sql` file stays an ordinary check (a program), as before.
+fn sql_check(fname: &str, p: &str) -> R<Value> {
+    let (k, name) = split_kind(fname, CHECK_KINDS, "checks")?;
+    let name = name.strip_suffix(".sql").unwrap_or(&name).to_string();
+    if !match_name(&name) {
+        return Err(err(format!(
+            "checks/{fname}: the name after {k}_ may use letters, digits, '.', '_', '-'"
+        )));
+    }
+    let text = std::fs::read(p).map_err(|x| crash(format!("{p}: {x}")))?;
+    let head = &text[..text.len().min(4096)];
+    let mut store: Option<String> = None;
+    let mut e = Map::new();
+    e.insert("name".into(), s(&name));
+    e.insert("kind".into(), s(k));
+    let mut msg = None;
+    let mut kv: Vec<(String, Value)> = Vec::new();
+    for line in splitlines(&String::from_utf8_lossy(head)) {
+        let t = line.trim_start();
+        let Some(c) = t.strip_prefix("--") else {
+            continue;
+        };
+        let c = c.trim_start();
+        if let Some(m) = c.strip_prefix("hydo-msg:") {
+            msg = Some(m.trim().to_string());
+        } else if let Some(h) = c.strip_prefix("hydo:") {
+            for tok in py::split_ws(h) {
+                if let Some((a, v)) = tok.split_once('=') {
+                    if a == "store" {
+                        store = Some(v.to_string());
+                        continue;
+                    }
+                    if !["every", "within", "after", "poll"].contains(&a) {
+                        return Err(err(format!(
+                            "checks/{fname}: header key {} (allowed here: store, every, within, after, poll)",
+                            repr_str(a)
+                        )));
+                    }
+                    let val = if !v.is_empty() && v.chars().all(|c| c.is_ascii_digit()) {
+                        v.parse::<i64>()
+                            .map(|i| Value::Number(i.into()))
+                            .unwrap_or_else(|_| s(v))
+                    } else {
+                        s(v)
+                    };
+                    match kv.iter_mut().find(|(x, _)| x == a) {
+                        Some(x) => x.1 = val,
+                        None => kv.push((a.to_string(), val)),
+                    }
+                }
+            }
+        }
+    }
+    let mut run = vec![
+        s("hydo-sql"),
+        s("none"),
+        s("--file"),
+        s(&format!("/hydo/checks/{fname}")),
+    ];
+    if let Some(st) = store {
+        run.push(s("--on"));
+        run.push(s(&st));
+    }
+    e.insert("run".into(), Value::Array(run));
+    for (a, v) in kv {
+        e.insert(a, v);
+    }
+    if let Some(m) = msg.filter(|m| !m.is_empty()) {
+        e.insert("msg".into(), s(&m));
+    }
+    Ok(Value::Object(e))
+}
+
 /// `scan_folder(mdir)`: the hydo/ folder next to a manifest, or None when it has none of
 /// workload/, checks/, regressions/.
 pub fn scan_folder(mdir: &str) -> R<Option<Value>> {
@@ -260,6 +337,10 @@ pub fn scan_folder(mdir: &str) -> R<Option<Value>> {
                 return Err(err(format!(
                     "{sub}/{fname}: a directory; only helper_* directories may sit beside commands"
                 )));
+            }
+            if sub == "checks" && fname.ends_with(".sql") && !executable(Path::new(&p)) {
+                lists[1].1.push(sql_check(&fname, &p)?);
+                continue;
             }
             let (k, name) = split_kind(&fname, kinds, sub)?;
             if !executable(Path::new(&p)) {
@@ -1086,7 +1167,11 @@ pub fn test_from_meta(meta: &Value) -> Value {
 
 // ------------------------------------------------------------------ hydo_version
 
-/// `engine_version(here)` with `here` = the product's onboard/ directory.
+/// `engine_version(here)` with `here` = the product's onboard/ directory: the release's (or the
+/// tree's) `VERSION` file, else the version this program is built with (the workspace version,
+/// which `hydo/VERSION` equals). Until the TigerBeetle onboarding the fallback was `0.0.0`, so a
+/// hydo built in a checkout, whose onboard/ directory is not next to it, refused every plan with
+/// `hydo_version: "0.1"`.
 pub fn engine_version(onboard_dir: &Path) -> String {
     for p in [
         onboard_dir.join("..").join("VERSION"),
@@ -1098,7 +1183,7 @@ pub fn engine_version(onboard_dir: &Path) -> String {
             }
         }
     }
-    "0.0.0".into()
+    env!("CARGO_PKG_VERSION").into()
 }
 
 fn vt(x: &str) -> [i128; 3] {

@@ -1243,9 +1243,12 @@ pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
             return 1;
         }
         if ctx.cargo_installed && version == cache.own_version {
-            println!(
-                "hydo setup: hydo {version} is installed; this hydo (installed by cargo) uses it"
-            );
+            let how = if ctx.checkout.is_some() {
+                "built in a checkout"
+            } else {
+                "installed by cargo"
+            };
+            println!("hydo setup: hydo {version} is installed; this hydo ({how}) uses it");
         } else {
             println!(
                 "hydo setup: hydo {version} is installed; run it as {}",

@@ -178,7 +178,12 @@ fn word_char_after(c: u8) -> bool {
 
 /// `READERS_RE.search(text)`: `(?<![A-Za-z0-9_./-])hydo-(read|check)(?![A-Za-z0-9_-])`.
 pub fn readers_search(b: &[u8]) -> bool {
-    for word in [&b"hydo-read"[..], &b"hydo-check"[..]] {
+    words_search(b, &[&b"hydo-read"[..], &b"hydo-check"[..]])
+}
+
+/// One of `words` as a command word (the same boundaries as `readers_search`).
+pub fn words_search(b: &[u8], words: &[&[u8]]) -> bool {
+    for &word in words {
         let mut i = 0;
         while i + word.len() <= b.len() {
             if &b[i..i + word.len()] == word {
@@ -194,13 +199,13 @@ pub fn readers_search(b: &[u8]) -> bool {
     false
 }
 
-fn walk_strings(x: &Value) -> bool {
+fn walk_strings(x: &Value, found: &dyn Fn(&[u8]) -> bool) -> bool {
     match x {
-        Value::Object(o) => o
-            .iter()
-            .any(|(k, v)| !["description", "msg", "name"].contains(&k.as_str()) && walk_strings(v)),
-        Value::Array(a) => a.iter().any(walk_strings),
-        Value::String(s) => readers_search(s.as_bytes()),
+        Value::Object(o) => o.iter().any(|(k, v)| {
+            !["description", "msg", "name"].contains(&k.as_str()) && walk_strings(v, found)
+        }),
+        Value::Array(a) => a.iter().any(|v| walk_strings(v, found)),
+        Value::String(s) => found(s.as_bytes()),
         _ => false,
     }
 }
@@ -208,7 +213,18 @@ fn walk_strings(x: &Value) -> bool {
 /// `uses_readers(m)`: a command of the manifest (or a file of its hydo/ folder) calls hydo-read
 /// or hydo-check.
 pub fn uses_readers(m: &Value) -> Result<bool, Fail> {
-    if walk_strings(m) {
+    uses_program(m, &readers_search)
+}
+
+/// `uses_sql(m)`: a command of the manifest (or a file of its hydo/ folder) calls hydo-sql, the
+/// ready-made SQL workloads and checks; /bin/hydo-sql is staged only then, so no other image
+/// changes.
+pub fn uses_sql(m: &Value) -> Result<bool, Fail> {
+    uses_program(m, &|b: &[u8]| words_search(b, &[&b"hydo-sql"[..]]))
+}
+
+fn uses_program(m: &Value, found: &dyn Fn(&[u8]) -> bool) -> Result<bool, Fail> {
+    if walk_strings(m, found) {
         return Ok(true);
     }
     let dirs: Vec<String> = m
@@ -229,7 +245,7 @@ pub fn uses_readers(m: &Value) -> Result<bool, Fail> {
                 if let Ok(md) = std::fs::metadata(&p) {
                     if md.is_file() && md.len() <= (64 << 20) {
                         let b = std::fs::read(&p).map_err(|e| io_fail("cannot read", &p, e))?;
-                        if readers_search(&b) {
+                        if found(&b) {
                             return Ok(true);
                         }
                     }
@@ -260,6 +276,37 @@ pub fn under(r: &Path, rel: &str) -> PathBuf {
     } else {
         r.join(rel)
     }
+}
+
+/// The services' own file systems (services[].storage with size_mib), each an empty journaled
+/// ext4 image `<prefix>-<service>.img` in the build directory, in the manifest's order: the
+/// logical partitions /dev/vda5, /dev/vda6, ... of the data disk (docs/design/storage-faults.md).
+pub fn volume_images(
+    ctx: &Ctx,
+    mk: &MkfsTools,
+    m: &Value,
+    name: &str,
+    bdir: &Path,
+    prefix: &str,
+) -> Result<Vec<(PathBuf, u64)>, Fail> {
+    let mut out = Vec::new();
+    for (svc, st, _) in hydo_manifest::storage::volumes(m) {
+        let mib = st.size_mib.unwrap_or(0);
+        let img = bdir.join(format!("{prefix}-{svc}.img"));
+        image::mkfs(
+            ctx,
+            mk,
+            &img,
+            mib,
+            &image::uuid_from(name, &format!("vol-{svc}")),
+            &image::uuid_from(name, &format!("vol-{svc}-hash")),
+            None,
+            true,
+        )?;
+        image::zero_times(&img, true)?;
+        out.push((img, mib));
+    }
+    Ok(out)
 }
 
 /// The base directories, then root.dirs.
@@ -401,6 +448,39 @@ pub fn write_compiled(
     Ok(())
 }
 
+/// `tls:` (src/tls.rs): the certificates, the guest's trust and host names into the staged root
+/// `r`, the trust variables into the manifest's env (before it is compiled); what image services
+/// need is returned for `oci::stage_with`. Nothing without `tls:`.
+pub fn tls_stage(
+    data: &mut Value,
+    eps: &[crate::tls::Endpoint],
+    r: &Path,
+    io: &mut Io,
+) -> Result<Option<crate::oci::TlsTrust>, Fail> {
+    if eps.is_empty() {
+        return Ok(None);
+    }
+    let pki = crate::tls::make(&py::str_of(&data["name"]), eps);
+    crate::tls::stage_root(r, eps, &pki)?;
+    crate::tls::add_env(data);
+    for e in eps {
+        outln(
+            io,
+            &format!(
+                "hydo-build: {} serves TLS on {}:{} for {} (test CA /etc/hydo/tls/ca.pem)",
+                e.name,
+                e.addr,
+                e.port,
+                e.hosts.join(", ")
+            ),
+        );
+    }
+    Ok(Some(crate::oci::TlsTrust {
+        ca_pem: pki.ca_pem,
+        host_lines: crate::tls::host_lines(eps),
+    }))
+}
+
 /// The prebuilt helper copied into the root with mode 755.
 pub fn put_exec(src: &str, dst: &Path) -> Result<(), Fail> {
     fsx::copy_file(Path::new(src), dst)?;
@@ -454,12 +534,22 @@ pub fn build(
         modroot = Some(tool(&ctx.inputs.modroot, MODROOT, isdir)?);
     }
     let mut world = None;
+    let tls_eps = crate::tls::endpoints(&m);
     if shell::has_world(&m) {
-        world = Some(tool(
-            &ctx.inputs.worldbin,
-            &bdir.join("hydo-world").to_string_lossy(),
-            isfile,
-        )?);
+        world = Some(if tls_eps.is_empty() {
+            tool(
+                &ctx.inputs.worldbin,
+                &bdir.join("hydo-world").to_string_lossy(),
+                isfile,
+            )?
+        } else {
+            // the program with the TLS front (hydo/crates/hydo-world/build.sh, HYDO_WORLD_TLS=1)
+            tool(
+                &ctx.inputs.worldbin_tls,
+                &bdir.join("hydo-world-tls").to_string_lossy(),
+                isfile,
+            )?
+        });
     }
     let rootsec = section(&m, "root")?;
     let r = bdir.join(format!("{out}-root"));
@@ -554,6 +644,21 @@ pub fn build(
             ),
         );
     }
+    if uses_sql(&m)? {
+        let sb = tool(
+            &ctx.inputs.sql_bin,
+            &bdir.join("hydo-sql").to_string_lossy(),
+            isfile,
+        )?;
+        put_exec(&sb, &r.join("bin/hydo-sql"))?;
+        outln(
+            io,
+            &format!(
+                "hydo-build: staged /bin/hydo-sql (sha256 {})",
+                &fsx::sha(Path::new(&sb))?[..16]
+            ),
+        );
+    }
     if let Some(fc) = &fcbin {
         put_exec(fc, &r.join("bin/hydo_fc"))?;
     }
@@ -608,6 +713,7 @@ pub fn build(
     }
     stage_files(&m, manifest_path, &r, &|s| store.view(s).exists())?;
     default_etc(&r, &shell::default_hosts(&m))?;
+    let trust = tls_stage(&mut p.data, &tls_eps, &r, io)?;
     let tools = ShellTools {
         tc: if want_tc {
             format!("{}/bin/tc", iproute2.clone().unwrap_or_default())
@@ -627,15 +733,39 @@ pub fn build(
     crate::agent::install(&bin, &sha, &r, "/sbin/init", io)?;
     crate::record::write_inside(&r, "x86_64", false)?;
     crate::stage::compose_stage(&m, &r)?;
-    let oci_meta = crate::oci::stage(
+    // `writable: true` image services: their trees go onto the data partition (staged here)
+    let dstage = bdir.join(format!("{out}-data"));
+    if dstage.is_dir() {
+        fsx::force_remove(&dstage)?;
+    }
+    let any_layer = p.oci.iter().any(|o| o.writable);
+    if any_layer {
+        fsx::makedirs(&dstage)?;
+    }
+    let (oci_meta, layer_meta) = crate::oci::stage_with(
         &mut p.oci,
         &r,
         Path::new(&busybox),
         &bdir.join(format!("{out}-oci-tmp")),
         netns,
+        pyv::get(rootsec, "share_images")? == Some(&serde_json::Value::Bool(true)),
+        any_layer.then_some(dstage.as_path()),
+        trust.as_ref(),
         io,
     )?;
+    for w in crate::oci::ready_warnings(
+        &p.oci,
+        &r,
+        &m,
+        pyv::get(rootsec, "share_images")? == Some(&serde_json::Value::Bool(true)),
+        any_layer.then_some(dstage.as_path()),
+    ) {
+        crate::errln(io, &format!("hydo-build: warning: {w}"));
+    }
     fsx::fix_mtimes(&r)?;
+    if any_layer {
+        fsx::fix_mtimes(&dstage)?;
+    }
 
     let ext4 = bdir.join(format!("{out}-ext4.img"));
     let data = bdir.join(format!("{out}-data.img"));
@@ -682,10 +812,25 @@ pub fn build(
     }
     image::zero_times(&ext4, false)?;
     let dsec = section(&m, "data")?;
-    let dmib = pyv::get(dsec, "size_mib")?
+    let mut dmib = pyv::get(dsec, "size_mib")?
         .map(|v| pyv::int(v, "data.size_mib"))
         .transpose()?
         .unwrap_or(512);
+    if any_layer {
+        // the layers come on top of data.size_mib
+        let du = run_ok(Command::new("du").arg("-sm").arg(&dstage), "du -sm")?;
+        let used: i128 = String::from_utf8_lossy(&du.stdout)
+            .split_whitespace()
+            .next()
+            .and_then(|x| x.parse().ok())
+            .ok_or_else(|| Fail::Exit("hydo-build: du -sm printed no size".into()))?;
+        let lmib = (used * 13 / 10 + 63) / 64 * 64;
+        outln(
+            io,
+            &format!("hydo-build: writable layers {lmib} MiB on the data disk, besides data.size_mib {dmib}"),
+        );
+        dmib += lmib;
+    }
     image::mkfs(
         ctx,
         &mk,
@@ -693,18 +838,45 @@ pub fn build(
         dmib as u64,
         &image::uuid_from(&name, "data"),
         &image::uuid_from(&name, "data-hash"),
-        None,
+        any_layer.then_some(dstage.as_path()),
         true,
     )?;
+    if any_layer {
+        crate::oci::fix_ext4(
+            &layer_meta,
+            &ctx.inputs.debugfs,
+            &mke2fs,
+            &faketime,
+            &data,
+            io,
+        )?;
+    }
     image::zero_times(&data, true)?;
     let (p1, n1) = (2048u64, rmib as u64 * 2048);
     let (p2, n2) = (p1 + n1, dmib as u64 * 2048);
-    image::assemble_disk(
-        &disk,
-        p2 + n2,
-        &[(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
-        &[(&ext4, p1), (&data, p2)],
-    )?;
+    let vols = volume_images(ctx, &mk, &m, &name, bdir, &format!("{out}-vol"))?;
+    if vols.is_empty() {
+        image::assemble_disk(
+            &disk,
+            p2 + n2,
+            &[(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
+            &[(&ext4, p1), (&data, p2)],
+        )?;
+    } else {
+        let v: Vec<(&Path, u64)> = vols.iter().map(|(p, n)| (p.as_path(), *n)).collect();
+        image::assemble_disk_volumes(
+            &disk,
+            [(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
+            &[(&ext4, p1), (&data, p2)],
+            &v,
+        )?;
+        for (p, n) in &vols {
+            outln(
+                io,
+                &format!("hydo-build: {} (own file system, {n} MiB)", p.display()),
+            );
+        }
+    }
     outln(
         io,
         &format!(

@@ -21,12 +21,14 @@ mod doctor;
 mod explain;
 mod fetch;
 mod hvxenv;
+mod inspect;
 mod migrate;
 mod module;
 mod pyjson;
 mod runs;
 mod setup;
 mod skillupdate;
+mod sqlgen;
 
 use ctx::{Ctx, Platform};
 
@@ -140,7 +142,7 @@ fn main() {
     // the engine of the commands that run guests (Linux: hvx, or KVM with --backend kvm)
     if matches!(
         argv.get(1).map(String::as_str),
-        Some("run" | "repro" | "explore" | "doctor")
+        Some("run" | "repro" | "explore" | "doctor" | "inspect")
     ) {
         ctx.take_backend(&mut argv);
     }
@@ -179,6 +181,11 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         // M165: `hydo diff --help`, `hydo explain --help` (the main help is a recorded answer)
         "diff" => diff::cmd_diff(ctx, rest),
         "explain" => explain::cmd_explain(ctx, rest),
+        // M178: look inside a recorded run (docs/design/inspect.md; `hydo inspect --help`)
+        "inspect" => inspect::cmd_inspect(ctx, rest),
+        // ready-made SQL workloads and checks for the hydo/ folder (`hydo sql-gen --help`; the
+        // main help is a recorded answer)
+        "sql-gen" => sqlgen::cmd_sql_gen(rest),
         "save" => runs::cmd_save(ctx, rest),
         "errors" => delegated::cmd_errors(ctx, rest),
         "check-history" => hydo_history::cli::main(rest),

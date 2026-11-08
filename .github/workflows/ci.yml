@@ -88,6 +88,9 @@ jobs:
           echo "HYDO_SKILLS_REF=$RUNNER_TEMP/skills-ref/bin/agentskills" >> "$GITHUB_ENV"
       - name: cargo fmt --check
         run: cargo fmt --all --check
+      # every crate's integration tests are one program (docs/CI.md, "One test program per crate")
+      - name: One test program per crate
+        run: sh ci/consolidate-tests.sh --check
       - name: cargo clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Which packages the change can affect
@@ -126,6 +129,7 @@ jobs:
           workspaces: |
             hydo/crates/hydo-agent -> target
             hydo/crates/hydo-read -> target
+            hydo/crates/hydo-sql -> target
       - name: hydo-agent (the guest agent's native tests, as an unprivileged user)
         working-directory: hydo/crates/hydo-agent
         run: cargo test --locked
@@ -141,6 +145,11 @@ jobs:
         run: |
           cargo test --locked
           cargo test --locked --test stores -- --nocapture --test-threads=1 2>&1 | grep 'skipped'
+      # The outcome rules against scripted sqld and PostgreSQL servers, the configuration, the
+      # SQL of each dialect, the world source (no database needed).
+      - name: hydo-sql (the ready-made SQL workloads and checks)
+        working-directory: hydo/crates/hydo-sql
+        run: cargo test --locked
 
   sdks:
     name: sdks

@@ -14,12 +14,12 @@
 //! of every 256 lines of Python's stream, recorded from 2a58c4b with Python 3.15.0 on the Mac
 //! (59,262 cases). The stream must be identical.
 //!
-//! `HYDO_BLESS=1 cargo test -p hydo-composer --test equivalence` re-records both goldens from the
+//! `HYDO_BLESS=1 cargo test -p hydo-composer --test it equivalence::` re-records both goldens from the
 //! Rust answers after a deliberate change. A pinned plan folder whose files changed fails the test
 //! only through the answers; the test prints which folders changed (Milestone 171). `HYDO_RECORD_PY=<py_ref.py output> HYDO_RECORD_WORK=<its --work dir>` records from a
 //! saved Python stream instead (how the goldens were made).
 
-mod common;
+use crate::common;
 
 use common::golden;
 use common::pyrandom::PyRandom;

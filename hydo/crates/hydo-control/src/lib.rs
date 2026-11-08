@@ -25,6 +25,7 @@ pub mod control;
 pub mod drive;
 mod flow;
 pub mod lockstep_link;
+pub mod names;
 pub mod plan;
 pub mod replay;
 pub mod runner;

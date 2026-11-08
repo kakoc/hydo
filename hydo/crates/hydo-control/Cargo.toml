@@ -2,6 +2,9 @@
 # docs/HISTORY.md M120). Nothing calls it yet: the engines' callers start using it in step C1.
 [package]
 name = "hydo-control"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo's host controller for agent images: the Controller trait, the ScheduleController that runs today's schedules through hydo-agent's commands, the control transcript and its replay"
 version.workspace = true
 edition.workspace = true
@@ -40,3 +43,8 @@ hydo-history = { path = "../hydo-history" }
 flate2 = { workspace = true }
 # tests/fakes.rs and tests/features.rs: the init, manifest.sh and compose.list hydo-build writes
 hydo-build = { path = "../hydo-build" }
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

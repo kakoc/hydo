@@ -28,6 +28,10 @@ pub struct RecoveryInputs {
     /// `fakes:`/`proxies:`: the fake world's records the first boot carried (`w:` lines, the
     /// `world` of [`crate::Ending::PowerCut`]; empty without a world).
     pub world: Vec<String>,
+    /// `guest.outcomes_after_cut: true`: the last outcome of every id of the first boot's
+    /// `$HYDO_OUTCOMES`, as `<id> <outcome>` lines, which the recovery boot's `$HYDO_OUTCOMES`
+    /// starts with (empty without the key: that file starts empty, as before it).
+    pub outcomes: Vec<String>,
 }
 
 impl RecoveryInputs {
@@ -41,6 +45,7 @@ impl RecoveryInputs {
             acked,
             failed,
             world,
+            outcomes,
         } = t.ending()?
         else {
             return None;
@@ -64,6 +69,7 @@ impl RecoveryInputs {
             failed: failed.clone(),
             clock,
             world: world.clone(),
+            outcomes: outcomes.clone(),
         })
     }
 }
@@ -72,4 +78,6 @@ impl RecoveryInputs {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct Carried {
     pub clock: Option<i64>,
+    /// `guest.outcomes_after_cut`: the first boot's last outcomes (`<id> <outcome>` lines).
+    pub outcomes: Vec<String>,
 }

@@ -440,6 +440,400 @@ pub struct Run {
     /// Runs on agent images: the control transcript of each conversation (added in M120).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub control: Vec<Control>,
+    /// Why a passing run may have checked nothing (added after 0.1.0): the workload acknowledged
+    /// nothing, or a history check judged an empty history. One sentence each; absent when
+    /// there is none. A run with warnings still passed: the verdict is unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+    /// Why the run failed, when it did not pass (added in M178): what the run's own files say
+    /// and, when collected, what a replay of the run read in the guest at the stop where the
+    /// verdict was given. `hydo run` writes it; the fingerprints never depend on it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnosis: Option<Diagnosis>,
+}
+
+// ------------------------------------------------------------------ diagnosis and inspection
+
+/// Where in a run something is (added in M178): its conversation (`boot`, `run`, `recovery`),
+/// the number of the stop (the control transcript's `n`) and the engine's virtual clock there
+/// (hvx's instruction clock, hvm's and kvm's exit count). `point` is the two in the form
+/// `hydo inspect start --at` takes (`boot:172`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RunPoint {
+    pub point: String,
+    pub conversation: String,
+    pub stop: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<u64>,
+}
+
+/// How a process the host started ended (added in M178): the agent's `exit` (a service, the
+/// provisioning) or `done` (a command) event.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ProcessEnd {
+    /// The service's or the command's name as the host started it (`redis`, `provision`,
+    /// `setup:redis`, `workload`).
+    pub handle: String,
+    /// The command, as text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// The exit status as a shell reports it (the code, or 128 + the signal).
+    pub status: u64,
+    /// The signal that ended it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal: Option<u64>,
+    /// The signal's name (`KILL`, `SEGV`, ...).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal_name: Option<String>,
+    /// Its time limit ended it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timed_out: Option<bool>,
+    /// The host sent that signal itself (a kill of the schedule, the end of a check). False: a
+    /// signal hydo did not send (for SIGKILL usually the kernel's out-of-memory killer).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal_by_hydo: Option<bool>,
+    /// What the agent kept of its output (commands only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    /// Where it ended (the first recorded stop by which the host had seen the event).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<RunPoint>,
+}
+
+/// A readiness check's end (added in M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ProbeEnd {
+    pub service: String,
+    pub command: String,
+    /// `ok`, `deadline` (it did not pass in time) or `died` (the service's process ended first).
+    pub why: String,
+    pub tries: u64,
+    /// The last attempt's exit status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_status: Option<u64>,
+    /// The time limit, in seconds of guest time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deadline_s: Option<u64>,
+}
+
+/// Text read in the guest (added in M178): a log's tail, a command's output.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Evidence {
+    /// What it is, in words (`the log of redis`, `the kernel's messages`).
+    pub what: String,
+    /// The file read, or the command run.
+    pub source: String,
+    /// The text (invalid UTF-8 replaced by U+FFFD).
+    pub text: String,
+    /// The whole size in bytes (of the file, or of the command's output).
+    pub bytes: u64,
+    /// Only the end (a log) or the start (a command's output) of it is in `text`.
+    pub truncated: bool,
+    /// A command's exit status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<u64>,
+}
+
+/// Why a run failed (added in M178; `result.json`'s `diagnosis`, `hydo inspect diagnose`).
+///
+/// `failure` names what failed (an open set): `service-exited` (a service's process ended
+/// while it started), `service-not-ready` (its readiness check did not pass in time),
+/// `service-setup`, `provision`, `restart` (a service did not come back after the faults),
+/// `mount`, `timeout` (a phase ran out of time), `vm` (the guest or the engine stopped),
+/// `control`, `violation` (a check failed; no process failed) or `other`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Diagnosis {
+    /// One or two sentences for a reader who sees nothing else.
+    pub summary: String,
+    pub failure: String,
+    /// The service it concerns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<String>,
+    /// The stop where the verdict was given (`hydo inspect start <run dir> --at end` looks there).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict_at: Option<RunPoint>,
+    /// The process whose end caused the failure.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process: Option<ProcessEnd>,
+    /// The readiness check that failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub probe: Option<ProbeEnd>,
+    /// Every process the host started that ended before the verdict with a status other than 0.
+    #[serde(default)]
+    pub exits: Vec<ProcessEnd>,
+    /// Conclusions drawn from the facts, each with its reason.
+    #[serde(default)]
+    pub likely: Vec<String>,
+    /// The kernel's lines about crashes and memory (out of memory, segfault, panic), from the
+    /// console and, when collected, from `dmesg`.
+    #[serde(default)]
+    pub kernel: Vec<String>,
+    /// `collected` (a replay read `evidence` in the guest), `not-collected` (with the reason in
+    /// `evidence_note`) or `failed`.
+    pub evidence_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_note: Option<String>,
+    #[serde(default)]
+    pub evidence: Vec<Evidence>,
+    /// Commands that look further, exactly as they can be run.
+    #[serde(default)]
+    pub next: Vec<String>,
+}
+
+tag!(DiagnosisType, "diagnosis");
+tag!(TimelineType, "timeline");
+tag!(InspectType, "inspect");
+tag!(InspectErrorType, "inspect-error");
+
+/// `hydo inspect diagnose <run dir>`: a run's [`Diagnosis`] as a document (added in M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DiagnosisDoc {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: DiagnosisType,
+    pub run_dir: String,
+    pub verdict: Verdict,
+    pub diagnosis: Diagnosis,
+}
+
+/// One event of a run's timeline (added in M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TimelineEvent {
+    /// `<conversation>:<stop>`, the form `hydo inspect start --at` takes; absent for the run's
+    /// result.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point: Option<String>,
+    pub conversation: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop: Option<u64>,
+    /// The engine's virtual clock at the stop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<u64>,
+    /// An open set: `command` (the host typed an agent command), `exit` (a process the host
+    /// started ended), `probe` (a readiness check ended), `done` (a command ended), `fault` (a
+    /// fault applied or healed), `note` (the host controller's note), `report` (a line of the
+    /// run's report), `assertion`, `guest` (a line the guest printed), `snapshot`, `engine`,
+    /// `end` (the end of a conversation), `verdict`.
+    pub kind: String,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<String>,
+    /// The record behind it (an agent event, a command).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<Value>,
+}
+
+/// One conversation of a run in its timeline (added in M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TimelineConversation {
+    pub conversation: String,
+    pub first_stop: u64,
+    pub last_stop: u64,
+    /// How it ended (`end at snapshot S1`, `end: HYDO-ORACLE: OK ...`, `power cut`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<String>,
+    /// Whether `hydo inspect` can keep a snapshot at its stops (boot and the workload; not after
+    /// the workload's end, not in a recovery boot, not under timing schedules) or works on one
+    /// live branch there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshots: Option<String>,
+}
+
+/// `hydo inspect events <run dir>`: a run's events with their stops, filtered and paged (added in
+/// M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Timeline {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: TimelineType,
+    pub run_dir: String,
+    pub verdict: Verdict,
+    #[serde(default)]
+    pub conversations: Vec<TimelineConversation>,
+    /// Events matching the filters (before paging).
+    pub total: u64,
+    /// The index of the first event shown among them.
+    pub offset: u64,
+    #[serde(default)]
+    pub events: Vec<TimelineEvent>,
+    /// More events match than are shown.
+    pub truncated: bool,
+    /// The command that shows the next page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<String>,
+}
+
+/// Text read from the guest by `hydo inspect` (added in M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InspectText {
+    /// The text (invalid UTF-8 replaced by U+FFFD), absent when `hex` is given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// The bytes in lower-case hex, when they are not UTF-8 text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hex: Option<String>,
+    /// The whole size in bytes.
+    pub bytes: u64,
+    /// The bytes shown start here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u64>,
+    /// Fewer bytes are shown than there are (`--max-bytes`).
+    pub truncated: bool,
+}
+
+/// A command run in the guest by `hydo inspect` (added in M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InspectExec {
+    pub argv: Vec<String>,
+    /// The service whose network namespace it ran in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<String>,
+    /// The exit status (the code, or 128 + the signal).
+    pub status: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signal: Option<u64>,
+    /// Its time limit (`--timeout`, guest time) ended it.
+    pub timed_out: bool,
+    pub stdout: InspectText,
+    pub stderr: InspectText,
+}
+
+/// A file or directory entry (added in M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InspectEntry {
+    pub name: String,
+    /// `file`, `dir`, `link`, `socket`, `fifo`, `device` or `other`.
+    pub kind: String,
+    pub bytes: u64,
+    /// The permission bits in octal.
+    pub mode: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    /// Seconds since 1970 (the guest's clock).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mtime: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+}
+
+/// A process in the guest (added in M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InspectProcess {
+    pub pid: u64,
+    pub ppid: u64,
+    /// The kernel's state letter (`R`, `S`, `D`, `T` stopped, `Z` zombie).
+    pub state: String,
+    /// Resident memory in KiB.
+    pub rss_kib: u64,
+    pub threads: u64,
+    pub command: String,
+}
+
+/// A socket in the guest (added in M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InspectSocket {
+    /// `tcp`, `tcp6`, `udp`, `udp6` or `unix`.
+    pub proto: String,
+    pub local: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<String>,
+    /// TCP's state (`LISTEN`, `ESTABLISHED`, ...).
+    pub state: String,
+    pub send_queue: u64,
+    pub recv_queue: u64,
+}
+
+/// An inspection session (added in M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InspectSession {
+    pub id: String,
+    pub run_dir: String,
+    /// The stop the session looks at, and how: `snapshot` (every call starts from the stop's
+    /// snapshot, so each sees the same state) or `live` (calls run one after another on one
+    /// branch from the stop; each sees what the earlier ones left).
+    pub at: RunPoint,
+    pub state: String,
+    /// `starting`, `ready` or `ended`.
+    pub status: String,
+    /// It ends by itself after this many seconds without a call.
+    pub idle_timeout_s: u64,
+    /// Every process was stopped (SIGSTOP) at the stop (`--freeze`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frozen: Option<bool>,
+    /// The engine (`hvx`, `hvm`, `kvm`).
+    pub engine: String,
+    /// Calls served so far.
+    pub calls: u64,
+}
+
+/// What a call cost (added in M178).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InspectCost {
+    /// Wall time of the call.
+    pub wall_ms: u64,
+    /// Engine stops the call took (a replay to the stop counts every stop of it).
+    pub stops: u64,
+}
+
+/// One answer of `hydo inspect` (added in M178): `op` says which; the members of that op are set.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Inspect {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: InspectType,
+    /// `start`, `status`, `list`, `stop`, `exec`, `read`, `ls`, `logs`, `ps`, `sockets`,
+    /// `advance`.
+    pub op: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<InspectSession>,
+    /// `list`: every session of this user.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sessions: Vec<InspectSession>,
+    /// The state the call saw: the session's stop (`snapshot`), or the branch after the earlier
+    /// calls (`live`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<RunPoint>,
+    /// `exec`, `logs`, `ps`, `sockets`: the command and its output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exec: Option<InspectExec>,
+    /// `read`: the file's bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<InspectText>,
+    /// `ls`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<InspectEntry>,
+    /// `ps`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub processes: Vec<InspectProcess>,
+    /// `sockets`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sockets: Vec<InspectSocket>,
+    /// Lists shown in part (`--limit`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub truncated: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<InspectCost>,
+    /// Remarks for the caller (what the state is, what to try next).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
+}
+
+/// A call of `hydo inspect` that failed (added in M178): what was wrong and what would work.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InspectError {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: InspectErrorType,
+    pub op: String,
+    /// An open set: `usage`, `no-run`, `no-session`, `bad-point`, `engine`, `agent`,
+    /// `timeout`, `refused`.
+    pub code: String,
+    pub message: String,
+    /// Commands that would work, exactly as they can be run.
+    #[serde(default, rename = "try", skip_serializing_if = "Vec::is_empty")]
+    pub try_: Vec<String>,
 }
 
 /// One property over the runs of a table.
@@ -474,6 +868,10 @@ pub struct Property {
     /// Eventually properties: the slowest episode that held, in seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slowest_ok_s: Option<f64>,
+    /// Eventually properties: the deadline in seconds after the anchor (the records' `within_s`,
+    /// the largest seen; added after M176).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub within_s: Option<f64>,
 }
 
 /// The property table: every assertion property over a set of runs (hydo/ASSERTIONS.md).
@@ -508,6 +906,17 @@ pub struct Liveness {
     pub first_miss_run: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_miss: Option<Value>,
+    /// The property's deadline in seconds after its anchor (the records' `within_s`; the largest
+    /// when runs differ), so that `slowest_s` can be read against it (added after M176).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub within_s: Option<f64>,
+    /// The slowest episode that held only after its deadline (the host's `satisfied only <t>s
+    /// after ...`): the guest time the property needed in that run, and the run (added after
+    /// M176). A deadline of at least this would have held there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slowest_late_s: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slowest_late_run: Option<String>,
 }
 
 /// A run of a schedule again, to confirm it.
@@ -743,6 +1152,10 @@ pub struct Summary {
     pub error_kinds_new: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runs_with_new_error_kinds: Option<u64>,
+    /// First runs that passed with a warning that they may have checked nothing (their run
+    /// records' `warnings`; added after 0.1.0).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vacuous_passes: Option<u64>,
 }
 
 /// Where an exploration's files are, relative to its directory.
@@ -951,6 +1364,11 @@ pub enum AnyV1 {
     Shrink(Box<Shrink>),
     End(Box<End>),
     Diff(Box<Diff>),
+    /// Added in M178.
+    Diagnosis(Box<DiagnosisDoc>),
+    Timeline(Box<Timeline>),
+    Inspect(Box<Inspect>),
+    InspectError(Box<InspectError>),
 }
 
 impl Run {

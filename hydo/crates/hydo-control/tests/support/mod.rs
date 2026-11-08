@@ -404,7 +404,7 @@ pub struct Ran {
 }
 
 pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
-    let mut ctl = ScheduleController::run(b.plan.clone(), s, &b.s1.2)?;
+    let mut ctl = ScheduleController::run_unchecked(b.plan.clone(), s, &b.s1.2)?;
     let salt = s.to_string();
     let cad = cadence(Some(s));
     let h = header("run", Some(s), "resume S1");
@@ -429,6 +429,7 @@ pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
             acked,
             failed,
             world,
+            ..
         }) => {
             let i = inputs.as_ref().expect("a power cut hands its inputs over");
             assert_eq!((&i.acked, &i.failed, &i.world), (acked, failed, world));
@@ -527,7 +528,7 @@ pub fn check_golden(name: &str, comment: &[&str], inputs: &[String], lines: &[St
     for (i, (a, b)) in wl.iter().zip(gl.iter()).enumerate() {
         if a != b && !(input_path(a).is_some() && input_path(a) == input_path(b)) {
             panic!(
-                "{} differs at line {}:\n  golden: {a}\n  now:    {b}{note}\nIf the change is intended, re-record with HYDO_BLESS=1 cargo test -p hydo-control --test corpus",
+                "{} differs at line {}:\n  golden: {a}\n  now:    {b}{note}\nIf the change is intended, re-record with HYDO_BLESS=1 cargo test -p hydo-control --test it",
                 p.display(),
                 i + 1
             );

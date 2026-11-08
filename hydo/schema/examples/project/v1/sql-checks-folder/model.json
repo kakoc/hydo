@@ -1,0 +1,234 @@
+{
+  "format": 1,
+  "hydo_version": "0.1",
+  "name": "postgres-sql",
+  "description": "PostgreSQL 15 with hydo's ready-made SQL workloads: bank transfers, list-append transactions, registers, a set and a counter, checked by the generated checks and hydo's history checkers",
+  "guest": {
+    "ram_mib": 1024
+  },
+  "network": "bridge",
+  "root": {
+    "text": {
+      "/etc/hosts": "127.0.0.1 localhost\n::1 localhost ip6-localhost ip6-loopback\n10.89.0.15 db\n",
+      "/etc/pg-sync-commit.sh": "exec timeout 30 hydo-oci db psql -X -q -U postgres -h 127.0.0.1 -c \"ALTER SYSTEM SET synchronous_commit = '$1'\" -c \"SELECT pg_reload_conf()\"\n"
+    }
+  },
+  "data": {
+    "size_mib": 512,
+    "dirs": [
+      "vol/db-data"
+    ]
+  },
+  "services": [
+    {
+      "name": "db",
+      "ready": "timeout 10 hydo-oci db pg_isready -q -U postgres -h 127.0.0.1",
+      "ready_timeout": 120,
+      "port": 5432,
+      "addr": "10.89.0.15",
+      "image": {
+        "x86_64": "images/postgres-15-alpine-amd64.docker.tar",
+        "arm64": "images/postgres-15-alpine-arm64-oci"
+      },
+      "image_ref": "postgres:15-alpine",
+      "env": {
+        "POSTGRES_USER": "postgres",
+        "POSTGRES_PASSWORD": "postgres"
+      },
+      "mounts": [
+        {
+          "src": "/etc/hosts",
+          "dst": "/etc/hosts"
+        },
+        {
+          "dst": "/run",
+          "tmpfs": true,
+          "copy_up": true
+        },
+        {
+          "dst": "/dev/shm",
+          "tmpfs": true,
+          "size": "64m"
+        },
+        {
+          "src": "/data/vol/db-data",
+          "dst": "/var/lib/postgresql/data",
+          "copy_up": true
+        }
+      ]
+    }
+  ],
+  "workload": {
+    "steps": 60,
+    "timeout": 300
+  },
+  "knobs": [
+    {
+      "token": "S",
+      "name": "postgres synchronous_commit",
+      "default": "on",
+      "set": "sh /etc/pg-sync-commit.sh $HYDO_VALUE",
+      "values": [
+        "on",
+        "off"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "id": "sql.la",
+      "type": "list-append",
+      "history": "la",
+      "consistency": "strict-serializable",
+      "msg": "the SQL list-append transactions are strict-serializable (no lost, aborted or duplicated append, no dependency cycle)",
+      "final": "exec '/hydo/checks/list_append_sql.la'"
+    },
+    {
+      "id": "sql.rg",
+      "type": "linearizable",
+      "history": "rg",
+      "model": "cas",
+      "msg": "the SQL registers are linearizable (no lost write, no stale read on a primary)",
+      "final": "exec '/hydo/checks/linearizable_sql.rg'"
+    }
+  ],
+  "faults": [
+    "kill",
+    "pause",
+    "network",
+    "oneway",
+    "cut",
+    "clock",
+    "disk"
+  ],
+  "test": {
+    "parallel": 6,
+    "per_round": 3,
+    "round_ms": 300,
+    "command_timeout": 30,
+    "drain_timeout": 30,
+    "check_every": 2,
+    "commands": [
+      {
+        "name": "sql_init",
+        "kind": "first",
+        "run": [
+          "/hydo/workload/first_sql_init"
+        ],
+        "timeout": 90,
+        "content": "adea23e0fa47f421"
+      },
+      {
+        "name": "sql_counter_add",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_sql_counter_add"
+        ],
+        "timeout": 20,
+        "content": "216b1ba171c12f6a"
+      },
+      {
+        "name": "sql_itransfer",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_sql_itransfer"
+        ],
+        "timeout": 20,
+        "content": "c4fb33457c3cf366"
+      },
+      {
+        "name": "sql_itxn",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_sql_itxn"
+        ],
+        "timeout": 20,
+        "content": "ad2d85e0bde6887d"
+      },
+      {
+        "name": "sql_register",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_sql_register"
+        ],
+        "timeout": 20,
+        "content": "246d4880bc2066e8"
+      },
+      {
+        "name": "sql_set_add",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_sql_set_add"
+        ],
+        "timeout": 20,
+        "content": "743f234022c1895d"
+      },
+      {
+        "name": "sql_transfer",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_sql_transfer"
+        ],
+        "timeout": 20,
+        "content": "cf7e01e1c4d800ca"
+      },
+      {
+        "name": "sql_txn",
+        "kind": "parallel_driver",
+        "run": [
+          "/hydo/workload/parallel_driver_sql_txn"
+        ],
+        "timeout": 20,
+        "content": "71bef2bbd6734cf0"
+      }
+    ],
+    "checks": [
+      {
+        "name": "sql_bank_live",
+        "kind": "always",
+        "run": [
+          "/hydo/checks/always_sql_bank_live"
+        ],
+        "msg": "the bank's total never changes and no balance is negative, on db",
+        "every": 2
+      },
+      {
+        "name": "sql_bank_after",
+        "kind": "final",
+        "run": [
+          "/hydo/checks/final_sql_bank_after"
+        ],
+        "msg": "after the faults, the bank's total on db is unchanged and no balance is negative"
+      },
+      {
+        "name": "sql_counter",
+        "kind": "final",
+        "run": [
+          "/hydo/checks/final_sql_counter"
+        ],
+        "msg": "no acknowledged increment of the counter on db is lost"
+      },
+      {
+        "name": "sql_no_negative_balance",
+        "kind": "final",
+        "run": [
+          "hydo-sql",
+          "none",
+          "--file",
+          "/hydo/checks/final_sql_no_negative_balance.sql",
+          "--on",
+          "db"
+        ],
+        "msg": "no account's balance is negative"
+      },
+      {
+        "name": "sql_set",
+        "kind": "final",
+        "run": [
+          "/hydo/checks/final_sql_set"
+        ],
+        "msg": "every acknowledged insert is in the set on db"
+      }
+    ]
+  }
+}

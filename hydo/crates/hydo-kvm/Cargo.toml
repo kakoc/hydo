@@ -1,5 +1,8 @@
 [package]
 name = "hydo-kvm"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "The KVM run engine: deterministic x86_64 guests on stock Linux KVM (/dev/kvm) with an exit-count clock, the engine's own PIC and the Mac engine's devices and protocol; in-process or as the hydo-kvm program"
 version.workspace = true
 edition.workspace = true
@@ -28,3 +31,10 @@ hydo-config = { workspace = true }
 [[bin]]
 name = "hydo-kvm"
 path = "src/bin/hydo-kvm.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

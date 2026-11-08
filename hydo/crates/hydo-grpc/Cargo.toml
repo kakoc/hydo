@@ -16,6 +16,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "hydo-grpc"
 path = "src/bin/hydo-grpc.rs"
+# no unit test of its own, so no test program (hydo-release tests/test_tiers.rs checks it)
+test = false
 
 [dependencies]
 prost = "0.14"

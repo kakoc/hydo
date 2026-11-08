@@ -353,9 +353,16 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
         findings.extend(f);
         error_logs = Some(el);
     }
+    let mut warnings = if verdict.kind == "ok" {
+        vacuous(consoles, &findings)
+    } else {
+        Vec::new()
+    };
+    warnings.extend(unseen_events(text, consoles));
     Run {
         tag: Some(tag.to_string()),
         schedule: text.to_string(),
+        warnings,
         verdict,
         fingerprints: Fingerprints {
             fp: s(r, "fp").unwrap_or_default(),
@@ -374,6 +381,71 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
         }),
         ..Run::default()
     }
+}
+
+/// Why a passing run may have checked nothing (no silent passes, 2026-11-07): a pass of a run
+/// whose workload acknowledged nothing, or whose history check judged an empty history, is not
+/// evidence that the system is correct; a broken workload (a client that cannot connect, a
+/// service that never started) passes the same way. One sentence per reason.
+///
+/// - The workload acknowledged nothing: the first boot's last `hydo-explore-acked:` report has
+///   no id, no composer command exited 0 (`compose.<id>.succeeded`), and no history check saw
+///   an operation. A run without that report (it ended before the workload's end) is not
+///   judged.
+/// - A history check that passed with no operation (`ops` 0 in its details).
+pub fn vacuous(consoles: &[(String, String)], findings: &[Finding]) -> Vec<String> {
+    let mut out = Vec::new();
+    let ops = |f: &Finding| {
+        f.details
+            .get("details")
+            .and_then(|d| d.get("ops"))
+            .and_then(Value::as_u64)
+    };
+    let hist: Vec<&Finding> = findings
+        .iter()
+        .filter(|f| f.kind == kind::HISTORY_CHECK)
+        .collect();
+    let first = consoles
+        .iter()
+        .find(|(name, _)| !name.contains(".recovery"))
+        .map(|(_, t)| t.as_str())
+        .unwrap_or("");
+    let acked = first
+        .lines()
+        .rev()
+        .find_map(|l| l.strip_prefix("hydo-explore-acked:"))
+        .map(|l| {
+            l.split_whitespace()
+                .filter(|w| !w.starts_with("clock=") && !w.starts_with("w:"))
+                .count()
+        });
+    let composed = consoles.iter().any(|(_, t)| {
+        t.lines().any(|l| {
+            l.starts_with("HYDO-ASSERT ")
+                && l.contains("\"id\":\"compose.")
+                && l.contains(".succeeded\"")
+                && l.contains("\"ok\":true")
+        })
+    });
+    let hist_ops = hist.iter().any(|f| ops(f).is_some_and(|n| n > 0));
+    if acked == Some(0) && !composed && !hist_ops {
+        out.push(
+            "the workload acknowledged nothing: no id in $HYDO_ACKED, no test command exited 0, \
+             no history operation; this pass checked nothing the workload did (a client that \
+             cannot reach a service passes the same way)"
+                .to_string(),
+        );
+    }
+    for f in hist {
+        if f.status == status::OK && ops(f) == Some(0) {
+            out.push(format!(
+                "the history check {} judged an empty history (0 operations): nothing was \
+                 recorded with hydo_hist",
+                f.id
+            ));
+        }
+    }
+    out
 }
 
 /// An explorer run's consoles (`consoles/<tag>.log`, `consoles/<tag>.recovery.log`).
@@ -420,6 +492,8 @@ struct P {
     runs_fail: u64,
     first_fail: Vec<u8>,
     max_ok_elapsed: f64,
+    /// eventually: the largest `within_s` of its records (-1: none)
+    max_within: f64,
     run_pass: bool,
     run_fail: bool,
 }
@@ -506,6 +580,7 @@ impl Table {
             id: cut(id, ID_LEN),
             ty: cut(ty, TYPE_LEN),
             max_ok_elapsed: -1.0,
+            max_within: -1.0,
             ..P::default()
         });
         Some(self.p.len() - 1)
@@ -524,6 +599,15 @@ impl Table {
         if decl {
             p.declared = true;
             return;
+        }
+        if p.ty == b"eventually" {
+            if let Some(e) = find(rec, b"\"within_s\":") {
+                let x = &rec[e + 11..];
+                let w = atof(if x.first() == Some(&b'"') { &x[1..] } else { x });
+                if w > p.max_within {
+                    p.max_within = w;
+                }
+            }
         }
         if find(rec, b"\"ok\":true").is_some() {
             p.passes += 1;
@@ -643,36 +727,38 @@ pub fn property_table(runs: &[String]) -> Option<PropertyTable> {
     if !any {
         return None;
     }
-    let props: Vec<Property> =
-        t.p.iter()
-            .map(|p| {
-                let v = verdict(p);
-                Property {
-                    id: lossy(&p.id),
-                    assertion: lossy(&p.ty),
-                    message: lossy(&p.msg),
-                    declared: p.declared,
-                    passes: p.passes,
-                    fails: p.fails,
-                    runs_passed: p.runs_pass,
-                    runs_failed: p.runs_fail,
-                    verdict: v.into(),
-                    status: if v.starts_with("FAIL") {
-                        status::VIOLATION
-                    } else if v == "NOT EXERCISED" {
-                        status::NOT_EXERCISED
-                    } else if v == "NOT EVALUATED" {
-                        status::NOT_EVALUATED
-                    } else {
-                        status::OK
-                    }
-                    .into(),
-                    first_failure: (!p.first_fail.is_empty()).then(|| lossy(&p.first_fail)),
-                    slowest_ok_s: (p.ty == b"eventually" && p.max_ok_elapsed >= 0.0)
-                        .then_some(p.max_ok_elapsed),
+    let props: Vec<Property> = t
+        .p
+        .iter()
+        .map(|p| {
+            let v = verdict(p);
+            Property {
+                id: lossy(&p.id),
+                assertion: lossy(&p.ty),
+                message: lossy(&p.msg),
+                declared: p.declared,
+                passes: p.passes,
+                fails: p.fails,
+                runs_passed: p.runs_pass,
+                runs_failed: p.runs_fail,
+                verdict: v.into(),
+                status: if v.starts_with("FAIL") {
+                    status::VIOLATION
+                } else if v == "NOT EXERCISED" {
+                    status::NOT_EXERCISED
+                } else if v == "NOT EVALUATED" {
+                    status::NOT_EVALUATED
+                } else {
+                    status::OK
                 }
-            })
-            .collect();
+                .into(),
+                first_failure: (!p.first_fail.is_empty()).then(|| lossy(&p.first_fail)),
+                slowest_ok_s: (p.ty == b"eventually" && p.max_ok_elapsed >= 0.0)
+                    .then_some(p.max_ok_elapsed),
+                within_s: (p.ty == b"eventually" && p.max_within >= 0.0).then_some(p.max_within),
+            }
+        })
+        .collect();
     Some(PropertyTable {
         runs: t.runs,
         setup_complete_runs: t.setup,
@@ -718,7 +804,10 @@ pub fn render_properties(t: &PropertyTable) -> String {
             nl += 1;
             nlf += (p.fails > 0) as u64;
             if let (None, Some(s)) = (&p.first_failure, p.slowest_ok_s) {
-                slow = format!("  [slowest in time: {s:.2} s]");
+                slow = match p.within_s {
+                    Some(w) => format!("  [slowest in time: {s:.2} s of {w} s]"),
+                    None => format!("  [slowest in time: {s:.2} s]"),
+                };
             }
         }
         o.push_str(&format!(
@@ -785,6 +874,28 @@ pub fn liveness(runs: &[(String, String)]) -> Vec<Liveness> {
                 id: pid,
                 ..Liveness::default()
             });
+            for (ok, el, det) in &eps {
+                let w = match det.get("within_s") {
+                    Some(Value::String(s)) => s.trim().parse::<f64>().ok(),
+                    Some(v) => v.as_f64(),
+                    None => None,
+                };
+                if let Some(w) = w {
+                    if p.within_s.is_none_or(|x| w > x) {
+                        p.within_s = Some(w);
+                    }
+                }
+                // satisfied after the deadline: the host's "satisfied only <t>s after <anchor>"
+                let late = !ok
+                    && det
+                        .get("out")
+                        .and_then(Value::as_str)
+                        .is_some_and(|o| o.contains("satisfied only "));
+                if late && p.slowest_late_s.is_none_or(|s| *el > s) {
+                    p.slowest_late_s = Some(*el);
+                    p.slowest_late_run = Some(stem.clone());
+                }
+            }
             if eps.iter().all(|e| e.0) {
                 p.held_runs += 1;
                 let worst = eps.iter().map(|e| e.1).fold(f64::NEG_INFINITY, f64::max);
@@ -817,11 +928,19 @@ pub fn render_liveness(l: &[Liveness]) -> Vec<String> {
     let mut out = vec![
         "## Liveness (eventually properties, hvx/ASSERTIONS.md)".to_string(),
         String::new(),
-        "| property | held in time | missed deadline | slowest in time | first miss |".into(),
-        "|---|---|---|---|---|".into(),
+        "| property | held in time | missed deadline | slowest in time | deadline | slowest held late | first miss |".into(),
+        "|---|---|---|---|---|---|---|".into(),
     ];
     for p in l {
         let slow = match (p.slowest_s, &p.slowest_run) {
+            (Some(w), Some(s)) => format!("{w:.2} s ({s})"),
+            _ => "-".into(),
+        };
+        let within = p
+            .within_s
+            .map(|w| format!("{w} s"))
+            .unwrap_or_else(|| "-".into());
+        let late = match (p.slowest_late_s, &p.slowest_late_run) {
             (Some(w), Some(s)) => format!("{w:.2} s ({s})"),
             _ => "-".into(),
         };
@@ -838,10 +957,106 @@ pub fn render_liveness(l: &[Liveness]) -> Vec<String> {
             None => "-".into(),
         };
         out.push(format!(
-            "| `{}` | {} | {} | {slow} | {miss} |",
+            "| `{}` | {} | {} | {slow} | {within} | {late} | {miss} |",
             p.id, p.held_runs, p.missed_runs
         ));
     }
     out.push(String::new());
     out
+}
+
+/// Reactions (`A=<event>:...`) whose event no assertion record of the run names: the event is an
+/// assertion id only the running program declares, so a misspelt one cannot be refused before
+/// the run; it never fires, and the run is the run without that reaction. One sentence each.
+pub fn unseen_events(schedule: &str, consoles: &[(String, String)]) -> Vec<String> {
+    let Ok(s) = hydo_schedule::Schedule::parse(schedule) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for t in &s.guest {
+        let hydo_schedule::GuestToken::React(r) = t else {
+            continue;
+        };
+        let needle = format!("\"id\":\"{}\"", r.event);
+        let seen = consoles.iter().any(|(_, c)| {
+            c.lines().any(|l| {
+                (l.starts_with("HYDO-ASSERT ") || l.starts_with("HYDO-ASSERT-DECL "))
+                    && l.contains(&needle)
+            })
+        });
+        if !seen {
+            out.push(format!(
+                "the reaction {t} never fired: no assertion record of the run names the event {} \
+                 (a misspelt event id is not refused before the run)",
+                r.event
+            ));
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hist(ops: u64) -> Finding {
+        let mut d = Map::new();
+        d.insert("details".into(), serde_json::json!({ "ops": ops }));
+        Finding {
+            kind: kind::HISTORY_CHECK.into(),
+            id: "kv".into(),
+            status: status::OK.into(),
+            message: String::new(),
+            details: d,
+        }
+    }
+
+    fn con(t: &str) -> Vec<(String, String)> {
+        vec![("one.log".into(), t.into())]
+    }
+
+    #[test]
+    fn a_pass_with_nothing_acknowledged_or_an_empty_history_is_flagged() {
+        // nothing acknowledged, no command succeeded, no history
+        let w = vacuous(&con("hydo-explore-acked: \nHYDO-ORACLE: OK\n"), &[]);
+        assert_eq!(w.len(), 1);
+        assert!(
+            w[0].starts_with("the workload acknowledged nothing"),
+            "{w:?}"
+        );
+        // the world's records and the clock are not ids
+        let w = vacuous(&con("hydo-explore-acked: clock=17 w:abc\n"), &[]);
+        assert_eq!(w.len(), 1);
+        // acknowledged ids, a test command that exited 0, or history operations: not flagged
+        assert!(vacuous(&con("hydo-explore-acked: 0 1 2\n"), &[]).is_empty());
+        let ok = "hydo-explore-acked: \nHYDO-ASSERT {\"t\":\"sometimes\",\
+                  \"id\":\"compose.parallel_driver_set.succeeded\",\"ok\":true}\n";
+        assert!(vacuous(&con(ok), &[]).is_empty());
+        assert!(vacuous(&con("hydo-explore-acked: \n"), &[hist(4)]).is_empty());
+        // a history check over an empty history
+        let w = vacuous(&con("hydo-explore-acked: 1\n"), &[hist(0)]);
+        assert_eq!(
+            w,
+            vec![
+                "the history check kv judged an empty history (0 operations): nothing was \
+                  recorded with hydo_hist"
+                    .to_string()
+            ]
+        );
+        // a run that ended before the workload's end is not judged
+        assert!(vacuous(&con("HYDO-ORACLE: ERROR provision failed\n"), &[]).is_empty());
+    }
+
+    #[test]
+    fn a_reaction_whose_event_no_record_names_is_flagged() {
+        let s = "disk=none | run A=client.place_faild:kill-redis";
+        let rec = "HYDO-ASSERT {\"id\":\"client.place_failed\",\"ok\":true}\n";
+        let w = unseen_events(s, &con(rec));
+        assert_eq!(w.len(), 1);
+        assert!(w[0].contains("client.place_faild"), "{w:?}");
+        let s = "disk=none | run A=client.place_failed:kill-redis";
+        let decl = "HYDO-ASSERT-DECL {\"t\":\"sometimes\",\"id\":\"client.place_failed\"}\n";
+        assert!(unseen_events(s, &con(decl)).is_empty());
+        assert!(unseen_events("disk=none | run K=redis@3+2", &con("")).is_empty());
+    }
 }

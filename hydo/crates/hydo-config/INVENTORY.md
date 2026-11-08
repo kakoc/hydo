@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-48 user-facing and 87 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+52 user-facing and 87 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -37,7 +37,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HVX_QUANTUM_AFTER` | developer | flag: set (any value) | off | hydo-hvx | Set: apply `HVX_QUANTUM` after the boot only. |
 | `HVX_EXPLORE_CMDLINE_EXTRA` | developer | text | - | hydo-hvx | Extra words on the guest kernel's command line. |
 | `HVX_EXPLORE_NO_UNSYNC` | developer | flag: set (any value) | off | hydo-hvx | Set: keep the disk's volatile write cache out of snapshots (no HVX_GET/SET_UNSYNC). |
-| `HVX_EXPLORE_RAM_MIB` | developer | integer | 1024 | hydo-hvx | The guest RAM in MiB when `--ram-mib` is not given (256-3072). |
+| `HVX_EXPLORE_RAM_MIB` | developer | integer | 1024 | hydo-hvx | The guest RAM in MiB when `--ram-mib` is not given (256-8192). |
 | `HVX_EXPLORE_VCPUS` | developer | integer | 1 | hydo-hvx | The vCPU count when `--vcpus` is not given. |
 
 ## The hvx engine's diagnostics (`hydo_config::hvx::Options`)
@@ -87,7 +87,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_HVM_ENGINE` | user | path | <root>/target/release/hydo-hvm, else <root>/bin/hydo-hvm | hydo-engine | The Mac engine program (an empty value means the default). |
 | `HVM_DISK` | user | path | - | hydo-hvm (set by hydo-engine) | The data disk (virtio-blk); hydo-engine sets it for an image with a `-disk.img`. |
 | `HVM_DISK_OUT` | developer | path | - | hydo-hvm hvm | `hydo-hvm hvm` writes the durable disk image here at its end (flushed bytes only). |
-| `HVM_MEM_MB` | user | number | 1024 (hydo-hvm hvm: 256) | hydo-hvm | Guest RAM in MiB (the engine: 256..4096, default 1024; `hydo-hvm hvm`: default 256); `--ram-mib` wins. |
+| `HVM_MEM_MB` | user | number | 1024 (hydo-hvm hvm: 256) | hydo-hvm | Guest RAM in MiB (the engine: 256..8192, default 1024; `hydo-hvm hvm`: default 256); `--ram-mib` wins. |
 | `HVM_STEP` | developer | number | 64 | hydo-hvm | Virtual ticks of the 24 MHz counter per VM exit. |
 | `HVM_MAX_EXITS` | developer | number | 200000000 | hydo-hvm hvm | The exit budget of `hydo-hvm hvm`. |
 | `HVM_RUN_EXITS` | developer | number | 50000000 | hydo-hvm | The engine's exit budget per phase of a run. |
@@ -176,8 +176,12 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_FCBIN_ARM64` | user | path; empty = default | <build dir>/hydo_fc-arm64 | hydo-build | The arm64 `hydo_fc`. |
 | `HYDO_WORLDBIN` | user | path; empty = default | <build dir>/hydo-world | hydo-build | The x86_64 `hydo-world`. |
 | `HYDO_WORLDBIN_ARM64` | user | path; empty = default | <build dir>/hydo-world-arm64 | hydo-build | The arm64 `hydo-world`. |
+| `HYDO_WORLDBIN_TLS` | user | path; empty = default | <build dir>/hydo-world-tls | hydo-build | The x86_64 `hydo-world-tls` (hydo-world with the TLS front), staged instead of `hydo-world` for manifests whose fakes or proxies have `tls:`. |
+| `HYDO_WORLDBIN_TLS_ARM64` | user | path; empty = default | <build dir>/hydo-world-tls-arm64 | hydo-build | The arm64 `hydo-world-tls`. |
 | `HYDO_READ_BIN` | user | path; empty = default | <build dir>/hydo-read | hydo-build | The x86_64 `hydo-read`. |
 | `HYDO_READ_BIN_ARM64` | user | path; empty = default | <build dir>/hydo-read-arm64 | hydo-build | The arm64 `hydo-read`. |
+| `HYDO_SQL_BIN` | user | path; empty = default | <build dir>/hydo-sql | hydo-build | The x86_64 `hydo-sql` (the ready-made SQL workloads and checks), staged only when a command calls it. |
+| `HYDO_SQL_BIN_ARM64` | user | path; empty = default | <build dir>/hydo-sql-arm64 | hydo-build | The arm64 `hydo-sql`. |
 | `HYDO_AGENT_BIN` | user | path; empty = default | <build dir>/hydo-agent | hydo-build | The x86_64 `hydo-agent` (its sha256 must be the pinned one). |
 | `HYDO_AGENT_BIN_ARM64` | user | path; empty = default | <build dir>/hydo-agent-arm64 | hydo-build | The arm64 `hydo-agent`. |
 | `HYDO_AGENT_UNPINNED` | developer | flag: exactly `1` | off | hydo-build | `1`: stage an agent whose sha256 is not the pinned one (with a warning). |

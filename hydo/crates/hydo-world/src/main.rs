@@ -23,9 +23,15 @@ mod gojson;
 mod grpc;
 mod h2x;
 mod http1;
+mod objects;
 mod rt;
 mod rules;
 mod serve;
+mod sign;
+#[cfg(feature = "tls")]
+mod tls;
+#[cfg(feature = "tls")]
+mod tls_crypto;
 mod world;
 
 use std::os::unix::ffi::OsStringExt;
@@ -47,6 +53,8 @@ fn main() {
                 .iter()
                 .map(|a| String::from_utf8_lossy(a).into_owned())
                 .collect();
+            #[cfg(feature = "tls")]
+            tls::start_main(&s);
             serve::serve_main(&s)
         }
         b"ctl" => check::ctl_main(rest),

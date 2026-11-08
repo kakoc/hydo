@@ -1,0 +1,67 @@
+# The Redis example (hydo.yaml) with its append-only file on a file system of its own, for the
+# storage faults of one service (MANIFEST.md "Storage faults of one service";
+# docs/design/storage-faults.md). Try:
+#   disk=none dseed=1 | run L=redis@10+2             -> OK (appendfsync always: every acked SET
+#                                                       was fsynced before the power loss)
+#   disk=none dseed=1 | run R=no L=redis@10+2        -> VIOLATION (what Redis had not fsynced is
+#                                                       lost with the power of its machine)
+#   disk=none dseed=1 | run G=redis@10+2:trunc,len=40,file=.incr.aof   -> the AOF's tail cut off
+name: redis-storage
+description: Redis with an append-only file on its own file system; every acknowledged SET must survive a power loss of Redis alone.
+
+root:
+  files:
+    - {src: ~/hydo/build/redis-server, dst: /bin/redis-server, mode: "0755"}
+    - {src: ~/hydo/build/redis-cli, dst: /bin/redis-cli, mode: "0755"}
+  text:
+    /etc/redis.conf: |
+      port 6379
+      bind 127.0.0.1
+      dir /data/redis
+      save ""
+      appendonly yes
+      appendfsync always
+      hz 1
+      dynamic-hz no
+
+data:
+  size_mib: 64
+  dirs: [redis]
+
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli ping | grep -q PONG
+    port: 6379
+    storage: {dir: redis, size_mib: 64}   # /data/redis: Redis's own file system
+
+workload:
+  steps: 20                         # step i = SET k:i v<i>
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline
+      if [ "$r" = OK ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+
+knobs:
+  - token: R
+    name: Redis appendfsync
+    default: always
+    values: [always, everysec, "no"]
+    set: /bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE
+
+invariants:
+  - id: redis.acked_writes_survive
+    msg: every SET the client saw acknowledged reads back with its value
+    cmd: |
+      lost=0
+      for i in $(cat $HYDO_ACKED); do
+        [ "$(/bin/redis-cli GET k:$i)" = "v$i" ] || { echo "key k:$i lost"; lost=1; break; }
+      done
+      [ $lost = 0 ] && echo "acked=$(wc -l < $HYDO_ACKED) all present"
+      [ $lost = 0 ]
+
+faults: [kill, pause, cut, clock, disk, corrupt, powerloss]

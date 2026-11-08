@@ -191,6 +191,18 @@ fn note(s: &mut Seen, r: &Record) {
         Record::Diff(_) => {
             s.types.insert("diff".into());
         }
+        Record::Diagnosis(_) => {
+            s.types.insert("diagnosis".into());
+        }
+        Record::Timeline(_) => {
+            s.types.insert("timeline".into());
+        }
+        Record::Inspect(x) => {
+            s.types.insert(format!("inspect {}", x.op));
+        }
+        Record::InspectError(_) => {
+            s.types.insert("inspect-error".into());
+        }
     }
 }
 
@@ -241,7 +253,23 @@ fn every_example_parses_and_is_valid() {
         }
     }
     assert!(n > 0, "no examples");
-    for t in ["run", "exploration", "start", "shrink", "end", "diff"] {
+    for t in [
+        "run",
+        "exploration",
+        "start",
+        "shrink",
+        "end",
+        "diff",
+        "diagnosis",
+        "timeline",
+        "inspect start",
+        "inspect exec",
+        "inspect read",
+        "inspect ls",
+        "inspect ps",
+        "inspect sockets",
+        "inspect-error",
+    ] {
         assert!(seen.types.contains(t), "no example has a {t} record");
     }
     for k in ["invariant", "assertion", "history-check", "error-log"] {

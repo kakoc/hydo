@@ -27,6 +27,10 @@ The last output line is the explanation; it becomes the details of the property'
 `HYDO-ORACLE: VIOLATION [<id>] <details>`. Start every check by testing that the store answers,
 and `exit 2` if not, so a killed service is not reported as a violation. An `eventually_` check
 returns 0 when satisfied and anything else for "not yet"; a missed deadline is a violation.
+To choose `within=`: `hydo run` prints how many seconds of guest time each `eventually_` check
+needed, and an exploration's `report.md` (section "Liveness") gives, per check, the slowest run
+that held in time, the deadline, and the slowest run that held only after it (the deadline that
+run needed).
 
 Use `always_` for properties that can break and heal during the run (stale reads, a negative
 balance seen for a moment). An `always_` check runs only while the workload lasts, so keep the

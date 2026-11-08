@@ -58,7 +58,10 @@ service in its own network namespace at its own address) and prints a warning fo
 could not map; read each one (bind mounts that the program writes to need a hand fix). It also
 writes a numbered-steps `workload.run` and a `TODO` invariant: delete both (keep `workload.steps`
 and `workload.timeout`) and add a `test:` section with commands. Keep the generated comments that
-say where each value came from. Reference: `hydo guide manifest`, "From Docker Compose".
+say where each value came from. A service built locally (`build:`) is never pulled:
+fetch-images.sh prints the `docker build` and `docker save` commands that make its file and stops
+until the file is there; run `hydo compose` again then, to pin it by the file's content.
+Reference: `hydo guide manifest`, "From Docker Compose".
 
 ## Where each program comes from
 
@@ -102,5 +105,8 @@ hydo save <explore dir>                       # the minimal schedules -> hydo/re
 ```
 
 On the Mac a schedule without host tokens is `disk=none | run`. If the first run without faults
-fails, the cause is the folder or a real bug: read the console files that `hydo run` names. The
+fails, the cause is the folder or a real bug: read the `hydo: diagnosis:` lines and the
+`diagnosis` in the run directory's `result.json` (which process ended how, its log, the kernel's
+messages), then look inside the run with `hydo inspect` (`hydo guide inspect`) before changing
+the image. The
 full build also checks the backend's limits (the arm64 build refuses `guest.cpu: v3`).

@@ -176,6 +176,10 @@ pub struct Plan {
     /// `guest.clock_after_cut`: seconds the machine is off at a power cut; the recovery boot's
     /// clock continues from the first boot's (features/clock.rs).
     pub clock_after_cut: Option<i64>,
+    /// `guest.outcomes_after_cut: true`: the recovery boot after a power cut starts with the
+    /// first boot's last outcome of every id in `$HYDO_OUTCOMES` (without it that file starts
+    /// empty there).
+    pub outcomes_after_cut: bool,
     pub invariants: Vec<PlanInvariant>,
     pub knobs: Vec<PlanKnob>,
     /// `buggify: true`: a B= token is then written to /tmp/hydo-buggify (features/buggify.rs);
@@ -196,7 +200,33 @@ pub struct Plan {
     pub net_extra: Vec<String>,
     /// The fake outside world (`fakes:` / `proxies:`, driven by `schedule/fakes.rs`).
     pub world: Option<PlanWorld>,
+    /// `services[].storage` (docs/design/storage-faults.md), in the manifest's order: the
+    /// directories G= corrupts and the own file systems L= takes away (schedule/storage.rs).
+    pub storage: Vec<PlanStorage>,
     pub layout: Layout,
+}
+
+/// One service's storage: its directory, and its own file system's partition when it has one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanStorage {
+    pub svc: String,
+    /// The directory, absolute (under the data disk's mount point).
+    pub dir: String,
+    /// The own file system's partition number on the data disk (5, 6, ...), when it has one.
+    pub part: Option<u32>,
+}
+
+impl PlanStorage {
+    /// The own file system's device: the data partition's disk with the partition's number
+    /// (/dev/vda2 -> /dev/vda5).
+    pub fn dev(&self, l: &Layout) -> Option<String> {
+        self.part.map(|n| {
+            format!(
+                "{}{n}",
+                l.data_dev.trim_end_matches(|c: char| c.is_ascii_digit())
+            )
+        })
+    }
 }
 
 /// The fake outside world of a manifest with `fakes:` or `proxies:` (M89): one `hydo-world`
@@ -481,6 +511,7 @@ impl Plan {
                 None => None,
                 Some(c) => Some(int(c, "guest.clock_after_cut")?),
             },
+            outcomes_after_cut: get(guest, "outcomes_after_cut").is_some_and(py::truthy),
             invariants,
             knobs,
             buggify: m.buggify,
@@ -491,12 +522,27 @@ impl Plan {
             bridge,
             net_extra,
             world: PlanWorld::of(d),
+            storage: {
+                let vols = hydo_manifest::storage::volumes(d);
+                hydo_manifest::storage::of_manifest(d)
+                    .into_iter()
+                    .map(|(svc, st)| PlanStorage {
+                        part: vols.iter().find(|(n, _, _)| *n == svc).map(|v| v.2),
+                        dir: format!("{}/{}", layout.data_dir, st.dir),
+                        svc,
+                    })
+                    .collect()
+            },
             layout,
         })
     }
 
     pub fn service(&self, name: &str) -> Option<&PlanService> {
         self.services.iter().find(|s| s.name == name)
+    }
+
+    pub fn storage_of(&self, svc: &str) -> Option<&PlanStorage> {
+        self.storage.iter().find(|s| s.svc == svc)
     }
 
     pub fn knob(&self, token: &str) -> Option<&PlanKnob> {

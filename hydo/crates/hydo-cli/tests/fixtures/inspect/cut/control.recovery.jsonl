@@ -1,0 +1,36 @@
+{"cadence":"rb=16","control":1,"controller":"schedule","conversation":"recovery","schedule":"disk=cut rb=16 | run C=12 R=everysec","start":"resume S0"}
+{"at":822656,"n":23182,"seen":9,"t":"stop","why":"start"}
+{"at":822656,"by":"runner","bytes":"\u0018{\"id\":7,\"nonce\":822656,\"op\":\"sync\",\"v\":1}\n","id":7,"n":23182,"t":"send"}
+{"by":"main","line":"hydo-ob: command: oracle 0 1 2 3 4 5 6 7 8 9 10 11","n":23182,"t":"note"}
+{"at":822656,"by":"main","bytes":"{\"id\":8,\"op\":\"clock_set\",\"sec\":1767225600,\"v\":1}\n","id":8,"n":23182,"t":"send"}
+{"at":822752,"n":23188,"seen":10,"t":"stop","why":"hostcall"}
+{"id":7,"n":23188,"send":23,"t":"ack"}
+{"at":822790,"n":23191,"seen":11,"t":"stop","why":"hostcall"}
+{"id":8,"n":23191,"send":24,"t":"ack"}
+{"by":"main","line":"hydo-ob: realtime clock set to 2026-01-01T00:00:00Z","n":23191,"t":"note"}
+{"at":822790,"by":"main","bytes":"{\"append\":true,\"data\":\"0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n10\\n11\\n\",\"id\":9,\"op\":\"write\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":9,"n":23191,"t":"send"}
+{"at":822790,"by":"main","bytes":"{\"dst\":\"/data\",\"fstype\":\"ext4\",\"id\":10,\"op\":\"mount\",\"src\":\"/dev/vda2\",\"v\":1}\n","id":10,"n":23191,"t":"send"}
+{"at":822946,"n":23201,"seen":12,"t":"stop","why":"hostcall"}
+{"id":9,"n":23201,"send":25,"t":"ack"}
+{"at":823967,"n":23264,"seen":13,"t":"stop","why":"hostcall"}
+{"id":10,"n":23264,"send":26,"t":"ack"}
+{"at":823967,"by":"main","bytes":"{\"id\":11,\"op\":\"mkdir\",\"path\":\"/data/redis\",\"v\":1}\n","id":11,"n":23264,"t":"send"}
+{"by":"main","line":"hydo-ob: mounted /dev/vda2 on /data (rw)","n":23264,"t":"note"}
+{"by":"main","line":"hydo-stack: recovering from log","n":23264,"t":"note"}
+{"at":823967,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; exec /bin/redis-server /etc/redis.conf\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"h\":\"redis\",\"id\":12,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/redis.log\",\"stdout\":\"/tmp/hydo/redis.log\",\"v\":1}\n","id":12,"n":23264,"t":"send"}
+{"at":824174,"n":23277,"seen":14,"t":"stop","why":"hostcall"}
+{"id":11,"n":23277,"send":27,"t":"ack"}
+{"at":824255,"n":23283,"seen":15,"t":"stop","why":"hostcall"}
+{"id":12,"n":23283,"send":28,"t":"ack"}
+{"at":824255,"by":"main","bytes":"{\"alive\":\"redis\",\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; /bin/redis-cli ping | grep -q PONG\"],\"deadline_ms\":120000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"every_ms\":1000,\"id\":13,\"op\":\"probe\",\"v\":1}\n","id":13,"n":23283,"t":"send"}
+{"at":824608,"n":23306,"seen":16,"t":"stop","why":"hostcall"}
+{"id":13,"n":23306,"send":29,"t":"ack"}
+{"at":841857,"n":23999,"seen":17,"t":"stop","why":"hostcall"}
+{"by":"main","line":"hydo-ob: redis ready after 1 polls","n":23999,"t":"note"}
+{"at":841857,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; lost=0\\nfor i in $(cat $HYDO_ACKED); do\\n  [ \\\"$(/bin/redis-cli GET k:$i)\\\" = \\\"v$i\\\" ] || { echo \\\"key k:$i lost\\\"; lost=1; break; }\\ndone\\n[ $lost = 0 ] && echo \\\"acked=$(wc -l < $HYDO_ACKED) all present\\\"\\n[ $lost = 0 ]\\n\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"id\":14,\"op\":\"run\",\"v\":1}\n","id":14,"n":23999,"t":"send"}
+{"at":842175,"n":24019,"seen":18,"t":"stop","why":"hostcall"}
+{"id":14,"n":24019,"send":30,"t":"ack"}
+{"at":844575,"n":24042,"seen":19,"t":"stop","why":"hostcall"}
+{"by":"main","line":"HYDO-ASSERT {\"t\":\"always\",\"id\":\"redis.acked_writes_survive\",\"ok\":false,\"msg\":\"every SET the client saw acknowledged reads back with its value\",\"details\":{\"out\":\"key k:1 lost\"}}","n":24042,"t":"report"}
+{"by":"main","line":"HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost","n":24042,"t":"report"}
+{"end":{"verdict":"HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost"},"n":24042,"t":"end"}

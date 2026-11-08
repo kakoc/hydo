@@ -474,7 +474,7 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
     }
     let (r#ref, idem) = (v.extract(&ref_spec), v.extract(&e.idempotency));
 
-    let (rule, ans_seq, heal) = {
+    let (rule, ans_seq, heal, missing, obj) = {
         let mut st = w.lock_gate().await;
         let rule = st.request_rule(&e.name, &rname);
         let apply = rule.as_ref().is_none_or(|r| r.applied());
@@ -496,6 +496,30 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
                 ans_seq = s;
                 out = "replay".into();
                 extra = format!(" orig={s}");
+            }
+        }
+        // objects.rs: a request about an object the fake does not have takes no effect
+        let mut missing: Option<Vec<u8>> = None;
+        let mut obj: Option<crate::objects::Obj> = None;
+        if let Some(r) = rt.filter(|r| fake && apply && crate::objects::uses(r)) {
+            let s = ans_seq.to_string();
+            let octx: [(&str, &[u8]); 5] = [
+                ("seq", s.as_bytes()),
+                ("ref", &r#ref),
+                ("idem", &idem),
+                ("fake", e.name.as_bytes()),
+                ("route", rname.as_bytes()),
+            ];
+            match crate::objects::lookup(&st.objects, &e.name, r, &octx, &v) {
+                Err(k) => {
+                    missing = Some(k);
+                    fx = false;
+                    out = "-".into();
+                    extra = format!("{extra} obj=missing");
+                }
+                Ok(cur) => {
+                    obj = crate::objects::save(&mut st.objects, &e.name, r, fx, cur, &octx, &v);
+                }
             }
         }
         if let Some(r) = &rule {
@@ -527,7 +551,7 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
                 }
             }
         }
-        (rule, ans_seq, st.heal.clone())
+        (rule, ans_seq, st.heal.clone(), missing, obj)
     };
     let apply = rule.as_ref().is_none_or(|r| r.applied());
 
@@ -622,9 +646,20 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
         }
         return Outcome::Answer(a);
     };
+    if let Some(k) = &missing {
+        return Outcome::Answer(missing_answer(k, grpc));
+    }
+    // objects.rs: {obj:<field>} of the route's object
+    let rend = |t: &str| {
+        let b = render(t, &ctx, Some(&v));
+        match &obj {
+            Some(o) => crate::objects::subst(b, o),
+            None => b,
+        }
+    };
     let mut a = Answer::default();
     for (k, val) in &r.headers {
-        hset(&mut a.headers, k, render(val, &ctx, Some(&v)));
+        hset(&mut a.headers, k, rend(val));
     }
     if grpc {
         let msg = hex_decode(&r.message);
@@ -643,8 +678,26 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
         hset(&mut a.headers, "Content-Type", b"application/json".to_vec());
     }
     a.status = r.status.clamp(0, 999) as u16;
-    a.body = render(&r.body, &ctx, Some(&v));
+    a.body = rend(&r.body);
     Outcome::Answer(a)
+}
+
+/// The answer to a request about an object the fake does not have (objects.rs): 404 with a JSON
+/// error, or gRPC NOT_FOUND.
+fn missing_answer(key: &[u8], grpc: bool) -> Answer {
+    let mut a = Answer::default();
+    if grpc {
+        grpc_status(
+            &mut a,
+            5,
+            &format!("hydo fake: no object {}", String::from_utf8_lossy(key)),
+        );
+        return a;
+    }
+    hset(&mut a.headers, "Content-Type", b"application/json".to_vec());
+    a.status = 404;
+    a.body = crate::objects::missing_body(key);
+    a
 }
 
 /// The request to the real service of an HTTP proxy.

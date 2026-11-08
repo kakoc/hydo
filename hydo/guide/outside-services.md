@@ -36,9 +36,39 @@ templates: `{seq}`, `{ref}`, `{idem}`, `{json:a.b}`, `{header:X}`, `{query:x}`, 
 `protocol: grpc` makes a cleartext HTTP/2 gRPC fake (`path` is `/pkg.Service/Method`, the answer
 is `message:` in hex protobuf and `code:`).
 
+When the system reads back what it created (a payment's currency, its status after a capture),
+give the creating route `save: {key: 'pi_{seq}', fields: {currency: '{form:currency}'}}` and the
+reading route `load: '{path:id}'`; its answer then uses `{obj:currency}` (an unknown id is
+answered 404). When the system checks the provider's webhook signature, give the webhook
+`sign: {header: <its header>, secret: <the endpoint secret the system is configured with>}`
+(HMAC-SHA256 of `{ts}.{body}`, value `t={ts},v1={hmac}`; `payload:`, `value:` and
+`encoding: base64` change the scheme). `hydo guide manifest` has the details.
+
 Find the outside services in the project's configuration (base URLs, API keys, webhook
 endpoints) and point each base URL at its fake. Ask the user which answers each route gives, or
 take them from the provider's API documentation.
+
+## HTTPS: a provider whose SDK cannot be pointed at plain HTTP
+
+Most providers are HTTPS only, and their SDKs call a fixed host name and check the certificate
+(Stripe's SDKs call `https://api.stripe.com`). Do not build a CA, a TLS front or trust settings by
+hand: give the fake `tls:` with the names the SDK calls, and leave the SDK's base URL alone.
+
+```yaml
+fakes:
+  - name: stripe
+    port: 9101
+    tls: {hosts: [api.stripe.com]}   # HTTPS on <the fake's address>:443 for these names
+```
+
+The build makes a test CA and a certificate for those names (reproducible, valid for any guest
+clock), maps the names to the fake in `/etc/hosts` (the guest's and every image service's), adds
+the CA to the system bundles of the guest and of every image, and sets `SSL_CERT_FILE`,
+`REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS` and `NIX_SSL_CERT_FILE` (Node.js, Python's requests and
+httpx, Go, OpenSSL, curl and Ruby then trust it). The record and `H=` rules are the same as over
+plain HTTP. Not covered: Java's own `cacerts` (import the CA with `keytool` in `setup:`), a
+program with a built-in CA list no variable replaces, and certificate pinning. The image needs
+`hydo-world-tls` (`hydo guide manifest`, "HTTPS for fakes and proxies"). A proxy takes `tls:` too.
 
 ## Proxies: protocol faults in front of a real service
 
@@ -96,4 +126,5 @@ For a system whose inputs are gRPC endpoints, do not write one client per RPC:
 Outcomes come from the gRPC status: OK is ok; INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS,
 FAILED_PRECONDITION and similar are definite failures; DEADLINE_EXCEEDED, UNAVAILABLE, INTERNAL
 and similar are unknown (`classify:` in the hints overrides a code per RPC). Limits: cleartext
-HTTP/2 only (no TLS or auth metadata). Example in hydo's repository: `hydo/grpcgen/demo/`.
+HTTP/2 only (no auth metadata; a fake with `tls:` serves gRPC over TLS, the generated client
+does not speak TLS). Example in hydo's repository: `hydo/grpcgen/demo/`.

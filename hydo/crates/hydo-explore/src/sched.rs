@@ -196,6 +196,27 @@ pub struct S {
     pub rb: Option<i64>,
     /// A= reactions (M139), in token order.
     pub a: Vec<Ra>,
+    /// G=svc@at[+down]:what (corruption of one service's files).
+    pub g: Option<Gz>,
+    /// L=svc@at+down (a power loss of one service).
+    pub l: Option<(String, i64, i64)>,
+}
+
+/// A G= token: (service, step, steps down or None for in place, the corruption's text).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Gz {
+    pub svc: String,
+    pub at: i64,
+    pub down: Option<i64>,
+    pub how: String,
+}
+
+/// The text of a G= token.
+pub fn render_g(g: &Gz) -> String {
+    match g.down {
+        Some(d) => format!("G={}@{}+{d}:{}", g.svc, g.at, g.how),
+        None => format!("G={}@{}:{}", g.svc, g.at, g.how),
+    }
 }
 
 impl S {

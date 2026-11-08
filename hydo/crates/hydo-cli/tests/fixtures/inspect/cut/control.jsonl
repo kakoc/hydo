@@ -1,0 +1,48 @@
+{"cadence":"rb=16","control":1,"controller":"schedule","conversation":"run","schedule":"disk=cut rb=16 | run C=12 R=everysec","start":"resume S1"}
+{"at":841608,"n":22922,"seen":16,"t":"stop","why":"resume"}
+{"at":841608,"by":"runner","bytes":"\u0018{\"id\":13,\"nonce\":841608,\"op\":\"sync\",\"v\":1}\n","id":13,"n":22922,"t":"send"}
+{"by":"main","line":"hydo-ob: command: run C=12 R=everysec","n":22922,"t":"note"}
+{"at":841608,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; /bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"HYDO_VALUE=everysec\",\"TERM=linux\"],\"id\":14,\"op\":\"run\",\"v\":1}\n","id":14,"n":22922,"t":"send"}
+{"at":841811,"n":22935,"seen":17,"t":"stop","why":"hostcall"}
+{"id":13,"n":22935,"send":13,"t":"ack"}
+{"at":841889,"n":22940,"seen":18,"t":"stop","why":"hostcall"}
+{"id":14,"n":22940,"send":14,"t":"ack"}
+{"at":841985,"n":22946,"seen":19,"t":"stop","why":"hostcall"}
+{"by":"main","line":"hydo-ob: knob R=everysec (Redis appendfsync)","n":22946,"t":"note"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.paused\",\"msg\":\"a service was paused (SIGSTOP)\"}","n":22946,"t":"report"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"sometimes\",\"id\":\"fault.pause_mid_request\",\"msg\":\"a pause began while a client request was in flight\"}","n":22946,"t":"report"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.clock_back\",\"msg\":\"the realtime clock was stepped backwards\"}","n":22946,"t":"report"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.clock_fwd\",\"msg\":\"the realtime clock was stepped forwards\"}","n":22946,"t":"report"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.oneway_req\",\"msg\":\"a one-way network fault hit the req direction\"}","n":22946,"t":"report"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"reachable\",\"id\":\"fault.oneway_resp\",\"msg\":\"a one-way network fault hit the resp direction\"}","n":22946,"t":"report"}
+{"at":841985,"by":"main","bytes":"{\"data\":\"\",\"id\":15,\"op\":\"write\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":15,"n":22946,"t":"send"}
+{"at":841985,"by":"main","bytes":"{\"data\":\"\",\"id\":16,\"op\":\"write\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":16,"n":22946,"t":"send"}
+{"at":841985,"by":"main","bytes":"{\"data\":\"\",\"id\":17,\"op\":\"write\",\"path\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":17,"n":22946,"t":"send"}
+{"at":841985,"by":"main","bytes":"{\"append\":true,\"argv\":[\"/bin/busybox\",\"timeout\",\"300\",\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; i=$HYDO_FROM\\nwhile [ $i -lt $HYDO_TO ]; do\\n  r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline\\n  if [ \\\"$r\\\" = OK ]; then echo $i >> $HYDO_ACKED; echo \\\"$i ack\\\" >> $HYDO_OUTCOMES\\n  else echo \\\"$i unknown\\\" >> $HYDO_OUTCOMES; fi\\n  i=$((i + 1))\\ndone\\n\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_FROM=0\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"HYDO_TO=12\",\"TERM=linux\"],\"h\":\"workload\",\"id\":18,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/workload.log\",\"stdout\":\"/tmp/hydo/workload.log\",\"v\":1}\n","id":18,"n":22946,"t":"send"}
+{"at":844434,"n":22972,"seen":20,"t":"stop","why":"hostcall"}
+{"id":15,"n":22972,"send":15,"t":"ack"}
+{"at":844469,"n":22975,"seen":21,"t":"stop","why":"hostcall"}
+{"id":16,"n":22975,"send":16,"t":"ack"}
+{"at":844505,"n":22978,"seen":22,"t":"stop","why":"hostcall"}
+{"id":17,"n":22978,"send":17,"t":"ack"}
+{"at":844584,"n":22983,"seen":23,"t":"stop","why":"hostcall"}
+{"id":18,"n":22983,"send":18,"t":"ack"}
+{"at":853376,"n":23149,"seen":24,"t":"stop","why":"hostcall"}
+{"by":"main","line":"hydo-ob: workload steps 0..11 rc=0","n":23149,"t":"note"}
+{"at":853376,"by":"main","bytes":"{\"id\":19,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":19,"n":23149,"t":"send"}
+{"at":853516,"n":23158,"seen":25,"t":"stop","why":"hostcall"}
+{"id":19,"n":23158,"send":19,"t":"ack"}
+{"at":853516,"by":"main","bytes":"{\"data\":\"\",\"id\":20,\"op\":\"write\",\"path\":\"/tmp/hydo/failed\",\"v\":1}\n","id":20,"n":23158,"t":"send"}
+{"at":853516,"by":"main","bytes":"{\"id\":21,\"max\":3000,\"op\":\"read\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":21,"n":23158,"t":"send"}
+{"at":853628,"n":23165,"seen":26,"t":"stop","why":"hostcall"}
+{"id":20,"n":23165,"send":20,"t":"ack"}
+{"at":853693,"n":23170,"seen":27,"t":"stop","why":"hostcall"}
+{"id":21,"n":23170,"send":21,"t":"ack"}
+{"by":"main","line":"hydo-explore-acked: 0 1 2 3 4 5 6 7 8 9 10 11 ","n":23170,"t":"report"}
+{"by":"main","line":"hydo-explore-failed: ","n":23170,"t":"report"}
+{"at":853693,"by":"main","bytes":"{\"h\":\"redis\",\"id\":22,\"op\":\"signal\",\"sig\":\"STOP\",\"tree\":true,\"v\":1}\n","id":22,"n":23170,"t":"send"}
+{"by":"main","line":"hydo-ob: POWER CUT before step 12 (all services frozen)","n":23170,"t":"note"}
+{"by":"main","line":"hydo-explore-workload-done cut","n":23170,"t":"report"}
+{"at":853854,"n":23181,"seen":28,"t":"stop","why":"hostcall"}
+{"id":22,"n":23181,"send":22,"t":"ack"}
+{"end":{"cut":{"acked":["0","1","2","3","4","5","6","7","8","9","10","11"],"failed":[]}},"n":23181,"t":"end"}

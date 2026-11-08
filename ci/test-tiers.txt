@@ -1,5 +1,9 @@
 # The test tiers of the workspace (Milestone 171; docs/CI.md "Test tiers"). One line per test
-# binary, as cargo-nextest names it, and its tier:
+# binary, as cargo-nextest names it, and its tier. In a crate whose integration tests are one
+# program (`it`, tests/main.rs, ci/consolidate-tests.sh) the line `<package>::<name>` names the
+# module of tests/<name>.rs, whose tests are `<name>::<test>` in that program (ci/tier-filter.sh
+# turns it into a filter on the test names). Programs and libraries without a unit test have
+# `test = false` and no test binary, so no line.
 #
 #   fast  run on every push and pull request (ci.yml, for the packages the change can affect:
 #         ci/affected-packages.sh) and in the full tier;
@@ -18,20 +22,19 @@ hydo-agents                              fast
 hydo-agents::public_content              fast
 hydo-agents::skill_check                 fast
 hydo-bench                               fast
-hydo-bench::bin/hydo-bench               fast
 hydo-bench::golden                       fast
 hydo-bench::recorded                     fast
 hydo-build                               fast
-hydo-build::bin/hydo-build               fast
 hydo-build::control                      fast
 hydo-build::equivalence                  full
 hydo-build::errlog                       fast
 hydo-build::netns                        fast
 hydo-build::oci                          fast
+hydo-build::oci_share                    fast
+hydo-build::world_objects                fast
 hydo-compose                             fast
-hydo-compose::bin/hydo-compose           fast
-hydo-compose::bin/hydo-fetch-image       fast
 hydo-compose::equivalence                fast
+hydo-compose::local_build                fast
 hydo-compose::pycheck                    fast
 hydo-compose::registry                   fast
 hydo-composer                            fast
@@ -51,37 +54,36 @@ hydo-control::m123                       full
 hydo-control::react                      fast
 hydo-control::restart                    fast
 hydo-control::restart_may_fail           fast
+hydo-control::storage                    fast
+hydo-control::silent                     fast
 hydo-engine                              fast
 hydo-engine-proto                        fast
 hydo-engine::lockstep                    fast
 hydo-errors                              fast
 hydo-errors::equivalence                 fast
 hydo-explore                             fast
-hydo-explore::bin/hydo-explore           fast
 hydo-explore::corpus                     full
 hydo-explore::fake_engine                fast
 hydo-explore::identity                   fast
+hydo-explore::liveness_deadline          fast
+hydo-explore::names                      fast
 hydo-explore::netns_links                fast
 hydo-explore::reactive                   fast
+hydo-explore::storage_faults             fast
 hydo-grpc                                fast
 hydo-grpc-gen                            fast
-hydo-grpc-gen::bin/hydo-grpc-gen         fast
 hydo-grpc-gen::client                    fast
 hydo-grpc-gen::golden                    fast
 hydo-grpc-gen::units                     fast
-hydo-grpc::bin/hydo-grpc                 fast
 hydo-grpc::streams                       full
 hydo-history                             fast
-hydo-history::bin/hydo-hist-check        fast
 hydo-history::checkers                   fast
 hydo-history::doctest                    full
 hydo-history::equiv                      fast
 hydo-hvm                                 fast
-hydo-hvm::bin/hydo-hvm                   fast
 hydo-hvm::c_layout                       fast
 hydo-hvx                                 fast
 hydo-hvx::abi                            fast
-hydo-hvx::bin/hydo-hvx                   fast
 hydo-hvx::options                        fast
 hydo-hvx::parse_vs_c                     fast
 hydo-image                               fast
@@ -91,35 +93,27 @@ hydo-image::obtain                       fast
 hydo-image::schema                       fast
 hydo-kvm                                 fast
 hydo-kvm::abi                            fast
-hydo-kvm::bin/hydo-kvm                   fast
 hydo-kvm::engine                         fast
 hydo-manifest                            fast
+hydo-manifest::engine_version            fast
 hydo-manifest::equivalence               full
 hydo-manifest::extractors                fast
+hydo-manifest::fake_objects              fast
 hydo-manifest::format                    fast
 hydo-release                             fast
-hydo-release::bin/hydo-release           fast
 hydo-release::crates                     fast
 hydo-release::sdks                       fast
 hydo-release::test_tiers                 fast
 hydo-release::third_party                fast
-hydo-results                             fast
 hydo-results::examples                   fast
 hydo-results::reader                     fast
 hydo-results::schema                     fast
-hydo-schedule                            fast
 hydo-schedule::language                  fast
-hydo-schema-compat                       fast
 hydo-schema-compat::real_schemas         fast
 hydo-schema-compat::rules                fast
 hydo-tools                               fast
-hydo-tools::bin/hydo-cpio-extract        fast
-hydo-tools::bin/hydo-elf-comment         fast
-hydo-tools::bin/hydo-elfdeps             fast
-hydo-tools::bin/hydo-nar-extract         fast
-hydo-tools::bin/hydo-nix-fetch           fast
-hydo-tools::bin/hydo-skill-pack          fast
 hydo-world::bin/hydo-world               fast
+hydo-world::objects_sign                 fast
 hydo-world::xcheck                       full
 hydo::agents_equivalence                 fast
 hydo::bin/hydo                           fast

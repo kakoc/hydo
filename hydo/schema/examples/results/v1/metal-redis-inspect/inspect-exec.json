@@ -1,0 +1,35 @@
+{
+  "v": 1,
+  "type": "inspect",
+  "op": "exec",
+  "at": {
+    "point": "run:23170",
+    "conversation": "run",
+    "stop": 23170,
+    "at": 853693
+  },
+  "exec": {
+    "argv": [
+      "redis-cli",
+      "CONFIG",
+      "GET",
+      "appendfsync"
+    ],
+    "status": 0,
+    "timed_out": false,
+    "stdout": {
+      "text": "appendfsync\neverysec\n",
+      "bytes": 21,
+      "truncated": false
+    },
+    "stderr": {
+      "text": "",
+      "bytes": 0,
+      "truncated": false
+    }
+  },
+  "cost": {
+    "wall_ms": 410,
+    "stops": 45
+  }
+}

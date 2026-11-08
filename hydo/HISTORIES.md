@@ -110,9 +110,12 @@ no completion and count as unknown outcomes.
 Everything is a pure function of the consoles, and the consoles are part of a run's fingerprint:
 a reproduced run gets the same history and the same verdict.
 
-The console is 64 KiB per VM (since the snapshot the run starts from). A record is 40–60 bytes, so
-a run can record roughly 500 operations next to its other output; a range read of many keys is
-one long line. Record short keys and values.
+The console is 64 KiB per VM on hvx (since the snapshot the run starts from; the kernel module's
+buffer, `HVX_CONSOLE_SZ`) and 4 MiB on the KVM engine and the Mac. A record is 40–60 bytes, so an
+hvx run can record roughly 500 operations next to its other output, a KVM or Mac run about 60,000;
+a range read of many keys is one long line. Record short keys and values. When an hvx run writes
+more, the rest of its console is not kept: its engine.log says `hvx: console full` and `hydo run`
+warns, and the history check then sees only the first operations.
 
 ## The checkers
 

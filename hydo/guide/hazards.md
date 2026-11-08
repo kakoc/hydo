@@ -2,7 +2,8 @@
 
 The guest is one Linux virtual machine: one virtual CPU by default, `guest.ram_mib` of RAM
 (default 1024 MiB), no network outside the guest (loopback, or with `network: bridge` one
-bridge between the services' own namespaces), a read-only root, one data disk on `/data`, and a
+bridge between the services' own namespaces), a read-only root (an image service can have a
+writable one, `writable: true`), one data disk on `/data`, and a
 clock and a random generator that hydo makes deterministic. Check each item and report what you
 found.
 
@@ -37,9 +38,11 @@ found.
   "invalid opcode" or "CPU ISA level is lower than required". Set `guest.cpu: v3` (x86_64 only;
   AVX/AVX2, FMA, BMI1/2; no AVX-512), or use a build for the baseline. On the Mac the guest is
   arm64: images and binaries must be built for linux/arm64.
-- **Memory.** Every service together must fit in `guest.ram_mib` (at most 3072 MiB on x86_64,
-  4096 on arm64). Cap heaps and caches explicitly (JVM `-Xmx`, database buffer pools, Redis
-  `maxmemory`).
+- **Memory.** Every service together must fit in `guest.ram_mib` (at most 8192 MiB). Cap heaps
+  and caches explicitly (JVM `-Xmx`, database buffer pools, Redis `maxmemory`). The host needs
+  that much free memory for every guest that runs at once: `hydo run` refuses a guest that does
+  not fit, and `hydo explore` sizes its pool from the guest's RAM (one 8 GiB worker on a 16 GiB
+  machine).
 - **One CPU.** Set worker and thread counts to 1 or 2 where the program sizes them from the CPU
   count (Go: `GOMAXPROCS=1`; JVM: `-XX:ActiveProcessorCount=1`; database I/O threads).
 - **JVM services.** Use deterministic-friendly flags: one synchronous C1 compiler
@@ -68,5 +71,6 @@ found.
   matches every line (GNU grep matches none), so "acknowledged ids that were not read back" comes
   out empty exactly when nothing was read back. Compare sets with `awk` keyed on `FILENAME`, or
   with `hydo-check`.
-- **Console size.** The guest console holds 64 KiB. Print short lines; do not print every
-  acknowledged id.
+- **Console size.** The guest console holds 64 KiB per VM on hvx (`hydo run` warns when a run
+  wrote more) and 4 MiB on the KVM engine and the Mac. Print short lines; do not print every
+  acknowledged id. A long history (thousands of operations) fits on the KVM engine or the Mac.

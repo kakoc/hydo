@@ -1,3 +1,0 @@
-#!/bin/sh
-# hydo-msg: after the faults, the primary's bank total is unchanged and no balance is negative
-exec /bin/sqlgen total primary

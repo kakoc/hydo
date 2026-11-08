@@ -425,6 +425,11 @@ pub fn run_with(
                             acked,
                             failed: report_ids(&w.t, FAILED_PREFIX),
                             world,
+                            // guest.outcomes_after_cut: the outcomes line next to the ids
+                            outcomes: crate::schedule::outcomes_of_words(&report_ids(
+                                &w.t,
+                                crate::schedule::OUTCOMES_PREFIX,
+                            )),
                         };
                         w.push(Record::End {
                             n: stop.n,

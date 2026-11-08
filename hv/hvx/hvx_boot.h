@@ -72,6 +72,10 @@
 /* Conventional-memory top / hi-mem start for e820 (boot.rs:35-36). */
 #define EBDA_START        0x9FC00ULL
 #define HIMEM_START       0x100000ULL
+/* Guest RAM above RAM_LOW_MAX is at RAM_HIGH_BASE (milestone 179; hvx_abi.h's HVX_RAM_LOW_MAX
+ * and HVX_RAM_HIGH_BASE, repeated here because this header does not include hvx_abi.h). */
+#define RAM_LOW_MAX       0xc0000000ULL
+#define RAM_HIGH_BASE     0x100000000ULL
 
 /* e820 memory types (boot.rs:29). */
 #define E820_RAM          1u
@@ -451,13 +455,21 @@ static inline int load_bzimage_n(uint8_t *mem, uint64_t mem_size,
 	}
 
 	{
-		struct { uint64_t addr, size; uint32_t type; } e820[2];
+		struct { uint64_t addr, size; uint32_t type; } e820[3];
 		size_t n = 0;
 		size_t i;
+		/* M179: above RAM_LOW_MAX the rest of RAM sits at RAM_HIGH_BASE (hvx_abi.h) */
+		uint64_t low = mem_size < RAM_LOW_MAX ? mem_size : RAM_LOW_MAX;
 		e820[n].addr = 0; e820[n].size = EBDA_START; e820[n].type = E820_RAM; n++;
-		if (mem_size > HIMEM_START) {
+		if (low > HIMEM_START) {
 			e820[n].addr = HIMEM_START;
-			e820[n].size = mem_size - HIMEM_START;
+			e820[n].size = low - HIMEM_START;
+			e820[n].type = E820_RAM;
+			n++;
+		}
+		if (mem_size > low) {
+			e820[n].addr = RAM_HIGH_BASE;
+			e820[n].size = mem_size - low;
 			e820[n].type = E820_RAM;
 			n++;
 		}

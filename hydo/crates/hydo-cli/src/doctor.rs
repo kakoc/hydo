@@ -60,6 +60,9 @@ fn rel(ctx: &Ctx, p: &Path) -> String {
 /// (it opens the device and asks KVM; no VM is made), the guest kernel and the initramfs.
 pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
     let mut c = Checks { fails: 0, warns: 0 };
+    if let Some(note) = missing_release_note(ctx) {
+        println!("{note}");
+    }
     let (sys, mach) = uname_sys_machine();
     c.check(
         sys == "Linux" && mach == "x86_64",
@@ -120,7 +123,9 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
     };
     let found = match &ctx.config.kvm.kernel {
         Some(p) => Some(p.clone()),
-        None => hydo_image::kernels::locate(&want, hydo_image::kernels::Role::Kernel, &dirs),
+        // only this machine's files: doctor never fetches (a missing file is reported with the
+        // command that gets it)
+        None => hydo_image::kernels::locate_here(&want, hydo_image::kernels::Role::Kernel, &dirs),
     };
     c.check(
         found.is_some(),
@@ -133,7 +138,10 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
                 .map(|p| format!(": {}", rel(ctx, p)))
                 .unwrap_or_default()
         ),
-        "build it with hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) and put it in guest/, or name it with HYDO_KVM_KERNEL",
+        &format!(
+            "{} (the Linux release ships it), or build it with hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) and put it in guest/, or name it with HYDO_KVM_KERNEL",
+            get_command()
+        ),
         false,
     );
     c.check(
@@ -156,7 +164,8 @@ fn kvm_state(c: &mut Checks, ctx: &Ctx) {
         sha256: k.sha256.into(),
     };
     let dirs = [ctx.guest(), ctx.p("build"), ctx.p("hv/kvm/linux/out")];
-    let kernel = hydo_image::kernels::locate(&want, hydo_image::kernels::Role::Kernel, &dirs);
+    // only this machine's files: doctor never fetches
+    let kernel = hydo_image::kernels::locate_here(&want, hydo_image::kernels::Role::Kernel, &dirs);
     let program = crate::ctx::access(
         &hydo_engine::kvm::program(&ctx.root, &ctx.config.kvm),
         libc::X_OK,
@@ -168,7 +177,7 @@ fn kvm_state(c: &mut Checks, ctx: &Ctx) {
             k.file,
             &k.sha256[..16]
         ),
-        reinstall(ctx),
+        &reinstall(ctx),
         true,
     );
     let dev = ctx.config.kvm.dev();
@@ -193,6 +202,9 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         return cmd_doctor_kvm(ctx);
     }
     let mut c = Checks { fails: 0, warns: 0 };
+    if let Some(note) = missing_release_note(ctx) {
+        println!("{note}");
+    }
     let (sys, mach) = uname_sys_machine();
     c.check(
         sys == "Linux" && mach == "x86_64",
@@ -381,7 +393,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         c.check(
             p.exists(),
             &format!("present: {}", rel(ctx, &p)),
-            reinstall(ctx),
+            &reinstall(ctx),
             false,
         );
     }
@@ -439,12 +451,59 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
 
 /// The fix for a missing installation file: unpack the release again, or, for a `hydo` installed
 /// by `cargo install` (M169), fetch this version's files.
-fn reinstall(ctx: &Ctx) -> &'static str {
-    if ctx.cargo_installed {
-        "hydo setup --get (installs this version's files into the install cache)"
-    } else {
-        "reinstall"
+/// The first lines of `hydo doctor` for a hydo without its release files yet, built in a
+/// checkout or installed by cargo: which hydo this is and the one command that gets the guest
+/// kernels, engine programs and tools the later checks look for. `None` when the files are there.
+pub fn missing_release_note(ctx: &Ctx) -> Option<String> {
+    if !ctx.cargo_installed || ctx.root.join("SHA256SUMS").exists() {
+        return None;
     }
+    Some(missing_release_text(
+        hydo_image::hydo_version(),
+        hydo_image::hydo_commit(),
+        ctx.checkout.as_deref(),
+        &ctx.root,
+    ))
+}
+
+fn missing_release_text(
+    v: &str,
+    commit: Option<&str>,
+    checkout: Option<&Path>,
+    root: &Path,
+) -> String {
+    let who = match (checkout, commit) {
+        (Some(t), Some(c)) => format!("built in the checkout {} (commit {c})", t.display()),
+        (Some(t), None) => format!("built in the checkout {}", t.display()),
+        (None, _) => "installed by cargo".to_string(),
+    };
+    format!(
+        "doctor: this is hydo {v}, {who}. A checkout or a cargo install has none of a release's \
+         files (guest kernels, engine programs, tools), so the checks that need them fail.\n\
+         doctor: get them with   hydo setup --get {v}   (the {v} release into {}; this hydo then \
+         uses it), or install a release and run its bin/hydo.",
+        root.display()
+    )
+}
+
+fn reinstall(ctx: &Ctx) -> String {
+    if ctx.cargo_installed {
+        format!(
+            "{} (installs this version's files into the install cache)",
+            get_command()
+        )
+    } else {
+        format!(
+            "{} (installs this version's release into the install cache), or unpack the release again",
+            get_command()
+        )
+    }
+}
+
+/// The one command that gets this version's release files (guest kernels, engine programs,
+/// tools): `hydo doctor` names it for a missing file and never fetches one itself.
+fn get_command() -> String {
+    format!("hydo setup --get {}", hydo_image::hydo_version())
 }
 
 /// What `hydo setup --check` would say (M154): one line per damaged file (the fix is to unpack the
@@ -453,13 +512,17 @@ fn reinstall(ctx: &Ctx) -> &'static str {
 fn installation(c: &mut Checks, ctx: &Ctx) {
     let r = crate::setup::inspect_ctx(ctx);
     if !r.release && ctx.cargo_installed {
+        let how = match &ctx.checkout {
+            Some(t) => format!("hydo was built in the checkout {}", t.display()),
+            None => "hydo was installed by cargo".to_string(),
+        };
         c.check(
             false,
             &format!(
-                "this version's release files in {} (hydo was installed by cargo)",
+                "this version's release files in {} ({how})",
                 ctx.root.display()
             ),
-            "hydo setup --get",
+            &format!("hydo setup --get {}", hydo_image::hydo_version()),
             false,
         );
         return;
@@ -534,6 +597,9 @@ fn cmd_out(cmd: &str, args: &[&str]) -> Option<(bool, String)> {
 
 pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
     let mut c = Checks { fails: 0, warns: 0 };
+    if let Some(note) = missing_release_note(ctx) {
+        println!("{note}");
+    }
     let (sys, mach) = uname_sys_machine();
     c.check(
         sys == "Darwin" && mach == "arm64",
@@ -572,7 +638,7 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         c.check(
             p.exists(),
             &format!("present: {}", rel(ctx, &p)),
-            reinstall(ctx),
+            &reinstall(ctx),
             false,
         );
     }
@@ -658,4 +724,25 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         );
     }
     c.summary()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    /// The note names the hydo, its checkout and commit, and the one command with the version.
+    #[test]
+    fn missing_release_note_names_the_command() {
+        let t = super::missing_release_text(
+            "0.1.0",
+            Some("abc123"),
+            Some(Path::new("/src/hydo")),
+            Path::new("/h/.hydo/versions/0.1.0"),
+        );
+        assert!(t.contains("this is hydo 0.1.0, built in the checkout /src/hydo (commit abc123)"));
+        assert!(t.contains("hydo setup --get 0.1.0"));
+        assert!(t.contains("/h/.hydo/versions/0.1.0"));
+        let c = super::missing_release_text("0.1.0", None, None, Path::new("/v"));
+        assert!(c.contains("installed by cargo"));
+    }
 }
