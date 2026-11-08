@@ -295,9 +295,11 @@ release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs
 continuous integration: findings proven new or fixed by replay, a small history per run, and
 seed ranges split across runners. It plans stages 0 to 4. None of it is built yet.
 
-**Documentation.** `docs/STYLE.md` is the writing standard, checked by `sh ci/vale.sh`. Before
-M187 this file held the full current state; that text is kept verbatim in `docs/HISTORY.md`
-Milestone 187.
+**Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 48 documents
+(`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
+facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
+fresh reader (`docs/RELEASING.md`). Before M187 this file held the full current state; that text
+is kept verbatim in `docs/HISTORY.md` Milestone 187.
 
 ## Open items
 
