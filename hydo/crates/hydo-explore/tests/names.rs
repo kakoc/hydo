@@ -4,7 +4,7 @@
 //! `buggify: true`, are refused by `hydo explore`), names only services, links, fakes, proxies
 //! and knobs of that manifest (`hydo_control::names`, which refuses the others before a run).
 
-mod support;
+use crate::support;
 
 use hydo_control::Plan;
 use hydo_explore::gen::{Backend, Ex};

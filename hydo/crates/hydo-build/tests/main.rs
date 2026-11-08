@@ -8,3 +8,5 @@ mod equivalence;
 mod errlog;
 mod netns;
 mod oci;
+mod oci_share;
+mod world_objects;

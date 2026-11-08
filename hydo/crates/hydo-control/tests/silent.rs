@@ -4,7 +4,7 @@
 //! last outcomes in `$HYDO_OUTCOMES` (without it nothing changes: the recorded transcripts of
 //! the other tests are the proof).
 
-mod support;
+use crate::support;
 
 use hydo_agent_proto::msg::Command;
 use hydo_control::{Ending, Plan, ScheduleController};

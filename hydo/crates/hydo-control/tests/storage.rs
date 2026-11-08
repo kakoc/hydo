@@ -8,7 +8,7 @@
 //! guest answers commands with made-up output, so the tests look at what the controller did, not
 //! at the verdict.
 
-mod support;
+use crate::support;
 
 use hydo_agent_proto::msg::Command;
 use hydo_control::{Ending, Plan};

@@ -6,5 +6,6 @@
 mod common;
 
 mod equivalence;
+mod local_build;
 mod pycheck;
 mod registry;

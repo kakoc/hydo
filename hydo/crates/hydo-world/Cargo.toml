@@ -1,5 +1,8 @@
 [package]
 name = "hydo-world"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo-world: the fake outside services and fault proxies inside the guest (fakes:, proxies:, H= protocol faults)"
 version.workspace = true
 edition.workspace = true
@@ -33,3 +36,8 @@ hmac = { version = "0.12", optional = true }
 
 [features]
 tls = ["dep:rustls", "dep:tokio-rustls", "dep:p256", "dep:aes-gcm", "dep:hmac"]
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"

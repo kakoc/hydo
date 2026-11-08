@@ -3,6 +3,8 @@
 //! after adding a tests/<name>.rs). Each tests/<name>.rs is the module <name>, so its tests are
 //! `<name>::<test>`: `cargo test -p hydo-manifest --test it <name>::`.
 
+mod engine_version;
 mod equivalence;
 mod extractors;
+mod fake_objects;
 mod format;
