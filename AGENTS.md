@@ -245,7 +245,7 @@ value is in `hydo/onboard/recorded.json`, and `hydo-bench rebaseline` checks or 
 
 **The hvx engine.** The module (`hv/hvx/hvx.c`, ABI `hvx_abi.h`) boots Linux 6.6.35
 deterministically, with guest RAM up to 8 GiB. Its clock counts VM exits, or the guest's retired
-conditional branches with the PMU clock. Every module feature is opt-in; the engine turns on the
+conditional branches with the PMU branch clock. Every module feature is opt-in; the engine turns on the
 host-call port by default (M140). The run engine is the Rust crate `hydo-hvx`, which runs inside
 `hydo` when the process can open `/dev/hvx`. Details:
 `docs/HISTORY.md` Milestones 33, 66–69, 132, 137, 138, 156 and 179; the module's safety net is

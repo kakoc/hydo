@@ -2,18 +2,18 @@
 
 This page says how to build hydo from this repository, how to test it, and how to submit a
 change. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains the parts.
-[AGENTS.md](AGENTS.md) holds the project's full rules and its current state.
+[AGENTS.md](AGENTS.md) is the maintainers' notes: the full rules, the project's machines, and its
+current state.
 
 ## What you need
 
 - An Apple Silicon Mac, or x86_64 Linux.
 - Rust 1.90.0. When you use rustup, [rust-toolchain.toml](rust-toolchain.toml) selects it.
 - cargo-nextest 0.9.148 for the fast test tier. Install it with
-  `cargo install cargo-nextest --version 0.9.148 --locked`, or download the pinned build that
-  [docs/CI.md](docs/CI.md) names.
-- Optional: sccache 0.18.0 on PATH. `.cargo/rustc-wrapper.sh` then keeps a compile cache in
-  `.sccache/` of the main checkout. The main checkout is the first clone of the repository, as
-  opposed to the extra working trees that `git worktree add` makes; all of them share the cache.
+  `cargo install cargo-nextest --version 0.9.148 --locked`.
+- The documentation check needs network access, `curl`, and `unzip`.
+- The SDK tests need Go 1.26.5, Python 3.9 or later, and Node.js 22.
+- Optional: sccache 0.18.0 on PATH. The build then keeps a compile cache in `.sccache/`.
 
 ## Build the hydo command
 
@@ -26,43 +26,45 @@ target/release/hydo setup
 The package is named `hydo`; its directory is [hydo/crates/hydo-cli](hydo/crates/hydo-cli). A
 checkout has none of a release's files: the guest kernels, the engine programs, and the guest
 tools. `hydo setup` downloads the published release of the tree's version into
-`~/.hydo/versions/<version>`, once. The `hydo` of the tree then runs over those files.
+`~/.hydo/versions/<version>`, once. The `hydo` of the tree then boots guests with those files.
 `target/release/hydo setup --check` and `target/release/hydo doctor` report whether that step is
 still to do.
 
-If the tree's version has no published release yet, `hydo setup` stops, because there is nothing
-to download. Then build a release from the tree with `hydo/dist/linux/build-release.sh` or
-`hydo/dist/mac/build-release.sh` ([docs/RELEASING.md](docs/RELEASING.md), section 2), and use the
-`hydo` inside it.
+Without release files, everything except booting a guest works: the build, `hydo build --check`,
+and every test of the fast and full tiers. When the tree's version is not published yet, a
+checkout cannot boot guests; maintainers then build a release from the tree
+([docs/RELEASING.md](docs/RELEASING.md), section 2).
 
-## Build and load the kernel module
+## Build the engines
 
-The kernel module needs x86_64 Linux with an Intel CPU, VT-x, and the running kernel's headers.
+The kernel module needs x86_64 Linux with an Intel CPU, VT-x, a C compiler, `make`, and the
+running kernel's headers. Build it from this tree:
 
 ```sh
 make -C hv/hvx
 ```
 
-Loading `hvx.ko` needs the kernel modules `kvm_intel` and `kvm` unloaded. That stops every
-virtual machine that runs under KVM on the machine:
+`hydo module install` and `hydo module uninstall` load and unload a release's module, and they
+take the module lock, so that no run loses its module. They build the release's copy of
+`hvx.c`, not this tree's. To load the module you built, take the same lock yourself. Loading it
+needs `kvm_intel` and `kvm` unloaded, which stops every virtual machine that runs under KVM:
 
 ```sh
 sudo rmmod kvm_intel kvm
-sudo insmod hv/hvx/hvx.ko
+flock ~/.hvx-module.lock sudo insmod hv/hvx/hvx.ko
 ```
 
-`sudo rmmod hvx` unloads it again. Then `sudo modprobe kvm_intel` brings KVM back.
-
-Optional: [hv/hvx/deploy-metal.sh](hv/hvx/deploy-metal.sh) runs the module's regression suite on
-a remote Linux machine. It reaches the machine through a file `machines.local.sh` that you write
-and that git ignores. The comment at the top of [machines.sh](machines.sh) says what the file
-defines.
+`flock ~/.hvx-module.lock sudo rmmod hvx` unloads it again. Then `sudo modprobe kvm_intel` brings
+KVM back.
 
 The Mac engine needs an Apple Silicon Mac. `cargo build --release -p hydo-hvm` builds it, and hydo
-signs it with [hv/hvm/hv.entitlements](hv/hvm/hv.entitlements) before it runs it.
+signs it with [hv/hvm/hv.entitlements](hv/hvm/hv.entitlements) before it runs it. The KVM engine
+is part of the `hydo` program on Linux.
 
-`hydo build` makes the same image bytes on any machine without extra tools. The guest kernels, the
-pinned guest programs, and the hand-made images in [hv/hvx/images/](hv/hvx/images/) are
+## Reproducible builds
+
+`hydo build` makes the same image bytes on any machine, with no extra tools. The guest kernels,
+the pinned guest programs, and the hand-made images in [hv/hvx/images/](hv/hvx/images/) are
 reproducible only with the pinned toolchain in [docs/BUILD-PINS.md](docs/BUILD-PINS.md).
 
 ## Test
@@ -100,16 +102,32 @@ Some parts keep their own Cargo workspace or language. Test them when you change
 | [sdk/js](sdk/js) | `node --test` |
 
 No test boots a guest. A change to an engine, the host controller, the agent, or a guest kernel
-also needs runs on real machines. Run `hv/hvx/deploy-metal.sh` for hvx, and `hydo-bench rebaseline`
-for the recorded example values ([docs/REBASELINE.md](docs/REBASELINE.md), "How to re-baseline").
+can move recorded fingerprints, and only runs on real machines show that. Two maintainers' tools
+make those runs on the project's test machine, an Intel server with the module loaded:
+
+- [hv/hvx/deploy-metal.sh](hv/hvx/deploy-metal.sh) runs the module's regression suite. It needs
+  `machines.local.sh`, a file that git ignores and that says how to reach the machine
+  ([machines.sh](machines.sh) describes it).
+- `hydo-bench rebaseline` runs every recorded example and compares the values
+  ([docs/REBASELINE.md](docs/REBASELINE.md), "How to re-baseline"). It needs an unpacked release
+  of the platform:
+
+  ```sh
+  target/release/hydo-bench rebaseline --release <unpacked release> --work <work folder> --check
+  ```
+
+If you do not have such a machine, say in the pull request that your change touches an engine or
+the guest. A maintainer then runs the suite.
 
 ## Rules every change keeps
 
 - Keep recorded fingerprints. A new feature must be opt-in and must change nothing when it is off.
-  A change that moves recorded fingerprints on purpose raises the fingerprint epoch, which
-  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains.
-- Change a versioned format only by additions. The schema tests compare each format with its
-  released copy in [hydo/schema/released/](hydo/schema/released/).
+  A maintainer checks the fingerprints on the pull request. A change that moves them on purpose
+  raises the fingerprint epoch, which [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains.
+- Change a format by changing its tests and its example files in
+  [hydo/schema/examples/](hydo/schema/examples/), by additions only. The schema tests fail when a
+  format changes by more than additions since its released copy in
+  [hydo/schema/released/](hydo/schema/released/).
 - Write hydo's own programs in Rust. The kernel module stays in C, and each SDK is in its own
   language. A rewrite must give the same bytes and fingerprints as the code it replaces.
 - Tests are the specification ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), "Tests are the
@@ -136,18 +154,10 @@ argument.
 1. Open a pull request against `main` on https://github.com/kakoc/hydo.
 2. Make sure that CI passes. The `ci` workflow runs on every push, and `docs` runs when a document
    changes.
-3. Your contribution is licensed under the license of each file that you change. Most files are
-   licensed under Apache-2.0, and [hv/hvx/hvx.c](hv/hvx/hvx.c) under GPL-2.0-only. The header `hvx_abi.h` is
-   GPL-2.0-only WITH Linux-syscall-note, or Apache-2.0.
+3. Your contribution is licensed under the license of each file that you change. A new file is
+   licensed under Apache-2.0, except in [hv/hvx/](hv/hvx/), where
+   [hv/hvx/LICENSE.md](hv/hvx/LICENSE.md) says which license applies. `hvx.c` is licensed under
+   GPL-2.0-only.
 
-## For maintainers: record the work
-
-Maintainers record each piece of work as a milestone:
-
-1. Add a milestone section with the details and the evidence to the end of
-   [docs/HISTORY.md](docs/HISTORY.md).
-2. Add a one-line entry to the milestone index in [AGENTS.md](AGENTS.md).
-3. Update the current state in AGENTS.md, and its open items if something stays open.
-
-The machine rules in AGENTS.md "Safety and coordination rules" apply to maintainers who use the
-project's own machines.
+Maintainers record each merged piece of work as a milestone; AGENTS.md "How to record new work"
+says how.

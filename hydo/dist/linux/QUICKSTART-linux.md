@@ -8,9 +8,21 @@ installing to your first exploration and a reproduced failure.
 
 ## What you need
 
+hydo has two engines on Linux, and each needs different things:
+
+- The KVM engine runs on the KVM that comes with Linux, on an Intel or AMD CPU, with no kernel
+  module and no root: your user needs only access to `/dev/kvm`. Install with
+  `install.sh --no-module` and follow [section 6](#6-run-without-the-kernel-module-kvm); the
+  example in sections 2 to 5 works the same with `--backend kvm`.
+- The kernel module `hvx.ko`, which sections 1 to 5 use, needs what the rest of this list says.
+  It adds several virtual CPUs, the k-th-flush power cut and inserted timer ticks.
+
+For the kernel module:
+
 - An x86_64 Linux machine with an **Intel** CPU and VT-x enabled in the firmware. Bare metal is
   best. A CPU with a performance-monitoring unit that is not a hybrid (P-core/E-core) design
-  gives hydo its fast "PMU clock"; without one hydo uses the slower exit-count clock (runs are
+  gives hydo its PMU branch clock: the unit counts the guest's conditional branches, so a timer
+  tick lands at an exact instruction. Without one hydo uses the slower exit-count clock (runs are
   still deterministic, but their fingerprints differ from the ones printed below).
 - Root through `sudo`: loading the kernel module needs it, and so does opening `/dev/hvx`
   unless you install the optional udev rule (see "Runs without sudo" below).
@@ -114,7 +126,8 @@ Building the same `hydo.yaml` again, on this or another machine, gives the same 
 it, `explore-ob-redis-disk.img.json` records which hydo built it (version and commit) and the
 manifest's sha256.
 
-Run one schedule with no faults, then one with a power cut before write 12 while Redis is set
+Run one schedule with no faults, then one with a power cut before step 12 (the workload's 20
+steps count from 0, and step i writes the key `k:i`) while Redis is set
 to sync its log only once a second:
 
 ```sh
@@ -155,7 +168,7 @@ REPRODUCED   run  fp=3520af95868b4e8f (recorded 3520af95868b4e8f)  disk=cut | ru
 hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under hydo-out/runs/run-…/repro-…)
 ```
 
-These fingerprints were recorded on a Xeon E3-1270 v6 with the PMU clock, from the image with
+These fingerprints were recorded on a Xeon E3-1270 v6 with the PMU branch clock, from the image with
 the sha256 shown, both as a user whose runs use sudo and as root (the engine then runs inside
 `hydo`): the two give the same fingerprints. A different image, or the exit-count clock, gives
 different fingerprints with the same verdicts.
@@ -253,7 +266,7 @@ hydo explore --backend kvm --seeds 1-20 --strategy swarm --workers 2
 `hydo` (or as `bin/hydo-kvm` with `HYDO_KVM=process`) and boots its own build of the guest kernel,
 `guest/bzImage-kvm`, which takes all its time from the engine's clock. Runs are deterministic, with
 the same verdicts as with hvx, but they are counted differently: guest time advances with the
-virtual machine's exits to the engine (there is no PMU clock), every guest has one virtual CPU at
+virtual machine's exits to the engine (there is no PMU branch clock), every guest has one virtual CPU at
 the x86-64-v2 level (an image with several CPUs or `guest.cpu: v3` is refused), and the
 fingerprints are this engine's own. `hydo repro` of an hvx run with `--backend kvm` (or the other
 way round) compares verdicts, not fingerprints, and says so. A host power cut at the k-th disk

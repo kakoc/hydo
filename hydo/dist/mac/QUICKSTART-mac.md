@@ -65,8 +65,9 @@ This writes `hydo-out/explore-ob-redis-arm64.cpio.gz` (the guest's root) and
 `hydo-out/explore-ob-redis-arm64-disk.img` (its data disk). Building the same `hydo.yaml` again
 gives the same bytes.
 
-Run one schedule with no faults, then one with a power cut before write 12 while Redis is set to
-sync its log only once a second:
+Run one schedule with no faults, then one with a power cut before step 12 (the workload's 20
+steps count from 0, and step i writes the key `k:i`) while Redis is set to sync its log only once
+a second:
 
 ```sh
 hydo run "disk=none | run"
@@ -78,7 +79,7 @@ an acknowledged key is gone after the power cut. That is Redis's documented `eve
 found and reproduced deterministically. Run either command again and the fingerprint (`fp=`) is
 the same.
 
-Network faults work the same way. This one drops every reply Redis sends during writes 5 to 9,
+Network faults work the same way. This one drops every reply Redis sends during steps 5 to 9,
 so the client times out on those five writes and does not count them as acknowledged:
 
 ```sh
