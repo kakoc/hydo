@@ -1,9 +1,96 @@
+# Publishing from GitHub Actions (trusted publishing)
+
+Since Milestone 186 the registry packages of a release are published by the workflow
+`.github/workflows/release.yml`, with each registry's trusted publishing (user decision,
+2026-11-08): GitHub gives the workflow a short-lived OpenID Connect token that says which
+repository, workflow and environment it runs in, and the registry, which was told once to
+trust exactly that combination, accepts it for one upload. No registry token is stored in the
+repository, in GitHub's secrets or on a laptop, and nobody's second factor is needed per upload
+(npm asks for one at every publish from a laptop, which blocked unattended releases). The
+commands in the sections after this one stay as the fallback (publishing by hand).
+
+## What the workflow does
+
+It starts when a version tag `v<version>` appears in the repository: creating the GitHub release
+with `gh release create v<version> --target <commit> …` creates the tag (docs/RELEASING.md step 7),
+and a tag pushed by hand starts it too. It can also be started by hand (Actions, `release`, Run
+workflow, or `gh workflow run release.yml --ref <tag or branch> -f dry_run=<true|false>`); the
+input `dry_run` (on by default) runs everything except the uploads, also on a branch, where the
+version is `hydo/VERSION`'s. A run by hand without `dry_run` must be on the tag.
+
+| Job | What it does | Permissions |
+|---|---|---|
+| `check` | the tag's version equals `hydo/VERSION`, the workspace's, every `hydo-*` entry of `[workspace.dependencies]` (not `hydo-agent-proto`, which keeps its own) and every SDK's (`hydo/dist/registries.sh versions`); the GitHub release of the tag is published with the four tarballs and `SHA256SUMS`, and `SHA256SUMS` names every tarball (`registries.sh release`; for a pushed tag it waits up to 45 minutes; a dry run only warns); it prints what each registry already has and what the run would publish | `contents: read` |
+| `packages` | `.github/workflows/packages.yml` (below): every package packed and checked, and `cargo install hydo` rehearsed, on Linux and macOS; it builds the Python sdist and wheel that the `pypi` job uploads | `contents: read` |
+| `crates` | the 20 crates of `cargo install hydo` in this document's order (the `cargo publish --registry crates-io -p` lines below), then `hydo-assert` (`sdk/rust`), with `cargo publish --locked --no-verify` (the `packages` job built every package); a token from `rust-lang/crates-io-auth-action` (a trusted-publishing token lives 30 minutes: the job stops starting crates after 20 minutes and takes a second token for the rest) | `contents: read`, `id-token: write`; environment `release` |
+| `pypi` | the sdist and wheel from the `packages` job, with `pypa/gh-action-pypi-publish` (trusted publishing, attestations on) | `id-token: write`; environment `release` |
+| `npm` | `npm publish --provenance --access public --registry https://registry.npmjs.org/` in `sdk/js`, with npm 11.21.0 on Node 22 (npm's trusted publishing needs npm 11.5.1 or later and Node 22.14.0 or later) | `contents: read`, `id-token: write`; environment `release` |
+| `go` | the annotated tag `sdk/go/v<version>` on the tagged commit (through the GitHub API, with the workflow's own token), then one fetch of the version through `proxy.golang.org` | `contents: write`; environment `release` |
+
+Every job has a timeout, every action is pinned by commit, no job restores a cache, and only
+the four publishing jobs run in the GitHub environment `release`, which every registry's
+trusted-publisher entry names: a token from any other workflow, job or fork is refused by the
+registries. A dry run skips those four jobs. Every publishing job skips a version its registry
+already has (crates.io's index, `skip-existing` on PyPI, the npm registry, an existing Go tag on
+the same commit; an existing Go tag on another commit fails the job), so **a failed job is
+re-run as it is** (Actions, Re-run failed jobs) once the cause is fixed; a version that is
+already uploaded is never uploaded again.
+
+`.github/workflows/packages.yml` is the dry run of every package on its own: it runs on every
+pull request and push to main that changes a package (the Cargo workspace, the crates, the
+files they compile in, the SDKs, this document) and by hand. Its jobs: `crates` (Linux and
+macOS: `hydo/dist/crates/rehearse.sh`, then `cargo package` of `sdk/rust`), `python` (the sdist
+and the wheel built as below, `twine check --strict`), `npm` (`npm pack --dry-run`, and a check
+of the files it would publish). It uploads nothing.
+
+`hydo/dist/registries.sh` holds what the jobs run (the order, the version check, the release
+check, the published-version lookups and the publishing loop); each command works by hand too.
+
+## The one-time setup on each registry
+
+Every registry needs the same four values, taken from the repository `kakoc/hydo`: its owner
+(the part before the slash), its name `hydo`, the workflow file name `release.yml` (the name
+only, not the path) and the environment `release`.
+The packages exist on every registry since 0.2.0 (crates.io and npm let a trusted publisher be
+added only to an existing package).
+
+1. **GitHub, the environment.** Settings, Environments, New environment `release` (the workflow
+   would create it on first use, without rules). Optional: Deployment branches and tags,
+   "Selected branches and tags", a tag rule `v*` (then only a run on a version tag can enter the
+   environment); Required reviewers, the user (then every release waits for one approval on the
+   run's page before anything is uploaded). No environment secret is needed.
+2. **crates.io**, for each of the 21 crates that `hydo/dist/registries.sh crates` prints (the 20
+   of the `cargo publish --registry crates-io -p` lines below, then `hydo-assert`): the crate's
+   page, Settings, Trusted Publishing, Add: publisher GitHub, repository owner and repository
+   name those of `kakoc/hydo`, workflow filename `release.yml`, environment `release`. A crate with no entry fails in
+   the `crates` job with an authorization error; add the entry and re-run the job. A crate that
+   is new to the closure must be published once by hand with a token (crates.io accepts a
+   trusted publisher only for a crate that exists), then gets its entry.
+3. **PyPI**, the project `hydo-assert`: Manage, Publishing, Add a new publisher, GitHub: owner
+   and repository name those of `kakoc/hydo`, workflow name `release.yml`, environment name
+   `release`.
+4. **npm**, the package `hydo-assert`: npmjs.com, the package, Settings, Trusted Publisher,
+   GitHub Actions: organization or user and repository those of `kakoc/hydo`, workflow filename
+   `release.yml`, environment name `release`. npm's documentation says a new trusted-publisher
+   configuration must complete its first successful publish within 2 days, or it expires and can
+   no longer be used or edited: add it at most two days before the release (and add it again if
+   it expired). After the first publish through it, npm recommends Settings, Publishing access,
+   "Require two-factor authentication and disallow tokens": the workflow still publishes, and no
+   token can.
+5. **Go:** nothing on a registry. The `go` job pushes the tag with the workflow's own token; if a
+   ruleset of the repository restricts creating tags, allow the GitHub Actions app to create
+   `sdk/go/v*` tags (or push the tag by hand, as below, before the workflow's run reaches it:
+   the job accepts a tag already on the same commit).
+
+Before the first real release with the workflow, a dry run checks everything except the
+uploads and the trusted-publisher entries: `gh workflow run release.yml --ref main -f dry_run=true`.
+
 # Publishing the SDKs
 
 hydo's four assertion SDKs are published to their languages' registries with the release's
-version, at every release (docs/RELEASING.md step 10). Nothing here is done automatically, and
-nothing is published until the user decides to; the packages' metadata and the dry runs below
-are prepared in the tree (Milestone 160; the APIs were cleaned up before their first
+version, at every release (docs/RELEASING.md step 10), by the release workflow (above); the
+commands below are the same steps by hand, the fallback. The packages' metadata and the dry
+runs below are prepared in the tree (Milestone 160; the APIs were cleaned up before their first
 publication in Milestone 163).
 
 The `hydo` program itself is published through the GitHub release (docs/RELEASING.md step 7: the two tarballs, the two sources archives and, since 0.2.0, the Mac programs' signatures asset `hydo-mac-<version>-signatures.tar.gz`, docs/design/signing.md), the Homebrew tap (step 8, `brew install kakoc/tap/hydo`) and the release index (step 9); this file covers the SDKs, the crates of `cargo install hydo`, and (last section) the onboarding skill, which has its own releases.
@@ -63,9 +150,10 @@ Milestone 163 removed or hid what did not meet this rule (docs/HISTORY.md, "Mile
 So check everything before the first upload of a version: the dry runs below, the shared cases
 of the four languages, and the version.
 
-## Accounts and tokens
+## Accounts and tokens (publishing by hand)
 
-Never write a token into a tracked file, a script or a commit message.
+The release workflow needs none of these (above). Never write a token into a tracked file, a
+script or a commit message.
 
 - **crates.io:** log in with the GitHub account on crates.io, create an API token with the
   scope `publish-new` and `publish-update` (Account Settings, API Tokens), then `cargo login`
@@ -103,10 +191,11 @@ python3 -m unittest discover -s sdk/python/tests
 (cd sdk/js && npm test && node --test test/cases.test.js)
 ```
 
-## The order and the commands
+## The order and the commands (by hand)
 
-The four registries are independent; do them in the order below so that each SDK's README links
-work when users arrive. Each upload is preceded by its dry run.
+The release workflow runs these steps (its `crates`, `pypi`, `npm` and `go` jobs, in parallel).
+By hand: the four registries are independent; do them in the order below so that each SDK's
+README links work when users arrive. Each upload is preceded by its dry run.
 
 1. **`hydo-assert` (crates.io)**
 
@@ -176,8 +265,9 @@ The Go SDK's tag changes no image (the order service uses the frozen copy in `hy
 # Publishing the hydo command
 
 The `hydo` command is published to crates.io, so that `cargo install hydo` installs it
-(Milestone 169). Nothing here is done automatically, and nothing is published until the user
-decides to; the crates' metadata, the check and the dry run below are prepared in the tree. The
+(Milestone 169). At a release the `crates` job of the release workflow publishes them (above,
+"Publishing from GitHub Actions"); the commands below are the same steps by hand, the
+fallback. The crates' metadata, the check and the dry run below are prepared in the tree. The
 assertion SDKs have their own publishing steps.
 
 ## What is published
@@ -314,9 +404,11 @@ minutes, at the time of writing): publishing 20 new crates takes a few hours unl
 asked to raise the limit for the account first (help@crates.io). New versions of existing
 crates have a much higher limit.
 
-## Accounts and tokens
+## Accounts and tokens (publishing by hand)
 
-Log in with the GitHub account on crates.io, create an API token with the scopes
+Only for publishing by hand, and for the first version of a crate that is new on crates.io
+(crates.io accepts a trusted publisher only for an existing crate). Log in with the GitHub
+account on crates.io, create an API token with the scopes
 `publish-new` and `publish-update`, then `cargo login` (it reads the token from standard input
 and stores it in `~/.cargo/credentials.toml`). Never write a token into a tracked file, a script
 or a commit message.
@@ -342,7 +434,9 @@ the packages record that commit.
 
 ## The order and the commands
 
-One crate at a time, in this order (every crate after the crates it depends on; the check
+This list is the order: the release workflow's `crates` job, `hydo/dist/registries.sh crates`
+and `hydo/dist/crates/rehearse.sh` read these lines, and the `crates` test checks them. By
+hand: one crate at a time, in this order (every crate after the crates it depends on; the check
 above fails when it is not). `cargo publish` builds each crate once more from its package
 against what is already on crates.io, uploads it, and then waits until the crates.io index
 lists it, so the next command finds it.
@@ -378,7 +472,8 @@ crate works only for a crate whose dependencies are already on crates.io (`hydo-
 
 Publish the crates after the version's GitHub release exists (docs/RELEASING.md): a
 `cargo install hydo` of a version whose release archive is not there yet installs a `hydo`
-whose `hydo setup --get` cannot download anything.
+whose `hydo setup --get` cannot download anything. The release workflow's `check` job refuses
+to go on until the release is published with its assets.
 
 ## Check from outside
 

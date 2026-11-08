@@ -3,7 +3,10 @@
 The steps of a release, in order. Each release is two tarballs, the two sources archives that
 accompany them and, since 0.2.0, the Mac programs' signatures asset
 `hydo-mac-<version>-signatures.tar.gz` (docs/design/signing.md); nothing is published until
-step 7, and step 8 points the Homebrew tap at the new Mac tarball. The onboarding skill is released on its own (the last section). The history of how
+step 7, and step 8 points the Homebrew tap at the new Mac tarball. Creating the GitHub release
+in step 7 creates the tag `v<version>`, which starts the release workflow: it publishes the
+registry packages (step 10) with trusted publishing, so no registry token or security key is
+needed. The onboarding skill is released on its own (the last section). The history of how
 each step was first done is in docs/HISTORY.md (Milestones 149, 150, 153–158, 168 and 170).
 docs/PUBLISHING.md lists every place hydo is published.
 
@@ -159,7 +162,25 @@ as they are. Scan the signed Mac tarball (not only the unsigned one) and the sig
 ## 7. Publish (the user decides)
 
 Create the GitHub release for the tag of the final commit and upload all five files and
-`SHA256SUMS`. The release notes name the sources archive as the corresponding source of the
+`SHA256SUMS`, in one command:
+
+```sh
+gh release create v<version> --target <full commit hash> --title "hydo <version>" \
+  --notes-file <notes> hydo/dist/out/hydo-linux-<version>.tar.gz \
+  hydo/dist/out/hydo-linux-<version>-sources.tar.gz hydo/dist/out/hydo-mac-<version>.tar.gz \
+  hydo/dist/out/hydo-mac-<version>-sources.tar.gz hydo/dist/out/hydo-mac-<version>-signatures.tar.gz \
+  hydo/dist/out/SHA256SUMS
+```
+
+`gh` uploads the files to a draft and publishes it when all are there; publishing creates the
+tag `v<version>` on that commit, and the new tag starts the release workflow (step 10). This is
+why the release comes first and the tag with it: the workflow publishes the crates of
+`cargo install hydo`, which are useless before the release's archive can be downloaded, so its
+`check` job refuses to publish anything until the release of the tag is published with its
+tarballs and `SHA256SUMS`. Pushing the tag first also works (`git tag v<version> <commit>`,
+`git push origin v<version>`, then `gh release create v<version> --verify-tag …` with the same
+files): the `check` job waits up to 45 minutes for the release; if it takes longer, re-run the
+workflow once the release is up. The release notes name the sources archive as the corresponding source of the
 third-party software in the tarballs, and say that the Mac tarball is the unsigned build of the tag
 with the signatures asset attached (`hydo/dist/mac/attach-signatures.sh`, docs/design/signing.md). Keep every sources archive available for as long as its
 tarball is offered (and at least three years after the last download of it, as GPL-2.0 section 3
@@ -201,15 +222,36 @@ Never change a line that is there. `cargo test -p hydo-image` checks the format.
 tarballs and `build-release.sh` do not change for this: the index is in the program, not in the
 release.
 
-## 10. Publish the SDKs (the user decides; with the release)
+## 10. Publish the packages (the release workflow; starts with step 7)
 
-Publish every SDK with the release's version, in the order and with the commands of
-docs/PUBLISHING.md: the four assertion SDKs, `hydo-assert` on crates.io, on PyPI and on npm, and
-the tag `sdk/go/v<version>` for the Go module. The Rust test SDK (`hydo-test`,
-`hydo-test-macros`, `cargo-hydo`) is not published (`publish = false`) until the user decides
-about code-first tests.
-An uploaded version can never be replaced on any of them (only yanked, deprecated or retracted),
-so run each dry run first.
+The tag of step 7 starts `.github/workflows/release.yml` (docs/PUBLISHING.md "Publishing from
+GitHub Actions"; Milestone 186), which publishes with trusted publishing, without a token or a
+security key: the 20 crates of `cargo install hydo` and `hydo-assert` on crates.io,
+`hydo-assert` on PyPI and on npm, and the tag `sdk/go/v<version>` for the Go module. The Rust
+test SDK (`hydo-test`, `hydo-test-macros`, `cargo-hydo`) is not published (`publish = false`)
+until the user decides about code-first tests. Steps 8 and 9 do not wait for it.
+
+1. Before step 7 (once per release, optional but cheap): a dry run on the release commit's
+   branch, `gh workflow run release.yml --ref main -f dry_run=true`: the version check, every
+   package packed and checked, `cargo install hydo` rehearsed on Linux and macOS, and the list of
+   what the real run would publish. It warns (does not fail) while the release does not exist.
+   npm only: if the trusted-publisher entry of `hydo-assert` was never used, it expires two days
+   after it was added (docs/PUBLISHING.md, the one-time setup), so add it again first.
+2. After step 7: watch the run (`gh run list --workflow release.yml`, then `gh run watch <id>`;
+   about 30 to 45 minutes, most of it the `packages` job). With a required reviewer on the
+   environment `release`, approve the deployment on the run's page.
+3. If a job fails, fix the cause without moving the tag (a registry setting, a trusted-publisher
+   entry, a network error) and re-run the failed jobs: every job skips what its registry already
+   has. A failure in the packages themselves cannot happen at this point when the `packages`
+   workflow passed on the release commit; if it does, the version cannot be published as it is
+   (crates.io, PyPI and npm never take a version twice): fix it on `main` and release the next
+   patch version.
+4. Check from outside (docs/PUBLISHING.md, "Check from outside" and step 5 of the SDKs' commands).
+
+If the workflow cannot run (GitHub Actions down, a registry's trusted publishing unavailable),
+publish by hand with the commands of docs/PUBLISHING.md, in the same order; that needs each
+registry's token or login, and npm asks for the second factor at every publish. An uploaded
+version can never be replaced on any registry (only yanked, deprecated or retracted).
 
 ## Releasing the onboarding skill (separate from hydo releases)
 

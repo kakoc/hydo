@@ -1,0 +1,325 @@
+# Publishes a release's packages to their registries with trusted publishing (OpenID Connect):
+# no registry token is stored anywhere, and no person's second factor is needed per upload
+# (user decision, 2026-11-08). docs/PUBLISHING.md "Publishing from GitHub Actions" has the
+# one-time setup on each registry; docs/RELEASING.md step 10 the place of this workflow in a
+# release.
+#
+# It starts when a version tag `v<version>` appears (pushed, or created by `gh release create`),
+# or by hand (Actions, "release", Run workflow, on the tag; `dry_run`, on by default, does
+# everything except the uploads, and also runs on a branch, for example main before the tag).
+# It does only the registries: the tarballs are built, signed and published as the GitHub
+# release by hand first (docs/RELEASING.md steps 2 to 7), and the check job waits up to 45
+# minutes for that release.
+#
+# - check: the tag's version is that of hydo/VERSION, the workspace and every SDK; the GitHub
+#   release of the tag is published with its tarballs and SHA256SUMS; what each registry has.
+# - packages: packages.yml (every package packed and checked, `cargo install hydo` rehearsed;
+#   it builds the Python packages that the pypi job uploads).
+# - crates: the 20 crates of `cargo install hydo` in docs/PUBLISHING.md's order, then the Rust
+#   SDK `hydo-assert`, with crates.io's trusted publishing; a version crates.io already has is
+#   skipped, so a rerun is safe.
+# - pypi: `hydo-assert`'s sdist and wheel, with PyPI's trusted publishing and attestations.
+# - npm: `hydo-assert` (sdk/js), with npm's trusted publishing and provenance.
+# - go: the module tag `sdk/go/v<version>` on the tagged commit, then one fetch through the Go
+#   module proxy.
+#
+# Each publishing job runs in the GitHub environment `release`, which every registry's
+# trusted-publisher entry names, so a run of another workflow, of a job outside that
+# environment or of a fork cannot publish. A dry run skips those jobs altogether (it never
+# enters the environment). Only they may ask for an OIDC token (`id-token: write`), and only the
+# go job may write to the repository (the tag). No job restores a cache. Every action is
+# pinned by commit.
+name: release
+
+on:
+  push:
+    tags: ["v[0-9]*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Everything except the uploads (also on a branch: the version is hydo/VERSION's)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  # the repository's rustc wrapper (.cargo/rustc-wrapper.sh) runs rustc itself
+  HYDO_SCCACHE: "0"
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.what.outputs.tag }}
+      version: ${{ steps.what.outputs.version }}
+      dry_run: ${{ steps.what.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The tag and the version
+        id: what
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          DRY_RUN: ${{ inputs.dry_run == true && 'true' || 'false' }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            tag="$REF_NAME"
+          elif [ "$DRY_RUN" = true ]; then
+            tag="v$(tr -d ' \n' < hydo/VERSION)"
+            echo "::notice::a dry run on the branch $REF_NAME: the version is hydo/VERSION's ($tag)"
+          else
+            echo "::error::a release runs on a version tag v<version>; this run is on the branch $REF_NAME (choose the tag in 'Use workflow from', or run with dry_run)"
+            exit 1
+          fi
+          if ! printf '%s\n' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$'; then
+            echo "::error::$tag is not a version tag v<major>.<minor>.<patch>"
+            exit 1
+          fi
+          {
+            echo "tag=$tag"
+            echo "version=${tag#v}"
+            echo "dry_run=$DRY_RUN"
+          } >> "$GITHUB_OUTPUT"
+          echo "event $EVENT, tag $tag, commit $GITHUB_SHA, dry run: $DRY_RUN"
+      - name: Every package has the tag's version
+        env:
+          VERSION: ${{ steps.what.outputs.version }}
+        run: hydo/dist/registries.sh versions "$VERSION"
+      # A tag pushed before `gh release create --verify-tag` is waited for (45 minutes); a run by
+      # hand checks once; a dry run only warns (it may run before the release exists).
+      - name: The GitHub release of the tag is published with its assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.what.outputs.tag }}
+          DRY_RUN: ${{ steps.what.outputs.dry_run }}
+          WAIT: ${{ github.event_name == 'push' && '2700' || '0' }}
+        run: |
+          if [ "$DRY_RUN" = true ]; then
+            hydo/dist/registries.sh release "$TAG" 0 || echo "::warning::no complete GitHub release $TAG yet: a real run fails here until it is published (docs/RELEASING.md step 7)"
+          else
+            hydo/dist/registries.sh release "$TAG" "$WAIT"
+          fi
+      - name: Install the pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install && cargo --version
+      - name: What the registries have, and what this run publishes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.what.outputs.version }}
+        run: |
+          hydo/dist/registries.sh publish-crates --dry-run
+          if curl -fsS -o /dev/null "https://pypi.org/pypi/hydo-assert/$VERSION/json"; then
+            echo "== PyPI hydo-assert $VERSION: already there, skipped"
+          else
+            echo "== PyPI hydo-assert $VERSION: would be published"
+          fi
+          if hydo/dist/registries.sh npm-published hydo-assert "$VERSION"; then
+            echo "== npm hydo-assert $VERSION: already there, skipped"
+          else
+            echo "== npm hydo-assert $VERSION: would be published"
+          fi
+          tag="sdk/go/v$VERSION"
+          if [ -n "$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$tag" --jq ".[] | select(.ref == \"refs/tags/$tag\") | .ref")" ]; then
+            echo "== Go tag $tag: already there (the go job checks that it is on $GITHUB_SHA)"
+          else
+            echo "== Go tag $tag: would be created on $GITHUB_SHA"
+          fi
+
+  packages:
+    name: packages
+    needs: check
+    permissions:
+      contents: read
+    uses: ./.github/workflows/packages.yml
+
+  crates:
+    name: crates.io
+    needs: [check, packages]
+    if: needs.check.outputs.dry_run != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment:
+      name: release
+      url: https://crates.io/crates/hydo
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install && cargo --version
+      # A trusted-publishing token lives 30 minutes. `cargo publish --no-verify` (the packages
+      # job built every package already) takes well under a minute per crate, so one token
+      # normally does; the first step stops starting crates after 20 minutes and a second token
+      # finishes. The action's post step revokes each token at the end of the job.
+      - name: A crates.io token (trusted publishing)
+        id: auth1
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+      - name: cargo publish, in docs/PUBLISHING.md's order
+        id: pub1
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth1.outputs.token }}
+        run: hydo/dist/registries.sh publish-crates --deadline 1200
+      - name: A second crates.io token
+        id: auth2
+        if: steps.pub1.outputs.done != 'true'
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+      - name: cargo publish, the rest
+        id: pub2
+        if: steps.pub1.outputs.done != 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth2.outputs.token }}
+        run: hydo/dist/registries.sh publish-crates --deadline 1200
+      - name: Every crate is on crates.io
+        run: |
+          hydo/dist/registries.sh publish-crates --dry-run | tee "$RUNNER_TEMP/left.txt"
+          if grep -q 'would be published' "$RUNNER_TEMP/left.txt"; then
+            echo "::error::crates are left: run this job again (crates.io's versions are skipped)"
+            exit 1
+          fi
+
+  pypi:
+    name: PyPI
+    needs: [check, packages]
+    if: needs.check.outputs.dry_run != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: release
+      url: https://pypi.org/project/hydo-assert/
+    permissions:
+      id-token: write
+    steps:
+      # built and checked (twine check --strict) by the packages job, which had no OIDC token
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: python-dist
+          path: dist/
+      - name: The packages of this version
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          ls -l dist
+          test -f "dist/hydo_assert-$VERSION.tar.gz"
+          test -f "dist/hydo_assert-$VERSION-py3-none-any.whl"
+      - name: Publish to PyPI (trusted publishing, with attestations)
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: dist/
+          attestations: true
+          skip-existing: true
+          print-hash: true
+
+  npm:
+    name: npm
+    needs: [check, packages]
+    if: needs.check.outputs.dry_run != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: release
+      url: https://www.npmjs.com/package/hydo-assert
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No registry-url: no .npmrc with a token placeholder is written; npm publish finds the
+      # OIDC token itself, and every command names the public registry.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: npm 11.21.0 (trusted publishing needs npm 11.5.1 or later and Node 22.14.0 or later)
+        run: |
+          npm install --global --registry https://registry.npmjs.org/ npm@11.21.0
+          node --version && npm --version
+          node -e 'const [a, b] = process.versions.node.split(".").map(Number); if (a < 22 || (a === 22 && b < 14)) { console.error("Node 22.14.0 or later is needed"); process.exit(1); }'
+      - name: npm publish (trusted publishing, with provenance)
+        working-directory: sdk/js
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          if ../../hydo/dist/registries.sh npm-published hydo-assert "$VERSION"; then
+            echo "npm already has hydo-assert $VERSION: skipped"
+            exit 0
+          fi
+          npm publish --provenance --access public --ignore-scripts --registry https://registry.npmjs.org/
+
+  go:
+    name: Go module
+    needs: [check, packages]
+    if: needs.check.outputs.dry_run != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: release
+      url: https://pkg.go.dev/github.com/kakoc/hydo/sdk/go
+    permissions:
+      # only for the tag sdk/go/v<version>
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # An annotated tag, as docs/PUBLISHING.md's manual commands make it. A tag that is there
+      # already must be on this commit (the proxy serves a version's first content forever).
+      - name: The tag sdk/go/v<version> on the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          tag="sdk/go/v$VERSION"
+          found=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$tag" \
+            --jq ".[] | select(.ref == \"refs/tags/$tag\") | .object | \"\(.type) \(.sha)\"")
+          if [ -n "$found" ]; then
+            read -r type sha <<< "$found"
+            if [ "$type" = tag ]; then
+              sha=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha" --jq .object.sha)
+            fi
+            if [ "$sha" != "$GITHUB_SHA" ]; then
+              echo "::error::$tag exists on $sha, not on $GITHUB_SHA: a Go version cannot be moved (docs/PUBLISHING.md \"What is permanent\")"
+              exit 1
+            fi
+            echo "$tag is already on $GITHUB_SHA"
+            exit 0
+          fi
+          object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags" \
+            -f tag="$tag" -f message="hydo Go SDK $VERSION" -f object="$GITHUB_SHA" -f type=commit --jq .sha)
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$object" --jq .ref
+      - name: The Go module proxy has the version
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          module=$(sed -n 's/^module //p' sdk/go/go.mod)
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS "https://proxy.golang.org/$module/@v/v$VERSION.info"; then
+              echo
+              exit 0
+            fi
+            echo "attempt $attempt: not yet, again in 30 s"
+            sleep 30
+          done
+          echo "::error::proxy.golang.org does not serve $module v$VERSION"
+          exit 1
