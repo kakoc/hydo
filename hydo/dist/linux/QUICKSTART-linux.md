@@ -213,8 +213,8 @@ are ready, the workload, the invariants that must always hold, and which faults 
 `~/.hydo/hydo/onboard/MANIFEST.md` describes every field; `~/.hydo/examples/redis/hydo.yaml` is a
 complete example. The release includes an onboarding guide for AI coding tools of any vendor (an
 Agent Skills folder, https://agentskills.io) that reads your repository and writes the project's
-`hydo/` folder: run `hydo init` in your project, then tell your AI tool "run `hydo guide` and
-follow it". `hydo skill install --agent claude|codex|cursor|copilot|gemini|all` copies the skill
+`hydo/` folder: run `hydo init` in your project, then tell your AI tool "run `hydo guide skill`
+and follow it". To write the folder yourself, start with `hydo guide workflow`. `hydo skill install --agent claude|codex|cursor|copilot|gemini|all` copies the skill
 where that tool reads skills (`.claude/skills/` for Claude Code, `.agents/skills/` for the others).
 Review the checks it proposes: that is the one step that needs your judgement.
 
@@ -237,7 +237,8 @@ hydo has a second engine for Linux that needs no kernel module and no root: it r
 images on the KVM that comes with Linux (`/dev/kvm`). Use it on a machine where you cannot load
 `hvx` (no root, a cloud VM with nested virtualization, a machine that runs other KVM virtual
 machines). It needs x86_64 Linux 5.10 or later with `/dev/kvm` usable by your user (often: be in
-the group `kvm`); it has so far been run on Intel CPUs only.
+the group `kvm`, `sudo usermod -aG kvm "$USER"`, then log in again). It runs on Intel and AMD
+CPUs; its fingerprints differ between the two vendors, and its verdicts do not.
 
 ```sh
 ./hydo-linux-0.2.0/install.sh --no-module     # nothing to build or load
@@ -259,7 +260,9 @@ way round) compares verdicts, not fingerprints, and says so. A host power cut at
 flush (`cf=`) and inserted ticks (`pp=`, `xt…`) are hvx's alone; the explorer draws the faults both
 engines apply. With the image above, the two schedules end `OK` (`bfa03053d51bec8a`) and
 `VIOLATION … key k:1 lost` (`8ed16d6da60c34c6`), on an Intel Core i7-13700HX on both its
-performance and its efficiency cores.
+performance and its efficiency cores. On AMD EPYC 9V45 and 9V74 CPUs (GitHub's ubuntu-24.04
+runners) they end with the same verdicts and the fingerprints `93da6e186fe00d1a` and
+`ea0afd368b0ab9b1`.
 
 ## Notes
 

@@ -12,8 +12,8 @@ Linux kernel module is the exception:
   programs. It is licensed under **GPL-2.0-only WITH Linux-syscall-note OR Apache-2.0**, the same
   arrangement Linux uses for its own user-space interface headers, so that Apache-2.0 user-space
   code may include it.
-- Everything else in this folder (the run engine `hvx_explore.c`, the tests and harnesses, the
-  guest-image scripts and the engine tools) is Apache-2.0, like the rest of the repository.
+- Everything else in this folder (the tests and harnesses, the guest-image scripts and the engine
+  tools) is Apache-2.0, like the rest of the repository.
 
 The GPL-2.0 covers the module's source only. It does not reach programs that use the module
 through `/dev/hvx`, nor the software tested under hydo.

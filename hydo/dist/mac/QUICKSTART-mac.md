@@ -65,7 +65,7 @@ This writes `hydo-out/explore-ob-redis-arm64.cpio.gz` (the guest's root) and
 `hydo-out/explore-ob-redis-arm64-disk.img` (its data disk). Building the same `hydo.yaml` again
 gives the same bytes.
 
-Run one schedule with no faults, then one with a power cut after write 12 while Redis is set to
+Run one schedule with no faults, then one with a power cut before write 12 while Redis is set to
 sync its log only once a second:
 
 ```sh
@@ -173,8 +173,10 @@ folder. Start the folder, then give your tool one instruction:
 ```sh
 cd your-project
 hydo init                    # hydo/ skeleton, .gitignore lines, a hydo section in AGENTS.md
-# then tell your AI tool: "run `hydo guide` and follow it"
+# then tell your AI tool: "run `hydo guide skill` and follow it"
 ```
+
+`hydo guide workflow` says what goes into each file of the folder, if you write it yourself.
 
 `hydo skill install --agent claude|codex|cursor|copilot|gemini|all` also copies the skill into the
 directory that tool reads skills from (`.claude/skills/` for Claude Code, `.agents/skills/` for
@@ -210,7 +212,7 @@ The release carries every guest file the arm64 build stages, so these work from 
 - A busy-wait loop is resolved only if it repeats exactly (the same registers and memory each
   time, or only counters that never feed back). Any other loop that never makes a system call
   marks its run invalid instead of giving a wrong result.
-- One virtual CPU, and guest RAM up to a few GiB.
+- One virtual CPU, and guest RAM up to 8 GiB (`guest.ram_mib`).
 
 ## Licenses and source code
 

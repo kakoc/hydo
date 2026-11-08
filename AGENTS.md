@@ -257,8 +257,10 @@ clock counts VM exits. The program is signed with `hv/hvm/hv.entitlements` befor
 The details are in Milestones 48, 51, 99, 143, and 147.
 
 **The KVM engine.** `hydo/crates/hydo-kvm` runs the x86_64 images on stock Linux KVM, without the
-module or root, with one vCPU and a patched guest kernel (`bzImage-kvm`). Its fingerprints are its
-own. Details: `docs/design/kvm-engine.md`, Milestones 159, 161, and 175.
+module or root, with one vCPU and a patched guest kernel (`bzImage-kvm`). It runs on Intel and on
+AMD (GitHub's ubuntu-24.04 runners, 2026-11-08). Its fingerprints are its own and differ between
+CPU vendors; the verdicts are the same. Details: `docs/design/kvm-engine.md`, Milestones 159, 161,
+and 175, and open item 45 in `docs/HISTORY.md` Milestone 187.
 
 **Guest control.** Every image is an agent image. The guest agent `hydo-agent` (0.3.0) is PID 1
 and runs only primitives. The host controller (`hydo/crates/hydo-control`) drives services,
@@ -367,7 +369,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 43. The suite's recorded values of M121's agent boot check are older than M140 (M156).
 44. [user decision] License compliance: the sources archives must stay available; three SPDX
     expressions are approximations; a lawyer's review is open (M158).
-45. The KVM engine: no AMD host has run it; one vCPU only (M159, M161).
+45. The KVM engine: one vCPU only. On AMD, RDRAND, RDSEED and TSX cannot be made to fault, so a
+    guest program that uses them without checking CPUID sees the host (M159, M161).
 46. Homebrew: no Linux formula (M168).
 47. The install cache: no pruning; the Linux side ran only against a local server (M162).
 48. [user decision] The Rust test SDK is unpublished until the user decides about code-first
