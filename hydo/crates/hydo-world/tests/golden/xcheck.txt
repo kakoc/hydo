@@ -23,10 +23,10 @@ $ ctl on 1 orders@0-1:status=NOPE: error: status="NOPE" is not a number rc=1
 $ ctl: stderr: usage: hydo-world serve <world.json> [--carry FILE] | ctl <cmd...> | event <name> <ref> | check <kind> <target> [opts] rc=2
 ## fake: charges, replays, routes
 charge o1 k1: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 40 | Connection: close || body={"id":"ch_1","order":"o1","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-1 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o1","charge":"ch_1","key":"k1"} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-1 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o1","charge":"ch_1","key":"k1"} -> 200
 charge o1 k1 again: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 40 | Connection: close || body={"id":"ch_1","order":"o1","amount":12.5}
 charge o2 (no key): HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 40 | Connection: close || body={"id":"ch_4","order":"o2","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 65 | Content-Type: application/json | X-Sig: s-4 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o2","charge":"ch_4","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 65 | Content-Type: application/json | X-Sig: s-4 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o2","charge":"ch_4","key":""} -> 200
 get ch_1: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 18 | Connection: close || body={"id":"ch_1","n":}
 get with a json body: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 32 | Connection: close || body={"id":"ch 2","n":[1,{"a":true}]}
 search: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 11 | Connection: close || body={"q":"a b"}
@@ -35,16 +35,16 @@ plain: HTTP/1.1 200 OK | Content-Type: text/plain | Content-Length: 8 | Connecti
 no route: HTTP/1.1 404 Not Found | Content-Type: text/plain; charset=utf-8 | X-Content-Type-Options: nosniff | Content-Length: 32 | Connection: close || body={"error":"hydo fake: no route"}\x0a
 HEAD of a route: HTTP/1.1 404 Not Found | Content-Type: text/plain; charset=utf-8 | X-Content-Type-Options: nosniff | Content-Length: 32 | Connection: close
 expect 100-continue: HTTP/1.1 100 Continue [timeout]
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-13 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o3","charge":"ch_13","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-13 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o3","charge":"ch_13","key":""} -> 200
 two requests on one connection: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 11 || body={"q":"one"} || HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 11 | Connection: close || body={"q":"two"}
 HTTP/1.0: HTTP/1.0 200 OK | Content-Type: application/json | Content-Length: 11 || body={"q":"old"}
 chunked request: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 37 | Connection: close || body={"id":"ch_18","order":"o4","amount":}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-18 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o4","charge":"ch_18","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-18 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o4","charge":"ch_18","key":""} -> 200
 garbage:  [timeout]
 absolute URI: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 11 | Connection: close || body={"q":"abs"}
 ## fake over HTTP/2
 h2 charge o5 k5: status=200 h[content-length=38;content-type=application/json] body={"id":"ch_21","order":"o5","amount":1} end
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 68 | Content-Type: application/json | X-Sig: s-21 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o5","charge":"ch_21","key":"k5"} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 68 | Content-Type: application/json | X-Sig: s-21 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o5","charge":"ch_21","key":"k5"} -> 200
 h2 charge o5 k5 again: status=200 h[content-length=38;content-type=application/json] body={"id":"ch_21","order":"o5","amount":1} end
 h2 get: status=200 h[content-length=18;content-type=application/json] body={"id":"ch_9","n":} end
 h2 no route: status=404 h[content-length=32;content-type=text/plain; charset=utf-8;x-content-type-options=nosniff] body={"error":"hydo fake: no route"}\x0a end
@@ -65,19 +65,19 @@ search (other route): HTTP/1.1 200 OK | Content-Type: application/json | Content
 $ ctl off 3: ok rc=0
 $ ctl on 4 payments.charge@0-1:status=429,effect=yes: ok rc=0
 charge o7, 429 but done: HTTP/1.1 429 Too Many Requests | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":429}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 68 | Content-Type: application/json | X-Sig: s-33 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o7","charge":"ch_33","key":"k7"} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 68 | Content-Type: application/json | X-Sig: s-33 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o7","charge":"ch_33","key":"k7"} -> 200
 $ ctl off 4: ok rc=0
 $ ctl on 5 payments.charge@0-1:delay=100: ok rc=0
 charge o8 delayed: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"id":"ch_35","order":"o8","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-35 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o8","charge":"ch_35","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-35 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o8","charge":"ch_35","key":""} -> 200
 $ ctl off 5: ok rc=0
 $ ctl on 6 payments.charge@0-1:drop: ok rc=0
 charge o9 dropped:  [timeout]
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-37 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o9","charge":"ch_37","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 66 | Content-Type: application/json | X-Sig: s-37 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o9","charge":"ch_37","key":""} -> 200
 $ ctl off 6: ok rc=0
 $ ctl on 7 payments.charge@0-1:reset: ok rc=0
 charge o10 reset:  [reset]
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-39 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o10","charge":"ch_39","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-39 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o10","charge":"ch_39","key":""} -> 200
 $ ctl off 7: ok rc=0
 $ ctl on 8 payments@0-1:status=500: ok rc=0
 search, every route: HTTP/1.1 500 Internal Server Error | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":500}
@@ -90,26 +90,26 @@ $ ctl off 9: ok rc=0
 $ ctl on 10 payments.charge@2-4:status=503,p=50: ok rc=0
 charge o12: HTTP/1.1 503 Service Unavailable | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":503}
 charge o13: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_45","order":"o13","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-45 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o13","charge":"ch_45","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-45 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o13","charge":"ch_45","key":""} -> 200
 charge o14: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_47","order":"o14","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-47 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o14","charge":"ch_47","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-47 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o14","charge":"ch_47","key":""} -> 200
 charge o15: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_49","order":"o15","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-49 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o15","charge":"ch_49","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-49 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o15","charge":"ch_49","key":""} -> 200
 charge o16: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_51","order":"o16","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-51 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o16","charge":"ch_51","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-51 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o16","charge":"ch_51","key":""} -> 200
 charge o17: HTTP/1.1 503 Service Unavailable | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":503}
 charge o18: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_54","order":"o18","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-54 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o18","charge":"ch_54","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-54 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o18","charge":"ch_54","key":""} -> 200
 charge o19: HTTP/1.1 503 Service Unavailable | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":503}
 $ ctl off 10: ok rc=0
 ## fake faults: a drop ended by off, by heal
 $ ctl on 11 payments.charge@0-1:drop: ok rc=0
 charge o20, off after 200 ms: [closed]
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-57 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o20","charge":"ch_57","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-57 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o20","charge":"ch_57","key":""} -> 200
 $ ctl on 12 payments.charge@0-1:drop: ok rc=0
 $ ctl on 13 payments.get@0-1:drop: ok rc=0
 charge o21, heal after 200 ms: [closed]
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-59 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o21","charge":"ch_59","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-59 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o21","charge":"ch_59","key":""} -> 200
 get after the heal: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 18 | Connection: close || body={"id":"ch_1","n":}
 ## fake faults over HTTP/2
 $ ctl on 14 payments.charge@0-1:status=503: ok rc=0
@@ -117,17 +117,17 @@ h2 charge o22, 503: status=503 h[content-length=41;content-type=application/json
 $ ctl off 14: ok rc=0
 $ ctl on 15 payments.charge@0-1:drop: ok rc=0
 h2 charge o23, dropped: [timeout]
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-63 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o23","charge":"ch_63","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-63 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o23","charge":"ch_63","key":""} -> 200
 $ ctl off 15: ok rc=0
 $ ctl on 16 payments.charge@0-1:reset: ok rc=0
 h2 charge o24, reset: [rst INTERNAL_ERROR]
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-65 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o24","charge":"ch_65","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-65 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o24","charge":"ch_65","key":""} -> 200
 $ ctl off 16: ok rc=0
 ## webhooks: dup
 $ ctl on 17 payments.charge@0-1:dup: ok rc=0
 charge o25: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_67","order":"o25","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 70 | Content-Type: application/json | X-Sig: s-67 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o25","charge":"ch_67","key":"k25"} -> 200
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 70 | Content-Type: application/json | X-Sig: s-67 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o25","charge":"ch_67","key":"k25"} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 70 | Content-Type: application/json | X-Sig: s-67 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o25","charge":"ch_67","key":"k25"} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 70 | Content-Type: application/json | X-Sig: s-67 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o25","charge":"ch_67","key":"k25"} -> 200
 $ ctl off 17: ok rc=0
 ## webhooks: lost, late, reorder, failing
 $ ctl on 18 payments.charge@0-1:lost: ok rc=0
@@ -135,19 +135,19 @@ charge o26: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 4
 $ ctl off 18: ok rc=0
 $ ctl on 19 payments.charge@0-1:late=200: ok rc=0
 charge o27: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_72","order":"o27","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-72 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o27","charge":"ch_72","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-72 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o27","charge":"ch_72","key":""} -> 200
 $ ctl off 19: ok rc=0
 $ ctl on 20 payments.charge@0-1:reorder: ok rc=0
 charge o28: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_74","order":"o28","amount":12.5}
 charge o29: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_75","order":"o29","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-74 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o28","charge":"ch_74","key":""} -> 200
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-75 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o29","charge":"ch_75","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-74 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o28","charge":"ch_74","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-75 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o29","charge":"ch_75","key":""} -> 200
 charge o32 (held): HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 42 | Connection: close || body={"id":"ch_78","order":"o32","amount":12.5}
 $ ctl off 20: ok rc=0
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-78 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o32","charge":"ch_78","key":""} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 67 | Content-Type: application/json | X-Sig: s-78 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o32","charge":"ch_78","key":""} -> 200
 charge fail1: HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 44 | Connection: close || body={"id":"ch_80","order":"fail1","amount":12.5}
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 69 | Content-Type: application/json | X-Sig: s-80 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"fail1","charge":"ch_80","key":""} -> 500
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 69 | Content-Type: application/json | X-Sig: s-80 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"fail1","charge":"ch_80","key":""} -> 500
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 69 | Content-Type: application/json | X-Sig: s-80 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"fail1","charge":"ch_80","key":""} -> 500
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 69 | Content-Type: application/json | X-Sig: s-80 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"fail1","charge":"ch_80","key":""} -> 500
 ## events
 $ event cancelled o2: ok 84 rc=0
 $ event cancelled o 3,x: ok 85 rc=0
@@ -155,38 +155,38 @@ $ event shipped : ok 86 rc=0
 $ event x: stderr: usage: hydo-world serve <world.json> [--carry FILE] | ctl <cmd...> | event <name> <ref> | check <kind> <target> [opts] rc=2
 ## HTTP proxy
 get /api?order=o40: HTTP/1.1 200 OK | Content-Type: application/json | X-Upstream: yes | Content-Length: 31 | Connection: close || body={"path":"/api?order=o40","n":0}
-  upstream http: GET /api?order=o40 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | X-Trace: t1 | Accept-Encoding: gzip | Connection: close || body=
+  upstream http: GET /api?order=o40 HTTP/1.1 | Host: 127.0.0.1:28611 | User-Agent: Go-http-client/1.1 | X-Trace: t1 | Accept-Encoding: gzip | Connection: close || body=
 post with hop headers: HTTP/1.1 200 OK | Content-Type: application/json | X-Upstream: yes | Content-Length: 33 | Connection: close || body={"path":"/api/x?order=o41","n":3}
-  upstream http: POST /api/x?order=o41 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: client/2 | Content-Length: 3 | Accept: */* | Accept-Encoding: gzip | Connection: close || body=abc
+  upstream http: POST /api/x?order=o41 HTTP/1.1 | Host: 127.0.0.1:28611 | User-Agent: client/2 | Content-Length: 3 | Accept: */* | Accept-Encoding: gzip | Connection: close || body=abc
 gzip, the client asked for nothing: HTTP/1.1 200 OK | Content-Type: application/json | Vary: Accept-Encoding | Content-Length: 57 | Connection: close || body={"gz":true,"text":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
-  upstream http: GET /gz?order=o42 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+  upstream http: GET /gz?order=o42 HTTP/1.1 | Host: 127.0.0.1:28611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
 gzip, the client asked for it: HTTP/1.1 200 OK | Content-Encoding: gzip | Content-Type: application/json | Vary: Accept-Encoding | Content-Length: 54 | Connection: close || body=\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x8d\xc0\xb1\x0d\x00 \x08D\xd1]~\xed\x04lcA\xec\xcd\x99\x18\x08\xbb\xb3\x02/9\x81\xe9>_\xc8\xbf0\xf6\x00\xd5\xde\xca\xce\x9e9\x00\x00\x00
-  upstream http: GET /gz?order=o43 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+  upstream http: GET /gz?order=o43 HTTP/1.1 | Host: 127.0.0.1:28611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
 chunked with a trailer: HTTP/1.1 200 OK | Content-Type: text/plain | Content-Length: 11 | Connection: close || body=hello world
-  upstream http: GET /chunked?order=o44 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+  upstream http: GET /chunked?order=o44 HTTP/1.1 | Host: 127.0.0.1:28611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
 over HTTP/2: status=200 h[content-length=31;content-type=application/json;x-upstream=yes] body={"path":"/api?order=o45","n":0} end
-  upstream http: GET /api?order=o45 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | X-H2: 1 | Accept-Encoding: gzip | Connection: close || body=
+  upstream http: GET /api?order=o45 HTTP/1.1 | Host: 127.0.0.1:28611 | User-Agent: Go-http-client/1.1 | X-H2: 1 | Accept-Encoding: gzip | Connection: close || body=
 $ ctl on 21 shop@0-1:status=502: ok rc=0
 502, not forwarded: HTTP/1.1 502 Bad Gateway | Content-Type: application/json | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":502}
 $ ctl off 21: ok rc=0
 $ ctl on 22 shop.api@0-1:drop: ok rc=0
 dropped after forwarding:  [timeout]
-  upstream http: GET /api?order=o47 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+  upstream http: GET /api?order=o47 HTTP/1.1 | Host: 127.0.0.1:28611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
 $ ctl off 22: ok rc=0
 $ ctl on 23 shop@0-1:reset: ok rc=0
 reset after forwarding:  [reset]
-  upstream http: GET /api?order=o48 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+  upstream http: GET /api?order=o48 HTTP/1.1 | Host: 127.0.0.1:28611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
 $ ctl off 23: ok rc=0
 $ ctl on 24 shop@0-1:delay=100,effect=no: ok rc=0
 delay without effect: [closed]
 $ ctl off 24: ok rc=0
 $ ctl on 25 shop@0-1:status=503,effect=yes,retry-after=9: ok rc=0
 503 after forwarding: HTTP/1.1 503 Service Unavailable | Content-Type: application/json | Retry-After: 9 | Content-Length: 41 | Connection: close || body={"error":"injected by hydo","status":503}
-  upstream http: GET /api?order=o50 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+  upstream http: GET /api?order=o50 HTTP/1.1 | Host: 127.0.0.1:28611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
 $ ctl off 25: ok rc=0
 slow upstream, client gives up:  [timeout]
-  upstream http: GET /slow?order=o51 HTTP/1.1 | Host: 127.0.0.1:38611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
-no upstream: HTTP/1.1 502 Bad Gateway | Content-Type: text/plain; charset=utf-8 | X-Content-Type-Options: nosniff | Content-Length: 113 | Connection: close || body=hydo proxy: upstream: Post "http://127.0.0.1:38619/x?y=1": dial tcp 127.0.0.1:38619: connect: connection refused\x0a
+  upstream http: GET /slow?order=o51 HTTP/1.1 | Host: 127.0.0.1:28611 | User-Agent: Go-http-client/1.1 | Accept-Encoding: gzip | Connection: close || body=
+no upstream: HTTP/1.1 502 Bad Gateway | Content-Type: text/plain; charset=utf-8 | X-Content-Type-Options: nosniff | Content-Length: 113 | Connection: close || body=hydo proxy: upstream: Post "http://127.0.0.1:28619/x?y=1": dial tcp 127.0.0.1:28619: connect: connection refused\x0a
 ## TCP proxy
 echo: +PING\x0a+SET a 1\x0a [closed]
   upstream tcp: PING\x0aSET a 1\x0a
@@ -214,18 +214,18 @@ status on a byte stream: +GET f\x0a [closed]
 $ ctl off 31: ok rc=0
 ## gRPC proxy: calls
 Unary o1: status=200 h[content-type=application/grpc] m[6f6b3a0a026f31] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 Stream: status=200 h[content-type=application/grpc] m[7331] m[7332] m[7333] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 Client, 3 messages: status=200 h[content-type=application/grpc] m[33] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Client h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=3 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Client h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=3 end=eos
 Fail (trailers-only from the server): status=200 h[content-type=application/grpc;grpc-message=nope;grpc-status=5] end
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Fail h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Fail h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 unknown method: status=200 h[content-type=application/grpc;grpc-message=unknown method;grpc-status=12] end
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Nope h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=0 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Nope h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=0 end=eos
 no upstream: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
 slow, client gives up: [timeout]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Slow h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Slow h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 ## gRPC proxy: faults without forwarding
 $ ctl on 32 orders@0-1:status=UNAVAILABLE: ok rc=0
 status=UNAVAILABLE: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
@@ -247,70 +247,70 @@ drop, no effect, healed after 200 ms: [rst INTERNAL_ERROR]
 ## gRPC proxy: faults on the answer
 $ ctl on 38 orders@0-1:status=ABORTED,effect=yes: ok rc=0
 status=ABORTED after forwarding: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=10] end
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 $ ctl off 38: ok rc=0
 $ ctl on 39 orders@0-1:drop: ok rc=0
 drop: [timeout]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 drop, off after 200 ms: [rst INTERNAL_ERROR]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 $ ctl on 40 orders@0-1:delay=100: ok rc=0
 delay: status=200 h[content-type=application/grpc] m[6f6b3a0a036f3133] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 $ ctl off 40: ok rc=0
 $ ctl on 41 orders@0-1:reset: ok rc=0
 reset: [rst INTERNAL_ERROR]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 $ ctl off 41: ok rc=0
 $ ctl on 42 orders@0-1:reset=conn: ok rc=0
 reset=conn: [conn]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 $ ctl off 42: ok rc=0
 $ ctl on 43 orders.place@0-1:status=14: ok rc=0
 route place: Unary: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
 route place: Stream passes: status=200 h[content-type=application/grpc] m[7331] m[7332] m[7333] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 $ ctl off 43: ok rc=0
 ## gRPC proxy: streams
 $ ctl on 44 orders@0-1:cut=1: ok rc=0
 cut=1: status=200 h[content-type=application/grpc] m[7331] [rst INTERNAL_ERROR]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 $ ctl off 44: ok rc=0
 $ ctl on 45 orders@0-1:cut=0: ok rc=0
 cut=0: status=200 h[content-type=application/grpc] [rst INTERNAL_ERROR]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 $ ctl off 45: ok rc=0
 $ ctl on 46 orders@0-1:hold=1: ok rc=0
 hold=1, client gives up: status=200 h[content-type=application/grpc] m[7331] [timeout]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 hold=1, off after 200 ms: status=200 h[content-type=application/grpc] m[7331] m[7332] m[7333] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Stream h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 $ ctl on 47 orders@0-1:cut=1,dir=req: ok rc=0
 cut=1 dir=req: [rst INTERNAL_ERROR]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Client h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=reset
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Client h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=reset
 $ ctl off 47: ok rc=0
 $ ctl on 48 orders@0-1:hold=1,dir=req: ok rc=0
 hold=1 dir=req, healed after 200 ms: status=200 h[content-type=application/grpc] m[33] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Client h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=3 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Client h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=3 end=eos
 ## gRPC proxy: rpc=, call=, p=, seed=
 $ ctl on 49 orders@0-1:status=INTERNAL,rpc=Stream: ok rc=0
 rpc=Stream: Unary passes: status=200 h[content-type=application/grpc] m[6f6b3a0a036f3137] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 rpc=Stream: Stream fails: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=13] end
 $ ctl off 49: ok rc=0
 $ ctl on 50 orders@0-1:status=13,rpc=/t.S/Count,call=2-3: ok rc=0
 Count call 1: status=200 h[content-type=application/grpc] m[6f6b3a0a026e31] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Count h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Count h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 Count call 2: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=13] end
 Count call 3: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=13] end
 Count call 4: status=200 h[content-type=application/grpc] m[6f6b3a0a026e34] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Count h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Count h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 $ ctl off 50: ok rc=0
 $ ctl on 51 orders@0-1:status=14,p=50,seed=7: ok rc=0
 p=50 call 1: status=200 h[content-type=application/grpc] m[6f6b3a0a027031] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 p=50 call 2: status=200 h[content-type=application/grpc] m[6f6b3a0a027032] t[grpc-message=;grpc-status=0]
-  upstream grpc: POST 127.0.0.1:38613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
+  upstream grpc: POST 127.0.0.1:28613 /t.S/Unary h[accept-encoding=gzip;content-type=application/grpc;te=trailers;user-agent=xcheck/1] msgs=1 end=eos
 p=50 call 3: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
 p=50 call 4: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
 p=50 call 5: status=200 h[content-length=0;content-type=application/grpc;grpc-message=injected by hydo;grpc-status=14] end
@@ -869,15 +869,15 @@ charge o31 after the cut (never answered):  [timeout]
   seq=184 kind=call ep=orders route=place path=/t.S/Unary ref=p6 call=21 req=183 status=14 server=0 upstream=- msgs=0/0 out=-+status14
   seq=185 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o30 idem=k30 body=3a5409592130 fx=1 out=ok
 ## the world's stderr
-  hydo-world: fake ledger grpc on 127.0.0.1:38602
-  hydo-world: fake payments http on 127.0.0.1:38601
-  hydo-world: proxy kv tcp on 127.0.0.1:38604 -> 127.0.0.1:38612
-  hydo-world: proxy orders grpc on 127.0.0.1:38605
-  hydo-world: proxy orders2 grpc on 127.0.0.1:38606
-  hydo-world: proxy shop http on 127.0.0.1:38603
-  hydo-world: proxy shop2 http on 127.0.0.1:38607
+  hydo-world: fake ledger grpc on 127.0.0.1:28602
+  hydo-world: fake payments http on 127.0.0.1:28601
+  hydo-world: proxy kv tcp on 127.0.0.1:28604 -> 127.0.0.1:28612
+  hydo-world: proxy orders grpc on 127.0.0.1:28605
+  hydo-world: proxy orders2 grpc on 127.0.0.1:28606
+  hydo-world: proxy shop http on 127.0.0.1:28603
+  hydo-world: proxy shop2 http on 127.0.0.1:28607
 ## the recovery world
-  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:38614 | User-Agent: Go-http-client/1.1 | Content-Length: 71 | Content-Type: application/json | X-Sig: s-185 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o30","charge":"ch_185","key":"k30"} -> 200
+  webhook got: POST /hooks/payments HTTP/1.1 | Host: 127.0.0.1:28614 | User-Agent: Go-http-client/1.1 | Content-Length: 71 | Content-Type: application/json | X-Sig: s-185 | Accept-Encoding: gzip | Connection: close || body={"type":"charge.succeeded","order":"o30","charge":"ch_185","key":"k30"} -> 200
 charge o1 k1 again (remembered): HTTP/1.1 200 OK | Content-Type: application/json | Content-Length: 40 | Connection: close || body={"id":"ch_1","order":"o1","amount":12.5}
 $ check at-most-once payments.charge --by idem: HYDO-ORACLE: OK payments.charge: 26 effects, every idem at most once rc=0
 $ check count payments.charge: HYDO-ORACLE: OK payments.charge: 26 effects, 26 refs rc=0
@@ -1038,11 +1038,11 @@ $ check count payments.charge: HYDO-ORACLE: OK payments.charge: 26 effects, 26 r
   seq=186 kind=hook ep=payments route=charge ref=o30 idem=k30 src=185 n=1 dup=0 out=200
   seq=187 kind=req ep=payments route=charge from=127.0.0.1 method=POST path=/v1/charges ref=o1 idem=k1 body=a53a51d29818 fx=0 out=replay orig=1
 ## the world's stderr
-  hydo-world: fake ledger grpc on 127.0.0.1:38602
-  hydo-world: fake payments http on 127.0.0.1:38601
-  hydo-world: proxy kv tcp on 127.0.0.1:38604 -> 127.0.0.1:38612
-  hydo-world: proxy orders grpc on 127.0.0.1:38605
-  hydo-world: proxy orders2 grpc on 127.0.0.1:38606
-  hydo-world: proxy shop http on 127.0.0.1:38603
-  hydo-world: proxy shop2 http on 127.0.0.1:38607
+  hydo-world: fake ledger grpc on 127.0.0.1:28602
+  hydo-world: fake payments http on 127.0.0.1:28601
+  hydo-world: proxy kv tcp on 127.0.0.1:28604 -> 127.0.0.1:28612
+  hydo-world: proxy orders grpc on 127.0.0.1:28605
+  hydo-world: proxy orders2 grpc on 127.0.0.1:28606
+  hydo-world: proxy shop http on 127.0.0.1:28603
+  hydo-world: proxy shop2 http on 127.0.0.1:28607
 $ ctl ping: stderr: hydo-world ctl: dial unix <dir>/world.sock: connect: connection refused rc=1
