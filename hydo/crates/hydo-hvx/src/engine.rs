@@ -2739,6 +2739,27 @@ fn create_vm(
     if o.cpu_v3 {
         cfg.flags |= HVX_VM_X86_64_V3;
     }
+    if o.cpu_cache {
+        // M195: a module that does not know the flag ignores it, and its guest would see no
+        // cache leaves without a word: ask it first
+        match vm.caps() {
+            Ok(Some(f)) if f & HVX_VM_CPU_CACHE != 0 => cfg.flags |= HVX_VM_CPU_CACHE,
+            Ok(_) => {
+                say!(
+                    "HVX_CREATE_VM: the image asks for the CPU cache leaves (guest.cpu_cache), \
+                     which this hvx.ko ({}) does not give (it is older than Milestone 195); \
+                     load a module built from this hydo (hydo module install), or remove \
+                     guest.cpu_cache from the manifest and rebuild the image",
+                    o.dev
+                );
+                return None;
+            }
+            Err(e) => {
+                say!("HVX_GET_CAPS: {e}");
+                return None;
+            }
+        }
+    }
     if o.pt_trace_vm {
         cfg.flags |= HVX_VM_PT_TRACE;
     }
@@ -3193,21 +3214,24 @@ pub struct Start {
     pub vcpus: Option<u32>,
     /// `--cpu v3`.
     pub cpu_v3: bool,
+    /// `--cpu-cache on` (M195: `guest.cpu_cache`, the CPUID cache leaves).
+    pub cpu_cache: bool,
 }
 
-/// The program's command line (`[--ram-mib N] [--vcpus N] [--cpu v2|v3] --control boot
-/// serve|one <bzImage> <initramfs> <disk.img> <outdir> ["<schedule>"]`, read as hvx_explore read
+/// The program's command line (`[--ram-mib N] [--vcpus N] [--cpu v2|v3] [--cpu-cache on|off]
+/// --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir> ["<schedule>"]`, read as
+/// hvx_explore read
 /// it), then [`run`] over the text port (requests and commands on `io.input`, reports on
 /// `io.out`). The plain `one`/`serve` modes and `--control one` (the shell-init images') are
 /// refused since M145.
 pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
     let mut a: Vec<String> = args.to_vec();
     let (mut control_one, mut control_boot) = (false, false);
-    let (mut ram_mib, mut vcpus, mut cpu_v3) = (None, None, false);
+    let (mut ram_mib, mut vcpus, mut cpu_v3, mut cpu_cache) = (None, None, false, false);
     while a.len() > 2
         && matches!(
             a[1].as_str(),
-            "--ram-mib" | "--vcpus" | "--cpu" | "--control"
+            "--ram-mib" | "--vcpus" | "--cpu" | "--cpu-cache" | "--control"
         )
     {
         if a[1] == "--control" && a[2] == "boot" {
@@ -3233,6 +3257,14 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
                     return 2;
                 }
             }
+            "--cpu-cache" => match a[2].as_str() {
+                "on" => cpu_cache = true,
+                "off" => cpu_cache = false,
+                v => {
+                    let _ = writeln!(io.diag, "hydo-hvx: --cpu-cache {v}: expected on or off");
+                    return 2;
+                }
+            },
             _ => match vcpus_parse(&a[2], "--vcpus", &mut io.diag) {
                 Some(n) => vcpus = Some(n),
                 None => return 2,
@@ -3241,7 +3273,7 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
         a.drain(1..3);
     }
     if a.len() < 6 {
-        let _ = writeln!(io.diag, "usage: {} [--ram-mib N] [--vcpus N] [--cpu v2|v3] --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir> [\"<schedule>\"]", a.first().map(String::as_str).unwrap_or("hydo-hvx"));
+        let _ = writeln!(io.diag, "usage: {} [--ram-mib N] [--vcpus N] [--cpu v2|v3] [--cpu-cache on|off] --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir> [\"<schedule>\"]", a.first().map(String::as_str).unwrap_or("hydo-hvx"));
         return 2;
     }
     if !control_boot || control_one {
@@ -3283,6 +3315,7 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
         ram_mib,
         vcpus,
         cpu_v3,
+        cpu_cache,
     };
     let port = Box::new(crate::text::TextPort::new(io.input, io.out));
     run(start, o, port, io.diag)
@@ -3321,6 +3354,15 @@ pub fn run(
     }
     if o.cpu_v3 {
         let _ = writeln!(diag, "hvx_explore: guest CPU x86-64-v3 (AVX/AVX2)");
+    }
+    if start.cpu_cache {
+        o.cpu_cache = true;
+    }
+    if o.cpu_cache {
+        let _ = writeln!(
+            diag,
+            "hydo-hvx: the guest's CPUID describes its caches (HVX_VM_CPU_CACHE)"
+        );
     }
     let outdir = start.outdir.clone();
     let _ = std::fs::create_dir(&outdir);

@@ -199,6 +199,18 @@ impl Vm {
         ret(unsafe { libc::ioctl(self.fd.as_raw_fd(), HVX_RESET_FTSTAT as _, 0) })
     }
 
+    /// HVX_GET_CAPS (M195): the `HVX_VM_*` flags this module acts on. `Ok(None)` for a module
+    /// older than Milestone 195, which refuses the request (ENOTTY) and ignores flags above
+    /// `HVX_VM_DIRTY_LOG`.
+    pub fn caps(&self) -> io::Result<Option<u32>> {
+        let mut c = hvx_caps::default();
+        match self.io(HVX_GET_CAPS, &mut c) {
+            Ok(()) => Ok(Some(c.vm_flags)),
+            Err(e) if e.raw_os_error() == Some(libc::ENOTTY) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     /// HVX_RESET_VM (M138): the VM as HVX_CREATE_VM left it, RAM and disk contents aside.
     pub fn reset(&self) -> io::Result<()> {
         // SAFETY: an _IO request without an argument

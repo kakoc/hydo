@@ -59,3 +59,4 @@ restart-policies
 restart-may-fail
 tls-and-writable
 sql-checks-folder
+cpu-cache

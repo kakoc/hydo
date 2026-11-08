@@ -1160,8 +1160,8 @@ pub fn vm_opts(o: &KvmOptions, disk: Option<&std::path::Path>) -> VmOpts {
     }
 }
 
-/// The program's `main` over the given streams: `hydo-kvm [--ram-mib N] [--cpu v2|v3] --control
-/// boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir> ["<schedule>"]`.
+/// The program's `main` over the given streams: `hydo-kvm [--ram-mib N] [--cpu v2|v3] [--cpu-cache
+/// on|off] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir> ["<schedule>"]`.
 #[cfg(target_os = "linux")]
 pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
     let diag: Diag = Arc::new(Mutex::new(io.diag));
@@ -1171,8 +1171,21 @@ pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
     let mut a: Vec<String> = args.to_vec();
     let mut ram_mib = None;
     let mut level = crate::cpuid::Level::V2;
-    while a.len() > 2 && (a[1] == "--ram-mib" || a[1] == "--cpu") {
-        if a[1] == "--cpu" {
+    let mut cache = false;
+    while a.len() > 2 && (a[1] == "--ram-mib" || a[1] == "--cpu" || a[1] == "--cpu-cache") {
+        if a[1] == "--cpu-cache" {
+            match a[2].as_str() {
+                "on" => cache = true,
+                "off" => cache = false,
+                v => {
+                    say(
+                        &diag,
+                        &format!("hydo-kvm: --cpu-cache {v}: expected on or off"),
+                    );
+                    return 2;
+                }
+            }
+        } else if a[1] == "--cpu" {
             match crate::cpuid::Level::parse(&a[2]) {
                 Some(l) => level = l,
                 None => {
@@ -1201,7 +1214,7 @@ pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
         || (a[1] != "serve" && a[1] != "one")
         || (a[1] == "one" && argc < 7)
     {
-        say(&diag, "usage: hydo-kvm [--ram-mib N] [--cpu v2|v3] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir> [\"<schedule>\"]");
+        say(&diag, "usage: hydo-kvm [--ram-mib N] [--cpu v2|v3] [--cpu-cache on|off] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir> [\"<schedule>\"]");
         return 2;
     }
     let sched = match a.get(6).map(String::as_str) {
@@ -1235,7 +1248,7 @@ pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
         .clone()
         .unwrap_or_else(|| hydo_config::kvm::DEFAULT_DEV.to_string());
     let hv = match crate::sys::Kvm::open(&dev).and_then(|k| k.with_level(level)) {
-        Ok(k) => k,
+        Ok(k) => k.with_cache(cache),
         Err(e) => {
             say(&diag, &e);
             return 1;

@@ -66,6 +66,8 @@ struct Cx {
     ram_mib: i64,
     vcpus: i64,
     cpu: String,
+    /// `guest.cpu_cache` of the image's manifest (M195; hvx and KVM).
+    cpu_cache: bool,
     hvm_kernel: Option<PathBuf>,
     /// `--backend kvm`: the KVM engine (hydo-kvm). Its schedules are drawn as the Mac engine's
     /// (the tokens both apply: no `cf=`, `pp=` or `xt*`; forced preemption points), its images are
@@ -120,6 +122,10 @@ impl Cx {
         if self.cpu == "v3" && (self.ex.backend == Backend::Hvx || self.kvm) {
             a.push("--cpu".into());
             a.push("v3".into());
+        }
+        if self.cpu_cache && (self.ex.backend == Backend::Hvx || self.kvm) {
+            a.push("--cpu-cache".into());
+            a.push("on".into());
         }
         a
     }
@@ -228,6 +234,7 @@ fn setup(a: Args, env: &Env) -> Cx {
         ram_mib: 1024,
         vcpus: 1,
         cpu: "v2".into(),
+        cpu_cache: false,
         hvm_kernel: a.hvm_kernel.as_ref().map(PathBuf::from),
         kvm,
         known: Some(known),
@@ -390,6 +397,14 @@ fn setup(a: Args, env: &Env) -> Cx {
     }
     if cx.cpu != "v2" {
         eprintln!("guest CPU: {}", cx.cpu);
+    }
+    // M195: the CPUID cache leaves (an x86_64 key: the Mac engine's arm64 guests have no CPUID)
+    cx.cpu_cache = guest
+        .and_then(|g| g.get("cpu_cache"))
+        .is_some_and(|v| v.as_bool() == Some(true))
+        && (cx.ex.backend == Backend::Hvx || cx.kvm);
+    if cx.cpu_cache {
+        eprintln!("guest CPU: the cache leaves of CPUID (guest.cpu_cache)");
     }
     if cx.ram_mib != 1024 {
         eprintln!("guest RAM: {} MiB", cx.ram_mib);
@@ -579,6 +594,7 @@ fn make_pool(cx: &Cx) -> Pool {
             } else {
                 CpuLevel::V2
             },
+            cpu_cache: cx.cpu_cache,
             kernel: PathBuf::new(),
             initrd: None,
             outdir: consoles,
@@ -614,6 +630,7 @@ fn make_pool(cx: &Cx) -> Pool {
             ram_mib: cx.ram_mib as u32,
             vcpus: 1,
             cpu: CpuLevel::V2,
+            cpu_cache: false,
             kernel: cx
                 .hvm_kernel
                 .clone()
@@ -640,6 +657,7 @@ fn make_pool(cx: &Cx) -> Pool {
             } else {
                 CpuLevel::V2
             },
+            cpu_cache: cx.cpu_cache,
             kernel: cx.build.join("bzImage"),
             initrd: Some(cx.build.join("initramfs-kafka.cpio.gz")),
             outdir: consoles,

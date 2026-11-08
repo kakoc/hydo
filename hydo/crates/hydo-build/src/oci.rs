@@ -1601,8 +1601,61 @@ pub fn ready_warnings(
     share: bool,
     layers: Option<&Path>,
 ) -> Vec<String> {
-    let paths: Vec<(String, String, PathBuf)> = oci
-        .iter()
+    ready_warnings_in(&service_trees(oci, root, share, layers), m)
+}
+
+/// Image services whose image has the glibc 2.28 of Red Hat Enterprise Linux 8 and its rebuilds
+/// (AlmaLinux 8, Rocky Linux 8, UBI 8, CentOS 8), in a manifest with `guest.cpu: v3` and without
+/// `guest.cpu_cache: true` (M195, no silent passes): that glibc takes its copy thresholds from
+/// the CPUID cache leaves, which are empty without the key, and its AVX `memcpy` then fails at
+/// once (a segfault in `libc-2.28.so`; at v2 it uses another copy, which works). x86_64 only
+/// (the caller's). Called as [`ready_warnings`].
+pub fn cpu_cache_warnings(
+    oci: &[OciService],
+    root: &Path,
+    m: &Value,
+    share: bool,
+    layers: Option<&Path>,
+) -> Vec<String> {
+    cpu_cache_warnings_in(&service_trees(oci, root, share, layers), m)
+}
+
+/// [`cpu_cache_warnings`] for image services given as (service, the image's PATH, its tree).
+fn cpu_cache_warnings_in(paths: &[(String, String, PathBuf)], m: &Value) -> Vec<String> {
+    let g = m.get("guest");
+    let on = g.and_then(|g| g.get("cpu_cache")).and_then(Value::as_bool) == Some(true);
+    let v3 = g.and_then(|g| g.get("cpu")).and_then(Value::as_str) == Some("v3");
+    if on || !v3 {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for (svc, _, tree) in paths {
+        let libc = ["usr/lib64/libc-2.28.so", "lib64/libc-2.28.so"]
+            .into_iter()
+            .find(|p| fsx::lexists(&tree.join(p)));
+        if let (Some(libc), true) = (libc, fsx::lexists(&tree.join("etc/redhat-release"))) {
+            out.push(format!(
+                "services: {svc}: its image has the glibc 2.28 of Red Hat Enterprise Linux 8's \
+                 family (/{libc}), whose AVX memcpy fails when CPUID describes no caches, and \
+                 this manifest has guest.cpu: v3 without guest.cpu_cache: true: its programs \
+                 would end with a segfault in libc-2.28.so; add guest.cpu_cache: true \
+                 (MANIFEST.md \"The CPU's caches\")"
+            ));
+        }
+    }
+    out
+}
+
+/// Each image service's unpacked tree as (service, the image's PATH, its tree): its own
+/// `R/oci/<svc>`, the tree it shares with `root.share_images`, or its `writable: true` layer on
+/// the staged data partition.
+fn service_trees(
+    oci: &[OciService],
+    root: &Path,
+    share: bool,
+    layers: Option<&Path>,
+) -> Vec<(String, String, PathBuf)> {
+    oci.iter()
         .enumerate()
         .map(|(i, o)| {
             let p = o
@@ -1632,8 +1685,7 @@ pub fn ready_warnings(
                 tree,
             )
         })
-        .collect();
-    ready_warnings_in(&paths, m)
+        .collect()
 }
 
 /// [`ready_warnings`] for image services given as (service, the image's PATH, its tree).
@@ -2193,6 +2245,56 @@ mod tests {
             "{}",
             w[0]
         );
+    }
+
+    /// M195: an image with the glibc 2.28 of Red Hat Enterprise Linux 8's family is named when the
+    /// manifest has guest.cpu: v3 and lacks guest.cpu_cache: true; with the key, at v2, or for
+    /// another glibc or distribution, nothing is said.
+    #[test]
+    fn rhel8_glibc_without_the_cache_leaves_is_named() {
+        let root = std::env::temp_dir().join(format!("hydo-cpucache-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        for (svc, libc, redhat) in [
+            ("alma", "usr/lib64/libc-2.28.so", true),
+            ("buster", "lib/x86_64-linux-gnu/libc-2.28.so", false),
+            ("rocky9", "usr/lib64/libc.so.6", true),
+        ] {
+            let t = root.join("oci").join(svc);
+            fs::create_dir_all(t.join(Path::new(libc).parent().unwrap())).unwrap();
+            fs::write(t.join(libc), b"").unwrap();
+            if redhat {
+                fs::create_dir_all(t.join("etc")).unwrap();
+                fs::write(t.join("etc/redhat-release"), b"").unwrap();
+            }
+        }
+        let paths: Vec<_> = ["alma", "buster", "rocky9"]
+            .iter()
+            .map(|s| {
+                (
+                    s.to_string(),
+                    DEFAULT_PATH.to_string(),
+                    root.join("oci").join(s),
+                )
+            })
+            .collect();
+        let w = cpu_cache_warnings_in(&paths, &json!({"guest": {"cpu": "v3"}}));
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(
+            w[0].starts_with(
+                "services: alma: its image has the glibc 2.28 of Red Hat Enterprise Linux 8's \
+                 family (/usr/lib64/libc-2.28.so)"
+            ),
+            "{}",
+            w[0]
+        );
+        assert!(w[0].contains("add guest.cpu_cache: true"), "{}", w[0]);
+        let on = json!({"guest": {"cpu": "v3", "cpu_cache": true}});
+        assert!(cpu_cache_warnings_in(&paths, &on).is_empty());
+        assert!(
+            cpu_cache_warnings_in(&paths, &json!({})).is_empty(),
+            "v2 copies work"
+        );
+        let _ = fs::remove_dir_all(&root);
     }
 
     /// The refusals of hydo_oci._mounts that test_hydo_compose.py's test_validation checked

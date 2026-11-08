@@ -762,6 +762,15 @@ pub fn build(
     ) {
         crate::errln(io, &format!("hydo-build: warning: {w}"));
     }
+    for w in crate::oci::cpu_cache_warnings(
+        &p.oci,
+        &r,
+        &m,
+        pyv::get(rootsec, "share_images")? == Some(&serde_json::Value::Bool(true)),
+        any_layer.then_some(dstage.as_path()),
+    ) {
+        crate::errln(io, &format!("hydo-build: warning: {w}"));
+    }
     fsx::fix_mtimes(&r)?;
     if any_layer {
         fsx::fix_mtimes(&dstage)?;

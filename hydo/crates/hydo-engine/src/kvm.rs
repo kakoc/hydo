@@ -3,7 +3,7 @@
 //! one process), or as the program `hydo-kvm` with `HYDO_KVM=process`:
 //!
 //! ```text
-//! hydo-kvm [--ram-mib N] [--cpu v3] --control boot serve|one <bzImage-kvm> <initramfs> <disk> <outdir> ["<schedule>"]
+//! hydo-kvm [--ram-mib N] [--cpu v3] [--cpu-cache on] --control boot serve|one <bzImage-kvm> <initramfs> <disk> <outdir> ["<schedule>"]
 //! ```
 //!
 //! It boots the same images as hvx (the image's disk and its recorded initramfs) with its own
@@ -204,6 +204,7 @@ fn spawn(
     let dev = hydo_config::kvm::Engine::from_env(&e).dev();
     let hv = hydo_kvm::sys::Kvm::open(&dev.display().to_string())
         .and_then(|k| k.with_level(level_of(spec.cpu)))
+        .map(|k| k.with_cache(spec.cpu_cache))
         .map_err(EngineError::Unsupported)?;
     let initrd = spec.initrd.clone().ok_or_else(|| {
         EngineError::Unsupported("the KVM engine needs the image's initramfs".into())
@@ -347,6 +348,7 @@ mod tests {
             ram_mib: 2048,
             vcpus: 1,
             cpu: crate::CpuLevel::V2,
+            cpu_cache: false,
             kernel: "/g/bzImage-kvm".into(),
             initrd: Some("/g/initramfs-kafka.cpio.gz".into()),
             outdir: "/o".into(),
@@ -369,6 +371,16 @@ mod tests {
             k.argv(&v3, "one", &s).join(" "),
             "/r/bin/hydo-kvm --ram-mib 2048 --cpu v3 --control boot one /g/bzImage-kvm \
              /g/initramfs-kafka.cpio.gz /i/x-disk.img /o rb=64 | run"
+        );
+        // M195: guest.cpu_cache
+        let cache = BootSpec {
+            cpu_cache: true,
+            ..v3.clone()
+        };
+        assert_eq!(
+            k.argv(&cache, "one", &s).join(" "),
+            "/r/bin/hydo-kvm --ram-mib 2048 --cpu v3 --cpu-cache on --control boot one \
+             /g/bzImage-kvm /g/initramfs-kafka.cpio.gz /i/x-disk.img /o rb=64 | run"
         );
         for cpu in [crate::CpuLevel::V2, crate::CpuLevel::V3] {
             let more = BootSpec {

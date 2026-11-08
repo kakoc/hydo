@@ -83,6 +83,8 @@ pub struct Kvm {
     xcrs: bool,
     /// the guest CPU level ([`Kvm::with_level`])
     level: Level,
+    /// the CPUID cache leaves (`guest.cpu_cache`, [`Kvm::with_cache`])
+    cache: bool,
     /// v3 on a hybrid CPU: the CPUs of one kind of core every vCPU thread runs on
     /// ([`crate::hybrid`])
     pin: Option<Vec<usize>>,
@@ -171,8 +173,19 @@ impl Kvm {
             supported: c.entries[..n].to_vec(),
             xcrs,
             level: Level::V2,
+            cache: false,
             pin: None,
         })
+    }
+
+    /// Whether the guest's CPUID describes the fixed cache hierarchy (`guest.cpu_cache`, M195:
+    /// [`crate::cpuid::table_with`]); no host requirement.
+    pub fn with_cache(mut self, cache: bool) -> Kvm {
+        if cache {
+            self.desc = format!("{}; CPUID cache leaves", self.desc);
+        }
+        self.cache = cache;
+        self
     }
 
     /// The guest CPU level of every VM this makes (x86-64-v2 unless set): Err when the host's KVM
@@ -358,7 +371,7 @@ impl Hypervisor for Kvm {
             pin: self.pin.clone(),
         };
         let mut c = Box::<kvm_cpuid2>::default();
-        let t = crate::cpuid::table_for(self.level);
+        let t = crate::cpuid::table_with(self.level, self.cache);
         c.h.nent = t.len() as u32;
         c.entries[..t.len()].copy_from_slice(&t);
         chk(

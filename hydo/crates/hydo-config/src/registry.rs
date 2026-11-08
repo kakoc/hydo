@@ -151,6 +151,8 @@ variables! {
     HVX_VCPU_PARK: HvxEngine, Developer, "flag: set and not `0`", "off", "hydo-hvx";
     /// Not `0`: the guest CPU is x86-64-v3 (as `--cpu v3`).
     HVX_CPU_V3: HvxEngine, Developer, "flag: set and not `0`", "off", "hydo-hvx";
+    /// Not `0`: the guest's CPUID describes its caches (as `--cpu-cache on`; HVX_VM_CPU_CACHE).
+    HVX_CPU_CACHE: HvxEngine, Developer, "flag: set and not `0`", "off", "hydo-hvx";
     /// `0` turns the PMU branch clock off.
     HVX_PMU_CLOCK: HvxEngine, Developer, "flag: not `0`", "on", "hydo-hvx";
     /// `0` turns PAUSE exits off.

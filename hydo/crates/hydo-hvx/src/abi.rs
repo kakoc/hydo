@@ -36,6 +36,23 @@ pub const HVX_VM_X86_64_V3: u32 = 1 << 7;
 pub const HVX_VM_HOSTCALL: u32 = 1 << 8;
 /// M138: the dirty-page log of RAM and disk.
 pub const HVX_VM_DIRTY_LOG: u32 = 1 << 9;
+/// M195: CPUID describes a fixed cache hierarchy (leaves 2, 4 and 0x8000_0006; hvx_abi.h).
+pub const HVX_VM_CPU_CACHE: u32 = 1 << 10;
+/// M195: every flag a module of this ABI knows (`HVX_GET_CAPS`).
+pub const HVX_VM_KNOWN_FLAGS: u32 = (1 << 11) - 1;
+/// M195: CPUID leaf 2 EAX with `HVX_VM_CPU_CACHE`: one round, descriptor 0xff ("see leaf 4").
+pub const HVX_CPUID2_EAX: u32 = 0x0000_ff01;
+/// M195: CPUID leaf 4, sub-leaves 0..3 (L1 data, L1 instruction, L2, L3), `[EAX, EBX, ECX,
+/// EDX]` for one logical processor (`HVX_CPUID4_SUB`). Also the KVM engine's (hydo-kvm's
+/// `cpuid`), so both engines describe the same caches.
+pub const HVX_CPUID4_SUB: [[u32; 4]; 4] = [
+    [0x0000_0121, 0x01c0_003f, 0x0000_003f, 0x0000_0000],
+    [0x0000_0122, 0x01c0_003f, 0x0000_003f, 0x0000_0000],
+    [0x0000_0143, 0x00c0_003f, 0x0000_03ff, 0x0000_0000],
+    [0x0000_0163, 0x03c0_003f, 0x0000_1fff, 0x0000_0006],
+];
+/// M195: CPUID leaf 0x8000_0006 ECX with `HVX_VM_CPU_CACHE` (the L2: 256 KiB, 4-way, 64 B).
+pub const HVX_CPUID_E6_ECX: u32 = 0x0100_4040;
 pub const HVX_EXIT_HOSTCALL: u32 = 0xffff_fffa;
 pub const HVX_HC_DATA_PORT: u16 = 0x05f0;
 pub const HVX_HC_CTL_PORT: u16 = 0x05f4;
@@ -571,6 +588,15 @@ pub const HVX_HC_GET: u64 = iowr::<hvx_hc_io>(66);
 pub const HVX_HC_PUT: u64 = iow::<hvx_hc_io>(67);
 pub const HVX_HC_GET_STATE: u64 = iowr::<hvx_hc_state>(68);
 pub const HVX_HC_SET_STATE: u64 = iow::<hvx_hc_state>(69);
+pub const HVX_GET_CAPS: u64 = ior::<hvx_caps>(70);
+
+/// `struct hvx_caps` (M195).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct hvx_caps {
+    pub vm_flags: u32,
+    pub reserved: [u32; 7],
+}
 
 /// `struct hvx_hc_io` (M138).
 #[repr(C)]
@@ -675,7 +701,8 @@ pod!(
     hvx_ftstat,
     hvx_hc_io,
     hvx_hc_state,
-    hvx_dirty
+    hvx_dirty,
+    hvx_caps
 );
 
 /// The bytes of a field of a Pod struct (for the fingerprint's field-by-field hashing).
