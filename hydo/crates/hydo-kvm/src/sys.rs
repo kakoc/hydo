@@ -83,6 +83,9 @@ pub struct Kvm {
     xcrs: bool,
     /// the guest CPU level ([`Kvm::with_level`])
     level: Level,
+    /// v3 on a hybrid CPU: the CPUs of one kind of core every vCPU thread runs on
+    /// ([`crate::hybrid`])
+    pin: Option<Vec<usize>>,
 }
 
 /// What the host is, for the diagnostics and the doctor.
@@ -168,6 +171,7 @@ impl Kvm {
             supported: c.entries[..n].to_vec(),
             xcrs,
             level: Level::V2,
+            pin: None,
         })
     }
 
@@ -185,9 +189,65 @@ impl Kvm {
         if level != Level::V2 {
             self.desc = format!("{}; guest CPU {}", self.desc, level.name());
         }
+        if level == Level::V3 {
+            self.pin = one_kind_of_core();
+            if let Some(p) = &self.pin {
+                self.desc = format!(
+                    "{}, on one kind of core of this hybrid CPU: CPUs {}",
+                    self.desc,
+                    p.iter()
+                        .map(|c| c.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                );
+            }
+        }
         self.level = level;
         Ok(self)
     }
+}
+
+/// The CPU list of a sysfs file (empty when it is not there).
+fn sys_cpus(path: &str) -> Vec<usize> {
+    std::fs::read_to_string(path)
+        .map(|s| crate::hybrid::cpulist(&s))
+        .unwrap_or_default()
+}
+
+/// The CPUs this thread may use now.
+fn allowed_cpus() -> Vec<usize> {
+    // SAFETY: a zeroed cpu_set_t is a valid empty set; sched_getaffinity fills it
+    let mut set: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+    let r = unsafe { libc::sched_getaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &mut set) };
+    if r != 0 {
+        return Vec::new();
+    }
+    // SAFETY: CPU_ISSET reads the set within its size
+    (0..libc::CPU_SETSIZE as usize)
+        .filter(|&c| unsafe { libc::CPU_ISSET(c, &set) })
+        .collect()
+}
+
+/// On a hybrid Intel CPU, the CPUs of one kind of core this process may use
+/// ([`crate::hybrid::choose`]); None elsewhere.
+fn one_kind_of_core() -> Option<Vec<usize>> {
+    crate::hybrid::choose(
+        &allowed_cpus(),
+        &sys_cpus("/sys/devices/cpu_core/cpus"),
+        &sys_cpus("/sys/devices/cpu_atom/cpus"),
+    )
+}
+
+/// Bind the calling thread to `cpus`.
+fn bind_thread(cpus: &[usize]) -> Result<(), String> {
+    // SAFETY: a zeroed cpu_set_t is a valid empty set; CPU_SET writes within it
+    let mut set: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+    for &c in cpus {
+        unsafe { libc::CPU_SET(c, &mut set) };
+    }
+    // SAFETY: the set lives across the call
+    let r = unsafe { libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &set) };
+    chk("sched_setaffinity (one kind of core of a hybrid CPU)", r).map(|_| ())
 }
 
 fn new_fd(r: i32) -> File {
@@ -295,6 +355,7 @@ impl Hypervisor for Kvm {
             ram_len: len,
             dirty: None,
             v3: self.level == Level::V3,
+            pin: self.pin.clone(),
         };
         let mut c = Box::<kvm_cpuid2>::default();
         let t = crate::cpuid::table_for(self.level);
@@ -355,6 +416,8 @@ pub struct KvmCpu {
     /// x86-64-v3: the guest enables XSAVE components itself, so its XCR0 is part of the state
     /// ([`CpuState::xcr0`])
     v3: bool,
+    /// the CPUs the vCPU's thread is bound to at its first run (v3 on a hybrid CPU)
+    pin: Option<Vec<usize>>,
 }
 
 // SAFETY: the kvm_run page is owned by this value and used by one thread at a time (the engine's)
@@ -558,6 +621,11 @@ impl Cpu for KvmCpu {
             let t = unsafe { libc::pthread_self() } as u64;
             unblock_kick();
             self.thread.store(t, Ordering::Relaxed);
+            if let Some(p) = &self.pin {
+                if let Err(e) = bind_thread(p) {
+                    crate::fatal(1, &e);
+                }
+            }
         }
         match self.kvm_run() {
             Ok(true) => self.decode(),

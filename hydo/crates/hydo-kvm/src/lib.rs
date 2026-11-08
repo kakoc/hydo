@@ -38,6 +38,7 @@ pub mod abi;
 pub mod boot;
 pub mod cpu;
 pub mod cpuid;
+pub mod hybrid;
 pub mod kernel;
 pub mod layout;
 pub mod machine;
