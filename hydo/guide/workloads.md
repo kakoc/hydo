@@ -1,8 +1,8 @@
 # Ready-made workloads and checks (SQL systems, and business rules)
 
-Before writing a client or a check by hand, look here: for a system with a SQL database, hydo
-writes the workload and its checks, and for business rules it reads the stores and the fake
-outside world for you. The full reference is "SQL systems: ready-made workloads and checks" in
+Before you write a client or a check by hand, look here. hydo writes the workload and its checks
+for a system with a SQL database. For business rules, it reads the stores and the fake outside
+world for you. The full reference is the section `SQL systems: ready-made workloads and checks` in
 `hydo guide manifest`; the design and its reasons are docs/design/workloads.md in hydo's
 repository.
 
@@ -24,9 +24,9 @@ hydo sql-gen --dialect postgres|mysql|libsql --endpoint NAME=ADDRESS[,replica] .
   prefixed `hydo_`, and their first rows), one `parallel_driver_sql_*` per workload and shape, and
   the checks. `hydo build` stages the guest program `/bin/hydo-sql` because the commands call it.
 - Set how many commands run at once in `hydo.yaml`'s `test:` (`parallel`, `per_round`,
-  `round_ms`), and the durability knob of the database in `knobs:` yourself
-  (`synchronous_commit`, `innodb_flush_log_at_trx_commit`, sqld's `durability_mode`): the knob's
-  default is what the system ships with, which is the setting worth testing.
+  `round_ms`). Set the durability knob of the database in `knobs:` yourself, for example
+  `synchronous_commit`, `innodb_flush_log_at_trx_commit`, or sqld's `durability_mode`. Make the
+  knob's default what the system ships with, because that is the setting worth testing.
 
 ## The workloads and what they check
 
@@ -47,19 +47,23 @@ round trip, the client deciding in between (as ORMs do); only this shape can sho
 
 **What a history may claim.** A level without real time (`serializable`) cannot see a lost write:
 an acknowledged append missing after a power cut is not an anomaly there. So the generator claims
-real time wherever the reads are current: with one primary, `strict-serializable` for every
-transaction; with replicas, `serializable` for all of them (history `la`) and
-`strict-serializable` for what a primary ran plus the appends of what a replica served (history
-`lap`).
+real time wherever the reads are current:
 
-**Outcomes** (each operation's line in `$HYDO_OUTCOMES`): no connection = failed; an error the
-server answered before or at COMMIT = failed (serialization failures, deadlocks and `database is
-locked` are retried as new transactions, twice by default); no answer to COMMIT (or to a
-one-request transaction) = unknown.
+- With one primary, it claims `strict-serializable` for every transaction.
+- With replicas, it claims `serializable` for all of them (history `la`). It claims
+  `strict-serializable` for what a primary ran, plus the appends of what a replica served
+  (history `lap`).
+
+**Outcomes** (each operation's line in `$HYDO_OUTCOMES`):
+
+- No connection: failed.
+- An error that the server answered before or at COMMIT: failed. Serialization failures,
+  deadlocks, and `database is locked` are retried as new transactions, twice by default.
+- No answer to COMMIT, or to a one-request transaction: unknown.
 
 ## SQL checks: a query that must return no rows
 
-A file `checks/final_<name>.sql` (or `always_`, `eventually_`), **not executable**:
+A file `checks/final_<name>.sql` (or `always_`, `eventually_`) that is not executable:
 
 ```sql
 -- hydo: store=primary every=2
@@ -82,9 +86,10 @@ without the generated workloads, `hydo sql-gen --workloads none ...` writes only
 | `sql <endpoint> '<query>'` | the rows of any query on a configured endpoint |
 | `libsql <host:port> '<query>'` | the rows of a query through sqld's HTTP API |
 | `dump <endpoint>` | the workloads' rows, one item per row |
-| `world <ep>.<route>\|<route>\|* [--all]` | the fake outside world's record: one record per request that took effect (`--all`: every request), with its fields `ref`, `idem`, `route`, `out`, ... |
+| `world <ep>.<route>\|<route>\|* [--all]` | the fake outside world's record: one record per request that took effect (`--all`: every request), with its fields `ref`, `idem`, `route`, `out`, and others |
 
-"Every captured payment in our books was captured at the provider, and the other way round":
+An example rule: every payment that the system's books record as captured was captured at the
+provider, and the other way round.
 
 ```sh
 hydo-sql check equal --left 'books=sql db "SELECT intent FROM payment WHERE captured"' \
@@ -97,8 +102,8 @@ hydo cannot guess a domain's rules; ask the project's owner which of these hold,
 as a SQL check or a `hydo-sql check` line:
 
 - **Commerce:** units sold <= units stocked; units sold = units reserved; one payment per order;
-  no order without a payment; no money held (authorized) without an order; refunded <= captured;
-  every acknowledged checkout has its order.
+  no order without a payment. No money is held (authorized) without an order; refunded <=
+  captured; every acknowledged checkout has its order.
 - **Money movement:** the sum over accounts never changes (transfers only move money); no balance
   below its limit; every transfer has both legs or neither; ledger entries sum to the balance.
 - **Inventory and booking:** no seat, room or slot booked twice; a released reservation frees its
@@ -107,5 +112,5 @@ as a SQL check or a `hydo-sql check` line:
   job runs after its cancellation; a job's effects appear once.
 - **Accounts and identity:** unique emails or user names stay unique; a deleted account has no
   live sessions or orders.
-- **Agreement with the outside world:** our books and the provider's record agree (captures,
-  refunds, messages sent), compared with a `world` source.
+- **Agreement with the outside world:** the system's books and the provider's record agree
+  (captures, refunds, messages sent), compared with a `world` source.

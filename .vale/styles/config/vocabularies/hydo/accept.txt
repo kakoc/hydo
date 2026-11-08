@@ -1,8 +1,12 @@
+Apple Silicon
+cargo
 Docker
 EPT
+Go
 Homebrew
 HTTPS
 hydo
+JavaScript
 Jepsen
 Kafka
 KVM
@@ -11,11 +15,15 @@ Mac
 Medusa
 MySQL
 NATS
+Node.js
 PMU
 PostgreSQL
+Python
 RDTSC
 Redis
 Rust
+SDKs?
 SMIs
+SQL
 TigerBeetle
 VMXON

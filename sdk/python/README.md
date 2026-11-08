@@ -118,9 +118,9 @@ The operator is one of `<`, `<=`, `==`, `!=`, `>=` and `>`.
 
 ### Check that something happens in time (eventually)
 
-An `eventually` property says "after this point, the condition becomes true within a deadline",
-for example "after a restart the server answers within 5 seconds". Time inside a hydo guest is
-deterministic, so the verdict is the same on every replay.
+An `eventually` property says that after this point, the condition becomes true within a
+deadline. For example: after a restart, the server answers within 5 seconds. Time inside a hydo
+guest is deterministic, so the verdict is the same on every replay.
 
 ```python
 import time
@@ -196,8 +196,9 @@ that is on fires on some of its calls. To try it outside hydo, set
 
 ### Record an operation history
 
-hydo can check a whole history of operations after a run: is every read consistent with the
-writes before it (linearizability per key), or do list appends ever go missing? Your workload's
+hydo can check a whole history of operations after a run. It checks that every read is
+consistent with the writes before it (linearizability per key), and that no list append goes
+missing. Your workload's
 client records each operation twice: when it starts (`invoke`) and when the outcome is known.
 
 ```python
@@ -245,7 +246,7 @@ project with a `hydo.yaml` is the python-kv example:
 ## Reference
 
 - The API: the docstrings of `hydo_assert` and `hydo_assert.history` (`help(hydo_assert)`).
-- The records and how hydo judges each kind of property:
+- The records, and how hydo judges each property type:
   <https://github.com/kakoc/hydo/blob/main/hydo/ASSERTIONS.md>.
 - The history format and the checkers:
   <https://github.com/kakoc/hydo/blob/main/hydo/HISTORIES.md>.

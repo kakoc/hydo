@@ -119,8 +119,8 @@ The operator is one of `<`, `<=`, `==`, `!=`, `>=` and `>`; the values are `int6
 
 ### Check that something happens in time (eventually)
 
-An `Eventually` property says "after this point, the condition becomes true within a
-deadline", for example "after a restart the server answers within 5 seconds". Time inside a
+An `Eventually` property says that after this point, the condition becomes true within a
+deadline. For example: after a restart, the server answers within 5 seconds. Time inside a
 hydo guest is deterministic, so the verdict is the same on every replay.
 
 ```go
@@ -165,8 +165,9 @@ that is on fires on some of its calls. To try it outside hydo, set
 
 ### Record an operation history
 
-hydo can check a whole history of operations after a run: is every read consistent with the
-writes before it (linearizability per key), or do list appends ever go missing? Your workload's
+hydo can check a whole history of operations after a run. It checks that every read is
+consistent with the writes before it (linearizability per key), and that no list append goes
+missing. Your workload's
 client records each operation twice: when it starts (`Invoke`) and when the outcome is known.
 
 ```go
@@ -217,7 +218,7 @@ service on MySQL, Kafka and Redis:
 
 - The API and its examples: <https://pkg.go.dev/github.com/kakoc/hydo/sdk/go/hydoassert> and
   <https://pkg.go.dev/github.com/kakoc/hydo/sdk/go/hydohist>.
-- The records and how hydo judges each kind of property:
+- The records, and how hydo judges each property type:
   <https://github.com/kakoc/hydo/blob/main/hydo/ASSERTIONS.md>.
 - The history format and the checkers:
   <https://github.com/kakoc/hydo/blob/main/hydo/HISTORIES.md>.

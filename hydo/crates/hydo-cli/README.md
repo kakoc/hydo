@@ -2,17 +2,17 @@
 
 hydo runs your system inside a deterministic virtual machine and injects faults into it. You
 describe the system once: its services, a workload that uses them, and checks of what must
-stay true (for example "every write the client saw acknowledged can still be read"). hydo then
-runs the workload under process kills and pauses, network faults, power cuts, clock jumps,
-disk errors and a disk that loses writes it acknowledged.
+stay true. An example of such a check: every write the client saw acknowledged can still be
+read. The workload then runs under process kills and pauses, network faults, power cuts, clock
+jumps, disk errors, and a disk that loses writes it acknowledged.
 
 Every run is deterministic: the same *schedule* (a one-line description of a run and its
 faults) gives the same run, bit for bit. So when hydo finds a failure, it gives you a short
 schedule that replays it exactly, as often as you need while you debug it.
 
-The services run unmodified, from their own binaries or from Docker images. hydo runs on an
-Apple Silicon Mac (macOS 13 or later, no root needed) and on x86_64 Linux (with hydo's own
-kernel module on an Intel machine, or with stock KVM).
+The services run unmodified. They come from their own programs or from Docker images. hydo runs on an
+Apple Silicon Mac with macOS 13 or later, with no root needed. It also runs on x86_64 Linux,
+with hydo's own kernel module on an Intel machine, or with stock KVM.
 
 ## Install
 
@@ -23,8 +23,8 @@ hydo doctor
 ```
 
 `cargo install hydo` builds only the `hydo` command. `hydo setup` downloads the rest of the
-installation from the GitHub release of the same version: the guest kernels, the programs that
-run inside the virtual machine, the examples and the engine program. It checks every file by
+installation from the GitHub release of the same version. That is the guest kernels, the
+programs that run inside the virtual machine, the examples, and the engine program. It checks every file by
 sha256 and keeps them in `~/.hydo/versions/<version>` (set `HYDO_HOME` to use another
 directory). Running it again does nothing. `hydo doctor` checks the machine and the
 installation, and names the fix for anything that is missing.
@@ -34,9 +34,9 @@ archive for your platform from <https://github.com/kakoc/hydo/releases>.
 
 ## A first run
 
-The installation contains a ready example: Redis with its append-only log on a virtual disk, a
-workload that writes 20 keys, and one check, "every write the client saw acknowledged is still
-there afterwards". Copy it, build its guest image and run two schedules:
+The installation contains a ready example: Redis with its append-only log on a virtual disk,
+and a workload that writes 20 keys. Its one check says that every write the client saw
+acknowledged is still there afterwards. Copy it, build its guest image, and run two schedules:
 
 ```sh
 cp -R ~/.hydo/versions/0.2.0/examples/redis ~/hydo-redis && cd ~/hydo-redis
@@ -62,7 +62,7 @@ hydo report
 ```
 
 `hydo explore` makes one schedule from each seed, runs them all, runs every failure again to
-confirm that it replays, and shrinks each kind of failure to a minimal schedule. `hydo report`
+confirm that it replays, and shrinks one failure of each signature to a minimal schedule. `hydo report`
 prints what it found.
 
 On Linux, a run uses hydo's kernel module (`hydo module install` builds and loads it, with
@@ -107,5 +107,6 @@ Programs can also describe what must hold from the inside, with hydo's assertion
 
 ## License
 
-Apache-2.0, for this crate and every other hydo crate. A Linux installation can also build
-hydo's kernel module, which is GPL-2.0 and is not part of this crate.
+This crate and every other hydo crate are licensed under Apache-2.0 (the file `LICENSE`). A
+Linux installation can also build hydo's kernel module, which is GPL-2.0 and is not part of this
+crate.

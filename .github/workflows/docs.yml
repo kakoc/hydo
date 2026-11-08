@@ -1,7 +1,13 @@
-# The writing standard's check (docs/STYLE.md, "How the standard is checked"): Vale on the
-# documents ci/vale.sh lists. ci/vale.sh pins Vale and its two style packages by sha256.
+# The writing standard's checks (docs/STYLE.md, "How the standard is checked").
 #
-# The action is pinned by commit. The workflow needs no secret and only reads the repository.
+# - vale: Vale on the documents ci/vale.sh lists, on every push and pull request that changes a
+#   document or the Vale files. ci/vale.sh pins Vale and its two style packages by sha256.
+#   Relative links and anchors are checked by the Rust test `docs::` of the hydo package, in
+#   ci.yml's per-push tier.
+# - external-links: the http and https links of the same documents (ci/links-external.sh, lychee
+#   pinned by sha256), only every night and on demand, so that no push depends on other sites.
+#
+# Actions are pinned by commit. The workflow needs no secret and only reads the repository.
 name: docs
 
 on:
@@ -11,6 +17,7 @@ on:
       - ".vale.ini"
       - ".vale/**"
       - "ci/vale.sh"
+      - "ci/links-external.sh"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
@@ -18,13 +25,17 @@ on:
       - ".vale.ini"
       - ".vale/**"
       - "ci/vale.sh"
+      - "ci/links-external.sh"
       - ".github/workflows/docs.yml"
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: docs-${{ github.ref }}
+  group: docs-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 # Named explicitly, bash runs with -eo pipefail, as in ci.yml.
@@ -34,9 +45,19 @@ defaults:
 
 jobs:
   vale:
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: vale
         run: sh ci/vale.sh
+
+  external-links:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: external links
+        run: sh ci/links-external.sh

@@ -5,10 +5,10 @@ numbered-steps manifest; the body is the same). Exit 0 = holds, 1 = violated, 2 
 evaluated now. Print one line of details last. Files: `$HYDO_ACKED` (one acknowledged id per
 line), `$HYDO_OUTCOMES` (`<id> ack|failed|unknown`, the last line per id wins), `$HYDO_FAILED`
 (ids whose last outcome was `failed`). After a power cut the recovery boot's checks get
-`$HYDO_ACKED` and `$HYDO_FAILED` carried over; `$HYDO_OUTCOMES` is carried (the last outcome of
-every id) only with `guest.outcomes_after_cut: true` in the manifest, and is empty there without
-it, so a check that looks up the ids listed in `$HYDO_OUTCOMES` needs that key or checks nothing
-after a power cut. Where a ready-made `hydo-check` line exists it is shown
+`$HYDO_ACKED` and `$HYDO_FAILED` carried over. `$HYDO_OUTCOMES` is carried, with the last outcome
+of every id, only with `guest.outcomes_after_cut: true` in the manifest. Without that key it is
+empty there, so a check that looks up the ids in `$HYDO_OUTCOMES` checks nothing after a power
+cut. Where a ready-made `hydo-check` line exists it is shown
 first; use the shell version where `hydo-read` is not available (`hydo guide capabilities`) or the store is
 not one it reads.
 
@@ -16,7 +16,7 @@ Start every check by testing that the store answers and `exit 2` if not, so a ki
 not reported as a violation. When a check reads over HTTP, test the status code first: an error
 page or a JSON error body is not data.
 
-## Acknowledged writes are durable (key-value) — `final_acked_writes_survive`
+## Acknowledged writes are durable (key-value): `final_acked_writes_survive`
 
 ```sh
 #!/bin/sh
@@ -36,7 +36,7 @@ done
 echo "acked=$(wc -l < $HYDO_ACKED) all present"
 ```
 
-## Acknowledged rows exist exactly once (SQL) — `final_orders_exactly_once`
+## Acknowledged rows exist exactly once (SQL): `final_orders_exactly_once`
 
 ```sh
 #!/bin/sh
@@ -55,7 +55,7 @@ done
 echo "acked=$(wc -l < $HYDO_ACKED) exactly once"
 ```
 
-## Told failed, so not applied — `final_failed_not_applied`
+## Told failed, so not applied: `final_failed_not_applied`
 
 ```sh
 #!/bin/sh
@@ -63,7 +63,7 @@ exec hydo-check disjoint --left 'told_failed=hydo told-failed' \
      --right 'db=mysql root:@tcp(127.0.0.1:3306)/app "SELECT id FROM orders"'
 ```
 
-## Domain rule as a query that must return 0 — `always_no_negative_balance`
+## Domain rule as a query that must return 0: `always_no_negative_balance`
 
 ```sh
 #!/bin/sh
@@ -78,7 +78,7 @@ orphans (`... LEFT JOIN ... WHERE parent.id IS NULL`) and uniqueness (`GROUP BY 
 COUNT(*) > 1`). As `always_` checks they also run at the end. A shell example of conservation:
 `hydo guide examples/example-redis-composed/hydo/checks/final_total_conserved`.
 
-## Monotonic reads — `always_version_never_goes_back`
+## Monotonic reads: `always_version_never_goes_back`
 
 Keep the last value seen in a file under `/tmp`; it must never go down.
 
@@ -92,9 +92,9 @@ echo $v > /tmp/hydo/last_version; echo "version $v"
 ```
 
 For a store with versions or revisions, a history check (`linearizable_<name>`) is stronger:
-`hydo guide checks`, "History checks".
+`hydo guide checks`, section `History checks`.
 
-## A cache never disagrees with the store — `final_cache_never_wrong`
+## A cache never disagrees with the store: `final_cache_never_wrong`
 
 ```sh
 #!/bin/sh
@@ -106,7 +106,7 @@ exec hydo-check never-wrong-value \
 A missing cache entry is allowed; a cache entry the store does not have, or with another value,
 is a violation.
 
-## A message log holds each acknowledged message exactly once — `final_on_topic_once`
+## A message log holds each acknowledged message exactly once: `final_on_topic_once`
 
 ```sh
 #!/bin/sh
@@ -129,7 +129,7 @@ exec hydo-world check at-most-once payments.charge --by ref
 exec hydo-world check effect-for-acked mail.send --ref 'o{id}'
 ```
 
-## The service answers again after the faults — `eventually_answers`
+## The service answers again after the faults: `eventually_answers`
 
 ```sh
 #!/bin/sh

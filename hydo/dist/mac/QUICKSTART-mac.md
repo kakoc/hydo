@@ -23,23 +23,28 @@ Homebrew, `~/.hydo` in the rest of this guide is that `libexec` directory:
 `cp -R "$(brew --prefix hydo)/libexec/examples/redis" ~/hydo-redis` copies the first example.
 `brew uninstall hydo` removes it again.
 
-Without Homebrew, unpack the release and run its installer. It copies hydo into `~/.hydo` and
+Without Homebrew, unpack the release, and run its installer. It copies hydo into `~/.hydo` and
 runs `hydo setup` there, then `hydo doctor`.
 
 ```sh
-tar xzf hydo-mac-0.2.0.tar.gz
-./hydo-mac-0.2.0/install.sh
+tar xzf hydo-mac-0.3.0.tar.gz
+./hydo-mac-0.3.0/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
-`hydo setup` checks that this Mac can run hydo (Apple Silicon, macOS 13 or later,
-Hypervisor.framework), checks every file against the release's `SHA256SUMS` and against the
-sha256 pins built into `hydo` (the guest kernels, the guest tools and the guest programs),
-and removes the quarantine attribute a download leaves on the files. The release's programs
-(`bin/hydo`, `bin/hydo-build`, `bin/hydo-fetch-image` and the virtual-machine engine
-`bin/hydo-hvm`, which carries the hypervisor entitlement) are signed with the project's
-Developer ID and notarized by Apple, so `hydo setup` leaves them as they are; an engine built
-from source instead is signed on your Mac with the entitlement (an ad-hoc signature). A damaged
+`hydo setup` does three things:
+
+- It checks that this Mac can run hydo: Apple Silicon, macOS 13 or later, and
+  Hypervisor.framework.
+- It checks every file against the release's `SHA256SUMS`, and against the sha256 pins built into
+  `hydo`: the guest kernels, the guest tools, and the guest programs.
+- It removes the quarantine attribute that a download leaves on the files.
+
+The release's programs are `bin/hydo`, `bin/hydo-build`, `bin/hydo-fetch-image`, and the
+virtual-machine engine `bin/hydo-hvm`, which carries the hypervisor entitlement. They are signed
+with the project's Developer ID and notarized by Apple, so `hydo setup` leaves them as they are.
+An engine built from source is signed on your Mac with the entitlement instead (an ad-hoc
+signature). A damaged
 or incomplete download is refused with the name of each file that does not match. Running
 `hydo setup` again does nothing on a complete installation; `hydo setup --check` only reports
 (exit status 0: nothing to do, 1: a file is damaged, 3: setup has steps left).
@@ -52,9 +57,9 @@ want it to put `~/.hydo/bin` on your PATH in your shell startup file (`~/.zshrc`
 
 ## 2. Run the bundled example: Redis
 
-The release contains a ready example: Redis 7.2 with its append-only file on a virtual disk, a
-workload that stores 20 keys, and one invariant, "every write the client saw acknowledged is
-still there afterwards". Copy it somewhere and build its guest image:
+The release contains a ready example: Redis 7.2 with its append-only file on a virtual disk, and
+a workload that stores 20 keys. Its one invariant says that every write the client saw
+acknowledged is still there afterwards. Copy it somewhere and build its guest image:
 
 ```sh
 cp -R ~/.hydo/examples/redis ~/hydo-redis && cd ~/hydo-redis
@@ -65,9 +70,9 @@ This writes `hydo-out/explore-ob-redis-arm64.cpio.gz` (the guest's root) and
 `hydo-out/explore-ob-redis-arm64-disk.img` (its data disk). Building the same `hydo.yaml` again
 gives the same bytes.
 
-Run one schedule with no faults, then one with a power cut before step 12 (the workload's 20
-steps count from 0, and step i writes the key `k:i`) while Redis is set to sync its log only once
-a second:
+Run one schedule with no faults. Then run one with a power cut before step 12, while Redis is set
+to sync its log only once a second. The workload's 20 steps count from 0, and step 5, for
+example, writes the key `k:5`.
 
 ```sh
 hydo run "disk=none | run"
@@ -76,7 +81,7 @@ hydo run "disk=cut | run C=12 R=everysec"
 
 The first prints a `RESULT` line with `verdict=HYDO-ORACLE: OK`. The second prints a violation:
 an acknowledged key is gone after the power cut. That is Redis's documented `everysec` window,
-found and reproduced deterministically. Run either command again and the fingerprint (`fp=`) is
+which hydo found and reproduced deterministically. Run either command again and the fingerprint (`fp=`) is
 the same.
 
 Network faults work the same way. This one drops every reply Redis sends during steps 5 to 9,
@@ -89,8 +94,8 @@ hydo run "disk=none | run O=redis@5-10:resp:loss,100%"
 It ends `OK ... acked=15 all present`: the 15 writes the client saw acknowledged are all there.
 Again, a second run gives the same fingerprint.
 
-hydo can also vary thread timing: the host part of a schedule can delay the guest's timer
-interrupts by a seeded number of VM exits, which changes where the guest switches threads.
+hydo can also vary thread timing. The host part of a schedule can delay the guest's timer
+interrupts by a seeded number of VM exits. That changes where the guest switches threads.
 This delays about half of the ticks during the workload by up to 500 exits:
 
 ```sh
@@ -105,8 +110,8 @@ adds such timing to half of the generated schedules.
 ### A program that busy-waits
 
 Some programs wait in a tight loop on a memory value without any system call. A deterministic
-machine cannot interrupt such a loop at a fixed point by itself, so hydo watches for it: it
-proves that the loop repeats forever, then delivers the next timer interrupt at a point chosen
+machine cannot interrupt such a loop at a fixed point by itself, so hydo watches for it. It
+proves that the loop repeats forever. Then it delivers the next timer interrupt at a point chosen
 from the loop's own state, so the result does not depend on when hydo noticed. The second
 example spins in every request (`/bin/spin_load`, and a loop that also counts, `/bin/spin_count`,
 in every tenth one):
@@ -119,8 +124,8 @@ hydo run "disk=none | run P=front@10+2"
 ```
 
 The first ends `OK ... acked=30 each stored once`. On the way it prints that a run ended at a
-counter loop and was run again in rewind mode: the counting loop needs the slower mode, which
-hydo switches to on its own. The second pauses the web server for two requests, the client's
+counter loop and was run again in rewind mode. The counting loop needs the slower mode, and hydo
+switches to it on its own. The second pauses the web server for two requests, the client's
 retry stores entry 10 twice, and the invariant catches it (`entry 10 stored 2 times`). This
 example's server is deliberately not idempotent. Each command gives the same fingerprint every
 time. A busy-wait run takes about ten seconds instead of one.
@@ -196,7 +201,7 @@ get them:
 List each file under `root.files:` with a path relative to `hydo.yaml`. `root.nix:` needs a Nix
 store on this Mac and is not supported by the Mac build yet.
 
-Then the same three commands as above: `hydo build hydo/hydo.yaml` (or `hydo build hydo.yaml`
+Then the same three commands as in section 2: `hydo build hydo/hydo.yaml` (or `hydo build hydo.yaml`
 for a single file), `hydo run "disk=none | run"`, `hydo explore`. `hydo build hydo/hydo.yaml
 --check` checks the folder without building.
 
@@ -217,15 +222,23 @@ The release carries every guest file the arm64 build stages, so these work from 
 
 ## Licenses and source code
 
-hydo is licensed under the Apache License 2.0 (`LICENSE`). The release also contains
-third-party software: the two arm64 guest kernels, busybox, mke2fs, the tc, ip and iptables tools
-with their libraries, the Redis example's binaries, the GNU C library and GCC runtime linked
-into `guest/hydo_fc`, the Rust standard library and the Rust crates compiled into hydo's
-programs. `THIRD-PARTY.md` lists each one with its version, license, the files it is in and where
-its source is, and `licenses/` holds the full text of every license.
+hydo is licensed under the Apache License 2.0 (`LICENSE`). The release also contains this
+third-party software:
 
-The archive `hydo-mac-0.2.0-sources.tar.gz` accompanies this release (it is published next to
-the tarball, with the same `SHA256SUMS`). It contains the corresponding source: the exact
-upstream source archives of every third-party component, including every GPL- and LGPL-licensed
-one (among them the Arm GNU Toolchain's source snapshot for the C library in `guest/hydo_fc`),
-our kernel patches and configurations, and the build recipes.
+- the two arm64 guest kernels, busybox, and mke2fs;
+- the tc, ip, and iptables tools with their libraries;
+- the Redis example's binaries;
+- the GNU C library and the GCC runtime linked into `guest/hydo_fc`;
+- the Rust standard library, and the Rust crates compiled into hydo's programs.
+
+`THIRD-PARTY.md` lists each one with its version, its license, the files it is in, and where its
+source is. `licenses/` holds the full text of every license.
+
+The archive `hydo-mac-0.3.0-sources.tar.gz` accompanies this release; it is published next to
+the tarball, with the same `SHA256SUMS`. It contains the corresponding source:
+
+- the exact upstream source archives of every third-party component, including every GPL- and
+  LGPL-licensed one, among them the Arm GNU Toolchain's source snapshot for the C library in
+  `guest/hydo_fc`;
+- hydo's kernel patches and configurations;
+- the build recipes.

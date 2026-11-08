@@ -117,6 +117,21 @@ download. Then it runs Vale with `.vale.ini`. Every warning and every error fail
 workflow `.github/workflows/docs.yml` runs the same script on every push that changes a
 document or the Vale files.
 
+The covered documents are the list `DOCS` in `ci/vale.sh`: the top-level documents, both
+quickstarts, the package pages, and the topics of `hydo guide`. `sh ci/vale.sh --list` prints
+them. The list `EXCEPT` names the few files that Vale skips, each with its reason. A file is an
+exception only when a fix would change a code example's text, a file inside a guest image, or
+output that a test pins.
+
+Two more checks read the same documents:
+
+- `cargo test -p hydo --test it docs::` checks every relative link and anchor, offline. It also
+  checks the facts of `README.md` and the quickstarts: the version they name, the fingerprints
+  they cite, and the `hydo` commands and options they show. It runs the cheap commands of the
+  README in a temporary directory.
+- `sh ci/links-external.sh` checks the http and https links. It needs the network, so CI runs it
+  only every night and on demand.
+
 To check other files, give them as arguments:
 
 ```sh

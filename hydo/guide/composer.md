@@ -5,24 +5,27 @@ part you need to write commands.
 
 ## How a run uses the commands
 
-The schedule token `W=<seed>,p..,q..,r..` decides the composition. For each of `workload.steps`
-rounds, the composer starts either one serial driver (1 round in 4 when there are parallel
-drivers) or 1..`per_round` parallel drivers drawn with repetition, plus an anytime command in 1
-round of 3. A round starts every `round_ms` of guest time. A command keeps running across later
+The schedule token `W=<seed>,p..,q..,r..` decides the composition. There are `workload.steps`
+rounds. In each round, the composer starts one of these:
+
+- one serial driver (1 round in 4 when there are parallel drivers);
+- 1..`per_round` parallel drivers, drawn with repetition.
+
+It also starts an anytime command in 1 round of 3. A round starts every `round_ms` of guest time. A command keeps running across later
 rounds and fault points until it ends, so faults land in the middle of commands. At most
 `parallel` commands run at once. After the last round the composer waits `drain_timeout` seconds
 for running commands, kills the rest, heals the faults, runs the `eventually_` commands, the
 `finally_` commands and the checks, and prints one verdict. A power cut freezes everything; the
 recovery boot runs the `eventually_` commands and the checks again.
 
-The explorer draws `W=` for every schedule and shrinks it (one command never run, fewer commands,
-no concurrency, fewer entries), so a failure ends as a small composition, written in the
-resolved form that names commands by id (see Regressions). A schedule written by hand may
+The explorer draws `W=` for every schedule and shrinks it: one command never run, fewer
+commands, no concurrency, fewer entries. A failure ends as a small composition. It is written in
+the resolved form that names commands by id (see Regressions). A schedule written by hand may
 leave `W=` out (seed 0 with the manifest's defaults).
 
 ## Command kinds
 
-| file name | runs | faults during it | alongside |
+| filename | runs | faults during it | alongside |
 |---|---|---|---|
 | `first_<name>` | once each, in name order, during provisioning (inside the snapshot every run starts from) | none | nothing |
 | `parallel_driver_<name>` | repeatedly, several at once (also copies of itself) | yes | other parallel drivers, anytime |
@@ -43,10 +46,13 @@ so a typo does not silently do nothing.
   `. /hydo/workload/helper_lib.sh`.
 - Optional header lines in the first 4 KiB: `# hydo: timeout=30` (seconds; else
   `test.command_timeout`).
-- Exit status of a driver or anytime command: `0` = the operation succeeded; `100` = the command
-  saw a violation (the run fails, through the `compose.commands` invariant and the property
-  `compose.<id>.no_violation`); anything else = the operation failed (recorded, not fatal).
-  A `first_` command that fails fails provisioning. An `eventually_` or `finally_` command is an
+- Exit status of a driver or anytime command:
+  - `0`: the operation succeeded.
+  - `100`: the command saw a violation. The run fails, through the `compose.commands` invariant
+    and the property `compose.<id>.no_violation`.
+  - Anything else: the operation failed. It is recorded and is not fatal.
+
+  A `first_` command that fails makes provisioning fail. An `eventually_` or `finally_` command is an
   invariant: 0 holds, anything else is a violation.
 - Output goes to `/tmp/hydo/compose/log.<entry>`; `HYDO-ASSERT` lines it prints reach the
   run's report when the command's log is collected. A reaction (`A=`) sees only records written to
@@ -61,7 +67,7 @@ so a typo does not silently do nothing.
 | `HYDO_ROUND` | the round it started in |
 | `HYDO_SEED` | a number from the composition's random stream, for the command's own choices |
 | `HYDO_ACKED` | file: append one id per line for every operation the client saw acknowledged (carried across a power cut) |
-| `HYDO_OUTCOMES` | file: append `<id> ack\|failed\|unknown` per attempt (the last line per id wins); carried across a power cut only with `guest.outcomes_after_cut: true` (then the recovery boot's file holds the last outcome of every id); without it the file is empty there, so a check that looks ids up in it checks nothing after a power cut |
+| `HYDO_OUTCOMES` | file: append `<id> ack\|failed\|unknown` per attempt; the last line per id wins. It is carried across a power cut only with `guest.outcomes_after_cut: true`, and then the recovery boot's file holds the last outcome of every id. Without that key the file is empty there. A check that looks ids up in it then checks nothing after a power cut. |
 | `HYDO_FAILED` | file (checks only): ids whose last outcome was `failed` |
 | the manifest's `env:` | exported to every command; `shell:` helpers are sourced too |
 
@@ -80,10 +86,14 @@ else
 fi
 ```
 
-More, in a complete folder (print each file with `hydo guide examples/example-redis-composed/hydo/<file>`;
-`hydo guide examples/example-redis-composed/README.md` lists them): SETs, transfers between
-accounts, an AOF rewrite as a serial driver, a read as an anytime command, seed accounts as a
-`first_` command, a saved regression.
+A complete folder has more examples:
+
+- Redis SET commands, and transfers between accounts;
+- an AOF rewrite as a serial driver, and a read as an anytime command;
+- seed accounts as a `first_` command, and a saved regression.
+
+`hydo guide examples/example-redis-composed/README.md` lists the files, and
+`hydo guide examples/example-redis-composed/hydo/<file>` prints each one.
 
 ## Options in hydo.yaml
 
@@ -114,10 +124,11 @@ the default), `# expect: violation` (a known open bug still fails) or `# expect:
 one schedule line. `hydo save <explore dir>` writes them from an exploration; `hydo repro
 --regressions` replays them from fresh boots and exits 1 if one is not as expected.
 
-A saved regression keeps its composition when you add, remove or rename other commands. Every
-command has a stable id, `<kind>_<name>` (the file name in `hydo/workload/`), and `hydo save`
-writes the composition in its resolved form: `W=:p2,r200,cparallel_driver_transfer,7.4.0.721476632,...`
-lists each command run, by id, with its round, its entry number and its `HYDO_SEED`. A long one
+A saved regression keeps its composition when you add, remove, or rename other commands. Every
+command has a stable id, `<kind>_<name>`, which is its filename in `hydo/workload/`. `hydo save`
+writes the composition in its resolved form, for example
+`W=:p2,r200,cparallel_driver_transfer,7.4.0.721476632,...`. It lists each command run by id,
+with its round, its entry number, and its `HYDO_SEED`. A long one
 is written as `W=@<key>` plus a `# compose: <resolved form>` line, which `hydo build` puts into
 the image. The file also records `# command-sha: <id> <hash>` for each command used. So:
 

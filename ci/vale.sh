@@ -3,6 +3,7 @@
 #
 #   sh ci/vale.sh              check the documents listed below
 #   sh ci/vale.sh FILE...      check these files instead
+#   sh ci/vale.sh --list       print the documents and exit (ci/links-external.sh uses it)
 #
 # It downloads Vale 3.25.1 and the Google and proselint style packages once into
 # ${XDG_CACHE_HOME:-~/.cache}/hydo-vale, checks every download's sha256, copies the two
@@ -26,10 +27,29 @@ GOOGLE_SHA256=4b67fca1f2a88595b2a578ab98bbf3017a23af677b04f93e862843f3ea1a9a0b
 PROSELINT_URL=https://github.com/errata-ai/proselint/releases/download/v0.3.4/proselint.zip
 PROSELINT_SHA256=48b1fb481ba44f6505d44346b283f6cdc74efd234f913bbdb09bf34420fab81c
 
-# The documents the standard covers. Add a document here once it passes.
-DOCS="README.md CONTRIBUTING.md AGENTS.md docs/STYLE.md docs/ARCHITECTURE.md skills/hydo-docs/SKILL.md"
+# The documents the standard covers (shell patterns, expanded in the repository root). Add a
+# document here once it passes.
+DOCS="README.md CONTRIBUTING.md AGENTS.md docs/STYLE.md docs/ARCHITECTURE.md
+  skills/hydo-docs/SKILL.md
+  hydo/dist/linux/QUICKSTART-linux.md hydo/dist/mac/QUICKSTART-mac.md
+  hydo/crates/*/README.md sdk/README.md sdk/*/README.md
+  hydo/guide/*.md"
+# Files of those patterns that Vale does not check, each with its reason:
+# - hydo/guide/overview.md: the text `hydo guide` prints with no topic, laid out for a terminal
+#   (aligned columns, not prose); the CLI golden pins its bytes.
+EXCEPT="hydo/guide/overview.md"
 
 root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+list=
+if [ "${1:-}" = "--list" ]; then list=1; shift; fi
+if [ "$#" -eq 0 ]; then
+  for f in $DOCS; do
+    case " $EXCEPT " in *" $f "*) continue ;; esac
+    set -- "$@" "$f"
+  done
+fi
+if [ -n "$list" ]; then printf '%s\n' "$@"; exit 0; fi
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/hydo-vale
 mkdir -p "$cache"
 
@@ -69,8 +89,6 @@ rm -rf "$root/.vale/styles/Google" "$root/.vale/styles/proselint"
 unzip -qo "$cache/Google-0.7.1.zip" -d "$root/.vale/styles"
 unzip -qo "$cache/proselint-0.3.4.zip" -d "$root/.vale/styles"
 
-cd "$root"
-if [ "$#" -gt 0 ]; then set -- "$@"; else set -- $DOCS; fi
 # .vale.ini sets MinAlertLevel = warning, so every line Vale prints is a warning or an error.
 "$cache/$VALE_VERSION/vale" --no-exit --output=line "$@" > "$cache/out.txt"
 if [ -s "$cache/out.txt" ]; then

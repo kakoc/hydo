@@ -26,8 +26,8 @@ faults between and inside them, and runs the checks. The older "numbered steps" 
 - Write `format: 1` in every `hydo.yaml`. Within format 1 hydo only adds keys; an unknown key is
   an error, so a typo fails the check. `hydo migrate` rewrites an older file in the current
   spelling; a newer format is refused with the format it needs.
-- `hydo build hydo/hydo.yaml --check` validates the schema, the name, executable bit and header of
-  every command and check file, and the guest RAM limit. Run it after every change.
+- `hydo build hydo/hydo.yaml --check` validates the schema and the guest RAM limit. For every
+  command and check file it validates the name, the executable bit, and the header. Run it after every change.
 - Without the `hydo` command, inside hydo's own source repository, the same facts are in
   `hydo/guide/`, `hydo/onboard/MANIFEST.md` and `hydo/schema/project-v1.json`, and
   `cargo build --release -p hydo-build && target/release/hydo-build <manifest> --check` replaces
@@ -52,16 +52,17 @@ hydo compose docker-compose.yaml --out hydo/hydo.yaml --images-dir images
 sh hydo/fetch-images.sh        # copies every image by digest into hydo/images/ (network, once)
 ```
 
-The importer writes the services (images pinned by digest, commands, environment, readiness from
-the healthchecks, ports, volumes on the data disk, restart policies, and `network: bridge`: each
-service in its own network namespace at its own address) and prints a warning for everything it
-could not map; read each one (bind mounts that the program writes to need a hand fix). It also
+The importer writes the services: images pinned by digest, commands, environment, readiness from
+the healthchecks, ports, volumes on the data disk, and restart policies. It sets
+`network: bridge`, so each service has its own network namespace at its own address. It prints a
+warning for everything it could not map. Read each one; bind mounts that the program writes to
+need a fix by hand. It also
 writes a numbered-steps `workload.run` and a `TODO` invariant: delete both (keep `workload.steps`
 and `workload.timeout`) and add a `test:` section with commands. Keep the generated comments that
-say where each value came from. A service built locally (`build:`) is never pulled:
-fetch-images.sh prints the `docker build` and `docker save` commands that make its file and stops
-until the file is there; run `hydo compose` again then, to pin it by the file's content.
-Reference: `hydo guide manifest`, "From Docker Compose".
+say where each value came from. A service built locally (`build:`) is never pulled.
+fetch-images.sh prints the `docker build` and `docker save` commands that make its file, and
+stops until the file is there. Then run `hydo compose` again, to pin it by the file's content.
+The reference is `hydo guide manifest`, section `From Docker Compose`.
 
 ## Where each program comes from
 
@@ -105,8 +106,8 @@ hydo save <explore dir>                       # the minimal schedules -> hydo/re
 ```
 
 On the Mac a schedule without host tokens is `disk=none | run`. If the first run without faults
-fails, the cause is the folder or a real bug: read the `hydo: diagnosis:` lines and the
-`diagnosis` in the run directory's `result.json` (which process ended how, its log, the kernel's
-messages), then look inside the run with `hydo inspect` (`hydo guide inspect`) before changing
-the image. The
+fails, the cause is the folder or a real bug. Read the `hydo: diagnosis:` lines, and the
+`diagnosis` in the run directory's `result.json`: which process ended how, its log, and the
+kernel's messages. Then look inside the run with `hydo inspect` (`hydo guide inspect`) before you
+change the image. The
 full build also checks the backend's limits (the arm64 build refuses `guest.cpu: v3`).

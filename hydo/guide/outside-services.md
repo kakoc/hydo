@@ -1,7 +1,7 @@
-# Outside services, protocol faults and generated gRPC drivers
+# Outside services, protocol faults, and generated gRPC drivers
 
-Full reference: the sections "Fake outside services and protocol faults", "gRPC faults" and
-"gRPC services: generated drivers" of `hydo guide manifest`. Everything on this page is x86_64
+The full reference is in `hydo guide manifest`, in the sections `Fake outside services and
+protocol faults`, `gRPC faults`, and `gRPC services: generated drivers`. Everything on this page is x86_64
 only and needs a build from hydo's repository (`hydo guide capabilities`).
 
 ## Fakes: outside services the system calls
@@ -36,10 +36,10 @@ templates: `{seq}`, `{ref}`, `{idem}`, `{json:a.b}`, `{header:X}`, `{query:x}`, 
 `protocol: grpc` makes a cleartext HTTP/2 gRPC fake (`path` is `/pkg.Service/Method`, the answer
 is `message:` in hex protobuf and `code:`).
 
-When the system reads back what it created (a payment's currency, its status after a capture),
-give the creating route `save: {key: 'pi_{seq}', fields: {currency: '{form:currency}'}}` and the
-reading route `load: '{path:id}'`; its answer then uses `{obj:currency}` (an unknown id is
-answered 404). When the system checks the provider's webhook signature, give the webhook
+The system can read back what it created, such as a payment's currency or its status after a
+capture. Then give the creating route
+`save: {key: 'pi_{seq}', fields: {currency: '{form:currency}'}}`, and the reading route
+`load: '{path:id}'`. Its answer then uses `{obj:currency}`; an unknown id is answered 404. When the system checks the provider's webhook signature, give the webhook
 `sign: {header: <its header>, secret: <the endpoint secret the system is configured with>}`
 (HMAC-SHA256 of `{ts}.{body}`, value `t={ts},v1={hmac}`; `payload:`, `value:` and
 `encoding: base64` change the scheme). `hydo guide manifest` has the details.
@@ -51,8 +51,8 @@ take them from the provider's API documentation.
 ## HTTPS: a provider whose SDK cannot be pointed at plain HTTP
 
 Most providers are HTTPS only, and their SDKs call a fixed host name and check the certificate
-(Stripe's SDKs call `https://api.stripe.com`). Do not build a CA, a TLS front or trust settings by
-hand: give the fake `tls:` with the names the SDK calls, and leave the SDK's base URL alone.
+(Stripe's SDKs call `https://api.stripe.com`). Do not build a CA, a TLS front, or trust settings
+by hand: give the fake `tls:` with the names the SDK calls, and leave the SDK's base URL alone.
 
 ```yaml
 fakes:
@@ -61,14 +61,23 @@ fakes:
     tls: {hosts: [api.stripe.com]}   # HTTPS on <the fake's address>:443 for these names
 ```
 
-The build makes a test CA and a certificate for those names (reproducible, valid for any guest
-clock), maps the names to the fake in `/etc/hosts` (the guest's and every image service's), adds
-the CA to the system bundles of the guest and of every image, and sets `SSL_CERT_FILE`,
-`REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS` and `NIX_SSL_CERT_FILE` (Node.js, Python's requests and
-httpx, Go, OpenSSL, curl and Ruby then trust it). The record and `H=` rules are the same as over
-plain HTTP. Not covered: Java's own `cacerts` (import the CA with `keytool` in `setup:`), a
-program with a built-in CA list no variable replaces, and certificate pinning. The image needs
-`hydo-world-tls` (`hydo guide manifest`, "HTTPS for fakes and proxies"). A proxy takes `tls:` too.
+The build does four things:
+
+- It makes a test CA and a certificate for those names. Both are reproducible and valid for any
+  guest clock.
+- It maps the names to the fake in `/etc/hosts`, the guest's and every image service's.
+- It adds the CA to the system bundles of the guest and of every image.
+- It sets `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, and `NIX_SSL_CERT_FILE`.
+  Node.js, Python's requests and httpx, Go, OpenSSL, curl, and Ruby then trust the CA.
+
+The record and `H=` rules are the same as over plain HTTP. These are not covered:
+
+- the own `cacerts` of a Java program (import the CA with `keytool` in `setup:`);
+- a program with a built-in CA list that no variable replaces;
+- certificate pinning.
+
+The image needs `hydo-world-tls` (`hydo guide manifest`, section `HTTPS for fakes and
+proxies`). A proxy takes `tls:` too.
 
 ## Proxies: protocol faults in front of a real service
 
@@ -101,13 +110,15 @@ For a system whose inputs are gRPC endpoints, do not write one client per RPC:
 
 1. Find the `.proto` files (or a compiled descriptor set, or a server with reflection enabled).
    If the service has no `.proto` (a hand-written service descriptor), write one that matches
-   it exactly: package, service and method names, request and response types.
-2. Write a hints file from the API's documentation and validation code: `target`, a
-   `deadline_ms` like the real clients', and per RPC a `weight`; `range`/`choice`/`len` for
-   fields the server validates; `unique: true` for ids and idempotency keys the client chooses;
-   `from: <Rpc>.<field>` for ids an earlier response returns; `retry: {attempts: N}` for RPCs
-   real clients retry; `outcome_id:` for the field that identifies an operation in
-   `$HYDO_ACKED`.
+   it exactly: package, service, and method names, and request and response types.
+2. Write a hints file from the API's documentation and validation code. It has these keys:
+   - `target`, and a `deadline_ms` like the real clients';
+   - per RPC a `weight`;
+   - `range`, `choice`, or `len` for fields the server validates;
+   - `unique: true` for ids and idempotency keys that the client chooses;
+   - `from: <Rpc>.<field>` for ids that an earlier response returns;
+   - `retry: {attempts: N}` for RPCs that real clients retry;
+   - `outcome_id:` for the field that identifies an operation in `$HYDO_ACKED`.
 3. Run, from hydo's repository (it needs Go):
 
    ```sh
@@ -120,11 +131,16 @@ For a system whose inputs are gRPC endpoints, do not write one client per RPC:
    `hydo/hydo.yaml`). Copy the commands into `hydo/workload/`.
 4. Check the plan: `hydo-grpc gen <rpc> 5` prints generated requests (do they look valid?),
    `hydo-grpc list` lists the RPCs.
-5. Checks stay hand-written. `hydo-grpc call <rpc> '<json>'` (exit 0 ok, 1 definite failure, 2
-   unknown) is a read-back for them.
+5. Checks stay hand-written. `hydo-grpc call <rpc> '<json>'` is a read-back for them. It exits 0
+   on success, 1 on a definite failure, and 2 on an unknown outcome.
 
-Outcomes come from the gRPC status: OK is ok; INVALID_ARGUMENT, NOT_FOUND, ALREADY_EXISTS,
-FAILED_PRECONDITION and similar are definite failures; DEADLINE_EXCEEDED, UNAVAILABLE, INTERNAL
-and similar are unknown (`classify:` in the hints overrides a code per RPC). Limits: cleartext
+Outcomes come from the gRPC status:
+
+- `OK` is a success.
+- `INVALID_ARGUMENT`, `NOT_FOUND`, `ALREADY_EXISTS`, `FAILED_PRECONDITION`, and similar codes
+  are definite failures.
+- `DEADLINE_EXCEEDED`, `UNAVAILABLE`, `INTERNAL`, and similar codes are unknown.
+
+`classify:` in the hints overrides a code per RPC. Limits: cleartext
 HTTP/2 only (no auth metadata; a fake with `tls:` serves gRPC over TLS, the generated client
 does not speak TLS). Example in hydo's repository: `hydo/grpcgen/demo/`.

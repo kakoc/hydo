@@ -1,7 +1,7 @@
-# Faults, knobs and exploring
+# Faults, knobs, and exploring
 
-Full reference: "Fault tokens", "Freeze at a call", "Clock after a power cut" and "Link faults"
-in `hydo guide manifest`.
+The full reference is in `hydo guide manifest`, in the sections `Fault tokens`, `Freeze at a
+call`, `Clock after a power cut`, and `Link faults`.
 
 ## Which faults a project allows
 
@@ -11,7 +11,7 @@ in `hydo guide manifest`.
 |---|---|---|
 | `kill` | SIGKILL a service's whole process tree, restart it later (setup + cmd + ready) | `K=<svc>@<step>+<down>`, timed `X=` |
 | `pause` | SIGSTOP / SIGCONT, also in the middle of a request | `P=<svc>@<step>+<n>`, `P=<svc>@<step>~<ms>:<ms>` |
-| `network` | netem delay, loss, duplication, reordering on traffic to a service's `port:` (or on a link between two services with `addr:`; with `network: bridge` the link carries their real traffic and the explorer draws only links between services that list each other in `depends_on`) | `N=<svc>@<from>-<to>:<netem>`, `N=a-b@...` |
+| `network` | netem delay, loss, duplication, and reordering on traffic to a service's `port:`, or on a link between two services with `addr:`. With `network: bridge` the link carries their real traffic, and the explorer draws only links between services that list each other in `depends_on`. | `N=<svc>@<from>-<to>:<netem>`, `N=a-b@...` |
 | `oneway` | the same in one direction only | `O=<svc>@<from>-<to>:req\|resp:<netem>` |
 | `cut` | power cut: only data that reached the disk survives; a fresh boot recovers and runs the final checks | `C=<step>`, host `cf=<k>` (at the k-th disk flush) |
 | `clock` | step the realtime clock (like an NTP step) | `T=<step>:<seconds>` |
@@ -44,22 +44,25 @@ knobs:
 ```
 
 A setting that needs a restart cannot be a knob; say so in the report. A failure found with a
-relaxed knob and a power cut is classified as "unsafe setting", not as a bug.
+relaxed knob and a power cut is classified as an unsafe setting, not as a bug.
 
 ## Freeze at a packet
 
 For bugs that need a service stopped between two messages of a conversation, list `freeze` in
-`faults:` and optionally `freeze_match:` (payload strings that mark interesting packets, as lists under `replies:` and `requests:`). Finding the packet:
-`hydo explore --sweep freeze --fc-adaptive` sweeps the matched streams (or every 8th packet),
-then every packet in a widening window around each failure, so a narrow failing band is mapped
-with a fraction of the runs of `--sweep freeze` (every packet).
+`faults:`. Optionally add `freeze_match:`: payload strings that mark interesting packets, as
+lists under `replies:` and `requests:`.
+
+To find the packet, run `hydo explore --sweep freeze --fc-adaptive`. It sweeps the matched
+streams (or every eighth packet), then every packet in a widening window around each failure. So
+it maps a narrow failing band with a fraction of the runs of `--sweep freeze`, which tries every
+packet.
 
 ## Clock after a power cut
 
-Every boot starts its clock at `guest.clock_start`. If a check compares a time written before a
-power cut with one written after it, set `guest.clock_after_cut: 60` so the recovery boot
-continues the first boot's clock plus 60 seconds; otherwise time runs backwards and the check can
-report a false violation.
+Every boot starts its clock at `guest.clock_start`. A check can compare a time written before a
+power cut with one written after it. Then set `guest.clock_after_cut: 60`, so the recovery boot
+continues the first boot's clock plus 60 seconds. Otherwise time runs backwards, and the check
+can report a false violation.
 
 ## BUGGIFY
 
@@ -78,20 +81,28 @@ hydo repro <explore dir>                         # re-run every failure, compare
 hydo save <explore dir>                          # minimal schedules -> hydo/regressions/
 ```
 
-Useful options (`hydo explore` passes them to the explorer): `--more-faults` (timed kills and
-k-th-flush cuts; the hvx engine only: the explorer refuses it with `--backend kvm` and on a Mac,
-`hydo guide capabilities`), `--new-faults` (pauses, clock jumps, one-way loss), `--timing`
-(thread-timing jitter), `--concurrency` (a manifest knob `Q`), `--durable-only` (only durable settings and an honest disk),
-`--protocol-faults`, `--grpc-faults`, `--buggify`, `--storage-faults` (`G=` and `L=` for
-services with `storage:`), `--workers N`. The lesson of hydo's own
-benchmark: where and in what combination faults land matters more than how the next schedule is
-chosen, so prefer `--strategy process` with `--more-faults` (with `--backend kvm` and on a Mac,
-`--new-faults`).
+Useful options of `hydo explore`:
 
-One schedule holds one `K=`, one `P=` and one `X=` (a second one is refused), and every token
-names what the image has: a service, a link between services with `addr:`, a fake or proxy, a
-knob of `knobs:` (a token for anything else is refused before the run, naming what the image has). To crash or stop
-several services at once (every node of a cluster), use reactions: `A=<event>:kill-<svc>` once
-per service, where `<event>` is the id of an assertion record the system writes to the console
-(`hydo guide manifest`, "Reactions"); `hydo explore --reactive fault --react-events <id>` draws
-them.
+- `--more-faults`: timed kills and k-th-flush cuts. Only the hvx engine has them; the explorer
+  refuses the option with `--backend kvm` and on a Mac (`hydo guide capabilities`).
+- `--new-faults`: pauses, clock jumps, and one-way loss.
+- `--timing`: thread-timing jitter.
+- `--concurrency`: concurrent clients, through a manifest knob `Q`.
+- `--durable-only`: only durable settings and an honest disk.
+- `--protocol-faults`, `--grpc-faults`, `--buggify`.
+- `--storage-faults`: `G=` and `L=` for services with `storage:`.
+- `--workers N`.
+
+hydo's own benchmark showed that where faults land, and in what combination, matters more than
+how the next schedule is chosen. So prefer `--strategy process` with `--more-faults`. With
+`--backend kvm` and on a Mac, use `--new-faults` instead.
+
+One schedule holds one `K=`, one `P=`, and one `X=`; a second one is refused. Every token names
+something the image has: a service, a link between services with `addr:`, a fake or proxy, or a
+knob of `knobs:`. A token for anything else is refused before the run, with a message that names
+what the image has.
+
+To crash or stop several services at once, for example every node of a cluster, use reactions.
+Write `A=<event>:kill-<svc>` once per service. `<event>` is the id of an assertion record that the
+system writes to the console (`hydo guide manifest`, section `Reactions`).
+`hydo explore --reactive fault --react-events <id>` draws them.

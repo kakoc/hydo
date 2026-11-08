@@ -1,11 +1,12 @@
 # SDKs: assertions inside the programs, and tests written in code
 
-All SDKs live in hydo's source repository and are not published to package registries yet.
-Depend on them by path or git, or copy them into the project. The wire format and the verdict rules are in `hydo/ASSERTIONS.md` of hydo's repository.
+The assertion SDKs are published: `hydo-assert` on crates.io, PyPI, and npm, and the Go module
+`github.com/kakoc/hydo/sdk/go`. The Rust test SDK is not published; depend on it by path or git.
+The wire format and the verdict rules are in `hydo/ASSERTIONS.md` of hydo's repository.
 
 ## Assertion SDKs (in the services and in commands)
 
-They write the same console records byte for byte, with the same deduplication and BUGGIFY
+They write the same console records byte for byte. They make the same deduplication and BUGGIFY
 decisions, so the explorer and the reports read them unchanged. Properties: `always`,
 `always_or_unreachable`, `sometimes`, `reachable`, `unreachable`, `eventually`, and BUGGIFY
 fault points; a numeric comparison is `cmp(left, op, right)` on an `always` or `sometimes`
@@ -27,9 +28,9 @@ programs that carry fault points.
 ## The Rust test SDK: the whole test as one Rust program
 
 `sdk/rust-test` (crate `hydo-test`; not published to crates.io, so depend on it by path or git)
-writes the same plan that the `hydo/` folder describes, from Rust code: a `system()` builder on
-the host (services, files, data disk, knobs, faults, composer options, regressions), and drivers
-and checks as functions:
+writes the same plan that the `hydo/` folder describes, from Rust code. A `system()` builder on
+the host describes the services, files, data disk, knobs, faults, composer options, and
+regressions. Drivers and checks are functions:
 
 ```rust
 use hydo_test::prelude::*;
@@ -61,6 +62,6 @@ hydo_test::main!(system);
 `hydo`.
 Results map to the composer's exit codes: a driver's `Err(fail!(..))` is a failed operation,
 `Err(violation!(..))` fails the run; a check's `Err(violation!(..))` is a violation and
-`Err(fail!(..))` "cannot be evaluated now". Not yet in the Rust SDK: importing Compose files and
+`Err(fail!(..))` means that the check cannot be evaluated now. Not yet in the Rust SDK: importing Compose files and
 fakes. Example in hydo's repository: `hydo/onboard/examples/redis-composed-rs/`. Other languages
 have no test SDK yet; use the `hydo/` folder.

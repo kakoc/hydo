@@ -117,6 +117,7 @@ hydo-world::objects_sign                 fast
 hydo-world::xcheck                       full
 hydo::agents_equivalence                 fast
 hydo::bin/hydo                           fast
+hydo::docs                               fast
 hydo::equivalence                        fast
 hydo::migrate                            fast
 hydo::readme                             fast

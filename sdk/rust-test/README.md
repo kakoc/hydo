@@ -1,8 +1,8 @@
 # hydo-test: a hydo test as one Rust program
 
-A team writes its test in Rust: a `system()` function that describes the system (services,
-files, data disk, knobs, allowed faults, composer options, saved regressions), and the test's
-operations and properties as ordinary functions with an attribute. hydo is the deterministic
+A team writes its test in Rust. A `system()` function describes the system: services, files,
+data disk, knobs, allowed faults, composer options, and saved regressions. The test's operations
+and properties are ordinary functions with an attribute. hydo is the deterministic
 hypervisor in [this repository](https://github.com/kakoc/hydo).
 
 ```toml
@@ -51,10 +51,17 @@ optional `timeout = <s>`, `name = "..."`, `msg = "..."`; `#[check(final | always
 with optional `every = <s>` (always), `within = <s>`, `poll = <s>`, `after = "start"`
 (eventually), `msg = "..."`. MANIFEST.md "The test composer" says when each kind runs.
 
-Results map to the composer's exit statuses: a driver's `Ok` is 0, `Err(fail!(..))` 1 (the
-operation failed: recorded, normal under faults), `Err(violation!(..))` 100 (the run fails); a
-check's `Ok` is 0 (holds), `Err(violation!(..))` 1 (violated), `Err(fail!(..))` 2 (could not be
-evaluated now). The error's message is printed and becomes the property's details.
+Results map to the composer's exit statuses:
+
+| Function | Result | Exit status | Meaning |
+|---|---|---|---|
+| driver | `Ok` | 0 | done |
+| driver | `Err(fail!(..))` | 1 | the operation failed; recorded, normal under faults |
+| driver | `Err(violation!(..))` | 100 | the run fails |
+| check | `Ok` | 0 | holds |
+| check | `Err(violation!(..))` | 1 | violated |
+| check | `Err(fail!(..))` | 2 | could not be evaluated now |
+ The error's message is printed and becomes the property's details.
 
 `Ctx`: `seed()` (the composition's number for this command, for its own choices), `below(n)`
 (deterministic draws from it), `id()`, `name()`, `round()`, `env(k)`, `ack(id)` /
@@ -62,12 +69,14 @@ evaluated now). The error's message is printed and becomes the property's detail
 power cut), `exec(argv, deadline)`.
 
 History checks (`hydo/HISTORIES.md`): drivers record their operations with
-`hydo_test::assert::history::History` (process = `ctx.id()`, unique per command), and the plan
-declares a ready-made checker the host runs after the run:
-`System::history_check(HistoryCheck::linearizable("db.kv", "kv").model("cas").readback(&argv))` or
-`HistoryCheck::list_append("db.log", "log").consistency("serializable")` (a `test.checks` entry
-of kind `linearizable` / `list_append`; the optional read-back argv runs at the end of the same
-boot or of the recovery boot).
+`hydo_test::assert::history::History`, with `ctx.id()` as the process, unique per command. The
+plan declares a ready-made checker that the host runs after the run, for example:
+
+- `System::history_check(HistoryCheck::linearizable("db.kv", "kv").model("cas").readback(&argv))`
+- `HistoryCheck::list_append("db.log", "log").consistency("serializable")`
+
+Each becomes a `test.checks` entry of kind `linearizable` or `list_append`. The optional
+read-back argv runs at the end of the same boot, or of the recovery boot.
 
 ## cargo hydo
 
@@ -94,13 +103,13 @@ commands in the same rounds in both).
 
 **Command ids and saved regressions.** A driver's id is `<kind>_<name>` (`parallel_driver_transfer`
 for `#[driver(parallel)] fn transfer`). Saved compositions name commands by this id
-(`hydo/onboard/MANIFEST.md`, "Stable compositions"), so renaming a driver that a saved regression
-uses makes that regression fail with a message naming it; adding, removing or reordering other
-drivers does not change it. `<bin> plan` refuses two drivers (or two checks) with the same name,
+(`hydo/onboard/MANIFEST.md`, "Stable compositions"). Renaming a driver that a saved regression
+uses makes that regression fail with a message that names it. Adding, removing, or reordering
+other drivers does not change it. `<bin> plan` refuses two drivers (or two checks) with the same name,
 since the guest runs them as `<bin> driver <name>`. The attribute macro writes a `content` hash
-of each driver (FNV-1a 64 over its attribute and tokens; formatting and comments do not count,
-code it calls is not covered, and a different compiler version may print tokens differently),
-which goes into the plan, so a regression warns when the driver changed since it was saved.
+of each driver into the plan, so a regression warns when the driver changed since it was saved.
+The hash is FNV-1a 64 over the driver's attribute and tokens. Formatting and comments do not
+count, code it calls is not covered, and another compiler version can print tokens differently.
 `cargo hydo save` writes regressions to `hydo/regressions/` of the crate; `cargo hydo plan`
 mirrors that folder into `.hydo/regressions/`, where `hydo build` reads it next to the plan.
 `System::regression(name, schedule, expect)` still takes a schedule string; use it for schedules

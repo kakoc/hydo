@@ -16,7 +16,11 @@ credentials), pin every action by commit, and run every step with `bash -eo pipe
   Vale 3.25.1 with the Google and proselint packages and the project's own style on the
   documents docs/STYLE.md covers (docs/STYLE.md "How the standard is checked"). Vale and the two
   packages are downloaded and checked by sha256 in the script; every warning and error fails
-  it. Locally the same command works on a Mac (Apple Silicon) or Linux (x86_64).
+  it. Locally the same command works on a Mac (Apple Silicon) or Linux (x86_64). Its job
+  `external-links` checks the documents' http and https links with lychee 0.24.2
+  (`ci/links-external.sh`, pinned by sha256), only every night (02:41 UTC) and on demand, so
+  that no push depends on other sites; relative links and anchors are the Rust test `docs::` of
+  the hydo package, in the per-push tier.
 
 Two more workflows concern releases (Milestone 186; docs/PUBLISHING.md "Publishing from GitHub
 Actions"): `.github/workflows/packages.yml` packs and checks every registry package (the crates

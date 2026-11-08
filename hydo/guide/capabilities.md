@@ -1,10 +1,13 @@
 # What works where
 
-hydo runs a guest on one of three engines. Check this table before using a feature; `hydo
-build --check` validates the schema only, the full `hydo build` refuses a feature the
-architecture lacks, and a run refuses a schedule token its engine cannot apply (`UNSUPPORTED on
-kvm: host token cf=20 needs hvx`) or one that names a service, link, fake or knob the image does
-not have. State of hydo after 0.2.0 (2026-11-08).
+hydo runs a guest on one of three engines. Check this table before using a feature:
+
+- `hydo build --check` validates the schema only.
+- The full `hydo build` refuses a feature the architecture lacks.
+- A run refuses a schedule token its engine cannot apply (`UNSUPPORTED on kvm: host token cf=20
+  needs hvx`), and a token that names a service, link, fake, or knob the image does not have.
+
+State of hydo after 0.2.0 (2026-11-08).
 
 - **hvx** (the Linux release, `hydo-linux-<version>`): x86_64 guests on an Intel VT-x machine,
   through hydo's kernel module (`hydo module install`). The reference engine: every feature.
@@ -63,7 +66,9 @@ is Rust programs only and needs no Python.
 | code coverage (Intel Processor Trace) | yes | no | no |
 | a counter loop with no VM exits (`while (flag) n++`) | interrupted by the PMU clock | resolved in the rewind mode (`spin=rewind`, automatic) | resolved in the rewind mode (automatic) |
 
-Where a feature is missing, say so in the report and offer the closest substitute: a shell
-read-back loop instead of `hydo-check` (`hydo guide invariant-patterns`), a hand-written driver
-instead of a generated one, a port fault instead of a link fault, `--strategy process` without
-`--more-faults` on kvm and the Mac.
+Where a feature is missing, say so in the report and offer the closest substitute:
+
+- a shell read-back loop instead of `hydo-check` (`hydo guide invariant-patterns`);
+- a hand-written driver instead of a generated one;
+- a port fault instead of a link fault;
+- `--strategy process` without `--more-faults` on kvm and the Mac.
