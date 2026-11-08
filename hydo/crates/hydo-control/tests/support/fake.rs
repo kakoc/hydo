@@ -579,6 +579,10 @@ impl Fake {
                     (4, if bad { 1 } else { 0 }, String::new())
                 } else if let Some(x) = self.needs(&script) {
                     x
+                } else if let Some(w) = script.split("HYDO_FAKE_PRIMARY=").nth(1) {
+                    // a group's primary probe (M194): prints the service it names
+                    let name = w.split_whitespace().next().unwrap_or("");
+                    (2, 0, format!("{name}\n"))
                 } else {
                     // an invariant: its k-th evaluation
                     let k = self.world.evals.entry(script.clone()).or_default();

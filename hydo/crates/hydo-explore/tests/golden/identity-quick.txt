@@ -65,6 +65,7 @@ input	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	a7e19bf3c01be56d464b7a
 input	hydo/onboard/examples/nats-jetstream/hydo/checks/final_acked_readable	900e87df6b54fa36af827d5c7d246375af4da61bd20b61838640fb1508b546a9
 input	hydo/onboard/examples/nats-jetstream/hydo/fetch-images.sh	b8360f6b9d20162d723336510712e6eba9c919e0899b29b67673f0a433ff20ae
 input	hydo/onboard/examples/nats-jetstream/hydo/hydo-compose.lock.json	319aa2ded0f4f002a2cf8d5e95e2b8db3d7abe2e5551064de3f2b1ebc4b95376
+input	hydo/onboard/examples/nats-jetstream/hydo/hydo-groups.yaml	7d69cfc871c459d097e0ed2c7475510aadd6b3496b4aab4a2724ccf8e0b6f772
 input	hydo/onboard/examples/nats-jetstream/hydo/known-errors.yaml	8eeb9294ed5a38a17b6b0576f331c7b4041566c30747afcbb162460913407051
 input	hydo/onboard/examples/nats-jetstream/hydo/regressions/README.md	bf69c8d9566826cfbec446e1d3d9702b3cb8fc48b45937ab5d173f8062f3b2ef
 input	hydo/onboard/examples/nats-jetstream/hydo/workload/helper_lib.sh	30aa23c29a4034cbcb303161511b2f4b7716662fe789d6863ff62256153c27aa

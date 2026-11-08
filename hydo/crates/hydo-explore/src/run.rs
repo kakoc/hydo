@@ -431,6 +431,16 @@ fn setup(a: Args, env: &Env) -> Cx {
     }
     cx.ex.more_faults = a.more_faults;
     cx.ex.storage_faults = a.storage_faults;
+    // M194: kills, pauses and partitions of the manifest's groups
+    let has_groups = m
+        .as_ref()
+        .and_then(|m| m.get("groups"))
+        .and_then(Value::as_array)
+        .is_some_and(|g| !g.is_empty());
+    if a.cluster_faults && !has_groups {
+        die("hydo explore: --cluster-faults draws faults of the manifest's groups:, and this image's manifest has none (declare the cluster's nodes as a group: groups: [{name:, services: [...]}])");
+    }
+    cx.ex.cluster_faults = a.cluster_faults;
     // M139: reactions (A=) from their own stream
     if let Some(r) = &a.reactive {
         cx.ex.react_fault = r == "fault" || r == "both";

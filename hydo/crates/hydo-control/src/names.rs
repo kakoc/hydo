@@ -17,10 +17,15 @@
 //!
 //! What a token may name:
 //!
-//! - `K=`, `P=`, `X=`: a service.
+//! - `K=`, `P=`, `X=`: a service, a list of services, or a selector over a group of the
+//!   manifest's `groups:` (M194): the group exists, has enough members for the selector, and
+//!   `primary` needs the group's `primary:` command.
 //! - `N=`, `O=`: a service, or a link `a-b` / `a-*` between services with `addr:`; the image needs
 //!   `network` or `oneway` in `faults:` (else it has no `tc`, and the fault was skipped); a
-//!   service's own fault acts on its `port:`, so the service needs one.
+//!   service's own fault acts on its `port:`, so the service needs one. A partition (`a,b/c`) or
+//!   a group's shape (`<group>.halves`) cuts links: every service it names has `addr:`, the
+//!   group exists and is large enough for the shape, and `primary` needs the group's
+//!   `primary:` command.
 //! - `F=`: the image has `freeze` in `faults:`; the frozen service is a service, its peer a
 //!   service or `workload`.
 //! - `H=`: a fake or proxy (`fakes:`/`proxies:`), or one of its routes as `<name>.<route>`.
@@ -39,7 +44,7 @@
 //! `C=` and `T=` name nothing.
 
 use crate::plan::Plan;
-use hydo_schedule::{GuestToken, NetTarget, Pause, ReactAction, Schedule};
+use hydo_schedule::{GuestToken, NetTarget, Pause, ReactAction, Schedule, Selector, Shape, Target};
 
 /// Refuse a schedule whose guest tokens name what `plan`'s image does not have. The error is
 /// one message for people.
@@ -73,6 +78,53 @@ fn service(plan: &Plan, t: &GuestToken, svc: &str) -> Result<(), String> {
     ))
 }
 
+fn groups(plan: &Plan) -> String {
+    list(plan.groups.iter().map(|g| g.name.clone()))
+}
+
+/// The members of a group the token names (M194).
+fn group<'a>(plan: &'a Plan, t: &GuestToken, g: &str) -> Result<&'a [String], String> {
+    match plan.group(g) {
+        Some(v) => Ok(&v.services),
+        None => Err(format!(
+            "{t} names the group {g}, which this image's manifest does not have (its groups: {})",
+            groups(plan)
+        )),
+    }
+}
+
+fn has_primary(plan: &Plan, t: &GuestToken, g: &str) -> Result<(), String> {
+    if plan.group(g).is_some_and(|v| !v.primary.is_empty()) {
+        return Ok(());
+    }
+    Err(format!(
+        "{t} names the primary of the group {g}, which has no primary: command in the manifest \
+         (a command that prints the current primary's service name)"
+    ))
+}
+
+/// A K=, P= or X= target (M194: a list or a group's selector too).
+fn target(plan: &Plan, t: &GuestToken, target: &Target) -> Result<(), String> {
+    match target {
+        Target::Service(s) => service(plan, t, s),
+        Target::List(l) => l.iter().try_for_each(|s| service(plan, t, s)),
+        Target::Group { group: g, sel } => {
+            let members = group(plan, t, g)?;
+            if *sel == Selector::Primary {
+                return has_primary(plan, t, g);
+            }
+            if sel.pick(members).is_none() {
+                return Err(format!(
+                    "{t}: the group {g} has {} members, too few for {}",
+                    members.len(),
+                    sel.word()
+                ));
+            }
+            Ok(())
+        }
+    }
+}
+
 fn net_target(plan: &Plan, t: &GuestToken, target: &NetTarget) -> Result<(), String> {
     let has_tc = !plan.layout.tc.is_empty();
     if !has_tc {
@@ -90,7 +142,35 @@ fn net_target(plan: &Plan, t: &GuestToken, target: &NetTarget) -> Result<(), Str
                 .map(|s| s.name.clone()),
         )
     };
+    let linked = |x: &str| -> Result<(), String> {
+        match addr(x) {
+            None => service(plan, t, x),
+            Some(false) => Err(format!(
+                "{t} cuts the links of the service {x}, which has no addr: (services with \
+                 addr:: {})",
+                with_addr()
+            )),
+            Some(true) => Ok(()),
+        }
+    };
     match target {
+        NetTarget::Partition(c) => c.iter().flatten().try_for_each(|x| linked(x)),
+        NetTarget::Shape { group: g, shape } => {
+            let members = group(plan, t, g)?;
+            members.iter().try_for_each(|x| linked(x))?;
+            if members.len() < shape.min_members() {
+                return Err(format!(
+                    "{t}: the group {g} has {} members, and {} needs at least {}",
+                    members.len(),
+                    shape.word(),
+                    shape.min_members()
+                ));
+            }
+            if *shape == Shape::Primary {
+                return has_primary(plan, t, g);
+            }
+            Ok(())
+        }
         NetTarget::Service(s) => {
             service(plan, t, s)?;
             let v = plan.service(s).expect("checked above");
@@ -161,10 +241,10 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
         _ => {}
     }
     match t {
-        GuestToken::Kill { svc, .. }
-        | GuestToken::TimedKill { svc, .. }
-        | GuestToken::Pause(Pause::Steps { svc, .. })
-        | GuestToken::Pause(Pause::Timer { svc, .. }) => service(plan, t, svc),
+        GuestToken::Kill { target: x, .. }
+        | GuestToken::TimedKill { target: x, .. }
+        | GuestToken::Pause(Pause::Steps { target: x, .. })
+        | GuestToken::Pause(Pause::Timer { target: x, .. }) => target(plan, t, x),
         GuestToken::Net { target, .. } | GuestToken::OneWay { target, .. } => {
             net_target(plan, t, target)
         }

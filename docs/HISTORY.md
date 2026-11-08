@@ -3693,3 +3693,131 @@ KVM; VT-x cannot make XSAVEOPT, XSAVEC or XGETBV1 fault.
 **Test** `hydo-control/tests/silent.rs` `a_plan_without_commands_keeps_the_manifests_own_workload`: the shop's manifest copied beside a `regressions/` folder (and, second, a `checks/` folder), the plan from `hydo_manifest::for_explorer`, a run of the double-charge schedule on the scripted agent; it requires the workload's `shop place` to be spawned and no `HYDO-COMPOSE` report, and `W=` to be refused. Before the fix it failed: the run spawned only the service, timers and the world's summary.
 
 **Nothing recorded moved.** No tracked manifest has a plan without commands next to its own `workload.run` (every tracked YAML and JSON manifest checked with `hydo-build --print-shell`: each that stages a plan has `compose.sh step` as its workload; the only folder without `workload/` is hydo-manifest's `regressions-only` fixture, which has no `workload.run` and is refused). hydo-manifest and hydo-build did not change, so no image byte changed; the controller's recorded transcripts (`hydo-control`'s corpora, features, fakes and `m123` tests) are unchanged.
+
+### Milestone 194 (tentative) — DONE (faults aimed at several services or a role, and partitions; 2026-11-08)
+
+**Why.** A schedule could fault one service per token, and a second `K=`, `P=` or `X=` was refused
+(M141). Killing every node of a cluster needed one hand-written reaction per node, and a
+partition into halves needed several `N=` tokens, of which the last replaced the others without a
+word. docs/design/jepsen-gaps.md ranks node sets, roles and partition shapes as items 2 to 4.
+
+**The syntax** (hydo-schedule's one parser; `src/target.rs`; MANIFEST.md "Groups of services and
+partitions"). No new letter: the existing tokens take more targets.
+
+- `K=`, `P=` and `X=` take a list (`K=n1,n2,n3@5+2`) or a selector over a group:
+  `<group>.one[.<i>]`, `.minority[.<i>]`, `.majority[.<i>]`, `.all`, `.primary`. `one`,
+  `minority` (floor(n/2) members) and `majority` (floor(n/2)+1) choose the `<i>`-th subset of
+  their size, the subsets counted in the lexicographic order of the members' positions, `<i>`
+  modulo their number and not written when 0.
+- `N=` takes components (`n1/n2,n3`: every link between two components, both ways) or a shape
+  over a group: `halves[.<i>]`, `isolate[.<i>]`, `primary`, `bridge[.<i>]` and `ring` (one way:
+  each member hears itself and the next floor(n/2) members around the list). `O=` refuses them.
+- The manifest key `groups:` (a format-1 addition: `name`, `services`, `primary:`, `description`;
+  `hydo/schema/project-v1.json`, example case `groups-and-shapes`). `primary:` is a command that
+  prints the current primary's service name.
+- The schedule keeps the selector (the lead's decision): the intent stays in the schedule, and
+  the control transcript records what it meant in the run.
+
+**The controller** (`hydo-control/src/schedule/targets.rs`, `netfault.rs`). A list or a
+selector is resolved before the token's step; `primary` runs the group's `primary:` command in
+the guest, up to 10 times one second of guest time apart, and ends the run in ERROR when no
+answer names a member (a fault aimed at nothing would be a silent pass). Each resolution is a
+note in the control transcript (`K: nodes.primary = n2`, `N: nodes.ring = n3>n1 n1>n2 n2>n3`),
+and the commands that follow name the services, so `hydo repro --transcript` replays them. A
+kill of several services kills each in the list's order and restarts each at the restart step;
+a storage fault's restart of one of them takes it out of the list. A partition is one fault
+(`net_on_links`): the set of directed links, one netem queue per device, one u32 filter per
+directed link (on `lo` with `addr:`, on the receiving service's veth with `network: bridge`),
+lifted with the M71 drain. A plain service target takes the path it took before, with no
+command and no log line more.
+
+**Repeated tokens.** Checked first: no recorded schedule (recorded.json, the bench plans, the
+goldens) repeats `N=`, `O=`, `T=` or `C=`; two identity-corpus cases of hydo-control do, and
+they keep their meaning (reported to the lead; open item 64 (a)): `N=<svc>@1-<m>:delay,9ms
+N=<svc>@2-<e>:delay,20ms` (`corpus_net.rs`, the later token on the same target wins) and
+`T=1:3 T=2:-5` (`features.rs`, the later clock step wins). Decided per token:
+
+- `C=`: a second one is refused ("a run has one power cut").
+- `N=` and `O=`: several are one fault when they share the window, the direction and the netem
+  arguments and each names a link, a partition or a shape (a link fault written link by link is
+  the partition it means); a second token with another window or other arguments is refused, and
+  so is a service's port fault beside another token (one netem queue per device). The same
+  target twice: the later token, as before.
+- `T=`: unchanged (the later token wins), because the corpus case records it.
+
+**The names check** (M184, `names.rs`) refuses a group, a member or a primary probe the image
+lacks, and a group too small for its selector or shape (a ring and a bridge need 3 members,
+halves and an isolation 2), before any VM.
+
+**The explorer.** `hydo explore --cluster-faults` (refused without `groups:`) draws from its own
+stream (`CLUSTER_SALT`): a kill with a selector in 50% of the schedules, a pause in 30%, a
+partition shape replacing the network fault (and the one-way fault) in 50%. Without the option a
+manifest with `groups:` draws what it drew before (`hydo-explore/tests/cluster_faults.rs`: 2,000
+schedules of four strategies, only K/P/N/O differ, every schedule and shrink candidate canonical
+and accepted by the names check). The shrinker moves a selector towards one member
+(`nodes.majority` to `nodes.one` to `n1`), a list towards fewer services and a shape towards
+`isolate`.
+
+**Tests.** hydo-schedule: round trips and refusals of every new form, the subsets and shapes.
+hydo-control: every identity corpus byte-identical (corpus, corpus_net, features, m123 and the
+rest); new `tests/groups.rs` on the scripted agent and engine (lists, selectors, the probe and
+its failure, timed pauses and kills, partitions on `lo` and on veths, merged link tokens, every
+refusal), each run twice and replayed from its transcript, the transcripts recorded in
+`tests/golden/groups.txt`. Goldens re-recorded: hydo-hvx `parse_differences.txt` (two fuzz inputs
+the C engine typed, a `K=` and a `P=` whose target holds `.` or `,`, now parse; their host part
+arms the same values), hydo-manifest and hydo-build answers (the top level's known keys gain
+`groups`, and the pinned list is the tracked files of today), the CLI's guide topics, and the
+explorer's identity and corpus input pins (the new `hydo-groups.yaml`).
+
+**Proof on the Mac** (hydo-hvm; NATS JetStream's three nodes, `hydo/onboard/examples/nats-jetstream/hydo/hydo-groups.yaml`:
+the M141 project with `groups: [{name: nodes, services: [n1, n2, n3], primary: <the JetStream
+meta leader from /jsz>}]`; images built from this tree with the client of M141 (`bccebbe8…`):
+2.10.22 `46d0108f…`, 2.10.23 `53b8fc64…`). Every schedule twice from a fresh boot (`hydo run`),
+one fingerprint each:
+
+| schedule | 2.10.22 | 2.10.23 |
+|---|---|---|
+| `disk=none \| run K=nodes.all@1+2` (Jepsen's 3.1: every node at once) | VIOLATION stream lost (acked=2) `10afd1c5d6170bd2` | OK `25a3d38b0c8dc3d2` |
+| `disk=none \| run K=n1,n2,n3@1+2` | VIOLATION stream lost `10afd1c5d6170bd2` | OK `25a3d38b0c8dc3d2` |
+| `disk=none \| run K=nodes.primary@5+1` | VIOLATION stream lost (acked=19; the primary was n1) `e97d8040917cb5db` | OK (n3) `4b9dc76af77a1164` |
+| `disk=none \| run P=nodes.majority@4+3` | OK `6548f86e06c233de` | OK `5db57fb4f1e6e6ac` |
+| `disk=none \| run N=nodes.halves@3-9:loss,100%` | VIOLATION lost 9 of 38 acknowledged messages `956df32ad9956f56` | OK `05c5a0496fb0aea0` |
+| `disk=none \| run N=nodes.primary@3-9:loss,100%` | VIOLATION lost 10 of 38 `8e916a9d1bbb78f7` | OK `da818e743a72a051` |
+| `disk=none \| run N=nodes.ring@3-9:loss,100%` | OK `d9a6f7a30e7eb49a` | OK `f20f9d1d0b87dd8d` |
+
+`K=nodes.all` and `K=n1,n2,n3` give one fingerprint (the guest does the same) and different ctl
+values (the transcript's note). M141 needed three reactions for the first row.
+
+**The explorer finds them** (`hydo explore --seeds 1-30 --strategy process --workers 4` on the
+2.10.22 image): without `--cluster-faults` 9 failures (seeds 1 5 6 8 12 17 20 21 26; 143 s), all
+with a power cut, as in M141; with it 11 (352 s), those 9 and two without a power cut: seed 18
+(`K=nodes.all@19+3 N=nodes.halves.7@9-15:delay,500ms P=n3@15+5 T=2:-2592000 W=06dd08ca,p2,q1,r500`,
+stream lost) and seed 22 (`K=n3@17+2 N=nodes.primary@2-10:loss,100% P=nodes.majority.3@9+3
+T=11:-300 ...`, lost acknowledged messages, a new signature). Every failure reproduced. The
+shrinker shrank seed 22 to `disk=none dseed=d9f3d4e02b8520f9 | run N=nodes.isolate@2-10:loss,100%
+T=11:-18 W=e195e771,p4,q2,r500` (82 runs; lost 5 of 34, `e6b474bf9a8a5c14` twice; the same from
+fresh boots, twice; 2.10.23 passes it, `299bd7e6e1714f99`; without the clock step it passes on
+both, so the isolation of n1 and a clock step back 18 s are both needed); it shrinks one
+failure per signature, so the stream-lost signature's minimal schedule is seed 1's power cut
+again. Seed 18 shrunk by hand: its kill alone, `disk=none dseed=f92a9eae7103378b | run
+K=nodes.all@19+3 W=06dd08ca,p2,q1,r500`, loses the stream on 2.10.22 (`40eea7912a3bab48`) and
+passes on 2.10.23 (`351a0fcb8bb88bbd`), twice each; the whole seed-18 schedule from a fresh boot
+gives the explorer's `2de3e4b8d5c83f79`.
+
+**Left** (AGENTS.md open item 64):
+
+- [user decision] The two identity-corpus cases above keep "the later token wins". Refusing a
+  second `N=` on one target, or applying several clock steps in order, re-records one case
+  each. Until then a hand-written second `T=`, or a second `N=` on the same target, replaces the
+  first without a message.
+- `G=` and `L=` take one service, and `O=` takes no partition.
+- Several `N=` tokens with different windows are refused. Two faults in force on one device
+  need a netem queue each (a prio band per fault).
+- Repeated windows in one token (`K=n1@3+2/7+2`, docs/design/jepsen-gaps.md item 6) are not
+  built.
+- The primary probe runs once, before the fault's step, in the guest's own network namespace. A
+  leader elected during the fault is not followed.
+- No schedule with a group ran on hvx or on the KVM engine. They run the same controller;
+  `hydo-bench rebaseline --check` ran on the Mac only.
+- The loss of acknowledged messages on NATS 2.10.22 under a partition was not matched to an
+  upstream issue. 2.10.23 passes the same schedules.

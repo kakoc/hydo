@@ -137,6 +137,16 @@
         "$ref": "#/$defs/Service"
       }
     },
+    "groups": {
+      "description": "Named sets of services (the nodes of a cluster) that fault tokens aim at as a whole:\nK=<group>.majority@..., P=<group>.primary@..., N=<group>.halves@... (MANIFEST.md\n\"Groups of services\").",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Group"
+      }
+    },
     "provision": {
       "description": "Run once after every service is ready, before the snapshot every schedule starts from.",
       "anyOf": [
@@ -1051,6 +1061,49 @@
       "additionalProperties": false,
       "required": [
         "dir"
+      ]
+    },
+    "Group": {
+      "description": "A group of services that fault tokens select from.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "[a-z][a-z0-9_]*: the name fault tokens use (K=<name>.majority@...).",
+          "type": "string"
+        },
+        "services": {
+          "description": "The members, services of this manifest, each once. Selectors count them in this order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "primary": {
+          "description": "A command that prints the service name of the group's current primary (leader) on its\nfirst line and exits 0; run in the guest when a fault aims at <name>.primary.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "services"
       ]
     },
     "Workload": {

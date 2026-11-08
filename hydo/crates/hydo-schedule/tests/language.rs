@@ -105,7 +105,7 @@ fn types() {
     assert_eq!(
         s.guest[0],
         GuestToken::Kill {
-            svc: "redis".into(),
+            target: Target::Service("redis".into()),
             at: 3,
             down: 2
         }
@@ -362,6 +362,82 @@ fn reactions() {
     refused("disk=none | run A=a/b:cut", "not an assertion id");
 }
 
+/// Targets beyond one service (Milestone 194): lists, group selectors and partition shapes.
+#[test]
+fn several_services_and_partitions() {
+    for s in [
+        "disk=none | run K=n1,n2,n3@5+2",
+        "disk=none | run K=nodes.all@5+2 C=9",
+        "disk=none | run K=nodes.majority.2@5+2",
+        "disk=none | run K=nodes.primary@3+1 P=nodes.minority@6+2",
+        "disk=none | run P=nodes.one.1@4~100:2000",
+        "disk=none | run X=a,b@3~50",
+        "disk=none | run N=n1,n2/n3@3-9:loss,100%",
+        "disk=none | run N=a/b/c@0-4:delay,200ms",
+        "disk=none | run N=nodes.halves.3@2-8:loss,100%",
+        "disk=none | run N=nodes.isolate@2-8:loss,100%",
+        "disk=none | run N=nodes.ring@2-8:loss,100%",
+        "disk=none | run N=nodes.bridge.1@2-8:loss,100%",
+        "disk=none | run N=nodes.primary@2-8:loss,100% K=nodes.one@4+1",
+    ] {
+        round_trip(s);
+    }
+    let s = Schedule::parse("disk=none | run K=n1,n2@5+2 P=g.majority.1@1+1").unwrap();
+    assert_eq!(
+        s.guest[0],
+        GuestToken::Kill {
+            target: Target::List(vec!["n1".into(), "n2".into()]),
+            at: 5,
+            down: 2
+        }
+    );
+    assert_eq!(
+        s.guest[1],
+        GuestToken::Pause(Pause::Steps {
+            target: Target::Group {
+                group: "g".into(),
+                sel: Selector::Majority(1)
+            },
+            at: 1,
+            steps: 1
+        })
+    );
+    let n = Schedule::parse("disk=none | run N=g.ring@1-2:loss,100%").unwrap();
+    assert_eq!(
+        n.guest[0],
+        GuestToken::Net {
+            target: NetTarget::Shape {
+                group: "g".into(),
+                shape: Shape::Ring
+            },
+            from: 1,
+            to: 2,
+            netem: vec![Netem::Loss(100)]
+        }
+    );
+    refused("disk=none | run K=n1,n1@1+1", "named twice");
+    refused("disk=none | run K=n1,@1+1", "not a service name");
+    refused("disk=none | run K=g.most@1+1", "not a selector");
+    refused("disk=none | run K=g.one.0@1+1", "no .0");
+    refused("disk=none | run K=g.all.2@1+1", "takes no index");
+    refused("disk=none | run K=g.primary.1@1+1", "takes no index");
+    refused("disk=none | run K=G.all@1+1", "not a service name");
+    refused("disk=none | run N=a/a@1-2:loss,100%", "one component");
+    refused("disk=none | run N=a,b@1-2:loss,100%", "not a service name");
+    refused(
+        "disk=none | run N=g.cut@1-2:loss,100%",
+        "not a partition shape",
+    );
+    refused("disk=none | run N=g.ring.1@1-2:loss,100%", "takes no index");
+    refused("disk=none | run O=a/b@1-2:req:loss,100%", "cut both ways");
+    refused(
+        "disk=none | run O=g.halves@1-2:req:loss,100%",
+        "cut both ways",
+    );
+    // G= and L= stay one service
+    refused("disk=none | run L=a,b@1+1", "not a service name");
+}
+
 /// The storage faults of one service (docs/design/storage-faults.md): G= corrupts files in its
 /// storage directory, L= is its own power loss.
 #[test]
@@ -578,4 +654,68 @@ fn documentation_schedules() {
     eprintln!("documentation: {ok} schedules round-trip, {placeholders} placeholders skipped");
     assert!(ok > 30, "{ok}");
     assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+// The subsets, selectors and partition shapes of Milestone 194 (target.rs).
+
+fn members(n: usize) -> Vec<String> {
+    (1..=n).map(|i| format!("n{i}")).collect()
+}
+
+#[test]
+fn target_subsets_in_order() {
+    assert_eq!(binomial(5, 2), 10);
+    assert_eq!(binomial(3, 0), 1);
+    assert_eq!(binomial(2, 3), 0);
+    let all: Vec<Vec<usize>> = (0..10).map(|i| subset(5, 2, i)).collect();
+    assert_eq!(all[0], [0, 1]);
+    assert_eq!(all[3], [0, 4]);
+    assert_eq!(all[4], [1, 2]);
+    assert_eq!(all[9], [3, 4]);
+    assert_eq!(subset(5, 2, 10), [0, 1]);
+    assert_eq!(subset(3, 3, 7), [0, 1, 2]);
+}
+
+#[test]
+fn target_selectors_pick() {
+    let g = members(3);
+    assert_eq!(Selector::One(1).pick(&g).unwrap(), ["n2"]);
+    assert_eq!(Selector::One(4).pick(&g).unwrap(), ["n2"]);
+    assert_eq!(Selector::Minority(0).pick(&g).unwrap(), ["n1"]);
+    assert_eq!(Selector::Majority(2).pick(&g).unwrap(), ["n2", "n3"]);
+    assert_eq!(Selector::All.pick(&g).unwrap(), ["n1", "n2", "n3"]);
+    assert_eq!(Selector::Primary.pick(&g), None);
+    assert_eq!(Selector::Minority(0).pick(&members(1)), None);
+    assert_eq!(Selector::Majority(0).pick(&members(5)).unwrap().len(), 3);
+}
+
+#[test]
+fn target_shapes_cut() {
+    let g = members(3);
+    let l = Shape::Isolate(1).links(&g, None).unwrap();
+    assert_eq!(
+        l,
+        [("n1", "n2"), ("n2", "n1"), ("n2", "n3"), ("n3", "n2")]
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+    );
+    assert_eq!(Shape::Primary.links(&g, Some("n2")).unwrap(), l);
+    assert_eq!(Shape::Primary.links(&g, Some("x")), None);
+    // ring of 3: each member hears itself and the next one
+    let r = Shape::Ring.links(&g, None).unwrap();
+    assert_eq!(
+        r,
+        [("n3", "n1"), ("n1", "n2"), ("n2", "n3")].map(|(a, b)| (a.to_string(), b.to_string()))
+    );
+    // ring of 5: every member hears three, two cut towards each member
+    let r5 = Shape::Ring.links(&members(5), None).unwrap();
+    assert_eq!(r5.len(), 10);
+    // bridge of 5 at n3: n1,n2 against n4,n5
+    let b = Shape::Bridge(2).links(&members(5), None).unwrap();
+    assert_eq!(b.len(), 8);
+    assert!(!b.iter().any(|(a, c)| a == "n3" || c == "n3"));
+    // halves of 4: two against two
+    assert_eq!(Shape::Halves(0).links(&members(4), None).unwrap().len(), 8);
+    assert_eq!(Shape::Ring.links(&members(2), None), None);
+    let c = component_links(&[vec!["a".into()], vec!["b".into(), "c".into()]]);
+    assert_eq!(c.len(), 4);
 }

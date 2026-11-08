@@ -1,16 +1,16 @@
 inputs 23351
-both accept, same armed values 9286
+both accept, same armed values 9288
 both refuse 3971
-the C engine ran it, hydo-schedule refuses it 10094
+the C engine ran it, hydo-schedule refuses it 10092
      103  guest: a B= token its grammar refuses (the C typed it)  (for example "disk=none dseed=975835de1c9756ce pp=65536 q=890681 qs=3ef5afb8de981432 qb=99561:920:500 qbs=3c72a63e5cabce79 | run K=mysql@9+2 N=redis@7-13:duplicate,36%,loss,57% Q=8 B=b37|246f0193c21")
      123  guest: a C= token its grammar refuses (the C typed it)  (for example "disk=cut dseed=ca87cb278bbed782 pp=65536 q=1284474 | run C=xtx= P=redis@11+3")
       83  guest: a F= token its grammar refuses (the C typed it)  (for example "disk=none dseed=975835de1c9756ce pp=65536 q=890681 qs=3ef5afb8de981432 qb=99561:920:500 qbs=3c72a63e5cabce79 | run K=primary@6+2 N=primary-replica@2-8:duplicate,36%,loss,57% F=")
      489  guest: a H= token its grammar refuses (the C typed it)  (for example "disk=none dseed=975835de1c9756ce pp=65536 q=890681 qs=3ef5afb8de981432 qb=99561:920:500 qbs=3c72a63e5cabce79 | run K=primary@6+2 N=primary-replica@2-8:duplicate,36%,loss,57% F=replica>primary@4#57:3000 H=redisp@14-1e:delay=10000,p=25")
-     298  guest: a K= token its grammar refuses (the C typed it)  (for example "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redisc12+2")
+     297  guest: a K= token its grammar refuses (the C typed it)  (for example "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redisc12+2")
        2  guest: a M= token its grammar refuses (the C typed it)  (for example "disk=none dseed=3cd4819f59bef36c | run K=kafka@18+1 M=  T=16:300 B=87e19635b8d5f890")
      599  guest: a N= token its grammar refuses (the C typed it)  (for example "disk=none dseed=975835de1c9756ce pp=65536 q=890681 qs=3ef5afb8de981432 qb=99561:920:500 qbs=3c72a63e5cabce79 | run K=mysql@9+2 N=redis@7-13:duplicate")
      145  guest: a O= token its grammar refuses (the C typed it)  (for example "disk=lying:2 dseed=943ff9fc99de8f03 | run K=mysql@17+3 C=27 O=mysql@28-29:req:delay,184cms")
-     148  guest: a P= token its grammar refuses (the C typed it)  (for example "disk=none dseed=bb0802c412d354cb | run N=kafka@12-20:loss,5%,corrupt,7% P= ")
+     147  guest: a P= token its grammar refuses (the C typed it)  (for example "disk=none dseed=bb0802c412d354cb | run N=kafka@12-20:loss,5%,corrupt,7% P= ")
       41  guest: a Q= token its grammar refuses (the C typed it)  (for example "disk=none dseed=975835de1c9756ce q=890681 qs=3ef5afb8de981432 qb=99561:920:500 qbs=3c72a63e5cabce79 | run K=mysql@9+2 N=redis@7-13:duplicate,36%,loss,57% Q=8=B=b374246f0193c21")
        2  guest: a R= token its grammar refuses (the C typed it)  (for example "disk=cut dseed=c3b7f4e80f554dda xt=66882e0bfabc71b3 xtr=4 xtpm=500 | run N=redis@18-21:delay,187ms C=11 R= P=mysql@23+1 T=25:-300 B=f60223083a230f76")
      116  guest: a T= token its grammar refuses (the C typed it)  (for example "disk=none dseed=d2c055787d9dfed8 q=2063640 qs=130e3df32f3b76d3 | run K=kafka@12+3 P=front@9~452:24018 T=1")

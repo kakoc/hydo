@@ -40,7 +40,7 @@ use hydo_agent_proto::msg::{
     ClockSet, Command, Event, Mkdir, Mount, MountFlag, Probe, ProbeEnd, Read, Reply, Run, Sig,
     Signal, Spawn, Syncfs, Write,
 };
-use hydo_schedule::{GuestToken, Pause, Schedule};
+use hydo_schedule::{GuestToken, Pause, Schedule, Target};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -71,6 +71,8 @@ mod restart;
 mod react;
 // the storage faults of one service, G= and L= (docs/design/storage-faults.md)
 mod storage;
+// Milestone 194: targets beyond one service (lists, group selectors, the primary's probe)
+mod targets;
 
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
@@ -112,12 +114,12 @@ impl Conversation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PauseCfg {
     Steps {
-        svc: String,
+        target: Target,
         at: i64,
         up: i64,
     },
     Timer {
-        svc: String,
+        target: Target,
         at: i64,
         off: u64,
         dur: u64,
@@ -132,10 +134,11 @@ struct RunCfg {
     /// The tokens explore_run's token loop hands to set_knob (every letter its `case` does not
     /// assign itself), typed, in token order.
     knobs: Vec<GuestToken>,
-    k: Option<(String, i64, i64)>,
+    /// K=: (target, at, up); a target is a service, a list or a group selector (M194).
+    k: Option<(Target, i64, i64)>,
     c: Option<i64>,
     p: Option<PauseCfg>,
-    x: Option<(String, i64, u64)>,
+    x: Option<(Target, i64, u64)>,
     /// T=: (at, delta seconds).
     t: Option<(i64, i64)>,
     /// N= and O= (NET-FAULTS reads their typed fields).
@@ -215,14 +218,15 @@ enum Part {
     /// start_periodic forked it (the shell's subshell keeps them; a later start_svc or export
     /// does not reach it).
     Every(usize, BTreeMap<String, String>),
+    /// P=...~: the services it pauses (one, or several since M194).
     PauseTimer {
-        svc: String,
+        svcs: Vec<String>,
         off: u64,
         dur: u64,
     },
     /// The stack's kill_timer (X=), see `explore_run`.
     KillTimer {
-        svc: String,
+        svcs: Vec<String>,
         off: u64,
     },
     /// SEAM(Composer): the composer's daemon and one thread per launched command.
@@ -489,9 +493,11 @@ impl ScheduleController {
     }
 }
 
-/// The letter of a single-fault token (K=, P=, X=) the schedule has more than once (M141). A
-/// second one used to replace the first without a word: a schedule meant to kill three nodes of
-/// a cluster killed one.
+/// The letter of a single-fault token (K=, P=, X=, G=, L=, and since M194 C=) the schedule has
+/// more than once (M141). A second one used to replace the first without a word: a schedule
+/// meant to kill three nodes of a cluster killed one. (Several N= and O= are merged or refused
+/// by [`targets::merge_net`]; a second T= still replaces the first, as the identity corpus
+/// records.)
 fn repeated_fault(s: &Schedule) -> Option<char> {
     let mut seen = Vec::new();
     for t in &s.guest {
@@ -502,6 +508,7 @@ fn repeated_fault(s: &Schedule) -> Option<char> {
                 | GuestToken::TimedKill { .. }
                 | GuestToken::Corrupt { .. }
                 | GuestToken::PowerLoss { .. }
+                | GuestToken::Cut(_)
         ) {
             if seen.contains(&t.letter()) {
                 return Some(t.letter());
@@ -522,38 +529,47 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
     // with names.rs; here it is ignored with a log line, for the identity corpora)
     let _ = plan;
     if let Some(l) = repeated_fault(s) {
+        let how = match l {
+            'C' => "a run has one power cut".to_string(),
+            'K' | 'P' | 'X' => format!(
+                "several services at once: a list ({l}=a,b@...), a group's selector \
+                 ({l}=<group>.majority@...), or reactions"
+            ),
+            _ => "one service per token".to_string(),
+        };
         return Err(Unsupported::other(format!(
-            "{l}= appears more than once in the schedule; one {l}= token per schedule (several services at once: reactions, A=<event>:kill-<svc> or :stop-<svc>-<ms>)"
+            "{l}= appears more than once in the schedule; one {l}= token per schedule ({how})"
         )));
     }
+    let (mut ns, mut os) = (Vec::new(), Vec::new());
     for t in &s.guest {
         match t {
-            GuestToken::Kill { svc, at, down } => {
-                c.k = Some((svc.clone(), *at as i64, (*at + *down) as i64));
+            GuestToken::Kill { target, at, down } => {
+                c.k = Some((target.clone(), *at as i64, (*at + *down) as i64));
             }
-            GuestToken::Pause(Pause::Steps { svc, at, steps }) => {
+            GuestToken::Pause(Pause::Steps { target, at, steps }) => {
                 c.p = Some(PauseCfg::Steps {
-                    svc: svc.clone(),
+                    target: target.clone(),
                     at: *at as i64,
                     up: (*at + *steps) as i64,
                 });
             }
             GuestToken::Pause(Pause::Timer {
-                svc,
+                target,
                 at,
                 off_ms,
                 dur_ms,
             }) => {
                 c.p = Some(PauseCfg::Timer {
-                    svc: svc.clone(),
+                    target: target.clone(),
                     at: *at as i64,
                     off: *off_ms,
                     dur: *dur_ms,
                 });
             }
             GuestToken::Cut(at) => c.c = Some(*at as i64),
-            GuestToken::TimedKill { svc, at, off_ms } => {
-                c.x = Some((svc.clone(), *at as i64, *off_ms));
+            GuestToken::TimedKill { target, at, off_ms } => {
+                c.x = Some((target.clone(), *at as i64, *off_ms));
             }
             // SEAM(NetFaults): netfault.rs
             GuestToken::Net {
@@ -561,30 +577,28 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
                 from,
                 to,
                 netem,
-            } => {
-                c.n = Some(netfault::NetTok {
-                    target: target.clone(),
-                    from: *from,
-                    to: *to,
-                    dir: None,
-                    netem: netem.clone(),
-                })
-            }
+            } => ns.push(netfault::NetTok {
+                target: target.clone(),
+                more: Vec::new(),
+                from: *from,
+                to: *to,
+                dir: None,
+                netem: netem.clone(),
+            }),
             GuestToken::OneWay {
                 target,
                 from,
                 to,
                 dir,
                 netem,
-            } => {
-                c.o = Some(netfault::NetTok {
-                    target: target.clone(),
-                    from: *from,
-                    to: *to,
-                    dir: Some(*dir),
-                    netem: netem.clone(),
-                })
-            }
+            } => os.push(netfault::NetTok {
+                target: target.clone(),
+                more: Vec::new(),
+                from: *from,
+                to: *to,
+                dir: Some(*dir),
+                netem: netem.clone(),
+            }),
             // SEAM(Freeze): freeze.rs reads F= as a knob below; with network: bridge the
             // trigger binds its queue in the frozen service's namespace (the freeze command's
             // netns, M131), so no F= is refused any more.
@@ -612,6 +626,9 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             _ => c.knobs.push(t.clone()),
         }
     }
+    // M194: several N= (or O=) are one fault when they share the window and the netem arguments
+    c.n = targets::merge_net('N', ns)?;
+    c.o = targets::merge_net('O', os)?;
     Ok(c)
 }
 
@@ -748,8 +765,8 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
             Conversation::Solo => main_solo(fx, &ctx),
         },
         Part::Every(i, exports) => periodic_loop(fx, &ctx, *i, exports),
-        Part::PauseTimer { svc, off, dur } => pause_timer(fx, &ctx, svc, *off, *dur),
-        Part::KillTimer { svc, off } => kill_timer(fx, &ctx, svc, *off),
+        Part::PauseTimer { svcs, off, dur } => pause_timer(fx, &ctx, svcs, *off, *dur),
+        Part::KillTimer { svcs, off } => kill_timer(fx, &ctx, svcs, *off),
         Part::Compose(j) => composer::job(fx, &ctx, j),
         Part::Live(m) => liveness::live_monitor(fx, &ctx, m),
         Part::FreezeWatch { id, dur } => freeze::watch(fx, *id, *dur),
@@ -2015,7 +2032,7 @@ fn in_flight(fx: &mut F<'_>, ctx: &Ctx, e: Vec<String>) -> Step<bool> {
 
 /// pause_timer: after off ms, stop the service (asserting whether a request was in flight),
 /// for dur ms.
-fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64, dur: u64) -> Step<()> {
+fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svcs: &[String], off: u64, dur: u64) -> Step<()> {
     let e = env(fx, ctx, &[]);
     run(
         fx,
@@ -2024,8 +2041,10 @@ fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64, dur: u64) -> Step
         None,
     )?;
     let mid = in_flight(fx, ctx, e.clone())?;
-    svc_sig(fx, svc, Sig::Stop)?;
-    log(fx, format!("PAUSED {svc} (timer, mid_request={mid})"));
+    for svc in svcs {
+        svc_sig(fx, svc, Sig::Stop)?;
+        log(fx, format!("PAUSED {svc} (timer, mid_request={mid})"));
+    }
     xassert(
         fx,
         "reachable",
@@ -2041,8 +2060,10 @@ fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64, dur: u64) -> Step
         );
     }
     run(fx, vec![bb(ctx), "sleep".into(), secs(dur, 3)], e, None)?;
-    svc_sig(fx, svc, Sig::Cont)?;
-    log(fx, format!("RESUMED {svc} (timer)"));
+    for svc in svcs {
+        svc_sig(fx, svc, Sig::Cont)?;
+        log(fx, format!("RESUMED {svc} (timer)"));
+    }
     Ok(())
 }
 
@@ -2050,7 +2071,7 @@ fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64, dur: u64) -> Step
 /// service's tree (asserting whether a request was in flight). hydo-init.sh has no X= (it reads
 /// it as an unknown knob and the explorer never draws it for a manifest); the controller gives
 /// it the stack's meaning, and the service is restarted by restart_dead at the end.
-fn kill_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64) -> Step<()> {
+fn kill_timer(fx: &mut F<'_>, ctx: &Ctx, svcs: &[String], off: u64) -> Step<()> {
     let e = env(fx, ctx, &[]);
     run(
         fx,
@@ -2059,13 +2080,15 @@ fn kill_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64) -> Step<()> {
         None,
     )?;
     let mid = in_flight(fx, ctx, e)?;
-    if ctx.plan.service(svc).is_some_and(|s| s.restart.restarts()) {
-        // a restart policy's start in progress ends first (M134); without a policy the timer
-        // may still kill the main sequence's K= restart, as the shell's timer does
-        fx.until(|h, _| !h.starting.contains(svc))?;
+    for svc in svcs {
+        if ctx.plan.service(svc).is_some_and(|s| s.restart.restarts()) {
+            // a restart policy's start in progress ends first (M134); without a policy the timer
+            // may still kill the main sequence's K= restart, as the shell's timer does
+            fx.until(|h, _| !h.starting.contains(svc.as_str()))?;
+        }
+        svc_sig(fx, svc, Sig::Kill)?;
+        log(fx, format!("KILLED {svc} (timer, mid_request={mid})"));
     }
-    svc_sig(fx, svc, Sig::Kill)?;
-    log(fx, format!("KILLED {svc} (timer, mid_request={mid})"));
     xassert(fx, KILL_TIMER_DECL.0, KILL_TIMER_DECL.1, KILL_TIMER_DECL.2);
     Ok(())
 }
@@ -2194,46 +2217,54 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     }
     // a token naming a service the manifest does not have is ignored
     let known = |s: &str| plan.service(s).is_some();
-    let (mut ksvc, mut kat, mut kup) = (String::new(), -1i64, -1i64);
-    if let Some((s, at, up)) = &cfg.k {
-        ksvc = s.clone();
+    // K=: the target, its services once resolved (a selector at its step), and those still down
+    let (mut ktarget, mut kat, mut kup) = (None::<Target>, -1i64, -1i64);
+    let mut kdown: Vec<String> = Vec::new();
+    if let Some((t, at, up)) = &cfg.k {
         (kat, kup) = (*at, *up);
-        if !known(s) {
-            log(fx, format!("K: no service {s}, ignored"));
-            (kat, kup) = (-1, -1);
+        match targets::read(fx, ctx, 'K', t) {
+            Some(t) => ktarget = Some(t),
+            None => (kat, kup) = (-1, -1),
         }
     }
     // SEAM(NetFaults): N= is read here (nsvc, nfrom, nto), with its "N: no service" line.
     let mut net = netfault::Net::default();
     net.read_n(fx, ctx, cfg.n.as_ref());
     let cat = cfg.c.unwrap_or(-1);
-    let (mut psvc, mut pat, mut pup, mut ptime) = (String::new(), -1i64, -1i64, None);
-    match &cfg.p {
-        Some(PauseCfg::Steps { svc, at, up }) => {
-            psvc = svc.clone();
+    let (mut ptarget, mut pat, mut pup, mut ptime) = (None::<Target>, -1i64, -1i64, None);
+    let mut psvcs: Vec<String> = Vec::new();
+    let pt = match &cfg.p {
+        Some(PauseCfg::Steps { target, at, up }) => {
             (pat, pup) = (*at, *up);
+            Some(target)
         }
-        Some(PauseCfg::Timer { svc, at, off, dur }) => {
-            psvc = svc.clone();
+        Some(PauseCfg::Timer {
+            target,
+            at,
+            off,
+            dur,
+        }) => {
             pat = *at;
             ptime = Some((*off, *dur));
+            Some(target)
         }
-        None => {}
-    }
-    if cfg.p.is_some() && !known(&psvc) {
-        log(fx, format!("P: no service {psvc}, ignored"));
-        (pat, pup) = (-1, -1);
+        None => None,
+    };
+    if let Some(t) = pt {
+        match targets::read(fx, ctx, 'P', t) {
+            Some(t) => ptarget = Some(t),
+            None => (pat, pup) = (-1, -1),
+        }
     }
     // SEAM(Clock): T= (tat, tdelta). SEAM(NetFaults): O= (osvc, ofrom, oto, odir).
     let (tat, tdelta) = cfg.t.unwrap_or((-1, 0));
     net.read_o(fx, ctx, cfg.o.as_ref());
-    let (mut xsvc, mut xat, mut xoff) = (String::new(), -1i64, 0u64);
-    if let Some((s, at, off)) = &cfg.x {
-        xsvc = s.clone();
+    let (mut xtarget, mut xat, mut xoff) = (None::<Target>, -1i64, 0u64);
+    if let Some((t, at, off)) = &cfg.x {
         (xat, xoff) = (*at, *off);
-        if !known(s) {
-            log(fx, format!("X: no service {s}, ignored"));
-            xat = -1;
+        match targets::read(fx, ctx, 'X', t) {
+            Some(t) => xtarget = Some(t),
+            None => xat = -1,
         }
     }
     // the storage faults (schedule/storage.rs): G= (zsvc, zat, zup) and L= (lsvc, lat, lup)
@@ -2269,7 +2300,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     }
     start_periodic(fx, ctx)?;
     restart::start(fx, ctx)?; // restart policies (M134): from the workload's start
-    let (mut down, mut cut, mut paused) = (false, false, false);
+    let (mut cut, mut paused) = (false, false);
     let (mut zdown, mut ldown) = (false, false);
     let (mut ptimer, mut xtimer): (Option<usize>, Option<usize>) = (None, None);
     let mut prev: Option<i64> = None;
@@ -2293,41 +2324,48 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
         // SEAM(NetFaults): `p == nto && netup`: net_off, "network healed before step p".
         net.heal_n_at(fx, ctx, p)?;
-        if p == kup && down {
-            log(fx, format!("restarting {ksvc} before step {p}"));
-            if !start_svc(fx, ctx, &ksvc)? {
-                // M136: a K= restart that falls after the workload's last step is a restart
-                // after the faults; with restart_may_fail the service stays down and the heal's
-                // restart pass decides (restart_dead), as for any service that is down then
-                let after_faults =
-                    p == steps && ctx.plan.service(&ksvc).is_some_and(|s| s.restart_may_fail);
-                if !after_faults {
-                    return die_oracle(fx, format!("HYDO-ORACLE: ERROR {ksvc} restart failed"));
+        if p == kup {
+            for ksvc in std::mem::take(&mut kdown) {
+                log(fx, format!("restarting {ksvc} before step {p}"));
+                if !start_svc(fx, ctx, &ksvc)? {
+                    // M136: a K= restart that falls after the workload's last step is a restart
+                    // after the faults; with restart_may_fail the service stays down and the
+                    // heal's restart pass decides (restart_dead), as for any service down then
+                    let after_faults =
+                        p == steps && ctx.plan.service(&ksvc).is_some_and(|s| s.restart_may_fail);
+                    if !after_faults {
+                        return die_oracle(fx, format!("HYDO-ORACLE: ERROR {ksvc} restart failed"));
+                    }
+                    log(
+                        fx,
+                        format!("{ksvc} restart failed after the last step (restart_may_fail): left to the heal"),
+                    );
                 }
-                log(
-                    fx,
-                    format!("{ksvc} restart failed after the last step (restart_may_fail): left to the heal"),
-                );
             }
-            down = false;
         }
         if p == xat {
-            // the stack's order: the kill timer is armed after the restart, before the kill
-            xtimer = Some(fx.start(Part::KillTimer {
-                svc: xsvc.clone(),
-                off: xoff,
-            })?);
-            log(
-                fx,
-                format!("kill timer for {xsvc} armed before step {p} (after {xoff}ms)"),
-            );
+            if let Some(t) = &xtarget {
+                // the stack's order: the kill timer is armed after the restart, before the kill
+                let svcs = targets::resolve(fx, ctx, 'X', t)?;
+                let names = svcs.join(",");
+                xtimer = Some(fx.start(Part::KillTimer { svcs, off: xoff })?);
+                log(
+                    fx,
+                    format!("kill timer for {names} armed before step {p} (after {xoff}ms)"),
+                );
+            }
         }
         if p == kat {
-            // a restart policy's start in progress ends first (M134; never waits without a policy)
-            fx.until(|h, _| !h.starting.contains(&ksvc))?;
-            svc_sig(fx, &ksvc, Sig::Kill)?;
-            down = true;
-            log(fx, format!("KILLED {ksvc} before step {p}"));
+            if let Some(t) = &ktarget {
+                for ksvc in targets::resolve(fx, ctx, 'K', t)? {
+                    // a restart policy's start in progress ends first (M134; never waits
+                    // without a policy)
+                    fx.until(|h, _| !h.starting.contains(&ksvc))?;
+                    svc_sig(fx, &ksvc, Sig::Kill)?;
+                    log(fx, format!("KILLED {ksvc} before step {p}"));
+                    kdown.push(ksvc);
+                }
+            }
         }
         // the storage faults of one service (schedule/storage.rs): restarts first, as K=
         for (svc, up, is_down, why) in [
@@ -2348,9 +2386,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
                 }
                 log(fx, format!("restarting {svc} before step {p}"));
                 // K= on the same service would wait for this process to end before its restart
-                if *svc == ksvc {
-                    down = false;
-                }
+                kdown.retain(|k| k != svc);
                 if !start_svc(fx, ctx, svc)? {
                     let after_faults =
                         p == steps && ctx.plan.service(svc).is_some_and(|s| s.restart_may_fail);
@@ -2388,27 +2424,33 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         // SEAM(NetFaults): `p == nfrom`: net_on; `p == oto && oneup`: heal; `p == ofrom`: one-way on.
         net.at(fx, ctx, p)?;
         if p == pup && paused {
-            svc_sig(fx, &psvc, Sig::Cont)?;
+            for psvc in &psvcs {
+                svc_sig(fx, psvc, Sig::Cont)?;
+                log(fx, format!("RESUMED {psvc} before step {p}"));
+            }
             paused = false;
-            log(fx, format!("RESUMED {psvc} before step {p}"));
         }
-        if p == pat {
+        if let (true, Some(t)) = (p == pat, &ptarget) {
+            psvcs = targets::resolve(fx, ctx, 'P', t)?;
             if let Some((off, dur)) = ptime {
+                let names = psvcs.join(",");
                 ptimer = Some(fx.start(Part::PauseTimer {
-                    svc: psvc.clone(),
+                    svcs: psvcs.clone(),
                     off,
                     dur,
                 })?);
                 log(
                     fx,
                     format!(
-                        "pause timer for {psvc} armed before step {p} (after {off}ms, for {dur}ms)"
+                        "pause timer for {names} armed before step {p} (after {off}ms, for {dur}ms)"
                     ),
                 );
             } else {
-                svc_sig(fx, &psvc, Sig::Stop)?;
+                for psvc in &psvcs {
+                    svc_sig(fx, psvc, Sig::Stop)?;
+                    log(fx, format!("PAUSED {psvc} before step {p}"));
+                }
                 paused = true;
-                log(fx, format!("PAUSED {psvc} before step {p}"));
                 xassert(
                     fx,
                     "reachable",
@@ -2533,11 +2575,15 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     net.heal_at_end(fx, ctx)?;
     if let Some(t) = ptimer {
         fx.join(t)?;
-        svc_sig(fx, &psvc, Sig::Cont)?;
+        for psvc in &psvcs {
+            svc_sig(fx, psvc, Sig::Cont)?;
+        }
     }
     if paused {
-        svc_sig(fx, &psvc, Sig::Cont)?;
-        log(fx, format!("RESUMED {psvc} at the end"));
+        for psvc in &psvcs {
+            svc_sig(fx, psvc, Sig::Cont)?;
+            log(fx, format!("RESUMED {psvc} at the end"));
+        }
     }
     if let Some(t) = xtimer {
         fx.join(t)?;

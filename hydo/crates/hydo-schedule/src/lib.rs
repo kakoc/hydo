@@ -55,6 +55,7 @@ mod guest;
 mod host;
 mod num;
 mod storage;
+mod target;
 
 pub use compose::{Compose, Omit, RangeItem, RangeList, ResolvedField, SeedField, WORKLOAD_KINDS};
 pub use guest::{
@@ -63,6 +64,7 @@ pub use guest::{
 };
 pub use host::{Disk, HostToken, MAX_EXPLICIT};
 pub use storage::{mix, CorruptKind, Corruption, Edit, MAX_FLIPS, MAX_LEN};
+pub use target::{binomial, component_links, subset, Selector, Shape, Target};
 
 use num::err;
 use std::fmt;

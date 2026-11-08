@@ -1,8 +1,19 @@
 # What Jepsen has that hydo lacks (design)
 
-Status: proposal, nothing built. It compares hydo, as AGENTS.md "Current state" describes it on
+Status: proposal. It compares hydo, as AGENTS.md "Current state" describes it on
 2026-11-08, with Jepsen's current sources, and proposes what to build and in which order. The
 messaging checks it ranks first are designed in [messaging.md](messaging.md).
+
+Built since: items 2 to 4 of the ranked plan in Milestone 194 (docs/HISTORY.md), with these
+differences from this proposal:
+
+- A repeated `C=` is refused. Several `N=` (or `O=`) tokens are one fault when they share the
+  window and the netem arguments.
+- A second `N=` on the same target, and a second `T=`, still replace the first, because the
+  identity corpus records that behaviour.
+- The explorer option is `--cluster-faults`, which draws both node sets and partitions.
+- A selector's index follows the selector (`nodes.majority.2`), and `G=` and `L=` stay one
+  service.
 
 Sources read (the `main` branches on 2026-11-08):
 

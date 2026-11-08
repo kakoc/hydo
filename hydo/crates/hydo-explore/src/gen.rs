@@ -60,6 +60,12 @@ pub const HVM_TJ_MAX: i64 = 1000;
 pub const REACT_SALT: u64 = 0xA5EAC7C0FFEEA5EA;
 /// The storage faults' own stream (`--storage-faults`, docs/design/storage-faults.md).
 pub const STORAGE_SALT: u64 = 0x5701A6EC0FFEE570;
+/// The cluster faults' own stream (`--cluster-faults`, Milestone 194).
+pub const CLUSTER_SALT: u64 = 0xC1B57E5C0FFEEC1B;
+/// The selectors a cluster kill or pause draws (`primary` only for a group with a probe).
+const CLUSTER_SELECTORS: [&str; 5] = ["one", "minority", "majority", "all", "primary"];
+/// The partition shapes a cluster network fault draws.
+const CLUSTER_SHAPES: [&str; 5] = ["halves", "isolate", "ring", "bridge", "primary"];
 /// How many bits a drawn G=...:flip changes, and how many bytes a drawn zero clears.
 const G_FLIPS: [i64; 4] = [1, 1, 4, 32];
 const G_LENS: [i64; 3] = [512, 4096, 65536];
@@ -143,6 +149,9 @@ pub struct Ex {
     pub more_faults: bool,
     /// `--storage-faults`: G= and L= from their own stream (STORAGE_SALT).
     pub storage_faults: bool,
+    /// `--cluster-faults` (M194): kills and pauses of a group's members and partitions of a
+    /// group, from their own stream (CLUSTER_SALT).
+    pub cluster_faults: bool,
     pub cf_range: Option<(i64, i64)>,
     pub backend: Backend,
     /// hvm: the image has a data disk / tc (hvm_backend.configure).
@@ -200,6 +209,7 @@ impl Default for Ex {
             concurrency: false,
             more_faults: false,
             storage_faults: false,
+            cluster_faults: false,
             cf_range: None,
             backend: Backend::Hvx,
             hvm_disk: false,
@@ -1051,6 +1061,144 @@ impl Ex {
         s
     }
 
+    /// `--cluster-faults` (M194): for a manifest with `groups:`, from their own stream
+    /// (CLUSTER_SALT), so every other field of a seed's schedule stays as it was, and every draw
+    /// is made whether it is used or not: a kill of a group's members (50% of the schedules; the
+    /// selector one, minority, majority, all or primary, with a drawn subset), a pause of them
+    /// (30%), and a partition of a group whose members have `addr:` (50%: halves, isolate, ring,
+    /// bridge or primary; all packets lost or delayed by 500 ms). A drawn kill, pause or partition
+    /// takes the place of the schedule's own K=, P= or N= (and a partition of its O=, which would
+    /// need the same devices).
+    pub fn add_cluster_faults(&self, mut s: S, seed: u64) -> S {
+        if !self.cluster_faults {
+            return s;
+        }
+        let Some(sp) = &self.space else {
+            return s;
+        };
+        if sp.groups.is_empty() {
+            return s;
+        }
+        let n_ = self.norders;
+        let mut t = SplitMix::new(seed ^ CLUSTER_SALT);
+        let k_on = t.below(100) < 50;
+        let k_group = t.next();
+        let k_sel = t.below(5);
+        let k_idx = t.below(8);
+        let k_at = t.rng(0, (n_ - 4).max(0));
+        let k_down = t.rng(1, 4.min(n_ - k_at).max(1));
+        let p_on = t.below(100) < 30;
+        let p_group = t.next();
+        let p_sel = t.below(5);
+        let p_idx = t.below(8);
+        let p_at = t.rng(0, (n_ - 2).max(0));
+        let p_n = t.rng(1, 3);
+        let n_on = t.below(100) < 50;
+        let n_group = t.next();
+        let n_shape = t.below(5);
+        let n_idx = t.below(8);
+        let n_a = t.rng(0, (n_ - 2).max(0));
+        let n_b = t.rng(n_a + 1, n_.min(n_a + 10).max(n_a + 1));
+        let n_loss = t.below(2) == 0;
+        let groups = &sp.groups;
+        let pick = |r: u64| &groups[(r % groups.len() as u64) as usize];
+        let sel = |g: &crate::space::SpaceGroup, i: i64, idx: i64| -> Option<String> {
+            let n = g.members.len();
+            let mut w = CLUSTER_SELECTORS[i as usize];
+            if w == "primary" && !g.primary {
+                w = "majority";
+            }
+            if w == "minority" && n < 2 {
+                w = "one";
+            }
+            let indexed = matches!(w, "one" | "minority" | "majority");
+            Some(if indexed && idx > 0 {
+                format!("{}.{w}.{idx}", g.name)
+            } else {
+                format!("{}.{w}", g.name)
+            })
+        };
+        if k_on && sp.has_fault("kill") {
+            if let Some(tg) = sel(pick(k_group), k_sel, k_idx) {
+                s.k = Some((tg, k_at, k_down));
+            }
+        }
+        if p_on && sp.has_fault("pause") {
+            if let Some(tg) = sel(pick(p_group), p_sel, p_idx) {
+                s.p = Some(Pause::Plus(tg, p_at, p_n));
+            }
+        }
+        let g = pick(n_group);
+        if n_on && sp.has_fault("network") && g.linked && g.members.len() >= 2 {
+            let n = g.members.len();
+            let mut w = CLUSTER_SHAPES[n_shape as usize];
+            if w == "primary" && !g.primary {
+                w = "isolate";
+            }
+            if (w == "ring" || w == "bridge") && n < 3 {
+                w = "halves";
+            }
+            let indexed = matches!(w, "halves" | "isolate" | "bridge");
+            let target = if indexed && n_idx > 0 {
+                format!("{}.{w}.{n_idx}", g.name)
+            } else {
+                format!("{}.{w}", g.name)
+            };
+            let kinds = if n_loss {
+                one("loss", 100)
+            } else {
+                one("delay", 500)
+            };
+            s.n = Some((target, n_a, n_b, kinds));
+            s.o = None;
+        }
+        s
+    }
+
+    /// Simpler targets for a list or a group's selector (M194): a selector shrinks towards one
+    /// member (`<g>.majority` -> `<g>.one`, `<g>.one.<i>` -> that member), a list loses a member
+    /// (two left: each alone), a partition shape becomes the isolation of one member.
+    pub fn shrink_target(&self, t: &str, net: bool) -> Vec<String> {
+        let mut out = Vec::new();
+        if net {
+            if let Some((g, shape)) = t.split_once('.') {
+                if !shape.starts_with("isolate") {
+                    out.push(format!("{g}.isolate"));
+                }
+            }
+            return out;
+        }
+        if let Some((g, sel)) = t.split_once('.') {
+            let (word, idx) = match sel.split_once('.') {
+                Some((w, i)) => (w, i.parse::<u64>().unwrap_or(0)),
+                None => (sel, 0),
+            };
+            if word == "one" {
+                let members = self
+                    .space
+                    .as_ref()
+                    .and_then(|sp| sp.groups.iter().find(|x| x.name == g))
+                    .map(|x| x.members.clone())
+                    .unwrap_or_default();
+                if !members.is_empty() {
+                    out.push(members[(idx % members.len() as u64) as usize].clone());
+                }
+            } else {
+                out.push(format!("{g}.one"));
+            }
+            return out;
+        }
+        if t.contains(',') {
+            let l: Vec<&str> = t.split(',').collect();
+            for i in 0..l.len() {
+                let mut r = l.clone();
+                r.remove(i);
+                out.push(r.join(","));
+            }
+        }
+        out
+    }
+
     /// The composition explore.py main() applies to a generated schedule.
     pub fn compose_seed(&self, strategy: &str, seed: u64, durable_only: bool) -> S {
         let mut s = self.generator(strategy, seed);
@@ -1063,6 +1211,7 @@ impl Ex {
         s = self.add_more_faults(s, seed, strategy);
         s = self.add_reactive(s, seed);
         s = self.add_storage_faults(s, seed);
+        s = self.add_cluster_faults(s, seed);
         s = self.add_freeze_call(s, seed);
         s = self.add_protocol_faults(s, seed);
         s = self.add_grpc_faults(s, seed);
@@ -1510,6 +1659,29 @@ impl Ex {
             }
         }
         self.nf_candidates(s, &mut var);
+        // M194: a list or a group's selector towards one service, a partition towards an
+        // isolation
+        if let Some((tg, at, down)) = &s.k {
+            for t2 in self.shrink_target(tg, false) {
+                let k = (t2, *at, *down);
+                var(&|t| t.k = Some(k.clone()));
+            }
+        }
+        if let Some(p) = &s.p {
+            for t2 in self.shrink_target(p.svc(), false) {
+                let p2 = match p {
+                    Pause::Plus(_, a, n) => Pause::Plus(t2, *a, *n),
+                    Pause::Timed(_, a, o, d) => Pause::Timed(t2, *a, *o, *d),
+                };
+                var(&|t| t.p = Some(p2.clone()));
+            }
+        }
+        if let Some((tg, a, b, kinds)) = &s.n {
+            for t2 in self.shrink_target(tg, true) {
+                let n = (t2, *a, *b, kinds.clone());
+                var(&|t| t.n = Some(n.clone()));
+            }
+        }
         // the storage faults: go, stay down one step, a single flip
         if let Some(z) = &s.g {
             var(&|t| t.g = None);

@@ -23,6 +23,16 @@ pub const PF_REQ_KINDS: [&str; 4] = ["status", "delay", "drop", "reset"];
 pub const PF_HOOK_KINDS: [&str; 4] = ["dup", "reorder", "late", "lost"];
 pub const PF_TCP_KINDS: [&str; 3] = ["delay", "drop", "reset"];
 
+/// A group of the manifest's `groups:` (Milestone 194): its members in order, whether it has a
+/// `primary:` probe, and whether every member has `addr:` (its links can be cut).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpaceGroup {
+    pub name: String,
+    pub members: Vec<String>,
+    pub primary: bool,
+    pub linked: bool,
+}
+
 /// An H= target: a fake's route, a proxy, or a proxy's route.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PfTarget {
@@ -51,6 +61,9 @@ pub struct Space {
     /// The services with `storage:` (G=), and those with their own file system (L=).
     pub storage_svcs: Vec<String>,
     pub own_fs_svcs: Vec<String>,
+    /// `groups:` (M194), and the services with `addr:` (a partition's ends).
+    pub groups: Vec<SpaceGroup>,
+    pub addr_svcs: Vec<String>,
 }
 
 fn arr(v: Option<&Value>) -> Vec<Value> {
@@ -90,6 +103,19 @@ impl Space {
             .filter(|s| get(s, "addr").is_some_and(truthy))
             .map(name_of)
             .collect();
+        let groups: Vec<SpaceGroup> = arr(m.get("groups"))
+            .iter()
+            .map(|g| {
+                let members: Vec<String> = arr(g.get("services")).iter().map(str_of).collect();
+                SpaceGroup {
+                    name: str_of(g.get("name").unwrap_or(&Value::Null)),
+                    linked: members.iter().all(|s| addr.contains(s)),
+                    primary: get(g, "primary").is_some_and(truthy),
+                    members,
+                }
+            })
+            .collect();
+        let addr_svcs = addr.clone();
         let mut links: Vec<String> = Vec::new();
         if addr.len() >= 2 {
             for (i, a) in addr.iter().enumerate() {
@@ -156,6 +182,8 @@ impl Space {
         Ok(Space {
             storage_svcs,
             own_fs_svcs,
+            groups,
+            addr_svcs,
             m,
             name,
             compose,
@@ -238,6 +266,16 @@ impl Space {
             k.insert(t.clone(), json!({"safe": s, "relaxed": v}));
         }
         d.insert("knobs".into(), Value::Object(k));
+        if !self.groups.is_empty() {
+            d.insert(
+                "groups".into(),
+                json!(self
+                    .groups
+                    .iter()
+                    .map(|g| format!("{}:{}", g.name, g.members.join(",")))
+                    .collect::<Vec<_>>()),
+            );
+        }
         if !self.pf_targets.is_empty() {
             d.insert(
                 "protocol_targets".into(),
@@ -354,8 +392,11 @@ impl Space {
         if !self.has_fault("clock") {
             s.t = None;
         }
-        let net_ok =
-            |x: &str| self.ported.iter().any(|p| p == x) || self.links.iter().any(|p| p == x);
+        let net_ok = |x: &str| {
+            self.ported.iter().any(|p| p == x)
+                || self.links.iter().any(|p| p == x)
+                || self.partition_ok(x)
+        };
         if s.n.as_ref().is_some_and(|n| !net_ok(&n.0)) {
             s.n = None;
         }
@@ -372,13 +413,22 @@ impl Space {
         if !s.h.is_empty() {
             s.h.retain(|h| self.pf_targets.iter().any(|t| t.name == h.target));
         }
-        if s.k.as_ref().is_some_and(|k| k.0 == "-") {
+        if s.k
+            .as_ref()
+            .is_some_and(|k| k.0 == "-" || !self.target_ok(&k.0))
+        {
             s.k = None;
         }
-        if s.p.as_ref().is_some_and(|p| p.svc() == "-") {
+        if s.p
+            .as_ref()
+            .is_some_and(|p| p.svc() == "-" || !self.target_ok(p.svc()))
+        {
             s.p = None;
         }
-        if s.x.as_ref().is_some_and(|x| x.0 == "-") {
+        if s.x
+            .as_ref()
+            .is_some_and(|x| x.0 == "-" || !self.target_ok(&x.0))
+        {
             s.x = None;
         }
         if s.g.as_ref().is_some_and(|g| {
@@ -431,6 +481,33 @@ impl Space {
         s.cq = None;
         s.x = None;
         s
+    }
+
+    /// A K=, P= or X= target this project has (M194): a plain service is left to the other
+    /// filters (as before); a list names only its services, a selector only its groups.
+    fn target_ok(&self, t: &str) -> bool {
+        if let Some((g, _)) = t.split_once('.') {
+            return self.groups.iter().any(|x| x.name == g);
+        }
+        if t.contains(',') {
+            return t.split(',').all(|x| self.svcs.iter().any(|s| s == x));
+        }
+        true
+    }
+
+    /// An N= partition this project can cut (M194): components of services with `addr:`, or a
+    /// shape over a group whose members all have `addr:`.
+    fn partition_ok(&self, t: &str) -> bool {
+        if t.contains('/') {
+            return t
+                .split('/')
+                .flat_map(|c| c.split(','))
+                .all(|x| self.addr_svcs.iter().any(|s| s == x));
+        }
+        match t.split_once('.') {
+            Some((g, _)) => self.groups.iter().any(|x| x.name == g && x.linked),
+            None => false,
+        }
     }
 
     pub fn check_sweep(&self, name: &str) -> Result<(), String> {

@@ -1,0 +1,16 @@
+# Milestone 194: faults aimed at several services or a role, and partitions, on the
+# scripted agent and engine (hydo/crates/hydo-control/tests/groups.rs). Re-record:
+# HYDO_BLESS=1 cargo test -p hydo-control --test it groups::
+loopback	disk=none | run K=n1,n3@2+2	ee5565d5db35e8b76986abcbcf6fa30c2f2ca4eb8bd18f7dbc17545132597bb6
+loopback	disk=none | run K=nodes.majority.2@2+1	505528b7fab2e63ed403e844b311e7a3f44e1755dd7a0db0b86c66e0da2daf7d
+loopback	disk=none | run K=nodes.primary@3+1	a01b5e576d976d6a5dae87fddfd993618a9958ba4e3c354c1f59f776c7b3ce1e
+loopback	disk=none | run K=deaf.primary@3+1	cb8e6686eed8f30c1a932abb3281db137f900d24acea4812a02a908b91c8a8ad
+loopback	disk=none | run P=nodes.all@1~100:400	5317ca450875b67daaf890ce8bf3e11d78afddf854419db26b72dfdeaafff46e
+loopback	disk=none | run X=nodes.one.1@2~50	429025523f93c7fb0690960c227c1c1810e5e8d193ddd7a15ed33510baf3e056
+loopback	disk=cut | run K=nodes.all@2+3 C=4	6722b4daaf02a83db81aed2d08c7c71ab8ef8e6eb7e1417208592a9df8a2a3be
+loopback	disk=cut | run K=nodes.all@2+3 C=4	recovery	056a5672672127d8693b4994fd062d93fef0c877300fc48c7e90d19dc102c97f
+loopback	disk=none | run N=nodes.ring@1-4:loss,100%	3d0c393ad0f34de6ae45819b874ce636557d0b2d7bf86a192f0873755092c057
+loopback	disk=none | run N=nodes.primary@2-5:delay,300ms	386218107da5350cd026b3edcbc08d44e0144c4e426a109d624f76bff253b0d3
+loopback	disk=none | run N=n1-n2@1-4:loss,100% N=n1-n3@1-4:loss,100%	78ebd74b50540c7cbbaec53c43ad1a4e1f22bf813de1733b1c5be2af9b78f52c
+bridge	disk=none | run N=nodes.bridge.1@1-3:loss,100%	a39128e6e9b879fe8a0372ac930ff961c4349ce9b06ddf96acdfb8f67ba56872
+bridge	disk=none | run N=n1,n2/n3@0-8:loss,100% K=n3@2+2	a548023b69dea9356418d1ac0045d2eab6ba3ff4e61a6f340ca3749614589ca7

@@ -1,0 +1,60 @@
+{
+  "format": 1,
+  "name": "groups-and-shapes",
+  "description": "a three-node cluster declared as a group with a primary probe",
+  "network": "bridge",
+  "services": [
+    {
+      "name": "n1",
+      "cmd": "/bin/node --id 1",
+      "ready": "/bin/node-ping 1",
+      "addr": "10.89.0.11"
+    },
+    {
+      "name": "n2",
+      "cmd": "/bin/node --id 2",
+      "ready": "/bin/node-ping 2",
+      "addr": "10.89.0.12"
+    },
+    {
+      "name": "n3",
+      "cmd": "/bin/node --id 3",
+      "ready": "/bin/node-ping 3",
+      "addr": "10.89.0.13"
+    },
+    {
+      "name": "proxy",
+      "cmd": "/bin/proxy",
+      "ready": "true",
+      "addr": "10.89.0.20"
+    }
+  ],
+  "groups": [
+    {
+      "name": "nodes",
+      "services": [
+        "n1",
+        "n2",
+        "n3"
+      ],
+      "primary": "/bin/node-leader",
+      "description": "the consensus members"
+    },
+    {
+      "name": "edge",
+      "services": [
+        "proxy"
+      ]
+    }
+  ],
+  "workload": {
+    "steps": 10,
+    "run": "/bin/client"
+  },
+  "invariants": [
+    {
+      "id": "acked_readable",
+      "cmd": "/bin/check"
+    }
+  ]
+}
