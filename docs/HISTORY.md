@@ -3626,7 +3626,7 @@ Branch `worktree-agent-a1012231e943edabb` from `main` = `424a443a` (M176), merge
 
 **Left** (AGENTS.md open item 63): the user's one-time setup on GitHub, crates.io (21 crates), PyPI and npm (whose entry expires if unused for two days); the first run; a ruleset that restricts tag creation would refuse the `go` job's tag; a crate new to the closure needs its first version published by hand with a token.
 
-### Milestone 187 — DONE (the KVM engine at x86-64-v3: `guest.cpu: v3` on KVM; a v3 vCPU on one kind of core of a hybrid CPU; TigerBeetle found not to run on KVM; 2026-11-08)
+### Milestone 189 — DONE (the KVM engine at x86-64-v3: `guest.cpu: v3` on KVM; a v3 vCPU on one kind of core of a hybrid CPU; TigerBeetle found not to run on KVM; 2026-11-08)
 
 Branch `worktree-agent-aab5d4ece38bf00d9` from `main` (`f25c9e90`, rebased on `62e4db08`). Design,
 every nondeterminism source and the measurements: docs/design/kvm-engine.md, "x86-64-v3".

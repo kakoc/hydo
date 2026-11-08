@@ -10,7 +10,7 @@ What a user needs to know, in short: the KVM engine runs hydo's x86_64 images on
 Linux machine where the user can open `/dev/kvm` (a cloud VM with nested virtualization, a CI
 runner, a laptop), with no kernel module and no root (`--backend kvm`). It gives the guest one
 vCPU at the x86-64-v2 level, or at x86-64-v3 (AVX2) for images with `guest.cpu: v3` on a host
-that has it (Milestone 187; images that ask for several vCPUs are refused).
+that has it (Milestone 189; images that ask for several vCPUs are refused).
 Guest time is counted in VM exits that reach the engine, not in instructions, so a stretch of
 guest code that makes no exit takes no guest time and gets no timer interrupt; a loop that spins
 without exits is resolved when it is an exact cycle of register states, and a loop that also
@@ -456,7 +456,7 @@ where the counter's flags are written and never read.
 | the PMU (RDPMC, counters) | leaf 0xA zero; KVM's PMU disabled where `KVM_CAP_PMU_CAPABILITY` allows; CR4.PCE clear | `cpuid` tests |
 | RDRAND, RDSEED | hidden; on Intel KVM makes them fault | `cpuid` tests; audit |
 | MONITOR/MWAIT, WAITPKG (TPAUSE, UMWAIT) | hidden; KVM intercepts MWAIT | `cpuid` tests |
-| XSAVE state size and features, AVX | hidden at v2 (as hvx's default); FXSAVE state only. At v3 (Milestone 187): x87, SSE and AVX in the standard format, and the sources of the table in "x86-64-v3" | `cpuid` tests |
+| XSAVE state size and features, AVX | hidden at v2 (as hvx's default); FXSAVE state only. At v3 (Milestone 189): x87, SSE and AVX in the standard format, and the sources of the table in "x86-64-v3" | `cpuid` tests |
 | stale TLB entries after a permission upgrade (spurious page faults the guest counts) | the guest kernel flushes at every change of a present entry | 4 of 100 E-core runs differed before, 0 of 150 after |
 | accessed bits cleared without a flush (reclaim decides by them; the CPU sets them again only on a TLB miss) | the guest kernel flushes the page in `ptep_clear_flush_young` (M159) | the patch (found in the review; it needs memory pressure in the guest) |
 | a thread that yields while it waits for a timeout | every `sched_yield` reads the clock (an exit) | the patch |
@@ -534,7 +534,7 @@ the stop where the host took S1).
   `xt*`; forced preemption points `pct=` instead), with hvx's images.
 - An image that asks for several vCPUs is refused by the engine itself (for `hydo run`, the
   explorer and hydo-bench alike), not run on fewer (Milestone 159). An image with `guest.cpu: v3`
-  runs at x86-64-v3 (`hydo-kvm --cpu v3`, Milestone 187) on a host whose KVM has AVX2, and is
+  runs at x86-64-v3 (`hydo-kvm --cpu v3`, Milestone 189) on a host whose KVM has AVX2, and is
   refused elsewhere with what the host lacks; `hydo doctor --backend kvm` says which.
 - A run that ends as a SPIN (a counter loop the engine proved, Milestone 161) is run again by the
   host with `spin=rewind` (`hydo run`, `hydo repro`, the explorer and hydo-bench alike), and the
@@ -553,11 +553,11 @@ the stop where the host took S1).
   `HYDO_KVM_SPIN_MS`, `HYDO_KVM_TRACE`, `HYDO_KVM_ECHO`, `HYDO_KVM_DIAG`, `HYDO_KVM_DIAG_RAM`,
   `HYDO_KVM_TRACE_UNKNOWN`; the ABI probe's `HYDO_KVM_HEADERS` (tests).
 
-## x86-64-v3 (`guest.cpu: v3`, Milestone 187)
+## x86-64-v3 (`guest.cpu: v3`, Milestone 189)
 
 Programs built for newer CPUs need AVX2 at start: TigerBeetle's release binary, the official
 Restate image, and anything compiled with `-march=x86-64-v3` stop with "illegal instruction" on a
-v2 guest. Until Milestone 187 the KVM engine refused such images; now it gives them hvx's
+v2 guest. Until Milestone 189 the KVM engine refused such images; now it gives them hvx's
 x86-64-v3 CPU (Milestone 68) on a host whose KVM has AVX2. A v2 guest is exactly what it was:
 the same CPUID table, the same vCPU state, the same fingerprints.
 
@@ -684,7 +684,7 @@ stay hvx's.
 Several vCPUs need turns of an exact length of guest work (hvx counts retired branches with the
 PMU, M66); KVM gives no instruction-exact clock, and the exit count is not one. The engine has
 one vCPU; `--vcpus` stays an hvx option (the v3 CPU level is the KVM engine's too since
-Milestone 187).
+Milestone 189).
 
 ## AMD hosts
 

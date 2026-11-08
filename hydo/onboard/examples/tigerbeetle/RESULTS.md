@@ -343,9 +343,9 @@ disk mapped, and S0 and S1 in memory: the hvx engine keeps both there), so one s
 needs a machine with about 20 GB free; `hydo explore` sizes its pool from the guest's RAM and the
 machine's available memory, and `hydo run` refuses a guest that does not fit.
 
-## On the KVM engine (Milestone 187)
+## On the KVM engine (Milestone 189)
 
-Since Milestone 187 the KVM engine runs `guest.cpu: v3` images, so the three-replica image above
+Since Milestone 189 the KVM engine runs `guest.cpu: v3` images, so the three-replica image above
 (`4dfaec44…`) was tried there (the build machine, `hydo run --backend kvm`, 8 GiB). It does not
 run: every schedule ends `ERROR boot: SPIN (guest loops without exits; run invalid)` during the
 first replica's `setup:`. `tigerbeetle format` starts, its AVX2 code runs, and it then waits for
