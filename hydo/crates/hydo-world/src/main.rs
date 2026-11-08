@@ -27,11 +27,11 @@ mod objects;
 mod rt;
 mod rules;
 mod serve;
+mod sign;
 #[cfg(feature = "tls")]
 mod tls;
 #[cfg(feature = "tls")]
 mod tls_crypto;
-mod sign;
 mod world;
 
 use std::os::unix::ffi::OsStringExt;
