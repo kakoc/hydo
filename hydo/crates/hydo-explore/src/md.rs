@@ -113,6 +113,9 @@ pub fn report(doc: &Exploration) -> String {
     }
     let mut l: Vec<String> = vec!["# Explorer report".into(), String::new()];
     table(doc, &mut l);
+    if let Some(t) = &doc.turn_sweep {
+        l.extend(turn_sweep_md(t));
+    }
     let mut by: std::collections::BTreeMap<(String, String), Vec<&Failure>> = Default::default();
     for f in &doc.failures {
         by.entry((class(f), f.signature.clone()))
@@ -242,6 +245,72 @@ pub fn report(doc: &Exploration) -> String {
         l.extend(hydo_errors::report_md_of(ek));
     }
     l.join("\n") + "\n"
+}
+
+/// `--sweep turns` (M205): the boundaries with both neighbours, then every length run.
+fn turn_sweep_md(t: &hydo_results::TurnSweep) -> Vec<String> {
+    let mut l = vec![
+        String::new(),
+        "## vCPU turn lengths (`--sweep turns`)".into(),
+        String::new(),
+        format!(
+            "The schedule `{}` ran with every turn length `q=` of a grid of {} lengths from {} to {} branches; \
+             each pair of neighbouring lengths with different verdict kinds was bisected until they were at most {} branches apart.",
+            t.base, t.grid, t.lo, t.hi, t.resolution
+        ),
+        String::new(),
+    ];
+    if t.boundaries.is_empty() {
+        l.push("No boundary: every length gave the same verdict kind.".into());
+        l.push(String::new());
+    }
+    for b in &t.boundaries {
+        l.push(format!(
+            "### Boundary between q={} ({}) and q={} ({})",
+            b.below.q, b.below.kind, b.above.q, b.above.kind
+        ));
+        l.push(String::new());
+        let fps = |p: &hydo_results::TurnPoint, i: usize| {
+            format!(
+                "`{}` / `{}`",
+                p.fp.as_deref().unwrap_or("None"),
+                b.reproductions
+                    .get(i)
+                    .and_then(|r| r.fp.as_deref())
+                    .unwrap_or("None")
+            )
+        };
+        for (i, p, cmd) in [
+            (0, &b.below, &b.below_command),
+            (1, &b.above, &b.above_command),
+        ] {
+            l.push(format!(
+                "- q={}: `{}`, fingerprint, two runs: {}",
+                p.q,
+                p.verdict.as_deref().unwrap_or("None"),
+                fps(p, i)
+            ));
+            if let Some(c) = cmd {
+                l.push(format!("  - by hand: {c}"));
+            }
+        }
+        l.push(format!(
+            "- reproduced: {}",
+            if b.reproduced { "yes" } else { "NO" }
+        ));
+        l.push(String::new());
+    }
+    l.push("| q | verdict kind | fingerprint |".into());
+    l.push("|---|---|---|".into());
+    for p in &t.points {
+        l.push(format!(
+            "| {} | {} | `{}` |",
+            p.q,
+            p.kind,
+            p.fp.as_deref().unwrap_or("None")
+        ));
+    }
+    l
 }
 
 fn branch_report(doc: &Exploration) -> String {

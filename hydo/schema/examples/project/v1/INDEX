@@ -66,3 +66,4 @@ messages-ordered-groups
 messages-measure-only
 messages-include
 cpu-cache
+test-workload

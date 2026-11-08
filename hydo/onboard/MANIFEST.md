@@ -238,6 +238,9 @@ services:                      # may be empty ([] or left out): a project that i
 provision: /bin/myapp-admin create-schema   # once, after all services are ready, before S1
 
 workload:                      # required
+  kind: system                 # system (default) or test: a test program run once (M205;
+                               #   `hydo guide flaky-tests`): steps may be 1, no fault kind is
+                               #   drawn unless faults: lists it, a failure is class test-failed
   steps: 30                    # required, 1..1000. Faults are placed at step numbers.
   run: /bin/loadgen $HYDO_FROM $HYDO_TO     # required. runs steps [HYDO_FROM, HYDO_TO);
                                #   called several times per run (once per fault-free range)
@@ -1956,6 +1959,15 @@ needs `--cpu v3` too (the report's repro line includes it). Without the key noth
 options in the same way (hvx flag `HVX_VM_CPU_CACHE`; on the KVM engine its table with the cache
 leaves). `hydo run`, `hydo repro` and `hydo explore` read it from the image's manifest, and an
 absent key by the epoch in the image's record.
+
+Several vCPUs (hvx only): `hydo run --vcpus N`, `hydo repro` and `hydo explain` take the count
+(1..8; default 1, or `HVX_EXPLORE_VCPUS`), and `--turn-margin N` sets the scheduler's turn-end
+margin. The vCPUs take turns of exactly `q=` guest branches, a host token of the schedule, so the
+turn length is in the schedule and the vCPU count is not. A run's `result.json` records both
+options (`engine.args`), so `hydo repro <run dir>` repeats them, and an exploration's "by hand"
+lines carry them. `hydo explore --vcpus N --sweep turns` searches the turn lengths of one schedule
+for the lengths where the verdict changes (`hydo guide flaky-tests`). Since M205 several vCPUs run
+with the host-call port: the engine reads the port's records at every return of a run call.
 
 Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/manifest.sh`
 (compiled), `/etc/hydo/prelude.sh` (env + shell helpers), `/etc/hydo/control` (`agent 1`: boot

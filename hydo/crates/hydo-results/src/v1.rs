@@ -1397,6 +1397,66 @@ pub struct End {
     pub summary: Summary,
 }
 
+/// A search over the vCPU turn length `q=` of one schedule (added in M205; `hydo explore
+/// --sweep turns`): a coarse grid of turn lengths, then a bisection of every pair of
+/// neighbouring lengths with different verdict kinds.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TurnSweep {
+    /// The schedule every point ran with its own `q=` (`--sweep-with`).
+    pub base: String,
+    /// The smallest and the largest turn length searched (`--turn-range`).
+    pub lo: u64,
+    pub hi: u64,
+    /// The number of lengths in the coarse grid (`--turn-points`).
+    pub grid: u64,
+    /// A boundary is narrowed until its two lengths are at most this far apart
+    /// (`--turn-resolution`).
+    pub resolution: u64,
+    /// Every turn length run, in increasing order.
+    #[serde(default)]
+    pub points: Vec<TurnPoint>,
+    /// Every pair of neighbouring lengths whose verdict kinds differ, in increasing order.
+    #[serde(default)]
+    pub boundaries: Vec<TurnBoundary>,
+}
+
+/// One turn length of a turn sweep (added in M205).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TurnPoint {
+    /// The turn length in guest branches (`q=`).
+    pub q: u64,
+    /// The schedule that ran.
+    pub schedule: String,
+    /// `ok`, `violation` or `error`.
+    pub kind: String,
+    /// The verdict line; absent when the run gave no result.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fp: Option<String>,
+    /// The run's tag in `events.jsonl` and `consoles/`.
+    pub tag: String,
+}
+
+/// Two neighbouring turn lengths with different verdict kinds (added in M205).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TurnBoundary {
+    /// The shorter turn length.
+    pub below: TurnPoint,
+    /// The longer one.
+    pub above: TurnPoint,
+    /// Both were run a second time and gave their fingerprints again.
+    pub reproduced: bool,
+    /// The second runs (below, then above).
+    #[serde(default)]
+    pub reproductions: Vec<Reproduction>,
+    /// The `hydo run` command lines of the two schedules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub below_command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub above_command: Option<String>,
+}
+
 /// `exploration.json`: an exploration's result.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Exploration {
@@ -1417,6 +1477,10 @@ pub struct Exploration {
     /// `--sweep freeze`: the trace and adaptive stages (their counts, centres, windows, rounds).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub freeze_sweep: Option<Map<String, Value>>,
+    /// `--sweep turns` (added in M205): the vCPU turn lengths tried and the boundaries between
+    /// verdicts found.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_sweep: Option<TurnSweep>,
     /// Every failing first run, in seed order.
     #[serde(default)]
     pub failures: Vec<Failure>,

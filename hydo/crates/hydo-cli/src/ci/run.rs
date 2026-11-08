@@ -481,7 +481,14 @@ impl Replayer<'_> {
             dir: Some(rel),
             ..CiReplay::default()
         };
-        let keys = match runs::try_run_to_dir(self.ctx, &b.path, b.ci.sha256.clone(), sched, &dir) {
+        let keys = match runs::try_run_to_dir(
+            self.ctx,
+            &b.path,
+            b.ci.sha256.clone(),
+            sched,
+            &dir,
+            &runs::RunOpts::default(),
+        ) {
             Err(w) => {
                 println!("hydo ci:   refused: {w}");
                 r.refused = Some(w);

@@ -1,0 +1,19 @@
+# Milestone 205: workload.kind: test, a test program run once (hydo guide flaky-tests).
+format: 1
+name: test-workload
+description: "a flaky Go test run once in one process"
+root:
+  files:
+    - {src: bin/pkg.test, dst: /bin/pkg.test, mode: "0755"}
+data:
+  dirs: [t]
+workload:
+  kind: test
+  steps: 1
+  run: |
+    [ "$HYDO_FROM" = 0 ] || exit 0
+    cd /data/t && /bin/pkg.test -test.count=2 -test.v > out 2>&1
+    echo 0 >> $HYDO_ACKED
+invariants:
+  - id: test.passes
+    cmd: "! grep -q -- '^--- FAIL' /data/t/out"

@@ -423,6 +423,18 @@ const SCENARIOS: &[(&str, &[&str])] = &[
         ],
     ),
     ("stack_sweep_tail", &["--sweep", "tail"]),
+    // M205: the turn-length search on a scripted boundary between q=18750 and q=18751
+    (
+        "turn_sweep",
+        &[
+            "--sweep",
+            "turns",
+            "--vcpus",
+            "2",
+            "--sweep-with",
+            "disk=none dseed=8363 | run",
+        ],
+    ),
     (
         "stack_sweep_frontkill",
         &["--sweep", "frontkill", "--timing"],
@@ -843,6 +855,18 @@ mod engine {
                 "HYDO-ORACLE: VIOLATION stale read order={}",
                 after(after(oo.unwrap(), '@', 1), '-', 0)
             );
+        }
+        // the turn sweep's schedules (M205; dseed=8363, which no generator draws): the shape of
+        // nats-server's flaky test on two vCPUs, passing with turns up to 18,700 branches
+        if host.split_whitespace().any(|t| t == "dseed=8363") {
+            if let Some(q) = re(r"\bq=(\d+)").captures(host) {
+                let q: u64 = q[1].parse().unwrap();
+                verdict = if q <= 18750 {
+                    "HYDO-ORACLE: OK pass=2 of 2".into()
+                } else {
+                    "HYDO-ORACLE: VIOLATION [ats.test_passes] pass=1 fail=1 3 vs 2".into()
+                };
+            }
         }
         // properties: a failed always-property for clock jumps backwards, an eventually with a timing
         let ok_e = !oo.is_some_and(|ov| ov.contains("delay"));

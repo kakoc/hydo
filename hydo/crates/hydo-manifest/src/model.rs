@@ -386,6 +386,10 @@ choice!(
     Network { Loopback = "loopback", Bridge = "bridge" }
 );
 choice!(
+    /// What a workload is: a system under a stream of requests, or a test program (M205).
+    WorkloadKind { System = "system", Test = "test" }
+);
+choice!(
     /// The guest CPU level (x86_64 only).
     CpuLevel { V2 = "v2", V3 = "v3" }
 );
@@ -932,6 +936,13 @@ pub struct Mount {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, expecting = "a mapping")]
 pub struct Workload {
+    /// `system` (the default): the workload drives a system through numbered steps, and faults
+    /// are placed at steps. `test` (added in M205): the workload runs a test program (a unit or
+    /// integration test, often once, in step 0); the explorer then takes one step, draws no
+    /// service faults unless `faults:` lists them, and classes a failure as `test-failed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "system"))]
+    pub kind: Option<Param<WorkloadKind>>,
     /// Faults are placed at step numbers (1..1000; with test commands: rounds, default 20).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub steps: Option<i64>,

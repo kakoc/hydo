@@ -6,6 +6,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds 1-200] [--strategy random|
        --image IMG --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm|kvm]
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
        [--freeze-call] [--protocol-faults] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
+       [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
        [--storage-faults] ... (explore.py's options)";
@@ -70,6 +71,12 @@ pub struct Args {
     pub no_compose: bool,
     pub bursts: bool,
     pub turn_margin: Option<i64>,
+    /// `--sweep turns` (M205): the turn lengths searched, `LO-HI`.
+    pub turn_range: String,
+    /// `--sweep turns`: the coarse grid's size.
+    pub turn_points: i64,
+    /// `--sweep turns`: a boundary is narrowed until its lengths are at most this far apart.
+    pub turn_resolution: i64,
     pub ram_mib: Option<i64>,
     pub known_errors: Option<String>,
     pub errors: Option<String>,
@@ -136,6 +143,9 @@ impl Default for Args {
             no_compose: false,
             bursts: false,
             turn_margin: None,
+            turn_range: crate::turns::RANGE.into(),
+            turn_points: crate::turns::POINTS as i64,
+            turn_resolution: crate::turns::RESOLUTION as i64,
             ram_mib: None,
             known_errors: None,
             errors: None,
@@ -168,7 +178,7 @@ const FLAGS: [&str; 18] = [
     "bursts",
 ];
 
-const VALUED: [&str; 40] = [
+const VALUED: [&str; 43] = [
     "seeds",
     "workers",
     "image",
@@ -202,6 +212,9 @@ const VALUED: [&str; 40] = [
     "cpu",
     "vcpus",
     "turn-margin",
+    "turn-range",
+    "turn-points",
+    "turn-resolution",
     "ram-mib",
     "known-errors",
     "errors",
@@ -342,6 +355,9 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "cpu" => a.cpu = Some(choice("cpu", v, &["v2", "v3"])?),
             "vcpus" => a.vcpus = int("vcpus", v)?,
             "turn-margin" => a.turn_margin = Some(int("turn-margin", v)?),
+            "turn-range" => a.turn_range = val,
+            "turn-points" => a.turn_points = int("turn-points", v)?,
+            "turn-resolution" => a.turn_resolution = int("turn-resolution", v)?,
             "ram-mib" => a.ram_mib = Some(int("ram-mib", v)?),
             "known-errors" => a.known_errors = Some(val),
             "errors" => a.errors = Some(choice("errors", v, &["report", "fail"])?),

@@ -91,8 +91,17 @@ pub const KNOWN_INV: &[&str] = &[
     "poll",
 ];
 pub const LIVE_ANCHORS: &[&str] = &["heal", "start"];
-pub(crate) const KNOWN_WORKLOAD: &[&str] =
-    &["steps", "run", "retry", "process", "timeout", "description"];
+pub(crate) const KNOWN_WORKLOAD: &[&str] = &[
+    "kind",
+    "steps",
+    "run",
+    "retry",
+    "process",
+    "timeout",
+    "description",
+];
+/// `workload.kind` (M205).
+pub const WORKLOAD_KINDS: &[&str] = &["system", "test"];
 pub(crate) const KNOWN_DATA: &[&str] = &["size_mib", "mount", "dirs", "description"];
 pub(crate) const KNOWN_ROOT: &[&str] = &[
     "size_mib",
@@ -576,6 +585,13 @@ pub fn validate(m: &mut Value) -> R<()> {
         return Err(err("workload.steps: between 1 and 1000"));
     }
     need(&wl, "run", "workload", Typ::Str)?;
+    let kind = obj_get(&wl, "kind").cloned().unwrap_or(Value::Null);
+    if !(kind.is_null() || in_strs(&kind, WORKLOAD_KINDS)) {
+        return Err(err(format!(
+            "workload.kind: system or test (got {})",
+            repr(&kind)
+        )));
+    }
     let invs = match obj_get(m, "invariants") {
         Some(x) if truthy(x) => x.clone(),
         _ => Value::Array(Vec::new()),

@@ -1584,6 +1584,10 @@ impl Ex {
         if relaxed && (self.knob_rule_any || s.disk == "cut" || s.l.is_some()) {
             return "unsafe-knob";
         }
+        // M205: a test program (workload.kind: test) failed with no fault that explains it
+        if self.space.as_ref().is_some_and(|sp| sp.test) {
+            return "test-failed";
+        }
         "durable-defaults"
     }
 

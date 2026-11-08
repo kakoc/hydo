@@ -1162,6 +1162,25 @@
     "Workload": {
       "type": "object",
       "properties": {
+        "kind": {
+          "description": "`system` (the default): the workload drives a system through numbered steps, and faults\nare placed at steps. `test` (added in M205): the workload runs a test program (a unit or\nintegration test, often once, in step 0); the explorer then takes one step, draws no\nservice faults unless `faults:` lists them, and classes a failure as `test-failed`.",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorkloadKind"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "system"
+        },
         "steps": {
           "description": "Faults are placed at step numbers (1..1000; with test commands: rounds, default 20).",
           "type": [
@@ -1224,6 +1243,14 @@
         }
       },
       "additionalProperties": false
+    },
+    "WorkloadKind": {
+      "description": "What a workload is: a system under a stream of requests, or a test program (M205).",
+      "type": "string",
+      "enum": [
+        "system",
+        "test"
+      ]
     },
     "Knob": {
       "type": "object",

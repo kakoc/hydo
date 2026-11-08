@@ -9,7 +9,7 @@
 //! with the stack's names and step count gives the stack explorer's schedules.
 
 use crate::gen::Ex;
-use crate::sched::{KV, S};
+use crate::sched::{Pause, KV, S};
 use hydo_manifest::py::{int_of, str_of, truthy};
 use serde_json::{json, Map, Value};
 use std::path::Path;
@@ -64,6 +64,10 @@ pub struct Space {
     /// `groups:` (M195), and the services with `addr:` (a partition's ends).
     pub groups: Vec<SpaceGroup>,
     pub addr_svcs: Vec<String>,
+    /// `workload.kind: test` (M205): a test program, often run once. The generators then draw
+    /// as for 4 steps and every fault's step is folded into the workload's own steps; no fault
+    /// kind is drawn unless `faults:` lists it; a failure is in the class `test-failed`.
+    pub test: bool,
 }
 
 fn arr(v: Option<&Value>) -> Vec<Value> {
@@ -137,13 +141,21 @@ impl Space {
             .and_then(|w| w.get("steps"))
             .and_then(int_of)
             .unwrap_or(0) as i64;
-        if steps < 4 {
+        let test = m
+            .get("workload")
+            .and_then(|w| w.get("kind"))
+            .and_then(Value::as_str)
+            == Some("test");
+        if steps < 4 && !(test && steps >= 1) {
             return Err(format!(
-                "manifest_space: workload.steps={steps}; the generators need at least 4 steps"
+                "manifest_space: workload.steps={steps}; the generators need at least 4 steps \
+                 (a workload that runs a test program takes fewer with workload.kind: test)"
             ));
         }
         let faults: Vec<String> = match m.get("faults") {
             Some(v) if truthy(v) => arr(Some(v)).iter().map(str_of).collect(),
+            // a test program: only the timing streams the options add (--timing, --turns, ...)
+            _ if test => Vec::new(),
             _ => FAULT_KINDS.iter().map(|s| s.to_string()).collect(),
         };
         let mut knobs = Vec::new();
@@ -180,6 +192,7 @@ impl Space {
             .map(|(n, _)| n.clone())
             .collect();
         Ok(Space {
+            test,
             storage_svcs,
             own_fs_svcs,
             groups,
@@ -352,7 +365,12 @@ impl Space {
             dash()
         };
         ex.pause_svcs = ex.svcs.clone();
-        ex.norders = self.steps;
+        // a test workload's few steps: drawn as for 4, folded into its own (restrict)
+        ex.norders = if self.test {
+            self.steps.max(4)
+        } else {
+            self.steps
+        };
         let pairs: Vec<(String, KV)> = self
             .knobs
             .iter()
@@ -480,7 +498,62 @@ impl Space {
         }
         s.cq = None;
         s.x = None;
+        if self.test {
+            self.fold_steps(&mut s);
+        }
         s
+    }
+
+    /// A test workload (M205): the generators drew steps as for 4 or more; every fault's step is
+    /// folded into the workload's own (0..=steps; a cut 1..=steps), and a window or a down time
+    /// shortened to end by the last step. Idempotent: a step already inside is kept.
+    fn fold_steps(&self, s: &mut S) {
+        let n = self.steps.max(1);
+        let at = |v: i64| v.rem_euclid(n + 1);
+        if let Some(c) = s.c.as_mut() {
+            *c = 1 + (*c - 1).rem_euclid(n);
+        }
+        if let Some(t) = s.t.as_mut() {
+            t.0 = at(t.0);
+        }
+        if let Some(k) = s.k.as_mut() {
+            k.1 = at(k.1);
+            k.2 = k.2.clamp(1, (n - k.1).max(1));
+        }
+        if let Some(p) = s.p.as_mut() {
+            match p {
+                Pause::Plus(_, a, d) => {
+                    *a = at(*a);
+                    *d = (*d).clamp(1, (n - *a).max(1));
+                }
+                Pause::Timed(_, a, _, _) => *a = at(*a),
+            }
+        }
+        if let Some(w) = s.n.as_mut() {
+            w.1 = at(w.1);
+            w.2 = w.2.clamp(w.1 + 1, n.max(w.1 + 1));
+        }
+        if let Some(w) = s.o.as_mut() {
+            w.1 = at(w.1);
+            w.2 = w.2.clamp(w.1 + 1, n.max(w.1 + 1));
+        }
+        if let Some(f) = s.f.as_mut() {
+            f.step = at(f.step);
+        }
+        for h in s.h.iter_mut() {
+            h.a = at(h.a);
+            h.b = h.b.clamp(h.a + 1, n.max(h.a + 1));
+        }
+        if let Some(g) = s.g.as_mut() {
+            g.at = at(g.at);
+        }
+        if let Some(l) = s.l.as_mut() {
+            l.1 = at(l.1);
+            l.2 = l.2.clamp(1, (n - l.1).max(1));
+        }
+        for a in s.a.iter_mut() {
+            a.at = at(a.at);
+        }
     }
 
     /// A K=, P= or X= target this project has (M195): a plain service is left to the other

@@ -106,6 +106,101 @@ pub fn engine_args(image: &Path, ram: Option<u64>, cpu: Option<String>, vcpus: u
     a
 }
 
+/// The vCPU options of `hydo run`, `hydo repro` and `hydo explain` (M205): `--vcpus N` (hvx
+/// only; default `HVX_EXPLORE_VCPUS`, else 1) and `--turn-margin N` (the in-kernel scheduler's
+/// turn-end margin, M85; hvx with several vCPUs). They become engine arguments, which the run's
+/// result.json records (`engine.args`), so `hydo repro <run dir>` runs with them again. The
+/// turn lengths themselves are schedule tokens (`q=`, `qs=`, `qb=`, `qm=`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RunOpts {
+    /// None: not given (one vCPU).
+    pub vcpus: Option<u32>,
+    pub turn_margin: Option<u64>,
+}
+
+/// The vCPU and turn options' lines of the commands' help texts.
+pub const RUN_OPTS_HELP: &str =
+    "  --vcpus N        run the guest on N vCPUs (hvx only, 1..8; default 1, or HVX_EXPLORE_VCPUS);
+                   the vCPUs take turns of exactly the schedule's q= guest branches (default 2^20)
+  --turn-margin N  the in-kernel scheduler's turn-end margin in branches (hvx, several vCPUs)";
+
+impl RunOpts {
+    /// Take `--vcpus N` and `--turn-margin N` from `args`; dies on a bad value. Without
+    /// `--vcpus`, `HVX_EXPLORE_VCPUS` (which the engine read on its own before M205) names the
+    /// count, so that the run records it.
+    pub fn take(ctx: &Ctx, args: &mut Vec<String>) -> RunOpts {
+        let num = |flag: &str, v: &str| -> u64 {
+            v.parse()
+                .unwrap_or_else(|_| die(&format!("{flag} {v}: not a whole number")))
+        };
+        let vcpus = take(args, "--vcpus")
+            .map(|v| num("--vcpus", &v))
+            .or_else(|| {
+                ctx.config
+                    .env
+                    .nonempty(hydo_config::registry::HVX_EXPLORE_VCPUS)
+                    .map(|v| num(hydo_config::registry::HVX_EXPLORE_VCPUS, &v))
+            });
+        let turn_margin = take(args, "--turn-margin").map(|v| num("--turn-margin", &v));
+        let o = RunOpts {
+            vcpus: vcpus.map(|n| n.min(u32::MAX as u64) as u32),
+            turn_margin,
+        };
+        if let Err(e) = o.check(ctx.platform, ctx.kvm) {
+            die(&e);
+        }
+        o
+    }
+
+    /// Whether this platform's engine can run them (`kvm`: Linux's KVM engine).
+    pub fn check(&self, platform: Platform, kvm: bool) -> Result<(), String> {
+        let n = self.vcpus.unwrap_or(1);
+        if !(1..=8).contains(&n) {
+            return Err(format!(
+                "--vcpus {n}: the vCPU count must be 1..8 (hvx's HVX_MAX_VCPUS)"
+            ));
+        }
+        if n > 1 && (platform == Platform::Mac || kvm) {
+            let e = if kvm { "KVM" } else { "Mac" };
+            return Err(format!(
+                "--vcpus {n}: the {e} engine runs one vCPU (several vCPUs need the hvx engine on Linux)"
+            ));
+        }
+        if let Some(m) = self.turn_margin {
+            if n < 2 || !(8..=(1 << 20)).contains(&m) {
+                return Err(format!(
+                    "--turn-margin {m}: needs --vcpus N > 1 and a value in [8, 2^20]"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// The engine arguments of `image` with these options.
+    pub fn eargs(&self, image: &Path) -> Vec<String> {
+        let mut a = engine_args(image, None, None, self.vcpus.unwrap_or(1) as u64);
+        if let Some(m) = self.turn_margin {
+            a.push("--turn-margin".into());
+            a.push(m.to_string());
+        }
+        a
+    }
+
+    /// The options in recorded engine arguments (a run's `engine.args`).
+    pub fn of_eargs(eargs: &[String]) -> RunOpts {
+        let get = |f: &str| {
+            eargs
+                .windows(2)
+                .find(|w| w[0] == f)
+                .and_then(|w| w[1].parse::<u64>().ok())
+        };
+        RunOpts {
+            vcpus: get("--vcpus").filter(|n| *n > 1).map(|n| n as u32),
+            turn_margin: get("--turn-margin"),
+        }
+    }
+}
+
 /// Engine options (as argv words) -> a BootSpec.
 fn spec_from_args(
     eargs: &[String],
@@ -205,10 +300,16 @@ pub fn controlled_engine(
             (Arc::new(k), spec)
         }
         Platform::Linux => {
+            // M205: `--turn-margin N` (an engine argument of `hydo run`) is the engine's
+            // HVX_TURN_MARGIN, as the explorer passes it
+            let extra_env = RunOpts::of_eargs(eargs)
+                .turn_margin
+                .map(|m| vec![format!("{}={m}", hydo_config::registry::HVX_TURN_MARGIN)])
+                .unwrap_or_default();
             let hvx = Hvx {
                 engine: hvxenv::engine(ctx),
                 hvx_run: Some(ctx.libexec().join("hvx-run")),
-                extra_env: Vec::new(),
+                extra_env,
                 env: hvxenv::tool_env(ctx),
                 config: ctx.config.env.clone(),
             };
@@ -236,6 +337,9 @@ pub fn controlled_engine(
         Platform::Mac => {
             let kernel = mac_kernel_for(ctx, image, quiet);
             let spec = spec_from_args(eargs, image, kernel, None, outdir);
+            if spec.vcpus != 1 {
+                die("the Mac engine runs one vCPU (--vcpus needs hvx)");
+            }
             (
                 Arc::new(Hvm::for_release(&ctx.root, ctx.config.env.clone())),
                 spec,
@@ -531,8 +635,9 @@ pub fn run_to_dir(
     image_sha: Option<String>,
     sched: &str,
     outdir: &Path,
+    opts: &RunOpts,
 ) -> Option<hydo_results::Run> {
-    try_run_to_dir(ctx, image, image_sha, sched, outdir)
+    try_run_to_dir(ctx, image, image_sha, sched, outdir, opts)
         .unwrap_or_else(|w| die(&format!("not run (no VM was started): {w}")))
 }
 
@@ -544,8 +649,9 @@ pub fn try_run_to_dir(
     image_sha: Option<String>,
     sched: &str,
     outdir: &Path,
+    opts: &RunOpts,
 ) -> Result<Option<hydo_results::Run>, String> {
-    let eargs = engine_args(image, None, None, 1);
+    let eargs = opts.eargs(image);
     let (r, _) = run_engine_try(ctx, image, sched, outdir, &eargs, true, &Policy::Schedule)?;
     let Some(r) = r else {
         return Ok(None);
@@ -617,7 +723,7 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     if argv.iter().any(|a| a == "-h" || a == "--help") {
         println!(
             "usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE] \
-             [--no-diagnose]{}\n  runs one schedule from a fresh boot, e.g. hydo run \"disk=cut | run C=12 \
+             [--no-diagnose] [--vcpus N] [--turn-margin N]{}\n{RUN_OPTS_HELP}\n  runs one schedule from a fresh boot, e.g. hydo run \"disk=cut | run C=12 \
              R=everysec\".\n  IMG defaults to the one image `hydo build` wrote in ./hydo-out (or ./.hydo). \
              The run's\n  directory (result.json, consoles) is printed; `hydo repro <run dir>` repeats it.\n  \
              The exit status is 0 whenever the run finished, whatever its verdict (OK, VIOLATION or\n  \
@@ -641,13 +747,14 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         }
         None => false,
     };
+    let opts = RunOpts::take(ctx, &mut args);
     let image = find_image(ctx, &mut args);
     if args.len() != 1 {
-        die("usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE]   e.g. hydo run \"disk=cut | run C=12 R=everysec\"");
+        die("usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE] [--vcpus N] [--turn-margin N]   e.g. hydo run \"disk=cut | run C=12 R=everysec\"");
     }
     let sched = args[0].clone();
     let outdir = outdir.map(PathBuf::from).unwrap_or_else(new_run_dir);
-    let eargs = engine_args(&image, None, None, 1);
+    let eargs = opts.eargs(&image);
     if let Ok(Some(r)) = hydo_engine::image::image_record(&image) {
         if r.epoch != hydo_image::EPOCH {
             println!(
@@ -839,19 +946,26 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
         image = ctx.guest().join(image);
     }
     let e = &doc.engine;
-    let eargs = engine_args(
+    let mut eargs = engine_args(
         &image,
         Some(e.ram_mib.unwrap_or(1024)),
         Some(e.cpu.clone().unwrap_or_else(|| "v2".into())),
         e.vcpus.unwrap_or(1),
     );
+    // M205: the exploration's turn margin (recorded in its engine arguments)
+    if let Some(m) = RunOpts::of_eargs(e.args.as_deref().unwrap_or(&[])).turn_margin {
+        eargs.push("--turn-margin".into());
+        eargs.push(m.to_string());
+    }
     let mut out = Vec::new();
     for f in &doc.failures {
         out.push(ReproItem {
-            label: format!(
-                "seed {}",
-                f.run.seed.map(|s| s.to_string()).unwrap_or_default()
-            ),
+            // a turn sweep's failure has no seed: its tag names the turn length (M205)
+            label: match (f.run.seed, f.run.tag.as_deref()) {
+                (Some(s), _) => format!("seed {s}"),
+                (None, Some(t)) => t.to_string(),
+                (None, None) => "seed ".to_string(),
+            },
             image: image.clone(),
             sched: f.run.schedule.clone(),
             fp: f.run.fingerprints.fp.clone(),
@@ -1385,5 +1499,39 @@ mod tests {
              with the host's checks, as result.json has it; the RESULT line above has the \
              guest's checks only)"
         );
+    }
+
+    /// M205: `--vcpus` and `--turn-margin` become engine arguments, and a run's recorded
+    /// arguments give them back (`hydo repro <run dir>`, `hydo explain <run dir>`).
+    #[test]
+    fn the_vcpu_options_go_through_the_recorded_engine_arguments() {
+        use super::{Platform, RunOpts};
+        let o = RunOpts {
+            vcpus: Some(2),
+            turn_margin: Some(160),
+        };
+        let a = ["--ram-mib", "2048", "--vcpus", "2", "--turn-margin", "160"].map(String::from);
+        assert_eq!(RunOpts::of_eargs(&a), o);
+        assert_eq!(RunOpts::of_eargs(&[]), RunOpts::default());
+        // one vCPU is the default, written or not
+        let one = ["--vcpus", "1"].map(String::from);
+        assert_eq!(RunOpts::of_eargs(&one), RunOpts::default());
+        assert!(o.check(Platform::Linux, false).is_ok());
+        assert!(o
+            .check(Platform::Linux, true)
+            .unwrap_err()
+            .contains("KVM engine runs one vCPU"));
+        assert!(o
+            .check(Platform::Mac, false)
+            .unwrap_err()
+            .contains("Mac engine"));
+        let bad = |v, m| RunOpts {
+            vcpus: Some(v),
+            turn_margin: m,
+        };
+        assert!(bad(9, None).check(Platform::Linux, false).is_err());
+        assert!(bad(0, None).check(Platform::Linux, false).is_err());
+        assert!(bad(1, Some(160)).check(Platform::Linux, false).is_err());
+        assert!(bad(2, Some(4)).check(Platform::Linux, false).is_err());
     }
 }

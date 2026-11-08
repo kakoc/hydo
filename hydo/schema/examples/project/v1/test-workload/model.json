@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "name": "test-workload",
+  "description": "a flaky Go test run once in one process",
+  "root": {
+    "files": [
+      {
+        "src": "bin/pkg.test",
+        "dst": "/bin/pkg.test",
+        "mode": "0755"
+      }
+    ]
+  },
+  "data": {
+    "dirs": [
+      "t"
+    ]
+  },
+  "workload": {
+    "kind": "test",
+    "steps": 1,
+    "run": "[ \"$HYDO_FROM\" = 0 ] || exit 0\ncd /data/t && /bin/pkg.test -test.count=2 -test.v > out 2>&1\necho 0 >> $HYDO_ACKED\n"
+  },
+  "invariants": [
+    {
+      "id": "test.passes",
+      "cmd": "! grep -q -- '^--- FAIL' /data/t/out"
+    }
+  ]
+}

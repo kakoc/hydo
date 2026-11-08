@@ -158,6 +158,10 @@ struct Ctl {
     on: bool,
     start: u8,
     capped: bool,
+    /// M205: the last run call was ended early only for the host-call port (several vCPUs);
+    /// `hc_quiet` counts such calls since the last stop.
+    hc_capped: bool,
+    hc_quiet: u32,
     boot_s1: bool,
     wdone: u8,
     cut: bool,
@@ -177,6 +181,8 @@ impl Ctl {
             on: false,
             start: 0,
             capped: false,
+            hc_capped: false,
+            hc_quiet: 0,
             boot_s1: false,
             wdone: 0,
             cut: false,
@@ -1723,8 +1729,19 @@ impl Core {
     fn run_call(&mut self, b: &Boot) -> Result<u32, ()> {
         let vm = b.vm();
         if self.c.on {
-            let cap = self.ctl_cap();
+            let mut cap = self.ctl_cap();
             self.c.capped = cap != 0 && (self.budget == 0 || cap < self.budget);
+            // M205: with several vCPUs the port's records are taken only when a run call returns
+            // (run_until_any), so the call is ended often enough that the 64 KiB buffer cannot
+            // fill in between (each 4-byte OUT is one exit). Such a return is a stop only when it
+            // brought records, or at every HC_SMP_QUIET-th one: the cadence of the module's own
+            // returns without the cap. No run with several vCPUs and the port gave a result before
+            // M205, so this moves no recorded value.
+            self.c.hc_capped = hc_smp_cap(self.o.vcpus, vm.hc, self.c.capped, cap, self.budget);
+            if self.c.hc_capped {
+                cap = HC_SMP_CAP;
+                self.c.capped = true;
+            }
             let mut c = hvx_run_ctl {
                 max_insns: if self.c.capped { cap } else { self.budget },
                 ..Default::default()
@@ -1816,18 +1833,52 @@ impl Core {
                 return -1;
             }
             // M138: a host-call record ended the run call: take it, stop, and go on
-            let hostcall = reason == HVX_EXIT_HOSTCALL;
+            let mut hostcall = reason == HVX_EXIT_HOSTCALL;
             if hostcall && self.hc_drain(b).is_err() {
                 return -1;
             }
-            let reason = if hostcall { HVX_EXIT_THROTTLE } else { reason };
+            // M205: with several vCPUs the module's in-kernel scheduler does not end the run
+            // call at a record (it keeps the vCPUs' turns exact), so the records wait in the
+            // port's buffer until the call returns at a turn or budget boundary, a point that is
+            // a pure function of the guest's execution. Take them at every return, as the
+            // console is taken, and stop as for a record. Before M205 they were taken only at a
+            // HOSTCALL return, which never comes with several vCPUs: the agent's first line never
+            // reached the host and the run waited until its wall limit.
+            if !hostcall && self.o.vcpus > 1 && b.vm().hc && reason == HVX_EXIT_THROTTLE {
+                let n0 = b.pbuf.len();
+                if self.hc_drain(b).is_err() {
+                    return -1;
+                }
+                hostcall = b.pbuf.len() > n0;
+            }
+            let reason = if reason == HVX_EXIT_HOSTCALL {
+                HVX_EXIT_THROTTLE
+            } else {
+                reason
+            };
             self.padd(Ph::Drain, pht);
             if self.o.retlog {
                 self.retlog(b, reason);
             }
+            // M205: a return that only the port's cap made is a cadence stop at every
+            // HC_SMP_QUIET-th one (the module's own return without the cap)
+            let hc_cadence = self.c.on
+                && self.c.hc_capped
+                && reason == HVX_EXIT_THROTTLE
+                && !hostcall
+                && !self.ctl_due()
+                && {
+                    self.c.hc_quiet += 1;
+                    self.c.hc_quiet >= HC_SMP_QUIET
+                };
             if self.c.on
-                && (hostcall || !self.c.capped || reason != HVX_EXIT_THROTTLE || self.ctl_due())
+                && (hostcall
+                    || hc_cadence
+                    || !self.c.capped
+                    || reason != HVX_EXIT_THROTTLE
+                    || self.ctl_due())
             {
+                self.c.hc_quiet = 0;
                 let why = if hostcall {
                     "hostcall"
                 } else if reason != HVX_EXIT_THROTTLE {
@@ -2695,6 +2746,18 @@ fn check_restored(
 pub const HC_TOKEN: &str = "hydo.hc=1";
 /// M138: the byte typed on the serial input to wake an agent that reads its lines from the port.
 const HC_DOORBELL: u8 = 0x07;
+/// M205: the most exits one run call may retire with several vCPUs and the host-call port: at
+/// most 32 KiB of records (one 4-byte OUT per exit), half the module's buffer (HVX_HC_SZ).
+const HC_SMP_CAP: u64 = 8192;
+/// M205: whether a run call with several vCPUs and the host-call port is ended at HC_SMP_CAP
+/// exits: when the port is there, no earlier stop is due (`capped` with a smaller `cap`) and the
+/// run budget (`budget`, 0 = none) is not smaller.
+fn hc_smp_cap(vcpus: u32, hc: bool, capped: bool, cap: u64, budget: u64) -> bool {
+    vcpus > 1 && hc && (!capped || cap > HC_SMP_CAP) && (budget == 0 || HC_SMP_CAP < budget)
+}
+/// M205: HC_SMP_CAP * HC_SMP_QUIET is the module's own most exits per run call
+/// (HVX_MAX_INKERNEL_EXITS, 2^16), so quiet guests stop as often as without the cap.
+const HC_SMP_QUIET: u32 = 8;
 
 const PMU_NOTE: &str = "hvx_stack_verify: no usable PMU on this host; using the exit-count clock";
 
@@ -3556,5 +3619,26 @@ mod tests {
         assert_eq!(super::CONSOLE_FULL_MARK, "hvx: console full");
         assert!(n.contains("wrote 70000 bytes"));
         assert!(n.contains("first 65536"));
+    }
+
+    /// M205: with several vCPUs and the host-call port, a run call ends at HC_SMP_CAP exits
+    /// (so the port's buffer cannot fill between two reads), and only there; one vCPU, a VM
+    /// without the port, an earlier stop or a smaller run budget keep the call as before.
+    #[test]
+    fn several_vcpus_with_the_port_end_their_calls_often_enough() {
+        use super::{hc_smp_cap, HC_SMP_CAP, HC_SMP_QUIET};
+        // at most half the port's buffer between two reads, one 4-byte OUT per exit
+        assert!(HC_SMP_CAP as usize * 4 <= crate::abi::HVX_HC_SZ / 2);
+        // quiet guests stop at the module's own cadence (HVX_MAX_INKERNEL_EXITS)
+        assert_eq!(HC_SMP_CAP * HC_SMP_QUIET as u64, 1 << 16);
+        assert!(hc_smp_cap(2, true, false, 0, 0));
+        assert!(hc_smp_cap(8, true, true, HC_SMP_CAP + 1, 0));
+        assert!(hc_smp_cap(2, true, false, 0, HC_SMP_CAP + 1));
+        // one vCPU: a record ends the call itself (M138); no port: nothing to read
+        assert!(!hc_smp_cap(1, true, false, 0, 0));
+        assert!(!hc_smp_cap(2, false, false, 0, 0));
+        // an earlier send, or a smaller run budget, ends the call first
+        assert!(!hc_smp_cap(2, true, true, 100, 0));
+        assert!(!hc_smp_cap(2, true, false, 0, 16));
     }
 }

@@ -130,7 +130,26 @@ impl Cx {
             a.push("--cpu-cache".into());
             a.push("on".into());
         }
+        // M205: recorded with the others (`hydo repro` and the result cache's key take it); the
+        // engine gets it as HVX_TURN_MARGIN (make_pool)
+        if let Some(tm) = self.a.turn_margin {
+            a.push("--turn-margin".into());
+            a.push(tm.to_string());
+        }
         a
+    }
+
+    /// The vCPU options of `hydo run` that run a schedule as this exploration runs it (M205):
+    /// `--vcpus N` and `--turn-margin N`, each followed by a space; empty for one vCPU.
+    fn vcpu_words(&self) -> String {
+        let mut w = String::new();
+        if self.vcpus > 1 {
+            w.push_str(&format!("--vcpus {} ", self.vcpus));
+        }
+        if let Some(tm) = self.a.turn_margin {
+            w.push_str(&format!("--turn-margin {tm} "));
+        }
+        w
     }
 
     /// explore.py `by_hand`: the command line that runs one schedule: `hydo run` (M107 when
@@ -145,8 +164,11 @@ impl Cx {
         // the KVM engine's runs are repeated on KVM (since 0.3.0; hvx's default would need the
         // module and sudo on a machine that has only /dev/kvm)
         let backend = if self.kvm { "--backend kvm " } else { "" };
+        // M205: with the vCPU count and turn margin, so that the line runs the same schedule
+        // (the turn lengths are in the schedule: q=)
         format!(
-            "`hydo run {backend}--image {} \"{}\"`",
+            "`hydo run {backend}{}--image {} \"{}\"`",
+            self.vcpu_words(),
             img.display(),
             sched
         )
@@ -450,6 +472,14 @@ fn setup(a: Args, env: &Env) -> Cx {
         die(
             "hydo explore: --turns needs --vcpus N > 1 (turn tokens on a one-vCPU VM are an ERROR)",
         );
+    }
+    if a.sweep.as_deref() == Some("turns") {
+        if a.vcpus < 2 {
+            die("hydo explore: --sweep turns needs --vcpus N > 1 (the turn length q= exists only with several vCPUs)");
+        }
+        if let Err(e) = crate::turns::parse_range(&a.turn_range) {
+            die(&format!("hydo explore: {e}"));
+        }
     }
     cx.ex.turns = a.turns;
     cx.ex.bursts = a.bursts;
@@ -964,6 +994,11 @@ fn run(mut cx: Cx) -> i32 {
         pool.close();
         return 0;
     }
+    if cx.a.sweep.as_deref() == Some("turns") {
+        let code = turn_sweep(&cx, &pool, t0, image_sha);
+        pool.close();
+        return code;
+    }
     let (seeds, items, pre_res, fc_info, labels) = match &cx.a.sweep {
         Some(sw) => {
             if let Some(sp) = &cx.ex.space {
@@ -1071,6 +1106,186 @@ fn run(mut cx: Cx) -> i32 {
             image_sha,
         },
     )
+}
+
+/// `--sweep turns` (M205, [`crate::turns`]): the base schedule (`--sweep-with`, default
+/// `disk=none | run`) with every turn length of a coarse grid, then the boundaries between
+/// verdict kinds bisected to `--turn-resolution`, then both lengths of every boundary once more.
+/// Every run is in events.jsonl (role `first`; the second runs `rerun`); exploration.json has
+/// `turn_sweep` and, as its failures, the failing length of every boundary.
+fn turn_sweep(cx: &Cx, pool: &Pool, t0: Instant, image_sha: ShaThread) -> i32 {
+    use crate::turns::{self, Outcome};
+    let (lo, hi) = turns::parse_range(&cx.a.turn_range).unwrap_or_else(|e| die(&e));
+    let base =
+        cx.a.sweep_with
+            .clone()
+            .unwrap_or_else(|| "disk=none | run".to_string());
+    if let Err(e) = hydo_schedule::Schedule::parse(&turns::with_q(&base, lo)) {
+        die(&format!("hydo explore: --sweep-with {base:?}: {e}"));
+    }
+    let grid = cx.a.turn_points.max(2) as u64;
+    let resolution = cx.a.turn_resolution.max(1) as u64;
+    eprintln!(
+        "turn sweep: {base:?} with q= from {lo} to {hi} ({grid} lengths, then bisected to {resolution} branches)"
+    );
+    let mut res: HashMap<String, Res> = HashMap::new();
+    let outcome = |tag: &str, r: &Res| {
+        let v = r.get("verdict").filter(|v| !v.is_null()).map(py_str);
+        Outcome {
+            kind: verdict_kind(v.as_deref().unwrap_or("ERROR no result")).to_string(),
+            verdict: v,
+            fp: r.get("fp").filter(|v| !v.is_null()).map(py_str),
+            tag: tag.to_string(),
+        }
+    };
+    let mut run = |qs: &[u64]| -> Vec<Outcome> {
+        let items: Vec<(String, String)> = qs
+            .iter()
+            .map(|q| (format!("q-{q}"), turns::with_q(&base, *q)))
+            .collect();
+        let got = pool.run_all(&items, true);
+        items
+            .iter()
+            .map(|(tag, text)| {
+                let r = got.get(tag).map(|x| x.1.clone()).unwrap_or_default();
+                cx.ev.write(&cx.run_record(tag, text, &r, role::FIRST));
+                let o = outcome(tag, &r);
+                eprintln!(
+                    "turn sweep: {tag:<12} {:<9} fp={}",
+                    o.kind,
+                    o.fp.as_deref().unwrap_or("None")
+                );
+                res.insert(tag.clone(), r);
+                o
+            })
+            .collect()
+    };
+    let found = turns::search(lo, hi, grid, resolution, &mut run);
+    // both lengths of every boundary once more
+    let mut again: Vec<(String, String)> = Vec::new();
+    for &(a, b) in &found.boundaries {
+        for i in [a, b] {
+            let q = found.points[i].0;
+            let item = (format!("q-{q}-again"), turns::with_q(&base, q));
+            if !again.contains(&item) {
+                again.push(item);
+            }
+        }
+    }
+    let got = pool.run_all(&again, true);
+    for (tag, text) in &again {
+        let r = got.get(tag).map(|x| x.1.clone()).unwrap_or_default();
+        cx.ev.write(&cx.run_record(tag, text, &r, role::RERUN));
+        res.insert(tag.clone(), r);
+    }
+    let point = |i: usize| {
+        let (q, o) = &found.points[i];
+        hydo_results::TurnPoint {
+            q: *q,
+            schedule: turns::with_q(&base, *q),
+            kind: o.kind.clone(),
+            verdict: o.verdict.clone(),
+            fp: o.fp.clone(),
+            tag: o.tag.clone(),
+        }
+    };
+    let mut boundaries = Vec::new();
+    let mut failures = Vec::new();
+    for &(a, b) in &found.boundaries {
+        let (pa, pb) = (point(a), point(b));
+        let reps: Vec<Reproduction> = [&pa, &pb]
+            .iter()
+            .map(|p| {
+                let t = format!("{}-again", p.tag);
+                repro_of(&t, res.get(&t))
+            })
+            .collect();
+        let reproduced = pa.fp.is_some() && reps[0].fp == pa.fp && reps[1].fp == pb.fp;
+        // the failing side of the boundary, as a failure (`hydo repro <exploration>` runs it)
+        for (p, rep) in [(&pb, &reps[1]), (&pa, &reps[0])] {
+            if p.kind == "ok" {
+                continue;
+            }
+            let r = res.get(&p.tag).cloned().unwrap_or_default();
+            let mut run = cx.run_record(&p.tag, &p.schedule, &r, role::FIRST);
+            run.class = Some("turn-length".into());
+            failures.push(Failure {
+                signature: sig_key(p.verdict.as_deref().unwrap_or("")),
+                reproduced: rep.fp.is_some() && rep.fp == p.fp,
+                reproductions: vec![rep.clone()],
+                timing_only: None,
+                run,
+            });
+        }
+        println!(
+            "turn sweep: boundary between q={} ({}) and q={} ({}){}",
+            pa.q,
+            pa.kind,
+            pb.q,
+            pb.kind,
+            if reproduced {
+                ", both reproduced"
+            } else {
+                ", NOT REPRODUCED"
+            }
+        );
+        println!("  {}", cx.by_hand(&pa.schedule));
+        println!("  {}", cx.by_hand(&pb.schedule));
+        boundaries.push(hydo_results::TurnBoundary {
+            below_command: Some(cx.by_hand(&pa.schedule)),
+            above_command: Some(cx.by_hand(&pb.schedule)),
+            below: pa,
+            above: pb,
+            reproduced,
+            reproductions: reps,
+        });
+    }
+    if found.boundaries.is_empty() {
+        let kind = found
+            .points
+            .first()
+            .map(|p| p.1.kind.as_str())
+            .unwrap_or("none");
+        println!(
+            "turn sweep: no boundary: every length from {lo} to {hi} gave {kind} ({} lengths)",
+            found.points.len()
+        );
+    }
+    if found.capped {
+        println!(
+            "turn sweep: stopped narrowing after {} runs (the verdict changes too often to bisect)",
+            turns::MAX_RUNS
+        );
+    }
+    let sweep = hydo_results::TurnSweep {
+        base: base.clone(),
+        lo,
+        hi,
+        grid,
+        resolution,
+        points: (0..found.points.len()).map(point).collect(),
+        boundaries,
+    };
+    let nfail = sweep.points.iter().filter(|p| p.kind != "ok").count() as u64;
+    let summary = Summary {
+        schedules: sweep.points.len() as u64,
+        failures: nfail,
+        reproduced: Some(sweep.boundaries.iter().filter(|b| b.reproduced).count() as u64),
+        repro_runs: Some(again.len() as u64),
+        total_wall_s: Some(round1(t0.elapsed().as_secs_f64())),
+        ..Summary::default()
+    };
+    cx.ev.write(&End {
+        summary: summary.clone(),
+        ..End::default()
+    });
+    let mut doc = cx.exploration(pool.workers(), summary, image_sha);
+    doc.turn_sweep = Some(sweep);
+    doc.failures = failures;
+    let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
+    let _ = std::fs::write(cx.out.join("report.md"), md::report(&doc));
+    println!("{}", md::summary_line(&doc));
+    0
 }
 
 /// explore.py `measure_cf_range` (the probe run goes into the stream).

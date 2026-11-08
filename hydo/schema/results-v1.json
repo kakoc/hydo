@@ -1741,6 +1741,17 @@
           ],
           "additionalProperties": true
         },
+        "turn_sweep": {
+          "description": "`--sweep turns` (added in M205): the vCPU turn lengths tried and the boundaries between\nverdicts found.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TurnSweep"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "failures": {
           "description": "Every failing first run, in seed order.",
           "type": "array",
@@ -2032,6 +2043,181 @@
         "failures"
       ]
     },
+    "TurnSweep": {
+      "description": "A search over the vCPU turn length `q=` of one schedule (added in M205; `hydo explore\n--sweep turns`): a coarse grid of turn lengths, then a bisection of every pair of\nneighbouring lengths with different verdict kinds.",
+      "type": "object",
+      "properties": {
+        "base": {
+          "description": "The schedule every point ran with its own `q=` (`--sweep-with`).",
+          "type": "string"
+        },
+        "lo": {
+          "description": "The smallest and the largest turn length searched (`--turn-range`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "hi": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "grid": {
+          "description": "The number of lengths in the coarse grid (`--turn-points`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "resolution": {
+          "description": "A boundary is narrowed until its two lengths are at most this far apart\n(`--turn-resolution`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "points": {
+          "description": "Every turn length run, in increasing order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TurnPoint"
+          },
+          "default": []
+        },
+        "boundaries": {
+          "description": "Every pair of neighbouring lengths whose verdict kinds differ, in increasing order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TurnBoundary"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "base",
+        "lo",
+        "hi",
+        "grid",
+        "resolution"
+      ]
+    },
+    "TurnPoint": {
+      "description": "One turn length of a turn sweep (added in M205).",
+      "type": "object",
+      "properties": {
+        "q": {
+          "description": "The turn length in guest branches (`q=`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "schedule": {
+          "description": "The schedule that ran.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`ok`, `violation` or `error`.",
+          "type": "string"
+        },
+        "verdict": {
+          "description": "The verdict line; absent when the run gave no result.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tag": {
+          "description": "The run's tag in `events.jsonl` and `consoles/`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "q",
+        "schedule",
+        "kind",
+        "tag"
+      ]
+    },
+    "TurnBoundary": {
+      "description": "Two neighbouring turn lengths with different verdict kinds (added in M205).",
+      "type": "object",
+      "properties": {
+        "below": {
+          "description": "The shorter turn length.",
+          "$ref": "#/$defs/TurnPoint"
+        },
+        "above": {
+          "description": "The longer one.",
+          "$ref": "#/$defs/TurnPoint"
+        },
+        "reproduced": {
+          "description": "Both were run a second time and gave their fingerprints again.",
+          "type": "boolean"
+        },
+        "reproductions": {
+          "description": "The second runs (below, then above).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Reproduction"
+          },
+          "default": []
+        },
+        "below_command": {
+          "description": "The `hydo run` command lines of the two schedules.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "above_command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "below",
+        "above",
+        "reproduced"
+      ]
+    },
+    "Reproduction": {
+      "description": "A run of a schedule again, to confirm it.",
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fp": {
+          "description": "Absent: the run gave no result.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "present": {
+          "description": "Error kinds: the kind was present in this run.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
     "Failure": {
       "description": "A failing run of an exploration and its re-runs.",
       "type": "object",
@@ -2068,38 +2254,6 @@
         "reproduced",
         "run"
       ]
-    },
-    "Reproduction": {
-      "description": "A run of a schedule again, to confirm it.",
-      "type": "object",
-      "properties": {
-        "tag": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "fp": {
-          "description": "Absent: the run gave no result.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "verdict": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "present": {
-          "description": "Error kinds: the kind was present in this run.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        }
-      }
     },
     "Shrink": {
       "description": "A failure shrunk to a minimal schedule (one per class and signature).",
