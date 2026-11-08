@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo's project format as types: `hydo.yaml` (or a JSON plan), a plan's `test:` section and the
 //! `hydo/` folder next to the manifest.
 //!

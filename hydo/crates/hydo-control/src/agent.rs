@@ -4,9 +4,9 @@
 //! `agent <proto>` and implements the same [`Engine`]/[`Worker`] traits, so the explorer's pool,
 //! re-runs, shrinking and reports and the `hydo` command drive agent images without knowing:
 //!
-//! - [`Engine::start`] boots under control ([`Engine::start_controlled`]) with the boot
-//!   conversation of [`ScheduleController::boot`] (the host takes S0 and S1), then serves;
-//! - [`Worker::run`] runs a schedule from S1 with [`Worker::run_controlled`] and the run
+//! - [`Engine::start`] boots under control ([`ControlledEngine::start_controlled`]) with the boot
+//!   conversation of `ScheduleController::boot` (the host takes S0 and S1), then serves;
+//! - [`Worker::run`] runs a schedule from S1 with [`ControlledWorker::run_controlled`] and the run
 //!   conversation (and after a power cut the recovery conversation, in the same engine run);
 //! - [`Engine::one`] is the fresh-boot run (`--control boot one`).
 //!

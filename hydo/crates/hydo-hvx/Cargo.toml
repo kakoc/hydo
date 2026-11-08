@@ -4,6 +4,7 @@ name = "hydo-hvx"
 # ci/consolidate-tests.sh)
 autotests = false
 description = "The hvx run engine in Rust: drives /dev/hvx through its ioctls (hv/hvx/hvx_abi.h); in-process or as the hydo-hvx program (the C hvx_explore's command line and protocol)"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +13,7 @@ repository.workspace = true
 homepage.workspace = true
 # What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests and their
 # recorded answers stay in the repository.
-include = ["/src/**", "/Cargo.toml", "/LICENSE", "/build.rs", "/pt/**"]
+include = ["/src/**", "/Cargo.toml", "/LICENSE", "/README.md", "/build.rs", "/pt/**"]
 build = "build.rs"
 
 [lib]

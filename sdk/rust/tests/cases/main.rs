@@ -10,7 +10,7 @@
 //!     cargo test --test cases                 # check: sdk/cases must equal what Rust writes
 //!     HYDO_BLESS=1 cargo test --test cases    # (re)write sdk/cases after a format change
 //!
-//! File layout and the reader's rules: sdk/rust/README.md, "The shared cases".
+//! File layout and the reader's rules: sdk/README.md, "The shared cases".
 
 #[macro_use]
 mod model;

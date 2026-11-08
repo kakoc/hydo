@@ -423,7 +423,7 @@ pub fn fits(schedule: &str) -> bool {
     g.trim().chars().count() <= GUEST_MAX
 }
 
-/// hydo_composer.key_of: the key of a resolved composition (W=@<key>).
+/// hydo_composer.key_of: the key of a resolved composition (`W=@<key>`).
 pub fn key_of(resolved: &str) -> String {
     let h = Sha256::digest(resolved.as_bytes());
     h.iter().map(|b| format!("{b:02x}")).collect::<String>()[..12].to_string()

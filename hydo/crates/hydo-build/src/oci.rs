@@ -1,7 +1,7 @@
 //! Services whose files come from a Docker/OCI image (`services[].image`): port of
 //! hydo/onboard/hydo_oci.py. No network access: the image is a file on disk, an OCI image layout
 //! directory or a tar archive (`docker save`, skopeo's docker-archive:/oci-archive:, optionally
-//! gzip-compressed). Each image service gets its own root /oci/<service> in the guest and runs
+//! gzip-compressed). Each image service gets its own root `/oci/<service>` in the guest and runs
 //! chrooted there; the layers are applied in order with whiteouts; owners and modes come from the
 //! layer tars and go into the ext4 root with debugfs (x86_64) or into the cpio headers (arm64);
 //! every blob is checked against its digest and every layer against the config's diff_ids.
@@ -956,7 +956,7 @@ pub struct OciService {
     pub user: String,
     pub mounts: Vec<Mount>,
     /// `writable: true`: the service's root is a writable copy of the image (its layer) on the
-    /// data disk, bound over /oci/<service> at the first start of every boot.
+    /// data disk, bound over `/oci/<service>` at the first start of every boot.
     pub writable: bool,
 }
 
@@ -1592,7 +1592,7 @@ fn unpack(o: &OciService, t: &mut Tree, tmpdir: &Path, busybox: &Path, hosts: &s
 /// ...`, and an image without `<prog>` (the libSQL server's image has no `curl`) fails the
 /// readiness check of every run, after its whole time limit. Called after [`stage`] or
 /// [`stage_with`] with the same `share` and `layers`, so that each service's tree is looked at
-/// where it was unpacked (its own R/oci/<svc>, the tree it shares with `root.share_images`, or
+/// where it was unpacked (its own `R/oci/<svc>`, the tree it shares with `root.share_images`, or
 /// its `writable: true` layer on the staged data partition); one warning per such command.
 pub fn ready_warnings(
     oci: &[OciService],
@@ -1681,10 +1681,10 @@ fn ready_warnings_in(paths: &[(String, String, PathBuf)], m: &Value) -> Vec<Stri
 }
 
 /// `stage(oci, R, busybox, tmpdir, netns, share)`: flatten every image service's image into
-/// R/oci/<svc>, add the launchers. Returns the owners and modes of everything under R/oci.
+/// `R/oci/<svc>`, add the launchers. Returns the owners and modes of everything under R/oci.
 ///
 /// `share` (`root.share_images: true`, opt-in): a service whose image (by config digest) an
-/// earlier service already unpacked gets no tree of its own: its R/oci/<svc> is an empty
+/// earlier service already unpacked gets no tree of its own: its `R/oci/<svc>` is an empty
 /// directory, and its launcher bind-mounts the first service's tree there before anything else
 /// (a plain bind, so the first service's own mounts are not seen through it: each service keeps
 /// its own /tmp, /data, volumes and tmpfs mounts on its own mount point). The mount points of
@@ -1707,8 +1707,8 @@ pub fn stage(
 pub type Metas = HashMap<String, MetaEntry>;
 
 /// `stage` with `writable:` layers and `tls:` trust. `layers`: the staged data partition, where
-/// an x86_64 build puts the tree of every `writable: true` service (at .hydo/layers/<svc>, with
-/// its .done file; the root keeps an empty /oci/<svc> to bind it on); None (arm64) keeps every
+/// an x86_64 build puts the tree of every `writable: true` service (at `.hydo/layers/<svc>`, with
+/// its .done file; the root keeps an empty `/oci/<svc>` to bind it on); None (arm64) keeps every
 /// tree in the root, and the launcher copies it to the data disk. Returns the owners and modes
 /// under R/oci and under the data partition.
 #[allow(clippy::too_many_arguments)]

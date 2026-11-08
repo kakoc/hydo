@@ -495,7 +495,7 @@ fn tar_header(name: &str, size: u64) -> Result<tar::Header, String> {
 }
 
 /// fetch_image.py: copy one image (a single-platform manifest digest) into a `docker save`
-/// archive `out` (manifest.json, the config as <hex>.json, the layers as downloaded), every blob
+/// archive `out` (manifest.json, the config as `<hex>.json`, the layers as downloaded), every blob
 /// checked. Progress goes to stderr with fetch_image.py's lines.
 pub fn fetch_image(r: &str, digest: &str, tag: &str, out: &str) -> Result<(), String> {
     let tag = full_tag(tag);

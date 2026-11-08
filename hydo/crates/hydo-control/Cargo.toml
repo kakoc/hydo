@@ -6,6 +6,7 @@ name = "hydo-control"
 # ci/consolidate-tests.sh)
 autotests = false
 description = "hydo's host controller for agent images: the Controller trait, the ScheduleController that runs today's schedules through hydo-agent's commands, the control transcript and its replay"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,7 +15,7 @@ repository.workspace = true
 homepage.workspace = true
 # What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests and their
 # recorded answers stay in the repository.
-include = ["/src/**", "/Cargo.toml", "/LICENSE"]
+include = ["/src/**", "/Cargo.toml", "/LICENSE", "/README.md"]
 
 [lib]
 # no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)

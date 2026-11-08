@@ -8,13 +8,13 @@
 //! is the knob `W` whose set command is `compose.sh setw`, and the invariants are
 //! `compose.sh verdict | end IDX | check IDX`. Each of those calls is replaced here:
 //!
-//! - [`set_knob`] (`setw`): parse_w's variables come from W= as hydo-schedule parsed it
+//! - `set_knob` (`setw`): parse_w's variables come from W= as hydo-schedule parsed it
 //!   ([`Compose`]) and its composition is computed (`wplan`): the seed form by hydo-composer's
 //!   generator ([`hydo_composer::plan`], the Rust twin of PLAN_AWK) with PLAN_AWK's filters, the
-//!   resolved form (W's typed fields) and the saved form (the text of compose.saved/<key>) as
+//!   resolved form (W's typed fields) and the saved form (the text of `compose.saved/<key>`) as
 //!   RES_AWK reads them, with its messages;
-//! - [`provision`] (`first`): the project's own provisioning, then every `first` command;
-//! - [`step`] (`step FROM TO`): opens the gate to round TO, starts the daemon the first time, and
+//! - `provision` (`first`): the project's own provisioning, then every `first` command;
+//! - `step` (`step FROM TO`): opens the gate to round TO, starts the daemon the first time, and
 //!   waits until the daemon waits at round TO (the last range: until it drained), or the daemon
 //!   died, or `workload.timeout` minus 5 s passed (then `stop_all`);
 //! - the daemon ([`Job::Daemon`]): the rounds (each `round_ms` of guest time after the previous
@@ -23,7 +23,7 @@
 //! - one thread per launched entry ([`Job::Run1`], `run1`): the command with HYDO_CMD,
 //!   HYDO_CMD_ID, HYDO_ROUND and HYDO_SEED, its HYDO-ASSERT lines, its end line and the
 //!   `compose.<id>.succeeded` / `no_violation` records;
-//! - [`eval`]: the invariants `verdict` (answered from the host's state), `end IDX` and
+//! - `eval`: the invariants `verdict` (answered from the host's state), `end IDX` and
 //!   `check IDX` (their commands run in the guest).
 //!
 //! The console lines are compose.sh's, byte for byte, except the durations (`ms=`): the shell read
@@ -75,7 +75,7 @@ pub struct ComposePlan {
     pub commands: Vec<Cmd>,
     /// compose.checks.
     pub checks: Vec<Cmd>,
-    /// compose.saved/<key>: the resolved compositions of the plan's regressions (`W=@<key>`).
+    /// `compose.saved/<key>`: the resolved compositions of the plan's regressions (`W=@<key>`).
     pub saved: BTreeMap<String, String>,
     /// Whether provisioning ends with `compose.sh first`.
     pub has_first: bool,
@@ -171,7 +171,7 @@ impl ComposePlan {
 
 /// parse_w's variables. W itself is hydo-schedule's [`Compose`] (the shell took its text apart
 /// with `IFS=,` and `case`); what parse_w derives from it is kept typed where only W or the plan
-/// sets it, and as text where a saved composition's words (compose.saved/<key>, a file of the
+/// sets it, and as text where a saved composition's words (`compose.saved/<key>`, a file of the
 /// image, which the shell reads as text) can set it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WFields {
@@ -604,7 +604,7 @@ pub struct State {
     pub summary: Option<String>,
     /// $C/violation and violation.detail: (entry, command id, detail).
     pub violation: Option<(i64, String, String)>,
-    /// $C/ok.<id>, $C/vio.<id>.
+    /// `$C/ok.<id>`, `$C/vio.<id>`.
     pub ok_ids: BTreeSet<String>,
     pub vio_ids: BTreeSet<String>,
     /// The daemon's environment (the first step call's).
@@ -652,7 +652,7 @@ impl State {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Job {
     Daemon,
-    /// run1 <entry> <round> <cmd index> <entry seed>.
+    /// `run1 <entry> <round> <cmd index> <entry seed>`.
     Run1 {
         entry: i64,
         round: i64,

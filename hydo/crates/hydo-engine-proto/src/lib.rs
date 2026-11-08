@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! The calls between hydo and its run engines, as Rust types, and their one text form.
 //!
 //! An engine boots an agent image under lock-step control (the host takes its snapshot points),

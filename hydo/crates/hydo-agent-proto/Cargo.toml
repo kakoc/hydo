@@ -12,6 +12,7 @@ name = "hydo-agent-proto"
 # ci/consolidate-tests.sh)
 autotests = false
 description = "hydo's host-agent protocol: messages, canonical JSON, console framing, the host session with the version rule, the generated schema and the example transcripts"
+readme = "README.md"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
@@ -20,7 +21,7 @@ repository = "https://github.com/kakoc/hydo"
 homepage = "https://github.com/kakoc/hydo"
 # What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests, the
 # example transcripts they check and the schema stay in the repository.
-include = ["/src/**", "/Cargo.toml", "/LICENSE"]
+include = ["/src/**", "/Cargo.toml", "/LICENSE", "/README.md"]
 
 [lib]
 # no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)

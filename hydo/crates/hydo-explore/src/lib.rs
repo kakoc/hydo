@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo's fault explorer (the port of hydo/explore/explore.py and the modules it imported for the
 //! product: manifest_space.py, fc_adaptive.py, grpc_faults.py, hvm_backend.py, and the explorer
 //! side of hydo_composer.py).

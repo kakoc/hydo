@@ -1,8 +1,8 @@
 //! `--arch arm64`: the manifest compiled for the Mac VMM (hv/hvm/). Port of
 //! hydo_build_arm64.py, with the Mac release's bundled aarch64 tc closure (hydo_bridge.py's
 //! `use_bundled_tc`). Output, in the build dir:
-//!     <NAME>-arm64.cpio.gz    the root, as one initramfs
-//!     <NAME>-arm64-disk.img   the data disk for the virtio-blk device (HVM_DISK): an MBR with a
+//!     `<NAME>-arm64.cpio.gz`    the root, as one initramfs
+//!     `<NAME>-arm64-disk.img`   the data disk for the virtio-blk device (HVM_DISK): an MBR with a
 //!                             1 MiB placeholder p1 and the journaled ext4 data partition p2
 //! The root tree is the x86 image's, with two differences: the whole root is the initramfs and a
 //! small /init waits for /dev/vda2; tc is the pinned aarch64 iproute2 with exactly the shared

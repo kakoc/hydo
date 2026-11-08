@@ -20,7 +20,8 @@
 //! This test fails when a test binary or folded test file of the workspace has no line (a new
 //! tests/<name>.rs, a new program), when a line names one that does not exist, when a line is
 //! doubled or its tier is unknown, when a library with `doctest = false` has a documentation
-//! example that rustdoc would test (it would never run), when a tests/*.rs of a workspace crate is
+//! example that rustdoc would test (it would never run; a Markdown file the crate makes its
+//! documentation with `#![doc = include_str!(..)]`, such as its README, counts), when a tests/*.rs of a workspace crate is
 //! in no test program (a crate with `autotests = false` compiles only the files it names), when a
 //! folded program's tests/main.rs holds a test of its own (no tier line would name it), and when a
 //! program or library with `test = false` has a unit test (it would never run).
@@ -238,6 +239,26 @@ fn no_documentation_example_is_switched_off() {
             let mut open = false;
             for (n, l) in text.lines().enumerate() {
                 let l = l.trim_start();
+                // a Markdown file made documentation (`#![doc = include_str!("../README.md")]`):
+                // each of its fenced blocks is a documentation example too
+                if let Some(md) = l
+                    .strip_prefix("#![doc = include_str!(\"")
+                    .and_then(|r| r.strip_suffix("\")]"))
+                {
+                    let path = f.parent().unwrap().join(md);
+                    let text = std::fs::read_to_string(&path).unwrap();
+                    let mut open = false;
+                    for (m, l) in text.lines().enumerate() {
+                        let Some(info) = l.trim_start().strip_prefix("```") else {
+                            continue;
+                        };
+                        open = !open;
+                        if open && is_tested_example(info.trim()) {
+                            found.push(format!("{pkg}: {}:{}", path.display(), m + 1));
+                        }
+                    }
+                    continue;
+                }
                 let Some(doc) = l.strip_prefix("///").or_else(|| l.strip_prefix("//!")) else {
                     continue;
                 };

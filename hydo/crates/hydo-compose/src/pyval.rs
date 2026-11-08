@@ -152,7 +152,7 @@ impl Y {
     }
 }
 
-/// `as_list(x)`: None -> [], a list as is, anything else -> [x].
+/// `as_list(x)`: None -> `[]`, a list as is, anything else -> `[x]`.
 pub fn as_list(x: Option<&Y>) -> Vec<Y> {
     match x {
         None | Some(Y::Null) => Vec::new(),

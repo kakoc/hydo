@@ -4,6 +4,7 @@ name = "hydo-agents"
 # ci/consolidate-tests.sh)
 autotests = false
 description = "hydo's AI-facing commands: hydo guide, hydo skill install, hydo init (the onboarding skill is built in)"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +13,7 @@ repository.workspace = true
 homepage.workspace = true
 # What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests and their
 # recorded answers stay in the repository.
-include = ["/src/**", "/Cargo.toml", "/LICENSE", "/build.rs", "/embed/**"]
+include = ["/src/**", "/Cargo.toml", "/LICENSE", "/README.md", "/build.rs", "/embed/**"]
 build = "build.rs"
 
 [lib]

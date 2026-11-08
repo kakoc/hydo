@@ -6,6 +6,11 @@
 //! they do not know like any other string. The values hydo writes today are in [`kind`],
 //! [`status`] and [`role`].
 
+// The doc comments below are also the descriptions of the generated JSON Schema, written in
+// the format's own notation (`<name>`, `sha256:<digest>`); rustdoc would read that notation
+// as HTML tags, and quoting it would change the schema.
+#![allow(rustdoc::invalid_html_tags)]
+
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};

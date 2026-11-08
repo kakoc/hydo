@@ -23,6 +23,9 @@
 //!   cargo copies into the package), and a build script names no path outside the crate except
 //!   the ones [`OUTSIDE_ALLOWED`] lists with the reason.
 //!
+//! - its pages: [`page_problems`] (a README that crates.io and docs.rs both show, with absolute
+//!   links, and for an internal crate the sentence that it has no stable API).
+//!
 //! It also checks that every other workspace crate has `publish = false` (so that a
 //! `cargo publish --workspace` cannot publish a development tool or a guest program by accident),
 //! that the guest programs are not in the closure (they come from the release download, never
@@ -537,6 +540,7 @@ fn check_member(
             errs.push(format!("{n}: its readme {r} is not in the package"));
         }
     }
+    errs.extend(page_problems(m));
     let mut bytes = 0u64;
     for f in &files {
         if ["tests/", "examples/", "benches/"]
@@ -602,4 +606,96 @@ fn check_member(
         ));
     }
     errs
+}
+
+/// What the crates.io and docs.rs pages of a published crate need (docs/PUBLISHING.md, "The
+/// crates' pages"): a `README.md` as its readme (crates.io shows it), every link in it absolute
+/// (crates.io shows the README outside the repository, so a relative link leads nowhere), a
+/// library's documentation starting with that README (`#![doc = include_str!("../README.md")]`
+/// as the first line of `src/lib.rs`, so docs.rs shows the same page and its code blocks are
+/// doctests), and, for every crate but the `hydo` command, the sentence that says it has no
+/// stable API.
+pub fn page_problems(m: &Member) -> Vec<String> {
+    let n = &m.name;
+    let mut errs = Vec::new();
+    if m.readme.as_deref() != Some("README.md") {
+        errs.push(format!(
+            "{n}: readme is {:?}; set `readme = \"README.md\"` (the crates.io page)",
+            m.readme
+        ));
+        return errs;
+    }
+    let Ok(text) = std::fs::read_to_string(m.dir.join("README.md")) else {
+        errs.push(format!("{n}: README.md cannot be read"));
+        return errs;
+    };
+    for target in relative_links(&text) {
+        errs.push(format!(
+            "{n}: README.md links to {target:?}; crates.io shows the README outside the \
+             repository, so give an absolute https:// link"
+        ));
+    }
+    let lib = m.dir.join("src/lib.rs");
+    if let Ok(src) = std::fs::read_to_string(&lib) {
+        if src.lines().next() != Some(README_DOC) {
+            errs.push(format!(
+                "{n}: the first line of src/lib.rs must be `{README_DOC}`, so that docs.rs shows \
+                 the crates.io page and its examples run as doctests"
+            ));
+        }
+    }
+    if n != ROOT && !text.contains(NO_STABLE_API) {
+        errs.push(format!(
+            "{n}: README.md must say \"{NO_STABLE_API}\": the crate is published only because \
+             {ROOT} is built from it"
+        ));
+    }
+    errs
+}
+
+/// The first line of a published library's `src/lib.rs`.
+pub const README_DOC: &str = "#![doc = include_str!(\"../README.md\")]";
+
+/// What every internal crate's page says.
+pub const NO_STABLE_API: &str = "This crate has no stable API.";
+
+/// The targets of the Markdown links and images of `text` (`[text](target)`) that are neither
+/// absolute (`https://`, `http://`, `mailto:`) nor an anchor on the page (`#...`). Code spans and
+/// fenced blocks are skipped.
+pub fn relative_links(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut fenced = false;
+    for line in text.lines() {
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced {
+            continue;
+        }
+        // drop code spans
+        let mut plain = String::new();
+        let mut code = false;
+        for c in line.chars() {
+            if c == '`' {
+                code = !code;
+            } else if !code {
+                plain.push(c);
+            }
+        }
+        let mut rest = plain.as_str();
+        while let Some(i) = rest.find("](") {
+            let after = &rest[i + 2..];
+            let end = after.find(')').unwrap_or(after.len());
+            let target = after[..end].trim();
+            let absolute = ["https://", "http://", "mailto:", "#"]
+                .iter()
+                .any(|p| target.starts_with(p));
+            if !absolute {
+                out.push(target.to_string());
+            }
+            rest = &after[end..];
+        }
+    }
+    out
 }

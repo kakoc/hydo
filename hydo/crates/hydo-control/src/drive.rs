@@ -169,7 +169,7 @@ impl Ran {
     }
 
     /// The run's control hash (`ctl=`): the run conversation's transcript hash, or with a recovery
-    /// boot the first 16 hex digits of SHA-256 over both hashes ("<run> <recovery>").
+    /// boot the first 16 hex digits of SHA-256 over both hashes ("`<run>` `<recovery>`").
     pub fn ctl(&self) -> String {
         ctl_of(
             &self.run.transcript,

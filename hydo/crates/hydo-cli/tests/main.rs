@@ -6,3 +6,4 @@
 mod agents_equivalence;
 mod equivalence;
 mod migrate;
+mod readme;

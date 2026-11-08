@@ -5,18 +5,18 @@
 //! `HYDO-HIST` lines straight to /dev/console), and the checks run on the host after the run
 //! (hydo-history). The init only
 //! - prints one `HYDO-CHECK <spec>` line per check when the workload starts (start_periodic, once
-//!   per boot), so a saved console describes its own checks: [`declare`];
+//!   per boot), so a saved console describes its own checks: `declare`;
 //! - at the end of the boot that gives the verdict (the run, or the recovery boot after a power
 //!   cut) runs each check's `final:` read-back, bounded by workload.timeout with its output in
 //!   workload.log, and prints its exit status (`HYDO-CHECK-FINAL`), before the final invariants
-//!   (finish): [`finals`].
+//!   (finish): `finals`.
 
 use super::{env, log, spawn_wait, timeout_argv, Ctx, F};
 use crate::flow::Step;
 use hydo_manifest::py;
 use serde_json::{Map, Value};
 
-/// One history check, as manifest.sh carries it (HYDO_CHECK_c<i>_*).
+/// One history check, as manifest.sh carries it (`HYDO_CHECK_c<i>_*`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HistCheck {
     pub id: String,

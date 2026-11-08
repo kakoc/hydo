@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! `hydo compose` / `hydo-compose`: turn a docker-compose.yaml into a starting hydo.yaml
 //! (MANIFEST.md, "From Docker Compose"). The Rust port of hydo/onboard/hydo_compose.py, which it
 //! replaces: for the same Compose file, options and lock file it writes the same hydo.yaml,

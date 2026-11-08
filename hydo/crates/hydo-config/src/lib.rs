@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo-config: one typed configuration, read in one place (M144).
 //!
 //! hydo is configured by its command lines, by a project's files (`hydo.yaml`, the `hydo/`

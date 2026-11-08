@@ -1,6 +1,7 @@
 [package]
 name = "hydo-config"
 description = "Every environment variable hydo reads, in one place: the inventory, a snapshot read once at a program's start, and typed configuration grouped by owner"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 # What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests and their
 # recorded answers stay in the repository.
-include = ["/src/**", "/Cargo.toml", "/LICENSE"]
+include = ["/src/**", "/Cargo.toml", "/LICENSE", "/README.md"]
 
 [lib]
 # no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)

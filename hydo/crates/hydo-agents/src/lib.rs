@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! The AI-facing commands of the `hydo` command (the Rust port of hydo/onboard/hydo_agents.py,
 //! which it replaces with the same output, files and exit codes):
 //!

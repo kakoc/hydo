@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo's schedule language as types.
 //!
 //! A schedule is one line, `<host tokens> | run <guest tokens>`, for example

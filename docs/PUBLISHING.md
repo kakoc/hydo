@@ -106,7 +106,7 @@ Every package has the version of `hydo/VERSION` (and of the Cargo workspace), th
 Apache-2.0, a copy of the repository's `LICENSE` and the repository `https://github.com/kakoc/hydo`.
 The test `cargo test -p hydo-release --test it sdks::` checks this, and that the Go module `sdk/go`
 holds the same code as the frozen copy in `hydo/stack` apart from the documented differences
-(`sdk/go/README.md`, "Two copies").
+(`sdk/README.md`, "The Go module and the frozen copy in `hydo/stack`").
 
 **Not published: the Rust test SDK.** `hydo-test` (`sdk/rust-test`), `hydo-test-macros`
 (`sdk/rust-test/macros`) and `cargo-hydo` (`sdk/rust-test/cargo-hydo`) stay unpublished until the
@@ -130,6 +130,14 @@ SDK's own: in Rust `#[doc(hidden)]` (the `__` items, `Type` and `to_json`, publi
 macros expand in the user's crate or the SDK's tests call them), in Python names starting with
 `_`, in JavaScript what `index.d.ts` and `history.d.ts` do not declare, in Go unexported names.
 Milestone 163 removed or hid what did not meet this rule (docs/HISTORY.md, "Milestone 163").
+
+## The pages
+
+Each SDK's `README.md` is its page on the registry (and on pkg.go.dev for Go). The four pages
+have the same parts in the same order, and every code example on them runs in the SDK's own
+tests (`sdk/README.md`, "The pages are tested"); `cargo test -p hydo-release --test it sdks::`
+checks that the parts and the complete programs' lines are the same on the four pages. The
+links on the pages are absolute, because the registries show a README outside the repository.
 
 ## What is permanent
 
@@ -188,7 +196,7 @@ cargo test --locked --release -p hydo-release --test it sdks::              # na
 (cd sdk/go && go vet ./... && go test ./...)                            # and GOTOOLCHAIN=go1.26.5 go test ./...
 (cd hydo/stack && go test ./hydoassert/ ./hydohist/)                    # the frozen copy
 python3 -m unittest discover -s sdk/python/tests
-(cd sdk/js && npm test && node --test test/cases.test.js)
+(cd sdk/js && node --test)                                             # every test, the README's too
 ```
 
 ## The order and the commands (by hand)
@@ -321,6 +329,22 @@ on new crates (below).
 `hydo-grpc` are inside guest images, are built by their own scripts to pinned bytes, and come
 from the version's release archive like the guest kernels; no published crate depends on them
 (the check below fails if one does).
+
+## The crates' pages
+
+crates.io shows each crate's `README.md`, and docs.rs shows its documentation. For every crate
+of the closure the two are one text: the first line of a library's `src/lib.rs` is
+`#![doc = include_str!("../README.md")]`, so a code block of the page is a doctest. Every link on
+a page is absolute (crates.io shows the README outside the repository). The `hydo` crate's page
+says what hydo is, how to install it and how to make a first run; its test
+(`cargo test -p hydo --test it readme::`) checks every `hydo` command the page shows against
+the help text, and runs those that need no installed release. The page of each of the other 19
+crates is short and the same in form: that the crate is part of hydo, that it has no stable API
+("This crate has no stable API."), how to get hydo instead, and what the crate contains. After
+the page come the crate's notes for hydo's developers. The `crates` check below fails when a
+page is missing, a link is relative, a library's documentation does not start with its page, or
+an internal crate's page lacks that sentence; `cargo doc --no-deps` of the 20 crates builds
+without a warning.
 
 ## What `cargo install hydo` gives
 
