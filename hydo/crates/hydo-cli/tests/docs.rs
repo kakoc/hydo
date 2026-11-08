@@ -11,6 +11,8 @@
 //!   raises the version must update them, or this test fails); every 16-digit hex value they cite
 //!   is in hydo/onboard/recorded.json or in `CITED_ELSEWHERE` with its source; every `hydo`
 //!   command they show is in a help text, with only options that help text names.
+//! - The README's commands that need no virtual machine and no network run as written, in a
+//!   temporary directory (`the_readme_commands_that_need_no_vm_run_as_written`).
 
 use std::path::{Path, PathBuf};
 
@@ -517,4 +519,127 @@ fn the_fact_checks_see_what_a_page_says() {
     assert_eq!(c, ["hydo run --no-such-option \"disk=none | run\""]);
     assert!(!help_lines("run").contains("--no-such-option"));
     assert!(help_lines("run").contains("--image"));
+}
+
+// ---------------------------------------------------------------- the README's commands run
+
+/// Runs `hydo` in `dir`, offline, with an install cache of its own, and returns whether it
+/// succeeded and what it printed.
+fn run_hydo(dir: &Path, args: &[&str]) -> (bool, String) {
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_hydo"))
+        .args(args)
+        .current_dir(dir)
+        .env("HYDO_HOME", dir.join(".hydo-home"))
+        .env("HYDO_OFFLINE", "1")
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&o.stdout),
+        String::from_utf8_lossy(&o.stderr)
+    );
+    (o.status.success(), text)
+}
+
+fn scratch(name: &str) -> PathBuf {
+    let d = std::env::temp_dir().join(format!("hydo-docs-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+/// The commands of the README's "Test your own project" that need no virtual machine run as
+/// written: `hydo init`, `hydo build hydo/hydo.yaml --check`, every `hydo guide <topic>` the
+/// README names, and `hydo compose` on a small Compose file. The Compose test copies a recorded
+/// lock file (tests/fixtures/docs-compose/) next to the output, so that the importer pins the
+/// image from it and needs no registry. `sh hydo/fetch-images.sh`, `hydo run` and `hydo explore`
+/// need the network or a virtual machine; their output is cited from recorded runs instead.
+#[test]
+fn the_readme_commands_that_need_no_vm_run_as_written() {
+    let readme = read("README.md");
+    let cmds = commands(&readme);
+    for want in [
+        "hydo init",
+        "hydo build hydo/hydo.yaml --check",
+        "hydo compose docker-compose.yaml --out hydo/hydo.yaml --images-dir images",
+        "hydo guide workflow",
+        "hydo guide faults",
+        "hydo guide manifest",
+        "hydo guide sdks",
+        "hydo guide skill",
+    ] {
+        assert!(
+            cmds.iter().any(|c| c == want),
+            "README.md no longer shows `{want}`; update this test with the page"
+        );
+    }
+
+    // hydo init, then the check of the skeleton it wrote
+    let d = scratch("init");
+    let (ok, out) = run_hydo(&d, &["init"]);
+    assert!(ok, "hydo init: {out}");
+    for f in [
+        "hydo/hydo.yaml",
+        "hydo/workload",
+        "hydo/checks",
+        "hydo/regressions",
+        ".gitignore",
+        "AGENTS.md",
+    ] {
+        assert!(d.join(f).exists(), "hydo init did not create {f}: {out}");
+    }
+    let (ok, out) = run_hydo(&d, &["build", "hydo/hydo.yaml", "--check"]);
+    assert!(ok, "hydo build hydo/hydo.yaml --check: {out}");
+
+    // every guide topic the README names
+    let mut topics = 0;
+    for c in &cmds {
+        let words: Vec<&str> = c.split_whitespace().collect();
+        if words.get(1) == Some(&"guide") {
+            let (ok, out) = run_hydo(&d, &words[1..]);
+            assert!(ok, "{c}: {out}");
+            topics += 1;
+        }
+    }
+    assert!(
+        topics >= 5,
+        "the README names fewer guide topics than expected"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+
+    // hydo compose, as written, after hydo init
+    let d = scratch("compose");
+    let fx = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/docs-compose");
+    std::fs::copy(
+        fx.join("docker-compose.yaml"),
+        d.join("docker-compose.yaml"),
+    )
+    .unwrap();
+    let (ok, out) = run_hydo(&d, &["init"]);
+    assert!(ok, "hydo init: {out}");
+    std::fs::copy(
+        fx.join("hydo-compose.lock.json"),
+        d.join("hydo/hydo-compose.lock.json"),
+    )
+    .unwrap();
+    let args = [
+        "compose",
+        "docker-compose.yaml",
+        "--out",
+        "hydo/hydo.yaml",
+        "--images-dir",
+        "images",
+    ];
+    let (ok, out) = run_hydo(&d, &args);
+    assert!(ok, "hydo compose: {out}");
+    assert!(
+        d.join("hydo/fetch-images.sh").exists(),
+        "hydo compose wrote no hydo/fetch-images.sh: {out}"
+    );
+    let yaml = std::fs::read_to_string(d.join("hydo/hydo.yaml")).unwrap();
+    assert!(
+        yaml.contains("cache"),
+        "hydo/hydo.yaml lacks the service: {yaml}"
+    );
+    let _ = std::fs::remove_dir_all(&d);
 }

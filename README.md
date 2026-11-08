@@ -230,6 +230,9 @@ same. On a Mac the same schedule loses key `k:0`.
    sh hydo/fetch-images.sh
    ```
 
+   The import writes a placeholder workload and invariant. Replace them with commands in
+   `hydo/workload/` and checks in `hydo/checks/`; until then the check in step 4 fails.
+
 3. Read `hydo guide workflow`. It says what to put in each file.
 4. Run `hydo build hydo/hydo.yaml --check` after each change. It checks the folder without
    building.

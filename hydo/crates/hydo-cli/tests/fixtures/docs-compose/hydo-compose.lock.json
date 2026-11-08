@@ -1,0 +1,71 @@
+{
+ "generated_by": "hvx/onboard/hydo-compose",
+ "images": {
+  "redis:7.2": {
+   "index_digest": "sha256:5b816bb37d9707a70f10ef5002ecf8ee431750d397010fc4314c93dca887962f",
+   "name": "redis",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "redis-server"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "REDIS_VERSION=7.2.17"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:b690ae83413c6051e087c9fb92a420b002e820a9fe434ef6e266d612e3915306",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "redis-server"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "REDIS_VERSION=7.2.17"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:f98c84a3b5d07e1a5a720feff7a6a1534cc951a488c28a33ca41fe5385fe3acf",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "redis:7.2",
+   "registry": "docker.io",
+   "repo": "library/redis",
+   "tag": "7.2"
+  }
+ }
+}
