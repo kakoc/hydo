@@ -182,6 +182,7 @@ fn a_cf_run_ends_at_the_workload_end_with_the_reported_ids() {
                 acked: ids("hydo-explore-acked:"),
                 failed: ids("hydo-explore-failed:"),
                 world: Vec::new(),
+                outcomes: Vec::new(),
             }),
             "{text}"
         );

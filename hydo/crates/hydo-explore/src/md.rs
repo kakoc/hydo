@@ -82,6 +82,9 @@ pub fn summary_rows(doc: &Exploration) -> Vec<(String, Value)> {
     if let Some(n) = s.runs_with_new_error_kinds {
         put("runs_with_new_error_kinds", json!(n));
     }
+    if let Some(n) = s.vacuous_passes {
+        put("vacuous_passes", json!(n));
+    }
     r
 }
 

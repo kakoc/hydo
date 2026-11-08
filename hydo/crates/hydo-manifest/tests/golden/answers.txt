@@ -848,8 +848,8 @@ R	^	<tmp>/cases/v-guest-13.json --arch x86_64 []	err	"guest.clock_start: invalid
 R	^	<tmp>/cases/v-guest-13.json --arch arm64 []	err	"guest.clock_start: invalid type: string \"2024-01-01\", expect…#9360a251e9555bb9"
 R	^	<tmp>/cases/v-guest-14.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: list object i…#dab5e50983647e36"
 R	^	<tmp>/cases/v-guest-14.json --arch arm64 []	crash	"hydo-build stops here with a Python exception: list object i…#dab5e50983647e36"
-R	^	<tmp>/cases/v-guest-15.json --arch x86_64 []	err	"guest: unknown field(s) x (known: clock_after_cut, clock_sta…#3e54304ed4a6375f"
-R	^	<tmp>/cases/v-guest-15.json --arch arm64 []	err	"guest: unknown field(s) x (known: clock_after_cut, clock_sta…#3e54304ed4a6375f"
+R	^	<tmp>/cases/v-guest-15.json --arch x86_64 []	err	"guest: unknown field(s) x (known: clock_after_cut, clock_sta…#4ccbd739868c62e4"
+R	^	<tmp>/cases/v-guest-15.json --arch arm64 []	err	"guest: unknown field(s) x (known: clock_after_cut, clock_sta…#4ccbd739868c62e4"
 R	^	<tmp>/cases/v-checks-empty.json --arch x86_64 []	err	"checks: a non-empty list of history checks (hydo/HISTORIES.md)"
 R	^	<tmp>/cases/v-checks-empty.json --arch arm64 []	err	"checks: a non-empty list of history checks (hydo/HISTORIES.md)"
 R	^	<tmp>/cases/v-checks-map.json --arch x86_64 []	err	"checks: a non-empty list of history checks (hydo/HISTORIES.md)"
@@ -1064,7 +1064,7 @@ R	^	<tmp>/mutants/m32.json --arch x86_64 []	err	"knobs[0]: unknown field(s) 1 (k
 R	^	<tmp>/mutants/m33.json --arch x86_64 []	ok	d:5a3d8060 w:4f53cda1 c:af71f2f0 m:74234e98
 R	^	<tmp>/mutants/m34.json --arch x86_64 []	ok	d:08e2f33f w:4f53cda1 c:77c49d58 m:74234e98
 R	^	<tmp>/mutants/m35.json --arch x86_64 []	err	"invariants[2]: duplicate id 'stack.exactly_once'"
-R	^	<tmp>/mutants/m36.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: clock_after_cut, clock…#5e2623dff4ec2b85"
+R	^	<tmp>/mutants/m36.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: clock_after_cut, clock…#55f76c2e671fca32"
 R	^	<tmp>/mutants/m37.json --arch x86_64 []	ok	d:d32981a2 w:4f53cda1 c:3c6caa57 m:74234e98
 R	^	<tmp>/mutants/m38.json --arch x86_64 []	ok	d:dce52cc4 w:4f53cda1 c:a18fbc84 m:74234e98
 R	^	<tmp>/mutants/m39.json --arch x86_64 []	err	"knobs[2]: unknown field(s) bogus (known: default, descriptio…#778225674b226bbf"

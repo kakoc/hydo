@@ -2428,7 +2428,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case299.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) ram (known: clock_after_…#4e2ecab348f2b224"
+R	^	<tmp>/case299.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) ram (known: clock_after_…#a491511b8c4676b0"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -2524,7 +2524,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case315.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: clock_after_cu…#a501f21a710ee27f"
+R	^	<tmp>/case315.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: clock_after_cu…#7397226bcd4711a4"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^

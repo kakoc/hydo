@@ -373,6 +373,7 @@ fn the_core_controllers_transcripts_on_the_identity_corpus() {
                     acked: ids,
                     failed: f,
                     world,
+                    ..
                 }) = r.run.fin.ending.clone()
                 else {
                     unreachable!()

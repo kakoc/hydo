@@ -439,7 +439,7 @@ pub(super) fn failed_ids_at_cut(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
 /// The power cut's hand-over for a plan with a world: the acknowledged ids, the failed ids and
 /// the carried records, from the text of `$HYDO_ACKED` with the dump appended (the words of the
 /// shell's `hydo-explore-acked:` line). Without a world every word is an id, as in the core.
-pub(super) fn power_cut(ctx: &Ctx, acked: &str, failed: &str) -> Ending {
+pub(super) fn power_cut(ctx: &Ctx, acked: &str, failed: &str, outcomes: Vec<String>) -> Ending {
     let words = |t: &str| t.split_whitespace().map(str::to_string).collect::<Vec<_>>();
     let (world_, acked): (Vec<String>, Vec<String>) = if world(ctx).is_some() {
         words(acked).into_iter().partition(|x| is_record(x))
@@ -450,6 +450,7 @@ pub(super) fn power_cut(ctx: &Ctx, acked: &str, failed: &str) -> Ending {
         acked,
         failed: words(failed),
         world: world_,
+        outcomes,
     }
 }
 

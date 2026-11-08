@@ -141,6 +141,7 @@ guest:
   ram_mib: 1024                # guest RAM in MiB (default 1024): 256..8192
   clock_start: 1767225600      # unix seconds the realtime clock starts at (default 2026-01-01)
   clock_after_cut: 60          # optional: after a power cut the recovery boot's clock continues from the cut, + 60 s
+  outcomes_after_cut: true     # optional: after a power cut the recovery boot's $HYDO_OUTCOMES holds the first boot's last outcomes
   cpu: v3                      # guest CPU level (x86_64 only): v2 (default) = x86-64-v2, no AVX;
                                # v3 = adds AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE, XSAVE
 
@@ -742,6 +743,18 @@ the harness passes on in the recovery boot's `oracle` command, and the recovery 
 clock at that epoch plus `<seconds>` (the time the machine was off), as a real
 clock keeps running across a power loss. Opt-in: only for a manifest that sets it (the host
 controller reads the clock at the cut and hands it to the recovery boot).
+
+### Outcomes after a power cut (`guest.outcomes_after_cut`)
+
+The recovery boot after a power cut starts with the first boot's `$HYDO_ACKED` and `$HYDO_FAILED`,
+and with an empty `$HYDO_OUTCOMES`. A check that looks up the ids listed in `$HYDO_OUTCOMES` (to
+find the unknown outcomes, or every id the client sent) then looks up nothing after a power cut,
+and reports "every acknowledged id lost" or passes without checking anything. With
+`guest.outcomes_after_cut: true` the host controller reads the first boot's `$HYDO_OUTCOMES` at the
+cut and writes the last outcome of every id into the recovery boot's file (`<id> <outcome>`, one
+line per id, in numeric order of the ids); `hydo-read hydo unknown` and the checks then see what
+the client saw. Opt-in, so that images built before it keep their recorded fingerprints: a
+manifest without the key gets an empty file there, as before.
 
 ### Link faults (a network fault between two named services)
 

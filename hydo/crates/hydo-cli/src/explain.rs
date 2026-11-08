@@ -194,12 +194,13 @@ pub fn cmd_explain(ctx: &Ctx, argv: &[String]) -> i32 {
         .is_ok_and(|r| r.schedule == sched);
     if !a_done {
         println!("hydo explain: the schedule        {sched}");
-        if run_to_dir(ctx, &image, sha.clone(), &sched, &a_dir).is_none() {
+        let Some(run) = run_to_dir(ctx, &image, sha.clone(), &sched, &a_dir) else {
             die(&format!(
                 "the schedule produced no RESULT line (see {})",
                 a_dir.join("engine.log").display()
             ));
-        }
+        };
+        crate::runs::print_warnings(&run);
     }
     let a = diff::load(&a_dir).unwrap_or_else(|e| die(&e));
     println!(

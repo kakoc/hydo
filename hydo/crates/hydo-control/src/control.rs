@@ -139,10 +139,15 @@ pub enum Ending {
     /// `fakes:`/`proxies:`; empty otherwise): the `w:` records of `hydo-world ctl dump`, which
     /// the shell init appended to the acknowledged-ids line. The recovery conversation is given
     /// them with [`crate::ScheduleController::with_world`].
+    ///
+    /// `outcomes` is the last outcome of every id of the first boot's `$HYDO_OUTCOMES`, as
+    /// `<id> <outcome>` lines, for a plan with `guest.outcomes_after_cut: true` (empty
+    /// otherwise): the recovery boot's `$HYDO_OUTCOMES` starts with them.
     PowerCut {
         acked: Vec<String>,
         failed: Vec<String>,
         world: Vec<String>,
+        outcomes: Vec<String>,
     },
     /// The conversation ends at the snapshot of this name, which later conversations resume
     /// from (the boot conversation ends at S1).

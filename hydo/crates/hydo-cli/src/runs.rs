@@ -267,7 +267,13 @@ fn run_engine(
     let run = a
         .with_control(&ctx.config.control)
         .one_with(&spec, &s, policy)
-        .unwrap_or_else(|e| die(&format!("cannot start the engine: {e}")));
+        .unwrap_or_else(|e| match e {
+            // a schedule the host controller refuses (what it names, a seam): no VM was started
+            hydo_engine::EngineError::Unsupported(w) => {
+                die(&format!("not run (no VM was started): {w}"))
+            }
+            e => die(&format!("cannot start the engine: {e}")),
+        });
     let _ = std::fs::write(outdir.join("engine.log"), &run.output);
     if !quiet {
         // the spin observer's notes (hvm: a run ended at a counter loop and ran again)
@@ -384,6 +390,26 @@ fn host_checks(outdir: &Path, mut res: Map<String, Value>, quiet: bool) -> Map<S
     res
 }
 
+fn verdict_of(res: &Map<String, Value>) -> String {
+    res.get("verdict")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
+/// The run's final verdict, when the host's checks (history checks, error logs) changed the one
+/// the `RESULT` line printed: the guest's checks only. A script that reads the `RESULT` line
+/// would otherwise report a lost write that a history check found as OK (the libSQL
+/// onboarding's friction item 8).
+fn final_verdict_line(printed: &str, last: &str) -> Option<String> {
+    (printed != last).then(|| {
+        format!(
+            "hydo: VERDICT {last}   (the run's verdict with the host's checks, as result.json \
+             has it; the RESULT line above has the guest's checks only)"
+        )
+    })
+}
+
 /// The known-errors list a run's error kinds were compared with (result.json `error_logs`).
 const ERRLOG_KNOWN: &str = "_errlog_known";
 
@@ -426,6 +452,15 @@ fn run_document(
         }
     }
     let mut run = hydo_explore::results::run_of("one", sched, res, &consoles);
+    // faults after the workload's last step do nothing (hydo_control::names::step_warnings)
+    if let (Ok(plan), Ok(s)) = (
+        hydo_control::agent::plan_of_image(image),
+        hydo_schedule::Schedule::parse(sched),
+    ) {
+        let mut w = hydo_control::names::step_warnings(&plan, &s);
+        w.append(&mut run.warnings);
+        run.warnings = w;
+    }
     run.tag = None;
     run.hydo_version = Some(env!("CARGO_PKG_VERSION").into());
     run.epoch = hydo_explore::results::this_epoch();
@@ -523,6 +558,14 @@ pub fn eventually_lines(run: &hydo_results::Run) -> Vec<String> {
         .collect()
 }
 
+/// A run's warnings (results `warnings`: faults that do nothing, a pass that checked nothing, a
+/// reaction that never fired), one `hydo: warning:` line each.
+pub fn print_warnings(run: &hydo_results::Run) {
+    for w in &run.warnings {
+        println!("hydo: warning: {w}");
+    }
+}
+
 fn write_run_document(outdir: &Path, run: &hydo_results::Run) {
     let _ = hydo_results::write_document(&outdir.join(hydo_results::RUN_DOC), run);
 }
@@ -568,8 +611,12 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         }
     }
     let res = run_one(ctx, &image, &sched, &outdir, &eargs, false);
+    let printed = verdict_of(&res);
     let res = host_checks(&outdir, res, false);
     let res = errors_one(&outdir, &sched, res, known.as_deref());
+    if let Some(line) = final_verdict_line(&printed, &verdict_of(&res)) {
+        println!("{line}");
+    }
     let sha = sha256_file(&image).unwrap_or_else(|e| die(&format!("{}: {e}", image.display())));
     let run = run_document(
         &outdir,
@@ -594,6 +641,7 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
             l.trim()
         );
     }
+    print_warnings(&run);
     // M178: why a failed run failed, after everything the run recorded is written (the
     // evidence is read by a separate replay; `--no-diagnose` skips it)
     if run.verdict.kind != "ok" {
@@ -832,6 +880,7 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
                 ctx.backend_name(),
             );
             write_run_document(&dir, &run);
+            print_warnings(&run);
             let fp = py_str(&res["fp"]);
             let (ok, word) = repro_same(it, now, &fp, &py_str(&res["verdict"]));
             same += ok as usize;
@@ -1227,4 +1276,24 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
     }
     println!("hydo: {n} regressions saved; `hydo build` stages them, `hydo repro --regressions` replays them");
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::final_verdict_line;
+
+    /// The RESULT line prints the guest's checks only; when the host's checks change the verdict,
+    /// `hydo run` prints the final one (the libSQL onboarding's friction item 8).
+    #[test]
+    fn the_final_verdict_is_printed_when_the_hosts_checks_changed_it() {
+        let g = "HYDO-ORACLE: OK invariants=1 held (x)";
+        assert_eq!(final_verdict_line(g, g), None);
+        let v = "HYDO-ORACLE: VIOLATION [sql.lap] lost-append";
+        assert_eq!(
+            final_verdict_line(g, v).unwrap(),
+            "hydo: VERDICT HYDO-ORACLE: VIOLATION [sql.lap] lost-append   (the run's verdict \
+             with the host's checks, as result.json has it; the RESULT line above has the \
+             guest's checks only)"
+        );
+    }
 }

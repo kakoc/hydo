@@ -226,6 +226,7 @@ impl Suite {
                 acked: ids,
                 failed: f,
                 world,
+                ..
             }) = r.run.fin.ending.clone()
             else {
                 unreachable!()

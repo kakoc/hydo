@@ -1587,6 +1587,99 @@ fn unpack(o: &OciService, t: &mut Tree, tmpdir: &Path, busybox: &Path, hosts: &s
     Ok(())
 }
 
+/// Readiness commands that run a program the image does not have (no silent passes,
+/// 2026-11-07): `hydo compose` turns a Compose healthcheck into `ready: ... hydo-oci <svc> <prog>
+/// ...`, and an image without `<prog>` (the libSQL server's image has no `curl`) fails the
+/// readiness check of every run, after its whole time limit. Called after [`stage`] or
+/// [`stage_with`] with the same `share` and `layers`, so that each service's tree is looked at
+/// where it was unpacked (its own R/oci/<svc>, the tree it shares with `root.share_images`, or
+/// its `writable: true` layer on the staged data partition); one warning per such command.
+pub fn ready_warnings(
+    oci: &[OciService],
+    root: &Path,
+    m: &Value,
+    share: bool,
+    layers: Option<&Path>,
+) -> Vec<String> {
+    let paths: Vec<(String, String, PathBuf)> = oci
+        .iter()
+        .enumerate()
+        .map(|(i, o)| {
+            let p = o
+                .env
+                .iter()
+                .find(|(k, _)| k == "PATH")
+                .map(|(_, v)| v.clone());
+            let tree = match layers {
+                Some(l) if o.writable => l.join(".hydo/layers").join(&o.svc),
+                _ => {
+                    // the first earlier service of the same image that is not writable
+                    let owner = oci[..i]
+                        .iter()
+                        .find(|x| {
+                            share
+                                && !o.writable
+                                && !x.writable
+                                && x.img.config_digest == o.img.config_digest
+                        })
+                        .map_or(o.svc.as_str(), |x| x.svc.as_str());
+                    root.join("oci").join(owner)
+                }
+            };
+            (
+                o.svc.clone(),
+                p.unwrap_or_else(|| DEFAULT_PATH.to_string()),
+                tree,
+            )
+        })
+        .collect();
+    ready_warnings_in(&paths, m)
+}
+
+/// [`ready_warnings`] for image services given as (service, the image's PATH, its tree).
+fn ready_warnings_in(paths: &[(String, String, PathBuf)], m: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    let services = m.get("services").and_then(Value::as_array);
+    for s in services.into_iter().flatten() {
+        let name = s.get("name").and_then(Value::as_str).unwrap_or("");
+        let Some(ready) = s.get("ready").and_then(Value::as_str) else {
+            continue;
+        };
+        let w: Vec<&str> = ready.split_whitespace().collect();
+        for (i, tok) in w.iter().enumerate() {
+            if *tok != "hydo-oci" && !tok.ends_with("/hydo-oci") {
+                continue;
+            }
+            let (Some(svc), Some(prog)) = (w.get(i + 1), w.get(i + 2)) else {
+                continue;
+            };
+            // a word the shell expands or a quoted one cannot be looked up here
+            if prog.starts_with('-') || prog.contains(['$', '"', '\'', '`', '(', ';', '|', '&']) {
+                continue;
+            }
+            let Some((_, path, base)) = paths.iter().find(|(s, _, _)| s.as_str() == *svc) else {
+                continue;
+            };
+            let found = if prog.contains('/') {
+                fsx::lexists(&base.join(prog.trim_start_matches('/')))
+            } else {
+                path.split(':')
+                    .filter(|d| !d.is_empty())
+                    .any(|d| fsx::lexists(&base.join(d.trim_start_matches('/')).join(prog)))
+            };
+            if !found {
+                out.push(format!(
+                    "services: {name}: ready: runs {prog} inside the image of {svc} (hydo-oci), \
+                     and that image has no {prog} (PATH {path}): the readiness check would fail \
+                     in every run; use a program the image has, or the guest's busybox outside \
+                     hydo-oci (for example wget -q -O /dev/null http://<addr>:<port>/<path>)"
+                ));
+            }
+        }
+    }
+    out
+}
+
 /// `stage(oci, R, busybox, tmpdir, netns, share)`: flatten every image service's image into
 /// R/oci/<svc>, add the launchers. Returns the owners and modes of everything under R/oci.
 ///
@@ -2065,6 +2158,42 @@ pub fn fix_ext4(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// A readiness command that runs, through hydo-oci, a program its image lacks is named;
+    /// one whose program is there (on the image's PATH, or by its path) is not.
+    #[test]
+    fn ready_commands_with_a_program_the_image_lacks_are_named() {
+        let root = std::env::temp_dir().join(format!("hydo-ready-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("oci/primary/bin")).unwrap();
+        fs::write(root.join("oci/primary/bin/wget"), b"").unwrap();
+        fs::create_dir_all(root.join("oci/primary/opt/x")).unwrap();
+        fs::write(root.join("oci/primary/opt/x/probe"), b"").unwrap();
+        let m = json!({"services": [
+            {"name": "primary", "ready": "timeout 2 hydo-oci primary curl -fsS http://localhost:8080/health"},
+            {"name": "a", "ready": "timeout 2 hydo-oci primary wget -q -O- http://localhost:8080/"},
+            {"name": "b", "ready": "hydo-oci primary /opt/x/probe"},
+            {"name": "c", "ready": "hydo-oci primary \"$X\""},
+            {"name": "d", "ready": "redis-cli ping"},
+            {"name": "e", "ready": "hydo-oci other curl x"}
+        ]});
+        let paths = vec![(
+            "primary".to_string(),
+            DEFAULT_PATH.to_string(),
+            root.join("oci").join("primary"),
+        )];
+        let w = ready_warnings_in(&paths, &m);
+        let _ = fs::remove_dir_all(&root);
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(
+            w[0].starts_with(
+                "services: primary: ready: runs curl inside the image of primary (hydo-oci), and \
+                 that image has no curl"
+            ),
+            "{}",
+            w[0]
+        );
+    }
 
     /// The refusals of hydo_oci._mounts that test_hydo_compose.py's test_validation checked
     /// (deleted with the Python in M107): its eight cases with hydo_oci's messages.

@@ -101,6 +101,7 @@ pub(crate) const KNOWN_GUEST: &[&str] = &[
     "ram_mib",
     "clock_start",
     "clock_after_cut",
+    "outcomes_after_cut",
     "cpu",
     "description",
 ];
@@ -701,6 +702,15 @@ pub fn validate(m: &mut Value) -> R<()> {
         if !int_in(c, 1, 10 * 365 * 86400) {
             return Err(err(format!(
                 "guest.clock_after_cut: whole seconds in [1, 315360000] (got {})",
+                repr(c)
+            )));
+        }
+    }
+    if has(&guest, "outcomes_after_cut")? {
+        let c = index(&guest, "outcomes_after_cut")?;
+        if !c.is_boolean() {
+            return Err(err(format!(
+                "guest.outcomes_after_cut: true or false (got {})",
                 repr(c)
             )));
         }

@@ -55,6 +55,7 @@ hydo-control::react                      fast
 hydo-control::restart                    fast
 hydo-control::restart_may_fail           fast
 hydo-control::storage                    fast
+hydo-control::silent                     fast
 hydo-engine                              fast
 hydo-engine-proto                        fast
 hydo-engine::lockstep                    fast
@@ -66,6 +67,7 @@ hydo-explore::corpus                     full
 hydo-explore::fake_engine                fast
 hydo-explore::identity                   fast
 hydo-explore::liveness_deadline          fast
+hydo-explore::names                      fast
 hydo-explore::netns_links                fast
 hydo-explore::reactive                   fast
 hydo-explore::storage_faults             fast

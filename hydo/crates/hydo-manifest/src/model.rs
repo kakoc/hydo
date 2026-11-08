@@ -584,6 +584,11 @@ pub struct Guest {
     /// After a power cut the recovery boot's clock continues from the cut plus this many seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clock_after_cut: Option<i64>,
+    /// After a power cut the recovery boot's $HYDO_OUTCOMES starts with the first boot's last
+    /// outcome of every id (without it the file starts empty there).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub outcomes_after_cut: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = "v2"))]
     pub cpu: Option<Param<CpuLevel>>,

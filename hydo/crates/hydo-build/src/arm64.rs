@@ -411,6 +411,15 @@ pub fn build(
             .ok_or_else(|| Fail::Exit("hydo-build: du -sm printed no size".into()))?;
         layer_mib += (used * 13 / 10 + 63) / 64 * 64;
     }
+    for w in crate::oci::ready_warnings(
+        &p.oci,
+        &r,
+        &m,
+        pyv::get(rootsec, "share_images")? == Some(&serde_json::Value::Bool(true)),
+        None,
+    ) {
+        crate::errln(io, &format!("hydo-build: warning: {w}"));
+    }
     // the agent is the kernel's first process itself (rdinit=/init): no shell before it
     crate::agent::install(&agent_bin, &agent_sha, &r, "/init", io)?;
     crate::record::write_inside(&r, "arm64", netns_k)?;
