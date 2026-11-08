@@ -694,6 +694,9 @@ build machine, before 2026-10-13.
   `docs/design/agent-environments.md`)
 - M200: Ghost onboarded on KVM (Mailgun and Stripe faked over HTTPS); a donation is recorded once
   per webhook delivery (known upstream), a newsletter batch whose answer is lost goes out again
+- M201: flaky test verdicts of 31 SWE-bench Lite tasks: no verdict flipped natively or under
+  hydo; native logs differed in 27 of 31 tasks, hydo's never; stale `.pyc` caches from the fixed
+  file times (`docs/design/flaky-verdicts.md`)
 
 ## Where to look
 

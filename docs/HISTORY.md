@@ -4923,3 +4923,34 @@ open item 69); a release buildable from the tree with `hydo-world-tls` and `hydo
 
 The example's manifest joined the identity corpora (`hydo-control` `corpus-quick.txt`,
 `hydo-explore` `corpus-full.txt` and `identity-quick.txt`).
+
+### Milestone 201 — DONE (flaky test verdicts of coding tasks, natively and under hydo: a measurement; 2026-11-08)
+
+A question from the agent-environments study (Milestone 199): when a coding task's tests give
+other verdicts on identical runs, an AI agent's score or a CI result moves for no reason in the
+code. How often does that happen natively, and does hydo remove it? The answer and every table:
+`docs/design/flaky-verdicts.md`; the scripts to run it again: `hydo/explore/flaky-verdicts/`. No
+product change.
+
+**Setup.** 31 tasks of SWE-bench Lite (pytest, pylint, sphinx, flask, django, requests, sympy,
+seaborn, xarray, scikit-learn, astropy) with 928 listed tests, each task's evaluation image
+prepared once with its patches applied and flattened. Natively: 10 `docker run` runs per task,
+and 10 with a quarter of one CPU for 19 tasks. Under hydo, on the KVM engine of the build machine
+with the environment as a `writable: true` image service: 10 fresh boots per task, 3 on a loaded
+CPU for 19 tasks, and 10 calls from a held snapshot (`hydo inspect exec`).
+
+**Result.** No test verdict changed between identical runs, natively or under hydo (310 native
+runs, 190 on a quarter CPU, 310 hydo fresh boots, 57 on a loaded CPU, 310 calls from a snapshot).
+The noise stayed below the verdict: in 27 of 31 tasks the native test logs differed between
+identical runs, and under hydo every log of a task was the same byte for byte, with one
+fingerprint per task in every fresh boot, also on a loaded host CPU. Median seconds per run:
+native 0.9, hydo fresh boot 8.9, hydo from the snapshot 4.3.
+
+**The `.pyc` finding.** hydo changed a verdict once, for a reason outside the tests:
+`hydo-build` gives every file of an image one fixed time, so Python's timestamp byte-code caches
+are stale under hydo and Python compiles the installed packages again at every start, with the
+compile-time warnings a cached run does not get. In flask-4045 a `DeprecationWarning` from
+`blinker`, turned into an error by `filterwarnings = error`, failed all 52 tests under hydo while
+they passed natively. Rewriting the caches as checked-hash caches (`python -m compileall
+--invalidation-mode checked-hash`) in the preparation removed every difference. This affects
+every Python image service; Milestone 202 adds the opt-in `root.fix_pyc` for it.

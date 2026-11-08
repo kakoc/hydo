@@ -1,0 +1,33 @@
+# The SWE-bench Lite tasks of the experiment (docs/design/flaky-verdicts.md), in the order they
+# were run: the smaller repositories first, with short test commands.
+psf__requests-2317
+pallets__flask-4045
+pallets__flask-4992
+pallets__flask-5063
+psf__requests-863
+pytest-dev__pytest-5103
+pytest-dev__pytest-5227
+pytest-dev__pytest-5413
+pytest-dev__pytest-5692
+pytest-dev__pytest-7168
+pytest-dev__pytest-7220
+pytest-dev__pytest-7432
+pytest-dev__pytest-8365
+pytest-dev__pytest-9359
+pylint-dev__pylint-5859
+pylint-dev__pylint-6506
+pylint-dev__pylint-7228
+pylint-dev__pylint-7993
+sphinx-doc__sphinx-7975
+sphinx-doc__sphinx-8273
+sphinx-doc__sphinx-8627
+sphinx-doc__sphinx-11445
+sympy__sympy-13043
+sympy__sympy-24909
+django__django-10924
+django__django-13220
+django__django-16046
+mwaskom__seaborn-3010
+pydata__xarray-4248
+scikit-learn__scikit-learn-13584
+astropy__astropy-14365
