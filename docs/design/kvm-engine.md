@@ -9,7 +9,8 @@ guest kernel recipe `hv/kvm/linux/`; end-to-end check `hv/kvm/kvm-check.sh`.
 What a user needs to know, in short: the KVM engine runs hydo's x86_64 images on any x86_64
 Linux machine where the user can open `/dev/kvm` (a cloud VM with nested virtualization, a CI
 runner, a laptop), with no kernel module and no root (`--backend kvm`). It gives the guest one
-vCPU at the x86-64-v2 level (images that ask for several vCPUs or `guest.cpu: v3` are refused).
+vCPU at the x86-64-v2 level, or at x86-64-v3 (AVX2) for images with `guest.cpu: v3` on a host
+that has it (Milestone 187; images that ask for several vCPUs are refused).
 Guest time is counted in VM exits that reach the engine, not in instructions, so a stretch of
 guest code that makes no exit takes no guest time and gets no timer interrupt; a loop that spins
 without exits is resolved when it is an exact cycle of register states, and a loop that also
@@ -18,8 +19,10 @@ schedule again (anything else that runs without exits ends the run as invalid, S
 share the image's disk and RAM, so a worker's memory grows with what its runs write. Its
 fingerprints are its own: they compare with
 runs of this engine with the same guest kernel on the same kind of host CPU, never with hvx's or
-the Mac engine's (across engines only verdicts compare, and `hydo repro` says so). It has run on
-one Intel machine only (no AMD host yet).
+the Mac engine's (across engines only verdicts compare, and `hydo repro` says so); a v3 guest's
+fingerprints also differ between the performance and the efficiency cores of a hybrid CPU, so its
+vCPU runs on one kind ("x86-64-v3"). It has run on an Intel machine (the build machine) and, at v2,
+on GitHub's AMD runners.
 
 ## Why
 
@@ -453,7 +456,7 @@ where the counter's flags are written and never read.
 | the PMU (RDPMC, counters) | leaf 0xA zero; KVM's PMU disabled where `KVM_CAP_PMU_CAPABILITY` allows; CR4.PCE clear | `cpuid` tests |
 | RDRAND, RDSEED | hidden; on Intel KVM makes them fault | `cpuid` tests; audit |
 | MONITOR/MWAIT, WAITPKG (TPAUSE, UMWAIT) | hidden; KVM intercepts MWAIT | `cpuid` tests |
-| XSAVE state size and features, AVX | hidden (x86-64-v2 as hvx's default); FXSAVE state only | `cpuid` tests |
+| XSAVE state size and features, AVX | hidden at v2 (as hvx's default); FXSAVE state only. At v3 (Milestone 187): x87, SSE and AVX in the standard format, and the sources of the table in "x86-64-v3" | `cpuid` tests |
 | stale TLB entries after a permission upgrade (spurious page faults the guest counts) | the guest kernel flushes at every change of a present entry | 4 of 100 E-core runs differed before, 0 of 150 after |
 | accessed bits cleared without a flush (reclaim decides by them; the CPU sets them again only on a TLB miss) | the guest kernel flushes the page in `ptep_clear_flush_young` (M159) | the patch (found in the review; it needs memory pressure in the guest) |
 | a thread that yields while it waits for a timeout | every `sched_yield` reads the clock (an exit) | the patch |
@@ -492,8 +495,8 @@ engine's control transcript (its stops are counted in that engine's clock).
 Everything that defines the guest's state is in a snapshot and in the fingerprint: the general
 registers, the segment registers with their hidden parts, the descriptor tables, CR0, CR2-CR4,
 CR8, EFER and APIC_BASE (`kvm_sregs`, with the pending-interrupt bitmap), the x87, SSE and MXCSR
-state (from `KVM_GET_XSAVE`; XCR0 stays at its reset value 1, since the guest cannot enable
-XSAVE), the KVM-owned MSRs (SYSENTER, PAT, STAR, LSTAR, CSTAR, SFMASK, KERNEL_GS_BASE; FS and GS
+state (from `KVM_GET_XSAVE`; at v2 XCR0 stays at its reset value 1, since the guest cannot
+enable XSAVE; at v3 XCR0 and the AVX state too, "x86-64-v3"), the KVM-owned MSRs (SYSENTER, PAT, STAR, LSTAR, CSTAR, SFMASK, KERNEL_GS_BASE; FS and GS
 bases are in the segments), the pending events (exception, interrupt, NMI, the interrupt shadow,
 a pending triple fault), the debug registers, the engine's machine state (the clock, the exit
 count, the timer, the PIC, the UART, the MSR model), the devices with the disk's volatile cache,
@@ -525,12 +528,14 @@ the stop where the host took S1).
   sha256 and the initramfs.
 - The engine runs on a thread of the `hydo` process (KVM allows several VMs in one process);
   `HYDO_KVM=process` runs the program `hydo-kvm` instead, with the Mac engine's command line plus
-  the disk: `hydo-kvm [--ram-mib N] --control boot serve|one <bzImage-kvm> <initramfs> <disk|->
-  <outdir> ["<schedule>"]`.
+  the disk: `hydo-kvm [--ram-mib N] [--cpu v3] --control boot serve|one <bzImage-kvm> <initramfs>
+  <disk|-> <outdir> ["<schedule>"]`.
 - The explorer draws schedules for it as for the Mac (the tokens both apply: no `cf=`, `pp=`,
   `xt*`; forced preemption points `pct=` instead), with hvx's images.
-- An image that asks for several vCPUs or `guest.cpu: v3` is refused by the engine itself (for
-  `hydo run`, the explorer and hydo-bench alike), not run on less (Milestone 159).
+- An image that asks for several vCPUs is refused by the engine itself (for `hydo run`, the
+  explorer and hydo-bench alike), not run on fewer (Milestone 159). An image with `guest.cpu: v3`
+  runs at x86-64-v3 (`hydo-kvm --cpu v3`, Milestone 187) on a host whose KVM has AVX2, and is
+  refused elsewhere with what the host lacks; `hydo doctor --backend kvm` says which.
 - A run that ends as a SPIN (a counter loop the engine proved, Milestone 161) is run again by the
   host with `spin=rewind` (`hydo run`, `hydo repro`, the explorer and hydo-bench alike), and the
   second run is the one reported, as on the Mac; `HVM_SPIN_REWIND=0` turns that off for both
@@ -548,11 +553,138 @@ the stop where the host took S1).
   `HYDO_KVM_SPIN_MS`, `HYDO_KVM_TRACE`, `HYDO_KVM_ECHO`, `HYDO_KVM_DIAG`, `HYDO_KVM_DIAG_RAM`,
   `HYDO_KVM_TRACE_UNKNOWN`; the ABI probe's `HYDO_KVM_HEADERS` (tests).
 
+## x86-64-v3 (`guest.cpu: v3`, Milestone 187)
+
+Programs built for newer CPUs need AVX2 at start: TigerBeetle's release binary, the official
+Restate image, and anything compiled with `-march=x86-64-v3` stop with "illegal instruction" on a
+v2 guest. Until Milestone 187 the KVM engine refused such images; now it gives them hvx's
+x86-64-v3 CPU (Milestone 68) on a host whose KVM has AVX2. A v2 guest is exactly what it was:
+the same CPUID table, the same vCPU state, the same fingerprints.
+
+**What the guest sees.** `cpuid::table_for(Level::V3)`: the v2 table plus FMA, MOVBE, XSAVE, AVX
+and F16C (leaf 1), BMI1, AVX2 and BMI2 (leaf 7), LZCNT (leaf 0x80000001), the basic leaves up to
+0xD, and the XSAVE leaf for x87, SSE and AVX only, in the standard format (an 832-byte area, AVX at
+offset 576; sub-leaf 1 zero: no XSAVEOPT, XSAVEC, XGETBV1 or XSAVES). No AVX-512, MPX, PKRU or AMX.
+The vendor and everything hidden at v2 stay as at v2 (no TSC, no APIC, no RDRAND or RDSEED, no
+PMU, no topology). KVM itself keeps two values of the table in step with the guest, as hardware
+does: OSXSAVE mirrors the guest's CR4.OSXSAVE, and CPUID.0xD.0:EBX is the area's size for the
+guest's current XCR0 (576 or 832 bytes). Both are functions of the guest's own state. The guest
+kernel says "x86/fpu: Enabled xstate features 0x7, context size is 832 bytes, using 'standard'
+format", `/proc/cpuinfo` lists `fma movbe xsave avx f16c abm bmi1 avx2 bmi2`, and glibc reports
+x86-64-v3 as supported, as under hvx.
+
+**How it is set.** `hydo-kvm --cpu v3` (the engine options carry it for `hydo run`, `hydo repro`,
+the explorer and hydo-bench, from the image's manifest as for hvx). `sys::Kvm::with_level` checks
+the host's `KVM_GET_SUPPORTED_CPUID` for every v3 bit, for XCR0 x87|SSE|AVX, and that the host's
+XSAVE layout puts AVX at offset 576, and it needs `KVM_CAP_XCRS`; a host without them is refused
+with the list of what it lacks (`hydo doctor --backend kvm` says whether v3 can run there). The
+guest enables XSAVE components itself with XSETBV, which KVM handles in the kernel against the
+table (a bit outside x87|SSE|AVX is a #GP), so XCR0 is guest state.
+
+**Snapshots and fingerprints.** A v3 vCPU's state adds XCR0 (`KVM_GET_XCRS`/`KVM_SET_XCRS`,
+restored before the XSAVE image); the YMM upper halves were already in the XSAVE image the engine
+keeps (`KVM_GET_XSAVE`, 4096 bytes, standard format). The fingerprint of a v3 vCPU adds XCR0, the
+header's XSTATE_BV restricted to x87|SSE|AVX (what the guest's own XSAVE writes; KVM may add PKRU on
+a host with protection keys, which the guest cannot see) and the AVX state. A v2 state hashes as
+before: `CpuState.xcr0` is 0 there, and the hash then reads nothing beyond the legacy area
+(`cpu::tests::a_v2_state_hashes_as_before_v3`).
+
+**What a v3 guest can see of the host, and how each is handled.**
+
+| source | how it is handled | test |
+|---|---|---|
+| the feature bits, the XSAVE leaf, the vendor | one fixed v3 table on every host, checked against the host's KVM | `cpuid::tests::v3_*` |
+| XCR0 | set by the guest's XSETBV (in KVM, no exit, no clock), limited by the table; in snapshots and in the fingerprint | S1 run equals fresh boot |
+| the YMM upper halves | in the XSAVE image of every snapshot; in the fingerprint | S1 run equals fresh boot; `a_v3_state_hashes_...` |
+| the XSAVE area's size and layout (Intel and AMD) | standard format only (no XSAVEC/XSAVES), AVX at 576 on both vendors, checked on the host | `v3_check_names_what_is_missing` |
+| XSAVEOPT's "modified" optimization (whether it writes depends on the last XRSTOR, which host exits and context switches change) | hidden (CPUID.0xD.1 zero), so the guest kernel and glibc use plain XSAVE; VT-x cannot make XSAVEOPT or XSAVEC fault, so a program that uses them without checking CPUID could see it | the guest kernel's "standard" line |
+| which components a core tracks as being in their initial state (XINUSE, the init optimization: the header's XSTATE_BV that the guest's own XSAVE writes into its RAM) | the core design's choice. On the build machine's hybrid Core i7-13700HX the x87 bit of a saved area is 0 on a performance core and 1 on an efficiency core, so the same run gave one fingerprint on each kind, and a third when the vCPU thread moved between them. A v3 vCPU thread is bound to one kind of core at its first run: the performance cores the process may use, else its efficiency cores (`hybrid::choose`, the CPUs in the engine's host line); across CPU models, as before, compare verdicts | unpinned runs equal the runs pinned to a performance core; pinned to CPU 16 they are the efficiency cores' own value |
+| XGETBV with ECX=1 (reads XINUSE) | hidden (XGETBV1 is not in the table) but VT-x cannot make it fault: a program that executes it without checking CPUID reads the core's tracking | — |
+| MXCSR_MASK (also written by XSAVE) | as at v2: left out of the vCPU part of the fingerprint, in RAM when the guest saves it | — |
+| AVX frequency changes | timing only, which the exit clock does not see | — |
+| the spin observer | its decoder knows no VEX instruction: a loop without exits that uses AVX is not resolved and ends as a SPIN, as any undecoded loop | — |
+
+**Measured** (the build machine, Core i7-13700HX, Linux 6.6.35, `bzImage-kvm` `d50fbc67…`; every
+schedule from a fresh boot unless marked S1, which is a run from the explorer's worker snapshot):
+
+| image (sha256) | schedule | verdict | fp |
+|---|---|---|---|
+| the avx2 example (`2dcb4305…`, M140's build) | `disk=none \| run` | OK, 8 AVX2/FMA steps equal the scalar ones; xstate 0x7, 832 bytes, standard format | `963aa26e9b7a5a08` (twice, twice pinned to CPU 0, and S1) |
+| | the same, pinned to CPU 16 (an efficiency core) | OK | `2068294767586e14` (twice) |
+| | `disk=none \| run T=4:3600` | OK | `9da9f9e442eb9aa4` (twice, twice on CPU 0, S1); CPU 16 `8ee59a997783b9cd` (twice) |
+| | `disk=none \| run` with `hydo explore --cpu v2` (the control) | VIOLATION `acked=0 good=0` (no AVX2) | `9398a9f5d5df5774` |
+| restate-oci (`77978db5…`, the official image built for Broadwell) | `disk=none \| run` | OK, 6 of 6 steps answered | `62acce98929d1369` (twice) |
+| | `disk=none \| run K=restate@2+2` | OK, 4 of 6 | `69c72be4dbd8e583` (twice) |
+| | `disk=cut \| run C=4` | OK, 4 of 6 | `04f9abeff6e9c10b` (twice) |
+
+The verdicts are hvx's for the same images (docs/REBASELINE.md 13.2). The 20 unbound runs of the
+clock schedule after the binding gave `9da9f9e442eb9aa4` every time.
+
+Before the binding to one kind of core, unbound runs of the avx2 image gave `c23937045b3bd29c`
+twice, and the clock schedule gave the performance cores' value 14 times and another value once:
+the thread had moved between the two kinds during those runs.
+
+Every recorded v2 value of this document is unchanged with the v3 code in the engine:
+`hv/kvm/kvm-check.sh` gave 16 of 16 (with the ledger-spin check, CPUs 0 and 16) and every recorded
+KVM value of `hydo/onboard/recorded.json` (the release's Redis image's eight schedules, the netem
+image, the S1 run `ac512c2616cef6a4`, the exploration's 46 runs and `hydo repro` 14 of 14), and the
+stack's pinned reproducers' schedule gave `c3419179cf1a55ba` (VIOLATION, order 11) and
+`c0746a7568ccf3b8` (OK), each twice.
+
+`hv/kvm/v3-check.sh` checks v3 end to end on any KVM host, Intel or AMD: the doctor, two fresh
+boots and a run from S1 of a v3 image (`hv/kvm/v3/hydo.yaml`, the avx2 example without its Nix
+glibc, built by the release on the machine), a clock step twice, and the v2 control. On the build
+machine it gave 5 of 5 (its image `1ae6a578…`, `disk=none | run` `856667408ac3beaa` from fresh
+boots and from S1).
+
+**TigerBeetle does not run on this engine, at any CPU level.** Its three-replica image of
+Milestone 179 (`4dfaec44…`, 8 GiB, v3) boots on it and starts `tigerbeetle format` in the first
+replica's `setup:`, whose AVX2 code runs (the vCPU was found in its `vmovdqu` stores), and then
+makes no VM exit again: the run ends `ERROR boot: SPIN` after `HYDO_KVM_SPIN_SECS` (10 s by
+default; with 600 s it spun until stopped, with constant memory). `format` waits for its disk writes
+by polling io_uring's completion queue from user space without a system call (TigerBeetle's
+`io.tick()`, Zig's `copy_cqes` with no wait). On this engine the disk's completion interrupt is
+raised 16 exits after the request, and a completion reaches user space only when the guest kernel
+is entered again; a loop with no exit and no system call gets neither, so it waits forever. On hvx
+the PMU clock interrupts it. The spin observer cannot prove the loop a cycle (it stores to memory,
+calls functions and uses VEX instructions), so it is the class "anything else that runs without
+exits ends the run as invalid" (AGENTS.md open item 45 (c)), not a v3 problem. A remedy needs an
+exit at a point the guest alone fixes inside such a loop: a proof of exact cycles that also
+covers stores (writes that put back the same bytes) and AVX registers, or a branch-counting
+interrupt as hvx's.
+
+**On an AMD host (GitHub's runners).** Not run yet. The steps, on `ubuntu-24.04` (AMD EPYC there
+on 2026-11-08), with the branch checked out:
+
+1. Give the runner's user `/dev/kvm`: write the udev rule
+   `KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"` to
+   `/etc/udev/rules.d/99-kvm4all.rules` with sudo, then `sudo udevadm control --reload-rules` and
+   `sudo udevadm trigger --name-match=kvm`.
+2. Install the published Linux release (it has `guest/bzImage-kvm`): download
+   `hydo-linux-0.2.0.tar.gz` from the GitHub release `v0.2.0`, unpack it, and run
+   `./hydo-linux-0.2.0/install.sh --no-module --prefix "$HOME/hydo-rel"`.
+3. Build this tree's `hydo` as a static program: `sudo apt-get install -y musl-tools`,
+   `rustup target add x86_64-unknown-linux-musl`, then
+   `CC_x86_64_unknown_linux_musl=musl-gcc cargo build --release --locked -p hydo --target x86_64-unknown-linux-musl`.
+4. Run the check: `HYDO=target/x86_64-unknown-linux-musl/release/hydo REL="$HOME/hydo-rel"
+   OUT="$RUNNER_TEMP/v3" sh hv/kvm/v3-check.sh` (it compiles `hydoavx` with the runner's `cc`
+   and builds the image with the release), and keep `$RUNNER_TEMP/v3/v3-check.log` as an artifact,
+   with `grep -m1 'model name' /proc/cpuinfo`.
+
+Expected: 5 of 5, with fingerprints of their own (AMD's XINUSE tracking and MXCSR_MASK are its
+own, as v2's fingerprints already differ by vendor). Running `hv/kvm/kvm-check.sh` there as well
+shows the v2 values unchanged (`93da6e186fe00d1a` and `ea0afd368b0ab9b1` on the Redis image).
+
+Left: no AMD host has run a v3 guest yet (AMD's XINUSE tracking and its MXCSR_MASK will give
+other fingerprints, as v2's already differ by vendor; the verdicts should be equal); several vCPUs
+stay hvx's.
+
 ## One vCPU
 
 Several vCPUs need turns of an exact length of guest work (hvx counts retired branches with the
 PMU, M66); KVM gives no instruction-exact clock, and the exit count is not one. The engine has
-one vCPU; `--vcpus` and the v3 CPU level stay hvx options.
+one vCPU; `--vcpus` stays an hvx option (the v3 CPU level is the KVM engine's too since
+Milestone 187).
 
 ## AMD hosts
 
@@ -561,8 +693,12 @@ On AMD, KVM's cross-vendor support covers what a 64-bit Linux guest with this ta
 (SYSENTER in 64-bit mode is not used: no 32-bit compatibility). The differences that remain are
 the hardware's (undefined flags, as above) and one gap: AMD has no RDRAND or RDSEED exiting, so a
 user program that executes RDRAND without checking CPUID gets hardware random bits there (glibc,
-OpenSSL and the Go and Rust runtimes check CPUID first). The KVM engine has not run on an AMD host
-yet.
+OpenSSL and the Go and Rust runtimes check CPUID first). GitHub's AMD runners ran it at v2 on
+2026-11-08 (AGENTS.md, open item 45): the same verdicts as on Intel, fingerprints of their own. At
+v3 the standard XSAVE format is the same on both vendors (the engine checks the AVX offset on the
+host); which components a core tracks as initial, and MXCSR_MASK, are the core's, so a v3 guest's
+fingerprints are per CPU kind there too. No AMD host has run a v3 guest yet (`hv/kvm/v3-check.sh`
+does it).
 
 ## Code structure
 
@@ -572,7 +708,8 @@ yet.
   steps run to the next operation's address, as KVM's run to a breakpoint);
 - `mem.rs` guest RAM, the RAM bases snapshots share, and RAM images (with `sys.rs` the only
   `unsafe` code); the disk's copy-on-write blocks are hydo-hvm's `disk`;
-- `cpuid.rs`, `msr.rs`, `pic.rs`, `uart.rs`, `machine.rs`, `layout.rs`, `boot.rs`, `kernel.rs`;
+- `cpuid.rs` (the v2 and v3 tables), `msr.rs`, `pic.rs`, `uart.rs`, `machine.rs`, `layout.rs`,
+  `boot.rs`, `kernel.rs`; `hybrid.rs` which kind of core a v3 vCPU runs on;
 - `vmm.rs` the machine, the run loop (generic over the vCPU) and the rewind mode; `spin.rs` the
   spin observer's rules, the decoder's data flow and the counter-loop proof;
 - `serve.rs` the protocol; `bin/hydo-kvm.rs` the program.
