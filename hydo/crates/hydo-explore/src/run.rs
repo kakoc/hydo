@@ -148,6 +148,27 @@ impl Cx {
         })
     }
 
+    /// The finding class of a schedule given by hand (`--schedule`). The engines take a schedule
+    /// without `disk=` or `dseed=` (`disk=none | run`); the explorer's own reader does not. The
+    /// seed never decides the class, so a missing value is read as the engines' default
+    /// (`disk=none`, `dseed=0`), and a text that still cannot be read has no class. Until
+    /// Milestone 192 the explorer printed the run's result and then stopped with "cannot read
+    /// the schedule ...: no dseed=" and exit status 1.
+    fn manual_class(&self, t: &str) -> Option<String> {
+        let s = self.ex.parse(t).ok().or_else(|| {
+            let (host, guest) = t.split_once('|')?;
+            let mut h: Vec<&str> = host.split_whitespace().collect();
+            if !h.iter().any(|w| w.starts_with("disk=")) {
+                h.insert(0, "disk=none");
+            }
+            if !h.iter().any(|w| w.starts_with("dseed=")) {
+                h.push("dseed=0");
+            }
+            self.ex.parse(&format!("{} |{guest}", h.join(" "))).ok()
+        })?;
+        Some(self.ex.finding_class(&s).to_string())
+    }
+
     fn compose_meta(&self) -> Option<&Value> {
         self.ex
             .space
@@ -813,7 +834,7 @@ fn run(mut cx: Cx) -> i32 {
         let r = &res["manual"].1;
         println!("{}", dumps_line(&Value::Object(results::public(r))));
         let mut run = cx.run_record("manual", &sch, r, role::MANUAL);
-        run.class = Some(cx.ex.finding_class(&cx.parse(&sch)).to_string());
+        run.class = cx.manual_class(&sch);
         cx.ev.write(&run);
         let summary = Summary {
             schedules: 1,

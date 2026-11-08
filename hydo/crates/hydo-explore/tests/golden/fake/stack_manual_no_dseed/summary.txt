@@ -1,0 +1,1 @@
+{"fp": "1ea1b97cda0f4b35", "wfp": "7acddbab5c7cc877", "secs": 2.7, "verdict": "HYDO-ORACLE: OK acked=30", "worker": N, "errors_new": ["4c53c64297e2"], "errors_known": 0}
