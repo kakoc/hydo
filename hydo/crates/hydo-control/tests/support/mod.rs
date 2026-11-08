@@ -361,7 +361,8 @@ pub struct Booted {
     pub s1: (VmState, AgentPoint, GuestState),
 }
 
-pub fn boot(plan: &Plan, salt: &str) -> Result<Booted, String> {
+/// The boot conversation alone, however it ends.
+pub fn boot_conv(plan: &Plan, salt: &str) -> Result<(Conv, ScheduleController), String> {
     let mut ctl = ScheduleController::boot(plan.clone()).map_err(|e| e.to_string())?;
     let c = converse(
         Fake::boot(salt, 16),
@@ -369,6 +370,11 @@ pub fn boot(plan: &Plan, salt: &str) -> Result<Booted, String> {
         Start::Boot,
         header("boot", None, "boot"),
     );
+    Ok((c, ctl))
+}
+
+pub fn boot(plan: &Plan, salt: &str) -> Result<Booted, String> {
+    let (c, ctl) = boot_conv(plan, salt)?;
     if c.fin.ending != Some(Ending::AtSnapshot("S1".into())) {
         return Err(format!("the boot ended with {:?}", c.fin.ending));
     }
@@ -449,6 +455,40 @@ pub fn run_schedule(b: &Booted, s: &Schedule) -> Result<Ran, Unsupported> {
         replay,
         inputs,
     })
+}
+
+/// A run whose engine turns the workload's end into a power cut (a `cf=` schedule whose k-th
+/// flush came), and its recovery boot from the inputs the run's transcript hands over, as
+/// `hydo_control::drive` does (Milestone 196).
+pub fn run_cut_at_go(
+    b: &Booted,
+    s: &Schedule,
+) -> Result<(Conv, Option<RecoveryInputs>, Option<Conv>), Unsupported> {
+    let mut ctl = ScheduleController::run_unchecked(b.plan.clone(), s, &b.s1.2)?;
+    let salt = s.to_string();
+    let cad = cadence(Some(s));
+    let mut fake = Fake::resume(&b.s1.0, &salt, cad);
+    fake.cut_at_go = true;
+    let run = converse(
+        fake,
+        &mut ctl,
+        Start::Resume(b.s1.1.clone()),
+        header("run", Some(s), "resume S1"),
+    );
+    let inputs = RecoveryInputs::from_transcript(&run.fin.transcript);
+    let recovery = match &inputs {
+        Some(i) => {
+            let mut rc = ScheduleController::recovery_from(b.plan.clone(), i, &b.s0.2)?;
+            Some(converse(
+                Fake::resume(&b.s0.0, &format!("{salt} recovery"), cad),
+                &mut rc,
+                Start::Resume(b.s0.1.clone()),
+                header("recovery", Some(s), "resume S0"),
+            ))
+        }
+        None => None,
+    };
+    Ok((run, inputs, recovery))
 }
 
 /// The acknowledged and failed ids a run's report states: the words of its last

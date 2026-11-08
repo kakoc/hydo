@@ -71,6 +71,8 @@ pub const KNOWN_SVC: &[&str] = &[
     "restart_may_fail",
     "writable",
     "storage",
+    "start_after",
+    "logs",
 ];
 pub const KNOWN_INV: &[&str] = &[
     "id",
@@ -95,6 +97,7 @@ pub(crate) const KNOWN_ROOT: &[&str] = &[
     "text",
     "dirs",
     "share_images",
+    "fix_pyc",
     "description",
 ];
 pub(crate) const KNOWN_GUEST: &[&str] = &[
@@ -501,6 +504,32 @@ pub fn validate(m: &mut Value) -> R<()> {
                 )));
             }
         }
+        if let Some(a) = obj_get(s, "start_after") {
+            if !in_strs(a, &["ready", "started"]) {
+                return Err(err(format!(
+                    "{wh}: start_after: ready or started (got {})",
+                    repr(a)
+                )));
+            }
+        }
+        if let Some(lg) = obj_get(s, "logs") {
+            let Value::Array(a) = lg else {
+                return Err(err(format!(
+                    "{wh}: logs: a list of absolute paths of log files"
+                )));
+            };
+            for x in a {
+                if !x
+                    .as_str()
+                    .is_some_and(|p| p.starts_with('/') && !p.contains(['\n', '\'']))
+                {
+                    return Err(err(format!(
+                        "{wh}: logs: {} is not an absolute path of a log file (for example /data/db/log/*.log)",
+                        repr(x)
+                    )));
+                }
+            }
+        }
         if let Some(b) = obj_get(s, "writable") {
             if !b.is_boolean() {
                 return Err(err(format!("{wh}: writable: must be true or false")));
@@ -693,6 +722,11 @@ pub fn validate(m: &mut Value) -> R<()> {
     if let Some(v) = obj_get(&root, "share_images") {
         if !v.is_boolean() {
             return Err(err("root.share_images: must be true or false"));
+        }
+    }
+    if let Some(v) = obj_get(&root, "fix_pyc") {
+        if !v.is_boolean() {
+            return Err(err("root.fix_pyc: must be true or false"));
         }
     }
     let guest = or_map(obj_get(m, "guest"));

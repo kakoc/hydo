@@ -572,6 +572,8 @@ impl Taker for Batch {
 }
 
 const TAIL: u64 = 3000;
+/// How many last lines of each file of a service's `logs:` the evidence reads.
+const LOG_FILE_LINES: u64 = 30;
 
 /// The replayed agent events of a run (conversation, stop, the agent's line).
 pub type Replayed = Vec<(Conv, StopInfo, Value)>;
@@ -678,9 +680,29 @@ fn plan_works(plan: &Plan, d: &Diagnosis) -> Vec<(String, String, Work)> {
         names.retain(|n| n != s);
         names.insert(0, s.clone());
     }
+    let bb = l.busybox.as_str();
+    let ex = |script: String, ns: Option<String>| {
+        Work::exec(bb, script, env(plan), ns, super::TIMEOUT_MS, TAIL)
+    };
     for s in &names {
         let p = l.log_of(s);
         v.push((format!("the log of {s}"), p.clone(), tail(p)));
+        // the service's own log files (`logs:`, `errors.files`): databases write theirs into
+        // their data directories, not to their output (Milestone 196)
+        if let Some(sv) = plan.service(s).filter(|sv| !sv.logs.is_empty()) {
+            v.push((
+                format!("the log files of {s}"),
+                sv.logs.join(" "),
+                Work::exec(
+                    bb,
+                    super::log_files_script(&sv.logs, LOG_FILE_LINES),
+                    env(plan),
+                    None,
+                    super::TIMEOUT_MS,
+                    4 * TAIL,
+                ),
+            ));
+        }
     }
     if let Some(s) = &d.service {
         let p = format!("{}/{s}.setup.log", l.dir);
@@ -690,17 +712,13 @@ fn plan_works(plan: &Plan, d: &Diagnosis) -> Vec<(String, String, Work)> {
         let p = format!("{}/provision.log", l.dir);
         v.push(("the provisioning's log".into(), p.clone(), tail(p)));
     }
-    let bb = l.busybox.as_str();
-    let ex = |script: String, ns: Option<String>, k: u64| {
-        Work::exec(bb, script, env(plan), ns, super::TIMEOUT_MS, 100 + k, TAIL)
-    };
     if let (Some(s), "service-not-ready" | "other") = (&d.service, d.failure.as_str()) {
         if let Some(sv) = plan.service(s) {
             let ns = netns_of(plan, Some(s)).ok().flatten();
             v.push((
                 format!("the readiness check of {s}, run once"),
                 sv.ready.clone(),
-                ex(format!(". {} 2>/dev/null; {}", l.prelude, sv.ready), ns, 1),
+                ex(format!(". {} 2>/dev/null; {}", l.prelude, sv.ready), ns),
             ));
         }
     }
@@ -708,12 +726,12 @@ fn plan_works(plan: &Plan, d: &Diagnosis) -> Vec<(String, String, Work)> {
     v.push((
         "the kernel's messages".into(),
         dmesg.into(),
-        ex(dmesg.into(), None, 2),
+        ex(dmesg.into(), None),
     ));
     v.push((
         "memory".into(),
         "free -m".into(),
-        ex("free -m".into(), None, 3),
+        ex("free -m".into(), None),
     ));
     v.push((
         "processes".into(),
@@ -721,7 +739,6 @@ fn plan_works(plan: &Plan, d: &Diagnosis) -> Vec<(String, String, Work)> {
         ex(
             "ps -o pid,ppid,stat,rss,args 2>/dev/null || ps".into(),
             None,
-            4,
         ),
     ));
     v

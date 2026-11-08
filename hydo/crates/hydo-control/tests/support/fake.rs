@@ -182,6 +182,9 @@ pub struct Fake {
     /// Refusals for lines the real agent would refuse (bad fields, unknown ops, old ids).
     pub bad_lines: Vec<String>,
     max_stops: u64,
+    /// The engine turns the workload's end (DiskFaultsOff) into a power cut, as a `cf=` run
+    /// whose k-th flush came does (only the tests that ask for it; Milestone 196).
+    pub cut_at_go: bool,
 }
 
 impl Fake {
@@ -205,6 +208,7 @@ impl Fake {
             ended: None,
             bad_lines: Vec::new(),
             max_stops: 400_000,
+            cut_at_go: false,
         };
         f.emit(
             1,
@@ -248,6 +252,7 @@ impl Fake {
             ended: None,
             bad_lines: Vec::new(),
             max_stops: 400_000,
+            cut_at_go: false,
         }
     }
 
@@ -643,8 +648,29 @@ impl Fake {
                 ]);
                 self.world.calls += 1;
                 let max_tries = (p.deadline_ms / p.every_ms.max(1)).max(1);
+                // `HYDO_FAKE_PEERS=<h>,<h>` in a readiness check: it passes only while every
+                // named service runs (a cluster whose check needs its peers), else at its deadline
+                let peers_down = p.argv.join(" ").split("HYDO_FAKE_PEERS=").nth(1).map(|l| {
+                    l.split_whitespace()
+                        .next()
+                        .unwrap_or("")
+                        .split(',')
+                        .any(|h| {
+                            !self
+                                .world
+                                .procs
+                                .get(h)
+                                .is_some_and(|x| x.running && !x.dying)
+                        })
+                });
                 let (ok, why, tries) = if !alive {
                     (false, ProbeEnd::Died, 1)
+                } else if let Some(down) = peers_down {
+                    if down {
+                        (false, ProbeEnd::Deadline, max_tries)
+                    } else {
+                        (true, ProbeEnd::Ok, 1)
+                    }
                 } else if r.is_multiple_of(53) {
                     (false, ProbeEnd::Deadline, max_tries)
                 } else {
@@ -1007,5 +1033,13 @@ impl Link for Fake {
     fn end(&mut self, e: &Ending) -> Result<String, LinkError> {
         self.ended = Some(e.clone());
         Ok(format!("RESULT fake at={} stops={}", self.t, self.n))
+    }
+
+    fn engine_cut(&self) -> bool {
+        self.cut_at_go
+            && self
+                .engine_actions
+                .last()
+                .is_some_and(|(_, a)| *a == EngineAction::DiskFaultsOff)
     }
 }

@@ -132,7 +132,6 @@ pub struct LiveTaker<'c> {
     pub at: RunPoint,
     pub pre: Option<Work>,
     cur: Option<(Req, Work, Instant)>,
-    k: u64,
     pub stop: Option<StopInfo>,
     pub served: u64,
     pub status: Value,
@@ -151,7 +150,6 @@ impl<'c> LiveTaker<'c> {
             at,
             pre,
             cur: None,
-            k: 0,
             stop: None,
             served: 0,
             status: Value::Null,
@@ -208,13 +206,10 @@ impl Taker for LiveTaker<'_> {
                     let s = self.status.clone();
                     self.calls.answer(s);
                 }
-                Some(req) => {
-                    self.k += 1;
-                    match work_for(&req, &self.plan, self.k) {
-                        Ok(w) => self.cur = Some((req, w, Instant::now())),
-                        Err(p) => self.calls.answer(err_doc(req.op(), &p)),
-                    }
-                }
+                Some(req) => match work_for(&req, &self.plan) {
+                    Ok(w) => self.cur = Some((req, w, Instant::now())),
+                    Err(p) => self.calls.answer(err_doc(req.op(), &p)),
+                },
             }
         }
     }
@@ -666,17 +661,15 @@ pub fn serve(ctx: &Ctx, id: &str) -> i32 {
                 return fail(&Problem::new("engine", "the stop was not kept", vec![]));
             };
             ready(&mut daemon, reach.stops, Vec::new());
-            let mut k = 0;
             while let Some(req) = daemon.next() {
                 if req == Req::Stop {
                     daemon.answer(json!({"v": 1, "type": "inspect", "op": "stop",
                         "notes": ["the session ended"]}));
                     break;
                 }
-                k += 1;
                 let t0 = Instant::now();
                 let keep = matches!(req, Req::Advance { .. });
-                let v = match work_for(&req, &m.plan, k) {
+                let v = match work_for(&req, &m.plan) {
                     Err(p) => err_doc(req.op(), &p),
                     Ok(mut w) => {
                         match m.call(&mut worker, &mut point, &rec, &mut w, keep, CALL_STOPS) {

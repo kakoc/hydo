@@ -363,6 +363,10 @@ variables! {
     /// `/proc/locks`, `/sys/module`, `/dev`, `/etc/udev/rules.d`): the CLI test sets an empty one,
     /// so its recorded answers are those of a host without hvx, KVM or the udev rule.
     HYDO_CLI_HOST_ROOT: Cli, Developer, "path; empty = `/`", "/", "hydo-cli";
+    /// The `guest.clock_start` (Unix seconds) that `hydo init` and `hydo compose` write into a
+    /// new project. The default is today at 00:00 UTC, so a new project's guest clock does not
+    /// start before the software it runs was built; the tests set a fixed value.
+    HYDO_INIT_CLOCK_START: Cli, User, "whole number: Unix seconds; empty = default", "today at 00:00 UTC", "hydo-cli, hydo-compose";
     /// The install cache (Milestone 162, docs/design/install-cache.md): `store/` (release
     /// archives and guest kernels by sha256), `versions/<version>/` (releases `hydo setup --get`
     /// installed), `bin/hydo` (the current one). An empty value means the default.

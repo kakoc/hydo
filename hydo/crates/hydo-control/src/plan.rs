@@ -112,6 +112,13 @@ pub struct PlanService {
     /// the workload's retry, and without a power cut ends in ERROR naming the service
     /// (`schedule.rs` `restart_dead`; MANIFEST.md "A restart after the faults that may fail").
     pub restart_may_fail: bool,
+    /// `start_after: started`: the service starts once every service before it was started,
+    /// without waiting for their readiness checks (`schedule.rs` `start_all`); false (`ready`,
+    /// the default): once every service before it is ready.
+    pub start_after_started: bool,
+    /// The service's own log files besides its output (`logs:`, then `errors.files`), absolute
+    /// paths or shell patterns: the diagnosis and `hydo inspect logs` read their tails.
+    pub logs: Vec<String>,
 }
 
 /// One invariant (manifest.sh's `HYDO_INV_<k>_*`).
@@ -380,6 +387,27 @@ impl Plan {
                     None => Restart::No,
                 },
                 restart_may_fail: get(s, "restart_may_fail") == Some(&Value::Bool(true)),
+                start_after_started: get(s, "start_after").map(py::str_of).as_deref()
+                    == Some("started"),
+                logs: {
+                    let mut v: Vec<String> = Vec::new();
+                    let lists = [
+                        get(s, "logs"),
+                        get(s, "errors").and_then(|e| get(e, "files")),
+                    ];
+                    for x in lists
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_array)
+                        .flatten()
+                    {
+                        let x = py::str_of(x);
+                        if !v.contains(&x) {
+                            v.push(x);
+                        }
+                    }
+                    v
+                },
             });
         }
         let wl = &d["workload"];

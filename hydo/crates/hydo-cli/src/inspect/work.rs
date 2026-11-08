@@ -95,18 +95,20 @@ impl Work {
         Work::new(None, files)
     }
 
-    /// `argv` run to its end, its stdout and stderr in `<DIR>/<k>.out` and `.err`, both read
-    /// up to `max` bytes. `script` is the shell text that runs the command (see [`shell`]).
+    /// `argv` run to its end, its stdout and stderr in `<DIR>/out` and `<DIR>/err`, both read up
+    /// to `max` bytes. `script` is the shell text that runs the command (see [`shell`]). The
+    /// names are the same for every call (before Milestone 196 they carried the call's number,
+    /// so from call 10 on the guest did one more character of work), and calls run one after
+    /// another, each reading its files before the next writes them.
     pub fn exec(
         busybox: &str,
         script: String,
         env: Vec<String>,
         netns: Option<String>,
         kill_after_ms: u64,
-        k: u64,
         max: u64,
     ) -> Work {
-        let (o, e) = (format!("{DIR}/{k}.out"), format!("{DIR}/{k}.err"));
+        let (o, e) = (format!("{DIR}/out"), format!("{DIR}/err"));
         let text = format!(
             "{busybox} mkdir -p {DIR}; ( {script} ) >{o} 2>{e} </dev/null",
             busybox = busybox
@@ -316,23 +318,13 @@ mod tests {
 
     #[test]
     fn exec_runs_then_reads_both_files_in_pieces() {
-        let mut w = Work::exec(
-            "/bin/busybox",
-            "echo hi".into(),
-            vec![],
-            None,
-            5000,
-            3,
-            4000,
-        );
+        let mut w = Work::exec("/bin/busybox", "echo hi".into(), vec![], None, 5000, 4000);
         let mut out = Out::new(10);
         w.step(&[], &mut out);
         let s = sent(out);
         assert_eq!(s.len(), 1);
         let Command::Run(r) = &s[0].1 else { panic!() };
-        assert!(
-            r.argv[3].contains("( echo hi ) >/tmp/hydo-inspect/3.out 2>/tmp/hydo-inspect/3.err")
-        );
+        assert!(r.argv[3].contains("( echo hi ) >/tmp/hydo-inspect/out 2>/tmp/hydo-inspect/err"));
         assert_eq!(r.kill_after_ms, Some(5000));
         // the run's answer, then its done event
         let mut out = Out::new(11);
@@ -360,7 +352,7 @@ mod tests {
         let Command::Read(r) = &s[0].1 else { panic!() };
         assert_eq!(
             (r.path.as_str(), r.offset, r.max),
-            ("/tmp/hydo-inspect/3.out", Some(0), 3000)
+            ("/tmp/hydo-inspect/out", Some(0), 3000)
         );
         // 3000 of 3500 bytes, then the rest is limited by max (4000 - 3000 = 1000)
         let mut out = Out::new(12);
@@ -393,7 +385,7 @@ mod tests {
         // stderr next: not there
         let s = sent(out);
         let Command::Read(r) = &s[0].1 else { panic!() };
-        assert_eq!(r.path, "/tmp/hydo-inspect/3.err");
+        assert_eq!(r.path, "/tmp/hydo-inspect/err");
         let mut out = Out::new(14);
         w.step(
             &[Seen::Refused {

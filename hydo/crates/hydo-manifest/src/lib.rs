@@ -276,6 +276,35 @@ pub fn service_order(services: &Value) -> Result<Vec<String>, ManifestError> {
     validate::service_order(services)
 }
 
+/// The `guest.clock_start` a new project gets (`hydo init`, `hydo compose`): `given`
+/// (`HYDO_INIT_CLOCK_START`), else today at 00:00 UTC. The format's default (2026-01-01) stays
+/// as it is, because changing it would move every recorded image; a new project names its own
+/// start, so that the guest's clock does not start before the software it runs was built.
+pub fn new_clock_start(given: Option<i64>) -> i64 {
+    given.unwrap_or_else(|| {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        now - now.rem_euclid(86_400)
+    })
+}
+
+/// A Unix time's UTC date, `YYYY-MM-DD` (for the comment beside a written `clock_start`).
+pub fn utc_date(sec: i64) -> String {
+    // days since 1970-01-01 to a civil date (Howard Hinnant's days_from_civil, inverted)
+    let z = sec.div_euclid(86_400) + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
 /// The manifest an image carries (/etc/hydo/hydo.yaml, any format) with the plan meta it carries
 /// (/etc/hydo/compose.json): manifest_space.Space(text, "hydo.yaml", compose=meta) up to its
 /// validation. The plan is in `Manifest::test`; `data` is the validated manifest as Space holds it.
@@ -412,4 +441,17 @@ pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
         ));
     }
     out
+}
+
+#[cfg(test)]
+mod clock_tests {
+    #[test]
+    fn dates() {
+        assert_eq!(super::utc_date(1767225600), "2026-01-01");
+        assert_eq!(super::utc_date(951782400), "2000-02-29");
+        assert_eq!(super::utc_date(0), "1970-01-01");
+        assert_eq!(super::utc_date(1794096000), "2026-11-08");
+        assert_eq!(super::new_clock_start(Some(5)), 5);
+        assert_eq!(super::new_clock_start(None) % 86_400, 0);
+    }
 }

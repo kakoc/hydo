@@ -1110,7 +1110,8 @@ fn relpath(p: &str, start: &str) -> String {
     }
 }
 
-pub fn init(argv: &[String], _root: &Path, out: &mut Out) -> R<i32> {
+pub fn init(argv: &[String], _root: &Path, out: &mut Out, clock_start: Option<i64>) -> R<i32> {
+    let clock_start = hydo_manifest::new_clock_start(clock_start);
     let mut a: Vec<String> = argv.to_vec();
     let mut d = cwd()?.display().to_string();
     let (mut name, mut do_agents, mut do_ignore) = (None::<String>, true, true);
@@ -1177,7 +1178,10 @@ pub fn init(argv: &[String], _root: &Path, out: &mut Out) -> R<i32> {
                     continue;
                 }
             }
-            let text = text_of(&bytes).replace("@NAME@", &name);
+            let text = text_of(&bytes)
+                .replace("@NAME@", &name)
+                .replace("@CLOCK_START@", &clock_start.to_string())
+                .replace("@CLOCK_DATE@", &hydo_manifest::utc_date(clock_start));
             std::fs::write(&dst, text).map_err(|e| io_fail(e, &dst))?;
             std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(mode))
                 .map_err(|e| io_fail(e, &dst))?;
@@ -1231,17 +1235,33 @@ pub fn init(argv: &[String], _root: &Path, out: &mut Out) -> R<i32> {
 /// Entry point for the CLI (`hydo guide | skill | init`): the exit status; prints
 /// `hydo: <message>` on stderr on a failure. `root` is the release root (or the repository).
 pub fn run(cmd: &str, argv: &[String], root: &Path) -> i32 {
+    run_with(cmd, argv, root, None)
+}
+
+/// [`run`] with the `guest.clock_start` that `hydo init` writes (`HYDO_INIT_CLOCK_START`, which
+/// a program's `main` reads; None: today at 00:00 UTC).
+pub fn run_with(cmd: &str, argv: &[String], root: &Path, clock_start: Option<i64>) -> i32 {
     let mut stdout = std::io::stdout().lock();
     let mut out = Out { w: &mut stdout };
-    run_to(cmd, argv, root, &mut out)
+    run_to_with(cmd, argv, root, &mut out, clock_start)
 }
 
 /// [`run`] writing to any stream (tests).
 pub fn run_to(cmd: &str, argv: &[String], root: &Path, out: &mut Out) -> i32 {
+    run_to_with(cmd, argv, root, out, None)
+}
+
+fn run_to_with(
+    cmd: &str,
+    argv: &[String],
+    root: &Path,
+    out: &mut Out,
+    clock_start: Option<i64>,
+) -> i32 {
     let r = match cmd {
         "guide" => guide(argv, root, out),
         "skill" => skill(argv, root, out),
-        "init" => init(argv, root, out),
+        "init" => init(argv, root, out, clock_start),
         _ => Err(Fail(format!("unknown command {cmd}"))),
     };
     let _ = out.w.flush();

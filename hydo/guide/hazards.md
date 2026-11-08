@@ -15,8 +15,12 @@ Check each item and report what you found.
 
 - The random generator is seeded deterministically, so `getrandom()` and `/dev/urandom` do not
   block.
-- Loopback is up; the realtime clock starts at `guest.clock_start` (default 2026-01-01).
-- Services start in dependency order with readiness waits; killed services are restarted; the
+- Loopback is up; the realtime clock starts at `guest.clock_start`. The format's default is
+  2026-01-01; `hydo init` and `hydo compose` write the day they ran. Software built after the
+  clock start sees its own files and catalogs in the future, so keep `clock_start` after the
+  newest release in the image.
+- Services start in dependency order with readiness waits (`start_after: started` for a cluster
+  whose readiness needs its peers, `hydo guide services`); killed services are restarted; the
   recovery boot after a power cut is automatic. A service that crashes by itself is started again
   only at the heal, unless it has a `restart:` policy such as `always` or `on-failure`
   (MANIFEST.md, section `Restart policies`). A service that does not come back at the heal ends the run in ERROR,
@@ -54,10 +58,17 @@ Check each item and report what you found.
   (`-XX:+UseSerialGC`), a fixed heap (`-Xms` = `-Xmx`), `-XX:-UsePerfData`,
   `-XX:-UseContainerSupport`, `-Xshare:off`, and a fixed time zone and locale
   (`-Duser.timezone=UTC`).
+- **Python services and tests.** An image gives every file one fixed time, so Python's bytecode
+  caches (`__pycache__/*.pyc`) look stale and Python compiles every module again in every run.
+  That costs guest time and can print a warning, which a test suite with warnings as errors
+  turns into failures. Set `root.fix_pyc: true` (`hydo guide manifest`, section
+  `Python bytecode`).
 - **Wall clock in data.** Timestamps in payloads or keys make runs differ when the clock is
   stepped; derive values from `$HYDO_CMD_ID` or `$HYDO_SEED` instead. Expiry, TTL, or lease
   logic is affected by clock-jump faults on purpose: note it as a target, not as a hazard. If a
-  check compares times from before and after a power cut, set `guest.clock_after_cut`.
+  check compares times from before and after a power cut, set `guest.clock_after_cut`. Set it
+  too when the system stores times and checks them when it starts (hybrid clocks, leases).
+  Without it the recovery boot's clock starts at `clock_start` again (`hydo guide faults`).
 - **Background timers.** Periodic timers of 100 ms or less (a server `hz` of 10 or more) cost
   guest time; lower them where the project allows (`hz 1` for Redis).
 - **Services that refuse to run as root** (PostgreSQL and others). Everything in the guest runs

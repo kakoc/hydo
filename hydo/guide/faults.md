@@ -81,10 +81,19 @@ packet.
 
 ## Clock after a power cut
 
-Every boot starts its clock at `guest.clock_start`. A check can compare a time written before a
-power cut with one written after it. Then set `guest.clock_after_cut: 60`, so the recovery boot
-continues the first boot's clock plus 60 seconds. Otherwise time runs backwards, and the check
-can report a false violation.
+Every boot starts its clock at `guest.clock_start`. Without `guest.clock_after_cut`, the recovery
+boot after a power cut starts its clock at `clock_start` again, so time runs backwards across the
+cut. No real machine does that. Set `guest.clock_after_cut: 60`, so the recovery boot continues
+the first boot's clock plus 60 seconds, in two cases:
+
+- A check compares a time written before a power cut with one written after it. Without the
+  key, the check can report a false violation.
+- The system stores times and checks them when it starts: databases with hybrid clocks
+  (YugabyteDB, CockroachDB), leases, certificates. Without the key, a service refuses to start
+  in the recovery boot ("clock skew"), and the run ends with `VIOLATION service cannot recover`.
+  That is a false finding.
+
+The key covers both kinds of power cut: `C=` and a cut at the k-th disk flush (`cf=`).
 
 ## BUGGIFY
 

@@ -39,6 +39,7 @@ is Rust programs only and needs no Python.
 | Docker/OCI images (`image:`), `hydo compose` | yes | yes | yes (a big image root needs a bigger `guest.ram_mib`: the root is in guest RAM) |
 | `guest.ram_mib` | 256–8192 | 256–8192 | 256–8192 |
 | `guest.clock_after_cut`, `guest.outcomes_after_cut` | yes | yes | yes |
+| `services[].start_after`, `services[].logs`, `root.fix_pyc` | yes (not run on hvx yet) | yes (not run on kvm yet) | yes |
 | `guest.cpu: v3` (AVX/AVX2) | yes | yes (on a host with AVX2; `hydo doctor --backend kvm` says) | no (arm64) |
 | `params:` (build variants, `hydo build --set k=v`) | yes | yes | yes |
 | `addr:` and link faults between services | yes | yes | yes (second guest kernel) |

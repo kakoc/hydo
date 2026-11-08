@@ -34,9 +34,11 @@ hydo-build::oci_share                    fast
 hydo-build::world_objects                fast
 hydo-compose                             fast
 hydo-compose::equivalence                fast
+hydo-compose::fetch_arch                 fast
 hydo-compose::local_build                fast
 hydo-compose::pycheck                    fast
 hydo-compose::registry                   fast
+hydo-compose::start_and_clock            fast
 hydo-composer                            fast
 hydo-composer::compositions              fast
 hydo-composer::equivalence               full
@@ -44,6 +46,7 @@ hydo-composer::ids                       fast
 hydo-config                              fast
 hydo-config::inventory                   fast
 hydo-control                             fast
+hydo-control::clock_cut                  fast
 hydo-control::conversations              fast
 hydo-control::corpus                     full
 hydo-control::corpus_net                 full
@@ -56,6 +59,7 @@ hydo-control::restart                    fast
 hydo-control::restart_may_fail           fast
 hydo-control::storage                    fast
 hydo-control::silent                     fast
+hydo-control::start_after                fast
 hydo-engine                              fast
 hydo-engine-proto                        fast
 hydo-engine::lockstep                    fast

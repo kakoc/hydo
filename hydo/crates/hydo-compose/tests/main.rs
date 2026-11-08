@@ -6,6 +6,8 @@
 mod common;
 
 mod equivalence;
+mod fetch_arch;
 mod local_build;
 mod pycheck;
 mod registry;
+mod start_and_clock;

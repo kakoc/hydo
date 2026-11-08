@@ -417,9 +417,12 @@ pub fn run_with(
                         // controller's later actions at this stop belong to a VM that is gone.
                         // (the fake world's `w:` records, when the acknowledged line carries any,
                         // go to the recovery as the world, as the shell's oracle command did)
+                        // (a `clock=` token, the first boot's clock with guest.clock_after_cut,
+                        // is no id: the recovery reads it from the acked line, M196)
                         let (world, acked): (Vec<String>, Vec<String>) =
                             report_ids(&w.t, ACKED_PREFIX)
                                 .into_iter()
+                                .filter(|x| !x.starts_with("clock="))
                                 .partition(|x| x.starts_with("w:"));
                         let e = Ending::PowerCut {
                             acked,

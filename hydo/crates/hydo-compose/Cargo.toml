@@ -32,6 +32,7 @@ path = "src/bin/hydo-fetch-image.rs"
 test = false
 
 [dependencies]
+hydo-config = { workspace = true }
 hydo-manifest = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
