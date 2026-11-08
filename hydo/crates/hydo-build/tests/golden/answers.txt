@@ -151,8 +151,8 @@ I	hydo/onboard/examples/medusa/docker-compose.yaml	35bfc9c940ab6b7019ccf8beb0930
 I	hydo/onboard/examples/medusa/hydo/hydo.yaml	90f7fc226d38faad7a6bcacd0f19bcc19a57a4191e568a9662f68ef29eec9cde
 I	hydo/onboard/examples/medusa/hydo/known-errors.yaml	aa0904c64ac6f38493dad25cff34806568f4d1be7af8fff334aa5944386b51e7
 I	hydo/onboard/examples/medusa/upstream/docker-compose.yaml	1491dd3b2a24748360c49a319362700a9d94104b08d7b4e31fd2e21267549ed5
-I	hydo/onboard/examples/miniflux/hydo-read.yaml	1b3d58300d7bfdfaed92347bc9594734df29ed6cdf40a6f61eeae312b89bfa31
-I	hydo/onboard/examples/miniflux/hydo.yaml	ab8c2a1bb58e1e6321d99522f1fa88879c0443c4574f1a3474020bdc46d7af25
+I	hydo/onboard/examples/miniflux/hydo-read.yaml	96baa7f3afccebb7dcbfb7ed78d64e79c6563096f2e84072ff62db752b34e26f
+I	hydo/onboard/examples/miniflux/hydo.yaml	7f74f2fac53dbc117de6152c0e43fe15e1bf1c4524e16f4226029de1b7ac003a
 I	hydo/onboard/examples/nats-flaky-8363/hydo.yaml	7a03b8012f603b7a340bd1262f20418dc2ddc48a9401636d4836adf4daf29c65
 I	hydo/onboard/examples/nats-jetstream/docker-compose.yaml	5be0024be7d45c6233bb3f36837beec388a018b1f97912540ebb58f8e0e8d1f9
 I	hydo/onboard/examples/nats-jetstream/hydo/hydo-compose.lock.json	319aa2ded0f4f002a2cf8d5e95e2b8db3d7abe2e5551064de3f2b1ebc4b95376
@@ -5657,16 +5657,16 @@ R	^	<tmp>/mutant00848.json --arch arm64 --check	run	1	""	"hydo-build: workload: 
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00849.json --arch x86_64 --check	run	0	#76286ad7cb232230/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#5c4f3f7f829c9da9/4960	^
+R	^	^ --arch x86_64 --print-shell	run	0	#c89d839d613a8fdf/5172	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00850.json --arch x86_64 --check	run	0	#cb2e8b6aa2d2dde7/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#5c4f3f7f829c9da9/4960	^
+R	^	^ --arch x86_64 --print-shell	run	0	#c89d839d613a8fdf/5172	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00851.json --arch x86_64 --check	run	0	#2cb684203ec6f48b/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#7aa51925487fe914/4962	^
+R	^	^ --arch x86_64 --print-shell	run	0	#50d143e1feb842b1/5174	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00852.json --arch arm64 --check	run	0	#46524e0bbbca4d39/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#5c4f3f7f829c9da9/4960	^
+R	^	^ --arch arm64 --print-shell	run	0	#c89d839d613a8fdf/5172	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00853.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'ready' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
@@ -5678,7 +5678,7 @@ R	^	<tmp>/mutant00855.json --arch x86_64 --check	run	1	""	"hydo-build: invariant
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00856.json --arch arm64 --check	run	0	#290805d8b55fc664/84	""
-R	^	^ --arch arm64 --print-shell	run	0	#89504094f23b22f1/4968	^
+R	^	^ --arch arm64 --print-shell	run	0	#ac85f6206361bc21/5180	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00857.json --arch x86_64 --check	run	1	""	"hydo-build: top level: field 'name' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
@@ -5687,7 +5687,7 @@ R	^	<tmp>/mutant00858.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]:
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00859.json --arch x86_64 --check	run	0	#51e9bfd3bd0dfacf/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#082764ee4062c3bd/4903	^
+R	^	^ --arch x86_64 --print-shell	run	0	#dd852ed41073b05b/5115	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00860.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].bogus: unknown field `bogus`, expe…#fd9a461e72675b71"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
@@ -5705,7 +5705,7 @@ R	^	<tmp>/mutant00864.json --arch arm64 --check	run	1	""	"hydo-build: knobs[0]: 
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00865.json --arch x86_64 --check	run	0	#b9bb0a86b3b77408/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#dddd219ff484cbd5/4616	^
+R	^	^ --arch x86_64 --print-shell	run	0	#8bd8c7fecad4907c/4828	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00866.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 4096 (known: clock, corrupt…#5037907c9aa5899d"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
@@ -5717,16 +5717,16 @@ R	^	<tmp>/mutant00868.json --arch arm64 --check	run	1	""	"hydo-build: invariants
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00869.json --arch x86_64 --check	run	0	#cde3c1dff23b3a17/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#1cd7eab511885adf/4984	^
+R	^	^ --arch x86_64 --print-shell	run	0	#467c46ec3d43539d/5196	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00870.json --arch x86_64 --check	run	0	#eb4ae386e36ae238/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
+R	^	^ --arch x86_64 --print-shell	run	0	#b7c84e75f85cfa64/5334	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00871.json --arch x86_64 --check	run	0	#3317e8577c6b4177/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
+R	^	^ --arch x86_64 --print-shell	run	0	#b7c84e75f85cfa64/5334	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00872.json --arch arm64 --check	run	0	#28dacf417261e57e/84	^
-R	^	^ --arch arm64 --print-shell	run	0	#94d2ddc01d20e16b/4847	^
+R	^	^ --arch arm64 --print-shell	run	0	#7c7d6d5abb8a5d99/5059	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00873.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].bogus: unknown field `bogus`, expe…#fd9a461e72675b71"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
@@ -5741,7 +5741,7 @@ R	^	<tmp>/mutant00876.json --arch arm64 --check	run	1	""	"hydo-build: root.text:
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00877.json --arch x86_64 --check	run	0	#8706c952880bbf01/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
+R	^	^ --arch x86_64 --print-shell	run	0	#b7c84e75f85cfa64/5334	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant00878.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0]: invalid type: boolean `false`, ex…#ec5c9790b4e787a3"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
@@ -8318,16 +8318,16 @@ R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<root>/hydo/onboard/examples/miniflux/hydo-read.yaml --arch x86_64 --check	run	0	#e23f496cbefc042a/114	""
-R	^	^ --arch x86_64 --print-shell	run	0	#5c4f3f7f829c9da9/4960	^
+R	^	^ --arch x86_64 --print-shell	run	0	#c89d839d613a8fdf/5172	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	^ --arch arm64 --check	run	0	#e23f496cbefc042a/114	^
-R	^	^ --arch arm64 --print-shell	run	0	#5c4f3f7f829c9da9/4960	^
+R	^	^ --arch arm64 --print-shell	run	0	#c89d839d613a8fdf/5172	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
 R	^	<root>/hydo/onboard/examples/miniflux/hydo.yaml --arch x86_64 --check	run	0	#e5f7c997343c12ba/109	^
-R	^	^ --arch x86_64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
+R	^	^ --arch x86_64 --print-shell	run	0	#b7c84e75f85cfa64/5334	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	^ --arch arm64 --check	run	0	#e5f7c997343c12ba/109	^
-R	^	^ --arch arm64 --print-shell	run	0	#e9822d9dd30a3b6a/5122	^
+R	^	^ --arch arm64 --print-shell	run	0	#b7c84e75f85cfa64/5334	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
 R	^	<root>/hydo/onboard/examples/nats-flaky-8363/hydo.yaml --arch x86_64 --check	run	0	#baf40c33f1f8d2aa/115	^
 R	^	^ --arch x86_64 --print-shell	run	0	#bb0e31fd42df10f6/1600	^

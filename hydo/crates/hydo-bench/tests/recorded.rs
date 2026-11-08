@@ -34,9 +34,10 @@ fn reads_and_keeps_its_form() {
     // 13.2 (126 x86_64 schedules on 37 images) and 13.4's Linux examples; M159's KVM table;
     // since 0.3.0 the release example's `disk=cut | run C=12` on each engine (the quickstarts
     // cite it) and the KVM exploration's third minimal schedule (REBASELINE.md section 18); since
-    // the fingerprint epoch 2 the hvx exploration's new lying-disk minimal schedule (section 19)
+    // the fingerprint epoch 2 the hvx exploration's new lying-disk minimal schedule (section 19);
+    // since M206 the nats-flaky-8363 pair on several vCPUs (two images, four runs)
     assert_eq!(count("hvm"), (21, 76));
-    assert_eq!(count("hvx"), (39, 133));
+    assert_eq!(count("hvx"), (41, 137));
     assert_eq!(count("kvm"), (4, 13));
     for i in &images {
         assert!(
@@ -62,8 +63,8 @@ fn reads_and_keeps_its_form() {
             );
             let mut seen = std::collections::BTreeSet::new();
             assert!(
-                i.runs.iter().all(|x| seen.insert(&x.schedule)),
-                "{}: a schedule listed twice",
+                i.runs.iter().all(|x| seen.insert(x.key())),
+                "{}: a schedule listed twice with one vCPU count",
                 i.id
             );
         }

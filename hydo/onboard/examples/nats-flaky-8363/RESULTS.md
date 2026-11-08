@@ -263,6 +263,29 @@ range around it made 36 runs in 30 seconds
 (`--turn-range 18000-19000 --turn-points 21 --turn-resolution 10`). It found five boundaries.
 The failing bands are 18,486 to 18,543, 18,732 to 18,853, and 18,980 branches on. `hydo repro` of the dense sweep reproduced all five failing lengths.
 
+## The fingerprint epoch 2 (Milestone 206): the current values
+
+The values in the sections above are those of the fingerprint epoch 1. Since Milestone 204 an
+x86_64 image built by hydo describes the CPU's caches in CPUID by default (`guest.cpu_cache`), and
+that moves the guest's timing, so the turn-length boundary moved too. The images built at epoch 2
+(buggy `43b6237e6fdb25d7…`, fixed `a4646977e5c4a2fb…`) ran on the bare-metal machine, each
+schedule twice from a fresh boot with `hydo run`:
+
+| image | schedule | vCPUs | verdict | fingerprint (both runs) |
+|---|---|---|---|---|
+| buggy | `disk=none q=18140 \| run` | 2 | VIOLATION, line 72, `3 vs 2` | `6fca0caef17a99f9` |
+| buggy | `disk=none q=18051 \| run` | 2 | OK, `pass=2 of 2` | `9293d2b0af65bb25` |
+| fixed | `disk=none q=18140 \| run` | 2 | OK | `5650cc5ce89fb568` |
+| buggy | `disk=none \| run` | 1 | VIOLATION | `21944e55f674efb2` |
+
+These four runs are in `hydo/onboard/recorded.json` (`hvx/nats-flaky-buggy`,
+`hvx/nats-flaky-fixed`), so `hydo-bench rebaseline` checks them with the other examples. The
+default turn sweep (`hydo explore --vcpus 2 --sweep turns`, 19 runs in 64 seconds) found the
+boundary between `q=18051` and `q=18140`. The dense sweep of 18,000 to 19,000 (36 runs) found five
+other boundaries: the failing bands are 18,171 to 18,387, 18,461 to 18,606, and 18,808 branches
+on. It stepped over the band at 18,140: its grid points 18,098 and 18,147 pass. At epoch 2,
+`q=18800` and `q=18700` both pass.
+
 ## Files
 
 | file | what it is |

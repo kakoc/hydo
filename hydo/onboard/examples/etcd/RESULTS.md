@@ -239,3 +239,33 @@ same fingerprint (docs/REBASELINE.md section 13, which also says how each image 
 |---|---|---|---|
 | `disk=none dseed=1 \| run` | OK checks=1 held (etcd.kv_linearizable: 183 operations on 90 keys linearizable) | `06f59cfe18040d1d` | yes |
 | `disk=none dseed=1 \| run K=etcd1@10+1 P=etcd3@26+1` | OK checks=1 held (etcd.kv_linearizable: 187 operations on 90 keys linearizable) | `7cf68773b8ba60da` | yes |
+
+## The second symptom of 14685 at the fingerprint epoch 2 (Milestone 206)
+
+At the fingerprint epoch 2 (Milestone 204) the guest's CPUID describes the CPU's caches, and the
+guest's timing moved. M78's schedule `disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1` then
+passed on 3.5.5 (`aef7cfa89a40a28a`). A hand sweep in M78's way found the symptom again on the
+epoch-2 image (`b4dc0195…`), from the S1 snapshot with `hydo-bench list`:
+
+- 62 schedules: etcd1 killed at step 10 (and at 5, 15 and 20), etcd2 or etcd3 paused late for
+  one or two steps. All passed.
+- 156 schedules: one kill alone, of each member at each step from 4 to 29, for one or two steps.
+  150 passed. Killing etcd2 right after a defrag (steps 15, 20 and 25) gave the first symptom,
+  `etcd.members_agree` (the members end on different revisions).
+- 38 schedules: etcd2 killed at step 15, 20 or 25, then etcd1 or etcd3 paused for one step. All
+  failed on 3.5.5. Pausing etcd3 gave `etcd.members_agree` only. Pausing etcd1 at most steps
+  gave the second symptom, `client.revisions_monotonic` (15 of the 38).
+
+The schedule now recorded for both releases, each run twice from a fresh boot with `hydo run`:
+
+    disk=none dseed=1 | run K=etcd2@20+1 P=etcd1@26+1
+
+| image | verdict | fingerprint (both runs) |
+|---|---|---|
+| 3.5.5 | VIOLATION `client.revisions_monotonic`: client 0 read revision 85 (get k75 through etcd2), then 84 (get k78 through etcd3) | `2228bc5d41fd9575` (ctl `745236b192e3da74`) |
+| 3.5.6 | OK, acked=90, every invariant holds | `e5af2f3fbac43df9` (ctl `07d2f2fe1c35f223`) |
+
+The killed member now is etcd2, and the paused one is etcd1. It is M78's shape with the members'
+roles moved: the member killed right after a defrag replays entries on restart and runs one
+revision ahead, and a client that switches members sees its revision go back. The values are in
+`hydo/onboard/recorded.json` (`hvx/etcd-3.5.5`, `hvx/etcd-3.5.6`).

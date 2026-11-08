@@ -1201,6 +1201,65 @@
       ]
     },
     {
+      "id": "hvx/nats-flaky-buggy",
+      "platform": "hvx",
+      "recorded": "M206: hydo run twice from fresh boots, 2026-11-08",
+      "note": "nats-server's flaky TestRegisterAndUnregister (issue 8363) on 2 vCPUs: the turn length q= decides; the boundary is the one hydo explore --vcpus 2 --sweep turns found at epoch 2",
+      "build": {
+        "stage": "nats-flaky",
+        "dir": "hydo/onboard/examples/nats-flaky-8363",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "43b6237e6fdb25d7a44af5b390201a206ca61531cbbe3c4536e4675b8b0df27d",
+      "runs": [
+        {
+          "schedule": "disk=none q=18140 | run",
+          "verdict": "VIOLATION [ats.test_passes] pass=1 fail=1 order=[PASS FAIL ] ats_test.go:72: Expected same number of go routines after removing all registered: 3 vs 2",
+          "fp": "6fca0caef17a99f9",
+          "ctl": "1051d03f5de80a60",
+          "vcpus": 2
+        },
+        {
+          "schedule": "disk=none q=18051 | run",
+          "verdict": "OK invariants=1 held (ats.test_passes: pass=2 of 2)",
+          "fp": "9293d2b0af65bb25",
+          "ctl": "126c826a86eb3895",
+          "vcpus": 2
+        },
+        {
+          "schedule": "disk=none | run",
+          "verdict": "VIOLATION [ats.test_passes] pass=1 fail=1 order=[PASS FAIL ] ats_test.go:72: Expected same number of go routines after removing all registered: 3 vs 2",
+          "fp": "21944e55f674efb2",
+          "ctl": "90e70ce91d0f114b"
+        }
+      ]
+    },
+    {
+      "id": "hvx/nats-flaky-fixed",
+      "platform": "hvx",
+      "recorded": "M206: hydo run twice from fresh boots, 2026-11-08",
+      "build": {
+        "stage": "nats-flaky",
+        "dir": "hydo/onboard/examples/nats-flaky-8363",
+        "manifest": "hydo.yaml",
+        "args": [
+          "--set",
+          "variant=fixed"
+        ]
+      },
+      "sha256": "a4646977e5c4a2fb576bf9683c8e36b0e76dc120e048035a061e0d2cc72c4043",
+      "runs": [
+        {
+          "schedule": "disk=none q=18140 | run",
+          "verdict": "OK invariants=1 held (ats.test_passes: pass=2 of 2)",
+          "fp": "5650cc5ce89fb568",
+          "ctl": "e5bbbe50532ca9a1",
+          "vcpus": 2
+        }
+      ]
+    },
+    {
       "id": "hvx/shop-buggy",
       "platform": "hvx",
       "recorded": "hydo-bench rebaseline --write, 2026-11-08",
@@ -1293,7 +1352,7 @@
     {
       "id": "hvx/etcd-3.5.5",
       "platform": "hvx",
-      "recorded": "hydo-bench rebaseline --write, 2026-11-08",
+      "recorded": "M206: the etcd 14685 schedule found again at epoch 2 (hydo run twice from fresh boots), 2026-11-08",
       "build": {
         "stage": "etcd",
         "dir": "hydo/onboard/examples/etcd",
@@ -1319,16 +1378,17 @@
           "ctl": "fe14b3dd746609ec"
         },
         {
-          "schedule": "disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1",
-          "verdict": "VIOLATION [client.revisions_monotonic] /tmp/hydo/rev.2: revision 82 (get-k80@127.0.0.12:12379) after 83 (ge...",
-          "fp": "0967af85386e3b6f"
+          "schedule": "disk=none dseed=1 | run K=etcd2@20+1 P=etcd1@26+1",
+          "verdict": "VIOLATION [client.revisions_monotonic] /tmp/hydo/rev.0: revision 84 (get-k78@127.0.0.13:22379) after 85 (get-k75@127.0.0.12:12379)",
+          "fp": "2228bc5d41fd9575",
+          "ctl": "745236b192e3da74"
         }
       ]
     },
     {
       "id": "hvx/etcd-3.5.6",
       "platform": "hvx",
-      "recorded": "hydo-bench rebaseline --write, 2026-11-08",
+      "recorded": "M206: the etcd 14685 schedule found again at epoch 2 (hydo run twice from fresh boots), 2026-11-08",
       "build": {
         "stage": "etcd",
         "dir": "hydo/onboard/examples/etcd",
@@ -1354,10 +1414,10 @@
           "ctl": "91d5088201d7182f"
         },
         {
-          "schedule": "disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1",
+          "schedule": "disk=none dseed=1 | run K=etcd2@20+1 P=etcd1@26+1",
           "verdict": "OK invariants=3 held (etcd.acked_puts_readable: acked=90 all readable)",
-          "fp": "ee2e813ef0f568e2",
-          "ctl": "1cb64bb8562ae593"
+          "fp": "e5af2f3fbac43df9",
+          "ctl": "07d2f2fe1c35f223"
         }
       ]
     },
@@ -1768,8 +1828,9 @@
         },
         {
           "schedule": "disk=ioerr:5 dseed=1 | run",
-          "verdict": "ERROR restart after the faults (mysql)",
-          "fp": "3dee52a138056f08"
+          "verdict": "ERROR restart after the faults (redis)",
+          "fp": "4d9d5f493f30d060",
+          "ctl": "14b0489580ebf008"
         }
       ],
       "big": true
@@ -1807,65 +1868,66 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "479a35bc912376d2d7a7ec78e166f9622a2cad012b98606ca2c5b4563f503597",
+      "sha256": "defcfba23d29cb84e091ccf4503f523ad5858be2d1b1116d74a7ca120fc9cd7c",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
-          "fp": "106a9b291122d954",
+          "fp": "58b57ca3e8f2aa0d",
           "ctl": "0ce5371946964d9a"
         },
         {
           "schedule": "disk=none dseed=1 | run K=postgres@10+3",
           "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
-          "fp": "444a9530111ce245",
-          "ctl": "dda03f35d5147c83"
+          "fp": "50299528012d5f2f",
+          "ctl": "58dea28a6498b59c"
         },
         {
           "schedule": "disk=none dseed=1 | run K=front@10+3",
           "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
-          "fp": "9e91ff8bc2079ba8",
+          "fp": "bb462d034c4e1129",
           "ctl": "d5337196037f90e7"
         },
         {
           "schedule": "disk=none dseed=1 | run P=postgres@10+3",
           "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
-          "fp": "773ebe2e44a5accd",
-          "ctl": "26c7b26221f4aea9"
+          "fp": "87f13444e344e999",
+          "ctl": "74b67eb74b47bb17"
         },
         {
           "schedule": "disk=none dseed=1 | run P=postgres@10~50:4000",
           "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
-          "fp": "9b40d31136f91705"
+          "fp": "d6516ad7f1f284fd",
+          "ctl": "027a662cd83ef657"
         },
         {
           "schedule": "disk=none dseed=1 | run O=postgres@10-15:resp:loss,100%",
           "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
-          "fp": "b737f26e198326ba",
-          "ctl": "5ec61d1ca9e37dff"
+          "fp": "7b69072c9ed3a285",
+          "ctl": "1d8ac15c12aca6cd"
         },
         {
           "schedule": "disk=none dseed=1 | run O=front@10-15:resp:loss,100%",
           "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
-          "fp": "60abf4dda0918d48",
-          "ctl": "00c93a5e80e5f0b0"
+          "fp": "540b88ac9c966060",
+          "ctl": "ed1160f5799175e7"
         },
         {
           "schedule": "disk=none dseed=1 | run O=front@10-15:req:loss,100%",
           "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=30 exactly once)",
-          "fp": "57ff0c404b739e25",
-          "ctl": "03938740f339b9b9"
+          "fp": "a81374f7d649b6bc",
+          "ctl": "e3c4f9e029345821"
         },
         {
           "schedule": "disk=none dseed=1 | run C=20",
           "verdict": "OK invariants=2 held (categories.acked_exactly_once: acked=20 exactly once)",
-          "fp": "4d62ac993791172f",
+          "fp": "d192092c8aedb694",
           "ctl": "a21224259ac269d9"
         },
         {
           "schedule": "disk=none dseed=1 | run C=20 S=off",
           "verdict": "VIOLATION [categories.acked_exactly_once] category c16 stored 0 times",
-          "fp": "66dbf27cf49a42ec",
+          "fp": "e802c446666ef19c",
           "ctl": "1863ffc8166a7813"
         }
       ],
@@ -1882,18 +1944,18 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "b1c1bc9c7a2914f294cc3b52f034dcda13e8627cfbf554be74d90a1db35ebfc0",
+      "sha256": "3ad1e1afd9d31b73112080ce786a7adf116ceb6a1fea3116c92babbaf88b1a40",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=2 held (categories.acked_exactly_once: exactly-once holds: each of the 30 items of acked occurs once in categories (categories has 31 records))",
-          "fp": "77a3378d613374cf",
+          "fp": "4520cf8e20fc792f",
           "ctl": "e3da1ee6b8dba89a"
         },
         {
           "schedule": "disk=none dseed=1 | run C=20 S=off",
           "verdict": "VIOLATION [categories.acked_exactly_once] exactly-once violated: acked c16 is in categories 0 times (of 20 in acked); missing 4: c16, c17, c18, c19",
-          "fp": "097b65f6763ee66d",
+          "fp": "ee166e3b5f660ec8",
           "ctl": "24d58d18a106e817"
         }
       ],

@@ -70,12 +70,13 @@ instruction.
   nats-server test failed on every one of 209 schedules, whatever the timing tokens.
 - On hvx with several vCPUs (`--vcpus N`, up to 8), the vCPUs take turns of exactly `q=` guest
   branches (default 2^20). The other vCPU's threads run between the turns, so the turn length
-  decides where the threads interleave. The nats-server test fails at `q=18800` and passes at
-  `q=18700` on two vCPUs, each twice with one fingerprint.
+  decides where the threads interleave. The nats-server test fails at `q=18140` and passes at
+  `q=18051` on two vCPUs, each twice with one fingerprint. These are the values of the
+  fingerprint epoch 2; another epoch, image or engine can move the boundary.
 
 ```sh
-hydo run --vcpus 2 "disk=none q=18800 | run"
-hydo run --vcpus 2 "disk=none q=18700 | run"
+hydo run --vcpus 2 "disk=none q=18140 | run"
+hydo run --vcpus 2 "disk=none q=18051 | run"
 ```
 
 The run's `result.json` records the vCPU count, so `hydo repro <run dir>` runs it again on as many
@@ -102,8 +103,9 @@ same, and every length it ran with its verdict and fingerprint. `exploration.jso
 
 The verdict need not change only once. The sweep bisects only between the lengths it ran, so a
 narrow band of other verdicts between two grid points stays hidden. On the nats-server image the
-default sweep made 19 runs and found one boundary, between `q=18407` (passes) and `q=18496`
-(fails). A dense sweep of the range around it found five boundaries in 36 runs:
+default sweep made 19 runs and found one boundary, between `q=18051` (passes) and `q=18140`
+(fails). A dense sweep of the range around it found five boundaries in 36 runs, and it stepped
+over that one: `q=18140` fails, but its grid points `q=18098` and `q=18147` both pass.
 
 ```sh
 hydo explore --vcpus 2 --sweep turns --turn-range 18000-19000 --turn-points 21 \
@@ -112,12 +114,12 @@ hydo explore --vcpus 2 --sweep turns --turn-range 18000-19000 --turn-points 21 \
 
 | turn lengths | verdict |
 |---|---|
-| 18,000 to 18,480 | passes |
-| 18,486 to 18,543 | fails |
-| 18,549 to 18,725 | passes |
-| 18,732 to 18,853 | fails |
-| 18,859 to 18,974 | passes |
-| 18,980 to 19,000 | fails |
+| 18,000 to 18,165 | passes (but 18,140 fails) |
+| 18,171 to 18,387 | fails |
+| 18,394 to 18,455 | passes |
+| 18,461 to 18,606 | fails |
+| 18,612 to 18,802 | passes |
+| 18,808 to 19,000 | fails |
 
 ## Explore the timing
 
@@ -127,5 +129,6 @@ hydo explore --vcpus 2 --turns --timing --seeds 1-60
 
 `--turns` draws a turn length for half of the schedules. `--timing` adds tick jitter. The report's
 "by hand" lines carry `--vcpus`, so a copied line runs the same schedule. On the nats-server image
-this exploration gave 56 failures and 4 passes. Every pass had turns of at most 9,096 branches.
+this exploration gave 56 failures and 4 passes at the fingerprint epoch 1. Every pass had turns
+of at most 9,096 branches.
 Each failure is in the class `test-failed`.

@@ -5351,3 +5351,105 @@ On the bare-metal machine with the new-form images (below): the default sweep ma
 **Checks.** The corpora that read every repository manifest gained the example's manifest (merged from its branch): the controller's identity corpus only added that manifest's lines (13,585 runs, every earlier line as recorded), and the explorer's corpus (518,060 strings) and identity goldens pass as recorded with that manifest set aside, so no existing draw moved; hydo-build's and the manifest validator's recorded answers changed only in the unknown-field message of `workload` (the new key `kind`) and the new input. `cargo test --locked --release --workspace`, clippy with `-D warnings`, fmt, `ci/consolidate-tests.sh --check`, `sh ci/vale.sh`, the public-content test, and `hydo-bench rebaseline --check` on this Mac with this tree's programs over the 0.3.0 Mac release and Go 1.26.5: all 21 images with their recorded bytes and all 76 schedules with every verdict, fingerprint and ctl value as recorded (in two passes from one work folder: the first stopped when the Mac's free disk dipped below 20 GB, and the shop and gRPC images needed `HYDO_GO`). Fingerprint epoch 1.
 
 **Left** (AGENTS.md open item 75): no several-vCPU run is in `recorded.json`; the sweep finds only the boundaries between lengths it ran; KVM and the Mac have one vCPU; a test workload with services or with `faults:` was not run.
+
+### Milestone 206 — DONE (the three epoch-2 verdict changes decided; runs on several vCPUs in the recorded list; 2026-11-08)
+
+**Where it came from.** Milestone 204 raised the fingerprint epoch to 2 and left three hvx verdict
+changes undecided (open item 74). Milestone 205 added several vCPUs to `hydo run`, but no run on
+several vCPUs was in `hydo/onboard/recorded.json`. This milestone decides the three and records
+the nats-server flaky-test example. It was done on the integration branch of Milestones 204 and
+205.
+
+**Runs on several vCPUs in the list.** A run entry of `recorded.json` can name `vcpus` (2 to 8,
+hvx only) and `turn_margin` (with `vcpus`, 8 to 2^20), additions to the list's format
+(`hydo/crates/hydo-bench/src/recorded.rs`; `Run::engine_args`, `Run::key`). `hydo-bench rebaseline`
+passes them to `hydo run` as `--vcpus` and `--turn-margin`. The default mode runs such an entry
+from a fresh boot, not in the worker pool, which boots one vCPU. Its cache key and report line add
+the options, so a one-vCPU entry keeps the key it had. The stage `nats-flaky` of `stage.sh` takes
+the two test programs from the inputs folder, checked against `build-test.sh`'s pins, and builds
+them with `build-test.sh` when they are missing. The nats-flaky-8363 images at epoch 2 (buggy
+`43b6237e…`, fixed `a4646977…`): `hydo explore --vcpus 2 --sweep turns` (19 runs, 64 s) found the
+boundary between `q=18051` (OK) and `q=18140` (VIOLATION). The dense sweep of 18,000 to 19,000 (36
+runs) found five more boundaries and stepped over this one, because its grid points 18,098 and
+18,147 pass. M205's pair `q=18800`/`q=18700` passes on both lengths at epoch 2. Each run twice
+from a fresh boot with `hydo run`:
+
+| entry | schedule | vCPUs | verdict | fp | ctl |
+|---|---|---|---|---|---|
+| `hvx/nats-flaky-buggy` | `disk=none q=18140 \| run` | 2 | VIOLATION, `3 vs 2` | `6fca0caef17a99f9` | `1051d03f5de80a60` |
+| `hvx/nats-flaky-buggy` | `disk=none q=18051 \| run` | 2 | OK | `9293d2b0af65bb25` | `126c826a86eb3895` |
+| `hvx/nats-flaky-buggy` | `disk=none \| run` | 1 | VIOLATION | `21944e55f674efb2` | `90e70ce91d0f114b` |
+| `hvx/nats-flaky-fixed` | `disk=none q=18140 \| run` | 2 | OK | `5650cc5ce89fb568` | `e5bbbe50532ca9a1` |
+
+The example's manifest comment, its RESULTS.md and the guide topic `flaky-tests` now cite the
+epoch-2 values.
+
+**`hvx/stack-errors-fix` `disk=ioerr:5 dseed=1 | run`: accepted.** `ERROR restart after the faults
+(mysql)` became `(redis)` (`4d9d5f493f30d060`, twice). It is the same class: the seeded I/O errors
+make one service's restart fail, and which service's disk request the fault lands on depends on
+the request order, which moves with the guest's timing. The same switch happened at Milestone 140.
+Written with `hydo-bench rebaseline --write --accept-verdicts --only hvx/stack-errors-fix`.
+
+**`hvx/etcd-3.5.5`: etcd issue 14685's second symptom at epoch 2.** M78's
+`K=etcd1@10+1 P=etcd3@26+1` passes at epoch 2. A hand sweep in M78's way, on the epoch-2 images
+from the S1 snapshot (`hydo-bench list`), 256 schedules in all: 62 with etcd1 killed after a
+defrag and another member paused late (all OK); 156 single kills of every member at every step
+from 4 to 29 (OK, except etcd2 killed right after a defrag at steps 15, 20 and 25: the first
+symptom, `etcd.members_agree`); 38 with etcd2 killed after a defrag and etcd1 or etcd3 paused (all
+VIOLATION; 15 with the second symptom, `client.revisions_monotonic`, all of them with etcd1
+paused). The new schedule `disk=none dseed=1 | run K=etcd2@20+1 P=etcd1@26+1` gives, twice each
+from a fresh boot, VIOLATION `client.revisions_monotonic` on 3.5.5 (client 0 read revision 85
+through etcd2, then 84 through etcd3; `2228bc5d41fd9575`, the same as the S1 run) and OK on 3.5.6
+(`e5af2f3fbac43df9`). It replaces M78's schedule in both entries. It is M78's shape with the
+members' roles moved. The example keeps `guest.cpu_cache` at its default.
+
+**`hvx/miniflux` `P=postgres@10~50:4000`: the check was too strict.** `hydo run` reproduced the
+epoch-2 VIOLATION `[api.reads_acked_categories] acked c14 missing from the API`
+(`7b12415767cbb079`). `hydo inspect events` and frozen sessions (`hydo inspect start --at
+run:<stop> --freeze`) showed the order. The periodic check sent its `GET /v1/categories` at
+`run:33801`, while PostgreSQL was paused. The workload's `POST` of c14 went out later, after
+c13's had timed out. At `run:35380` (PostgreSQL resumed) and `run:35400` both requests were in
+flight with 0 to 12 acknowledged. At `run:35440` both were answered: the list had c0 to c13 and
+no c14, and c14 was acknowledged. At `run:35570` the check read `$HYDO_ACKED`, now with 14, and
+failed. The read started before c14's create was acknowledged, so not seeing c14 is correct. The
+check now reads `$HYDO_ACKED` before its `GET` (`hydo.yaml`, `hydo-read.yaml`). No upstream note:
+miniflux behaved correctly. The same verdict had come and gone with timing at Milestones 140 and
+155. Both images have new bytes (the manifest is inside them), and all 12 of their runs were
+re-recorded, each twice with one result. The schedule is OK again (`d6516ad7f1f284fd`).
+
+**Checks of the list.** `hydo-bench rebaseline --check` from this branch, with the 0.3.0 releases'
+guest files:
+
+- hvx (the bare-metal machine, the loaded main module `91D86B693F4D4035C368F9B`, own tree and work
+  folder, the fast mode with two VMs at a time): all 41 images built from the tree, 137 schedules.
+  After the two writes every verdict is as recorded, and the new entries (the nats-flaky pair
+  through `--vcpus`, the etcd schedule) gave their recorded values. Two kinds of difference stay.
+  The shop's two images get other bytes from another inputs folder (the list's note says so), and
+  their runs give the recorded values. Four schedules differ between the worker pool's run from
+  S1 and a fresh boot (open item 76). `--check --thorough --only` of those four images (each
+  built twice, each schedule twice from fresh boots) gives every recorded value.
+- The Mac (hvm, this Mac, the fast mode): 21 images with their recorded bytes and 76 schedules,
+  every value as recorded.
+- KVM (the build machine, `--thorough`, because the fast mode has no KVM worker pool; one VM at a
+  time): the two release images built twice with their recorded bytes and the two stack images
+  from the bare-metal machine, 13 schedules twice each, every value as recorded.
+
+**The worker pool and a fresh boot differ on four hvx schedules** (open item 76).
+`hvx/redis-composed`, `hvx/redis-composed-hist` and `hvx/redis-composed-read` with `disk=cut
+dseed=1 | run C=12 R=everysec W=...`, and `hvx/redis-errors` with `disk=ioerr:1 ... W=...`, give
+another fingerprint (and ctl value) from the pool's S1 snapshot than from a fresh boot, with the
+same verdict. The same schedules without the knob or the disk errors agree. M204's programs give
+the pool's value too, so the difference is older than the merge of M205. A fresh boot of an
+epoch-1 image of redis-composed (M164's) gives the same value as the epoch-2 pool
+(`c0daeb01f242ebb7`). The list keeps the fresh boots' values (M204 recorded with `--thorough`).
+The cause was not looked for.
+
+**Goldens.** The miniflux manifests' check moved hydo-control's identity corpus (the two miniflux
+manifests' chunks and counts, and a stale input digest of the glibc-cache control manifest), and
+hydo-build's and hydo-manifest's recorded answers (the inputs' digests and their mutants), each
+reviewed: nothing outside the miniflux manifests moved. The CLI's agents golden took the guide's new
+digest (the flaky-tests topic's epoch-2 values). The list's test counts 41 hvx images and
+137 schedules.
+
+**Left** (AGENTS.md open items 75 and 76): the turn sweep can step over a narrow band (it did at
+epoch 2); the pool-against-fresh-boot difference above.

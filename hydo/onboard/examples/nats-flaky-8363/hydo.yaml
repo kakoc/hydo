@@ -7,7 +7,7 @@
 #   hydo build hydo.yaml                                     # buggy, count 2, GOMAXPROCS default
 #   hydo build hydo.yaml --set variant=fixed                 # pull request 8794
 #   hydo build hydo.yaml --set procs=2                       # GOMAXPROCS=2 (needs 2+ vCPUs)
-#   hydo run --vcpus 2 "disk=none q=18800 | run"              # fails; q=18700 passes (hvx)
+#   hydo run --vcpus 2 "disk=none q=18140 | run"              # fails; q=18051 passes (hvx)
 #   hydo explore --vcpus 2 --sweep turns --out turns          # finds that boundary
 # RESULTS.md has the schedules, rates and fingerprints; `hydo guide flaky-tests` the method.
 name: nats-flaky-8363

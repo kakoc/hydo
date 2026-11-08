@@ -132,12 +132,15 @@ invariants:
     every: 2
     final: false
     cmd: |
+      # only what was acknowledged before the read began must be in it: a create that is still
+      # in flight while the read runs may be answered 201 after the read's snapshot (M206)
+      acked=$(cat $HYDO_ACKED)
       code=$(API -o /tmp/hydo/cats -w '%{http_code}' --max-time 3 http://127.0.0.1:8080/v1/categories)
       [ "$code" = 200 ] || exit 2          # server or database down: cannot evaluate now
       list=$(cat /tmp/hydo/cats)
-      for i in $(cat $HYDO_ACKED); do
+      for i in $acked; do
         echo "$list" | grep -q "\"title\":\"c$i\"" || { echo "acked c$i missing from the API"; exit 1; }
       done
-      echo "api shows all $(wc -l < $HYDO_ACKED) acked"
+      echo "api shows all $(echo "$acked" | grep -c .) acked before the read"
 
 faults: [kill, pause, network, oneway, cut, clock, disk]

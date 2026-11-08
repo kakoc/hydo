@@ -229,6 +229,21 @@ linux_prepare() {
       [ -f "$IN/oci/restate-1.7.13-amd64.docker.tar" ] || { mkdir -p "$IN/oci"; "$P/bin/hydo-fetch-image" docker.io/restatedev/restate \
         sha256:d25e52b505f1b21c382282c9aa3339a79ff3eaab0c9b01c9516a1f349a895d07 restatedev/restate:1.7.13 "$IN/oci/restate-1.7.13-amd64.docker.tar"; }
       ln -sfn "$IN/oci/restate-1.7.13-amd64.docker.tar" "$ST/$X/restate-oci/restate-1.7.13-amd64.docker.tar";;
+    nats-flaky)   # nats-server's two test programs (build-test.sh: git and Go's toolchain download
+      # once), kept in $IN/nats-flaky and checked against build-test.sh's pins
+      copy $X/nats-flaky-8363; mkdir -p "$IN/nats-flaky" "$ST/$X/nats-flaky-8363/bin"
+      local v pin
+      for v in buggy fixed; do
+        pin=$(grep -o "check bin/ats-$v.test [0-9a-f]*" "$T/$X/nats-flaky-8363/build-test.sh" | cut -d' ' -f3)
+        if ! have "$IN/nats-flaky/ats-$v.test" "$pin"; then
+          need_go
+          ( cd "$ST/$X/nats-flaky-8363" && PATH=$(dirname "$GO"):$PATH GOPATH=$W/go GOMODCACHE=$IN/gomod \
+              GOCACHE=$W/go-cache NATS_SRC=$IN/nats-flaky/nats-server sh build-test.sh )
+          install -m 0755 "$ST/$X/nats-flaky-8363/bin/ats-$v.test" "$IN/nats-flaky/ats-$v.test"
+        fi
+        need "$IN/nats-flaky/ats-$v.test" "$pin"
+        install -m 0755 "$IN/nats-flaky/ats-$v.test" "$ST/$X/nats-flaky-8363/bin/ats-$v.test"
+      done;;
     release) release_examples;;
     *) die "unknown stage $1 for $PLAT";;
   esac
@@ -431,6 +446,7 @@ sources() {
     avx2) echo "$X/avx2";;
     redis-oci|mac-redis-oci) echo "$X/redis-oci";;
     restate-oci) echo "$X/restate-oci";;
+    nats-flaky) echo "$X/nats-flaky-8363";;
     release) echo "";;
     mac-redis) echo "$XM/redis $XM/redis-ram $XM/redis-bridge $XM/redis-composed $X/redis-composed";;
     mac-redis-racy) echo "$XM/redis-composed $X/redis-composed";;

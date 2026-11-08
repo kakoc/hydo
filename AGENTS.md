@@ -366,7 +366,9 @@ record. `hydo run`, `repro` and `explain` take `--vcpus N` and `--turn-margin N`
 (`exploration.json` `turn_sweep`, a results addition). The format-1 addition `workload.kind:
 test` makes a test program first class: one step, no fault kinds unless `faults:` lists them,
 and the class `test-failed`. The guide topic is `hydo guide flaky-tests`; the example is
-`hydo/onboard/examples/nats-flaky-8363`. Proof runs: `docs/HISTORY.md` Milestone 205.
+`hydo/onboard/examples/nats-flaky-8363`. Proof runs: `docs/HISTORY.md` Milestone 205. Since M206 an
+entry of `hydo/onboard/recorded.json` can name `vcpus` (and `turn_margin`), and the example's
+turn-length pair on 2 vCPUs is recorded there.
 
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
@@ -514,19 +516,19 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     one engine that applies `cf=`, did not run it. `start_after: started` ran on the Mac only
     (M202). The restart of a service that ends during its readiness check ran only on the
     scripted engine (M204).
-74. [user decision] At the fingerprint epoch 2 the CPUID cache leaves change the guest's timing
-    on hvx, and three recorded verdicts changed. `hvx/etcd-3.5.5` `K=etcd1@10+1 P=etcd3@26+1`
-    went from VIOLATION to OK. `hvx/miniflux` `P=postgres@10~50:4000` went from OK to VIOLATION
-    (acked c14 missing from the API). `hvx/stack-errors-fix` `disk=ioerr:5` still ends in ERROR,
-    but the restart of redis fails instead of mysql's.
-    Built with `guest.cpu_cache: false` the first two give the recorded verdicts. The list keeps
-    their epoch-1 values, so `hydo-bench rebaseline --check` on hvx reports them. Decide: accept
-    them (`--write --accept-verdicts`), find new schedules for the etcd and miniflux symptoms, or
-    give those examples `guest.cpu_cache: false`. Until then the hvx check of the list fails on
-    these three (M204).
-75. Several vCPUs and the turn sweep (M205). No several-vCPU run is in `recorded.json`. The
-    sweep bisects only between the lengths it ran, so a narrow band between two grid points
-    stays hidden. A test workload with services or with `faults:` was not run.
+75. Several vCPUs and the turn sweep (M205). The sweep bisects only between the lengths it ran,
+    so a narrow band between two grid points stays hidden. At epoch 2 the dense sweep of the
+    nats-server image stepped over the failing `q=18140`. A test workload with services or with
+    `faults:` was not run.
+76. At the fingerprint epoch 2 four hvx schedules give another fingerprint from the worker pool's
+    S1 snapshot than from a fresh boot, with the same verdict: `hvx/redis-composed`,
+    `hvx/redis-composed-hist` and `hvx/redis-composed-read` `disk=cut dseed=1 | run C=12
+    R=everysec W=...`, and `hvx/redis-errors`' `disk=ioerr:1 ... W=...`. M204's programs give the
+    same, and a fresh boot of an epoch-1 image gives the pool's value. The list keeps the fresh
+    boots' values, so the fast `hydo-bench rebaseline --check` on hvx reports these four as
+    differing between two runs; `--thorough` (fresh boots only) passes. The cause was not looked
+    for. If it is not found, the explorer's and the fast check's runs of such schedules do not
+    reproduce with `hydo run` bit for bit (M206).
 
 ## Milestone index
 
@@ -757,10 +759,13 @@ build machine, before 2026-10-13.
   KVM engine's full-state cycles too, and its fingerprint drops KVM's stale event fields. Compose's
   short-form `depends_on` imports as `start_after: started`, and restart policies hold from a
   service's start. An image built at epoch 1 keeps its defaults. Every example is re-recorded; on
-  hvx three timing-sensitive verdicts changed with the cache leaves (open item 74)
+  hvx three timing-sensitive verdicts changed with the cache leaves (decided in M206)
 - M205: several vCPUs with the host-call port, `--vcpus` on `hydo run`, `repro` and
   `explain`, `hydo explore --sweep turns`, and `workload.kind: test` for test programs, from the
   nats-server flaky-test example; no recorded value moved
+- M206: the three epoch-2 verdict changes decided. stack-errors-fix's is accepted (the same
+  class), etcd 14685 has a new schedule (`K=etcd2@20+1 P=etcd1@26+1`), and miniflux's API check
+  was too strict and is fixed. `recorded.json` takes `vcpus`, and the nats-flaky-8363 pair is in it
 
 ## Where to look
 

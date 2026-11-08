@@ -19,7 +19,10 @@
 //! - `runs`: `schedule`, `verdict` (the verdict line as recorded, without `HYDO-ORACLE: `; a long
 //!   one may end in `...`; on the Mac a run whose history check replaced the guest's verdict reads
 //!   `<guest verdict>; history <check verdict>`), `fp`, and where recorded `ctl` and `wfp`;
-//!   `pinned: true` marks the pinned reproducers.
+//!   `pinned: true` marks the pinned reproducers; `vcpus` (hvx only, 2..8; absent: one vCPU) and
+//!   `turn_margin` (hvx only, with `vcpus`; [`crate::rebaseline`] passes both to `hydo run` as
+//!   `--vcpus` and `--turn-margin`, M206) for a run on several vCPUs. The vCPUs' turn length is
+//!   the schedule's own host token `q=`. A schedule may be listed once per vCPU count.
 //!
 //! What counts as the same verdict ([`verdict_key`]): the class (OK, VIOLATION, ERROR, ...) and,
 //! for a VIOLATION, the property in brackets after it; for any other class but OK the words of
@@ -131,6 +134,42 @@ pub struct Run {
     pub fp: String,
     pub ctl: Option<String>,
     pub wfp: Option<String>,
+    /// The guest's vCPUs (1 when the entry has no `vcpus`).
+    pub vcpus: u32,
+    /// `hydo run --turn-margin` (only with several vCPUs).
+    pub turn_margin: Option<u32>,
+}
+
+impl Run {
+    /// The `hydo run` options of the entry's vCPUs: none for one vCPU.
+    pub fn engine_args(&self) -> Vec<String> {
+        let mut a = Vec::new();
+        if self.vcpus > 1 {
+            a.push("--vcpus".to_string());
+            a.push(self.vcpus.to_string());
+        }
+        if let Some(m) = self.turn_margin {
+            a.push("--turn-margin".to_string());
+            a.push(m.to_string());
+        }
+        a
+    }
+
+    /// The run's key in caches and reports: the schedule, followed by the vCPU options when the
+    /// entry has any (so a one-vCPU entry keeps the key it had before `vcpus` existed).
+    pub fn key(&self) -> String {
+        let a = self.engine_args();
+        if a.is_empty() {
+            self.schedule.clone()
+        } else {
+            format!("{} [{}]", self.schedule, a.join(" "))
+        }
+    }
+
+    /// Whether the run boots like the worker pools do (one vCPU, no engine options).
+    pub fn one_vcpu(&self) -> bool {
+        self.engine_args().is_empty()
+    }
 }
 
 fn s(v: &Value, k: &str) -> Option<String> {
@@ -174,12 +213,43 @@ pub fn images(doc: &Value) -> Result<Vec<Image>, String> {
         for r in v["runs"].as_array().ok_or(e("no runs"))? {
             let schedule = s(r, "schedule").ok_or(e("a run without a schedule"))?;
             let fp = s(r, "fp").ok_or(e(&format!("{schedule}: no fp")))?;
+            let num = |k: &str| -> Result<Option<u32>, String> {
+                match r.get(k) {
+                    None => Ok(None),
+                    Some(v) => v
+                        .as_u64()
+                        .and_then(|n| u32::try_from(n).ok())
+                        .map(Some)
+                        .ok_or(e(&format!("{schedule}: {k} is not a number"))),
+                }
+            };
+            let vcpus = num("vcpus")?.unwrap_or(1);
+            let turn_margin = num("turn_margin")?;
+            if r.get("vcpus").is_some() && !(2..=8).contains(&vcpus) {
+                return Err(e(&format!(
+                    "{schedule}: vcpus {vcpus}: 2..8 (leave it out for one vCPU)"
+                )));
+            }
+            if vcpus > 1 && platform != "hvx" {
+                return Err(e(&format!(
+                    "{schedule}: vcpus: only hvx runs several vCPUs"
+                )));
+            }
+            if let Some(m) = turn_margin {
+                if vcpus < 2 || !(8..=1 << 20).contains(&m) {
+                    return Err(e(&format!(
+                        "{schedule}: turn_margin {m}: needs vcpus and a value in [8, 2^20]"
+                    )));
+                }
+            }
             runs.push(Run {
                 verdict: s(r, "verdict").ok_or(e(&format!("{schedule}: no verdict")))?,
                 fp,
                 ctl: s(r, "ctl"),
                 wfp: s(r, "wfp"),
                 schedule,
+                vcpus,
+                turn_margin,
             });
         }
         if runs.is_empty() {
@@ -265,5 +335,50 @@ mod tests {
         assert_eq!(verdict_line("HYDO-ORACLE: OK x", None), "OK x");
         assert!(same_hex("eb8a9cb1", "eb8a9cb1ffff"));
         assert!(!same_hex("", "eb"));
+    }
+
+    fn one(platform: &str, run: serde_json::Value) -> Result<Vec<Image>, String> {
+        images(&serde_json::json!({
+            "v": 1, "type": "recorded-runs",
+            "images": [{
+                "id": format!("{platform}/x"), "platform": platform,
+                "build": {"stage": "s", "dir": "d", "manifest": "m", "args": []},
+                "runs": [run]
+            }]
+        }))
+    }
+
+    #[test]
+    fn several_vcpus() {
+        let base = serde_json::json!({"schedule": "disk=none q=18800 | run", "verdict": "OK", "fp": "0123456789abcdef"});
+        let r = &one("hvx", base.clone()).unwrap()[0].runs[0];
+        assert_eq!((r.vcpus, r.turn_margin), (1, None));
+        assert!(r.one_vcpu() && r.engine_args().is_empty());
+        assert_eq!(r.key(), "disk=none q=18800 | run");
+        let mut v = base.clone();
+        v["vcpus"] = 2.into();
+        v["turn_margin"] = 160.into();
+        let r = &one("hvx", v.clone()).unwrap()[0].runs[0];
+        assert_eq!(
+            r.engine_args(),
+            ["--vcpus", "2", "--turn-margin", "160"].map(String::from)
+        );
+        assert_eq!(
+            r.key(),
+            "disk=none q=18800 | run [--vcpus 2 --turn-margin 160]"
+        );
+        assert!(!r.one_vcpu());
+        assert!(
+            one("kvm", v.clone()).is_err(),
+            "only hvx runs several vCPUs"
+        );
+        for (k, bad) in [("vcpus", 1), ("vcpus", 9), ("turn_margin", 4)] {
+            let mut w = v.clone();
+            w[k] = bad.into();
+            assert!(one("hvx", w).is_err(), "{k} {bad}");
+        }
+        let mut w = base;
+        w["turn_margin"] = 160.into();
+        assert!(one("hvx", w).is_err(), "a turn margin needs vcpus");
     }
 }

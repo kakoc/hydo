@@ -435,8 +435,8 @@ fn wait_to_start(o: &Opts, big: bool) -> bool {
     }
 }
 
-/// One `hydo run` from a fresh boot into `dir`.
-fn run_vm(o: &Opts, image: &Path, schedule: &str, dir: &Path) -> Ran {
+/// One `hydo run` from a fresh boot into `dir`, with the entry's vCPU options (`args`, M206).
+fn run_vm(o: &Opts, image: &Path, schedule: &str, args: &[String], dir: &Path) -> Ran {
     let t0 = Instant::now();
     let _ = std::fs::remove_dir_all(dir);
     if let Some(p) = dir.parent() {
@@ -460,7 +460,8 @@ fn run_vm(o: &Opts, image: &Path, schedule: &str, dir: &Path) -> Ran {
     if o.platform == "kvm" {
         c.args(["--backend", "kvm"]);
     }
-    c.arg(image)
+    c.args(args)
+        .arg(image)
         .arg(schedule)
         .arg("--out")
         .arg(dir)
@@ -851,32 +852,44 @@ fn fast_runs(o: &Opts, selected: &[Image], outcomes: &mut [Outcome]) -> Result<(
         let sha = oc.built.sha256.clone();
         let mut todo = Vec::new();
         for (ri, r) in img.runs.iter().enumerate() {
-            match load(&key(&sha, &r.schedule, 0)) {
+            match load(&key(&sha, &r.key(), 0)) {
                 Some(c) => {
                     let second = if as_recorded(r, &c) {
                         None
                     } else {
-                        load(&key(&sha, &r.schedule, 1))
+                        load(&key(&sha, &r.key(), 1))
                     };
                     oc.ran.insert(ri, [Some(c), second]);
                 }
                 None => todo.push(ri),
             }
         }
-        if !todo.is_empty() {
+        // a run on several vCPUs boots on its own (`hydo run --vcpus`): the pools boot one vCPU
+        let (pooled, alone): (Vec<usize>, Vec<usize>) =
+            todo.iter().partition(|&&ri| img.runs[ri].one_vcpu());
+        let rd = o.work.join("runs").join(slug(&img.id));
+        for &ri in &alone {
             if !wait_to_start(o, img.big) {
                 return Err("waited 6 hours for the quiet file to go or for memory".into());
             }
-            let rd = o.work.join("runs").join(slug(&img.id));
-            let first = todo[0];
-            let rest: Vec<usize> = todo[1..].to_vec();
+            let r = &img.runs[ri];
+            let d = rd.join(format!("r{ri}-1"));
+            let a = run_vm(o, &oc.built.image, &r.schedule, &r.engine_args(), &d);
+            oc.ran.insert(ri, [Some(a), None]);
+        }
+        if !pooled.is_empty() {
+            if !wait_to_start(o, img.big) {
+                return Err("waited 6 hours for the quiet file to go or for memory".into());
+            }
+            let first = pooled[0];
+            let rest: Vec<usize> = pooled[1..].to_vec();
             let image = oc.built.image.clone();
             let fresh_dir = rd.join(format!("r{first}-1"));
             let sched0 = img.runs[first].schedule.clone();
             // the fresh boot alongside the pool (a big image: before it, alone)
             let oo = o.clone();
             let (img0, dir0) = (image.clone(), fresh_dir.clone());
-            let fresh = std::thread::spawn(move || run_vm(&oo, &img0, &sched0, &dir0));
+            let fresh = std::thread::spawn(move || run_vm(&oo, &img0, &sched0, &[], &dir0));
             let fresh = if img.big || o.jobs <= 1 {
                 Some(fresh.join().map_err(|_| "the fresh-boot run panicked")?)
             } else {
@@ -895,15 +908,17 @@ fn fast_runs(o: &Opts, selected: &[Image], outcomes: &mut [Outcome]) -> Result<(
                     oc.ran.insert(ri, [Some(a), None]);
                 }
             }
+        }
+        if !todo.is_empty() {
             made += todo.len();
             for &ri in &todo {
                 let r = &img.runs[ri];
                 if let Some(Some(a)) = oc.ran.get(&ri).map(|p| p[0].clone()) {
-                    save(&key(&sha, &r.schedule, 0), &a);
+                    save(&key(&sha, &r.key(), 0), &a);
                     eprintln!(
                         "rebaseline: {} `{}` {} {}",
                         img.id,
-                        r.schedule,
+                        r.key(),
                         if a.error.is_some() { "FAILED" } else { &a.fp },
                         if as_recorded(r, &a) {
                             "as recorded"
@@ -929,12 +944,12 @@ fn fast_runs(o: &Opts, selected: &[Image], outcomes: &mut [Outcome]) -> Result<(
                 .join("runs")
                 .join(slug(&img.id))
                 .join(format!("r{ri}-2"));
-            let c = run_vm(o, &oc.built.image, &r.schedule, &d);
+            let c = run_vm(o, &oc.built.image, &r.schedule, &r.engine_args(), &d);
             made += 1;
             eprintln!(
                 "rebaseline: {} `{}` second run {} ({})",
                 img.id,
-                r.schedule,
+                r.key(),
                 if c.error.is_some() { "FAILED" } else { &c.fp },
                 if c.fp == a.fp {
                     "the same as the first"
@@ -942,7 +957,7 @@ fn fast_runs(o: &Opts, selected: &[Image], outcomes: &mut [Outcome]) -> Result<(
                     "DIFFERS from the first"
                 }
             );
-            save(&key(&oc.built.sha256, &r.schedule, 1), &c);
+            save(&key(&oc.built.sha256, &r.key(), 1), &c);
             oc.ran.insert(ri, [Some(a.clone()), Some(c)]);
         }
     }
@@ -997,6 +1012,8 @@ struct Job {
     key: String,
     path: PathBuf,
     schedule: String,
+    /// The entry's vCPU options for `hydo run`.
+    args: Vec<String>,
     dir: PathBuf,
 }
 
@@ -1168,7 +1185,11 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
             for rep in 0..2 {
                 let key = sha_text(&format!(
                     "{}\n{}\n{}\n{}\n{}",
-                    o.platform, oc.built.sha256, r.schedule, rep, engine
+                    o.platform,
+                    oc.built.sha256,
+                    r.key(),
+                    rep,
+                    engine
                 ));
                 let path = o.work.join("cache").join(format!("{key}.json"));
                 if let Some(c) = std::fs::read_to_string(&path)
@@ -1187,6 +1208,7 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
                     key,
                     path,
                     schedule: r.schedule.clone(),
+                    args: r.engine_args(),
                     dir: o
                         .work
                         .join("runs")
@@ -1221,7 +1243,7 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
             let oo = o.clone();
             let image = outcomes[j.image].built.image.clone();
             std::thread::spawn(move || {
-                let r = run_vm(&oo, &image, &j.schedule, &j.dir);
+                let r = run_vm(&oo, &image, &j.schedule, &j.args, &j.dir);
                 let _ = tx.send((j, r));
             });
         }
@@ -1307,7 +1329,7 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
             };
             let (Some(a), Some(c)) = (a, c) else {
                 rep.failures
-                    .push(format!("{} `{}`: not run", img.id, r.schedule));
+                    .push(format!("{} `{}`: not run", img.id, r.key()));
                 continue;
             };
             for x in [&a, &c] {
@@ -1315,7 +1337,7 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
                     rep.failures.push(format!(
                         "{} `{}`: {e} ({})",
                         img.id,
-                        r.schedule,
+                        r.key(),
                         x.dir.display()
                     ));
                 }
@@ -1333,18 +1355,24 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
             let twice = a.fp == c.fp && a.ctl == c.ctl && a.verdict == c.verdict;
             if !twice {
                 rep.nondeterministic
-                    .push(format!("{} `{}`: {} / {}", img.id, r.schedule, a.fp, c.fp));
+                    .push(format!("{} `{}`: {} / {}", img.id, r.key(), a.fp, c.fp));
             }
             let verdict_same = recorded::same_verdict(&r.verdict, &a.verdict);
             if !verdict_same {
                 rep.verdicts.push(format!(
                     "{} `{}`:\n  - recorded: {}\n  - now: {}",
-                    img.id, r.schedule, r.verdict, a.verdict
+                    img.id,
+                    r.key(),
+                    r.verdict,
+                    a.verdict
                 ));
             } else if !recorded::same_text(&r.verdict, &a.verdict) {
                 rep.texts.push(format!(
                     "{} `{}`:\n  - recorded: {}\n  - now: {}",
-                    img.id, r.schedule, r.verdict, a.verdict
+                    img.id,
+                    r.key(),
+                    r.verdict,
+                    a.verdict
                 ));
             }
             let fp_same = r.fp == a.fp;
@@ -1358,7 +1386,7 @@ pub fn rebaseline(o: &Opts) -> Result<i32, String> {
                 rep.table,
                 "| `{}` | `{}` | {} | `{}` | `{}`{} | {}{} |",
                 img.id,
-                r.schedule.replace('|', "\\|"),
+                r.key().replace('|', "\\|"),
                 a.verdict
                     .chars()
                     .take(60)

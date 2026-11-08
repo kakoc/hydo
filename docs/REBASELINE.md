@@ -3343,7 +3343,7 @@ values moved, because the CPUID cache leaves change the guest's timing. Every ru
 values twice from fresh boots, and every image built twice to the same bytes.
 
 **Three hvx verdicts changed, and the list keeps their epoch-1 values until the user decides**
-(AGENTS.md open item 74): `hvx/etcd-3.5.5` `disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1`
+(AGENTS.md open item 74, decided in section 20): `hvx/etcd-3.5.5` `disk=none dseed=1 | run K=etcd1@10+1 P=etcd3@26+1`
 (recorded VIOLATION, revision 82 after 83; now OK `aef7cfa89a40a28a`), `hvx/miniflux`
 `disk=none dseed=1 | run P=postgres@10~50:4000` (recorded OK; now VIOLATION, acked c14 missing
 from the API, `7b12415767cbb079`) and `hvx/stack-errors-fix` `disk=ioerr:5 dseed=1 | run`
@@ -3362,3 +3362,44 @@ bare-metal machine; `hydo/onboard/examples/stack/build-reproducers.sh` rebuilds 
 `efbde7b57264be0f` (OK) on `explore-ob-stack-fix-disk.img` (`d61cbf00…`); on KVM
 `c586a0079f931135` and `32c826fd530a6c6d`. The epoch-1 images in `~/hydo/build/m155` still give
 `1dc3677fb94053cf` and `ba0aa0612502a1df` under this hydo.
+
+## 20. The three epoch-2 verdict changes decided, and runs on several vCPUs (M206, 2026-11-08)
+
+Milestone 204 left three hvx verdict changes in the list with their epoch-1 values (section 19).
+Milestone 206 decided each one (docs/HISTORY.md "Milestone 206"):
+
+- **`hvx/stack-errors-fix` `disk=ioerr:5 dseed=1 | run`: accepted.** It was `ERROR restart after
+  the faults (mysql)` and is now `ERROR restart after the faults (redis)` (`4d9d5f493f30d060`,
+  twice from fresh boots). The verdict class is the same: the I/O errors still make a service's
+  restart fail. Which service fails first depends on which service's disk request the seeded
+  fault lands on, and the request order moves with the guest's timing. The same switch happened
+  at Milestone 140 (section 9). It was written with `--write --accept-verdicts --only
+  hvx/stack-errors-fix`.
+- **`hvx/etcd-3.5.5` and `hvx/etcd-3.5.6`: a new schedule.** M78's `K=etcd1@10+1 P=etcd3@26+1`
+  passes at epoch 2. A hand sweep of 256 schedules found etcd issue 14685's second symptom again
+  with the members' roles moved: `disk=none dseed=1 | run K=etcd2@20+1 P=etcd1@26+1` is VIOLATION
+  `client.revisions_monotonic` on 3.5.5 (`2228bc5d41fd9575`) and OK on 3.5.6
+  (`e5af2f3fbac43df9`), each twice from fresh boots. It replaces M78's schedule for both releases.
+  The example keeps `guest.cpu_cache` at its default (hydo/onboard/examples/etcd/RESULTS.md).
+- **`hvx/miniflux` `P=postgres@10~50:4000`: the check was too strict.** The check
+  `api.reads_acked_categories` compared the categories the API returned with the acknowledgements
+  that arrived after the read had started. It now reads the acknowledged list before the read.
+  Both miniflux images have new bytes, and all their runs are re-recorded; the schedule is OK
+  again (hydo/onboard/examples/miniflux/RESULTS.md).
+
+**Runs on several vCPUs.** An entry of the list can name `vcpus` (2 to 8, hvx only) and
+`turn_margin`; `hydo-bench rebaseline` passes them to `hydo run` as `--vcpus` and
+`--turn-margin`, and runs such an entry from a fresh boot instead of the worker pool. The
+nats-flaky-8363 example is in the list with its epoch-2 boundary: `hvx/nats-flaky-buggy`
+`disk=none q=18140 | run` on 2 vCPUs VIOLATION (`6fca0caef17a99f9`), `disk=none q=18051 | run` on
+2 vCPUs OK (`9293d2b0af65bb25`), `disk=none | run` on one vCPU VIOLATION (`21944e55f674efb2`), and
+`hvx/nats-flaky-fixed` `disk=none q=18140 | run` on 2 vCPUs OK (`5650cc5ce89fb568`). The stage
+`nats-flaky` of `stage.sh` takes the two test programs from the inputs folder, checked against
+`build-test.sh`'s pins.
+
+**What the hvx check still reports.** The fast `--check` on hvx reports four schedules whose run
+in the worker pool (from S1) differs from a fresh boot: the three composed Redis images'
+`disk=cut dseed=1 | run C=12 R=everysec W=...` and redis-errors' `disk=ioerr:1 ... W=...` (the
+same verdicts; AGENTS.md open item 76). The list keeps the fresh boots' values, and `--thorough`
+gives them. It also reports new bytes for the shop's two images when the inputs folder is not
+M164's, as the list's note says; their runs give the recorded values.

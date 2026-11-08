@@ -208,3 +208,31 @@ same fingerprint (docs/REBASELINE.md section 13, which also says how each image 
 |---|---|---|---|
 | `disk=none dseed=1 \| run` | OK invariants=2 held (categories.acked_exactly_once: exactly-once holds: each of the 30 items of acked occu... | `96d6e0b2584542bd` | yes |
 | `disk=none dseed=1 \| run C=20 S=off` | VIOLATION [categories.acked_exactly_once] exactly-once violated: acked c17 is in categories 0 times (of 20 ... | `d35d0fb81ca11ed4` | yes |
+
+## Milestone 206: the API check read the acknowledged list too late
+
+At the fingerprint epoch 2 (Milestone 204) the schedule `disk=none dseed=1 | run
+P=postgres@10~50:4000` ended in `VIOLATION [api.reads_acked_categories] acked c14 missing from
+the API` (`7b12415767cbb079`, twice). The same verdict had appeared at Milestone 140 and had gone
+again at Milestone 155. In both cases the guest's timing had moved. The finding was not a bug in
+miniflux. The check was too strict.
+
+`api.reads_acked_categories` runs every 2 seconds while the workload runs. It sent its `GET
+/v1/categories` first and read `$HYDO_ACKED` after the answer came. `hydo inspect` of the run
+shows the order. Each stop below was held with `--freeze`:
+
+| stop | what the guest shows |
+|---|---|
+| `run:33801` | the check starts, while PostgreSQL is paused (from `run:32760`, for 4 s); its `GET` waits |
+| `run:35380` | PostgreSQL resumes; acknowledged: 0 to 12; in flight: the check's `GET` and the `POST` of c14 (sent after c13's timed out) |
+| `run:35400` | the same: both requests still in flight, no answer yet |
+| `run:35440` | both answered: the `GET`'s list has c0 to c13 and no c14; c14 is acknowledged (201) |
+| `run:35570` | the check reads `$HYDO_ACKED` (now with 14), finds c14 missing from the list, and fails |
+
+The `GET` was sent before the `POST` of c14, and both waited for PostgreSQL. A read that starts
+before a create is acknowledged need not see it. So miniflux answered correctly, and the check
+compared the read with an acknowledgement that came after it. The check now reads `$HYDO_ACKED`
+before the `GET` and requires only those categories (`hydo.yaml` and `hydo-read.yaml`). With the
+corrected check the schedule passes. The new values are in `hydo/onboard/recorded.json`
+(`hvx/miniflux`, `hvx/miniflux-read`). Both images have new bytes, because the manifest is inside
+them.
