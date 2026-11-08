@@ -43,7 +43,7 @@ rm -rf "$TOP/target/package"
 # the package changed (the version is the same): remove our crates' leftovers there first
 CH="${CARGO_HOME:-$HOME/.cargo}"
 for c in $CRATES; do rm -rf "$CH"/registry/src/-*/"$c"-[0-9]*; done
-( cd "$TOP" && cargo package --locked "${DIRTY[@]}" "${PKGS[@]}" )
+( cd "$TOP" && cargo package --locked ${DIRTY[@]+"${DIRTY[@]}"} "${PKGS[@]}" )
 
 echo "== 2. the stand-in registry: $WORK/registry"
 rm -rf "$WORK/registry" "$WORK/home" "$WORK/install" "$WORK/target" "$WORK/proj"
