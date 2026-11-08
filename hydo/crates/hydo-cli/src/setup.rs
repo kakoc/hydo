@@ -1022,6 +1022,21 @@ pub fn add_to_path(rc: &Path, bin: &Path) -> std::io::Result<bool> {
     Ok(true)
 }
 
+/// A hydo installed by cargo or built in a checkout (`cargo_installed`) whose release root has no
+/// `SHA256SUMS` yet: its version's release is not installed in the install cache.
+fn version_to_install(cargo_installed: bool, root: &Path) -> bool {
+    cargo_installed && !root.join(SUMS).exists()
+}
+
+/// What `hydo setup --check` says for [`version_to_install`].
+fn would_install(version: &str, p: Platform, dir: &Path) -> String {
+    format!(
+        "hydo setup: hydo {version} for the {} is not installed in {}\n  hydo setup would: install hydo {version} (fetch its release, check it, set it up)",
+        platform_word(p),
+        dir.display()
+    )
+}
+
 fn platform_word(p: Platform) -> &'static str {
     match p {
         Platform::Linux => "Linux",
@@ -1185,14 +1200,16 @@ pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
             2,
         );
     }
-    // a hydo installed by cargo (M169) whose version is not installed yet: plain `hydo setup`
-    // installs it, as `hydo setup --get` does
-    if get.is_none()
-        && !check
-        && !verify
-        && ctx.cargo_installed
-        && !ctx.root.join("SHA256SUMS").exists()
-    {
+    // a hydo installed by cargo (M169) or built in a checkout (M181) whose version is not
+    // installed yet: plain `hydo setup` installs it, as `hydo setup --get` does, and `--check`
+    // reports that step (exit status 3) instead of calling the empty directory no release
+    if get.is_none() && !verify && version_to_install(ctx.cargo_installed, &ctx.root) {
+        if check {
+            let cache = cache_of(ctx, offline);
+            let dir = cache.home.version(&cache.own_version);
+            println!("{}", would_install(&cache.own_version, ctx.platform, &dir));
+            return 3;
+        }
         get = Some(None);
     }
     let cache = cache_of(ctx, offline);
@@ -1686,6 +1703,30 @@ mod tests {
         assert_eq!(std::fs::read(root.join(ENGINE_MAC)).unwrap(), engine);
         let r = inspect(&root, Platform::Mac, &[], &host);
         assert!(r.ok() && r.pending.is_empty(), "{r:?}");
+        cleanup(&root);
+    }
+
+    /// A hydo installed by cargo or built in a checkout, before its version is installed:
+    /// `hydo setup --check` names the install that plain `hydo setup` does (exit status 3), as
+    /// `hydo doctor` does, instead of calling the empty directory no release.
+    #[test]
+    fn a_cargo_installed_hydo_without_its_release_has_an_install_left() {
+        let root = scratch();
+        assert!(version_to_install(true, &root));
+        assert!(!version_to_install(false, &root));
+        std::fs::write(root.join(SUMS), "").unwrap();
+        assert!(!version_to_install(true, &root));
+        let l = would_install("0.2.0", Platform::Mac, &root);
+        assert!(
+            l.ends_with(
+                "  hydo setup would: install hydo 0.2.0 (fetch its release, check it, set it up)"
+            ),
+            "{l}"
+        );
+        assert!(
+            l.starts_with("hydo setup: hydo 0.2.0 for the Mac is not installed in "),
+            "{l}"
+        );
         cleanup(&root);
     }
 
