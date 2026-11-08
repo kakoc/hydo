@@ -145,7 +145,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | Variable | Kind | Type | Default | Readers | What it does |
 |---|---|---|---|---|---|
 | `HVM_SPIN_REWIND` | user | flag: exactly `0` turns it off | on | hydo-control, hydo-hvm | `0`: the host does not run a SPIN of an agent image on hvm or kvm again in the rewind mode (`hydo-hvm hvm` reads it too: `1` turns the rewind mode on). |
-| `HYDO_COST` | developer | flag: set and not `0` | off | hydo-control | Not `0`: the host controller reads the guest's work counters (`/proc`: disk, network, CPU, memory per process) at the workload's start and end and in a recovery boot, and reports them as `HYDO-COST` lines (an experiment, docs/design/cost-tracking.md). |
+| `HYDO_COST` | developer | `0`, `1` or `full` | off | hydo-control | Not `0`: the host controller reads the guest's work counters (`/proc`: disk, network, CPU, memory per process) after each conversation's verdict and reports them as `HYDO-COST` lines; `full`: also at the workload's start and end and in a recovery boot before its checks, which moves the run's timing (an experiment, docs/design/cost-tracking.md). |
 
 ## The `hydo` command (`hydo_config::run::Cli`)
 

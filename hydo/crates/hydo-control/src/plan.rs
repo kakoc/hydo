@@ -205,9 +205,10 @@ pub struct Plan {
     pub storage: Vec<PlanStorage>,
     pub layout: Layout,
     /// `HYDO_COST` (an experiment, docs/design/cost-tracking.md): read the guest's work counters
-    /// (`/proc`) at the workload's start and end and in a recovery boot, as `HYDO-COST` report
-    /// lines. Not a manifest key: the host's choice, off by default, so nothing changes without it.
-    pub cost: bool,
+    /// (`/proc`) as `HYDO-COST` report lines: 0 never, 1 after each conversation's verdict, 2 also
+    /// at the workload's start and end and in a recovery boot before its checks. Not a manifest
+    /// key: the host's choice, off by default, so nothing changes without it.
+    pub cost: u8,
 }
 
 /// One service's storage: its directory, and its own file system's partition when it has one.
@@ -516,7 +517,7 @@ impl Plan {
                 Some(c) => Some(int(c, "guest.clock_after_cut")?),
             },
             outcomes_after_cut: get(guest, "outcomes_after_cut").is_some_and(py::truthy),
-            cost: false,
+            cost: 0,
             invariants,
             knobs,
             buggify: m.buggify,
