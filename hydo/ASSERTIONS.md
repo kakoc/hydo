@@ -217,7 +217,7 @@ writes invalid UTF-8 as a raw U+FFFD; the SDK writes Go 1.26's `\ufffd` escape.
 `hydo/onboard/examples/node-kv` is a complete example (Mac backend).
 
 **The shared cases** (`sdk/cases`; the format and the rules for reading it are in
-`sdk/rust/README.md`, "The shared cases"). The Rust SDK is the reference: its test
+`sdk/README.md`, "The shared cases"). The Rust SDK is the reference: its test
 `cargo test --test cases` (in `sdk/rust`) runs each case's calls and writes, for every run,
 the exact bytes the sink receives and what the calls return, under the run's output target
 (`HYDO_ASSERT_OUT` / `HYDO_HIST_OUT`) and BUGGIFY configuration. The other SDKs read every case,

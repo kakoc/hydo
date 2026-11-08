@@ -11,16 +11,23 @@ use std::fmt::Write as _;
 /// macro (`crate::details!`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
+    /// JSON `null`.
     Null,
+    /// `true` or `false`.
     Bool(bool),
+    /// A signed integer.
     Int(i64),
+    /// An unsigned integer.
     Uint(u64),
     /// Encoded as Go encodes a `float64`.
     Float(f64),
     /// Encoded as Go encodes a `float32` (shortest digits of the 32-bit value).
     Float32(f32),
+    /// A string.
     Str(String),
+    /// An array.
     List(Vec<Value>),
+    /// An object.
     Map(Details),
 }
 
@@ -44,18 +51,23 @@ impl Details {
         self.insert(key, value);
         self
     }
+    /// The value of `key`, if it is set.
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.0.get(key)
     }
+    /// Removes `key` and returns its value, if it was set.
     pub fn remove(&mut self, key: &str) -> Option<Value> {
         self.0.remove(key)
     }
+    /// Whether no key is set.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+    /// The number of keys.
     pub fn len(&self) -> usize {
         self.0.len()
     }
+    /// The keys and values, in byte order of the keys.
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Value)> {
         self.0.iter()
     }

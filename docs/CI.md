@@ -19,7 +19,7 @@ credentials), pin every action by commit, and run every step with `bash -eo pipe
 | `rust (ubuntu-24.04)` | GitHub's Linux x86_64 runner | `cargo fmt --all --check`, `sh ci/consolidate-tests.sh --check` (below, "One test program per crate"), `cargo clippy --locked --workspace --all-targets -- -D warnings`, then `ci/affected-packages.sh` and `cargo nextest run --cargo-profile ci` with the `fast` tier's filter (`ci/tier-filter.sh`) | about 3 minutes (169 s) with warm caches (6.5 minutes with none) |
 | `rust (macos-15)` | GitHub's macOS Apple Silicon runner | the same | about 4.5 minutes (257 s) with warm caches (8 minutes with none) |
 | `guest programs (ubuntu-24.04)` | Linux | the guest agent (`hydo/crates/hydo-agent`: its native tests, then the agent as PID 1 of its own PID and mount namespace, which needs `sudo -n` and runs because the runner has password-less sudo) the store reader (`hydo/crates/hydo-read`) and the SQL workloads (`hydo/crates/hydo-sql`, Milestone 182); each keeps its own Cargo workspace and lock file | under 1 minute |
-| `sdks` | Linux | the Rust SDK (`sdk/rust`, the reference that writes `sdk/cases/`), the Rust test SDK (`sdk/rust-test`), the Go SDK (the public module `sdk/go`, and the frozen copy `hydo/stack/hydoassert` and `hydo/stack/hydohist` the order service builds with) with Go 1.26.5, the Python SDK with Python 3.9 and 3.13, the JavaScript SDK with Node 22 | about 1 minute |
+| `sdks` | Linux | the Rust SDK (`sdk/rust`, the reference that writes `sdk/cases/`), the Rust test SDK (`sdk/rust-test`), the Go SDK (the public module `sdk/go`, and the frozen copy `hydo/stack/hydoassert` and `hydo/stack/hydohist` the order service builds with) with Go 1.26.5, the Python SDK with Python 3.9 and 3.13, the JavaScript SDK with Node 22; in each SDK also every code example of its README (sdk/README.md, "The pages are tested") | about 1 minute |
 | `rust full (ubuntu-24.04)`, `rust full (macos-15)` (ci-full.yml) | Linux, macOS | `cargo test --locked --release --workspace --no-fail-fast` (every test, the documentation examples too), then a step that prints what the tests skipped | 18 minutes (Linux) and 29 minutes (macOS) with a warm cache, 23 and 31 with none |
 
 The checks docs/RELEASING.md step 1 asks for before a release are the per-push tier's `fmt` and
@@ -109,7 +109,8 @@ whose integration tests are one program (below, "One test program per crate") th
 So every test runs in the full tier, and none can be in neither: `hydo-release`'s `test_tiers`
 test (in the `fast` tier, and always run) fails when a test binary of the workspace has no line,
 when a line names no binary, when a line is doubled or names another tier, and when a library
-with `doctest = false` has a documentation example rustdoc would test; since the consolidation
+with `doctest = false` has a documentation example rustdoc would test (also in a Markdown file
+the library makes its documentation with `#![doc = include_str!(..)]`, such as its README); since the consolidation
 also when a `tests/*.rs` is in no test program, when a `tests/main.rs` holds a test of its own,
 and when a program or library with `test = false` has a unit test. A new test file is added as
 `fast` unless it is such a corpus.
@@ -364,4 +365,5 @@ documentation example in about two minutes.
 
 The SDKs: `cargo test` in `sdk/rust` and `sdk/rust-test`, `GOTOOLCHAIN=go1.26.5 go test ./...`
 in `sdk/go`, `python3 -m unittest discover -s sdk/python/tests`, and
-`node --test` in `sdk/js`.
+`node --test` in `sdk/js`. Each of them also runs every code example of the SDK's README (its
+page on the registry). The `hydo` crate's page is tested by `hydo::readme` (`fast`).

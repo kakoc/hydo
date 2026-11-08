@@ -112,9 +112,9 @@ impl Assertion {
         Self::raw(t, Cow::Borrowed(id), Cow::Borrowed(msg), Some(Loc { file, line, col, wire: true }), None)
     }
 
-    pub fn id(&self) -> &str {
-        &self.id
-    }
+    /// The property's id, as its records carry it.
+    pub fn id(&self) -> &str { &self.id }
+    /// The property's message for people.
     pub fn msg(&self) -> &str {
         &self.msg
     }

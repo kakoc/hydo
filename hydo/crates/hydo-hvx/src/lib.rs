@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo-hvx: the hvx run engine in Rust (M132; the only hvx engine since M137, which deleted the C
 //! engine runner `hv/hvx/hvx_explore.c` it was ported from: `git show d9202e7:hv/hvx/hvx_explore.c`).
 //! It drives `/dev/hvx` (the hvx kernel module, `hv/hvx/hvx.c`) directly through the ioctls of
@@ -9,13 +13,13 @@
 //!
 //! Two ways to use it:
 //!
-//! - in-process (the default): [`engine::run`] runs the engine from a typed [`engine::Start`]
+//! - in-process (the default): `engine::run` runs the engine from a typed `engine::Start`
 //!   and talks to the host through a [`port::Port`] in values (`hydo-engine-proto`, M142);
 //!   hydo-engine runs one per worker on a thread of the `hydo` process itself, over a
 //!   [`port::ChanPort`], whenever that process can open the device (`HYDO_ENGINE=inproc` forces
 //!   it). The engine reads no schedule text: [`sched::Sched::from_schedule`] arms the module from
 //!   hydo-schedule's typed schedule;
-//! - the program `hydo-hvx`, with the C engine's command line and protocol ([`engine::main_with`]
+//! - the program `hydo-hvx`, with the C engine's command line and protocol (`engine::main_with`
 //!   reads the command line, [`text::TextPort`] turns the lines into the same values), which hydo-engine
 //!   starts under `hvx-run sudo` when the process cannot open the device (`HYDO_ENGINE=process`
 //!   forces it; `HYDO_HVX_EXPLORE` names another program).

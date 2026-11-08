@@ -4,12 +4,12 @@
 //! Each covered service has log streams (0 = its stdout/stderr log, `<svc>.log.old` and
 //! `<svc>.log` together; 1 = its setup log; 2.. = the files of its `errors.files`). The guest
 //! keeps the shell's bookkeeping files, written by the same pipelines (`cat … | wc -l`):
-//! - [`after_mount`] (mount_data): each data-disk file's line count when this boot mounted the
+//! - `after_mount` (mount_data): each data-disk file's line count when this boot mounted the
 //!   disk (`$H/el.b.<svc>.<k>`), so older lines are not reported again;
-//! - [`mark`] (step_range, retry_workload): every stream's line count when a workload range (label
+//! - `mark` (step_range, retry_workload): every stream's line count when a workload range (label
 //!   = its first step) or the end phase (`end`) starts (`$H/el.m.<svc>.<k>`).
 //!
-//! [`report`] (el_report, once per boot: before the verdict, before die_oracle's verdict, and at a
+//! `report` (el_report, once per boot: before the verdict, before die_oracle's verdict, and at a
 //! power cut after the services are stopped) reads the streams and those files and computes the
 //! records on the host: EL_SCAN's selection and template and EL_SUM's grouping, ported from the
 //! awk programs with busybox awk's semantics (POSIX regular expressions with leftmost-longest
@@ -18,7 +18,7 @@
 //!
 //! The verdict stays the last line: the assertion records the final invariants print (the
 //! shell's final_verdict output, redirected into `$H/el.verdict`) are held back until the error
-//! records are out ([`final_verdict`], [`assert_line`]). With fakes as well, the fake world's
+//! records are out (`final_verdict`, `assert_line`). With fakes as well, the fake world's
 //! summary lines are held with them: hydo-build splices hydo-init-errlog.sh after
 //! hydo-init-fakes.sh, so its final_verdict redirects the fakes' one, summary included. The
 //! shell then prints the error records, the summary lines, the assertion records and the verdict
@@ -54,16 +54,16 @@ pub const LEVEL_WARNING: &str = concat!(
 pub const EXCEPTION_LINE: &str = r#"^[A-Za-z_$][A-Za-z0-9_$.]*(Exception|Error)(:|$)"#;
 pub const REDIS_LEVEL: &str = r#"^[0-9]+:[XCSM] [^#]* # "#;
 
-/// One covered service (manifest.sh's HYDO_ERR_<svc>_*).
+/// One covered service (manifest.sh's `HYDO_ERR_<svc>_*`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ErrSvc {
     pub name: String,
     pub level: String,
     pub exc: String,
     pub ignore: String,
-    /// errors.files, as the words of HYDO_ERR_<svc>_files.
+    /// errors.files, as the words of `HYDO_ERR_<svc>_files`.
     pub files: Vec<String>,
-    /// HYDO_ERR_<svc>_norm's lines (`<pattern>\t<replacement>`).
+    /// `HYDO_ERR_<svc>_norm`'s lines (`<pattern>\t<replacement>`).
     pub norm: Vec<String>,
 }
 
@@ -566,7 +566,7 @@ fn is_alnum(c: u8) -> bool {
 
 /// nums(s): numbers become `#` unless they are part of an error code (MY-012592, errno 2) or a
 /// service port (below the ephemeral range, after an address or a known host); mixed tokens
-/// become <hex>, <id> or lose their digits.
+/// become `<hex>`, `<id>` or lose their digits.
 pub fn nums(s: &[u8], hosts: &[String]) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let mut prev: Vec<u8> = Vec::new();

@@ -119,7 +119,7 @@ pub fn scalar(tok: &str, wh: &str) -> Result<Value, ManifestError> {
     Ok(Value::String(t.to_string()))
 }
 
-/// `_flow`: `[a, b]` / `{k: v}` with nesting, starting at s[i]; returns (value, next index).
+/// `_flow`: `[a, b]` / `{k: v}` with nesting, starting at `s[i]`; returns (value, next index).
 pub fn flow(s: &[char], mut i: usize, wh: &str) -> Result<(Value, usize), ManifestError> {
     let open_c = s[i];
     let close_c = if open_c == '[' { ']' } else { '}' };

@@ -10,8 +10,8 @@
 //! nothing outside the guest (only the guest trusts this CA).
 //!
 //! What goes into the image (nothing of it for a manifest without `tls:`):
-//! - /etc/hydo/tls/ca.pem (the CA), /etc/hydo/tls/<endpoint>.pem (its certificate and the CA's)
-//!   and <endpoint>.key (PKCS#8), named in /etc/hydo/world.json for hydo-world-tls;
+//! - /etc/hydo/tls/ca.pem (the CA), `/etc/hydo/tls/<endpoint>.pem` (its certificate and the CA's)
+//!   and `<endpoint>.key` (PKCS#8), named in /etc/hydo/world.json for hydo-world-tls;
 //! - the CA appended to the guest's /etc/ssl/certs/ca-certificates.crt (made if missing, with
 //!   /etc/ssl/cert.pem pointing at it), and to every image service's system bundle (oci.rs);
 //! - each host name mapped to its endpoint's address in /etc/hosts (the guest's and every image

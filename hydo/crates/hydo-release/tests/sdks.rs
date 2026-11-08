@@ -2,7 +2,7 @@
 //!
 //! 1. The public Go module `sdk/go` and the frozen copy in `hydo/stack` (whose compiled bytes are
 //!    inside recorded images) hold the same code: they may differ only in the documented
-//!    differences below (`sdk/go/README.md` lists them too): the renamed identifiers of
+//!    differences below (`sdk/README.md` lists them too): the renamed identifiers of
 //!    `GO_RENAMES` (Milestone 163 made the assertion type unexported in `sdk/go` only) and the
 //!    lines of `GO_DIFFERENCES`.
 //! 2. Every published SDK package (the four assertion SDKs: crates.io, PyPI and npm
@@ -96,6 +96,11 @@ fn replace_word(text: &str, from: &str, to: &str) -> String {
 /// Files that only the frozen copy has (the shell SDK is not part of the Go module).
 const GO_FROZEN_ONLY: &[&str] = &["hydoassert/hydo_assert.sh"];
 
+/// Files that only the public module has: the examples of its package documentation and the
+/// test of its README. They are test files, so no program is compiled from them, and the frozen
+/// copy needs no documentation.
+const GO_PUBLIC_ONLY: &[&str] = &["hydoassert/example_test.go", "hydohist/example_test.go"];
+
 /// The Go packages of the module.
 const GO_PACKAGES: &[&str] = &["hydoassert", "hydohist"];
 
@@ -140,6 +145,9 @@ fn go_sdk_equals_the_frozen_copy_in_hydo_stack() {
     for pkg in GO_PACKAGES {
         let (p, f) = (files_in(&public, pkg), files_in(&frozen, pkg));
         for only in p.difference(&f) {
+            if GO_PUBLIC_ONLY.contains(&only.as_str()) {
+                continue;
+            }
             problems.push(format!("sdk/go/{only} has no counterpart in hydo/stack/ (add it there too, or document why not here)"));
         }
         for only in f.difference(&p) {
@@ -187,7 +195,7 @@ fn go_sdk_equals_the_frozen_copy_in_hydo_stack() {
     }
     assert!(
         problems.is_empty(),
-        "the public Go module sdk/go and the frozen copy in hydo/stack drifted apart (sdk/go/README.md, \"Two copies\"; a real change goes into both, and a change to hydo/stack moves recorded fingerprints):\n{}",
+        "the public Go module sdk/go and the frozen copy in hydo/stack drifted apart (sdk/README.md, \"The Go module and the frozen copy\"; a real change goes into both, and a change to hydo/stack moves recorded fingerprints):\n{}",
         problems.join("\n")
     );
 }
@@ -342,4 +350,56 @@ fn sdk_packages_share_version_license_and_repository() {
         "the SDK packages are not ready for their registries (docs/PUBLISHING.md; every SDK has the release's version, so a release bumps them together):\n{}",
         problems.join("\n")
     );
+}
+
+/// The four SDKs' pages (their README.md, shown by crates.io, PyPI, npm and pkg.go.dev) have
+/// the same parts in the same order, and their complete programs write the same lines: the same
+/// program in each language (sdk/README.md, "The pages are tested"; each SDK's own test runs
+/// its program and compares the lines).
+#[test]
+fn the_four_sdk_pages_are_parallel() {
+    let r = repo();
+    let pages = ["sdk/rust", "sdk/python", "sdk/js", "sdk/go"];
+    let mut outlines = Vec::new();
+    let mut outputs = Vec::new();
+    for p in pages {
+        let text = read(&r.join(p).join("README.md"));
+        // the level-2 headings, and the level-3 headings of "How to" but its last (each
+        // language's own "build or run a program for a hydo guest")
+        let mut h2 = Vec::new();
+        let mut how = Vec::new();
+        let mut in_how = false;
+        for l in text.lines() {
+            if let Some(h) = l.strip_prefix("## ") {
+                in_how = h == "How to";
+                h2.push(h.to_string());
+            } else if let Some(h) = l.strip_prefix("### ") {
+                if in_how {
+                    how.push(h.to_string());
+                }
+            }
+        }
+        how.pop();
+        outlines.push((p, h2, how));
+        let start = text
+            .find("\n## A complete program\n")
+            .unwrap_or_else(|| panic!("{p}/README.md has no \"A complete program\""));
+        let rest = &text[start..];
+        let i = rest.find("\n```text\n").expect("the program's lines") + 9;
+        let end = rest[i..].find("\n```\n").unwrap();
+        outputs.push((p, rest[i..i + end].to_string()));
+    }
+    for (p, h2, how) in &outlines[1..] {
+        assert_eq!(
+            (h2, how),
+            (&outlines[0].1, &outlines[0].2),
+            "{p}/README.md has other parts than sdk/rust/README.md"
+        );
+    }
+    for (p, out) in &outputs[1..] {
+        assert_eq!(
+            out, &outputs[0].1,
+            "{p}/README.md: its complete program writes other lines than sdk/rust/README.md's"
+        );
+    }
 }

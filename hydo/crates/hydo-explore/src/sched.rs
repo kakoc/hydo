@@ -176,7 +176,7 @@ pub struct S {
     pub t: Option<(i64, i64)>,
     /// O=svc@a-b:dir:netem
     pub o: Option<(String, i64, i64, String, Kinds)>,
-    /// Q=n[d]
+    /// `Q=n[d]`
     pub cq: Option<(i64, bool)>,
     /// X=svc@at~off
     pub x: Option<(String, i64, i64)>,

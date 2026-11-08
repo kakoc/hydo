@@ -11,7 +11,7 @@
 //! write the device (`HVX_DEV`, default `/dev/hvx`): as root, or as a user the udev rule gives the
 //! device to. A user who cannot open it gets the program `hydo-hvx` under `hvx-run sudo`. These
 //! are `hydo_config::engine::Engine`, read from the [`Hvx`]'s configuration with its overrides
-//! on top ([`settings`]); nothing here reads the environment (M144).
+//! on top (`settings`); nothing here reads the environment (M144).
 //!
 //! Each engine thread holds the module's shared lock while it runs, as `hvx-run` holds it for a
 //! program: `flock(LOCK_SH)` on `$HYDO_LOCK`, default `.hvx-module.lock` in the home directory

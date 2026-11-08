@@ -1,7 +1,7 @@
 //! The Rust side of the equivalence proof (tests/equiv.py): one case in, one answer out, in the
 //! exact text tests/equiv.py writes for hydohist.py, so the two can be compared byte for byte.
 //!
-//!   {"kind":"checks","srcs":[[label,text],...],"verdict":v|null,"budget":n,"specs":[...]|null}
+//!   `{"kind":"checks","srcs":[[label,text],...],"verdict":v|null,"budget":n,"specs":[...]|null}`
 //!   {"kind":"pdec","toks":[...]}            {"kind":"penc","strs":[...],"extra":","}
 //!   {"kind":"decode","hex":"..."}           (Python's open(errors="replace").read() of the bytes)
 

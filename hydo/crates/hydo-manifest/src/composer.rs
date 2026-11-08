@@ -1631,7 +1631,7 @@ pub fn fits(schedule: &str) -> bool {
     py::strip(g).chars().count() <= GUEST_MAX
 }
 
-/// `key_of(resolved)`: the key of a saved composition (W=@<key>).
+/// `key_of(resolved)`: the key of a saved composition (`W=@<key>`).
 pub fn key_of(resolved: &str) -> String {
     sha_hex(resolved.as_bytes())[..12].to_string()
 }

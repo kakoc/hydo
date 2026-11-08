@@ -1,4 +1,5 @@
-// Types of hydo-assert/history (CommonJS entry). The wire format and checkers: hydo/HISTORIES.md.
+// Types of hydo-assert/history (CommonJS entry). The wire format and checkers:
+// https://github.com/kakoc/hydo/blob/main/hydo/HISTORIES.md
 
 /** A record argument: a string that is already one token (see enc), or an integer. */
 export type Token = string | number | bigint;
@@ -6,9 +7,14 @@ export type Token = string | number | bigint;
 /** The value of an absent key (register model). */
 export declare const NIL: 'nil';
 
-/** One named history (a check's `history:`; [A-Za-z0-9_.-]+). */
+/**
+ * One named history: the `history:` of a check in the project's `hydo.yaml`.
+ * @example const kv = new History('kv');
+ */
 export declare class History {
+  /** @param name the history's name, `[A-Za-z0-9_.-]+` */
   constructor(name: string);
+  /** The history's name. */
   readonly name: string;
   /**
    * Records the invocation of f(args...) by process `proc` (an integer, or a token without
@@ -22,9 +28,13 @@ export declare class History {
 /** An invoked operation waiting for its completion. */
 export declare class Op {
   private constructor();
+  /** The history the operation belongs to. */
   readonly history: History;
+  /** The process that invoked it. */
   readonly proc: string;
+  /** The operation's function, for example `'write'`. */
   readonly f: string;
+  /** The invocation's arguments, as tokens. */
   readonly args: string[];
   /** A successful completion; with no args the invocation's are repeated. */
   ok(...args: Token[]): void;

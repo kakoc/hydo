@@ -119,3 +119,4 @@ hydo::agents_equivalence                 fast
 hydo::bin/hydo                           fast
 hydo::equivalence                        fast
 hydo::migrate                            fast
+hydo::readme                             fast

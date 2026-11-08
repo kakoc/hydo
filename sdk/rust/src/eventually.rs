@@ -39,6 +39,7 @@ impl Liveness {
     pub fn __assertion(&'static self) -> &'static Assertion {
         &self.a
     }
+    /// The deadline of an episode, counted from its start.
     pub fn within(&self) -> Duration {
         self.within
     }

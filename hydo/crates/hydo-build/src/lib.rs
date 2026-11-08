@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo-build: compile a project manifest (hydo.yaml, see hydo/onboard/MANIFEST.md) into a hydo
 //! guest image. The Rust port of hydo/onboard/hydo-build (x86_64), hydo_build_arm64.py (arm64),
 //! hydo_oci.py (services from Docker/OCI images) and the release-time build patches that were in

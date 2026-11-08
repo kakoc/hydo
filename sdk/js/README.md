@@ -1,235 +1,246 @@
-# hydo-assert: the JavaScript assertion SDK (Node.js)
+# hydo-assert for JavaScript (Node.js)
 
-A Node.js program running under hydo (the deterministic hypervisor of
-[github.com/kakoc/hydo](https://github.com/kakoc/hydo)) uses this package to say what must be
-true, what should happen at least once, what must happen within a deadline, and where a
-dependency may misbehave. It writes the same console records as the Go SDK (`sdk/go`), byte for
-byte, with the same deduplication rules, so `hydo run` and the explorer (`hydo explore`) read
-them unchanged. The wire format and the verdict rules are in
-`hydo/ASSERTIONS.md` of that repository; paths below are relative to it.
+[hydo](https://github.com/kakoc/hydo) runs a whole system in a deterministic virtual machine,
+injects faults (process kills, network faults, power cuts, disk errors) and replays every
+failure bit for bit. This package lets a Node.js program that runs under hydo say, from the
+inside, what must be true and what should happen. hydo collects what the program reports, and
+an exploration (many runs with different faults) reports each property as passed, failed (with
+a schedule that replays the failure) or never exercised.
 
-The package has no dependencies, works from CommonJS and ESM, and ships TypeScript types.
-Install it from npm (`npm install hydo-assert`), or depend on a checkout by path:
+The package has no dependencies, works from CommonJS and from ES modules, ships TypeScript
+types and needs Node.js 16 or later. Outside hydo it does almost nothing: the records go to
+standard error (or nowhere), and fault points stay off.
 
-```json
-{ "dependencies": { "hydo-assert": "file:../hydo/sdk/js" } }
+## Install
+
+```sh
+npm install hydo-assert
 ```
 
-In a guest image, copy `package.json`, `index.js` and `index.mjs` to
-`/<app>/node_modules/hydo-assert/` (see `hydo/onboard/examples/node-kv/hydo-mac.yaml`).
+In a guest image without npm, copy `package.json`, `index.js` and `index.mjs` (and
+`history.js` and `history.mjs` for histories) to `node_modules/hydo-assert/` next to the
+program.
 
-## Use
+## A complete program
 
-```js
-const ha = require('hydo-assert');          // or: import * as ha from 'hydo-assert'
-
-// Declare at module top level (load time), so the catalog knows every property up front.
-const ACKED = ha.always('kv.acked_durable', 'every acknowledged write reads back with its value');
-const RECOVERED = ha.sometimes('kv.recovered', 'the server replayed a non-empty log');
-const TORN = ha.reachable('kv.torn_tail', 'the log ended in a partial line');
-const OVERWRITE = ha.unreachable('kv.overwrite', 'a key is never overwritten with another value');
-const LOG_SIZE = ha.always('kv.log_size', 'the log stays under its cap');
-const BACK = ha.eventually('kv.back', 'the server answers within 5 s', 5000);
-const LOST_REPLY = ha.buggify('kv.put.lost_reply', 'the write lands but the reply is lost');
-
-ha.catalog();                                // once, early, in one process: HYDO-ASSERT-DECL lines
-ACKED.check(got === want, { key: k, got });
-RECOVERED.check(n > 0, { keys: n });
-TORN.hit({ bytes });
-OVERWRITE.hit({ key });
-LOG_SIZE.cmp(size, '<=', cap);               // details: left, op, right
-if (LOST_REPLY.fire({ key })) { socket.destroy(); return; }
-await BACK.awaitCond(async () => (await ping()) === 'pong', 100);   // one record per episode
-ha.setupComplete();                          // HYDO-SETUP-COMPLETE
-```
-
-| Go SDK (`hydoassert`) | JavaScript (`hydo-assert`) |
-|---|---|
-| `Always(id, msg)`, `AlwaysOrUnreachable`, `Sometimes`, `Reachable`, `Unreachable` | `always(id, msg)`, `alwaysOrUnreachable`, `sometimes`, `reachable`, `unreachable` |
-| `a.Check(cond, d)`, `a.Hit(d)` | `a.check(cond, d)` (returns the condition as a boolean), `a.hit(d)` |
-| `a.Cmp(left, op, right, d)` | `a.cmp(left, op, right, d)` (numbers or bigints; `op` is one of `<`, `<=`, `==`, `!=`, `>=`, `>`) |
-| `Eventually(id, msg, within)` | `eventually(id, msg, withinMs)` |
-| `l.Await(cond, poll, d)` | `await l.awaitCond(cond, pollMs, d)` (cond may return a promise); `l.awaitCondSync(cond, pollMs, d)` blocks the thread |
-| `l.Begin()`, `w.Done(d)`, `w.Expire(d)` | `l.begin()`, `w.done(d)`, `w.expire(d)` |
-| `Buggify(id, msg)`, `p.Fire(d)` | `buggify(id, msg)`, `p.fire(d)` |
-| `Catalog()`, `SetupComplete()` | `catalog()`, `setupComplete()` |
-| `D{...}` | a plain object (or a `Map`) |
-
-That table, the classes the calls return (`Assertion`, `Liveness`, `Watch`, `Point`) and the
-history recorder below are the whole API, as `index.d.ts` declares it: a comparison has one
-form, `cmp` with its operator. Exports and fields whose names start with `_` and fields that
-`index.d.ts` does not declare are the package's own and may change in any version.
-
-## Records, deduplication, catalog
-
-- Records go to `/dev/ttyS0`, opened once (`O_WRONLY|O_APPEND|O_NOCTTY`), one synchronous
-  `write` per record (`fs.writeSync`), so a record is never interleaved with other console
-  output and is on the console before the call returns. `HYDO_ASSERT_OUT=<path>` writes to that
-  existing file, `stderr` to standard error (plain logging outside hydo), `off` nowhere (a
-  no-op; BUGGIFY still works). If the file cannot be opened, standard error is used.
-- A process writes each (assertion, outcome) pair once: the first pass and the first failure,
-  with the details of that evaluation. A `sometimes` that evaluated false is never written.
-  `unreachable` is written with `ok:false`. As in Go, a record whose details cannot be encoded
-  (a NaN, an infinity, a cycle) is not written at all, and that outcome still counts as
-  written.
-- `catalog()` writes one `HYDO-ASSERT-DECL` line per declared assertion, in declaration order
-  (each call writes all of them again, as Go's `Catalog()` does). Declare at module top level,
-  so a property in code that never runs is still in the catalog and is reported as never
-  evaluated. Under hydo the explorer's runs start from a snapshot taken after the services are
-  up, so a long-running server's start-up catalog is not in each run's console: let a
-  short-lived process that runs in every run (the oracle, a client) call `catalog()` too, and
-  declare the properties in one module that every program loads (as `node-kv/props.cjs` does).
-- "Per process": a worker thread (`worker_threads`) loads its own copy of the module, with its
-  own deduplication table. The ESM entry re-exports the CommonJS module, so a program that uses
-  both `require` and `import` has one state.
-
-### How details are encoded (exactly as Go's `encoding/json`)
-
-| JavaScript value | written as | Go value it matches |
-|---|---|---|
-| object / `Map` | object, keys sorted by their UTF-8 bytes (not by JavaScript's UTF-16 order) | `map[string]any` |
-| array, `Set`, typed arrays other than `Uint8Array` | array | slice |
-| `Uint8Array`, `Buffer` | base64 string | `[]byte` |
-| number | shortest digits; exponent form below 1e-6 and from 1e21 (`1e+21`, `1.5e-7`); `-0` as `-0` | `float64` (and Go integers, which print the same) |
-| bigint | decimal integer | `int64`, `uint64` |
-| string | `"`, `\` escaped; `\b \f \n \r \t`; other control characters `\u00xx`; `<` `>` `&` as `<` `>` `&`; U+2028/U+2029 escaped; a lone surrogate as `�` | `string` (invalid UTF-8 as `�`) |
-| `true`, `false`, `null` | the same | |
-| a value with `toJSON()` (e.g. `Date`) | its result | |
-| `undefined`, function, symbol | left out of objects, `null` in arrays (as `JSON.stringify`) | |
-| NaN, ±Infinity, a cycle | the record is not written | `json.Marshal` fails |
-| details that are not an object (a string, an array) | `{"value": ...}` | |
-
-An absent or empty details object gives no `details` field (Go's `omitempty`). `cmp` adds
-`left`/`op`/`right`, `eventually` adds `elapsed_ms`/`within_ms`, and a
-fired fault point adds `hit`: each to the caller's own object (or `Map`) when one is given, as
-the Go SDK writes into the caller's map.
-
-**Go version note.** The shared cases hold the bytes of Go 1.26.5, the version this
-repository's Go programs are built with. Go 1.27 changed one detail of `encoding/json`: invalid
-UTF-8 is written as a raw U+FFFD character instead of the escape `\ufffd`. This package
-writes the escape (the Go 1.26 form); everything else is the same for both Go versions.
-
-## Eventually
-
-`eventually(id, msg, withinMs)` declares a bounded-liveness property. One episode = one anchor
-and one deadline, measured on the monotonic clock (`process.hrtime`; deterministic under hydo):
-
-- `await l.awaitCond(cond, pollMs, d)` anchors now, evaluates `cond` (sync or async) every
-  `pollMs` (with `setTimeout`, so the event loop keeps running) until it is true or the
-  deadline has passed, writes one record and resolves to the outcome. The last evaluation
-  happens at or after the deadline, so a condition that becomes true exactly then still counts.
-- `l.awaitCondSync(cond, pollMs, d)` does the same and blocks the thread between evaluations
-  (`Atomics.wait`): only for scripts that have nothing else to do.
-- `w = l.begin()` anchors now; `w.done(d)` records "true now" (ok if in time), `w.expire(d)`
-  records a miss. Only the first of them counts for one watch.
-
-## BUGGIFY
-
-Same decisions as the Go SDK, bit for bit: configured by `$HYDO_BUGGIFY`, or else the file
-`$HYDO_BUGGIFY_FILE` (default `/tmp/hydo-buggify`), holding
-`<seed-hex>[,<enable-permille>[,<fire-permille>]]` (defaults 250 and 250, FoundationDB's values;
-parsed as Go parses it: hex seed without `0x`, Go's whitespace trimming, a bad enable or fire
-value keeps the default). It is read once, at the first evaluation of any point, which also
-writes `HYDO-BUGGIFY {"seed":..,"enable_pm":..,"fire_pm":..,"enabled":[..]}`. A point is enabled
-for the run when `splitmix64(seed ^ fnv1a(id)) % 1000 < enable`; its k-th evaluation fires when
-`splitmix64(splitmix64(seed ^ fnv1a(id)) + k·0x9e3779b97f4a7c15) % 1000 < fire` (64-bit
-arithmetic with `BigInt`). Each point is also a `sometimes` property `buggify.<id>`
-("fault point fired: <msg>"), recorded at its first firing with `{"hit": k}`. Without a
-configuration every point returns false and has no other effect. Under hydo the schedule token
-`B=<seed>` (`hydo explore --buggify`) reaches the file through the guest init: an onboarded
-project gets it with `buggify: true` in its `hydo.yaml` (`hydo/onboard/MANIFEST.md`).
-
-## History recorder
-
-The entry `hydo-assert/history` records operation histories for hydo's host-side checkers
-(linearizability of a register or compare-and-set object per key, and Elle-style list-append;
-the format and the checkers are in `hydo/HISTORIES.md`). It writes the same `HYDO-HIST` lines as
-the Go recorder (`sdk/go/hydohist`), byte for byte except the time field. It is separate from
-the assertion SDK, so loading it changes nothing the assertion records contain. In a guest
-image, also copy `history.js` and `history.mjs`.
+A small key/value store that declares three properties and checks them:
 
 ```js
-const hh = require('hydo-assert/history');   // or: import * as hh from 'hydo-assert/history'
+const ha = require('hydo-assert'); // or: import * as ha from 'hydo-assert';
 
-const kv = new hh.History('kv');              // or hh.history('kv')
-let op = kv.invoke(3, 'write', 'k1', hh.enc(v));   // process 3, before the request
-try {
-  const rev = await put('k1', v);
-  op.ok('k1', hh.ver(v, rev));                // the version the store assigned, if any
-} catch (e) {
-  if (rejected(e)) op.fail();                 // it definitely had no effect
-  else op.info();                             // a timeout: the outcome is unknown
+const READ_BACK = ha.always('kv.read_back', 'every acknowledged write reads back with its value');
+const OVERWRITE = ha.sometimes('kv.overwrite', 'a write replaced an existing value');
+const LOST_REPLY = ha.buggify('kv.lost_reply', 'the write lands but its reply is lost');
+
+ha.catalog(); // list every property, also the ones that never run
+const store = new Map();
+ha.setupComplete(); // the system is ready: hydo may start injecting faults
+
+for (const [key, value] of [['a', 1], ['b', 2], ['a', 3]]) {
+  const old = store.get(key);
+  store.set(key, value);
+  OVERWRITE.check(old !== undefined, { key });
+  if (LOST_REPLY.fire({ key })) {
+    continue; // the client never hears back (only when hydo turns this point on)
+  }
+  const acked = store.get(key) === value;
+  READ_BACK.check(acked, { key, value });
 }
-kv.invoke(3, 'read', 'k1').ok('k1', hh.valueOrNil(await get('k1')));   // null means absent
-
-const la = hh.history('la');
-const tx = la.invoke(4, 'txn', hh.append('x', '1'), hh.read('y'));
-tx.ok(hh.append('x', '1'), hh.readResult('y', '1', '2'));
 ```
 
-| Go (`hydohist`) | JavaScript (`hydo-assert/history`) |
-|---|---|
-| `New(name)` | `new History(name)` or `history(name)` |
-| `h.Invoke(proc, f, args...)`, `h.Record(proc, typ, f, args...)` | `h.invoke(proc, f, ...args)`, `h.record(proc, type, f, ...args)` |
-| `op.Ok(args...)`, `op.Fail()`, `op.Info()` | `op.ok(...args)` (no args repeats the invocation's), `op.fail()`, `op.info()` |
-| `Enc`, `Ver`, `ValOrNil(v, ok)`, `List` | `enc`, `ver`, `valueOrNil`, `list` |
-| `Append`, `Read`, `ReadResult`, `Nil` | `append`, `read`, `readResult`, `NIL` |
+Run it with `HYDO_ASSERT_OUT=stderr` to see what it reports. It writes these lines (under hydo
+they go to the guest's console, where hydo reads them):
 
-- `valueOrNil(v)` treats `null` and `undefined` as absent. `valueOrNil(v, ok)` follows Go: the
-  second argument says whether the value is present.
-- A process is an integer or a token without spaces. Arguments are tokens: a string is written
-  as it is (encode free-form values with `enc`), and an integer (a number that is an integer,
-  or a bigint) is written in decimal. Versions are int64 values; pass a bigint beyond 2^53.
-  A value outside int64 throws a `RangeError`, and a value that is not an integer throws a
-  `TypeError`.
-- Records go to `/dev/console`. `HYDO_HIST_OUT=<path>` appends to that file and creates it if
-  it is missing (mode 0644), `stderr` writes to standard error, and `off` writes nothing. If the
-  file cannot be opened, standard error is used. The setting is read once, at the first record,
-  and is separate from `HYDO_ASSERT_OUT`.
-- Each record is one `fs.writeSync` call. The time field is `process.hrtime.bigint()`
-  (CLOCK_MONOTONIC on Linux, deterministic under hydo). The ESM entry re-exports the CommonJS
-  module, so a program that uses both has one sink; a worker thread opens its own.
-- Text is written as UTF-8, and `enc` works on the UTF-8 bytes exactly as Go's `Enc` does. A
-  JavaScript string cannot hold invalid UTF-8; a lone surrogate is written (and encoded) as
-  U+FFFD, as `Buffer.from` and `TextEncoder` convert it.
-- A process has at most one operation in flight: give each concurrent client its own process
-  number. Record the invocation before sending the request and the completion after the reply,
-  because the checkers order operations by the position of their records.
+```text
+HYDO-ASSERT-DECL {"t":"always","id":"kv.read_back","msg":"every acknowledged write reads back with its value"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"kv.overwrite","msg":"a write replaced an existing value"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"buggify.kv.lost_reply","msg":"fault point fired: the write lands but its reply is lost"}
+HYDO-SETUP-COMPLETE
+HYDO-ASSERT {"t":"always","id":"kv.read_back","ok":true,"msg":"every acknowledged write reads back with its value","details":{"key":"a","value":1}}
+HYDO-ASSERT {"t":"sometimes","id":"kv.overwrite","ok":true,"msg":"a write replaced an existing value","details":{"key":"a"}}
+```
 
-## Tests
+A process writes each outcome of a property once: the first pass and the first failure, with
+the details of that evaluation. That is why the later passes of `kv.read_back` write nothing.
 
-- `npm test` (`node --test test/unit.test.js test/history.test.js`): what the shared cases cannot
-  express (cycles, `undefined`, `Map`/`Set`, `Date`, async liveness, the sink switches) and the
-  BUGGIFY rates over 400 seeds; for the history recorder, the exact lines of the Go recorder's
-  own unit test, the encoding of every byte class, the argument checks, the sink settings and
-  one `fs.writeSync` per record.
-- `node --test` (every file in `test/`; `npm test` runs the two unit-test files only) also
-  runs `test/cases.test.js`: the shared cases (`sdk/cases`, written by the reference SDK,
-  `sdk/rust`; format and rules in `sdk/rust/README.md`, "The shared cases"). For every case
-  and run it starts itself as a child process, once through the CommonJS and once through the
-  ESM entry, makes the case's calls with this package and `hydo-assert/history`, and compares
-  the bytes the sink received and the calls' results with the case's files. Cases that need a
-  float32 (`f32`) or invalid UTF-8 bytes in a history record (`raw_hist`, which a JavaScript
-  string cannot hold) are skipped and listed. To add a case, add it to the Rust SDK's
-  `tests/cases/defs.rs` and run `HYDO_BLESS=1 cargo test --test cases` there; this test then
-  runs it. A format change starts in the Rust SDK too: after it is blessed, this test fails on
-  the lines this package must change. No other language is needed to run it.
-- `package.json`, `index.js` and `index.mjs` are copied into the node-kv example's images, so
-  a change to any of them changes those images' bytes and every node-kv fingerprint (the last
-  such change, the `Apache-2.0` license field and the removed `conformance` script of the
-  deleted Go-binary harnesses, re-recorded them in milestone 152, and a reworded comment in
-  `index.js` in milestone 157; docs/REBASELINE.md has the values).
+## How to
 
-## Example
+### Declare properties and check them
 
-`hydo/onboard/examples/node-kv/` is a complete example for the Mac backend: a key/value server
-(ESM) and its client and oracle (CommonJS) using this package, the pinned aarch64 Node.js and a
-`hydo-mac.yaml`.
+A property has an id (stable across versions of your program) and a message for people. Its
+kind says what hydo expects:
 
-## Limits
+| kind | the property holds when | hydo reports a failure when |
+|---|---|---|
+| `always` | the condition is true every time, and it is checked at least once | it is false once, or never checked |
+| `alwaysOrUnreachable` | the condition is true every time it is checked | it is false once |
+| `sometimes` | the condition is true at least once in an exploration | it is never true |
+| `reachable` | the code is reached at least once in an exploration | it is never reached |
+| `unreachable` | the code is never reached | it is reached |
 
-- Node.js only (it uses `fs`, `Buffer` and `process.hrtime`); not for browsers or Deno/Bun as
-  tested targets. Node 16 or later (BigInt, `Atomics.wait`).
-- Each worker thread has its own deduplication table and console file descriptor.
-- No call-site helpers that capture the file and line (the Rust SDK's macros do); declare
-  properties with explicit ids.
+Declare properties at the top level of a module, so that the catalog lists them once the
+module is loaded:
+
+```js
+const ha = require('hydo-assert');
+
+const STORED = ha.always('kv.stored', 'every acknowledged write is stored');
+const PARSES = ha.alwaysOrUnreachable('kv.log_parses', 'every complete log line parses');
+const RETRIED = ha.sometimes('kv.retried', 'a client retried a request');
+const RECOVERED = ha.reachable('kv.recovered', 'the server replayed a non-empty log');
+const UNKNOWN = ha.unreachable('kv.unknown_command', 'the server got a command it does not know');
+
+STORED.check(true, { key: 'a' }); // returns the condition
+PARSES.check(true); // the details are optional
+RETRIED.check(false); // a false `sometimes` writes nothing
+RECOVERED.hit({ entries: 3 });
+const command = 'GET';
+if (command !== 'GET' && command !== 'SET') {
+  UNKNOWN.hit({ command });
+}
+```
+
+### Compare two values
+
+`cmp` checks `left op right` and puts both values and the operator into the details, so a
+failure shows them:
+
+```js
+const ha = require('hydo-assert');
+
+const LOG_SIZE = ha.always('kv.log_size', 'the log stays under its cap');
+const size = 12;
+LOG_SIZE.cmp(size, '<=', 10000); // details: {"left":12,"op":"<=","right":10000}
+```
+
+The operator is one of `<`, `<=`, `==`, `!=`, `>=` and `>`; the values are numbers or bigints.
+
+### Check that something happens in time (eventually)
+
+An `eventually` property says "after this point, the condition becomes true within a deadline",
+for example "after a restart the server answers within 5 seconds". Time inside a hydo guest is
+deterministic, so the verdict is the same on every replay.
+
+```js
+const ha = require('hydo-assert');
+
+const BACK = ha.eventually('kv.back', 'the server answers within 5 s of its start', 5000); // ms
+const started = Date.now();
+const answers = async () => Date.now() - started >= 20; // stands for a real request
+
+(async () => {
+  const inTime = await BACK.awaitCond(answers, 5); // polls every 5 ms
+  if (!inTime) throw new Error('late');
+
+  // Or mark the start and the end yourself:
+  const watch = BACK.begin();
+  // ... the server comes up ...
+  watch.done(); // or watch.expire() when you know it will not
+})();
+```
+
+`awaitCond` keeps the event loop running between checks, and its condition may return a
+promise. `awaitCondSync` blocks the thread instead, for scripts that have nothing else to do.
+
+### Add a fault point (BUGGIFY)
+
+A fault point is a place where your program misbehaves on purpose: it drops a reply, fails a
+write, waits too long. Normally the point does nothing (`fire` returns false). hydo can turn
+points on for a run, so that faults happen where only your program can make them. FoundationDB
+calls this technique BUGGIFY.
+
+```js
+const ha = require('hydo-assert');
+
+const LOST_REPLY = ha.buggify('kv.lost_reply_point', 'the write lands but its reply is lost');
+const SLOW_DISK = ha.buggify('kv.slow_disk', 'a write takes 10 ms longer');
+
+let reply = 'OK';
+if (LOST_REPLY.fire()) {
+  reply = null; // misbehave: the client never gets the reply
+}
+const delay = SLOW_DISK.fire({ key: 'a' }) ? 10 : 0;
+setTimeout(() => console.log(reply), delay);
+```
+
+To let hydo turn the points on, add `buggify: true` to the project's `hydo.yaml` and explore
+with `hydo explore --buggify`. Each run then gets a seed that turns some points on, and a point
+that is on fires on some of its calls. To try it outside hydo, set
+`HYDO_BUGGIFY=<seed in hex>,<points on, per mille>,<calls that fire, per mille>`; for example
+`HYDO_BUGGIFY=2a,1000,1000` makes every point fire every time.
+
+### Record an operation history
+
+hydo can check a whole history of operations after a run: is every read consistent with the
+writes before it (linearizability per key), or do list appends ever go missing? Your workload's
+client records each operation twice: when it starts (`invoke`) and when the outcome is known.
+
+```js
+const hh = require('hydo-assert/history'); // or: import * as hh from 'hydo-assert/history';
+
+const kv = hh.history('kv');
+const write = kv.invoke(3, 'write', 'k1', hh.enc('v1')); // client 3, before the request
+// ... send the request, then record the outcome:
+write.ok(); // it happened; fail(): it did not; info(): the outcome is unknown
+const read = kv.invoke(3, 'read', 'k1');
+read.ok('k1', hh.valueOrNil('v1'));
+```
+
+Then name the history in the project's `hydo.yaml`:
+
+```yaml
+checks:
+  - id: kv.linearizable
+    type: linearizable
+    model: register
+    history: kv
+    msg: every read sees the latest acknowledged write
+```
+
+`hydo guide checks` describes the checks and their options.
+
+### Choose where the records go
+
+Under hydo the records go to the guest's console (`/dev/ttyS0` for properties, `/dev/console`
+for histories), which hydo reads even when the program's standard output goes to a log file.
+Outside hydo, where the console cannot be opened, they go to standard error. Two variables
+change this, and each is read once, at the first record:
+
+- `HYDO_ASSERT_OUT`: a path of an existing file, `stderr`, or `off` for the properties;
+- `HYDO_HIST_OUT`: a path (created if missing), `stderr`, or `off` for the histories.
+
+### Run a Node.js program in a hydo guest
+
+A complete project with a `hydo.yaml` for hydo on a Mac is the node-kv example:
+<https://github.com/kakoc/hydo/tree/main/hydo/onboard/examples/node-kv>.
+
+## Reference
+
+- The API: the TypeScript declarations `index.d.ts` and `history.d.ts`, with a comment on every
+  call (your editor shows them).
+- The records and how hydo judges each kind of property:
+  <https://github.com/kakoc/hydo/blob/main/hydo/ASSERTIONS.md>.
+- The history format and the checkers:
+  <https://github.com/kakoc/hydo/blob/main/hydo/HISTORIES.md>.
+- The same SDK for Rust, Python and Go writes the same records, byte for byte:
+  <https://github.com/kakoc/hydo/tree/main/sdk>.
+
+Rules of this package:
+
+- The catalog (`catalog()`) lists the properties in the order they were declared. Call it
+  once, early, in the process whose console hydo reads.
+- Details are encoded as Go's `encoding/json` encodes the same values: object and `Map` keys in
+  UTF-8 byte order, a `Set` or a typed array as an array, a `Uint8Array` or `Buffer` as base64,
+  a bigint as an integer, `undefined` and functions left out. Details that are not an object
+  are wrapped as `{"value": ...}`. A record whose details hold a NaN, an infinity or a cycle is
+  not written.
+- Every record is one synchronous write, so it is on the console before the call returns. The
+  ES module entry re-exports the CommonJS one, so a program that uses both has one state; a
+  worker thread has its own.
+- A history's process is an integer or a token without spaces; its arguments are tokens
+  (encode free-form values with `enc`). Versions are int64 values (pass a bigint beyond 2^53).
+  A process has at most one operation in flight.
+
+## License
+
+Apache-2.0.

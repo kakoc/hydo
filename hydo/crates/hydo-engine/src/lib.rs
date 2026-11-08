@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! One interface to hydo's run engines.
 //!
 //! Two layers. A [`ControlledEngine`] boots an agent image (every image `hydo build` makes since
@@ -60,7 +64,7 @@
 //!   Rust hvx engine (M137) every hvx engine keeps them in memory whatever is asked, and hvm keeps
 //!   its files; the field no longer changes anything but the explorer's printed pool line.
 //!   Callers never see snapshot files.
-//! - **Reset to a snapshot is a worker operation.** [`Worker::reset`] puts the worker's VM back at
+//! - **Reset to a snapshot is a worker operation.** `Worker::reset` puts the worker's VM back at
 //!   S0 or S1. The process engines do it inside every RUN (the default method says so); an
 //!   in-process engine may do it by copying back only the pages and disk blocks the last run
 //!   dirtied (0.4% to 11% of RAM, under 1.5% of the data disk), and may share the read-only root

@@ -78,3 +78,9 @@ fn the_documented_order_is_read_from_the_publish_lines() {
         vec!["hydo-config".to_string(), "hydo".to_string()]
     );
 }
+
+#[test]
+fn a_page_with_a_relative_link_is_found() {
+    let page = "[a](https://example.org) [b](docs/x.md) `[c](d)`\n```\n[e](f)\n```\n[g](#h) ![i](logo.png)\n";
+    assert_eq!(publish::relative_links(page), ["docs/x.md", "logo.png"]);
+}

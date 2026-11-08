@@ -205,13 +205,19 @@ macro_rules! __decl_reg {
 /// Declares named assertions as `static`s and puts them into the catalog before `main`, in
 /// the order written (the Go SDK's package-level `var x = hydoassert.Always(...)`):
 ///
-/// ```ignore
+/// ```
+/// use std::time::Duration;
+///
 /// hydo_assert::declare! {
 ///     pub static ACKED_DURABLE: always("kv.acked_durable", "every acknowledged write reads back");
 ///     static RECOVERED: sometimes("kv.recovered", "the server replayed a non-empty log");
 ///     static BACK: eventually("kv.back", "the server answers within 5 s", Duration::from_secs(5));
 ///     static LOST_REPLY: buggify("kv.put.lost_reply", "the write lands but the reply is lost");
 /// }
+/// # fn main() {
+/// #     ACKED_DURABLE.check(true, ());
+/// #     assert_eq!(BACK.within(), Duration::from_secs(5));
+/// # }
 /// ```
 ///
 /// Kinds: `always`, `always_or_unreachable`, `sometimes`, `reachable`, `unreachable` (an

@@ -8,14 +8,18 @@
 //! HYDO-HIST <history> <process> <invoke|ok|fail|info> <time-ns> <f> <arg>...
 //! ```
 //!
-//! ```ignore
+//! ```
 //! use hydo_assert::history::{History, enc, ver, value_or_nil};
+//! # enum PutError { Rejected, Timeout }
+//! # fn put(_k: &str, _v: &str) -> Result<u64, PutError> { Ok(83) }
+//! # fn get(_k: &str) -> Option<String> { Some("v1".into()) }
 //! let kv = History::new("kv");
+//! let v = "v1";
 //! let op = kv.invoke(3, "write", &["k1", &enc(v)]);   // process 3, before the request
 //! match put("k1", v) {
 //!     Ok(rev) => op.ok(&["k1", &ver(v, rev)]),        // the version the store assigned, if any
-//!     Err(e) if e.rejected() => op.fail(),             // definitely had no effect
-//!     Err(_) => op.info(),                             // a timeout: unknown outcome
+//!     Err(PutError::Rejected) => op.fail(),            // definitely had no effect
+//!     Err(PutError::Timeout) => op.info(),             // a timeout: unknown outcome
 //! }
 //! let op = kv.invoke(3, "read", &["k1"]);
 //! let got = get("k1");
@@ -189,13 +193,16 @@ pub fn list(elems: &[&str]) -> String {
     format!("[{}]", elems.iter().map(|e| enc(e)).collect::<Vec<_>>().join(","))
 }
 
-/// List-append txn micro-ops: `a:<k>:<e>`, `r:<k>` (invocation), `r:<k>:[...]` (completion).
+/// The list-append micro-op that appends element `e` to the list `k`, `a:<k>:<e>`. Use it in
+/// a `txn` operation with [`read_mop`] and [`read_result_mop`].
 pub fn append_mop(k: &str, e: &str) -> String {
     format!("a:{}:{}", enc(k), enc(e))
 }
+/// The list-append read micro-op of an invocation, `r:<k>`.
 pub fn read_mop(k: &str) -> String {
     format!("r:{}", enc(k))
 }
+/// The list-append read micro-op of a completion, `r:<k>:[...]`: the list that was read.
 pub fn read_result_mop(k: &str, l: &[&str]) -> String {
     format!("r:{}:{}", enc(k), list(l))
 }

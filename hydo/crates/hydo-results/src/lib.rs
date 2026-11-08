@@ -1,3 +1,7 @@
+#![doc = include_str!("../README.md")]
+//!
+//! ## Notes for hydo's developers
+//!
 //! hydo's results format: what a run and an exploration report, in one versioned,
 //! machine-readable model.
 //!
