@@ -14,6 +14,7 @@
 
 use crate::abi::*;
 use crate::cpu::{Cpu, CpuState, Exit, Hypervisor, Reply};
+use crate::cpuid::Level;
 use std::fs::File;
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -76,6 +77,12 @@ pub struct Kvm {
     run_size: usize,
     pmu_off: bool,
     desc: String,
+    /// what the host's KVM supports (`KVM_GET_SUPPORTED_CPUID`)
+    supported: Vec<kvm_cpuid_entry2>,
+    /// `KVM_CAP_XCRS`
+    xcrs: bool,
+    /// the guest CPU level ([`Kvm::with_level`])
+    level: Level,
 }
 
 /// What the host is, for the diagnostics and the doctor.
@@ -141,7 +148,9 @@ impl Kvm {
             )
         })?;
         let n = (c.h.nent as usize).min(CPUID_MAX);
-        crate::cpuid::check(&c.entries[..n])?;
+        crate::cpuid::check(&c.entries[..n], Level::V2)?;
+        // SAFETY: as above
+        let xcrs = unsafe { ioctl(fd, KVM_CHECK_EXTENSION, KVM_CAP_XCRS as u64) } > 0;
         let desc = format!(
             "hydo-kvm: {dev}, KVM API {v}, {}{}",
             host_line(),
@@ -156,7 +165,28 @@ impl Kvm {
             run_size,
             pmu_off: pmu as u64 & KVM_PMU_CAP_DISABLE != 0,
             desc,
+            supported: c.entries[..n].to_vec(),
+            xcrs,
+            level: Level::V2,
         })
+    }
+
+    /// The guest CPU level of every VM this makes (x86-64-v2 unless set): Err when the host's KVM
+    /// cannot give it (the features of [`crate::cpuid::table_for`], and for v3 the guest's XCR0
+    /// in snapshots, `KVM_CAP_XCRS`).
+    pub fn with_level(mut self, level: Level) -> Result<Kvm, String> {
+        crate::cpuid::check(&self.supported, level).map_err(|e| format!("hydo-kvm: {e}"))?;
+        if level == Level::V3 && !self.xcrs {
+            return Err(
+                "hydo-kvm: this host's KVM lacks KVM_CAP_XCRS (the guest's XCR0 at x86-64-v3)"
+                    .into(),
+            );
+        }
+        if level != Level::V2 {
+            self.desc = format!("{}; guest CPU {}", self.desc, level.name());
+        }
+        self.level = level;
+        Ok(self)
     }
 }
 
@@ -264,9 +294,10 @@ impl Hypervisor for Kvm {
             ram: ram as u64,
             ram_len: len,
             dirty: None,
+            v3: self.level == Level::V3,
         };
         let mut c = Box::<kvm_cpuid2>::default();
-        let t = crate::cpuid::table();
+        let t = crate::cpuid::table_for(self.level);
         c.h.nent = t.len() as u32;
         c.entries[..t.len()].copy_from_slice(&t);
         chk(
@@ -321,6 +352,9 @@ pub struct KvmCpu {
     ram_len: usize,
     /// the dirty-page log's bitmap while the log is on ([`Cpu::dirty_log`])
     dirty: Option<Vec<u64>>,
+    /// x86-64-v3: the guest enables XSAVE components itself, so its XCR0 is part of the state
+    /// ([`CpuState::xcr0`])
+    v3: bool,
 }
 
 // SAFETY: the kvm_run page is owned by this value and used by one thread at a time (the engine's)
@@ -384,6 +418,18 @@ impl KvmCpu {
     }
     fn fd(&self) -> RawFd {
         self.vcpu.as_raw_fd()
+    }
+
+    /// The guest's XCR0 (`KVM_GET_XCRS`).
+    fn xcr0(&self) -> u64 {
+        let x: kvm_xcrs = self.get(KVM_GET_XCRS, "KVM_GET_XCRS");
+        match x.xcrs[..(x.nr_xcrs as usize).min(16)]
+            .iter()
+            .find(|r| r.xcr == 0)
+        {
+            Some(r) => r.value,
+            None => crate::fatal(1, "hydo-kvm: KVM_GET_XCRS gave no XCR0"),
+        }
     }
 
     fn get<T: Default>(&self, req: u64, what: &str) -> T {
@@ -613,12 +659,27 @@ impl Cpu for KvmCpu {
                 .collect(),
             events: self.get(KVM_GET_VCPU_EVENTS, "KVM_GET_VCPU_EVENTS"),
             debugregs: self.get(KVM_GET_DEBUGREGS, "KVM_GET_DEBUGREGS"),
+            xcr0: if self.v3 { self.xcr0() } else { 0 },
         }
     }
 
     fn load(&mut self, s: &CpuState) {
         self.set(KVM_SET_SREGS, &s.sregs, "KVM_SET_SREGS");
         self.set(KVM_SET_REGS, &s.regs, "KVM_SET_REGS");
+        if self.v3 && s.xcr0 != 0 {
+            // before the XSAVE image: KVM checks XCR0 against the guest's CPUID only, and the
+            // image's components against what the CPUID allows
+            let mut x = kvm_xcrs {
+                nr_xcrs: 1,
+                ..kvm_xcrs::default()
+            };
+            x.xcrs[0] = kvm_xcr {
+                xcr: 0,
+                reserved: 0,
+                value: s.xcr0,
+            };
+            self.set(KVM_SET_XCRS, &x, "KVM_SET_XCRS");
+        }
         if s.xsave.len() == 1024 {
             let mut xs = kvm_xsave::default();
             xs.region.copy_from_slice(&s.xsave);

@@ -125,7 +125,7 @@ impl EngineKind {
     }
 }
 
-/// The guest CPU level (hydo.yaml `guest.cpu`): x86-64-v2 (the default) or v3 (AVX/AVX2; hvx only).
+/// The guest CPU level (hydo.yaml `guest.cpu`): x86-64-v2 (the default) or v3 (AVX/AVX2; hvx and KVM).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum CpuLevel {
     #[default]
@@ -199,22 +199,20 @@ pub enum SnapshotStore {
 
 impl BootSpec {
     /// The engine options in front of the mode, as explore.py passes them: `--ram-mib N` only for a
-    /// size other than 1024, `--vcpus N` only above 1 (hvx), `--cpu v3` only for v3 (hvx).
+    /// size other than 1024, `--vcpus N` only above 1 (hvx), `--cpu v3` only for v3 (hvx, KVM).
     pub fn engine_args(&self, kind: EngineKind) -> Vec<String> {
         let mut a = Vec::new();
         if self.ram_mib != 1024 {
             a.push("--ram-mib".to_string());
             a.push(self.ram_mib.to_string());
         }
-        if kind == EngineKind::Hvx {
-            if self.vcpus > 1 {
-                a.push("--vcpus".to_string());
-                a.push(self.vcpus.to_string());
-            }
-            if self.cpu == CpuLevel::V3 {
-                a.push("--cpu".to_string());
-                a.push("v3".to_string());
-            }
+        if kind == EngineKind::Hvx && self.vcpus > 1 {
+            a.push("--vcpus".to_string());
+            a.push(self.vcpus.to_string());
+        }
+        if self.cpu == CpuLevel::V3 && matches!(kind, EngineKind::Hvx | EngineKind::Kvm) {
+            a.push("--cpu".to_string());
+            a.push("v3".to_string());
         }
         a
     }

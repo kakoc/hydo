@@ -197,8 +197,8 @@ pub fn controlled_engine(
                 eprintln!("hydo: {n}");
             }
             let spec = spec_from_args(eargs, image, b.kernel, Some(b.initrd), &abspath(outdir));
-            if spec.vcpus != 1 || spec.cpu != CpuLevel::V2 {
-                die("the KVM engine runs one vCPU at the v2 CPU level (--vcpus and guest.cpu: v3 need hvx)");
+            if spec.vcpus != 1 {
+                die("the KVM engine runs one vCPU (--vcpus needs hvx)");
             }
             let k = hydo_engine::kvm::Kvm::for_release(&ctx.root, ctx.config.env.clone());
             (Arc::new(k), spec)

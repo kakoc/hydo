@@ -45,6 +45,8 @@ fn types_and_numbers_match_linux_kvm_h() {
         kvm_sregs as "kvm_sregs" { cs, ds, es, fs, gs, ss, tr, ldt, gdt, idt, cr0, cr2, cr3, cr4, cr8, efer, apic_base, interrupt_bitmap }
         kvm_fpu as "kvm_fpu" { fpr, fcw, fsw, ftwx, last_opcode, last_ip, last_dp, xmm, mxcsr }
         kvm_xsave as "kvm_xsave" { region }
+        kvm_xcr as "kvm_xcr" { xcr, reserved, value }
+        kvm_xcrs as "kvm_xcrs" { nr_xcrs, flags, xcrs, padding }
         kvm_msr_entry as "kvm_msr_entry" { index, data }
         kvm_cpuid_entry2 as "kvm_cpuid_entry2" { function, index, flags, eax, ebx, ecx, edx }
         kvm_interrupt as "kvm_interrupt" { irq }
@@ -176,6 +178,8 @@ fn types_and_numbers_match_linux_kvm_h() {
         KVM_SET_FPU,
         KVM_GET_XSAVE,
         KVM_SET_XSAVE,
+        KVM_GET_XCRS,
+        KVM_SET_XCRS,
         KVM_SET_CPUID2,
         KVM_GET_VCPU_EVENTS,
         KVM_SET_VCPU_EVENTS,
@@ -208,6 +212,7 @@ fn types_and_numbers_match_linux_kvm_h() {
         KVM_CAP_VCPU_EVENTS,
         KVM_CAP_DEBUGREGS,
         KVM_CAP_XSAVE,
+        KVM_CAP_XCRS,
         KVM_CAP_IMMEDIATE_EXIT,
         KVM_CAP_X86_USER_SPACE_MSR,
         KVM_CAP_X86_MSR_FILTER,
