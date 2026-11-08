@@ -407,6 +407,62 @@ fn doctor_needs_no_python() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// `hydo doctor` never fetches: with the install cache empty, `HYDO_OFFLINE` unset and the release
+/// URL pointing at a local port that listens, no connection reaches the port, nothing is written
+/// into the cache, and a missing release file (here the KVM guest kernel, which the release
+/// ships since 0.2.0) is reported with the one command that gets it. Until this test the KVM
+/// check asked the install cache, which downloaded the whole Linux release archive (64 MB).
+#[test]
+fn doctor_never_fetches() {
+    use std::net::TcpListener;
+    let root = release();
+    let home = scratch("doctor-home");
+    let l = TcpListener::bind("127.0.0.1:0").unwrap();
+    l.set_nonblocking(true).unwrap();
+    let url = format!(
+        "http://127.0.0.1:{}/releases",
+        l.local_addr().unwrap().port()
+    );
+    let get = format!("hydo setup --get {}", env!("CARGO_PKG_VERSION"));
+    for plat in ["linux", "mac"] {
+        let o = Command::new(root.join("bin/hydo"))
+            .env("HYDO_CLI_PLATFORM", plat)
+            .env("PATH", "/usr/bin:/bin")
+            .env("HYDO_HOME", &home)
+            .env("HYDO_RELEASE_URL", &url)
+            .env_remove("HYDO_OFFLINE")
+            .arg("doctor")
+            .output()
+            .unwrap();
+        let out = String::from_utf8_lossy(&o.stdout);
+        let err = String::from_utf8_lossy(&o.stderr);
+        assert!(err.is_empty(), "{plat}: {err}");
+        assert!(!out.contains("fetching"), "{plat}: {out}");
+        match l.accept() {
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+            other => panic!("{plat}: hydo doctor connected to the release URL: {other:?}"),
+        }
+        if plat == "linux" {
+            let line = out
+                .lines()
+                .find(|l| l.contains("the KVM engine's files"))
+                .unwrap_or_else(|| panic!("{out}"));
+            assert!(line.contains(&get), "{line}");
+        }
+    }
+    let left: Vec<_> = std::fs::read_dir(&home)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.file_name())
+        .collect();
+    assert!(
+        left.is_empty(),
+        "hydo doctor wrote into the install cache: {left:?}"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
 fn load_golden() -> BTreeMap<String, Value> {
     let text = std::fs::read_to_string(golden_path()).unwrap_or_default();
     text.lines()

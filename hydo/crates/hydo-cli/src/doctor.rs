@@ -123,7 +123,9 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
     };
     let found = match &ctx.config.kvm.kernel {
         Some(p) => Some(p.clone()),
-        None => hydo_image::kernels::locate(&want, hydo_image::kernels::Role::Kernel, &dirs),
+        // only this machine's files: doctor never fetches (a missing file is reported with the
+        // command that gets it)
+        None => hydo_image::kernels::locate_here(&want, hydo_image::kernels::Role::Kernel, &dirs),
     };
     c.check(
         found.is_some(),
@@ -136,7 +138,10 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
                 .map(|p| format!(": {}", rel(ctx, p)))
                 .unwrap_or_default()
         ),
-        "build it with hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) and put it in guest/, or name it with HYDO_KVM_KERNEL",
+        &format!(
+            "{} (the Linux release ships it), or build it with hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) and put it in guest/, or name it with HYDO_KVM_KERNEL",
+            get_command()
+        ),
         false,
     );
     c.check(
@@ -159,7 +164,8 @@ fn kvm_state(c: &mut Checks, ctx: &Ctx) {
         sha256: k.sha256.into(),
     };
     let dirs = [ctx.guest(), ctx.p("build"), ctx.p("hv/kvm/linux/out")];
-    let kernel = hydo_image::kernels::locate(&want, hydo_image::kernels::Role::Kernel, &dirs);
+    // only this machine's files: doctor never fetches
+    let kernel = hydo_image::kernels::locate_here(&want, hydo_image::kernels::Role::Kernel, &dirs);
     let program = crate::ctx::access(
         &hydo_engine::kvm::program(&ctx.root, &ctx.config.kvm),
         libc::X_OK,
@@ -171,7 +177,7 @@ fn kvm_state(c: &mut Checks, ctx: &Ctx) {
             k.file,
             &k.sha256[..16]
         ),
-        reinstall(ctx),
+        &reinstall(ctx),
         true,
     );
     let dev = ctx.config.kvm.dev();
@@ -387,7 +393,7 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         c.check(
             p.exists(),
             &format!("present: {}", rel(ctx, &p)),
-            reinstall(ctx),
+            &reinstall(ctx),
             false,
         );
     }
@@ -480,12 +486,24 @@ fn missing_release_text(
     )
 }
 
-fn reinstall(ctx: &Ctx) -> &'static str {
+fn reinstall(ctx: &Ctx) -> String {
     if ctx.cargo_installed {
-        "hydo setup --get (installs this version's files into the install cache)"
+        format!(
+            "{} (installs this version's files into the install cache)",
+            get_command()
+        )
     } else {
-        "reinstall"
+        format!(
+            "{} (installs this version's release into the install cache), or unpack the release again",
+            get_command()
+        )
     }
+}
+
+/// The one command that gets this version's release files (guest kernels, engine programs,
+/// tools): `hydo doctor` names it for a missing file and never fetches one itself.
+fn get_command() -> String {
+    format!("hydo setup --get {}", hydo_image::hydo_version())
 }
 
 /// What `hydo setup --check` would say (M154): one line per damaged file (the fix is to unpack the
@@ -620,7 +638,7 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         c.check(
             p.exists(),
             &format!("present: {}", rel(ctx, &p)),
-            reinstall(ctx),
+            &reinstall(ctx),
             false,
         );
     }
