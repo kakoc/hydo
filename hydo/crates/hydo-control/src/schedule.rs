@@ -1769,7 +1769,9 @@ fn step_range_core(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
 }
 
 fn step_range_run(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
-    let st = if ctx.plan.compose.is_some() {
+    // a plan of only checks or regressions keeps the manifest's workload (until 2026-11-08 the
+    // composer's empty rounds ran instead, and every check passed)
+    let st = if ctx.plan.composed() {
         composer::step(fx, ctx, a, b)? // SEAM(Composer): compose.sh step FROM TO
     } else if !ctx.run.a.is_empty() {
         // M139: the wait also ends at a reaction's power cut
@@ -1941,7 +1943,7 @@ fn provision(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 /// `i` is the token's index in `RunCfg::knobs` (the composer remembers which W= it set).
 fn set_knob(fx: &mut F<'_>, ctx: &Ctx, i: usize, t: &GuestToken) -> Step<()> {
     match t {
-        GuestToken::Compose(w) if ctx.plan.compose.is_some() => {
+        GuestToken::Compose(w) if ctx.plan.composed() => {
             return composer::set_knob(fx, ctx, i, w); // SEAM(Composer): compose.sh setw
         }
         GuestToken::Protocol(h) => {
@@ -1998,7 +2000,7 @@ fn token_value(t: &GuestToken) -> String {
 
 /// `pgrep -f "$HYDO_WORKLOAD_PGREP"`: whether a client request is in flight.
 fn in_flight(fx: &mut F<'_>, ctx: &Ctx, e: Vec<String>) -> Step<bool> {
-    if ctx.plan.compose.is_some() {
+    if ctx.plan.composed() {
         // SEAM(Composer): `compose.sh run1` processes, i.e. composed commands running
         return Ok(composer::in_flight(fx));
     }

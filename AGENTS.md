@@ -596,6 +596,8 @@ build machine, before 2026-10-13.
 - M187: the writing standard, Vale, a shorter AGENTS.md and a new README
 - M188: the package pages rewritten, every code example a test; `sdk/README.md` for SDK maintainers
 - M189: the KVM engine at x86-64-v3 (`guest.cpu: v3` on KVM; every v2 value unchanged)
+- M191: a plan of only `checks/` or `regressions/` keeps the manifest's own `workload.run` (before, its
+  saved regressions passed without running it); `W=` is refused on such an image
 
 ## Where to look
 

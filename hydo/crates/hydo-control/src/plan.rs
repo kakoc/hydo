@@ -332,6 +332,12 @@ fn words(v: Option<&Value>) -> Vec<String> {
 }
 
 impl Plan {
+    /// Whether the test composer runs the workload (a plan with commands to compose). A plan
+    /// of only checks or regressions keeps the manifest's own `workload.run`.
+    pub fn composed(&self) -> bool {
+        self.compose.as_ref().is_some_and(|c| c.composed)
+    }
+
     /// The plan of a validated manifest (from `hydo_manifest::load`, `from_embedded` or
     /// `for_explorer`), with the layout of today's images.
     pub fn from_manifest(m: &Manifest) -> Result<Plan, Unsupported> {
