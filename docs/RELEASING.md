@@ -159,6 +159,23 @@ as they are. Scan the signed Mac tarball (not only the unsigned one) and the sig
 - Record the values: AGENTS.md (the current tarballs, a milestone line and the index),
   docs/HISTORY.md (a milestone section), the release READMEs (`hydo/dist/*/README.md`).
 
+## 6a. Docs review (since 0.3.0)
+
+A fresh reader checks the pages a user reads first against the release candidate, before the tag:
+
+1. Make sure that `sh ci/vale.sh` prints no findings, and that
+   `cargo test -p hydo --test it docs::` passes. The test fails when `README.md` or a quickstart
+   names another version, cites a fingerprint that is not recorded, or shows a command or
+   option that `hydo` does not have.
+2. Start a reader with no other context: a coding agent with the prompt in
+   `skills/hydo-docs/SKILL.md`, section `The release docs review`. Give it the release
+   candidate's tarballs, `README.md`, and both quickstarts.
+3. Fix each finding, or defer it with a reason. Write every deferred finding and its reason into
+   the release notes.
+
+Do not tag the release until every finding is fixed or deferred. If this step is skipped, a page
+that does not match the release ships with it.
+
 ## 7. Publish (the user decides)
 
 Create the GitHub release for the tag of the final commit and upload all five files and

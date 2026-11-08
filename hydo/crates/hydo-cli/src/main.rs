@@ -47,7 +47,7 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
     hydo setup   --get [VERSION] [--add-to-path] | --archive FILE
                                                    install a version from its release into ~/.hydo (verified
                                                    by sha256), or put a downloaded archive into that cache
-    hydo doctor                                    check this machine and the installation
+    hydo doctor  [--backend kvm]                   check this machine and the installation (for KVM)
     hydo module install|uninstall|build|load|unload|status [--name NAME] [--dry-run]
                                                    build for this kernel and load (install), or unload
                                                    and delete (uninstall) the hvx kernel module
@@ -75,6 +75,8 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
     hydo errors  list [DIR] | accept SIG... --reason TEXT [--with F] [--during F] | check
                                                    error logs as findings: list new error kinds, accept
                                                    expected ones into hydo/known-errors.yaml (MANIFEST.md)
+    hydo run|repro|explore ... --backend kvm       run the guests on the KVM engine (stock /dev/kvm, no
+                                                   module, no root; also HYDO_BACKEND=kvm)
 
 IMG defaults to the one *-disk.img in ./hydo-out, or in ./.hydo for a project whose manifest is
 hydo/hydo.yaml (the agreed repository layout; `hydo build` with no manifest uses ./hydo/hydo.yaml).

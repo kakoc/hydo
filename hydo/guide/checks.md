@@ -1,12 +1,12 @@
 # Checks in hydo/checks/
 
-The full reference: the sections "Invariants", "Liveness", "History checks", "Reading the stores"
-and "Side-effect checks" of `hydo guide manifest`. Shell templates for common properties:
+The full reference is in `hydo guide manifest`, in the sections `Invariants`, `Liveness`,
+`History checks`, `Reading the stores`, and `Side-effect checks`. Shell templates for common properties:
 `hydo guide invariant-patterns`.
 
 ## Check files
 
-| file name | when it runs | header keys |
+| filename | when it runs | header keys |
 |---|---|---|
 | `final_<name>` | once at the end of the run (after the heal, the retries and the `eventually_` commands); after a power cut, in the recovery boot | none |
 | `always_<name>` | also every `every` seconds of guest time while the workload runs | `# hydo: every=1` |
@@ -20,17 +20,18 @@ Exit status of a `final_`, `always_` or `eventually_` check: `0` = holds, `1` = 
 cannot be evaluated now (the store is down, a read timed out). A check that times out counts as
 2; its time limit is `test.command_timeout` (default 60 s; after a power cut a clustered store
 may need longer to elect its leaders). The explorer groups failures by the last line with its
-numbers blanked, so print lists of ids on an earlier line and keep the last line to counts
-("lost 3 of 20 acknowledged messages"): a list of ids in it makes every count its own finding.
+numbers blanked. So print lists of ids on an earlier line, and keep the last line to counts, for
+example `lost 3 of 20 acknowledged messages`. A list of ids in it makes every count its own
+finding.
 The last output line is the explanation; it becomes the details of the property's
 `HYDO-ASSERT` record and, for the first violation, of the verdict line
 `HYDO-ORACLE: VIOLATION [<id>] <details>`. Start every check by testing that the store answers,
 and `exit 2` if not, so a killed service is not reported as a violation. An `eventually_` check
 returns 0 when satisfied and anything else for "not yet"; a missed deadline is a violation.
-To choose `within=`: `hydo run` prints how many seconds of guest time each `eventually_` check
-needed, and an exploration's `report.md` (section "Liveness") gives, per check, the slowest run
-that held in time, the deadline, and the slowest run that held only after it (the deadline that
-run needed).
+To choose `within=`, look at two outputs. `hydo run` prints how many seconds of guest time each
+`eventually_` check needed. An exploration's `report.md` (section `Liveness`) gives, per check,
+the slowest run that held in time, the deadline, and the slowest run that held only after it,
+with the deadline that run needed.
 
 Use `always_` for properties that can break and heal during the run (stale reads, a negative
 balance seen for a moment). An `always_` check runs only while the workload lasts, so keep the
@@ -79,9 +80,10 @@ Go programs use `hydohist` (module `github.com/kakoc/hydo/sdk/go`), Rust `hydo_a
 JavaScript `require("hydo-assert/history")` and Python `from hydo_assert import history`; all write the
 same lines.
 The check file `checks/linearizable_<name>` reads every key back at the end and records the reads,
-so a write lost in a crash shows up. The host checks the history after the run (`linearizable`
-for registers and compare-and-set objects per key, Knossos/Porcupine style; `list_append`, Elle
-style, at the `consistency:` level the system claims) and names a minimal witness. The record
+so a write lost in a crash shows up. The host checks the history after the run and names a
+minimal witness. `linearizable` checks registers and compare-and-set objects per key. It works
+as Knossos and Porcupine do. `list_append` works as Elle does, at the `consistency:` level that
+the system claims. The record
 format and the models: `hydo/HISTORIES.md` in hydo's repository. Example:
 `hydo/onboard/examples/redis-composed-hist/` in hydo's repository.
 

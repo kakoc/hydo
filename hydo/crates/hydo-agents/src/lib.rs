@@ -1214,7 +1214,7 @@ pub fn init(argv: &[String], _root: &Path, out: &mut Out) -> R<i32> {
     .into_iter()
     .find(|f| dp.join(f).is_file());
     out.put(
-        "hydo: next: give your AI tool this instruction: \"run `hydo guide` and follow it\"\n",
+        "hydo: next: give your AI tool this instruction: \"run `hydo guide skill` and follow it\"\n",
     )?;
     if let Some(c) = compose {
         out.put(&format!(
