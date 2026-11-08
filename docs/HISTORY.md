@@ -4814,3 +4814,34 @@ User decision 2026-11-08: "go" on docs/design/ci.md stage 1, with the design's d
    - Saved regressions: `hydo save` of the pull request's exploration, changed to `# expect: ok` and committed as `hydo/regressions/double-charge.schedule`, was replayed by `hydo ci run` and reported (`1 of 1 regressions as expected`, a junit test case) on the fixed and **also on the buggy** commit. The cause is outside `hydo ci`: a `hydo/regressions/` folder makes `hydo build` read the `hydo/` folder as a test-composer plan, and for this numbered-steps manifest (`workload.run`, no `hydo/workload/`) the composer's rounds run `sleep 0.20` instead of the workload, so nothing is ordered or charged and every check holds vacuously (`payments.charge: 0 effects`); the explorer warned (`5 passing first runs may have checked nothing`). `hydo ci run` now carries that count (`summary.vacuous_passes`) and `report.md` prints a warning with it. Saved regressions therefore work only for test-composer plans today; this silent pass should be fixed in `hydo build` (refuse, or keep `workload.run`, when a `hydo/` folder has regressions but no commands). Milestone 191, merged before this milestone, fixed it: such a plan keeps the manifest's own `workload.run`.
 
 Left for stage 2 and later (docs/design/ci.md section 9): the history branch, the ledger with `reappeared` and `accepted` (`known-findings.yaml`), budgets from history and `--time-limit`, sharding and `hydo ci merge`, `hydo bisect`, `hydo ci reproduce`. Not run: `hydo ci run` on Linux (the KVM engine on the build machine or a GitHub runner), the action and the template on GitHub and GitLab (a trial needs a throwaway public repository: the coordinator asks the user), an `error-log` finding through `hydo ci run`. The main help text does not list `hydo ci` (its recorded answer; `hydo ci --help` does). The CLI and agents goldens were re-recorded for the new guide topic only.
+
+### Milestone 198 — DONE (cost tracking: performance as deterministic work counts, an experiment; 2026-11-08)
+
+User decision 2026-11-08: an experiment with a written result, not a feature. The question: time
+inside a guest is virtual, so hydo cannot measure latency, but counts of work are exact; are they
+stable across runs, and do real changes move them? The result is `docs/design/cost-tracking.md`.
+
+**Built** (opt-in, off by default): `HYDO_COST` (`hydo-config`, developer; `0`, `1` or `full`)
+and `hydo/crates/hydo-control/src/schedule/cost.rs`. With `1` the host controller runs one busybox
+probe after the verdict that reads the guest's `/proc` counters (disk I/O per partition, packets
+per interface, forks, context switches, page faults, memory per process) and reports them as
+`HYDO-COST` lines in the control transcript. With `full` it also probes before and after the
+workload and in the recovery boot; those probes move the run's timing. With the option off, every
+recorded value comes back.
+
+**Found** on hvx, KVM and the Mac engine:
+
+- Stable: every one of about 160 to 300 counters per run was identical in five fresh boots and
+  five runs from S1, on all three engines.
+- Sensitive to the right things: Redis's `appendfsync` moves flushes from 40 to 0; the same 2.0
+  flushes and 16.4 KiB per acknowledged write on all three engines; a Redis restart costs 28 to
+  77 % more work; the stack's recovery boot after a power cut costs 9 to 31 times the workload. An
+  extra unsynced write per request shows on every engine. Extra CPU work shows only on hvx (its
+  branch counter), and only above a noise floor of about 0.8 % that comes from the timing shift
+  of any program change.
+- Across engines, device counts that do not depend on time are equal; engine clocks and anything
+  driven by timers agree in direction, not in size.
+
+**Recommendation:** worth building as a small, opt-in part of CI stage 2: device counts and
+engine clocks per schedule against the base commit, only changes above a threshold, never shown
+as latency (the design note's section 6). Nothing of it is built beyond the probe.

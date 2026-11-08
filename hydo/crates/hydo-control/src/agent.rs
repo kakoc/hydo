@@ -447,6 +447,7 @@ impl AgentEngine {
     /// With the host controller's configuration (M144).
     pub fn with_control(mut self, c: &hydo_config::run::Control) -> AgentEngine {
         self.spin_rewind = c.spin_rewind;
+        self.plan.cost = c.cost;
         self
     }
 

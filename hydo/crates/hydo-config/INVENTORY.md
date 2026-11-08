@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-52 user-facing and 88 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+52 user-facing and 89 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -146,6 +146,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | Variable | Kind | Type | Default | Readers | What it does |
 |---|---|---|---|---|---|
 | `HVM_SPIN_REWIND` | user | flag: exactly `0` turns it off | on | hydo-control, hydo-hvm | `0`: the host does not run a SPIN of an agent image on hvm or kvm again in the rewind mode (`hydo-hvm hvm` reads it too: `1` turns the rewind mode on). |
+| `HYDO_COST` | developer | `0`, `1` or `full` | off | hydo-control | Not `0`: the host controller reads the guest's work counters (`/proc`: disk, network, CPU, memory per process) after each conversation's verdict and reports them as `HYDO-COST` lines; `full`: also at the workload's start and end and in a recovery boot before its checks, which moves the run's timing (an experiment, docs/design/cost-tracking.md). |
 
 ## The `hydo` command (`hydo_config::run::Cli`)
 

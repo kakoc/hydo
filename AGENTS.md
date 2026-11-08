@@ -680,6 +680,9 @@ build machine, before 2026-10-13.
 - M197: hydo in a team's CI, stage 1: `hydo ci run` and `hydo ci compare`, `hydo/ci.yaml`,
   `ci-run.json`, `report.md` and `junit.xml`, the GitHub action and the GitLab template,
   `hydo guide ci`
+- M198: cost tracking as deterministic work counts, an experiment (the opt-in probe `HYDO_COST`;
+  counts exactly stable on every engine, sensitive to durability settings and faults; CPU work
+  visible only on hvx; `docs/design/cost-tracking.md`)
 
 ## Where to look
 

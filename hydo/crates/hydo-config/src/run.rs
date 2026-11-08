@@ -64,6 +64,10 @@ pub struct Control {
     /// Not `HVM_SPIN_REWIND=0`: a SPIN of an agent image on hvm or kvm runs again in the rewind
     /// mode (M130; kvm since M161). Default on.
     pub spin_rewind: bool,
+    /// `HYDO_COST`: whether the host controller reads the guest's work counters (an experiment,
+    /// docs/design/cost-tracking.md): 0 off (unset, empty or `0`, the default), 2 `full` (also
+    /// before the verdict), 1 any other value (only after the verdict).
+    pub cost: u8,
 }
 
 impl Default for Control {
@@ -76,6 +80,11 @@ impl Control {
     pub fn from_env(e: &Env) -> Control {
         Control {
             spin_rewind: !e.is(HVM_SPIN_REWIND, "0"),
+            cost: match e.text(HYDO_COST).as_deref() {
+                None | Some("") | Some("0") => 0,
+                Some("full") => 2,
+                Some(_) => 1,
+            },
         }
     }
 }

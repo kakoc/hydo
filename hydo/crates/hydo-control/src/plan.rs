@@ -207,6 +207,11 @@ pub struct Plan {
     /// (`K=<group>.majority`, `N=<group>.halves`), in the manifest's order.
     pub groups: Vec<PlanGroup>,
     pub layout: Layout,
+    /// `HYDO_COST` (an experiment, docs/design/cost-tracking.md): read the guest's work counters
+    /// (`/proc`) as `HYDO-COST` report lines: 0 never, 1 after each conversation's verdict, 2 also
+    /// at the workload's start and end and in a recovery boot before its checks. Not a manifest
+    /// key: the host's choice, off by default, so nothing changes without it.
+    pub cost: u8,
 }
 
 /// One group of services (`groups:`): its members in the manifest's order and the command that
@@ -551,6 +556,7 @@ impl Plan {
                 Some(c) => Some(int(c, "guest.clock_after_cut")?),
             },
             outcomes_after_cut: get(guest, "outcomes_after_cut").is_some_and(py::truthy),
+            cost: 0,
             invariants,
             knobs,
             buggify: m.buggify,

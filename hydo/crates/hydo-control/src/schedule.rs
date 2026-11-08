@@ -73,6 +73,8 @@ mod react;
 mod storage;
 // Milestone 195: targets beyond one service (lists, group selectors, the primary's probe)
 mod targets;
+// work counters of a run, HYDO_COST (an experiment, docs/design/cost-tracking.md)
+mod cost;
 
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
@@ -1751,6 +1753,9 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     liveness::before_finish(fx, ctx)?;
     let v = errlog::final_verdict(fx, ctx)?; // SEAM(ErrorLogs): wraps final_verdict
     fx.report(v.clone());
+    // HYDO_COST: the counters once the verdict is decided, so the probe changes no verdict and
+    // nothing before it (the workload's fingerprint stays the run's without the probe)
+    cost::probe(fx, ctx, "final", false)?;
     fx.settle()?;
     fx.end(Ending::Verdict(v))
 }
@@ -2181,6 +2186,7 @@ fn main_recovery(fx: &mut F<'_>, ctx: &Ctx, acked: &[String], failed: &[String])
         true,
     )?;
     restart::start(fx, ctx)?; // restart policies (M134): once every recovering service is up
+    cost::probe(fx, ctx, "up", true)?; // HYDO_COST=full: the recovery boot up to its checks
     finish(fx, ctx)
 }
 
@@ -2298,6 +2304,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     for f in [l.acked(), l.outcomes(), format!("{}/workload.log", l.dir)] {
         post(fx, write_cmd(&f, "", false))?;
     }
+    cost::probe(fx, ctx, "start", true)?; // HYDO_COST=full: before the workload
     start_periodic(fx, ctx)?;
     restart::start(fx, ctx)?; // restart policies (M134): from the workload's start
     let (mut cut, mut paused) = (false, false);
@@ -2566,6 +2573,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
                 format!("POWER CUT before step {cat} (all services frozen)"),
             );
         }
+        cost::probe(fx, ctx, "end", true)?; // HYDO_COST=full: services frozen, before the cut
         fx.report("hydo-explore-workload-done cut");
         fx.settle()?;
         return fx.end(ending);
@@ -2608,6 +2616,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     if ctx.plan.outcomes_after_cut {
         fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
     }
+    cost::probe(fx, ctx, "end", true)?; // HYDO_COST=full: after the workload
     fx.report("hydo-explore-workload-done");
     // explore_read: "go" -- the host switches the disk faults off
     fx.engine(EngineAction::DiskFaultsOff);
