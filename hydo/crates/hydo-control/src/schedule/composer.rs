@@ -64,6 +64,13 @@ pub struct Cmd {
 /// lines, compose.list, compose.checks, compose.saved/).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ComposePlan {
+    /// The plan meta's `composed`: whether the composer runs the workload (the plan has a
+    /// parallel, serial or singleton driver or an anytime command, and hydo-manifest's `expand`
+    /// made `workload.run` `compose.sh step`). A plan of only checks or regressions (a `checks/`
+    /// or `regressions/` folder beside a manifest with its own `workload.run`) is not composed:
+    /// the manifest's workload runs, as the shell init ran `$HYDO_WORKLOAD_RUN`, and the plan's
+    /// checks are still evaluated through the composer.
+    pub composed: bool,
     pub parallel: i64,
     pub per_round: i64,
     pub round_ms: i64,
@@ -151,6 +158,7 @@ impl ComposePlan {
             (false, None)
         };
         Ok(Some(ComposePlan {
+            composed: meta.get("composed").is_some_and(py::truthy),
             parallel: int(&p["parallel"]),
             per_round: int(&p["per_round"]),
             round_ms: int(&p["round_ms"]),
