@@ -26,7 +26,7 @@ step 8).
 | `guest/hydo-world` | the in-guest program of `fakes:` and `proxies:` (`hydo/crates/hydo-world`, built from the tree, `c247d595…` since 0.3.0) |
 | `guest/hydo-world-tls` | hydo-world with the TLS front of `tls:` fakes and proxies (the cargo feature `tls`, built from the tree, `ddb50605…`; shipped since 0.3.0), staged instead of hydo-world only for manifests with `tls:` |
 | `guest/hydo-read` | `hydo-read` and, through a link in the image, `hydo-check` (`hydo/crates/hydo-read`, built from the tree; `build-release.sh` and `hydo setup` check the pinned Mac build `88576fa8…` of `guest-programs.sha256`; shipped since Milestone 150) |
-| `guest/hydo-sql` | the ready-made SQL workloads and checks of `hydo sql-gen` (`hydo/crates/hydo-sql`, built from the tree, `0754e1f7…`; shipped since 0.3.0), staged only for manifests whose commands call it |
+| `guest/hydo-sql` | the ready-made SQL workloads and checks of `hydo sql-gen` (`hydo/crates/hydo-sql`, built from the tree, `3e8cd4fa…`; shipped since 0.3.0), staged only for manifests whose commands call it |
 | `guest/hydo_fc` | the freeze helper (`hydo/onboard/hydo_fc.c` built for aarch64 with the pinned Arm GNU toolchain, `499f654e…`), which `hydo build` stages for `faults: [freeze]` (an agent image freezes with the agent's own packet trigger; open item 30 in AGENTS.md; shipped since Milestone 150) |
 | `guest/busybox`, `guest/mke2fs` | static arm64 busybox 1.36.1 and e2fsprogs 1.47.0 (aarch64 nixpkgs) |
 | `guest/busybox-applets[.txt]` | the applet set to link, as the Linux build links it |

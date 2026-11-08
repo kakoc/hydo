@@ -369,7 +369,8 @@ staged into an image only when a command or a folder file names `hydo-sql`, so i
 inside those images' fingerprints. Like hydo-read it keeps its own Cargo workspace and lock file
 (started from hydo-read's: the same versions of the same crates, no other crate) and builds with
 `hydo/crates/hydo-sql/build.sh [x86_64|aarch64|all] [OUTDIR]` (Rust 1.90.0, both musl targets,
-rust-lld, the checkout path and `$CARGO_HOME` remapped) into `build/hydo-sql` and
+rust-lld, the checkout path and `$CARGO_HOME` remapped; since 0.3.0 through `rustc-stable`,
+below) into `build/hydo-sql` and
 `build/hydo-sql-arm64`, the names `hydo-build` looks for (`HYDO_SQL_BIN`, `HYDO_SQL_BIN_ARM64`).
 Its build script copies hydo-read's `pg.rs`, `mysql.rs` and `check.rs` into the build (their
 `//!` lines blanked, so line numbers stay), so a change of those three files changes hydo-sql's
@@ -382,15 +383,24 @@ host's kind is in the bytes. The values for Milestone 182:
 | aarch64 | aarch64-apple-darwin (the Mac) | 1,414,240 | `5e5544d679f1e4a6642b0b97af7265141702120ccba6e0a48c7f010abb695228` |
 
 The images of `examples/libsql-replica` and `examples/postgres-sql` in their RESULTS.md carry the
-first. Both releases ship `guest/hydo-sql` since 0.3.0, pinned in `guest-programs.sha256`. The
-builds of 0.3.0's release commit differ from the values above (which were measured on Milestone
-182's branch; the cause was not looked for, since no recorded image carries hydo-sql); they are:
+first. Both releases ship `guest/hydo-sql` since 0.3.0, pinned in `guest-programs.sha256`.
+
+**The checkout path was in its bytes until 0.3.0.** Cargo's `-C metadata` hashes the path of the
+path dependency `hydo-read` (as for rust-kv, AGENTS.md open item 24), so the same commit built in
+two checkouts gave two programs: the Linux release built in a new tree did not give the bytes of
+the same commit built in another tree, and the Milestone 182 values above are those of one
+checkout. Since 0.3.0 `build.sh` uses the gRPC client's recipe (`hydo/grpcgen/rustc-stable` as
+`RUSTC_WRAPPER`, which replaces `-C metadata` with a hash of what each crate is, and
+`hydo-elf-comment` for the linker's line): two checkout paths give the same bytes (checked on this
+Mac and on the bare-metal machine). The kind of building host is still in the bytes (a Mac's and a
+Linux machine's x86_64 builds differ; the cause was not looked for), so, as for hydo-read, the Linux
+release pins the bare-metal machine's x86_64 build and the Mac release the Mac's arm64 build:
 
 | target | built on | size | sha256 |
 |---|---|---|---|
-| x86_64 | x86_64-unknown-linux-gnu (the bare-metal machine; the Linux release's) | 1,716,024 | `fc393e26888b035acf48c0fd5e86786a2810027c79b1f5ece8cb0b7389d9252d` |
-| x86_64 | aarch64-apple-darwin (the Mac) | | `a26758047b13cb8953999f26c580c5c16f5e84c4ac96a2573b65047dc40e36e6` |
-| aarch64 | aarch64-apple-darwin (the Mac; the Mac release's) | | `0754e1f78b0b8d9cfead7bfcfcddfdc5ae506fc2c75050e76ccd4456da8add9e` |
+| x86_64 | x86_64-unknown-linux-gnu (the bare-metal machine; the Linux release's) | 1,715,936 | `348af8b37a12be72344ec6ea96ef19e9d4dd6977138b328704c8f867b592626b` |
+| x86_64 | aarch64-apple-darwin (the Mac) | 1,715,936 | `4954b75f183f74efc07c25ea6d5fbcca088acd9a4d2bf438d8cf26528afa2d02` |
+| aarch64 | aarch64-apple-darwin (the Mac; the Mac release's) | 1,414,144 | `3e8cd4fa8073f94b7e21e4cd4cb5d53c4f719b83791ac897f0ec86b54da45587` |
 
 ## hydo-agent: the guest agent (Milestone 117)
 
