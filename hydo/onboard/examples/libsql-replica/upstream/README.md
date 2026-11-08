@@ -28,7 +28,7 @@ mode) and 2 is `FULL` (the `strong` mode).
 
 ## Output on 2026-11-08
 
-Docker Desktop 28.4.0 on an Apple Silicon Mac. The image is `v0.24.33`, arm64, digest
+Docker Engine 28.4.0 (an Ubuntu 24.04 arm64 VM) on an Apple Silicon Mac. The image is `v0.24.33`, arm64, digest
 `sha256:f8ca0134cdde…`; `sqld --version` prints `sqld 0.24.33 (40a151bd 2025-12-19)`. Fields
 that never changed (`block_reads`, `max_db_size`, `heartbeat_url`, `jwt_key`, `allow_attach`) are
 left out of the lines below.

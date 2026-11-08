@@ -65,7 +65,7 @@ system payment provider. `race.mjs` refunds one control order twice in sequence,
 trials. Each trial places an order of one unit, captures its payment, and sends two refunds of 10
 together.
 
-Run on 2026-11-08, Docker Desktop 28.4.0 on an Apple Silicon Mac (arm64 images), Node.js
+Run on 2026-11-08, Docker Engine 28.4.0 (an Ubuntu 24.04 arm64 VM) on an Apple Silicon Mac (arm64 images), Node.js
 22.23.4, PostgreSQL 15.19:
 
 | Medusa | both refunds accepted | two order changes at one version | line item written twice |
@@ -125,7 +125,7 @@ seen on 2.18.0.)
 **Database and its version:** PostgreSQL 15.19 (`postgres:15-alpine`), Redis 7 for the event bus,
 the workflow engine and locking
 
-**Operating system name and version:** Linux containers (`node:22-alpine`) on Docker Desktop 28.4.0, macOS, Apple Silicon
+**Operating system name and version:** Linux containers (`node:22-alpine`) on Docker Engine 28.4.0 in an Ubuntu 24.04 arm64 VM on an Apple Silicon Mac
 
 **Browser name:** n/a (admin API)
 
@@ -249,7 +249,7 @@ namespaces disabled the admin API is the only way to set it.
 `hydo/onboard/examples/libsql-replica/upstream/` (its README has the full output): one sqld
 primary from `ghcr.io/tursodatabase/libsql-server:v0.24.33` with `SQLD_ADMIN_LISTEN_ADDR`, and
 `run.sh`, which sets the configuration, restarts sqld and reads the configuration back with the
-admin API and `PRAGMA synchronous`. Run on 2026-11-08, Docker Desktop 28.4.0 on an Apple Silicon
+admin API and `PRAGMA synchronous`. Run on 2026-11-08, Docker Engine 28.4.0 (an Ubuntu 24.04 arm64 VM) on an Apple Silicon
 Mac (arm64 image, `sqld 0.24.33 (40a151bd 2025-12-19)`):
 
 | step | `durability_mode` | `PRAGMA synchronous` |

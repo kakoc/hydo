@@ -30,7 +30,7 @@ docker compose down -v                 # remove the containers and the database
 
 ## Output
 
-On 2026-11-08, Docker Desktop 28.4.0 on an Apple Silicon Mac (arm64 images), Node.js 22.23.4,
+On 2026-11-08, Docker Engine 28.4.0 (an Ubuntu 24.04 arm64 VM) on an Apple Silicon Mac (arm64 images), Node.js 22.23.4,
 PostgreSQL 15.19. The refusal text is cut short in the lines below; in full it is `400
 {"type":"invalid_data","message":"Order (order_…) already has an existing active order
 change"}`.
