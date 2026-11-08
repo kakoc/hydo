@@ -1,0 +1,16 @@
+#!/bin/sh
+# hydo: timeout=1500
+# The table of the large-transaction test: 120,000 rows inserted and flushed to SST files (so
+# they are packed rows on disk), then one transaction that updates every row (120,000 per-column
+# update records, more than the 100,000 records a transaction's apply moves in one batch).
+# Its rows stay in the memtables: nothing flushes them before the power cut that follows.
+. /hydo/workload/helper_bigtxn.sh
+wait_ysql 600 || exit 1
+q "CREATE TABLE IF NOT EXISTS big (id int PRIMARY KEY, v int NOT NULL) SPLIT INTO 1 TABLETS" || exit 1
+n=$(q "SELECT count(*) FROM big") || exit 1
+if [ "$n" != 120000 ]; then
+  q "INSERT INTO big SELECT g, 0 FROM generate_series(1, 120000) g ON CONFLICT DO NOTHING" || exit 1
+  admin flush_table ysql.yugabyte big || exit 1
+fi
+q "UPDATE big SET v = 1" || exit 1
+echo "bigtxn: 120000 rows updated to v=1 in one transaction (acknowledged)" > /dev/console

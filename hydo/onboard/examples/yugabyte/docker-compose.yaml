@@ -1,0 +1,103 @@
+# A three-node YugabyteDB cluster (replication factor 3), written the way the YugabyteDB
+# documentation's manual deployment runs it: one yb-master and one yb-tserver per node, every
+# master listing all three masters, every tserver serving YSQL (PostgreSQL's wire protocol) on
+# port 5433. Release: YugabyteDB 2025.2.8.1 (the newest of the 2025.2 stable series on
+# 2026-11-08).
+#   docker compose up -d
+#   psql -h localhost -p 5433 -U yugabyte
+
+services:
+  yb-master-1:
+    image: yugabytedb/yugabyte:2025.2.8.1-b8
+    hostname: yb-master-1
+    restart: unless-stopped
+    command: ["/home/yugabyte/bin/yb-master",
+              "--fs_data_dirs=/mnt/master",
+              "--master_addresses=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100",
+              "--rpc_bind_addresses=yb-master-1:7100",
+              "--replication_factor=3"]
+    volumes: [master-1:/mnt/master]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://yb-master-1:7000/"]
+      interval: 5s
+  yb-master-2:
+    image: yugabytedb/yugabyte:2025.2.8.1-b8
+    hostname: yb-master-2
+    restart: unless-stopped
+    command: ["/home/yugabyte/bin/yb-master",
+              "--fs_data_dirs=/mnt/master",
+              "--master_addresses=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100",
+              "--rpc_bind_addresses=yb-master-2:7100",
+              "--replication_factor=3"]
+    volumes: [master-2:/mnt/master]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://yb-master-2:7000/"]
+      interval: 5s
+  yb-master-3:
+    image: yugabytedb/yugabyte:2025.2.8.1-b8
+    hostname: yb-master-3
+    restart: unless-stopped
+    command: ["/home/yugabyte/bin/yb-master",
+              "--fs_data_dirs=/mnt/master",
+              "--master_addresses=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100",
+              "--rpc_bind_addresses=yb-master-3:7100",
+              "--replication_factor=3"]
+    volumes: [master-3:/mnt/master]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://yb-master-3:7000/"]
+      interval: 5s
+
+  yb-tserver-1:
+    image: yugabytedb/yugabyte:2025.2.8.1-b8
+    hostname: yb-tserver-1
+    restart: unless-stopped
+    command: ["/home/yugabyte/bin/yb-tserver",
+              "--fs_data_dirs=/mnt/tserver",
+              "--tserver_master_addrs=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100",
+              "--rpc_bind_addresses=yb-tserver-1:9100",
+              "--enable_ysql=true",
+              "--pgsql_proxy_bind_address=yb-tserver-1:5433"]
+    volumes: [tserver-1:/mnt/tserver]
+    ports: ["5433:5433"]
+    depends_on: [yb-master-1, yb-master-2, yb-master-3]
+    healthcheck:
+      test: ["CMD", "/home/yugabyte/postgres/bin/pg_isready", "-h", "yb-tserver-1", "-p", "5433"]
+      interval: 5s
+  yb-tserver-2:
+    image: yugabytedb/yugabyte:2025.2.8.1-b8
+    hostname: yb-tserver-2
+    restart: unless-stopped
+    command: ["/home/yugabyte/bin/yb-tserver",
+              "--fs_data_dirs=/mnt/tserver",
+              "--tserver_master_addrs=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100",
+              "--rpc_bind_addresses=yb-tserver-2:9100",
+              "--enable_ysql=true",
+              "--pgsql_proxy_bind_address=yb-tserver-2:5433"]
+    volumes: [tserver-2:/mnt/tserver]
+    depends_on: [yb-master-1, yb-master-2, yb-master-3]
+    healthcheck:
+      test: ["CMD", "/home/yugabyte/postgres/bin/pg_isready", "-h", "yb-tserver-2", "-p", "5433"]
+      interval: 5s
+  yb-tserver-3:
+    image: yugabytedb/yugabyte:2025.2.8.1-b8
+    hostname: yb-tserver-3
+    restart: unless-stopped
+    command: ["/home/yugabyte/bin/yb-tserver",
+              "--fs_data_dirs=/mnt/tserver",
+              "--tserver_master_addrs=yb-master-1:7100,yb-master-2:7100,yb-master-3:7100",
+              "--rpc_bind_addresses=yb-tserver-3:9100",
+              "--enable_ysql=true",
+              "--pgsql_proxy_bind_address=yb-tserver-3:5433"]
+    volumes: [tserver-3:/mnt/tserver]
+    depends_on: [yb-master-1, yb-master-2, yb-master-3]
+    healthcheck:
+      test: ["CMD", "/home/yugabyte/postgres/bin/pg_isready", "-h", "yb-tserver-3", "-p", "5433"]
+      interval: 5s
+
+volumes:
+  master-1:
+  master-2:
+  master-3:
+  tserver-1:
+  tserver-2:
+  tserver-3:

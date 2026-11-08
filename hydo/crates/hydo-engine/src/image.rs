@@ -63,7 +63,8 @@ pub fn debugfs_cat(image: &Path, path: &str) -> Result<String, ImageError> {
         .arg(format!("{}?offset={}", image.display(), ROOT_OFFSET))
         .stdin(Stdio::null())
         .stderr(Stdio::null())
-        .output()?;
+        .output()
+        .map_err(debugfs_start_error)?;
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
     if !out.status.success() || text.trim().is_empty() {
         return Err(ImageError::Missing(format!(
@@ -72,6 +73,36 @@ pub fn debugfs_cat(image: &Path, path: &str) -> Result<String, ImageError> {
         )));
     }
     Ok(text)
+}
+
+/// A `debugfs` that could not be started says which program is missing: the bare
+/// "No such file or directory" of a failed start read as if the image were missing
+/// (`hydo: hydo: No such file or directory (os error 2)` from `hydo run` with a PATH without
+/// /usr/sbin, found by the YugabyteDB onboarding).
+fn debugfs_start_error(e: std::io::Error) -> std::io::Error {
+    if e.kind() == std::io::ErrorKind::NotFound {
+        std::io::Error::new(
+            e.kind(),
+            "debugfs (e2fsprogs) is not on PATH: hydo reads the files of an image with it (a \
+             Linux release has a copy in libexec/bin)",
+        )
+    } else {
+        e
+    }
+}
+
+#[cfg(test)]
+mod debugfs_tests {
+    #[test]
+    fn a_missing_debugfs_is_named() {
+        let e = super::debugfs_start_error(std::io::Error::from(std::io::ErrorKind::NotFound));
+        assert!(e
+            .to_string()
+            .starts_with("debugfs (e2fsprogs) is not on PATH"));
+        let other =
+            super::debugfs_start_error(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+        assert_eq!(other.kind(), std::io::ErrorKind::PermissionDenied);
+    }
 }
 
 /// One file from a gzip'd newc cpio (hvm_backend.embedded_file).

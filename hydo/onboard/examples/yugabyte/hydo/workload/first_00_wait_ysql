@@ -1,0 +1,15 @@
+#!/bin/sh
+# hydo: timeout=1500
+# Before the generated workload's tables (first_sql_init): wait until YSQL answers a query on
+# all three tservers. A tserver's PostgreSQL accepts connections (its readiness) long before
+# the cluster can run a query: the transaction status table needs two live tservers, and the
+# first start runs the cluster's YSQL initdb.
+for n in 1 2 3; do
+  i=0
+  until timeout 60 hydo-oci yb_tserver_$n /home/yugabyte/postgres/bin/ysqlsh -h yb-tserver-$n -U yugabyte -X -q -At -c "SELECT 1" >/dev/null 2>&1; do
+    i=$((i + 5))
+    [ "$i" -lt 1400 ] || { echo "first_00_wait_ysql: yb-tserver-$n does not answer YSQL after ${i}s" > /dev/console; exit 1; }
+    sleep 5
+  done
+  echo "first_00_wait_ysql: yb-tserver-$n answers YSQL" > /dev/console
+done

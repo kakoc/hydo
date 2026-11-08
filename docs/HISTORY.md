@@ -4504,3 +4504,62 @@ Tests: `services_in_verdicts` and three fixture tests on copies of the power-cut
 **Nothing recorded moved.** The workspace's fast test tier passed on this Mac (556 tests), and so did the full `cargo test --locked --release --workspace`. `hydo-bench rebaseline --check` on this Mac, from a new work folder with Go 1.26.5 from go.dev (sha256 `efb87ff2…`, checked against go.dev's list), built all 21 images once with their recorded bytes and ran all 75 schedules: every verdict, fingerprint and ctl value as recorded (560 s). The re-baseline was not run on hvx or KVM. The two changes that act during a run (the explorer's class of a hand-given schedule, and the `.sql` check's verdict line) touch no recorded schedule: none is a `--schedule` exploration and no recorded image has a `.sql` check.
 
 **Not checked with Vale.** `docs/STYLE.md` and `ci/vale.sh` are not on this branch's base yet, so the new text follows the standard by hand (read from the commit that adds it) and was not run through Vale.
+
+### Milestone 193 — DONE (YugabyteDB onboarded on hvx as an outside user would; three hydo fixes; 2026-11-08)
+
+The first onboarding of the second round: YugabyteDB 2025.2.8.1 (the official image
+`yugabytedb/yugabyte:2025.2.8.1-b8`) as three nodes with replication factor 3, each one
+`yb-master` and one `yb-tserver`, YSQL on every tserver. It started from a Compose file in the
+style of the documentation's manual deployment. After that it used only the onboarding skill,
+`hydo guide`, `hydo compose`, `hydo sql-gen` (three primaries; the bank, list-append, register,
+set and counter workloads) and a Linux release built from the tree. It ran on the bare-metal
+machine with the hvx engine, in 8 GiB guests, with `storage:` per service for `G=` and `L=`. The
+example is `hydo/onboard/examples/yugabyte/`; its `RESULTS.md` has every table, the friction log
+and the comparison with the first round (Milestones 173, 174 and 176).
+
+**Getting it to run** took eight runs and about two hours. The diagnosis of Milestone 178 named
+the failing process and its status in four of the six failed runs, and `hydo inspect` explained
+the other two without a change of the image. The causes: a hydo bug (below), hvx's empty CPUID
+leaf 4 (no cache sizes, so glibc 2.28's `memcpy` faults; worked around with `GLIBC_TUNABLES`), a
+readiness deadlock (hydo starts services one after the other, and a tserver's YSQL needs a second
+live tserver), YugabyteDB's 3 GB free-disk floor, and a guest clock that started before the
+release was built (`guest.clock_start` 2026-11-08, and `guest.clock_after_cut: 60`).
+
+**Findings.** Every schedule ran twice with one fingerprint, on the default image (`1afe802f…`)
+and on the image with `durable_wal_write=true` (`0f4d61e0…`).
+
+1. The default `durable_wal_write=false` loses acknowledged writes at a power cut of the whole
+   cluster: three of four cut points lost an increment, a set element or a register write, each
+   found by a different generated check (`C=8` `086f686c474bb4f8`, `C=12` `6620196fd74d07c6`,
+   `C=16` `b75a03c991330339`). With `durable_wal_write=true` the same schedules pass. YugabyteDB
+   documents this default as meant for deployments without correlated power loss.
+2. A backward step of the clock by 60 s (`T=10:-60`, `5287ef9b01dd36ac`) stops the tservers
+   ("Too big clock skew is detected"), and they cannot start until the clock has caught up.
+3. Not found: no isolation anomaly, no lost write without a power cut. TA-30772 (a transaction of
+   more than 100,000 records partly undone after a restart) was not reproduced: a user-table
+   version of its trigger passes on 2025.2.2.2 and on 2025.2.3.0 alike (`bigtxn/hydo/`).
+
+An exploration of 20 process schedules with `--more-faults --storage-faults` (96 minutes) gave 17
+failures, all reproduced: finding 1 in four (shrunk to one cut at the 4th flush), finding 2 in
+eleven, and two false findings from the recovery boot's clock after a cut at the k-th flush
+(`cf=`), whose clock the controller does not carry.
+
+**Three hydo fixes**, each with a test, no recorded image changed:
+
+- `hydo-build`: a PAX value that is not UTF-8 (Docker writes them for file capabilities) ended
+  the reader of an image layer silently, so YugabyteDB's image lost 8,615 of the 9,188 entries of
+  its base layer. The value is now decoded lossily.
+- `hydo-engine`: a `debugfs` that is not on PATH is named, instead of
+  `hydo: No such file or directory`. The CLI golden's one case with that message was re-recorded.
+- `hydo-control`: the power loss of an image service (`L=`) unmounts every mount of the device,
+  its binds too. Before, every `L=` of an image service ended in the false verdict "storage
+  unmountable after its power loss".
+
+The example's manifest joined the identity corpora (`hydo-control` `corpus-quick.txt`, and
+`hydo-explore` `corpus-full.txt` and `identity-quick.txt`, re-recorded on the bare-metal machine).
+
+**Gaps found** (open item 64): hvx's CPUID leaf 4 is empty; readiness gates deadlock a cluster
+whose health check needs its peers; the diagnosis reads only a service's stdout, not the logs a
+database writes into its data directory; the recovery boot's clock after a `cf=` cut starts at
+`clock_start` again; the explorer never cuts links between peers of one cluster; one 4 GiB disk
+is tight for six services.

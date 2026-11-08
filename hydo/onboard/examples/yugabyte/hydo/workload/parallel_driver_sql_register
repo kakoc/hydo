@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# One read, write or compare-and-set of a register, recorded for hydo's linearizability checker.
+exec hydo-sql register op

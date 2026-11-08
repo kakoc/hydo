@@ -422,6 +422,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     and npm. The npm entry expires after two days unused, so add it just before a release. No
     run of `release.yml` or `packages.yml` has happened yet. A crate new to `cargo install hydo`
     needs its first version published by hand (M186).
+64. YugabyteDB showed gaps: hvx's CPUID leaf 4 is empty (glibc 2.28 then needs
+    `GLIBC_TUNABLES`); readiness gates deadlock a cluster whose health check needs its peers; the
+    diagnosis reads only a service's stdout; the recovery clock after a `cf=` cut restarts at
+    `clock_start`; the explorer never cuts links between peers of one cluster (M193).
 
 ## Milestone index
 
@@ -624,6 +628,9 @@ build machine, before 2026-10-13.
   diagnosis of a service that is down or does not recover, a failing `.sql` check's rows in the
   verdict, the guide on ordering by the system's own times, `kvm-check.sh` by a relative path,
   `hvx_hugeram_test` in `deploy-metal.sh`)
+- M193: YugabyteDB onboarded on hvx (three nodes; the default WAL setting loses acknowledged
+  writes at a power cut; a backward clock step stops the tservers); fixes to `hydo-build`'s PAX
+  reader, the `debugfs` message and `L=` of an image service
 
 ## Where to look
 

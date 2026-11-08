@@ -40,6 +40,7 @@ input	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	b99571f53a0199054
 input	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	b344fa1f5be236c5a4ad91a58223a3384024e44fede6213d7b276957463e2798
 input	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	07525fcfc18578bc7276dbc99774d5eb1a1e0f511506fb5d7c6f472f5000e070
 input	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	8315d20511432b934f32e1c212add7da36e3ca827f8af14a0a648d076bcfd8cb
+input	hydo/onboard/examples/yugabyte/hydo/hydo.yaml	49b022282c7f370ee71d4be2a804c2439d3654c18a2061c4645037e460b7747a
 input	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	97abb5b0751d76f6e9793ab4076e25b3d10ce4b3ae2e98529192eb234ac12917
 input	hydo/onboard/examples-mac/ledger/hydo.yaml	01cf6c04e2c7c83d49bbca58d5c8ff4efb95539bbb472a7a2d7f649995765184
 input	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	bcc3a34e69784a0133b1d6b3a5faeb4cdfa52c90ab219fd7536332539d797840
@@ -6657,6 +6658,7 @@ chunk	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	587	500	1817763d05b974bb9
 chunk	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	588	500	f69dd23f266cb62010d0c9a4dc612d41e2728af0a9b7b353922a35ed521d8bfa
 chunk	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	589	500	a32518d092652d31a61ac5e3bbd8b3fb54ecc279b807591b155262700373f391
 chunk	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	590	344	d3e217649b275bf62bb126208a72f1502f083034004c7646f44ab62eaf6341e9
+manifest	hydo/onboard/examples/yugabyte/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	core
 boot	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	hydo/onboard/examples-mac/ledger-spin/hydo.yaml#0	snapshot	dd6cf3dfde93c6ec
 counts	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	identity=138 recovery:ok=4 refused=1 run:cut=4 run:error=14 run:ok=11 run:violation=120 token:C=4 token:K=90 token:P=90 token:Q=1 token:T=73 token:X=4 token:Z=1 written=11

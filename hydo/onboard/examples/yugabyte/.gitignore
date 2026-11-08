@@ -1,0 +1,5 @@
+# built or fetched here, never committed
+hydo/images/
+hydo-out/
+.hydo/
+.hydo-*/
