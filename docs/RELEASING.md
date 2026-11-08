@@ -71,7 +71,7 @@ filled once from the machine with the Nix store paths).
   low-priority work pauses while it exists) and remove it when done. Check `free -m`. Build in
   an own tree made from an archive of the commit's tracked files, with `hydo/COMMIT` holding the
   full commit hash, from clean Rust targets (`target/`, `hydo/crates/hydo-agent/target/`,
-  `hydo/crates/hydo-read/target/` removed):
+  `hydo/crates/hydo-read/target/` and, since 0.3.0, `hydo/crates/hydo-sql/target/` removed):
   `HYDO_ASSETS_FROM=<assets> HYDO_SOURCES_FROM=<cache> sh hydo/dist/linux/build-release.sh <out>`,
   with `~/hydo-rust/env.sh` sourced. Twice, into two output directories. The assets directory
   must hold every file of `assets.sha256` and nothing else: since 0.2.0 that includes the KVM
@@ -158,6 +158,23 @@ as they are. Scan the signed Mac tarball (not only the unsigned one) and the sig
   `hydo/dist/out/before/`) and write `SHA256SUMS` with all five lines.
 - Record the values: AGENTS.md (the current tarballs, a milestone line and the index),
   docs/HISTORY.md (a milestone section), the release READMEs (`hydo/dist/*/README.md`).
+
+## 6a. Docs review (since 0.3.0)
+
+A fresh reader checks the pages a user reads first against the release candidate, before the tag:
+
+1. Make sure that `sh ci/vale.sh` prints no findings, and that
+   `cargo test -p hydo --test it docs::` passes. The test fails when `README.md` or a quickstart
+   names another version, cites a fingerprint that is not recorded, or shows a command or
+   option that `hydo` does not have.
+2. Start a reader with no other context: a coding agent with the prompt in
+   `skills/hydo-docs/SKILL.md`, section `The release docs review`. Give it the release
+   candidate's tarballs, `README.md`, and both quickstarts.
+3. Fix each finding, or defer it with a reason. Write every deferred finding and its reason into
+   the release notes.
+
+Do not tag the release until every finding is fixed or deferred. If this step is skipped, a page
+that does not match the release ships with it.
 
 ## 7. Publish (the user decides)
 

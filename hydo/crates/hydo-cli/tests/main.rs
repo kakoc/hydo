@@ -4,6 +4,7 @@
 //! `<name>::<test>`: `cargo test -p hydo --test it <name>::`.
 
 mod agents_equivalence;
+mod docs;
 mod equivalence;
 mod migrate;
 mod readme;

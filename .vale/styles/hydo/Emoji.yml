@@ -1,0 +1,8 @@
+# docs/STYLE.md: no emoji.
+extends: existence
+message: "No emoji."
+level: error
+scope: raw
+nonword: true
+raw:
+  - '[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B50}\x{2B55}]'

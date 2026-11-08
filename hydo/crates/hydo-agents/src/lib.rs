@@ -1082,7 +1082,7 @@ pub fn update_gitignore(path: &Path, lines: &[&str]) -> R<Vec<String>> {
     if !old.is_empty() && !old.ends_with('\n') {
         text.push('\n');
     }
-    text.push_str("# hydo (hydo init): the build cache and fetched images\n");
+    text.push_str("# hydo (hydo init): the build cache, fetched images and run results\n");
     for l in &add {
         text.push_str(l);
         text.push('\n');
@@ -1117,7 +1117,7 @@ pub fn init(argv: &[String], _root: &Path, out: &mut Out) -> R<i32> {
     while !a.is_empty() {
         let x = a.remove(0);
         if x == "-h" || x == "--help" {
-            out.put("usage: hydo init [--dir DIR] [--name NAME] [--no-agents-md] [--no-gitignore]\n  creates DIR/hydo/ (hydo.yaml skeleton, workload/, checks/, regressions/) where missing,\n  adds .hydo/ and hydo/images/ to .gitignore, and a hydo section to AGENTS.md (between markers).\n  Existing files are never overwritten; running it again changes nothing.\n")?;
+            out.put("usage: hydo init [--dir DIR] [--name NAME] [--no-agents-md] [--no-gitignore]\n  creates DIR/hydo/ (hydo.yaml skeleton, workload/, checks/, regressions/) where missing,\n  adds .hydo/, hydo/images/ and hydo-out/ to .gitignore, and a hydo section to AGENTS.md (between markers).\n  Existing files are never overwritten; running it again changes nothing.\n")?;
             return Ok(0);
         }
         if x == "--dir" && !a.is_empty() {
@@ -1191,7 +1191,10 @@ pub fn init(argv: &[String], _root: &Path, out: &mut Out) -> R<i32> {
         out.put(&format!("hydo: kept    {p}\n"))?;
     }
     if do_ignore {
-        for l in update_gitignore(&dp.join(".gitignore"), &[".hydo/", "hydo/images/"])? {
+        for l in update_gitignore(
+            &dp.join(".gitignore"),
+            &[".hydo/", "hydo/images/", "hydo-out/"],
+        )? {
             out.put(&format!("hydo: added {l} to .gitignore\n"))?;
         }
     }
@@ -1214,7 +1217,7 @@ pub fn init(argv: &[String], _root: &Path, out: &mut Out) -> R<i32> {
     .into_iter()
     .find(|f| dp.join(f).is_file());
     out.put(
-        "hydo: next: give your AI tool this instruction: \"run `hydo guide` and follow it\"\n",
+        "hydo: next: give your AI tool this instruction: \"run `hydo guide skill` and follow it\"\n",
     )?;
     if let Some(c) = compose {
         out.put(&format!(

@@ -7,7 +7,7 @@
 format: 1
 name: tigerbeetle-single
 description: "TigerBeetle, one replica: every acknowledged transfer survives crashes, pauses, clock jumps and power cuts, and balances stay the sum of their transfers"
-hydo_version: "0.2"
+hydo_version: "0.3"
 
 params:
   tb: "0.17.9"

@@ -52,7 +52,13 @@ pub const MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 /// The guest programs: they are inside guest images, come from the release download and must
 /// never be something `cargo install hydo` builds.
-pub const GUEST_PROGRAMS: &[&str] = &["hydo-agent", "hydo-world", "hydo-read", "hydo-grpc"];
+pub const GUEST_PROGRAMS: &[&str] = &[
+    "hydo-agent",
+    "hydo-world",
+    "hydo-read",
+    "hydo-grpc",
+    "hydo-sql",
+];
 
 /// Published crates whose version is their own, not hydo's, with the reason.
 pub const OWN_VERSION: &[(&str, &str)] = &[(

@@ -39,6 +39,9 @@ pub struct Ctx {
     /// Linux: run x86_64 images on the KVM engine (`--backend kvm` or `HYDO_BACKEND=kvm`)
     /// instead of hvx.
     pub kvm: bool,
+    /// The engine was chosen (`--backend`, or `HYDO_BACKEND`); when it was not, `hydo repro` and
+    /// `hydo inspect` take the engine the run recorded ([`Ctx::follow_recorded_backend`]).
+    pub backend_chosen: bool,
     /// Installed by `cargo install` (no release around the program): the root is this version's
     /// directory of the install cache ([`installed_root`]), which `hydo setup --get` fills.
     pub cargo_installed: bool,
@@ -70,11 +73,13 @@ impl Ctx {
         let root = installed.unwrap_or(root);
         let platform = Platform::detect(&config.cli);
         let kvm = platform == Platform::Linux && config.kvm.backend.as_deref() == Some("kvm");
+        let backend_chosen = config.kvm.backend.is_some();
         Ctx {
             platform,
             root,
             config,
             kvm,
+            backend_chosen,
             cargo_installed,
             checkout,
         }
@@ -96,6 +101,24 @@ impl Ctx {
             (Platform::Linux, Some(hydo_config::kvm::Backend::Hvx)) => self.kvm = false,
             (Platform::Mac, _) => die("--backend: the Mac has one engine (hvm)"),
             (_, None) => die(&format!("--backend {b}: expected hvx or kvm")),
+        }
+        self.backend_chosen = true;
+    }
+
+    /// `hydo repro <dir>` and `hydo inspect ... <dir>` without `--backend` or `HYDO_BACKEND`: on
+    /// Linux, use the engine the run or exploration in `dir` recorded (`hvx` or `kvm`), so that a
+    /// KVM run is repeated on KVM (before 0.3.0 it fell back to hvx, which needs the module and
+    /// sudo). Anything else (no such directory, no recorded engine, the Mac) changes nothing.
+    pub fn follow_recorded_backend(&mut self, dir: &Path) {
+        if self.backend_chosen || self.platform != Platform::Linux || !dir.is_dir() {
+            return;
+        }
+        if let Some(b) = recorded_backend(dir) {
+            match b.as_str() {
+                "kvm" => self.kvm = true,
+                "hvx" => self.kvm = false,
+                _ => {}
+            }
         }
     }
 
@@ -304,10 +327,46 @@ pub fn pjoin(a: &str, b: &str) -> String {
     }
 }
 
+/// The engine a run directory (`result.json`) or an exploration directory (`exploration.json`)
+/// recorded, if any.
+pub fn recorded_backend(dir: &Path) -> Option<String> {
+    match hydo_results::read_dir(dir).ok()? {
+        hydo_results::Results::Run { run, .. } => run.engine.and_then(|e| e.backend),
+        hydo_results::Results::Exploration { doc, .. } => doc.and_then(|d| d.engine.backend),
+    }
+    .filter(|b| !b.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::checkout_of;
+    use super::{checkout_of, recorded_backend};
     use std::path::Path;
+
+    /// `hydo repro <run dir>` follows the engine the run recorded (0.3.0): the engine is read from
+    /// result.json's `engine.backend`; a directory without one, or without a run, gives none.
+    #[test]
+    fn the_recorded_engine_is_read_from_a_run_directory() {
+        let d = std::env::temp_dir().join(format!("hydo-ctx-engine-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        assert_eq!(recorded_backend(&d), None);
+        let run = hydo_results::Run {
+            engine: Some(hydo_results::Engine {
+                backend: Some("kvm".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        hydo_results::write_document(&d.join(hydo_results::RUN_DOC), &run).unwrap();
+        assert_eq!(recorded_backend(&d).as_deref(), Some("kvm"));
+        hydo_results::write_document(
+            &d.join(hydo_results::RUN_DOC),
+            &hydo_results::Run::default(),
+        )
+        .unwrap();
+        assert_eq!(recorded_backend(&d), None);
+        let _ = std::fs::remove_dir_all(&d);
+    }
 
     fn checkout(at: &Path) {
         std::fs::create_dir_all(at.join("hydo/crates/hydo-cli")).unwrap();

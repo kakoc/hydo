@@ -15,7 +15,7 @@
 #       disk=cut | run C=12 R=everysec               Redis's documented fsync window loses acked SETs
 name: redis-composed-read
 description: Redis with an append-only file, driven by composed commands (SETs, transfers, AOF rewrites).
-hydo_version: "0.2"
+hydo_version: "0.3"
 format: 1
 
 params:

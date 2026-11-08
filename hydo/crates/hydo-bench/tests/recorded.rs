@@ -31,10 +31,12 @@ fn reads_and_keeps_its_form() {
         (i.len(), i.iter().map(|i| i.runs.len()).sum::<usize>())
     };
     // docs/REBASELINE.md 13.1 + 14 (67 Mac schedules on 19 images) and 13.4's Mac examples;
-    // 13.2 (126 x86_64 schedules on 37 images) and 13.4's Linux examples; M159's KVM table
-    assert_eq!(count("hvm"), (21, 75));
-    assert_eq!(count("hvx"), (39, 131));
-    assert_eq!(count("kvm"), (4, 11));
+    // 13.2 (126 x86_64 schedules on 37 images) and 13.4's Linux examples; M159's KVM table;
+    // since 0.3.0 the release example's `disk=cut | run C=12` on each engine (the quickstarts
+    // cite it) and the KVM exploration's third minimal schedule (REBASELINE.md section 18)
+    assert_eq!(count("hvm"), (21, 76));
+    assert_eq!(count("hvx"), (39, 132));
+    assert_eq!(count("kvm"), (4, 13));
     for i in &images {
         assert!(
             i.sha256.len() == 64 && i.sha256.bytes().all(|c| c.is_ascii_hexdigit()),

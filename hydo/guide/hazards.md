@@ -1,11 +1,15 @@
 # Determinism and environment hazards
 
-The guest is one Linux virtual machine: one virtual CPU by default, `guest.ram_mib` of RAM
-(default 1024 MiB), no network outside the guest (loopback, or with `network: bridge` one
-bridge between the services' own namespaces), a read-only root (an image service can have a
-writable one, `writable: true`), one data disk on `/data`, and a
-clock and a random generator that hydo makes deterministic. Check each item and report what you
-found.
+The guest is one Linux virtual machine. It has:
+
+- one virtual CPU by default, and `guest.ram_mib` of RAM (default 1024 MiB);
+- no network outside the guest: loopback, or with `network: bridge` one bridge between the
+  services' own namespaces;
+- a read-only root (an image service can have a writable one, `writable: true`), and one data
+  disk on `/data`;
+- a clock and a random generator that hydo makes deterministic.
+
+Check each item and report what you found.
 
 ## Handled by hydo (nothing to do)
 
@@ -14,48 +18,48 @@ found.
 - Loopback is up; the realtime clock starts at `guest.clock_start` (default 2026-01-01).
 - Services start in dependency order with readiness waits; killed services are restarted; the
   recovery boot after a power cut is automatic. A service that crashes by itself is started again
-  only at the heal, unless it has a `restart:` policy (`always`, `on-failure`, ...: MANIFEST.md
-  "Restart policies"). A service that does not come back at the heal ends the run in ERROR,
+  only at the heal, unless it has a `restart:` policy such as `always` or `on-failure`
+  (MANIFEST.md, section `Restart policies`). A service that does not come back at the heal ends the run in ERROR,
   unless it has `restart_may_fail: true` (MANIFEST.md "A restart after the faults that may fail").
 - Faults (kill, pause, the freeze of a power cut) reach a service's whole process tree.
 
 ## Must be checked per project
 
 - **Network access.** Anything that downloads, resolves external names, sends telemetry, checks
-  for updates or contacts a license server at start fails. Disable it in the configuration, or
-  report it as a blocker. Outside services the system really calls become fakes
+  for updates or contacts a license server at start fails. Turn it off in the configuration, or
+  report it as a blocker. Outside services that the system calls become fakes
   (`hydo guide outside-services`).
 - **Listening address.** On one shared loopback network, bind every service to 127.0.0.1 (or to
   its `addr:`). With `network: bridge`, a service that others call must listen on `0.0.0.0` or on
-  its `addr:`: inside its namespace, 127.0.0.1 is reachable only from the service itself (as in a
-  container), and its peers, the workload and the checks connect from outside it (the workload and
-  the checks from 10.89.0.1). External addresses do not exist.
+  its `addr:`. Inside its namespace, 127.0.0.1 is reachable only from the service itself, as in a
+  container. Its peers, the workload, and the checks connect from outside it; the workload and
+  the checks connect from 10.89.0.1. External addresses do not exist.
 - **Writable paths.** Only `/data` (persistent, the fault target) and `/tmp` (lost at a power
-  cut) are writable. Point data, logs, sockets and PID files there. An image service also gets
+  cut) are writable. Point data, logs, sockets, and PID files there. An image service also gets
   the writable paths of its `mounts:`.
-- **CPU features.** The guest CPU is x86-64-v2 by default (SSE4.2, POPCNT), without AVX or AVX2.
-  Binaries built for x86-64-v3, or that need AVX at start, stop with "illegal instruction",
-  "invalid opcode" or "CPU ISA level is lower than required". Set `guest.cpu: v3` (x86_64 only;
+- **CPU features.** The guest CPU is x86-64-v2 by default (SSE4.2, POPCNT). It has no AVX and
+  no AVX2. Binaries built for x86-64-v3, or that need AVX at start, stop with one of these
+  messages: `illegal instruction`, `invalid opcode`, `CPU ISA level is lower than required`. Set `guest.cpu: v3` (x86_64 only;
   AVX/AVX2, FMA, BMI1/2; no AVX-512), or use a build for the baseline. On the Mac the guest is
   arm64: images and binaries must be built for linux/arm64.
 - **Memory.** Every service together must fit in `guest.ram_mib` (at most 8192 MiB). Cap heaps
   and caches explicitly (JVM `-Xmx`, database buffer pools, Redis `maxmemory`). The host needs
-  that much free memory for every guest that runs at once: `hydo run` refuses a guest that does
-  not fit, and `hydo explore` sizes its pool from the guest's RAM (one 8 GiB worker on a 16 GiB
-  machine).
+  that much free memory for every guest that runs at once. `hydo run` refuses a guest that does
+  not fit, and `hydo explore` sizes its pool from the guest's RAM: one 8 GiB worker on a 16 GiB
+  machine.
 - **One CPU.** Set worker and thread counts to 1 or 2 where the program sizes them from the CPU
   count (Go: `GOMAXPROCS=1`; JVM: `-XX:ActiveProcessorCount=1`; database I/O threads).
 - **JVM services.** Use deterministic-friendly flags: one synchronous C1 compiler
   (`-XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation`), Serial GC
   (`-XX:+UseSerialGC`), a fixed heap (`-Xms` = `-Xmx`), `-XX:-UsePerfData`,
-  `-XX:-UseContainerSupport`, `-Xshare:off`, a fixed time zone and locale
+  `-XX:-UseContainerSupport`, `-Xshare:off`, and a fixed time zone and locale
   (`-Duser.timezone=UTC`).
 - **Wall clock in data.** Timestamps in payloads or keys make runs differ when the clock is
-  stepped; derive values from `$HYDO_CMD_ID` or `$HYDO_SEED` instead. Expiry, TTL or lease
+  stepped; derive values from `$HYDO_CMD_ID` or `$HYDO_SEED` instead. Expiry, TTL, or lease
   logic is affected by clock-jump faults on purpose: note it as a target, not as a hazard. If a
   check compares times from before and after a power cut, set `guest.clock_after_cut`.
-- **Background timers.** Very short periodic timers (a server `hz` of 10 or more) cost guest
-  time; lower them where the project allows (`hz 1` for Redis).
+- **Background timers.** Periodic timers of 100 ms or less (a server `hz` of 10 or more) cost
+  guest time; lower them where the project allows (`hz 1` for Redis).
 - **Services that refuse to run as root** (PostgreSQL and others). Everything in the guest runs
   as root. Add the user to `/etc/passwd` and `/etc/group` under `root.text`, `chown` its data
   directory in `setup`, and start it with `su <user> -s /bin/sh -c "exec ..."` so that the

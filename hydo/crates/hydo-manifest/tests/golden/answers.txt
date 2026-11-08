@@ -81,21 +81,21 @@ I	hydo/crates/hydo-manifest/tests/fixtures/folders/regressions-only/hydo/hydo.ya
 I	hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/hydo/hydo.yaml	c49532c1aabe4e123f31acd6a7d45821433658ccf428af04ddda353f4a3c2848
 I	hydo/crates/hydo-manifest/tests/fixtures/folders/two-schedules/hydo/hydo.yaml	2c3b77759f05c4420d6739d08778d52ecb8240bbfbfad3dbd5c4b74b9d1cf36c
 I	hydo/crates/hydo-manifest/tests/fixtures/yaml_cases.json	1bd685d8d18a6f8e195254a21c50ce058763fa33b7373bff3923051a8da663ed
-I	hydo/dist/linux/third-party.json	fcc33764dff700807e68332bb151c3bb4e260061c16c00be91c27f7f908bd016
-I	hydo/dist/mac/third-party.json	9cd68ddd959d2720cb2203433c620334a381fdeffc29d4adb007079f4addf848
+I	hydo/dist/linux/third-party.json	c8e60e84461a1377053e08206991ca796a745b731e790ca34cfca525d5586b1f
+I	hydo/dist/mac/third-party.json	3e4e13f1211f71582a0728da1e28e1e2fed45bb564a6ec2014ffd32b74c399d3
 I	hydo/grpcgen/demo/hints.yaml	61f215d0658471d8dcecd611de222f8af6628583f4d2689b9064f9529c14c0f3
 I	hydo/grpcgen/demo/hydo-mac.yaml	8df424c6576e59769fc88a8c9dc6611980d33df4b273b9be7c6d43c6eba73403
 I	hydo/grpcgen/demo/hydo.yaml	2f7ec93857b9dbdb43bd901fb530463933b707e95d21bf2633132a9e056f4fb2
 I	hydo/guide/examples/example-miniflux.yaml	056fe1ea51d103145f0db56f65c550c83bd6a87b491b2cdbad74509dd3a2ee57
-I	hydo/guide/examples/example-redis-composed/hydo/hydo.yaml	7ace53f2a90a304000598babe4c886c69ee0d659759e474f28cdb5f3f5f90aca
-I	hydo/guide/init/hydo/hydo.yaml	536ba5098ca480018f4a834bf6f05984def00a6e51fa1cd37e84d32dbaf0aeab
+I	hydo/guide/examples/example-redis-composed/hydo/hydo.yaml	d4dc949f193dd9d860f69336b95d6c3c48852b492c2c666ecedb7f6ad42d2b1f
+I	hydo/guide/init/hydo/hydo.yaml	ea28882e9ef1a485d5026a16b765bef08b23e9d7ca0cf37c5a1f39066fc97086
 I	hydo/knownbugs/sqlite/hydo-cpudiag.yaml	4ae20e6a032b7c0836e7edb1682ad39cf71876fd6ef39f4dee0822c55e02b834
 I	hydo/knownbugs/sqlite/hydo-reset.yaml	1066f040d6b002cd744a2c4510d49c159de3137ab54708d817d7ce8caf97117a
 I	hydo/knownbugs/sqlite/hydo.yaml	85b4164b568afba86ab525225915187ad8dc02e09fc3aa24311656b05bf87fdb
 I	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	97abb5b0751d76f6e9793ab4076e25b3d10ce4b3ae2e98529192eb234ac12917
 I	hydo/onboard/examples-mac/ledger/hydo.yaml	01cf6c04e2c7c83d49bbca58d5c8ff4efb95539bbb472a7a2d7f649995765184
 I	hydo/onboard/examples-mac/redis-bridge/hydo.yaml	bcc3a34e69784a0133b1d6b3a5faeb4cdfa52c90ab219fd7536332539d797840
-I	hydo/onboard/examples-mac/redis-composed/hydo/hydo.yaml	2fb55057af22b15855f7aa8e0ebeda1377cb1cdcaea8b61ee3c9a21f4dc312d1
+I	hydo/onboard/examples-mac/redis-composed/hydo/hydo.yaml	d7169b9bf9413f36bf6faad051ef362809d315a92d1620d08effd0489d2e30e8
 I	hydo/onboard/examples-mac/redis-ram/hydo.yaml	8cf023cbdd0b096987f1389f758c5334d62ad1b4a84f069394eb34bb38d83f45
 I	hydo/onboard/examples-mac/redis/hydo-hist.yaml	03c50c67f26c1d2ce24f345a8a1d7a7cf46d343abdf65a96f0b4b76e13394f72
 I	hydo/onboard/examples-mac/redis/hydo-read.yaml	160a4c0a430464a37fd4ea0af6ebff72b451a402be1eb8ac28efc9440c0c85a8
@@ -120,10 +120,10 @@ I	hydo/onboard/examples/node-kv/hydo.yaml	bf84c318fec3878f26ffe5c40cec1bf03c4cda
 I	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	f5b1bb0d84df3db0115e938aa9e31c1088c75ff09ba5af7698347e618a75e84b
 I	hydo/onboard/examples/python-kv/hydo-mac.yaml	19ae1d6b5ec2705e9583e9d81d211586ef923b4efbef4ebafff6e4d4a7293d88
 I	hydo/onboard/examples/redis-bridge/hydo.yaml	30da2c5ff1a49e0399e076cbda5bb3d62df316dcdc337a81077b3b24fc4003f6
-I	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	4854d41fcd5fad977f784fce2f19d0468a1d25594e55395405e617e2e8d29598
-I	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	2eb7a953d254647b6423bb9ffb1334061cace1790750a3e117bba3cc9eca02e3
-I	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	7ace53f2a90a304000598babe4c886c69ee0d659759e474f28cdb5f3f5f90aca
-I	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	8552c1c89281294cf134eed33c80c1fe9e286bbe2ae56213b3570887a03c2965
+I	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	4b6b8b1a93f59f5591de4a3e1a52329853a4d12ddc0d78d24238de5eaee0835d
+I	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	f5547a4a24c07ff2196bf56764d2c9fb3aae0ccd164022e73cbbf9320566d380
+I	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	d4dc949f193dd9d860f69336b95d6c3c48852b492c2c666ecedb7f6ad42d2b1f
+I	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	8102f4d23ba79c9efe75a9e7a9edb950aedb242a42a6f650a49e4afcfad069eb
 I	hydo/onboard/examples/redis-errors/hydo/known-errors.yaml	7aeb9c62f10ff842c90220b26a136a562bc5e42480572361cb1b94f731db259a
 I	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	b4fde7c060d7d0c3c59fed9c223d2655a113ddf73d3e9a9cd322f3793ccdfdca
 I	hydo/onboard/examples/redis-oci/hydo.yaml	056cbfb7ef423ebf7c2cc96e445a180ca5510e2dc95fb62a7918b0b6f5f4e1c4
@@ -211,8 +211,8 @@ I	sdk/cases/programs/history_python.json	decdc5c2d4a32f6b110db41ede3d320a76857b1
 I	sdk/cases/programs/js.json	fa4b432deb158bfaaf7f32600d4571d972aa4f02244150a372743795a55470a7
 I	sdk/cases/programs/python.json	a809d7cd8b7cca4ca888014935f0ecb64a6d2e8963443e8ca93e65eb033b49c6
 I	sdk/cases/programs/rust.json	4c01f91f15d568be3e4f150f4bee16987a4134680de0980f2c2c5074d9ba425d
-I	sdk/js/package.json	21977f81ded755ebd9aceff2734b1755136f1d7347d7f0f2b1f475914ee93e07
-R	--set	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch x86_64 [("transfer", "racy")]	ok	d:690d482d w:4f53cda1 c:3f730dfc m:74234e98
+I	sdk/js/package.json	f4a4b01b6ab100f3590f4702ad9049e08f81ef1dbd504c22656629d826d9750c
+R	--set	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch x86_64 [("transfer", "racy")]	ok	d:1c22569b w:4f53cda1 c:3f730dfc m:74234e98
 R	^	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch x86_64 [("nope", "1")]	err	"--set nope: the manifest declares no parameter 'nope' (params: transfer)"
 R	^	<root>/hydo/onboard/examples/redis/hydo.yaml --arch x86_64 [("x", "1")]	err	"--set x: the manifest declares no parameter 'x' (params: none)"
 R	^	<tmp>/cases/p-ok.json --arch x86_64 [("nm", "xyz")]	ok	d:f76137e4 w:4f53cda1 c:9968adc6 m:74234e98
@@ -452,12 +452,12 @@ R	^	<tmp>/cases/plan-provision.json --arch x86_64 []	ok	d:c351caa2 w:4f53cda1 c:
 R	^	<tmp>/cases/plan-provision.json --arch arm64 []	ok	d:c351caa2 w:4f53cda1 c:91b28b6f m:74234e98
 R	^	<tmp>/cases/plan-inv-clash.json --arch x86_64 []	err	"invariants: id 'compose.commands' is also a test command or check"
 R	^	<tmp>/cases/plan-inv-clash.json --arch arm64 []	err	"invariants: id 'compose.commands' is also a test command or check"
-R	^	<tmp>/cases/plan-format-2.json --arch x86_64 []	err	"format: this file is written in project format 2, and this h…#b9cebcc5673f3ab8"
-R	^	<tmp>/cases/plan-format-2.json --arch arm64 []	err	"format: this file is written in project format 2, and this h…#b9cebcc5673f3ab8"
+R	^	<tmp>/cases/plan-format-2.json --arch x86_64 []	err	"format: this file is written in project format 2, and this h…#dd4008d21e4c32cf"
+R	^	<tmp>/cases/plan-format-2.json --arch arm64 []	err	"format: this file is written in project format 2, and this h…#dd4008d21e4c32cf"
 R	^	<tmp>/cases/plan-format-1.json --arch x86_64 []	ok	d:2c42f88d w:4f53cda1 c:089a3dbb m:74234e98
 R	^	<tmp>/cases/plan-format-1.json --arch arm64 []	ok	d:2c42f88d w:4f53cda1 c:089a3dbb m:74234e98
-R	^	<tmp>/cases/plan-format-true.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.2.0…#0ba52e2fd9f2df1c"
-R	^	<tmp>/cases/plan-format-true.json --arch arm64 []	err	"format: the project format, a whole number; this hydo (0.2.0…#0ba52e2fd9f2df1c"
+R	^	<tmp>/cases/plan-format-true.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.3.0…#605c2d7d67f562b4"
+R	^	<tmp>/cases/plan-format-true.json --arch arm64 []	err	"format: the project format, a whole number; this hydo (0.3.0…#605c2d7d67f562b4"
 R	^	<tmp>/cases/plan-format-no-test.json --arch x86_64 []	ok	d:8d9d3c2f w:4f53cda1 c:7e3bcfdc m:74234e98
 R	^	<tmp>/cases/plan-format-no-test.json --arch arm64 []	ok	d:8d9d3c2f w:4f53cda1 c:7e3bcfdc m:74234e98
 R	^	<tmp>/cases/plan-test-list.json --arch x86_64 []	err	"test: must be a mapping"
@@ -540,20 +540,20 @@ R	^	<tmp>/cases/plan-reg-long.json --arch x86_64 []	ok	d:fd358ec4 w:2a1aabdf c:1
 R	^	<tmp>/cases/plan-reg-long.json --arch arm64 []	ok	d:fd358ec4 w:2a1aabdf c:1cc84c32 m:74234e98
 R	^	<tmp>/cases/plan-steps-big.json --arch x86_64 []	ok	d:891302b5 w:2a1aabdf c:b27f9aa7 m:74234e98
 R	^	<tmp>/cases/plan-steps-big.json --arch arm64 []	ok	d:891302b5 w:2a1aabdf c:b27f9aa7 m:74234e98
-R	^	<tmp>/cases/plan-version-ok.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 0.1.x, this hydo is 0.2.0 …#a522314942b4c32f"
-R	^	<tmp>/cases/plan-version-ok.json --arch arm64 []	err	"hydo_version: the plan needs hydo 0.1.x, this hydo is 0.2.0 …#a522314942b4c32f"
-R	^	<tmp>/cases/plan-version-patch.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 0.1.x, this hydo is 0.2.0 …#a522314942b4c32f"
-R	^	<tmp>/cases/plan-version-patch.json --arch arm64 []	err	"hydo_version: the plan needs hydo 0.1.x, this hydo is 0.2.0 …#a522314942b4c32f"
+R	^	<tmp>/cases/plan-version-ok.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 0.1.x, this hydo is 0.3.0 …#9b224995b85d0292"
+R	^	<tmp>/cases/plan-version-ok.json --arch arm64 []	err	"hydo_version: the plan needs hydo 0.1.x, this hydo is 0.3.0 …#9b224995b85d0292"
+R	^	<tmp>/cases/plan-version-patch.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 0.1.x, this hydo is 0.3.0 …#9b224995b85d0292"
+R	^	<tmp>/cases/plan-version-patch.json --arch arm64 []	err	"hydo_version: the plan needs hydo 0.1.x, this hydo is 0.3.0 …#9b224995b85d0292"
 R	^	<tmp>/cases/plan-version-ge.json --arch x86_64 []	ok	d:7fa07acf w:4f53cda1 c:42dd6421 m:74234e98
 R	^	<tmp>/cases/plan-version-ge.json --arch arm64 []	ok	d:7fa07acf w:4f53cda1 c:42dd6421 m:74234e98
 R	^	<tmp>/cases/plan-version-bad.json --arch x86_64 []	err	"hydo_version: \"0.1\", \"0.1.0\" or \">=0.1\" (got 'v1')"
 R	^	<tmp>/cases/plan-version-bad.json --arch arm64 []	err	"hydo_version: \"0.1\", \"0.1.0\" or \">=0.1\" (got 'v1')"
-R	^	<tmp>/cases/plan-version-new.json --arch x86_64 []	ok	d:962ab7c5 w:4f53cda1 c:260b82d0 m:74234e98
-R	^	<tmp>/cases/plan-version-new.json --arch arm64 []	ok	d:962ab7c5 w:4f53cda1 c:260b82d0 m:74234e98
-R	^	<tmp>/cases/plan-version-ge-new.json --arch x86_64 []	err	"hydo_version: the plan needs hydo at least 1.0, this hydo is…#7278cca0ab0634b6"
-R	^	<tmp>/cases/plan-version-ge-new.json --arch arm64 []	err	"hydo_version: the plan needs hydo at least 1.0, this hydo is…#7278cca0ab0634b6"
-R	^	<tmp>/cases/plan-version-int.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 0.0.x, this hydo is 0.2.0 …#0e63d4345b0d41bf"
-R	^	<tmp>/cases/plan-version-int.json --arch arm64 []	err	"hydo_version: the plan needs hydo 0.0.x, this hydo is 0.2.0 …#0e63d4345b0d41bf"
+R	^	<tmp>/cases/plan-version-new.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 0.2.x, this hydo is 0.3.0 …#9ec6530772942ce6"
+R	^	<tmp>/cases/plan-version-new.json --arch arm64 []	err	"hydo_version: the plan needs hydo 0.2.x, this hydo is 0.3.0 …#9ec6530772942ce6"
+R	^	<tmp>/cases/plan-version-ge-new.json --arch x86_64 []	err	"hydo_version: the plan needs hydo at least 1.0, this hydo is…#8842e5a65ddc1360"
+R	^	<tmp>/cases/plan-version-ge-new.json --arch arm64 []	err	"hydo_version: the plan needs hydo at least 1.0, this hydo is…#8842e5a65ddc1360"
+R	^	<tmp>/cases/plan-version-int.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 0.0.x, this hydo is 0.3.0 …#7742ef36df0c94fb"
+R	^	<tmp>/cases/plan-version-int.json --arch arm64 []	err	"hydo_version: the plan needs hydo 0.0.x, this hydo is 0.3.0 …#7742ef36df0c94fb"
 R	^	<tmp>/cases/v-minimal.json --arch x86_64 []	ok	d:6369658e w:4f53cda1 c:cf612d4a m:74234e98
 R	^	<tmp>/cases/v-minimal.json --arch arm64 []	ok	d:6369658e w:4f53cda1 c:cf612d4a m:74234e98
 R	^	<tmp>/cases/v-not-map.json --arch x86_64 []	err	"the manifest must be a mapping"
@@ -2484,7 +2484,7 @@ R	^	<tmp>/mutants/m1452.json --arch x86_64 []	err	"test: must be a mapping"
 R	^	<tmp>/mutants/m1453.json --arch x86_64 []	err	"hydo_version: \"0.1\", \"0.1.0\" or \">=0.1\" (got 'True')"
 R	^	<tmp>/mutants/m1454.json --arch x86_64 []	err	"services: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m1455.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
-R	^	<tmp>/mutants/m1456.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.2.0…#c07f7475914c9180"
+R	^	<tmp>/mutants/m1456.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.3.0…#54ab822cc6a10721"
 R	^	<tmp>/mutants/m1457.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<tmp>/mutants/m1458.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<tmp>/mutants/m1459.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
@@ -2505,7 +2505,7 @@ R	^	<tmp>/mutants/m1473.json --arch x86_64 []	err	"name: use lowercase letters, 
 R	^	<tmp>/mutants/m1474.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<tmp>/mutants/m1475.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m1476.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
-R	^	<tmp>/mutants/m1477.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.2.0…#56a2a35793d16f42"
+R	^	<tmp>/mutants/m1477.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.3.0…#a70c0654ab467ff9"
 R	^	<tmp>/mutants/m1478.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<tmp>/mutants/m1479.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<tmp>/mutants/m1480.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
@@ -2515,7 +2515,7 @@ R	^	<tmp>/mutants/m1483.json --arch x86_64 []	err	"name: use lowercase letters, 
 R	^	<tmp>/mutants/m1484.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<tmp>/mutants/m1485.json --arch x86_64 []	err	"test.parallel: a whole number in [1, 16] (got None)"
 R	^	<tmp>/mutants/m1486.json --arch x86_64 []	err	"hydo_version: \"0.1\", \"0.1.0\" or \">=0.1\" (got 'None')"
-R	^	<tmp>/mutants/m1487.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.2.0…#78c202dd9d43a3af"
+R	^	<tmp>/mutants/m1487.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.3.0…#de081be11fe2f3f9"
 R	^	<tmp>/mutants/m1488.json --arch x86_64 []	err	"guest.ram_mib: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m1489.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<tmp>/mutants/m1490.json --arch x86_64 []	err	"faults[5]: {{p}} is not a declared parameter"
@@ -3781,7 +3781,7 @@ R	^	<tmp>/mutants/m2749.json --arch x86_64 []	err	"test: unknown field(s) bogus 
 R	^	<tmp>/mutants/m2750.json --arch x86_64 []	err	"services[1]: field 'cmd' must be a str"
 R	^	<tmp>/mutants/m2751.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m2752.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m2753.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.2.0…#c07f7475914c9180"
+R	^	<tmp>/mutants/m2753.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.3.0…#54ab822cc6a10721"
 R	^	<tmp>/mutants/m2754.json --arch x86_64 []	err	"services[0]: missing required field 'name'"
 R	^	<tmp>/mutants/m2755.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, depen…#13cb53403e72b793"
 R	^	<tmp>/mutants/m2756.json --arch x86_64 []	err	"test.parallel: a whole number in [1, 16] (got True)"
@@ -4133,7 +4133,7 @@ R	^	<tmp>/mutants/m3101.json --arch x86_64 []	err	"workload: missing required fi
 R	^	<tmp>/mutants/m3102.json --arch x86_64 []	err	"test.command_timeout: a whole number in [1, 3600] (got ['x'])"
 R	^	<tmp>/mutants/m3103.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#e56c77ca8a0d2d4f"
 R	^	<tmp>/mutants/m3104.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m3105.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.2.0…#4ca899247b88a69d"
+R	^	<tmp>/mutants/m3105.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.3.0…#2b817faaa63eaa94"
 R	^	<tmp>/mutants/m3106.json --arch x86_64 []	err	"services[1]: duplicate service name 'redis'"
 R	^	<tmp>/mutants/m3107.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m3108.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -5510,8 +5510,8 @@ R	^	<root>/hydo/grpcgen/demo/hydo.yaml --arch x86_64 []	ok	d:0c823987 w:4f53cda1
 R	^	<root>/hydo/grpcgen/demo/hydo.yaml --arch arm64 []	ok	d:0c823987 w:4f53cda1 c:9d846a59 m:74234e98
 R	^	<root>/hydo/guide/examples/example-miniflux.yaml --arch x86_64 []	ok	d:31ddf6d9 w:4f53cda1 c:a94faf06 m:74234e98
 R	^	<root>/hydo/guide/examples/example-miniflux.yaml --arch arm64 []	ok	d:31ddf6d9 w:4f53cda1 c:a94faf06 m:74234e98
-R	^	<root>/hydo/guide/examples/example-redis-composed/hydo/hydo.yaml --arch x86_64 []	ok	d:a84ae67c w:4f53cda1 c:31ecb758 m:74234e98
-R	^	<root>/hydo/guide/examples/example-redis-composed/hydo/hydo.yaml --arch arm64 []	ok	d:a84ae67c w:4f53cda1 c:31ecb758 m:74234e98
+R	^	<root>/hydo/guide/examples/example-redis-composed/hydo/hydo.yaml --arch x86_64 []	ok	d:aa24b754 w:4f53cda1 c:31ecb758 m:74234e98
+R	^	<root>/hydo/guide/examples/example-redis-composed/hydo/hydo.yaml --arch arm64 []	ok	d:aa24b754 w:4f53cda1 c:31ecb758 m:74234e98
 R	^	<root>/hydo/guide/init/hydo/hydo.yaml --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<root>/hydo/guide/init/hydo/hydo.yaml --arch arm64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<root>/hydo/knownbugs/sqlite/hydo-cpudiag.yaml --arch x86_64 []	ok	d:37878c39 w:4f53cda1 c:46354d28 m:74234e98
@@ -5526,8 +5526,8 @@ R	^	<root>/hydo/onboard/examples-mac/ledger/hydo.yaml --arch x86_64 []	ok	d:8b67
 R	^	<root>/hydo/onboard/examples-mac/ledger/hydo.yaml --arch arm64 []	ok	d:8b673fe5 w:4f53cda1 c:10f82f21 m:74234e98
 R	^	<root>/hydo/onboard/examples-mac/redis-bridge/hydo.yaml --arch x86_64 []	ok	d:e9d18127 w:4f53cda1 c:0510eef3 m:74234e98
 R	^	<root>/hydo/onboard/examples-mac/redis-bridge/hydo.yaml --arch arm64 []	ok	d:e9d18127 w:4f53cda1 c:0510eef3 m:74234e98
-R	^	<root>/hydo/onboard/examples-mac/redis-composed/hydo/hydo.yaml --arch x86_64 []	ok	d:6e7d0774 w:4f53cda1 c:91e370f4 m:74234e98
-R	^	<root>/hydo/onboard/examples-mac/redis-composed/hydo/hydo.yaml --arch arm64 []	ok	d:6e7d0774 w:4f53cda1 c:91e370f4 m:74234e98
+R	^	<root>/hydo/onboard/examples-mac/redis-composed/hydo/hydo.yaml --arch x86_64 []	ok	d:b4672f70 w:4f53cda1 c:91e370f4 m:74234e98
+R	^	<root>/hydo/onboard/examples-mac/redis-composed/hydo/hydo.yaml --arch arm64 []	ok	d:b4672f70 w:4f53cda1 c:91e370f4 m:74234e98
 R	^	<root>/hydo/onboard/examples-mac/redis-ram/hydo.yaml --arch x86_64 []	ok	d:6cb27fdd w:4f53cda1 c:2c402397 m:74234e98
 R	^	<root>/hydo/onboard/examples-mac/redis-ram/hydo.yaml --arch arm64 []	ok	d:6cb27fdd w:4f53cda1 c:2c402397 m:74234e98
 R	^	<root>/hydo/onboard/examples-mac/redis/hydo-hist.yaml --arch x86_64 []	ok	d:9bb8289f w:4f53cda1 c:a821bc36 m:74234e98
@@ -5576,14 +5576,14 @@ R	^	<root>/hydo/onboard/examples/python-kv/hydo-mac.yaml --arch x86_64 []	ok	d:e
 R	^	<root>/hydo/onboard/examples/python-kv/hydo-mac.yaml --arch arm64 []	ok	d:e0209579 w:4f53cda1 c:595371ee m:74234e98
 R	^	<root>/hydo/onboard/examples/redis-bridge/hydo.yaml --arch x86_64 []	ok	d:6ea0d748 w:4f53cda1 c:c9bbe950 m:74234e98
 R	^	<root>/hydo/onboard/examples/redis-bridge/hydo.yaml --arch arm64 []	ok	d:6ea0d748 w:4f53cda1 c:c9bbe950 m:74234e98
-R	^	<root>/hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml --arch x86_64 []	ok	d:efb67919 w:4f53cda1 c:f0e82829 m:74234e98
-R	^	<root>/hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml --arch arm64 []	ok	d:efb67919 w:4f53cda1 c:f0e82829 m:74234e98
-R	^	<root>/hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml --arch x86_64 []	ok	d:ba842f77 w:3bb55b71 c:97a56681 m:74234e98
-R	^	<root>/hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml --arch arm64 []	ok	d:ba842f77 w:3bb55b71 c:97a56681 m:74234e98
-R	^	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch x86_64 []	ok	d:cd6aed23 w:4f53cda1 c:3f730dfc m:74234e98
-R	^	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch arm64 []	ok	d:cd6aed23 w:4f53cda1 c:3f730dfc m:74234e98
-R	^	<root>/hydo/onboard/examples/redis-errors/hydo/hydo.yaml --arch x86_64 []	ok	d:d6a9db06 w:3bb55b71 c:d39b57da m:74234e98
-R	^	<root>/hydo/onboard/examples/redis-errors/hydo/hydo.yaml --arch arm64 []	ok	d:d6a9db06 w:3bb55b71 c:d39b57da m:74234e98
+R	^	<root>/hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml --arch x86_64 []	ok	d:c444dd7f w:4f53cda1 c:f0e82829 m:74234e98
+R	^	<root>/hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml --arch arm64 []	ok	d:c444dd7f w:4f53cda1 c:f0e82829 m:74234e98
+R	^	<root>/hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml --arch x86_64 []	ok	d:a81d70c9 w:3bb55b71 c:97a56681 m:74234e98
+R	^	<root>/hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml --arch arm64 []	ok	d:a81d70c9 w:3bb55b71 c:97a56681 m:74234e98
+R	^	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch x86_64 []	ok	d:11aaac48 w:4f53cda1 c:3f730dfc m:74234e98
+R	^	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch arm64 []	ok	d:11aaac48 w:4f53cda1 c:3f730dfc m:74234e98
+R	^	<root>/hydo/onboard/examples/redis-errors/hydo/hydo.yaml --arch x86_64 []	ok	d:444a0bfb w:3bb55b71 c:d39b57da m:74234e98
+R	^	<root>/hydo/onboard/examples/redis-errors/hydo/hydo.yaml --arch arm64 []	ok	d:444a0bfb w:3bb55b71 c:d39b57da m:74234e98
 R	^	<root>/hydo/onboard/examples/redis-errors/hydo/known-errors.yaml --arch x86_64 []	err	"top level: unknown field(s) known, unknown (known: buggify, …#0069e7d1a91e7d1e"
 R	^	<root>/hydo/onboard/examples/redis-errors/hydo/known-errors.yaml --arch arm64 []	err	"top level: unknown field(s) known, unknown (known: buggify, …#0069e7d1a91e7d1e"
 R	^	<root>/hydo/onboard/examples/redis-oci/hydo-metacheck.yaml --arch x86_64 []	err	"services[0] (redis): image <root>/hydo/onboard/examples/redi…#c7827d4975618210"
@@ -5850,7 +5850,6 @@ R	^	embedded <tmp>/cases/plan-reg-30.json Some("<tmp>/embedded/316.compose.json"
 R	^	embedded <tmp>/cases/plan-reg-long.json Some("<tmp>/embedded/324.compose.json")	ok	d:6cdf3549 w:74234e98 c:74234e98 m:6976fd25
 R	^	embedded <tmp>/cases/plan-steps-big.json Some("<tmp>/embedded/326.compose.json")	ok	d:ac6dd807 w:74234e98 c:74234e98 m:fc06a716
 R	^	embedded <tmp>/cases/plan-version-ge.json Some("<tmp>/embedded/332.compose.json")	ok	d:229f5731 w:74234e98 c:74234e98 m:b0dd9fa9
-R	^	embedded <tmp>/cases/plan-version-new.json Some("<tmp>/embedded/336.compose.json")	ok	d:c6452e73 w:74234e98 c:74234e98 m:b0dd9fa9
 R	^	embedded <tmp>/cases/v-minimal.json None	ok	d:6369658e w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-buggify-ok.json None	ok	d:e56b5554 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/cases/v-services-none.json None	ok	d:36420f34 w:74234e98 c:74234e98 m:74234e98
@@ -6604,14 +6603,14 @@ R	^	embedded <root>/hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/h
 R	^	embedded <root>/hydo/grpcgen/demo/hydo-mac.yaml Some("<tmp>/embedded/5292.compose.json")	ok	d:324462f3 w:74234e98 c:74234e98 m:8612ae8b
 R	^	embedded <root>/hydo/grpcgen/demo/hydo.yaml Some("<tmp>/embedded/5294.compose.json")	ok	d:848a5a90 w:74234e98 c:74234e98 m:8612ae8b
 R	^	embedded <root>/hydo/guide/examples/example-miniflux.yaml None	ok	d:31ddf6d9 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <root>/hydo/guide/examples/example-redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5298.compose.json")	ok	d:c10c4f30 w:74234e98 c:74234e98 m:b5e65201
+R	^	embedded <root>/hydo/guide/examples/example-redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5298.compose.json")	ok	d:e4dcc564 w:74234e98 c:74234e98 m:b5e65201
 R	^	embedded <root>/hydo/knownbugs/sqlite/hydo-cpudiag.yaml None	err	"name: use lowercase letters, digits and '-' (got 'kb-sqlite-cpudiag-{{v}}')"
 R	^	embedded <root>/hydo/knownbugs/sqlite/hydo-reset.yaml None	err	"name: use lowercase letters, digits and '-' (got 'kb-sqlite-reset-{{v}}')"
 R	^	embedded <root>/hydo/knownbugs/sqlite/hydo.yaml None	err	"name: use lowercase letters, digits and '-' (got 'kb-sqlite-{{v}}')"
 R	^	embedded <root>/hydo/onboard/examples-mac/ledger-spin/hydo.yaml None	ok	d:b0e46b7a w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples-mac/ledger/hydo.yaml None	ok	d:8b673fe5 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples-mac/redis-bridge/hydo.yaml None	ok	d:e9d18127 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <root>/hydo/onboard/examples-mac/redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5314.compose.json")	ok	d:fccb2e6f w:74234e98 c:74234e98 m:b5e65201
+R	^	embedded <root>/hydo/onboard/examples-mac/redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5314.compose.json")	ok	d:fc52d4ae w:74234e98 c:74234e98 m:b5e65201
 R	^	embedded <root>/hydo/onboard/examples-mac/redis-ram/hydo.yaml None	ok	d:6cb27fdd w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples-mac/redis/hydo-hist.yaml None	ok	d:9bb8289f w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples-mac/redis/hydo-read.yaml None	ok	d:4815070d w:74234e98 c:74234e98 m:74234e98
@@ -6626,10 +6625,10 @@ R	^	embedded <root>/hydo/onboard/examples/node-kv/hydo.yaml None	ok	d:caaaabd9 w
 R	^	embedded <root>/hydo/onboard/examples/python-kv/hydo-mac-hist.yaml None	ok	d:f7336537 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/python-kv/hydo-mac.yaml None	ok	d:e0209579 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/redis-bridge/hydo.yaml None	ok	d:6ea0d748 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <root>/hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml Some("<tmp>/embedded/5364.compose.json")	ok	d:27cf577d w:74234e98 c:74234e98 m:1960ca96
-R	^	embedded <root>/hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml Some("<tmp>/embedded/5366.compose.json")	ok	d:655dafea w:74234e98 c:74234e98 m:a220798b
-R	^	embedded <root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5368.compose.json")	ok	d:c10c4f30 w:74234e98 c:74234e98 m:b5e65201
-R	^	embedded <root>/hydo/onboard/examples/redis-errors/hydo/hydo.yaml Some("<tmp>/embedded/5370.compose.json")	ok	d:93bcc400 w:74234e98 c:74234e98 m:b246f877
+R	^	embedded <root>/hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml Some("<tmp>/embedded/5364.compose.json")	ok	d:63bb2209 w:74234e98 c:74234e98 m:1960ca96
+R	^	embedded <root>/hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml Some("<tmp>/embedded/5366.compose.json")	ok	d:cb6bbfc1 w:74234e98 c:74234e98 m:a220798b
+R	^	embedded <root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml Some("<tmp>/embedded/5368.compose.json")	ok	d:e4dcc564 w:74234e98 c:74234e98 m:b5e65201
+R	^	embedded <root>/hydo/onboard/examples/redis-errors/hydo/hydo.yaml Some("<tmp>/embedded/5370.compose.json")	ok	d:2bed0716 w:74234e98 c:74234e98 m:b246f877
 R	^	embedded <root>/hydo/onboard/examples/redis-ram/hydo.yaml None	ok	d:31d3b555 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/redis/hydo-freeze.yaml None	ok	d:84e133cf w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/redis/hydo-hist.yaml None	ok	d:eb3ca386 w:74234e98 c:74234e98 m:74234e98

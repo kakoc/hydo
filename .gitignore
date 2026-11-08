@@ -26,3 +26,6 @@ __pycache__/
 /hydo/COMMIT
 # the local compile cache of this repository and its worktrees (.cargo/rustc-wrapper.sh; docs/CI.md)
 /.sccache/
+# the Vale style packages ci/vale.sh downloads (pinned by sha256 there; docs/STYLE.md)
+/.vale/styles/Google/
+/.vale/styles/proselint/

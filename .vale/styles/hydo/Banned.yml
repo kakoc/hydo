@@ -1,0 +1,71 @@
+# docs/STYLE.md "Banned words and phrases": marketing words and the habits of generated prose.
+extends: existence
+message: "Do not use '%s' (docs/STYLE.md, banned list). Say what the thing does, with a number or a command."
+level: error
+ignorecase: true
+tokens:
+  - seamless(?:ly)?
+  - robust(?:ly|ness)?
+  - powerful(?:ly)?
+  - leverag(?:e|es|ed|ing)
+  - comprehensive(?:ly)?
+  - cutting[- ]edge
+  - state[- ]of[- ]the[- ]art
+  - best[- ]in[- ]class
+  - world[- ]class
+  - next[- ]generation
+  - game[- ]chang(?:er|ing)
+  - delv(?:e|es|ed|ing)
+  - deep dive
+  - dive into
+  - effortless(?:ly)?
+  - blazing(?:ly)?[- ]fast
+  - lightning[- ]fast
+  - supercharg(?:e|es|ed|ing)
+  - revolutioni[sz](?:e|es|ed|ing)
+  - empower(?:s|ed|ing)?
+  - unlock(?:s|ed|ing)?
+  - elevat(?:e|es|ed|ing)
+  - streamlin(?:e|es|ed|ing)
+  - harness(?:es|ed|ing)? the power
+  - unparalleled
+  - unprecedented
+  - holistic(?:ally)?
+  - synerg(?:y|ies|istic)
+  - paradigm
+  - ever[- ](?:evolving|changing)
+  - landscape
+  - tapestry
+  - plethora
+  - myriad
+  - embark(?:s|ed|ing)?
+  - boasts?
+  - crucial(?:ly)?
+  - pivotal
+  - vital
+  - amazing(?:ly)?
+  - awesome
+  - exciting
+  - elegant(?:ly)?
+  - magic(?:al|ally)?
+  - delightful(?:ly)?
+  - beautiful(?:ly)?
+  - furthermore
+  - moreover
+  - in today's
+  - it's worth noting
+  - it is worth noting
+  - it should be noted
+  - it is important to note
+  - please note
+  - needless to say
+  - as you can see
+  - as mentioned (?:above|earlier|before)
+  - rest assured
+  - let's
+  - in conclusion
+  - in summary
+  - to summari[sz]e
+  - to sum up
+  - all in all
+  - at the end of the day

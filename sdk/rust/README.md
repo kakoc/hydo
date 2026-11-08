@@ -136,9 +136,9 @@ The operator is one of `<`, `<=`, `==`, `!=`, `>=` and `>`.
 
 ### Check that something happens in time (eventually)
 
-An `eventually` property says "after this point, the condition becomes true within a deadline",
-for example "after a restart the server answers within 5 seconds". Time inside a hydo guest is
-deterministic, so the verdict is the same on every replay.
+An `eventually` property says that after this point, the condition becomes true within a
+deadline. For example: after a restart, the server answers within 5 seconds. Time inside a hydo
+guest is deterministic, so the verdict is the same on every replay.
 
 ```rust
 use hydo_assert::eventually;
@@ -202,8 +202,9 @@ that is on fires on some of its calls. To try it outside hydo, set
 
 ### Record an operation history
 
-hydo can check a whole history of operations after a run: is every read consistent with the
-writes before it (linearizability per key), or do list appends ever go missing? Your workload's
+hydo can check a whole history of operations after a run. It checks that every read is
+consistent with the writes before it (linearizability per key), and that no list append goes
+missing. Your workload's
 client records each operation twice: when it starts (`invoke`) and when the outcome is known.
 
 ```rust
@@ -260,7 +261,7 @@ the rust-kv example:
 ## Reference
 
 - The API: <https://docs.rs/hydo-assert>.
-- The records and how hydo judges each kind of property:
+- The records, and how hydo judges each property type:
   <https://github.com/kakoc/hydo/blob/main/hydo/ASSERTIONS.md>.
 - The history format and the checkers:
   <https://github.com/kakoc/hydo/blob/main/hydo/HISTORIES.md>.
@@ -269,9 +270,9 @@ the rust-kv example:
 
 Rules of this crate:
 
-- The catalog (`catalog()`) lists the properties of `declare!` and of the macros first, sorted by
-  where they are written (file, line, column), and then the ones declared at run time, in the
-  order they were declared. Call it once, early, in the process whose console hydo reads.
+- The catalog (`catalog()`) first lists the properties of `declare!` and of the macros, sorted
+  by where they are written (file, line, column). Then it lists the ones declared at run time, in
+  the order they were declared. Call it once, early, in the process whose console hydo reads.
 - Details are JSON objects with their keys in byte order. A record whose details hold a NaN or
   an infinity is not written.
 - Every call is safe from threads and async tasks: one lock, held only while a record is

@@ -1,0 +1,27 @@
+# docs/STYLE.md "Every claim concrete": intensifiers, and words that claim ease or obviousness.
+extends: existence
+message: "'%s' adds no fact. Delete it, or give the number it stands for."
+level: error
+ignorecase: true
+tokens:
+  - very
+  - really
+  - extremely
+  - incredibly
+  - truly
+  - totally
+  - absolutely
+  - basically
+  - essentially
+  - actually
+  - simply
+  - easily
+  - obviously
+  - clearly
+  - of course
+  - just works
+  - significantly
+  - drastically
+  - massively
+  - hugely
+  - highly

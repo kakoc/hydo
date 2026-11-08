@@ -1,0 +1,7 @@
+# docs/STYLE.md: "not just X but Y" is a stock contrast of generated prose. State Y.
+extends: existence
+message: "Drop the 'not just ... but' contrast; state the fact directly."
+level: error
+ignorecase: true
+raw:
+  - '\bnot (?:just|only|merely|simply) [^.;:]{1,80}?\bbut\b'

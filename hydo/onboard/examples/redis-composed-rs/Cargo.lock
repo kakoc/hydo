@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "hydo-assert"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "hydo-test"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "hydo-assert",
  "hydo-test-macros",
@@ -17,7 +17,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-test-macros"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "inventory"
