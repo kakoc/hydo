@@ -171,6 +171,38 @@ struct hvx_config {
  * without EPT accessed/dirty flags.
  */
 #define HVX_VM_DIRTY_LOG	(1u << 9)
+/*
+ * HVX_VM_CPU_CACHE (milestone 195): CPUID describes a fixed cache hierarchy, the same on every
+ * host: leaf 2 says "see leaf 4" (descriptor 0xff), leaf 4 lists a 32 KiB L1 data and a 32 KiB
+ * L1 instruction cache (8-way), a 256 KiB L2 (4-way) and an 8 MiB inclusive L3 (16-way), all
+ * with 64-byte lines (HVX_CPUID4_SUB below), and the max extended leaf rises to 0x80000006,
+ * whose ECX gives the L2 again (0x80000002..5 stay zero). Without it these leaves are zero, as
+ * before: glibc then finds no cache sizes, and the glibc 2.28 of Red Hat Enterprise Linux 8 and
+ * its rebuilds (AlmaLinux 8, Rocky Linux 8, UBI 8) takes 0 as its non-temporal copy threshold
+ * and its AVX memcpy (HVX_VM_X86_64_V3) fails. Guest-visible, so opt-in: a VM without the flag
+ * answers exactly as before. An older module ignores the flag (it silently answers zero);
+ * HVX_GET_CAPS tells.
+ */
+#define HVX_VM_CPU_CACHE	(1u << 10)
+/* every HVX_VM_* flag this module knows (HVX_GET_CAPS) */
+#define HVX_VM_KNOWN_FLAGS	((1u << 11) - 1)
+/* the cache hierarchy of HVX_VM_CPU_CACHE. Leaf 2 EAX: one round, descriptor 0xff. */
+#define HVX_CPUID2_EAX		0x0000ff01u
+/* Leaf 4, sub-leaves 0..3 (4 and above: type 0, the end of the list), as {EAX, EBX, ECX, EDX}
+ * for one logical processor; a VM with several (HVX_VM_SMP_BOOT) adds n-1 at EAX[31:26] (cores
+ * in the package) of every sub-leaf and at EAX[25:14] (logical processors sharing it) of the L3.
+ * EAX: type (1 data, 2 instruction, 3 unified) | level << 5 | self-initializing (bit 8);
+ * EBX: (ways - 1) << 22 | (partitions - 1) << 12 | (line - 1); ECX: sets - 1;
+ * EDX: bit 1 inclusive of the lower levels, bit 2 complex indexing. */
+#define HVX_CPUID4_N		4
+#define HVX_CPUID4_SUB { \
+	{ 0x00000121u, 0x01c0003fu, 0x0000003fu, 0x00000000u },	/* L1 data, 32 KiB */ \
+	{ 0x00000122u, 0x01c0003fu, 0x0000003fu, 0x00000000u },	/* L1 instruction, 32 KiB */ \
+	{ 0x00000143u, 0x00c0003fu, 0x000003ffu, 0x00000000u },	/* L2, 256 KiB */ \
+	{ 0x00000163u, 0x03c0003fu, 0x00001fffu, 0x00000006u },	/* L3, 8 MiB */ \
+}
+/* Leaf 0x80000006 ECX: the L2 in KiB << 16 | associativity code 4 (4-way) << 12 | line size. */
+#define HVX_CPUID_E6_ECX	0x01004040u
 
 /*
  * Guest register file. The first 15 fields (rax..r15) are the general-purpose
@@ -1266,5 +1298,17 @@ struct hvx_dirty {
 #define HVX_HC_PUT	_IOW(HVX_IOC_MAGIC, 67, struct hvx_hc_io)
 #define HVX_HC_GET_STATE _IOWR(HVX_IOC_MAGIC, 68, struct hvx_hc_state)
 #define HVX_HC_SET_STATE _IOW(HVX_IOC_MAGIC, 69, struct hvx_hc_state)
+
+/*
+ * HVX_GET_CAPS (milestone 195): what this module knows, on any open /dev/hvx, before or after
+ * HVX_CREATE_VM. A module older than milestone 195 refuses it (ENOTTY): it knows the flags up to
+ * HVX_VM_DIRTY_LOG and ignores the others. A host that needs a flag such a module would ignore
+ * (HVX_VM_CPU_CACHE) asks first.
+ */
+struct hvx_caps {
+	__u32 vm_flags;		/* [out] the HVX_VM_* flags HVX_CREATE_VM acts on */
+	__u32 reserved[7];	/* [out] 0 */
+};
+#define HVX_GET_CAPS	_IOR(HVX_IOC_MAGIC, 70, struct hvx_caps)
 
 #endif /* _HVX_ABI_H */
