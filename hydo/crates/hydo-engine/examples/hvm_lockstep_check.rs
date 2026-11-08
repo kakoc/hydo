@@ -329,6 +329,7 @@ fn main() {
         vcpus: 1,
         cpu: CpuLevel::V2,
         cpu_cache: false,
+        epoch: 2,
         kernel: PathBuf::from(&a[2]),
         initrd: None,
         outdir: outdir.join("serve"),

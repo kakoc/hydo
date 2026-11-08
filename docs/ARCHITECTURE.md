@@ -104,7 +104,9 @@ check that it reproduces, and shrinks it to a minimal schedule.
 
 A change to an engine, the host controller, the agent, or a guest kernel can move every
 fingerprint. The fingerprint epoch (`hydo_image::EPOCH`) numbers these generations. Runs of one
-epoch compare fingerprints; runs of different epochs compare only verdicts.
+epoch compare fingerprints; runs of different epochs compare only verdicts. A default that
+changed with an epoch is taken from the epoch in the image's record (`hydo_image::defaults`), so
+an image built earlier keeps running as it did.
 [hydo/onboard/recorded.json](../hydo/onboard/recorded.json) lists every recorded example run with
 its fingerprint, and `hydo-bench rebaseline` checks them.
 

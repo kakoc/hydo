@@ -22,8 +22,9 @@ Check each item and report what you found.
 - Services start in dependency order with readiness waits (`start_after: started` for a cluster
   whose readiness needs its peers, `hydo guide services`); killed services are restarted; the
   recovery boot after a power cut is automatic. A service that crashes by itself is started again
-  only at the heal, unless it has a `restart:` policy such as `always` or `on-failure`
-  (MANIFEST.md, section `Restart policies`). A service that does not come back at the heal ends the run in ERROR,
+  only at the heal, unless it has a `restart:` policy such as `always` or `on-failure`. The policy
+  is in force from the service's start (MANIFEST.md, section `Restart policies`). A service that
+  does not come back at the heal ends the run in ERROR,
   unless it has `restart_may_fail: true` (MANIFEST.md "A restart after the faults that may fail").
 - Faults (kill, pause, the freeze of a power cut) reach a service's whole process tree.
 
@@ -46,11 +47,11 @@ Check each item and report what you found.
   messages: `illegal instruction`, `invalid opcode`, `CPU ISA level is lower than required`. Set `guest.cpu: v3` (x86_64 only;
   AVX/AVX2, FMA, BMI1/2; no AVX-512), or use a build for the baseline. On the Mac the guest is
   arm64: images and binaries must be built for linux/arm64.
-- **CPU caches.** By default the guest's CPUID describes no caches. The glibc 2.28 of Red Hat
-  Enterprise Linux 8 and its rebuilds (AlmaLinux 8, Rocky Linux 8, UBI 8) then crashes in
-  `memcpy` at `guest.cpu: v3`. The programs of such an image end with a segfault in
-  `libc-2.28.so`. Set `guest.cpu_cache: true` (x86_64 only). `hydo build` warns when an image
-  needs it.
+- **CPU caches.** The guest's CPUID describes a fixed cache hierarchy by default (x86_64,
+  `guest.cpu_cache`, since fingerprint epoch 2). With `guest.cpu_cache: false` it describes no
+  caches, and the glibc 2.28 of Red Hat Enterprise Linux 8 and its rebuilds (AlmaLinux 8, Rocky
+  Linux 8, UBI 8) then crashes in `memcpy` at `guest.cpu: v3`. The programs of such an image end
+  with a segfault in `libc-2.28.so`. `hydo build` warns when an image needs the key.
 - **Memory.** Every service together must fit in `guest.ram_mib` (at most 8192 MiB). Cap heaps
   and caches explicitly (JVM `-Xmx`, database buffer pools, Redis `maxmemory`). The host needs
   that much free memory for every guest that runs at once. `hydo run` refuses a guest that does
@@ -66,8 +67,8 @@ Check each item and report what you found.
 - **Python services and tests.** An image gives every file one fixed time, so Python's bytecode
   caches (`__pycache__/*.pyc`) look stale and Python compiles every module again in every run.
   That costs guest time and can print a warning, which a test suite with warnings as errors
-  turns into failures. Set `root.fix_pyc: true` (`hydo guide manifest`, section
-  `Python bytecode`).
+  turns into failures. `root.fix_pyc` (on by default since fingerprint epoch 2) rewrites the
+  caches to match (`hydo guide manifest`, section `Python bytecode`).
 - **Wall clock in data.** Timestamps in payloads or keys make runs differ when the clock is
   stepped; derive values from `$HYDO_CMD_ID` or `$HYDO_SEED` instead. Expiry, TTL, or lease
   logic is affected by clock-jump faults on purpose: note it as a target, not as a hazard. If a

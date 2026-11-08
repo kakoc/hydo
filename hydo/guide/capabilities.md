@@ -41,7 +41,7 @@ is Rust programs only and needs no Python.
 | `guest.clock_after_cut`, `guest.outcomes_after_cut` | yes | yes | yes |
 | `services[].start_after`, `services[].logs`, `root.fix_pyc` | yes (not run on hvx yet) | yes (not run on kvm yet) | yes |
 | `guest.cpu: v3` (AVX/AVX2) | yes | yes (on a host with AVX2; `hydo doctor --backend kvm` says) | no (arm64) |
-| `guest.cpu_cache` (the CPUID cache leaves) | yes (a module from Milestone 203 on) | yes | ignored (arm64) |
+| `guest.cpu_cache` (the CPUID cache leaves; on by default for images built at fingerprint epoch 2) | yes (a module from Milestone 203 on) | yes | ignored (arm64) |
 | `params:` (build variants, `hydo build --set k=v`) | yes | yes | yes |
 | `addr:` and link faults between services | yes | yes | yes (second guest kernel) |
 | `network: bridge` (a network namespace per service) | yes | yes | yes (second guest kernel) |

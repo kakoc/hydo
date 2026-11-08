@@ -62,16 +62,16 @@ It stops with a message that names the file when the file is missing (M151).
 - The regression suite: run `hv/hvx/deploy-metal.sh [load] [flagships]` from the Mac. It syncs the
   userspace sources and the Rust workspace to `~/$HVX_METAL_TREE` (default `hydo`), builds there,
   runs the module tests and the two pinned reproducers through `hvx-run`, and compares each result
-  with its baseline. Its last run printed `ALL PASS (33 checks)`. Since M192 it also runs
-  `hvx_hugeram_test 8192` (RAM hash `b71aaf1096f96f02`) and since M203 `hvx_cpucache_test`, which
-  needs a module with `HVX_VM_CPU_CACHE` (open item 72), so its next run prints 35 checks.
+  with its baseline. It runs `hvx_hugeram_test 8192` (RAM hash `b71aaf1096f96f02`, M192) and
+  `hvx_cpucache_test` (M203). Its last run printed `ALL PASS (35 checks)` (M204).
   - It syncs `hvx.c` and `hvx_abi.h` only with `load`, which also rebuilds and reloads the main
     module. `load` refuses when `~/bin/hvx-reload` does not build in `~/$HVX_METAL_TREE/hv/hvx`.
   - `flagships` also runs every real-service verify.
-- The main module loaded now is M179's: guest RAM up to 8 GiB, with M156's PMU-clock guard. Its
-  srcversion is `869F246124D8A3F84879E74`. The user loaded it on 2026-11-08 with
-  `deploy-metal.sh load`. The earlier modules are in `docs/HISTORY.md` (Milestones 140, 156 and
-  187).
+- The main module loaded now is M203's: guest RAM up to 8 GiB, M156's PMU-clock guard, and the
+  CPUID cache leaves (`HVX_VM_CPU_CACHE`, `HVX_GET_CAPS`). Its srcversion is
+  `91D86B693F4D4035C368F9B`. The user reloaded it on 2026-11-08 from `main` at `8bcf6dc6`, and
+  `deploy-metal.sh` printed `ALL PASS (35 checks)`. The earlier modules are in `docs/HISTORY.md`
+  (Milestones 140, 156, 187 and 204).
 - Rust: run `. ~/hydo-rust/env.sh` first (rustup with Rust 1.90.0 and the musl target). Build the
   run engine in a tree with `cargo build --release -p hydo-hvx`.
 - Nix (since M140): run `. ~/hydo-nixb-work/nixenv.sh` to put Nix 2.18.9 and the pinned nixpkgs
@@ -167,11 +167,14 @@ These rules are in force. Do not break them.
 - Keep existing fingerprints stable. A new module feature must be opt-in and inert when off, so
   that every recorded baseline stays the same. Check this with `deploy-metal.sh` and the pinned
   reproducers before and after the change.
-- The fingerprint epoch rule. `hydo_image::EPOCH` (now 1, since M155) names the generation of
-  fingerprints. Raise it by one in the same commit as any change that moves a recorded
-  fingerprint. Such changes are changes of an engine, the host controller, the agent pin or the
-  guest kernels. Add a section of `docs/REBASELINE.md` that names the new epoch. Runs of one epoch
-  compare fingerprints. Runs of different epochs compare only verdicts.
+- The fingerprint epoch rule. `hydo_image::EPOCH` (now 2, since M204; 1 from M155) names the
+  generation of fingerprints. Raise it by one in the same commit as any change that moves a
+  recorded fingerprint. Such changes are changes of an engine, the host controller, the agent pin
+  or the guest kernels, or of a default that an image's run depends on. Add a section of
+  `docs/REBASELINE.md` that names the new epoch. Runs of one epoch compare fingerprints. Runs of
+  different epochs compare only verdicts. A default that changes with an epoch is keyed on the
+  epoch in the image's record (`hydo_image::defaults`), so that an image built before keeps
+  running as it did.
 
 ## Language policy
 
@@ -256,13 +259,15 @@ The prepared material (release notes, the Homebrew formula, the release-index li
 release `skill-v1.2.0`) is in `hydo/dist/out/0.3.0/prepared/`. The checks and the publishing
 steps are in `docs/HISTORY.md` Milestone 190.
 
-**Fingerprints.** The fingerprint epoch is 1. The pinned reproducers are
-`disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` under `hydo run`: `1dc3677fb94053cf`
-(VIOLATION, order 11) on `explore-ob-stack-old-disk.img` and `ba0aa0612502a1df` (OK) on
-`explore-ob-stack-fix-disk.img`, in `~/hydo/build/m155` on the bare-metal machine.
-`hydo/onboard/examples/stack/build-reproducers.sh` rebuilds both images. Every recorded example
-value is in `hydo/onboard/recorded.json`, and `hydo-bench rebaseline` checks or re-records them
-(`docs/REBASELINE.md` "How to re-baseline").
+**Fingerprints.** The fingerprint epoch is 2 (M204; 1 from M155). The pinned reproducers are
+`disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` under `hydo run`: `a76d7fe857fdb37c`
+(VIOLATION, order 11) on `explore-ob-stack-old-disk.img` (`dab0e76c…`) and `efbde7b57264be0f`
+(OK) on `explore-ob-stack-fix-disk.img` (`d61cbf00…`), in `~/hydo/build/m204` on the bare-metal
+machine. Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
+`ba0aa0612502a1df` under this hydo, because an image keeps the defaults of its own epoch
+(`hydo_image::defaults`). `hydo/onboard/examples/stack/build-reproducers.sh` rebuilds both
+images. Every recorded example value is in `hydo/onboard/recorded.json`, and `hydo-bench
+rebaseline` checks or re-records them (`docs/REBASELINE.md` "How to re-baseline").
 
 **The hvx engine.** The module (`hv/hvx/hvx.c`, ABI `hvx_abi.h`) boots Linux 6.6.35
 deterministically, with guest RAM up to 8 GiB. Its clock counts VM exits, or the guest's retired
@@ -284,21 +289,22 @@ x86-64-v2 level, or at x86-64-v3 for `guest.cpu: v3` on a host whose KVM has AVX
 Its fingerprints are its own and differ between CPU vendors; the verdicts are the same. Details:
 `docs/design/kvm-engine.md`, Milestones 159, 161, 175 and 189, and open item 45 in
 `docs/HISTORY.md` Milestone 187. Some guest loops make no VM exits and store to memory, for
-example TigerBeetle's polling of io_uring. They run with the opt-in prototype
-`HYDO_KVM_SPIN_STATE=1`, which proves such a loop by the whole vCPU state and a dirty-page compare
-(M194; `hydo/explore/RESEARCH-kvm-exit-free.md`). With it off, every recorded KVM value is
-unchanged. With it on, TigerBeetle's single replica gives one fingerprint per schedule on Intel
-and on three AMD EPYC models.
+example TigerBeetle's polling of io_uring. The full-state cycles prove such a loop by the whole
+vCPU state and a dirty-page compare (M194; `hydo/explore/RESEARCH-kvm-exit-free.md`). With them
+TigerBeetle's single replica gives one fingerprint per schedule on Intel and on three AMD EPYC
+models. Since the fingerprint epoch 2 (M204) they are on by default. Every KVM fingerprint now
+leaves out what KVM keeps of a finished event. `HYDO_KVM_SPIN_STATE=0` turns the cycles off. An
+image built at epoch 1 runs as it did then (`hydo-kvm --image-epoch 1`).
 
-**The CPU's caches (M203).** By default the guest's CPUID describes no caches
-on hvx and KVM. The key `guest.cpu_cache: true` is a format-1 addition and is off by default. It
-makes the CPUID leaves 2, 4 and `0x80000006` describe one fixed hierarchy: 32 KiB L1 data and
-instruction caches, a 256 KiB L2, and an 8 MiB L3. The values are the same on every host and on
-both engines. Without the key, the glibc 2.28 of Red Hat Enterprise Linux 8 and its rebuilds
-crashes in its AVX `memcpy` at `guest.cpu: v3`. On hvx the key needs the module flag
-`HVX_VM_CPU_CACHE` and the ioctl `HVX_GET_CAPS`. Only the side module `hvxcc` has them until the
-user reloads the main module (open item 72). The details are in the section "The CPU's caches"
-of `hydo/onboard/MANIFEST.md` and in `docs/HISTORY.md` Milestone 203.
+**The CPU's caches (M203, the default since M204).** The key `guest.cpu_cache` (a format-1
+addition) makes the CPUID leaves 2, 4 and `0x80000006` describe one fixed hierarchy on hvx and
+KVM. It has 32 KiB L1 data and instruction caches, a 256 KiB L2, and an 8 MiB L3. The values are
+the same on every host and on both engines. Without it, the glibc 2.28 of Red Hat Enterprise
+Linux 8 and its rebuilds crashes in its AVX `memcpy` at `guest.cpu: v3`. It is on for x86_64
+images built at the fingerprint epoch 2 and later, and `false` turns it off. An image built at
+epoch 1 keeps it off unless its manifest says `true`. On hvx it needs the module flag `HVX_VM_CPU_CACHE` and the
+ioctl `HVX_GET_CAPS`, which the main module has since 2026-11-08. The details are in the section
+"The CPU's caches" of `hydo/onboard/MANIFEST.md` and in `docs/HISTORY.md` Milestones 203 and 204.
 
 **Guest control.** Every image is an agent image. The guest agent `hydo-agent` (0.3.0) is PID 1
 and runs only primitives. The host controller (`hydo/crates/hydo-control`) drives services,
@@ -343,9 +349,13 @@ Rust SDK records with `hydo_assert::history::messages`. Reference: `hydo guide m
 **Format-1 additions of M202.** `services[].start_after: started` starts a cluster's members
 before their readiness checks run. `services[].logs` names a service's own log files for the
 diagnosis and `hydo inspect logs`. `root.fix_pyc` makes Python's bytecode caches match the image's
-fixed file time; it is opt-in. With `guest.clock_after_cut`, a `cf=` cut now carries the first
+fixed file time; it is on by default since the fingerprint epoch 2 (M204), and `false` turns it
+off. With `guest.clock_after_cut`, a `cf=` cut now carries the first
 boot's clock too. `hydo init` and `hydo compose` write `guest.clock_start` as the day they ran
-(`HYDO_INIT_CLOCK_START`). Details: `docs/HISTORY.md` Milestone 202.
+(`HYDO_INIT_CLOCK_START`). Details: `docs/HISTORY.md` Milestone 202. Since M204 `hydo compose`
+writes `start_after: started` for Compose's short form of `depends_on` too (Compose's meaning,
+`service_started`), and it prints how each service starts and why. A service's `restart:` policy
+is in force from its start: a process that ends during its readiness check is started again.
 
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
@@ -443,10 +453,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 44. [user decision] License compliance: the sources archives must stay available; three SPDX
     expressions are approximations; a lawyer's review is open (M158).
 45. The KVM engine: one vCPU only. On AMD, RDRAND, RDSEED and TSX cannot be made to fault, so a
-    guest program that uses them without checking CPUID sees the host (M159, M161).
-    `HYDO_KVM_SPIN_STATE` stays off until its proof is reviewed. The user decided (2026-11-08)
-    to turn it on together with a default fingerprint without KVM's stale event fields, in one
-    re-recording. A loop that counts in memory is still never proven (M194).
+    guest program that uses them without checking CPUID sees the host (M159, M161). A loop that
+    counts in memory is still never proven (M194). The full-state cycles and the fingerprint
+    without KVM's stale event fields are the default since M204 (h closed); the epoch-2 values
+    have not run on an AMD host yet.
 46. Homebrew: no Linux formula (M168).
 47. The install cache: no pruning; the Linux side ran only against a local server (M162).
 48. [user decision] The Rust test SDK is unpublished until the user decides about code-first
@@ -464,14 +474,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 58. `tls:` and `writable:` were not run on hvx or arm64 (M180).
 60. Ready-made SQL workloads: the MySQL dialect and arm64 ran only in unit tests (M182).
 61. Storage faults: `L=` keeps writes the disk had not flushed (M183).
-62. [user decision] `guest.outcomes_after_cut` stays opt-in until an epoch change (M184).
+62. [user decision] `guest.outcomes_after_cut` stays opt-in until an epoch change (M184). The
+    epoch 2 (M204) did not take it in: it was not among the defaults the user named.
 63. [user decision] Trusted publishing needs the user's one-time setup on GitHub, crates.io, PyPI
     and npm. The npm entry expires after two days unused, so add it just before a release. No
     run of `release.yml` or `packages.yml` has happened yet. A crate new to `cargo install hydo`
     needs its first version published by hand (M186).
 64. YugabyteDB showed that the explorer never cuts links between peers of one cluster (M193).
     The readiness deadlock, the logs outside stdout and the `cf=` recovery clock are fixed (M202);
-    the empty CPUID cache leaves have the opt-in `guest.cpu_cache` (M203).
+    the empty CPUID cache leaves have `guest.cpu_cache` (M203, the default since M204).
 65. [user decision] Two identity-corpus schedules keep "the last token wins": a second `N=` on
     one target and a second `T=`. Refusing them, or applying several clock steps, re-records one
     case each. Also left: `G=` and `L=` lists, `O=` partitions, several `N=` windows at once, a
@@ -488,18 +499,20 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 69. The KVM engine gave two fingerprints for one Ghost schedule
     (`H=mailgun.messages@0-12:status=500,effect=yes`) with the same transcript, consoles and
     verdict; not investigated (M200).
-70. [user decision] `root.fix_pyc` is opt-in. On by default it would move the recorded voting
-    images (`hvm/voting` holds 803 such caches; the three x86_64 voting images were not
-    scanned) (M202).
 71. The `cf=` clock carry of `guest.clock_after_cut` ran only on the scripted engine; hvx, the
     one engine that applies `cf=`, did not run it. `start_after: started` ran on the Mac only
-    (M202).
-72. [user decision] The main `hvx.ko` lacks M203's `HVX_VM_CPU_CACHE`. An image with
-    `guest.cpu_cache: true` refuses to run on it, naming the module. After the merge into `main`,
-    tell the other sessions and run `hv/hvx/deploy-metal.sh load` from the Mac's main checkout. It
-    builds and reloads the module from `~/hydo/hv/hvx` and expects `ALL PASS (35 checks)` (M203).
-73. [user decision] `guest.cpu_cache` stays opt-in. Making it the default moves every recorded
-    x86_64 fingerprint, so it needs a fingerprint epoch bump and a re-baseline (M203).
+    (M202). The restart of a service that ends during its readiness check ran only on the
+    scripted engine (M204).
+74. [user decision] At the fingerprint epoch 2 the CPUID cache leaves change the guest's timing
+    on hvx, and three recorded verdicts changed. `hvx/etcd-3.5.5` `K=etcd1@10+1 P=etcd3@26+1`
+    went from VIOLATION to OK. `hvx/miniflux` `P=postgres@10~50:4000` went from OK to VIOLATION
+    (acked c14 missing from the API). `hvx/stack-errors-fix` `disk=ioerr:5` still ends in ERROR,
+    but the restart of redis fails instead of mysql's.
+    Built with `guest.cpu_cache: false` the first two give the recorded verdicts. The list keeps
+    their epoch-1 values, so `hydo-bench rebaseline --check` on hvx reports them. Decide: accept
+    them (`--write --accept-verdicts`), find new schedules for the etcd and miniflux symptoms, or
+    give those examples `guest.cpu_cache: false`. Until then the hvx check of the list fails on
+    these three (M204).
 
 ## Milestone index
 
@@ -726,11 +739,17 @@ build machine, before 2026-10-13.
 - M203: `guest.cpu_cache` makes CPUID describe a fixed cache hierarchy on hvx (the module flag
   `HVX_VM_CPU_CACHE`, on a side module until the main module is reloaded) and on KVM. With it,
   AlmaLinux 8's glibc copies work at v3. It is opt-in, and nothing recorded moved
+- M204: the fingerprint epoch 2. `guest.cpu_cache` and `root.fix_pyc` are on by default, the
+  KVM engine's full-state cycles too, and its fingerprint drops KVM's stale event fields. Compose's
+  short-form `depends_on` imports as `start_after: started`, and restart policies hold from a
+  service's start. An image built at epoch 1 keeps its defaults. Every example is re-recorded; on
+  hvx three timing-sensitive verdicts changed with the cache leaves (open item 74)
 
 ## Where to look
 
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.
-- `docs/REBASELINE.md`: the recorded fingerprints by section; section 13 is epoch 1.
+- `docs/REBASELINE.md`: the recorded fingerprints by section; section 13 is epoch 1, section 19
+  is epoch 2.
 - `docs/BUILD-PINS.md`: the pinned toolchain and guest programs.
 - `docs/CI.md`: what CI runs, where, and how long it takes.
 - `docs/RELEASING.md` and `docs/PUBLISHING.md`: the release and publishing steps.

@@ -17,7 +17,8 @@
 # Every command that opens /dev/hvx runs under ~/bin/hvx-run (shared flock), so a concurrent
 # module reload waits for running VMs instead of killing them. Guest images are expected in
 # ~/hydo/build on the bare-metal machine (built on the build machine, shipped with rsync); the pinned reproducers'
-# images in ~/hydo/build/m155 (hydo/onboard/examples/stack/build-reproducers.sh; rebuilt with the image record in M155). The run engine
+# images in ~/hydo/build/m204 (hydo/onboard/examples/stack/build-reproducers.sh; rebuilt at the fingerprint
+# epoch 2 in M204, which turns the CPUID cache leaves on: the module needs HVX_VM_CPU_CACHE). The run engine
 # and `hydo` are built with the bare-metal machine's Rust (~/hydo-rust/env.sh) in ~/$HVX_METAL_TREE (cargo build
 # --release -p hydo-hvx -p hydo).
 # The bare-metal machine is reached through machines.local.sh (machines.sh at the repository root).
@@ -163,11 +164,11 @@ cp ~/$TREE/target/release/hydo $P/bin/hydo
 ln -s $B/bzImage $P/guest/bzImage; ln -s $B/initramfs-kafka.cpio.gz $P/guest/initramfs-kafka.cpio.gz
 ln -s $R $P/libexec/hvx-run
 S="disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24"
-for p in explore-ob-stack-old-disk.img:1dc3677fb94053cf explore-ob-stack-fix-disk.img:ba0aa0612502a1df; do
+for p in explore-ob-stack-old-disk.img:a76d7fe857fdb37c explore-ob-stack-fix-disk.img:efbde7b57264be0f; do
   img=${p%%:*}; want=${p##*:}
   n=0; while [ $n -lt 1800 ] && [ "$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)" -lt 6144 ]; do sleep 30; n=$((n+30)); done
   o=/var/tmp/deploy-metal-pin-$img; rm -rf "$o"
-  out=$(HYDO_HVX_RUN=$R HYDO_HVX_EXPLORE=~/$TREE/target/release/hydo-hvx timeout 1800 $P/bin/hydo run $B/m155/$img "$S" --out "$o" 2>&1); rc=$?
+  out=$(HYDO_HVX_RUN=$R HYDO_HVX_EXPLORE=~/$TREE/target/release/hydo-hvx timeout 1800 $P/bin/hydo run $B/m204/$img "$S" --out "$o" 2>&1); rc=$?
   check "pinned $img" "$rc" "$(grep -a '^RESULT' <<< "$out" | grep -oE ' fp=[0-9a-f]{16}')" $want
 done
 

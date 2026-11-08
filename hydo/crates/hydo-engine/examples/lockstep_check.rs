@@ -459,6 +459,7 @@ fn main() {
         vcpus: 1,
         cpu: CpuLevel::V2,
         cpu_cache: false,
+        epoch: 2,
         kernel: PathBuf::from(&a[4]),
         initrd: Some(PathBuf::from(&a[5])),
         outdir: outdir.join("serve"),

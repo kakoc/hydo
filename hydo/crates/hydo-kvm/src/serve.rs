@@ -85,6 +85,10 @@ pub struct Start {
     pub outdir: std::path::PathBuf,
     /// `--ram-mib` (None: 1024)
     pub ram_mib: Option<u64>,
+    /// `--image-epoch`: the fingerprint epoch the image was built at (None: this hydo's, 2). An
+    /// image of epoch 1 runs as it did then (Milestone 204): no full-state cycles unless
+    /// HYDO_KVM_SPIN_STATE asks for them, and a fingerprint that keeps KVM's leftover event fields.
+    pub image_epoch: Option<u64>,
 }
 
 pub enum Mode {
@@ -1169,14 +1173,16 @@ pub fn vm_opts(o: &KvmOptions, disk: Option<&std::path::Path>) -> VmOpts {
             .unwrap_or(0.005),
         trace: o.trace.clone(),
         trace_unknown: o.trace_unknown,
-        spin_state: o.spin_state,
+        spin_state: o.spin_state.unwrap_or(true),
+        stale_events: false,
         cmdline: CMDLINE.to_string(),
         virtio: virt,
     }
 }
 
 /// The program's `main` over the given streams: `hydo-kvm [--ram-mib N] [--cpu v2|v3] [--cpu-cache
-/// on|off] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir> ["<schedule>"]`.
+/// on|off] [--image-epoch N] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir>
+/// ["<schedule>"]`.
 #[cfg(target_os = "linux")]
 pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
     let diag: Diag = Arc::new(Mutex::new(io.diag));
@@ -1187,8 +1193,25 @@ pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
     let mut ram_mib = None;
     let mut level = crate::cpuid::Level::V2;
     let mut cache = false;
-    while a.len() > 2 && (a[1] == "--ram-mib" || a[1] == "--cpu" || a[1] == "--cpu-cache") {
-        if a[1] == "--cpu-cache" {
+    let mut image_epoch = None;
+    while a.len() > 2
+        && (a[1] == "--ram-mib"
+            || a[1] == "--cpu"
+            || a[1] == "--cpu-cache"
+            || a[1] == "--image-epoch")
+    {
+        if a[1] == "--image-epoch" {
+            match a[2].parse::<u64>() {
+                Ok(n) if n >= 1 => image_epoch = Some(n),
+                _ => {
+                    say(
+                        &diag,
+                        &format!("hydo-kvm: --image-epoch {}: expected a number from 1", a[2]),
+                    );
+                    return 2;
+                }
+            }
+        } else if a[1] == "--cpu-cache" {
             match a[2].as_str() {
                 "on" => cache = true,
                 "off" => cache = false,
@@ -1229,7 +1252,7 @@ pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
         || (a[1] != "serve" && a[1] != "one")
         || (a[1] == "one" && argc < 7)
     {
-        say(&diag, "usage: hydo-kvm [--ram-mib N] [--cpu v2|v3] [--cpu-cache on|off] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir> [\"<schedule>\"]");
+        say(&diag, "usage: hydo-kvm [--ram-mib N] [--cpu v2|v3] [--cpu-cache on|off] [--image-epoch N] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir> [\"<schedule>\"]");
         return 2;
     }
     let sched = match a.get(6).map(String::as_str) {
@@ -1257,6 +1280,7 @@ pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
         disk: (a[4] != "-").then(|| a[4].clone().into()),
         outdir: a[5].clone().into(),
         ram_mib,
+        image_epoch,
     };
     let dev = o
         .dev
@@ -1315,6 +1339,10 @@ fn engine_main(
     let outdir = start.outdir.display().to_string();
     let _ = std::fs::create_dir(&outdir);
     let mut vo = vm_opts(o, start.disk.as_deref());
+    // what the image's own fingerprint epoch decides (Milestone 204; hydo_image::defaults)
+    let before_2 = start.image_epoch.is_some_and(|e| e < 2);
+    vo.spin_state = o.spin_state.unwrap_or(!before_2);
+    vo.stale_events = before_2;
     vo.ram_size = ram_mib << 20;
     if ram_mib != RAM_DEFAULT_MIB {
         say(&diag, &format!("hydo-kvm: guest RAM {ram_mib} MiB"));

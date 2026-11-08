@@ -136,7 +136,7 @@ I	hydo/onboard/examples/ghost/hydo/hydo-compose.lock.json	21b147617f25aa780aa92d
 I	hydo/onboard/examples/ghost/hydo/hydo.yaml	b259a222d54902f1615105decfa1874e897c916651a8207376c4825b648095fb
 I	hydo/onboard/examples/glibc-cache/docker-compose.yaml	f445eace219a913dba1799bc8d27895837bac5875f7791a712f2ccdb785a757c
 I	hydo/onboard/examples/glibc-cache/hydo-compose.lock.json	ca1c555da6fa5231b7dfa580638a90995d43cde218f998346c8414d26cdeecf9
-I	hydo/onboard/examples/glibc-cache/hydo-nocache.yaml	f5feae8b8f7e2a89c51083be600b5a39419f88bea63fbb02747a92d3192cf411
+I	hydo/onboard/examples/glibc-cache/hydo-nocache.yaml	be53f51ea2b3b915a93d8c9cdcf0be568aca3b717a2e59c5a9feaa83ecac6a2d
 I	hydo/onboard/examples/glibc-cache/hydo.yaml	3792407d2f5087d38119939c54ebf86dd3afdb80dc6905e580bf4c4ab4652732
 I	hydo/onboard/examples/libsql-replica/docker-compose.yaml	1b9c0366646ae37319431a9cdc23fc8faa31eb8c609243e07cde38fc7c760dc3
 I	hydo/onboard/examples/libsql-replica/hydo/hydo-compose.lock.json	6010fd9d507077e1e1b144102263136df0f779929405d10352fb3020d91eeb19
@@ -191,7 +191,7 @@ I	hydo/onboard/examples/yugabyte/bigtxn/hydo/hydo.yaml	1ee55745c9b0a1e49fb32a498
 I	hydo/onboard/examples/yugabyte/docker-compose.yaml	bff78dc0085f9c3cd9a420ae0e1a6bf823b14156b172821896c9665efc37089e
 I	hydo/onboard/examples/yugabyte/hydo/hydo-compose.lock.json	1e110be98e1441c646ccbeae82e3e640f2628d71f1fc52c4c288e546c0e7ff9d
 I	hydo/onboard/examples/yugabyte/hydo/hydo.yaml	2a7bd08e0f305646485929ca38f3550e53044b60b0977b0c7bb9e9fbdc661014
-I	hydo/onboard/recorded.json	b6cdc1a8942446baf3ad64facaf1df21f52a1545ba1f70b90115f549258f761a
+I	hydo/onboard/recorded.json	4a69748c8c5f90510a0f0cdc1a5c5a6f4796f725fc20396fa2b33d7980a84df1
 I	hydo/stack/grpc-hints.yaml	14affe885365284f669ce608060c39376e7f7a6ee42df7ad4f1f46334ee465c9
 I	sdk/cases/assert/always.json	60ca493f4722fd2400e8f95141732ee6eb470e1807e815733c103f41493d2de1
 I	sdk/cases/assert/always_or_unreachable.json	7daf932e0a7d183e433eb83541c085ba951dda333380aa52a21656e4eb0c4e53
@@ -4018,65 +4018,65 @@ R	^	<tmp>/mutants/m2936.json --arch x86_64 []	err	"hydo_version: the plan needs 
 R	^	<tmp>/mutants/m2937.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 0.2.x, this hydo is 0.3.0 …#9ec6530772942ce6"
 R	^	<tmp>/mutants/m2938.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 0.2.x, this hydo is 0.3.0 …#9ec6530772942ce6"
 R	^	<tmp>/mutants/m2939.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 0.2.x, this hydo is 0.3.0 …#9ec6530772942ce6"
-R	^	<tmp>/mutants/m2940.json --arch x86_64 []	err	"invariants[0]: missing required field 'id'"
-R	^	<tmp>/mutants/m2941.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#ce4e745026852a43"
-R	^	<tmp>/mutants/m2942.json --arch x86_64 []	ok	d:c7c33f70 w:4f53cda1 c:e911ea60 m:74234e98
-R	^	<tmp>/mutants/m2943.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#ce4e745026852a43"
+R	^	<tmp>/mutants/m2940.json --arch x86_64 []	err	"services[0] (alma): image: has no entry for x86_64"
+R	^	<tmp>/mutants/m2941.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2942.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2943.json --arch x86_64 []	err	"invariants[1]: duplicate id 'glibc.copies_work'"
 R	^	<tmp>/mutants/m2944.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2945.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2946.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2947.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: 'int' object is not iterable"
-R	^	<tmp>/mutants/m2948.json --arch x86_64 []	err	"faults: unknown kind 4096 (known: clock, corrupt, cut, disk,…#4af12eace0b2fe92"
-R	^	<tmp>/mutants/m2949.json --arch x86_64 []	err	"faults: unknown kind 'a' (known: clock, corrupt, cut, disk, …#4e7b1c6c1d4b95ee"
-R	^	<tmp>/mutants/m2950.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#ce4e745026852a43"
-R	^	<tmp>/mutants/m2951.json --arch x86_64 []	err	"services[0] (alma): image: keys are architectures (x86_64, arm64), not bogus"
-R	^	<tmp>/mutants/m2952.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
-R	^	<tmp>/mutants/m2953.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '5000')"
-R	^	<tmp>/mutants/m2954.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: 'int' object is not iterable"
-R	^	<tmp>/mutants/m2955.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
+R	^	<tmp>/mutants/m2945.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#7099e38c90ca56f1"
+R	^	<tmp>/mutants/m2946.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#ce4e745026852a43"
+R	^	<tmp>/mutants/m2947.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2948.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2949.json --arch x86_64 []	err	"guest.cpu_cache: true (the guest's CPUID describes its cache…#3b7dd22524f77271"
+R	^	<tmp>/mutants/m2950.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#7099e38c90ca56f1"
+R	^	<tmp>/mutants/m2951.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#7099e38c90ca56f1"
+R	^	<tmp>/mutants/m2952.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#ce4e745026852a43"
+R	^	<tmp>/mutants/m2953.json --arch x86_64 []	err	"workload.steps: between 1 and 1000"
+R	^	<tmp>/mutants/m2954.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2955.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#7099e38c90ca56f1"
 R	^	<tmp>/mutants/m2956.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2957.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2958.json --arch x86_64 []	err	"services[0]: must be a mapping"
+R	^	<tmp>/mutants/m2957.json --arch x86_64 []	err	"top level: missing required field 'name'"
+R	^	<tmp>/mutants/m2958.json --arch x86_64 []	err	"invariants[0]: unknown field(s) A (known: after, cmd, descri…#a5353e92d8c09df3"
 R	^	<tmp>/mutants/m2959.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#ce4e745026852a43"
-R	^	<tmp>/mutants/m2960.json --arch x86_64 []	err	"workload: field 'steps' must be a int"
-R	^	<tmp>/mutants/m2961.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2962.json --arch x86_64 []	err	"workload.steps: {{p}} is not a declared parameter"
-R	^	<tmp>/mutants/m2963.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2964.json --arch x86_64 []	err	"workload: required (steps + run)"
-R	^	<tmp>/mutants/m2965.json --arch x86_64 []	err	"invariants[0]: unknown field(s) 1 (known: after, cmd, descri…#00c9c43dd7016e39"
-R	^	<tmp>/mutants/m2966.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2967.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, proces…#cebd0249b1ab7fc7"
+R	^	<tmp>/mutants/m2960.json --arch x86_64 []	err	"services[0]: field 'ready' must be a str"
+R	^	<tmp>/mutants/m2961.json --arch x86_64 []	err	"guest.cpu: v2 (the default: x86-64-v2, no AVX) or v3 (adds A…#803e5988ede8dbf2"
+R	^	<tmp>/mutants/m2962.json --arch x86_64 []	err	"invariants[0].id: {{p}} is not a declared parameter"
+R	^	<tmp>/mutants/m2963.json --arch x86_64 []	err	"invariants[0]: missing required field 'cmd'"
+R	^	<tmp>/mutants/m2964.json --arch x86_64 []	err	"services[0]: must be a mapping"
+R	^	<tmp>/mutants/m2965.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '127.0.0.1')"
+R	^	<tmp>/mutants/m2966.json --arch x86_64 []	err	"invariants[0]: field 'cmd' must be a str"
+R	^	<tmp>/mutants/m2967.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
 R	^	<tmp>/mutants/m2968.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2969.json --arch x86_64 []	err	"services[0]: missing required field 'name'"
+R	^	<tmp>/mutants/m2969.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m2970.json --arch x86_64 []	err	"invariants[0]: unknown field(s) freeze, kill (known: after, …#5124c0d22533b474"
-R	^	<tmp>/mutants/m2971.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.3.0…#d777bb138abb2d5b"
+R	^	<tmp>/mutants/m2971.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m2972.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2973.json --arch x86_64 []	err	"workload: field 'steps' must be a int"
-R	^	<tmp>/mutants/m2974.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2975.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got 'A b')"
-R	^	<tmp>/mutants/m2976.json --arch x86_64 []	err	"services[0] (alma): image: a path to an OCI layout directory…#0c84cb6281491ec7"
-R	^	<tmp>/mutants/m2977.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2978.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m2979.json --arch x86_64 []	err	"services[0]: field 'ready' must be a str"
-R	^	<tmp>/mutants/m2980.json --arch x86_64 []	err	"data: unknown field(s) a, e, l, n, t, u, v, y (known: descri…#c81fef5701575c91"
-R	^	<tmp>/mutants/m2981.json --arch x86_64 []	ok	d:c7c33f70 w:4f53cda1 c:83ff0a9b m:74234e98
-R	^	<tmp>/mutants/m2982.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
-R	^	<tmp>/mutants/m2983.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2984.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m2985.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2973.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#7099e38c90ca56f1"
+R	^	<tmp>/mutants/m2974.json --arch x86_64 []	err	"workload: field 'run' must be a str"
+R	^	<tmp>/mutants/m2975.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2976.json --arch x86_64 []	err	"invariants[0]: unknown field(s) i, k, l (known: after, cmd, …#424d73701c1b1856"
+R	^	<tmp>/mutants/m2977.json --arch x86_64 []	ok	d:6ff80e89 w:4f53cda1 c:88418229 m:74234e98
+R	^	<tmp>/mutants/m2978.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2979.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: int object is not iterable"
+R	^	<tmp>/mutants/m2980.json --arch x86_64 []	err	"invariants[0]: unknown field(s) e (known: after, cmd, descri…#ba92769b7fdd968b"
+R	^	<tmp>/mutants/m2981.json --arch x86_64 []	err	"workload: missing required field 'run'"
+R	^	<tmp>/mutants/m2982.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2983.json --arch x86_64 []	err	"invariants[0]: unknown field(s) a, e, l, n, t, u, v, y (know…#79c3bd6c1ce51c49"
+R	^	<tmp>/mutants/m2984.json --arch x86_64 []	err	"invariants[0]: missing required field 'id'"
+R	^	<tmp>/mutants/m2985.json --arch x86_64 []	err	"guest.cpu: v2 (the default: x86-64-v2, no AVX) or v3 (adds A…#39049c897a9dc2c5"
 R	^	<tmp>/mutants/m2986.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2987.json --arch x86_64 []	err	"workload: required (steps + run)"
-R	^	<tmp>/mutants/m2988.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, depen…#ce4e745026852a43"
-R	^	<tmp>/mutants/m2989.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2990.json --arch x86_64 []	err	"invariants[0]: unknown field(s) x (known: after, cmd, descri…#8532948b04f8db6c"
-R	^	<tmp>/mutants/m2991.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m2992.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2993.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2994.json --arch x86_64 []	err	"services[0]: must be a mapping"
-R	^	<tmp>/mutants/m2995.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m2996.json --arch x86_64 []	err	"guest.cpu: v2 (the default: x86-64-v2, no AVX) or v3 (adds A…#1f5bff306724757a"
-R	^	<tmp>/mutants/m2997.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '-1')"
-R	^	<tmp>/mutants/m2998.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2987.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2988.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: buggify, checks, d…#7099e38c90ca56f1"
+R	^	<tmp>/mutants/m2989.json --arch x86_64 []	err	"invariants[0]: unknown field(s) 1 (known: after, cmd, descri…#00c9c43dd7016e39"
+R	^	<tmp>/mutants/m2990.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2991.json --arch x86_64 []	err	"invariants[0]: missing required field 'cmd'"
+R	^	<tmp>/mutants/m2992.json --arch x86_64 []	err	"services[0] (alma): image: a path to an OCI layout directory…#0c84cb6281491ec7"
+R	^	<tmp>/mutants/m2993.json --arch x86_64 []	err	"services[0]: name 'False' must match [a-z][a-z0-9_]* (it bec…#04c14e00cbfdacc9"
+R	^	<tmp>/mutants/m2994.json --arch x86_64 []	err	"data: unknown field(s) a, e, l, n, t, u, v, y (known: descri…#c81fef5701575c91"
+R	^	<tmp>/mutants/m2995.json --arch x86_64 []	err	"services[0] (alma): image: has no entry for x86_64"
+R	^	<tmp>/mutants/m2996.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
+R	^	<tmp>/mutants/m2997.json --arch x86_64 []	err	"services[0]: name '1' must match [a-z][a-z0-9_]* (it becomes a shell identifier)"
+R	^	<tmp>/mutants/m2998.json --arch x86_64 []	err	"services[0]: name '5000' must match [a-z][a-z0-9_]* (it beco…#fbf3e6f5d3bd04bd"
 R	^	<tmp>/mutants/m2999.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m3000.json --arch x86_64 []	err	"services[0] (alma): image: has no entry for x86_64"
 R	^	<tmp>/mutants/m3001.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
@@ -7528,8 +7528,7 @@ R	^	embedded <tmp>/mutants/m2860.json None	ok	d:d77cb8ac w:74234e98 c:74234e98 m
 R	^	embedded <tmp>/mutants/m2861.json None	ok	d:487cb1fd w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/mutants/m2869.json None	ok	d:59dbd637 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/mutants/m2879.json None	ok	d:86fcb7c5 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m2942.json None	ok	d:c7c33f70 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <tmp>/mutants/m2981.json None	ok	d:c7c33f70 w:74234e98 c:74234e98 m:74234e98
+R	^	embedded <tmp>/mutants/m2977.json None	ok	d:6ff80e89 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/mutants/m3016.json None	ok	d:cfccf324 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/mutants/m3180.json None	ok	d:f981344a w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <tmp>/mutants/m3181.json None	ok	d:058baba6 w:74234e98 c:74234e98 m:74234e98

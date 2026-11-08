@@ -705,9 +705,11 @@ struct Svc {
     addr: String,
     noaddr: bool,
     depends_on: Vec<String>,
-    /// `start_after: started` (every dependency in Compose's long form with condition
-    /// service_started).
+    /// `start_after: started`: Compose's short form of `depends_on`, or its long form with
+    /// condition service_started for every dependency (M202, M204).
     start_started: bool,
+    /// Why the service starts as it does, for the import's printed summary (M204).
+    start_why: String,
     setup: Option<String>,
     ready: String,
     ready_timeout: Option<i128>,
@@ -815,6 +817,40 @@ impl<'a> Importer<'a> {
 
     pub fn services(&self) -> usize {
         self.svcs.len()
+    }
+
+    /// One line per service: how hydo starts it and why (M204), in the start order `order` (the
+    /// names of the written manifest, `hydo_manifest::service_order`).
+    pub fn start_lines(&self, order: &[String]) -> Vec<String> {
+        order
+            .iter()
+            .filter_map(|n| self.svcs.iter().find(|s| s.name == *n))
+            .enumerate()
+            .map(|(i, s)| {
+                let how = if i == 0 {
+                    "starts first".to_string()
+                } else if s.start_started {
+                    format!(
+                        "starts once the services before it have started (start_after: started): {}",
+                        s.start_why
+                    )
+                } else if !s.start_why.is_empty() {
+                    format!(
+                        "starts when the services before it are ready (start_after: ready): {}",
+                        s.start_why
+                    )
+                } else {
+                    "starts when the services before it are ready (start_after: ready, the default; it has no depends_on)".to_string()
+                };
+                let restart = match s.restart.as_deref() {
+                    Some(r) if r != "no" => format!(
+                        "; restart: {r} also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)"
+                    ),
+                    _ => String::new(),
+                };
+                format!("{}: {how}{restart}", s.name)
+            })
+            .collect()
     }
 
     // ------------------------------------------------------------ top
@@ -1453,6 +1489,7 @@ impl<'a> Importer<'a> {
             noaddr: false,
             depends_on: Vec::new(),
             start_started: false,
+            start_why: String::new(),
             setup: None,
             ready: String::new(),
             ready_timeout: None,
@@ -1634,13 +1671,25 @@ impl<'a> Importer<'a> {
             self.hosts.push((ip, vec![h]));
         }
         // depends_on
+        // Compose's meaning (M204): the short form, and the long form's condition
+        // service_started, wait only until the dependency was started (start_after: started);
+        // service_healthy waits until it is ready (hydo's default, start_after: ready), and so
+        // does a service that names both kinds
         let dep = s.getn("depends_on").clone();
         let mut deps: Vec<String> = Vec::new();
         match &dep {
-            Y::Seq(a) => deps = a.iter().map(pstr).collect(),
+            Y::Seq(a) => {
+                deps = a.iter().map(pstr).collect();
+                svc.start_started = !deps.is_empty();
+                if svc.start_started {
+                    let ds = deps.join(", ");
+                    svc.start_why = format!(
+                        "depends_on {ds} in Compose's short form waits only until it has started"
+                    );
+                    svc.comments.push(format!("depends_on {ds} (short form: Compose's service_started): hydo starts it once the services before it have started, without waiting for their readiness (start_after: started)"));
+                }
+            }
             Y::Map(m) => {
-                // every dependency only started (Compose's long form, condition
-                // service_started): the service does not wait for readiness (start_after: started)
                 let cond_of = |c: &Y| {
                     if c.is_map() {
                         c.get("condition")
@@ -1652,11 +1701,18 @@ impl<'a> Importer<'a> {
                 };
                 svc.start_started =
                     !m.is_empty() && m.iter().all(|(_, c)| cond_of(c) == Y::s("service_started"));
+                let mut started = Vec::new();
+                let mut waits = Vec::new();
                 for (d, c) in m {
                     let ds = pstr(d);
                     deps.push(ds.clone());
+                    let cond = cond_of(c);
+                    if cond == Y::s("service_started") {
+                        started.push(ds.clone());
+                    } else {
+                        waits.push(format!("{ds} ({})", pstr(&cond)));
+                    }
                     if c.is_map() {
-                        let cond = cond_of(c);
                         if cond == Y::s("service_started") {
                             svc.comments.push(if svc.start_started {
                                 format!("depends_on {ds} (service_started): hydo starts it once {ds} has started, without waiting for its readiness (start_after: started)")
@@ -1669,6 +1725,14 @@ impl<'a> Importer<'a> {
                         }
                     }
                 }
+                svc.start_why = if svc.start_started {
+                    format!(
+                        "depends_on {} with condition service_started waits only until it has started",
+                        started.join(", ")
+                    )
+                } else {
+                    format!("depends_on {} waits until it is ready", waits.join(", "))
+                };
             }
             _ => {}
         }
@@ -2626,7 +2690,7 @@ impl<'a> Importer<'a> {
                 l.push_str(&format!("    depends_on: {}\n", flow_list(&s.depends_on)));
             }
             if s.start_started {
-                l.push_str("    start_after: started   # Compose's condition service_started: no wait for readiness\n");
+                l.push_str("    start_after: started   # Compose's service_started: no wait for readiness\n");
             }
             if let Some(st) = s.setup.as_ref().filter(|x| !x.is_empty()) {
                 l.push_str(&format!("    setup: {}\n", dumps_str(st)));
@@ -2951,10 +3015,13 @@ pub fn main_with_clock(
         hydo_manifest::validate_data(&mut m)?;
         hydo_manifest::service_order(&m["services"])
     });
-    if let Err(e) = check {
-        eprintln!("hydo-compose: internal error, the generated manifest is not valid: {e}");
-        return 3;
-    }
+    let order = match check {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("hydo-compose: internal error, the generated manifest is not valid: {e}");
+            return 3;
+        }
+    };
     let oabs = hydo_manifest::py::abspath(&out);
     let odir = hydo_manifest::py::dirname(&oabs);
     if let Err(e) = std::fs::create_dir_all(&odir) {
@@ -2979,6 +3046,9 @@ pub fn main_with_clock(
             eprintln!("hydo-compose: {}", ComposeError::os(e, imp.lock_path()));
             return 1;
         }
+    }
+    for l in imp.start_lines(&order) {
+        eprintln!("hydo-compose: {l}");
     }
     for (_, t) in &imp.w.list {
         eprintln!("hydo-compose: warning: {t}");

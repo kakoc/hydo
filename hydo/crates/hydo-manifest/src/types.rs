@@ -59,8 +59,10 @@ impl Run {
 pub struct Guest {
     pub ram_mib: u32,
     pub cpu: String,
-    /// `guest.cpu_cache` (M203): the guest's CPUID describes a fixed cache hierarchy.
-    pub cpu_cache: bool,
+    /// `guest.cpu_cache` (M203): the guest's CPUID describes a fixed cache hierarchy. None when
+    /// the manifest does not say: what that means depends on the fingerprint epoch the image was
+    /// built at (on from epoch 2 on x86_64, M204; `hydo_engine::image::cpu_cache_of`).
+    pub cpu_cache: Option<bool>,
     pub clock_start: Option<Value>,
     pub clock_after_cut: Option<i64>,
 }
@@ -75,7 +77,7 @@ impl Guest {
                 .and_then(Value::as_str)
                 .unwrap_or("v2")
                 .to_string(),
-            cpu_cache: get("cpu_cache").and_then(Value::as_bool).unwrap_or(false),
+            cpu_cache: get("cpu_cache").and_then(Value::as_bool),
             clock_start: get("clock_start").cloned(),
             clock_after_cut: i_of(get("clock_after_cut")),
         }

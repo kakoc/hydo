@@ -146,7 +146,8 @@ guest:
   outcomes_after_cut: true     # optional: after a power cut the recovery boot's $HYDO_OUTCOMES holds the first boot's last outcomes
   cpu: v3                      # guest CPU level (x86_64 only): v2 (default) = x86-64-v2, no AVX;
                                # v3 = adds AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE, XSAVE
-  cpu_cache: true              # optional (x86_64): CPUID describes the CPU's caches; see "The CPU's caches"
+  cpu_cache: false             # optional (x86_64): CPUID describes the CPU's caches (default true
+                               # since fingerprint epoch 2); see "The CPU's caches"
 
 network: bridge                # loopback (default): one network for everything in the guest;
                                # bridge: each service in its own network namespace at its addr:
@@ -165,10 +166,10 @@ root:                          # what goes on the read-only root filesystem
   share_images: true           # image services with the same image (config digest) share one
                                # unpacked tree, each on its own mount of it with its own /tmp,
                                # /data and mounts (default false: one copy per service)
-  fix_pyc: true                # Python bytecode caches (__pycache__/*.pyc that check their
+  fix_pyc: false               # Python bytecode caches (__pycache__/*.pyc that check their
                                # source's time) get the image's fixed file time, so Python uses
                                # them instead of compiling every module again in every run
-                               # (default false: such caches look stale; see "Python bytecode")
+                               # (default true since fingerprint epoch 2; see "Python bytecode")
 
 data:                          # the read-write disk, mounted on /data; the fault target
   size_mib: 512                # default 512
@@ -416,12 +417,13 @@ every run, which costs guest time, writes the cache again where the directory is
 can print a warning. A test suite that turns warnings into errors then fails (Milestone 202
 found it with flask's tests).
 
-`root.fix_pyc: true` (Milestone 202; default false) rewrites the header of every such cache in
-the image whose source is in the image: the recorded time becomes the image's fixed file time and
-the recorded size the source's size, so Python takes the cache as it is. It reaches the
-read-only root, the files of image services, and the writable layers of `writable: true`
-services. Hash-based caches (PEP 552) and caches without their source are left alone. The key is
-opt-in because it changes the bytes of every image that holds such caches.
+`root.fix_pyc` (Milestone 202) rewrites the header of every such cache in the image whose source
+is in the image: the recorded time becomes the image's fixed file time and the recorded size the
+source's size, so Python takes the cache as it is. It reaches the read-only root, the files of
+image services, and the writable layers of `writable: true` services. Hash-based caches (PEP 552)
+and caches without their source are left alone. It is on by default since fingerprint epoch 2
+(Milestone 204); `root.fix_pyc: false` builds the image with the caches as they are, as hydo did
+before. An image built before keeps the bytes it was built with.
 
 ### Restart policies (`services[].restart`)
 
@@ -437,10 +439,15 @@ keeps the behaviour hydo always had.
 | `on-failure` | it is started again when its exit status is not 0 (killed by a signal counts as a failure) |
 | `on-failure:<max>` | the same, at most `<max>` times in one boot (`on-failure:0`: no limit, as Docker) |
 
-- **When.** From the start of the workload (a run from S1, solo mode) and, in the recovery boot
-  after a power cut, once the services are up, until the verdict. Not while the image is being
-  provisioned (a service that dies then fails the start-up), and not after a power cut (nothing
-  is started while the machine is off).
+- **When.** From the service's start (Milestone 204): while hydo starts the services, at the
+  boot and in the recovery boot after a power cut, a service whose process ends during its
+  `ready:` check is started again as the policy says, so a service that crashes because a
+  dependency is not ready yet comes up as under Docker Compose. Those restarts share the check's
+  `ready_timeout`. Then from the start of the workload (a run from S1, solo mode) and, in the
+  recovery boot, once the services are up, until the verdict. Not while the image is being
+  provisioned after the services are up (a service that dies then fails the start-up), and not
+  after a power cut (nothing is started while the machine is off). A service that does not end
+  during its start sees the same commands as before Milestone 204.
 - **Delay.** Docker's: 100 ms of guest time before the first restart, doubled after each restart
   up to 60 s, and 100 ms again after a process that ran 10 s or more.
 - **Determinism.** The host controller sees the exit at a numbered stop, waits the delay with a
@@ -510,10 +517,14 @@ services:
 
 The recovery boot after a power cut starts the services the same way. The heal's restart pass
 (after the faults) restarts dead services one at a time, each with its readiness check. `hydo
-compose` writes `start_after: started` for a service whose `depends_on` is Compose's long form
-with `condition: service_started` for every dependency; the short form (a list of names) keeps
-the readiness wait. Without the key every service starts and is checked in turn, command for
-command as before.
+compose` writes `start_after: started` as Compose means `depends_on`: for its short form (a list
+of names, which Compose reads as `condition: service_started`) and for its long form with
+`condition: service_started` for every dependency (Milestone 204; before it the short form kept
+the readiness wait). A service with `condition: service_healthy` keeps the readiness wait. `hydo
+compose` prints, for each service, how it starts and why, and a service's restart policy is in
+force while it starts (see "Restart policies"), so a service that crashes because the service it
+depends on is not ready yet is started again, as under Docker. Without the key every service
+starts and is checked in turn, command for command as before.
 
 ### Variables every command sees
 
@@ -847,16 +858,18 @@ manifest without the key gets an empty file there, as before.
 
 ### The CPU's caches (`guest.cpu_cache`)
 
-By default the guest's CPUID describes no caches: leaf 2 has no descriptors, leaf 4 is empty and
-the highest extended leaf is 0x80000001 (on the KVM engine leaf 0x80000006 is zero). Most
-programs then use their own defaults. The glibc 2.28 of Red Hat Enterprise Linux 8 and its
+Without the cache leaves the guest's CPUID describes no caches: leaf 2 has no descriptors, leaf 4
+is empty and the highest extended leaf is 0x80000001 (on the KVM engine leaf 0x80000006 is zero).
+Most programs then use their own defaults. The glibc 2.28 of Red Hat Enterprise Linux 8 and its
 rebuilds (AlmaLinux 8, Rocky Linux 8, CentOS 8, UBI 8) does not: it takes 0 as its threshold for
 non-temporal copies. With `guest.cpu: v3` its AVX `memcpy` then fails at once, and the programs of
 such an image end with a segfault in `libc-2.28.so`. At v2 it uses another copy, which works.
 Measured on hvx with AlmaLinux 8.10: a Python copy test crashes at v3 and passes at v2.
 
-`guest.cpu_cache: true` makes CPUID describe one fixed cache hierarchy, the same on every host and
-on the hvx and KVM engines:
+`guest.cpu_cache` makes CPUID describe one fixed cache hierarchy, the same on every host and on the
+hvx and KVM engines. It is on by default for images built at fingerprint epoch 2 and later
+(Milestone 204); `guest.cpu_cache: false` turns it off. An image built before epoch 2 runs without
+the leaves unless its manifest says `true`, so it keeps its recorded fingerprints:
 
 | leaf | answer |
 |---|---|
@@ -871,11 +884,12 @@ on the hvx and KVM engines:
 
 With several vCPUs on hvx (`HVX_VM_SMP_BOOT`), every sub-leaf of leaf 4 also counts the vCPUs as
 cores of one package, and the L3 is shared by all of them. The key changes what the guest sees,
-so an image with it boots differently from the same image without it. That is why it is opt-in:
-every image built without the key keeps its recorded fingerprints. It is an x86_64 key; the Mac
+so an image with it boots differently from the same image without it. It was opt-in from
+Milestone 203 until the fingerprint epoch 2 made it the default; what an absent key means is
+taken from the epoch in the image's record (`/etc/hydo/image.json`). It is an x86_64 key; the Mac
 engine's arm64 guests ignore it. `hydo-build` warns when an image service has the Red Hat family's
 glibc 2.28 (`/usr/lib64/libc-2.28.so` and `/etc/redhat-release`) and the manifest has `guest.cpu:
-v3` without the key.
+v3` with `guest.cpu_cache: false`.
 
 On hvx the key needs a kernel module that knows it (`HVX_VM_CPU_CACHE`, Milestone 203). A run on
 an older module stops before the boot with "this hvx.ko ... does not give" the cache leaves. Load
@@ -1938,9 +1952,10 @@ FMA, BMI1/2, F16C, LZCNT, MOVBE and XSAVE (x87|SSE|AVX only, no AVX-512), which 
 binaries and images built for Haswell/Broadwell need.
 `hydo explore --cpu v3|v2` overrides it. Like the RAM size it is not in the schedule, so a hand run
 needs `--cpu v3` too (the report's repro line includes it). Without the key nothing changes.
-`guest.cpu_cache: true` adds `--cpu-cache on` to the engine's options in the same way (hvx flag
-`HVX_VM_CPU_CACHE`; on the KVM engine its table with the cache leaves). `hydo run`, `hydo repro`
-and `hydo explore` read it from the image's manifest.
+`guest.cpu_cache` (the default since fingerprint epoch 2) adds `--cpu-cache on` to the engine's
+options in the same way (hvx flag `HVX_VM_CPU_CACHE`; on the KVM engine its table with the cache
+leaves). `hydo run`, `hydo repro` and `hydo explore` read it from the image's manifest, and an
+absent key by the epoch in the image's record.
 
 Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/manifest.sh`
 (compiled), `/etc/hydo/prelude.sh` (env + shell helpers), `/etc/hydo/control` (`agent 1`: boot

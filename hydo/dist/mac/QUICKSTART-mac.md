@@ -108,7 +108,7 @@ an acknowledged key is gone after the power cut (`key k:0 lost`). That is Redis'
 `everysec` window, and the run reproduces it every time. Run either command again and the
 fingerprint (`fp=`) is the same. With the default `appendfsync always`, the same cut loses
 nothing: `hydo run "disk=cut | run C=12"` ends `OK` with `acked=12 all present`
-(`1785bbb72e7ffba2`).
+(`7147e75676d15194`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json` (in the folder under

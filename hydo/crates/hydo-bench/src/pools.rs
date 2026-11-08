@@ -85,6 +85,7 @@ impl Engines {
             vcpus: self.vcpus,
             cpu,
             cpu_cache,
+            epoch: hydo_engine::image::image_epoch(&self.build.join(image)).0,
             kernel: b.kernel,
             initrd: b.initrd,
             outdir: outdir.join("consoles"),
@@ -112,7 +113,8 @@ impl Engines {
 /// The guest's RAM, CPU level and CPU cache leaves from the manifest an image carries
 /// (`guest.ram_mib`, `guest.cpu`, `guest.cpu_cache`, as the explorer picks them for `--image`;
 /// M136: `list` on the onboarding examples needs them, the benchmark's own manifest has the
-/// defaults); 1024 MiB, v2 and no cache leaves for an image without the keys.
+/// defaults); 1024 MiB and v2 for an image without the keys, and the cache leaves as the image's
+/// fingerprint epoch decides (M204).
 fn guest_of(image: &Path) -> (u32, CpuLevel, bool) {
     let Ok(text) = hydo_engine::image::embedded_manifest(image) else {
         return (1024, CpuLevel::V2, false);
@@ -127,7 +129,11 @@ fn guest_of(image: &Path) -> (u32, CpuLevel, bool) {
     } else {
         CpuLevel::V2
     };
-    (ram, cpu, g["cpu_cache"].as_bool() == Some(true))
+    (
+        ram,
+        cpu,
+        hydo_engine::image::cpu_cache_of(image, g["cpu_cache"].as_bool()),
+    )
 }
 
 /// The host controller over `engine` for the agent image `image`; exits with the controller's

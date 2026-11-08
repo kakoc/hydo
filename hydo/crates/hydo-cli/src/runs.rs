@@ -99,7 +99,7 @@ pub fn engine_args(image: &Path, ram: Option<u64>, cpu: Option<String>, vcpus: u
         a.push("--cpu".to_string());
         a.push("v3".to_string());
     }
-    if g.cpu_cache {
+    if hydo_engine::image::cpu_cache_of(image, g.cpu_cache) {
         a.push("--cpu-cache".to_string());
         a.push("on".to_string());
     }
@@ -120,6 +120,9 @@ fn spec_from_args(
         vcpus: 1,
         cpu: CpuLevel::V2,
         cpu_cache: false,
+        // the image decides how the KVM engine runs it (M204), whatever arguments a recorded run
+        // carries
+        epoch: hydo_engine::image::image_epoch(image).0,
         kernel,
         initrd,
         outdir: outdir.to_path_buf(),

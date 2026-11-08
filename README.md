@@ -46,7 +46,7 @@ versions.
   OCI image (OCI is the open standard format of container images).
 - It explores. `hydo explore` generates schedules from seeds, runs each failure again to check
   that it reproduces, and shrinks it. In the Linux quickstart (section 3), an exploration of the
-  Redis example with 20 seeds found 11 failures in 14 seconds. All 11 are of the expected kinds:
+  Redis example with 20 seeds found 9 failures in 16 seconds. All 9 are of the expected kinds:
   a disk that drops writes, disk errors, and a relaxed sync setting. Each one reproduced.
 - It shows why a run failed. A failed run names the failing service and process, and
   `hydo inspect` opens a recorded run at any point to read its files, logs, and processes.
@@ -204,8 +204,8 @@ Each run prints one `RESULT` line. `verdict=` is the outcome, and `HYDO-ORACLE:`
 of the invariants. These two lines are from a recorded run on Linux, shortened at `…`:
 
 ```
-RESULT one fp=1893d8c55d7704d9 … verdict=HYDO-ORACLE: OK … (… acked=20 all present)
-RESULT one fp=3520af95868b4e8f … verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
+RESULT one fp=5ec14b8b4bdcf367 … verdict=HYDO-ORACLE: OK … (… acked=20 all present)
+RESULT one fp=9f8f90a7d14566df … verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 ```
 
 The power cut lost the keys from `k:1` on, which Redis had acknowledged (only `k:0` survived);
@@ -218,7 +218,7 @@ and compares the fingerprints:
 
 ```
 $ hydo repro hydo-out/runs/run-…
-REPRODUCED   run  fp=3520af95868b4e8f (recorded 3520af95868b4e8f)  disk=cut | run C=12 R=everysec
+REPRODUCED   run  fp=9f8f90a7d14566df (recorded 9f8f90a7d14566df)  disk=cut | run C=12 R=everysec
              HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under …)
 ```

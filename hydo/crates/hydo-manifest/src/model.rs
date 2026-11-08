@@ -699,11 +699,12 @@ pub struct Guest {
     #[schemars(extend("default" = "v2"))]
     pub cpu: Option<Param<CpuLevel>>,
     /// x86_64: the guest's CPUID describes a fixed cache hierarchy (32 KiB L1 data and
-    /// instruction caches, a 256 KiB L2, an 8 MiB L3), the same on every host and engine. Without
-    /// it the cache leaves are empty, and at cpu v3 the glibc 2.28 of Red Hat Enterprise Linux 8
-    /// and its rebuilds (AlmaLinux 8, Rocky Linux 8, UBI 8) crashes in memcpy.
+    /// instruction caches, a 256 KiB L2, an 8 MiB L3), the same on every host and engine. On by
+    /// default for images built at fingerprint epoch 2 and later; an image built earlier keeps it
+    /// off. false: the cache leaves are empty, and at cpu v3 the glibc 2.28 of Red Hat Enterprise
+    /// Linux 8 and its rebuilds (AlmaLinux 8, Rocky Linux 8, UBI 8) crashes in memcpy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(extend("default" = false))]
+    #[schemars(extend("default" = true))]
     pub cpu_cache: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
@@ -733,11 +734,12 @@ pub struct Root {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = false))]
     pub share_images: Option<bool>,
-    /// true: timestamp-checked Python bytecode caches (__pycache__/*.pyc) get the image's fixed
-    /// file time and their source's size in their header, so Python uses them instead of
-    /// compiling the sources again in every run. Off by default (it changes the image's bytes).
+    /// Timestamp-checked Python bytecode caches (__pycache__/*.pyc) get the image's fixed file
+    /// time and their source's size in their header, so Python uses them instead of compiling
+    /// the sources again in every run. On by default (images built at fingerprint epoch 2 and
+    /// later); false leaves the caches as the image has them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(extend("default" = false))]
+    #[schemars(extend("default" = true))]
     pub fix_pyc: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,

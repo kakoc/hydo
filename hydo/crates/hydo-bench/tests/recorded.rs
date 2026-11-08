@@ -33,9 +33,10 @@ fn reads_and_keeps_its_form() {
     // docs/REBASELINE.md 13.1 + 14 (67 Mac schedules on 19 images) and 13.4's Mac examples;
     // 13.2 (126 x86_64 schedules on 37 images) and 13.4's Linux examples; M159's KVM table;
     // since 0.3.0 the release example's `disk=cut | run C=12` on each engine (the quickstarts
-    // cite it) and the KVM exploration's third minimal schedule (REBASELINE.md section 18)
+    // cite it) and the KVM exploration's third minimal schedule (REBASELINE.md section 18); since
+    // the fingerprint epoch 2 the hvx exploration's new lying-disk minimal schedule (section 19)
     assert_eq!(count("hvm"), (21, 76));
-    assert_eq!(count("hvx"), (39, 132));
+    assert_eq!(count("hvx"), (39, 133));
     assert_eq!(count("kvm"), (4, 13));
     for i in &images {
         assert!(

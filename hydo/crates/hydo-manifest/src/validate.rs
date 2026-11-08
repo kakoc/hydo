@@ -765,7 +765,7 @@ pub fn validate(m: &mut Value) -> R<()> {
         let c = index(&guest, "cpu_cache")?;
         if !c.is_boolean() {
             return Err(err(format!(
-                "guest.cpu_cache: true (the guest's CPUID describes its caches; x86_64 only) or false (the default) (got {})",
+                "guest.cpu_cache: true (the guest's CPUID describes its caches; x86_64 only; the default) or false (got {})",
                 repr(c)
             )));
         }

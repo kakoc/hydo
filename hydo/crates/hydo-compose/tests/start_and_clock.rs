@@ -1,6 +1,7 @@
 //! Two things an import writes since Milestone 202: `start_after: started` for a service whose
-//! dependencies are all Compose's `condition: service_started` (long form), and an explicit
-//! `guest.clock_start` (the day of the import, or `HYDO_INIT_CLOCK_START`).
+//! dependencies are all Compose's `condition: service_started` (long form) or in Compose's short
+//! form (which means service_started; since Milestone 204), and an explicit `guest.clock_start`
+//! (the day of the import, or `HYDO_INIT_CLOCK_START`).
 
 use hydo_compose::registry::Registry;
 use std::path::PathBuf;
@@ -76,7 +77,10 @@ fn service_started_dependencies_start_without_waiting() {
         "the long form without a condition is service_started\n{m}"
     );
     assert!(!has("a"), "{m}");
-    assert!(!has("c"), "the short form keeps the readiness wait\n{m}");
+    assert!(
+        has("c"),
+        "the short form is Compose's service_started (M204)\n{m}"
+    );
     assert!(
         !has("d"),
         "one service_healthy keeps the readiness wait\n{m}"

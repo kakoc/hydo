@@ -257,28 +257,21 @@ const USER_PAGES: &[&str] = &[
 /// where it is recorded. Add a value here only with its source.
 const CITED_ELSEWHERE: &[(&str, &str)] = &[
     (
-        "1421b01fdc984975",
-        "wfp of the Redis example's clean run, recorded with fp 1893d8c55d7704d9 (Milestone 155)",
+        "30e74366625f3474",
+        "wfp of the Redis example's clean run on hvx, recorded with fp 5ec14b8b4bdcf367 \
+         (docs/HISTORY.md, Milestone 204)",
     ),
     (
-        "d38223b17189d9a9",
-        "ctl of the same run; docs/HISTORY.md, Milestone 155",
+        "c24534f57aab6d42",
+        "ctl of the same run; docs/HISTORY.md, Milestone 204",
     ),
     (
-        "fce0cfbd850a0e9d",
-        "wfp of the Redis power cut; hydo/crates/hydo-cli/tests/fixtures/inspect/cut/result.json",
+        "f4de09236076bc87",
+        "wfp of the Redis power cut on hvx, recorded with fp 9f8f90a7d14566df (Milestone 204)",
     ),
     (
-        "59ae8f3720816102",
-        "ctl of the Redis power cut; the same fixture",
-    ),
-    (
-        "93da6e186fe00d1a",
-        "KVM engine on AMD, Redis clean run; docs/HISTORY.md, open item 45 (Milestone 187)",
-    ),
-    (
-        "ea0afd368b0ab9b1",
-        "KVM engine on AMD, Redis power cut; the same open item",
+        "a98cc29af3d645f4",
+        "ctl of the Redis power cut; docs/HISTORY.md, Milestone 204",
     ),
 ];
 

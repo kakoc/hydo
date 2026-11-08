@@ -55,11 +55,39 @@ use std::path::{Path, PathBuf};
 pub const VERSION: u64 = 1;
 
 /// The fingerprint epoch of this hydo (see the crate documentation: increase it at every
-/// re-baseline).
-pub const EPOCH: u64 = 1;
+/// re-baseline). Epoch 2 (Milestone 204): `guest.cpu_cache` and `root.fix_pyc` on when absent,
+/// and the KVM engine's full-state cycles and fingerprint without KVM's leftover event fields
+/// ([`defaults`]).
+pub const EPOCH: u64 = 2;
 
 /// The epoch of a run, exploration or cache entry that recorded none (written before M155).
 pub const EPOCH_BEFORE_RECORDS: u64 = 1;
+
+/// What an image's own fingerprint epoch decides at run time (Milestone 204). The defaults that
+/// changed with an epoch are taken from the epoch the image was built at, so an image built
+/// before keeps running exactly as it did. An image without a record counts as
+/// [`EPOCH_BEFORE_RECORDS`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EpochDefaults {
+    /// What an absent `guest.cpu_cache` means for an x86_64 image: on from epoch 2.
+    pub cpu_cache: bool,
+    /// The KVM engine proves loops that store by the whole vCPU state (`HYDO_KVM_SPIN_STATE`,
+    /// Milestone 194) unless the variable says otherwise: from epoch 2.
+    pub kvm_full_state: bool,
+    /// The KVM fingerprint hashes what KVM keeps of an exception or interrupt it has finished
+    /// with (the leftovers of `KVM_GET_VCPU_EVENTS`, which depend on the host): before epoch 2.
+    pub kvm_stale_events: bool,
+}
+
+/// The defaults of an image built at `epoch` for `arch` (`x86_64` or `arm64`).
+pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
+    let two = epoch >= 2;
+    EpochDefaults {
+        cpu_cache: two && arch == "x86_64",
+        kvm_full_state: two,
+        kvm_stale_events: !two,
+    }
+}
 
 /// The image record's path inside the image's root (without the leading slash).
 pub const RECORD_PATH: &str = "etc/hydo/image.json";
@@ -333,7 +361,7 @@ mod tests {
     fn canonical_sorts_and_reads_back() {
         let r = kernels::record_for("x86_64", false);
         let t = canonical(&r);
-        assert!(t.starts_with("{\"arch\":\"x86_64\",\"epoch\":1,\"initrd\":{"));
+        assert!(t.starts_with("{\"arch\":\"x86_64\",\"epoch\":2,\"initrd\":{"));
         assert!(t.ends_with("}\n") && !t.contains(": "));
         assert_eq!(parse_record(&t).unwrap(), r);
         let mut v: Value = serde_json::from_str(&t).unwrap();
@@ -351,7 +379,14 @@ mod tests {
 
     #[test]
     fn epochs() {
-        assert_eq!(comparable(None), Compare::Fingerprints);
+        // a run without an epoch is from epoch 1, before this hydo's epoch 2 (M204)
+        assert_eq!(
+            comparable(None),
+            Compare::Verdicts {
+                recorded: EPOCH_BEFORE_RECORDS,
+                now: EPOCH
+            }
+        );
         assert_eq!(comparable(Some(EPOCH)), Compare::Fingerprints);
         assert_eq!(
             comparable(Some(EPOCH + 1)),
@@ -361,6 +396,18 @@ mod tests {
             }
         );
         assert!(other_epoch_note(1, 2).contains("not comparable"));
+    }
+
+    #[test]
+    fn epoch_defaults() {
+        // an image built at epoch 1 keeps every default it was built with (M204)
+        let one = defaults(1, "x86_64");
+        assert!(!one.cpu_cache && !one.kvm_full_state && one.kvm_stale_events);
+        let two = defaults(2, "x86_64");
+        assert!(two.cpu_cache && two.kvm_full_state && !two.kvm_stale_events);
+        // arm64 has no CPUID
+        assert!(!defaults(2, "arm64").cpu_cache);
+        assert_eq!(defaults(EPOCH, "x86_64"), two);
     }
 
     #[test]

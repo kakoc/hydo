@@ -146,7 +146,7 @@ and `hydo-agent`, plus a data partition. `hydo-agent` is a small program that is
 process and only carries out what the host tells it. Every decision (when to start Redis, when to
 inject a fault, when to check the invariant) is made by `hydo` on the host, which also records it.
 Building the same `hydo.yaml` again, on this or another machine, gives the same bytes (sha256
-`d255fb2bff5209bc…`). The image names the guest kernel it was built for, by sha256, in
+`668bf8adfdc64b2a…`). The image names the guest kernel it was built for, by sha256, in
 `/etc/hydo/image.json`. So a later hydo boots the same kernel, or says which one it needs. Next to
 the image, `explore-ob-redis-disk.img.json` records which hydo built it (version and commit) and
 the manifest's sha256.
@@ -163,8 +163,8 @@ hydo run "disk=cut | run C=12 R=everysec"
 Each prints the engine's `RESULT` line (shortened here):
 
 ```
-RESULT one fp=1893d8c55d7704d9 wfp=1421b01fdc984975 secs=0.4 stops=23608 typed=21 … ctl=d38223b17189d9a9 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)
-RESULT one fp=3520af95868b4e8f wfp=fce0cfbd850a0e9d secs=0.9 stops=24042 typed=30 … ctl=59ae8f3720816102 verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
+RESULT one fp=5ec14b8b4bdcf367 wfp=30e74366625f3474 secs=0.4 stops=23604 typed=21 … ctl=c24534f57aab6d42 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)
+RESULT one fp=9f8f90a7d14566df wfp=f4de09236076bc87 secs=0.9 stops=24042 typed=30 … ctl=a98cc29af3d645f4 verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 ```
 
 - `verdict=` is the outcome. `HYDO-ORACLE: OK` means every invariant held; `VIOLATION` names the
@@ -186,8 +186,8 @@ With Redis's default setting, `appendfsync always`, the same cut loses nothing:
 hydo run "disk=cut | run C=12"
 ```
 
-It ends `OK` with `acked=12 all present` (`5cfee0d955a38b78`; with `--backend kvm`
-`c5b4f7cbd0ec3ac7`).
+It ends `OK` with `acked=12 all present` (`f8af29d45e9502f8`; with `--backend kvm`
+`ff4fb00ab4f76b6b`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json`: `ok`, `violation`, or `error`.
@@ -203,7 +203,7 @@ Run either command again: the fingerprint is the same. Each run leaves a directo
 
 ```
 $ hydo repro hydo-out/runs/run-…
-REPRODUCED   run  fp=3520af95868b4e8f (recorded 3520af95868b4e8f)  disk=cut | run C=12 R=everysec
+REPRODUCED   run  fp=9f8f90a7d14566df (recorded 9f8f90a7d14566df)  disk=cut | run C=12 R=everysec
              HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under hydo-out/runs/run-…/repro-…)
 ```
@@ -246,10 +246,10 @@ For this example expect only these expected kinds:
 
 With the default settings and an honest disk, Redis loses nothing (the `disk=cut | run C=12`
 run of section 2). On the machine of section 2,
-the command took 14 s. It found 11 failures (io-errors 4, lying-disk 5, unsafe-knob 2), and all
+the command took 16 s. It found 9 failures (io-errors 4, lying-disk 3, unsafe-knob 2), and all
 of them reproduced. The two minimal schedules were
-`disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20` (`747a6fbfbceecaa3`) and
-`disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`89105a398516a2ea`).
+`disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`d3c11e15f3835b06`) and
+`disk=lying:2 dseed=17144527b62d669c | run C=17` (`32676d17c82aa953`).
 
 To re-run every failure of an exploration from a fresh boot and compare the fingerprints:
 
@@ -257,7 +257,7 @@ To re-run every failure of an exploration from a fresh boot and compare the fing
 hydo repro hydo-out/explore
 ```
 
-It ends `hydo: 13 of 13 reproduced with the recorded fingerprint` (the 11 failures and the 2
+It ends `hydo: 11 of 11 reproduced with the recorded fingerprint` (the 9 failures and the 2
 minimal schedules).
 
 ## 4. Network faults
@@ -271,7 +271,7 @@ hydo build hydo-netem.yaml
 hydo run --image hydo-out/explore-ob-redis-netem-disk.img "disk=none | run N=redis@3-6:delay,300ms"
 ```
 
-It ends `OK` with `retrans=0` (`0a706d74e43f2f4b`, image sha256 `bd4c979f8d6a448d…`): the
+It ends `OK` with `retrans=0` (`dc095cf7124dd3ac`, image sha256 `8a402198b0099369…`): the
 delayed packets were delivered when the fault was lifted. With two images in `hydo-out`, `hydo
 run` and `hydo explore` need `--image` to know which one you mean.
 
@@ -341,13 +341,13 @@ the same verdicts as with hvx, but they are counted differently:
 
 A host power cut at the k-th disk flush (`cf=`) and inserted ticks (`pp=`, `xt…`) are hvx's
 alone; the explorer draws the faults both engines apply. With the image of section 2, the two
-schedules end `OK` (`bfa03053d51bec8a`) and `VIOLATION … key k:1 lost` (`8ed16d6da60c34c6`), on
-an Intel Core i7-13700HX on both its performance and its efficiency cores. On AMD EPYC 9V45 and
-9V74 CPUs (GitHub's ubuntu-24.04 runners) they end with the same verdicts and the fingerprints
-`93da6e186fe00d1a` and `ea0afd368b0ab9b1`.
+schedules end `OK` (`b04d1932dfb20e09`) and `VIOLATION … key k:1 lost` (`1b61c2c7501a6f25`), on
+an Intel Core i7-13700HX on both its performance and its efficiency cores. AMD EPYC 9V45 and 9V74
+CPUs (GitHub's ubuntu-24.04 runners) gave the same verdicts with the images of hydo 0.3.0, and
+other fingerprints. A KVM fingerprint holds for one CPU vendor.
 
 On the Intel machine the exploration finds 11 failures, and its report gives three minimal
-schedules, one more than hvx's:
+schedules:
 
 - `disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20` (`lying-disk`, a lost key);
 - `disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`unsafe-knob`);

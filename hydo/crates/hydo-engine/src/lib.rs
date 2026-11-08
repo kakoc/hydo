@@ -180,8 +180,12 @@ pub struct BootSpec {
     /// Guest CPU level (hvx and KVM).
     pub cpu: CpuLevel,
     /// hydo.yaml `guest.cpu_cache` (M203): the guest's CPUID describes a fixed cache hierarchy
-    /// (hvx and KVM; default false: the cache leaves are zero, as before).
+    /// (hvx and KVM; false: the cache leaves are zero). The caller resolves an absent key by the
+    /// image's epoch (`image::cpu_cache_of`, M204).
     pub cpu_cache: bool,
+    /// The fingerprint epoch the image was built at (its record; `image::image_epoch`). The KVM
+    /// engine runs an image of epoch 1 as it did at epoch 1 (`--image-epoch 1`, M204).
+    pub epoch: u64,
     /// The guest kernel: hvx's bzImage, or hvm's arm64 `Image` (an image built for the second
     /// kernel records it; the caller resolves that with `hvm::kernel_for`).
     pub kernel: PathBuf,
@@ -225,6 +229,10 @@ impl BootSpec {
         if self.cpu_cache && matches!(kind, EngineKind::Hvx | EngineKind::Kvm) {
             a.push("--cpu-cache".to_string());
             a.push("on".to_string());
+        }
+        if self.epoch < 2 && kind == EngineKind::Kvm {
+            a.push("--image-epoch".to_string());
+            a.push(self.epoch.to_string());
         }
         a
     }

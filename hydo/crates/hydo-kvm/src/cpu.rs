@@ -95,9 +95,10 @@ impl CpuState {
     /// interrupt) KVM injected or re-injected even when nothing is injected or pending any more.
     /// A re-injection happens when a VM exit (an EPT fault, which the dirty-page log causes at
     /// writes) interrupts the delivery of the guest's own exception, so those leftovers depend on
-    /// the host; the guest never sees them. The fingerprint with HYDO_KVM_SPIN_STATE hashes this
-    /// form ([`crate::vmm::Vmm::xfp`]); the default fingerprint keeps hashing them, so that no
-    /// recorded value moves (docs/design/kvm-engine.md, "Loops that store").
+    /// the host; the guest never sees them. Every fingerprint hashes this form since the
+    /// fingerprint epoch 2 ([`crate::vmm::Vmm::xfp`], Milestone 204); an image built before is
+    /// fingerprinted with them, as it was then, unless the full-state cycles run
+    /// (docs/design/kvm-engine.md, "Loops that store").
     pub fn without_stale_events(&self) -> CpuState {
         let mut s = self.clone();
         let e = &mut s.events;

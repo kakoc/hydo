@@ -1,8 +1,8 @@
-# The control of hydo.yaml: the same project without guest.cpu_cache (Milestone 203). With
+# The control of hydo.yaml: the same project with guest.cpu_cache off (Milestone 203). With
 # guest.cpu: v3 that glibc's AVX memcpy takes its copy thresholds from the CPUID cache leaves,
-# and it fails at once when they describe no caches. guest.cpu_cache: true makes CPUID describe
-# a fixed cache hierarchy (MANIFEST.md "The CPU's caches"). This file leaves it out, so the
-# copy test fails.
+# and it fails at once when they describe no caches. guest.cpu_cache makes CPUID describe a
+# fixed cache hierarchy (MANIFEST.md "The CPU's caches"); it is on by default since the
+# fingerprint epoch 2 (Milestone 204). This file turns it off, so the copy test fails.
 #   sh fetch-images.sh            # almalinux:8.10 by digest (network, once)
 #   hydo build hydo-nocache.yaml --out .hydo-nocache
 #   hydo run .hydo-nocache/explore-ob-glibc-cache-nocache-disk.img "disk=none | run"
@@ -14,6 +14,7 @@ description: AlmaLinux 8's glibc 2.28 without the CPUID cache leaves (the contro
 guest:
   ram_mib: 1024
   cpu: v3           # AlmaLinux 8's glibc picks its AVX memcpy here
+  cpu_cache: false  # no CPUID cache leaves (before Milestone 204 the default)
 
 data:
   size_mib: 64
