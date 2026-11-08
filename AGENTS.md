@@ -309,6 +309,13 @@ maintainers: the shared cases, and the Go module with its frozen copy in `hydo/s
 test in its language (M188). The examples are in `hydo/onboard/examples/`;
 `hydo/onboard/MANIFEST.md` is the project format's reference.
 
+**Format-1 additions of M196.** `services[].start_after: started` starts a cluster's members
+before their readiness checks run. `services[].logs` names a service's own log files for the
+diagnosis and `hydo inspect logs`. `root.fix_pyc` makes Python's bytecode caches match the image's
+fixed file time; it is opt-in. With `guest.clock_after_cut`, a `cf=` cut now carries the first
+boot's clock too. `hydo init` and `hydo compose` write `guest.clock_start` as the day they ran
+(`HYDO_INIT_CLOCK_START`). Details: `docs/HISTORY.md` Milestone 196.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -421,6 +428,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     and npm. The npm entry expires after two days unused, so add it just before a release. No
     run of `release.yml` or `packages.yml` has happened yet. A crate new to `cargo install hydo`
     needs its first version published by hand (M186).
+64. [user decision] `root.fix_pyc` is opt-in. On by default it would move the recorded voting
+    images (`hvm/voting` holds 803 such caches; the three x86_64 voting images were not
+    scanned) (M196).
+65. The `cf=` clock carry of `guest.clock_after_cut` ran only on the scripted engine; hvx, the
+    one engine that applies `cf=`, did not run it. `start_after: started` ran on the Mac only
+    (M196).
 
 ## Milestone index
 
@@ -619,9 +632,12 @@ build machine, before 2026-10-13.
   `hydo-sql` in both releases, every example re-recorded, both releases built twice and verified)
 - M191: a plan of only `checks/` or `regressions/` keeps the manifest's own `workload.run` (before, its
   saved regressions passed without running it); `W=` is refused on such an image
-- M192 (tentative number): small fixes from the onboardings (`explore --schedule` without `dseed=`,
-  the diagnosis of a service that was down or did not come back after a power cut, a failing `.sql`
-  check's rows in the verdict, `hvx_hugeram_test` in `deploy-metal.sh`); nothing recorded moved
+- M192 (tentative number): small fixes from the onboardings. They cover `explore --schedule`
+  without `dseed=`, the diagnosis of a service that was down, a failing `.sql` check's rows, and
+  `hvx_hugeram_test` in `deploy-metal.sh`; nothing recorded moved
+- M196 (tentative number): seven fixes from the YugabyteDB onboarding: `start_after`, the `cf=`
+  clock carry, `logs:`, `clock_start` in new projects, `root.fix_pyc`, fixed `hydo inspect`
+  output names, and the Compose importer's header and fetch script; no recorded value moved
 
 ## Where to look
 
