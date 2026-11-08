@@ -136,11 +136,6 @@ fn spec_from_args(
     spec
 }
 
-/// Parse a schedule at the engine seam. A string the typed parser refuses is not run.
-fn schedule(text: &str) -> Schedule {
-    Schedule::parse(text).unwrap_or_else(|e| die(&format!("bad schedule {text:?}: {e}")))
-}
-
 // ---------------------------------------------------------------- one run
 
 /// The Mac's default guest kernel.
@@ -257,23 +252,38 @@ fn run_engine(
     quiet: bool,
     policy: &Policy,
 ) -> (Option<RunResult>, String) {
+    run_engine_try(ctx, image, sched, outdir, eargs, quiet, policy)
+        .unwrap_or_else(|w| die(&format!("not run (no VM was started): {w}")))
+}
+
+/// [`run_engine`], with a schedule that is not run returned as `Err(why)`: one the parser refuses,
+/// or one the host controller refuses before any VM because it names what the image lacks
+/// (`hydo ci run` reports such a replay as refused, never as a pass).
+fn run_engine_try(
+    ctx: &Ctx,
+    image: &Path,
+    sched: &str,
+    outdir: &Path,
+    eargs: &[String],
+    quiet: bool,
+    policy: &Policy,
+) -> Result<(Option<RunResult>, String), String> {
     let _ = std::fs::create_dir_all(outdir);
-    let s = schedule(sched);
+    let s = Schedule::parse(sched).map_err(|e| format!("bad schedule {sched:?}: {e}"))?;
     let (eng, spec) = controlled_engine(ctx, image, outdir, eargs, quiet);
     let a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));
     if !quiet {
         println!("hydo: an agent image: the host controller drives the run (/etc/hydo/control)");
     }
-    let run = a
+    let run = match a
         .with_control(&ctx.config.control)
         .one_with(&spec, &s, policy)
-        .unwrap_or_else(|e| match e {
-            // a schedule the host controller refuses (what it names, a seam): no VM was started
-            hydo_engine::EngineError::Unsupported(w) => {
-                die(&format!("not run (no VM was started): {w}"))
-            }
-            e => die(&format!("cannot start the engine: {e}")),
-        });
+    {
+        Ok(r) => r,
+        // a schedule the host controller refuses (what it names, a seam): no VM was started
+        Err(hydo_engine::EngineError::Unsupported(w)) => return Err(w),
+        Err(e) => die(&format!("cannot start the engine: {e}")),
+    };
     let _ = std::fs::write(outdir.join("engine.log"), &run.output);
     if !quiet {
         // the spin observer's notes (hvm: a run ended at a counter loop and ran again)
@@ -284,7 +294,7 @@ fn run_engine(
             println!("{}", r.line);
         }
     }
-    (run.result, run.output)
+    Ok((run.result, run.output))
 }
 
 /// One schedule from a fresh boot; dies without a RESULT (the engine's output tail on stderr).
@@ -469,6 +479,7 @@ fn run_document(
     let mut engine = hydo_results::Engine {
         backend: Some(backend.into()),
         args: Some(eargs.to_vec()),
+        host_cpu: hydo_results::HostCpu::of(hydo_engine::host_cpu()),
         ..hydo_results::Engine::default()
     };
     let mut i = 0;
@@ -515,9 +526,25 @@ pub fn run_to_dir(
     sched: &str,
     outdir: &Path,
 ) -> Option<hydo_results::Run> {
+    try_run_to_dir(ctx, image, image_sha, sched, outdir)
+        .unwrap_or_else(|w| die(&format!("not run (no VM was started): {w}")))
+}
+
+/// [`run_to_dir`], with a schedule that is not run (refused before any VM) returned as
+/// `Err(why)` (`hydo ci run`'s replays).
+pub fn try_run_to_dir(
+    ctx: &Ctx,
+    image: &Path,
+    image_sha: Option<String>,
+    sched: &str,
+    outdir: &Path,
+) -> Result<Option<hydo_results::Run>, String> {
     let eargs = engine_args(image, None, None, 1);
-    let (r, _) = run_engine(ctx, image, sched, outdir, &eargs, true, &Policy::Schedule);
-    let res = host_checks(outdir, result_map(&r?), true);
+    let (r, _) = run_engine_try(ctx, image, sched, outdir, &eargs, true, &Policy::Schedule)?;
+    let Some(r) = r else {
+        return Ok(None);
+    };
+    let res = host_checks(outdir, result_map(&r), true);
     let res = errors_one(outdir, sched, res, None);
     let run = run_document(
         outdir,
@@ -529,7 +556,7 @@ pub fn run_to_dir(
         ctx.backend_name(),
     );
     write_run_document(outdir, &run);
-    Some(run)
+    Ok(Some(run))
 }
 
 /// One line per eventually property that held in this run: how long after its anchor it held and
@@ -1122,8 +1149,8 @@ fn compose_meta(image: &Path) -> Value {
         .unwrap_or_else(|| json!({}))
 }
 
-/// One regression's pre-run check (M98). Returns false when it must not run.
-fn regression_precheck(r: &Value, meta: &Value, bad: &mut usize) -> bool {
+/// One regression's pre-run check (M98). Returns why it must not run.
+fn regression_precheck(r: &Value, meta: &Value) -> Option<String> {
     let name = py_str(&r["name"]);
     if meta.get("stable_compose").is_some_and(truthy) {
         let st = hydo_composer::regression_status(r, meta, None)
@@ -1132,7 +1159,6 @@ fn regression_precheck(r: &Value, meta: &Value, bad: &mut usize) -> bool {
             println!("hydo: warning: {name}: {w}");
         }
         if let Some(e) = st.error.as_ref().filter(|e| !e.is_empty()) {
-            *bad += 1;
             println!(
                 "FAIL  {}  expect {}  not run: {}\n      {}",
                 name,
@@ -1140,14 +1166,77 @@ fn regression_precheck(r: &Value, meta: &Value, bad: &mut usize) -> bool {
                 e,
                 py_str(&r["schedule"])
             );
-            return false;
+            return Some(e.clone());
         }
     } else if let Some(w) = hydo_composer::regression_warning(r, meta)
         .unwrap_or_else(|e| die(&format!("regression {name}: {e}")))
     {
         println!("hydo: warning: {w}");
     }
-    true
+    None
+}
+
+/// Every saved regression an image carries, replayed from fresh boots into `base/<k>-<name>`, one
+/// result each (`hydo repro --regressions`, `hydo ci run`). Prints a PASS or FAIL line per
+/// regression.
+pub fn replay_regressions(ctx: &Ctx, image: &Path, base: &Path) -> Vec<hydo_results::CiRegression> {
+    let meta = compose_meta(image);
+    let regs: Vec<Value> = meta
+        .get("regressions")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let eargs = engine_args(image, None, None, 1);
+    let mut out = Vec::new();
+    for (k, r) in regs.iter().enumerate() {
+        let name = py_str(&r["name"]);
+        let sched = py_str(&r["schedule"]);
+        let ex = py_str(&r["expect"]);
+        if let Some(e) = regression_precheck(r, &meta) {
+            out.push(hydo_results::CiRegression {
+                name,
+                schedule: sched,
+                expect: ex,
+                error: Some(e),
+                ..Default::default()
+            });
+            continue;
+        }
+        let dir = base.join(format!("{k:03}-{name}"));
+        let (fp, v, error) =
+            match run_engine_try(ctx, image, &sched, &dir, &eargs, true, &Policy::Schedule) {
+                Ok((Some(res), _)) => {
+                    let res = host_checks(&dir, result_map(&res), true);
+                    (py_str(&res["fp"]), py_str(&res["verdict"]), None)
+                }
+                Ok((None, _)) => ("-".into(), "ERROR no RESULT line".into(), None),
+                Err(w) => (
+                    "-".into(),
+                    format!("not run: {w}"),
+                    Some(format!("not run (no VM was started): {w}")),
+                ),
+            };
+        let ok = error.is_none() && regression_ok(&ex, &v, &fp);
+        println!(
+            "{:<5} {}  expect {}  fp={}  {}\n      {}",
+            if ok { "PASS" } else { "FAIL" },
+            name,
+            ex,
+            fp,
+            sched,
+            head(&v, 160)
+        );
+        out.push(hydo_results::CiRegression {
+            name,
+            schedule: sched,
+            expect: ex,
+            verdict: Some(v),
+            fp: Some(fp),
+            as_expected: ok,
+            error,
+        });
+    }
+    out
 }
 
 /// Python truthiness of a JSON value.
@@ -1184,36 +1273,14 @@ fn cmd_regressions(ctx: &Ctx, mut args: Vec<String>) -> i32 {
         .parent()
         .unwrap_or(Path::new(""))
         .join(format!("regressions-{}", strftime("%Y%m%d-%H%M%S")));
-    let eargs = engine_args(&image, None, None, 1);
-    let mut bad = 0usize;
-    for (k, r) in regs.iter().enumerate() {
-        if !regression_precheck(r, &meta, &mut bad) {
-            continue;
+    let got = replay_regressions(ctx, &image, &base);
+    // a regression the host controller refuses stops the command, as before `hydo ci run`
+    if let Some(e) = got.iter().find_map(|r| r.error.as_deref()) {
+        if e.starts_with("not run (no VM") {
+            die(e);
         }
-        let name = py_str(&r["name"]);
-        let sched = py_str(&r["schedule"]);
-        let dir = base.join(format!("{k:03}-{name}"));
-        let (fp, v) = match run_engine(ctx, &image, &sched, &dir, &eargs, true, &Policy::Schedule).0
-        {
-            Some(res) => {
-                let res = host_checks(&dir, result_map(&res), true);
-                (py_str(&res["fp"]), py_str(&res["verdict"]))
-            }
-            None => ("-".into(), "ERROR no RESULT line".into()),
-        };
-        let ex = py_str(&r["expect"]);
-        let ok = regression_ok(&ex, &v, &fp);
-        bad += !ok as usize;
-        println!(
-            "{:<5} {}  expect {}  fp={}  {}\n      {}",
-            if ok { "PASS" } else { "FAIL" },
-            name,
-            ex,
-            fp,
-            sched,
-            head(&v, 160)
-        );
     }
+    let bad = got.iter().filter(|r| !r.as_expected).count();
     println!(
         "hydo: {} of {} regressions as expected (consoles under {})",
         regs.len() - bad,

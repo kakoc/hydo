@@ -207,6 +207,27 @@ pub struct Engine {
     /// An exploration's worker count.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workers: Option<u64>,
+    /// The host's CPU (added after 0.2.0): KVM fingerprints depend on its vendor, so a run
+    /// compares fingerprints only with runs of the same engine and vendor, and verdicts otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_cpu: Option<HostCpu>,
+}
+
+/// The CPU of the machine that ran the engine (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HostCpu {
+    /// `GenuineIntel`, `AuthenticAMD` or `Apple` (as the host names it).
+    pub vendor: String,
+    /// The model name (`AMD EPYC 9V74 80-Core Processor`, `Apple M2 Pro`); empty when unknown.
+    #[serde(default)]
+    pub model: String,
+}
+
+impl HostCpu {
+    /// From the pair `hydo_engine::host_cpu()` returns.
+    pub fn of(vm: Option<(String, String)>) -> Option<HostCpu> {
+        vm.map(|(vendor, model)| HostCpu { vendor, model })
+    }
 }
 
 /// A run's verdict.
@@ -1512,6 +1533,321 @@ pub struct Diff {
     pub hunks: u64,
 }
 
+tag!(CiRunType, "ci-run");
+
+/// The values of [`CiFinding::state`] hydo writes (docs/design/ci.md section 4.4).
+pub mod ci_state {
+    /// Found here, and the base commit's image passes its minimal schedule (or cannot run it).
+    pub const NEW: &str = "new";
+    /// Found here, not among the base's findings, and the base's image fails the same way.
+    pub const PRE_EXISTING: &str = "pre-existing";
+    /// A finding of the base, still failing here.
+    pub const PRESENT: &str = "present";
+    /// A finding of the base whose minimal schedule now fails with another finding key.
+    pub const CHANGED: &str = "changed";
+    /// A finding of the base whose minimal schedules pass here, and the exploration did not find it.
+    pub const FIXED: &str = "fixed";
+    /// Cannot be replayed (the schedule is refused, or the replay gave no result).
+    pub const UNVERIFIED: &str = "unverified";
+}
+
+/// Where a CI run ran (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiSystem {
+    /// `github`, `gitlab`, `circleci`, `jenkins`, `buildkite`, `azure`, or `local`.
+    pub name: String,
+    /// The CI system's own id of the job or pipeline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<String>,
+    /// A link to the job.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_url: Option<String>,
+}
+
+/// The project a CI run tested (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiProject {
+    /// The manifest's `name`.
+    pub name: String,
+    /// The project's directory in the repository (`.` for the root).
+    pub dir: String,
+    /// The manifest, relative to the project's directory.
+    pub manifest: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest_sha256: Option<String>,
+}
+
+/// An image a CI run used (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiImage {
+    /// `ik1-<hex>`: a hash of everything the image is built from (docs/design/ci.md section 7.2);
+    /// absent for an image given ready-made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    /// Taken from the image cache instead of built.
+    #[serde(default)]
+    pub reused: bool,
+    /// Given on the command line (`--image`, `--base-image`).
+    #[serde(default)]
+    pub given: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+/// The commit a CI run compares with (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiBase {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    /// The base's own CI run whose findings were taken (`--base-run`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ci_run: Option<String>,
+    /// How the base's findings were known: `base-run` (its ci-run.json), `explored` (explored here
+    /// with the same budget) or `none`.
+    #[serde(default)]
+    pub findings_from: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<CiImage>,
+    /// Why there is no base comparison, when there is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub missing: Option<String>,
+}
+
+/// The hydo that ran a CI run (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiHydo {
+    pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    /// The fingerprint epoch.
+    pub epoch: u64,
+}
+
+/// What a CI run explored (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiBudget {
+    /// `pr`, `push` or `nightly`.
+    pub mode: String,
+    pub seeds: String,
+    pub strategy: String,
+    #[serde(default)]
+    pub options: Vec<String>,
+}
+
+/// The saved regressions a CI run replayed (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiRegressionCounts {
+    pub replayed: u64,
+    pub as_expected: u64,
+}
+
+/// The numbers of a CI run (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiSummary {
+    /// Runs of the exploration, and its failing first runs.
+    pub runs: u64,
+    pub failures: u64,
+    /// Findings (distinct finding keys), and how many are in each state.
+    pub findings: u64,
+    #[serde(default)]
+    pub states: std::collections::BTreeMap<String, u64>,
+    /// Single runs made to compare with the base (replays of minimal schedules).
+    #[serde(default)]
+    pub replays: u64,
+    /// Passing first runs that may have checked nothing (the workload acknowledged nothing, or
+    /// a history was empty): the exploration's `vacuous_passes`.
+    #[serde(default)]
+    pub vacuous_passes: u64,
+    #[serde(default)]
+    pub regressions: CiRegressionCounts,
+    /// Wall time of the whole CI run, in seconds.
+    #[serde(default)]
+    pub wall_s: f64,
+}
+
+/// What a property table says was reached (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiProperties {
+    pub declared: u64,
+    pub reached: u64,
+    #[serde(default)]
+    pub not_exercised: Vec<String>,
+}
+
+/// What a CI run's schedules drew (added after 0.2.0): counts, never percentages (docs/design/ci.md
+/// section 10).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiCoverage {
+    /// Schedule tokens of the exploration's first runs, by kind (`K`, `P`, `C`, `disk`, ...).
+    #[serde(default)]
+    pub faults: std::collections::BTreeMap<String, u64>,
+    /// Fault tokens by the service they target.
+    #[serde(default)]
+    pub services: std::collections::BTreeMap<String, u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub properties: Option<CiProperties>,
+}
+
+/// One run of a minimal schedule on another image, to decide a finding's state (added after
+/// 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiReplay {
+    /// `base` (on the base commit's image) or `head`.
+    pub on: String,
+    pub schedule: String,
+    /// The verdict, absent when the schedule was refused or gave no result.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fp: Option<String>,
+    /// The finding key of a failing verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// Why the schedule did not run (hydo refused it before any VM: the image lacks what it
+    /// names).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<String>,
+    /// The run directory, relative to the CI output directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+}
+
+/// One finding of a CI run: one finding key (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiFinding {
+    /// `f1:<kind>:<10 hex>`: stable across commits (docs/design/ci.md section 4.2).
+    pub key: String,
+    /// `invariant`, `assertion`, `history-check`, `error-log` or `run-error`.
+    pub kind: String,
+    /// The normalized statement (numbers as `#`).
+    pub title: String,
+    /// See [`ci_state`].
+    pub state: String,
+    /// What decided the state: `base-replay-ok`, `base-replay-fails`, `base-replay-other`,
+    /// `base-refused`, `base-run`, `head-replay-ok`, `head-replay-fails`, `head-replay-other`,
+    /// `no-base`, `no-replay`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof: Option<String>,
+    /// The minimal schedule (the first one seen under this key).
+    pub minimal: String,
+    /// Every minimal schedule seen under this key.
+    #[serde(default)]
+    pub schedules: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fp: Option<String>,
+    /// The fault classes that led to it (attributes, not part of the key).
+    #[serde(default)]
+    pub classes: Vec<String>,
+    /// The command that runs the minimal schedule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repro: Option<String>,
+    /// The replays that decided the state.
+    #[serde(default)]
+    pub replays: Vec<CiReplay>,
+    /// Where the base and this commit first differ on the minimal schedule (`hydo diff`'s first
+    /// judged difference), when both ran it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diff: Option<String>,
+    /// A finding of the other state with the same minimal schedule (a reworded check: "probably
+    /// the same finding, renamed").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renamed_from: Option<String>,
+}
+
+/// One saved regression a CI run replayed (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiRegression {
+    pub name: String,
+    pub schedule: String,
+    /// `ok`, `violation` or `fp=<hex>`.
+    pub expect: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fp: Option<String>,
+    pub as_expected: bool,
+    /// Why it did not run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// A failure whose re-run gave another fingerprint: a hydo or environment problem, never a finding
+/// of the project (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiNondeterminism {
+    pub schedule: String,
+    pub fp: String,
+    #[serde(default)]
+    pub rerun_fps: Vec<String>,
+}
+
+/// How a CI run ended (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiOutcome {
+    /// 0: passed by the policy, 1: failed by the policy, 2: the run could not be completed.
+    pub exit: u64,
+    /// The policy (`fail_on`): the finding states, and `regression`, that fail the run.
+    #[serde(default)]
+    pub fail_on: Vec<String>,
+    /// What failed it, one line each.
+    #[serde(default)]
+    pub failed_by: Vec<String>,
+}
+
+/// The files of a CI run, relative to its output directory (added after 0.2.0).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiArtifacts {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exploration: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_exploration: Option<String>,
+    pub report: String,
+    pub junit: String,
+}
+
+/// `ci-run.json`: one CI run of one project at one commit (`hydo ci run`; added after 0.2.0;
+/// docs/design/ci.md section 4.1). Small values only; the bulky outputs are named in `artifacts`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiRun {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: CiRunType,
+    /// `<system>:<run id>` (`github:11873625`), or `local:<time>`.
+    pub id: String,
+    pub ci: CiSystem,
+    pub project: CiProject,
+    /// `pull_request`, `push`, `schedule` or `manual`.
+    pub trigger: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// The pull or merge request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<CiBase>,
+    pub hydo: CiHydo,
+    pub engine: Engine,
+    pub image: CiImage,
+    pub budget: CiBudget,
+    pub summary: CiSummary,
+    #[serde(default)]
+    pub coverage: CiCoverage,
+    #[serde(default)]
+    pub findings: Vec<CiFinding>,
+    #[serde(default)]
+    pub regressions: Vec<CiRegression>,
+    #[serde(default)]
+    pub nondeterminism: Vec<CiNondeterminism>,
+    pub outcome: CiOutcome,
+    pub artifacts: CiArtifacts,
+}
+
 /// Any version-1 record or document (the schema's root).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
@@ -1527,6 +1863,8 @@ pub enum AnyV1 {
     Timeline(Box<Timeline>),
     Inspect(Box<Inspect>),
     InspectError(Box<InspectError>),
+    /// Added after 0.2.0 (`hydo ci run`).
+    CiRun(Box<CiRun>),
 }
 
 impl Run {

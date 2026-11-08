@@ -332,9 +332,15 @@ Rust SDK records with `hydo_assert::history::messages`. Reference: `hydo guide m
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
 
-**hydo in a team's CI (design only).** `docs/design/ci.md` designs hydo as part of a team's own
-continuous integration: findings proven new or fixed by replay, a small history per run, and
-seed ranges split across runners. It plans stages 0 to 4. None of it is built yet.
+**hydo in a team's CI (stage 1 built, M197).** `docs/design/ci.md` designs hydo as part of a team's
+own continuous integration in stages 0 to 4; stage 1 is built. `hydo ci run` builds the image (or
+takes it from the image cache by input key), explores it with the mode's fixed seeds, decides every
+finding against the base commit by replay (`new`, `pre-existing`, `present`, `changed`, `fixed`,
+`unverified`), replays the saved regressions, and writes `ci-run.json`, `report.md` and
+`junit.xml`. `hydo ci compare` compares two recorded runs offline. The settings are in
+`hydo/ci.yaml` (format 1, `hydo/schema/ci-v1.json`). The adapters are the GitHub composite action
+`action/action.yml` and the GitLab template `action/gitlab/hydo.gitlab-ci.yml`; `hydo guide ci`
+is the recipe for other systems.
 
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 48 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
@@ -456,6 +462,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 66. Messaging checks: no VM ran one yet, and per-window measures, `Exploration.messages` and the
     other SDKs' helpers are not built. The planted-bug example and the real-system onboardings
     come next (M196).
+67. `hydo ci run` ran only on this Mac: not on Linux, and the action and the GitLab template never
+    ran on GitHub or GitLab (a trial needs a throwaway public repository, the user's decision).
+    Stage 2 (history, accepted findings, budgets, sharding) is not built (M197).
 
 ## Milestone index
 
@@ -668,6 +677,9 @@ build machine, before 2026-10-13.
   `--cluster-faults`; NATS 2.10.22 loses its stream to `K=nodes.all@1+2` without reactions
 - M196: messaging checks, `type: messages` (the checker, the declaration with
   `include:` bundles, `Run.messages`, the Rust recorder)
+- M197: hydo in a team's CI, stage 1: `hydo ci run` and `hydo ci compare`, `hydo/ci.yaml`,
+  `ci-run.json`, `report.md` and `junit.xml`, the GitHub action and the GitLab template,
+  `hydo guide ci`
 
 ## Where to look
 

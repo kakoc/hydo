@@ -1,0 +1,153 @@
+{
+  "v": 1,
+  "type": "ci-run",
+  "id": "local:20261108T082214",
+  "ci": {
+    "name": "local"
+  },
+  "project": {
+    "name": "shop",
+    "dir": ".",
+    "manifest": "hydo/hydo.yaml",
+    "manifest_sha256": "f429db4d8597a3698494105808774a68ce783bbd15a74e8744b79ab4060bfab1"
+  },
+  "trigger": "pull_request",
+  "commit": "15fabe05d00a671f246800d7f05ef284359903a0",
+  "branch": "request-ids",
+  "base": {
+    "commit": "7c1e9a3312fb200b0083d3af28e04c1053b0eddb",
+    "findings_from": "explored",
+    "image": {
+      "input_key": "ik1-b394fd64556c2c041057b938c25ae7d3",
+      "sha256": "c68144b3bf4035300d010de5aa404b86b66b60b15e9328a15baee2a9ede8e093",
+      "reused": true,
+      "given": false,
+      "path": "/home/user/ci/cache/images/ik1-b394fd64556c2c041057b938c25ae7d3/explore-ob-shop-arm64.cpio.gz"
+    }
+  },
+  "hydo": {
+    "version": "0.2.0",
+    "commit": "d7c58e651ebde105ebb8859ee8019d78be0e6abe",
+    "epoch": 1
+  },
+  "engine": {
+    "backend": "hvm",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": 1,
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "image": {
+    "input_key": "ik1-01fdac22c0f0f6b5a0ea73e96836c81a",
+    "sha256": "19b51826015dbe7d6cc4d309763870d40f6f6eb247cb2590b7d1998bdd63a487",
+    "reused": true,
+    "given": false,
+    "path": "/home/user/ci/cache/images/ik1-01fdac22c0f0f6b5a0ea73e96836c81a/explore-ob-shop-arm64.cpio.gz"
+  },
+  "budget": {
+    "mode": "pr",
+    "seeds": "1-60",
+    "strategy": "process",
+    "options": [
+      "--protocol-faults"
+    ]
+  },
+  "summary": {
+    "runs": 74,
+    "failures": 1,
+    "findings": 1,
+    "states": {
+      "new": 1
+    },
+    "replays": 2,
+    "regressions": {
+      "replayed": 0,
+      "as_expected": 0
+    },
+    "wall_s": 309.3
+  },
+  "coverage": {
+    "faults": {
+      "C": 17,
+      "H": 52,
+      "K": 41,
+      "P": 48,
+      "T": 44,
+      "disk": 17
+    },
+    "services": {
+      "email": 20,
+      "payments": 32,
+      "shop": 89
+    },
+    "properties": {
+      "declared": 7,
+      "reached": 10,
+      "not_exercised": [
+        "fault.pause_mid_request",
+        "fault.oneway_req",
+        "fault.oneway_resp"
+      ]
+    }
+  },
+  "findings": [
+    {
+      "key": "f1:invariant:d4f25624c2",
+      "kind": "invariant",
+      "title": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o# took effect # times (records #,#)",
+      "state": "new",
+      "proof": "base-replay-ok",
+      "minimal": "disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50",
+      "schedules": [
+        "disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50"
+      ],
+      "fp": "b50c01e5ff5869db",
+      "classes": [
+        "durable-defaults"
+      ],
+      "repro": "`hydo run --image /home/user/ci/cache/images/ik1-01fdac22c0f0f6b5a0ea73e96836c81a/explore-ob-shop-arm64.cpio.gz \"disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50\"`",
+      "replays": [
+        {
+          "on": "base",
+          "schedule": "disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50",
+          "verdict": "HYDO-ORACLE: OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
+          "fp": "f0acdb15b270e561",
+          "dir": "replays/001-base"
+        },
+        {
+          "on": "head",
+          "schedule": "disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50",
+          "verdict": "HYDO-ORACLE: VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 23,26)",
+          "fp": "b50c01e5ff5869db",
+          "key": "f1:invariant:d4f25624c2",
+          "dir": "replays/002-head"
+        }
+      ],
+      "diff": "the first difference in what the checks judge (fake-world level, after `hydo-ob: liveness email.receipt_eventually: ok after 0.01s (deadline 30s after heal)`) is `only on the base: hydo-world: 1 payments.charge ref=o0 idem=charge-o0 fx=1 ok` (A is the base, B this change)"
+    }
+  ],
+  "regressions": [],
+  "nondeterminism": [],
+  "outcome": {
+    "exit": 1,
+    "fail_on": [
+      "new",
+      "reappeared",
+      "regression"
+    ],
+    "failed_by": [
+      "new finding VIOLATION [payments.charged_at_most_once] payments.charge: ref o# took effect # times (records #,#)"
+    ]
+  },
+  "artifacts": {
+    "exploration": "explore/exploration.json",
+    "base_exploration": "base-explore/exploration.json",
+    "report": "report.md",
+    "junit": "junit.xml"
+  }
+}

@@ -33,6 +33,10 @@
     },
     {
       "$ref": "#/$defs/InspectError"
+    },
+    {
+      "description": "Added after 0.2.0 (`hydo ci run`).",
+      "$ref": "#/$defs/CiRun"
     }
   ],
   "$defs": {
@@ -472,8 +476,37 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "host_cpu": {
+          "description": "The host's CPU (added after 0.2.0): KVM fingerprints depend on its vendor, so a run\ncompares fingerprints only with runs of the same engine and vendor, and verdicts otherwise.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HostCpu"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
+    },
+    "HostCpu": {
+      "description": "The CPU of the machine that ran the engine (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "vendor": {
+          "description": "`GenuineIntel`, `AuthenticAMD` or `Apple` (as the host names it).",
+          "type": "string"
+        },
+        "model": {
+          "description": "The model name (`AMD EPYC 9V74 80-Core Processor`, `Apple M2 Pro`); empty when unknown.",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "vendor"
+      ]
     },
     "Verdict": {
       "description": "A run's verdict.",
@@ -3553,6 +3586,739 @@
       "type": "string",
       "enum": [
         "inspect-error"
+      ]
+    },
+    "CiRun": {
+      "description": "`ci-run.json`: one CI run of one project at one commit (`hydo ci run`; added after 0.2.0;\ndocs/design/ci.md section 4.1). Small values only; the bulky outputs are named in `artifacts`.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/CiRunType"
+        },
+        "id": {
+          "description": "`<system>:<run id>` (`github:11873625`), or `local:<time>`.",
+          "type": "string"
+        },
+        "ci": {
+          "$ref": "#/$defs/CiSystem"
+        },
+        "project": {
+          "$ref": "#/$defs/CiProject"
+        },
+        "trigger": {
+          "description": "`pull_request`, `push`, `schedule` or `manual`.",
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change": {
+          "description": "The pull or merge request.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiBase"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hydo": {
+          "$ref": "#/$defs/CiHydo"
+        },
+        "engine": {
+          "$ref": "#/$defs/Engine"
+        },
+        "image": {
+          "$ref": "#/$defs/CiImage"
+        },
+        "budget": {
+          "$ref": "#/$defs/CiBudget"
+        },
+        "summary": {
+          "$ref": "#/$defs/CiSummary"
+        },
+        "coverage": {
+          "$ref": "#/$defs/CiCoverage",
+          "default": {
+            "faults": {},
+            "services": {}
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiFinding"
+          },
+          "default": []
+        },
+        "regressions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiRegression"
+          },
+          "default": []
+        },
+        "nondeterminism": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiNondeterminism"
+          },
+          "default": []
+        },
+        "outcome": {
+          "$ref": "#/$defs/CiOutcome"
+        },
+        "artifacts": {
+          "$ref": "#/$defs/CiArtifacts"
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "id",
+        "ci",
+        "project",
+        "trigger",
+        "hydo",
+        "engine",
+        "image",
+        "budget",
+        "summary",
+        "outcome",
+        "artifacts"
+      ]
+    },
+    "CiRunType": {
+      "description": "The `type` of this record: always `\"ci-run\"`.",
+      "type": "string",
+      "enum": [
+        "ci-run"
+      ]
+    },
+    "CiSystem": {
+      "description": "Where a CI run ran (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "`github`, `gitlab`, `circleci`, `jenkins`, `buildkite`, `azure`, or `local`.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The CI system's own id of the job or pipeline.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_url": {
+          "description": "A link to the job.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "CiProject": {
+      "description": "The project a CI run tested (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The manifest's `name`.",
+          "type": "string"
+        },
+        "dir": {
+          "description": "The project's directory in the repository (`.` for the root).",
+          "type": "string"
+        },
+        "manifest": {
+          "description": "The manifest, relative to the project's directory.",
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "dir",
+        "manifest"
+      ]
+    },
+    "CiBase": {
+      "description": "The commit a CI run compares with (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ci_run": {
+          "description": "The base's own CI run whose findings were taken (`--base-run`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "findings_from": {
+          "description": "How the base's findings were known: `base-run` (its ci-run.json), `explored` (explored here\nwith the same budget) or `none`.",
+          "type": "string",
+          "default": ""
+        },
+        "image": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiImage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "missing": {
+          "description": "Why there is no base comparison, when there is none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "CiImage": {
+      "description": "An image a CI run used (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "input_key": {
+          "description": "`ik1-<hex>`: a hash of everything the image is built from (docs/design/ci.md section 7.2);\nabsent for an image given ready-made.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reused": {
+          "description": "Taken from the image cache instead of built.",
+          "type": "boolean",
+          "default": false
+        },
+        "given": {
+          "description": "Given on the command line (`--image`, `--base-image`).",
+          "type": "boolean",
+          "default": false
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "CiHydo": {
+      "description": "The hydo that ran a CI run (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "description": "The fingerprint epoch.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "version",
+        "epoch"
+      ]
+    },
+    "CiBudget": {
+      "description": "What a CI run explored (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "`pr`, `push` or `nightly`.",
+          "type": "string"
+        },
+        "seeds": {
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "mode",
+        "seeds",
+        "strategy"
+      ]
+    },
+    "CiSummary": {
+      "description": "The numbers of a CI run (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "runs": {
+          "description": "Runs of the exploration, and its failing first runs.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "failures": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "findings": {
+          "description": "Findings (distinct finding keys), and how many are in each state.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "states": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "replays": {
+          "description": "Single runs made to compare with the base (replays of minimal schedules).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "vacuous_passes": {
+          "description": "Passing first runs that may have checked nothing (the workload acknowledged nothing, or\na history was empty): the exploration's `vacuous_passes`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "regressions": {
+          "$ref": "#/$defs/CiRegressionCounts",
+          "default": {
+            "replayed": 0,
+            "as_expected": 0
+          }
+        },
+        "wall_s": {
+          "description": "Wall time of the whole CI run, in seconds.",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        }
+      },
+      "required": [
+        "runs",
+        "failures",
+        "findings"
+      ]
+    },
+    "CiRegressionCounts": {
+      "description": "The saved regressions a CI run replayed (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "replayed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "as_expected": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "replayed",
+        "as_expected"
+      ]
+    },
+    "CiCoverage": {
+      "description": "What a CI run's schedules drew (added after 0.2.0): counts, never percentages (docs/design/ci.md\nsection 10).",
+      "type": "object",
+      "properties": {
+        "faults": {
+          "description": "Schedule tokens of the exploration's first runs, by kind (`K`, `P`, `C`, `disk`, ...).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "services": {
+          "description": "Fault tokens by the service they target.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiProperties"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "CiProperties": {
+      "description": "What a property table says was reached (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "declared": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reached": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "not_exercised": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "declared",
+        "reached"
+      ]
+    },
+    "CiFinding": {
+      "description": "One finding of a CI run: one finding key (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "`f1:<kind>:<10 hex>`: stable across commits (docs/design/ci.md section 4.2).",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`invariant`, `assertion`, `history-check`, `error-log` or `run-error`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "The normalized statement (numbers as `#`).",
+          "type": "string"
+        },
+        "state": {
+          "description": "See [`ci_state`].",
+          "type": "string"
+        },
+        "proof": {
+          "description": "What decided the state: `base-replay-ok`, `base-replay-fails`, `base-replay-other`,\n`base-refused`, `base-run`, `head-replay-ok`, `head-replay-fails`, `head-replay-other`,\n`no-base`, `no-replay`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "minimal": {
+          "description": "The minimal schedule (the first one seen under this key).",
+          "type": "string"
+        },
+        "schedules": {
+          "description": "Every minimal schedule seen under this key.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "fp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "classes": {
+          "description": "The fault classes that led to it (attributes, not part of the key).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "repro": {
+          "description": "The command that runs the minimal schedule.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replays": {
+          "description": "The replays that decided the state.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiReplay"
+          },
+          "default": []
+        },
+        "diff": {
+          "description": "Where the base and this commit first differ on the minimal schedule (`hydo diff`'s first\njudged difference), when both ran it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "renamed_from": {
+          "description": "A finding of the other state with the same minimal schedule (a reworded check: \"probably\nthe same finding, renamed\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "title",
+        "state",
+        "minimal"
+      ]
+    },
+    "CiReplay": {
+      "description": "One run of a minimal schedule on another image, to decide a finding's state (added after\n0.2.0).",
+      "type": "object",
+      "properties": {
+        "on": {
+          "description": "`base` (on the base commit's image) or `head`.",
+          "type": "string"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "verdict": {
+          "description": "The verdict, absent when the schedule was refused or gave no result.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "The finding key of a failing verdict.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refused": {
+          "description": "Why the schedule did not run (hydo refused it before any VM: the image lacks what it\nnames).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir": {
+          "description": "The run directory, relative to the CI output directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "on",
+        "schedule"
+      ]
+    },
+    "CiRegression": {
+      "description": "One saved regression a CI run replayed (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "expect": {
+          "description": "`ok`, `violation` or `fp=<hex>`.",
+          "type": "string"
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "as_expected": {
+          "type": "boolean"
+        },
+        "error": {
+          "description": "Why it did not run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "schedule",
+        "expect",
+        "as_expected"
+      ]
+    },
+    "CiNondeterminism": {
+      "description": "A failure whose re-run gave another fingerprint: a hydo or environment problem, never a finding\nof the project (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "type": "string"
+        },
+        "fp": {
+          "type": "string"
+        },
+        "rerun_fps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "schedule",
+        "fp"
+      ]
+    },
+    "CiOutcome": {
+      "description": "How a CI run ended (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "exit": {
+          "description": "0: passed by the policy, 1: failed by the policy, 2: the run could not be completed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fail_on": {
+          "description": "The policy (`fail_on`): the finding states, and `regression`, that fail the run.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "failed_by": {
+          "description": "What failed it, one line each.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "exit"
+      ]
+    },
+    "CiArtifacts": {
+      "description": "The files of a CI run, relative to its output directory (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "exploration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base_exploration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "report": {
+          "type": "string"
+        },
+        "junit": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "report",
+        "junit"
       ]
     }
   }

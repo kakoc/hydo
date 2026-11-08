@@ -1,0 +1,3 @@
+# Every key is optional: the defaults (the process strategy, seeds 1-50, fail on new findings,
+# reappeared findings and saved regressions that are not as expected).
+format: 1

@@ -99,6 +99,7 @@ hydo-kvm                                 fast
 hydo-kvm::abi                            fast
 hydo-kvm::engine                         fast
 hydo-manifest                            fast
+hydo-manifest::ci_format                 fast
 hydo-manifest::engine_version            fast
 hydo-manifest::equivalence               full
 hydo-manifest::extractors                fast

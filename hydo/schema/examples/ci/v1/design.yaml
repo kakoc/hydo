@@ -1,0 +1,17 @@
+# The example of docs/design/ci.md section 8.2, without the keys of later stages (budgets in time,
+# shards).
+format: 1
+engine: kvm
+build: ./ci/build-services.sh       # builds the services hydo.yaml names, from this commit
+inputs:                             # for services built here: what their files depend on
+  orders: [services/orders/]
+  payments: [services/payments/, go.sum]
+pr:
+  seeds: 1-200
+  strategy: process
+  options: [--more-faults]
+nightly:
+  seeds: 1-2000
+  strategy: process
+  options: [--more-faults, --new-faults]
+fail_on: [new, reappeared, regression]

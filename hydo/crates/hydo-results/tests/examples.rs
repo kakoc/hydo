@@ -203,6 +203,9 @@ fn note(s: &mut Seen, r: &Record) {
         Record::InspectError(_) => {
             s.types.insert("inspect-error".into());
         }
+        Record::CiRun(_) => {
+            s.types.insert("ci-run".into());
+        }
     }
 }
 
@@ -269,6 +272,7 @@ fn every_example_parses_and_is_valid() {
         "inspect ps",
         "inspect sockets",
         "inspect-error",
+        "ci-run",
     ] {
         assert!(seen.types.contains(t), "no example has a {t} record");
     }

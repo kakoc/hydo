@@ -413,6 +413,54 @@ pub fn available_mib() -> Option<u64> {
     )
 }
 
+/// The host's CPU: its vendor (`GenuineIntel`, `AuthenticAMD`, `Apple`) and model name. KVM
+/// fingerprints depend on the vendor (docs/design/kvm-engine.md), so every result records it
+/// (docs/design/ci.md section 4.1). Read from `/proc/cpuinfo` on Linux and from
+/// `machdep.cpu.brand_string` on macOS; None when it cannot be read.
+pub fn host_cpu() -> Option<(String, String)> {
+    if let Ok(t) = std::fs::read_to_string("/proc/cpuinfo") {
+        return host_cpu_of_cpuinfo(&t);
+    }
+    let out = std::process::Command::new("sysctl")
+        .args(["-n", "machdep.cpu.brand_string"])
+        .output()
+        .ok()?;
+    let model = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if model.is_empty() {
+        return None;
+    }
+    // Apple Silicon names itself "Apple M2 Pro"; an Intel Mac names its vendor in the model
+    let vendor = if model.starts_with("Apple") {
+        "Apple"
+    } else if model.contains("Intel") {
+        "GenuineIntel"
+    } else {
+        "unknown"
+    };
+    Some((vendor.into(), model))
+}
+
+/// The vendor and the first model name of a `/proc/cpuinfo` text (x86_64: `vendor_id` and `model
+/// name`; arm64 Linux has neither and gives `CPU implementer`).
+pub fn host_cpu_of_cpuinfo(text: &str) -> Option<(String, String)> {
+    let field = |k: &str| {
+        text.lines()
+            .find(|l| l.split(':').next().is_some_and(|n| n.trim() == k))
+            .and_then(|l| l.split_once(':'))
+            .map(|(_, v)| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+    };
+    let vendor = field("vendor_id").or_else(|| {
+        field("CPU implementer").map(|i| match i.as_str() {
+            "0x41" => "ARM".to_string(),
+            "0x61" => "Apple".to_string(),
+            _ => format!("implementer {i}"),
+        })
+    })?;
+    let model = field("model name").unwrap_or_default();
+    Some((vendor, model))
+}
+
 /// A booted image that runs schedules from S1, one at a time, each in a fresh VM ([`Engine::start`]).
 pub trait Worker {
     /// How long the boot to S1 took (the READY line).
@@ -485,5 +533,25 @@ pub fn native(root: &std::path::Path, config: hydo_config::Env) -> Box<dyn Contr
         EngineKind::Hvx => Box::new(hvx::Hvx::for_release(root, config)),
         EngineKind::Hvm => Box::new(hvm::Hvm::for_release(root, config)),
         EngineKind::Kvm => Box::new(kvm::Kvm::for_release(root, config)),
+    }
+}
+
+#[cfg(test)]
+mod host_cpu_tests {
+    use super::host_cpu_of_cpuinfo;
+
+    #[test]
+    fn the_vendor_and_model_come_from_cpuinfo() {
+        let amd = "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel name\t: AMD EPYC 9V74 80-Core Processor\n\nprocessor\t: 1\nvendor_id\t: AuthenticAMD\n";
+        assert_eq!(
+            host_cpu_of_cpuinfo(amd),
+            Some((
+                "AuthenticAMD".into(),
+                "AMD EPYC 9V74 80-Core Processor".into()
+            ))
+        );
+        let arm = "processor\t: 0\nBogoMIPS\t: 48.00\nCPU implementer\t: 0x41\n";
+        assert_eq!(host_cpu_of_cpuinfo(arm), Some(("ARM".into(), "".into())));
+        assert_eq!(host_cpu_of_cpuinfo("nothing here\n"), None);
     }
 }

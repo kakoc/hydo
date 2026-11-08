@@ -218,7 +218,7 @@ pub fn host_checks(h: &Host, tag: &str, res: &mut Res) {
             Err(e) => {
                 // where hydohist.py raised: explore.py stopped with a traceback
                 eprintln!("hydo-explore: history checks of {tag}: {e}");
-                std::process::exit(1);
+                crate::exit_die();
             }
         };
     crate::results::keep_checks(res, &r);

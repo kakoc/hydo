@@ -1,0 +1,83 @@
+# hydo's GitLab CI template (docs/design/ci.md section 8.4; `hydo guide ci`): a thin adapter around
+# `hydo ci run`, the second one after the GitHub Action (action/action.yml). Every decision is in
+# hydo; this file installs it, keeps its caches, runs it, keeps its files (junit.xml as the test
+# report GitLab shows on the merge request) and posts or updates one merge-request note.
+#
+# Copy this file into the project (here as ci/hydo.gitlab-ci.yml, from an action-v1.* tag of
+# https://github.com/kakoc/hydo) and use it from the project's .gitlab-ci.yml:
+#
+#   include:
+#     - local: ci/hydo.gitlab-ci.yml
+#   hydo:
+#     extends: .hydo
+#     variables:
+#       HYDO_VERSION: "0.3.0"
+#     tags: [kvm]               # a runner whose jobs can open /dev/kvm (hydo guide ci, "Runners")
+#
+# The note needs a project access token with the `api` scope in the CI/CD variable
+# HYDO_GITLAB_TOKEN (CI_JOB_TOKEN cannot write notes); without it the report is still in the job
+# log and the artifacts.
+
+.hydo:
+  image: ubuntu:24.04
+  variables:
+    HYDO_VERSION: ""            # required: the hydo release (for example 0.3.0)
+    HYDO_PROJECT: "."           # the directory that holds hydo/hydo.yaml
+    HYDO_OUT: hydo-ci
+    HYDO_ARGS: ""               # more arguments for hydo ci run
+    HYDO_HOME: $CI_PROJECT_DIR/.hydo-home   # GitLab caches only paths inside the project
+    GIT_DEPTH: "0"              # the base commit's checkout needs the history
+  cache:
+    key: hydo-$HYDO_VERSION
+    paths: [.hydo-home/]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq curl git jq ca-certificates > /dev/null
+    - test -n "$HYDO_VERSION" || { echo "set HYDO_VERSION"; exit 2; }
+    - test -w /dev/kvm || { echo "/dev/kvm is not usable in this job (hydo guide ci, Runners)"; exit 2; }
+    - |
+      v="$HYDO_VERSION"
+      if [ ! -x "$HYDO_HOME/versions/$v/bin/hydo" ]; then
+        url="https://github.com/kakoc/hydo/releases/download/v$v"
+        tmp="$(mktemp -d)"
+        curl -fsSL --retry 4 -o "$tmp/hydo-linux-$v.tar.gz" "$url/hydo-linux-$v.tar.gz"
+        curl -fsSL --retry 4 -o "$tmp/SHA256SUMS" "$url/SHA256SUMS"
+        (cd "$tmp" && grep " hydo-linux-$v.tar.gz\$" SHA256SUMS | sha256sum -c -)
+        tar xzf "$tmp/hydo-linux-$v.tar.gz" -C "$tmp"
+        "$tmp/hydo-linux-$v/bin/hydo" setup --archive "$tmp/hydo-linux-$v.tar.gz"
+        "$tmp/hydo-linux-$v/bin/hydo" setup --get "$v" --offline
+        rm -rf "$tmp"
+      fi
+      export PATH="$HYDO_HOME/versions/$v/bin:$PATH"
+  script:
+    - |
+      export PATH="$HYDO_HOME/versions/$HYDO_VERSION/bin:$PATH"
+      read -ra extra <<< "$HYDO_ARGS"
+      set +e
+      hydo ci run --project "$HYDO_PROJECT" --out "$HYDO_OUT" "${extra[@]}"
+      rc=$?
+      set -e
+      rm -rf "$HYDO_OUT/base-src"
+      if [ -n "${CI_MERGE_REQUEST_IID:-}" ] && [ -n "${HYDO_GITLAB_TOKEN:-}" ] && [ -f "$HYDO_OUT/report.md" ]; then
+        api="$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
+        marker="<!-- hydo-ci: $HYDO_PROJECT -->"
+        body="$(jq -Rs --arg m "$marker" '{body: ($m + "\n" + .)}' < "$HYDO_OUT/report.md")"
+        id="$(curl -fsS --header "PRIVATE-TOKEN: $HYDO_GITLAB_TOKEN" "$api?per_page=100" \
+          | jq -r --arg m "$marker" '[.[] | select(.body | startswith($m)) | .id][0] // empty')"
+        if [ -n "$id" ]; then
+          curl -fsS -X PUT --header "PRIVATE-TOKEN: $HYDO_GITLAB_TOKEN" --header "Content-Type: application/json" \
+            --data "$body" "$api/$id" > /dev/null || echo "could not update the hydo note"
+        else
+          curl -fsS -X POST --header "PRIVATE-TOKEN: $HYDO_GITLAB_TOKEN" --header "Content-Type: application/json" \
+            --data "$body" "$api" > /dev/null || echo "could not post the hydo note"
+        fi
+      fi
+      exit "$rc"
+  artifacts:
+    when: always
+    paths: [$HYDO_OUT/]
+    reports:
+      junit: $HYDO_OUT/junit.xml

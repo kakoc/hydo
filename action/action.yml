@@ -1,0 +1,177 @@
+# hydo's GitHub Action (docs/design/ci.md section 8.1; `hydo guide ci`): a thin adapter around
+# `hydo ci run`. Every decision is in hydo; this file only installs it, keeps its caches, runs it,
+# keeps its files as an artifact, writes the job summary and posts or updates one pull-request
+# comment with the job's GITHUB_TOKEN. It needs a Linux runner with a usable /dev/kvm (GitHub's
+# standard ubuntu-24.04 runners have one) and, for the comment, `pull-requests: write`.
+#
+#   - uses: actions/checkout@<sha>
+#   - uses: kakoc/hydo/action@v1
+#     with:
+#       hydo-version: 0.3.0
+name: hydo
+description: Deterministic fault testing of a whole system on every pull request, with findings compared against the base by replay.
+author: hydo
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  hydo-version:
+    description: The hydo release to use (for example 0.3.0). Pin it; upgrading hydo is a pull request like any other.
+    required: true
+  project:
+    description: The project's directory in the repository (the one that holds hydo/hydo.yaml).
+    default: "."
+  mode:
+    description: "pr, push or nightly; empty: from the event (pull_request: pr, schedule: nightly, else push)."
+    default: ""
+  args:
+    description: More arguments for `hydo ci run` (for example `--seeds 1-100`), split at spaces.
+    default: ""
+  out:
+    description: Where `hydo ci run` writes ci-run.json, report.md, junit.xml and its runs.
+    default: hydo-ci
+  comment:
+    description: Post the report as one pull-request comment, updated in place on every push.
+    default: "true"
+  artifact-name:
+    description: "The artifact's name; empty: hydo-ci-<project>-<run id>-<attempt>."
+    default: ""
+  github-token:
+    description: The token for the comment (needs pull-requests write).
+    default: ${{ github.token }}
+
+outputs:
+  exit-code:
+    description: "hydo ci run's exit status: 0 passed, 1 failed by fail_on, 2 not completed."
+    value: ${{ steps.run.outputs.exit-code }}
+  report:
+    description: The path of report.md.
+    value: ${{ steps.run.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - name: Make /dev/kvm usable
+      shell: bash
+      run: |
+        # GitHub's Linux runners have KVM; the device is opened by the runner's user
+        if [ ! -w /dev/kvm ]; then
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-hydo-kvm.rules > /dev/null
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+        fi
+        if [ ! -w /dev/kvm ]; then
+          echo "::error::/dev/kvm is not usable on this runner: hydo's KVM engine needs it (hydo guide ci, 'Runners')"
+          exit 2
+        fi
+
+    - name: Restore hydo and its image cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.hydo
+        key: hydo-${{ runner.os }}-${{ inputs.hydo-version }}-${{ inputs.project }}-${{ github.sha }}
+        restore-keys: |
+          hydo-${{ runner.os }}-${{ inputs.hydo-version }}-${{ inputs.project }}-
+          hydo-${{ runner.os }}-${{ inputs.hydo-version }}-
+
+    - name: Install hydo
+      shell: bash
+      env:
+        HYDO_VERSION: ${{ inputs.hydo-version }}
+      run: |
+        set -euo pipefail
+        v="$HYDO_VERSION"
+        if [ ! -x "$HOME/.hydo/versions/$v/bin/hydo" ]; then
+          url="https://github.com/kakoc/hydo/releases/download/v$v"
+          tmp="$(mktemp -d)"
+          curl -fsSL --retry 4 -o "$tmp/hydo-linux-$v.tar.gz" "$url/hydo-linux-$v.tar.gz"
+          curl -fsSL --retry 4 -o "$tmp/SHA256SUMS" "$url/SHA256SUMS"
+          (cd "$tmp" && grep " hydo-linux-$v.tar.gz\$" SHA256SUMS | sha256sum -c -)
+          tar xzf "$tmp/hydo-linux-$v.tar.gz" -C "$tmp"
+          # the archive into hydo's install cache, then the version installed from it
+          "$tmp/hydo-linux-$v/bin/hydo" setup --archive "$tmp/hydo-linux-$v.tar.gz"
+          "$tmp/hydo-linux-$v/bin/hydo" setup --get "$v" --offline
+          rm -rf "$tmp"
+        fi
+        "$HOME/.hydo/versions/$v/bin/hydo" --version
+        echo "$HOME/.hydo/versions/$v/bin" >> "$GITHUB_PATH"
+
+    - name: Fetch the base commit
+      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      shell: bash
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: git fetch --no-tags --depth=1 origin "$BASE_SHA"
+
+    - name: Run hydo ci run
+      id: run
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        OUT: ${{ inputs.out }}
+        MODE: ${{ inputs.mode }}
+        ARGS: ${{ inputs.args }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        set +e
+        read -ra extra <<< "$ARGS"
+        cmd=(hydo ci run --project "$PROJECT" --out "$OUT")
+        [ -n "$MODE" ] && cmd+=(--mode "$MODE")
+        # a pull request is compared with the base branch's tip it was opened against
+        [ -n "$BASE_SHA" ] && cmd+=(--base "$BASE_SHA")
+        "${cmd[@]}" "${extra[@]}"
+        rc=$?
+        echo "exit-code=$rc" >> "$GITHUB_OUTPUT"
+        echo "report=$OUT/report.md" >> "$GITHUB_OUTPUT"
+        if [ -f "$OUT/report.md" ]; then
+          cat "$OUT/report.md" >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "hydo ci run stopped before it wrote a report (exit status $rc); see the job's log." >> "$GITHUB_STEP_SUMMARY"
+        fi
+        # the base's checkout is not evidence
+        rm -rf "$OUT/base-src"
+        exit 0
+
+    - name: Keep hydo's files
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ inputs.artifact-name != '' && inputs.artifact-name || format('hydo-ci-{0}-{1}', github.run_id, github.run_attempt) }}
+        path: ${{ inputs.out }}
+        if-no-files-found: ignore
+
+    - name: Comment on the pull request
+      if: inputs.comment == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
+        REPORT: ${{ steps.run.outputs.report }}
+        PROJECT: ${{ inputs.project }}
+      run: |
+        # one comment per project, found again by its first line and edited in place
+        [ -f "$REPORT" ] || exit 0
+        marker="<!-- hydo-ci: $PROJECT -->"
+        body="$(printf '%s\n%s' "$marker" "$(cat "$REPORT")")"
+        id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+          --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)"
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" > /dev/null \
+            || echo "::warning::could not update the hydo comment (a pull request from a fork gets a read-only token); the report is in the job summary"
+        else
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" > /dev/null \
+            || echo "::warning::could not post the hydo comment (a pull request from a fork gets a read-only token); the report is in the job summary"
+        fi
+
+    - name: Fail by hydo's verdict
+      shell: bash
+      env:
+        RC: ${{ steps.run.outputs.exit-code }}
+      run: |
+        case "$RC" in
+          0) exit 0 ;;
+          1) echo "::error::hydo: failed by the project's fail_on policy (the report says why)"; exit 1 ;;
+          *) echo "::error::hydo ci run could not complete (exit status ${RC:-unknown})"; exit 2 ;;
+        esac

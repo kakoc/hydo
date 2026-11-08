@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hydo/ci.yaml, format 1",
+  "description": "`hydo/ci.yaml`.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "description": "The format of this file: 1. A file without it is read as format 1.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "manifest": {
+      "description": "The manifest, relative to the project's directory. Default `hydo/hydo.yaml`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "engine": {
+      "description": "The engine: `kvm` (stock Linux KVM: CI runners), `hvx` (the kernel module) or `hvm` (an\nApple Silicon Mac). Default: `hvm` on a Mac, `kvm` on Linux.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "build": {
+      "description": "A shell command run in the project's directory before `hydo build`, at the head commit and\nagain in the base commit's checkout: it builds what the manifest stages.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "set": {
+      "description": "`hydo build --set KEY=VALUE` for the manifest's `params:`.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "inputs": {
+      "description": "For files the `build` command makes: the repository paths (files or directories) they are\nmade from, per service or any name. Their git tree hashes go into the image input key, so\nan unchanged input reuses the cached image without building it.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "pr": {
+      "description": "What a pull request's run explores.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Budget"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "push": {
+      "description": "What a run on a push to a branch explores. Default: as `pr`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Budget"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nightly": {
+      "description": "What a scheduled run explores. Default: as `push`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Budget"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "fail_on": {
+      "description": "What fails the run. Default `[new, reappeared, regression]`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/FailOn"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Budget": {
+      "description": "What one kind of CI run explores.",
+      "type": "object",
+      "properties": {
+        "seeds": {
+          "description": "The explorer's seed range (`1-200`). The same range on every run of this kind, so that the\ncomparison with the base explores the same schedules. Default `1-50`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strategy": {
+          "description": "The explorer's strategy (`random`, `swarm`, `process`, ...). Default `process`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "options": {
+          "description": "More explorer options (`--more-faults`, `--protocol-faults`, ...).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "workers": {
+          "description": "The explorer's workers; default: sized from the machine.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "FailOn": {
+      "description": "What fails a CI run (`fail_on`): a finding in one of these states, or a saved regression that\nis not as expected.",
+      "oneOf": [
+        {
+          "description": "A finding this change introduced (the base commit passes its minimal schedule).",
+          "type": "string",
+          "const": "new"
+        },
+        {
+          "description": "A finding that was fixed earlier and fails again (decided from history, stage 2).",
+          "type": "string",
+          "const": "reappeared"
+        },
+        {
+          "description": "A saved regression (`hydo/regressions/`) that did not give its expected answer.",
+          "type": "string",
+          "const": "regression"
+        },
+        {
+          "description": "A finding the base also has, which the base's own exploration missed.",
+          "type": "string",
+          "const": "pre-existing"
+        },
+        {
+          "description": "A finding of the base that is still there.",
+          "type": "string",
+          "const": "present"
+        },
+        {
+          "description": "A finding of the base whose schedule now fails differently.",
+          "type": "string",
+          "const": "changed"
+        },
+        {
+          "description": "A finding whose schedule could not be replayed.",
+          "type": "string",
+          "const": "unverified"
+        }
+      ]
+    }
+  },
+  "$comment": "Generated from hydo-manifest's CI settings (hydo/crates/hydo-manifest/src/ci.rs); do not edit. Within format 1 keys are only added. HYDO_BLESS=1 cargo test -p hydo-manifest --test it ci_format:: rewrites it."
+}

@@ -190,7 +190,10 @@ fn norm(text: &str) -> String {
     let t = re2.replace_all(&t, "${1}N").into_owned();
     // the loaded hvx module of the machine the test runs on (absent on a Mac)
     let re3 = regex::Regex::new(r#",?\s*"module_srcversion": ?"[^"]*""#).unwrap();
-    re3.replace_all(&t, "").into_owned()
+    let t = re3.replace_all(&t, "").into_owned();
+    // the CPU of the machine the test runs on
+    let re4 = regex::Regex::new(r#",?\s*"host_cpu": ?\{[^}]*\}"#).unwrap();
+    re4.replace_all(&t, "").into_owned()
 }
 
 /// What an exploration writes (M115: the results format and report.md, its view for people).
@@ -260,6 +263,9 @@ fn bless() -> bool {
 }
 
 fn scenario(name: &str, args: &[&str]) {
+    if name == CACHE_SCENARIO {
+        return cache_scenario();
+    }
     let dir = scratch(name);
     let out = dir.join("out");
     let mut cmd = match std::env::var("HYDO_FAKE_EXPLORER") {
@@ -540,7 +546,53 @@ const SCENARIOS: &[(&str, &[&str])] = &[
             "2",
         ],
     ),
+    // no golden: cache_scenario() checks the result cache's key instead
+    (CACHE_SCENARIO, &[]),
 ];
+
+const CACHE_SCENARIO: &str = "cache_key_is_the_image_bytes";
+
+/// The result cache (`HYDO_EXPLORE_CACHE`) answers a schedule only for the same image bytes
+/// (docs/design/ci.md section 7.2): an exploration run twice is answered from the cache the second
+/// time, and once the image at the same path has other bytes, nothing is.
+fn cache_scenario() {
+    let dir = scratch(CACHE_SCENARIO);
+    let img = dir.join(IMAGE[1]);
+    let cache = dir.join("cache.jsonl");
+    let explore = |n: u32| -> serde_json::Value {
+        let out = dir.join(format!("out{n}"));
+        let o = Command::new(env!("CARGO_BIN_EXE_hydo-explore"))
+            .args(["--seeds", "1-4"])
+            .args(IMAGE)
+            .args(["--workers", "1", "--out"])
+            .arg(&out)
+            .env("HYDO_FAKE_ENGINE", "1")
+            .env("HYDO_SCRIPTED_ENGINE", engine_path())
+            .env("HYDO_BUILD", &dir)
+            .env("HYDO_EXPLORE_CACHE", &cache)
+            .env_remove("HYDO_QUIET_FILE")
+            .env_remove("HYDO_BLESS")
+            .env("HYDO_FAKE_HIST", "")
+            .current_dir(top())
+            .output()
+            .expect("run");
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+        let t = std::fs::read_to_string(out.join("exploration.json")).expect("exploration.json");
+        serde_json::from_str::<serde_json::Value>(&t).expect("json")["summary"]["cache_hits"]
+            .clone()
+    };
+    std::fs::write(&img, b"the first image").unwrap();
+    assert_eq!(explore(1), serde_json::Value::Null, "an empty cache");
+    assert_eq!(explore(2), serde_json::json!(4), "the same image again");
+    std::fs::write(&img, b"another image at the same path").unwrap();
+    assert_eq!(
+        explore(3),
+        serde_json::Value::Null,
+        "another image at the same path must not be answered from the cache"
+    );
+    assert_eq!(explore(4), serde_json::json!(4), "that image again");
+    let _ = std::fs::remove_dir_all(&dir);
+}
 
 /// The scripted engine (fake_engine.py, ported line for line).
 mod engine {

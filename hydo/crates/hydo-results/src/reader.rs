@@ -14,7 +14,8 @@
 //!    ignored; any other line that is not JSON is an error.
 
 use crate::v1::{
-    DiagnosisDoc, Diff, End, Exploration, Inspect, InspectError, Run, Shrink, Start, Timeline,
+    CiRun, DiagnosisDoc, Diff, End, Exploration, Inspect, InspectError, Run, Shrink, Start,
+    Timeline,
 };
 use crate::{EVENTS, EXPLORATION_DOC, RUN_DOC};
 use serde_json::Value;
@@ -41,6 +42,8 @@ pub enum Record {
     /// `hydo inspect`'s answers (added in M178).
     Inspect(Box<Inspect>),
     InspectError(Box<InspectError>),
+    /// `ci-run.json` (`hydo ci run`, added after 0.2.0).
+    CiRun(Box<CiRun>),
 }
 
 /// A record the reader skipped (rule 3).
@@ -142,6 +145,7 @@ pub fn record(v: Value) -> Result<Option<Record>, String> {
         "timeline" => Record::Timeline(de(v, &ty)?),
         "inspect" => Record::Inspect(de(v, &ty)?),
         "inspect-error" => Record::InspectError(de(v, &ty)?),
+        "ci-run" => Record::CiRun(de(v, &ty)?),
         _ => return Ok(None),
     }))
 }
