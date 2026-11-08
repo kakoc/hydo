@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# Insert one unique element; acknowledged elements must survive every fault.
+exec hydo-sql set add

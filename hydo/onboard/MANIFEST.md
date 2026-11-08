@@ -69,6 +69,7 @@ model, exactly as these entries written in the file would:
 |---|---|
 | `workload/<kind>_<name>` | `test.commands[]`: `{name, kind, run: [/hydo/workload/<file>], content: <first 16 hex digits of the file's SHA-256>}`; a `# hydo: timeout=N` header gives `timeout` |
 | `checks/final_<name>`, `checks/always_<name>`, `checks/eventually_<name>` | `test.checks[]`: `{name, kind, run: [/hydo/checks/<file>]}`; the header gives `every` / `within`, `after`, `poll`, and `# hydo-msg:` gives `msg` |
+| `checks/final_<name>.sql`, `checks/always_<name>.sql`, `checks/eventually_<name>.sql`, not executable | `test.checks[]`: `{name, kind, run: [hydo-sql, none, --file, /hydo/checks/<file>, --on, <store>]}`: a query that must return no rows; the header (`--` comments) `-- hydo: store=<endpoint> every=N within=N after=... poll=N` and `-- hydo-msg:` (Milestone 182; an executable `.sql` file is an ordinary check, as before) |
 | `checks/linearizable_<name>`, `checks/list_append_<name>` | top-level `checks[]`: `{id: <name>, type: linearizable or list-append, history, msg, final: "exec '/hydo/checks/<file>'"}`; the header gives `history`, `model`, `initial`, `consistency` |
 | `regressions/<name>.schedule` | `test.regressions[]`: `{name, schedule, expect}` and, from its comment lines, `commands`, `compose`, `contents` |
 
@@ -1166,7 +1167,8 @@ without a `hydo/` folder is not changed by it.
 hydo/
   hydo.yaml          services, data, knobs, allowed faults, guest settings (and test: options)
   workload/          commands: <kind>_<name> executables; helper_* files and dot files are ignored
-  checks/            properties: final_<name>, always_<name>, eventually_<name>
+  checks/            properties: final_<name>, always_<name>, eventually_<name>; <kind>_<name>.sql
+                     (not executable): a SQL query that must return no rows ("SQL systems")
   regressions/       <name>.schedule: saved minimal schedules, replayed by `hydo repro --regressions`
 .hydo/               build cache, git-ignored (`hydo build` writes here for a manifest in hydo/)
 ```
@@ -1808,6 +1810,110 @@ its own volume on `/data`, do not share one directory (`{src: /data/vol/n1-data,
 - Healthchecks run through `hydo-oci`, as root unless the service has a `user:`; the image's own
   user for a healthcheck (Docker runs it as the container's user) is not looked up.
 - No `build:`, no registry pulls at build time, no Swarm (`deploy:`), no GPUs or host devices.
+
+## SQL systems: ready-made workloads and checks (`hydo sql-gen`, `hydo-sql`)
+
+A system with a SQL database needs no hand-written client for the classic transactional
+workloads, and no shell for its business rules over SQL tables. `hydo sql-gen` writes test-composer
+commands and checks into the `hydo/` folder; they call the static guest program `hydo-sql`
+(`hydo/crates/hydo-sql`, built like `hydo-read`, `docs/BUILD-PINS.md`), which `hydo build`
+stages as `/bin/hydo-sql` when a command or a folder file names it (`HYDO_SQL_BIN`, default the
+release's `guest/hydo-sql`; arm64 `HYDO_SQL_BIN_ARM64`). Design: docs/design/workloads.md
+(Milestone 182). `hydo guide workloads` is the short form of this section.
+
+```sh
+hydo sql-gen --dialect postgres|mysql|libsql --endpoint NAME=ADDRESS[,replica] ... \
+  [--workloads bank,list-append,register,set,counter|none] [--shapes batch,interactive] \
+  [--route NAME,...] [--isolation serializable|repeatable-read|read-committed] \
+  [--accounts 8] [--balance 100] [--keys 6] [--timeout-ms 3000] [--retries 2] [--out hydo] [--force]
+```
+
+**Endpoints.** The address is what the guest connects to: `host:port` of sqld's HTTP API (Hrana
+over HTTP) for `libsql` (SQLite and libSQL), a DSN for `postgres` and `mysql`, as `hydo-read` takes
+them. `,replica` marks an endpoint whose reads may be stale; every other endpoint is a primary.
+Operations go to the endpoints of `--route` (default every endpoint), the seed choosing.
+
+**Files written** (kept when they exist, unless `--force`):
+
+| file | what |
+|---|---|
+| `workload/helper_sql.conf` | the configuration `hydo-sql` reads (`/hydo/workload/helper_sql.conf`, or `$HYDO_SQL_CONF`): `dialect`, `endpoint <name> <address> primary\|replica`, `isolation`, `workloads`, `route <workload\|*> <endpoint>...`, `accounts`, `balance`, `keys`, `timeout_ms`, `retries` |
+| `workload/first_sql_init` | the workloads' tables (`hydo_accounts`, `hydo_lists`, `hydo_registers`, `hydo_set`, `hydo_counter`) and first rows on the first primary, then a wait until every endpoint has them |
+| `workload/parallel_driver_sql_transfer`, `_itransfer` | a bank transfer, batch or interactive |
+| `workload/parallel_driver_sql_txn`, `_itxn` | a list-append transaction (1 to 4 appends and whole-list reads), batch or interactive |
+| `workload/parallel_driver_sql_register` | a read, write or compare-and-set of a register |
+| `workload/parallel_driver_sql_set_add`, `_counter_add` | a unique insert; an increment |
+| `checks/always_sql_bank_live`, `final_sql_bank_after`, `final_sql_no_negative_balance.sql` | the bank's total and no negative balance: on every endpoint while the workload runs, on the primary after the faults |
+| `checks/list_append_sql.la` (and `.lap`) | hydo's list-append checker over history `la` (and `lap`) |
+| `checks/linearizable_sql.rg` | hydo's linearizability checker (model `cas`) over history `rg` |
+| `checks/final_sql_set`, `final_sql_counter` | every acknowledged element is there; the counter is at least the acknowledged increments |
+| `checks/eventually_sql_replicas_converge` | with replicas: within 120 s of the heal every replica holds the primary's rows |
+
+**Transaction shapes.** *batch*: statements fixed before the transaction starts, sent as one
+request (PostgreSQL: one simple-query message `BEGIN ISOLATION LEVEL ...; ...; COMMIT`; libSQL: one
+Hrana batch with conditional steps; MySQL's text protocol has none, so the statements follow each
+other on one connection and a transfer is one multi-table `UPDATE`). *interactive*: one statement
+per round trip, the client deciding in between (read both balances, write computed values).
+
+**Outcomes** (`<id> ack|failed|unknown` to `$HYDO_OUTCOMES`; acknowledgements to `$HYDO_ACKED`:
+`<id>`, `set-<element>`, `counter-<id>`): no connection = failed; a server error before or at
+COMMIT = failed, retried as a new transaction (`retries`) when it is a transient conflict
+(PostgreSQL 40001 and 40P01, MySQL 1213 and 1205, SQLite `SQLITE_BUSY`); an interactive
+transaction that lost its connection before COMMIT = failed; COMMIT (or a one-request
+transaction) sent and no complete answer (a timeout, a reset, an HTTP 5xx, PostgreSQL class
+08/57/58/XX at COMMIT) = unknown.
+
+**Histories and claims.** List-append transactions go to history `la`; with replicas on the route
+also to `lap`: what a primary ran whole, and only the appends of what a replica served. `la`
+claims the isolation level's real-time form when no replica is on the route
+(`strict-serializable` for `serializable`, `strong-snapshot-isolation` for `repeatable-read`),
+else the form without real time (`serializable`, `snapshot-isolation`), and `lap` the real-time
+form: only a real-time claim sees an acknowledged write lost at a power cut. Register operations go
+to history `rg`, without the reads a replica served. `read-committed` allows no list-append claim
+(`hydo sql-gen` refuses the pair). Each attempt of a retried transaction is its own operation with
+its own elements.
+
+**`hydo-sql`'s commands** (the generated files call them; usable by hand):
+
+| command | use |
+|---|---|
+| `hydo-sql init [--wait S]` | the tables and first rows; wait until every endpoint has them |
+| `hydo-sql bank transfer`, `list-append txn` `[--shape batch\|interactive\|seed] [--on <endpoint>\|seed]` | one operation; exit 0 acknowledged, 1 failed or unknown |
+| `hydo-sql register op`, `set add`, `counter add` `[--on ...]` | one operation |
+| `hydo-sql bank check [<endpoint>...]`, `set check [<endpoint>]`, `counter check [<endpoint>]` | the workload's property: 0 holds, 1 violated, 2 cannot evaluate |
+| `hydo-sql list-append read-all <endpoint> [process]`, `register read-all ...` | a history check's final read-back |
+| `hydo-sql none <endpoint>[,...] '<query>'`, `none --file F [--on <endpoint>] [--msg M]` | a query that must return no rows: up to 5 offending rows, exit 1 when any |
+| `hydo-sql dump <endpoint>` | the workloads' rows, one item per row |
+| `hydo-sql read <store> ...`, `hydo-sql check <check> ...` | `hydo-read` and `hydo-check` (below, "Reading the stores") with the sources `sql <endpoint> '<query>'`, `libsql <host:port> '<query>'`, `dump <endpoint>` and `world <ep>.<route>\|<route>\|* [--all] [--log PATH]` |
+
+**SQL checks.** A non-executable `checks/<final|always|eventually>_<name>.sql` file is a query
+that must return no rows on the store its header names (an endpoint of `helper_sql.conf`; default
+the first primary):
+
+```sql
+-- hydo: store=primary every=2
+-- hydo-msg: no order is paid twice
+SELECT order_id, count(*) FROM payment WHERE status = 'captured' GROUP BY order_id HAVING count(*) > 1
+```
+
+For a project's own tables, `hydo sql-gen --workloads none` writes only `helper_sql.conf`.
+
+**The outside world as a source.** `world <target>` reads the fake outside world's record
+(`/tmp/hydo/world.log`, "The record"): one record per request that took effect (`fx=1`) and per
+event, `--all` every request, each with its fields (`seq`, `ep`, `route`, `ref`, `idem`, `fx`,
+`out`, ...). So "the books and the provider agree" is one line:
+
+```sh
+hydo-sql check equal --left 'books=sql db "SELECT intent FROM payment WHERE captured"' \
+                     --right 'stripe=world stripe.capture --field ref'
+```
+
+The record keeps no request fields beyond `ref` and `idem` (a refund's amount is not there; adding
+fields changes `hydo-world`'s pinned bytes, so it waits for a release that re-pins it).
+
+**Examples.** `examples/libsql-replica/` (a primary and a replica, both shapes; it reproduces the
+durability findings of Milestone 173 with the generated files) and `examples/postgres-sql/` (the
+voting app's PostgreSQL with all five workloads).
 
 ## gRPC services: generated drivers (`hydo-grpc-gen`)
 

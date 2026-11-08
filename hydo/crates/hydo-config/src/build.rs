@@ -81,6 +81,10 @@ pub struct Build {
     pub read_bin: Input,
     /// `HYDO_READ_BIN_ARM64`.
     pub read_bin_arm64: Input,
+    /// `HYDO_SQL_BIN`.
+    pub sql_bin: Input,
+    /// `HYDO_SQL_BIN_ARM64`.
+    pub sql_bin_arm64: Input,
     /// `HYDO_AGENT_BIN`.
     pub agent_bin: Input,
     /// `HYDO_AGENT_BIN_ARM64`.
@@ -128,6 +132,8 @@ impl Build {
             worldbin_tls_arm64: Input::read(e, HYDO_WORLDBIN_TLS_ARM64),
             read_bin: Input::read(e, HYDO_READ_BIN),
             read_bin_arm64: Input::read(e, HYDO_READ_BIN_ARM64),
+            sql_bin: Input::read(e, HYDO_SQL_BIN),
+            sql_bin_arm64: Input::read(e, HYDO_SQL_BIN_ARM64),
             agent_bin: Input::read(e, HYDO_AGENT_BIN),
             agent_bin_arm64: Input::read(e, HYDO_AGENT_BIN_ARM64),
             arm64_store: Input::read(e, HYDO_ARM64_STORE),

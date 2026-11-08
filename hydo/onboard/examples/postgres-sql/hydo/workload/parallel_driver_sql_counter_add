@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# Add one to a counter; no acknowledged increment may be lost.
+exec hydo-sql counter add

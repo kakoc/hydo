@@ -13,7 +13,9 @@ Start from what the user said must never happen, then go through this list:
 3. **Failed means not applied**: an operation the system reported as failed left no effect. (An
    operation whose outcome the client did not learn may have either; do not check it either way.)
 4. **Domain rules**: no negative balance, totals conserved, no order without its items, unique
-   keys unique.
+   keys unique. Start from the standard rules of the project's domain that the owner confirmed
+   (step 1 of SKILL.md; the lists are in `hydo guide workloads`), and write each over SQL tables
+   as a `.sql` check (a query that must return no rows) rather than a shell loop.
 5. **Monotonic reads**: a version, counter or offset that a client saw never goes back.
 6. **Caches agree with the store**: a cache never serves a value the store does not hold
    (allowing for its documented staleness).

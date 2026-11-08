@@ -180,6 +180,8 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_WORLDBIN_TLS_ARM64` | user | path; empty = default | <build dir>/hydo-world-tls-arm64 | hydo-build | The arm64 `hydo-world-tls`. |
 | `HYDO_READ_BIN` | user | path; empty = default | <build dir>/hydo-read | hydo-build | The x86_64 `hydo-read`. |
 | `HYDO_READ_BIN_ARM64` | user | path; empty = default | <build dir>/hydo-read-arm64 | hydo-build | The arm64 `hydo-read`. |
+| `HYDO_SQL_BIN` | user | path; empty = default | <build dir>/hydo-sql | hydo-build | The x86_64 `hydo-sql` (the ready-made SQL workloads and checks), staged only when a command calls it. |
+| `HYDO_SQL_BIN_ARM64` | user | path; empty = default | <build dir>/hydo-sql-arm64 | hydo-build | The arm64 `hydo-sql`. |
 | `HYDO_AGENT_BIN` | user | path; empty = default | <build dir>/hydo-agent | hydo-build | The x86_64 `hydo-agent` (its sha256 must be the pinned one). |
 | `HYDO_AGENT_BIN_ARM64` | user | path; empty = default | <build dir>/hydo-agent-arm64 | hydo-build | The arm64 `hydo-agent`. |
 | `HYDO_AGENT_UNPINNED` | developer | flag: exactly `1` | off | hydo-build | `1`: stage an agent whose sha256 is not the pinned one (with a warning). |

@@ -58,3 +58,4 @@ skill-example-redis-composed-folder
 restart-policies
 restart-may-fail
 tls-and-writable
+sql-checks-folder

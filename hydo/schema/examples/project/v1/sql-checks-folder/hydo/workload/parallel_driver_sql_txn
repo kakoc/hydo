@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=20
+# One list-append transaction (1 to 4 appends of unique elements and whole-list reads) as one transaction (one request),
+# recorded for hydo's list-append checker.
+exec hydo-sql list-append txn --shape batch

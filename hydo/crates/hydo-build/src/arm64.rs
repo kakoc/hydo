@@ -226,6 +226,15 @@ pub fn build(
     } else {
         None
     };
+    let sql = if x86::uses_sql(&m)? {
+        Some(aarch64_tool(
+            &bt,
+            &ctx.inputs.sql_bin_arm64,
+            &bdir.join("hydo-sql-arm64").to_string_lossy(),
+        )?)
+    } else {
+        None
+    };
     let netns_k = needs_netns_kernel(&m);
     let netns = shell::has_netns(&m);
     let mut fcbin = None;
@@ -293,6 +302,16 @@ pub fn build(
             &format!(
                 "hydo-build: staged /bin/hydo-read and /bin/hydo-check (arm64, sha256 {})",
                 &fsx::sha(Path::new(rb))?[..16]
+            ),
+        );
+    }
+    if let Some(sb) = &sql {
+        put_exec(sb, &r.join("bin/hydo-sql"))?;
+        outln(
+            io,
+            &format!(
+                "hydo-build: staged /bin/hydo-sql (arm64, sha256 {})",
+                &fsx::sha(Path::new(sb))?[..16]
             ),
         );
     }

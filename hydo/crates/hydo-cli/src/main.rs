@@ -28,6 +28,7 @@ mod pyjson;
 mod runs;
 mod setup;
 mod skillupdate;
+mod sqlgen;
 
 use ctx::{Ctx, Platform};
 
@@ -182,6 +183,9 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         "explain" => explain::cmd_explain(ctx, rest),
         // M178: look inside a recorded run (docs/design/inspect.md; `hydo inspect --help`)
         "inspect" => inspect::cmd_inspect(ctx, rest),
+        // ready-made SQL workloads and checks for the hydo/ folder (`hydo sql-gen --help`; the
+        // main help is a recorded answer)
+        "sql-gen" => sqlgen::cmd_sql_gen(rest),
         "save" => runs::cmd_save(ctx, rest),
         "errors" => delegated::cmd_errors(ctx, rest),
         "check-history" => hydo_history::cli::main(rest),

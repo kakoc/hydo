@@ -8,13 +8,24 @@
 # 2. write the workload and the invariants below
 # 3. HYDO_SEEDRNG=<pinned hvx_seedrng> hvx/onboard/hydo-build hydo.yaml   (or: hydo build)
 #
-# hand: changes made after the import are marked "hand:". The workload is the seeded SQL client
-# ../client (sqlgen, static Rust): bank transfers and Elle-style list-append transactions over
-# Hrana HTTP, sent to the primary or the replica as the seed chooses (RESULTS.md).
+# hand: changes made after the import are marked "hand:". The workload and its checks are hydo's
+# ready-made SQL workloads (workload/, checks/), written by
+#   hydo sql-gen --dialect libsql --endpoint primary=10.89.0.11:8080 --endpoint replica=10.89.0.12:8080,replica
+# bank transfers and Elle-style list-append transactions over sqld's HTTP API, batch and
+# interactive, sent to the primary or the replica as the seed chooses (RESULTS.md). Until
+# Milestone 177 they were a hand-written client, ../client (sqlgen, about 850 lines of Rust).
 format: 1
 name: libsql-replica
 description: "libSQL server (sqld): a primary and a read replica; seeded SQL transactions checked for a constant bank total, serializable list-append histories and replica convergence"
 hydo_version: "0.2"
+
+# hand: what the primary's ready command runs after its health check. By default it sets sqld's
+# durability mode again after every start, because sqld keeps it only in memory (RESULTS.md,
+# finding 3); `hydo build --set 'mode_on_start=&& true'` builds the image that sets it only once
+# (workload/first_sqld_durability), which loses acknowledged transactions at a power cut after a
+# kill of the primary.
+params:
+  mode_on_start: "&& sh /etc/sqld-durability.sh"
 
 network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
 
@@ -27,9 +38,6 @@ data:
   dirs: [vol/primary-data, vol/replica-data]
 
 root:
-  files:
-    # hand: the workload client, built by ../client/build.sh
-    - {src: ../client/bin/sqlgen, dst: /bin/sqlgen, mode: "0755"}
   text:
     # hand: sets sqld's durability mode through the admin API: the knob's value, or the last
     # one set (strong at first); the primary's ready command runs it after every start
@@ -44,11 +52,6 @@ root:
       ::1 localhost ip6-localhost ip6-loopback
       10.89.0.11 primary
       10.89.0.12 replica
-
-# hand: where the client finds the two nodes
-env:
-  SQLGEN_PRIMARY: "10.89.0.11:8080"
-  SQLGEN_REPLICA: "10.89.0.12:8080"
 
 services:
   # Compose service primary
@@ -73,7 +76,7 @@ services:
     # hand: the image has no curl (the Compose healthcheck could never pass); busybox wget from the
     # guest. Then the durability mode, again after every start: sqld keeps it only in memory
     # (RESULTS.md, finding 3), so a restarted primary would fall back to relaxed.
-    ready: "wget -q -T 2 -O /dev/null http://127.0.0.1:8080/health && sh /etc/sqld-durability.sh"
+    ready: "wget -q -T 2 -O /dev/null http://127.0.0.1:8080/health {{mode_on_start}}"
     ready_timeout: 120
     restart: "unless-stopped"
     mounts:

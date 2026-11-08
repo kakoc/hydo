@@ -178,7 +178,12 @@ fn word_char_after(c: u8) -> bool {
 
 /// `READERS_RE.search(text)`: `(?<![A-Za-z0-9_./-])hydo-(read|check)(?![A-Za-z0-9_-])`.
 pub fn readers_search(b: &[u8]) -> bool {
-    for word in [&b"hydo-read"[..], &b"hydo-check"[..]] {
+    words_search(b, &[&b"hydo-read"[..], &b"hydo-check"[..]])
+}
+
+/// One of `words` as a command word (the same boundaries as `readers_search`).
+pub fn words_search(b: &[u8], words: &[&[u8]]) -> bool {
+    for &word in words {
         let mut i = 0;
         while i + word.len() <= b.len() {
             if &b[i..i + word.len()] == word {
@@ -194,13 +199,13 @@ pub fn readers_search(b: &[u8]) -> bool {
     false
 }
 
-fn walk_strings(x: &Value) -> bool {
+fn walk_strings(x: &Value, found: &dyn Fn(&[u8]) -> bool) -> bool {
     match x {
-        Value::Object(o) => o
-            .iter()
-            .any(|(k, v)| !["description", "msg", "name"].contains(&k.as_str()) && walk_strings(v)),
-        Value::Array(a) => a.iter().any(walk_strings),
-        Value::String(s) => readers_search(s.as_bytes()),
+        Value::Object(o) => o.iter().any(|(k, v)| {
+            !["description", "msg", "name"].contains(&k.as_str()) && walk_strings(v, found)
+        }),
+        Value::Array(a) => a.iter().any(|v| walk_strings(v, found)),
+        Value::String(s) => found(s.as_bytes()),
         _ => false,
     }
 }
@@ -208,7 +213,18 @@ fn walk_strings(x: &Value) -> bool {
 /// `uses_readers(m)`: a command of the manifest (or a file of its hydo/ folder) calls hydo-read
 /// or hydo-check.
 pub fn uses_readers(m: &Value) -> Result<bool, Fail> {
-    if walk_strings(m) {
+    uses_program(m, &readers_search)
+}
+
+/// `uses_sql(m)`: a command of the manifest (or a file of its hydo/ folder) calls hydo-sql, the
+/// ready-made SQL workloads and checks; /bin/hydo-sql is staged only then, so no other image
+/// changes.
+pub fn uses_sql(m: &Value) -> Result<bool, Fail> {
+    uses_program(m, &|b: &[u8]| words_search(b, &[&b"hydo-sql"[..]]))
+}
+
+fn uses_program(m: &Value, found: &dyn Fn(&[u8]) -> bool) -> Result<bool, Fail> {
+    if walk_strings(m, found) {
         return Ok(true);
     }
     let dirs: Vec<String> = m
@@ -229,7 +245,7 @@ pub fn uses_readers(m: &Value) -> Result<bool, Fail> {
                 if let Ok(md) = std::fs::metadata(&p) {
                     if md.is_file() && md.len() <= (64 << 20) {
                         let b = std::fs::read(&p).map_err(|e| io_fail("cannot read", &p, e))?;
-                        if readers_search(&b) {
+                        if found(&b) {
                             return Ok(true);
                         }
                     }
@@ -594,6 +610,21 @@ pub fn build(
             &format!(
                 "hydo-build: staged /bin/hydo-read and /bin/hydo-check (sha256 {})",
                 &fsx::sha(Path::new(&rb))?[..16]
+            ),
+        );
+    }
+    if uses_sql(&m)? {
+        let sb = tool(
+            &ctx.inputs.sql_bin,
+            &bdir.join("hydo-sql").to_string_lossy(),
+            isfile,
+        )?;
+        put_exec(&sb, &r.join("bin/hydo-sql"))?;
+        outln(
+            io,
+            &format!(
+                "hydo-build: staged /bin/hydo-sql (sha256 {})",
+                &fsx::sha(Path::new(&sb))?[..16]
             ),
         );
     }
