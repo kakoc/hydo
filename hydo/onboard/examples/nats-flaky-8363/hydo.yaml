@@ -7,7 +7,9 @@
 #   hydo build hydo.yaml                                     # buggy, count 2, GOMAXPROCS default
 #   hydo build hydo.yaml --set variant=fixed                 # pull request 8794
 #   hydo build hydo.yaml --set procs=2                       # GOMAXPROCS=2 (needs 2+ vCPUs)
-# RESULTS.md has the schedules, rates and fingerprints.
+#   hydo run --vcpus 2 "disk=none q=18800 | run"              # fails; q=18700 passes (hvx)
+#   hydo explore --vcpus 2 --sweep turns --out turns          # finds that boundary
+# RESULTS.md has the schedules, rates and fingerprints; `hydo guide flaky-tests` the method.
 name: nats-flaky-8363
 description: nats-server's flaky TestRegisterAndUnregister (issue 8363), one test process per run.
 
@@ -25,9 +27,10 @@ data:
   dirs: [t]
 
 workload:
-  steps: 4                # the explorer needs at least 4 steps; the test runs in step 0 only
+  kind: test              # a test program run once: one step, no service faults, class test-failed
+  steps: 1
   run: |
-    [ "$HYDO_FROM" = 0 ] || exit 0
+    [ "$HYDO_FROM" = 0 ] || exit 0    # the test runs once, in step 0
     procs="{{procs}}"
     [ -n "$procs" ] && export GOMAXPROCS=$procs
     echo "hydo-ats: cpus=$(grep -c ^processor /proc/cpuinfo) GOMAXPROCS=${GOMAXPROCS:-default} count={{count}} variant={{variant}}" > /dev/console
@@ -49,5 +52,3 @@ invariants:
       line=$(grep -m1 'ats_test.go' /data/t/out | sed 's/^ *//')
       seq=$(grep -- '^--- ' /data/t/out | cut -c5-8 | tr '\n' ' ')
       echo "pass=$pass fail=$fail order=[$seq] $line"; exit 1
-
-faults: [clock]

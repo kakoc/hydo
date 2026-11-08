@@ -267,8 +267,8 @@ value is in `hydo/onboard/recorded.json`, and `hydo-bench rebaseline` checks or 
 **The hvx engine.** The module (`hv/hvx/hvx.c`, ABI `hvx_abi.h`) boots Linux 6.6.35
 deterministically, with guest RAM up to 8 GiB. Its clock counts VM exits, or the guest's retired
 conditional branches with the PMU branch clock. Every module feature is opt-in; the engine turns on the
-host-call port by default (M140). The run engine is the Rust crate `hydo-hvx`, which runs inside
-`hydo` when the process can open `/dev/hvx`. Details:
+host-call port by default (M140), also with several vCPUs since M205. The run engine is the Rust
+crate `hydo-hvx`, which runs inside `hydo` when the process can open `/dev/hvx`. Details:
 `docs/HISTORY.md` Milestones 33, 66–69, 132, 137, 138, 156 and 179; the module's safety net is
 `hv/hvx/SAFETY.md`.
 
@@ -347,6 +347,17 @@ fixed file time; it is opt-in. With `guest.clock_after_cut`, a `cf=` cut now car
 boot's clock too. `hydo init` and `hydo compose` write `guest.clock_start` as the day they ran
 (`HYDO_INIT_CLOCK_START`). Details: `docs/HISTORY.md` Milestone 202.
 
+**Several vCPUs and flaky tests (M205, tentative number).** With several vCPUs the hvx engine
+reads the host-call port's records at every return of a run call and ends a call every 8,192
+exits. Before, such a run never ended, because the in-kernel scheduler does not end a call at a
+record. `hydo run`, `repro` and `explain` take `--vcpus N` and `--turn-margin N`, and
+`result.json` records them. An exploration's "by hand" lines carry them. `hydo explore --vcpus N
+--sweep turns` searches the turn lengths `q=` of one schedule for verdict boundaries
+(`exploration.json` `turn_sweep`, a results addition). The format-1 addition `workload.kind:
+test` makes a test program first class: one step, no fault kinds unless `faults:` lists them,
+and the class `test-failed`. The guide topic is `hydo guide flaky-tests`; the example is
+`hydo/onboard/examples/nats-flaky-8363`. Proof runs: `docs/HISTORY.md` Milestone 205.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -361,7 +372,7 @@ and `junit.xml`. `hydo ci compare` compares two recorded runs offline. The setti
 `action/action.yml` and the GitLab template `action/gitlab/hydo.gitlab-ci.yml`; `hydo guide ci`
 is the recipe for other systems.
 
-**Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 48 documents
+**Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 51 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
 facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
 fresh reader (`docs/RELEASING.md`). Before M187 this file held the full current state; that text
@@ -421,8 +432,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `--arch arm64` (M107).
 28. Example manifests' comments still name Python-era paths; their text is inside images (M107).
 29. Python left in build scripts for the build machine (M108).
-30. Guest control: several vCPUs and a schedule's own `rb=` are refused for agent images; a hang
-    over the serial line stays unexplained (M136, M138, M140).
+30. Guest control: a schedule's own `rb=` is refused for agent images; a hang over the serial
+    line stays unexplained (M136, M138, M140). Several vCPUs run on agent images since M205.
 31. The Rust test SDK still writes history checks in the retired `test.checks` spelling (M114).
 32. Results format: only Rust has a reader; `hydo-bench`'s own files are not in the format
     (M115).
@@ -500,6 +511,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     builds and reloads the module from `~/hydo/hv/hvx` and expects `ALL PASS (35 checks)` (M203).
 73. [user decision] `guest.cpu_cache` stays opt-in. Making it the default moves every recorded
     x86_64 fingerprint, so it needs a fingerprint epoch bump and a re-baseline (M203).
+74. Several vCPUs and the turn sweep (M205). No several-vCPU run is in `recorded.json`. The sweep bisects only between the lengths it ran, so a
+    narrow band between two grid points stays hidden. Not run: KVM and the Mac (one vCPU),
+    `--turn-margin` in a VM, and a test workload with services or with `faults:`.
 
 ## Milestone index
 
@@ -726,6 +740,9 @@ build machine, before 2026-10-13.
 - M203: `guest.cpu_cache` makes CPUID describe a fixed cache hierarchy on hvx (the module flag
   `HVX_VM_CPU_CACHE`, on a side module until the main module is reloaded) and on KVM. With it,
   AlmaLinux 8's glibc copies work at v3. It is opt-in, and nothing recorded moved
+- M205 (tentative): several vCPUs with the host-call port, `--vcpus` on `hydo run`, `repro` and
+  `explain`, `hydo explore --sweep turns`, and `workload.kind: test` for test programs, from the
+  nats-server flaky-test example; no recorded value moved
 
 ## Where to look
 

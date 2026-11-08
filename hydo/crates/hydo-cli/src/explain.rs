@@ -7,7 +7,7 @@
 
 use crate::ctx::{abspath, die, take, Ctx};
 use crate::diff;
-use crate::runs::{find_image, run_to_dir};
+use crate::runs::{find_image, run_to_dir, RunOpts, RUN_OPTS_HELP};
 use hydo_engine::image::sha256_file;
 use hydo_results::{Diff, Run};
 use hydo_schedule::Schedule;
@@ -131,6 +131,7 @@ fn reach(d: &Diff) -> (usize, u64) {
 
 const USAGE: &str = "usage: hydo explain [IMG] \"<schedule>\" [--image IMG] [--out DIR]
                     [--with \"<schedule>\"]... [--with-image IMG2] [--max N]
+                    [--vcpus N] [--turn-margin N]
        hydo explain <run dir> [--out DIR] [...]
     runs a failing schedule (or takes a run directory's) and its neighbours: the schedule with one
     guest token removed, with one fault moved one step, without its disk faults (--max N runs the
@@ -138,13 +139,14 @@ const USAGE: &str = "usage: hydo explain [IMG] \"<schedule>\" [--image IMG] [--o
     failing run against each (diff.json and diff.txt in each neighbour's directory) and shows the
     diff against the passing neighbour whose first difference comes latest (docs/design/explain.md).
     Every neighbour is a fresh boot of one VM, one after the other; a run already in DIR with the
-    same schedule and image is reused (so an interrupted explain goes on where it stopped).";
+    same schedule and image is reused (so an interrupted explain goes on where it stopped).
+    Every run has the failing run's vCPU options (a run directory's recorded ones by default):";
 
 /// `hydo explain`.
 pub fn cmd_explain(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     if args.iter().any(|a| a == "-h" || a == "--help") {
-        println!("{USAGE}");
+        println!("{USAGE}\n{RUN_OPTS_HELP}");
         return 0;
     }
     let out = take(&mut args, "--out")
@@ -155,6 +157,8 @@ pub fn cmd_explain(ctx: &Ctx, argv: &[String]) -> i32 {
         m.parse()
             .unwrap_or_else(|_| die(&format!("--max {m}: not a number")))
     });
+    let given_opts = (args.iter().any(|a| a == "--vcpus" || a == "--turn-margin"))
+        .then(|| RunOpts::take(ctx, &mut args));
     let mut with = Vec::new();
     while let Some(w) = take(&mut args, "--with") {
         with.push(w);
@@ -165,7 +169,7 @@ pub fn cmd_explain(ctx: &Ctx, argv: &[String]) -> i32 {
         .first()
         .map(PathBuf::from)
         .filter(|p| p.join(hydo_results::RUN_DOC).is_file());
-    let (image, sched, a_dir) = match given_dir {
+    let (image, sched, a_dir, opts) = match given_dir {
         Some(d) => {
             args.remove(0);
             let run: Run = hydo_results::reader::read_run(&d.join(hydo_results::RUN_DOC))
@@ -175,7 +179,16 @@ pub fn cmd_explain(ctx: &Ctx, argv: &[String]) -> i32 {
                 Some(i) => abspath(Path::new(i.resolved.as_deref().unwrap_or(&i.path))),
                 None => die(&format!("{}: names no image; give --image", d.display())),
             };
-            (image, run.schedule.clone(), d)
+            // M205: the recorded run's vCPU options, unless given
+            let opts = given_opts.clone().unwrap_or_else(|| {
+                RunOpts::of_eargs(
+                    run.engine
+                        .as_ref()
+                        .and_then(|e| e.args.as_deref())
+                        .unwrap_or(&[]),
+                )
+            });
+            (image, run.schedule.clone(), d, opts)
         }
         None => {
             let image = find_image(ctx, &mut args);
@@ -183,7 +196,10 @@ pub fn cmd_explain(ctx: &Ctx, argv: &[String]) -> i32 {
                 eprintln!("{USAGE}");
                 return 2;
             }
-            (image, args[0].clone(), out.join("a"))
+            let opts = given_opts
+                .clone()
+                .unwrap_or_else(|| RunOpts::take(ctx, &mut Vec::new()));
+            (image, args[0].clone(), out.join("a"), opts)
         }
     };
     if !image.is_file() {
@@ -194,7 +210,7 @@ pub fn cmd_explain(ctx: &Ctx, argv: &[String]) -> i32 {
         .is_ok_and(|r| r.schedule == sched);
     if !a_done {
         println!("hydo explain: the schedule        {sched}");
-        let Some(run) = run_to_dir(ctx, &image, sha.clone(), &sched, &a_dir) else {
+        let Some(run) = run_to_dir(ctx, &image, sha.clone(), &sched, &a_dir, &opts) else {
             die(&format!(
                 "the schedule produced no RESULT line (see {})",
                 a_dir.join("engine.log").display()
@@ -238,7 +254,7 @@ pub fn cmd_explain(ctx: &Ctx, argv: &[String]) -> i32 {
         // a neighbour run before in this directory (an interrupted or repeated explain) is kept
         let done = hydo_results::reader::read_run(&dir.join(hydo_results::RUN_DOC))
             .is_ok_and(|r| &r.schedule == s && r.image.and_then(|i| i.sha256) == isha);
-        if !done && run_to_dir(ctx, img, isha, s, &dir).is_none() {
+        if !done && run_to_dir(ctx, img, isha, s, &dir, &opts).is_none() {
             println!(
                 "hydo explain:   no RESULT line (see {})",
                 dir.join("engine.log").display()

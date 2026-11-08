@@ -213,6 +213,56 @@ every test line has the same stop.
 7. **Not tried:** the `-race` binary in the guest (it needs cgo, so a dynamic binary and glibc in
    the image), and `hydo explore --vcpus` with the host-call port on.
 
+## Milestone 205: the gaps closed
+
+Milestone 205 (tentative number) fixed items 1, 2, 3, and 5 of the preceding list. The runs below were
+made on the bare-metal machine with hydo built from the M205 branch, one VM at a time.
+
+**The host-call port with several vCPUs.** With several vCPUs, the module's in-kernel scheduler
+does not end a run call at the agent's record. The engine read the port's records only when a call
+ended at one, so the agent's first line never reached the host. Since M205 the engine reads
+the records at every return of a run call. It also ends a call every 8,192 exits, so that the
+port's 64 KiB buffer cannot fill. The port is on by default, and no variable is needed. On the images of
+the section "The hydo project" (the same bytes), each schedule ran twice from fresh boots:
+
+| image | schedule | vCPUs | verdict | fingerprint (both runs) |
+|---|---|---|---|---|
+| buggy | `disk=none q=18800 \| run` | 2 | VIOLATION | `3687688f9524f9c5` |
+| buggy | `disk=none q=18700 \| run` | 2 | OK | `e5d353a436951f60` |
+| buggy | `disk=none \| run` | 2 | VIOLATION | `57ba6456c2c6e8ac` |
+| fixed | `disk=none q=18800 \| run` | 2 | OK | `dd2e764497d4794d` |
+| buggy | `disk=none q=20000 \| run` | 4 | VIOLATION | `a6d4a06a44eed1b3` |
+| buggy | `disk=none \| run` | 1 | VIOLATION | `cdee99d853af62f1` |
+
+The boundary is where it was over the serial line. The fingerprints differ from the serial line's,
+because the agent's lines travel another way. The one-vCPU run gives the value recorded before
+M205. Each run took 7 to 8 seconds.
+
+**The project in the new form.** `hydo.yaml` now says `workload.kind: test` with one step and no
+`faults:`. The M205 `hydo build` made new images: buggy `f4c8b0e15a2dd6ae…`, fixed
+`056258a6dafd120e…`. Each schedule ran twice with `hydo run --vcpus 2`, and `result.json` records
+the two vCPUs:
+
+| image | schedule | verdict | fingerprint (both runs) |
+|---|---|---|---|
+| buggy | `disk=none q=18800 \| run` | VIOLATION | `3f5ddc03373f0903` |
+| buggy | `disk=none q=18700 \| run` | OK | `4c392504eb20a851` |
+| fixed | `disk=none q=18800 \| run` | OK | `c19f715ce52e1dbe` |
+| buggy, one vCPU | `disk=none \| run` | VIOLATION | `00bce3c8f97dfc2c` |
+
+`hydo repro` of the first run directory said REPRODUCED. `hydo explore --vcpus 2 --turns --timing
+--seeds 1-12 --workers 1` gave 9 failures, all in the class `test-failed`, all reproduced. The
+report's line by hand was `hydo run --vcpus 2 --image <image> "disk=none dseed=975835de1c9756ce |
+run"`.
+
+**The turn sweep.** `hydo explore --vcpus 2 --sweep turns --workers 1` made 19 runs in 60 seconds
+and found one boundary: `q=18407` passes (`96e792fe27fe27b0`) and `q=18496` fails
+(`adb0fab23867e30f`), both reproduced. Fresh boots with `hydo run` gave the same two
+fingerprints. The verdict does not change only once with the turn length. A dense sweep of the
+range around it made 36 runs in 30 seconds
+(`--turn-range 18000-19000 --turn-points 21 --turn-resolution 10`). It found five boundaries.
+The failing bands are 18,486 to 18,543, 18,732 to 18,853, and 18,980 branches on. `hydo repro` of the dense sweep reproduced all five failing lengths.
+
 ## Files
 
 | file | what it is |

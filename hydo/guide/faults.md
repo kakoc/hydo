@@ -152,6 +152,8 @@ Useful options of `hydo explore`:
 - `--protocol-faults`, `--grpc-faults`, `--buggify`.
 - `--storage-faults`: `G=` and `L=` for services with `storage:`.
 - `--cluster-faults`: kills, pauses, and partitions of the services of `groups:`.
+- `--vcpus N --turns`: several vCPUs (hvx) and drawn turn lengths `q=`. `--vcpus N --sweep turns`
+  searches the turn lengths of one schedule for a change of verdict (`hydo guide flaky-tests`).
 - `--workers N`.
 
 hydo's own benchmark showed that where faults land, and in what combination, matters more than

@@ -32,14 +32,14 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HVX_PAUSE_EXIT` | developer | flag: not `0` | on | hydo-hvx | `0` turns PAUSE exits off. |
 | `HVX_PT_TRACE_VM` | developer | flag: set (any value) | off | hydo-hvx | Set: trace the VM with Processor Trace (HVX_VM_PT_TRACE). |
 | `HVX_PAUSE_K` | developer | integer (C strtoull) | the module's | hydo-hvx | The PAUSE-exit clock step (C strtoull). |
-| `HVX_TURN_MARGIN` | developer | integer (C strtoull) | the module's | hydo-hvx, hydo-explore | The vCPU turn-end margin (M85; `--turn-margin` of the explorer sets it). |
+| `HVX_TURN_MARGIN` | developer | integer (C strtoull) | the module's | hydo-hvx, hydo-explore, hydo | The vCPU turn-end margin (M85; `--turn-margin` of the explorer and of `hydo run` sets it). |
 | `HVX_QUANTUM` | developer | integer (C strtoull) | the schedule's | hydo-hvx | The vCPU turn length in branches (several vCPUs). |
 | `HVX_BURST` | developer | integer (C strtoull) | off | hydo-hvx | Burst turns (M85). |
 | `HVX_QUANTUM_AFTER` | developer | flag: set (any value) | off | hydo-hvx | Set: apply `HVX_QUANTUM` after the boot only. |
 | `HVX_EXPLORE_CMDLINE_EXTRA` | developer | text | - | hydo-hvx | Extra words on the guest kernel's command line. |
 | `HVX_EXPLORE_NO_UNSYNC` | developer | flag: set (any value) | off | hydo-hvx | Set: keep the disk's volatile write cache out of snapshots (no HVX_GET/SET_UNSYNC). |
 | `HVX_EXPLORE_RAM_MIB` | developer | integer | 1024 | hydo-hvx | The guest RAM in MiB when `--ram-mib` is not given (256-8192). |
-| `HVX_EXPLORE_VCPUS` | developer | integer | 1 | hydo-hvx | The vCPU count when `--vcpus` is not given. |
+| `HVX_EXPLORE_VCPUS` | developer | integer | 1 | hydo-hvx, hydo | The vCPU count when `--vcpus` is not given (`hydo run`, `repro` and `explain` record it as `--vcpus`, M205). |
 
 ## The hvx engine's diagnostics (`hydo_config::hvx::Options`)
 

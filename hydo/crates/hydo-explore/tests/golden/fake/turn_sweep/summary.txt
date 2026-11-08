@@ -1,0 +1,1 @@
+{"schedules": 21, "strategy": "sweep:turns", "image": "scripted-disk.img", "workers": N, "sweep_wall_s": N, "runs_per_hour": N, "mean_run_s": 0.0, "worker_boot_s": 0.0, "total_wall_s": N, "failures": 13, "reproduced": 1, "repro_runs": 2, "vcpus": 2}

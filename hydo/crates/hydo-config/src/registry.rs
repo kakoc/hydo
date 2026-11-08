@@ -161,8 +161,8 @@ variables! {
     HVX_PT_TRACE_VM: HvxEngine, Developer, "flag: set (any value)", "off", "hydo-hvx";
     /// The PAUSE-exit clock step (C strtoull).
     HVX_PAUSE_K: HvxEngine, Developer, "integer (C strtoull)", "the module's", "hydo-hvx";
-    /// The vCPU turn-end margin (M85; `--turn-margin` of the explorer sets it).
-    HVX_TURN_MARGIN: HvxEngine, Developer, "integer (C strtoull)", "the module's", "hydo-hvx, hydo-explore";
+    /// The vCPU turn-end margin (M85; `--turn-margin` of the explorer and of `hydo run` sets it).
+    HVX_TURN_MARGIN: HvxEngine, Developer, "integer (C strtoull)", "the module's", "hydo-hvx, hydo-explore, hydo";
     /// The vCPU turn length in branches (several vCPUs).
     HVX_QUANTUM: HvxEngine, Developer, "integer (C strtoull)", "the schedule's", "hydo-hvx";
     /// Burst turns (M85).
@@ -175,8 +175,9 @@ variables! {
     HVX_EXPLORE_NO_UNSYNC: HvxEngine, Developer, "flag: set (any value)", "off", "hydo-hvx";
     /// The guest RAM in MiB when `--ram-mib` is not given (256-8192).
     HVX_EXPLORE_RAM_MIB: HvxEngine, Developer, "integer", "1024", "hydo-hvx";
-    /// The vCPU count when `--vcpus` is not given.
-    HVX_EXPLORE_VCPUS: HvxEngine, Developer, "integer", "1", "hydo-hvx";
+    /// The vCPU count when `--vcpus` is not given (`hydo run`, `repro` and `explain` record it
+    /// as `--vcpus`, M205).
+    HVX_EXPLORE_VCPUS: HvxEngine, Developer, "integer", "1", "hydo-hvx, hydo";
 
     // ------------------------------------------------------------------ HvxDiagnostics
     /// Not `0`: print the run's phases with their times (also on with `HVX_EXPLORE_DIRTY`).
