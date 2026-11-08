@@ -231,6 +231,8 @@ fn run_one(root: &Path, cwd: &Path, platform: &str, args: &[&str]) -> Value {
         .env_remove("HYDO_LOCK")
         .env_remove("HVX_DEV")
         .env("HYDO_CLI_HOST_ROOT", &host().root)
+        // the clock_start hydo init and hydo compose write is today otherwise (Milestone 202)
+        .env("HYDO_INIT_CLOCK_START", "1794096000")
         .env("PATH", &host().path)
         .env("HOME", cwd.join("home"))
         .output()

@@ -209,7 +209,9 @@ fn compose_equals_python() {
             .env_clear()
             .env("PATH", "/usr/bin:/bin")
             .env("HOME", d.join("home"))
-            .env("LANG", "C.UTF-8");
+            .env("LANG", "C.UTF-8")
+            // the clock_start an import writes is today otherwise (Milestone 202)
+            .env("HYDO_INIT_CLOCK_START", "1794096000");
         if let Some(e) = case["env"].as_object() {
             for (k, v) in e {
                 cmd.env(k, v.as_str().unwrap());

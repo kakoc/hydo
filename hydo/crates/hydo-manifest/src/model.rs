@@ -541,6 +541,10 @@ choice!(
     ProxyProtocol { Http = "http", Grpc = "grpc", Tcp = "tcp" }
 );
 choice!(
+    /// When a service starts: once every service before it is ready, or once each has started.
+    StartAfter { Ready = "ready", Started = "started" }
+);
+choice!(
     /// Which log lines are error lines.
     ErrorLevel { Error = "error", Warning = "warning" }
 );
@@ -722,6 +726,12 @@ pub struct Root {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = false))]
     pub share_images: Option<bool>,
+    /// true: timestamp-checked Python bytecode caches (__pycache__/*.pyc) get the image's fixed
+    /// file time and their source's size in their header, so Python uses them instead of
+    /// compiling the sources again in every run. Off by default (it changes the image's bytes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub fix_pyc: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
@@ -797,6 +807,19 @@ pub struct Service {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = false))]
     pub restart_may_fail: Option<bool>,
+    /// When hydo starts this service: ready (the default) waits until every service before it in
+    /// the start order passed its readiness check; started waits only until each of them was
+    /// started, so a cluster whose readiness check needs its peers can start (Docker Compose's
+    /// depends_on condition service_started). Every service is ready before provisioning and the
+    /// workload either way (MANIFEST.md "Starting services together").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "ready"))]
+    pub start_after: Option<Param<StartAfter>>,
+    /// More log files the service writes besides its output (absolute paths; shell patterns such
+    /// as /data/db/log/*.log are allowed). The diagnosis of a failed run and `hydo inspect logs`
+    /// show their last lines too.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logs: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
     /// This service's error-log settings (needs the top-level errors:).

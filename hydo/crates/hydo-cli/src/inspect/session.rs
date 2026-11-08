@@ -132,7 +132,6 @@ pub struct LiveTaker<'c> {
     pub at: RunPoint,
     pub pre: Option<Work>,
     cur: Option<(Req, Work, Instant)>,
-    k: u64,
     pub stop: Option<StopInfo>,
     pub served: u64,
     pub status: Value,
@@ -151,7 +150,6 @@ impl<'c> LiveTaker<'c> {
             at,
             pre,
             cur: None,
-            k: 0,
             stop: None,
             served: 0,
             status: Value::Null,
@@ -221,13 +219,10 @@ impl Taker for LiveTaker<'_> {
                         ),
                     ));
                 }
-                Some(req) => {
-                    self.k += 1;
-                    match work_for(&req, &self.plan, self.k) {
-                        Ok(w) => self.cur = Some((req, w, Instant::now())),
-                        Err(p) => self.calls.answer(err_doc(req.op(), &p)),
-                    }
-                }
+                Some(req) => match work_for(&req, &self.plan) {
+                    Ok(w) => self.cur = Some((req, w, Instant::now())),
+                    Err(p) => self.calls.answer(err_doc(req.op(), &p)),
+                },
             }
         }
     }
@@ -679,7 +674,6 @@ pub fn serve(ctx: &Ctx, id: &str) -> i32 {
                 return fail(&Problem::new("engine", "the stop was not kept", vec![]));
             };
             ready(&mut daemon, reach.stops, Vec::new());
-            let mut k = 0;
             let mut branches = Branches::new();
             let max_branches = max_branches(ctx.backend_name());
             while let Some(req) = daemon.next() {
@@ -688,7 +682,6 @@ pub fn serve(ctx: &Ctx, id: &str) -> i32 {
                         "notes": ["the session ended"]}));
                     break;
                 }
-                k += 1;
                 let t0 = Instant::now();
                 let keep = matches!(req, Req::Advance { .. });
                 if let Req::Exec {
@@ -710,7 +703,7 @@ pub fn serve(ctx: &Ctx, id: &str) -> i32 {
                     daemon.answer(v);
                     continue;
                 }
-                let v = match work_for(&req, &m.plan, k) {
+                let v = match work_for(&req, &m.plan) {
                     Err(p) => err_doc(req.op(), &p),
                     Ok(mut w) => {
                         match m.call(&mut worker, &mut point, &rec, &mut w, keep, CALL_STOPS) {
@@ -787,7 +780,7 @@ fn branch_snap(name: &str) -> String {
 
 /// `exec --branch NAME [--from OTHER]` in a snapshot session: the command runs from the branch's
 /// state (a new branch starts from `OTHER`, or from the session's stop), and the state after it
-/// is kept as the branch. The output files have one name on every branch (`k` = 0), so the same
+/// is kept as the branch. Every call writes the same output files (Milestone 202), so the same
 /// command from the same state leaves the same state on any branch.
 #[allow(clippy::too_many_arguments)]
 fn branch_call(
@@ -854,7 +847,7 @@ fn branch_call(
             },
         }
     };
-    let mut w = match work_for(req, &m.plan, 0) {
+    let mut w = match work_for(req, &m.plan) {
         Ok(w) => w,
         Err(p) => return err_doc(op, &p),
     };

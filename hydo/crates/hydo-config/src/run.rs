@@ -107,6 +107,9 @@ pub struct Cli {
     pub host_root: Option<PathBuf>,
     /// The install cache (Milestone 162).
     pub cache: Cache,
+    /// `HYDO_INIT_CLOCK_START`: the `guest.clock_start` a new project gets from `hydo init` and
+    /// `hydo compose`; None (unset, empty or not a whole number): today at 00:00 UTC.
+    pub init_clock_start: Option<i64>,
 }
 
 /// The default of `HYDO_RELEASE_URL`: the project's GitHub releases.
@@ -158,6 +161,9 @@ impl Cli {
             },
             host_root: e.path_nonempty(HYDO_CLI_HOST_ROOT),
             cache: Cache::from_env(e),
+            init_clock_start: e
+                .nonempty(HYDO_INIT_CLOCK_START)
+                .and_then(|v| v.trim().parse().ok()),
         }
     }
 }

@@ -328,6 +328,13 @@ the history, and it knows no messaging system or API. The checker is the module 
 Rust SDK records with `hydo_assert::history::messages`. Reference: `hydo guide messages`; design:
 `docs/design/messaging.md`; evidence and decisions: `docs/HISTORY.md` Milestone 196.
 
+**Format-1 additions of M202.** `services[].start_after: started` starts a cluster's members
+before their readiness checks run. `services[].logs` names a service's own log files for the
+diagnosis and `hydo inspect logs`. `root.fix_pyc` makes Python's bytecode caches match the image's
+fixed file time; it is opt-in. With `guest.clock_after_cut`, a `cf=` cut now carries the first
+boot's clock too. `hydo init` and `hydo compose` write `guest.clock_start` as the day they ran
+(`HYDO_INIT_CLOCK_START`). Details: `docs/HISTORY.md` Milestone 202.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -452,9 +459,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     run of `release.yml` or `packages.yml` has happened yet. A crate new to `cargo install hydo`
     needs its first version published by hand (M186).
 64. YugabyteDB showed gaps: hvx's CPUID leaf 4 is empty (glibc 2.28 then needs
-    `GLIBC_TUNABLES`); readiness gates deadlock a cluster whose health check needs its peers; the
-    diagnosis reads only a service's stdout; the recovery clock after a `cf=` cut restarts at
-    `clock_start`; the explorer never cuts links between peers of one cluster (M193).
+    `GLIBC_TUNABLES`), and the explorer never cuts links between peers of one cluster (M193). The
+    readiness deadlock, the logs outside stdout and the `cf=` recovery clock are fixed (M202).
 65. [user decision] Two identity-corpus schedules keep "the last token wins": a second `N=` on
     one target and a second `T=`. Refusing them, or applying several clock steps, re-records one
     case each. Also left: `G=` and `L=` lists, `O=` partitions, several `N=` windows at once, a
@@ -471,6 +477,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 69. The KVM engine gave two fingerprints for one Ghost schedule
     (`H=mailgun.messages@0-12:status=500,effect=yes`) with the same transcript, consoles and
     verdict; not investigated (M200).
+70. [user decision] `root.fix_pyc` is opt-in. On by default it would move the recorded voting
+    images (`hvm/voting` holds 803 such caches; the three x86_64 voting images were not
+    scanned) (M202).
+71. The `cf=` clock carry of `guest.clock_after_cut` ran only on the scripted engine; hvx, the
+    one engine that applies `cf=`, did not run it. `start_after: started` ran on the Mac only
+    (M202).
 
 ## Milestone index
 
@@ -697,6 +709,10 @@ build machine, before 2026-10-13.
 - M201: flaky test verdicts of 31 SWE-bench Lite tasks: no verdict flipped natively or under
   hydo; native logs differed in 27 of 31 tasks, hydo's never; stale `.pyc` caches from the fixed
   file times (`docs/design/flaky-verdicts.md`)
+- M202: seven fixes from the YugabyteDB onboarding: `services[].start_after`, the `cf=` clock
+  carry under `guest.clock_after_cut`, `services[].logs`, `clock_start` in new projects,
+  `root.fix_pyc`, fixed `hydo inspect` output names, and the Compose importer's header and
+  per-architecture fetch script; no recorded value moved
 
 ## Where to look
 

@@ -34,7 +34,7 @@
 use crate::busybox;
 use crate::control::{Controller, Ending, EngineAction, Out, Seen, StopInfo};
 use crate::flow::{Facts, Flow, Fx, Memo, Step};
-use crate::plan::Plan;
+use crate::plan::{Plan, PlanService};
 use crate::seams::Unsupported;
 use hydo_agent_proto::msg::{
     ClockSet, Command, Event, Mkdir, Mount, MountFlag, Probe, ProbeEnd, Read, Reply, Run, Sig,
@@ -152,6 +152,8 @@ struct RunCfg {
     z: Option<(String, i64, Option<i64>, hydo_schedule::Corruption)>,
     /// L=: (svc, at, up).
     l: Option<(String, i64, i64)>,
+    /// The host token `cf=`: the engine may turn the workload's end into a power cut.
+    cf: bool,
 }
 
 #[derive(Debug)]
@@ -525,6 +527,7 @@ fn repeated_fault(s: &Schedule) -> Option<char> {
 fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
     let mut c = RunCfg {
         guest_text: s.guest_text(),
+        cf: matches!(s.host_token("cf"), Some(hydo_schedule::HostToken::Cf(_))),
         ..RunCfg::default()
     };
     // (a token naming what the image does not have is refused before, by ScheduleController::run
@@ -1389,6 +1392,54 @@ fn start_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
 }
 
 fn start_svc_once(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
+    match launch_svc(fx, ctx, s)? {
+        Some(e) => await_ready(fx, ctx, s, e),
+        None => Ok(false),
+    }
+}
+
+/// `start_svc` without its readiness check (`start_after: started` of the next service): the
+/// service counts as starting until [`await_launched`] has seen its readiness check end.
+fn launch_tracked(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<Option<Vec<String>>> {
+    fx.until(|h, _| !h.starting.contains(s))?;
+    fx.effect(|h, _| {
+        h.starting.insert(s.to_string());
+        Memo::Unit
+    });
+    let e = launch_svc(fx, ctx, s)?;
+    if e.is_none() {
+        fx.effect(|h, _| {
+            h.starting.remove(s);
+            Memo::Unit
+        });
+    }
+    Ok(e)
+}
+
+/// The readiness checks of the services [`launch_tracked`] started, in their start order; the
+/// first that does not pass ends the run with `verdict (<service>)`.
+fn await_launched(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    verdict: &str,
+    pending: &mut Vec<(String, Vec<String>)>,
+) -> Step<()> {
+    for (s, e) in std::mem::take(pending) {
+        let up = await_ready(fx, ctx, &s, e)?;
+        fx.effect(|h, _| {
+            h.starting.remove(&s);
+            Memo::Unit
+        });
+        if !up {
+            return die_oracle(fx, format!("{verdict} ({s})"));
+        }
+    }
+    Ok(())
+}
+
+/// A service's setup and its process (the first half of `start_svc`): Some(the environment of
+/// its commands) when the process was started, None when setup failed or the spawn was refused.
+fn launch_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<Option<Vec<String>>> {
     let l = &ctx.plan.layout;
     let sv = ctx.plan.service(s).expect("a service of the plan");
     let log_file = l.log_of(s);
@@ -1427,7 +1478,7 @@ fn start_svc_once(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
         if st != 0 {
             // AMBIGUOUS: the shell also prints the last 8 lines of the setup log here.
             log(fx, format!("{s} setup FAILED"));
-            return Ok(false);
+            return Ok(None);
         }
     }
     // AMBIGUOUS: the shell starts the new process at once; the agent refuses a handle whose
@@ -1456,8 +1507,16 @@ fn start_svc_once(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<bool> {
     });
     if fx.reply(id)?.is_err() {
         log(fx, format!("{s} DIED"));
-        return Ok(false);
+        return Ok(None);
     }
+    Ok(Some(e))
+}
+
+/// A started service's readiness check (the second half of `start_svc`), with the environment
+/// [`launch_svc`] gave its commands.
+fn await_ready(fx: &mut F<'_>, ctx: &Ctx, s: &str, e: Vec<String>) -> Step<bool> {
+    let sv = ctx.plan.service(s).expect("a service of the plan");
+    let ns = netns::of(ctx, s);
     // the readiness loop: `ready` once a second, at most `timeout` times, while the service
     // lives (AMBIGUOUS: the shell starts poll k one second after poll k-1 ENDED; the agent at k
     // seconds after the start, or when poll k-1 ended if later)
@@ -1501,15 +1560,34 @@ fn start_all(fx: &mut F<'_>, ctx: &Ctx, verdict: &str, recovery: bool) -> Step<(
     fakes::start_all(fx, ctx)?; // SEAM(Fakes): the world starts before the services
                                 // SEAM(Liveness): the recovery boot reaches both anchors before its services start
     liveness::before_start_all(fx, ctx, recovery)?;
-    for s in &ctx.plan.services {
-        if recovery && !s.recovery {
-            continue;
+    // In the start order, each service waits until every service before it is ready, unless it
+    // says `start_after: started`. A run of services joined that way (the one before each such
+    // service, and each of them) is started first and their readiness checks run afterwards in
+    // the start order: before the next service that waits for readiness, and at the latest
+    // before this function returns, so every service is ready before provisioning or the
+    // workload. Without `start_after: started` every service is started and checked in turn,
+    // command for command as before Milestone 202.
+    let list: Vec<&PlanService> = ctx
+        .plan
+        .services
+        .iter()
+        .filter(|s| !recovery || s.recovery)
+        .collect();
+    let mut pending: Vec<(String, Vec<String>)> = Vec::new();
+    for (i, s) in list.iter().enumerate() {
+        if !s.start_after_started {
+            await_launched(fx, ctx, verdict, &mut pending)?;
         }
-        if !start_svc(fx, ctx, &s.name)? {
+        if !pending.is_empty() || list.get(i + 1).is_some_and(|n| n.start_after_started) {
+            match launch_tracked(fx, ctx, &s.name)? {
+                Some(e) => pending.push((s.name.clone(), e)),
+                None => return die_oracle(fx, format!("{verdict} ({})", s.name)),
+            }
+        } else if !start_svc(fx, ctx, &s.name)? {
             return die_oracle(fx, format!("{verdict} ({})", s.name));
         }
     }
-    Ok(())
+    await_launched(fx, ctx, verdict, &mut pending)
 }
 
 /// The heal's restart pass: every dead service is started again; one that does not come back
@@ -2606,8 +2684,19 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     freeze::kill(fx)?;
     stop_periodic(fx);
     let (failed, outcomes) = failed_ids_outcomes(fx, ctx)?;
+    // SEAM(Clock): with cf=, the engine turns the workload's end into a power cut, so with
+    // guest.clock_after_cut the first boot's clock is read here and carried as at a C= cut
+    // (Milestone 202; before it, such a recovery boot's clock started at guest.clock_start)
+    let at_end = if ctx.run.cf {
+        clock::at_cut(fx, ctx)?
+    } else {
+        None
+    };
     let acked = read_all(fx, &l.acked())?;
-    fx.report(format!("hydo-explore-acked: {}", acked.replace('\n', " ")));
+    fx.report(format!(
+        "hydo-explore-acked: {}",
+        format!("{acked}{}", clock::acked_token(at_end)).replace('\n', " ")
+    ));
     fx.report(format!(
         "hydo-explore-failed: {}",
         failed.replace('\n', " ")

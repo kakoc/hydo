@@ -489,12 +489,22 @@ fn ls_script(path: &str) -> String {
     )
 }
 
-/// The guest work of a call (`k` numbers the output files).
-pub fn work_for(req: &Req, plan: &Plan, k: u64) -> Result<Work, Problem> {
+/// The script that prints the last `lines` lines of each file a service's `logs:` names (shell
+/// patterns expanded in the guest), each after a `==> <file> <==` line; a pattern that matches
+/// nothing prints nothing.
+pub fn log_files_script(patterns: &[String], lines: u64) -> String {
+    format!(
+        "for f in {}; do [ -f \"$f\" ] || continue; echo \"==> $f <==\"; tail -n {lines} \"$f\"; done; true",
+        patterns.join(" ")
+    )
+}
+
+/// The guest work of a call.
+pub fn work_for(req: &Req, plan: &Plan) -> Result<Work, Problem> {
     let bb = plan.layout.busybox.as_str();
     let prelude = plan.layout.prelude.as_str();
     let ex = |script: String, ns: Option<String>, t: u64, max: u64| {
-        Work::exec(bb, script, env(plan), ns, t, k, max)
+        Work::exec(bb, script, env(plan), ns, t, max)
     };
     Ok(match req {
         Req::Exec {
@@ -534,12 +544,13 @@ pub fn work_for(req: &Req, plan: &Plan, k: u64) -> Result<Work, Problem> {
                 return Err(no_service(plan, service));
             }
             let log = plan.layout.log_of(service);
-            ex(
-                format!("tail -n {lines} {}", work::quote(&log)),
-                None,
-                TIMEOUT_MS,
-                *max_bytes,
-            )
+            let mut script = format!("tail -n {lines} {}", work::quote(&log));
+            // the service's own log files (`logs:`, `errors.files`), after its output
+            if let Some(sv) = plan.service(service).filter(|sv| !sv.logs.is_empty()) {
+                script.push_str("; ");
+                script.push_str(&log_files_script(&sv.logs, *lines));
+            }
+            ex(script, None, TIMEOUT_MS, *max_bytes)
         }
         Req::Ps { .. } => ex(PS.into(), None, TIMEOUT_MS, 512 * 1024),
         Req::Sockets { service, .. } => {
@@ -1288,5 +1299,77 @@ mod tests {
         assert_eq!(s[1].remote.as_deref(), Some("127.0.0.1:40000"));
         assert_eq!((s[1].send_queue, s[1].recv_queue), (16, 2));
         assert_eq!(s[2].local, "[::1]:8080");
+    }
+}
+
+#[cfg(test)]
+mod calls_tests {
+    use super::*;
+
+    fn plan(logs: &str) -> Plan {
+        let text = format!(
+            "name: t\nservices:\n  - name: db\n    cmd: db-server\n    ready: db-ping\n{logs}workload:\n  steps: 2\n  run: client\ninvariants:\n  - id: ok\n    cmd: \"true\"\n"
+        );
+        Plan::from_manifest(&hydo_manifest::from_embedded(&text, None).unwrap()).unwrap()
+    }
+
+    /// The shell text of a call's first command.
+    fn script(w: &mut Work) -> String {
+        let mut out = hydo_control::Out::new(10);
+        w.step(&[], &mut out);
+        out.into_actions()
+            .into_iter()
+            .find_map(|a| match a {
+                hydo_control::Action::Send {
+                    cmd: Command::Run(r),
+                    ..
+                } => Some(r.argv.join(" ")),
+                _ => None,
+            })
+            .expect("a run command")
+    }
+
+    #[test]
+    fn repeated_calls_do_the_same_guest_work() {
+        // Milestone 202: the output files had the call's number in their names, so from the 10th
+        // call on the guest did one more character of work; now every call writes the same names
+        let p = plan("");
+        let req = Req::Exec {
+            argv: vec!["redis-cli".into(), "GET".into(), "k".into()],
+            sh: None,
+            service: None,
+            timeout_ms: 5000,
+            max_bytes: 100,
+            branch: None,
+        };
+        let first = script(&mut work_for(&req, &p).unwrap());
+        for _ in 0..12 {
+            assert_eq!(script(&mut work_for(&req, &p).unwrap()), first);
+        }
+        assert!(
+            first.contains(">/tmp/hydo-inspect/out 2>/tmp/hydo-inspect/err"),
+            "{first}"
+        );
+    }
+
+    #[test]
+    fn logs_shows_the_files_a_service_names() {
+        let req = Req::Logs {
+            service: "db".into(),
+            lines: 50,
+            max_bytes: 1000,
+        };
+        let plain = script(&mut work_for(&req, &plan("")).unwrap());
+        assert!(plain.contains("tail -n 50 /tmp/hydo/db.log )"), "{plain}");
+        assert!(!plain.contains("for f in"), "{plain}");
+        let p = plan("    logs: [/data/db/log/*.log, /data/db/INFO]\n");
+        let with = script(&mut work_for(&req, &p).unwrap());
+        assert!(
+            with.contains("tail -n 50 /tmp/hydo/db.log; for f in /data/db/log/*.log /data/db/INFO; do [ -f \"$f\" ] || continue; echo \"==> $f <==\"; tail -n 50 \"$f\"; done; true"),
+            "{with}"
+        );
+        // errors.files counts too, after logs:, once each
+        let p = plan("    logs: [/a.log]\n    errors: {files: [/a.log, /b.log]}\nerrors: true\n");
+        assert_eq!(p.services[0].logs, ["/a.log", "/b.log"]);
     }
 }

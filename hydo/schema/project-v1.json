@@ -445,6 +445,14 @@
           ],
           "default": false
         },
+        "fix_pyc": {
+          "description": "true: timestamp-checked Python bytecode caches (__pycache__/*.pyc) get the image's fixed\nfile time and their source's size in their header, so Python uses them instead of\ncompiling the sources again in every run. Off by default (it changes the image's bytes).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
         "description": {
           "anyOf": [
             {
@@ -637,6 +645,35 @@
           ],
           "default": false
         },
+        "start_after": {
+          "description": "When hydo starts this service: ready (the default) waits until every service before it in\nthe start order passed its readiness check; started waits only until each of them was\nstarted, so a cluster whose readiness check needs its peers can start (Docker Compose's\ndepends_on condition service_started). Every service is ready before provisioning and the\nworkload either way (MANIFEST.md \"Starting services together\").",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StartAfter"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "ready"
+        },
+        "logs": {
+          "description": "More log files the service writes besides its output (absolute paths; shell patterns such\nas /data/db/log/*.log are allowed). The diagnosis of a failed run and `hydo inspect logs`\nshow their last lines too.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
         "description": {
           "anyOf": [
             {
@@ -790,6 +827,14 @@
         {
           "$ref": "#/$defs/ParamRef"
         }
+      ]
+    },
+    "StartAfter": {
+      "description": "When a service starts: once every service before it is ready, or once each has started.",
+      "type": "string",
+      "enum": [
+        "ready",
+        "started"
       ]
     },
     "ServiceErrors": {

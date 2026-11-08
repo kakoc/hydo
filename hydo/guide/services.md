@@ -20,6 +20,17 @@ rules that matter most:
   leave from it.
 - `depends_on`; `recovery: false` for a stateless tier that the final checks do not need after a
   power cut.
+- `start_after: started` for the members of a cluster whose `ready` needs its peers (a quorum, a
+  replica count, SQL that needs two storage nodes). hydo starts the services in order and by
+  default starts the next one only when the one before it is ready, so such a check never
+  passes: `ERROR service start (<first member>)` after `ready_timeout`. With the key on every
+  member after the first, the members start together and are checked afterwards, all before the
+  workload (`hydo guide manifest`, section `Starting services together`). Alternatively, keep
+  `ready` local (the member's own port or health page) and wait for the cluster in a `first_`
+  command.
+- `logs`: the service's own log files besides its output. Give absolute paths, or shell patterns
+  (`/data/db/yb-data/tserver/logs/*.INFO`). Databases often write their real log there, not to
+  their output. The diagnosis of a failed run and `hydo inspect logs` show their last lines too.
 - `restart`: what happens when the process ends by itself during the test, in Docker Compose's
   words (`no`, the default: it stays down until the heal; `always`; `unless-stopped`;
   `on-failure[:max]`). Give a service the policy it has in production (the Compose import copies

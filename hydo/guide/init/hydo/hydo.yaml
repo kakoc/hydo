@@ -10,6 +10,7 @@ hydo_version: "0.3"              # the hydo this project was made for
 
 guest:
   ram_mib: 1024                  # must hold every service (256..8192)
+  clock_start: @CLOCK_START@         # @CLOCK_DATE@ 00:00 UTC: the guest's clock starts here (keep it after the software was built)
   # cpu: v3                      # x86_64 only: AVX/AVX2 for binaries built for x86-64-v3
   # clock_after_cut: 60          # when a check compares times from before and after a power cut
 

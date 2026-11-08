@@ -17,7 +17,8 @@ it as `hydo: diagnosis: ...`. For an ERROR, and for a violation that names a ser
 (`service cannot recover ... (<svc>)`), it has already replayed the run once. At the stop where
 the verdict was given, it read the evidence (`evidence`):
 
-- every service's log, and the setup and provisioning logs;
+- every service's log (its output, and the files its `logs:` names), and the setup and
+  provisioning logs;
 - the readiness check, run once;
 - the kernel's memory and crash messages, `free`, and `ps`.
 
@@ -88,6 +89,10 @@ hydo inspect sockets i-3f2a9c1e --service db
 hydo inspect advance i-3f2a9c1e --ms 2000        # let the system run 2 s further, then look again
 hydo inspect stop    i-3f2a9c1e
 ```
+
+`logs` shows the service's output and then the last lines of every file its `logs:` key names
+(`hydo guide services`). Without the key, a database's own log under its data directory is read
+with `read` or `exec`.
 
 `start` costs one replay up to the stop (about as long as the run took to get there). Each later
 call costs a restore and a few engine stops (`cost` in every answer). In a `snapshot` session

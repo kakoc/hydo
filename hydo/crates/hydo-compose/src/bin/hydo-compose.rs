@@ -3,5 +3,6 @@
 
 fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
-    std::process::exit(hydo_compose::main(&argv));
+    let cli = hydo_config::run::Cli::from_env(&hydo_config::Env::process());
+    std::process::exit(hydo_compose::main_clock(&argv, cli.init_clock_start));
 }

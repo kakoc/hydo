@@ -139,8 +139,10 @@ description: one line          # free text, anywhere below too
 
 guest:
   ram_mib: 1024                # guest RAM in MiB (default 1024): 256..8192
-  clock_start: 1767225600      # unix seconds the realtime clock starts at (default 2026-01-01)
+  clock_start: 1794096000      # unix seconds the realtime clock starts at (default 2026-01-01;
+                               #   hydo init and hydo compose write the day they ran)
   clock_after_cut: 60          # optional: after a power cut the recovery boot's clock continues from the cut, + 60 s
+                               #   (without it the recovery boot's clock starts at clock_start again)
   outcomes_after_cut: true     # optional: after a power cut the recovery boot's $HYDO_OUTCOMES holds the first boot's last outcomes
   cpu: v3                      # guest CPU level (x86_64 only): v2 (default) = x86-64-v2, no AVX;
                                # v3 = adds AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE, XSAVE
@@ -162,6 +164,10 @@ root:                          # what goes on the read-only root filesystem
   share_images: true           # image services with the same image (config digest) share one
                                # unpacked tree, each on its own mount of it with its own /tmp,
                                # /data and mounts (default false: one copy per service)
+  fix_pyc: true                # Python bytecode caches (__pycache__/*.pyc that check their
+                               # source's time) get the image's fixed file time, so Python uses
+                               # them instead of compiling every module again in every run
+                               # (default false: such caches look stale; see "Python bytecode")
 
 data:                          # the read-write disk, mounted on /data; the fault target
   size_mib: 512                # default 512
@@ -205,6 +211,12 @@ services:                      # may be empty ([] or left out): a project that i
     restart_may_fail: false               # true: its restart after the faults may fail (no
                                           #   retry then; see "A restart after the faults that
                                           #   may fail")
+    start_after: ready                    # ready (default): start once every service before it
+                                          #   is ready; started: once each was started (see
+                                          #   "Starting services together")
+    logs: [/data/db/log/*.log]            # its own log files besides its output (absolute paths,
+                                          #   shell patterns allowed): the diagnosis and `hydo
+                                          #   inspect logs` show their last lines too
 
   - name: cache                # a service whose files come from a Docker/OCI image (see below)
     image: images/redis.tar    # a `docker save` tar or an OCI layout directory, relative to
@@ -393,6 +405,23 @@ services:
 - `writable:` is for image services only (refused without `image:`). A service of the hydo root
   (`root.nix`, `root.files`) keeps the read-only root: give it a directory under `/data` or `/tmp`.
 
+### Python bytecode (`root.fix_pyc`)
+
+hydo-build gives every file of an image one fixed modification time, so that two builds give the
+same bytes. Python's bytecode caches (`__pycache__/<module>.cpython-<version>.pyc`) usually record
+their source file's time and size, and Python compiles the source again when either differs. In
+an image every such cache therefore looks stale: Python compiles each imported module again in
+every run, which costs guest time, writes the cache again where the directory is writable, and
+can print a warning. A test suite that turns warnings into errors then fails (Milestone 202
+found it with flask's tests).
+
+`root.fix_pyc: true` (Milestone 202; default false) rewrites the header of every such cache in
+the image whose source is in the image: the recorded time becomes the image's fixed file time and
+the recorded size the source's size, so Python takes the cache as it is. It reaches the
+read-only root, the files of image services, and the writable layers of `writable: true`
+services. Hash-based caches (PEP 552) and caches without their source are left alone. The key is
+opt-in because it changes the bytes of every image that holds such caches.
+
 ### Restart policies (`services[].restart`)
 
 What hydo does when a service's process ends by itself (it crashes or exits; not a hydo fault)
@@ -452,6 +481,38 @@ failed restart there leaves the service to the heal's restart pass instead of en
 `ERROR <service> restart failed`. A service that does come back behaves exactly as without the key. Example: the bug benchmark's
 order service (`hydo/bench/manifest/hydo.yaml`), which replaced a wrapper script (Milestone 135)
 with this key.
+
+### Starting services together (`services[].start_after`)
+
+hydo starts the services one at a time, in their start order (`depends_on`), and by default starts
+the next service only when the one before it passed its `ready:` check. A cluster whose
+readiness check needs its peers then never starts: the first node's check waits for nodes that
+are started only after it is ready. For example, a YugabyteDB tablet server answers SQL only
+when a second tablet server runs, and a Raft member reports itself healthy only once it has a
+quorum.
+
+`start_after: started` (Milestone 202; default `ready`) on a service says that it starts once
+every service before it was started, without waiting for their readiness checks. A run of such
+services (the service before the first one, and each one with the key) is started first; their
+readiness checks then run in the start order, before the next service without the key starts,
+and in any case before provisioning and the workload. So every service is still ready before
+the window under test, and a check that fails ends the run with `ERROR service start
+(<service>)` as before:
+
+```yaml
+services:
+  - {name: node1, cmd: /bin/node --id 1, ready: /bin/node-ready 1}
+  - {name: node2, cmd: /bin/node --id 2, ready: /bin/node-ready 2, start_after: started}
+  - {name: node3, cmd: /bin/node --id 3, ready: /bin/node-ready 3, start_after: started}
+  - {name: app, cmd: /bin/app, ready: /bin/app-ping, depends_on: [node1]}   # waits for all three
+```
+
+The recovery boot after a power cut starts the services the same way. The heal's restart pass
+(after the faults) restarts dead services one at a time, each with its readiness check. `hydo
+compose` writes `start_after: started` for a service whose `depends_on` is Compose's long form
+with `condition: service_started` for every dependency; the short form (a list of names) keeps
+the readiness wait. Without the key every service starts and is checked in turn, command for
+command as before.
 
 ### Variables every command sees
 
@@ -749,16 +810,27 @@ unchanged.
 
 ### Clock after a power cut (`guest.clock_after_cut`)
 
-Every serve boot sets the realtime clock to `guest.clock_start`, the recovery boot after a power
-cut included. A check that compares a time written in the first boot with one written in the
-recovery boot (for example a broker append time against the time an engine processed an event
-only after the restart) then sees time run backwards and can report a false violation.
+Every serve boot sets the realtime clock to `guest.clock_start`, **the recovery boot after a
+power cut included**: without `guest.clock_after_cut` the recovery boot's clock starts again at
+`clock_start`, earlier than every time the first boot wrote. No real machine does that. Two kinds
+of project need the key:
+
+- a check that compares a time written in the first boot with one written in the recovery boot
+  (for example a broker append time against the time an engine processed an event only after
+  the restart): it sees time run backwards and can report a false violation;
+- a system that stores times and checks them when it starts (databases with hybrid or
+  timestamp-ordered clocks, such as YugabyteDB or CockroachDB; lease and certificate checks): a
+  service then refuses to start in the recovery boot ("clock skew"), and the run ends with
+  `VIOLATION service cannot recover`, a false finding.
+
 `guest.clock_after_cut: <seconds>` makes the recovery boot continue the first boot's clock
-instead: at the cut the first boot adds `clock=<epoch>` to its `hydo-explore-acked:` line, which
-the harness passes on in the recovery boot's `oracle` command, and the recovery boot starts its
-clock at that epoch plus `<seconds>` (the time the machine was off), as a real
-clock keeps running across a power loss. Opt-in: only for a manifest that sets it (the host
-controller reads the clock at the cut and hands it to the recovery boot).
+instead: at the cut the host controller reads the first boot's clock, writes `clock=<epoch>` into
+its `hydo-explore-acked:` line and hands it to the recovery boot, which starts its clock at that
+epoch plus `<seconds>` (the time the machine was off), as a real clock keeps running across a
+power loss. A power cut at the k-th disk flush (`cf=`) is cut by the engine at the workload's
+end; since Milestone 202 the controller reads the clock there too, when the schedule has `cf=`
+(before, such a recovery boot started at `clock_start` plus `<seconds>`). Opt-in: only for a
+manifest that sets it, because the default would move every recorded power-cut value.
 
 ### Outcomes after a power cut (`guest.outcomes_after_cut`)
 
@@ -1866,7 +1938,8 @@ what the team already runs:
 hydo compose docker-compose.yml [--out hydo.yaml] [--images-dir images]
         [--env-file F ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE]
         [--network bridge|loopback] [--no-addr]
-sh fetch-images.sh            # written next to hydo.yaml: copies every image by digest with hydo-fetch-image (network, once)
+sh fetch-images.sh            # written next to hydo.yaml: copies every image by digest with hydo-fetch-image (network, once);
+                              #   x86_64 on Linux, arm64 on a Mac; `sh fetch-images.sh all` for both
 # write the workload and the invariants (the generated file marks them TODO), then hydo build
 ```
 
@@ -1875,7 +1948,9 @@ pulls only, no skopeo). Everything it resolves is written to
 `hydo-compose.lock.json`, so a second run needs no network and writes the same file; an image
 that `fetch-images.sh` already copied is read from the file instead. It reads the Compose file
 as YAML 1.1, as PyYAML's `safe_load` does (anchors, aliases and `<<` merge keys included); the
-output of `docker compose config --format json` works as well.
+output of `docker compose config --format json` works as well. The written `hydo.yaml` sets
+`guest.clock_start` to the day of the import, 00:00 UTC (`HYDO_INIT_CLOCK_START` names another
+time), so that the guest's clock does not start before the images were built.
 A bare `environment:` entry (`- POSTGRES_USER`) takes its value from `.env`, as in Compose. The generated manifest is checked with hydo-build's own
 validator before it is written. Example: `examples/compose-voting/` (Docker's example voting app;
 `hydo.generated.yaml` is the raw import, `hydo.yaml` the version with a workload and invariants).
@@ -1890,7 +1965,7 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | `working_dir:`, `user:` | `workdir:`, `user:` |
 | `ports:`, `expose:` | `port:` = the first CONTAINER port (`"8080:80"` -> 80); else the image's `EXPOSE`. Network faults (`N=`/`O=`) act on that port. |
 | (each service) | `network: bridge` and its own network namespace with `addr:` 10.89.0.11, .12, ... (see "Service networks"), and `/etc/hosts` (`root.text`, mounted into every image root) maps the Compose service names, `container_name`, `hostname`, network `aliases`, `links` aliases and `extra_hosts` to them (`host-gateway` -> 10.89.0.1). `--network loopback`: the Milestone 84 layout, one shared loopback network with `addr:` 127.0.0.11, .12, ... (link faults then act on nothing, see "Link faults"). `--no-addr`: one shared loopback network, every name -> 127.0.0.1 (the arm64 build, whose kernel has no network namespaces; `hydo compose` on a Mac passes it). |
-| `depends_on:` (list or map) | `depends_on:`. hydo starts a service only after its dependencies passed their `ready:`, so `service_healthy` and `service_started` both hold. |
+| `depends_on:` (list or map) | `depends_on:`. By default hydo starts a service only after the services before it passed their `ready:`, so `service_healthy` and `service_started` both hold. When every dependency in the long form says `condition: service_started`, the service also gets `start_after: started`: it starts once they have started, as in Compose (section "Starting services together"). |
 | `depends_on.<job>.condition: service_completed_successfully` | the job service idles (`/.hydo/busybox sleep`) and its command runs once per boot in the `setup:` of every service that waits for it (also before a restart and in crash recovery). |
 | `healthcheck:` (else the image's `HEALTHCHECK`) | `ready: timeout <t> hydo-oci <svc> <test>`: `CMD` as argv, `CMD-SHELL`/a string through `/bin/sh -c`, as the service's `user:` (busybox `chpst`), polled every second; `ready_timeout` = `start_period + interval x retries + 60` s (120..600). Without one: `nc -z -w 2 <addr> <port>`, or `true` (with a TODO) when there is no port. |
 | `volumes:` named / anonymous, the image's `VOLUME`s | a directory `/data/vol/<name>` on the data disk (the fault target; listed in `data.dirs`), mounted on the target with `copy_up` (on first use it gets the image's content, owner and mode, as a Docker named volume). Several services naming one volume share it. `external: true` starts empty (warning). A volume on `/data` is the data disk's root already, except when several services have their own named volume on `/data` (the nodes of a cluster), or when one has and another service keeps a named volume elsewhere on the data disk (Redis's `redis_data:/data` beside PostgreSQL's volume: the Redis image's entrypoint chowns everything under its `/data` to its own user, which took PostgreSQL's files away from PostgreSQL): then each gets `{src: /data/vol/<name>, dst: /data}` (services naming one volume share it). |

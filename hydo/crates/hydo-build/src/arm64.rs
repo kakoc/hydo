@@ -463,6 +463,10 @@ pub fn build(
             &v,
         )?;
     }
+    // root.fix_pyc (Milestone 202): Python's bytecode caches point at the fixed time below
+    if pyv::get(rootsec, "fix_pyc")? == Some(&serde_json::Value::Bool(true)) {
+        crate::pyc::fix_tree(&r, fsx::FIXED_MTIME)?;
+    }
     fsx::fix_mtimes(&r)?;
     let cpio = bdir.join(format!("{out}-arm64.cpio.gz"));
     let meta = (!oci_meta.is_empty()).then(|| crate::oci::cpio_meta(&oci_meta));

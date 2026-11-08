@@ -4954,3 +4954,127 @@ compile-time warnings a cached run does not get. In flask-4045 a `DeprecationWar
 they passed natively. Rewriting the caches as checked-hash caches (`python -m compileall
 --invalidation-mode checked-hash`) in the preparation removed every difference. This affects
 every Python image service; Milestone 202 adds the opt-in `root.fix_pyc` for it.
+
+### Milestone 202 — DONE (seven fixes from the YugabyteDB onboarding; 2026-11-08)
+
+The YugabyteDB onboarding (`hydo/onboard/examples/yugabyte/RESULTS.md`, merged here with
+Milestone 192's fixes) named seven problems. Each fix has a test. The changes that could move a
+recorded value are opt-in, and the default paths send the same commands as before.
+
+**1. Starting services together (`services[].start_after`).** hydo started the services in order
+and started the next one only when the one before it passed its readiness check. A tablet server
+whose check needs a second tablet server therefore never became ready, and the run ended with
+`ERROR service start` after `ready_timeout`; two YugabyteDB runs went to it. The new key
+`start_after: started` (a format-1 addition, default `ready`) starts a service once every service
+before it was started. The controller (`hydo-control/src/schedule.rs`, `start_all`) splits a
+service's start into `launch_svc` (setup and process) and `await_ready` (the readiness probe).
+A run of services joined by the key is launched first; their probes then run in the start order,
+before the next service without the key and before `start_all` returns, so every service is
+ready before provisioning and the workload. The recovery boot starts the services the same way.
+The heal's restart pass still restarts dead services one at a time. Without the key `start_all`
+calls `start_svc` as before, command for command: the identity corpora (`corpus`,
+`corpus_net`, `m123`, the explorer's) and every example golden are unchanged. `hydo compose`
+writes the key for a service whose `depends_on` uses Compose's long form with `condition:
+service_started` for every dependency (Compose's own meaning). The short form keeps the readiness
+wait, so the imports of existing Compose files do not change. Tests: `hydo-control` `start_after`
+(the scripted guest's readiness check `HYDO_FAKE_PEERS=` passes only while its peers run: the
+default boot ends `ERROR service start (n1)`; with the key the boot sends `spawn n1, n2, n3`, then
+`probe n1, n2, n3`, then the next service; `ready` written out is the default command for
+command; the recovery boot starts them the same way) and `hydo-compose` `start_and_clock`.
+
+**2. The recovery boot's clock after a cut at the k-th flush.** With `guest.clock_after_cut`, the
+recovery boot continues the first boot's clock, which the controller reads on its power-cut path
+(`C=`). A cut at the k-th disk flush (`cf=`) is made by the engine at the workload's end
+(`EngineAction::DiskFaultsOff`), so the controller never took that path, and the recovery boot
+started at `guest.clock_start` plus the seconds of the key. YugabyteDB then refused to start
+("Too big clock skew"), a false finding in two of nine exploration schedules. Now, when the
+schedule has `cf=` and the plan has the key, the controller reads the clock before it reads the
+acknowledged ids and writes `clock=<epoch>` into the `hydo-explore-acked:` line, as on the `C=`
+path; `RecoveryInputs::from_transcript` already read it from there, and the runner leaves the
+token out of the ids (`runner.rs`). Without `cf=`, or without the key, the run sends the same
+commands. The only recorded values that moved are in `hydo-control`'s
+`tests/golden/features-quick.txt`, re-recorded on purpose: 94 of its 9,474 conversations
+differ, every one a run conversation of a `cf=` schedule on a plan with `clock_after_cut`. Each
+gets one `clock_get` before the acknowledged ids are read and the `clock=` token. No image in
+`hydo/onboard/recorded.json` has the key, so no recorded fingerprint can move. The default (no
+key: the recovery boot's clock restarts at `clock_start`) is unchanged, and `hydo guide faults`,
+`hydo guide hazards` and MANIFEST.md now say plainly that clock-sensitive systems (hybrid clocks,
+leases, certificates) need the key. Test: `hydo-control` `clock_cut` (a scripted engine that cuts
+at the workload's end: the clock is carried and the recovery boot's clock is set to it plus 60;
+without `cf=` or without the key nothing changes). Not run on hvx, the only engine that applies
+`cf=`.
+
+**3. A service's own log files (`services[].logs`).** The diagnosis read only a service's output
+(`/tmp/hydo/<svc>.log`); YugabyteDB writes its real log under its data directory, so two
+provisioning failures needed an `hydo inspect` session each. The new key `logs:` (a format-1
+addition) lists absolute paths or shell patterns; the plan also takes `errors.files`. The
+diagnosis evidence adds "the log files of <svc>" (the last 30 lines of every matching file, after
+a `==> <file> <==` line), and `hydo inspect logs` prints them after the service's output. Tests:
+`hydo` `inspect::calls_tests::logs_shows_the_files_a_service_names`.
+
+**4. An explicit `clock_start` in new projects.** The format's default, 2026-01-01, is before
+software released since; YugabyteDB's catalog snapshot (built 2026-11-02) was in the guest's
+future. The default stays (it would move every recorded image). `hydo init` and `hydo compose`
+now write `guest.clock_start` with today's date at 00:00 UTC, and a comment with the date.
+`HYDO_INIT_CLOCK_START` (hydo-config, user kind) names another value; the CLI, agents and Compose
+goldens set it to 1794096000 (2026-11-08) and were re-recorded on purpose. Tests:
+`init_skeleton_builds` (today's date) and `hydo-compose` `start_and_clock`.
+
+**5. Python bytecode (`root.fix_pyc`).** hydo-build gives every file one fixed time, so a
+timestamp-checked `.pyc` (PEP 552 flags 0) looks stale and Python compiles the module again in
+every run. The flaky-verdict experiment (`docs/design/flaky-verdicts.md` on its branch) saw flask's
+tests fail on the compile warning. `hydo-build/src/pyc.rs` rewrites each such cache whose source
+is in the image: the recorded time becomes the file time the guest sees (the fixed time on the
+root and in an arm64 initramfs, 0 in a writable layer on the data disk, whose times hydo-build
+zeroes) and the recorded size the source's size. Hash-based caches, caches without their source
+and other layouts are left alone. It is opt-in (`root.fix_pyc: true`, a format-1 addition),
+because it changes the bytes of every image that holds such caches. Measured on this Mac by
+scanning the 21 recorded Mac images built from this tree: only `hvm/voting` holds such caches
+(803, all of the voting service's Python image); the Python examples `hvm/python-kv` and
+`hvm/python-kv-hist` hold none. The x86_64 voting images (`hvx/voting`, `hvx/voting-generated`,
+`hvx/voting-loopback`) carry the same Python image and are expected to hold them too; they were
+not scanned. Turning the key on by default would move those images' bytes and fingerprints, a
+decision for the user. Test: `hydo-build` `pyc::tests`.
+
+**6. `hydo inspect` calls do the same guest work.** Each call wrote its output to
+`/tmp/hydo-inspect/<call number>.out`, so from the 10th call on the guest did one more character
+of work. Every call now writes `/tmp/hydo-inspect/out` and `err` (calls run one after another and
+read their files before the next call). Tests: `inspect::calls_tests::repeated_calls_do_the_same_guest_work`
+and the updated `work::tests`.
+
+**7. The Compose importer.** The generated header named the deleted Python tools
+(`hvx/onboard/hydo-compose`, `HYDO_SEEDRNG=... hvx/onboard/hydo-build`; open item 38 d); it now
+names `hydo compose`, `hydo guide skill`, `hydo guide services` and `hydo build`. The lock file's
+`generated_by` was left as it is, because the Voting app's committed lock file is compared byte
+for byte. `fetch-images.sh` fetched both architectures; it now fetches the one this machine builds
+(x86_64 on Linux, arm64 on a Mac) and takes `x86_64`, `arm64` or `all` as its argument. Every
+Compose golden was re-recorded on purpose. Test: `hydo-compose` `fetch_arch` (the YugabyteDB
+example's import with its lock file and a recording fetcher).
+
+**Run on the Mac engine.** A three-node manifest whose readiness check needs all three nodes
+(each node's command touches a file; the check tests all three files; `ready_timeout: 5`), built
+with this tree's `hydo` over the 0.3.0 Mac release, each schedule twice from a fresh boot:
+without the key, `disk=none | run` ends `ERROR service start (n1)` (`507ce9f19efd4a2f` twice; the
+diagnosis names n1's readiness check that did not pass in 5 s); with `start_after: started` on the
+second and third nodes it is OK (`62d9937e3831ca00` twice). The first node's `logs:
+[/data/n1/*.log]` appears in the diagnosis evidence as "the log files of n1" (`==>
+/data/n1/node.log <==` and its lines), and `hydo inspect logs <run dir> n1 --at end` prints the
+file after the service's output.
+
+**Nothing recorded moved.** `hydo-bench rebaseline --check` on this Mac, with this tree's
+programs over the 0.3.0 Mac release and Go 1.26.5 from go.dev (sha256 `efb87ff2…`, checked against
+go.dev's list): all 21 images built once with their recorded bytes, all 76 schedules ran with
+every verdict, fingerprint and ctl value as recorded (a first pass was stopped when the Mac's free
+disk fell below 20 GB, and the second pass ran every schedule again; 673 s). On the build machine
+with KVM (`--platform kvm --thorough --jobs 1`, the 0.3.0 Linux release): the two release Redis
+images built twice with their recorded bytes and their 11 schedules ran twice each from fresh
+boots, every value as recorded. The two stack images were not built there: their build keeps the
+build machine's owners with `sudo setpriv`, and this session has no sudo there. hvx was not run.
+The workspace's fast tier, clippy with `-D warnings`, `cargo fmt --check`, `sh ci/vale.sh` and the
+full `cargo test --locked --release --workspace` pass.
+
+**Decisions left for the user.** Whether `root.fix_pyc` becomes the default: it would move the
+recorded voting images (open item 70). Whether `hydo compose` should also map Compose's short
+form of `depends_on` (whose Compose meaning is `service_started`) to `start_after: started`: it
+would change the import of every Compose file with dependencies, and services that crash when a
+dependency is not ready yet would then fail to start.

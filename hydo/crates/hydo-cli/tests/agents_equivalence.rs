@@ -179,6 +179,8 @@ fn run_seq(
             .args(c)
             .current_dir(cwd)
             .env("HOME", cwd.join("home"))
+            // the clock_start hydo init writes is today otherwise (Milestone 202)
+            .env("HYDO_INIT_CLOCK_START", "1794096000")
             .output()
             .unwrap();
         let mut files = BTreeMap::new();
@@ -593,6 +595,16 @@ fn init_skeleton_builds() {
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
     let agents = std::fs::read_to_string(cwd.join("AGENTS.md")).unwrap();
     assert!(agents.starts_with("# Instructions for coding agents\n"));
+    // Milestone 202: the guest's clock starts today (00:00 UTC), not at the format's 2026-01-01
+    let m = std::fs::read_to_string(cwd.join("hydo/hydo.yaml")).unwrap();
+    let today = hydo_manifest::new_clock_start(None);
+    assert!(
+        m.contains(&format!(
+            "  clock_start: {today}         # {} 00:00 UTC",
+            hydo_manifest::utc_date(today)
+        )),
+        "{m}"
+    );
     let o = run(&["build", "hydo/hydo.yaml", "--check"]);
     assert!(
         o.status.success(),

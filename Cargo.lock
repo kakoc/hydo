@@ -567,6 +567,7 @@ name = "hydo-compose"
 version = "0.3.0"
 dependencies = [
  "flate2",
+ "hydo-config",
  "hydo-manifest",
  "libc",
  "libyaml-safer",

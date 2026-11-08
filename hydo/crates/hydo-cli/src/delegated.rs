@@ -150,16 +150,16 @@ pub fn cmd_errors(_ctx: &Ctx, argv: &[String]) -> i32 {
 
 // ---------------------------------------------------------------- compose (the hydo-compose crate)
 
-pub fn cmd_compose(_ctx: &Ctx, argv: &[String]) -> i32 {
+pub fn cmd_compose(ctx: &Ctx, argv: &[String]) -> i32 {
     if argv.is_empty() || argv[0] == "-h" || argv[0] == "--help" {
         die("usage: hydo compose <docker-compose.yaml> [--out hydo.yaml] [--images-dir DIR] [--env-file F] \
              [--profile P] [--use-env] [--no-resolve] [--lock FILE]");
     }
-    hydo_compose::main(argv)
+    hydo_compose::main_clock(argv, ctx.config.cli.init_clock_start)
 }
 
 // ---------------------------------------------------------------- guide, skill, init (the hydo-agents crate)
 
 pub fn cmd_agents(ctx: &Ctx, cmd: &str, argv: &[String]) -> i32 {
-    hydo_agents::run(cmd, argv, &ctx.root)
+    hydo_agents::run_with(cmd, argv, &ctx.root, ctx.config.cli.init_clock_start)
 }

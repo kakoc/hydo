@@ -30,6 +30,7 @@ pub mod elfdeps;
 pub mod fsx;
 pub mod image;
 pub mod oci;
+pub mod pyc;
 pub mod pyjson;
 pub mod pyv;
 pub mod record;
