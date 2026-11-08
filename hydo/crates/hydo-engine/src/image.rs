@@ -84,7 +84,7 @@ fn debugfs_start_error(e: std::io::Error) -> std::io::Error {
         std::io::Error::new(
             e.kind(),
             "debugfs (e2fsprogs) is not on PATH: hydo reads the files of an image with it (a \
-             release has a copy in libexec/bin; Debian and Ubuntu install it in /usr/sbin)",
+             Linux release has a copy in libexec/bin)",
         )
     } else {
         e
