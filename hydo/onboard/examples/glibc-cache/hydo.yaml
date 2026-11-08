@@ -1,0 +1,68 @@
+# AlmaLinux 8's glibc 2.28 copies memory correctly in the guest (Milestone 203). With
+# guest.cpu: v3 that glibc's AVX memcpy takes its copy thresholds from the CPUID cache leaves,
+# and it fails at once when they describe no caches. guest.cpu_cache: true makes CPUID describe
+# a fixed cache hierarchy (MANIFEST.md "The CPU's caches"); hydo-nocache.yaml is the same
+# project without it.
+#   sh fetch-images.sh            # almalinux:8.10 by digest (network, once)
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"    # OK: 4 of 4 copy tests passed
+# On hvx the key needs a module that knows it (HVX_VM_CPU_CACHE); on KVM every hydo from
+# Milestone 203 on has it.
+format: 1
+name: glibc-cache
+description: AlmaLinux 8's glibc 2.28 copies memory correctly in the guest
+
+guest:
+  ram_mib: 1024
+  cpu: v3           # AlmaLinux 8's glibc picks its AVX memcpy here
+  cpu_cache: true   # the CPUID cache leaves; without them that memcpy fails
+
+data:
+  size_mib: 64
+
+services:
+  - name: alma
+    image: {x86_64: images/almalinux-8.10-amd64.docker.tar, arm64: images/almalinux-8.10-arm64-oci}
+    image_ref: "almalinux:8.10"
+    cmd: [sleep, infinity]
+    ready: "true"
+
+# one step = one run of a copy test in AlmaLinux 8's own Python (platform-python 3.6): bytes of
+# 13 sizes from 1 byte to 9 MiB copied with memcpy and compared; the step is acknowledged when
+# every copy is equal. The step also prints what glibc reads from CPUID (getconf) to the console.
+workload:
+  steps: 4
+  run: |
+    P='
+    import sys
+    sizes = [1, 32, 256, 257, 1000, 4096, 5000, 16384, 65536, 100000, 1 << 20, 3 << 20, 9 << 20]
+    bad = []
+    for n in sizes:
+        src = (bytes(range(256)) * (n // 256 + 2))[1:n + 1]
+        dst = bytearray(src)
+        if len(dst) != n or bytes(dst) != src:
+            bad.append(n)
+    print("copies", len(sizes), "bad", bad)
+    sys.exit(1 if bad else 0)
+    '
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      c=$(hydo-oci alma getconf -a 2>&1 | grep -E "^LEVEL[123]_[DI]?CACHE_SIZE|^LEVEL[23]_CACHE_SIZE" | tr -s " \n" "  ")
+      if out=$(hydo-oci alma /usr/libexec/platform-python -c "$P" 2>&1); then
+        echo $i >> $HYDO_ACKED
+      fi
+      echo "glibc-cache: step $i: python: $out getconf: $c" > /dev/console
+      i=$((i + 1))
+    done
+  timeout: 300
+
+invariants:
+  - id: glibc.copies_work
+    msg: every step's copy test in AlmaLinux 8's Python ran and copied correctly
+    cmd: |
+      n=$(wc -l < $HYDO_ACKED)
+      s=$(cat /sys/devices/system/cpu/cpu0/cache/index*/size 2>/dev/null | tr "\n" " ")
+      if [ "$n" = 4 ]; then echo "4 of 4 copy tests passed; kernel caches: ${s:-none}"; exit 0; fi
+      echo "$n of 4 copy tests passed (glibc's memcpy crashed?); kernel caches: ${s:-none}"; exit 1
+
+faults: [kill, cut]

@@ -18,7 +18,16 @@
 //! - the PMU (leaf 0xA is zero; the engine also disables KVM's PMU), RDRAND and RDSEED, RDPID,
 //!   MONITOR/MWAIT, XSAVE and AVX at v2 (as hvx's v2), PCID/INVPCID, FSGSBASE, MCE/MCA, MTRR, the
 //!   speculation-control and ARCH_CAPABILITIES bits, WAITPKG, the thermal and power leaf, the
-//!   cache and topology leaves (zero: the guest uses defaults).
+//!   cache and topology leaves (zero: the guest uses defaults; with `guest.cpu_cache` the cache
+//!   leaves describe a fixed hierarchy instead, below).
+//!
+//! `guest.cpu_cache: true` (Milestone 203, [`table_with`]) fills the cache leaves with the hvx
+//! engine's values (`hydo_hvx::abi::HVX_CPUID4_SUB` and its neighbours, the module's
+//! `HVX_VM_CPU_CACHE`): leaf 2 says "see leaf 4", leaf 4 lists a 32 KiB L1 data and instruction
+//! cache, a 256 KiB L2 and an 8 MiB L3, and leaf 0x8000_0006 gives the L2 again. Without it the
+//! glibc 2.28 of Red Hat Enterprise Linux 8 and its rebuilds finds no cache sizes and its AVX
+//! `memcpy` (at v3) fails; with it the table describes a CPU the host does not have, the same on
+//! every host. Off by default: the table without it is the one every recorded run used.
 //!
 //! The vendor is `GenuineIntel` on every host: one table means one set of guest code paths; on
 //! an AMD host KVM's cross-vendor emulation covers what a 64-bit Linux guest could hit
@@ -137,6 +146,16 @@ pub fn table() -> Vec<kvm_cpuid_entry2> {
 /// Milestone 159, unchanged; v3 adds its feature bits, raises the basic leaves to 0xD and
 /// describes the XSAVE area there.
 pub fn table_for(level: Level) -> Vec<kvm_cpuid_entry2> {
+    table_with(level, false)
+}
+
+/// The guest's CPUID table at `level`, with the cache leaves (`guest.cpu_cache`, Milestone 203)
+/// or without them ([`table_for`]). With them, leaf 2 is `HVX_CPUID2_EAX`, leaf 4 has the
+/// sub-leaves `HVX_CPUID4_SUB` and a fifth that ends the list, and leaf 0x8000_0006's ECX is
+/// `HVX_CPUID_E6_ECX`: the hvx engine's values for one logical processor, so both engines give a
+/// guest the same caches. Nothing else changes.
+pub fn table_with(level: Level, cache: bool) -> Vec<kvm_cpuid_entry2> {
+    use hydo_hvx::abi::{HVX_CPUID2_EAX, HVX_CPUID4_SUB, HVX_CPUID_E6_ECX};
     let v3 = level == Level::V3;
     let vendor = b"GenuineIntel";
     let v = |i: usize| u32::from_le_bytes(vendor[i * 4..i * 4 + 4].try_into().unwrap());
@@ -158,18 +177,35 @@ pub fn table_for(level: Level) -> Vec<kvm_cpuid_entry2> {
         // max basic leaf 7 (v3: 0xD, the XSAVE leaf); "GenuineIntel" in EBX, EDX, ECX
         e(0, 0, if v3 { 0xd } else { 7 }, v(0), v(2), v(1)),
         e(1, 0, L1_EAX, L1_EBX, l1_ecx | HYPERVISOR_BIT, L1_EDX),
-        // no cache or TLB descriptors
-        e(2, 0, 0x0000_0001, 0, 0, 0),
+        // no cache or TLB descriptors (with the cache leaves: "see leaf 4")
+        e(
+            2,
+            0,
+            if cache { HVX_CPUID2_EAX } else { 0x0000_0001 },
+            0,
+            0,
+            0,
+        ),
         e(3, 0, 0, 0, 0, 0),
+    ];
+    if cache {
+        // the deterministic cache parameters, then type 0 (the end of the list)
+        for (i, s) in HVX_CPUID4_SUB.iter().enumerate() {
+            t.push(e(4, i as u32, s[0], s[1], s[2], s[3]));
+        }
+        t.push(e(4, HVX_CPUID4_SUB.len() as u32, 0, 0, 0, 0));
+    } else {
         // no deterministic cache parameters (type 0 ends the list)
-        e(4, 0, 0, 0, 0, 0),
+        t.push(e(4, 0, 0, 0, 0, 0));
+    }
+    t.extend([
         // no MONITOR/MWAIT, no thermal and power management
         e(5, 0, 0, 0, 0, 0),
         e(6, 0, 0, 0, 0, 0),
         // structured extended features: none at v2, BMI1/AVX2/BMI2 at v3 (never FSGSBASE, ERMS,
         // INVPCID, RDSEED, RDPID, WAITPKG, AVX-512, speculation control or ARCH_CAPABILITIES)
         e(7, 0, 0, l7_ebx, 0, 0),
-    ];
+    ]);
     if v3 {
         // leaves 8 to 0xC are absent, so zero (no PMU, no topology). The XSAVE leaf: x87, SSE
         // and AVX; EBX the size for the current XCR0 (KVM keeps it in step), ECX the size for
@@ -191,7 +227,14 @@ pub fn table_for(level: Level) -> Vec<kvm_cpuid_entry2> {
         e(0x8000_0003, 0, b1[0], b1[1], b1[2], b1[3]),
         e(0x8000_0004, 0, b2[0], b2[1], b2[2], b2[3]),
         e(0x8000_0005, 0, 0, 0, 0, 0),
-        e(0x8000_0006, 0, 0, 0, 0, 0),
+        e(
+            0x8000_0006,
+            0,
+            0,
+            0,
+            if cache { HVX_CPUID_E6_ECX } else { 0 },
+            0,
+        ),
         // no invariant TSC, no power management
         e(0x8000_0007, 0, 0, 0, 0, 0),
         e(0x8000_0008, 0, (48 << 8) | PHYS_BITS, 0, 0, 0),
@@ -511,6 +554,70 @@ mod tests {
         assert!(e.contains("the host says offset 640"), "{e}");
     }
 
+    /// The size glibc computes from a leaf-4 entry: ways * partitions * line size * sets.
+    fn size4(x: &kvm_cpuid_entry2) -> u32 {
+        ((x.ebx >> 22) + 1) * (((x.ebx >> 12) & 0x3ff) + 1) * ((x.ebx & 0xfff) + 1) * (x.ecx + 1)
+    }
+
+    #[test]
+    fn cache_leaves_are_hvx_s_and_change_nothing_else() {
+        for level in [Level::V2, Level::V3] {
+            let off = table_for(level);
+            assert_eq!(table_with(level, false), off);
+            let on = table_with(level, true);
+            assert_eq!(
+                leaf(&on, 2).eax,
+                0x0000_ff01,
+                "one round, descriptor 0xff: see leaf 4"
+            );
+            assert_eq!(leaf(&off, 2).eax, 1, "without: no descriptors");
+            let l4: Vec<_> = on.iter().filter(|x| x.function == 4).collect();
+            assert_eq!(l4.len(), 5);
+            let mut sizes = Vec::new();
+            for (i, x) in l4.iter().enumerate() {
+                assert_eq!(x.index, i as u32);
+                assert_eq!(x.flags, KVM_CPUID_FLAG_SIGNIFCANT_INDEX);
+                if i < 4 {
+                    let h = hydo_hvx::abi::HVX_CPUID4_SUB[i];
+                    assert_eq!([x.eax, x.ebx, x.ecx, x.edx], h);
+                    // (type, level), one logical processor: no sharing, one core
+                    assert_eq!(x.eax >> 14, 0);
+                    sizes.push((x.eax & 0x1f, (x.eax >> 5) & 7, size4(x)));
+                } else {
+                    assert_eq!(
+                        (x.eax, x.ebx, x.ecx, x.edx),
+                        (0, 0, 0, 0),
+                        "the end of the list"
+                    );
+                }
+            }
+            assert_eq!(
+                sizes,
+                [
+                    (1, 1, 32 << 10),
+                    (2, 1, 32 << 10),
+                    (3, 2, 256 << 10),
+                    (3, 3, 8 << 20)
+                ]
+            );
+            assert_eq!(l4[3].edx & 2, 2, "the L3 is inclusive");
+            let e6 = leaf(&on, 0x8000_0006);
+            assert_eq!((e6.eax, e6.ebx, e6.edx), (0, 0, 0));
+            assert_eq!(e6.ecx >> 16, 256, "the L2 in KiB");
+            assert_eq!((e6.ecx >> 12) & 0xf, 4, "4-way");
+            assert_eq!(e6.ecx & 0xff, 64, "64-byte lines");
+            assert_eq!(leaf(&off, 0x8000_0006).ecx, 0);
+            // every other entry is the table without the cache leaves
+            let rest = |t: &[kvm_cpuid_entry2]| -> Vec<kvm_cpuid_entry2> {
+                t.iter()
+                    .filter(|x| !matches!(x.function, 2 | 4 | 0x8000_0006))
+                    .copied()
+                    .collect()
+            };
+            assert_eq!(rest(&on), rest(&off));
+        }
+    }
+
     #[test]
     fn table_is_fixed() {
         // the table shapes every guest run: a change is a new baseline of this engine
@@ -530,10 +637,38 @@ mod tests {
             ),
             TABLE_V3_FNV
         );
+        // M203: with the cache leaves (four more leaf-4 entries)
+        let with = |l| {
+            let mut b = Vec::new();
+            for x in table_with(l, true) {
+                for v in [x.function, x.index, x.flags, x.eax, x.ebx, x.ecx, x.edx] {
+                    b.extend_from_slice(&v.to_le_bytes());
+                }
+            }
+            b
+        };
+        assert_eq!(with(Level::V2).len(), 23 * 28);
+        assert_eq!(with(Level::V3).len(), 26 * 28);
+        assert_eq!(
+            [
+                format!(
+                    "{:016x}",
+                    hydo_hvm::fnv::fnv(&with(Level::V2), hydo_hvm::fnv::OFFSET)
+                ),
+                format!(
+                    "{:016x}",
+                    hydo_hvm::fnv::fnv(&with(Level::V3), hydo_hvm::fnv::OFFSET)
+                )
+            ],
+            [TABLE_CACHE_FNV, TABLE_V3_CACHE_FNV]
+        );
     }
 
     /// The v2 table's FNV-1a (recorded since Milestone 159; [`table_is_fixed`]).
     const TABLE_FNV: &str = "d7160ae07579d4da";
     /// The v3 table's FNV-1a (recorded; [`table_is_fixed`]).
     const TABLE_V3_FNV: &str = "4ee3ccb3c689b48a";
+    /// The tables with the cache leaves (M203; [`table_is_fixed`]).
+    const TABLE_CACHE_FNV: &str = "dbc8a19ef8edfb20";
+    const TABLE_V3_CACHE_FNV: &str = "470155319f8ae4e4";
 }

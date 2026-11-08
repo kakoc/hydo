@@ -147,6 +147,7 @@ fn start_of(spec: &BootSpec, mode: hydo_hvx::engine::Mode) -> hydo_hvx::engine::
         ram_mib: (spec.ram_mib != 1024).then_some(spec.ram_mib as u64),
         vcpus: (spec.vcpus > 1).then_some(spec.vcpus),
         cpu_v3: spec.cpu == crate::CpuLevel::V3,
+        cpu_cache: spec.cpu_cache,
     }
 }
 

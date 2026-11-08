@@ -61,7 +61,7 @@ impl Engines {
             env: hvx::wrapper_env(&self.config.engine),
             config: self.config.env.clone(),
         };
-        let (ram_mib, cpu) = guest_of(&self.build.join(image));
+        let (ram_mib, cpu, cpu_cache) = guest_of(&self.build.join(image));
         // the kernel and initramfs the image's record names (M155); an image without the record
         // boots the build directory's, with a warning
         let img = self.build.join(image);
@@ -84,6 +84,7 @@ impl Engines {
             ram_mib,
             vcpus: self.vcpus,
             cpu,
+            cpu_cache,
             kernel: b.kernel,
             initrd: b.initrd,
             outdir: outdir.join("consoles"),
@@ -108,16 +109,16 @@ impl Engines {
     }
 }
 
-/// The guest's RAM and CPU level from the manifest an image carries (`guest.ram_mib`,
-/// `guest.cpu`, as the explorer picks them for `--image`; M136: `list` on the onboarding examples
-/// needs them, the benchmark's own manifest has the defaults); 1024 MiB and v2 for an image
-/// without the keys.
-fn guest_of(image: &Path) -> (u32, CpuLevel) {
+/// The guest's RAM, CPU level and CPU cache leaves from the manifest an image carries
+/// (`guest.ram_mib`, `guest.cpu`, `guest.cpu_cache`, as the explorer picks them for `--image`;
+/// M136: `list` on the onboarding examples needs them, the benchmark's own manifest has the
+/// defaults); 1024 MiB, v2 and no cache leaves for an image without the keys.
+fn guest_of(image: &Path) -> (u32, CpuLevel, bool) {
     let Ok(text) = hydo_engine::image::embedded_manifest(image) else {
-        return (1024, CpuLevel::V2);
+        return (1024, CpuLevel::V2, false);
     };
     let Ok(m) = hydo_manifest::from_embedded(&text, None) else {
-        return (1024, CpuLevel::V2);
+        return (1024, CpuLevel::V2, false);
     };
     let g = &m.data["guest"];
     let ram = g["ram_mib"].as_u64().map_or(1024, |r| r as u32);
@@ -126,7 +127,7 @@ fn guest_of(image: &Path) -> (u32, CpuLevel) {
     } else {
         CpuLevel::V2
     };
-    (ram, cpu)
+    (ram, cpu, g["cpu_cache"].as_bool() == Some(true))
 }
 
 /// The host controller over `engine` for the agent image `image`; exits with the controller's

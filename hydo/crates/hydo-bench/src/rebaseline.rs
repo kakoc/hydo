@@ -688,7 +688,7 @@ fn pool_for(o: &Opts, image: &Path, workers: usize, outdir: &Path) -> Result<Poo
         .release
         .clone()
         .ok_or("--release is needed for the worker pools")?;
-    let (ram_mib, cpu) = guest_of(image);
+    let (ram_mib, cpu, cpu_cache) = guest_of(image);
     let (engine, kernel, initrd): (
         Arc<dyn ControlledEngine + Send + Sync>,
         PathBuf,
@@ -738,6 +738,7 @@ fn pool_for(o: &Opts, image: &Path, workers: usize, outdir: &Path) -> Result<Poo
         ram_mib,
         vcpus: 1,
         cpu: if cpu { CpuLevel::V3 } else { CpuLevel::V2 },
+        cpu_cache,
         kernel,
         initrd,
         outdir: outdir.join("consoles"),
@@ -766,17 +767,18 @@ fn pool_for(o: &Opts, image: &Path, workers: usize, outdir: &Path) -> Result<Poo
 }
 
 /// The guest's RAM and whether it asks for x86-64-v3, from the manifest the image carries.
-fn guest_of(image: &Path) -> (u32, bool) {
+fn guest_of(image: &Path) -> (u32, bool, bool) {
     let Ok(text) = hydo_engine::image::embedded_manifest(image) else {
-        return (1024, false);
+        return (1024, false, false);
     };
     let Ok(m) = hydo_manifest::from_embedded(&text, None) else {
-        return (1024, false);
+        return (1024, false, false);
     };
     let g = &m.data["guest"];
     (
         g["ram_mib"].as_u64().map_or(1024, |r| r as u32),
         g["cpu"].as_str() == Some("v3"),
+        g["cpu_cache"].as_bool() == Some(true),
     )
 }
 

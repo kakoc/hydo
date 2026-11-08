@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "name": "cpu-cache",
+  "description": "a guest whose CPUID describes its caches",
+  "guest": {
+    "cpu": "v3",
+    "cpu_cache": true
+  },
+  "services": [
+    {
+      "name": "app",
+      "cmd": [
+        "sleep",
+        "infinity"
+      ],
+      "ready": "true",
+      "image": {
+        "x86_64": "images/app-amd64.docker.tar"
+      },
+      "image_ref": "almalinux:8.10"
+    }
+  ],
+  "workload": {
+    "steps": 1,
+    "run": "hydo-oci app /usr/libexec/platform-python -c 'print(len(bytearray(1 << 20)))'\n"
+  },
+  "invariants": [
+    {
+      "id": "app.ran",
+      "cmd": "true"
+    }
+  ]
+}

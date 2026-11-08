@@ -123,6 +123,7 @@ fn structs_and_ioctls_match_the_header() {
         hvx_hc_io { addr, len, n, records, errors }
         hvx_hc_state { addr, cap, out_len, out_done, in_len, flags, pad }
         hvx_dirty { ram_addr, ram_bytes, disk_addr, disk_bytes, flags, pad, ram_dirty, disk_dirty }
+        hvx_caps { vm_flags, reserved }
     };
     // the explicit pads of the snapshot are not fields in C: check that the next field's offset
     // is the C one (it is in the list) and leave them out
@@ -169,7 +170,8 @@ fn structs_and_ioctls_match_the_header() {
         HVX_HC_GET,
         HVX_HC_PUT,
         HVX_HC_GET_STATE,
-        HVX_HC_SET_STATE
+        HVX_HC_SET_STATE,
+        HVX_GET_CAPS
     );
     let consts: Vec<(String, usize)> = vec![
         (
@@ -213,7 +215,22 @@ fn structs_and_ioctls_match_the_header() {
         ("HVX_HC_SZ".into(), HVX_HC_SZ),
         ("HVX_HC_STATE_OVF".into(), HVX_HC_STATE_OVF as usize),
         ("HVX_DIRTY_CLEAR".into(), HVX_DIRTY_CLEAR as usize),
+        ("HVX_VM_CPU_CACHE".into(), HVX_VM_CPU_CACHE as usize),
+        ("HVX_VM_KNOWN_FLAGS".into(), HVX_VM_KNOWN_FLAGS as usize),
+        ("HVX_CPUID2_EAX".into(), HVX_CPUID2_EAX as usize),
+        ("HVX_CPUID4_N".into(), HVX_CPUID4_SUB.len()),
+        ("HVX_CPUID_E6_ECX".into(), HVX_CPUID_E6_ECX as usize),
     ];
+    // M203: the cache table, entry by entry (a compound literal of the header's initializer)
+    let mut consts = consts;
+    for (i, row) in HVX_CPUID4_SUB.iter().enumerate() {
+        for (j, v) in row.iter().enumerate() {
+            consts.push((
+                format!("((const __u32[HVX_CPUID4_N][4])HVX_CPUID4_SUB)[{i}][{j}]"),
+                *v as usize,
+            ));
+        }
+    }
     let mut src = String::from(
         "#include <stdio.h>\n#include <stddef.h>\n#include \"hvx_abi.h\"\n\
          typedef struct { __u64 tick, delay; } hvx_tj_explicit;\nint main(void) {\n",

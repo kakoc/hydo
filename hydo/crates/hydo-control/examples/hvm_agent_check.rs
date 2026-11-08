@@ -48,6 +48,7 @@ fn main() {
         ram_mib: 1024,
         vcpus: 1,
         cpu: CpuLevel::V2,
+        cpu_cache: false,
         kernel: PathBuf::from(&a[2]),
         initrd: None,
         outdir: outdir.join(dir),

@@ -177,8 +177,11 @@ pub struct BootSpec {
     pub ram_mib: u32,
     /// vCPUs (hvx only; default 1).
     pub vcpus: u32,
-    /// Guest CPU level (hvx only).
+    /// Guest CPU level (hvx and KVM).
     pub cpu: CpuLevel,
+    /// hydo.yaml `guest.cpu_cache` (M203): the guest's CPUID describes a fixed cache hierarchy
+    /// (hvx and KVM; default false: the cache leaves are zero, as before).
+    pub cpu_cache: bool,
     /// The guest kernel: hvx's bzImage, or hvm's arm64 `Image` (an image built for the second
     /// kernel records it; the caller resolves that with `hvm::kernel_for`).
     pub kernel: PathBuf,
@@ -203,7 +206,8 @@ pub enum SnapshotStore {
 
 impl BootSpec {
     /// The engine options in front of the mode, as explore.py passes them: `--ram-mib N` only for a
-    /// size other than 1024, `--vcpus N` only above 1 (hvx), `--cpu v3` only for v3 (hvx, KVM).
+    /// size other than 1024, `--vcpus N` only above 1 (hvx), `--cpu v3` only for v3 (hvx, KVM),
+    /// `--cpu-cache on` only with `guest.cpu_cache` (hvx, KVM).
     pub fn engine_args(&self, kind: EngineKind) -> Vec<String> {
         let mut a = Vec::new();
         if self.ram_mib != 1024 {
@@ -217,6 +221,10 @@ impl BootSpec {
         if self.cpu == CpuLevel::V3 && matches!(kind, EngineKind::Hvx | EngineKind::Kvm) {
             a.push("--cpu".to_string());
             a.push("v3".to_string());
+        }
+        if self.cpu_cache && matches!(kind, EngineKind::Hvx | EngineKind::Kvm) {
+            a.push("--cpu-cache".to_string());
+            a.push("on".to_string());
         }
         a
     }

@@ -65,3 +65,4 @@ messages-keyed-log
 messages-ordered-groups
 messages-measure-only
 messages-include
+cpu-cache

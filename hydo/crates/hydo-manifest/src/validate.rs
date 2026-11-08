@@ -110,6 +110,7 @@ pub(crate) const KNOWN_GUEST: &[&str] = &[
     "clock_after_cut",
     "outcomes_after_cut",
     "cpu",
+    "cpu_cache",
     "description",
 ];
 pub const KNOWN_KNOB: &[&str] = &[
@@ -756,6 +757,15 @@ pub fn validate(m: &mut Value) -> R<()> {
         if !c.is_boolean() {
             return Err(err(format!(
                 "guest.outcomes_after_cut: true or false (got {})",
+                repr(c)
+            )));
+        }
+    }
+    if has(&guest, "cpu_cache")? {
+        let c = index(&guest, "cpu_cache")?;
+        if !c.is_boolean() {
+            return Err(err(format!(
+                "guest.cpu_cache: true (the guest's CPUID describes its caches; x86_64 only) or false (the default) (got {})",
                 repr(c)
             )));
         }

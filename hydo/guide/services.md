@@ -54,6 +54,9 @@ Guest settings:
 
 - `guest.ram_mib` (default 1024, at most 8192) must hold every service.
 - `guest.cpu: v3` when a binary needs AVX or AVX2 (x86_64 only).
+- `guest.cpu_cache: true` with `guest.cpu: v3` when an image is built on Red Hat Enterprise Linux
+  8 or a rebuild of it (AlmaLinux 8, Rocky Linux 8, UBI 8). Without it, that glibc's AVX `memcpy`
+  crashes, because CPUID describes no caches.
 - `guest.clock_after_cut: 60` when a check compares times written before and after a power cut.
 - `guest.outcomes_after_cut: true` when a check reads `$HYDO_OUTCOMES`. Without it, that file is
   empty in the recovery boot after a power cut.

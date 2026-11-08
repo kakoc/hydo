@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-53 user-facing and 90 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+53 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -27,6 +27,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HVX_EXPLORE_WALL_SECS` | developer | number (C atof) | 900 | hydo-hvx | A run's wall-clock budget in seconds (C `atof`; not positive: the default). |
 | `HVX_VCPU_PARK` | developer | flag: set and not `0` | off | hydo-hvx | Not `0`: park idle vCPUs (several vCPUs). |
 | `HVX_CPU_V3` | developer | flag: set and not `0` | off | hydo-hvx | Not `0`: the guest CPU is x86-64-v3 (as `--cpu v3`). |
+| `HVX_CPU_CACHE` | developer | flag: set and not `0` | off | hydo-hvx | Not `0`: the guest's CPUID describes its caches (as `--cpu-cache on`; HVX_VM_CPU_CACHE). |
 | `HVX_PMU_CLOCK` | developer | flag: not `0` | on | hydo-hvx | `0` turns the PMU branch clock off. |
 | `HVX_PAUSE_EXIT` | developer | flag: not `0` | on | hydo-hvx | `0` turns PAUSE exits off. |
 | `HVX_PT_TRACE_VM` | developer | flag: set (any value) | off | hydo-hvx | Set: trace the VM with Processor Trace (HVX_VM_PT_TRACE). |

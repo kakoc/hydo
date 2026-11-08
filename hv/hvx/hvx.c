@@ -943,6 +943,7 @@ struct hvx_vm {
 	 * bits so a real glibc userland (a distro OpenJDK JRE) loads. Set at HVX_CREATE_VM. */
 	unsigned int cpu_v2;
 	unsigned int cpu_v3;		/* HVX_VM_X86_64_V3: guest AVX/XSAVE (implies cpu_v2) */
+	unsigned int cpu_cache;		/* HVX_VM_CPU_CACHE (M203): CPUID describes the caches */
 	unsigned int pmu_clock;		/* HVX_VM_PMU_CLOCK */
 	/* In-kernel vCPU scheduler (HVX_VM_SMP_SCHED with n_vcpus > 1). `sched` holds the
 	 * policy, the scheduler state and the VM-wide clock (its v[] array is unused here:
@@ -2329,6 +2330,25 @@ static void hvx_cpuid(struct hvx_vcpu *vcpu)
 				c |= (1U << 27);	/* OSXSAVE mirrors guest CR4 */
 		}
 		break;
+	case 0x2:		/* cache descriptors: "see leaf 4" (HVX_VM_CPU_CACHE only, M203) */
+		if (vcpu->vm->cpu_cache)
+			a = HVX_CPUID2_EAX;
+		break;
+	case 0x4:		/* deterministic cache parameters (HVX_VM_CPU_CACHE only, M203) */
+		if (vcpu->vm->cpu_cache && subleaf < HVX_CPUID4_N) {
+			static const u32 sub[HVX_CPUID4_N][4] = HVX_CPUID4_SUB;
+			/* logical processors: every vCPU of an SMP-boot VM is a core of one
+			 * package (as leaf 0xB says), one thread each, all sharing the L3 */
+			u32 n1 = vcpu->vm->smp_boot ? vcpu->vm->n_vcpus - 1 : 0;
+
+			a = sub[subleaf][0] | (n1 << 26);
+			if (subleaf == HVX_CPUID4_N - 1)
+				a |= n1 << 14;
+			b = sub[subleaf][1];
+			c = sub[subleaf][2];
+			d = sub[subleaf][3];
+		}
+		break;
 	case 0x7:		/* structured extended features: none advertised */
 		a = b = c = d = 0;
 		if (vcpu->vm->cpu_v3 && subleaf == 0)
@@ -2397,6 +2417,12 @@ static void hvx_cpuid(struct hvx_vcpu *vcpu)
 		break;
 	case 0x80000000:	/* max extended leaf */
 		a = 0x80000001;
+		if (vcpu->vm->cpu_cache)
+			a = 0x80000006;	/* M203: up to the L2 leaf; 0x80000002..5 are zero */
+		break;
+	case 0x80000006:	/* L2 cache (HVX_VM_CPU_CACHE only, M203; Intel: ECX only) */
+		if (vcpu->vm->cpu_cache)
+			c = HVX_CPUID_E6_ECX;
 		break;
 	case 0x80000001:	/* extended feature flags */
 		d = (1U << 11) |	/* SYSCALL */
@@ -6916,6 +6942,7 @@ static int hvx_create_vm(struct hvx_vm *vm, struct hvx_config *cfg)
 	vm->idle_hb = (cfg->flags & HVX_VM_IDLE_HEARTBEAT) ? 1 : 0;
 	vm->cpu_v2 = (cfg->flags & HVX_VM_X86_64_V2) ? 1 : 0;
 	vm->cpu_v3 = (cfg->flags & HVX_VM_X86_64_V3) ? 1 : 0;
+	vm->cpu_cache = (cfg->flags & HVX_VM_CPU_CACHE) ? 1 : 0;
 	if (vm->cpu_v3)
 		vm->cpu_v2 = 1;		/* v3 includes v2 */
 	vm->pmu_clock = (cfg->flags & HVX_VM_PMU_CLOCK) ? 1 : 0;
@@ -7328,6 +7355,14 @@ static long hvx_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	vc = vm->vcpu ? &vm->vcpu[vm->cur_vcpu] : NULL;
 
 	switch (cmd) {
+	case HVX_GET_CAPS: {	/* M203: what this module knows (no VM needed) */
+		struct hvx_caps caps;
+
+		memset(&caps, 0, sizeof(caps));
+		caps.vm_flags = HVX_VM_KNOWN_FLAGS;
+		ret = copy_to_user(uarg, &caps, sizeof(caps)) ? -EFAULT : 0;
+		break;
+	}
 	case HVX_CREATE_VM: {
 		struct hvx_config cfg;
 

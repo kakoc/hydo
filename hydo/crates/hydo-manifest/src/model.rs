@@ -698,6 +698,13 @@ pub struct Guest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = "v2"))]
     pub cpu: Option<Param<CpuLevel>>,
+    /// x86_64: the guest's CPUID describes a fixed cache hierarchy (32 KiB L1 data and
+    /// instruction caches, a 256 KiB L2, an 8 MiB L3), the same on every host and engine. Without
+    /// it the cache leaves are empty, and at cpu v3 the glibc 2.28 of Red Hat Enterprise Linux 8
+    /// and its rebuilds (AlmaLinux 8, Rocky Linux 8, UBI 8) crashes in memcpy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub cpu_cache: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

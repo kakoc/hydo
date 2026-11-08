@@ -41,7 +41,8 @@ done
 TESTS="hvx_test hvx_rdtsc_test hvx_step_test hvx_tscclock_test hvx_snapshot_test hvx_intr_test
 hvx_verify hvx_console_test hvx_bigmem_test hvx_scale_test hvx_cpuid_test hvx_sregs_test
 hvx_input_test hvx_smp_test hvx_virtio_iso_test hvx_virtio_pci_test hvx_fault_test hvx_net_test
-hvx_net_fault_test hvx_bug_f0_test hvx_fuzzresume_test hvx_pmu_test hvx_bigram_test hvx_avx_test"
+hvx_net_fault_test hvx_bug_f0_test hvx_fuzzresume_test hvx_pmu_test hvx_bigram_test hvx_avx_test
+hvx_cpucache_test"
 # several vCPUs (CLAUDE.md M66/M69): hand-written tests, run with a longer timeout below
 SMPTESTS="hvx_sched_pmu_test hvx_sched_race_test hvx_sipi_test hvx_sched_sweep_test"
 # guest RAM above 4 GiB (M179; in the main module since 2026-11-08): an 8 GiB guest, three rounds
@@ -104,6 +105,7 @@ declare -A EXP=(
   [hvx_net_fault_test]="883a00eb6a14a6f0 37490fb78da33064 40659aabb208aaa0"
   [hvx_bug_f0_test]="1083e400458728ff"
   [hvx_avx_test]="3bb428a134ce542a"
+  [hvx_cpucache_test]="64329d56a2c9b638"
   [hvx_smp_test]="27ead8c880ef7820 88ee51bd9f8e40e0 d042bb01201c269d"
   [hvx_pmu_test]="86c4afcd0a799450"
   [hvx_sched_pmu_test]="73a465516c4e0094 b544e114dc426e85"

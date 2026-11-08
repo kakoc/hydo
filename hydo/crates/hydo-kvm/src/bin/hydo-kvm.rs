@@ -1,7 +1,7 @@
 //! `hydo-kvm`: the KVM engine as a program, with the Mac engine's protocol on stdin and stdout.
 //!
 //! ```text
-//! hydo-kvm [--ram-mib N] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir> ["<schedule>"]
+//! hydo-kvm [--ram-mib N] [--cpu v2|v3] [--cpu-cache on|off] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir> ["<schedule>"]
 //! ```
 
 fn main() {

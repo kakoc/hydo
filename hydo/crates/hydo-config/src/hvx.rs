@@ -16,6 +16,8 @@ pub struct Options {
     pub park: bool,
     /// `HVX_CPU_V3`, set and not 0.
     pub cpu_v3: bool,
+    /// `HVX_CPU_CACHE`, set and not 0 (M203: the CPUID cache leaves, `guest.cpu_cache`).
+    pub cpu_cache: bool,
     /// `HVX_PMU_CLOCK`, not 0 (default on).
     pub pmu_clock: bool,
     /// `HVX_PAUSE_EXIT`, not 0 (default on).
@@ -130,6 +132,7 @@ impl Options {
             vcpus: 1,
             park: e.set_not_0(HVX_VCPU_PARK),
             cpu_v3: e.set_not_0(HVX_CPU_V3),
+            cpu_cache: e.set_not_0(HVX_CPU_CACHE),
             pmu_clock: e.not_0(HVX_PMU_CLOCK),
             pause_exit: e.not_0(HVX_PAUSE_EXIT),
             pt_trace_vm: e.is_set(HVX_PT_TRACE_VM),

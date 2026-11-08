@@ -762,6 +762,15 @@ pub fn build(
     ) {
         crate::errln(io, &format!("hydo-build: warning: {w}"));
     }
+    for w in crate::oci::cpu_cache_warnings(
+        &p.oci,
+        &r,
+        &m,
+        pyv::get(rootsec, "share_images")? == Some(&serde_json::Value::Bool(true)),
+        any_layer.then_some(dstage.as_path()),
+    ) {
+        crate::errln(io, &format!("hydo-build: warning: {w}"));
+    }
     // root.fix_pyc (Milestone 202): Python's bytecode caches point at the fixed time below
     if pyv::get(rootsec, "fix_pyc")? == Some(&serde_json::Value::Bool(true)) {
         crate::pyc::fix_tree(&r, fsx::FIXED_MTIME)?;

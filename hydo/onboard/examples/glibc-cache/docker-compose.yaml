@@ -1,0 +1,4 @@
+services:
+  alma:
+    image: almalinux:8.10
+    command: ["sleep", "infinity"]

@@ -80,15 +80,12 @@ pub fn image_guest(image: &Path) -> Guest {
     }
 }
 
-/// The engine options the explorer passes for this image (explore.py's engine_args_for).
+/// The engine options the explorer passes for this image (explore.py's engine_args_for). The
+/// CPU cache leaves (`guest.cpu_cache`, M203) always come from the image: no recorded run
+/// carries them apart from its engine arguments.
 pub fn engine_args(image: &Path, ram: Option<u64>, cpu: Option<String>, vcpus: u64) -> Vec<String> {
-    let (ram, cpu) = match (ram, cpu) {
-        (Some(r), Some(c)) => (r, c),
-        (r, c) => {
-            let g = image_guest(image);
-            (r.unwrap_or(g.ram_mib as u64), c.unwrap_or(g.cpu))
-        }
-    };
+    let g = image_guest(image);
+    let (ram, cpu) = (ram.unwrap_or(g.ram_mib as u64), cpu.unwrap_or(g.cpu));
     let mut a = Vec::new();
     if ram != 1024 {
         a.push("--ram-mib".to_string());
@@ -101,6 +98,10 @@ pub fn engine_args(image: &Path, ram: Option<u64>, cpu: Option<String>, vcpus: u
     if cpu == "v3" {
         a.push("--cpu".to_string());
         a.push("v3".to_string());
+    }
+    if g.cpu_cache {
+        a.push("--cpu-cache".to_string());
+        a.push("on".to_string());
     }
     a
 }
@@ -118,6 +119,7 @@ fn spec_from_args(
         ram_mib: 1024,
         vcpus: 1,
         cpu: CpuLevel::V2,
+        cpu_cache: false,
         kernel,
         initrd,
         outdir: outdir.to_path_buf(),
@@ -129,6 +131,7 @@ fn spec_from_args(
             "--ram-mib" => spec.ram_mib = eargs[i + 1].parse().unwrap_or(1024),
             "--vcpus" => spec.vcpus = eargs[i + 1].parse().unwrap_or(1),
             "--cpu" => spec.cpu = CpuLevel::parse(&eargs[i + 1]).unwrap_or_default(),
+            "--cpu-cache" => spec.cpu_cache = eargs[i + 1] == "on",
             _ => {}
         }
         i += 2;
