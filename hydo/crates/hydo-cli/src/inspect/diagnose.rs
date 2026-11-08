@@ -19,9 +19,16 @@ use serde_json::Value;
 use std::path::Path;
 
 /// The service a verdict names: `ERROR service start (S)`, `ERROR S restart failed`,
-/// `ERROR restart after the faults (S)`.
+/// `ERROR restart after the faults (S)`, and the violations of a service that did not start
+/// again: `VIOLATION service cannot recover (committed data unrecoverable) (S)` (the recovery
+/// boot after a power cut) and `VIOLATION service cannot recover after the faults (S)`.
 pub fn verdict_service(v: &str) -> Option<String> {
     let v = v.trim_start_matches("HYDO-ORACLE: ");
+    if v.starts_with("VIOLATION service cannot recover") {
+        let r = v.strip_suffix(')')?;
+        let (_, s) = r.rsplit_once(" (")?;
+        return (!s.is_empty() && !s.contains(' ')).then(|| s.to_string());
+    }
     if let Some(r) = v.strip_prefix("ERROR service start (") {
         return r.split(')').next().map(str::to_string);
     }
@@ -206,7 +213,9 @@ fn host_from(rec: &Recorded, evs: Vec<AgentEv>) -> Option<Diagnosis> {
             }
         });
         let _ = last_spawn;
-        let what = if core.contains("restart") {
+        let what = if conv == Conv::Recovery {
+            "while it started in the recovery boot after the power cut"
+        } else if core.contains("restart") || core.contains("after the faults") {
             "while it was restarted"
         } else {
             "while it started"
@@ -256,6 +265,16 @@ fn host_from(rec: &Recorded, evs: Vec<AgentEv>) -> Option<Diagnosis> {
             }
             .into();
             d.summary = format!("{core}: no exit or readiness result of {s} was recorded");
+            if !evs
+                .iter()
+                .any(|a| matches!(a.kind, "exit" | "done" | "probe"))
+            {
+                d.summary.push_str(&format!(
+                    " (the run's consoles carry no agent lines: on hvx they go over the host-call \
+                     port; `hydo inspect diagnose {} --evidence` replays the run and reads them)",
+                    rec.dir.display()
+                ));
+            }
         }
     } else if core.starts_with("ERROR provision failed") {
         d.failure = "provision".into();
@@ -840,7 +859,11 @@ pub fn for_run(ctx: &Ctx, dir: &Path, evidence_on: bool) -> Option<Diagnosis> {
         && !agent_events(&rec)
             .iter()
             .any(|a| a.conv == Conv::Recovery && matches!(a.kind, "exit" | "done" | "probe"));
-    if evidence_on && (rec.doc.verdict.kind == "error" || blind_recovery) {
+    // a violation that names a service which did not start again (`service cannot recover ...
+    // (S)`): its log says why, and only the replay reads it
+    let named =
+        rec.doc.verdict.kind == "violation" && verdict_service(&rec.doc.verdict.text).is_some();
+    if evidence_on && (rec.doc.verdict.kind == "error" || blind_recovery || named) {
         let (d2, ev) = with_evidence(ctx, &rec, d);
         d = d2;
         d.next.retain(|n| !n.contains("--evidence"));
@@ -878,6 +901,24 @@ mod tests {
         assert_eq!(
             verdict_service("HYDO-ORACLE: ERROR restart after the faults (redis)").as_deref(),
             Some("redis")
+        );
+        assert_eq!(
+            verdict_service(
+                "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (tb_0)"
+            )
+            .as_deref(),
+            Some("tb_0")
+        );
+        assert_eq!(
+            verdict_service("HYDO-ORACLE: VIOLATION service cannot recover after the faults (db)")
+                .as_deref(),
+            Some("db")
+        );
+        assert_eq!(
+            verdict_service(
+                "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable)"
+            ),
+            None
         );
         assert_eq!(verdict_service("HYDO-ORACLE: ERROR provision failed"), None);
         assert_eq!(verdict_service("HYDO-ORACLE: VIOLATION [x] y"), None);
@@ -1039,6 +1080,48 @@ mod fixtures {
         }
         std::fs::write(d.join(super::super::timeline::AGENT_EVENTS), events).unwrap();
         d
+    }
+
+    /// Milestone 192: the recovery boot's start of a service fails (its process exits with
+    /// status 2 and its readiness check sees it die): the host controller's verdict is
+    /// `VIOLATION service cannot recover (committed data unrecoverable) (redis)`, and the
+    /// diagnosis names redis, its exit and its readiness check instead of "No process failed".
+    #[test]
+    fn a_service_that_does_not_start_in_the_recovery_boot_is_named() {
+        let d = cut_with_events(
+            "nostart",
+            concat!(
+                r#"{"conversation":"recovery","stop":23300,"at":824500,"line":{"ev":"exit","h":"redis","id":12,"v":1,"status":2}}"#,
+                "\n",
+                r#"{"conversation":"recovery","stop":23306,"at":824608,"line":{"ev":"probe","id":13,"ok":false,"why":"died","status":1,"tries":1,"v":1}}"#,
+                "\n"
+            ),
+        );
+        let v =
+            "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (redis)";
+        let p = d.join(hydo_results::RUN_DOC);
+        let mut doc: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+        doc["verdict"]["text"] = Value::String(v.into());
+        std::fs::write(&p, serde_json::to_string(&doc).unwrap()).unwrap();
+        let rec = Recorded::load(&d).unwrap();
+        let g = host(&rec).unwrap();
+        assert_eq!(g.failure, "service-exited", "{}", g.summary);
+        assert_eq!(g.service.as_deref(), Some("redis"));
+        let pe = g.process.as_ref().unwrap();
+        assert_eq!((pe.status, pe.signal), (2, None));
+        assert_eq!(g.probe.as_ref().unwrap().why, "died");
+        assert!(
+            g.summary
+                .contains("in the recovery boot after the power cut")
+                && g.summary.contains("exit status 2"),
+            "{}",
+            g.summary
+        );
+        // without the replayed events (hvx), the summary says where to get them
+        std::fs::remove_file(d.join(super::super::timeline::AGENT_EVENTS)).unwrap();
+        let g2 = host(&Recorded::load(&d).unwrap()).unwrap();
+        assert!(g2.summary.contains("--evidence"), "{}", g2.summary);
+        let _ = std::fs::remove_dir_all(d);
     }
 
     /// Milestone 192: a service that exits by itself in the recovery boot is named, so that a
