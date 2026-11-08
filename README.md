@@ -1,166 +1,168 @@
-# hydo — deterministic fault testing for distributed systems
+# hydo
 
-hydo runs a whole system (your services, their databases and queues, and the workload that drives
-them) inside a virtual machine whose execution is **bit-for-bit deterministic**: the same image and
-the same schedule give the same run, every time. On top of that it injects faults from a seed:
-process kills and pauses, network loss and delay, one-way partitions, power cuts at a chosen disk
-flush, disk errors and lying disks, clock jumps, and faults in fake outside services. It explores
-many such schedules, checks the system's properties after each run, and shrinks every failure to
-a minimal schedule that replays exactly. A replay needs the same engine and the same image: a
-failure found on Linux (x86_64) cannot be replayed on a Mac (arm64), and replay on a second
-machine of the same kind is expected but not yet tested (hydo/PRODUCT.md, "Where hydo runs").
+hydo tests a distributed system under faults and replays every failure exactly. It runs your
+services, their databases, and their client in one virtual machine. The execution is
+deterministic: the same image and the same schedule give a bit-identical run. A schedule is a
+line of text that names the faults of one run, for example a power cut before write 12. From
+many generated schedules, hydo finds the runs that break a property of your system. It shrinks
+each failure to a minimal schedule that you can replay.
 
-Software runs unmodified. hydo has found, for example, etcd 3.5.5's member-revision divergence
-(issue 14685) without being told about it, MySQL showing a commit before its redo log was flushed
-when the binary log is off, and Kafka deleting acknowledged records after a large clock jump with
-its default retention; it reproduces the SQLite 3.51.2 WAL-reset corruption.
+hydo 0.2.0 is the current release. It is experimental: formats and commands can change between
+versions.
 
-**Status: experimental.** The engines and the product work and are tested, but interfaces and
-formats may still change between versions.
+## An example: Redis loses an acknowledged write
+
+The release contains an example with Redis 7.2. Its workload writes 20 keys. Its property says
+that every write the client saw acknowledged is still there after the run. The schedule
+`disk=cut | run C=12 R=everysec` sets Redis to sync its log once a second and cuts the power
+before write 12. After an install from a tarball the example is in `~/.hydo/examples/redis`, and
+the section [Install](#install) gives its place for the other installs:
+
+```sh
+cp -R ~/.hydo/examples/redis ~/hydo-redis && cd ~/hydo-redis
+hydo build hydo.yaml
+hydo run "disk=none | run"
+hydo run "disk=cut | run C=12 R=everysec"
+```
+
+These are the two result lines of a recorded run on Linux (shortened at `…`):
+
+```
+RESULT one fp=1893d8c55d7704d9 wfp=1421b01fdc984975 secs=0.4 stops=23608 typed=21 … ctl=d38223b17189d9a9 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)
+RESULT one fp=3520af95868b4e8f wfp=fce0cfbd850a0e9d secs=0.9 stops=24042 typed=30 … ctl=59ae8f3720816102 verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
+```
+
+- `verdict=` is the outcome. The power cut lost key `k:1`, which Redis had acknowledged. This is
+  the documented window of Redis's `appendfsync everysec` setting.
+- `fp=` is the fingerprint, a hash of the guest's whole final state. Each run of the same schedule
+  on the same image gives the same fingerprint.
+
+Each run writes a directory under `hydo-out/runs/`. `hydo repro` runs a recorded run again from a
+fresh boot and compares the fingerprints:
+
+```
+$ hydo repro hydo-out/runs/run-…
+REPRODUCED   run  fp=3520af95868b4e8f (recorded 3520af95868b4e8f)  disk=cut | run C=12 R=everysec
+             HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
+hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under hydo-out/runs/run-…/repro-…)
+```
+
+The output comes from the Linux release's quickstart (`hydo/dist/linux/QUICKSTART-linux.md`). The
+values are recorded in `docs/REBASELINE.md` section 13.4. On a Mac the same schedule loses key
+`k:0`, with the fingerprint `a6870a92a1bbf0ae`.
 
 ## Install
 
-On an Apple Silicon Mac with macOS 13 or later, the easiest way is Homebrew:
+hydo runs on an Apple Silicon Mac with macOS 13 or later, and on x86_64 Linux. Each install puts
+the `hydo` command on your PATH. Then `hydo doctor` checks the machine and the installation.
+
+### macOS with Homebrew
 
 ```sh
 brew install kakoc/tap/hydo
 hydo doctor
 ```
 
-The formula (https://github.com/kakoc/homebrew-tap) installs the prebuilt Mac release and runs
-`hydo setup`, which checks every file. Since 0.2.0 the Mac programs come signed with the project's
-Developer ID and notarized by Apple (docs/design/signing.md). Alternatively, download
-`hydo-mac-<version>.tar.gz` (or, for Linux on x86_64 with Intel VT-x,
-`hydo-linux-<version>.tar.gz`) from https://github.com/kakoc/hydo/releases, unpack it and run its
-`install.sh`; the tarball's README or `QUICKSTART-mac.md` takes it from there. Since 0.2.0 the
-Linux release also runs guests on stock Linux KVM, without hydo's kernel module (`--backend kvm`).
+The example is then in `$(brew --prefix hydo)/libexec/examples/redis`. Without Homebrew, use the
+tarball `hydo-mac-0.2.0.tar.gz` of the same release and its `install.sh`, as for Linux below. The
+Mac quickstart is `hydo/dist/mac/QUICKSTART-mac.md`.
 
-To onboard a project with an AI coding tool, use hydo's onboarding skill: run
-`hydo skill install --agent claude` (or `codex`, `cursor`, `copilot`, `gemini`) in the repository,
-then ask the tool to onboard the project with hydo. From hydo 0.2.0 on, Claude Code can also
-install it as a plugin (`/plugin marketplace add kakoc/hydo`), and `hydo skill update` fetches a
-newer skill. The skill holds the process; it reads every fact about your hydo from `hydo guide`.
+### Linux with the kernel module
 
-## How it fits together
-
-```
- your project ── hydo.yaml or a hydo/ folder ──┐
-                                               ▼
- ┌──────────────────────── hydo (the product, Rust) ────────────────────────┐
- │ hydo-cli: the `hydo` command                                             │
- │ hydo-build  hydo-explore  hydo-composer  hydo-errors  hydo-history  ...  │
- │ hydo-manifest (project format)    hydo-schedule (schedule language)      │
- │ hydo-engine: the Engine / Worker interface                               │
- └──────────────┬────────────────────────────────────────┬──────────────────┘
-                ▼                                        ▼
-   hv/hvx — Linux engine                     hv/hvm — Mac engine
-   a VT-x kernel module (/dev/hvx)           arm64 Linux on Apple Silicon
-   + the run engine hydo-hvx (Rust)          through Hypervisor.framework (hydo-hvm, Rust)
-```
-
-- **The product** builds a guest image from a project description, drives an engine through one
-  interface (`hydo-engine`), explores fault schedules, checks the results and reports them. It is
-  one Rust workspace (`hydo/crates/`).
-- **The engines** run the guest deterministically and apply faults. They share no code; each
-  implements the same schedule language. `hvx` is our own Intel VT-x hypervisor as a Linux kernel
-  module: it owns the VMCS, so it controls `RDTSC`, interrupts and every VM exit, and its clock
-  counts VM exits or the guest's retired branches. `hvm` runs on Apple Silicon Macs without root.
-
-## Repository layout
-
-```
-hv/hvx/        the Linux engine: hvx.c (module), hvx_abi.h (ioctl ABI), module tests and
-               harnesses, images/ (guest kernel and hand-written images), safety/ (KASAN kernel
-               and syzkaller), deploy-metal.sh (regression suite); its run engine is the Rust
-               crate hydo/crates/hydo-hvx (M132; the C hvx_explore.c was deleted in M137)
-hv/hvm/        the Mac engine's hardware probes, arm64 guest kernels and write-ups; its run engine
-               is the Rust crate hydo/crates/hydo-hvm (M143; the C hvm.c and hvmx were deleted in M147)
-hydo/crates/   the Rust workspace (see below)
-hydo/onboard/  the guest-side init and its extensions (shell, inside every image), MANIFEST.md
-               (the project format), examples
-hydo/          other product parts: readers/ (store readers),
-               grpcgen/ (gRPC driver generator), stack/ (the example order system), bench/ (the
-               bug benchmark), dist/ (release packaging)
-sdk/           assertion SDKs for programs under test: Rust (the reference), Go, Python,
-               JavaScript (docs/PUBLISHING.md: their registry packages)
-skills/        hydo-onboard, an Agent Skill that writes a project's hydo/ folder
-docs/          HISTORY.md (every milestone with its evidence), REBASELINE.md, BUILD-PINS.md
-```
-
-### The Rust workspace
-
-| Crate | Responsibility |
-|---|---|
-| `hydo-schedule` | The schedule language as types (`disk=cut dseed=1 \| run K=redis@11+1 C=24`), parse and print, byte for byte. |
-| `hydo-manifest` | The project format: `hydo.yaml`, a plan's `test:` section, the `hydo/` folder; parsing and validation. |
-| `hydo-engine` | The `Engine` and `Worker` traits and the two implementations (`hvx`, `hvm`). |
-| `hydo-build` | Builds guest images for x86_64 and arm64, including services from Docker/OCI images. |
-| `hydo-explore` | The explorer: strategies, sweeps, re-runs, shrinking, reports. |
-| `hydo-composer` | The test composer: commands composed into rounds, stable saved regressions. |
-| `hydo-errors` | Error log lines as findings, with a reviewed list of known errors. |
-| `hydo-history` | Linearizability and list-append checks of recorded histories. |
-| `hydo-results` | The results format: run and exploration documents, the event stream, the lenient reader, the generated JSON Schema. |
-| `hydo-compose` | Imports a `docker-compose.yaml` as a starting `hydo.yaml`. |
-| `hydo-agents` | `hydo guide`, `hydo skill install`, `hydo init` for AI coding agents. |
-| `hydo-world` | The program inside the guest that serves `fakes:` and `proxies:` (HTTP, gRPC, TCP), applies `H=` protocol faults and records what the outside world saw (a static musl binary in every such image). |
-| `hydo-bench` | The bug benchmark: how well explorer strategies find the planted defects (not shipped). |
-| `hydo-tools` | Build-machine helpers: Nix-cache fetch and unpack, cpio extraction, ELF library lists (not shipped). |
-| `hydo-cli` | The `hydo` command (package `hydo`, the name `cargo install hydo` uses; docs/PUBLISHING.md). |
-
-The formats between the parts (the schedule language, the project format, the SDKs' output lines)
-are defined by their implementations and their tests; the tests' recorded examples are the
-specification.
-
-## Building and testing
+This install needs an Intel CPU with VT-x, sudo, a C compiler, `make`, and the running kernel's
+headers. It builds and loads hydo's kernel module `hvx.ko`.
 
 ```sh
-cargo test --locked                        # the whole workspace (Rust 1.90.0, rust-toolchain.toml)
-cargo clippy --all-targets -- -D warnings
-cargo fmt --check
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.2.0/hydo-linux-0.2.0.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.2.0/SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+tar xzf hydo-linux-0.2.0.tar.gz
+./hydo-linux-0.2.0/install.sh
+export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
-- **The `hydo` command from this tree:** `cargo build --release -p hydo` gives `target/release/hydo`,
-  which reports this tree's version and commit (`hydo --version`). A checkout has none of a
-  release's files (guest kernels, engine programs, tools), so such a `hydo` uses its version's
-  release from the install cache, as a `cargo install`ed one does: `target/release/hydo setup --get
-  <version>` fetches it once (`hydo doctor` names the command), and the tree's `hydo` then runs over
-  it.
+The Linux quickstart is `hydo/dist/linux/QUICKSTART-linux.md`, and the release has a copy as its
+`README.md`.
 
-- **The Linux engine** needs an x86_64 machine with Intel VT-x and the running kernel's headers:
-  `make -C hv/hvx` builds `hvx.ko`; `hv/hvx/deploy-metal.sh` runs the engine's regression suite on
-  such a machine. Bare metal is best; a VM works if it exposes nested VT-x, but the exact branch
-  clock needs a working PMU and does not work on Intel hybrid CPUs.
-- **The Mac engine** needs an Apple Silicon Mac: `cargo build --release -p hydo-hvm` builds the
-  program `hydo-hvm`, which hydo signs with the hypervisor entitlement (`hv/hvm/hv.entitlements`)
-  before it runs it.
-- **Guest images** are reproducible only with the pinned toolchain listed in `docs/BUILD-PINS.md`.
+### Linux without the kernel module
 
-## Using it on a project
+The KVM engine runs the same images on the KVM that comes with Linux. It needs no module and no
+root, only a `/dev/kvm` that your user can open. Install the tarball with `--no-module`:
 
-`hydo init` creates a project's `hydo/` folder; `hydo guide` prints the onboarding guide, which an
-AI coding agent can follow (`hydo skill install --agent claude|codex` installs it as a skill).
-`hydo build`, `hydo run`, `hydo explore` and `hydo repro` build the image, run one schedule,
-explore many and replay a failure; their results are `result.json`, `exploration.json` and
-`events.jsonl` (schema `hydo/schema/results-v1.json`; `hydo/PRODUCT.md`, "Where the results are").
-`hydo/onboard/MANIFEST.md` describes the project format and
-`hydo/PRODUCT.md` describes hydo from a user's point of view.
+```sh
+./hydo-linux-0.2.0/install.sh --no-module
+hydo doctor --backend kvm
+```
+
+Then add `--backend kvm` to `hydo run` and `hydo explore`. The KVM engine gives the same verdicts
+as the module, with its own fingerprints. It has one virtual CPU. Section 6 of the Linux
+quickstart describes it.
+
+### With cargo
+
+```sh
+cargo install hydo --locked
+hydo setup
+hydo doctor
+```
+
+`cargo install` builds only the `hydo` command. `hydo setup` downloads the release for your
+platform into `~/.hydo/versions/0.2.0`, and checks every file by sha256. The example is then in
+`~/.hydo/versions/0.2.0/examples/redis`. This install was tested on a Mac. On Linux it was only
+compiled.
+
+## What you get
+
+- Faults from a seeded schedule:
+  - process kills and pauses;
+  - network delay, loss, and partitions between services;
+  - power cuts, disks that lose acknowledged writes, and disk errors;
+  - clock jumps and changes of thread timing;
+  - errors and lost webhooks from fake outside services.
+- hydo runs your software unmodified. A service is a program, a set of files, or a Docker or OCI
+  image.
+- An explorer: `hydo explore` generates schedules, runs each failure again to check that it
+  reproduces, and shrinks it. On the Redis example on Linux,
+  `hydo explore --seeds 1-20 --strategy swarm --workers 2` found 11 failures in 14 seconds, and
+  each one reproduced (Linux quickstart, section 3).
+- Ready-made checks: linearizability and list-append checks of recorded histories, readers for
+  MySQL, PostgreSQL, Kafka, Redis, and etcd, and assertion SDKs for Rust, Go, Python, and
+  JavaScript.
+- A start from Docker Compose: `hydo compose docker-compose.yaml` writes a first `hydo.yaml`.
+- An onboarding skill for AI coding tools. In Claude Code, run
+  `/plugin marketplace add kakoc/hydo`, then `/plugin install hydo-onboard@hydo`. For other
+  tools, run `hydo skill install --agent codex` (or `cursor`, `copilot`, `gemini`).
+
+hydo has found upstream bugs without being told where to look:
+
+- etcd 3.5.5: member revisions diverge after an online defragmentation and a crash (etcd issue
+  14685). It is absent in 3.5.6 (`docs/HISTORY.md` Milestone 60).
+- NATS 2.10.22: a JetStream stream is deleted when every node stops shortly after the stream was
+  created (nats-server issue 6888). It is fixed in 2.10.23 (Milestone 141).
 
 ## Limits
 
-- The Linux engine supports Intel VT-x only, not AMD.
-- Machines with Secure Boot need the module signed before it can be loaded.
-- Anyone who can open `/dev/hvx` can run guests through the kernel module, which is as powerful as
-  root; give that access only to people you would give sudo.
+- A failure replays exactly only with the same engine, the same image, and the same hydo
+  version. A failure found on Linux does not replay on a Mac.
+- The kernel module supports Intel VT-x only, not AMD. The KVM engine has run only on Intel CPUs.
+- In 0.2.0 a guest has at most 3 GiB of RAM on Linux and 4 GiB on a Mac.
+- Time inside the virtual machine is virtual, so hydo does not measure performance.
+- The kernel module runs with the rights of the kernel. Anyone who can open `/dev/hvx` can run
+  guests through it, so give that access only to people you would give sudo.
+- On a machine with Secure Boot, the module must be signed before it can be loaded.
 
-## Contributing
+## More
 
-`AGENTS.md` describes the project's conventions and current state for anyone working in the
-repository, people and coding agents alike. The two rules that matter most: a change must keep
-every recorded fingerprint unchanged unless it deliberately changes one, and a new feature is
-opt-in and inert when off.
+- `hydo guide` prints the guide built into your `hydo`: the project format, the faults, and the
+  commands.
+- `hydo/onboard/examples/` has 26 example projects. Among them are etcd, NATS, TigerBeetle,
+  Docker's voting app, and a stack of MySQL, Kafka, and Redis.
+- `docs/ARCHITECTURE.md` explains how hydo is built.
+- `CONTRIBUTING.md` says how to build hydo from this repository and how to test it.
+- `hydo/PRODUCT.md` describes hydo from a user's point of view, with its known gaps.
 
 ## License
 
-Apache License 2.0 (`LICENSE`). The Linux kernel module `hv/hvx/hvx.c` is GPL-2.0-only, and its
-interface header `hvx_abi.h` is GPL-2.0-only WITH Linux-syscall-note OR Apache-2.0; see
-`hv/hvx/LICENSE.md`.
+hydo is licensed under the Apache License 2.0 (`LICENSE`). The kernel module `hv/hvx/hvx.c` is
+licensed under GPL-2.0-only. Its interface header `hvx_abi.h` is licensed under GPL-2.0-only
+WITH Linux-syscall-note, or Apache-2.0. `hv/hvx/LICENSE.md` has the details.
