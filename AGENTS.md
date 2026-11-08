@@ -62,7 +62,8 @@ It stops with a message that names the file when the file is missing (M151).
 - The regression suite: run `hv/hvx/deploy-metal.sh [load] [flagships]` from the Mac. It syncs the
   userspace sources and the Rust workspace to `~/$HVX_METAL_TREE` (default `hydo`), builds there,
   runs the module tests and the two pinned reproducers through `hvx-run`, and compares each result
-  with its baseline. Today it prints `ALL PASS (33 checks)`.
+  with its baseline. Today it prints `ALL PASS (34 checks)` (33 before M195 added
+  `hvx_cpucache_test`).
   - It syncs `hvx.c` and `hvx_abi.h` only with `load`, which also rebuilds and reloads the main
     module. `load` refuses when `~/bin/hvx-reload` does not build in `~/$HVX_METAL_TREE/hv/hvx`.
   - `flagships` also runs every real-service verify.
@@ -283,6 +284,16 @@ Its fingerprints are its own and differ between CPU vendors; the verdicts are th
 `docs/design/kvm-engine.md`, Milestones 159, 161, 175 and 189, and open item 45 in
 `docs/HISTORY.md` Milestone 187.
 
+**The CPU's caches (M195, tentative number).** By default the guest's CPUID describes no caches
+on hvx and KVM. The key `guest.cpu_cache: true` is a format-1 addition and is off by default. It
+makes the CPUID leaves 2, 4 and `0x80000006` describe one fixed hierarchy: 32 KiB L1 data and
+instruction caches, a 256 KiB L2, and an 8 MiB L3. The values are the same on every host and on
+both engines. Without the key, the glibc 2.28 of Red Hat Enterprise Linux 8 and its rebuilds
+crashes in its AVX `memcpy` at `guest.cpu: v3`. On hvx the key needs the module flag
+`HVX_VM_CPU_CACHE` and the ioctl `HVX_GET_CAPS`. Only the side module `hvxcc` has them until the
+user reloads the main module (open item 64). The details are in the section "The CPU's caches"
+of `hydo/onboard/MANIFEST.md` and in `docs/HISTORY.md` Milestone 195.
+
 **Guest control.** Every image is an agent image. The guest agent `hydo-agent` (0.3.0) is PID 1
 and runs only primitives. The host controller (`hydo/crates/hydo-control`) drives services,
 workload, faults and checks under lock-step control of the engine. Every run leaves a control
@@ -419,6 +430,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     and npm. The npm entry expires after two days unused, so add it just before a release. No
     run of `release.yml` or `packages.yml` has happened yet. A crate new to `cargo install hydo`
     needs its first version published by hand (M186).
+64. [user decision] The main `hvx.ko` lacks M195's `HVX_VM_CPU_CACHE`. An image with
+    `guest.cpu_cache: true` refuses to run on it, naming the module. After the merge into `main`,
+    tell the other sessions and run `hv/hvx/deploy-metal.sh load` from the Mac's main checkout. It
+    builds and reloads the module from `~/hydo/hv/hvx` and expects `ALL PASS (34 checks)` (M195).
+65. [user decision] `guest.cpu_cache` stays opt-in. Making it the default moves every recorded
+    x86_64 fingerprint, so it needs a fingerprint epoch bump and a re-baseline (M195).
 
 ## Milestone index
 
@@ -617,6 +634,9 @@ build machine, before 2026-10-13.
   `hydo-sql` in both releases, every example re-recorded, both releases built twice and verified)
 - M191: a plan of only `checks/` or `regressions/` keeps the manifest's own `workload.run` (before, its
   saved regressions passed without running it); `W=` is refused on such an image
+- M195 (tentative number): `guest.cpu_cache` makes CPUID describe a fixed cache hierarchy on hvx
+  (the module flag `HVX_VM_CPU_CACHE`, on a side module only) and on KVM. With it, AlmaLinux 8's
+  glibc copies work at v3. It is opt-in, and nothing recorded moved
 
 ## Where to look
 

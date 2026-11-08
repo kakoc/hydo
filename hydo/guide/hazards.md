@@ -42,6 +42,11 @@ Check each item and report what you found.
   messages: `illegal instruction`, `invalid opcode`, `CPU ISA level is lower than required`. Set `guest.cpu: v3` (x86_64 only;
   AVX/AVX2, FMA, BMI1/2; no AVX-512), or use a build for the baseline. On the Mac the guest is
   arm64: images and binaries must be built for linux/arm64.
+- **CPU caches.** By default the guest's CPUID describes no caches. The glibc 2.28 of Red Hat
+  Enterprise Linux 8 and its rebuilds (AlmaLinux 8, Rocky Linux 8, UBI 8) then crashes in
+  `memcpy` at `guest.cpu: v3`. The programs of such an image end with a segfault in
+  `libc-2.28.so`. Set `guest.cpu_cache: true` (x86_64 only). `hydo build` warns when an image
+  needs it.
 - **Memory.** Every service together must fit in `guest.ram_mib` (at most 8192 MiB). Cap heaps
   and caches explicitly (JVM `-Xmx`, database buffer pools, Redis `maxmemory`). The host needs
   that much free memory for every guest that runs at once. `hydo run` refuses a guest that does

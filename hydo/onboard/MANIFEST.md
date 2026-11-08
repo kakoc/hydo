@@ -144,6 +144,7 @@ guest:
   outcomes_after_cut: true     # optional: after a power cut the recovery boot's $HYDO_OUTCOMES holds the first boot's last outcomes
   cpu: v3                      # guest CPU level (x86_64 only): v2 (default) = x86-64-v2, no AVX;
                                # v3 = adds AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE, XSAVE
+  cpu_cache: true              # optional (x86_64): CPUID describes the CPU's caches; see "The CPU's caches"
 
 network: bridge                # loopback (default): one network for everything in the guest;
                                # bridge: each service in its own network namespace at its addr:
@@ -755,6 +756,42 @@ cut and writes the last outcome of every id into the recovery boot's file (`<id>
 line per id, in numeric order of the ids); `hydo-read hydo unknown` and the checks then see what
 the client saw. Opt-in, so that images built before it keep their recorded fingerprints: a
 manifest without the key gets an empty file there, as before.
+
+### The CPU's caches (`guest.cpu_cache`)
+
+By default the guest's CPUID describes no caches: leaf 2 has no descriptors, leaf 4 is empty and
+the highest extended leaf is 0x80000001 (on the KVM engine leaf 0x80000006 is zero). Most
+programs then use their own defaults. The glibc 2.28 of Red Hat Enterprise Linux 8 and its
+rebuilds (AlmaLinux 8, Rocky Linux 8, CentOS 8, UBI 8) does not: it takes 0 as its threshold for
+non-temporal copies. With `guest.cpu: v3` its AVX `memcpy` then fails at once, and the programs of
+such an image end with a segfault in `libc-2.28.so`. At v2 it uses another copy, which works.
+Measured on hvx with AlmaLinux 8.10: a Python copy test crashes at v3 and passes at v2.
+
+`guest.cpu_cache: true` makes CPUID describe one fixed cache hierarchy, the same on every host and
+on the hvx and KVM engines:
+
+| leaf | answer |
+|---|---|
+| 2 | EAX `0x0000ff01`: one round with the descriptor 0xff ("read leaf 4") |
+| 4, sub-leaf 0 | L1 data cache, 32 KiB, 8-way, 64-byte lines |
+| 4, sub-leaf 1 | L1 instruction cache, 32 KiB, 8-way, 64-byte lines |
+| 4, sub-leaf 2 | L2 cache, 256 KiB, 4-way, 64-byte lines |
+| 4, sub-leaf 3 | L3 cache, 8 MiB, 16-way, 64-byte lines, inclusive |
+| 4, sub-leaf 4 and above | zero (the end of the list) |
+| 0x80000000 | the highest extended leaf is 0x80000006 (hvx; KVM's is 0x80000008 already) |
+| 0x80000006 | ECX `0x01004040`: the L2 again (256 KiB, 4-way, 64-byte lines) |
+
+With several vCPUs on hvx (`HVX_VM_SMP_BOOT`), every sub-leaf of leaf 4 also counts the vCPUs as
+cores of one package, and the L3 is shared by all of them. The key changes what the guest sees,
+so an image with it boots differently from the same image without it. That is why it is opt-in:
+every image built without the key keeps its recorded fingerprints. It is an x86_64 key; the Mac
+engine's arm64 guests ignore it. `hydo-build` warns when an image service has the Red Hat family's
+glibc 2.28 (`/usr/lib64/libc-2.28.so` and `/etc/redhat-release`) and the manifest has `guest.cpu:
+v3` without the key.
+
+On hvx the key needs a kernel module that knows it (`HVX_VM_CPU_CACHE`, Milestone 195). A run on
+an older module stops before the boot with "this hvx.ko ... does not give" the cache leaves. Load
+a module built from this hydo with `hydo module install`.
 
 ### Link faults (a network fault between two named services)
 
@@ -1735,6 +1772,9 @@ FMA, BMI1/2, F16C, LZCNT, MOVBE and XSAVE (x87|SSE|AVX only, no AVX-512), which 
 binaries and images built for Haswell/Broadwell need.
 `hydo explore --cpu v3|v2` overrides it. Like the RAM size it is not in the schedule, so a hand run
 needs `--cpu v3` too (the report's repro line includes it). Without the key nothing changes.
+`guest.cpu_cache: true` adds `--cpu-cache on` to the engine's options in the same way (hvx flag
+`HVX_VM_CPU_CACHE`; on the KVM engine its table with the cache leaves). `hydo run`, `hydo repro`
+and `hydo explore` read it from the image's manifest.
 
 Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/manifest.sh`
 (compiled), `/etc/hydo/prelude.sh` (env + shell helpers), `/etc/hydo/control` (`agent 1`: boot

@@ -679,6 +679,24 @@ Left: no AMD host has run a v3 guest yet (AMD's XINUSE tracking and its MXCSR_MA
 other fingerprints, as v2's already differ by vendor; the verdicts should be equal); several vCPUs
 stay hvx's.
 
+## The CPU's caches (`guest.cpu_cache`, Milestone 195)
+
+The table describes no caches by default: leaf 2 has no descriptors, leaf 4 ends at sub-leaf 0,
+and leaf 0x8000_0006 is zero. With `guest.cpu_cache: true` (`hydo-kvm --cpu-cache on`,
+`cpuid::table_with`) leaf 2 says "read leaf 4", leaf 4 lists a 32 KiB L1 data and instruction
+cache, a 256 KiB L2 and an 8 MiB L3, and leaf 0x8000_0006 gives the L2 again. The values are the
+hvx module's (`hydo_hvx::abi::HVX_CPUID4_SUB`, checked against `hvx_abi.h` by `hydo-hvx`'s ABI
+test), so both engines describe the same caches. Nothing in the table depends on the host, so it
+adds no source of nondeterminism. The table without the key is byte for byte the one before
+(`tests::table_is_fixed`), and every recorded KVM value stays.
+
+The key exists because the glibc 2.28 of Red Hat Enterprise Linux 8 and its rebuilds takes 0 as
+its non-temporal copy threshold when CPUID describes no caches, and its AVX `memcpy` then fails.
+On the build machine an AlmaLinux 8.10 image at `guest.cpu: v3` gave, each run twice from a fresh
+boot with one fingerprint: without the key VIOLATION `06e3244d55cdbe7e` (the Python copy test
+crashed, `getconf` reported cache sizes of 0), with it OK `9037e4e693bab2e0` (`getconf`: 32768,
+32768, 262144, 8388608).
+
 ## One vCPU
 
 Several vCPUs need turns of an exact length of guest work (hvx counts retired branches with the
