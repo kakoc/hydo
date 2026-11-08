@@ -246,7 +246,13 @@ fn run_engine(
             one(Arc::new(Hvm::for_release(&ctx.root, ctx.config.env.clone())), &spec)
         }
     }
-    .unwrap_or_else(|e| die(&format!("cannot start the engine: {e}")));
+    .unwrap_or_else(|e| match e {
+        // a schedule the host controller refuses (what it names, a seam): no VM was started
+        hydo_engine::EngineError::Unsupported(w) => {
+            die(&format!("not run (no VM was started): {w}"))
+        }
+        e => die(&format!("cannot start the engine: {e}")),
+    });
     let _ = std::fs::write(outdir.join("engine.log"), &run.output);
     if !quiet {
         // the spin observer's notes (hvm: a run ended at a counter loop and ran again)
