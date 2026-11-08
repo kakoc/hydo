@@ -350,6 +350,7 @@ impl Hypervisor for Kvm {
             last: Last::None,
             thread: Arc::new(AtomicU64::new(0)),
             stepping: false,
+            tf: false,
             rf_at: None,
             ram: ram as u64,
             ram_len: len,
@@ -405,6 +406,8 @@ pub struct KvmCpu {
     thread: Arc<AtomicU64>,
     /// the spin observer's breakpoints are armed ([`Cpu::step_to`])
     stepping: bool,
+    /// trap-flag single steps are on ([`Cpu::single_step`]: the walk of a full-state cycle)
+    tf: bool,
     /// where the observer set RFLAGS.RF for a jump to itself (cleared again on disarming when the
     /// instruction did not run)
     rf_at: Option<u64>,
@@ -572,7 +575,7 @@ impl KvmCpu {
                 // only the observer's two instruction breakpoints (DR6 B0, B1) are expected: the
                 // observer does not step a guest that uses the trap flag or its own breakpoints
                 let d: kvm_debug_exit_arch = self.exit_union();
-                if self.stepping && d.dr6 & 3 != 0 {
+                if (self.stepping && d.dr6 & 3 != 0) || (self.tf && d.dr6 & 0x4000 != 0) {
                     Exit::Debug
                 } else {
                     Exit::Fail(format!(
@@ -831,6 +834,23 @@ impl Cpu for KvmCpu {
             }
         }
         self.stepping = step.is_some();
+        self.tf = false;
+        self.set(KVM_SET_GUEST_DEBUG, &d, "KVM_SET_GUEST_DEBUG");
+    }
+
+    fn can_single_step(&self) -> bool {
+        true
+    }
+
+    fn single_step(&mut self, on: bool) {
+        // KVM sets RFLAGS.TF while the guest runs one instruction and takes the debug exception
+        // (KVM_GET_REGS does not show the flag); turning the steps off takes the flag back
+        let mut d = kvm_guest_debug::default();
+        if on {
+            d.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP;
+        }
+        self.tf = on;
+        self.stepping = false;
         self.set(KVM_SET_GUEST_DEBUG, &d, "KVM_SET_GUEST_DEBUG");
     }
 

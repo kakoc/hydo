@@ -3681,3 +3681,65 @@ not a v3 problem; the three-replica cluster runs only on hvx (M179).
 **Left** (AGENTS.md open items 5 and 45): a v3 guest on an AMD host (`hv/kvm/v3-check.sh` does the check;
 docs/design/kvm-engine.md "x86-64-v3" lists the steps for GitHub's runners); TigerBeetle and other io_uring busy-pollers on
 KVM; VT-x cannot make XSAVEOPT, XSAVEC or XGETBV1 fault.
+
+### Milestone 190 — DONE (interrupts for guest code without VM exits on KVM: research, and the full-state cycle as an opt-in prototype; TigerBeetle's single replica runs on KVM; 2026-11-08)
+
+Branch of the worktree, from `main` (`d6fce49e`). The research note is
+`hydo/explore/RESEARCH-kvm-exit-free.md`; the design section is docs/design/kvm-engine.md "Loops that
+store: full-state cycles".
+
+**Why.** M189 found that TigerBeetle never finishes `format` on the KVM engine: it waits for its
+disk by polling io_uring's completion queue, and the completion comes only at a VM exit, which the
+loop never makes. The user asked for research into how the engine can deliver interrupts to such
+code deterministically.
+
+**What the loop is.** Sampled at the watchdog's kicks and disassembled: `while (!done) io.tick()`;
+with nothing to submit, `tick` makes no system call; `flush_completions` fills a 4 KiB array with
+`0xaa` (Zig's `undefined` in a ReleaseSafe build) with an AVX2 `memset`, reads the ring's head and
+tail and returns. Every store rewrites the bytes already there.
+
+**Researched** (details and sources in the note):
+1. An interrupt from the host's performance counter (as hvx's PMU clock): measured with the new probe
+   `hv/kvm/pmu/pmuprobe.c` on the build machine without root. The guest's user-mode conditional
+   branches are counted exactly (events `0x11c4` on performance cores, `0x7ec4` on efficiency cores;
+   10^9-branch runs, and under preemption); the guest kernel cannot be counted at
+   `perf_event_paranoid` 2; the overflow signal stops the guest 26 branches late on a performance
+   core and 8 to 18 on an efficiency core; single steps reach the exact count (1.4 and 2.5 µs per
+   step); an exit costs the same with the counter on. Not built: a stop without the trap flag needs
+   breakpoint stepping over a full x86-64 decoder (the trap flag leaks through PUSHF, SYSCALL and
+   exception frames, and page faults inside the stepped stretch depend on host timing), AMD needs
+   root for exact counts (rr's `SpecLockMap` workaround), and it is a new clock with new values.
+2. The spin observer proving loops that store: built.
+3. Help from the guest kernel: ruled out (the loop makes no system call; completing disk requests
+   at once changes the device model; io_uring settings change the program; rings mapped as MMIO
+   would need KVM to emulate VEX).
+
+**Built** (`HYDO_KVM_SPIN_STATE=1`, off by default; hydo-config's registry and INVENTORY.md):
+`Vmm::observe_state` (the whole vCPU state at a kick, a hardware breakpoint on its instruction,
+KVM's dirty-page log and a page compare between two arrivals with that state), `Vmm::state_walk`
+(one period by trap-flag single steps, the canonical state by the general-register hash, ties broken
+by the whole vCPU state and the written pages; SYSCALL run over to a breakpoint; PUSHF, POPF, IRET,
+INT, UD2, SYSRET and SYSENTER refused: `spin::saves_flags`, `spin::syscall_len`),
+`Cpu::single_step` (`KVM_GUESTDBG_SINGLESTEP`), and `CpuState::without_stale_events` for the mode's
+fingerprint. `HYDO_KVM_DIAG` also prints the vCPU state's parts (segment registers, XSAVE, MSRs,
+events, debug registers).
+
+**Found.** (a) TigerBeetle's `start` calls one `memset` twice from one frame, so the general registers
+alone gave no single canonical state and every look gave up; the tie-break fixed it. (b) The first
+TigerBeetle runs gave two fingerprints (`e7776fa561cf7371`, `bbecba0468407612`) whose only difference
+was KVM's leftover of a finished page fault in `KVM_GET_VCPU_EVENTS` (error code 6 or 20, nothing
+injected or pending): KVM re-injects an exception when a VM exit interrupts its delivery, and the
+mode's dirty-page log, turned on at host-timed kicks, causes such exits. The mode's fingerprint
+leaves those fields out; the default fingerprint still hashes them (AGENTS.md open item 45 (h)).
+
+**Checked on the build machine** (TigerBeetle 0.17.9's single-replica image `9bb2da8a…`, built by
+the 0.2.0 candidate release; this branch's static `hydo`): without the mode `ERROR boot: SPIN`; with
+it `disk=none | run` OK (33 of 33 commands, both invariants) `3a4bc40c537fa2e5` six times from fresh
+boots and once from the worker's S1, about 20 s per run, 205 cycles resolved per run;
+`K=tigerbeetle_0@5+3` `f0d41a5e0ec01857`, `disk=cut | run C=10` `ee29f74b535be5d7`,
+`P=tigerbeetle_0@5+5` `c81750124e391266`, `T=6:3600` `f836467eda6c12ad`, each OK and twice the same.
+With the mode off `hv/kvm/kvm-check.sh` 16 of 16, every fingerprint equal to M189's run.
+
+**Left** (AGENTS.md open item 45 (c) and (h)): a review of the proof and a run on AMD before the
+mode is on by default; loops that count in memory; the stale event fields in the default
+fingerprint; option 1 as a later opt-in clock.

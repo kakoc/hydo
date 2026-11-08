@@ -506,6 +506,48 @@ pub fn pure(code: &[u8]) -> bool {
     decode(code).is_some()
 }
 
+/// Whether the instruction at the start of `code` writes or reloads RFLAGS as a whole, so that a
+/// trap-flag single step of it would put the trap flag into the guest's state or lose the step:
+/// PUSHF, POPF, IRET, INT3, INT n, INTO, INT1, SYSCALL, SYSRET, SYSENTER, SYSEXIT and UD2 (its
+/// #UD frame). Unknown bytes (a prefix run with no opcode) count as such too. The full-state
+/// cycle's walk ([`crate::vmm::Vmm::observe_state`]) does not step them.
+pub fn saves_flags(code: &[u8]) -> bool {
+    let mut i = 0;
+    while i < code.len() {
+        match code[i] {
+            0x26 | 0x2e | 0x36 | 0x3e | 0x64 | 0x65 | 0x66 | 0x67 | 0xf0 | 0xf2 | 0xf3 => i += 1,
+            0x40..=0x4f => i += 1,
+            _ => break,
+        }
+    }
+    match code.get(i) {
+        None => true,
+        Some(0x9c | 0x9d | 0xcf | 0xcc | 0xcd | 0xce | 0xf1) => true,
+        Some(0x0f) => matches!(
+            code.get(i + 1),
+            None | Some(0x05 | 0x07 | 0x0b | 0x34 | 0x35)
+        ),
+        Some(_) => false,
+    }
+}
+
+/// The length of a SYSCALL instruction at the start of `code` (with its prefixes), None for any
+/// other instruction. The full-state cycle's walk runs over it to a breakpoint at the next
+/// instruction instead of single-stepping it (the kernel returns there, and the trap flag would
+/// otherwise reach the guest through R11).
+pub fn syscall_len(code: &[u8]) -> Option<u64> {
+    let mut i = 0;
+    while i < code.len()
+        && matches!(
+            code[i],
+            0x26 | 0x2e | 0x36 | 0x3e | 0x64 | 0x65 | 0x66 | 0x67 | 0xf2 | 0xf3 | 0x40..=0x4f
+        )
+    {
+        i += 1;
+    }
+    (code.get(i) == Some(&0x0f) && code.get(i + 1) == Some(&0x05)).then_some(i as u64 + 2)
+}
+
 /// The state the cycle detection compares: every general register, RIP and RFLAGS.
 pub fn state_hash(r: &kvm_regs) -> u64 {
     let mut h = OFFSET;
@@ -671,6 +713,37 @@ pub fn canonical_pc(states: &[kvm_regs]) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn instructions_that_save_rflags_are_not_single_stepped() {
+        for c in [
+            &[0x9c][..],         // pushf
+            &[0x66, 0x9c],       // pushf with an operand-size prefix
+            &[0x9d],             // popf
+            &[0x48, 0xcf],       // iretq
+            &[0xcc],             // int3
+            &[0xcd, 0x80],       // int 0x80
+            &[0x0f, 0x05],       // syscall
+            &[0x48, 0x0f, 0x07], // sysretq
+            &[0x0f, 0x0b],       // ud2
+            &[0x66, 0x66],       // prefixes only
+            &[0x0f],             // cut short
+        ] {
+            assert!(saves_flags(c), "{c:02x?}");
+        }
+        // TigerBeetle's poll loop (Milestone 189's SPIN): AVX stores, sub, cmp, jne, call, ret
+        for c in [
+            &[0xc5, 0xfe, 0x7f, 0x04, 0x38][..], // vmovdqu [rax+rdi], ymm0
+            &[0x48, 0x83, 0xef, 0x80],           // sub rdi, -128
+            &[0x48, 0x39, 0xf9],                 // cmp rcx, rdi
+            &[0x75, 0xe0],                       // jne
+            &[0xe8, 0, 0, 0, 0],                 // call
+            &[0xc3],                             // ret
+            &[0x0f, 0x1f, 0x40, 0x00],           // nop
+        ] {
+            assert!(!saves_flags(c), "{c:02x?}");
+        }
+    }
 
     #[test]
     fn the_spin_loop_of_mysqld_is_pure() {

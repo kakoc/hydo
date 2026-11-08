@@ -346,6 +346,10 @@ variables! {
     HYDO_KVM_DIAG_RAM: Kvm, Developer, "number", "0", "hydo-kvm";
     /// Set: log every MSR access and I/O port the engine's model does not know.
     HYDO_KVM_TRACE_UNKNOWN: Kvm, Developer, "flag: set", "", "hydo-kvm";
+    /// Set (a prototype, off by default): the spin observer also proves loops that store to
+    /// memory and use the vector registers, when the whole machine state repeats (every store
+    /// rewrites the bytes that are there), and resolves them like an exact cycle.
+    HYDO_KVM_SPIN_STATE: Kvm, Developer, "flag: set", "", "hydo-kvm";
     /// `kvm`: the `hydo` command runs x86_64 images on the KVM engine instead of hvx (Linux;
     /// `--backend kvm` does the same for one command).
     HYDO_BACKEND: Kvm, User, "word: hvx | kvm", "hvx", "hydo-cli";
