@@ -1,0 +1,45 @@
+{
+  "v": 1,
+  "type": "exploration",
+  "hydo_version": "0.3.0",
+  "epoch": 1,
+  "mode": "schedule",
+  "config": {
+    "strategy": "random",
+    "schedule": "disk=none | run",
+    "argv": [
+      "--schedule",
+      "disk=none | run",
+      "--image",
+      "scripted-disk.img",
+      "--workers",
+      "3",
+      "--out",
+      "<out>"
+    ]
+  },
+  "image": {
+    "path": "scripted-disk.img",
+    "resolved": "<dir>/scripted-disk.img"
+  },
+  "engine": {
+    "backend": "hvx",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": N
+  },
+  "summary": {
+    "schedules": 1,
+    "total_wall_s": N,
+    "failures": 0
+  },
+  "failures": [],
+  "shrinks": [],
+  "liveness": [],
+  "artifacts": {
+    "events": "events.jsonl",
+    "consoles": "consoles"
+  }
+}

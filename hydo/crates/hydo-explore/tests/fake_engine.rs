@@ -425,6 +425,13 @@ const SCENARIOS: &[(&str, &[&str])] = &[
         "stack_manual",
         &["--schedule", "disk=cut dseed=0 | run C=4 R=everysec"],
     ),
+    // a schedule without dseed= (or disk=), as `hydo run` takes it: until Milestone 192 the
+    // explorer printed the result and then stopped with "no dseed=" and exit status 1
+    ("stack_manual_no_dseed", &["--schedule", "disk=none | run"]),
+    (
+        "stack_manual_no_disk",
+        &["--schedule", "| run C=4 R=everysec"],
+    ),
     (
         "composed_plan",
         &[

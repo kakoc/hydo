@@ -13,7 +13,8 @@ with status 2.
 ## 1. Read the diagnosis first (free)
 
 `hydo run` writes `diagnosis` into the run directory's `result.json` when a run fails, and prints
-it as `hydo: diagnosis: ...`. For an ERROR it has already replayed the run once. At the stop where
+it as `hydo: diagnosis: ...`. For an ERROR, and for a violation that names a service
+(`service cannot recover ... (<svc>)`), it has already replayed the run once. At the stop where
 the verdict was given, it read the evidence (`evidence`):
 
 - every service's log, and the setup and provisioning logs;
@@ -50,6 +51,13 @@ Typical causes and what they look like:
 - `signal_name: KILL` with `signal_by_hydo: false`: the out-of-memory killer; `kernel` names the
   process (`Out of memory: Killed process ...`): raise `guest.ram_mib` or make the service smaller;
 - status 127: a program is not in the image or not on PATH.
+- `VIOLATION service cannot recover (committed data unrecoverable) (<svc>)` after a power cut:
+  the service did not start in the recovery boot. The diagnosis gives its exit and its last log
+  lines. The cause can be a real finding (the program refuses its own files after the power
+  cut) or a setup problem. The verdict alone does not say that data was lost.
+- a violation of a check while a service was down (`failure: service-exited` or
+  `service-not-ready` with a check's verdict): the check read a service that did not answer.
+  Start the check with a test that the store answers, and `exit 2` when it does not.
 
 ## 2. Find the moment (free)
 
