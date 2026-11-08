@@ -395,6 +395,21 @@ it, and runs the minimal schedule:
   Linux machine or `hydo inspect` on the CI artifacts (a later addition: an inspect session on a
   downloaded run directory).
 
+**Portable reproduction of a finding (stage 3 or later; needs its own design, user 2026-11-08).**
+Bit-for-bit replay across engines is not possible: x86_64 and arm64 run different machine code, and
+hvx, hvm and KVM measure guest time differently by design. What can travel is the finding, not
+the run. A "portable failure" would hold the schedule, the finding key (section 4.2), the image's
+recipe (commit and input key) and the engine it was found on. On another engine, hydo would build
+the image for its own architecture, run the schedule, and compare by finding key. If the finding
+does not appear, it would search nearby schedules (each fault one step earlier or later, as
+`hydo explain` derives neighbours) and shrink the first one that gives the same finding key. It
+then reports "this finding reproduces here with this schedule", which is an exact reproducer on
+that engine from then on. Open questions for that design: how far the search may go before it
+says "not reproducible here"; how to treat timing-only findings (`tj=`, `cf=`, races), which may
+have no equivalent on another clock; whether the translated schedule is stored with the finding so
+every developer on that engine gets it at once; and how the report states which engines a finding
+has been reproduced on.
+
 ## 7. Scale
 
 ### 7.1 Sharding the exploration
@@ -670,7 +685,7 @@ generic recipe.
 | 0. Today, by hand | Install a release in a workflow, `hydo build`, `hydo explore --backend kvm`, `hydo repro --regressions`, upload `hydo-out/`. A red check on any failure. No comparison, no history, every pre-existing bug fails every pull request. | A documented example workflow. | Small: an example and a guide page. |
 | 1. A useful pull-request check | One comment per pull request: findings new to the change (proven on the base), fixed by it, still open; saved regressions; what ran (fault kinds, services, properties never reached, runs, time); the `hydo diff` of each new finding against the base; fails only by policy. KVM on standard runners, images reused by input key, two shards at most. | `engine.host_cpu`; the explorer cache key fixed; the finding key; `ci-run.json`; `hydo ci run` and `hydo ci compare` (base-image replay, regressions, `report.md`, `junit.xml`, the CI environment table: section 8.4); `hydo/ci.yaml`; the image input key; the composite action and the generic recipe. The base's open findings come from the base's last `ci-run.json` artifact. | Medium: about 3 milestones (roughly 3,000 to 4,000 lines of Rust with tests, plus the action). |
 | 2. History | The `hydo-history` branch: the ledger with new, present, fixed, reappeared, unverified and accepted; nightly deep runs with rotating seeds whose findings every pull request replays; `known-findings.yaml`; the history page (open findings, timeline, coverage trend, runs, hydo's health); proposed regression files when a finding is fixed. | `hydo ci record` and `page`; the store interface with the `dir:` backend; the ledger fold; the `workflow_run` recorder; budgets from history and `--time-limit`. | Medium: about 3 milestones. |
-| 3. Scale and depth | Many-shard nightly runs merged and shrunk once; the commit that introduced each new finding (bisection); `hydo ci reproduce` on a laptop; targeting changed services (once measured); self-hosted hvx runners for several vCPUs; an object-store backend. | `--shrink none`, `hydo ci merge`, `--shrink-from`; `hydo bisect`; `hydo ci reproduce`; `--focus` with a benchmark measurement; the object-store backend; the shared run cache. | Large: about 4 to 6 milestones, mostly independent of each other. |
+| 3. Scale and depth | Many-shard nightly runs merged and shrunk once; the commit that introduced each new finding (bisection); `hydo ci reproduce` on a laptop; a finding carried to another engine (section 6.3, needs its own design); targeting changed services (once measured); self-hosted hvx runners for several vCPUs; an object-store backend. | `--shrink none`, `hydo ci merge`, `--shrink-from`; `hydo bisect`; `hydo ci reproduce`; `--focus` with a benchmark measurement; the object-store backend; the shared run cache. | Large: about 4 to 6 milestones, mostly independent of each other. |
 | 4. A hosted service | Cross-repository dashboards, a fleet of managed runners, a database, access control. | A server, its operation, its security, billing. | Very large, and a different kind of work. Not worth building until many teams use stages 2 and 3 and ask for it; the GitHub-native design covers a single team fully. |
 
 Each stage is useful on its own, and none needs the next. A team that stops at stage 1 already
