@@ -178,8 +178,12 @@ pub fn checkout_of(exe: &Path, root: &Path) -> Option<PathBuf> {
 
 /// `hydo: <msg>` on stderr and exit with status 1.
 pub fn die(msg: &str) -> ! {
-    die_rc(msg, 1)
+    die_rc(msg, DIE_CODE.load(std::sync::atomic::Ordering::Relaxed))
 }
+
+/// The exit status of [`die`]: 1, or 2 inside `hydo ci run` (its status for a run that could not
+/// be completed, kept apart from 1, a run that failed by the team's policy).
+pub static DIE_CODE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(1);
 
 pub fn die_rc(msg: &str, rc: i32) -> ! {
     eprintln!("hydo: {msg}");

@@ -39,3 +39,13 @@ pub mod scripted;
 pub mod space;
 
 pub use run::{main_with, Env};
+
+/// The exit status when the explorer cannot go on (a bad option, an engine that does not start).
+/// 1 by default; `hydo ci run` sets 2, its status for a run that could not be completed, so that a
+/// CI job never reads an explorer that stopped as a run that failed by the team's policy.
+pub static DIE_CODE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(1);
+
+/// Stop the program with [`DIE_CODE`].
+pub(crate) fn exit_die() -> ! {
+    std::process::exit(DIE_CODE.load(std::sync::atomic::Ordering::Relaxed))
+}

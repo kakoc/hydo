@@ -10,10 +10,12 @@
 //! (hydo-errors), history checks (hydo-history), compose (hydo-compose), guide/skill/init
 //! (hydo-agents), migrate (hydo-manifest, src/migrate.rs), build (hydo-build, src/build.rs),
 //! explore (hydo-explore), diff and explain (src/diff.rs, src/explain.rs, M165: where two runs
-//! first differ). No command runs Python.
+//! first differ), ci (src/ci/: hydo in continuous integration, docs/design/ci.md). No command
+//! runs Python.
 
 mod build;
 mod cache;
+mod ci;
 mod ctx;
 mod delegated;
 mod diff;
@@ -183,6 +185,9 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         "explain" => explain::cmd_explain(ctx, rest),
         // M178: look inside a recorded run (docs/design/inspect.md; `hydo inspect --help`)
         "inspect" => inspect::cmd_inspect(ctx, rest),
+        // hydo in continuous integration (docs/design/ci.md; `hydo ci --help`, `hydo guide ci`;
+        // the main help is a recorded answer)
+        "ci" => ci::cmd_ci(ctx, rest),
         // ready-made SQL workloads and checks for the hydo/ folder (`hydo sql-gen --help`; the
         // main help is a recorded answer)
         "sql-gen" => sqlgen::cmd_sql_gen(rest),

@@ -1,6 +1,13 @@
 # hydo in a team's continuous integration (design, 2026-11-08)
 
-Status: a design only. Nothing in it is built. It answers the user's question of 2026-11-08 ("is
+Status: stage 1 (section 9) is built (user decision 2026-11-08, "go", with the defaults of section
+13: a pull request does not fail on findings already on the base, history in a branch is stage 2,
+CI settings in `hydo/ci.yaml`, the action under `action/`): `hydo ci run` and `hydo ci compare`
+(`hydo/crates/hydo-cli/src/ci/`), `engine.host_cpu` in every result, the explorer cache keyed by
+the image's bytes and the engine, `hydo/ci.yaml` format 1, `ci-run.json`, the GitHub Action
+(`action/action.yml`), the GitLab template (`action/gitlab/hydo.gitlab-ci.yml`) and the generic
+recipe (`hydo guide ci`); docs/HISTORY.md has the milestone. Stages 2 to 4 are not built. It
+answers the user's question of 2026-11-08 ("is
 it scalable into a real solution? ... what was running, when, what's history, what was checked,
 found ... I don't have the whole picture of its evolution") and replaces the short "CI mode (to be
 discussed)" section of `hydo/PRODUCT.md` once the user agrees with it.

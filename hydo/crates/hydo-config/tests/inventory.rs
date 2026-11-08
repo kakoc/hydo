@@ -170,6 +170,11 @@ const NON_LITERAL_READS: &[(&str, &str)] = &[
         "getpass.getuser(): LOGNAME, USER, LNAME, USERNAME",
     ),
     (
+        "hydo-cli/src/ci/env.rs",
+        "the CI systems' own variables (GITHUB_SHA, CI_COMMIT_SHA, CIRCLE_SHA1, ...): `hydo ci \
+         run`'s table of what each CI system says about its job (docs/design/ci.md section 8.4)",
+    ),
+    (
         "hydo-engine/src/inproc.rs",
         "the module lock's default: SUDO_USER, SUDO_UID, SUDO_GID, HOME",
     ),

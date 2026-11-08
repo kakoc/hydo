@@ -52,7 +52,7 @@ pub struct Env {
 
 fn die(msg: &str) -> ! {
     eprintln!("{msg}");
-    std::process::exit(1)
+    crate::exit_die()
 }
 
 /// Everything the flow needs, set up once.
@@ -677,14 +677,80 @@ fn make_pool(cx: &Cx) -> Pool {
         known: cx.known.clone(),
         pool: cx.env.config.pool.clone(),
     };
-    Pool::new(
-        engine,
-        spec,
-        n,
-        host,
-        cx.image.clone(),
-        cx.engine_args().join(" "),
+    let (cache_image, cache_engine) = if cx.env.config.pool.cache.is_some() {
+        cache_identity(cx)
+    } else {
+        (cx.image.clone(), cx.engine_args().join(" "))
+    };
+    Pool::new(engine, spec, n, host, cache_image, cache_engine)
+}
+
+/// What a result in `$HYDO_EXPLORE_CACHE` is a function of, besides its schedule and the
+/// fingerprint epoch (which every entry carries): the image's bytes and the engine that ran it
+/// (docs/design/ci.md section 7.2). Until this key the cache was keyed by the image's *path* and
+/// the engine's options, so two images at one path, or two engines, shared entries.
+fn cache_identity(cx: &Cx) -> (String, String) {
+    let image = hydo_engine::image::sha256_file(&cx.image_file())
+        .map(|s| format!("sha256:{s}"))
+        .unwrap_or_else(|e| die(&format!("hydo: {}: {e}", cx.image_file().display())));
+    let backend = if cx.arm() {
+        "hvm"
+    } else if cx.kvm {
+        "kvm"
+    } else {
+        "hvx"
+    };
+    let program = if cx.arm() {
+        Some(hvm::program(&cx.env.root, &cx.env.config.hvm))
+    } else if cx.kvm {
+        None
+    } else {
+        Some(hvx::program(&cx.env.root, &cx.env.config.engine))
+    };
+    let host = match backend {
+        "hvx" => std::fs::read_to_string("/sys/module/hvx/srcversion")
+            .map(|s| format!("module={}", s.trim()))
+            .unwrap_or_else(|_| "module=?".into()),
+        _ => format!(
+            "cpu={}",
+            hydo_engine::host_cpu()
+                .map(|c| c.0)
+                .unwrap_or_else(|| "?".into())
+        ),
+    };
+    let engine = cache_engine_key(
+        backend,
+        &program_ids(program.as_deref()),
+        &host,
+        &cx.engine_args(),
+    );
+    (image, engine)
+}
+
+/// The engine part of the result cache's key (one string, so that an older cache file's entries,
+/// keyed by the engine's options alone, never match).
+pub fn cache_engine_key(backend: &str, programs: &str, host: &str, args: &[String]) -> String {
+    format!(
+        "backend={backend} programs={programs} {host} args={}",
+        args.join(" ")
     )
+}
+
+/// The first 16 hex digits of the sha256 of this program and of the engine program (when the
+/// engine is a program of its own): the engine's code runs in one of them.
+fn program_ids(engine: Option<&Path>) -> String {
+    let id = |p: &Path| {
+        hydo_engine::image::sha256_file(p)
+            .map(|s| s[..16].to_string())
+            .unwrap_or_else(|_| "-".into())
+    };
+    let me = std::env::current_exe()
+        .map(|p| id(&p))
+        .unwrap_or_else(|_| "-".into());
+    match engine.filter(|p| p.is_file()) {
+        Some(p) => format!("{me}+{}", id(p)),
+        None => me,
+    }
 }
 
 /// The pool size and the snapshot store (docs/PERF-RUN-COST.md section 7): a worker holds its VM
@@ -1722,6 +1788,7 @@ impl Cx {
                     .map(|s| s.trim().to_string())
             },
             workers: Some(workers as u64),
+            host_cpu: hydo_results::HostCpu::of(hydo_engine::host_cpu()),
         }
     }
 
