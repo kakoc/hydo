@@ -1,0 +1,169 @@
+# The dry run of every registry package (docs/PUBLISHING.md "Publishing from GitHub Actions"):
+# what release.yml would upload is packed and checked here, on every pull request and push to
+# main that changes a package, so that a broken package is found before a release. release.yml
+# calls this workflow too (workflow_call) before it publishes, and takes the Python packages it
+# built (the artifact `python-dist`).
+#
+# - crates: hydo/dist/crates/rehearse.sh on Linux and macOS (`cargo package` of the 20 crates of
+#   `cargo install hydo`, each built from its package; a stand-in crates.io; `cargo install hydo
+#   --locked --offline` in a fresh Cargo home; the installed `hydo` run), and `cargo package` of
+#   the Rust SDK `hydo-assert`.
+# - python: the sdist and the wheel of `hydo-assert` built as docs/PUBLISHING.md does, then
+#   `twine check --strict`.
+# - npm: `npm pack --dry-run` of `hydo-assert` (sdk/js) and the files it would publish.
+#
+# Uploads nothing, needs no secret and no token, reads the repository only, uses no cache (the
+# Python packages built here are the ones release.yml publishes). Every action is pinned by commit.
+name: packages
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - "LICENSE"
+      - "hydo/VERSION"
+      - "hydo/crates/**"
+      # files the published crates compile in through links inside them (docs/PUBLISHING.md)
+      - "hydo/dist/*/assets.sha256"
+      - "hydo/dist/*/guest-programs.sha256"
+      - "hydo/dist/releases.txt"
+      - "hydo/dist/crates/**"
+      - "hydo/dist/registries.sh"
+      - "hydo/guide/**"
+      - "hydo/onboard/MANIFEST.md"
+      - "skills/**"
+      - "sdk/rust/**"
+      - "sdk/python/**"
+      - "sdk/js/**"
+      - "docs/PUBLISHING.md"
+      - ".github/workflows/packages.yml"
+      - ".github/workflows/release.yml"
+  push:
+    branches: [main]
+    # the same list as above
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - "LICENSE"
+      - "hydo/VERSION"
+      - "hydo/crates/**"
+      - "hydo/dist/*/assets.sha256"
+      - "hydo/dist/*/guest-programs.sha256"
+      - "hydo/dist/releases.txt"
+      - "hydo/dist/crates/**"
+      - "hydo/dist/registries.sh"
+      - "hydo/guide/**"
+      - "hydo/onboard/MANIFEST.md"
+      - "skills/**"
+      - "sdk/rust/**"
+      - "sdk/python/**"
+      - "sdk/js/**"
+      - "docs/PUBLISHING.md"
+      - ".github/workflows/packages.yml"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  # the repository's rustc wrapper (.cargo/rustc-wrapper.sh) runs rustc itself
+  HYDO_SCCACHE: "0"
+
+jobs:
+  crates:
+    name: crates (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install && rustc --version && cargo --version
+      - name: The versions of the packages agree (hydo/VERSION, the workspace, the SDKs)
+        run: hydo/dist/registries.sh versions "$(tr -d ' \n' < hydo/VERSION)"
+      # the work directory outside the checkout, so that the install reads no repository file
+      - name: The dry run of `cargo install hydo` (hydo/dist/crates/rehearse.sh)
+        run: hydo/dist/crates/rehearse.sh "$RUNNER_TEMP/crates-rehearsal"
+      - name: cargo package of the Rust SDK (hydo-assert)
+        working-directory: sdk/rust
+        run: cargo package && ls -l target/package/*.crate
+
+  python:
+    name: python
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      # From a copy of sdk/python, as docs/PUBLISHING.md does (setuptools writes
+      # src/hydo_assert.egg-info next to the sources).
+      - name: Build the sdist and the wheel, then twine check --strict
+        run: |
+          python -m venv "$RUNNER_TEMP/pypi"
+          "$RUNNER_TEMP/pypi/bin/pip" install --quiet build==1.6.1 twine==7.0.0
+          cp -R sdk/python "$RUNNER_TEMP/py"
+          find "$RUNNER_TEMP/py" -name __pycache__ -prune -exec rm -rf {} +
+          "$RUNNER_TEMP/pypi/bin/python" -m build --outdir dist "$RUNNER_TEMP/py"
+          "$RUNNER_TEMP/pypi/bin/twine" check --strict dist/*
+          version=$(tr -d ' \n' < hydo/VERSION)
+          ls -l dist
+          test -f "dist/hydo_assert-$version.tar.gz"
+          test -f "dist/hydo_assert-$version-py3-none-any.whl"
+          test "$(find dist -type f | wc -l)" = 2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  npm:
+    name: npm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: npm pack --dry-run (what npm publish would upload)
+        working-directory: sdk/js
+        run: |
+          npm pack --dry-run --json --ignore-scripts > "$RUNNER_TEMP/pack.json"
+          # shellcheck disable=SC2016 # the single-quoted program is JavaScript
+          node -e '
+            const [p] = require(process.argv[1]);
+            const v = require("./package.json").version;
+            const files = p.files.map(f => f.path).sort();
+            console.log(`${p.name}@${p.version}: ${files.length} files, ${p.size} bytes packed`);
+            console.log(files.join("\n"));
+            const need = ["LICENSE", "README.md", "package.json", "index.js", "index.d.ts", "history.js", "history.d.ts"];
+            const missing = need.filter(f => !files.includes(f));
+            if (p.name !== "hydo-assert" || p.version !== v || missing.length) {
+              console.error(`error: the package is not what release.yml should publish (missing: ${missing.join(", ") || "none"})`);
+              process.exit(1);
+            }' "$RUNNER_TEMP/pack.json"
