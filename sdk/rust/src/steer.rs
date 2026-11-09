@@ -6,6 +6,9 @@
 //! number this id reported before in the process (smaller for [`minimize`], larger for
 //! [`maximize`]), at most [`MAX_RECORDS`] records per id, so the console stays small. The
 //! explorer takes the best value of each run.
+//!
+//! The calls need the cargo feature `steer` (off by default): a program built without it keeps
+//! its bytes, and the SDK examples inside recorded guest images keep theirs.
 
 use crate::json::write_str;
 use crate::sink;

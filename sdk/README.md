@@ -71,7 +71,7 @@ every recorded fingerprint of those examples (docs/REBASELINE.md has the values)
 ## Testing each SDK
 
 ```sh
-(cd sdk/rust && cargo test)                    # the doctests, the shared cases, the README program
+(cd sdk/rust && cargo test --features steer)   # the doctests, the shared cases, the README program
 python3 -m unittest discover -s sdk/python/tests
 (cd sdk/js && node --test)                     # every file in test/
 (cd sdk/go && go vet ./... && go test ./...)   # and GOTOOLCHAIN=go1.26.5 go test ./...
@@ -93,8 +93,8 @@ and compares the bytes:
 No SDK test needs another language installed.
 
 ```sh
-cargo test --test cases                # in sdk/rust: sdk/cases must equal what the Rust SDK writes
-HYDO_BLESS=1 cargo test --test cases   # in sdk/rust: rewrite sdk/cases (and remove files no case writes)
+cargo test --features steer --test cases                # in sdk/rust: sdk/cases must equal what the Rust SDK writes
+HYDO_BLESS=1 cargo test --features steer --test cases   # in sdk/rust: rewrite sdk/cases (and remove files no case writes)
 ```
 
 **A format change starts in the Rust SDK:** change it, run with `HYDO_BLESS=1`, and commit the

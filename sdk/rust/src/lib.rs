@@ -8,12 +8,14 @@ pub mod history;
 mod json;
 mod macros;
 mod sink;
+#[cfg(feature = "steer")]
 mod steer;
 
 pub use assertion::{always, always_or_unreachable, catalog, reachable, register, setup_complete, sometimes, unreachable, Assertion};
 pub use buggify::{buggify, Point};
 pub use eventually::{eventually, Liveness, Watch};
 pub use json::{Details, Value};
+#[cfg(feature = "steer")]
 pub use steer::{maximize, minimize, Steer};
 
 // Only the macros use these; they are public because a macro expands in the user's crate.

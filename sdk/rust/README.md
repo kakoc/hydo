@@ -283,11 +283,15 @@ Rules of this crate:
 - `minimize(id, msg)` and `maximize(id, msg)` declare a steered value: a number that says how
   close a run came to failing, for `hydo explore --steer <id>`. Its `value(v)` writes a
   `HYDO-STEER` record for the first number and for each number better than all earlier ones, at
-  most 64 per id in a process. Only this SDK has them so far.
+  most 64 per id in a process. They need the cargo feature `steer`, which is off by default so
+  that a program built without it keeps its bytes. Only this SDK has them so far.
 
   ```rust
-  let queue = hydo_assert::minimize("queue.len", "the test fails when the queue is empty");
-  queue.value(18);
+  #[cfg(feature = "steer")]
+  fn report(queue_len: i64) {
+      let queue = hydo_assert::minimize("queue.len", "the test fails when the queue is empty");
+      queue.value(queue_len);
+  }
   ```
 
 ## License

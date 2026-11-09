@@ -84,9 +84,10 @@ table and the readers above never see it:
 HYDO-STEER {"id":"<stable id>","goal":"min"|"max","v":<integer>,"msg":"<description>"}
 ```
 
-The Rust SDK writes it (`hydo_assert::minimize`, `hydo_assert::maximize`, then `value(v)`): the
-first value of an id, then only a value better than every earlier one in the process, at most 64
-records per id. A program without the SDK can print the number in its own words, and a
+The Rust SDK writes it with its cargo feature `steer` (`hydo_assert::minimize`,
+`hydo_assert::maximize`, then `value(v)`): the first value of an id, then only a value better
+than every earlier one in the process, at most 64 records per id. The feature is off by default,
+so a program built without it keeps its bytes. A program without the SDK can print the number in its own words, and a
 manifest's `steer:` entry or `--steer-match` reads it with a regular expression.
 
 ## Guest SDKs

@@ -168,7 +168,7 @@ jobs:
             sdk/rust-test -> target
       - name: Rust SDK (sdk/rust, the reference; compares with sdk/cases)
         working-directory: sdk/rust
-        run: cargo test
+        run: cargo test --features steer   # the steered values too (Milestone 209)
       - name: Rust test SDK (sdk/rust-test)
         working-directory: sdk/rust-test
         run: cargo test --locked --workspace
