@@ -35,10 +35,11 @@ fn reads_and_keeps_its_form() {
     // since 0.3.0 the release example's `disk=cut | run C=12` on each engine (the quickstarts
     // cite it) and the KVM exploration's third minimal schedule (REBASELINE.md section 18); since
     // the fingerprint epoch 2 the hvx exploration's new lying-disk minimal schedule (section 19);
-    // since M206 the nats-flaky-8363 pair on several vCPUs (two images, four runs)
+    // since M206 the nats-flaky-8363 pair on several vCPUs (two images, four runs); the
+    // qdrant-flaky-10200 images on hvx (two images, four runs) and on KVM (two images, four runs)
     assert_eq!(count("hvm"), (21, 76));
-    assert_eq!(count("hvx"), (41, 137));
-    assert_eq!(count("kvm"), (4, 13));
+    assert_eq!(count("hvx"), (43, 141));
+    assert_eq!(count("kvm"), (6, 17));
     for i in &images {
         assert!(
             i.sha256.len() == 64 && i.sha256.bytes().all(|c| c.is_ascii_hexdigit()),

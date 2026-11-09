@@ -1,0 +1,60 @@
+# A flaky Rust unit test inside one program: Qdrant issue 10200,
+# tests::wal_recovery_test::test_wal_replay_loads_pending_to_queue in the crate `collection`.
+# No services: the workload runs the compiled test binary once, as one process (cargo-nextest,
+# which Qdrant's CI uses, runs every test in a process of its own), and the invariant turns a
+# failed test into a violation with the test's own lines.
+# Build the binaries first: sh build-test.sh (bin/collection-buggy.test, bin/collection-fixed.test,
+# bin/lib/ with the C library they load).
+#   hydo build hydo.yaml                                     # the commit of the issue's report
+#   hydo build hydo.yaml --set variant=fixed                 # pull request 11028 applied
+#   hydo run --vcpus 2 "disk=none q=<n> | run"               # RESULTS.md has the turn lengths
+#   hydo explore --vcpus 2 --sweep turns --out turns         # finds where the verdict changes
+# RESULTS.md has the schedules, rates and fingerprints; `hydo guide flaky-tests` the method.
+name: qdrant-flaky-10200
+description: Qdrant's flaky test_wal_replay_loads_pending_to_queue (issue 10200), one test process per run.
+
+params:
+  variant: buggy        # buggy | fixed: which binary of build-test.sh runs
+  workers: ""           # TOKIO_WORKER_THREADS for the test; empty: tokio's default (the guest's CPUs)
+
+guest:
+  ram_mib: 1024
+
+root:
+  files:
+    - {src: "bin/collection-{{variant}}.test", dst: /bin/collection.test, mode: "0755"}
+    - {src: bin/lib/ld-linux-x86-64.so.2, dst: /lib64/ld-linux-x86-64.so.2, mode: "0755"}
+    - {src: bin/lib/libc.so.6, dst: /lib/x86_64-linux-gnu/libc.so.6, mode: "0755"}
+    - {src: bin/lib/libm.so.6, dst: /lib/x86_64-linux-gnu/libm.so.6, mode: "0644"}
+    - {src: bin/lib/libgcc_s.so.1, dst: /lib/x86_64-linux-gnu/libgcc_s.so.1, mode: "0644"}
+
+data:
+  size_mib: 256
+  dirs: [t]
+
+workload:
+  kind: test              # a test program run once: one step, no service faults, class test-failed
+  steps: 1
+  run: |
+    [ "$HYDO_FROM" = 0 ] || exit 0    # the test runs once, in step 0
+    workers="{{workers}}"
+    [ -n "$workers" ] && export TOKIO_WORKER_THREADS=$workers
+    echo "hydo-qdrant: cpus=$(grep -c ^processor /proc/cpuinfo) TOKIO_WORKER_THREADS=${TOKIO_WORKER_THREADS:-default} variant={{variant}}" > /dev/console
+    mkdir -p /data/t/tmp && cd /data/t
+    LD_LIBRARY_PATH=/lib/x86_64-linux-gnu TMPDIR=/data/t/tmp \
+      /bin/collection.test --exact tests::wal_recovery_test::test_wal_replay_loads_pending_to_queue \
+      --test-threads 1 --nocapture > out 2>&1
+    echo "rc=$?" >> out
+    grep -v '^ *[│├└]' out | sed 's/^/hydo-qdrant: /' | head -40 > /dev/console
+    sync
+    echo 0 >> $HYDO_ACKED
+
+invariants:
+  - id: qdrant.test_passes
+    msg: test_wal_replay_loads_pending_to_queue passes in one test process
+    cmd: |
+      [ -f /data/t/out ] || { echo "no test output"; exit 1; }
+      q=$(grep -m1 'Post-load update queue info' /data/t/out | sed 's/.*ShardUpdateQueueInfo //')
+      if grep -q '^test result: ok. 1 passed' /data/t/out; then echo "passed; after load: $q"; exit 0; fi
+      line=$(grep -m1 -A1 'panicked at' /data/t/out | tail -1)
+      echo "failed: ${line:-$(tail -1 /data/t/out)}; after load: $q"; exit 1
