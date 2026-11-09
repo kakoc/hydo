@@ -39,7 +39,7 @@ and a workload that writes 20 keys. Its one check says that every write the clie
 acknowledged is still there afterwards. Copy it, build its guest image, and run two schedules:
 
 ```sh
-cp -R ~/.hydo/versions/0.3.0/examples/redis ~/hydo-redis && cd ~/hydo-redis
+cp -R ~/.hydo/versions/0.3.1/examples/redis ~/hydo-redis && cd ~/hydo-redis
 hydo build hydo.yaml
 hydo run "disk=none | run"
 hydo run "disk=cut | run C=12 R=everysec"

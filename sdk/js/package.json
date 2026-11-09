@@ -1,6 +1,6 @@
 {
   "name": "hydo-assert",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Assertion SDK for Node.js programs tested under hydo, a deterministic hypervisor: always/sometimes/reachable/unreachable/eventually properties, BUGGIFY fault points and operation histories",
   "license": "Apache-2.0",
   "repository": {

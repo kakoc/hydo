@@ -28,7 +28,7 @@ The words this page uses:
 - Seed: a number that starts hydo's pseudo-random choices. The same seed gives the same schedules.
 - Fingerprint: a hash of the virtual machine's whole final state.
 
-The current release is hydo 0.3.0. It is experimental: formats and commands can change between
+The current release is hydo 0.3.1. It is experimental: formats and commands can change between
 versions.
 
 ## What hydo does
@@ -108,11 +108,11 @@ hydo doctor
 Without Homebrew:
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.0/hydo-mac-0.3.0.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.0/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.1/hydo-mac-0.3.1.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.1/SHA256SUMS
 shasum -a 256 -c --ignore-missing SHA256SUMS
-tar xzf hydo-mac-0.3.0.tar.gz
-./hydo-mac-0.3.0/install.sh
+tar xzf hydo-mac-0.3.1.tar.gz
+./hydo-mac-0.3.1/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -131,17 +131,17 @@ your own Intel machine.
 Download and check the release for both engines:
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.0/hydo-linux-0.3.0.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.0/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.1/hydo-linux-0.3.1.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.1/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
-tar xzf hydo-linux-0.3.0.tar.gz
+tar xzf hydo-linux-0.3.1.tar.gz
 ```
 
 For the KVM engine, your user must be able to open `/dev/kvm`. Install, then let
 `hydo doctor --backend kvm` check it:
 
 ```sh
-./hydo-linux-0.3.0/install.sh --no-module
+./hydo-linux-0.3.1/install.sh --no-module
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor --backend kvm
 ```
@@ -157,7 +157,7 @@ kernel's headers. Do not install it while other virtual machines run under KVM: 
 unloads the kernel modules `kvm_intel` and `kvm`.
 
 ```sh
-./hydo-linux-0.3.0/install.sh
+./hydo-linux-0.3.1/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor
 ```
@@ -171,7 +171,7 @@ hydo doctor
 ```
 
 `cargo install` builds only the `hydo` command. `hydo setup` downloads the release for your
-platform into `~/.hydo/versions/0.3.0` (`HYDO_HOME` names another folder than `~/.hydo`) and
+platform into `~/.hydo/versions/0.3.1` (`HYDO_HOME` names another folder than `~/.hydo`) and
 checks every file by sha256. On Linux, this path was
 only compiled, not run; use the tarball there.
 
@@ -189,7 +189,7 @@ Copy the example to a folder of your own. The source depends on the install:
 |---|---|
 | Homebrew | `cp -R "$(brew --prefix hydo)/libexec/examples/redis" ~/hydo-redis` |
 | Tarball | `cp -R ~/.hydo/examples/redis ~/hydo-redis` |
-| cargo | `cp -R ~/.hydo/versions/0.3.0/examples/redis ~/hydo-redis` |
+| cargo | `cp -R ~/.hydo/versions/0.3.1/examples/redis ~/hydo-redis` |
 
 Then build the image and run two schedules:
 

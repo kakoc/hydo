@@ -221,7 +221,7 @@ README links work when users arrive. Each upload is preceded by its dry run.
    rm -rf /tmp/hydo-py && cp -R sdk/python /tmp/hydo-py && find /tmp/hydo-py -name __pycache__ -prune -exec rm -rf {} +
    /tmp/hydo-pypi/bin/python -m build --outdir /tmp/hydo-py-dist /tmp/hydo-py
    /tmp/hydo-pypi/bin/twine check --strict /tmp/hydo-py-dist/*
-   /tmp/hydo-pypi/bin/twine upload --repository pypi /tmp/hydo-py-dist/hydo_assert-0.3.0*
+   /tmp/hydo-pypi/bin/twine upload --repository pypi /tmp/hydo-py-dist/hydo_assert-0.3.1*
    ```
 
    (Optionally first `--repository testpypi` with a TestPyPI token, as a rehearsal: TestPyPI has
@@ -239,9 +239,9 @@ README links work when users arrive. Each upload is preceded by its dry run.
    proxy so that the version is listed at once.
 
    ```sh
-   git tag -a sdk/go/v0.3.0 -m "hydo Go SDK 0.3.0"
-   git push origin sdk/go/v0.3.0
-   GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod go list -m github.com/kakoc/hydo/sdk/go@v0.3.0
+   git tag -a sdk/go/v0.3.1 -m "hydo Go SDK 0.3.1"
+   git push origin sdk/go/v0.3.1
+   GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod go list -m github.com/kakoc/hydo/sdk/go@v0.3.1
    ```
 
    The tag's prefix `sdk/go/` is the module's directory in the repository; Go finds a module in a
@@ -250,7 +250,7 @@ README links work when users arrive. Each upload is preceded by its dry run.
 5. **Check from outside:** in an empty directory, `cargo add hydo-assert`,
    `pip install hydo-assert` in a new virtual environment,
    `npm install hydo-assert --registry https://registry.npmjs.org/`, and a Go module with
-   `go get github.com/kakoc/hydo/sdk/go@v0.3.0`, each importing the package.
+   `go get github.com/kakoc/hydo/sdk/go@v0.3.1`, each importing the package.
 
 ## The next version
 
@@ -505,8 +505,8 @@ On a machine without the repository, in a fresh Cargo home:
 
 ```sh
 CARGO_HOME=/tmp/hydo-cargo cargo install hydo --locked
-/tmp/hydo-cargo/bin/hydo --version            # hydo 0.3.0 (<the release commit>)
-/tmp/hydo-cargo/bin/hydo setup --get          # downloads v0.3.0's archive, verified by sha256
+/tmp/hydo-cargo/bin/hydo --version            # hydo 0.3.1 (<the release commit>)
+/tmp/hydo-cargo/bin/hydo setup --get          # downloads v0.3.1's archive, verified by sha256
 /tmp/hydo-cargo/bin/hydo doctor
 ```
 

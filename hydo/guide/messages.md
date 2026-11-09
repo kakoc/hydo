@@ -132,7 +132,7 @@ receive the messages sent after its first completed `sub` or `recv`, or all of t
 different process numbers.
 
 The Rust SDK writes these records with the cargo feature `messages` of `hydo-assert`, which is
-new after 0.3.0 (`features = ["messages"]` on the dependency):
+new in 0.3.1 (`features = ["messages"]` on the dependency):
 
 ```rust
 use hydo_assert::history::messages::{Item, Messages};

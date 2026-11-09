@@ -7,7 +7,7 @@ hydo runs a guest on one of three engines. Check this table before using a featu
 - A run refuses a schedule token its engine cannot apply (`UNSUPPORTED on kvm: host token cf=20
   needs hvx`), and a token that names a service, link, fake, or knob the image does not have.
 
-State of hydo 0.3.0 (2026-11-08).
+State of hydo 0.3.1 (2026-11-09).
 
 - **hvx** (the Linux release, `hydo-linux-<version>`): x86_64 guests on an Intel VT-x machine,
   through hydo's kernel module (`hydo module install`). The reference engine: every feature.

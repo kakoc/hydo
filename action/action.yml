@@ -7,7 +7,7 @@
 #   - uses: actions/checkout@<sha>
 #   - uses: kakoc/hydo/action@v1
 #     with:
-#       hydo-version: 0.3.0
+#       hydo-version: 0.3.1
 name: hydo
 description: Deterministic fault testing of a whole system on every pull request, with findings compared against the base by replay.
 author: hydo
@@ -17,7 +17,7 @@ branding:
 
 inputs:
   hydo-version:
-    description: The hydo release to use (for example 0.3.0). Pin it; upgrading hydo is a pull request like any other.
+    description: The hydo release to use (for example 0.3.1). Pin it; upgrading hydo is a pull request like any other.
     required: true
   project:
     description: The project's directory in the repository (the one that holds hydo/hydo.yaml).

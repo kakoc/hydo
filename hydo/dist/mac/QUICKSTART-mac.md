@@ -44,8 +44,8 @@ Without Homebrew, unpack the release, and run its installer. It copies hydo into
 runs `hydo setup` there, then `hydo doctor`.
 
 ```sh
-tar xzf hydo-mac-0.3.0.tar.gz
-./hydo-mac-0.3.0/install.sh
+tar xzf hydo-mac-0.3.1.tar.gz
+./hydo-mac-0.3.1/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -285,7 +285,7 @@ third-party software:
 `THIRD-PARTY.md` lists each one with its version, its license, the files it is in, and where its
 source is. `licenses/` holds the full text of every license.
 
-The archive `hydo-mac-0.3.0-sources.tar.gz` accompanies this release; it is published next to
+The archive `hydo-mac-0.3.1-sources.tar.gz` accompanies this release; it is published next to
 the tarball, with the same `SHA256SUMS`. It contains the corresponding source:
 
 - the exact upstream source archives of every third-party component, including every GPL- and
