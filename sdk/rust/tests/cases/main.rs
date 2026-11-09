@@ -58,6 +58,7 @@ enum Obj {
     A(&'static hydo_assert::Assertion),
     L(&'static hydo_assert::Liveness),
     P(&'static hydo_assert::Point),
+    S(&'static hydo_assert::Steer),
 }
 
 fn details(d: &Option<model::V>) -> hydo_assert::Details {
@@ -96,6 +97,11 @@ fn execute(p: &model::Prog) -> String {
             }
             Step::Eventually { id, msg, within_ms } => objs.push(Obj::L(ha::eventually(id.rust(), msg.rust(), Duration::from_millis(*within_ms)))),
             Step::Buggify { id, msg } => objs.push(Obj::P(ha::buggify(id.rust(), msg.rust()))),
+            Step::Steer { goal, id, msg } => objs.push(Obj::S(if *goal == "min" { ha::minimize(id.rust(), msg.rust()) } else { ha::maximize(id.rust(), msg.rust()) })),
+            Step::Value { a: i, v } => match objs[*i] {
+                Obj::S(s) => s.value(*v),
+                _ => panic!("value on {}", i),
+            },
             Step::Check { a: i, cond, d } => push(a(&objs, *i).check(*cond, details(d))),
             Step::Hit { a: i, d } => a(&objs, *i).hit(details(d)),
             Step::Cmp { a: i, left, op, right, d, .. } => push(a(&objs, *i).cmp(*left, op, *right, details(d))),

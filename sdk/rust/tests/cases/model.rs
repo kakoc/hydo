@@ -453,6 +453,17 @@ pub enum Step {
         id: S,
         msg: S,
     },
+    /// A steered value (`minimize` or `maximize`, Milestone 209).
+    Steer {
+        goal: &'static str,
+        id: S,
+        msg: S,
+    },
+    /// A steered value reported.
+    Value {
+        a: usize,
+        v: i64,
+    },
     Check {
         a: usize,
         cond: bool,
@@ -581,6 +592,16 @@ impl Prog {
         self.kinds.push("buggify");
         self.kinds.len() - 1
     }
+    pub fn steer(&mut self, goal: &'static str, id: impl Into<S>, msg: impl Into<S>) -> usize {
+        assert!(matches!(goal, "min" | "max"));
+        self.push(Step::Steer { goal, id: id.into(), msg: msg.into() });
+        self.kinds.push("steer");
+        self.kinds.len() - 1
+    }
+    pub fn value(&mut self, a: usize, v: i64) {
+        assert_eq!(self.kind(a), "steer", "value on {}", self.kind(a));
+        self.push(Step::Value { a, v });
+    }
     fn kind(&self, a: usize) -> &'static str {
         self.kinds.get(a).copied().unwrap_or_else(|| panic!("no declared object {}", a))
     }
@@ -702,6 +723,11 @@ impl Prog {
                         n.insert("invalid_utf8");
                     }
                 }
+                // the Rust SDK has steered values first (Milestone 209); the other SDKs skip
+                // these cases until they have them
+                Step::Steer { .. } | Step::Value { .. } => {
+                    n.insert("steer");
+                }
                 Step::Check { d: Some(v), .. }
                 | Step::Hit { d: Some(v), .. }
                 | Step::Cmp { d: Some(v), .. }
@@ -775,6 +801,16 @@ fn step_json(s: &Step) -> String {
             f.push(("do", jstr("buggify")));
             f.push(("id", id.json()));
             f.push(("msg", msg.json()));
+        }
+        Step::Steer { goal, id, msg } => {
+            f.push(("do", jstr(if *goal == "min" { "minimize" } else { "maximize" })));
+            f.push(("id", id.json()));
+            f.push(("msg", msg.json()));
+        }
+        Step::Value { a, v } => {
+            f.push(("do", jstr("value")));
+            f.push(("a", a.to_string()));
+            f.push(("v", V::Int(*v).json()));
         }
         Step::Check { a, cond, d } => {
             f.push(("do", jstr("check")));

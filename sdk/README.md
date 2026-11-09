@@ -107,18 +107,19 @@ programs these cases replaced (M110); their outputs equal Go 1.26.5's.
 `<name>.out` (a case with one unnamed run) or `<name>.<run>.out`. Areas: `assert` (the types and
 deduplication), `compare`, `details` (the JSON encoding), `catalog`, `eventually`, `buggify`,
 `output` (`HYDO_ASSERT_OUT`), `history` (`HYDO-HIST` records and
-`HYDO_HIST_OUT`), `programs`. The case `history/messages` holds messaging records written with
+`HYDO_HIST_OUT`), `programs`, `steer` (steered values, `HYDO-STEER` records; only the Rust SDK has them, and the other readers skip these cases by their need `steer`). The case `history/messages` holds messaging records written with
 generic steps, whose item tokens come from the Rust SDK's `history::messages::Item`. The other
 SDKs replay it with their generic recorders. `sdk/rust/tests/messages.rs` checks that the Rust
 `Messages` recorder writes the same lines. A case file has:
 
 - `about`: what the case shows.
-- `needs`: features a language may lack: `f32` (a float32 value), `bytes` (a byte string,
-  Go's `[]byte`), `invalid_utf8` (invalid UTF-8 in an assertion string), `raw_hist` (invalid
-  UTF-8 in a history record). A reader skips, and reports, a case that needs what
-  its language cannot express, and fails on a need it does not know.
+- `needs`: features a language may lack. They are `f32` (a float32 value), `bytes` (a byte
+  string, Go's `[]byte`), `invalid_utf8` (invalid UTF-8 in an assertion string), `raw_hist`
+  (invalid UTF-8 in a history record) and `steer` (the steered-value calls). A reader skips, and
+  reports, a case that needs what its language cannot express, and fails on a need it does not
+  know.
 - `steps`: the calls, in order. The declarations are `always`, `always_or_unreachable`,
-  `sometimes`, `reachable`, `unreachable` (`id`, `msg`), `eventually` (`within_ms`), and `buggify`.
+  `sometimes`, `reachable`, `unreachable` (`id`, `msg`), `eventually` (`within_ms`), `buggify`, and `minimize` and `maximize` (a steered value; `value` with `v` reports a number).
   They are numbered from 0 in the order they appear and named by `a`. Then come `check` (`cond`), `hit`,
   `cmp` (`left`, `op`, `right`), `begin` (its watches are numbered and named by `w`), `done`, `expire`, `await`
   (the condition is true at once; `async`: the async form), `fire`, `catalog`,

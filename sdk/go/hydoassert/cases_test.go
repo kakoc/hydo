@@ -70,6 +70,8 @@ func skipReason(needs []string) (string, error) {
 		case "f32", "bytes", "raw_hist":
 		case "emit_line":
 			return "the Go SDK has no emit_line", nil
+		case "steer":
+			return "the Go SDK has no steered values yet (the Rust SDK has them first, Milestone 209)", nil
 		case "invalid_utf8":
 			if goMinor() >= 27 {
 				return runtime.Version() + " writes invalid UTF-8 as a raw U+FFFD; the cases hold Go 1.26's \\ufffd (run with GOTOOLCHAIN=go1.26.5)", nil

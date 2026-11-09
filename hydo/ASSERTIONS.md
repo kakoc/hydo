@@ -73,6 +73,22 @@ pure function of the program's evaluation sequence: no clocks, no host state, ca
 declaration order, JSON with sorted keys. Counts in the property table are therefore counts of
 emitted records (per process and outcome), not of every evaluation.
 
+## Steered values (Milestone 209)
+
+A steered value is not a property. It is a number that says how close a run came to failing,
+and `hydo explore --steer <id>` uses it to choose its next schedules
+(docs/design/steered-search.md). Its record is a console line with its own tag, so the property
+table and the readers above never see it:
+
+```
+HYDO-STEER {"id":"<stable id>","goal":"min"|"max","v":<integer>,"msg":"<description>"}
+```
+
+The Rust SDK writes it (`hydo_assert::minimize`, `hydo_assert::maximize`, then `value(v)`): the
+first value of an id, then only a value better than every earlier one in the process, at most 64
+records per id. A program without the SDK can print the number in its own words, and a
+manifest's `steer:` entry or `--steer-match` reads it with a regular expression.
+
 ## Guest SDKs
 
 **Go** (`sdk/go`, import `github.com/kakoc/hydo/sdk/go/hydoassert`; `hydo/stack/hydoassert` is a

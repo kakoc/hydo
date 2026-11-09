@@ -23,8 +23,11 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 CASES = os.path.normpath(os.path.join(HERE, "..", "..", "cases"))
 PRE = b"PRE existing line\n"
-UNSUPPORTED = {"f32": "Python has no float32"}
-KNOWN = {"f32", "bytes", "invalid_utf8", "raw_hist"}
+UNSUPPORTED = {
+    "f32": "Python has no float32",
+    "steer": "the Python SDK has no steered values yet (the Rust SDK has them first, Milestone 209)",
+}
+KNOWN = {"f32", "bytes", "invalid_utf8", "raw_hist", "steer"}
 
 
 def mask_times(b):

@@ -1,0 +1,21 @@
+{
+  "about": "maximize writes a value larger than every earlier one; two ids keep their own best",
+  "needs": ["steer"],
+  "steps": [
+    {"do":"maximize","id":"lag.ms","msg":"replication lag"},
+    {"do":"minimize","id":"free.slots","msg":"free slots"},
+    {"do":"value","a":0,"v":{"int":"3"}},
+    {"do":"value","a":1,"v":{"int":"9"}},
+    {"do":"value","a":0,"v":{"int":"1"}},
+    {"do":"value","a":1,"v":{"int":"9"}},
+    {"do":"value","a":0,"v":{"int":"5"}},
+    {"do":"value","a":1,"v":{"int":"4"}},
+    {"do":"value","a":0,"v":{"int":"5"}},
+    {"do":"value","a":1,"v":{"int":"4"}},
+    {"do":"value","a":0,"v":{"int":"8"}},
+    {"do":"value","a":1,"v":{"int":"6"}}
+  ],
+  "runs": [
+    {"name": "", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "maximize_and_two_ids.out", "returns": ""}
+  ]
+}

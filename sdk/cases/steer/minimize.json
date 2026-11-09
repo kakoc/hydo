@@ -1,0 +1,19 @@
+{
+  "about": "minimize: the first value is written, then only a value smaller than every earlier one",
+  "needs": ["steer"],
+  "steps": [
+    {"do":"minimize","id":"q.len","msg":"the queue the test reads must not be empty"},
+    {"do":"value","a":0,"v":{"int":"18"}},
+    {"do":"value","a":0,"v":{"int":"20"}},
+    {"do":"value","a":0,"v":{"int":"18"}},
+    {"do":"value","a":0,"v":{"int":"7"}},
+    {"do":"value","a":0,"v":{"int":"9"}},
+    {"do":"value","a":0,"v":{"int":"0"}},
+    {"do":"value","a":0,"v":{"int":"0"}},
+    {"do":"value","a":0,"v":{"int":"3"}}
+  ],
+  "runs": [
+    {"name": "file", "out": "file", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "minimize.file.out", "returns": ""},
+    {"name": "off", "out": "off", "hist_out": "off", "buggify_env": null, "buggify_file": null, "output": "minimize.off.out", "returns": ""}
+  ]
+}
