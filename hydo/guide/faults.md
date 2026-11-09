@@ -154,6 +154,9 @@ Useful options of `hydo explore`:
 - `--cluster-faults`: kills, pauses, and partitions of the services of `groups:`.
 - `--vcpus N --turns`: several vCPUs (hvx) and drawn turn lengths `q=`. `--vcpus N --sweep turns`
   searches the turn lengths of one schedule for a change of verdict (`hydo guide flaky-tests`).
+- `--steer <id>` or `--steer-match REGEX`: a steered search. It keeps the schedules whose runs
+  came closest to failing, by a number the system prints, and changes them a little. The section
+  "Steer the search by a number the test prints" of `hydo guide flaky-tests` shows it.
 - `--workers N`.
 
 hydo's own benchmark showed that where faults land, and in what combination, matters more than

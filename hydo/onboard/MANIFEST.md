@@ -293,6 +293,11 @@ faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make se
 errors: true                   # error logs as findings (see "Error logs as findings" below): scan
                                #   every service's log; or a mapping: level: error|warning,
                                #   max: 40 (kinds printed per boot), services: [names]
+
+steer:                         # numbers in the console that say how close a run came to failing,
+  - id: queue_len              #   for hydo explore --steer queue_len (see "Values that steer the
+    match: 'length: (\d+)'     #   explorer" below); the first capture group is the number
+    goal: min                  # min (default): smaller is closer to failing | max
 # and per service, under services[]:
 #   errors:
 #     format: auto             # auto (default: ERROR/FATAL/level=error/panic: ...) | redis | none
@@ -1005,6 +1010,27 @@ services, and a shape towards `isolate`.
 
 `hydo/onboard/examples/nats-jetstream/hydo/hydo-groups.yaml` declares the three NATS nodes as
 the group `nodes`; its `primary:` command asks the JetStream meta leader.
+
+### Values that steer the explorer (`steer:`)
+
+`steer:` names a number in the guest's console lines that says how close a run came to
+failing. `hydo explore --steer <id>` keeps the schedules whose runs came closest and spends half
+of its schedules on small changes to them (docs/design/steered-search.md):
+
+```yaml
+steer:
+  - id: queue_len                                  # [a-z][a-z0-9_.-]*: what --steer takes
+    match: 'ShardUpdateQueueInfo \{ length: (\d+)'  # Rust regex syntax, over each console line
+    goal: min                                      # min (default): smaller is closer; max
+    description: the test fails when the queue is empty when it looks
+```
+
+The first capture group is the number (the whole match without a group). A run's value is the
+best match of all its console lines and its verdict line. A program that uses the Rust SDK
+reports the number with `hydo_assert::minimize` or `maximize` instead, and needs no entry
+(hydo/ASSERTIONS.md, "Steered values"). `--steer-match REGEX` gives a pattern for an image
+whose manifest has no entry. The key changes nothing in the guest: an image of a manifest
+without it has the same bytes as before.
 
 ### Service networks (`network: bridge`)
 
