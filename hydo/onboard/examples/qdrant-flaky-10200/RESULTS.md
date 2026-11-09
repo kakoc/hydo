@@ -292,6 +292,12 @@ the extra point changes when the timer interrupts come, not which thread is stop
    distribution of the test's queue length (2 to 36, mostly 18) showed how close each run came,
    but the explorer cannot steer by such a number. A value printed by the test could serve as a
    distance for a guided search.
+   Milestone 209 built that search: `hydo explore --steer-match 'length: (\d+)'` keeps the
+   schedules with the smallest lengths and changes them a little. It did not help here. On KVM,
+   over five seed ranges, the first failure came after a median of 118 schedules, against 72
+   for the same seeds without the changes. On hvx no run read less than 34. The changed
+   schedules read small lengths twice as often, but did not fail more often
+   (`docs/design/steered-search.md`).
 
 ## Files
 

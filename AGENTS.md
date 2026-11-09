@@ -384,6 +384,21 @@ fingerprint moves. `hydo inspect events` shows the points (kind `preempt`, `Time
 and `hydo diff` names the first point where two runs' records differ (`Diff.first_preempt`). hvx
 has no such record yet (open item 77). Proof: `docs/HISTORY.md` Milestone 208.
 
+**Steered search (M209, opt-in).** `hydo explore --steer <id>` or `--steer-match REGEX` keeps
+the schedules whose runs came closest to failing, by a number the system reports. It spends
+`--steer-mix` (default 500) of every 1,000 schedules on one change to them. The rest are the plain
+exploration's schedules in seed order. The number comes from one of three places:
+
+- the Rust SDK's `HYDO-STEER` records (`hydo_assert::minimize`, `maximize`; the cargo feature
+  `steer`, off by default so that rkv keeps its bytes);
+- a manifest `steer:` entry (a format-1 addition);
+- the pattern of `--steer-match`.
+
+The results format gains `Run.steer` and `Exploration.steer`. Without the options nothing
+changes. On Qdrant's flaky test it did not help. On KVM, over five seed ranges, the first failure
+came after a median of 118 schedules, against 72 for the plain exploration. On hvx neither
+failed. Design and numbers: `docs/design/steered-search.md`; `docs/HISTORY.md` Milestone 209.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -545,6 +560,18 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `the_rewind_mode_changes_nothing_without_a_counter_loop` gave two fingerprints. It then
     passed 50 times, 44 of them under CPU load. The cause was not found; if it is a rare
     nondeterminism of the rewind mode, CI's full tier can meet it again.
+78. The steered search (M209). What is left:
+    - The Go, Python, and JavaScript SDKs have no steered values; their case readers skip
+      `sdk/cases/steer/`. Adding them moves the bytes of the python-kv and node-kv images,
+      whose SDK files are inside them, so it needs a re-record.
+    - The search has one value. Values per code location as in IJON are not built, nor a
+      distance that hydo computes itself (a fault's step against the step of a logged event).
+    - No run showed a benefit. On Qdrant the failure sits next to passing schedules of any
+      length, and on hvx the length does not move. The option stays experimental until a system
+      whose value falls step by step towards its failure is found.
+    - The Mac rebaseline check of M209 ran 60 of its 76 schedules, every image with its recorded
+      bytes, before the free disk fell below the limit. The 16 left are those of release-redis,
+      voting, redis-oci, and release-ledger-spin.
 
 ## Milestone index
 
@@ -793,6 +820,11 @@ build machine, before 2026-10-13.
   explorer never counts a refused run as a failure. On KVM and the Mac, `HYDO_PREEMPT_RECORD=1`
   records where each forced preemption point fired, and `hydo diff` names the first point where
   two runs differ: on the Qdrant pair it is the fortieth point. Nothing recorded moved
+- M209 (tentative number): a steered search, `hydo explore --steer` or `--steer-match`. It steers
+  by a number the system reports about how close a run came to failing: a Rust SDK record, a
+  manifest `steer:` entry, or a pattern. On Qdrant's flaky test it found the failure later than
+  the plain exploration on KVM (median 118 against 72 schedules), and neither found it on hvx.
+  Nothing recorded moved
 
 ## Where to look
 

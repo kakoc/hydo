@@ -171,3 +171,27 @@ refuses a jitter delay of a tick period or more. The engine refuses a schedule i
 before any VM, for example a hand-written `tjmax=500000` with `pp=65536`. `hydo run` stops with
 the reason. The explorer records such a run with the class `refused` and counts it in
 `refused`, never as a failure.
+
+## Steer the search by a number the test prints
+
+Some tests print how close they came to failing. The Qdrant example's test prints the length of
+a queue that must not be empty, and fails at 0. A steered search keeps the schedules whose runs
+printed the smallest numbers and spends half of its schedules on one change to them:
+
+```sh
+hydo explore --backend kvm --timing --preempt --seeds 1-400 --workers 1 \
+  --steer-match 'length: (\d+)' --steer-stop
+```
+
+`--steer-match` takes the number from the first capture group. A manifest's `steer:` entry names
+the pattern once, and `--steer <id>` takes it. A Rust test can report the number with
+`hydo_assert::minimize` (the SDK's cargo feature `steer`). `--steer-goal max` steers towards
+larger numbers. `--steer-mix 0` runs the same seeds without changes, which is the comparison to
+make.
+
+On the Qdrant test the steered search did not find the failure sooner. Over five seed ranges on
+KVM, the plain exploration failed first after a median of 72 schedules, the steered search after
+118. The changed schedules printed small lengths twice as often as random ones, but failed no
+more often: the failing run's neighbour `pctn=39` prints 22, not 1. Report a number whose small
+values come just before the failure. `docs/design/steered-search.md` in hydo's repository has the
+measurements.

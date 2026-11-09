@@ -5638,3 +5638,121 @@ the module, so the record needs a log of the forced ticks with RIP, CR3 and the 
 new ioctl, on a side module first. The record names a thread by its thread pointer, not by its
 process or thread id. On the Mac it ran on the scripted tests and one Redis schedule, not on a
 flaky test.
+
+### Milestone 209 (tentative) — DONE (a steered search: exploration by a number the system reports, how close a run came to failing; measured on Qdrant's flaky test, on KVM and hvx; 2026-11-09)
+
+**Where it came from.** The Qdrant flaky-test example (`hydo/onboard/examples/qdrant-flaky-10200`,
+RESULTS.md gap 5) prints the update queue's length when its test checks it. The test fails at
+length 0. The random KVM exploration read lengths from 2 to 36, mostly 18, and failed in 4 of 400
+schedules. The user decided (2026-11-09) to build an exploration steered by such a number.
+Design: `docs/design/steered-search.md`.
+
+**Built.**
+
+- `hydo explore --steer <id>` or `--steer-match REGEX` (hydo-explore `src/steer.rs`, `run.rs`
+  `steer_search`). A run's value is the best number of the run: the SDK's `HYDO-STEER` records
+  of the id, or the first capture group of a pattern over the consoles and the verdict line.
+  `--steer-goal min|max`. The search runs rounds of `--steer-batch` schedules (default 4). Once
+  its corpus has an entry, a schedule is a mutant with probability `--steer-mix`/1000 (default
+  500), otherwise the strategy's schedule of the next seed. The corpus keeps the
+  `--steer-corpus` best runs (default 16); a parent has the weight 1 / ((rank + 1)(picks + 1)).
+  A mutant is one change: a step or count moved (40 %), a seed drawn again (20 %), a part removed
+  (15 %), a part taken from another seed's schedule (25 %). `--steer-stop` ends the search after
+  the round of the first failure. The first runs then go through the usual re-runs, shrinks and
+  report. A mutant must read back and be one its engine accepts (`hydo_engine::refusal`). The
+  search is a pure function of its options and the runs' results; with `--steer-mix 0` it runs
+  the plain exploration's schedules in its order.
+- Results format additions: `Run.steer` (`value`, `origin`, `drawn_seed`, `parent`, `change`,
+  `best`) and `Exploration.steer` (`SteerSearch`: source, pattern, goal, options, stream seed,
+  counts, best value and run, first failure, `stopped`, `progress`, `corpus`). report.md has a
+  section "Steered search"; the summary line has `steer`, `steer_mutants`, `steer_best`,
+  `steer_first_failure`. None of them appear without `--steer`.
+- The manifest key `steer:` (format-1 addition, `hydo_manifest::model::SteerValue`): `id`,
+  `match`, `goal`, `description`. hydo-build checks the id, the regular expression and the goal.
+  New example document `steer-value`; MANIFEST.md "Values that steer the explorer".
+- The Rust SDK: `hydo_assert::minimize`, `maximize`, `Steer::value`, behind the cargo feature
+  `steer` (off by default). It writes `HYDO-STEER {"id":..,"goal":..,"v":..,"msg":..}` for the
+  first value and each better one, at most 64 per id in a process. Shared cases
+  `sdk/cases/steer/` (3 cases, 4 runs, need `steer`); the Go, Python and JavaScript readers skip
+  them. hydo/ASSERTIONS.md "Steered values".
+
+**The feature, and why.** Without the feature gate the new module moved rkv's bytes (the rust-kv
+example's program, inside recorded images), although rkv calls none of it: at the rebaseline's
+fixed path, aarch64, main's SDK gives `e36746cd3a9b55ce`, with the module `4c69fd83ffe5142f`.
+README text alone changes nothing. With the module behind `#[cfg(feature = "steer")]` rkv is
+`e36746cd3a9b55ce` again.
+
+**Measurements on the Qdrant example.** The image is the recorded buggy image (`9aa2213a…`),
+built with this tree's `hydo` over the 0.3.0 Linux release with its recorded bytes. The value is
+`--steer-match 'length: (\d+)'`, so the image needs no `steer:` entry. Every exploration ran with
+`--steer-stop --no-shrink`. The plain one ran with `--steer-mix 0`, which runs the strategy's
+schedules of the seeds in order, with the same bookkeeping.
+
+KVM, the build machine, one VM at a time (`--backend kvm --timing --preempt --workers 1`, rounds
+of 4, a budget of 400; 2.3 to 2.4 s a run):
+
+| seeds | plain: runs to the first failure | steered: runs to the first failure | the steered search's failing schedule |
+|---|---|---|---|
+| 1–400 | 37 (seed 37) | 78 | the random schedule of seed 37 |
+| 1001–1400 | 145 (seed 1145) | 118 | a mutant of run 102 (`tj=` drawn again) |
+| 2001–2400 | 22 (seed 2022) | 47 | the random schedule of seed 2022 |
+| 3001–3400 | 152 (seed 3152) | 221 | a mutant of run 158 (`tjmax=1000 -> tjmax=900`) |
+| 4001–4400 | 72 (seed 4072) | 133 | the random schedule of seed 4072 |
+
+The median is 72 for the plain exploration (22 to 152) and 118 for the steered search (47 to
+221). The steered search was earlier in 1 of 5 ranges. In 3 ranges its failure was the plain
+exploration's failing schedule, reached at about twice the run number, because half of its
+schedules are mutants. The pooled values:
+
+| runs | count | median length | length 5 or less | failed |
+|---|---|---|---|---|
+| plain | 436 | 18 | 3.7 % | 5 (1.1 %) |
+| steered, random schedules | 320 | 18 | 3.1 % | 3 (0.9 %) |
+| steered, mutants | 288 | 17 | 7.6 % | 2 (0.7 %) |
+
+The mutants read small lengths twice as often and did not fail more often. The steered search of
+seeds 2001–2400, run again with the final program in a new process, gave the same 48 schedules,
+fingerprints and values.
+
+hvx, the bare-metal machine (one vCPU, `--timing --preempt --workers 3`, rounds of 3, a budget of
+200; 3.0 to 3.7 s a run). On one vCPU the update worker takes at most 1 operation in the window,
+as in the example's RESULTS.md. The plain explorations of seeds 1–200, 1001–1200 and 2001–2200
+read the length 34 in 18, 23 and 18 runs, 35 in 176, 173 and 171 runs, and 36 in 6, 4 and 11
+runs. None failed. The steered searches of the same seeds, with the final program, read 34 in 40,
+41 and 31 runs, 35 in 156, 152 and 163, and 36 in 4, 7 and 6. None went below 34 and none
+failed (868, 514 and 347 s).
+
+A first steered run of seeds 1–200, made before the search skipped refused mutants, spent 14 of
+its 109 mutants on schedules that hvx refuses (a grafted `tj=` with `pp=`). It read 34 in 41 runs
+and failed nowhere. Its runs took 8.5 s on average, because its mutants often moved `pp=` to a
+shorter tick period. On two vCPUs with `--turns --timing`, 74 plain schedules read 34 to 36 and
+none failed. That search was stopped there, because a run took about a minute.
+
+**What moved, and the checks.** No recorded value moved. The Rust SDK's rkv check is above; the
+x86_64 rkv built as the rebaseline's rust-kv stage builds it gave the same bytes with main's SDK
+and with this one (`dbf4786c42d5925e` at one path of the bare-metal machine). The fast
+`hydo-bench rebaseline --check` on this Mac, with this tree over the 0.3.0 Mac release in a new
+work folder: all 21 images built with their recorded bytes (rust-kv, `46af29a2…`, only after the
+feature gate; before it the image was `1b1432ed…` and its 8 schedules moved), and 60 of the 76
+schedules gave their recorded values. The check was stopped twice when the Mac's free disk fell
+below its limit, with other sessions writing too; the 16 schedules it did not run are those of
+release-redis (7), voting (4), redis-oci (3) and release-ledger-spin (2), whose image bytes are
+the recorded ones. Every test of the workspace in the `ci` profile on this Mac (`cargo nextest
+run --cargo-profile ci --workspace`, both tiers): 699 passed. `cargo test --locked --release
+--workspace` on the bare-metal machine, in a copy of the tree without `.git` and `.claude/`: every
+test passed but hydo-build's answers golden (re-recorded, above) and two tests that read the
+checkout itself (`skillupdate::tests::each_agent_gets_its_folder` and `skill_check::`), which pass
+in the worktree. clippy with `-D warnings`, `cargo fmt`, `ci/consolidate-tests.sh --check`,
+`sh ci/vale.sh` (and the design page), the public-content test, and the SDK tests of the four
+languages (Rust with and without `--features steer`, Go in both copies, Python, JavaScript) pass.
+
+**Tests.** steer.rs's unit tests (value extraction, corpus order and picks, mutants as a
+function of the stream, the search's determinism and its `--steer-mix 0` identity, a scripted
+distance on which the median over ten stream seeds is 64 runs to the failure for the steered
+search and 228 for random schedules);
+run.rs's test of where the value comes from; two scripted-engine scenarios `steer_sdk` and
+`steer_random` (HYDO_FAKE_STEER); the Rust SDK's shared cases. Every other fake-engine golden,
+the identity goldens and the corpora unchanged. Re-recorded: hydo-manifest's answers golden (the
+known-key lists in messages, and inputs main had already changed), hydo-build's answers golden
+(the same messages; the new shared cases shift the mutant numbers), the CLI golden's two `guide
+manifest` answers, the schemas, INVENTORY.md.
