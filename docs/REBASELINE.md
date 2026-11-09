@@ -3422,7 +3422,7 @@ they have new pins (docs/BUILD-PINS.md), and the SDK versions are in rust-kv's p
 node-kv's `package.json` and python-kv's `__init__.py`. The plans keep `hydo_version: "0.3"`, and
 no engine, controller, agent or kernel changed.
 
-**What moved.** hvx (the bare-metal machine): 9 of 41 images have new bytes, 30 of 141 runs new
+**What moved.** hvx (the bare-metal machine): 9 of 43 images have new bytes, 30 of 141 runs new
 values (redis-proxy, redis-bridge, rust-kv, the shop's two images, the three gRPC stack images and
 the generated-driver stack). The Mac (`hvm`): 9 of 21 images, 36 of 76 runs (redis-bridge,
 node-kv, python-kv, python-kv-hist, rust-kv, the shop's two images, the gRPC demo's two images).

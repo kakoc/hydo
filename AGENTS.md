@@ -208,56 +208,46 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.2.0 was published on 2026-11-07 in these places:
+**Releases.** hydo 0.3.0 was published on 2026-11-08 in these places:
 
-- The GitHub release `v0.2.0`: both tarballs, their sources archives, and the Mac signatures.
+- The GitHub release `v0.3.0`: both tarballs, their sources archives, and the Mac signatures.
 - The Homebrew tap: `brew install kakoc/tap/hydo`.
 - crates.io: the 20 crates of `cargo install hydo`, and `hydo-assert`.
-- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.2.0`.
-- The skill release `skill-v1.0.0`.
+- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.3.0`.
+- The skill release `skill-v1.2.0`.
 
 The release index `hydo/dist/releases.txt` pins every published archive. Since 0.2.0 the Linux
-release ships the KVM engine, and the Mac programs are signed and notarized. Checksums and verification:
-`docs/HISTORY.md` Milestone 177. How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`.
+release ships the KVM engine, and the Mac programs are signed and notarized. How to release:
+`docs/RELEASING.md` and `docs/PUBLISHING.md`.
 
-**Registry publishing from GitHub Actions.** From the next release on, a tag `v<version>`
-starts `.github/workflows/release.yml`. It publishes the crates, the PyPI and npm packages, and the
-Go tag with each registry's trusted publishing, so no token is stored. `packages.yml` dry-runs the
+**Registry publishing from GitHub Actions.** A tag `v<version>` starts
+`.github/workflows/release.yml`. It publishes the crates, the PyPI and npm packages, and the Go tag
+with each registry's trusted publishing, so no token is stored. `packages.yml` dry-runs the
 packages on every pull request that changes one. The user is doing the one-time setup on each
 registry (open item 63); until it is done, a release is published by hand. The details are in
 `docs/PUBLISHING.md`, section "Publishing from GitHub Actions" (M186).
 
-**hydo 0.3.0: prepared, not published (M190).** The version is 0.3.0 everywhere it lives. The
-release adds M178–M189 and M191 to 0.2.0:
+**hydo 0.3.1: prepared, not published** (`docs/HISTORY.md` "The 0.3.1 release"). The version is
+0.3.1 everywhere it lives; plans keep `hydo_version: "0.3"`. It adds Milestones 192–208 to 0.3.0.
+Among them are the fingerprint epoch 2 (M204), test programs as workloads with `--vcpus` on
+`hydo run` (M205), faults aimed at groups (M195), messaging checks (M196) and `hydo ci run`
+(M197). Release
+step 6a ran on quick candidates and its findings are fixed: without `--backend`, hydo takes the
+machine's engine (KVM when there is no `/dev/hvx`). `guest/hydo-world`, `guest/hydo-world-tls`
+and `guest/hydo-grpc` are re-pinned for the version (`docs/BUILD-PINS.md`), and the examples are
+re-recorded (`docs/REBASELINE.md` section 21; the epoch stays 2). The release commit is
+`b3f73087`. Its five files and `SHA256SUMS` are in `hydo/dist/out/0.3.1/` of the main checkout
+(git-ignored), each platform built twice to the same bytes:
 
-- `hydo inspect` and the failure diagnosis (M178).
-- Guest RAM up to 8 GiB (M179).
-- `tls:` for fakes, and writable image services (M180).
-- Small fixes from the onboardings (M181).
-- `hydo sql-gen` and the guest program `hydo-sql` (M182).
-- Storage faults of one service, `G=` and `L=` (M183).
-- The check that a schedule names only what its image has (M184).
-- The KVM engine at x86-64-v3 (M189), and a plan of only checks or regressions keeps the
-  manifest's own workload (M191).
+- `hydo-linux-0.3.1.tar.gz` `fec2352a38113b86dbfd3f52fff2b91df62204ea83eac69353a793d5c071402e`;
+- `hydo-linux-0.3.1-sources.tar.gz` `ccdb3bb93c45293644e69fbad60d48e02d34f43cf0a213d6cbc366e4bcd9e711`;
+- `hydo-mac-0.3.1.tar.gz`, signed and notarized,
+  `2ed5dccc966f357354ea9069e2e9769841a290c45d85bcd4b5b322b876eab7db`;
+- `hydo-mac-0.3.1-sources.tar.gz` `5501e31dd65e66a04376604b4f3b196ba0479890cf8e083657860975a64d7c0c`;
+- `hydo-mac-0.3.1-signatures.tar.gz` `84d7bccee5e2eb2ea02c669b2f77f2aaa80c8628c4c1fab2a3a2416878416344`.
 
-Both releases ship `guest/hydo-world` (re-pinned), `guest/hydo-world-tls` and `guest/hydo-sql`,
-pinned in `hydo/dist/<platform>/guest-programs.sha256` (`docs/BUILD-PINS.md`). Every example was
-re-recorded; the fingerprint epoch stays 1 (`docs/REBASELINE.md` section 18). The release commit
-is `76a51408`. It adds the `rehearse.sh` fix that the release workflow needs to `2aa54fa4`, which
-the files were first built from (`docs/HISTORY.md` Milestone 190, the addendum). Its five files and
-`SHA256SUMS` are in `hydo/dist/out/0.3.0/` of the main checkout (git-ignored; the files built from
-`2aa54fa4` are in `before-2aa54fa4/`), each platform built twice to the same bytes:
-
-- `hydo-linux-0.3.0.tar.gz` `d274e519c53dda6b0512080cef0f96e90a86c042493f9da76bef79a6d2805680`;
-- `hydo-linux-0.3.0-sources.tar.gz` `00a4c143184199b652216ea6ef201ba17dd43e60c7d5d5b492c8205980e3c4c8`;
-- `hydo-mac-0.3.0.tar.gz`, signed and notarized,
-  `6eb5ae166013b06be31b39cbd0b8b7e6b2491e53024dcd8af5bf6c95a9e8c55a`;
-- `hydo-mac-0.3.0-sources.tar.gz` `b294cca72f5ad2563798a89ca19f7c224e61f8baef9c36df5bba68925cfa29b1`;
-- `hydo-mac-0.3.0-signatures.tar.gz` `d93d46efe60b7b30ded96c760c1a4e9b131deeab69b9def2d404269551af8cf8`.
-
-The prepared material (release notes, the Homebrew formula, the release-index lines, the skill
-release `skill-v1.2.0`) is in `hydo/dist/out/0.3.0/prepared/`. The checks and the publishing
-steps are in `docs/HISTORY.md` Milestone 190.
+The prepared material (release notes, the Homebrew formula, the release-index lines) is in
+`hydo/dist/out/0.3.1/prepared/`. There is no skill release: the skill did not change.
 
 **Fingerprints.** The fingerprint epoch is 2 (M204; 1 from M155). The pinned reproducers are
 `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` under `hydo run`: `a76d7fe857fdb37c`
@@ -545,6 +535,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `the_rewind_mode_changes_nothing_without_a_counter_loop` gave two fingerprints. It then
     passed 50 times, 44 of them under CPU load. The cause was not found; if it is a rare
     nondeterminism of the rewind mode, CI's full tier can meet it again.
+78. An image's bytes depend on the file modes of the tree it is built from. `hydo build` copies
+    the manifest into the image as `/etc/hydo/hydo.yaml` with the checkout's mode. 0.3.1's first
+    hvx re-baseline ran in a tree unpacked under umask 002, and every image got new bytes. Unpack a
+    tree for `hydo-bench rebaseline` or a release build under umask 022. Normalising the mode in
+    hydo-build would move the bytes of images built from such trees only, but it is a builder
+    change for a release that may move image bytes. Also seen in 0.3.1's Linux full tier, once:
+    `hydo-compose`'s `compose_equals_python` failed and then passed three times alone; the cause
+    was not found.
 
 ## Milestone index
 
@@ -793,6 +791,12 @@ build machine, before 2026-10-13.
   explorer never counts a refused run as a failure. On KVM and the Mac, `HYDO_PREEMPT_RECORD=1`
   records where each forced preemption point fired, and `hydo diff` names the first point where
   two runs differ: on the Qdrant pair it is the fortieth point. Nothing recorded moved
+- The 0.3.1 release (no milestone number): the version raised, and `hydo-world`,
+  `hydo-world-tls` and `hydo-grpc` re-pinned. Release step 6a ran on quick candidates, and its
+  fixes are in: hydo takes the machine's engine without `--backend`, `hydo doctor` prints the
+  state it found, and the pages are corrected. The examples are re-recorded (epoch 2). Both
+  releases are built twice to the same bytes, the Mac one signed and notarized, and verified on
+  hvx, KVM and the Mac; nothing is published
 
 ## Where to look
 
