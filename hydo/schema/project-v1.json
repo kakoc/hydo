@@ -265,6 +265,16 @@
         "null"
       ]
     },
+    "steer": {
+      "description": "Numbers the system's output reports that say how close a run came to failing: `hydo\nexplore --steer <id>` keeps the schedules that came closest and changes them a little\n(docs/design/steered-search.md).",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/SteerValue"
+      }
+    },
     "test": {
       "description": "The test composer's plan (the hydo/ folder fills it too).",
       "anyOf": [
@@ -3023,6 +3033,55 @@
         }
       },
       "additionalProperties": false
+    },
+    "SteerValue": {
+      "description": "A number in the guest's console lines that says how close a run came to failing (Milestone\n209): the steered search's value.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "[a-z][a-z0-9_.-]*: the name `hydo explore --steer` takes.",
+          "type": "string"
+        },
+        "match": {
+          "description": "A regular expression (Rust's regex syntax) over each console line; its first capture\ngroup (the whole match without a group) is the number. A run's value is the best match\nof all its lines.",
+          "type": "string"
+        },
+        "goal": {
+          "description": "min: a smaller number is closer to failing; max: a larger one.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SteerGoal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "min"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "match"
+      ]
+    },
+    "SteerGoal": {
+      "description": "Which way a steered value is closer to failing.",
+      "type": "string",
+      "enum": [
+        "min",
+        "max"
+      ]
     },
     "Test": {
       "description": "The test composer's plan: small commands composed into seeded rounds (the schedule token W=),\nproperties, and saved regressions. The hydo/ folder fills commands, checks and regressions.",

@@ -21,6 +21,7 @@ pub fn all() -> Vec<Case> {
     v.extend(catalog_cases());
     v.extend(eventually_cases());
     v.extend(buggify_cases());
+    v.extend(steer_cases());
     v.extend(output_cases());
     v.extend(history_cases());
     v
@@ -503,6 +504,54 @@ fn points_prog(rounds: usize) -> Prog {
         }
     }
     p
+}
+
+// ---- steered values (Milestone 209; the Rust SDK first: the other SDKs skip "steer") ----
+
+fn steer_cases() -> Vec<Case> {
+    let mut v = Vec::new();
+
+    let mut p = Prog::new();
+    let s = p.steer("min", "q.len", "the queue the test reads must not be empty");
+    for x in [18, 20, 18, 7, 9, 0, -0, 3] {
+        p.value(s, x);
+    }
+    v.push(case(
+        "steer",
+        "minimize",
+        "minimize: the first value is written, then only a value smaller than every earlier one",
+        p,
+        vec![Run::assert("file"), Run::assert("off").out("off")],
+    ));
+
+    let mut p = Prog::new();
+    let s = p.steer("max", "lag.ms", "replication lag");
+    let t = p.steer("min", "free.slots", "free slots");
+    for (a, b) in [(3, 9), (1, 9), (5, 4), (5, 4), (8, 6)] {
+        p.value(s, a);
+        p.value(t, b);
+    }
+    v.push(case(
+        "steer",
+        "maximize_and_two_ids",
+        "maximize writes a value larger than every earlier one; two ids keep their own best",
+        p,
+        one(),
+    ));
+
+    let mut p = Prog::new();
+    let s = p.steer("min", "countdown", "a value that improves at every report");
+    for x in (0..70).rev() {
+        p.value(s, x);
+    }
+    v.push(case(
+        "steer",
+        "at_most_64_records",
+        "one id writes at most 64 records in one process, so the console stays small",
+        p,
+        one(),
+    ));
+    v
 }
 
 fn buggify_cases() -> Vec<Case> {

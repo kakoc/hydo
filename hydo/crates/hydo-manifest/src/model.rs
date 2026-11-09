@@ -675,6 +675,11 @@ pub struct Project {
     /// The programs carry BUGGIFY fault points (the schedule token B= sets them).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub buggify: Option<bool>,
+    /// Numbers the system's output reports that say how close a run came to failing: `hydo
+    /// explore --steer <id>` keeps the schedules that came closest and changes them a little
+    /// (docs/design/steered-search.md).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steer: Option<Vec<SteerValue>>,
     /// The test composer's plan (the hydo/ folder fills it too).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub test: Option<Test>,
@@ -1265,6 +1270,31 @@ pub struct FreezeSplit {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requests: Option<Vec<String>>,
 }
+
+/// A number in the guest's console lines that says how close a run came to failing (Milestone
+/// 209): the steered search's value.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct SteerValue {
+    /// [a-z][a-z0-9_.-]*: the name `hydo explore --steer` takes.
+    pub id: String,
+    /// A regular expression (Rust's regex syntax) over each console line; its first capture
+    /// group (the whole match without a group) is the number. A run's value is the best match
+    /// of all its lines.
+    #[serde(rename = "match")]
+    pub pattern: String,
+    /// min: a smaller number is closer to failing; max: a larger one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "min"))]
+    pub goal: Option<SteerGoal>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
+}
+
+choice!(
+    /// Which way a steered value is closer to failing.
+    SteerGoal { Min = "min", Max = "max" }
+);
 
 /// A group of services that fault tokens select from.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]

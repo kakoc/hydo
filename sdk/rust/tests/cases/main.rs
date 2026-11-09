@@ -7,8 +7,8 @@
 //! received and what the calls returned. That is the expected output that the Go, Python and
 //! JavaScript SDKs' case tests compare their own bytes with.
 //!
-//!     cargo test --test cases                 # check: sdk/cases must equal what Rust writes
-//!     HYDO_BLESS=1 cargo test --test cases    # (re)write sdk/cases after a format change
+//!     cargo test --features steer --test cases               # check: sdk/cases must equal what Rust writes
+//!     HYDO_BLESS=1 cargo test --features steer --test cases  # (re)write sdk/cases after a format change
 //!
 //! File layout and the reader's rules: sdk/README.md, "The shared cases".
 
@@ -58,6 +58,8 @@ enum Obj {
     A(&'static hydo_assert::Assertion),
     L(&'static hydo_assert::Liveness),
     P(&'static hydo_assert::Point),
+    #[cfg(feature = "steer")]
+    S(&'static hydo_assert::Steer),
 }
 
 fn details(d: &Option<model::V>) -> hydo_assert::Details {
@@ -96,6 +98,15 @@ fn execute(p: &model::Prog) -> String {
             }
             Step::Eventually { id, msg, within_ms } => objs.push(Obj::L(ha::eventually(id.rust(), msg.rust(), Duration::from_millis(*within_ms)))),
             Step::Buggify { id, msg } => objs.push(Obj::P(ha::buggify(id.rust(), msg.rust()))),
+            #[cfg(feature = "steer")]
+            Step::Steer { goal, id, msg } => objs.push(Obj::S(if *goal == "min" { ha::minimize(id.rust(), msg.rust()) } else { ha::maximize(id.rust(), msg.rust()) })),
+            #[cfg(feature = "steer")]
+            Step::Value { a: i, v } => match objs[*i] {
+                Obj::S(s) => s.value(*v),
+                _ => panic!("value on {}", i),
+            },
+            #[cfg(not(feature = "steer"))]
+            Step::Steer { .. } | Step::Value { .. } => unreachable!("a steered value without the feature steer"),
             Step::Check { a: i, cond, d } => push(a(&objs, *i).check(*cond, details(d))),
             Step::Hit { a: i, d } => a(&objs, *i).hit(details(d)),
             Step::Cmp { a: i, left, op, right, d, .. } => push(a(&objs, *i).cmp(*left, op, *right, details(d))),
@@ -305,7 +316,11 @@ fn cases() {
     }
     let bless = std::env::var_os("HYDO_BLESS").is_some_and(|v| !v.is_empty());
     let root = cases_dir();
-    let cases = all_cases();
+    // the steered values are behind the feature `steer` (Milestone 209): without it the cases that
+    // need them are not run, and their files are left alone
+    let steer = cfg!(feature = "steer");
+    assert!(steer || !bless, "re-record the cases with the steered values: HYDO_BLESS=1 cargo test --features steer --test cases");
+    let cases: Vec<Case> = all_cases().into_iter().filter(|c| steer || !c.prog.needs().contains(&"steer")).collect();
     // what Rust writes, by path below sdk/cases
     let mut files: BTreeMap<PathBuf, Vec<u8>> = BTreeMap::new();
     let mut errors = Vec::new();
@@ -335,7 +350,9 @@ fn cases() {
                 for f in std::fs::read_dir(&area).unwrap() {
                     let f = f.unwrap().path();
                     let rel = f.strip_prefix(&root).unwrap().to_path_buf();
-                    present.push(rel);
+                    if steer || !rel.starts_with("steer") {
+                        present.push(rel);
+                    }
                 }
             }
         }

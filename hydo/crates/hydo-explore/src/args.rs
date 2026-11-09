@@ -9,7 +9,8 @@ pub const USAGE: &str = "usage: hydo explore [--seeds 1-200] [--strategy random|
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
-       [--storage-faults] ... (explore.py's options)";
+       [--storage-faults] [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
+        [--steer-batch N] [--steer-corpus N] [--steer-stop]] ... (explore.py's options)";
 
 /// The refusal without `--image` (Milestone 146: explore.py's default, `explore-disk.img`, is a
 /// shell-init image, which hydo has not run since Milestone 145).
@@ -85,6 +86,22 @@ pub struct Args {
     pub reactive: Option<String>,
     pub react_events: Option<String>,
     pub heal_events: Option<String>,
+    /// `--steer ID` (M209): steer the search by the value an SDK id (`HYDO-STEER` records) or a
+    /// manifest `steer:` entry reports ([`crate::steer`]).
+    pub steer: Option<String>,
+    /// `--steer-match REGEX`: steer by the first capture group of a regular expression over the
+    /// consoles' lines (for an image whose manifest has no `steer:` entry).
+    pub steer_match: Option<String>,
+    /// `--steer-goal min|max` (default: the record's or the entry's goal, else `min`).
+    pub steer_goal: Option<String>,
+    /// `--steer-mix N`: mutants per thousand schedules once the corpus has an entry.
+    pub steer_mix: i64,
+    /// `--steer-batch N`: schedules per round.
+    pub steer_batch: i64,
+    /// `--steer-corpus N`: the most schedules the corpus keeps.
+    pub steer_corpus: i64,
+    /// `--steer-stop`: stop after the round of the first failure.
+    pub steer_stop: bool,
 }
 
 impl Default for Args {
@@ -153,11 +170,18 @@ impl Default for Args {
             reactive: None,
             react_events: None,
             heal_events: None,
+            steer: None,
+            steer_match: None,
+            steer_goal: None,
+            steer_mix: crate::steer::MIX as i64,
+            steer_batch: crate::steer::BATCH as i64,
+            steer_corpus: crate::steer::CORPUS as i64,
+            steer_stop: false,
         }
     }
 }
 
-const FLAGS: [&str; 18] = [
+const FLAGS: [&str; 19] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -176,9 +200,10 @@ const FLAGS: [&str; 18] = [
     "turns",
     "no-compose",
     "bursts",
+    "steer-stop",
 ];
 
-const VALUED: [&str; 43] = [
+const VALUED: [&str; 49] = [
     "seeds",
     "workers",
     "image",
@@ -222,6 +247,12 @@ const VALUED: [&str; 43] = [
     "reactive",
     "react-events",
     "heal-events",
+    "steer",
+    "steer-match",
+    "steer-goal",
+    "steer-mix",
+    "steer-batch",
+    "steer-corpus",
 ];
 
 fn choice(name: &str, v: &str, ok: &[&str]) -> Result<String, String> {
@@ -365,12 +396,31 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "reactive" => a.reactive = Some(choice("reactive", v, &["both", "fault", "heal"])?),
             "react-events" => a.react_events = Some(val),
             "heal-events" => a.heal_events = Some(val),
+            "steer-stop" => a.steer_stop = true,
+            "steer" => a.steer = Some(val),
+            "steer-match" => a.steer_match = Some(val),
+            "steer-goal" => a.steer_goal = Some(choice("steer-goal", v, &["max", "min"])?),
+            "steer-mix" => a.steer_mix = int("steer-mix", v)?,
+            "steer-batch" => a.steer_batch = int("steer-batch", v)?,
+            "steer-corpus" => a.steer_corpus = int("steer-corpus", v)?,
             other => return Err(format!("unrecognized arguments: --{other}")),
         }
         i += 1;
     }
     if !out_given {
         return Err("the following arguments are required: --out".into());
+    }
+    if a.steer.is_some() && a.steer_match.is_some() {
+        return Err("argument --steer-match: not allowed with argument --steer (the value comes from one source)".into());
+    }
+    if !(0..=1000).contains(&a.steer_mix) {
+        return Err(format!(
+            "argument --steer-mix: {}: mutants per thousand schedules, 0 to 1000",
+            a.steer_mix
+        ));
+    }
+    if !(1..=64).contains(&a.steer_batch) || !(1..=1024).contains(&a.steer_corpus) {
+        return Err("argument --steer-batch: 1 to 64 schedules per round; --steer-corpus: 1 to 1024 schedules".into());
     }
     if a.image.is_empty() {
         return Err(NO_IMAGE.into());

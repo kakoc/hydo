@@ -374,6 +374,24 @@ fingerprint moves. `hydo inspect events` shows the points (kind `preempt`, `Time
 and `hydo diff` names the first point where two runs' records differ (`Diff.first_preempt`). hvx
 has no such record yet (open item 77). Proof: `docs/HISTORY.md` Milestone 208.
 
+**Steered search (M209, experimental and opt-in).** It did not help on the one system it was
+measured on (below), so treat it as an experiment, not a better default. `hydo explore --steer
+<id>` or `--steer-match REGEX` keeps
+the schedules whose runs came closest to failing, by a number the system reports. It spends
+`--steer-mix` (default 500) of every 1,000 schedules on one change to them. The rest are the plain
+exploration's schedules in seed order. The number comes from one of three places:
+
+- the Rust SDK's `HYDO-STEER` records (`hydo_assert::minimize`, `maximize`; the cargo feature
+  `steer`, off by default so that rkv keeps its bytes);
+- a manifest `steer:` entry (a format-1 addition);
+- the pattern of `--steer-match`.
+
+The results format gains `Run.steer` and `Exploration.steer`. Without the options nothing
+changes. On Qdrant's flaky test it did not help. On KVM, over five seed ranges, the steered
+exploration found the first failure after a median of 118 schedules. The plain exploration found
+it after 72. On hvx neither found it. Design and numbers: `docs/design/steered-search.md`;
+`docs/HISTORY.md` Milestone 209.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -543,6 +561,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     change for a release that may move image bytes. Also seen in 0.3.1's Linux full tier, once:
     `hydo-compose`'s `compose_equals_python` failed and then passed three times alone; the cause
     was not found.
+79. The steered search (M209). What is left:
+    - The Go, Python, and JavaScript SDKs have no steered values; their case readers skip
+      `sdk/cases/steer/`. Adding them moves the bytes of the python-kv and node-kv images,
+      whose SDK files are inside them, so it needs a re-record.
+    - The search has one value. Values per code location as in IJON are not built, nor a
+      distance that hydo computes itself (a fault's step against the step of a logged event).
+    - No run showed a benefit. On Qdrant the failure sits next to passing schedules of any
+      length, and on hvx the length does not move. The option stays experimental until a system
+      whose value falls step by step towards its failure is found.
 
 ## Milestone index
 
@@ -797,6 +824,11 @@ build machine, before 2026-10-13.
   state it found, and the pages are corrected. The examples are re-recorded (epoch 2). Both
   releases are built twice to the same bytes, the Mac one signed and notarized, and verified on
   hvx, KVM and the Mac; nothing is published
+- M209: an experimental steered search, `hydo explore --steer` or `--steer-match`. It steers by
+  a number the system reports about how close a run came to failing: a Rust SDK record, a
+  manifest `steer:` entry, or a pattern. It did not help: on Qdrant's flaky test it found the
+  failure later than the plain exploration on KVM (median 118 against 72 schedules), and neither
+  found it on hvx. Nothing recorded moved
 
 ## Where to look
 

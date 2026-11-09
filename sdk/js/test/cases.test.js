@@ -20,8 +20,9 @@ const PRE = 'PRE existing line\n';
 const UNSUPPORTED = {
   f32: 'JavaScript has no float32',
   raw_hist: 'JavaScript strings cannot hold the invalid UTF-8 bytes of a history record',
+  steer: 'the JavaScript SDK has no steered values yet (the Rust SDK has them first, Milestone 209)',
 };
-const KNOWN = new Set(['f32', 'bytes', 'invalid_utf8', 'raw_hist']);
+const KNOWN = new Set(['f32', 'bytes', 'invalid_utf8', 'raw_hist', 'steer']);
 
 // ---- the child ----
 

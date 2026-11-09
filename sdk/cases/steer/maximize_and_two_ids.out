@@ -1,0 +1,5 @@
+HYDO-STEER {"id":"lag.ms","goal":"max","v":3,"msg":"replication lag"}
+HYDO-STEER {"id":"free.slots","goal":"min","v":9,"msg":"free slots"}
+HYDO-STEER {"id":"lag.ms","goal":"max","v":5,"msg":"replication lag"}
+HYDO-STEER {"id":"free.slots","goal":"min","v":4,"msg":"free slots"}
+HYDO-STEER {"id":"lag.ms","goal":"max","v":8,"msg":"replication lag"}

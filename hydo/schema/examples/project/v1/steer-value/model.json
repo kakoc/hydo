@@ -1,0 +1,38 @@
+{
+  "format": 1,
+  "name": "steer-value",
+  "description": "a flaky test whose output says how close it came to failing",
+  "root": {
+    "files": [
+      {
+        "src": "bin/pkg.test",
+        "dst": "/bin/pkg.test",
+        "mode": "0755"
+      }
+    ]
+  },
+  "data": {
+    "dirs": [
+      "t"
+    ]
+  },
+  "workload": {
+    "kind": "test",
+    "steps": 1,
+    "run": "[ \"$HYDO_FROM\" = 0 ] || exit 0\ncd /data/t && /bin/pkg.test > out 2>&1; cat out > /dev/console\necho 0 >> $HYDO_ACKED\n"
+  },
+  "invariants": [
+    {
+      "id": "test.passes",
+      "cmd": "grep -q '^test result: ok' /data/t/out"
+    }
+  ],
+  "steer": [
+    {
+      "id": "queue_len",
+      "match": "queue length: (\\d+)",
+      "goal": "min",
+      "description": "the test fails when the queue is empty when it looks"
+    }
+  ]
+}

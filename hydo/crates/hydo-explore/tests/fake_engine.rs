@@ -163,6 +163,14 @@ fn run(prog: &mut Command, dir: &Path, out: &Path) -> String {
                 ""
             },
         )
+        .env(
+            "HYDO_FAKE_STEER",
+            if out.to_string_lossy().contains("steer_") {
+                "1"
+            } else {
+                ""
+            },
+        )
         .current_dir(top())
         .output()
         .expect("run");
@@ -433,6 +441,30 @@ const SCENARIOS: &[(&str, &[&str])] = &[
             "2",
             "--sweep-with",
             "disk=none dseed=8363 | run",
+        ],
+    ),
+    // M209: the steered search on a scripted distance (HYDO-STEER records of fake.distance, the
+    // failure at distance 0), and the same seeds without mutants (the plain exploration's
+    // schedules in the search's bookkeeping)
+    (
+        "steer_sdk",
+        &[
+            "--seeds",
+            "1-120",
+            "--steer",
+            "fake.distance",
+            "--steer-stop",
+        ],
+    ),
+    (
+        "steer_random",
+        &[
+            "--seeds",
+            "1-40",
+            "--steer",
+            "fake.distance",
+            "--steer-mix",
+            "0",
         ],
     ),
     (
@@ -867,6 +899,27 @@ mod engine {
                     "HYDO-ORACLE: VIOLATION [ats.test_passes] pass=1 fail=1 3 vs 2".into()
                 };
             }
+        }
+        // the steered search's scenario (M209; HYDO_FAKE_STEER, set for the scenarios named
+        // steer_*): a distance the guest reports in HYDO-STEER records, |K step - 17| + |K down
+        // - 3| (40 without a K=), and the only failure is at distance 0
+        if std::env::var("HYDO_FAKE_STEER").is_ok_and(|v| !v.is_empty()) {
+            let dist = match kk {
+                Some(kv) => {
+                    let at: i64 = after(after(kv, '@', 1), '+', 0).parse().unwrap();
+                    let down: i64 = after(kv, '+', 1).parse().unwrap_or(1);
+                    (at - 17).abs() + (down - 3).abs()
+                }
+                None => 40,
+            };
+            lines.push(format!(
+                "HYDO-STEER {{\"id\":\"fake.distance\",\"goal\":\"min\",\"v\":{dist},\"msg\":\"how far the kill is from the bug\"}}"
+            ));
+            verdict = if dist == 0 {
+                "HYDO-ORACLE: VIOLATION killed in the window order=17".into()
+            } else {
+                "HYDO-ORACLE: OK acked=30".into()
+            };
         }
         // properties: a failed always-property for clock jumps backwards, an eventually with a timing
         let ok_e = !oo.is_some_and(|ov| ov.contains("delay"));
