@@ -1222,9 +1222,20 @@ fn steer_search(cx: &Cx, pool: &Pool, seeds: &[i64]) -> SteerOut {
     let t0 = Instant::now();
     let mut res: HashMap<String, (String, Res)> = HashMap::new();
     let mut fresh = |sd: u64| cx.ex.compose_seed(&cx.a.strategy, sd, cx.a.durable_only);
+    // a mutant must read back, and its engine must accept it: a moved `pp=` or a grafted `tj=`
+    // can make a pair hvx refuses (M208), which would only spend a run on nothing
+    let kind = if cx.kvm {
+        hydo_engine::EngineKind::Kvm
+    } else if cx.ex.backend == Backend::Hvx {
+        hydo_engine::EngineKind::Hvx
+    } else {
+        hydo_engine::EngineKind::Hvm
+    };
     let mut render = |s: &S| {
         let t = cx.render(s);
-        let back = cx.ex.parse(&t).ok();
+        let accepted = hydo_schedule::Schedule::parse(&t)
+            .is_ok_and(|sc| hydo_engine::refusal(kind, &sc).is_none());
+        let back = cx.ex.parse(&t).ok().filter(|_| accepted);
         (t, back)
     };
     let mut run = |items: &[(String, String)]| -> Vec<Outcome> {
@@ -2436,5 +2447,65 @@ impl Cx {
             minimal,
             ..hydo_results::Shrink::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::steer::{Goal, Source};
+
+    fn args(extra: &[&str]) -> Args {
+        let mut v: Vec<String> = ["--image", "i.img", "--out", "o"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        v.extend(extra.iter().map(|s| s.to_string()));
+        args::parse(&v).unwrap()
+    }
+
+    /// `--steer <id>`: the manifest's entry of that id (its pattern and goal), else the SDK's
+    /// records; `--steer-match`: a pattern; `--steer-goal` overrides the entry's goal (M209).
+    #[test]
+    fn the_steered_value_comes_from_the_entry_the_sdk_or_the_pattern() {
+        let m = json!({"steer": [{"id": "queue_len", "match": "length: (\\d+)", "goal": "max"}]});
+        let Some((Source::Pattern { id, re }, g)) =
+            steer_source(&args(&["--steer", "queue_len"]), Some(&m)).unwrap()
+        else {
+            panic!("the entry")
+        };
+        assert_eq!(
+            (id.as_str(), re.as_str(), g),
+            ("queue_len", "length: (\\d+)", Some(Goal::Max))
+        );
+        let a = args(&["--steer", "queue_len", "--steer-goal", "min"]);
+        let Some((_, g)) = steer_source(&a, Some(&m)).unwrap() else {
+            panic!("the entry")
+        };
+        assert_eq!(g, Some(Goal::Min));
+        let Some((Source::Sdk { id }, None)) =
+            steer_source(&args(&["--steer", "other"]), Some(&m)).unwrap()
+        else {
+            panic!("the SDK's records")
+        };
+        assert_eq!(id, "other");
+        assert!(matches!(
+            steer_source(&args(&["--steer-match", "x=(\\d+)"]), None).unwrap(),
+            Some((Source::Pattern { .. }, None))
+        ));
+        assert!(steer_source(&args(&["--steer-match", "("]), None).is_err());
+        assert!(steer_source(&args(&["--steer", "q", "--sweep", "kill"]), None).is_err());
+        assert!(steer_source(&args(&[]), None).unwrap().is_none());
+        let both = [
+            "--image",
+            "i",
+            "--out",
+            "o",
+            "--steer",
+            "a",
+            "--steer-match",
+            "b",
+        ];
+        assert!(args::parse(&both.map(String::from)).is_err());
     }
 }
