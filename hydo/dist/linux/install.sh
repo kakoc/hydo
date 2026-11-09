@@ -32,7 +32,7 @@ while [ $# -gt 0 ]; do
     --udev) UDEV=1; shift ;;
     --udev-group) UDEV_GROUP=$2; shift 2 ;;
     --udev-name) UDEV_NAME=$2; shift 2 ;;
-    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "install.sh: unknown option $1" >&2; exit 2 ;;
   esac
 done

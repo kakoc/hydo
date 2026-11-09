@@ -1,7 +1,7 @@
 #!/bin/sh
 # Install hydo for Apple Silicon Macs from an unpacked release directory:
 #     ./install.sh [--prefix DIR] [--add-to-path]
-# Copies the release into DIR (default ~/.hydo). Everything else is the hydo program's (M154):
+# Copies the release into DIR (default ~/.hydo). Everything else is the hydo program's:
 #   hydo setup    checks this Mac (Apple Silicon, macOS 13 or later, Hypervisor.framework) and
 #                 every file against SHA256SUMS and the sha256 pins built into hydo, removes the
 #                 quarantine attribute of a download, and checks the signature of the engine

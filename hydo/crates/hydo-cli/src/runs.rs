@@ -394,8 +394,7 @@ fn run_engine_try(
     };
     let _ = std::fs::write(outdir.join("engine.log"), &run.output);
     if !quiet {
-        // the spin observer's notes (hvm: a run ended at a counter loop and ran again)
-        for line in run.output.lines().filter(|l| l.starts_with("hvmx: one")) {
+        for line in engine_notes(&run.output) {
             println!("{line}");
         }
         if let Some(r) = &run.result {
@@ -403,6 +402,19 @@ fn run_engine_try(
         }
     }
     Ok((run.result, run.output))
+}
+
+/// The lines of a run's engine output that `hydo run` prints before the RESULT line: the spin
+/// observer's notes (hvm: a run ended at a counter loop), and the host controller's note that
+/// it ran the schedule again in the engine's rewind mode. Before 0.3.1 the second was only in
+/// `engine.log`, so a reader saw two runs' worth of time and no reason.
+fn engine_notes(output: &str) -> Vec<&str> {
+    output
+        .lines()
+        .filter(|l| {
+            l.starts_with("hvmx: one") || l.starts_with("hydo: the run ended as SPIN; ran it again")
+        })
+        .collect()
 }
 
 /// One schedule from a fresh boot; dies without a RESULT (the engine's output tail on stderr).
@@ -975,7 +987,8 @@ fn repro_list(ctx: &Ctx, d: &Path) -> Vec<ReproItem> {
     }
     for x in &doc.shrinks {
         out.push(ReproItem {
-            label: format!("minimal {}", head(&x.signature, 40)),
+            // the whole signature: cut at 40 characters it ended inside a key name (0.3.1)
+            label: format!("minimal {}", x.signature),
             image: image.clone(),
             sched: x.minimal.clone(),
             fp: x
@@ -1486,6 +1499,20 @@ mod tests {
 
     /// The RESULT line prints the guest's checks only; when the host's checks change the verdict,
     /// `hydo run` prints the final one (the libSQL onboarding's friction item 8).
+    /// `hydo run` prints why a run took a second pass (0.3.1, the Mac reader's finding).
+    #[test]
+    fn the_rewind_note_is_printed() {
+        let out = "hvmx: one: ended at a counter loop (spin)\nnoise\nhydo: the run ended as SPIN; \
+                   ran it again in the engine's rewind mode (disk=none spin=rewind | run)\nRESULT one\n";
+        assert_eq!(
+            super::engine_notes(out),
+            vec![
+                "hvmx: one: ended at a counter loop (spin)",
+                "hydo: the run ended as SPIN; ran it again in the engine's rewind mode (disk=none spin=rewind | run)"
+            ]
+        );
+    }
+
     #[test]
     fn the_final_verdict_is_printed_when_the_hosts_checks_changed_it() {
         let g = "HYDO-ORACLE: OK invariants=1 held (x)";

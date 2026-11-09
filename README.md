@@ -45,23 +45,27 @@ versions.
 - It runs your software unmodified. A service is a Linux program, a set of files, or a Docker or
   OCI image (OCI is the open standard format of container images).
 - It explores. `hydo explore` generates schedules from seeds, runs each failure again to check
-  that it reproduces, and shrinks it. In the Linux quickstart (section 3), an exploration of the
-  Redis example with 20 seeds found 9 failures in 16 seconds. All 9 are of the expected kinds:
+  that it reproduces, and shrinks it. In the Linux quickstart (section 3), on the kernel module
+  (hvx), an exploration of the Redis example with 20 seeds found 9 failures in 16 seconds. All 9 are of the expected kinds:
   a disk that drops writes, disk errors, and a relaxed sync setting. Each one reproduced.
 - It shows why a run failed. A failed run names the failing service and process, and
   `hydo inspect` opens a recorded run at any point to read its files, logs, and processes.
-- It has ready-made checks and workloads: checks of recorded histories of operations, readers for
-  MySQL, PostgreSQL, Kafka, Redis, and etcd, and `hydo sql-gen`, which
+- It has ready-made checks and workloads. Among them are checks of recorded histories of
+  operations, and store readers. A store reader prints the contents of a database as sorted lines
+  for checks to compare: MySQL, PostgreSQL, Kafka, Redis, and etcd. `hydo sql-gen`
   writes SQL workloads and their checks. A linearizability check finds a read that no order of
   the operations explains; a list-append check finds anomalies between transactions that append
-  to lists. Assertion SDKs exist for Rust, Go, Python, and JavaScript (`hydo guide sdks`).
+  to lists. Assertion SDKs exist for Rust, Go, Python, and JavaScript (`hydo guide sdks`): an
+  assertion is a check that your program makes about itself while it runs, and hydo collects
+  them.
 
 hydo reproduced two known upstream bugs. `hydo explore` found each one, with no hand-written
 schedule:
 
 - etcd 3.5.5: member revisions diverge after an online defragmentation and a crash
   ([etcd issue 14685](https://github.com/etcd-io/etcd/issues/14685)). `hydo explore --strategy
-  process --new-faults --timing` failed 19 of 100 seeds on 3.5.5 and none on 3.5.6. The runs are in
+  process --new-faults --timing` failed 19 of 100 seeds on 3.5.5 and none on 3.5.6. The process
+  strategy draws faults as a process over the run: faults that start and heal at seeded times. The runs are in
   [hydo/onboard/examples/etcd/RESULTS.md](hydo/onboard/examples/etcd/RESULTS.md).
 - NATS 2.10.22: a JetStream stream is deleted when every node stops shortly after the stream was
   created ([nats-server issue 6888](https://github.com/nats-io/nats-server/issues/6888)). The
@@ -79,8 +83,7 @@ schedule:
     `hydo repro` says when the epoch differs.
 - Across machines, the recorded examples gave the same verdicts. The Redis example gave the same
   verdict on Linux and on a Mac, and on the KVM engine on Intel CPUs. The quickstarts record these
-  runs (Linux sections 2 and 6, Mac section 2). hydo 0.3.0 also gave the same verdicts on AMD
-  CPUs with the KVM engine; hydo 0.3.1 has not run on AMD yet.
+  runs (Linux sections 2 and 6, Mac section 2).
 - A failure found on Linux does not replay on a Mac. Your services run as x86_64 Linux programs
   on a Linux host, and as arm64 Linux programs on a Mac.
 - The kernel module needs an Intel CPU with VT-x, Intel's hardware support for virtual machines.
@@ -217,8 +220,9 @@ RESULT one fp=5ec14b8b4bdcf367 … verdict=HYDO-ORACLE: OK … (… acked=20 all
 RESULT one fp=9f8f90a7d14566df … verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 ```
 
-The power cut lost the keys from `k:1` on, which Redis had acknowledged (only `k:0` survived);
-the verdict names the first. This is the documented window of Redis's `appendfsync everysec`
+The power cut lost the keys from `k:1` on, which Redis had acknowledged (only `k:0` survived).
+The verdict names the first lost key. On a Mac the same schedule loses from `k:0` on, because
+the guest's timing differs by engine. This is the documented window of Redis's `appendfsync everysec`
 setting. `fp=` is the fingerprint. With Redis's default setting, `appendfsync always`, the same
 cut loses nothing: `hydo run "disk=cut | run C=12"` ends `OK` with `acked=12 all present`.
 
@@ -236,9 +240,8 @@ hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under …)
 ## Test your own project
 
 1. Run `hydo init` in your repository. It creates `hydo/hydo.yaml`, `hydo/workload/`,
-   `hydo/checks/`, and `hydo/regressions/`. It adds `.hydo/`, `hydo/images/`, and `hydo-out/` to `.gitignore`,
-   and a hydo section to `AGENTS.md`. Its two placeholder files make every run fail until you
-   replace them.
+   `hydo/checks/`, and `hydo/regressions/`. It adds `.hydo/` (hydo's build cache),
+   `hydo/images/`, and `hydo-out/` to `.gitignore`, and a hydo section to `AGENTS.md`.
 2. If your system has a Docker Compose file, import it instead of the skeleton's `hydo.yaml`. The
    second command downloads the images, once:
 
@@ -251,15 +254,17 @@ hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under …)
    Delete both from `hydo/hydo.yaml`, but keep `workload.steps` and `workload.timeout`: the
    commands in `hydo/workload/` are the workload, and the checks in `hydo/checks/` are the
    invariants. hydo's test composer runs those commands in seeded sequences and concurrent
-   mixes. Then replace `hydo init`'s placeholders `hydo/workload/parallel_driver_todo` and
-   `hydo/checks/final_todo` with your own commands and checks. Until you delete the two
-   placeholders, the check in step 4 fails with `workload.run/process: the test composer runs
-   the workload`.
+   mixes. Until you delete `workload.run`, the check of step 5 fails with `workload.run/process:
+   the test composer runs the workload`. Until you delete the `TODO` invariant, every run ends
+   `ERROR invariant todo.acked_operations_survive could not be evaluated`.
 
-3. Read `hydo guide workflow`. It says what to put in each file.
-4. Run `hydo build hydo/hydo.yaml --check` after each change. It checks the folder without
+3. Replace `hydo init`'s two placeholder files, `hydo/workload/parallel_driver_todo` and
+   `hydo/checks/final_todo`. Write your own commands and checks in their place. Until you do,
+   every run fails on purpose.
+4. Read `hydo guide workflow`. It says what to put in each file.
+5. Run `hydo build hydo/hydo.yaml --check` after each change. It checks the folder without
    building.
-5. Build and run without faults, twice. Both runs must end `OK` with the same `fp=`:
+6. Build and run without faults, twice. Both runs must end `OK` with the same `fp=`:
 
    ```sh
    hydo build hydo/hydo.yaml
@@ -267,7 +272,7 @@ hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under …)
    hydo run "disk=none | run"
    ```
 
-6. Explore, then read the findings. `--strategy process` draws faults as a process over the
+7. Explore, then read the findings. `--strategy process` draws faults as a process over the
    run, a series of faults that start and heal at seeded times; `hydo guide faults` lists the
    strategies:
 

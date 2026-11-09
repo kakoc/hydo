@@ -42,10 +42,14 @@ Homebrew, `~/.hydo` in the rest of this guide is that `libexec` directory:
 `cp -R "$(brew --prefix hydo)/libexec/examples/redis" ~/hydo-redis` copies the first example.
 `brew uninstall hydo` removes it again.
 
-Without Homebrew, unpack the release, and run its installer. It copies hydo into `~/.hydo` and
-runs `hydo setup` there, then `hydo doctor`.
+Without Homebrew, download the release and its checksums, check the tarball, unpack it, and run
+its installer. The installer copies hydo into `~/.hydo` and runs `hydo setup` there, then
+`hydo doctor`.
 
 ```sh
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.1/hydo-mac-0.3.1.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.1/SHA256SUMS
+shasum -a 256 -c --ignore-missing SHA256SUMS
 tar xzf hydo-mac-0.3.1.tar.gz
 ./hydo-mac-0.3.1/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
@@ -56,12 +60,10 @@ export PATH="$HOME/.hydo/bin:$PATH"
 - It checks that this Mac can run hydo: Apple Silicon, macOS 13 or later, and
   Hypervisor.framework.
 - It checks every file against the release's `SHA256SUMS`, and against the sha256 pins built into
-  `hydo`: the guest kernels, the guest tools, and the guest programs.
+  `hydo`. The pins are the sha256 values that `hydo` itself expects for the guest kernels, the
+  guest tools, and the guest programs.
 - It removes the quarantine attribute that a download leaves on the files.
 
-The release's programs are `bin/hydo`, `bin/hydo-build`, `bin/hydo-fetch-image`, and the
-virtual-machine engine `bin/hydo-hvm`, which carries the hypervisor entitlement. They are signed
-with the project's Developer ID and notarized by Apple, so `hydo setup` leaves them as they are.
 A damaged or incomplete download is refused with the name of each file that does not match. Running
 `hydo setup` again does nothing on a complete installation; `hydo setup --check` only reports
 (exit status 0: nothing to do, 1: a file is damaged, 3: setup has steps left).
@@ -76,7 +78,8 @@ want it to put `~/.hydo/bin` on your PATH in your shell startup file (`~/.zshrc`
 
 The release contains a ready example: Redis 7.2 with its append-only file on a virtual disk, and
 a workload that stores 20 keys. Its one invariant says that every write the client saw
-acknowledged is still there afterwards. Copy it somewhere and build its guest image:
+acknowledged is still there afterwards. Its manifest, `hydo.yaml`, describes all of this. Copy the
+example somewhere and build its guest image:
 
 ```sh
 cp -R ~/.hydo/examples/redis ~/hydo-redis && cd ~/hydo-redis
@@ -88,11 +91,11 @@ This writes into `hydo-out/`:
 - `explore-ob-redis-arm64.cpio.gz`, the guest's root, and `explore-ob-redis-arm64-disk.img`, its
   data disk: together they are the guest image;
 - `explore-ob-redis-arm64.cpio.gz.json`, the build record: which hydo built the image and from
-  which manifest;
-- `explore-ob-redis-arm64-data.img` and the folder `explore-ob-redis-arm64-root/`, the build's
-  intermediate files.
+  which manifest.
 
-Building the same `hydo.yaml` again gives the same bytes. `appendfsync` is the Redis setting that
+Building the same `hydo.yaml` again gives the same bytes:
+`shasum -a 256 hydo-out/explore-ob-redis-arm64.cpio.gz` prints `fba2c11e6a371d8b…` before and after
+a second `hydo build hydo.yaml`. `appendfsync` is the Redis setting that
 decides when Redis writes its log to the disk: `always` (the example's default) after every
 write, `everysec` once a second.
 
@@ -105,12 +108,16 @@ hydo run "disk=none | run"
 hydo run "disk=cut | run C=12 R=everysec"
 ```
 
-The first prints a `RESULT` line with `verdict=HYDO-ORACLE: OK`. The second prints a violation:
-an acknowledged key is gone after the power cut (`key k:0 lost`). That is Redis's documented
-`everysec` window, and the run reproduces it every time. Run either command again and the
-fingerprint (`fp=`) is the same. With the default `appendfsync always`, the same cut loses
-nothing: `hydo run "disk=cut | run C=12"` ends `OK` with `acked=12 all present`
-(`7147e75676d15194`).
+`R=everysec` is a guest token that sets Redis's `appendfsync` to `everysec` for this run. Each
+command prints a `RESULT` line. Its `verdict=` field is the outcome, and `HYDO-ORACLE:` marks
+the verdict of the invariants. The first ends `verdict=HYDO-ORACLE: OK` (fingerprint
+`d817d69781986987`). The second prints a violation: an acknowledged key is gone after the power
+cut (`key k:0 lost`, fingerprint `a2b8d71c0c467d15`). On Linux the same schedule loses from
+`k:1` on, because the guest's timing differs by engine. That is Redis's documented `everysec`
+window, and the run reproduces it every time. Run either command again and the fingerprint
+(`fp=`) is the same. With the default `appendfsync always`, the same cut loses nothing:
+`hydo run "disk=cut | run C=12"` ends `OK` with `acked=12 all present` (fingerprint
+`7147e75676d15194`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json` (in the folder under
@@ -129,8 +136,10 @@ It ends `OK ... acked=15 all present`: the 15 writes the client saw acknowledged
 Again, a second run gives the same fingerprint.
 
 hydo can also vary thread timing. The host part of a schedule can delay the guest's timer
-interrupts by a seeded number of VM exits. That changes where the guest switches threads.
-This delays about half of the ticks during the workload by up to 500 exits:
+interrupts by a seeded number of VM exits. That changes where the guest switches threads. In the
+schedule below, `tj=7` is the seed of the delays, `tjpm=500` is how many ticks in 1,000 are
+delayed, and `tjmax=500` is the longest delay in VM exits. So it delays about half of the ticks
+during the workload by up to 500 exits:
 
 ```sh
 hydo run "disk=none tj=7 tjpm=500 tjmax=500 | run"
@@ -139,7 +148,7 @@ hydo run "disk=none tj=7 tjpm=500 tjmax=500 | run"
 The `RESULT` line gains `tjk=` (the first and last tick period touched) and `tjn=` (how many
 ticks were delayed). The fingerprint differs from the untimed run, because the timing changed
 the guest's state, and it is the same on every run of this schedule. `hydo explore --timing`
-gives each generated schedule such timing with a chance of one in two.
+adds such timing to the schedules it generates.
 
 ### A program that busy-waits
 
@@ -158,9 +167,9 @@ hydo run "disk=none | run"
 hydo run "disk=none | run P=front@10+2"
 ```
 
-The first ends `OK ... acked=30 each stored once`. On the way it prints that the first run
-ended at a counter loop, so the result is from the run again in rewind mode. Rewind mode is
-slower: it keeps checkpoints and replays to the loop, so that the loop's wait ends at a point hydo
+The first ends `OK ... acked=30 each stored once`. Before its `RESULT` line, `hydo run` prints
+that the first run ended at a counter loop. It then ran the schedule again in rewind mode, and
+the result is from that second run. Rewind mode is slower: it keeps checkpoints and replays to the loop, so that the loop's wait ends at a point hydo
 can compute. hydo switches to it on its own. The second pauses the example's web server, the service
 `front`, for two requests; the client's retry stores entry 10 twice, and the invariant catches it
 (`entry 10 stored 2 times`). This example's server is deliberately not idempotent. Each command
@@ -168,17 +177,19 @@ gives the same fingerprint every time. A busy-wait run takes about eight seconds
 
 ## 3. Explore
 
+Go back to the Redis example first: the explorer explores the image of the folder it runs in.
 Let hydo generate schedules, run them, re-run every failure to check it reproduces, and shrink
-each failure to a minimal schedule:
+each failure to a minimal schedule. `--strategy swarm` turns whole kinds of faults on and off per
+schedule, which finds this example's few failure kinds in 20 schedules:
 
 ```sh
+cd ~/hydo-redis
 hydo explore --seeds 1-20 --strategy swarm
 hydo report
 ```
 
 hydo runs as many virtual machines at once as the Mac's cores and memory allow; add
-`--workers 2` to keep it to two. Each worker boots the guest once and starts every schedule from
-a snapshot of it, kept in files. The report lists every failure with its class (the cause) and
+`--workers 2` to keep it to two. The report lists every failure with its class (the cause) and
 says whether it reproduced. For each class of VIOLATION it gives the minimal schedule,
 found by shrinking (removing faults while the failure stays), and the
 `hydo run --image <image> "<schedule>"` command that replays it. A run that ended `ERROR` gets no
@@ -188,20 +199,22 @@ In this example the failures are all expected kinds: the disk that loses acknowl
 (`lying-disk`), injected disk errors (`io-errors`), and the relaxed `appendfsync` settings
 (`unsafe-knob`). A knob is a setting of the system that a guest token changes, here `R=`. With
 the default settings and an honest disk Redis loses nothing (the `disk=cut | run C=12` run of
-section 2). The exploration finds 11 failures. The report's last table lists properties: the
-assertions of hydo's SDKs (`hydo guide sdks`; this example has none), hydo's own `fault.*`
-properties (which fault the runs reached), and the invariants. `NOT EXERCISED` means no run
-reached a property, `[not in catalog]` that no program declared it, and `setup-complete seen in
-0` that no program reported the end of its setup. In its last line, `violations=` counts the
+section 2). The exploration finds 11 failures. The report's last table lists properties. They
+are the assertions of hydo's SDKs, hydo's own `fault.*` properties (which fault the runs reached),
+and the invariants. An assertion is a check that a program makes about itself while it runs
+(`hydo guide sdks`); this example has none. A program's catalog is the list of assertions it
+announces when it starts. `NOT EXERCISED` means no run reached a property, `[not in catalog]`
+that no program declared it, and `setup-complete seen in 0` that no program reported the end of
+its setup. In its last line, `violations=` counts the
 properties that failed, not the runs.
 
 ## 4. Reproduce a failure
 
-Copy a minimal schedule from the report, the whole string, and run it. This one is the
-report's `lying-disk` schedule:
+Copy a minimal schedule from the report, the whole string, and run it with `hydo run`, as the
+report's command does. This one is the report's `lying-disk` schedule:
 
 ```sh
-hydo repro "disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20"
+hydo run "disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20"
 ```
 
 It ends with the same verdict and the same fingerprint every time. The console of the run is
@@ -273,7 +286,7 @@ The release carries every guest file the arm64 build stages, so these work from 
 
 - A busy-wait loop is resolved only if it repeats exactly (the same registers and memory each
   time, or only counters that never feed back). Any other loop that never makes a system call
-  marks its run invalid instead of giving a wrong result.
+  ends its run with an `ERROR` verdict that names the spin, instead of a wrong result.
 - One virtual CPU, and guest RAM up to 8 GiB (`guest.ram_mib`).
 
 ## Licenses and source code
