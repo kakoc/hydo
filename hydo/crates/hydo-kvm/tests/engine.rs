@@ -67,6 +67,11 @@ impl Host {
     }
 
     fn start_program(mode: Mode, prog: Program) -> Host {
+        Host::start_with(mode, prog, KvmOptions::default()).0
+    }
+
+    /// An engine with options `o`, and its output directory.
+    fn start_with(mode: Mode, prog: Program, o: KvmOptions) -> (Host, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!(
             "hydo-kvm-engine-{}-{}",
             std::process::id(),
@@ -94,22 +99,26 @@ impl Host {
         let hv = Box::new(Script {
             program: Arc::new(prog),
         });
+        let out = start.outdir.clone();
         let join = std::thread::spawn(move || {
             run(
                 start,
-                &KvmOptions::default(),
+                &o,
                 Box::new(ChanPort::new(hrx, etx)),
                 Box::new(std::io::sink()),
                 None,
                 hv,
             )
         });
-        Host {
-            tx: htx,
-            rx: erx,
-            join: Some(join),
-            log: Vec::new(),
-        }
+        (
+            Host {
+                tx: htx,
+                rx: erx,
+                join: Some(join),
+                log: Vec::new(),
+            },
+            out,
+        )
     }
 
     fn recv(&mut self) -> EngineMsg {
@@ -659,4 +668,90 @@ fn a_snap_in_the_rewind_mode_resumes_in_it() {
     assert_eq!(a.verdict, "HYDO-ORACLE: OK counted", "{}", h.log.join("\n"));
     assert_eq!((a.fp, a.wfp), (b.fp, b.wfp), "{}", h.log.join("\n"));
     h.quit();
+}
+
+/// One run of `prog` from S1 with `s`, with or without the preemption records: the result and
+/// the records file (None: not written).
+fn run_recorded(prog: &Program, s: &str, record: bool) -> (RunResult, Option<String>) {
+    let o = KvmOptions {
+        preempt_record: record,
+        ..KvmOptions::default()
+    };
+    let (mut h, out) = Host::start_with(
+        Mode::Serve {
+            boot: Some(sched("rb=4 | run")),
+        },
+        prog.clone(),
+        o,
+    );
+    boot(&mut h);
+    h.recv();
+    h.tx.send(HostMsg::Request(Request::Ctl {
+        tag: "c".into(),
+        schedule: sched(s),
+    }))
+    .unwrap();
+    let r = h.drive(|_, _, _, _| false);
+    h.quit();
+    (r, std::fs::read_to_string(out.join("c.preempt.jsonl")).ok())
+}
+
+/// A number field of a record line.
+fn field(line: &str, k: &str) -> u64 {
+    let at = line.find(&format!("\"{k}\":")).expect("the field") + k.len() + 3;
+    line[at..]
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect::<String>()
+        .parse()
+        .expect("a number")
+}
+
+#[test]
+fn preemption_records_name_every_point_and_move_nothing() {
+    // M208: HYDO_PREEMPT_RECORD reads registers only: the same run with and without it
+    for (p, s, n) in [
+        (
+            program(40),
+            "pct=ec699251106e8e0c pctn=12 pctk=400 rb=4 | run",
+            12,
+        ),
+        // the rewind mode replays exits after a checkpoint: no point is recorded twice
+        (
+            counter_program(),
+            "spin=rewind pct=5 pctn=8 pctk=300 rb=4 | run",
+            8,
+        ),
+    ] {
+        let (off, none) = run_recorded(&p, s, false);
+        let (on, file) = run_recorded(&p, s, true);
+        assert!(none.is_none(), "nothing written without the option");
+        assert_eq!(
+            (&off.fp, &off.wfp, &off.verdict, &off.extras),
+            (&on.fp, &on.wfp, &on.verdict, &on.extras),
+            "{s}"
+        );
+        let file = file.expect("the records");
+        let recs: Vec<&str> = file.lines().collect();
+        // every point the run reached (a point after the guest's end never fires)
+        assert!(!recs.is_empty() && recs.len() <= n, "{s}: {file}");
+        for (k, r) in recs.iter().enumerate() {
+            assert!(r.starts_with("{\"v\":1,\"type\":\"preempt\""), "{r}");
+            assert_eq!(field(r, "i"), k as u64, "{r}");
+            assert!(r.contains("\"pc\":\"0x"), "{r}");
+        }
+        let exits: Vec<u64> = recs.iter().map(|r| field(r, "exit")).collect();
+        assert!(exits.windows(2).all(|w| w[0] <= w[1]), "{exits:?}");
+        // the points that moved the clock or found the timer due are the engine's pctf=
+        let fired = recs
+            .iter()
+            .filter(|r| r.contains("\"result\":\"moved\"") || r.contains("\"result\":\"due\""))
+            .count();
+        let pctf = on
+            .extras
+            .iter()
+            .find(|(k, _)| k == "pctf")
+            .map(|(_, v)| v.parse::<usize>().unwrap());
+        assert_eq!(pctf, Some(fired), "{s}: {file}");
+    }
 }

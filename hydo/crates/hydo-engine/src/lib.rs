@@ -543,6 +543,28 @@ pub trait ControlledWorker {
     fn close(self: Box<Self>) -> Result<(), EngineError>;
 }
 
+/// What engine `kind` refuses in a schedule's host part, said before any VM boots or is restored
+/// (None: it runs it). hvx refuses what its module would refuse when the schedule is armed
+/// ([`hydo_hvx::sched::refusal`]: tick jitter of a tick period or more, a `pp=` period of 512
+/// branches or less, too many extra ticks); the Mac and KVM engines refuse the host tokens only
+/// hvx applies ([`hydo_hvm::machine::host_token_problem`]). A refused schedule tests nothing:
+/// `hydo run` stops with the message, and the explorer records the run as refused, never as a
+/// failure (Milestone 208).
+pub fn refusal(kind: EngineKind, s: &hydo_schedule::Schedule) -> Option<String> {
+    match kind {
+        EngineKind::Hvx => hydo_hvx::sched::refusal(s),
+        EngineKind::Hvm | EngineKind::Kvm => hydo_hvm::machine::host_token_problem(s),
+    }
+    .map(|r| format!("{r} (on {})", kind.name()))
+}
+
+/// The verdict of a run an engine refused before it ran (an explorer worker writes it for a
+/// schedule [`refusal`] refuses or one that does not parse; the engines' own refusals read
+/// `ERROR refused: ...` on hvx and `UNSUPPORTED on <engine>: ...` on the Mac and KVM).
+pub fn is_refused(verdict: &str) -> bool {
+    verdict.starts_with("ERROR refused:") || verdict.starts_with("UNSUPPORTED on ")
+}
+
 /// The engine for this platform under a release root, with the configuration the program read.
 pub fn native(root: &std::path::Path, config: hydo_config::Env) -> Box<dyn ControlledEngine> {
     match EngineKind::native() {

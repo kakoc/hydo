@@ -2416,6 +2416,8 @@ impl Core {
                     Ok(()) => b.vm().io(HVX_GET_PMU, &mut pm).is_err() || pm.period == 0,
                 };
                 if bad {
+                    // the period rule is refused before the run (Sched::refusal); what is left
+                    // here is a VM without the PMU clock
                     break 'setup Some("ERROR harness tick jitter (needs the PMU clock)");
                 }
                 tjinfo = format!(" tjk={}", pm.next / pm.period);
@@ -2578,11 +2580,12 @@ impl Core {
             {
                 let cs = self.ctl_find("S1");
                 let why = if cs.is_none() {
-                    Some("no snapshot S1 (the boot took none)")
+                    Some("no snapshot S1 (the boot took none)".to_string())
                 } else if !Self::agent_guest_ok(&sc) {
-                    Some("an agent image's schedule has the guest part \"run\" only")
+                    Some("an agent image's schedule has the guest part \"run\" only".to_string())
                 } else {
-                    None
+                    // what the module would refuse, before a VM is restored (M208)
+                    sc.refusal().map(|r| format!("refused: {r}"))
                 };
                 if let Some(why) = why {
                     self.no_run(&tag, &format!("ERROR {why}"));
@@ -3558,6 +3561,10 @@ pub fn run(
                 "hvx_explore: an agent image's schedule has the guest part \"run\" only"
             );
             return 2;
+        }
+        if let Some(r) = sc.refusal() {
+            core.no_run("one", &format!("ERROR refused: {r}"));
+            return 0;
         }
         core.ctl_one = true;
         let (r, mut b) = core.agent_boot(&sc, "one");

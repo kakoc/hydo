@@ -85,6 +85,9 @@ pub fn summary_rows(doc: &Exploration) -> Vec<(String, Value)> {
     if let Some(n) = s.vacuous_passes {
         put("vacuous_passes", json!(n));
     }
+    if let Some(n) = s.refused {
+        put("refused", json!(n));
+    }
     r
 }
 

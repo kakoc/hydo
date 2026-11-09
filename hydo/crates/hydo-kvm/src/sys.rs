@@ -801,6 +801,18 @@ impl Cpu for KvmCpu {
         self.get(KVM_GET_REGS, "KVM_GET_REGS")
     }
 
+    fn where_now(&self) -> hydo_hvm::machine::Where {
+        let r = self.regs();
+        let s = self.get::<kvm_sregs>(KVM_GET_SREGS, "KVM_GET_SREGS");
+        hydo_hvm::machine::Where {
+            pc: r.rip,
+            kernel: s.cs.selector & 3 == 0,
+            page_table: s.cr3,
+            thread_pointer: s.fs.base,
+            sp: r.rsp,
+        }
+    }
+
     fn cr3(&self) -> u64 {
         self.get::<kvm_sregs>(KVM_GET_SREGS, "KVM_GET_SREGS").cr3
     }

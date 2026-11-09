@@ -250,6 +250,8 @@ pub struct Opts {
     pub diag_chunks: Option<String>,
     pub check_restore: bool,
     pub no_mlock: bool,
+    /// HYDO_PREEMPT_RECORD: write `<tag>.preempt.jsonl`, a record per forced preemption point
+    pub preempt_record: bool,
 }
 
 /// Everything but the VM (so the run loop's stop hook can borrow it while the VM runs).
@@ -686,38 +688,10 @@ fn tj_wanted(t: &Tjit) -> bool {
     t.n_explicit != 0 || (t.permille != 0 && t.max_delay != 0)
 }
 
-/// The host tokens hvx alone applies (the PMU clock, vCPU turns, the k-th-flush cut; `rb=` outside
-/// a lock-step run): the first one's refusal, as the C engine words it.
+/// The host tokens hvx alone applies: the first one's refusal
+/// ([`crate::machine::host_token_problem`]).
 fn host_token_problem(s: &Schedule) -> Option<String> {
-    for t in &s.host {
-        let hvx_only = matches!(
-            t,
-            HostToken::Rb(_)
-                | HostToken::Pp(_)
-                | HostToken::Pptsc(_)
-                | HostToken::Xt(_)
-                | HostToken::Xtr(_)
-                | HostToken::Xtpm(_)
-                | HostToken::Xtlo(_)
-                | HostToken::Xthi(_)
-                | HostToken::Xtsc(_)
-                | HostToken::Xtx(_)
-                | HostToken::Cf(_)
-                | HostToken::Cfn
-                | HostToken::Q(_)
-                | HostToken::Qs(_)
-                | HostToken::Qb { .. }
-                | HostToken::Qbs(_)
-                | HostToken::Qm(_)
-        );
-        if hvx_only {
-            let w = t.to_string();
-            let w = &w[..w.len().min(60)];
-            let msg = format!("host token {w} needs hvx (the PMU clock, vCPU turns or a power cut at a disk FLUSH)");
-            return Some(lossy(&ccap(msg.into_bytes(), 200)));
-        }
-    }
-    None
+    crate::machine::host_token_problem(s)
 }
 
 /// The disk policy of the host part (serve.c parse_disk): (seed, classes, probability).
@@ -1134,6 +1108,7 @@ impl Engine {
             let x = self.vm.m.exits;
             self.vm.pct = Pct::set(pct_seed, pct_n, x, x.wrapping_add(pct_k));
         }
+        self.vm.pct_log = (pct_n != 0 && self.h.o.preempt_record).then(Vec::new);
         self.run_rest(rs);
     }
 
@@ -1168,6 +1143,9 @@ impl Engine {
             ));
             cap(&mut tjinfo);
             self.vm.pct = Pct::default();
+            if let Some(log) = self.vm.pct_log.take() {
+                crate::machine::write_preempt(&self.h.outdir, &tag, &log);
+            }
         }
         if self.vm.tj.on {
             tjinfo.push_str(&format!(
@@ -1519,6 +1497,7 @@ fn engine_main(
         diag_chunks: o.diag_chunks.clone(),
         check_restore: o.check_restore,
         no_mlock: o.no_mlock,
+        preempt_record: o.preempt_record,
     };
     let vm = Vmm::new(&vo, &kernel, &initrd, diag.clone(), echo, !o.no_mlock);
     drop(kernel);

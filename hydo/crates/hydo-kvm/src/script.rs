@@ -121,8 +121,12 @@ impl ScriptCpu {
     fn exec(&mut self) -> Exit {
         self.finish();
         if let Some(v) = self.pending.take() {
-            // the injected interrupt is taken before the next instruction
+            // the injected interrupt is taken before the next instruction; one taken between
+            // two bytes of a Print keeps that Print's place in r13 (a forced preemption point
+            // can make the timer due there)
             self.s.regs.r15 = self.s.regs.rip;
+            self.s.regs.r13 = self.print_at as u64;
+            self.print_at = 0;
             self.set_if(false);
             match self.p.handlers.get(&v) {
                 Some(h) => self.set_pc(*h),
@@ -208,6 +212,8 @@ impl ScriptCpu {
                 }
                 Op::Iret => {
                     self.s.regs.rip = self.s.regs.r15;
+                    self.print_at = self.s.regs.r13 as usize;
+                    self.s.regs.r13 = 0;
                     self.set_if(true);
                 }
                 Op::Jmp(t) => self.set_pc(t),

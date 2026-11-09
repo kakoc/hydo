@@ -544,7 +544,17 @@ impl Ex {
                     let b = t.pick(&self.pct_points);
                     s.pct = Some((a, b, t.pick(&self.pct_exits)));
                 } else if t.below(2) != 0 {
-                    s.pp = Some(t.pick(&self.pp_values));
+                    let pp = t.pick(&self.pp_values);
+                    s.pp = Some(pp);
+                    // hvx refuses a tick-jitter delay of a tick period or more, and `pp=`
+                    // shortens the period: with --timing, keep the drawn jitter below half the
+                    // new period (TJ_MAX is about half the default period). Until M208 the pair
+                    // was drawn as it came and every such run was refused.
+                    if let Some(Tj::Seed { max, .. }) = &mut s.tj {
+                        if *max >= pp {
+                            *max = (pp / 2).max(1);
+                        }
+                    }
                 } else {
                     let a = t.next();
                     s.xt = Some((a, t.pick(&self.xt_rates), 500));

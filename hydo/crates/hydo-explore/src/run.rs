@@ -1695,6 +1695,7 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     let mut reps: Vec<(String, String)> = Vec::new();
     let mut t_sweep = 0.0;
     let mut rep: HashMap<String, Res> = HashMap::new();
+    let mut nrefused: u64 = 0;
     let (shrunk, errors, res_all) = std::thread::scope(|sc| {
         let pool = &pool;
         let mut chains = Vec::new();
@@ -1730,9 +1731,15 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                 run.seed = Some(sd);
                 run.class = Some(py_str(&rec["class"]));
                 run.point = labels.as_ref().and_then(|l| l.get(next).cloned());
-                cx.ev.write(&run);
                 let v = py_str(&rec["verdict"]);
-                if verdict_kind(&v) != "ok" {
+                // a schedule the engine refused tested nothing: not a failure (M208)
+                let refused = hydo_engine::is_refused(&v);
+                if refused {
+                    run.class = Some("refused".into());
+                    nrefused += 1;
+                }
+                cx.ev.write(&run);
+                if verdict_kind(&v) != "ok" && !refused {
                     let ritems: Vec<(String, String)> = (0..nrep)
                         .map(|k| {
                             let tag = if k == 0 {
@@ -1905,6 +1912,13 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
         cache_hits: (cache_hits > 0).then_some(cache_hits as u64),
         ..Summary::default()
     };
+    if nrefused > 0 {
+        summary.refused = Some(nrefused);
+        eprintln!(
+            "hydo: warning: the engine refused {nrefused} schedules before running them \
+             (their run records in events.jsonl have the class refused); they are not failures"
+        );
+    }
     // first runs that passed but may have checked nothing (results::vacuous)
     let vacuous = seeds
         .iter()

@@ -131,6 +131,12 @@ variables! {
     /// The engine program started when the engine does not run in this process (the name is
     /// the C engine's, deleted in M137).
     HYDO_HVX_EXPLORE: Engine, User, "path", "<root>/target/release/hydo-hvx, else <root>/bin/hydo-hvx", "hydo-engine";
+    /// Set and not `0`: a run with forced preemption points (`pct=`) writes
+    /// `<tag>.preempt.jsonl` into its directory, one record per point (its exit count, what it
+    /// did, and the guest's instruction pointer, mode, page tables, thread pointer and stack
+    /// pointer there); `hydo inspect events` and `hydo diff` read it (Milestone 208; the KVM and
+    /// Mac engines). Only registers are read: no fingerprint moves.
+    HYDO_PREEMPT_RECORD: Engine, User, "flag: set and not `0`", "off", "hydo-kvm, hydo-hvm";
 
     // ------------------------------------------------------------------ HvxEngine
     /// `0` turns the host-call port off (M138; on by default since M140).

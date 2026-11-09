@@ -7,7 +7,7 @@
 use crate::fnv::{fnv, fnv_u64, OFFSET};
 use crate::hv::{self, sr, Vcpu, HV_REG_CPSR, HV_REG_FPCR, HV_REG_FPSR, HV_REG_PC, HV_REG_X0};
 use crate::layout::*;
-use crate::machine::{bit, setb, Mach, Pct, Tjit};
+use crate::machine::{bit, setb, Mach, Pct, PctLog, Tjit, Where};
 use crate::mem::Mem;
 use crate::spin::Spin;
 use crate::virtio::{Ram, Virtio};
@@ -217,6 +217,9 @@ pub struct Vmm {
     trace_sysreg: bool,
     pub tj: Tjit,
     pub pct: Pct,
+    /// `HYDO_PREEMPT_RECORD`: the records of the run's forced preemption points (None: off;
+    /// in no snapshot and no fingerprint)
+    pub pct_log: PctLog,
     rxq: Box<[u8; RXQ]>,
     pub rx_head: u32,
     pub rx_tail: u32,
@@ -302,6 +305,7 @@ impl Vmm {
             trace_sysreg: o.trace_sysreg,
             tj: Tjit::default(),
             pct: Pct::default(),
+            pct_log: None,
             rxq: Box::new([0u8; RXQ]),
             rx_head: 0,
             rx_tail: 0,
@@ -475,23 +479,30 @@ impl Vmm {
     }
     /// called once per exit, after the exit is counted
     fn pct_at_exit(&mut self) {
-        if !self.pct.on {
+        if !self.pct.due(self.m.exits) {
             return;
         }
-        while self.pct.next < self.pct.n && self.pct.pt[self.pct.next as usize] <= self.m.exits {
-            if self.pct.pt[self.pct.next as usize] == self.m.exits {
-                let armed = (self.m.cntp_ctl & 3) == 1;
-                let due = self.timer_due();
-                if armed && due > self.m.vtime {
-                    self.m.vtime = due;
-                    self.pct.fired += 1;
-                } else if !armed {
-                    self.pct.missed += 1;
-                } else {
-                    self.pct.fired += 1;
-                }
-            }
-            self.pct.next += 1;
+        let timer = ((self.m.cntp_ctl & 3) == 1, self.timer_due());
+        let at = if self.pct_log.is_some() {
+            self.where_now()
+        } else {
+            Where::default()
+        };
+        let mut vtime = self.m.vtime;
+        self.pct
+            .at_exit(self.m.exits, timer, &mut vtime, &mut self.pct_log, at);
+        self.m.vtime = vtime;
+    }
+    /// Where the guest is and which of its threads runs, from the registers only (the
+    /// preemption record): PC, EL1 or EL0, TTBR0_EL1, TPIDR_EL0, SP_EL0 (at EL1 Linux keeps the
+    /// current task there).
+    pub fn where_now(&self) -> Where {
+        Where {
+            pc: self.rd(HV_REG_PC),
+            kernel: (self.rd(HV_REG_CPSR) >> 2) & 3 != 0,
+            page_table: self.v().sys(sr::TTBR0_EL1, 0),
+            thread_pointer: self.v().sys(sr::TPIDR_EL0, 0),
+            sp: self.v().sys(sr::SP_EL0, 0),
         }
     }
     fn timer_level(&mut self) -> bool {

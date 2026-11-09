@@ -272,6 +272,18 @@ pub trait Cpu: Send {
     fn regs(&self) -> kvm_regs;
     /// CR3 (the guest's page tables).
     fn cr3(&self) -> u64;
+    /// Where the guest is and which of its threads runs, from the registers only (the
+    /// preemption record, Milestone 208): RIP, CPL 0 or not, CR3, the FS base, RSP.
+    fn where_now(&self) -> hydo_hvm::machine::Where {
+        let r = self.regs();
+        hydo_hvm::machine::Where {
+            pc: r.rip,
+            kernel: false,
+            page_table: self.cr3(),
+            thread_pointer: 0,
+            sp: r.rsp,
+        }
+    }
     /// Arm the spin observer's step (Some): the next run stops at the first of the step's
     /// addresses the guest reaches and returns [`Exit::Debug`] (or the exit the guest makes
     /// first); an instruction that faults has its exception delivered as in free running. None

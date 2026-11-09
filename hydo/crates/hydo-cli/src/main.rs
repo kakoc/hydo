@@ -26,6 +26,7 @@ mod hvxenv;
 mod inspect;
 mod migrate;
 mod module;
+mod preempt;
 mod pyjson;
 mod runs;
 mod setup;

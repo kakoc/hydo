@@ -635,7 +635,21 @@ fn worker_main(
         for attempt in 0..2 {
             let Some(wk) = w.as_mut() else { break };
             let r = match Schedule::parse(&job.text) {
-                Ok(s) => wk.run(&job.tag, &s),
+                // a schedule the engine refuses (a combination its module refuses, a host token
+                // it cannot apply): no run, and a verdict that is never a finding (M208)
+                Ok(s) => match hydo_engine::refusal(engine.kind(), &s) {
+                    Some(why) => {
+                        res = Some(parse_result(
+                            &format!(
+                                "RESULT {} fp=0 wfp=0 secs=0 verdict=ERROR refused: {why}",
+                                job.tag
+                            ),
+                            i,
+                        ));
+                        break;
+                    }
+                    None => wk.run(&job.tag, &s),
+                },
                 Err(e) => {
                     // a schedule the engines would refuse: no run (explore.py sent it and
                     // got the engine's own error verdict)

@@ -373,6 +373,11 @@ fn run_engine_try(
     let _ = std::fs::create_dir_all(outdir);
     let s = Schedule::parse(sched).map_err(|e| format!("bad schedule {sched:?}: {e}"))?;
     let (eng, spec) = controlled_engine(ctx, image, outdir, eargs, quiet);
+    // a host part this engine refuses (a combination its module refuses, a token it cannot
+    // apply) is refused here, before any VM (M208)
+    if let Some(why) = hydo_engine::refusal(eng.kind(), &s) {
+        return Err(format!("the engine refuses the schedule: {why}"));
+    }
     let a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));
     if !quiet {
         println!("hydo: an agent image: the host controller drives the run (/etc/hydo/control)");

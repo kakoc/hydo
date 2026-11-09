@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-53 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+54 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 34 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -13,6 +13,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HVX_DEV` | user | path | /dev/hvx | hydo-engine, hydo-hvx, hydo-cli, libexec/hvx-run | The hvx device (another name: a side module). An empty value means the default. |
 | `HYDO_LOCK` | user | path | ~/.hvx-module.lock | hydo-engine, hydo-cli, libexec/hvx-run | The module lock file every run holds shared (a reload holds it exclusively). An empty value means the default (in `$SUDO_USER`'s home under sudo). |
 | `HYDO_HVX_EXPLORE` | user | path | <root>/target/release/hydo-hvx, else <root>/bin/hydo-hvx | hydo-engine | The engine program started when the engine does not run in this process (the name is the C engine's, deleted in M137). |
+| `HYDO_PREEMPT_RECORD` | user | flag: set and not `0` | off | hydo-kvm, hydo-hvm | Set and not `0`: a run with forced preemption points (`pct=`) writes `<tag>.preempt.jsonl` into its directory, one record per point (its exit count, what it did, and the guest's instruction pointer, mode, page tables, thread pointer and stack pointer there); `hydo inspect events` and `hydo diff` read it (Milestone 208; the KVM and Mac engines). Only registers are read: no fingerprint moves. |
 
 ## The hvx engine (`hydo_config::hvx::Options`)
 

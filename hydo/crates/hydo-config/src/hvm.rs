@@ -115,6 +115,8 @@ pub struct Options {
     pub check_restore: bool,
     /// `HVMX_NO_MLOCK`, set: do not lock guest RAM.
     pub no_mlock: bool,
+    /// `HYDO_PREEMPT_RECORD`, set and not `0`: a record per forced preemption point.
+    pub preempt_record: bool,
 }
 
 impl Options {
@@ -157,6 +159,7 @@ impl Options {
             diag_chunks: t(HVMX_DIAG_CHUNKS),
             check_restore: e.is_set(HVMX_CHECK_RESTORE),
             no_mlock: e.is_set(HVMX_NO_MLOCK),
+            preempt_record: e.set_not_0(HYDO_PREEMPT_RECORD),
         }
     }
 }

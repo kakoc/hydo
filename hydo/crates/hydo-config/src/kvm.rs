@@ -107,6 +107,8 @@ pub struct Options {
     pub spin_state: Option<bool>,
     /// `HYDO_KVM_NO_FP`, set: no fingerprints (they read as 0), to measure what they cost.
     pub no_fp: bool,
+    /// `HYDO_PREEMPT_RECORD`, set and not `0`: a record per forced preemption point.
+    pub preempt_record: bool,
 }
 
 impl Options {
@@ -125,6 +127,7 @@ impl Options {
             trace_unknown: e.is_set(HYDO_KVM_TRACE_UNKNOWN),
             spin_state: e.text(HYDO_KVM_SPIN_STATE).map(|v| v != "0"),
             no_fp: e.is_set(HYDO_KVM_NO_FP),
+            preempt_record: e.set_not_0(HYDO_PREEMPT_RECORD),
         }
     }
 }

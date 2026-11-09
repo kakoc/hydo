@@ -193,6 +193,66 @@ impl Sched {
         }
         sc
     }
+
+    /// What the module would refuse when this schedule is armed, said before any VM runs it
+    /// (None: nothing). The rules are hvx.c's: `HVX_SET_PMU` refuses a tick period of at most
+    /// [`PMU_PERIOD_MIN`] branches; `HVX_SET_TJITTER` refuses a delay of a tick period or more
+    /// (the period is `pp=`'s when the schedule has one, else the module's [`PMU_PERIOD`]), so
+    /// `tjmax=500000` with `pp=65536` is refused; `HVX_SET_XTICK` refuses more than
+    /// [`HVX_XT_MAX_RATE`] extra ticks per period. Until Milestone 208 such a schedule met the
+    /// refusal after the restore and ended `ERROR harness tick jitter (needs the PMU clock)`,
+    /// which the explorer counted as a failure. What depends on the machine (whether the PMU
+    /// clock is on) is still found when the engine arms the schedule.
+    pub fn refusal(&self) -> Option<String> {
+        if self.pp != 0 && self.pp <= PMU_PERIOD_MIN {
+            return Some(format!(
+                "pp={}: hvx needs a tick period above {PMU_PERIOD_MIN} branches",
+                self.pp
+            ));
+        }
+        let (period, from) = if self.pp != 0 {
+            (self.pp, format!("pp={}", self.pp))
+        } else {
+            (PMU_PERIOD, "the default".to_string())
+        };
+        if self.tj_on {
+            if self.tj.n_explicit == 0 && self.tj.max_delay >= period {
+                return Some(format!(
+                    "tick jitter tjmax={} with a tick period of {period} branches ({from}): hvx \
+                     refuses a delay of a tick period or more; use a tjmax below {period}",
+                    self.tj.max_delay
+                ));
+            }
+            let n = (self.tj.n_explicit as usize).min(HVX_TJ_MAX_EXPLICIT);
+            if let Some(e) = self.tj.explicit_[..n].iter().find(|e| e.delay >= period) {
+                return Some(format!(
+                    "tick jitter tjx={}:{} with a tick period of {period} branches ({from}): hvx \
+                     refuses a delay of a tick period or more",
+                    e.tick, e.delay
+                ));
+            }
+        }
+        if self.xt_on && self.xt.n_explicit == 0 && self.xt.rate > HVX_XT_MAX_RATE {
+            return Some(format!(
+                "xtr={}: hvx takes at most {HVX_XT_MAX_RATE} extra ticks per tick period",
+                self.xt.rate
+            ));
+        }
+        None
+    }
+}
+
+/// The module's tick period of the PMU clock when the schedule sets none (hvx.c
+/// `HVX_PMU_PERIOD`), in guest branches.
+pub const PMU_PERIOD: u64 = 1 << 20;
+/// `HVX_SET_PMU` refuses a period of at most this many branches (hvx.c `2 * HVX_PMU_MARGIN`).
+pub const PMU_PERIOD_MIN: u64 = 2 * 256;
+/// `HVX_SET_XTICK`'s largest seeded rate (hvx_abi.h `HVX_XT_MAX_RATE`).
+pub const HVX_XT_MAX_RATE: u32 = 64;
+
+/// [`Sched::refusal`] of a typed schedule: what hvx refuses in it, before any VM.
+pub fn refusal(s: &Schedule) -> Option<String> {
+    Sched::from_schedule(s).refusal()
 }
 
 #[cfg(test)]
@@ -233,5 +293,27 @@ mod tests {
         ] {
             assert!(Schedule::parse(bad).is_err(), "{bad}");
         }
+    }
+
+    fn refused(s: &str) -> Option<String> {
+        refusal(&Schedule::parse(s).unwrap())
+    }
+
+    #[test]
+    fn refusals_follow_the_module() {
+        // the Qdrant exploration's combination (M208): tjmax=500000 is above pp=65536
+        let r = refused("disk=none tj=5 tjpm=10 tjmax=500000 pp=65536 | run").expect("refused");
+        assert!(r.contains("tjmax=500000") && r.contains("pp=65536"), "{r}");
+        assert!(refused("disk=none tj=5 tjpm=10 tjmax=32768 pp=65536 | run").is_none());
+        assert!(refused("disk=none tj=5 tjpm=10 tjmax=500000 | run").is_none());
+        assert!(refused("disk=none tj=5 tjmax=1048576 | run").is_some());
+        // jitter off (permille 0) arms nothing
+        assert!(refused("disk=none tj=5 tjpm=0 tjmax=500000 pp=65536 | run").is_none());
+        assert!(refused("disk=none tjx=5:70000 pp=65536 | run").is_some());
+        assert!(refused("disk=none tjx=5:7000 pp=65536 | run").is_none());
+        assert!(refused("disk=none pp=512 | run").is_some());
+        assert!(refused("disk=none pp=513 | run").is_none());
+        assert!(refused("disk=none xt=3 xtr=65 | run").is_some());
+        assert!(refused("disk=none xt=3 xtr=64 pp=16384 tj=1 tjmax=8192 | run").is_none());
     }
 }

@@ -2036,6 +2036,15 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "refused": {
+          "description": "First runs the engine refused before running them (a combination of host tokens it\ncannot arm, a host token it cannot apply): their run records have the class `refused`,\nand they are not failures (added in Milestone 208).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [
@@ -2855,6 +2864,17 @@
           "format": "uint64",
           "minimum": 0,
           "default": 0
+        },
+        "first_preempt": {
+          "description": "The first forced preemption point where the runs' records differ (level `preempt`: a\npoint only one run has, or one both have at the same exit with other guest state), when\neither run recorded its points (`HYDO_PREEMPT_RECORD`; added in Milestone 208). `a` and\n`b` are the stops that follow the point, `details` say how many points both share\nbefore it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Divergence"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -3156,6 +3176,17 @@
             "string",
             "null"
           ]
+        },
+        "preempt": {
+          "description": "The run's forced preemption points, when it recorded them (`HYDO_PREEMPT_RECORD`;\nadded in Milestone 208). Each point is also an event of the kind `preempt`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreemptSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -3245,7 +3276,7 @@
           "minimum": 0
         },
         "kind": {
-          "description": "An open set: `command` (the host typed an agent command), `exit` (a process the host\nstarted ended), `probe` (a readiness check ended), `done` (a command ended), `fault` (a\nfault applied or healed), `note` (the host controller's note), `report` (a line of the\nrun's report), `assertion`, `guest` (a line the guest printed), `snapshot`, `engine`,\n`end` (the end of a conversation), `verdict`.",
+          "description": "An open set: `command` (the host typed an agent command), `exit` (a process the host\nstarted ended), `probe` (a readiness check ended), `done` (a command ended), `fault` (a\nfault applied or healed), `note` (the host controller's note), `report` (a line of the\nrun's report), `assertion`, `guest` (a line the guest printed), `snapshot`, `engine`,\n`end` (the end of a conversation), `verdict`, `preempt` (a forced preemption point,\nplaced at the stop that follows it, `at` its exit count; added in Milestone 208).",
           "type": "string"
         },
         "text": {
@@ -3265,6 +3296,61 @@
         "conversation",
         "kind",
         "text"
+      ]
+    },
+    "PreemptSummary": {
+      "description": "What a run's forced preemption points did (`<tag>.preempt.jsonl`, written by the KVM and Mac\nengines with `HYDO_PREEMPT_RECORD=1`; added in Milestone 208).",
+      "type": "object",
+      "properties": {
+        "file": {
+          "description": "The records file, relative to the run directory.",
+          "type": "string"
+        },
+        "points": {
+          "description": "Points recorded.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "moved": {
+          "description": "Points that moved the guest's clock to its timer's deadline (the running thread is\npreempted at once).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "due": {
+          "description": "Points that found the timer already due.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "missed": {
+          "description": "Points that found no timer armed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "passed": {
+          "description": "Points whose exit had passed when the points were set.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "threads": {
+          "description": "Distinct user thread pointers at the points that moved the clock: how many threads\nwere preempted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "file",
+        "points",
+        "moved",
+        "due",
+        "missed",
+        "passed",
+        "threads"
       ]
     },
     "Inspect": {

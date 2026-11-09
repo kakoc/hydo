@@ -77,6 +77,7 @@ hydo-explore::messages_results           fast
 hydo-explore::names                      fast
 hydo-explore::netns_links                fast
 hydo-explore::reactive                   fast
+hydo-explore::refusals                   fast
 hydo-explore::storage_faults             fast
 hydo-grpc                                fast
 hydo-grpc-gen                            fast

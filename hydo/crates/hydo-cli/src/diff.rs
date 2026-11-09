@@ -78,8 +78,12 @@ pub struct Loaded {
     pub dir: PathBuf,
     pub run: Run,
     pub events: Vec<Ev>,
-    /// The sources found (`control`, `console`, `result`).
+    /// The sources found (`control`, `console`, `result`, `preempt`).
     pub levels: Vec<String>,
+    /// The run's forced preemption points, when it recorded them (`crate::preempt`).
+    pub preempt: Option<Vec<Value>>,
+    /// The run conversation's transcript (where a preemption point sits among the stops).
+    pub run_transcript: Option<hydo_control::Transcript>,
 }
 
 // ---------------------------------------------------------------- reading a run
@@ -532,11 +536,21 @@ pub fn load(dir: &Path) -> Result<Loaded, String> {
     }
     events.extend(result_events(&run));
     levels.push("result".into());
+    let preempt = crate::preempt::read(dir);
+    if preempt.is_some() {
+        levels.push("preempt".into());
+    }
+    let run_transcript = files
+        .get(&1)
+        .and_then(|f| read_text(f).ok())
+        .and_then(|t| hydo_control::Transcript::parse(&t).ok());
     Ok(Loaded {
         dir: dir.to_path_buf(),
         run,
         events,
         levels,
+        preempt,
+        run_transcript,
     })
 }
 
@@ -1082,7 +1096,109 @@ pub fn diff(a: &Loaded, b: &Loaded) -> Diff {
         one_sided,
         counts,
         hunks: hs.len() as u64,
+        first_preempt: preempt_divergence(a, b),
         ..Diff::default()
+    }
+}
+
+/// The first forced preemption point where the runs' records differ (`crate::preempt`), as a
+/// divergence of the level `preempt` in the run conversation: None when neither run recorded
+/// its points or both recorded the same.
+fn preempt_divergence(a: &Loaded, b: &Loaded) -> Option<Divergence> {
+    if a.preempt.is_none() && b.preempt.is_none() {
+        return None;
+    }
+    let none = Vec::new();
+    let pa = a.preempt.as_ref().unwrap_or(&none);
+    let pb = b.preempt.as_ref().unwrap_or(&none);
+    let (x, y) = crate::preempt::first_difference(pa, pb)?;
+    let at = |l: &Loaded, v: Option<&Value>| -> Option<DiffPoint> {
+        let (stop, clock) =
+            crate::preempt::stop_for(l.run_transcript.as_ref(), crate::preempt::exit(v?))?;
+        Some(DiffPoint {
+            conversation: "run".into(),
+            stop: Some(stop),
+            at: Some(clock),
+        })
+    };
+    let line = |v: &Value, pa: Option<DiffPoint>, pb: Option<DiffPoint>| DiffLine {
+        level: "preempt".into(),
+        text: crate::preempt::text(v),
+        a: pa,
+        b: pb,
+        after: None,
+    };
+    // the side without the point: where that exit is in its own run
+    let (da, db) = (at(a, x.or(y)), at(b, y.or(x)));
+    let mut lines = Vec::new();
+    if let Some(v) = x {
+        lines.push(line(v, da.clone(), None));
+    }
+    if let Some(v) = y {
+        lines.push(line(v, None, db.clone()));
+    }
+    let shared = crate::preempt::shared_before(pa, pb);
+    let mut details = vec![format!(
+        "the runs' records share their first {shared} points (the same exits, results, \
+         instructions and threads)"
+    )];
+    match (x, y, a.preempt.is_some(), b.preempt.is_some()) {
+        (_, _, true, false) => details.push("B recorded no points".into()),
+        (_, _, false, true) => details.push("A recorded no points".into()),
+        (Some(v), None, ..) => {
+            details.push(format!(
+                "A has a point at exit {} that B does not have",
+                crate::preempt::exit(v)
+            ));
+            next_point(&mut details, "B", pb, v);
+        }
+        (None, Some(v), ..) => {
+            details.push(format!(
+                "B has a point at exit {} that A does not have",
+                crate::preempt::exit(v)
+            ));
+            next_point(&mut details, "A", pa, v);
+        }
+        (Some(v), Some(_), ..) => details.push(format!(
+            "both have a point at exit {} with other guest state there",
+            crate::preempt::exit(v)
+        )),
+        (None, None, ..) => {}
+    }
+    Some(Divergence {
+        conversation: "run".into(),
+        level: "preempt".into(),
+        a: da,
+        b: db,
+        context: Vec::new(),
+        lines,
+        details,
+    })
+}
+
+/// The other run's next point after a point only one run has (`A's next point: point 38 at exit
+/// 13,882 moved the clock ...`): what that run did instead.
+fn next_point(details: &mut Vec<String>, side: &str, recs: &[Value], v: &Value) {
+    let e = crate::preempt::exit(v);
+    if let Some(n) = recs.iter().find(|r| crate::preempt::exit(r) >= e) {
+        details.push(format!("{side}'s next point: {}", crate::preempt::text(n)));
+    }
+}
+
+/// The forced preemption points' section of `diff.txt`.
+fn render_preempt(s: &mut String, d: &Diff) {
+    if !d.levels.iter().any(|l| l == "preempt") {
+        return;
+    }
+    match &d.first_preempt {
+        None => s.push_str(
+            "\nForced preemption points: both runs fired the same points at the same exits, \
+             instructions and threads.\n",
+        ),
+        Some(p) => {
+            s.push_str("\nThe first forced preemption point where the runs' records differ:\n");
+            render_divergence(s, p);
+        }
     }
 }
 
@@ -1236,6 +1352,7 @@ pub fn render(d: &Diff) -> String {
                 d.a.fingerprints.fp, d.b.fingerprints.fp
             ));
         }
+        render_preempt(&mut s, d);
         return s;
     }
     if let Some(f) = &d.first {
@@ -1275,6 +1392,7 @@ pub fn render(d: &Diff) -> String {
         }
         (None, _) => s.push_str("\nThe runs do not differ in what the checks judge.\n"),
     }
+    render_preempt(&mut s, d);
     if !d.one_sided.is_empty() {
         s.push_str("\nRecords of a kind only one run writes (code only one image has, or a fault only one schedule has), first occurrence:\n");
         let (la, lb): (Vec<&DiffLine>, Vec<&DiffLine>) =
@@ -1459,7 +1577,82 @@ mod tests {
             },
             events,
             levels: vec!["control".into(), "console".into(), "result".into()],
+            preempt: None,
+            run_transcript: None,
         }
+    }
+
+    fn point(i: u64, exit: u64, tp: &str) -> Value {
+        serde_json::json!({"v":1,"type":"preempt","i":i,"exit":exit,"result":"moved",
+            "vtime_ns":1,"to_ns":2,"pc":"0x401000","mode":"user","page_table":"0x1000",
+            "thread_pointer":tp,"sp":"0x7ffc"})
+    }
+
+    #[test]
+    fn the_first_preemption_point_where_the_records_differ() {
+        let transcript = |stops: &[(u64, u64)]| {
+            Some(hydo_control::Transcript {
+                header: hydo_control::Header {
+                    controller: "test".into(),
+                    conversation: "run".into(),
+                    schedule: None,
+                    cadence: "16".into(),
+                    start: "S1".into(),
+                },
+                records: stops
+                    .iter()
+                    .map(|&(n, at)| hydo_control::Record::Stop {
+                        n,
+                        at,
+                        why: hydo_control::Why::Cadence,
+                        seen: 0,
+                    })
+                    .collect(),
+            })
+        };
+        let mut a = loaded("a", vec![], "OK: passed");
+        let mut b = loaded("b", vec![], "VIOLATION: failed");
+        a.preempt = Some(vec![point(0, 100, "0x7f01"), point(1, 900, "0x7f02")]);
+        // pctn one more: a point at exit 500, on another thread
+        b.preempt = Some(vec![
+            point(0, 100, "0x7f01"),
+            point(1, 500, "0x7f03"),
+            point(2, 900, "0x7f02"),
+        ]);
+        b.run_transcript = transcript(&[(1, 10), (2, 400), (3, 600), (4, 1000)]);
+        a.levels.push("preempt".into());
+        b.levels.push("preempt".into());
+        let d = diff(&a, &b);
+        let p = d.first_preempt.as_ref().expect("a preemption difference");
+        assert_eq!(p.level, "preempt");
+        assert!(p.a.is_none());
+        assert_eq!(p.b.as_ref().and_then(|x| x.stop), Some(3));
+        assert_eq!(p.lines.len(), 1);
+        assert!(p.lines[0].text.contains("exit 500"), "{}", p.lines[0].text);
+        assert!(p.lines[0].text.contains("0x7f03"), "{}", p.lines[0].text);
+        assert!(
+            p.details.iter().any(|x| x.contains("first 1 points")),
+            "{:?}",
+            p.details
+        );
+        assert!(p
+            .details
+            .iter()
+            .any(|x| x.contains("B has a point at exit 500")));
+        assert!(
+            p.details
+                .iter()
+                .any(|x| x.starts_with("A's next point: point 1 at exit 900")),
+            "{:?}",
+            p.details
+        );
+        let txt = render(&d);
+        assert!(txt.contains("The first forced preemption point where the runs' records differ"));
+        // the same records: no difference, and the view says so
+        b.preempt = a.preempt.clone();
+        let d = diff(&a, &b);
+        assert!(d.first_preempt.is_none());
+        assert!(render(&d).contains("both runs fired the same points"));
     }
 
     #[test]

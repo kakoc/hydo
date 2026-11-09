@@ -442,7 +442,7 @@ pub fn events(rec: &Recorded) -> Vec<TimelineEvent> {
                 .filter(|_| kind == "command" || kind == "end");
             let service = service_of(&e.text, e.json.as_ref().unwrap_or(&Value::Null));
             keyed.push((
-                (ci, e.stop.unwrap_or(0), 1, i),
+                (ci, e.stop.unwrap_or(0), 2, i),
                 TimelineEvent {
                     point: e.stop.map(|s| format!("{}:{s}", c.name())),
                     conversation: c.name().into(),
@@ -460,7 +460,7 @@ pub fn events(rec: &Recorded) -> Vec<TimelineEvent> {
         let ci = Conv::ALL.iter().position(|c| *c == a.conv).unwrap_or(0);
         let service = service_of("", &a.json);
         keyed.push((
-            (ci, a.stop.unwrap_or(0), 0, i),
+            (ci, a.stop.unwrap_or(0), 1, i),
             TimelineEvent {
                 point: a.stop.map(|s| format!("{}:{s}", a.conv.name())),
                 conversation: a.conv.name().into(),
@@ -470,6 +470,30 @@ pub fn events(rec: &Recorded) -> Vec<TimelineEvent> {
                 text: a.text,
                 service,
                 details: (!a.json.is_null()).then_some(a.json),
+            },
+        ));
+    }
+    // the forced preemption points (HYDO_PREEMPT_RECORD, M208), each before the stop that
+    // follows it; `at` is the point's own exit count
+    let ci = Conv::ALL.iter().position(|c| *c == Conv::Run).unwrap_or(0);
+    for (i, p) in crate::preempt::read(&rec.dir)
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+    {
+        let stop = crate::preempt::stop_for(rec.transcript(Conv::Run), crate::preempt::exit(&p))
+            .map(|(n, _)| n);
+        keyed.push((
+            (ci, stop.unwrap_or(0), 0, i),
+            TimelineEvent {
+                point: stop.map(|s| format!("{}:{s}", Conv::Run.name())),
+                conversation: Conv::Run.name().into(),
+                stop,
+                at: Some(crate::preempt::exit(&p)),
+                kind: "preempt".into(),
+                text: crate::preempt::text(&p),
+                service: None,
+                details: Some(p),
             },
         ));
     }
@@ -621,6 +645,7 @@ pub fn cmd(rest: &[String]) -> Result<Value, Problem> {
         events: shown,
         truncated,
         next,
+        preempt: crate::preempt::summary(&rec.dir),
         ..Timeline::default()
     };
     Ok(serde_json::to_value(&doc).unwrap_or(json!(null)))

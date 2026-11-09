@@ -792,7 +792,8 @@ pub struct TimelineEvent {
     /// started ended), `probe` (a readiness check ended), `done` (a command ended), `fault` (a
     /// fault applied or healed), `note` (the host controller's note), `report` (a line of the
     /// run's report), `assertion`, `guest` (a line the guest printed), `snapshot`, `engine`,
-    /// `end` (the end of a conversation), `verdict`.
+    /// `end` (the end of a conversation), `verdict`, `preempt` (a forced preemption point,
+    /// placed at the stop that follows it, `at` its exit count; added in Milestone 208).
     pub kind: String,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -840,6 +841,32 @@ pub struct Timeline {
     /// The command that shows the next page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next: Option<String>,
+    /// The run's forced preemption points, when it recorded them (`HYDO_PREEMPT_RECORD`;
+    /// added in Milestone 208). Each point is also an event of the kind `preempt`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preempt: Option<PreemptSummary>,
+}
+
+/// What a run's forced preemption points did (`<tag>.preempt.jsonl`, written by the KVM and Mac
+/// engines with `HYDO_PREEMPT_RECORD=1`; added in Milestone 208).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PreemptSummary {
+    /// The records file, relative to the run directory.
+    pub file: String,
+    /// Points recorded.
+    pub points: u64,
+    /// Points that moved the guest's clock to its timer's deadline (the running thread is
+    /// preempted at once).
+    pub moved: u64,
+    /// Points that found the timer already due.
+    pub due: u64,
+    /// Points that found no timer armed.
+    pub missed: u64,
+    /// Points whose exit had passed when the points were set.
+    pub passed: u64,
+    /// Distinct user thread pointers at the points that moved the clock: how many threads
+    /// were preempted.
+    pub threads: u64,
 }
 
 /// Text read from the guest by `hydo inspect` (added in M178).
@@ -1355,6 +1382,11 @@ pub struct Summary {
     /// records' `warnings`; added after 0.1.0).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vacuous_passes: Option<u64>,
+    /// First runs the engine refused before running them (a combination of host tokens it
+    /// cannot arm, a host token it cannot apply): their run records have the class `refused`,
+    /// and they are not failures (added in Milestone 208).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<u64>,
 }
 
 /// Where an exploration's files are, relative to its directory.
@@ -1615,6 +1647,13 @@ pub struct Diff {
     /// The number of separate places where the runs differ.
     #[serde(default)]
     pub hunks: u64,
+    /// The first forced preemption point where the runs' records differ (level `preempt`: a
+    /// point only one run has, or one both have at the same exit with other guest state), when
+    /// either run recorded its points (`HYDO_PREEMPT_RECORD`; added in Milestone 208). `a` and
+    /// `b` are the stops that follow the point, `details` say how many points both share
+    /// before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_preempt: Option<Divergence>,
 }
 
 tag!(CiRunType, "ci-run");

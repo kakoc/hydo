@@ -73,7 +73,7 @@ use crate::msr;
 use crate::pic::Pic;
 use crate::uart;
 use crate::{fatal, Diag};
-use hydo_hvm::machine::Pct;
+use hydo_hvm::machine::{Pct, PctLog, Where};
 use hydo_hvm::virtio::{self, Ram, VStats, Virtio};
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -125,6 +125,9 @@ pub struct Vmm {
     trace_unknown: bool,
     pub tj: Tjit,
     pub pct: Pct,
+    /// `HYDO_PREEMPT_RECORD`: the records of the run's forced preemption points (None: off;
+    /// in no snapshot and no fingerprint)
+    pub pct_log: PctLog,
     pub rx: uart::Rx,
     pub vio: Virtio,
     pub max_exits: u64,
@@ -297,6 +300,7 @@ impl Vmm {
             trace_unknown: o.trace_unknown,
             tj: Tjit::default(),
             pct: Pct::default(),
+            pct_log: None,
             rx: uart::Rx::default(),
             vio,
             max_exits: 200_000_000,
@@ -391,24 +395,19 @@ impl Vmm {
         )
     }
     fn pct_at_exit(&mut self) {
-        if !self.pct.on {
+        if !self.pct.due(self.m.exits) {
             return;
         }
-        while self.pct.next < self.pct.n && self.pct.pt[self.pct.next as usize] <= self.m.exits {
-            if self.pct.pt[self.pct.next as usize] == self.m.exits {
-                let armed = self.m.timer_armed != 0;
-                let due = self.timer_due();
-                if armed && due > self.m.vtime {
-                    self.m.vtime = due;
-                    self.pct.fired += 1;
-                } else if !armed {
-                    self.pct.missed += 1;
-                } else {
-                    self.pct.fired += 1;
-                }
-            }
-            self.pct.next += 1;
-        }
+        let timer = (self.m.timer_armed != 0, self.timer_due());
+        let at = if self.pct_log.is_some() {
+            self.cpu().where_now()
+        } else {
+            Where::default()
+        };
+        let mut vtime = self.m.vtime;
+        self.pct
+            .at_exit(self.m.exits, timer, &mut vtime, &mut self.pct_log, at);
+        self.m.vtime = vtime;
     }
     fn timer_level(&mut self) -> bool {
         if self.m.timer_armed == 0 {
@@ -998,6 +997,10 @@ impl Vmm {
         self.vio.vs = ck.vs;
         self.tj = ck.tj;
         self.pct = ck.pct;
+        // the replay fires the points after the checkpoint again: their records go too
+        if let Some(l) = self.pct_log.as_mut() {
+            l.retain(|r| r.exit <= ck.m.exits);
+        }
         self.rx = ck.rx.clone();
         let resume = ck.resume;
         self.rw.ck = Some(ck);
