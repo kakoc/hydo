@@ -49,6 +49,7 @@ pub const KNOWN_TOP: &[&str] = &[
     "network",
     "errors",
     "groups",
+    "steer",
 ];
 /// The keys of a `groups:` entry (Milestone 195).
 pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "description"];
@@ -808,6 +809,7 @@ pub fn validate(m: &mut Value) -> R<()> {
     }
     validate_network(m)?;
     validate_groups(m)?;
+    validate_steer(m)?;
     validate_checks(m, &ids)?;
     validate_world(m)?;
     validate_errors(m)?;
@@ -829,6 +831,60 @@ fn validate_network(m: &Value) -> R<()> {
             if !has(s, "addr")? {
                 return Err(err(format!(
                     "services[{i}]: network: bridge gives every service its own network namespace and address: addr: required (an address in {NET_BRIDGE} other than {NET_GW})"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The keys of a `steer:` entry (Milestone 209).
+pub const KNOWN_STEER: &[&str] = &["id", "match", "goal", "description"];
+
+/// `steer:` (Milestone 209): numbers in the console lines that say how close a run came to
+/// failing, for `hydo explore --steer <id>`.
+fn validate_steer(m: &Value) -> R<()> {
+    let Some(vs) = obj_get(m, "steer") else {
+        return Ok(());
+    };
+    let Value::Array(vs) = vs else {
+        return Err(err(
+            "steer: a list of {id:, match: <regular expression>, goal: min|max} entries",
+        ));
+    };
+    let mut ids: Vec<String> = Vec::new();
+    for (i, v) in vs.iter().enumerate() {
+        let wh = format!("steer[{i}]");
+        if !v.is_object() {
+            return Err(err(format!("{wh}: must be a mapping")));
+        }
+        unknown(v, KNOWN_STEER, &wh)?;
+        let id = need_str(v, "id", &wh)?;
+        if pyre::match_dollar(r"[a-z][a-z0-9_.\-]*", &id).is_none() {
+            return Err(err(format!(
+                "{wh}: id: lowercase letters, digits, '_', '.' and '-', starting with a letter (got {})",
+                repr_str(&id)
+            )));
+        }
+        if ids.contains(&id) {
+            return Err(err(format!(
+                "{wh}: the id {} is declared twice",
+                repr_str(&id)
+            )));
+        }
+        ids.push(id.clone());
+        let re = need_str(v, "match", &wh)?;
+        if let Err(e) = regex::Regex::new(&re) {
+            return Err(err(format!(
+                "{wh} ({id}): match: not a regular expression: {}",
+                e.to_string().lines().last().unwrap_or("")
+            )));
+        }
+        if let Some(g) = obj_get(v, "goal") {
+            if !matches!(g.as_str(), Some("min" | "max")) {
+                return Err(err(format!(
+                    "{wh} ({id}): goal: min or max (got {})",
+                    repr(g)
                 )));
             }
         }
