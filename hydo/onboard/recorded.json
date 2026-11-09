@@ -1260,6 +1260,65 @@
       ]
     },
     {
+      "id": "hvx/qdrant-flaky-buggy",
+      "platform": "hvx",
+      "recorded": "hydo run twice from fresh boots, 2026-11-09",
+      "note": "Qdrant's flaky test_wal_replay_loads_pending_to_queue (issue 10200): on 3 and 4 vCPUs its 2-second wait for the update queue times out (the failure of the sibling test in Qdrant issue 10103); 1 and 2 vCPUs pass",
+      "build": {
+        "stage": "qdrant-flaky",
+        "dir": "hydo/onboard/examples/qdrant-flaky-10200",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "9aa2213aea1a529518201593a33062fb76882fd3fb8c8fef4d9e3de28fc24598",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (qdrant.test_passes: passed; after load: { length: 35, op_num: Some(400), deferred_points: Some(0) })",
+          "fp": "240f9805a28e2544",
+          "ctl": "b5528ff4904389a4"
+        },
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (qdrant.test_passes: passed; after load: { length: 35, op_num: Some(400), deferred_points: Some(0) })",
+          "fp": "b0b35ed931e310d5",
+          "ctl": "e1b130ebbad94689",
+          "vcpus": 2
+        },
+        {
+          "schedule": "disk=none | run",
+          "verdict": "VIOLATION [qdrant.test_passes] failed: Timeout waiting for update queue to empty; after load: { length: 35, op_num: Some(400), deferred_points: Some(0) }",
+          "fp": "64a9294783a8edba",
+          "ctl": "b152e11c8630cce6",
+          "vcpus": 4
+        }
+      ]
+    },
+    {
+      "id": "hvx/qdrant-flaky-fixed",
+      "platform": "hvx",
+      "recorded": "hydo run twice from fresh boots, 2026-11-09",
+      "build": {
+        "stage": "qdrant-flaky",
+        "dir": "hydo/onboard/examples/qdrant-flaky-10200",
+        "manifest": "hydo.yaml",
+        "args": [
+          "--set",
+          "variant=fixed"
+        ]
+      },
+      "sha256": "4fbac285d9940f02cbe1b55591b78c75b993a627309ace1d46af65c72a977756",
+      "runs": [
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (qdrant.test_passes: passed; after load: { length: 0, op_num: Some(500), deferred_points: Some(0) })",
+          "fp": "0a79d1f07cf61ca3",
+          "ctl": "72924009539fa09d",
+          "vcpus": 4
+        }
+      ]
+    },
+    {
       "id": "hvx/shop-buggy",
       "platform": "hvx",
       "recorded": "hydo-bench rebaseline --write, 2026-11-08",
@@ -2370,6 +2429,62 @@
           "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
           "fp": "32c826fd530a6c6d",
           "ctl": "9f91c98d754f368f"
+        }
+      ]
+    },
+    {
+      "id": "kvm/qdrant-flaky-buggy",
+      "platform": "kvm",
+      "recorded": "hydo run twice from fresh boots, 2026-11-09, the build machine",
+      "note": "Qdrant's flaky test_wal_replay_loads_pending_to_queue (issue 10200): with 40 forced preemption points the update worker drains the queue before the test reads its length, with 39 it does not; the schedule hydo explore --backend kvm --timing --preempt found at seed 37",
+      "build": {
+        "stage": "qdrant-flaky",
+        "dir": "hydo/onboard/examples/qdrant-flaky-10200",
+        "manifest": "hydo.yaml",
+        "args": []
+      },
+      "sha256": "9aa2213aea1a529518201593a33062fb76882fd3fb8c8fef4d9e3de28fc24598",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=c7ab56057c8da907 pct=ec699251106e8e0c pctn=40 pctk=3000 | run",
+          "verdict": "VIOLATION [qdrant.test_passes] failed: update queue should have pending operations after WAL replay; after load: { length: 0, op_num: Some(500), deferred_points: Some(0) }",
+          "fp": "6b2a4115d537b1c3",
+          "ctl": "55c3184d4e8823d4"
+        },
+        {
+          "schedule": "disk=none dseed=c7ab56057c8da907 pct=ec699251106e8e0c pctn=39 pctk=3000 | run",
+          "verdict": "OK invariants=1 held (qdrant.test_passes: passed; after load: { length: 22, op_num: Some(477), deferred_points: Some(0) })",
+          "fp": "7bd5b072bda6734c",
+          "ctl": "a754bccdaf11a490"
+        },
+        {
+          "schedule": "disk=none | run",
+          "verdict": "OK invariants=1 held (qdrant.test_passes: passed; after load: { length: 18, op_num: Some(481), deferred_points: Some(0) })",
+          "fp": "8635373e77d7b828",
+          "ctl": "27c03dda58fc6888"
+        }
+      ]
+    },
+    {
+      "id": "kvm/qdrant-flaky-fixed",
+      "platform": "kvm",
+      "recorded": "hydo run twice from fresh boots, 2026-11-09, the build machine",
+      "build": {
+        "stage": "qdrant-flaky",
+        "dir": "hydo/onboard/examples/qdrant-flaky-10200",
+        "manifest": "hydo.yaml",
+        "args": [
+          "--set",
+          "variant=fixed"
+        ]
+      },
+      "sha256": "4fbac285d9940f02cbe1b55591b78c75b993a627309ace1d46af65c72a977756",
+      "runs": [
+        {
+          "schedule": "disk=none dseed=c7ab56057c8da907 pct=ec699251106e8e0c pctn=40 pctk=3000 | run",
+          "verdict": "OK invariants=1 held (qdrant.test_passes: passed; after load: { length: 0, op_num: Some(500), deferred_points: Some(0) })",
+          "fp": "3901d8a88cc8cec7",
+          "ctl": "17f5913a3189ad7d"
         }
       ]
     }

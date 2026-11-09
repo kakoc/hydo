@@ -244,6 +244,21 @@ linux_prepare() {
         need "$IN/nats-flaky/ats-$v.test" "$pin"
         install -m 0755 "$IN/nats-flaky/ats-$v.test" "$ST/$X/nats-flaky-8363/bin/ats-$v.test"
       done;;
+    qdrant-flaky)   # Qdrant's two test programs and the C library they load (build-test.sh: Rust
+      # 1.99.0, protoc 34.1 as HYDO_QDRANT_PROTOC and Ubuntu 24.04's gcc 13.3.0 make the pinned
+      # bytes), kept in $IN/qdrant-flaky and checked against build-test.sh's pins
+      local q=$X/qdrant-flaky-10200 f pin
+      copy $q; mkdir -p "$IN/qdrant-flaky/lib" "$ST/$q/bin/lib"
+      for f in collection-buggy.test collection-fixed.test lib/ld-linux-x86-64.so.2 lib/libc.so.6 lib/libm.so.6 lib/libgcc_s.so.1; do
+        pin=$(grep -o "check bin/$f [0-9a-f]*" "$T/$q/build-test.sh" | cut -d' ' -f3)
+        if ! have "$IN/qdrant-flaky/$f" "$pin"; then
+          [ -n "${HYDO_QDRANT_PROTOC:-}" ] || die "missing $IN/qdrant-flaky/$f: run $q/build-test.sh on an Ubuntu 24.04 x86_64 host and copy its bin/ there, or set HYDO_QDRANT_PROTOC (protoc 34.1) to build here"
+          ( cd "$ST/$q" && PROTOC=$HYDO_QDRANT_PROTOC QDRANT_SRC=$IN/qdrant-flaky/src/qdrant sh build-test.sh )
+          install -m 0755 "$ST/$q/bin/$f" "$IN/qdrant-flaky/$f"
+        fi
+        need "$IN/qdrant-flaky/$f" "$pin"
+        install -m 0755 "$IN/qdrant-flaky/$f" "$ST/$q/bin/$f"
+      done;;
     release) release_examples;;
     *) die "unknown stage $1 for $PLAT";;
   esac
@@ -447,6 +462,7 @@ sources() {
     redis-oci|mac-redis-oci) echo "$X/redis-oci";;
     restate-oci) echo "$X/restate-oci";;
     nats-flaky) echo "$X/nats-flaky-8363";;
+    qdrant-flaky) echo "$X/qdrant-flaky-10200";;
     release) echo "";;
     mac-redis) echo "$XM/redis $XM/redis-ram $XM/redis-bridge $XM/redis-composed $X/redis-composed";;
     mac-redis-racy) echo "$XM/redis-composed $X/redis-composed";;
