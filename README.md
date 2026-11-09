@@ -4,7 +4,7 @@ hydo tests a distributed system under faults and replays every failure exactly. 
 services, their databases, and their client in one virtual machine, and injects faults such as
 crashes and power cuts. The execution is deterministic: the same inputs give a bit-identical run.
 hydo finds the runs that break a property your system must keep, and shrinks each failure to the
-fewest faults that still cause it. The list below defines the words the rest of this page uses.
+fewest faults that still cause it.
 
 The words this page uses:
 
@@ -78,11 +78,13 @@ schedule:
   - the fingerprint epoch, a number that hydo raises when a new version changes fingerprints.
     `hydo repro` says when the epoch differs.
 - Across machines, the recorded examples gave the same verdicts. The Redis example gave the same
-  verdict on Linux and on a Mac, and on the KVM engine on Intel and AMD CPUs. The quickstarts
-  record these runs (Linux sections 2 and 6, Mac section 2).
+  verdict on Linux and on a Mac, and on the KVM engine on Intel CPUs. The quickstarts record these
+  runs (Linux sections 2 and 6, Mac section 2). hydo 0.3.0 also gave the same verdicts on AMD
+  CPUs with the KVM engine; hydo 0.3.1 has not run on AMD yet.
 - A failure found on Linux does not replay on a Mac. Your services run as x86_64 Linux programs
   on a Linux host, and as arm64 Linux programs on a Mac.
-- The kernel module needs an Intel CPU with VT-x. The KVM engine runs on Intel and AMD CPUs.
+- The kernel module needs an Intel CPU with VT-x, Intel's hardware support for virtual machines.
+  The KVM engine runs on Intel and AMD CPUs.
 - A guest has at most 8 GiB of RAM, on every engine.
 - Time inside the virtual machine is virtual, so hydo does not measure performance.
 - Anyone who can open `/dev/hvx` can run guests through the kernel module, which runs with the
@@ -119,12 +121,14 @@ export PATH="$HOME/.hydo/bin:$PATH"
 ### Linux
 
 Linux has two engines. Use the KVM engine unless you need one of three things: several virtual
-CPUs, a power cut at an exact disk flush, or inserted timer ticks. Those need the kernel module on
-your own Intel machine.
+CPUs, a power cut at an exact disk flush, or inserted timer ticks. Inserted timer ticks are extra
+timer interrupts that hydo puts into the guest at chosen points, to change the order in which its
+threads run. Those three need the kernel module on your own Intel machine.
 
 - The KVM engine uses the KVM that comes with Linux. It runs on Intel and AMD CPUs, and on a cloud
   VM with nested virtualization (a VM that can run VMs itself). It has one virtual CPU.
-- The kernel module `hvx.ko` needs an Intel CPU with VT-x and sudo. It has the PMU branch clock:
+- The kernel module `hvx.ko` needs an Intel CPU with VT-x (Intel's hardware support for virtual
+  machines) and sudo. It has the PMU branch clock:
   the CPU's performance-monitoring unit counts the guest's conditional branches, so a timer tick
   lands at an exact instruction.
 
@@ -149,8 +153,10 @@ hydo doctor --backend kvm
 Only if it says that `/dev/kvm` is not usable, add yourself to the group that owns it, often
 `kvm`: `sudo usermod -aG kvm "$USER"`, then log in again.
 
-Add `--backend kvm` to `hydo run`, `hydo repro`, and `hydo explore`, or set `HYDO_BACKEND=kvm`
-once.
+On a machine without the kernel module (no `/dev/hvx`), `hydo run`, `hydo repro`, and
+`hydo explore` use the KVM engine by themselves. On a machine that has both engines, add
+`--backend kvm` to these commands, or run `export HYDO_BACKEND=kvm` and add that line to your
+shell startup file (`~/.bashrc` or `~/.zshrc`) to keep it.
 
 For the kernel module, the machine also needs a C compiler, `make`, `xz`, `flock`, and the running
 kernel's headers. Do not install it while other virtual machines run under KVM: loading `hvx.ko`
@@ -191,7 +197,8 @@ Copy the example to a folder of your own. The source depends on the install:
 | Tarball | `cp -R ~/.hydo/examples/redis ~/hydo-redis` |
 | cargo | `cp -R ~/.hydo/versions/0.3.1/examples/redis ~/hydo-redis` |
 
-Then build the image and run two schedules:
+Then build the image and run two schedules. On a Linux machine that has both engines and where
+you want the KVM engine, run `export HYDO_BACKEND=kvm` first:
 
 ```sh
 cd ~/hydo-redis
@@ -201,7 +208,9 @@ hydo run "disk=cut | run C=12 R=everysec"
 ```
 
 Each run prints one `RESULT` line. `verdict=` is the outcome, and `HYDO-ORACLE:` marks the verdict
-of the invariants. These two lines are from a recorded run on Linux, shortened at `…`:
+of the invariants. These two lines are from a recorded run on Linux with the kernel module
+(hvx), shortened at `…`. The KVM engine and the Mac give the same verdicts with other
+fingerprints; the Linux quickstart (section 6) and the Mac quickstart (section 2) list them:
 
 ```
 RESULT one fp=5ec14b8b4bdcf367 … verdict=HYDO-ORACLE: OK … (… acked=20 all present)
@@ -214,7 +223,7 @@ setting. `fp=` is the fingerprint. With Redis's default setting, `appendfsync al
 cut loses nothing: `hydo run "disk=cut | run C=12"` ends `OK` with `acked=12 all present`.
 
 Each run writes a directory under `hydo-out/runs/`. `hydo repro` runs it again from a fresh boot
-and compares the fingerprints:
+and compares the fingerprints (again the hvx values):
 
 ```
 $ hydo repro hydo-out/runs/run-…
@@ -238,12 +247,14 @@ hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under …)
    sh hydo/fetch-images.sh
    ```
 
-   The import writes a `workload:` and an `invariants:` section with placeholders. Delete both
-   sections from `hydo/hydo.yaml`: the commands in `hydo/workload/` are the workload, and the
-   checks in `hydo/checks/` are the invariants. Then replace `hydo init`'s placeholders
-   `hydo/workload/parallel_driver_todo` and `hydo/checks/final_todo` with your own commands and
-   checks. Until you delete the two sections, the check in step 4 fails with `workload.run/process:
-   the test composer runs the workload`.
+   The import writes a numbered-steps `workload.run` and a `TODO` invariant as placeholders.
+   Delete both from `hydo/hydo.yaml`, but keep `workload.steps` and `workload.timeout`: the
+   commands in `hydo/workload/` are the workload, and the checks in `hydo/checks/` are the
+   invariants. hydo's test composer runs those commands in seeded sequences and concurrent
+   mixes. Then replace `hydo init`'s placeholders `hydo/workload/parallel_driver_todo` and
+   `hydo/checks/final_todo` with your own commands and checks. Until you delete the two
+   placeholders, the check in step 4 fails with `workload.run/process: the test composer runs
+   the workload`.
 
 3. Read `hydo guide workflow`. It says what to put in each file.
 4. Run `hydo build hydo/hydo.yaml --check` after each change. It checks the folder without
@@ -256,7 +267,9 @@ hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under …)
    hydo run "disk=none | run"
    ```
 
-6. Explore, then read the findings:
+6. Explore, then read the findings. `--strategy process` draws faults as a process over the
+   run, a series of faults that start and heal at seeded times; `hydo guide faults` lists the
+   strategies:
 
    ```sh
    hydo explore --seeds 1-20 --strategy process

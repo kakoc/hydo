@@ -58,7 +58,8 @@ the healthchecks, ports, volumes on the data disk, and restart policies. It sets
 warning for everything it could not map. Read each one; bind mounts that the program writes to
 need a fix by hand. It also
 writes a numbered-steps `workload.run` and a `TODO` invariant: delete both (keep `workload.steps`
-and `workload.timeout`) and add a `test:` section with commands. Keep the generated comments that
+and `workload.timeout`), and write the test as commands in `hydo/workload/` and `hydo/checks/`
+(or as a `test:` section in the file). Keep the generated comments that
 say where each value came from. A service built locally (`build:`) is never pulled.
 fetch-images.sh prints the `docker build` and `docker save` commands that make its file, and
 stops until the file is there. Then run `hydo compose` again, to pin it by the file's content.

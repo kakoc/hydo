@@ -105,6 +105,47 @@ impl Ctx {
         self.backend_chosen = true;
     }
 
+    /// Linux without `--backend` or `HYDO_BACKEND`: the engine this machine has. hvx when its
+    /// device exists (the module is loaded; a user who cannot open the device runs the engine
+    /// through sudo), else KVM when `/dev/kvm` is open to this user. With neither, hvx stays,
+    /// and a run stops with [`Ctx::require_hvx`]'s message (`hydo doctor` reports both). Before
+    /// 0.3.1 a machine with only KVM fell to hvx, and the run ended at sudo's password prompt.
+    pub fn choose_machine_engine(&mut self) {
+        if self.backend_chosen || self.platform != Platform::Linux {
+            return;
+        }
+        let hvx = crate::module::host(crate::hvxenv::dev(&self.config.engine));
+        if hvx.exists() {
+            return;
+        }
+        if kvm_usable() {
+            self.kvm = true;
+        }
+    }
+
+    /// Before a run on hvx: stop with what to do when its device is not there, instead of
+    /// starting the engine under sudo, which can only fail (0.3.1).
+    pub fn require_hvx(&self) {
+        let dev = crate::hvxenv::dev(&self.config.engine);
+        if crate::module::host(&dev).exists() {
+            return;
+        }
+        let kvm = if kvm_usable() {
+            "/dev/kvm is usable here: run on the KVM engine with --backend kvm (or export \
+             HYDO_BACKEND=kvm)"
+        } else if crate::module::host("/dev/kvm").exists() {
+            "/dev/kvm is there, but this user cannot open it: add the user to its group \
+             (often kvm) to use the KVM engine"
+        } else {
+            "/dev/kvm is not there either, so the KVM engine cannot run here"
+        };
+        die(&format!(
+            "the hvx engine cannot run: {dev} is not there, because its kernel module is not \
+             loaded (hydo module install builds and loads it). {kvm}. `hydo doctor` and \
+             `hydo doctor --backend kvm` say what each engine needs."
+        ));
+    }
+
     /// `hydo repro <dir>` and `hydo inspect ... <dir>` without `--backend` or `HYDO_BACKEND`: on
     /// Linux, use the engine the run or exploration in `dir` recorded (`hvx` or `kvm`), so that a
     /// KVM run is repeated on KVM (before 0.3.0 it fell back to hvx, which needs the module and
@@ -272,6 +313,12 @@ pub fn access(p: &Path, mode: libc::c_int) -> bool {
     };
     // SAFETY: c is a valid NUL-terminated path.
     unsafe { libc::access(c.as_ptr(), mode) == 0 }
+}
+
+/// Whether this user can open `/dev/kvm` (read and write), under the host root of the tests.
+pub fn kvm_usable() -> bool {
+    let k = crate::module::host("/dev/kvm");
+    k.exists() && access(&k, libc::R_OK | libc::W_OK)
 }
 
 pub fn getuid() -> u32 {

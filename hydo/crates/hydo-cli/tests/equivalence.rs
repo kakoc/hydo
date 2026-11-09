@@ -81,7 +81,11 @@ fn release() -> PathBuf {
     let r = scratch("rel");
     let repo = repo();
     std::fs::create_dir_all(r.join("bin")).unwrap();
-    std::fs::copy(env!("CARGO_BIN_EXE_hydo"), r.join("bin/hydo")).unwrap();
+    // a hard link, not a copy: a copy is open for writing while another test's thread forks, and
+    // its child then holds the descriptor, so running the copy can fail with "Text file busy"
+    if std::fs::hard_link(env!("CARGO_BIN_EXE_hydo"), r.join("bin/hydo")).is_err() {
+        std::fs::copy(env!("CARGO_BIN_EXE_hydo"), r.join("bin/hydo")).unwrap();
+    }
     if record_python() {
         for p in ["linux", "mac"] {
             let src = repo.join(format!("hydo/dist/{p}/hydo"));
@@ -377,6 +381,8 @@ fn doctor_needs_no_python() {
         let o = Command::new(root.join("bin/hydo"))
             .env("HYDO_CLI_PLATFORM", plat)
             .env("PATH", "/usr/bin:/bin")
+            // the hvx doctor, also on a machine whose only engine is KVM (0.3.1 picks it)
+            .env("HYDO_BACKEND", "hvx")
             .arg("doctor")
             .output()
             .unwrap();
@@ -398,15 +404,108 @@ fn doctor_needs_no_python() {
         if plat == "linux" {
             assert!(
                 out.contains(
-                    "FAIL bundled mke2fs runs (under the frozen clock)  -> cannot run libexec/faketime"
+                    "FAIL the bundled mke2fs does not run (under the frozen clock)  -> cannot run libexec/faketime"
                 ),
                 "{out}"
             );
         } else {
-            assert!(out.contains("WARN present: guest/hydo_fc"), "{out}");
+            assert!(out.contains("WARN missing: guest/hydo_fc"), "{out}");
         }
     }
     let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Without `--backend` or `HYDO_BACKEND`, `hydo` takes the engine the machine has (0.3.1): hvx
+/// when `/dev/hvx` is there, else KVM when `/dev/kvm` is open to the user, else hvx. Before, a
+/// machine with only KVM fell to hvx, and `hydo run` ended at sudo's password prompt. The host
+/// is a directory with the devices as plain files (`HYDO_CLI_HOST_ROOT`); `hydo doctor` shows
+/// which engine was taken: only the KVM doctor checks the initramfs as its own line.
+#[test]
+fn the_machine_engine_is_chosen() {
+    let root = release();
+    let doctor = |host: &Path, backend: Option<&str>| {
+        let mut c = Command::new(root.join("bin/hydo"));
+        c.env("HYDO_CLI_PLATFORM", "linux")
+            .env("PATH", "/usr/bin:/bin")
+            .env("HYDO_CLI_HOST_ROOT", host)
+            .env("HYDO_OFFLINE", "1")
+            .env_remove("HYDO_BACKEND")
+            .arg("doctor");
+        if let Some(b) = backend {
+            c.env("HYDO_BACKEND", b);
+        }
+        let o = c.output().unwrap();
+        String::from_utf8_lossy(&o.stdout).into_owned()
+    };
+    let kvm_doctor = |out: &str| out.contains("the x86_64 initramfs (initramfs-kafka.cpio.gz");
+    let dev = |host: &Path, name: &str| {
+        std::fs::create_dir_all(host.join("dev")).unwrap();
+        std::fs::write(host.join("dev").join(name), b"").unwrap();
+    };
+    let none = scratch("host-none");
+    assert!(!kvm_doctor(&doctor(&none, None)), "neither device: hvx");
+    let kvm = scratch("host-kvm");
+    dev(&kvm, "kvm");
+    assert!(kvm_doctor(&doctor(&kvm, None)), "only /dev/kvm: KVM");
+    assert!(
+        !kvm_doctor(&doctor(&kvm, Some("hvx"))),
+        "HYDO_BACKEND=hvx wins"
+    );
+    let both = scratch("host-both");
+    dev(&both, "kvm");
+    dev(&both, "hvx");
+    assert!(!kvm_doctor(&doctor(&both, None)), "both devices: hvx");
+    assert!(
+        kvm_doctor(&doctor(&both, Some("kvm"))),
+        "HYDO_BACKEND=kvm wins"
+    );
+    for d in [root, none, kvm, both] {
+        let _ = std::fs::remove_dir_all(d);
+    }
+}
+
+/// A run on hvx where `/dev/hvx` is not there stops before the engine starts, and says what to
+/// do (0.3.1): load the module, or use the KVM engine when `/dev/kvm` is usable. Before, the
+/// engine started under sudo and the run ended with "the run produced no RESULT line".
+#[test]
+fn no_hvx_device_is_explained() {
+    let root = release();
+    let cwd = scratch("nohvx-cwd");
+    std::fs::write(cwd.join("x-disk.img"), b"").unwrap();
+    let explore = |host: &Path| {
+        let o = Command::new(root.join("bin/hydo"))
+            .current_dir(&cwd)
+            .env("HYDO_CLI_PLATFORM", "linux")
+            .env("PATH", "/usr/bin:/bin")
+            .env("HYDO_CLI_HOST_ROOT", host)
+            .env("HYDO_BACKEND", "hvx")
+            .args(["explore", "--image", "x-disk.img", "--seeds", "1-1"])
+            .output()
+            .unwrap();
+        (
+            o.status.code(),
+            String::from_utf8_lossy(&o.stderr).into_owned(),
+        )
+    };
+    let none = scratch("nohvx-none");
+    let (rc, err) = explore(&none);
+    assert_ne!(rc, Some(0), "{err}");
+    assert!(
+        err.contains("the hvx engine cannot run: /dev/hvx is not there"),
+        "{err}"
+    );
+    assert!(err.contains("/dev/kvm is not there either"), "{err}");
+    let kvm = scratch("nohvx-kvm");
+    std::fs::create_dir_all(kvm.join("dev")).unwrap();
+    std::fs::write(kvm.join("dev/kvm"), b"").unwrap();
+    let (_, err) = explore(&kvm);
+    assert!(
+        err.contains("/dev/kvm is usable here: run on the KVM engine with --backend kvm"),
+        "{err}"
+    );
+    for d in [root, cwd, none, kvm] {
+        let _ = std::fs::remove_dir_all(d);
+    }
 }
 
 /// `hydo doctor` never fetches: with the install cache empty, `HYDO_OFFLINE` unset and the release
@@ -433,6 +532,7 @@ fn doctor_never_fetches() {
             .env("HYDO_HOME", &home)
             .env("HYDO_RELEASE_URL", &url)
             .env_remove("HYDO_OFFLINE")
+            .env("HYDO_BACKEND", "hvx")
             .arg("doctor")
             .output()
             .unwrap();

@@ -2,8 +2,8 @@
 # from commit 2a58c4b with Python 3.15.0; `git show 2a58c4b:hydo/onboard/hydo_agents.py`), one
 # command per line (tests/agents_equivalence.rs explains the form). Re-recorded from the Rust with
 # HYDO_BLESS=1 after a deliberate change.
-# skill sha256: fc0d00f5fb58ea7596fe38dddd6e75d495126273f2e668644ab0d31aa89d75cc
-{"cmd":["guide"],"rc":0,"stdout":{"sha256":"f30dc7f7d8b9cabbf1a3cd7628432aa9e5ddb775ec1c61221a3078407bc2d2da","len":2431},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.0"}
+# skill sha256: aeeb1ea2765c88097dd7c7e1f860cd318393c63bf00b38db27c45e78502cdfd9
+{"cmd":["guide"],"rc":0,"stdout":{"sha256":"bcbf0b8d24d37db446463ac05fa81c4d6406df9d6a37064dac9f43a2013ec5bb","len":2431},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.0"}
 {"cmd":["guide","--help"],"rc":0,"stdout":{"text":"usage: hydo guide [TOPIC | FILE | --list | --path]\n  no argument: how to get the onboarding skill, and the topics of this guide\n  TOPIC: one of `hydo guide --list` (this hydo's facts); `skill`: the onboarding skill's SKILL.md\n  FILE: a file of the examples (examples/...) or of the skill folder (references/...)\n"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.1"}
 {"cmd":["guide","-h"],"rc":0,"stdout":{"text":"usage: hydo guide [TOPIC | FILE | --list | --path]\n  no argument: how to get the onboarding skill, and the topics of this guide\n  TOPIC: one of `hydo guide --list` (this hydo's facts); `skill`: the onboarding skill's SKILL.md\n  FILE: a file of the examples (examples/...) or of the skill folder (references/...)\n"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.2"}
 {"cmd":["guide","manifest"],"rc":0,"stdout":{"skill":"hydo/onboard/MANIFEST.md"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.3"}
@@ -17,7 +17,7 @@
 {"cmd":["guide","composer.md"],"rc":0,"stdout":{"skill":"hydo/guide/composer.md"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.11"}
 {"cmd":["guide","SKILL.md"],"rc":0,"stdout":{"skill":"skills/hydo-onboard/SKILL.md"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.12"}
 {"cmd":["guide","skill"],"rc":0,"stdout":{"skill":"skills/hydo-onboard/SKILL.md"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.13"}
-{"cmd":["guide","overview"],"rc":0,"stdout":{"sha256":"f30dc7f7d8b9cabbf1a3cd7628432aa9e5ddb775ec1c61221a3078407bc2d2da","len":2431},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.14"}
+{"cmd":["guide","overview"],"rc":0,"stdout":{"sha256":"bcbf0b8d24d37db446463ac05fa81c4d6406df9d6a37064dac9f43a2013ec5bb","len":2431},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.14"}
 {"cmd":["guide","references/composer.md"],"rc":0,"stdout":{"skill":"hydo/guide/composer.md"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.15"}
 {"cmd":["guide","references/install.md"],"rc":0,"stdout":{"skill":"skills/hydo-onboard/references/install.md"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.16"}
 {"cmd":["guide","examples/example-redis-composed/README.md"],"rc":0,"stdout":{"skill":"hydo/guide/examples/example-redis-composed/README.md"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.17"}

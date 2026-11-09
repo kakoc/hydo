@@ -292,6 +292,7 @@ pub fn controlled_engine(
             (Arc::new(k), spec)
         }
         Platform::Linux => {
+            ctx.require_hvx();
             // M205: `--turn-margin N` (an engine argument of `hydo run`) is the engine's
             // HVX_TURN_MARGIN, as the explorer passes it
             let extra_env = RunOpts::of_eargs(eargs)

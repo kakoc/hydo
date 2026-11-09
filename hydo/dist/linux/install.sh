@@ -1,8 +1,9 @@
 #!/bin/sh
-# Install hydo for x86_64 Linux (Intel VT-x) from an unpacked release directory:
+# Install hydo for x86_64 Linux from an unpacked release directory. hydo runs guests on hvx (its
+# kernel module, Intel VT-x) or on the KVM engine (stock /dev/kvm, Intel or AMD):
 #     ./install.sh [--prefix DIR] [--add-to-path] [--no-module] [--udev [--udev-group G] [--udev-name N]]
 # Copies the release into DIR (default ~/.hydo; an earlier hydo installation there is replaced,
-# any other non-empty directory refused). Everything else is the hydo program's (M154):
+# any other non-empty directory refused). Everything else is the hydo program's:
 #   hydo setup            checks every file against SHA256SUMS and the sha256 pins built into
 #                         hydo, unpacks the guest store tree, makes the programs executable
 #                         (--add-to-path: also puts DIR/bin on PATH in your shell startup file);
@@ -66,4 +67,4 @@ echo
 echo "hydo $(cat "$P/VERSION") is installed in $P."
 echo "Next: export PATH=\"$P/bin:\$PATH\"; then follow $P/README.md"
 echo "(first step: cp -R \"$P/examples/redis\" ~/hydo-redis && cd ~/hydo-redis && hydo build hydo.yaml)"
-[ $KVM_ONLY = 0 ] || echo "(this machine runs the KVM engine: add --backend kvm to hydo run, repro and explore, or export HYDO_BACKEND=kvm)"
+[ $KVM_ONLY = 0 ] || echo "(this machine runs the KVM engine: hydo run, repro and explore pick it, because there is no /dev/hvx; --backend kvm or HYDO_BACKEND=kvm choose it in any case)"

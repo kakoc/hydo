@@ -150,6 +150,9 @@ fn main() {
         Some("run" | "repro" | "explore" | "doctor" | "inspect")
     ) {
         ctx.take_backend(&mut argv);
+        // without --backend or HYDO_BACKEND: the engine this machine has (KVM when there is no
+        // hvx device and /dev/kvm is usable; 0.3.1)
+        ctx.choose_machine_engine();
     }
     // repro and inspect of a recorded run follow the engine it recorded (`hydo repro <dir>`,
     // `hydo inspect <sub> <dir>` and `hydo inspect start <dir>`), unless one was chosen

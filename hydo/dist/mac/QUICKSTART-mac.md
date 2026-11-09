@@ -12,6 +12,8 @@ Words this page uses:
 
 - Guest: the arm64 Linux system that runs in hydo's virtual machine. Guest image: the files that
   hold a guest's programs and data, which `hydo build` writes.
+- Workload: the commands that act as your system's client during a run. It is split into
+  numbered steps; a step is one part of it, for example one write.
 - Schedule string, or schedule: one line of text that names the faults of one run,
   `<host part> | run <guest part>`. The host part sets up the machine, for example `disk=cut` (a
   disk that loses unflushed writes at a power cut) or `dseed=<hex>` (the seed of the disk's
@@ -184,11 +186,14 @@ minimal schedule; `hydo repro hydo-out/explore` re-runs it.
 
 In this example the failures are all expected kinds: the disk that loses acknowledged writes
 (`lying-disk`), injected disk errors (`io-errors`), and the relaxed `appendfsync` settings
-(`unsafe-knob`). With the default settings and an honest disk Redis loses nothing (the
-`disk=cut | run C=12` run of section 2). The exploration finds 11 failures. The report's last
-table lists the assertions of hydo's SDKs (`hydo guide sdks`); this example has none.
-`NOT EXERCISED` means no run reached a property, `[not in catalog]` that no program declared it,
-and `setup-complete seen in 0` that no program reported the end of its setup.
+(`unsafe-knob`). A knob is a setting of the system that a guest token changes, here `R=`. With
+the default settings and an honest disk Redis loses nothing (the `disk=cut | run C=12` run of
+section 2). The exploration finds 11 failures. The report's last table lists properties: the
+assertions of hydo's SDKs (`hydo guide sdks`; this example has none), hydo's own `fault.*`
+properties (which fault the runs reached), and the invariants. `NOT EXERCISED` means no run
+reached a property, `[not in catalog]` that no program declared it, and `setup-complete seen in
+0` that no program reported the end of its setup. In its last line, `violations=` counts the
+properties that failed, not the runs.
 
 ## 4. Reproduce a failure
 

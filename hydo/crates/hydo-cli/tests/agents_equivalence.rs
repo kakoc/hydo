@@ -214,7 +214,11 @@ fn release(with_skill: bool) -> PathBuf {
     }
     let r = scratch(if with_skill { "rel" } else { "bare" });
     std::fs::create_dir_all(r.join("bin")).unwrap();
-    std::fs::copy(env!("CARGO_BIN_EXE_hydo"), r.join("bin/hydo")).unwrap();
+    // a hard link, not a copy (a copy can fail to run with "Text file busy" while another
+    // test's thread forks; equivalence.rs's release() says why)
+    if std::fs::hard_link(env!("CARGO_BIN_EXE_hydo"), r.join("bin/hydo")).is_err() {
+        std::fs::copy(env!("CARGO_BIN_EXE_hydo"), r.join("bin/hydo")).unwrap();
+    }
     if with_skill {
         std::fs::create_dir_all(r.join("skill")).unwrap();
         copy_as_checked_out(

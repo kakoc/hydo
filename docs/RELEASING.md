@@ -63,6 +63,14 @@ Update the platform's `third-party.json` (format: `hydo/crates/hydo-release/src/
 
 ## 2. Build each tarball twice
 
+**The order since 0.3.1.** First build one quick candidate of each platform from the commit that
+raises the version: one build each, the Mac one unsigned, with no second build, comparison or
+notarization. Start step 6a's readers on these candidates at once. Fix their findings in the
+shipped pages and the code in one commit, and only then make the builds below, the signing and
+the verification, once, from that commit. Delete the quick candidates afterwards. If the readers
+run only on the final files, every finding that changes a shipped page costs a second round of
+double builds, signing, notarization and verification.
+
 Each build also writes, after the tarball, `hydo-<platform>-<version>-sources.tar.gz`. Its source
 archives come from a sources cache (`HYDO_SOURCES_FROM=DIR`, else `hydo/dist/<platform>/sources/`,
 filled once from the machine with the Nix store paths).
@@ -161,7 +169,9 @@ as they are. Scan the signed Mac tarball (not only the unsigned one) and the sig
 
 ## 6a. Docs review (since 0.3.0)
 
-A fresh reader checks the pages a user reads first against the release candidate, before the tag:
+A fresh reader checks the pages a user reads first against the release candidate, before the tag.
+Since 0.3.1 the readers get the quick candidates of step 2, so that their findings are fixed
+before the final builds:
 
 1. Make sure that `sh ci/vale.sh` prints no findings, and that
    `cargo test -p hydo --test it docs::` passes. The test fails when `README.md` or a quickstart

@@ -10,6 +10,8 @@ Words this page uses:
 
 - Guest: the Linux system that runs in hydo's virtual machine. Image: the disk file that holds a
   guest's programs and data, which `hydo build` writes.
+- Workload: the commands that act as your system's client during a run. It is split into
+  numbered steps; a step is one part of it, for example one write.
 - Schedule: one line of text that names the faults of one run, `<host tokens> | run <guest
   tokens>`. Host tokens set up the machine, for example `disk=cut` (a disk that loses unflushed
   writes at a power cut) or `dseed=<hex>` (the seed of the disk's faults). Guest tokens place a
@@ -22,8 +24,9 @@ Words this page uses:
 - Recovery: after a power cut, hydo boots the guest again on what the disk kept and runs the
   invariants there.
 - Engine: the program that runs the virtual machine: hvx (hydo's kernel module) or KVM.
-- Clock: hydo's guest time. With the PMU branch clock it advances with the guest's conditional
-  branches; with the exit-count clock it advances with the virtual machine's exits to the engine.
+- Clock: hydo's guest time. The PMU is the CPU's performance-monitoring unit. With the PMU
+  branch clock, guest time advances with the guest's conditional branches; with the exit-count
+  clock, it advances with the virtual machine's exits to the engine.
 
 ## What you need
 
@@ -32,17 +35,19 @@ hydo has two engines on Linux, and each needs different things:
 - The KVM engine runs on the KVM that comes with Linux, on an Intel or AMD CPU, with no kernel
   module and no root: your user needs only access to `/dev/kvm`. Install with
   `install.sh --no-module` and follow [section 6](#6-run-without-the-kernel-module-kvm); the
-  example in sections 2 to 5 works the same with `--backend kvm`.
+  example in sections 2 to 5 works the same on KVM. Without the kernel module (no `/dev/hvx`),
+  hydo uses the KVM engine by itself; on a machine with both engines, add `--backend kvm`.
 - The kernel module `hvx.ko`, which sections 1 to 5 use, needs what the rest of this list says.
   It adds several virtual CPUs, a power cut at the k-th disk flush (`cf=`), and inserted timer
   ticks (extra timer interrupts between the regular ones, which change thread interleavings).
 
 For the kernel module:
 
-- An x86_64 Linux machine with an Intel CPU and VT-x enabled in the firmware. Bare metal is best.
+- An x86_64 Linux machine with an Intel CPU and VT-x (Intel's hardware support for virtual
+  machines) enabled in the firmware. Bare metal is best.
 - A CPU with a performance-monitoring unit that is not a hybrid (P-core/E-core) design gives hydo
   its PMU branch clock. The unit counts the guest's conditional branches, so a timer tick lands at
-  an exact instruction. Without one, hydo uses the slower exit-count clock. Runs are still
+  an exact instruction. Without one, hydo uses the exit-count clock. Runs are still
   deterministic, but their fingerprints differ from the ones printed below.
 - Root through `sudo`: loading the kernel module needs it, and so does opening `/dev/hvx`
   unless you install the optional udev rule (see "Runs without sudo" below).
@@ -172,12 +177,12 @@ RESULT one fp=9f8f90a7d14566df wfp=f4de09236076bc87 secs=0.9 stops=24042 typed=3
   already acknowledged (only `k:0` survived); the verdict names the first lost key. That is
   Redis's documented `appendfsync everysec` window, and the run reproduces it every time.
 - `fp=` is the fingerprint: a hash of the guest's whole final state (memory, CPU, disks,
-  console). The same schedule on the same image gives the same fingerprint every time; that is
-  what bit-for-bit reproduction means. `wfp=` is the same hash taken at the end of the workload,
-  before recovery.
+  console). That it comes back every time is what bit-for-bit reproduction means. `wfp=` is the
+  same hash taken at the end of the workload, before recovery.
 - `ctl=` is the hash of the run's control transcript: every command the host sent to the guest
   and the point at which it sent it. `stops=` and `typed=` count the points at which the host
-  looked at the guest and the commands it typed.
+  looked at the guest and the commands it typed. `inh=` is a hash of that typed input: each
+  command's bytes and the guest time at which it was typed.
 - `secs=` is how long the run took.
 
 With Redis's default setting, `appendfsync always`, the same cut loses nothing:
@@ -197,7 +202,10 @@ Run either command again: the fingerprint is the same. Each run leaves a directo
 
 - the guest's console output (`one.log`), and the agent's own console in `one.agent.log`;
 - the control transcripts (`control.boot.jsonl`, `control.jsonl`);
-- the engine's log, and `result.json` (the run's result in hydo's results format).
+- after a power cut, the recovery boot's files: `control.recovery.jsonl`, `one.recovery.log` and
+  `one.recovery.agent.log`;
+- the engine's log (`one.engine.err`), and `result.json` (the run's result in hydo's results
+  format).
 
 `hydo repro <that directory>` runs it again from a fresh boot and compares the fingerprint:
 
@@ -208,9 +216,8 @@ REPRODUCED   run  fp=9f8f90a7d14566df (recorded 9f8f90a7d14566df)  disk=cut | ru
 hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under hydo-out/runs/run-…/repro-…)
 ```
 
-These fingerprints were recorded on a Xeon E3-1270 v6 with the PMU branch clock, from the image
-with the sha256 shown. A different image, or the exit-count clock, gives different fingerprints
-with the same verdicts.
+These fingerprints were recorded on a Xeon E3-1270 v6 with the PMU branch clock. The exit-count
+clock gives other fingerprints with the same verdicts.
 
 ## 3. Explore
 
@@ -234,15 +241,18 @@ signature (the verdict with keys and numbers blanked), and says whether it repro
 class of VIOLATION it gives the minimal schedule, found by shrinking (removing faults while the
 failure stays), and the `hydo run --image <image> "<schedule>"` command that replays it. A run
 that ended `ERROR` gets no minimal schedule; `hydo repro hydo-out/explore` re-runs it. The
-report's last table lists the assertions of hydo's SDKs (`hydo guide sdks`); this example has
-none. `NOT EXERCISED` means no run reached a property, `[not in catalog]` that no program declared
-it, and `setup-complete seen in 0` that no program reported the end of its setup.
+report's last table lists properties: the assertions of hydo's SDKs (`hydo guide sdks`; this
+example has none), hydo's own `fault.*` properties (which fault the runs reached), and the
+invariants. `NOT EXERCISED` means no run reached a property, `[not in catalog]` that no program
+declared it, and `setup-complete seen in 0` that no program reported the end of its setup. In
+its last line, `violations=` counts the properties that failed, not the runs.
 
 For this example expect only these expected kinds:
 
 - a disk that loses acknowledged writes (`lying-disk`);
 - injected disk errors (`io-errors`);
-- the relaxed `appendfsync` settings with a power cut (`unsafe-knob`).
+- the relaxed `appendfsync` settings with a power cut (`unsafe-knob`; a knob is a setting of the
+  system that a guest token changes, here `R=`).
 
 With the default settings and an honest disk, Redis loses nothing (the `disk=cut | run C=12`
 run of section 2). On the machine of section 2,
@@ -271,8 +281,8 @@ hydo build hydo-netem.yaml
 hydo run --image hydo-out/explore-ob-redis-netem-disk.img "disk=none | run N=redis@3-6:delay,300ms"
 ```
 
-It ends `OK` with `retrans=0` (`dc095cf7124dd3ac`, image sha256 `8a402198b0099369…`): the
-delayed packets were delivered when the fault was lifted. With two images in `hydo-out`, `hydo
+It ends `OK` with `retrans=0` (`dc095cf7124dd3ac`; on the KVM engine `45ff2e9ddab67aa5`; image
+sha256 `8a402198b0099369…`): the delayed packets were delivered when the fault was lifted. With two images in `hydo-out`, `hydo
 run` and `hydo explore` need `--image` to know which one you mean.
 
 ## 5. Onboard your own project
@@ -321,11 +331,16 @@ export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor --backend kvm
 cp -R ~/.hydo/examples/redis ~/hydo-redis && cd ~/hydo-redis
 hydo build hydo.yaml                           # the same image as in section 2
-hydo run --backend kvm "disk=none | run"
-hydo run --backend kvm "disk=cut | run C=12 R=everysec"
-hydo explore --backend kvm --seeds 1-20 --strategy swarm --workers 2
+hydo run --backend kvm --image hydo-out/explore-ob-redis-disk.img "disk=none | run"
+hydo run --backend kvm --image hydo-out/explore-ob-redis-disk.img "disk=cut | run C=12 R=everysec"
+hydo explore --backend kvm --image hydo-out/explore-ob-redis-disk.img --seeds 1-20 --strategy swarm --workers 2
 hydo repro hydo-out/explore
 ```
+
+If you did sections 2 to 4 already, skip the `cp` line (it would copy the example into
+`~/hydo-redis/redis`) and run `cd ~/hydo-redis` instead. `--image` names the image, because
+section 4 left a second one in `hydo-out`. Without the kernel module (no `/dev/hvx`), hydo uses
+the KVM engine by itself, so `--backend kvm` is needed only on a machine that has both engines.
 
 `HYDO_BACKEND=kvm` selects it for every command instead of `--backend kvm`. The engine runs inside
 `hydo` (or as `bin/hydo-kvm` with `HYDO_KVM=process`) and boots its own build of the guest kernel,
@@ -334,17 +349,19 @@ the same verdicts as with hvx, but they are counted differently:
 
 - Guest time advances with the virtual machine's exits to the engine; there is no PMU branch
   clock.
-- Every guest has one virtual CPU, at the x86-64-v2 level or, with `guest.cpu: v3`, at
-  x86-64-v3 (AVX2) on a host that has it. An image with several CPUs is refused.
+- Every guest has one virtual CPU. It runs at the x86-64-v2 level (the x86_64 instruction set
+  with SSE4.2 and POPCNT, no AVX), or with `guest.cpu: v3` at x86-64-v3 (AVX2) on a host that
+  has it. An image with several CPUs is refused.
 - The fingerprints are this engine's own. `hydo repro` of an hvx run with `--backend kvm` (or the
   other way round) compares verdicts, not fingerprints, and says so.
 
 A host power cut at the k-th disk flush (`cf=`) and inserted ticks (`pp=`, `xt…`) are hvx's
 alone; the explorer draws the faults both engines apply. With the image of section 2, the two
-schedules end `OK` (`b04d1932dfb20e09`) and `VIOLATION … key k:1 lost` (`1b61c2c7501a6f25`), on
-an Intel Core i7-13700HX on both its performance and its efficiency cores. AMD EPYC 9V45 and 9V74
-CPUs (GitHub's ubuntu-24.04 runners) gave the same verdicts with the images of hydo 0.3.0, and
-other fingerprints. A KVM fingerprint holds for one CPU vendor.
+schedules end `OK` (`b04d1932dfb20e09`) and `VIOLATION … key k:1 lost` (`1b61c2c7501a6f25`).
+These values come from an Intel Core i7-13700HX. Its performance cores and its efficiency cores
+give the same values. A KVM fingerprint holds for one CPU vendor. hydo 0.3.0 (fingerprint epoch
+1) ran on two AMD CPUs, an EPYC 9V45 and an EPYC 9V74 (GitHub's ubuntu-24.04 runners). They gave
+the same verdicts as Intel, with other fingerprints. hydo 0.3.1 (epoch 2) has not run on AMD yet.
 
 On the Intel machine the exploration finds 11 failures, and its report gives three minimal
 schedules:
@@ -360,9 +377,6 @@ schedules:
 
 ## Notes
 
-- Images do not depend on who builds them or where. `hydo build` sets every file in the root
-  image to owner root, uses a fixed umask, ignores the machine's `/etc/mke2fs.conf`, and freezes
-  the build clock.
 - `/dev/hvx` is mode 0600, so runs use `sudo` unless you installed the udev rule (section 1).
 - To remove hydo: `hydo module uninstall` (not needed when you installed with `--no-module`),
   then `chmod -R u+w ~/.hydo && rm -rf ~/.hydo ~/.hvx-module.lock`. `chmod` is needed because the

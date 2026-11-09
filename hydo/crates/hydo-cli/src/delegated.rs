@@ -54,6 +54,7 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
         full.push("--backend".into());
         full.push("kvm".into());
     } else if linux {
+        ctx.require_hvx();
         let engine = hvxenv::engine(ctx);
         let probe = hydo_engine::hvx::Hvx {
             engine: engine.clone(),

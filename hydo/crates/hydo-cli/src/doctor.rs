@@ -30,6 +30,13 @@ impl Checks {
         i32::from(self.fails > 0)
     }
 
+    /// A check whose failure line names the state found (`found`), not the state wanted
+    /// (`what`, printed when it passes): before 0.3.1 a failure printed `what` too, so a
+    /// failed "kvm_intel not loaded" read as if the module were not loaded.
+    fn check_found(&mut self, cond: bool, what: &str, found: &str, fix: &str, warn: bool) {
+        self.check(cond, if cond { what } else { found }, fix, warn);
+    }
+
     fn check(&mut self, cond: bool, what: &str, fix: &str, warn: bool) {
         let tag = if cond {
             "ok  "
@@ -84,9 +91,10 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
         .map(|(_, m)| m.trim().to_string())
         .unwrap_or_else(|| "?".into());
     println!("     CPU: {model}");
-    c.check(
+    c.check_found(
         flags.contains(&"vmx") || flags.contains(&"svm"),
         "hardware virtualization (vmx or svm in /proc/cpuinfo)",
+        "no hardware virtualization: neither vmx nor svm is in /proc/cpuinfo",
         "enable VT-x or AMD-V in the firmware; in a cloud VM, choose an instance type with nested virtualization",
         false,
     );
@@ -94,16 +102,21 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
         println!("     inside a VM: the KVM engine runs on nested virtualization (slower; results are this host's)");
     }
     let dev = ctx.config.kvm.dev();
-    c.check(
+    c.check_found(
         dev.exists(),
         &format!("{} exists", dev.display()),
+        &format!("{} is not there", dev.display()),
         "load the KVM module of the CPU (kvm_intel or kvm_amd), or enable nested virtualization",
         false,
     );
     if dev.exists() {
-        c.check(
+        c.check_found(
             access(&dev, libc::R_OK | libc::W_OK),
             &format!("{} is usable by this user", dev.display()),
+            &format!(
+                "{} cannot be opened (read and write) by this user",
+                dev.display()
+            ),
             "add the user to the group that owns the device (often kvm)",
             false,
         );
@@ -133,7 +146,7 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
         // command that gets it)
         None => hydo_image::kernels::locate_here(&want, hydo_image::kernels::Role::Kernel, &dirs),
     };
-    c.check(
+    c.check_found(
         found.is_some(),
         &format!(
             "the KVM guest kernel {} (sha256 {}){}",
@@ -145,15 +158,21 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
                 .unwrap_or_default()
         ),
         &format!(
+            "the KVM guest kernel {} (sha256 {}) is not on this machine",
+            k.file,
+            &k.sha256[..16]
+        ),
+        &format!(
             "{} (the Linux release ships it), or build it with hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) and put it in guest/, or name it with HYDO_KVM_KERNEL",
             get_command()
         ),
         false,
     );
-    c.check(
+    c.check_found(
         ctx.guest().join("initramfs-kafka.cpio.gz").is_file()
             || ctx.p("build/initramfs-kafka.cpio.gz").is_file(),
         "the x86_64 initramfs (initramfs-kafka.cpio.gz)",
+        "the x86_64 initramfs (initramfs-kafka.cpio.gz, the guest's first file system) is missing",
         "install the Linux release (guest/)",
         false,
     );
@@ -233,29 +252,33 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         .map(|(_, m)| m.trim().to_string())
         .unwrap_or_else(|| "?".into());
     println!("     CPU: {model}");
-    c.check(
+    c.check_found(
         cpu.contains("GenuineIntel"),
         "an Intel CPU (hvx is a VT-x hypervisor)",
+        "not an Intel CPU (hvx is a VT-x hypervisor; the KVM engine runs on AMD: --backend kvm)",
         "AMD (SVM) is not supported",
         false,
     );
-    c.check(
+    c.check_found(
         has("vmx"),
         "VT-x present and enabled in firmware (vmx in /proc/cpuinfo)",
+        "no vmx in /proc/cpuinfo: VT-x is absent or disabled in the firmware",
         "enable Intel VT-x in the BIOS/UEFI settings (the kernel hides vmx when firmware disables it)",
         false,
     );
-    c.check(
+    c.check_found(
         !has("hypervisor"),
         "bare metal (not inside a VM)",
+        "inside a VM (the CPU flags name a hypervisor)",
         "inside a VM hvx needs nested VT-x, runs much slower and has no PMU: the exit-count clock is used",
         true,
     );
     let hybrid = Path::new("/sys/devices/cpu_atom").is_dir() || has("hybrid_cpu");
     let pmu = has("arch_perfmon") && !hybrid && !has("hypervisor");
-    c.check(
+    c.check_found(
         pmu,
         "a usable PMU (non-hybrid CPU with arch_perfmon): the PMU branch clock is used",
+        "no usable PMU (the CPU's performance counters): the PMU branch clock is not used",
         &format!(
             "{}: hvx falls back to the exit-count clock -- runs stay deterministic, but fingerprints differ \
              from ones recorded with the PMU clock and a guest that computes without exits can stall",
@@ -274,9 +297,10 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         ),
         ("modinfo", "module checks, kmod"),
     ] {
-        c.check(
+        c.check_found(
             which(t).is_some(),
             &format!("{t} ({why})"),
+            &format!("{t} not found on PATH ({why})"),
             &format!("install {t}"),
             false,
         );
@@ -302,16 +326,18 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
             "",
             false,
         );
-        c.check(
+        c.check_found(
             sudo_ok,
             "sudo without a password prompt (only module load/unload need it)",
+            "sudo asks for a password (only module load/unload need sudo)",
             "`hydo module load/unload` will ask for a password",
             true,
         );
     } else {
-        c.check(
+        c.check_found(
             sudo_ok,
             &format!("runs use sudo (you cannot open {d} yourself: the run engine runs as bin/hydo-hvx under sudo), and sudo asks no password"),
+            &format!("runs use sudo (you cannot open {d} yourself: the run engine runs as bin/hydo-hvx under sudo), and sudo asks for a password"),
             &format!(
                 "a password prompt can block the explorer's workers: `hydo module udev install` (once, with \
                  sudo) gives {d} to a group, after which runs need no sudo -- see README"
@@ -321,16 +347,18 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
     }
     let rel_ = uname_release();
     let kdir = format!("/lib/modules/{rel_}/build");
-    c.check(
+    c.check_found(
         Path::new(&kdir).is_dir(),
         &format!("kernel headers for {rel_}"),
+        &format!("no kernel headers for {rel_} ({kdir} is not there)"),
         "install them (Debian/Ubuntu: sudo apt install linux-headers-$(uname -r))",
         false,
     );
     let lockdown = std::fs::read_to_string("/sys/kernel/security/lockdown").unwrap_or_default();
-    c.check(
+    c.check_found(
         lockdown.is_empty() || lockdown.contains("[none]"),
         "kernel lockdown off (an unsigned module can be loaded)",
+        "kernel lockdown is on (an unsigned module cannot be loaded)",
         &format!(
             "Secure Boot lockdown ({}): sign hvx.ko with an enrolled key or disable Secure Boot",
             lockdown.trim()
@@ -342,22 +370,37 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         srcversion_file(&module_ko(ctx, "hvx")),
         srcversion_loaded("hvx"),
     );
-    c.check(
+    c.check_found(
         built.is_some(),
         "hvx.ko built by this release",
+        "hvx.ko is not built by this release yet",
         "hydo module install (or only build it: hydo module build)",
         true,
     );
-    c.check(
+    c.check_found(
         mods.iter().any(|m| m == "hvx") && Path::new("/dev/hvx").exists(),
         "hvx module loaded, /dev/hvx present",
+        &format!(
+            "the hvx module is {}, and /dev/hvx is {}",
+            if mods.iter().any(|m| m == "hvx") {
+                "loaded"
+            } else {
+                "not loaded"
+            },
+            if Path::new("/dev/hvx").exists() {
+                "there"
+            } else {
+                "not there"
+            }
+        ),
         "hydo module install",
         false,
     );
     if d != "/dev/hvx" {
-        c.check(
+        c.check_found(
             Path::new(&d).exists(),
             &format!("{d} present (HVX_DEV: runs use this side module)"),
+            &format!("{d} is not there (HVX_DEV: runs use this side module)"),
             &format!("hydo module load --name {}", devname(e)),
             false,
         );
@@ -373,9 +416,10 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
             false,
         );
     }
-    c.check(
+    c.check_found(
         !mods.iter().any(|m| m == "kvm_intel"),
         "kvm_intel not loaded (KVM and hvx cannot both own VT-x)",
+        "kvm_intel is loaded (KVM and hvx cannot both own VT-x)",
         "`hydo module load` unloads kvm and kvm_intel (stop KVM virtual machines first)",
         false,
     );
@@ -386,26 +430,42 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         lock_holders(&lk)
     );
     let g = ctx.guest();
-    for p in [
-        g.join("bzImage"),
-        g.join("initramfs-kafka.cpio.gz"),
-        g.join("busybox"),
-        g.join("hvx_seedrng"),
-        g.join("hydo-agent"),
-        ctx.p("tools/bin/mke2fs"),
-        g.join("store-closures.txt"),
-        g.join("store").join("nix").join("store"),
+    // the release's guest files, each with what it is (0.3.1: a reader of the quickstart met
+    // initramfs-kafka.cpio.gz here without a word about it)
+    for (p, what) in [
+        (g.join("bzImage"), "the x86_64 guest kernel"),
+        (
+            g.join("initramfs-kafka.cpio.gz"),
+            "the initramfs every x86_64 guest boots; the name is historical",
+        ),
+        (g.join("busybox"), "the guest's shell tools"),
+        (g.join("hvx_seedrng"), "seeds the guest's random numbers"),
+        (
+            g.join("hydo-agent"),
+            "the guest agent, every image's first process",
+        ),
+        (ctx.p("tools/bin/mke2fs"), "makes the images' file systems"),
+        (
+            g.join("store-closures.txt"),
+            "the list of the guest network tools",
+        ),
+        (
+            g.join("store").join("nix").join("store"),
+            "the guest network tools",
+        ),
     ] {
-        c.check(
+        c.check_found(
             p.exists(),
-            &format!("present: {}", rel(ctx, &p)),
+            &format!("present: {} ({what})", rel(ctx, &p)),
+            &format!("missing: {} ({what})", rel(ctx, &p)),
             &reinstall(ctx),
             false,
         );
     }
-    c.check(
+    c.check_found(
         access(&ctx.p("bin/hydo-hvx"), libc::X_OK),
         "run engine present (bin/hydo-hvx; it runs inside hydo when /dev/hvx is usable)",
+        "the run engine bin/hydo-hvx is missing or not executable",
         "unpack the release again and run its install.sh",
         false,
     );
@@ -430,9 +490,10 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
             ),
         ),
     };
-    c.check(
+    c.check_found(
         text.contains("1.47.0"),
         "bundled mke2fs runs (under the frozen clock)",
+        "the bundled mke2fs does not run (under the frozen clock)",
         &fix,
         false,
     );
@@ -607,9 +668,10 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         println!("{note}");
     }
     let (sys, mach) = uname_sys_machine();
-    c.check(
+    c.check_found(
         sys == "Darwin" && mach == "arm64",
         "Apple Silicon Mac",
+        "not an Apple Silicon Mac",
         "hydo needs an M1 or later Mac",
         false,
     );
@@ -641,9 +703,10 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         ctx.guest().join("tc-closure.txt"),
         ctx.guest().join("hydo-agent"),
     ] {
-        c.check(
+        c.check_found(
             p.exists(),
             &format!("present: {}", rel(ctx, &p)),
+            &format!("missing: {}", rel(ctx, &p)),
             &reinstall(ctx),
             false,
         );
@@ -663,10 +726,14 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
             .trim_start_matches('/'),
         ),
     ] {
-        c.check(
+        c.check_found(
             p.exists(),
             &format!(
                 "present: {} (service networks and the freeze)",
+                rel(ctx, &p)
+            ),
+            &format!(
+                "missing: {} (service networks and the freeze)",
                 rel(ctx, &p)
             ),
             "not in this installation: manifests with `network: bridge`, `addr:` or `faults: [freeze]` \
@@ -691,10 +758,14 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
     )
     .map(|(_, t)| t)
     .unwrap_or_default();
-    c.check(
+    c.check_found(
         sig.contains("com.apple.security.hypervisor"),
         &format!(
             "{} signed with the hypervisor entitlement",
+            hvmx.file_name().unwrap_or_default().to_string_lossy()
+        ),
+        &format!(
+            "{} is not signed with the hypervisor entitlement",
             hvmx.file_name().unwrap_or_default().to_string_lossy()
         ),
         "hydo setup",
