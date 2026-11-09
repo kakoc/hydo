@@ -219,6 +219,38 @@ ended at stop 1,712. `hydo inspect read` of `/data/t/out` at stops 1,585, 1,590,
 `--freeze` at stop 1,582 showed `length: 30`. At stop 1,580 the line was not printed yet. The freeze stops the processes with the agent's own
 code, which also runs on that vCPU.
 
+### Where the 40th point fired (Milestone 208)
+
+With `HYDO_PREEMPT_RECORD=1` the KVM engine writes `one.preempt.jsonl` into the run directory,
+one record per forced preemption point. The engine only reads registers. On the build machine
+both schedules gave their recorded fingerprints with the records on, twice each with the same
+records: `pctn=40` VIOLATION `6b2a4115d537b1c3`, `pctn=39` OK `7bd5b072bda6734c`. A run of
+`pctn=40` without the records gave `6b2a4115d537b1c3` too.
+
+The seeded draws of the first 39 points do not depend on `pctn`, so the `pctn=40` schedule has
+the 39 points of `pctn=39` and one more. `hydo diff` of the two runs names that point:
+
+```text
+The first forced preemption point where the runs' records differ:
+  Only in B:
+    + run   stop 219  preempt  point 38 at exit 13,863 moved the clock from 3,093,347,500 to
+            3,097,120,000 ns (the timer's deadline): kernel code at pc 0xffffffff81232bc0,
+            thread pointer 0x7f375a2737f0 (page table 0x2d03000, sp 0xffffffff8180bf00)
+  What differs: the runs' records share their first 38 points
+  What differs: B has a point at exit 13863 that A does not have
+  What differs: A's next point: point 38 at exit 13,882 moved the clock from 3,093,395,000 to
+                3,097,120,000 ns (the timer's deadline): kernel code at pc 0xffffffff81232bc0 ...
+```
+
+The point fired 2,919 exits after the workload started, at stop 219, while the guest kernel
+wrote to the serial port (`io_serial_out` in the guest kernel's symbols) on its interrupt stack
+(`irq_stack_backing_store`). It moved the guest's clock to the timer's deadline 19 exits earlier
+than the `pctn=39` run does at its next point. From there on the two runs differ in timing. The
+test's output differs about 1,450 stops later, and the queue length that the test reads is 0
+instead of 22. All 40 points fall in the first 3,000 exits of the workload (`pctk=3000`), while
+the test process starts. At both runs' points there the kernel runs on its interrupt stack, so
+the extra point changes when the timer interrupts come, not which thread is stopped.
+
 ## Schedules run
 
 - Native: 2,604 runs on the Mac and the bare-metal machine; none failed.
@@ -226,6 +258,8 @@ code, which also runs on that vCPU.
   images, and 22 hand runs. On the first programs: 400 explored schedules and 15 hand runs.
 - hvx, the bare-metal machine: on the current images 9 hand runs (1 to 4 vCPUs); on the first
   programs 172 explored schedules and 6 hand runs.
+- Milestone 208, KVM on the build machine: the 8 runs of `hydo-bench rebaseline --check
+  --thorough`, and 5 hand runs with and without the preemption records.
 
 ## What hydo lacked, ranked
 
@@ -238,11 +272,17 @@ code, which also runs on that vCPU.
    `pctn=40`, but hydo does not say at which VM exit each point fired, or which thread it stopped.
    The shrinker tried `pctn=0` and `pctn=20` and kept `pctn=40`. A list of the points that fired,
    with the guest thread and instruction at each, would point at the window directly.
+   Added in Milestone 208, as described in the section "Where the 40th point fired" below.
 3. **`--timing --preempt` on hvx draws schedules that the module refuses.** Each schedule with both
    `tj=` (tick jitter, `tjmax=500000`) and `pp=` (a shorter tick period) ends
    `ERROR harness tick jitter (needs the PMU clock)`, although the PMU clock is on: the module
    answers `HVX_SET_TJITTER` with `EINVAL` (`worker-0.err`). That was 15 of 100 schedules.
    The report counts them as 15 failures of the class `test-failed`, all reproduced.
+   Fixed in Milestone 208. The explorer keeps the drawn jitter below half of `pp=`'s period. The
+   engine refuses such a combination before any VM, and the explorer counts a refused run as
+   `refused`, never as a failure. The same exploration on the current buggy image then gave 100
+   passes; its 15 schedules with both tokens carry `tjmax=32768 pp=65536` or
+   `tjmax=8192 pp=16384`.
 4. **hvx's several-vCPU mode does not reach this race.** Turns of 64 to 2,097,152 branches never
    let the worker take an operation in the window. The KVM engine's one vCPU did. There the
    guest switches threads at the exit-counted timer and at the forced points. Some races need one thread

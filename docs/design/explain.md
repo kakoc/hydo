@@ -31,6 +31,7 @@ two schedules that agree up to some point give equal records up to that point.
 | Network packets | not recorded (virtio-net has a capture for scripted devices; the freeze sweep counts packets of one stream) | a guest time per frame | no: an engine change (a frame log with the guest time of each frame) |
 | Disk requests | not recorded (the engine sees each virtio-blk request: its index, sectors, length, flush) | a guest time per request | no: an engine change (a request log) |
 | Guest memory | the snapshot fingerprint of the whole run (`fp=`) only | the end of the run | no: an engine request that hashes RAM (and disk) at a given stop |
+| Forced preemption points (`pct=`; since Milestone 208) | `one.preempt.jsonl` with `HYDO_PREEMPT_RECORD=1`, on the KVM and Mac engines: each point's exit, what it did, and the guest's PC, mode, page table, thread pointer, and stack pointer | the exit count, placed before the stop that follows it | on KVM and the Mac; on hvx it needs a module change |
 | Instructions | Intel PT coverage exists (M40), not per run | the instruction | no |
 
 A *divergence* at a level is the first record one run has and the other does not, after

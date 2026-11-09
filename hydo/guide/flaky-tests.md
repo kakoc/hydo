@@ -121,6 +121,38 @@ hydo explore --vcpus 2 --sweep turns --turn-range 18000-19000 --turn-points 21 \
 | 18,612 to 18,802 | passes |
 | 18,808 to 19,000 | fails |
 
+## Where the forced preemption points fired (KVM and the Mac)
+
+On one vCPU of the KVM or the Mac engine, `pct=<seed> pctn=<n> pctk=<exits>` puts `n` forced
+preemption points at seeded VM exits among the first `pctk` exits of the workload. At a point
+whose guest timer is armed, the guest's clock jumps to the timer's deadline, so the timer
+interrupt preempts the thread that runs there. A verdict can change between `pctn=39` and
+`pctn=40` (the Qdrant example `hydo/onboard/examples/qdrant-flaky-10200`). The first 39 points
+of both schedules are the same, so the fortieth point decides. To see where each point fired, set
+`HYDO_PREEMPT_RECORD=1`:
+
+```sh
+HYDO_PREEMPT_RECORD=1 hydo run --backend kvm "disk=none pct=ec699251106e8e0c pctn=40 pctk=3000 | run" --out r40
+HYDO_PREEMPT_RECORD=1 hydo run --backend kvm "disk=none pct=ec699251106e8e0c pctn=39 pctk=3000 | run" --out r39
+hydo diff r39 r40                          # the first point where the two runs' records differ
+hydo inspect events r40 --kind preempt     # every point, at the stop that follows it
+```
+
+The run directory then has `one.preempt.jsonl`, one JSON line per point:
+
+- `i`: the point's index in exit order.
+- `exit`: the engine's exit count where it fired.
+- `result`: what the point did. `moved` means the clock moved to the timer's deadline. `due`
+  means the timer was already due. `missed` means no timer was armed, so the point did nothing.
+- `vtime_ns`, `to_ns`: the guest's clock before the point and after it.
+- `pc`, `mode`, `page_table`, `thread_pointer`, `sp`: the guest's registers at the point. They
+  are the instruction, `user` or `kernel`, the page-table root (the process) and the user thread
+  pointer (the thread). The thread pointer is the FS base on x86_64 and TPIDR_EL0 on arm64. The
+  last one is the stack pointer.
+
+The engine only reads registers, so the fingerprints are the same with and without the records.
+hvx has no such record yet: its preemption points (`pp=`, `xt=`) fire inside the kernel module.
+
 ## Explore the timing
 
 ```sh
@@ -132,3 +164,10 @@ hydo explore --vcpus 2 --turns --timing --seeds 1-60
 this exploration gave 56 failures and 4 passes at the fingerprint epoch 1. Every pass had turns
 of at most 9,096 branches.
 Each failure is in the class `test-failed`.
+
+On hvx, `--preempt` draws a shorter tick period (`pp=65536` or `pp=16384`) or extra ticks
+(`xt=`). With `--timing` too, the drawn tick jitter stays below half of that period, because hvx
+refuses a jitter delay of a tick period or more. The engine refuses a schedule it cannot arm
+before any VM, for example a hand-written `tjmax=500000` with `pp=65536`. `hydo run` stops with
+the reason. The explorer records such a run with the class `refused` and counts it in
+`refused`, never as a failure.

@@ -5485,3 +5485,156 @@ The engine, the module, the snapshots and the controller were not involved: the 
 **Nothing recorded moved.** The recorded values are the fresh boots' (M204 recorded with `--thorough`), and the pool now gives them. The fingerprint epoch stays 2: no engine, controller, agent or kernel changed.
 
 **Left.** The cross-check runs one schedule per image and only when that schedule is not in the cache. A difference that shows only on another schedule, or only after an engine change that the cache key does not see (the run identity has the engine programs, the module and the epoch, but not hydo-bench's own controller), is found by the next run that misses the cache, or by `--thorough`, which runs only fresh boots and so cannot see it.
+
+### Milestone 208 (tentative) — DONE (refused schedules are no findings, and the explorer draws none on hvx; a record of where each forced preemption point fired on KVM and the Mac; 2026-11-09)
+
+**Where it came from.** The Qdrant flaky-test example (`hydo/onboard/examples/qdrant-flaky-10200`,
+RESULTS.md, "What hydo lacked") found two gaps. First, `hydo explore --timing --preempt` on hvx
+gave 15 failures of the class `test-failed` in 100 schedules, all "reproduced", and every one of
+them was `ERROR harness tick jitter (needs the PMU clock)` although the PMU clock was on. Second,
+the verdict flips between `pctn=39` and `pctn=40` on KVM, and nothing said where the forced
+preemption points fired.
+
+**The cause of the false failures.** `--timing` draws seeded tick jitter with `tjmax=500000`
+(the explorer's `TJ_MAX`) for half of the schedules, and on hvx `--preempt` draws `pp=65536` or
+`pp=16384` (a shorter PMU tick period) for a quarter of them. The engine arms `pp=` first
+(`HVX_SET_PMU`), then the jitter (`HVX_SET_TJITTER`). The module refuses a seeded jitter whose
+largest delay is a tick period or more (`hvx.c`: `!t.n_explicit && t.max_delay >= vm->pmu_period`
+gives `EINVAL`), and the engine reported that as the message it has for a VM without the PMU
+clock. The explorer counts every verdict that is not OK as a failure, re-ran it (the same
+ERROR, so "reproduced") and put it in the class of the image's workload (`test-failed` for a
+test program). About one schedule in eight drew the pair; on Qdrant it was 15 of 100.
+
+**The fix.**
+
+- The rule is written down once: `hydo_hvx::sched::Sched::refusal` (with `PMU_PERIOD`,
+  `PMU_PERIOD_MIN`, `HVX_XT_MAX_RATE`) says what the module refuses when a schedule is armed: a
+  `pp=` period of 512 branches or less, a seeded `tjmax` or an explicit `tjx` delay of a tick
+  period or more (the period of `pp=`, else 2^20), more than 64 extra ticks per period. The Mac
+  and KVM engines' rule, the hvx-only host tokens, moved to
+  `hydo_hvm::machine::host_token_problem` (both engines call it). `hydo_engine::refusal(kind,
+  schedule)` gives the rule of each engine, and `hydo_engine::is_refused(verdict)` recognises a
+  refused run's verdict (`ERROR refused: ...`, `UNSUPPORTED on <engine>: ...`).
+- Refused before any VM: `hydo run` (and `repro`, `explain`, `ci`, through `run_engine_try`) stops
+  with "the engine refuses the schedule: ..." before the engine boots. The explorer's worker
+  answers `ERROR refused: ...` without running. The hvx engine refuses such a request itself
+  before it restores S1 (`ERROR refused: ...`), and the program's one-shot mode before the boot.
+- Never a finding: the explorer gives a refused first run the class `refused`, does not re-run
+  or shrink it, and counts it in the results addition `Summary.refused` (with a warning line and
+  a `refused` row in the printed summary and `report.md`).
+- Never drawn: on hvx, when `--preempt` draws `pp=` and `--timing` drew a seeded jitter with
+  `tjmax` of `pp=` or more, `tjmax` becomes `pp/2` (`TJ_MAX` is about half of the default
+  period). The draws themselves are unchanged, so every other schedule is as before.
+
+**What moved, and why.** Only schedules with both a seeded `tj=` and `pp=` changed: their
+`tjmax=` (and the `tjx=` lists the shrinker derives from it). The explorer's identity golden
+`tests/golden/identity-quick.txt` was re-recorded: 119 of 15,249 lines changed. A comparison of
+the stream before and after the fix found only such lines, and 267 refused schedules in the old
+stream against none in the new one. The full stream (`HYDO_IDENT_FULL=1`) changes in 2,572 lines
+with the same property; its golden was already out of date on `main` (new examples are inputs
+of it) and was not re-recorded. The scripted-engine scenario `stack_swarm_pos_preempt` was
+re-recorded: the same 19 failures, all reproduced; its `mean_run_s` went from 5.6 to 5.3,
+because the scripted engine's seconds are a function of the schedule text. The explorer's schedule
+corpus (`corpus-full.txt`, 519,343 strings, full tier) changed in 121 of its 127 chunks. hydo-control's
+identity corpora (`corpus-quick.txt`, `features-quick.txt`, full tier) take their schedules from
+the same generator and were re-recorded: 52 of their 62 per-manifest count lines changed with the
+scripted runs of those schedules. With the old draw (the halving switched off by hand for the
+test), the three corpora and the explorer's identity stream pass against their old goldens, so
+nothing else moved. No recorded fingerprint moved (below).
+
+**The preemption record.** With `HYDO_PREEMPT_RECORD=1` (a registry entry; the KVM and Mac
+engines' options), a run with `pct=` writes `<tag>.preempt.jsonl` into the engine's output
+directory: `one.preempt.jsonl` in a `hydo run` directory. Each line is one point
+(`hydo_hvm::machine::PctRec`): `i`, `exit`, `result` (`moved`, `due`, `missed`, `passed`),
+`vtime_ns`, `to_ns`, and the guest's `pc`, `mode`, `page_table` (CR3, TTBR0_EL1),
+`thread_pointer` (the FS base, TPIDR_EL0) and `sp` (RSP; SP_EL0, which Linux keeps as the
+current task at EL1). The point logic moved into `Pct::at_exit`, shared by both engines, with the
+same results and counts as before. The engines read the registers only at a point, and only
+when the record is on (`KVM_GET_REGS` and `KVM_GET_SREGS`, `hv_vcpu_get_reg` and
+`hv_vcpu_get_sys_reg`); the KVM rewind mode drops the records after its checkpoint before it
+replays. Readers: `hydo inspect events` lists each point as an event of the kind `preempt` at
+the stop that follows it (`at` is its exit count), and `Timeline.preempt` (`PreemptSummary`)
+counts what the points did. `hydo diff` compares the two runs' records point by point in exit
+order and writes the first difference to `Diff.first_preempt` (level `preempt`, the stop after
+the point in each run, the record only one run has or both differing records, how many points
+both share, and the other run's next point), with a section in `diff.txt`. All three are
+results-format additions. The scripted KVM vCPU of the tests keeps a `Print`'s place across an
+interrupt (`r13`), because a forced point can make the timer due between two of its bytes.
+
+**Tests.** `hydo-hvx` `refusals_follow_the_module`; `hydo-explore` `refusals::` (every schedule
+the explorer generates with `--timing --preempt --new-faults`, and `--more-faults` on hvx, for
+the built-in space, Redis and the stack, 400 seeds of three strategies on each engine: 10,800
+schedules, every one accepted by its engine, with more than 100 that draw `tj=` with `pp=` and
+more than 100 `tj=` with `pct=`; the halved `tjmax`; the refusal of the Qdrant pair);
+`hydo-hvm` `the_record_does_not_change_what_a_point_does`; `hydo-kvm`
+`preemption_records_name_every_point_and_move_nothing` (with and without the record, and with
+the rewind mode: the same fingerprints, verdict and extras, one record per point reached,
+`pctf=` equal to the moved and due records); `hydo` `preempt::` and
+`the_first_preemption_point_where_the_records_differ`.
+
+**Proof on the Qdrant example (KVM, the build machine, one VM at a time).**
+
+- `hydo-bench rebaseline --check --thorough --only kvm/qdrant-flaky-buggy,kvm/qdrant-flaky-fixed`:
+  both images built twice with their recorded bytes, 4 schedules twice each, every value as
+  recorded.
+- With `HYDO_PREEMPT_RECORD=1`, `hydo run --backend kvm` twice each: `pctn=40` VIOLATION
+  `6b2a4115d537b1c3` (40 records), `pctn=39` OK `7bd5b072bda6734c` (39 records), the recorded
+  fingerprints, with the same records in both runs of a schedule. `pctn=40` without the record:
+  `6b2a4115d537b1c3`, and no file.
+- `hydo diff` of the `pctn=39` and `pctn=40` runs: "B has a point at exit 13863 that A does not
+  have". The two runs' records share their first 38 points. The point only `pctn=40` has is
+  `point 38 at exit 13,863 moved the clock from 3,093,347,500 to 3,097,120,000 ns`, at stop 219,
+  2,919 exits after the workload started. The guest kernel was in `io_serial_out` on its
+  interrupt stack (`irq_stack_backing_store`, from the guest kernel's `vmlinux`). The `pctn=39`
+  run's next point makes the same jump 19 exits later, at exit 13,882. The test's output differs
+  about 1,450 stops later, and the test reads the queue length 0 instead of 22. The example's
+  RESULTS.md has the section "Where the 40th point fired".
+- `hydo inspect events <run> --kind preempt`: 40 events; `preempt`: 4 moved, 36 due, 2 thread
+  pointers among the moved points.
+
+**The Mac.** The fast `hydo-bench rebaseline --check` with this tree over the 0.3.0 Mac release
+(a new work folder): 21 images built with their recorded bytes, 76 schedules, every value as
+recorded, the pool and the fresh boot one result each (583 s). The release Redis image with
+`disk=none pct=ec699251106e8e0c pctn=20 pctk=20000 | run`: `81868eb7c7169aca` twice with the
+record (14 points reached, the same records) and once without.
+
+**hvx (the bare-metal machine).** The fast `hydo-bench rebaseline --check` with this tree over
+the 0.3.0 Linux release (a new work folder, the loaded main module `91D86B693F4D4035C368F9B`,
+two VMs at a time): 43 images, 141 schedules, every verdict, fingerprint and ctl value as
+recorded, 41 first schedules (one per image) run both in the worker pool and from a fresh boot with one result each (builds 1,414 s,
+runs 1,627 s). It exits 3 only because the two shop images have other bytes: they carry their
+inputs folder's path (`--set bin={inputs}/shop`, the list's note), and this work folder's path
+differs from the recording's in its characters, not its length, so the fingerprints stay the
+same. With the epoch-2 recording's inputs folder (`--inputs` of M204's work folder, `--only
+hvx/shop-buggy,hvx/shop-fixed`) both images have their recorded bytes and the 8 schedules their
+recorded values, exit 0. Linux clippy (`-D warnings`) and the tests of hydo-kvm, hydo-hvx, hydo-engine and
+hydo-hvm pass on the bare-metal machine.
+
+The Qdrant exploration of the example's RESULTS.md, `hydo explore --timing --preempt --seeds 1-100
+--workers 2` on the epoch-2 buggy image built here: 100 schedules, 0 failures (153 s). The 15
+schedules that draw both jitter and `pp=` (before the fix the 15 false failures) now carry
+`tjmax=32768 pp=65536` (7) or `tjmax=8192 pp=16384` (8) and pass; no run says `harness tick
+jitter`. The test read the queue length 35 in 87 runs, 34 in 11 and 36 in 2, as on the idle
+native machines. `hydo run` of the hand-written `disk=none tj=5 tjpm=10 tjmax=500000 pp=65536 |
+run` on that image stops with "hydo: not run (no VM was started): the engine refuses the
+schedule: tick jitter tjmax=500000 with a tick period of 65536 branches (pp=65536): hvx refuses a
+delay of a tick period or more; use a tjmax below 65536 (on hvx)".
+
+**The full tier on this Mac** (`cargo test --locked --release --workspace --no-fail-fast`) found
+the three generator corpora above, and once
+`hydo-kvm` `engine::the_rewind_mode_changes_nothing_without_a_counter_loop` with two fingerprints
+for its two runs. That test does not use the record; the change it runs through is the scripted
+vCPU's `Print` place across an interrupt. It passed in 50 later runs of the KVM test program, 44
+of them with 10 to 14 busy loops on the Mac's 12 cores, and on the bare-metal machine. The one
+failure is not explained (AGENTS.md open item 77). With the corpora re-recorded, the full tier
+passes on this Mac, and the fast tier, clippy (`-D warnings`), `cargo fmt --check`,
+`ci/consolidate-tests.sh --check` and `sh ci/vale.sh` pass.
+
+**Nothing recorded moved.** The fingerprint epoch stays 2: no engine's guest-visible behaviour,
+the controller, the agent or a kernel changed.
+
+**Left (AGENTS.md open item 77).** hvx has no preemption record: its forced points fire inside
+the module, so the record needs a log of the forced ticks with RIP, CR3 and the FS base and a
+new ioctl, on a side module first. The record names a thread by its thread pointer, not by its
+process or thread id. On the Mac it ran on the scripted tests and one Redis schedule, not on a
+flaky test.

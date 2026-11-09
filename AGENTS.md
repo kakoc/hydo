@@ -370,6 +370,20 @@ and the class `test-failed`. The guide topic is `hydo guide flaky-tests`; the ex
 entry of `hydo/onboard/recorded.json` can name `vcpus` (and `turn_margin`), and the example's
 turn-length pair on 2 vCPUs is recorded there.
 
+**Refused schedules and the preemption record (M208).** An engine refuses a host part it
+cannot arm before any VM: `hydo_engine::refusal`. For hvx this is the module's rule in
+`hydo_hvx::sched::refusal`: no tick-jitter delay of a tick period or more, so not `tjmax=500000`
+with `pp=65536`. For the Mac and KVM engines it is the hvx-only host tokens. `hydo run` stops with
+the reason. The explorer records such a run with the class `refused` and counts it in the
+results addition `Summary.refused`, never as a failure. On hvx, `--timing --preempt` keeps the
+drawn jitter below half of `pp=`'s period, so it draws no refused combination. With
+`HYDO_PREEMPT_RECORD=1`, the KVM and Mac engines write `<tag>.preempt.jsonl` for a `pct=` run. It
+has one record per forced preemption point: its exit, what it did, and the guest's PC, mode,
+page table, thread pointer, and stack pointer there. The engines only read registers, so no
+fingerprint moves. `hydo inspect events` shows the points (kind `preempt`, `Timeline.preempt`),
+and `hydo diff` names the first point where two runs' records differ (`Diff.first_preempt`). hvx
+has no such record yet (open item 77). Proof: `docs/HISTORY.md` Milestone 208.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -520,6 +534,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     so a narrow band between two grid points stays hidden. At epoch 2 the dense sweep of the
     nats-server image stepped over the failing `q=18140`. A test workload with services or with
     `faults:` was not run.
+77. The preemption record (M208) exists on the KVM and Mac engines only. hvx's points fire
+    inside the kernel module: `pp=` is a shorter tick period and `xt=` adds extra ticks. A record
+    there needs a module change: a small log of the ticks the schedule forced, with RIP, CR3, and
+    the FS base, read by a new ioctl. Without it, a verdict that flips between two hvx timing
+    schedules cannot be traced to the tick that made the difference. The record names a thread
+    by its thread pointer, not by its process or thread id; reading the guest kernel's `current`
+    task needs its symbols. On the Mac the record ran only with the scripted tests and one Redis
+    schedule, not on a flaky test. Once, in the full tier on this Mac, the scripted KVM test
+    `the_rewind_mode_changes_nothing_without_a_counter_loop` gave two fingerprints. It then
+    passed 50 times, 44 of them under CPU load. The cause was not found; if it is a rare
+    nondeterminism of the rewind mode, CI's full tier can meet it again.
 
 ## Milestone index
 
@@ -762,6 +787,12 @@ build machine, before 2026-10-13.
   booted without the CPUID cache leaves. Every boot path now reads the guest's settings with
   `hydo_control::agent::image_guest`, and the fast rebaseline also runs each image's first schedule
   in the pool and requires the fresh boot's values. Nothing recorded moved
+- M208 (tentative number): from the Qdrant flaky-test example. `hydo explore --timing --preempt`
+  on hvx no longer draws tick jitter that `pp=`'s shorter period makes the module refuse, which
+  gave false `test-failed` failures. Engines refuse what they cannot arm before any VM, and the
+  explorer never counts a refused run as a failure. On KVM and the Mac, `HYDO_PREEMPT_RECORD=1`
+  records where each forced preemption point fired, and `hydo diff` names the first point where
+  two runs differ: on the Qdrant pair it is the fortieth point. Nothing recorded moved
 
 ## Where to look
 
