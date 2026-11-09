@@ -276,6 +276,17 @@
           "items": {
             "$ref": "#/$defs/MessagesCheck"
           }
+        },
+        "steer": {
+          "description": "A steered search's first run (added in M209, docs/design/steered-search.md): the value\nthe run reported and where its schedule came from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SteerRun"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -1691,6 +1702,54 @@
         "max_distance"
       ]
     },
+    "SteerRun": {
+      "description": "One first run of a steered search (`hydo explore --steer`; added in M209).",
+      "type": "object",
+      "properties": {
+        "value": {
+          "description": "The best value the run's consoles reported (the smallest for the goal `min`, the largest\nfor `max`); absent when they reported none.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "origin": {
+          "description": "`random` (a schedule drawn from its own seed, as the plain exploration draws it) or\n`mutant` (one change to a schedule of the corpus).",
+          "type": "string"
+        },
+        "drawn_seed": {
+          "description": "A random schedule's seed.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "parent": {
+          "description": "A mutant's parent: the tag of the corpus entry it was made from.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change": {
+          "description": "A mutant's change, in words (`pctn=39 -> pctn=40`, `added T=12:300`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "best": {
+          "description": "The run's value was better than every earlier run's.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "origin"
+      ]
+    },
     "Exploration": {
       "description": "`exploration.json`: an exploration's result.",
       "type": "object",
@@ -1746,6 +1805,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/TurnSweep"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "steer": {
+          "description": "`--steer` (added in M209): the steered search's options, its best value, its progress\nand its final corpus.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SteerSearch"
             },
             {
               "type": "null"
@@ -2226,6 +2296,174 @@
           ]
         }
       }
+    },
+    "SteerSearch": {
+      "description": "A steered search's record in `exploration.json` (added in M209).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The value's name: an SDK id (`HYDO-STEER` records), a manifest `steer:` entry's id, or\n`match` for `--steer-match`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "`sdk` (the SDK's `HYDO-STEER` records) or `pattern` (a regular expression over the\nconsoles' lines).",
+          "type": "string"
+        },
+        "pattern": {
+          "description": "The pattern, for the source `pattern`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "goal": {
+          "description": "`min` or `max`: which way is closer to failing.",
+          "type": "string"
+        },
+        "mix_permille": {
+          "description": "Mutants per thousand schedules once the corpus has an entry (`--steer-mix`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "batch": {
+          "description": "Schedules per round: the corpus changes only between rounds (`--steer-batch`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "corpus_max": {
+          "description": "The most schedules the corpus keeps (`--steer-corpus`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stream_seed": {
+          "description": "The seed of the search's own stream (the mutations, and the choice between a mutant and\na random schedule).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "runs": {
+          "description": "First runs made, random schedules and mutants.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "random": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "mutants": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "with_value": {
+          "description": "First runs whose consoles reported a value.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "best": {
+          "description": "The best value of the search and the first run that reported it.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "best_tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first_failure": {
+          "description": "The first failing first run: its run number (1 is the first schedule), its tag and its\nvalue.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "first_failure_tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first_failure_value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "stopped": {
+          "description": "The search stopped after the round of its first failure (`--steer-stop`).",
+          "type": "boolean"
+        },
+        "progress": {
+          "description": "Every run whose value was better than every earlier run's, in run order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SteerPoint"
+          },
+          "default": []
+        },
+        "corpus": {
+          "description": "The corpus at the end, best first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SteerPoint"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "goal",
+        "mix_permille",
+        "batch",
+        "corpus_max",
+        "stream_seed",
+        "runs",
+        "random",
+        "mutants",
+        "with_value"
+      ]
+    },
+    "SteerPoint": {
+      "description": "One run of a steered search's progress or corpus (added in M209).",
+      "type": "object",
+      "properties": {
+        "run": {
+          "description": "The run number (1 is the first schedule).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tag": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number",
+          "format": "double"
+        },
+        "schedule": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "run",
+        "tag",
+        "value",
+        "schedule"
+      ]
     },
     "Failure": {
       "description": "A failing run of an exploration and its re-runs.",

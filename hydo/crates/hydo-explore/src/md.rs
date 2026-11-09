@@ -88,6 +88,16 @@ pub fn summary_rows(doc: &Exploration) -> Vec<(String, Value)> {
     if let Some(n) = s.refused {
         put("refused", json!(n));
     }
+    // M209: a steered search's best value and its first failure (absent for other explorations)
+    if let Some(st) = &doc.steer {
+        put("steer", json!(format!("{} {}", st.goal, st.id)));
+        put("steer_mutants", json!(st.mutants));
+        put("steer_best", st.best.map(fl).unwrap_or(Value::Null));
+        put(
+            "steer_first_failure",
+            st.first_failure.map(|n| json!(n)).unwrap_or(Value::Null),
+        );
+    }
     r
 }
 
@@ -118,6 +128,9 @@ pub fn report(doc: &Exploration) -> String {
     table(doc, &mut l);
     if let Some(t) = &doc.turn_sweep {
         l.extend(turn_sweep_md(t));
+    }
+    if let Some(s) = &doc.steer {
+        l.extend(steer_md(s));
     }
     let mut by: std::collections::BTreeMap<(String, String), Vec<&Failure>> = Default::default();
     for f in &doc.failures {
@@ -251,6 +264,73 @@ pub fn report(doc: &Exploration) -> String {
 }
 
 /// `--sweep turns` (M205): the boundaries with both neighbours, then every length run.
+/// The steered search's section (M209).
+fn steer_md(s: &hydo_results::SteerSearch) -> Vec<String> {
+    let v = |x: f64| {
+        if x.fract() == 0.0 && x.abs() < 1e15 {
+            format!("{}", x as i64)
+        } else {
+            format!("{x}")
+        }
+    };
+    let what = match &s.pattern {
+        Some(p) => format!("the first capture group of `{p}` in the consoles"),
+        None => format!("the SDK's `HYDO-STEER` records of `{}`", s.id),
+    };
+    let mut l = vec![
+        String::new(),
+        "## Steered search (`--steer`)".into(),
+        String::new(),
+        format!(
+            "The value: {what}, the {} of each run (goal `{}`). {} runs: {} random schedules and {} mutants \
+             ({} mutants per 1000 schedules once the corpus had an entry, rounds of {}, a corpus of {}). \
+             {} runs reported a value.",
+            if s.goal == "max" { "largest" } else { "smallest" },
+            s.goal,
+            s.runs,
+            s.random,
+            s.mutants,
+            s.mix_permille,
+            s.batch,
+            s.corpus_max,
+            s.with_value
+        ),
+        String::new(),
+    ];
+    match (s.first_failure, &s.first_failure_tag) {
+        (Some(n), Some(t)) => l.push(format!(
+            "The first failure is run {n} (`{t}`), value {}.{}",
+            s.first_failure_value
+                .map(v)
+                .unwrap_or_else(|| "none".into()),
+            if s.stopped {
+                " The search stopped after its round."
+            } else {
+                ""
+            }
+        )),
+        _ => l.push(format!("No run failed in {} runs.", s.runs)),
+    }
+    l.push(String::new());
+    if !s.progress.is_empty() {
+        l.push("Every run whose value was better than every earlier run's:".into());
+        l.push(String::new());
+        l.push("| run | tag | value | schedule |".into());
+        l.push("|---|---|---|---|".into());
+        for p in &s.progress {
+            l.push(format!(
+                "| {} | {} | {} | `{}` |",
+                p.run,
+                p.tag,
+                v(p.value),
+                p.schedule.replace('|', "\\|")
+            ));
+        }
+        l.push(String::new());
+    }
+    l
+}
+
 fn turn_sweep_md(t: &hydo_results::TurnSweep) -> Vec<String> {
     let mut l = vec![
         String::new(),

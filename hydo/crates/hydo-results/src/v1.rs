@@ -482,6 +482,99 @@ pub struct Run {
     /// a `history-check` finding, under the id `<check>.<claim>`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub messages: Vec<MessagesCheck>,
+    /// A steered search's first run (added in M209, docs/design/steered-search.md): the value
+    /// the run reported and where its schedule came from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steer: Option<SteerRun>,
+}
+
+// ------------------------------------------------------------------ steered search
+
+/// One first run of a steered search (`hydo explore --steer`; added in M209).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SteerRun {
+    /// The best value the run's consoles reported (the smallest for the goal `min`, the largest
+    /// for `max`); absent when they reported none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<f64>,
+    /// `random` (a schedule drawn from its own seed, as the plain exploration draws it) or
+    /// `mutant` (one change to a schedule of the corpus).
+    pub origin: String,
+    /// A random schedule's seed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drawn_seed: Option<u64>,
+    /// A mutant's parent: the tag of the corpus entry it was made from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    /// A mutant's change, in words (`pctn=39 -> pctn=40`, `added T=12:300`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<String>,
+    /// The run's value was better than every earlier run's.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub best: bool,
+}
+
+/// A steered search's record in `exploration.json` (added in M209).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SteerSearch {
+    /// The value's name: an SDK id (`HYDO-STEER` records), a manifest `steer:` entry's id, or
+    /// `match` for `--steer-match`.
+    pub id: String,
+    /// `sdk` (the SDK's `HYDO-STEER` records) or `pattern` (a regular expression over the
+    /// consoles' lines).
+    pub source: String,
+    /// The pattern, for the source `pattern`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<String>,
+    /// `min` or `max`: which way is closer to failing.
+    pub goal: String,
+    /// Mutants per thousand schedules once the corpus has an entry (`--steer-mix`).
+    pub mix_permille: u64,
+    /// Schedules per round: the corpus changes only between rounds (`--steer-batch`).
+    pub batch: u64,
+    /// The most schedules the corpus keeps (`--steer-corpus`).
+    pub corpus_max: u64,
+    /// The seed of the search's own stream (the mutations, and the choice between a mutant and
+    /// a random schedule).
+    pub stream_seed: u64,
+    /// First runs made, random schedules and mutants.
+    pub runs: u64,
+    pub random: u64,
+    pub mutants: u64,
+    /// First runs whose consoles reported a value.
+    pub with_value: u64,
+    /// The best value of the search and the first run that reported it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub best: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub best_tag: Option<String>,
+    /// The first failing first run: its run number (1 is the first schedule), its tag and its
+    /// value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_failure: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_failure_tag: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_failure_value: Option<f64>,
+    /// The search stopped after the round of its first failure (`--steer-stop`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub stopped: bool,
+    /// Every run whose value was better than every earlier run's, in run order.
+    #[serde(default)]
+    pub progress: Vec<SteerPoint>,
+    /// The corpus at the end, best first.
+    #[serde(default)]
+    pub corpus: Vec<SteerPoint>,
+}
+
+/// One run of a steered search's progress or corpus (added in M209).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SteerPoint {
+    /// The run number (1 is the first schedule).
+    pub run: u64,
+    pub tag: String,
+    pub value: f64,
+    pub schedule: String,
 }
 
 // ------------------------------------------------------------------ messaging checks
@@ -1513,6 +1606,10 @@ pub struct Exploration {
     /// verdicts found.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_sweep: Option<TurnSweep>,
+    /// `--steer` (added in M209): the steered search's options, its best value, its progress
+    /// and its final corpus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steer: Option<SteerSearch>,
     /// Every failing first run, in seed order.
     #[serde(default)]
     pub failures: Vec<Failure>,

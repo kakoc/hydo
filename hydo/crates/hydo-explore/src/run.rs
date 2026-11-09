@@ -81,6 +81,9 @@ struct Cx {
     argv: Vec<String>,
     /// events.jsonl (opened when the run starts).
     ev: Events,
+    /// `--steer` / `--steer-match` (M209): where the value comes from and the goal given (by
+    /// `--steer-goal` or the manifest's entry).
+    steer: Option<(crate::steer::Source, Option<crate::steer::Goal>)>,
 }
 
 impl Cx {
@@ -287,6 +290,7 @@ fn setup(a: Args, env: &Env) -> Cx {
         known: Some(known),
         argv: Vec::new(),
         ev: Events::none(),
+        steer: None,
         a,
     };
     let a = cx.a.clone();
@@ -598,7 +602,60 @@ fn setup(a: Args, env: &Env) -> Cx {
         .split(',')
         .filter_map(|v| v.trim().parse().ok())
         .collect();
+    cx.steer = steer_source(&a, m.as_ref()).unwrap_or_else(|e| die(&e));
     cx
+}
+
+/// `--steer ID` (a manifest `steer:` entry of that id, else the SDK's records of that id) or
+/// `--steer-match REGEX`, with the goal of `--steer-goal`, else of the entry (M209).
+fn steer_source(
+    a: &Args,
+    m: Option<&Value>,
+) -> Result<Option<(crate::steer::Source, Option<crate::steer::Goal>)>, String> {
+    use crate::steer::{Goal, Source};
+    let given = a.steer_goal.as_deref().and_then(Goal::parse);
+    let pattern = |re: &str, what: &str| {
+        regex::Regex::new(re)
+            .map_err(|e| format!("hydo explore: {what}: not a regular expression: {e}"))
+    };
+    let src = if let Some(re) = &a.steer_match {
+        (
+            Source::Pattern {
+                id: "match".into(),
+                re: pattern(re, "--steer-match")?,
+            },
+            given,
+        )
+    } else if let Some(id) = &a.steer {
+        let entry = m
+            .and_then(|m| m.get("steer"))
+            .and_then(Value::as_array)
+            .and_then(|v| {
+                v.iter()
+                    .find(|e| e.get("id").and_then(Value::as_str) == Some(id.as_str()))
+            });
+        match entry {
+            Some(e) => {
+                let re = e.get("match").and_then(Value::as_str).unwrap_or_default();
+                let goal =
+                    given.or_else(|| e.get("goal").and_then(Value::as_str).and_then(Goal::parse));
+                (
+                    Source::Pattern {
+                        id: id.clone(),
+                        re: pattern(re, &format!("steer: {id}: match"))?,
+                    },
+                    goal,
+                )
+            }
+            None => (Source::Sdk { id: id.clone() }, given),
+        }
+    } else {
+        return Ok(None);
+    };
+    if a.sweep.is_some() || a.schedule.is_some() {
+        return Err("hydo explore: --steer goes with a seeded exploration (--seeds), not with --sweep or --schedule".into());
+    }
+    Ok(Some(src))
 }
 
 /// The refusal for an image whose manifest cannot be read (and no `--manifest`): the explorer
@@ -999,7 +1056,7 @@ fn run(mut cx: Cx) -> i32 {
         pool.close();
         return code;
     }
-    let (seeds, items, pre_res, fc_info, labels) = match &cx.a.sweep {
+    let (seeds, items, pre_res, fc_info, labels, steer) = match &cx.a.sweep {
         Some(sw) => {
             if let Some(sp) = &cx.ex.space {
                 if let Err(e) = sp.check_sweep(sw) {
@@ -1056,7 +1113,7 @@ fn run(mut cx: Cx) -> i32 {
                 println!("{}", dumps_line(&json!({"points": points.len()})));
                 return 0;
             }
-            (seeds, items, pre, info, Some(labels))
+            (seeds, items, pre, info, Some(labels), None)
         }
         None => {
             let (lo, hi) = cx
@@ -1081,16 +1138,21 @@ fn run(mut cx: Cx) -> i32 {
                     }
                 }
             }
-            let items: Vec<(String, String)> = seeds
-                .iter()
-                .map(|sd| {
-                    let s = cx
-                        .ex
-                        .compose_seed(&cx.a.strategy, *sd as u64, cx.a.durable_only);
-                    (format!("seed-{sd}"), cx.render(&s))
-                })
-                .collect();
-            (seeds, items, None, None, None)
+            if cx.steer.is_some() {
+                let (seeds, items, pre, info) = steer_search(&cx, &pool, &seeds);
+                (seeds, items, Some(pre), None, None, Some(info))
+            } else {
+                let items: Vec<(String, String)> = seeds
+                    .iter()
+                    .map(|sd| {
+                        let s = cx
+                            .ex
+                            .compose_seed(&cx.a.strategy, *sd as u64, cx.a.durable_only);
+                        (format!("seed-{sd}"), cx.render(&s))
+                    })
+                    .collect();
+                (seeds, items, None, None, None, None)
+            }
         }
     };
     explore(
@@ -1104,8 +1166,216 @@ fn run(mut cx: Cx) -> i32 {
             fc_info,
             labels,
             image_sha,
+            steer,
         },
     )
+}
+
+/// The run numbers, the tags and schedules, the results and the search's records (M209).
+type SteerOut = (
+    Vec<i64>,
+    Vec<(String, String)>,
+    HashMap<String, (String, Res)>,
+    SteerInfo,
+);
+
+/// What a steered search hands the flow (M209): each first run's record of the search, the
+/// search's record for exploration.json and its wall time.
+struct SteerInfo {
+    runs: HashMap<String, hydo_results::SteerRun>,
+    doc: hydo_results::SteerSearch,
+    wall_s: f64,
+}
+
+/// `--steer` (M209, [`crate::steer`]): the first runs chosen round by round from the corpus of
+/// the runs that came closest to failing, then handed to the flow as results (re-runs, shrinks
+/// and reports as for any exploration). The run numbers are the tags' numbers (`seed-<n>`); a
+/// random schedule's own seed is in its run record's `steer.drawn_seed`.
+fn steer_search(cx: &Cx, pool: &Pool, seeds: &[i64]) -> SteerOut {
+    use crate::steer::{self, Origin, Outcome, Params};
+    let (src, goal) = cx.steer.clone().expect("--steer");
+    let lo = seeds.first().copied().unwrap_or(1).max(0) as u64;
+    let p = Params {
+        goal,
+        mix: cx.a.steer_mix as u64,
+        batch: cx.a.steer_batch as usize,
+        corpus: cx.a.steer_corpus as usize,
+        budget: seeds.len(),
+        stop: cx.a.steer_stop,
+        stream_seed: steer::stream_seed(lo),
+        first_seed: lo,
+    };
+    let (source, pattern) = match &src {
+        steer::Source::Sdk { .. } => ("sdk", None),
+        steer::Source::Pattern { re, .. } => ("pattern", Some(re.as_str().to_string())),
+    };
+    eprintln!(
+        "steered search: {} {} ({source}{}), {} schedules, {} mutants per 1000, rounds of {}, a corpus of {}",
+        goal.map(|g| g.as_str()).unwrap_or("min (or the records' goal)"),
+        src.id(),
+        pattern.as_deref().map(|p| format!(" {p:?}")).unwrap_or_default(),
+        p.budget,
+        p.mix,
+        p.batch,
+        p.corpus
+    );
+    let t0 = Instant::now();
+    let mut res: HashMap<String, (String, Res)> = HashMap::new();
+    let mut fresh = |sd: u64| cx.ex.compose_seed(&cx.a.strategy, sd, cx.a.durable_only);
+    let mut render = |s: &S| {
+        let t = cx.render(s);
+        let back = cx.ex.parse(&t).ok();
+        (t, back)
+    };
+    let mut run = |items: &[(String, String)]| -> Vec<Outcome> {
+        let got = pool.run_all(items, false);
+        items
+            .iter()
+            .map(|(tag, text)| {
+                let r = got.get(tag).map(|x| x.1.clone()).unwrap_or_default();
+                let v = r
+                    .get("verdict")
+                    .filter(|v| !v.is_null())
+                    .map(py_str)
+                    .unwrap_or_else(|| "ERROR no result".into());
+                let merged = merged_text(&cx.out, tag, &r);
+                let (value, named) = steer::value_of(&src, goal, &[&merged, &v]);
+                let failed = verdict_kind(&v) != "ok" && !hydo_engine::is_refused(&v);
+                eprintln!(
+                    "steered search: {tag:<10} {:<9} value={}",
+                    verdict_kind(&v),
+                    value.map(fmt_value).unwrap_or_else(|| "none".into())
+                );
+                res.insert(tag.clone(), (text.clone(), r));
+                Outcome {
+                    value,
+                    goal: named,
+                    failed,
+                }
+            })
+            .collect()
+    };
+    let found = steer::search(&p, &mut fresh, &mut render, &mut run);
+    let wall_s = t0.elapsed().as_secs_f64();
+    let mut runs = HashMap::new();
+    let mut progress = Vec::new();
+    let (mut random, mut mutants, mut with_value) = (0, 0, 0);
+    let mut best: Option<(f64, String)> = None;
+    let mut first_failure = None;
+    for m in &found.made {
+        let mut r = hydo_results::SteerRun {
+            value: m.outcome.value,
+            best: m.best,
+            ..Default::default()
+        };
+        match &m.origin {
+            Origin::Random { seed } => {
+                random += 1;
+                r.origin = "random".into();
+                r.drawn_seed = Some(*seed);
+            }
+            Origin::Mutant { parent, change } => {
+                mutants += 1;
+                r.origin = "mutant".into();
+                r.parent = Some(parent.clone());
+                r.change = Some(change.clone());
+            }
+        }
+        if let Some(v) = m.outcome.value {
+            with_value += 1;
+            if m.best {
+                best = Some((v, m.tag.clone()));
+                progress.push(hydo_results::SteerPoint {
+                    run: m.run,
+                    tag: m.tag.clone(),
+                    value: v,
+                    schedule: m.text.clone(),
+                });
+            }
+        }
+        if m.outcome.failed && first_failure.is_none() {
+            first_failure = Some((m.run, m.tag.clone(), m.outcome.value));
+        }
+        runs.insert(m.tag.clone(), r);
+    }
+    match &first_failure {
+        Some((n, tag, v)) => println!(
+            "steered search: the first failure is run {n} ({tag}), value {}; best value {}",
+            v.map(fmt_value).unwrap_or_else(|| "none".into()),
+            best.as_ref()
+                .map(|b| fmt_value(b.0))
+                .unwrap_or_else(|| "none".into())
+        ),
+        None => println!(
+            "steered search: no failure in {} runs; best value {}{}",
+            found.made.len(),
+            best.as_ref()
+                .map(|b| fmt_value(b.0))
+                .unwrap_or_else(|| "none".into()),
+            best.as_ref()
+                .map(|b| format!(" ({})", b.1))
+                .unwrap_or_default()
+        ),
+    }
+    if with_value == 0 {
+        eprintln!(
+            "hydo: warning: no run reported a value for {} ({}): the search was the plain exploration with extra bookkeeping; check the id or the pattern against a run's console",
+            src.id(),
+            source
+        );
+    }
+    let doc = hydo_results::SteerSearch {
+        id: src.id().to_string(),
+        source: source.into(),
+        pattern,
+        goal: found.goal.as_str().into(),
+        mix_permille: p.mix,
+        batch: p.batch as u64,
+        corpus_max: p.corpus as u64,
+        stream_seed: p.stream_seed,
+        runs: found.made.len() as u64,
+        random,
+        mutants,
+        with_value,
+        best: best.as_ref().map(|b| b.0),
+        best_tag: best.map(|b| b.1),
+        first_failure: first_failure.as_ref().map(|f| f.0),
+        first_failure_tag: first_failure.as_ref().map(|f| f.1.clone()),
+        first_failure_value: first_failure.and_then(|f| f.2),
+        stopped: found.stopped,
+        progress,
+        corpus: found
+            .corpus
+            .iter()
+            .map(|e| hydo_results::SteerPoint {
+                run: e.run,
+                tag: e.tag.clone(),
+                value: e.value,
+                schedule: e.text.clone(),
+            })
+            .collect(),
+    };
+    let n = found.made.len() as i64;
+    let items = found
+        .made
+        .iter()
+        .map(|m| (m.tag.clone(), m.text.clone()))
+        .collect();
+    (
+        (1..=n).collect(),
+        items,
+        res,
+        SteerInfo { runs, doc, wall_s },
+    )
+}
+
+/// A value as people read it: a whole number without a fraction.
+fn fmt_value(v: f64) -> String {
+    if v.fract() == 0.0 && v.abs() < 1e15 {
+        format!("{}", v as i64)
+    } else {
+        format!("{v}")
+    }
 }
 
 /// `--sweep turns` (M205, [`crate::turns`]): the base schedule (`--sweep-with`, default
@@ -1654,6 +1924,7 @@ struct Inputs {
     fc_info: Option<(Map<String, Value>, Map<String, Value>)>,
     labels: Option<Vec<String>>,
     image_sha: ShaThread,
+    steer: Option<SteerInfo>,
 }
 
 fn repro_of(tag: &str, r: Option<&Res>) -> Reproduction {
@@ -1678,6 +1949,7 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
         fc_info,
         labels,
         image_sha,
+        steer,
     } = inp;
     let a = &cx.a;
     let nrep = a.repro.unwrap_or(if a.sweep.as_deref() == Some("freeze") {
@@ -1731,6 +2003,9 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                 run.seed = Some(sd);
                 run.class = Some(py_str(&rec["class"]));
                 run.point = labels.as_ref().and_then(|l| l.get(next).cloned());
+                run.steer = steer
+                    .as_ref()
+                    .and_then(|s| s.runs.get(&format!("seed-{sd}")).cloned());
                 let v = py_str(&rec["verdict"]);
                 // a schedule the engine refused tested nothing: not a failure (M208)
                 let refused = hydo_engine::is_refused(&v);
@@ -1770,7 +2045,10 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                 i["stage1_wall_s"].as_f64().unwrap_or(0.0)
                     + i["stage2_wall_s"].as_f64().unwrap_or(0.0)
             }
-            None => ts.elapsed().as_secs_f64(),
+            None => steer
+                .as_ref()
+                .map(|s| s.wall_s)
+                .unwrap_or_else(|| ts.elapsed().as_secs_f64()),
         };
         let mut all: HashMap<String, (String, Res)> = HashMap::new();
         for (i, s) in slot.iter().enumerate() {
@@ -1964,6 +2242,7 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     });
     let mut doc = cx.exploration(nworkers, summary, image_sha);
     doc.freeze_sweep = fc_info.map(|x| x.1);
+    doc.steer = steer.map(|s| s.doc);
     doc.failures = failures;
     doc.shrinks = shrinks;
     doc.error_kinds = error_kinds;

@@ -509,6 +509,8 @@ variables! {
     HYDO_FAKE_EXPLORER: Tests, Test, "command", "hydo-explore", "hydo-explore tests";
     /// Not empty: the scripted engine prints history records.
     HYDO_FAKE_HIST: Tests, Test, "flag: not empty", "", "hydo-explore tests";
+    /// Not empty: the scripted engine prints a steered distance and fails only at distance 0 (M209).
+    HYDO_FAKE_STEER: Tests, Test, "flag: not empty", "", "hydo-explore tests";
     /// The history checker's dump directory.
     HYDO_HIST_DUMP: Tests, Test, "path", "", "hydo-history tests";
     /// Set: the history checker's full corpus.
