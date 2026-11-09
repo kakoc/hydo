@@ -96,7 +96,8 @@ if [ "${HYDO_REHEARSAL_LINUX:-0}" = 1 ]; then
   # ring (rustls, for the registry pulls and the install cache's downloads) compiles C for the
   # target in its build script. Without a musl cross gcc, clang with --target does it, given
   # declarations for the four libc headers ring includes beyond clang's own (a check only: the
-  # objects are never linked or run)
+  # objects are never linked or run). -U__musl__: clang 21 (Xcode 26) defines it for a musl target,
+  # and its own stddef.h and stdint.h then include the musl headers, which are not there
   if ! command -v x86_64-linux-musl-gcc > /dev/null && command -v clang > /dev/null; then
     STUBS="$WORK/musl-stubs"
     mkdir -p "$STUBS"
@@ -104,7 +105,7 @@ if [ "${HYDO_REHEARSAL_LINUX:-0}" = 1 ]; then
     printf '#include <stddef.h>\nvoid *memcpy(void *, const void *, size_t);\nvoid *memmove(void *, const void *, size_t);\nvoid *memset(void *, int, size_t);\nint memcmp(const void *, const void *, size_t);\n' > "$STUBS/string.h"
     printf 'void abort(void);\n' > "$STUBS/stdlib.h"
     export CC_x86_64_unknown_linux_musl=clang
-    export CFLAGS_x86_64_unknown_linux_musl="--target=x86_64-unknown-linux-musl -I$STUBS"
+    export CFLAGS_x86_64_unknown_linux_musl="--target=x86_64-unknown-linux-musl -U__musl__ -I$STUBS"
   fi
   ( cd "$WORK" && CARGO_HOME="$WORK/home" RUSTC="$RUSTC_BIN" \
       "$CARGO_BIN" check --locked --offline --target x86_64-unknown-linux-musl \

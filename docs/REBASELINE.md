@@ -3409,3 +3409,30 @@ gives them. Milestone 207 found the cause in hydo-bench, not in the engine: its 
 those composed images without the CPUID cache leaves. Since then the pool gives the recorded
 values, and the fast check runs each image's first schedule both ways. It also reports new bytes for the shop's two images when the inputs folder is not
 M164's, as the list's note says; their runs give the recorded values.
+
+## 21. hydo 0.3.1 (2026-11-09)
+
+Made with `hydo-bench rebaseline --write` on the bare-metal machine and on a Mac, with a 0.3.1
+candidate as `--release` (docs/HISTORY.md "The 0.3.1 release"); the values are in
+`hydo/onboard/recorded.json`, and this section records only the decisions.
+
+**The fingerprint epoch stays 2.** Only the version moved image bytes. The workspace version is
+in Cargo's `-C metadata` of `guest/hydo-world`, `guest/hydo-world-tls` and `guest/hydo-grpc`, so
+they have new pins (docs/BUILD-PINS.md), and the SDK versions are in rust-kv's program,
+node-kv's `package.json` and python-kv's `__init__.py`. The plans keep `hydo_version: "0.3"`, and
+no engine, controller, agent or kernel changed.
+
+**What moved.** hvx (the bare-metal machine): 9 of 41 images have new bytes, 30 of 141 runs new
+values (redis-proxy, redis-bridge, rust-kv, the shop's two images, the three gRPC stack images and
+the generated-driver stack). The Mac (`hvm`): 9 of 21 images, 36 of 76 runs (redis-bridge,
+node-kv, python-kv, python-kv-hist, rust-kv, the shop's two images, the gRPC demo's two images).
+Every verdict is unchanged, and every moved run gave the same values twice. KVM's images carry
+none of these programs, so no KVM value moves; the release's `--check --thorough` on all three
+engines checks every value (docs/HISTORY.md).
+
+**A tree's file modes are in the images.** A first hvx pass in a tree unpacked under umask 002
+gave every image built from the tree new bytes: `hydo build` copies the manifest into the image
+as `/etc/hydo/hydo.yaml` with the checkout's mode, 0664 instead of git's 0644 (AGENTS.md open
+item 58 (h)). The pass was stopped, the tree's modes were set to git's, and the values above come
+from the second pass. Unpack a tree for `hydo-bench rebaseline` or a release build under umask
+022, or set its modes to git's.
