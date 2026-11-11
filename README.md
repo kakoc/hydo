@@ -28,10 +28,15 @@ failure hydo finds is a line you can run again tomorrow, or paste into an issue.
 
 ## Install
 
-macOS on Apple Silicon:
+macOS on Apple Silicon, with Homebrew or with cargo:
 
 ```sh
 brew install kakoc/tap/hydo
+```
+
+```sh
+cargo install hydo --locked
+hydo setup        # downloads the release's guest files and checks each one by sha256
 ```
 
 Linux, on Intel or AMD, with the KVM that comes with the kernel:
@@ -43,8 +48,9 @@ tar xzf hydo-linux-0.3.1.tar.gz
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
-Then run `hydo doctor`. It checks the machine. [docs/INSTALL.md](docs/INSTALL.md) has the
-checksums, hydo's own kernel module, and `cargo install`.
+Then run `hydo doctor`. It checks the machine. `cargo install` on Linux was only compiled, not
+run, so use the tarball there. [docs/INSTALL.md](docs/INSTALL.md) has the checksums and hydo's own
+kernel module.
 
 ## Make Redis lose a write
 
@@ -52,7 +58,8 @@ The release ships a Redis example. Its client writes the keys `k:0` to `k:19`, a
 that every write Redis acknowledged must survive.
 
 ```sh
-cp -R "$(brew --prefix hydo)/libexec/examples/redis" ~/hydo-redis   # Linux: ~/.hydo/examples/redis
+cp -R "$(brew --prefix hydo)/libexec/examples/redis" ~/hydo-redis
+# cargo: ~/.hydo/versions/0.3.1/examples/redis   Linux tarball: ~/.hydo/examples/redis
 cd ~/hydo-redis
 hydo build hydo.yaml
 hydo run "disk=cut | run C=12 R=everysec"
