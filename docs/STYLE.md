@@ -27,7 +27,11 @@ each page as one kind, and link to the other kinds.
 | Explanation | understand why | `docs/ARCHITECTURE.md`, `docs/design/*.md` |
 
 `README.md` is the entry page. It says what hydo does, shows one real run, and links to the four
-kinds.
+kinds. It is short: the install details, the limits, and the words a user needs for their own
+project are on their own pages (`docs/INSTALL.md`, `docs/LIMITS.md`, `docs/YOUR-PROJECT.md`).
+The entry page may open with one question in a quote, speak to the reader directly, and use an
+image. It explains a word where the word first matters, not in a list at the top. Every claim on
+it still needs a recorded run.
 
 ## Rules for every page
 

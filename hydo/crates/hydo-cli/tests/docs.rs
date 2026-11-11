@@ -249,6 +249,7 @@ fn anchors_follow_github() {
 /// The pages a user reads first. Their facts are checked against the tree.
 const USER_PAGES: &[&str] = &[
     "README.md",
+    "docs/INSTALL.md",
     "hydo/dist/linux/QUICKSTART-linux.md",
     "hydo/dist/mac/QUICKSTART-mac.md",
 ];
@@ -541,15 +542,15 @@ fn scratch(name: &str) -> PathBuf {
     d
 }
 
-/// The commands of the README's "Test your own project" that need no virtual machine run as
+/// The commands of `docs/YOUR-PROJECT.md` that need no virtual machine run as
 /// written: `hydo init`, `hydo build hydo/hydo.yaml --check`, every `hydo guide <topic>` the
-/// README names, and `hydo compose` on a small Compose file. The Compose test copies a recorded
+/// page names, and `hydo compose` on a small Compose file. The Compose test copies a recorded
 /// lock file (tests/fixtures/docs-compose/) next to the output, so that the importer pins the
 /// image from it and needs no registry. `sh hydo/fetch-images.sh`, `hydo run` and `hydo explore`
 /// need the network or a virtual machine; their output is cited from recorded runs instead.
 #[test]
 fn the_readme_commands_that_need_no_vm_run_as_written() {
-    let readme = read("README.md");
+    let readme = read("docs/YOUR-PROJECT.md");
     let cmds = commands(&readme);
     for want in [
         "hydo init",
@@ -563,7 +564,7 @@ fn the_readme_commands_that_need_no_vm_run_as_written() {
     ] {
         assert!(
             cmds.iter().any(|c| c == want),
-            "README.md no longer shows `{want}`; update this test with the page"
+            "docs/YOUR-PROJECT.md no longer shows `{want}`; update this test with the page"
         );
     }
 
@@ -596,7 +597,7 @@ fn the_readme_commands_that_need_no_vm_run_as_written() {
     }
     assert!(
         topics >= 5,
-        "the README names fewer guide topics than expected"
+        "docs/YOUR-PROJECT.md names fewer guide topics than expected"
     );
     let _ = std::fs::remove_dir_all(&d);
 

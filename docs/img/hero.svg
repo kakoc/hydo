@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="310" viewBox="0 0 920 310" role="img" aria-labelledby="t d">
+  <title id="t">hydo cuts the power under Redis</title>
+  <desc id="d">Three commands of the Redis example, with output recorded on Linux with the kernel module. A clean run ends OK. A power cut before step 12 loses the acknowledged key k:1. hydo repro runs it again from a fresh boot and gets the same fingerprint.</desc>
+  <style>
+    .term { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
+    .p { fill: #7d8590; }
+    .c { fill: #e6edf3; }
+    .m { fill: #7d8590; font-style: italic; }
+    .ok { fill: #3fb950; font-weight: 600; }
+    .bad { fill: #f85149; font-weight: 600; }
+    .fp { fill: #e3b341; }
+    .o { fill: #b1bac4; }
+  </style>
+  <rect x="0.5" y="0.5" width="919" height="309" rx="10" fill="#0d1117" stroke="#30363d"/>
+  <rect x="0.5" y="0.5" width="919" height="34" rx="10" fill="#161b22"/>
+  <rect x="0.5" y="24" width="919" height="11" fill="#161b22"/>
+  <line x1="0" y1="35" x2="920" y2="35" stroke="#30363d"/>
+  <circle cx="22" cy="17.5" r="6" fill="#ff5f57"/>
+  <circle cx="42" cy="17.5" r="6" fill="#febc2e"/>
+  <circle cx="62" cy="17.5" r="6" fill="#28c840"/>
+  <text x="460" y="22" text-anchor="middle" class="term p">~/hydo-redis</text>
+  <g class="term">
+    <text x="24" y="70"><tspan class="p">$ </tspan><tspan class="c">hydo run "disk=none | run"</tspan></text>
+    <text x="24" y="92" class="o">RESULT one <tspan class="fp">fp=5ec14b8b4bdcf367</tspan> … <tspan class="ok">OK</tspan> … (… acked=20 all present)</text>
+
+    <text x="24" y="134"><tspan class="p">$ </tspan><tspan class="c">hydo run "disk=cut | run C=12 R=everysec"</tspan></text>
+    <text x="520" y="134" class="m"># power cut before step 12</text>
+    <text x="24" y="156" class="o">RESULT one <tspan class="fp">fp=9f8f90a7d14566df</tspan> … <tspan class="bad">VIOLATION</tspan> [redis.acked_writes_survive] key k:1 lost</text>
+
+    <text x="24" y="198"><tspan class="p">$ </tspan><tspan class="c">hydo repro hydo-out/runs/run-…</tspan></text>
+    <text x="520" y="198" class="m"># again, from a fresh boot</text>
+    <text x="24" y="220" class="o"><tspan class="ok">REPRODUCED</tspan> run <tspan class="fp">fp=9f8f90a7d14566df</tspan> (recorded <tspan class="fp">9f8f90a7d14566df</tspan>)</text>
+    <text x="24" y="242" class="o">hydo: 1 of 1 reproduced with the recorded fingerprint</text>
+
+    <text x="24" y="284"><tspan class="p">$ </tspan><tspan class="c">▍</tspan></text>
+  </g>
+</svg>

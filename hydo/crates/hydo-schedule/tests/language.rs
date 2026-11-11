@@ -600,6 +600,8 @@ fn documentation_schedules() {
     let mut files = vec![
         top.join("AGENTS.md"),
         top.join("README.md"),
+        top.join("docs/INSTALL.md"),
+        top.join("docs/YOUR-PROJECT.md"),
         top.join("docs/HISTORY.md"),
         top.join("docs/REBASELINE.md"),
         top.join("hydo/onboard/MANIFEST.md"),
