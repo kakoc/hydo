@@ -28,6 +28,9 @@ if [ ! -x "$cache/$LYCHEE/lychee" ]; then
 fi
 
 cd "$root"
+# www.npmjs.com answers every request without a browser with 403 Forbidden (seen 2026-11-11), so
+# its package pages cannot be checked from CI; `npm view <package>` checks them instead.
 # shellcheck disable=SC2046
 "$cache/$LYCHEE/lychee" --no-progress --scheme https --scheme http --max-retries 3 \
+  --exclude '^https://www\.npmjs\.com/' \
   $(sh ci/vale.sh --list)
