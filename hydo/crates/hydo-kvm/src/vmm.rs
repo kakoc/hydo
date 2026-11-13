@@ -635,6 +635,17 @@ impl Vmm {
                 (sm.end, sm.n())
             };
             let cur = self.cur;
+            if end && self.cpus[cur].user_without_tsd() {
+                // user code with CR4.TSD clear reads the host's TSC with RDTSC, and no exit
+                // shows it: a guest kernel that does not keep TSD on every CPU
+                let rip = self.cpu().rip();
+                fatal(
+                    3,
+                    &format!(
+                        "hydo-kvm: vCPU {cur} runs user code with CR4.TSD clear (rip {rip:#x}): its RDTSC would read the host's TSC; the guest kernel must set TSD on every CPU"
+                    ),
+                );
+            }
             if !end && self.runnable(cur) {
                 if let Some(sm) = self.smp.as_mut() {
                     if sm.run[cur] == Run::Halted {

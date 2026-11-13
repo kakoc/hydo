@@ -319,6 +319,13 @@ pub trait Cpu: Send {
         [0; 3]
     }
     fn set_run_flags(&mut self, _f: [u8; 3]) {}
+    /// Whether the vCPU runs user code (CPL 3) with CR4.TSD clear: there RDTSC reads the host's
+    /// TSC without an exit (KVM does not trap it), so the guest kernel must keep TSD set on every
+    /// CPU (docs/design/kvm-vcpus.md, the determinism bug of Milestone 219).
+    fn user_without_tsd(&self) -> bool {
+        let s = self.save().sregs;
+        s.cs.dpl == 3 && s.cr4 & (1 << 2) == 0
+    }
     /// Whether [`Cpu::single_step`] works (KVM's vCPU; not the scripted one).
     fn can_single_step(&self) -> bool {
         false

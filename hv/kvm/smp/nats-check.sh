@@ -79,8 +79,16 @@ for q in $QS; do
   done
 done
 for seed in $SEEDS; do
-  r=$(run "$(img buggy)" "$(dir "qs$seed" 1)" "disk=none q=64 qs=$seed | run" --vcpus 2)
-  say "2 vCPUs, buggy, q=64 qs=$seed: $r"
-  case "$r" in *"HYDO-ORACLE: OK"*) pass=$((pass + 1));; *VIOLATION*) failn=$((failn + 1));; esac
+  k=1
+  while [ "$k" -le "$REPEAT" ]; do
+    r=$(run "$(img buggy)" "$(dir "qs$seed" "$k")" "disk=none q=64 qs=$seed | run" --vcpus 2)
+    say "2 vCPUs, buggy, q=64 qs=$seed: $r"
+    case "$r" in *"HYDO-ORACLE: OK"*) pass=$((pass + 1));; *VIOLATION*) failn=$((failn + 1));; esac
+    k=$((k + 1))
+  done
 done
+# REPEAT > 1: one fingerprint per setting
+if [ "$REPEAT" -gt 1 ]; then
+  grep -E '^2 vCPUs, buggy, q=' "$LOG" | sed 's/: \([0-9a-f]*\) .*/ \1/' | sort | uniq | awk '{k=$0; sub(/ [0-9a-f]+$/, "", k); n[k]++} END {for (k in n) print (n[k] == 1 ? "ONE " : "DIFFER ") n[k] " fingerprint(s): " k}' | sort | tee -a "$LOG"
+fi
 say "nats-check: buggy on 2 vCPUs: $pass passed, $failn failed ($(date -u))"
