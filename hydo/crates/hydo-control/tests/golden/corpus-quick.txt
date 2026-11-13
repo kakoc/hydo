@@ -6,6 +6,7 @@ input	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	a4ba83796fb727145d
 input	hydo/onboard/examples/compose-voting/hydo-mac.yaml	f31a88f96297c1b4a0de709926c3ac420bce149c69248ff064f54b661c63aac1
 input	hydo/onboard/examples/compose-voting/hydo.generated.yaml	82bc84ea9cd401d4ada50b08d587d5133b96be5459d945a67715cba0d54361e4
 input	hydo/onboard/examples/compose-voting/hydo.yaml	90b3e80fb1e04d4cc5d9a1def209a4a98e81414f2d959acfa5c3a5fe0b257654
+input	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	b81ec8dccb68aee7cab782a49e3bc119e9bd9ef2aea98f8771b1473799a8bdc8
 input	hydo/onboard/examples/etcd/hydo-hist.yaml	3ba821683b206d5ec9bf8a83f7879198bb3fb99ec2163700ceeb4ed8b7e027b2
 input	hydo/onboard/examples/etcd/hydo.yaml	ec0ae3f206de4167150fb4c94a0ab2e0a1ef9d983cd49005c5a9fdf18fe20c3c
 input	hydo/onboard/examples/glibc-cache/hydo-nocache.yaml	be53f51ea2b3b915a93d8c9cdcf0be568aca3b717a2e59c5a9feaa83ecac6a2d
@@ -36,6 +37,7 @@ input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8
 input	hydo/onboard/examples/stack/hydo-grpcgen.yaml	72b3a42760bb79db3be04fe34d4e7a55645ed133e86008b059f0935cd3f247cf
 input	hydo/onboard/examples/stack/hydo-read.yaml	d3899b9ac926be02576d0f8e9b950bcc174682dc727791d4f1309294b3a1fb68
 input	hydo/onboard/examples/stack/hydo.yaml	369ed2074d0024dcbb5bf2218731bee7526fa006ff0e900aef339cc6cf69fb24
+input	hydo/onboard/examples/formance-ledger/hydo/hydo.yaml	095ac480a9da07d711ee7dcb2c5d04eadef54f1e32ed75c0ce34652a54500e3e
 input	hydo/onboard/examples/ghost/hydo/hydo.yaml	e5a0a96f7d60faa87ba107f15fc1757aaf7111ade412aeeadb0424613c6392c6
 input	hydo/onboard/examples/libsql-replica/hydo/hydo.yaml	e9675d508c22631f89dfe6fe2c719a96e98ffade48092f1738748187814357fd
 input	hydo/onboard/examples/medusa/hydo/hydo.yaml	6e1a65dbb528ebc030ab84acad7e095324263ae3b2d4d30a4e0956d3168675c8
@@ -532,6 +534,11 @@ chunk	hydo/onboard/examples/compose-voting/hydo.yaml	120	500	6a9db26e54cbc6df7b6
 chunk	hydo/onboard/examples/compose-voting/hydo.yaml	121	500	76738374c4e5936600df874ad4e9cd80e65009def3fbe4736ddede140c780c35
 chunk	hydo/onboard/examples/compose-voting/hydo.yaml	122	500	38113b1175a43638af76df074db9c235848c4d6ca8668c44c457b2b3ade9f64e
 chunk	hydo/onboard/examples/compose-voting/hydo.yaml	123	60	ae2e60bc44bd741f222904851101239ed952ed089ab054e936c7460d62c6d7e6
+manifest	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	core
+boot	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml#0	snapshot	356507e5b53589ab
+counts	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	identity=1 recovery:ok=3 refused=1 run:cut=3 run:error=1 run:ok=7 run:violation=1 token:C=4 token:K=3 token:P=4 token:Q=1 token:X=4 token:Z=1 written=11
+boot-transcript	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	356507e5b53589ab
+chunk	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	0	493	56506718aba530bdbbf45c2c3709494c858ad14189dfee45a041598350ec2b2c
 manifest	hydo/onboard/examples/etcd/hydo-hist.yaml	core
 boot	hydo/onboard/examples/etcd/hydo-hist.yaml	hydo/onboard/examples/etcd/hydo-hist.yaml#0	snapshot	ec4a0980b72e820c
 counts	hydo/onboard/examples/etcd/hydo-hist.yaml	identity=271 recovery:ok=65 recovery:violation=8 refused=1 run:cut=73 run:error=14 run:ok=195 token:C=76 token:K=149 token:N=100 token:O=26 token:P=149 token:Q=1 token:T=125 token:X=4 token:Z=1 written=11
@@ -2759,6 +2766,7 @@ chunk	hydo/onboard/examples/stack/hydo.yaml	128	500	7108b5b0336c8ea934e15d929903
 chunk	hydo/onboard/examples/stack/hydo.yaml	129	500	3fcf8454fb37c8b7706b9a1cfb8647eb2681e6d76596c327911fa7a8c56662ae
 chunk	hydo/onboard/examples/stack/hydo.yaml	130	500	e06f4f68f253835a78154328eb693508d7bea8e2df30e4fae10cfcfa5a78b0e3
 chunk	hydo/onboard/examples/stack/hydo.yaml	131	394	3e745c2c1c8162cacdaaebb108e09167a69ef4c6f479340cbfa49afe8e4b969d
+manifest	hydo/onboard/examples/formance-ledger/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/ghost/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/libsql-replica/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/medusa/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
@@ -7253,4 +7261,4 @@ chunk	hydo/onboard/examples-mac/redis/hydo.yaml	53	500	f2bf8f98c9629fa6b8d45bcbd
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	54	500	5cf61ec38f3e010d9a42f26df58707533cae9b4627515e4e121648dbe6bbb663
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	55	500	2b8d95ff39036743ea03c9c1f547c7467526c0539b7dd35c08ebae98eccba1bb
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	56	491	2059fe37977a60502545de88616464b7109da8a5a2e579bf6b926a2ad0799a02
-refused	other=49
+refused	other=50

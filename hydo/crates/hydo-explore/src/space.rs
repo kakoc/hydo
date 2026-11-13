@@ -14,6 +14,8 @@ use hydo_manifest::py::{int_of, str_of, truthy};
 use serde_json::{json, Map, Value};
 use std::path::Path;
 
+/// The name a timed pause gives the workload's own process tree (Milestone 216).
+pub const WORKLOAD: &str = "workload";
 pub const FAULT_KINDS: [&str; 7] = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"];
 /// Guest tokens with a fixed meaning; a manifest knob may not reuse one.
 pub const RESERVED_TOKENS: [&str; 15] = [
@@ -398,7 +400,10 @@ impl Space {
         if !self.has_fault("kill") {
             s.k = None;
         }
-        if !self.has_fault("pause") {
+        // a pause of the workload's own tree (`--pause-workload`, Milestone 216) is no fault
+        // kind of `faults:`: the option asks for it, as `--timing` asks for tick jitter
+        let wp = matches!(&s.p, Some(Pause::Timed(t, ..)) if t == WORKLOAD);
+        if !self.has_fault("pause") && !wp {
             s.p = None;
         }
         if !self.has_fault("network") {
@@ -526,6 +531,8 @@ impl Space {
                     *a = at(*a);
                     *d = (*d).clamp(1, (n - *a).max(1));
                 }
+                // a pause of the workload (Milestone 216) in a step where the workload runs
+                Pause::Timed(t, a, _, _) if t == WORKLOAD => *a = a.rem_euclid(n),
                 Pause::Timed(_, a, _, _) => *a = at(*a),
             }
         }

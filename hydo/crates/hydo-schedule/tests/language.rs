@@ -438,6 +438,33 @@ fn several_services_and_partitions() {
     refused("disk=none | run L=a,b@1+1", "not a service name");
 }
 
+/// Pauses of the workload (Milestone 216): the timed pause names `workload`, the workload's own
+/// process tree (a test program's), to stop it for some guest time from a moment inside a step,
+/// as a container's CPU limit does. The language has nothing new: `workload` is a name like a service's, and the
+/// host controller and its names check give it the meaning (hydo-control's `names.rs`).
+#[test]
+fn workload_pauses() {
+    for s in [
+        "disk=none | run P=workload@0~180:60",
+        "disk=none dseed=1 | run P=workload,redis@5~0:1",
+        "disk=none pct=5 pctn=10 pctk=3000 | run P=workload@0~5:45",
+    ] {
+        round_trip(s);
+    }
+    let s = Schedule::parse("disk=none | run P=workload@0~180:60").unwrap();
+    assert_eq!(
+        s.guest,
+        vec![GuestToken::Pause(Pause::Timer {
+            target: Target::Service("workload".into()),
+            at: 0,
+            off_ms: 180,
+            dur_ms: 60,
+        })]
+    );
+    refused("disk=none | run P=workload@0~010:40", "leading zero");
+    refused("disk=none | run P=workload@0~10", "<svc>@<at>~<off>:<dur>");
+}
+
 /// The storage faults of one service (docs/design/storage-faults.md): G= corrupts files in its
 /// storage directory, L= is its own power loss.
 #[test]

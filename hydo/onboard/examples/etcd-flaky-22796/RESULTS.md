@@ -1,11 +1,13 @@
 # A flaky Go test under hydo (etcd issue 22796)
 
 This page records an attempt to reproduce an open flaky test with hydo. The test is
-`TestCacheCompactionResync` in etcd's module `go.etcd.io/etcd/cache/v3`. The flake is a race
-between the test's goroutine and the cache's retry timer. It fails when the whole test process
-gets no CPU for about 40 ms at one moment. hydo's timing tokens alone never made it fail. With
-a CPU limit inside the guest it fails on every run of one schedule, and its neighbour passes.
-The same CPU limit also makes it fail outside hydo. The last section lists what hydo lacked.
+`TestCacheCompactionResync` in etcd's module `go.etcd.io/etcd/cache/v3`. The flake is a race between
+the test's goroutine and the cache's retry timer. It fails when the whole test process gets no CPU
+for about 40 ms at one moment. hydo's timing tokens alone never made it fail. With a CPU limit
+inside the guest it fails on every run of one schedule, and its neighbour passes. The same CPU limit
+also makes it fail outside hydo. Milestone 216's pause of the workload needs no model in the guest.
+It stops the test process for 45 ms of guest time and fails the test on every run on the Mac engine
+and on hvx. The last section lists what hydo lacked.
 
 ## The issue
 
@@ -195,6 +197,61 @@ hydo build hydo.yaml --set "limit=10000 100000" --set busy=2
 hydo run --backend hvx "disk=none pp=65536 | run"
 ```
 
+### With a pause of the workload: no CPU-limit model
+
+A pause of the workload is the timed pause of its own process tree, `P=workload@<at>~<off>:<dur>`
+(Milestone 216, `hydo guide faults`, section "Pause the workload"). Before step `at`, hydo starts a
+timer in the guest. After `off` ms of guest time it stops every process of the test with SIGSTOP,
+and `dur` ms later it continues them. The CI pod's CPU limit does the same to the test program. The
+pause runs on the plain images, without `limit` and `busy`. `hydo.yaml` is unchanged, so the images
+keep their bytes, and its header comment does not name the pause.
+
+The runs used this tree's `hydo` and the plain images of the preceding table, rebuilt to the same
+bytes. Runs at many starts and lengths found one failing region on each engine:
+
+- On the Mac, a 60 ms pause failed for starts of 0 to 7 ms and passed from 8 to 90 ms. At a
+  start of 4 ms, lengths of 35 ms or less passed and 40 ms or more failed.
+- On hvx, a 60 ms pause passed for starts of 0 to 149 ms and failed for 151 to 163 ms, except
+  at 159 ms. It passed from 165 to 300 ms. At a start of 155 ms, a length of 30 ms passed, and
+  35 ms failed.
+
+The window is at another moment on each engine: hvx's clock counts guest branches, the Mac's
+counts VM exits. Each schedule below ran two or three times with one fingerprint:
+
+| engine | image | schedule | verdict | fingerprint |
+|---|---|---|---|---|
+| Mac | arm64 | `disk=none \| run P=workload@0~4:45` | VIOLATION, `expected cached revision 5 after compaction, got 20` | `24dedf9da7af0a08` (3 runs) |
+| Mac | arm64 | `disk=none \| run P=workload@0~4:35` | OK | `b8b9b46b4027b5af` |
+| Mac | arm64 | `disk=none \| run P=workload@0~8:45` | OK | `9402add9274c87ce` |
+| Mac | arm64 fixed | `disk=none \| run P=workload@0~4:45` | OK | `8171ca80d265840d` |
+| hvx | plain | `disk=none \| run P=workload@0~155:45` | VIOLATION, the same line | `2ae2f4390bb012b8` (3 runs) |
+| hvx | plain | `disk=none \| run P=workload@0~155:30` | OK | `3244703db66dae96` |
+| hvx | plain | `disk=none \| run P=workload@0~170:45` | OK | `42f3053533e11faa` |
+| hvx | plain fixed | `disk=none \| run P=workload@0~155:45` | OK | `7aa29c3293e32a26` |
+
+The runs without a pause gave the values of the earlier sections: `985f97632370e53b` and
+`0e32a33ecd1d0a7b` on the Mac, `5105ecd86ce54319` and `4c4eac3a06a2181a` on hvx.
+
+`hydo explore --pause-workload` draws such pauses:
+
+| engine | exploration | failures | the shrinker's schedule |
+|---|---|---|---|
+| Mac | `--pause-workload --seeds 1-100 --workers 1` | 13 of 100, all reproduced | `disk=none dseed=1d0b14e4db018fed \| run P=workload@0~0:50` (`a980b7222dcce5ee`) |
+| hvx | `--pause-workload --pause-max 200 --seeds 1-200 --workers 2` | 3 of 200, all reproduced | `disk=none dseed=2c0e0fedbe2218a8 \| run P=workload@0~154:62` (`fcc2301b270e5edf`) |
+
+Every failure printed the report's line. The explorations of the earlier sections, without
+`--pause-workload`, found none in 300 schedules on the Mac and 200 on hvx.
+
+To run the failing schedule:
+
+```sh
+sh build-test.sh
+hydo build hydo.yaml --arch arm64 --set arch=arm64      # the Mac
+hydo run "disk=none | run P=workload@0~4:45"
+hydo build hydo.yaml                                    # Linux, hvx
+hydo run --backend hvx "disk=none | run P=workload@0~155:45"
+```
+
 ## Crash and disk faults
 
 The test uses a stub for etcd's KV and watch API, so the cache reads nothing from the disk and
@@ -204,13 +261,14 @@ change nothing that it reads. Neither was used.
 ## What hydo lacked, ranked
 
 1. **No token that stops a process or a thread for some guest time.** The failure needs the test
-   process held off the CPU for about 40 ms at one moment, as a container's CPU limit does.
-   `pct=`, `tj=`, `pp=`, `xt=` and vCPU turns change which thread runs next, not how long a
-   runnable thread waits. A host token could stop every thread of the workload for N ms of guest
-   time at a seeded moment. It would reach this failure without a model in the workload.
-   Item 4 of "What hydo lacked" in `../qdrant-flaky-10200/RESULTS.md` asks for the same.
+   process held off the CPU for about 40 ms at one moment, as a container's CPU limit does. `pct=`,
+   `tj=`, `pp=`, `xt=` and vCPU turns change which thread runs next, not how long a runnable thread
+   waits. Added in Milestone 216: the pause `P=workload@<at>~<off>:<dur>` and `hydo explore
+   --pause-workload` (the section "With a pause of the workload: no CPU-limit model"). It stops the
+   whole process, not one thread, so item 4 of `../qdrant-flaky-10200/RESULTS.md` stays open.
 2. **The CPU-limit model needs hvx.** On the Mac and on KVM a busy loop makes no VM exits, so it
-   uses no guest time and cannot use up a CPU limit. This example's limit runs only on hvx.
+   uses no guest time and cannot use up a CPU limit. This example's limit runs only on hvx. The
+   pause needs no model and works on the Mac and on hvx.
 3. **hydo's value here is small.** The same CPU limit with a busy neighbour fails 90 to 100% of
    runs natively. hydo adds a schedule that fails every time and a neighbour that passes, but the
    cause was found with a native probe and a native rate table.

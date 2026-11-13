@@ -284,10 +284,13 @@ the extra point changes when the timer interrupts come, not which thread is stop
    passes; its 15 schedules with both tokens carry `tjmax=32768 pp=65536` or
    `tjmax=8192 pp=16384`.
 4. **hvx's several-vCPU mode does not reach this race.** Turns of 64 to 2,097,152 branches never
-   let the worker take an operation in the window. The KVM engine's one vCPU did. There the
-   guest switches threads at the exit-counted timer and at the forced points. Some races need one thread
+   let the worker take an operation in the window. The KVM engine's one vCPU did. There the guest
+   switches threads at the exit-counted timer and at the forced points. Some races need one thread
    held off the CPU for milliseconds, as on a loaded CI runner. hvx has no direct knob for that,
-   such as a token that stalls the running thread at a point for N branches.
+   such as a token that holds the running thread off the CPU for N branches at a point. Milestone
+   216's pause of the workload, `P=workload@<at>~<off>:<dur>`, stops the whole test process, the
+   worker too. So it does not reach this race. `hydo explore --pause-workload --pause-max 3000
+   --seeds 1-60` on hvx gave 60 passes, each with a queue length of 34 to 36.
 5. **One find in 100 schedules.** The KVM exploration found the failure in 4 of 400 schedules. The
    distribution of the test's queue length (2 to 36, mostly 18) showed how close each run came,
    but the explorer cannot steer by such a number. A value printed by the test could serve as a

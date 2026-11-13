@@ -65,6 +65,7 @@ is Rust programs only and needs no Python.
 | several vCPUs (`--vcpus N`, `--turns`) | yes | no | no |
 | tick jitter (`--timing`, `tj=`) | yes (branch-counted ticks) | yes (counted in VM exits) | yes (counted in VM exits) |
 | forced preemption (`--preempt`) | yes (`pp=`, `xt=`) | yes (`pct=`, counted in VM exits) | yes (`pct=`, counted in VM exits) |
+| pauses of the workload (`P=workload@<at>~<off>:<dur>`, `--pause-workload`) | yes | yes (not run on kvm yet) | yes |
 | code coverage (Intel Processor Trace) | yes | no | no |
 | a counter loop with no VM exits (`while (flag) n++`) | interrupted by the PMU clock | resolved in the rewind mode (`spin=rewind`, automatic) | resolved in the rewind mode (automatic) |
 

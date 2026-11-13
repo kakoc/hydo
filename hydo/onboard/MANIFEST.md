@@ -651,7 +651,8 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `K=<svc>@<at>+<down>` | SIGKILL the service before step `at`; restart it (setup + cmd + ready) before step `at+down` |
 | `K=<a>,<b>@...`, `K=<group>.<selector>@...` | the same for every service of the list, or for the members of a group that the selector picks (`one`, `minority`, `majority`, `all`, `primary`); also for `P=` and `X=`; see "Groups of services and partitions" |
 | `P=<svc>@<at>+<n>` | SIGSTOP before step `at`, SIGCONT before step `at+n` |
-| `P=<svc>@<at>~<off>:<dur>` | pause after `off` ms of guest time for `dur` ms, while steps run; `off` may have a fraction down to microseconds (`60589.25`) |
+| `P=<svc>@<at>~<off>:<dur>` | pause after `off` ms of guest time for `dur` ms, while steps run (whole milliseconds) |
+| `P=workload@<at>~<off>:<dur>` | a pause of the workload (Milestone 216): the same for the workload's own process tree, as a CPU limit stops it. `workload` may stand in a list with services. `hydo explore --pause-workload` draws it (`hydo guide faults`, "Pause the workload") |
 | `N=<svc>@<from>-<to>:<netem>` | `tc netem` on traffic to the service's `port` for steps `[from,to)` |
 | `O=<svc>@<from>-<to>:req\|resp:<netem>` | one direction only |
 | `C=<at>` | power cut before step `at` |
