@@ -475,12 +475,14 @@ impl Link for BranchLink<'_> {
         let want = self.rec[i].at();
         match live.next_stop()? {
             LinkNext::Stop { stop: s, lines } if Some(s.at) == want && lines.is_empty() => {}
-            LinkNext::Stop { stop: s, lines } => return Err(LinkError(format!(
+            LinkNext::Stop { stop: s, lines } => {
+                return Err(LinkError(format!(
                 "state search: the engine resumed at {} with {} lines, the snapshot was at {:?}",
                 s.at,
                 lines.len(),
                 want
-            ))),
+            )))
+            }
             LinkNext::Done(r) => {
                 return Err(LinkError(format!(
                     "state search: the engine did not resume: {r}"

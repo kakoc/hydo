@@ -613,8 +613,9 @@ pub trait ControlledWorker {
 /// `hydo run` stops with the message, and the explorer records the run as refused, never as a
 /// failure (Milestone 208).
 pub fn refusal(kind: EngineKind, s: &hydo_schedule::Schedule) -> Option<String> {
-    // the state search's timing switch (docs/design/state-search.md) is built on KVM only
-    if kind != EngineKind::Kvm && !s.branch_points().is_empty() {
+    // the state search's timing switch (docs/design/state-search.md) is built on KVM and the
+    // Mac engine; hvx's timing is the module's
+    if kind == EngineKind::Hvx && !s.branch_points().is_empty() {
         return Some(format!(
             "br= (a branch point that changes the timing) is not supported on {}",
             kind.name()

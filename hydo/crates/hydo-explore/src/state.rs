@@ -541,17 +541,20 @@ pub fn with_host_words(text: &str, extra: &str) -> String {
     }
 }
 
-/// The timing words of a fresh schedule, as a branch point's segment: its tick jitter and its
-/// forced preemption points.
-pub fn timing_words(f: &S) -> String {
-    let mut t =
-        f.tj.as_ref()
-            .map(crate::sched::render_tj)
-            .unwrap_or_default();
-    if let Some((a, b, c)) = f.pct {
-        t.push_str(&format!(" pct={a:x} pctn={b} pctk={c}"));
-    }
-    t
+/// The timing words of a fresh schedule's text, as a branch point's segment: its tick jitter and
+/// its forced preemption points (the host words whose keys a branch point takes), each with a
+/// space before it.
+pub fn timing_words(text: &str) -> String {
+    let host = text.split('|').next().unwrap_or("");
+    host.split_whitespace()
+        .take_while(|w| !w.starts_with("br="))
+        .filter(|w| {
+            w.split('=')
+                .next()
+                .is_some_and(|k| hydo_schedule::BRANCH_KEYS.contains(&k))
+        })
+        .map(|w| format!(" {w}"))
+        .collect()
 }
 
 #[cfg(test)]
@@ -592,6 +595,10 @@ mod tests {
             "disk=none dseed=1 pct=5 pctn=3 pctk=100 br=900 pct=7 pctn=2 | run"
         );
         assert_eq!(split_br("disk=none | run K=a@1+1").1, "");
+        assert_eq!(
+            timing_words("disk=none dseed=3 tj=5 tjpm=100 tjmax=1000 pct=7 pctn=2 pctk=9 | run"),
+            " tj=5 tjpm=100 tjmax=1000 pct=7 pctn=2 pctk=9"
+        );
     }
 
     #[test]

@@ -22,9 +22,11 @@
 //!   exit budget, SPIN) before the run's error RESULT.
 //! - **SNAP** is refused while a typed send is not acknowledged unless `retype` is given: input
 //!   still in the UART's receive queue is in no snapshot (M116), so RESUME types every such send
-//!   again right after the restore; queued sends are part of the snapshot. SNAP is refused for
-//!   schedules with tick jitter (`tj=`) or forced preemption points (`pct=`). At most 8 snapshots;
-//!   a second SNAP with a name replaces the first.
+//!   again right after the restore; queued sends are part of the snapshot. A snapshot keeps the
+//!   run's tick jitter (`tj=`) and forced preemption points (`pct=`), and its RESUME restores
+//!   them (the state search, docs/design/state-search.md; until then such a SNAP was refused).
+//!   At most 64 snapshots; a second SNAP with a name replaces the first.
+//! - **TIME** `<tokens>` at a workload stop replaces the timing from that stop on, as on KVM.
 //! - **The controlled boot** (M121): an agent image has hydo-agent as `/init` and no S0/S1
 //!   markers; the host takes `SNAP S0` and `SNAP S1` in the boot phase, END prints
 //!   `RESULT boot ...` and then READY. A CTL restores the host's S1, arms the host part, types
@@ -190,6 +192,9 @@ struct XSnap {
 struct CtlSnap {
     name: String,
     x: XSnap,
+    /// the run's timing at the snapshot (host-side, so not in the VM's snapshot)
+    tj: Tjit,
+    pct: Pct,
     rs: RunSt,
     k: Book,
     rb: u64,
@@ -422,10 +427,6 @@ impl Host {
             self.refuse(format!("snap {name} only in the workload or boot phase"));
             return;
         }
-        if vm.tj.on || self.c.rs.pct_n != 0 {
-            self.refuse(format!("snap {name} not for tj/pct schedules"));
-            return;
-        }
         if self.c.wdone != 0 {
             self.refuse(format!("snap {name} after DISKOFF/CUT"));
             return;
@@ -479,6 +480,8 @@ impl Host {
         cs.rb = self.c.rb;
         cs.used = true;
         cs.rw = vm.sp.rw_on;
+        cs.tj = vm.tj;
+        cs.pct = vm.pct;
         cs.name = lossy(&ccap(name.as_bytes().to_vec(), 64));
         let at = self.c.at;
         self.answer(Answer::Snap {
@@ -489,6 +492,49 @@ impl Host {
         if self.g_ctl_one && self.c.phase == Phase::Boot && name == "S1" {
             self.c.boot_s1 = true; // M121: the workload starts here once the host says CONT
         }
+    }
+
+    /// TIME: the timing from this stop on (the state search's branch point, as on KVM).
+    fn ctl_time_cmd(&mut self, vm: &mut Vmm, tokens: &str) {
+        if self.c.phase != Phase::Workload || self.c.wdone != 0 {
+            self.refuse("time only in the workload phase".into());
+            return;
+        }
+        let s = match Schedule::parse(&format!("{tokens} | run")) {
+            Ok(s) => s,
+            Err(e) => {
+                self.refuse(format!("time {e}"));
+                return;
+            }
+        };
+        if let Some(bad) = s
+            .host
+            .iter()
+            .find(|t| !hydo_schedule::BRANCH_KEYS.contains(&t.key()))
+        {
+            self.refuse(format!("time {}= is not a timing token", bad.key()));
+            return;
+        }
+        let mut tj = tick_jitter(&s);
+        tj.on = tj_wanted(&tj);
+        vm.tj = tj;
+        let pct_n = if s.host_token("pct").is_some() {
+            num(&s, "pctn").unwrap_or(0) as u32
+        } else {
+            0
+        };
+        vm.pct = Pct::default();
+        if pct_n != 0 {
+            let x = vm.m.exits;
+            let k = num(&s, "pctk").unwrap_or(20000);
+            vm.pct = Pct::set(num(&s, "pct").unwrap_or(0), pct_n, x, x.wrapping_add(k));
+            if vm.pct_log.is_none() && self.o.preempt_record {
+                vm.pct_log = Some(Vec::new());
+            }
+        }
+        self.c.rs.pct_n = self.c.rs.pct_n.max(pct_n);
+        let at = self.c.at;
+        self.answer(Answer::Time { at });
     }
 
     /// one stop: report, then serve host commands until CONT (false) or END/EOF (true)
@@ -589,9 +635,7 @@ impl Host {
                     self.answer(a);
                 }
                 HostCmd::Snap { name, retype } => self.ctl_snap_cmd(vm, &name, retype),
-                // the state search's timing switch (docs/design/state-search.md) is built on
-                // KVM only; hydo_engine::refusal refuses br= schedules for hvm before any VM
-                HostCmd::Time(_) => self.refuse("time not on hvm".into()),
+                HostCmd::Time(tokens) => self.ctl_time_cmd(vm, &tokens),
                 HostCmd::DiskOff | HostCmd::Cut => {
                     let cut = matches!(cmd, HostCmd::Cut);
                     let no = if self.c.phase != Phase::Workload {
@@ -1042,6 +1086,11 @@ impl Engine {
         };
         let check = self.h.o.check_restore;
         xsnap_restore(&mut self.vm, &self.h.snaps[i].x, check);
+        // the timing of the run the snapshot was taken in (none for S0, S1 and every snapshot
+        // of a run without timing tokens: what a RESUME found before snapshots kept it)
+        self.vm.tj = self.h.snaps[i].tj;
+        self.vm.pct = self.h.snaps[i].pct;
+        self.vm.pct_log = (self.h.snaps[i].rs.pct_n != 0 && self.h.o.preempt_record).then(Vec::new);
         self.h.ctl_begin(tag);
         self.h.c.k = self.h.snaps[i].k.clone();
         self.h.c.start = 2;
@@ -1133,6 +1182,8 @@ impl Engine {
             r = 0;
             cut |= self.h.c.cut; // M126: the host's DISKOFF/CUT is its workload marker
         }
+        // a TIME at a stop may have switched forced preemption points on (the state search)
+        let pct_n = pct_n.max(self.h.c.rs.pct_n);
         let cap = |s: &mut String| {
             if s.len() > 159 {
                 s.truncate(159)

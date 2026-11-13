@@ -1429,7 +1429,7 @@ fn state_search(cx: &Cx, pool: &Pool, seeds: &[i64]) -> StateOut {
         stream_seed: state::stream_seed(lo),
         first_seed: lo,
         steps: cx.ex.norders,
-        timing: cx.kvm && (cx.ex.timing || cx.ex.preempt),
+        timing: !hvx && (cx.ex.timing || cx.ex.preempt),
     };
     eprintln!(
         "state search: {} schedules, {} branches per 1000, a corpus of {} states ({} spare names), rare = seen in at most {} runs, {} snapshots per run{}",
@@ -1455,7 +1455,7 @@ fn state_search(cx: &Cx, pool: &Pool, seeds: &[i64]) -> StateOut {
         let b = state::branch_schedule(&a, &f, e.b, steps);
         let mut text = state::with_host_words(&cx.render(&b), &br);
         if timing {
-            let words = format!(" br={}{}", e.at, state::timing_words(&f));
+            let words = format!(" br={}{}", e.at, state::timing_words(&cx.render(&f)));
             text = state::with_host_words(&text, &words);
         }
         // it must read back as a schedule
