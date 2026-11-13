@@ -39,6 +39,7 @@
 #![allow(clippy::needless_range_loop)]
 
 pub mod abi;
+pub mod apic;
 pub mod boot;
 pub mod cpu;
 pub mod cpuid;

@@ -755,3 +755,57 @@ fn preemption_records_name_every_point_and_move_nothing() {
         assert_eq!(pctf, Some(fired), "{s}: {file}");
     }
 }
+
+/// The one-vCPU fingerprints of the scripted guests, pinned before the work on several vCPUs
+/// (docs/design/kvm-vcpus.md, "One vCPU stays exactly as it is"): a change that moves the
+/// one-vCPU path fails here on any machine. Each line is a run's `fp`, `wfp`, extras (`stops=`,
+/// `typed=`, `inh=`, `ctl=`, the tick-jitter and preemption-point counts) and verdict.
+#[test]
+fn one_vcpu_fingerprints_are_pinned() {
+    // (name, guest, schedule, the host says CONT at the guest's exit stop: the engine's verdict)
+    let cases: [(&str, Program, &str, bool); 6] = [
+        ("idle", program(5), "rb=4 | run", false),
+        (
+            "jitter",
+            program(40),
+            "tj=1234 tjpm=1000 tjmax=300 rb=4 | run",
+            false,
+        ),
+        (
+            "preempt",
+            program(40),
+            "pct=5 pctn=8 pctk=300 rb=4 | run",
+            false,
+        ),
+        ("cadence", program(5), "rb=64 | run", false),
+        ("spin", spin_program(4), "rb=4 | run", false),
+        (
+            "counter",
+            counter_program(),
+            "spin=rewind rb=4 | run",
+            false,
+        ),
+    ];
+    let mut got = Vec::new();
+    for (name, p, s, cont) in cases {
+        let r = &runs_of_with(&p, &[s], cont)[0];
+        let extras: Vec<String> = r.extras.iter().map(|(k, v)| format!("{k}={v}")).collect();
+        got.push(format!(
+            "{name} fp={} wfp={} {} | {}",
+            r.fp,
+            r.wfp,
+            extras.join(" "),
+            r.verdict
+        ));
+    }
+    assert_eq!(got, PINNED_ONE_VCPU, "got:\n{}", got.join("\n"));
+}
+
+const PINNED_ONE_VCPU: [&str; 6] = [
+    "idle fp=1be91463ed7b93ef wfp=8f02392fd574a1ea stops=22 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
+    "jitter fp=f205c09b49407002 wfp=c02648c73673a250 tjk=0-12 tjn=11 stops=92 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
+    "preempt fp=0cf0417a1a2cf149 wfp=c7bdacf949b69bf6 pctf=0 pctw=354 stops=92 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
+    "cadence fp=1be91463ed7b93ef wfp=8f02392fd574a1ea stops=5 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
+    "spin fp=2e8b92015190b56e wfp=1119861f7b2e16f4 stops=19 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
+    "counter fp=3c94fb7ed9aacd9c wfp=cab9588566b03486 stops=14 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK counted",
+];

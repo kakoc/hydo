@@ -6067,3 +6067,57 @@ queue does fill. No hang occurred: 230 rounds on the Mac, 200 on Linux, 100 hvx 
 **What hydo lacked.** hydo has no token that stops a process or a thread for some guest time.
 On the Mac and KVM a busy loop makes no VM exits, so a CPU limit in the guest works only on hvx.
 Both are open item 80.
+
+### Milestone 213 (tentative number) — DONE, STAGE 1 (several vCPUs on the KVM engine: the design, and a probe that showed KVM can run them one at a time from one thread with the local APIC in user space, deterministically, on AMD and Intel; the parts of stage 2 that leave the engine alone; nothing recorded moved; 2026-11-13)
+
+**In short.** Open item 45 says the KVM engine has one vCPU. `docs/design/kvm-vcpus.md` designs
+several: N KVM vCPUs in one VM, run one at a time from one host thread in turns of `q` counted
+exits, with one VM clock, an x2APIC per vCPU emulated in the engine (no in-kernel interrupt
+controller), INIT and STARTUP handled by the engine, and a second guest kernel
+`bzImage-kvm-smp` whose `cpu_relax()` exits. Its largest risk is that a turn can switch only at
+an exit, so a race window without an exit stays out of reach. Stage 1 of its plan, a C probe
+against `/dev/kvm`, passed on GitHub's runners. The engine is unchanged: one vCPU is still the only
+machine, and every recorded value stays.
+
+**The probe** (`hv/kvm/smp/smpprobe.c`, in the manner of `hv/kvm/pmu/pmuprobe.c`): hand-written
+32-bit guests on two vCPUs, no in-kernel irqchip, every vCPU run from one thread. A one-off
+workflow on a temporary branch `tmp-kvm-vcpus`, deleted afterwards, ran it in four jobs:
+https://github.com/kakoc/hydo/actions/runs/43407838670. The lead added `udevadm settle` and a
+wait for `/dev/kvm` to the workflow (the same race was fixed in `action/action.yml`, 500a0b7a).
+The hosts were an AMD EPYC 7763, two EPYC 9V74 and an Intel Xeon 6975P-C, each with 4 vCPUs and
+nested KVM on Linux 7.0.0. Each job ran the probe twice and its race test under four busy loops:
+17 of 17 checks twice and 4 of 4 under load, on every job.
+
+| check | result on every job |
+|---|---|
+| x2APIC | reads and writes of the x2APIC MSRs exit to user space with their index; CPUID leaf 1 has the APIC and x2APIC bits; an access to the xAPIC page is an MMIO exit |
+| INIT and STARTUP | vCPU 1 starts in real mode at the vector's page and reaches protected mode; the second STARTUP is ignored |
+| an IPI | injected into vCPU 1 with `KVM_INTERRUPT` at its next turn; the handler ran once; `d5862710e31e565b` |
+| a two-vCPU counter race in turns of `q` exits, `q` = 1..200 | every exit equals a model of the guest; one hash per `q` in both runs; grid hash `9ec051b85c9f3a4b` on AMD and Intel alike; the 100 odd turn lengths lose updates; 206 runs from snapshots restored into fresh VMs equal their straight runs |
+| a switch at every exit, one thread | 21 to 124 ns over an exit on AMD, 2,467 ns on Intel; an exit costs 8.2 to 13.6 µs there |
+
+A handover between two threads cost about one exit more (16.4 to 24.2 µs per exit), so the
+design's choice of one thread holds.
+
+**The parts of stage 2 and 3 that leave the engine alone** (the state search, Milestone 212,
+changes `hydo-kvm` and is not merged yet):
+
+- `engine::one_vcpu_fingerprints_are_pinned` (`hydo/crates/hydo-kvm/tests/engine.rs`) pins
+  six scripted one-vCPU runs: idle, tick jitter, preemption points, another cadence, an exact
+  spin, and a counter loop in the rewind mode. Their values are this tree's.
+- `hydo_kvm::apic` (`hydo/crates/hydo-kvm/src/apic.rs`), the x2APIC model with six unit tests:
+  priorities, EOI, the TPR, the APIC turned off in software, ExtINT on LINT0, ICR decoding, and
+  the timer in the exit clock. Nothing calls it yet.
+- The SMP kernel's recipe: `hv/kvm/linux/kernel-smp.nix` (an override of `kernel.nix`, which
+  does not change), `hydo-kvm-smp.config`, `hydo-kvm-smp.patch`, and `SMP=1` for
+  `build-kernel.sh`. A trial build on the bare-metal machine's single-user Nix (a compile check,
+  not a pin; no KVM there) found that `outb %al, $0x5f0` assembles to port `0xf0`: an immediate
+  port has 8 bits, and the build gave 207 assembler warnings. The relax port's OUT now takes the
+  port in DX. The second build had no warning and 198 sites that load `0x5f0` into DX. The
+  configuration checks passed, and `audit-rdtsc.sh` listed the UP kernel's 10 sites and no RDTSC.
+  The trial `bzImage-kvm-smp` was `a43b7bc3…`, not a pin.
+- Reading Linux 6.6.35 for the recipe found that the PIC reaches the boot CPU's LINT0 only when
+  the I/O APIC is turned off, so the SMP kernel's command line needs `noapic`.
+
+**Left.** Stage 2's engine code waits for the state search's merge. The SMP kernel was not booted
+and is not pinned. Intel KVM ran only the probe, on one runner model.

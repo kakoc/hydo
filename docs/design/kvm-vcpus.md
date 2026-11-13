@@ -1,7 +1,9 @@
 # Several vCPUs on the KVM engine
 
-Status: a design, written on 2026-11-13 before any engine code. Nothing of it is built. It
-answers AGENTS.md open item 45 ("The KVM engine: one vCPU only"). The engine it extends is
+Status: a design, written on 2026-11-13. Stage 1, the KVM probe, passed on 2026-11-13 on three
+AMD and one Intel model (Milestone 213, and the section on what the probe showed). The APIC model
+(`hydo/crates/hydo-kvm/src/apic.rs`) and the SMP kernel's recipe exist; the engine does not use
+them yet, and one vCPU is the only machine. It answers AGENTS.md open item 45 ("The KVM engine: one vCPU only"). The engine it extends is
 described in `docs/design/kvm-engine.md`; this page uses that page's terms (the exit clock, the
 spin observer, the rewind mode, the full-state cycles) and does not repeat them.
 
@@ -223,9 +225,13 @@ in physical x2APIC mode, so a logical destination ends the run with a message. N
 
 **Device interrupts.** In stages 1 to 4 the 8259 PIC stays the only device interrupt controller.
 Its output goes to the boot CPU's local interrupt pin LINT0, set to take the PIC's vector (ExtINT).
-This is "virtual wire" mode, and it sends every device interrupt to vCPU 0. Linux runs this way when the MP table lists no I/O APIC. An APIC vector of vCPU 0 is taken
-before the PIC's vector, as QEMU's user-space APIC does (`cpu_get_pic_interrupt`). An emulated I/O
-APIC that routes a device to any vCPU is stage 5.
+This is "virtual wire" mode, and it sends every device interrupt to vCPU 0. Linux sets LINT0 to
+ExtINT on the boot CPU only when the I/O APIC is turned off, in `setup_local_APIC`.
+With an MP table and the masked LINT0 of the reset state, it keeps LINT0 masked. So the SMP
+kernel's command line has `noapic`.
+
+An APIC vector of vCPU 0 is taken before the PIC's vector, as QEMU's user-space APIC does
+(`cpu_get_pic_interrupt`). An emulated I/O APIC that routes a device to any vCPU is stage 5.
 
 **Rejected: KVM's in-kernel local APIC** (`KVM_CAP_SPLIT_IRQCHIP`). It handles IPIs and EOIs
 without exits, but:
@@ -276,8 +282,9 @@ guest access to the MSR goes to the engine's model.
 
 **The MP table.** `hydo_hvx::boot::build_mptable_n` already writes a table with N processor
 entries, and the KVM boot erases it today. With N more than 1, the boot writes the table without
-its I/O APIC and interrupt entries, which puts Linux in virtual wire mode. The kernel runs
-`acpi=off`, as on hvx.
+its I/O APIC and interrupt entries. Linux then registers no I/O APIC and reads no I/O APIC
+register, and `noapic` puts the PIC on the boot CPU's LINT0. The kernel runs `acpi=off`, as on
+hvx.
 
 **Starting the other vCPUs.** Linux starts each other CPU (an AP) with INIT and two STARTUP
 IPIs. The engine
@@ -290,20 +297,25 @@ An INIT to a vCPU that already ran (CPU hot-unplug) ends the run with a message.
 
 ## The guest kernel `bzImage-kvm-smp`
 
-The SMP kernel is a second output of `hv/kvm/linux/kernel.nix` with a configuration fragment
-on top of `hydo-kvm.config`. The UP kernel's bytes do not change, so its pin stays.
+The SMP kernel is built by `hv/kvm/linux/kernel-smp.nix`, which overrides the UP recipe
+`kernel.nix` without changing it, so the UP kernel's pin stays. `SMP=1 sh
+hv/kvm/linux/build-kernel.sh` builds it.
 
-Configuration: `CONFIG_SMP=y`, `CONFIG_NR_CPUS=8`, `CONFIG_X86_X2APIC=y`, the MP table parser,
-and no ACPI. The command line adds `x2apic_phys`.
+Configuration: `hv/kvm/linux/hydo-kvm-smp.config` sets `CONFIG_SMP=y`, `CONFIG_NR_CPUS=8`,
+`CONFIG_X86_X2APIC=y`, and the MP table parser on top of `hydo-kvm.config`, and there is no
+ACPI. The command line adds `x2apic_phys noapic`.
 
-Additions to `hydo-kvm-guest.patch`, all under `CONFIG_SMP`:
+`hv/kvm/linux/hydo-kvm-smp.patch` applies after `hydo-kvm-guest.patch`. Each change is under
+`CONFIG_SMP`:
 
-- `cpu_relax()` executes the OUT to the relax port.
+- `cpu_relax()` executes the OUT to the relax port (`asm/vdso/processor.h`).
 - `lapic_timer_period` is preset to the 1 GHz bus clock, so Linux skips the APIC timer
-  calibration, which would wait without an exit. VMware's guest support presets it the same way.
+  calibration, which would wait without an exit (`calibrate_APIC_clock`: "lapic timer already
+  calibrated"). VMware's and Jailhouse's guest support preset it the same way.
 - The hydo platform's `x2apic_available` returns true, so Linux uses x2APIC without interrupt
-  remapping.
-- The one-shot timer on IRQ 0 is not registered. Every CPU uses its APIC timer.
+  remapping (`try_to_enable_x2apic`).
+- The one-shot timer on IRQ 0 is not registered, so there is no global clock event. Every CPU
+  uses its APIC timer from `setup_percpu_clockev`, as a Jailhouse guest does.
 
 The engine's kernel table (`hydo_kvm::kernel::TWINS`) pairs the image's recorded hvx kernel with
 both KVM builds: the UP build for one vCPU and the SMP build for several. Images do not change.
@@ -350,7 +362,9 @@ These numbers are known today:
   makes no exact stop and copies no state.
 
 A switch on KVM costs one `KVM_RUN` on another vCPU, which loads another VMCS or VMCB in the host
-kernel. Nested on a runner, that load is emulated by the outer hypervisor. Stage 1 measures both.
+kernel. Stage 1 measured it on GitHub's runners: 21 to 124 ns over an exit on AMD. On Intel it
+was 2,467 ns, where an exit costs 13.6 µs (the section on what the probe showed). An exit there
+costs 8 to 14 µs, against 1.06 µs on the build machine, so a switch adds at most a fifth of an exit.
 
 Each APIC access is an exit: an EOI per interrupt, an initial-count write per timer arm, and an ICR
 write per IPI. The UP kernel already makes about as many exits for the PIC's EOI and the timer port.
@@ -418,9 +432,44 @@ so its output is never the pin.
 Intel KVM is checked when the build machine is reachable again. A runner is AMD, and Intel's VMX
 paths (unrestricted guest, the VMCS switch) differ from AMD's SVM paths.
 
+## Stage 1: what the probe showed
+
+`hv/kvm/smp/smpprobe.c` ran on 2026-11-13 in four jobs of a one-off workflow on GitHub's
+`ubuntu-24.04` runners: https://github.com/kakoc/hydo/actions/runs/43407838670. The hosts were an
+AMD EPYC 7763, two AMD EPYC 9V74, and an Intel Xeon 6975P-C. Each had 4 vCPUs, nested KVM, and
+Linux 7.0.0 (Azure and AWS kernels). Each job ran the probe twice and its race test once more
+under four busy loops.
+
+Every job passed 17 of 17 checks in both runs, and 4 of 4 under load. The values were the same on
+every host, the Intel one included:
+
+| check | result on every job |
+|---|---|
+| `x2apic` | the read of `0x802` and the writes of the ICR (`0x830`) and the EOI exit to user space with their index. Leaf 1 has the x2APIC and APIC bits. A read of `0xfee00030` is an MMIO exit |
+| `sipi` | one INIT and one STARTUP taken, the second STARTUP ignored; vCPU 1 makes its real-mode exit (port `0x20`), then reaches protected mode (CS `0x08`, CR0 `0x60000011`) |
+| `ipi` | the handler ran once, after one `KVM_INTERRUPT` and no window exit; `d5862710e31e565b` in both runs |
+| `race` | every exit of every run equals the model's. Each `q` from 1 to 200 gave one hash twice; grid hash `9ec051b85c9f3a4b`. The 100 odd turn lengths lose updates (`q=1` loses 200, `q=3` 133, `q=5` 120). 206 runs from snapshots in fresh VMs equal their straight runs |
+
+The grid hash covers the counter and the vCPUs' general registers, which have no
+vendor-dependent values in this guest, so it matches across vendors. Linux guests' fingerprints
+still differ between vendors, as on one vCPU.
+
+The cost of an exit, in ns, from the first run of each job (the probe's `COST` line):
+
+| host | one vCPU | two vCPUs, a switch at every exit, one thread | two threads, a handover at every exit | one vCPU run by two threads in turn |
+|---|---|---|---|---|
+| EPYC 7763 | 9,880 | 10,004 | 19,891 | 25,446 |
+| EPYC 9V74 | 8,213 | 8,234 | 16,744 | 18,318 |
+| EPYC 9V74 | 8,274 | 8,339 | 16,385 | 19,147 |
+| Xeon 6975P-C | 13,616 | 16,083 | 24,234 | 40,237 |
+
+The decision for one thread holds: a handover between two threads costs about one exit more,
+and a vCPU that changes threads costs more again. The runners' kernels are newer than Linux 6.6, so
+the cost of `synchronize_rcu()` there was not measured on its own.
+
 ## The plan in stages
 
-**Stage 1: the KVM probe** (no change to `hydo-kvm`). A C program `hv/kvm/smp/smpprobe.c`, in the
+**Stage 1: the KVM probe** (no change to `hydo-kvm`; done, GO). A C program `hv/kvm/smp/smpprobe.c`, in the
 manner of `hv/kvm/pmu/pmuprobe.c`, runs hand-written guests on two vCPUs with no in-kernel irqchip.
 Its tests:
 
@@ -443,8 +492,15 @@ Go or no-go after stage 1, on at least two runner jobs:
 - If test 2 or 4 fails, or if a switch costs more than 20 µs, the work stops before any engine
   code, and the report says why.
 
-**Stage 2: the engine on hand-written and scripted guests.** It starts only after the state search
-is merged into `main`, because both change `hydo/crates/hydo-kvm`.
+**Stage 2: the engine on hand-written and scripted guests.** Its engine part starts only after the
+state search is merged into `main`, because both change `hydo/crates/hydo-kvm`. Two parts are
+ready already:
+
+- the test `engine::one_vcpu_fingerprints_are_pinned` (`hydo/crates/hydo-kvm/tests/engine.rs`)
+  pins six scripted one-vCPU runs: idle, tick jitter, preemption points, another cadence, an
+  exact spin, and a counter loop in the rewind mode;
+- the APIC model `hydo_kvm::apic` with its unit tests: priorities, EOI, the TPR, the
+  APIC turned off in software, ExtINT on LINT0, ICR decoding, and the timer in the exit clock.
 
 - `Vmm` with N vCPUs on one thread, the scheduler, and the APIC model.
 - INIT and STARTUP, the CPUID tables per vCPU, snapshots, and fingerprints.
@@ -452,7 +508,8 @@ is merged into `main`, because both change `hydo/crates/hydo-kvm`.
 - The one-vCPU pins first, then scripted tests of each rule, then the probe's guests run through
   the engine on a runner.
 
-**Stage 3: Linux on several vCPUs.** The SMP kernel recipe, the MP table, and the relax port.
+**Stage 3: Linux on several vCPUs.** The SMP kernel recipe (ready, not pinned), the MP table,
+and the relax port.
 Linux boots with 2 and 4 vCPUs and prints `smp: Brought up 1 node, 2 CPUs`. Each check runs twice and once
 under load, on every runner model:
 

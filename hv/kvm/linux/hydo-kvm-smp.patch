@@ -1,0 +1,106 @@
+diff -ruN a/arch/x86/include/asm/hydo.h b/arch/x86/include/asm/hydo.h
+--- a/arch/x86/include/asm/hydo.h
++++ b/arch/x86/include/asm/hydo.h
+@@ -12,6 +12,11 @@
+  *                    this many nanoseconds (one shot); 0 disarms. The engine
+  *                    disarms it when it delivers the interrupt.
+  *   HYDO_PORT_CTL    OUT dword: 1 powers the machine off, 2 resets it.
++ *   HYDO_PORT_RELAX  OUT byte (several vCPUs only): this CPU waits for
++ *                    another one; the engine ends the vCPU's turn. The
++ *                    kernel's cpu_relax() writes it (asm/vdso/processor.h
++ *                    names the port as a number, since the vDSO includes
++ *                    that header).
+  */
+ #ifndef _ASM_X86_HYDO_H
+ #define _ASM_X86_HYDO_H
+@@ -23,6 +28,7 @@
+ #define HYDO_PORT_WALL		0x5e4
+ #define HYDO_PORT_TIMER		0x5e8
+ #define HYDO_PORT_CTL		0x5ec
++#define HYDO_PORT_RELAX		0x5f0
+ 
+ /* Two dwords from one port in one instruction, so in one VM exit. */
+ static __always_inline u64 hydo_read_pair(u16 port)
+diff -ruN a/arch/x86/include/asm/vdso/processor.h b/arch/x86/include/asm/vdso/processor.h
+--- a/arch/x86/include/asm/vdso/processor.h
++++ b/arch/x86/include/asm/vdso/processor.h
+@@ -15,7 +15,17 @@
+ 
+ static __always_inline void cpu_relax(void)
+ {
++#if defined(CONFIG_HYDO_KVM_GUEST) && defined(CONFIG_SMP) && !defined(BUILD_VDSO)
++	/*
++	 * hydo's KVM engine runs one vCPU at a time and switches only at VM
++	 * exits, so a CPU that waits for another one must exit: an OUT to
++	 * HYDO_PORT_RELAX (asm/hydo.h) ends its turn. Kernel code only: the
++	 * vDSO runs in user space, where the OUT would fault.
++	 */
++	asm volatile("outb %%al, %%dx" : : "a" (0), "d" ((unsigned short)0x5f0) : "memory");
++#else
+ 	rep_nop();
++#endif
+ }
+ 
+ struct getcpu_cache;
+diff -ruN a/arch/x86/kernel/hydo.c b/arch/x86/kernel/hydo.c
+--- a/arch/x86/kernel/hydo.c
++++ b/arch/x86/kernel/hydo.c
+@@ -21,6 +21,13 @@
+  *  - a clock read (an exit) in every sched_yield, so a thread that yields
+  *    while it waits sees time move (kernel/sched/core.c).
+  *
++ * With several vCPUs (CONFIG_SMP, docs/design/kvm-vcpus.md) each vCPU has
++ * a local APIC in x2APIC mode that the engine emulates: every CPU's clock
++ * event is its APIC timer, counting in the exit clock with a 1 GHz bus
++ * clock (lapic_timer_period is preset, so no calibration waits without an
++ * exit), the one-shot timer on IRQ 0 is not used, x2APIC runs without
++ * interrupt remapping, and cpu_relax() exits (asm/vdso/processor.h).
++ *
+  * rdtsc() and rdtsc_ordered() themselves read HYDO_PORT_CLOCK in this
+  * configuration (asm/msr.h), so no kernel path reads the TSC.
+  */
+@@ -34,6 +41,7 @@
+ #include <linux/pm.h>
+ #include <linux/uaccess.h>
+ #include <linux/sched.h>
++#include <asm/apic.h>
+ #include <asm/cpuid.h>
+ #include <asm/hypervisor.h>
+ #include <asm/hydo.h>
+@@ -100,6 +108,9 @@
+ static void __init hydo_time_init(void)
+ {
+ 	clocksource_register_hz(&hydo_cs, NSEC_PER_SEC);
++	/* several vCPUs: every CPU uses its APIC timer (setup_boot_APIC_clock) */
++	if (IS_ENABLED(CONFIG_SMP))
++		return;
+ 	if (request_irq(0, hydo_timer_interrupt,
+ 			IRQF_NOBALANCING | IRQF_IRQPOLL | IRQF_TIMER, "timer", NULL))
+ 		pr_err("hydo: cannot get IRQ 0 for the timer\n");
+@@ -184,15 +195,26 @@
+ 	x86_platform.legacy.no_vga = 1;
+ 	paravirt_set_sched_clock(hydo_sched_clock);
+ 	preset_lpj = HYDO_LPJ;
++#ifdef CONFIG_SMP
++	/* the APIC timer's bus clock is 1 GHz: bus cycles per jiffy */
++	lapic_timer_period = NSEC_PER_SEC / HZ;
++#endif
+ 	pm_power_off = hydo_power_off;
+ 	machine_ops.restart = hydo_restart;
+ 	pr_info("hydo: the exit clock is the only clock\n");
+ }
+ 
++/* the engine's x2APIC needs no interrupt remapping (physical mode) */
++static bool __init hydo_x2apic_available(void)
++{
++	return IS_ENABLED(CONFIG_SMP);
++}
++
+ const __initconst struct hypervisor_x86 x86_hyper_hydo = {
+ 	.name			= "hydo",
+ 	.detect			= hydo_detect,
+ 	.type			= X86_HYPER_HYDO,
+ 	.init.init_platform	= hydo_init_platform,
++	.init.x2apic_available	= hydo_x2apic_available,
+ 	.ignore_nopv		= true,
+ };
