@@ -1,0 +1,15 @@
+#!/bin/sh
+# hydo-msg: every usage event the API acknowledged is stored once under its transaction id
+. /hydo/workload/helper_lib.sh
+Q "select 1" > /dev/null || exit 2
+Q "select transaction_id from events where deleted_at is null" > /tmp/ev.all || exit 2
+sort /tmp/ev.all > /tmp/ev.stored
+acked | cut -d, -f1 | sort -u > /tmp/ev.acked
+comm -23 /tmp/ev.acked /tmp/ev.stored > /tmp/ev.missing
+uniq -d /tmp/ev.stored > /tmp/ev.twice
+a=$(wc -l < /tmp/ev.acked); m=$(wc -l < /tmp/ev.missing); t=$(wc -l < /tmp/ev.twice)
+[ "$m" = 0 ] && [ "$t" = 0 ] && { echo "all $a acknowledged events stored once"; exit 0; }
+echo "missing: $(tr '\n' ' ' < /tmp/ev.missing)"
+echo "stored twice: $(tr '\n' ' ' < /tmp/ev.twice)"
+[ "$m" != 0 ] && echo "$m of $a acknowledged events are not stored" || echo "$t transaction ids are stored twice"
+exit 1

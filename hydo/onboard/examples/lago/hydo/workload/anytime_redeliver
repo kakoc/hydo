@@ -1,0 +1,19 @@
+#!/bin/sh
+# hydo: timeout=60
+# An at-least-once producer delivers an event a second time: one usage event that this run
+# already sent (acknowledged or not) goes out again with the same transaction id and the same
+# units, also while the first delivery may still be in flight. Lago must keep one.
+. /hydo/workload/helper_lib.sh
+s=${HYDO_SEED:-0}
+grep '^e[0-9]*,' "$HYDO_OUTCOMES" 2>/dev/null | cut -d' ' -f1 | sort -u > /tmp/redeliver.$HYDO_CMD_ID
+n=$(wc -l < /tmp/redeliver.$HYDO_CMD_ID)
+[ "$n" -gt 0 ] || exit 0
+id=$(sed -n "$((1 + s % n))p" /tmp/redeliver.$HYDO_CMD_ID)
+op=${id%%,*}; rest=${id#*,}; key=${rest%,*}; units=${rest##*,}
+sub=$(echo "$key" | cut -d: -f2); code=$(echo "$key" | cut -d: -f3)
+C event "$op" "$sub" "$code" "$units"
+case $? in
+  0) record ack "$id" ;;
+  # a refusal or no answer for a second delivery says nothing new about the first one
+  *) exit 1 ;;
+esac

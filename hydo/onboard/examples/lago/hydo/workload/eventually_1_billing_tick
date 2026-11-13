@@ -1,0 +1,37 @@
+#!/bin/sh
+# hydo: timeout=200
+# The billing tick, without waiting for it, and the rule that billing settles.
+# Lago's clock service starts the biller at minute 10 of every hour, and November is billed on
+# the first such tick of December 1. A run lasts less than a minute of guest time, so after the
+# faults this command moves the guest's clock forward to 2 s before that tick: to 2026-12-01
+# 00:09:58 when the clock is earlier (also after a clock fault stepped it back), or to the next
+# minute 10 when it is later. That is the step that waiting would make; Lago does the rest.
+# Then it waits up to 150 s for every subscription to have its November invoice and for every
+# invoice to be in a final state (finalized, voided or closed).
+. /hydo/workload/helper_lib.sh
+first=1796083798              # 2026-12-01 00:09:58 UTC
+now=$(date -u +%s)
+m=$(date -u -d "@$now" +%M); s=$(date -u -d "@$now" +%S)
+m=${m#0}; s=${s#0}
+into=$((m * 60 + s))          # seconds into the hour
+if [ $into -lt 598 ]; then t=$((now - into + 598)); else t=$((now - into + 3600 + 598)); fi
+[ $now -lt $first ] && t=$first
+date -u -s "$(date -u -d "@$t" '+%Y-%m-%d %H:%M:%S')" > /dev/null || exit 1
+echo "clock: $(date -u -d "@$now" '+%F %T') -> $(date -u '+%F %T')"
+missing='select count(*) from subscriptions s where not exists (
+  select 1 from invoice_subscriptions i join invoices v on v.id = i.invoice_id
+  where i.subscription_id = s.id and v.status = 1
+    and i.invoicing_reason in ($$subscription_periodic$$, $$subscription_terminating$$)
+    and i.charges_from_datetime < $$2026-11-02$$ and i.charges_to_datetime >= $$2026-11-30$$)'
+open='select count(*) from invoices where status not in (1, 2, 6)'
+i=0
+while [ $i -lt 150 ]; do
+  a=$(Q "$missing"); b=$(Q "$open")
+  [ "$a" = 0 ] && [ "$b" = 0 ] && { echo "billing settled after ${i} s"; exit 0; }
+  sleep 5; i=$((i + 5))
+done
+Q "select invoice_type, status, created_at from invoices where status not in (1, 2, 6)" | sed 's/^/lago-open-invoice: /' > /dev/console
+[ "$a" != 0 ] && [ "$b" != 0 ] && echo "150 s after the tick: $a subscriptions without a November invoice and $b invoices not final"
+[ "$a" != 0 ] && [ "$b" = 0 ] && echo "150 s after the tick: $a subscriptions without a November invoice"
+[ "$a" = 0 ] && echo "150 s after the tick: $b invoices not in a final state"
+exit 1
