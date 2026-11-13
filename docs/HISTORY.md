@@ -6654,10 +6654,33 @@ https://github.com/kakoc/hydo/actions/runs/43440090997; four jobs, every one gre
 | 4 vCPUs, `disk=none dseed=1 \| run` | OK, `5ad6cb7c9b3bd84a` (`qn=503`), twice on each host |
 | 2 vCPUs, from the worker's S1 against a fresh boot | not run: `hydo explore` refused `--vcpus` for KVM, fixed in this milestone |
 
-**Left.** The run from S1 with several vCPUs on KVM (the next runner run). `hydo repro` and `hydo
-explain` with `--vcpus` on KVM, the explorer's turn tokens for KVM, the help texts, and
-`bzImage-kvm-smp` in the Linux release. Stage 4's usefulness test, the nats example on 2 vCPUs.
-Intel KVM ran only Milestone 213's probe.
+**The S1 check and stage 4** (a third workflow run on a temporary branch `tmp-kvm-vcpus3`,
+deleted afterwards: https://github.com/kakoc/hydo/actions/runs/43446326976; AMD EPYC 7763 and 9V74,
+both green):
+
+- `hv/kvm/smp/smp-check.sh` 13 of 13 on both hosts. The run from the worker's S1 on 2 vCPUs gave
+  the fresh boot's `cb3f16360593598e`. An exploration of 8 seeds on 2 vCPUs made 27 runs, and
+  `hydo repro` of it gave 6 of 6 with the recorded fingerprint.
+- `hv/kvm/smp/nats-check.sh`, nats-server's flaky test (`hydo/onboard/examples/nats-flaky-8363`).
+  1 vCPU fails (`d6cb9210afe66ff9`); the fixed test passes on 2 vCPUs (`b0db8d6cd5ef6e7c`). Of 28
+  turn settings on 2 vCPUs, 10 pass (`q=2` to `q=8`, `16`, `24`, `32`, and two of six seeded
+  ones) and 18 fail, the same verdict per setting on both hosts. Turn boundaries at exits reach the
+  passing order, so the design's largest risk did not hold for this test.
+- 24 of the 28 settings gave one fingerprint on both hosts; `q=12`, `1024`, `2048` and `4096` gave
+  one per host, with equal verdicts. Each ran once per host, so the cause is not known yet: a
+  per-model difference inside the guest (Zen 3 against Zen 4), or a host-timed difference in the
+  engine. `HYDO_KVM_DIAG` now lists each vCPU's state, its APIC, and the scheduler, and a repeat
+  run on a branch `tmp-kvm-vcpus4` keeps every run's folder.
+
+Also in this milestone: with several vCPUs a proven exit-free cycle with interrupts off ends the
+vCPU's turn at the cycle's smallest state when another vCPU can run (before, it ended the run as a
+deadlock); a cycle with a state that has interrupts on is resolved as before. The `--vcpus` help
+text names KVM, and `hydo guide flaky-tests` and the manifest reference describe it.
+
+**Left.** The cause of the four fingerprints that differ between the two hosts. `hydo repro` of one
+run's folder and `hydo explain` with `--vcpus` on KVM, the explorer's turn tokens and turn-length
+search for KVM, and `bzImage-kvm-smp` in the Linux release. Intel KVM ran only Milestone 213's
+probe.
 
 ### Milestone 220 (tentative number) - DONE (`hydo report --html`: a failure as one self-contained web page, for a run, an exploration or a CI run, with the failing run's timeline and its first difference from a passing neighbour; nothing recorded moved; 2026-11-13)
 

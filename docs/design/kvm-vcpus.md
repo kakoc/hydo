@@ -1,9 +1,10 @@
 # Several vCPUs on the KVM engine
 
-Status: written on 2026-11-13. Stages 1 to 3 are built and passed on GitHub's AMD runners
-(Milestones 213 and 219). The sections on what the probe and the runs showed have the numbers. The engine runs
-several vCPUs with `--vcpus N` and the pinned SMP guest kernel `bzImage-kvm-smp`; with one vCPU it
-runs the code of before. Stage 4, the product and the usefulness test, is next. It answers
+Status: written on 2026-11-13. Stages 1 to 4 ran on GitHub's AMD runners (Milestones 213 and
+219). The usefulness test of stage 4 passed: turn boundaries at exits reach the passing order of
+the nats example. The sections on what the probe and the runs showed have the numbers. The
+engine runs several vCPUs with `--vcpus N` and the pinned SMP guest kernel `bzImage-kvm-smp`; with
+one vCPU it runs the code of before. It answers
 AGENTS.md open item 45 ("The KVM engine: one vCPU only"). The engine it extends is
 described in `docs/design/kvm-engine.md`; this page uses that page's terms (the exit clock, the
 spin observer, the rewind mode, the full-state cycles) and does not repeat them.
@@ -508,6 +509,43 @@ Linux used the second vCPU: in the default two-vCPU run vCPU 1 made 6,396 of the
 from the worker's S1: `hydo explore` refused `--vcpus` for KVM. Milestone 219 lets the explorer
 pass the count, and the next runner run checks S1 against a fresh boot there.
 
+## Stage 4: the nats example
+
+A third workflow run (https://github.com/kakoc/hydo/actions/runs/43446326976, AMD EPYC 7763 and
+9V74) finished stage 3. On both hosts `hv/kvm/smp/smp-check.sh` passed 13 of 13 checks. The run
+from the worker's S1 on 2 vCPUs gave the fresh boot's `cb3f16360593598e`. An exploration of 8
+seeds on 2 vCPUs made 27 runs, and `hydo repro` of it reproduced 6 of 6 with the recorded
+fingerprint.
+
+The usefulness test was `hv/kvm/smp/nats-check.sh`: nats-server's flaky test
+(`hydo/onboard/examples/nats-flaky-8363`) on 2 vCPUs over 28 turn settings. Risk 1 did not hold
+here: 10 settings pass and 18 fail, with one verdict per setting on both hosts (the example's
+`RESULTS.md` has the table). One vCPU fails every time, and the fixed test passes on 2 vCPUs. So a
+turn boundary at the exit before the race window, here the reschedule IPI or a clock read, lets
+the other vCPU's thread run in time.
+
+**Fingerprints across the two hosts.** 24 of the 28 settings gave one fingerprint on both hosts.
+`q=12`, `q=1024`, `q=2048` and `q=4096` gave one per host, with the same verdicts. Each setting
+ran once per host, so it is not known whether a host's own runs agree at those settings. The two
+possible causes are different, and only another run can tell them apart:
+
+- A host-dependent result inside the guest, such as an instruction whose flags are undefined or
+  the FPU's last-instruction pointers. Fingerprints already compare only between hosts of one CPU
+  model ("Where fingerprints compare" in `docs/design/kvm-engine.md`). The two hosts are Zen 3
+  and Zen 4.
+- A difference that the host's timing causes in the engine, which would be a determinism bug.
+
+The engine's diagnostics (`HYDO_KVM_DIAG`) now also list each vCPU's state, its APIC, and the
+scheduler, so two runs' diagnostics show which part differs. A repeat run on the branch
+`tmp-kvm-vcpus4` runs `q=2`, `q=12`, `q=1024` and `q=2048` three times each on three hosts, and
+keeps every run's folder.
+
+**A fix found while reviewing the spin paths.** On one vCPU, a proven cycle with interrupts off is a
+deadlock, and the run ends. With several vCPUs, another vCPU can release such a vCPU. Since
+Milestone 219, with several vCPUs such a cycle ends the turn at its smallest state when another
+vCPU can run. A cycle with a state that has interrupts on is resolved as before, so no value of
+these runs can move with the fix.
+
 ## The plan in stages
 
 **Stage 1: the KVM probe** (no change to `hydo-kvm`; done, GO). A C program `hv/kvm/smp/smpprobe.c`, in the
@@ -560,13 +598,15 @@ under load, on every runner model:
 
 Then the kernel's pin.
 
-**Stage 4: the product.** `--vcpus N` for `--backend kvm` reaches the engine from `hydo run` and
-`hydo explore` since Milestone 219. Left: `hydo repro` and `hydo explain`, the explorer's turn
-tokens and a KVM range for the turn-length search, the help texts, and `bzImage-kvm-smp` in the
-Linux release. Then `recorded.json`
-entries with `vcpus` for KVM, and TIME with turn tokens. The usefulness test is the nats example
-on 2 vCPUs: whether some `q` passes and some fails. If every `q` gives one verdict, risk 1 holds,
-and the result goes into `RESULTS.md` and open item 45.
+**Stage 4: the product** (the usefulness test passed). `--vcpus N` for `--backend kvm` reaches the
+engine from `hydo run`, `hydo explore` and `hydo repro` of an exploration since Milestone 219, and
+the help text says so. Left:
+
+- `hydo repro` of one run's folder and `hydo explain` with several vCPUs on KVM were not run;
+- the explorer's turn tokens (`--turns`) and a KVM range for the turn-length search (`--sweep
+  turns`);
+- `bzImage-kvm-smp` in the Linux release;
+- `recorded.json` entries with `vcpus` for KVM, and TIME with turn tokens.
 
 **Stage 5: what is left open.** The rewind mode across vCPUs, an emulated I/O APIC, paravirtual
 spinlock waits, waking a spinning vCPU only after another vCPU wrote the pages it reads, and CPU

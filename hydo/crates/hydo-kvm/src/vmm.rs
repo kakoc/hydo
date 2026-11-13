@@ -1146,6 +1146,14 @@ impl Vmm {
                             resume = false;
                             continue;
                         }
+                        if self.smp.is_some() && self.cpu().regs().rflags & (1 << 9) == 0 {
+                            // no other vCPU can run and this one cannot take an interrupt
+                            let rip = self.cpu().rip();
+                            self.say(&format!(
+                                "hydo-kvm: spin: a proven cycle with interrupts off and no other vCPU to run (deadlock) at rip {rip:#x}"
+                            ));
+                            return STOP_IDLE;
+                        }
                         let next = self.next_event();
                         if next > self.m.vtime {
                             self.m.vtime = next; // as at an idle HLT
@@ -1519,7 +1527,12 @@ impl Vmm {
                 ifs.push(r.rflags & (1 << 9) != 0);
                 states.push(r);
                 if let Some((start, p)) = cycle(&hs) {
-                    let canon = (start..start + p).filter(|&i| ifs[i]).map(|i| hs[i]).min();
+                    let mut canon = (start..start + p).filter(|&i| ifs[i]).map(|i| hs[i]).min();
+                    if canon.is_none() && self.smp.is_some() {
+                        // several vCPUs: a cycle with interrupts off waits for another vCPU; its
+                        // turn ends at the smallest state of the cycle
+                        canon = (start..start + p).map(|i| hs[i]).min();
+                    }
                     match canon {
                         None => break Outcome::Deadlock,
                         Some(c) if c == h => break Outcome::Resolved,
@@ -1761,12 +1774,20 @@ impl Vmm {
                     break 'walk o;
                 }
             }
-            let canon = hs
+            let mut canon = hs
                 .iter()
                 .zip(&ifs)
                 .filter(|(_, &i)| i)
                 .map(|(&h, _)| h)
                 .min();
+            if canon.is_none() && self.smp.is_some() {
+                // several vCPUs: a cycle with interrupts off waits for another vCPU; any of its
+                // states may be where the turn ends
+                for v in ifs.iter_mut() {
+                    *v = true;
+                }
+                canon = hs.iter().copied().min();
+            }
             let Some(c) = canon else {
                 break 'walk Outcome::Deadlock;
             };
@@ -2065,6 +2086,36 @@ impl Vmm {
             self.m.exits,
             self.m.vtime
         );
+        if let Some(sm) = &self.smp {
+            // several vCPUs: each vCPU's state (the lines above are the running vCPU's) and the
+            // several-vCPU state, so that two runs' diagnostics show which part differs
+            for (i, c) in self.cpus.iter().enumerate() {
+                let s = c.save().without_stale_events();
+                let _ = writeln!(
+                    t,
+                    "{phase} vcpu{i} {:016x} sregs {:016x} xsave {:016x} run {:?} regs {:?}",
+                    s.hash(OFFSET),
+                    fnv(format!("{:?}", s.sregs).as_bytes(), OFFSET),
+                    fnv(format!("{:?}", s.xsave).as_bytes(), OFFSET),
+                    sm.run[i],
+                    s.regs
+                );
+                let _ = writeln!(
+                    t,
+                    "{phase} vcpu{i} apic {:016x}",
+                    fnv(&sm.apic[i].bytes(), OFFSET)
+                );
+            }
+            let _ = writeln!(
+                t,
+                "{phase} smp {:016x} cur {} left {} turns {} exits {:?}",
+                fnv(&sm.bytes(), OFFSET),
+                sm.cur,
+                sm.left,
+                sm.turns,
+                sm.exits
+            );
+        }
         let ram = self.ram.bytes();
         let mut o = 0usize;
         while o < ram.len() {

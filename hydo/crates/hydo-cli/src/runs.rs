@@ -112,8 +112,9 @@ pub struct RunOpts {
 
 /// The vCPU and turn options' lines of the commands' help texts.
 pub const RUN_OPTS_HELP: &str =
-    "  --vcpus N        run the guest on N vCPUs (hvx only, 1..8; default 1, or HVX_EXPLORE_VCPUS);
-                   the vCPUs take turns of exactly the schedule's q= guest branches (default 2^20)
+    "  --vcpus N        run the guest on N vCPUs (hvx or KVM, 1..8; default 1, or HVX_EXPLORE_VCPUS);
+                   they take turns of the schedule's q= guest branches on hvx (default 2^20),
+                   of q= counted exits on KVM (default 256)
   --turn-margin N  the in-kernel scheduler's turn-end margin in branches (hvx, several vCPUs)";
 
 impl RunOpts {

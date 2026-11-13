@@ -64,7 +64,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -c -trimpath -o bin/pkg.test ./pkg
 A race between threads needs the threads to run at the same time, or to be switched at the right
 instruction.
 
-- On one vCPU (the KVM engine, the Mac engine, or hvx without `--vcpus`), a second thread runs
+- On one vCPU (the Mac engine, or hvx or KVM without `--vcpus`), a second thread runs
   only when the first one blocks or a timer interrupt arrives. KVM and the Mac count guest time in
   VM exits, so a window of a few microseconds with no exit in it is never interrupted. On KVM the
   nats-server test failed on every one of 209 schedules, whatever the timing tokens.
@@ -77,6 +77,16 @@ instruction.
 ```sh
 hydo run --vcpus 2 "disk=none q=18140 | run"
 hydo run --vcpus 2 "disk=none q=18051 | run"
+```
+
+- On the KVM engine with several vCPUs (`--backend kvm --vcpus N`, up to 8), the vCPUs take turns
+  of `q=` VM exits (default 256), so a turn can end only at an exit. That still reaches races
+  whose threads meet at a wake-up or a clock read. The nats-server test fails at the default turns
+  and at `q=12`, and passes at `q=2` to `q=8` on two vCPUs, the same on two AMD hosts. The values
+  are in the example's `RESULTS.md`; `hydo explore --sweep turns` does not search KVM turns yet.
+
+```sh
+hydo run --backend kvm --vcpus 2 "disk=none q=4 | run"
 ```
 
 The run's `result.json` records the vCPU count, so `hydo repro <run dir>` runs it again on as many

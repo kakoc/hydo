@@ -1993,10 +1993,12 @@ options in the same way (hvx flag `HVX_VM_CPU_CACHE`; on the KVM engine its tabl
 leaves). `hydo run`, `hydo repro` and `hydo explore` read it from the image's manifest, and an
 absent key by the epoch in the image's record.
 
-Several vCPUs (hvx only): `hydo run --vcpus N`, `hydo repro` and `hydo explain` take the count
-(1..8; default 1, or `HVX_EXPLORE_VCPUS`), and `--turn-margin N` sets the scheduler's turn-end
-margin. The vCPUs take turns of exactly `q=` guest branches, a host token of the schedule, so the
-turn length is in the schedule and the vCPU count is not. A run's `result.json` records both
+Several vCPUs (hvx; the KVM engine since Milestone 219, docs/design/kvm-vcpus.md): `hydo run
+--vcpus N`, `hydo repro` and `hydo explain` take the count (1..8; default 1, or
+`HVX_EXPLORE_VCPUS`), and on hvx `--turn-margin N` sets the scheduler's turn-end margin. On hvx the
+vCPUs take turns of exactly `q=` guest branches; on KVM turns of `q=` VM exits (default 256), with
+the SMP guest kernel `bzImage-kvm-smp`. `q=` is a host token of the schedule, so the turn length is
+in the schedule and the vCPU count is not. A run's `result.json` records both
 options (`engine.args`), so `hydo repro <run dir>` repeats them, and an exploration's "by hand"
 lines carry them. `hydo explore --vcpus N --sweep turns` searches the turn lengths of one schedule
 for the lengths where the verdict changes (`hydo guide flaky-tests`). Since M205 several vCPUs run

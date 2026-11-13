@@ -5,7 +5,12 @@
 # the verdict depends on the turn length. The question: does some turn length in exits pass?
 #
 #   HYDO=<hydo of this tree> REL=<unpacked Linux release> SMP_KERNEL=<bzImage-kvm-smp> \
-#     [OUT=<dir>] [T=<seconds per command>] [QS="1 2 4 ..."] sh hv/kvm/smp/nats-check.sh
+#     [OUT=<dir>] [T=<seconds per command>] [QS="1 2 4 ..."] [SEEDS="1 2 ..."] [REPEAT=1] \
+#     [KEEP=1] sh hv/kvm/smp/nats-check.sh
+#
+# REPEAT runs each turn length that many times; KEEP=1 keeps every run's folder as
+# OUT/r-<turns>-<k> (with the engine's diagnostics, HYDO_KVM_DIAG: which part of the end state a
+# fingerprint differs in).
 #
 # Needs Go (build-test.sh fetches the module's toolchain). Each run prints one line: the turn
 # length, the fingerprint and the verdict. Every wait has a time limit. It writes only under OUT.
@@ -16,6 +21,9 @@ SMP_KERNEL=${SMP_KERNEL:?SMP_KERNEL=<bzImage-kvm-smp>}
 OUT=${OUT:-$PWD/nats-check}
 T=${T:-900}
 QS=${QS:-"1 2 3 4 6 8 12 16 24 32 48 64 96 128 192 256 384 512 768 1024 2048 4096"}
+SEEDS=${SEEDS-"1 2 3 4 5 6"}
+REPEAT=${REPEAT:-1}
+KEEP=${KEEP:-0}
 here=$(cd "$(dirname "$0")" && pwd)
 ex=$(cd "$here/../../../hydo/onboard/examples/nats-flaky-8363" && pwd)
 mkdir -p "$OUT"
@@ -40,7 +48,7 @@ say "images: buggy $(sha256sum "$(img buggy)" | cut -c1-16)..., fixed $(sha256su
 run() { # <image> <dir> <schedule> [options]
   i=$1; d=$2; s=$3; shift 3
   rm -rf "$d"
-  timeout "$T" "$H" run --backend kvm --image "$i" --out "$d" "$@" "$s" > "$d.txt" 2>&1
+  HYDO_KVM_DIAG=1 timeout "$T" "$H" run --backend kvm --image "$i" --out "$d" "$@" "$s" > "$d.txt" 2>&1
   r=$(grep -m1 '^RESULT' "$d.txt")
   echo "$r" >> "$LOG"
   fp=$(echo "$r" | sed -n 's/.* fp=\([0-9a-f]*\) .*/\1/p')
@@ -57,14 +65,21 @@ cp -f "$SMP_KERNEL" "$REL/hv/kvm/linux/out/bzImage-kvm-smp"
 unset HYDO_KVM_KERNEL
 say "2 vCPUs, fixed, default turns: $(run "$(img fixed)" "$OUT/r" "disk=none | run" --vcpus 2)"
 say "2 vCPUs, buggy, default turns: $(run "$(img buggy)" "$OUT/r" "disk=none | run" --vcpus 2)"
+dir() { # <label> <k>: the run's folder
+  if [ "$KEEP" = 1 ]; then echo "$OUT/r-$1-$2"; else echo "$OUT/r"; fi
+}
 pass=0; failn=0
 for q in $QS; do
-  r=$(run "$(img buggy)" "$OUT/r" "disk=none q=$q | run" --vcpus 2)
-  say "2 vCPUs, buggy, q=$q: $r"
-  case "$r" in *"HYDO-ORACLE: OK"*) pass=$((pass + 1));; *VIOLATION*) failn=$((failn + 1));; esac
+  k=1
+  while [ "$k" -le "$REPEAT" ]; do
+    r=$(run "$(img buggy)" "$(dir "q$q" "$k")" "disk=none q=$q | run" --vcpus 2)
+    say "2 vCPUs, buggy, q=$q: $r"
+    case "$r" in *"HYDO-ORACLE: OK"*) pass=$((pass + 1));; *VIOLATION*) failn=$((failn + 1));; esac
+    k=$((k + 1))
+  done
 done
-for seed in 1 2 3 4 5 6; do
-  r=$(run "$(img buggy)" "$OUT/r" "disk=none q=64 qs=$seed | run" --vcpus 2)
+for seed in $SEEDS; do
+  r=$(run "$(img buggy)" "$(dir "qs$seed" 1)" "disk=none q=64 qs=$seed | run" --vcpus 2)
   say "2 vCPUs, buggy, q=64 qs=$seed: $r"
   case "$r" in *"HYDO-ORACLE: OK"*) pass=$((pass + 1));; *VIOLATION*) failn=$((failn + 1));; esac
 done

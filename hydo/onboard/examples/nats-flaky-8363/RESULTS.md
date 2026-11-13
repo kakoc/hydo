@@ -123,6 +123,35 @@ the tick jitter, and the forced preemption points all count VM exits, and so non
 land in that window. The second Go thread runs only when the first one blocks, which is after
 the count.
 
+## The KVM engine with two virtual CPUs
+
+Since Milestone 219 the KVM engine runs several vCPUs, in turns of a number of VM exits
+(`docs/design/kvm-vcpus.md`). A turn can end only at an exit, and the window of the previous section has none. The
+question was whether a turn boundary at another exit still lets the other vCPU run in time.
+It does. `hv/kvm/smp/nats-check.sh` ran on GitHub's runners on 2026-11-13, on AMD EPYC 7763 and
+9V74 (run https://github.com/kakoc/hydo/actions/runs/43446326976). Each run was a fresh boot of
+`hydo run --backend kvm`, and the guest saw 2 CPUs (`cpus=2`):
+
+| image | vCPUs | schedule | verdict on both hosts |
+|---|---|---|---|
+| buggy | 1 | `disk=none \| run` | VIOLATION (`d6cb9210afe66ff9`) |
+| fixed | 2 | `disk=none \| run` | OK (`b0db8d6cd5ef6e7c`) |
+| buggy | 2 | `disk=none \| run` (turns of 256 exits) | VIOLATION (`faa5cb0dacbd2877`) |
+| buggy | 2 | `q=2`, `3`, `4`, `6`, `8`, `16`, `24`, `32` | OK |
+| buggy | 2 | `q=1`, `12`, `48`, `64`, `96`, `128`, `192`, `256`, `384`, `512`, `768`, `1024`, `2048`, `4096` | VIOLATION |
+| buggy | 2 | `q=64 qs=4`, `q=64 qs=6` | OK |
+| buggy | 2 | `q=64 qs=1`, `2`, `3`, `5` | VIOLATION |
+
+So 10 of the 28 turn settings pass and 18 fail, with the same verdict on both hosts for each
+setting. Short turns of 2 to 32 exits let the other vCPU run between `Unregister()` and the count,
+as hvx's turns of at most about 18,700 branches do. One exit (`q=1`) fails again, and so does
+`q=12`, so the verdict is not monotonic in the turn length here either.
+
+The fingerprints were the same on both hosts for 24 of the 28 settings. They differed at `q=12`,
+`q=1024`, `q=2048` and `q=4096`, with equal verdicts. Each setting ran once per host, so this run
+cannot tell whether a host's own runs agree there. The design's section on stage 4 has what was
+checked about it.
+
 ## On hvx: several vCPUs, a turn-length boundary
 
 On the bare-metal machine, hvx runs the guest on several vCPUs in turns of a fixed number of
