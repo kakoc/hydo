@@ -23,6 +23,7 @@ machine was busy with another agent's timing measurement, and the build machine 
      different assets, race when they create the account, and one fails with `500 INTERNAL`.
      v2.3.24 does not do this. It shows without any fault, and natively with two `curl`
      commands. A one-clause patch fixes it: 0 of 200 pairs fail with it, against 196 without.
+     Reported upstream as https://github.com/formancehq/ledger/issues/2542 (2026-11-13).
   2. **A client mistake.** A client that retries without idempotency keys records a payment two
      or three times when an answer is lost after the commit.
   3. **A documented behaviour.** A backdated transfer can leave an account below zero at a past
