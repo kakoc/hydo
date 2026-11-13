@@ -55,6 +55,9 @@ pub const PORT_CLOCK: u16 = 0x5e0;
 pub const PORT_WALL: u16 = 0x5e4;
 pub const PORT_TIMER: u16 = 0x5e8;
 pub const PORT_CTL: u16 = 0x5ec;
+/// Several vCPUs: the SMP guest kernel's `cpu_relax()` writes it; the engine ends the vCPU's turn
+/// (docs/design/kvm-vcpus.md, hv/kvm/linux/hydo-kvm-smp.patch).
+pub const PORT_RELAX: u16 = 0x5f0;
 /// The timer's line (the hydo clock event device).
 pub const TIMER_IRQ: u8 = 0;
 

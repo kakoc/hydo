@@ -26,6 +26,10 @@
 //! - **Timing tokens**: tick jitter (`tj=`, `tjx=`, delays in exits, `tjmax=` default 1000) and
 //!   forced preemption points (`pct=`, `pctn=`, `pctk=`), counted in exits as on the Mac. Host
 //!   tokens only hvx applies (`pp=`, `xt*`, `q*`, `cf=`, `cfn`) are refused.
+//! - **Several vCPUs** (`--vcpus N`, docs/design/kvm-vcpus.md): the turn tokens `q=` (the turn
+//!   length in exits) and `qs=` (seeded lengths in `[1, q]`) apply from the run's start, and the
+//!   RESULT line has `qn=`, the turns the run took. Tick jitter is refused with several vCPUs
+//!   (not built yet), as are hvx's burst and margin tokens.
 //! - **Exit-free loops**: exact cycles are resolved in every run; a counter loop ends the run at
 //!   once as a SPIN unless the schedule has `spin=rewind`, which runs its workload, check and
 //!   recovery phases in the rewind mode ([`crate::vmm`], Milestone 161; the host runs a SPIN again
@@ -92,6 +96,8 @@ pub struct Start {
     /// image of epoch 1 runs as it did then (Milestone 204): no full-state cycles unless
     /// HYDO_KVM_SPIN_STATE asks for them, and a fingerprint that keeps KVM's leftover event fields.
     pub image_epoch: Option<u64>,
+    /// `--vcpus`: the vCPUs (1: the machine of every recorded value)
+    pub vcpus: usize,
 }
 
 pub enum Mode {
@@ -113,6 +119,8 @@ struct RunSt {
     tjinfo: String,
     /// the run's phases in the rewind mode (`spin=rewind`)
     rewind: bool,
+    /// several vCPUs: the turns ended before the run (for `qn=`)
+    turns0: Option<u64>,
 }
 
 impl Default for RunSt {
@@ -126,6 +134,7 @@ impl Default for RunSt {
             wx0: 0,
             tjinfo: String::new(),
             rewind: false,
+            turns0: None,
         }
     }
 }
@@ -987,9 +996,37 @@ impl Engine {
         None
     }
 
+    /// The first host token this machine does not apply: with one vCPU hvx's tokens; with
+    /// several the turn tokens `q=` and `qs=` apply, and tick jitter does not yet.
+    fn token_problem(&self, s: &Schedule) -> Option<String> {
+        if self.vm.smp.is_none() {
+            return host_token_problem(s);
+        }
+        for t in &s.host {
+            match t {
+                HostToken::Q(_) | HostToken::Qs(_) => {}
+                HostToken::Tj(_) | HostToken::Tjx(_) => {
+                    return Some(format!(
+                        "host token {t} with several vCPUs (tick jitter is one vCPU's for now)"
+                    ))
+                }
+                _ => {
+                    let one = Schedule {
+                        host: vec![t.clone()],
+                        guest: Vec::new(),
+                    };
+                    if let Some(p) = host_token_problem(&one) {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+        None
+    }
+
     fn run_once(&mut self, tag: &str, s: &Schedule) {
         let t0 = Instant::now();
-        if let Some(hw) = host_token_problem(s) {
+        if let Some(hw) = self.token_problem(s) {
             self.h.result_err(tag, &format!("UNSUPPORTED on kvm: {hw}"));
             return;
         }
@@ -1020,6 +1057,18 @@ impl Engine {
             self.vm.tj = tj;
             self.vm.tj.on = true;
             rs.tjinfo = format!(" tjk={}", self.vm.m.vtime / TJ_PERIOD);
+        }
+        if let Some(sm) = self.vm.smp.as_mut() {
+            let q = match s.host_token("q") {
+                Some(HostToken::Q(v)) => *v,
+                _ => crate::smp::Q_DEFAULT,
+            };
+            let qs = match s.host_token("qs") {
+                Some(HostToken::Qs(v)) => *v,
+                _ => 0,
+            };
+            sm.set_policy(q, qs);
+            rs.turns0 = Some(sm.turns);
         }
         rs.wx0 = self.vm.m.exits;
         rs.rewind = s.host_token("spin").is_some();
@@ -1077,6 +1126,10 @@ impl Engine {
             ));
             cap(&mut tjinfo);
             self.vm.tj = Tjit::default();
+        }
+        if let (Some(t0), Some(sm)) = (self.h.c.rs.turns0, self.vm.smp.as_ref()) {
+            tjinfo.push_str(&format!(" qn={}", sm.turns.wrapping_sub(t0)));
+            cap(&mut tjinfo);
         }
         let mut log_tag = tag.clone();
         let verdict: String;
@@ -1243,12 +1296,13 @@ pub fn vm_opts(o: &KvmOptions, disk: Option<&std::path::Path>) -> VmOpts {
         stale_events: false,
         cmdline: CMDLINE.to_string(),
         virtio: virt,
+        vcpus: 1,
     }
 }
 
 /// The program's `main` over the given streams: `hydo-kvm [--ram-mib N] [--cpu v2|v3] [--cpu-cache
-/// on|off] [--image-epoch N] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir>
-/// ["<schedule>"]`.
+/// on|off] [--image-epoch N] [--vcpus N] --control boot serve|one <bzImage-kvm> <initramfs>
+/// <disk|-> <outdir> ["<schedule>"]`.
 #[cfg(target_os = "linux")]
 pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
     let diag: Diag = Arc::new(Mutex::new(io.diag));
@@ -1260,13 +1314,30 @@ pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
     let mut level = crate::cpuid::Level::V2;
     let mut cache = false;
     let mut image_epoch = None;
+    let mut vcpus = 1;
     while a.len() > 2
         && (a[1] == "--ram-mib"
             || a[1] == "--cpu"
             || a[1] == "--cpu-cache"
-            || a[1] == "--image-epoch")
+            || a[1] == "--image-epoch"
+            || a[1] == "--vcpus")
     {
-        if a[1] == "--image-epoch" {
+        if a[1] == "--vcpus" {
+            match a[2].parse::<usize>() {
+                Ok(n) if (1..=crate::smp::MAX_VCPUS).contains(&n) => vcpus = n,
+                _ => {
+                    say(
+                        &diag,
+                        &format!(
+                            "hydo-kvm: --vcpus {}: expected 1 to {}",
+                            a[2],
+                            crate::smp::MAX_VCPUS
+                        ),
+                    );
+                    return 2;
+                }
+            }
+        } else if a[1] == "--image-epoch" {
             match a[2].parse::<u64>() {
                 Ok(n) if n >= 1 => image_epoch = Some(n),
                 _ => {
@@ -1318,7 +1389,7 @@ pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
         || (a[1] != "serve" && a[1] != "one")
         || (a[1] == "one" && argc < 7)
     {
-        say(&diag, "usage: hydo-kvm [--ram-mib N] [--cpu v2|v3] [--cpu-cache on|off] [--image-epoch N] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir> [\"<schedule>\"]");
+        say(&diag, "usage: hydo-kvm [--ram-mib N] [--cpu v2|v3] [--cpu-cache on|off] [--image-epoch N] [--vcpus N] --control boot serve|one <bzImage-kvm> <initramfs> <disk|-> <outdir> [\"<schedule>\"]");
         return 2;
     }
     let sched = match a.get(6).map(String::as_str) {
@@ -1347,6 +1418,7 @@ pub fn main_with(args: &[String], o: &KvmOptions, io: Io) -> i32 {
         outdir: a[5].clone().into(),
         ram_mib,
         image_epoch,
+        vcpus,
     };
     let dev = o
         .dev
@@ -1410,6 +1482,10 @@ fn engine_main(
     vo.spin_state = o.spin_state.unwrap_or(!before_2);
     vo.stale_events = before_2;
     vo.ram_size = ram_mib << 20;
+    vo.vcpus = start.vcpus.max(1);
+    if vo.vcpus > 1 {
+        say(&diag, &format!("hydo-kvm: {} vCPUs", vo.vcpus));
+    }
     if ram_mib != RAM_DEFAULT_MIB {
         say(&diag, &format!("hydo-kvm: guest RAM {ram_mib} MiB"));
     }

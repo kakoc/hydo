@@ -245,6 +245,58 @@ pub fn table_with(level: Level, cache: bool) -> Vec<kvm_cpuid_entry2> {
     t
 }
 
+/// The table of vCPU `id` of a machine with `n` vCPUs, n more than 1 (docs/design/kvm-vcpus.md,
+/// "What the guest sees"): [`table_with`] plus a local APIC in x2APIC mode (the engine emulates
+/// it, `crate::apic`), the vCPU's initial APIC ID, HTT and `n` logical processors in leaf 1, the
+/// x2APIC topology leaf 0xB (one thread per core, `n` cores), ARAT in leaf 6 (the APIC timer
+/// runs in every state, so Linux needs no broadcast timer), and with the cache leaves the L3
+/// shared by the `n` cores. The one-vCPU machine never uses it.
+pub fn table_smp(level: Level, cache: bool, n: u32, id: u32) -> Vec<kvm_cpuid_entry2> {
+    let n = n.max(1);
+    let mut t = table_with(level, cache);
+    let shift = 32 - (n - 1).leading_zeros(); // ceil(log2 n), 0 for one vCPU
+    for x in t.iter_mut() {
+        match (x.function, x.index) {
+            (0, 0) => x.eax = x.eax.max(0xb),
+            (1, 0) => {
+                x.ebx = (x.ebx & 0x0000_ffff) | (n.min(255) << 16) | (id.min(255) << 24);
+                x.ecx |= 1 << 21; // x2APIC
+                x.edx |= (1 << 9) | (1 << 28); // APIC, HTT
+            }
+            (4, _) if x.eax & 0x1f != 0 => {
+                // cores per package - 1 in bits 31:26; the L3 (level 3, bits 7:5) is shared by all
+                x.eax = (x.eax & 0x03ff_ffff) | ((n - 1).min(63) << 26);
+                if (x.eax >> 5) & 7 == 3 {
+                    x.eax = (x.eax & !(0xfff << 14)) | ((n - 1).min(0xfff) << 14);
+                }
+            }
+            (6, 0) => x.eax |= 1 << 2, // ARAT
+            _ => {}
+        }
+    }
+    // leaves 8 to 0xA stay zero (no PMU), then the topology: the SMT level (one thread), the core
+    // level (n cores), and the end of the list
+    let at = t.iter().position(|x| x.function > 7).unwrap_or(t.len());
+    let mut topo = Vec::new();
+    if !t.iter().any(|x| x.function == 8) {
+        topo.extend([
+            e(8, 0, 0, 0, 0, 0),
+            e(9, 0, 0, 0, 0, 0),
+            e(0xa, 0, 0, 0, 0, 0),
+        ]);
+    }
+    topo.extend([
+        e(0xb, 0, 0, 1, 0x100, id),
+        e(0xb, 1, shift, n, 0x201, id),
+        e(0xb, 2, 0, 0, 2, id),
+    ]);
+    for x in topo.iter_mut().filter(|x| x.function == 0xb) {
+        x.flags = KVM_CPUID_FLAG_SIGNIFCANT_INDEX;
+    }
+    t.splice(at..at, topo);
+    t
+}
+
 /// The bytes of the table at `level` (their hash is recorded: `tests::table_is_fixed`).
 pub fn table_bytes(level: Level) -> Vec<u8> {
     let mut b = Vec::new();
@@ -433,6 +485,57 @@ mod tests {
         assert!(t.iter().all(|x| x.function <= 7
             || (0x4000_0000..=0x4000_0001).contains(&x.function)
             || (0x8000_0000..=0x8000_0008).contains(&x.function)));
+    }
+
+    #[test]
+    fn several_vcpus_add_the_apic_and_the_topology() {
+        for (level, cache) in [(Level::V2, false), (Level::V3, true)] {
+            let one = table_with(level, cache);
+            let t = table_smp(level, cache, 4, 2);
+            let at = |f: u32, i: u32| *t.iter().find(|x| x.function == f && x.index == i).unwrap();
+            let l1 = at(1, 0);
+            assert_eq!(l1.ecx & (1 << 21), 1 << 21, "x2APIC");
+            assert_eq!(
+                l1.edx & ((1 << 9) | (1 << 28)),
+                (1 << 9) | (1 << 28),
+                "APIC, HTT"
+            );
+            assert_eq!((l1.ebx >> 16) & 0xff, 4);
+            assert_eq!(l1.ebx >> 24, 2, "the initial APIC ID");
+            assert_eq!(l1.ebx & 0xffff, leaf(&one, 1).ebx & 0xffff);
+            assert!(at(0, 0).eax >= 0xb);
+            assert_eq!(
+                (at(0xb, 0).ebx, at(0xb, 0).ecx, at(0xb, 0).edx),
+                (1, 0x100, 2)
+            );
+            assert_eq!(
+                (at(0xb, 1).eax, at(0xb, 1).ebx, at(0xb, 1).ecx),
+                (2, 4, 0x201)
+            );
+            assert_eq!(at(0xb, 2).ecx, 2, "the end of the levels");
+            assert_eq!(at(6, 0).eax & (1 << 2), 1 << 2, "ARAT");
+            // leaf order, and every leaf of the one-vCPU table is still there
+            assert!(t
+                .windows(2)
+                .all(|w| (w[0].function, w[0].index) < (w[1].function, w[1].index)));
+            for x in &one {
+                assert!(t
+                    .iter()
+                    .any(|y| (y.function, y.index) == (x.function, x.index)));
+            }
+            if cache {
+                let l3 = t
+                    .iter()
+                    .find(|x| x.function == 4 && (x.eax >> 5) & 7 == 3)
+                    .unwrap();
+                assert_eq!(((l3.eax >> 14) & 0xfff, l3.eax >> 26), (3, 3));
+            }
+        }
+        assert_eq!(
+            table_smp(Level::V2, false, 2, 0).len(),
+            table_smp(Level::V2, false, 8, 7).len()
+        );
+        assert_eq!(leaf(&table_smp(Level::V2, false, 8, 7), 0xb).ebx, 1);
     }
 
     #[test]

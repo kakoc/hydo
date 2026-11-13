@@ -74,6 +74,16 @@ impl Host {
 
     /// An engine with options `o`, and its output directory.
     fn start_with(mode: Mode, prog: Program, o: KvmOptions) -> (Host, std::path::PathBuf) {
+        Host::start_machine(mode, Script::new(prog), 1, o)
+    }
+
+    /// An engine of `vcpus` scripted vCPUs (`hv` has their programs), and its output directory.
+    fn start_machine(
+        mode: Mode,
+        hv: Script,
+        vcpus: usize,
+        o: KvmOptions,
+    ) -> (Host, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!(
             "hydo-kvm-engine-{}-{}",
             std::process::id(),
@@ -95,12 +105,11 @@ impl Host {
             outdir: dir.join("out"),
             ram_mib: Some(256),
             image_epoch: None,
+            vcpus,
         };
         let (htx, hrx) = channel();
         let (etx, erx) = channel();
-        let hv = Box::new(Script {
-            program: Arc::new(prog),
-        });
+        let hv = Box::new(hv);
         let out = start.outdir.clone();
         let join = std::thread::spawn(move || {
             run(
@@ -948,3 +957,219 @@ const PINNED_ONE_VCPU: [&str; 6] = [
     "spin fp=2e8b92015190b56e wfp=1119861f7b2e16f4 stops=19 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
     "counter fp=3c94fb7ed9aacd9c wfp=cab9588566b03486 stops=14 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK counted",
 ];
+
+// ---------------- several vCPUs (docs/design/kvm-vcpus.md) ----------------
+
+const IPI_VECTOR: u8 = 0x40;
+const AP_TIMER_VECTOR: u8 = 0x41;
+/// x2APIC MSRs the scripted guests write
+const SVR: u32 = 0x80f;
+const EOI: u32 = 0x80b;
+const ICR: u32 = 0x830;
+const LVT_TIMER: u32 = 0x832;
+const TMICT: u32 = 0x838;
+const TDCR: u32 = 0x83e;
+
+/// vCPU 0 of the two-vCPU guest: it starts vCPU 1 with INIT and two STARTUPs (the second is
+/// ignored), prints `a` `n` times, and waits in HLT for vCPU 1's IPI, whose handler prints the
+/// verdict.
+fn bsp_program(n: u64) -> Program {
+    use Op::*;
+    let ops = vec![
+        WrMsr(SVR, 0x1ff),
+        WrMsr(ICR, 0x1_0000_4500),
+        WrMsr(ICR, 0x1_0000_0608),
+        WrMsr(ICR, 0x1_0000_0608),
+        Print(b"a".to_vec()), // 4
+        Inc,
+        JmpIfCountBelow(n, 4),
+        Sti,
+        Hlt, // 8
+        Jmp(8),
+        Print(b"HYDO-ORACLE: OK smp\n".to_vec()), // 10: the IPI's handler
+        Cli,
+        Hlt,
+    ];
+    Program {
+        ops,
+        handlers: HashMap::from([(IPI_VECTOR, 10)]),
+    }
+}
+
+/// vCPU 1: from its STARTUP it prints `b` `n` times, arms its APIC timer and waits for it in
+/// HLT; the timer's handler sends vCPU 0 the IPI and stops.
+fn ap_program(n: u64) -> Program {
+    use Op::*;
+    let ops = vec![
+        WrMsr(SVR, 0x1ff),
+        Print(b"b".to_vec()), // 1
+        Inc,
+        JmpIfCountBelow(n, 1),
+        WrMsr(LVT_TIMER, AP_TIMER_VECTOR as u64),
+        WrMsr(TDCR, 0xb), // divide by 1: one count per nanosecond
+        WrMsr(TMICT, 50_000),
+        Sti,
+        Hlt, // 8
+        Jmp(8),
+        WrMsr(EOI, 0), // 10: the timer's handler
+        WrMsr(ICR, IPI_VECTOR as u64),
+        Cli,
+        Hlt,
+    ];
+    Program {
+        ops,
+        handlers: HashMap::from([(AP_TIMER_VECTOR, 10)]),
+    }
+}
+
+fn two_vcpus() -> Script {
+    let mut s = Script::new(bsp_program(12));
+    s.aps = vec![Arc::new(ap_program(9))];
+    s
+}
+
+/// Runs of the two-vCPU guest from S1 (taken at boot stop 3), one engine per schedule.
+fn smp_runs(schedules: &[&str]) -> Vec<RunResult> {
+    schedules
+        .iter()
+        .map(|s| {
+            let (mut h, _) = Host::start_machine(
+                Mode::Serve {
+                    boot: Some(sched("rb=4 | run")),
+                },
+                two_vcpus(),
+                2,
+                KvmOptions::default(),
+            );
+            boot(&mut h);
+            h.recv();
+            h.tx.send(HostMsg::Request(Request::Ctl {
+                tag: "c".into(),
+                schedule: sched(s),
+            }))
+            .unwrap();
+            let r = to_the_end(&mut h);
+            h.quit();
+            r
+        })
+        .collect()
+}
+
+fn extra(r: &RunResult, k: &str) -> Option<String> {
+    r.extras
+        .iter()
+        .find(|(a, _)| a == k)
+        .map(|(_, v)| v.clone())
+}
+
+#[test]
+fn two_vcpus_start_by_ipi_interleave_by_turn_length_and_repeat() {
+    let r = smp_runs(&[
+        "rb=4 | run",
+        "rb=4 | run",
+        "rb=4 q=1 | run",
+        "rb=4 q=1 | run",
+        "rb=4 q=3 | run",
+        "rb=4 q=7 qs=1f | run",
+        "rb=4 q=7 qs=1f | run",
+    ]);
+    for (i, x) in r.iter().enumerate() {
+        assert_eq!(x.verdict, "HYDO-ORACLE: OK smp", "run {i}: {}", x.line);
+        assert!(extra(x, "qn").is_some(), "run {i}: qn= in {}", x.line);
+    }
+    let key = |x: &RunResult| (x.fp.clone(), x.wfp.clone(), x.extras.clone());
+    assert_eq!(key(&r[0]), key(&r[1]), "the default turns, twice");
+    assert_eq!(key(&r[2]), key(&r[3]), "q=1, twice");
+    assert_eq!(key(&r[5]), key(&r[6]), "seeded turns, twice");
+    // the turn length moves the interleaving: other fingerprints and turn counts
+    assert_ne!(r[0].fp, r[2].fp);
+    assert_ne!(r[2].fp, r[4].fp);
+    assert_ne!(extra(&r[0], "qn"), extra(&r[2], "qn"));
+    let qn = |x: &RunResult| extra(x, "qn").unwrap().parse::<u64>().unwrap();
+    assert!(qn(&r[2]) > qn(&r[4]), "q=1 takes more turns than q=3");
+}
+
+/// The two-vCPU guest with S1 at boot stop `k`: from the worker's S1, and from a fresh boot.
+fn smp_s1_and_fresh_at(k: u64, s: &str) -> (RunResult, RunResult, String) {
+    let (mut h, _) = Host::start_machine(
+        Mode::Serve {
+            boot: Some(sched(s)),
+        },
+        two_vcpus(),
+        2,
+        KvmOptions::default(),
+    );
+    h.drive(|h, n, _, _| {
+        if n == 1 {
+            h.snap("S0");
+        }
+        if n == k {
+            h.snap("S1");
+            h.cmd(HostCmd::End(None));
+            return true;
+        }
+        false
+    });
+    h.recv();
+    h.tx.send(HostMsg::Request(Request::Ctl {
+        tag: "w".into(),
+        schedule: sched(s),
+    }))
+    .unwrap();
+    let w = to_the_end(&mut h);
+    let wlog = h.log.join("\n");
+    h.quit();
+    let (mut o, _) =
+        Host::start_machine(Mode::One(sched(s)), two_vcpus(), 2, KvmOptions::default());
+    let f = o.drive(|h, n, phase, why| {
+        if phase == Phase::Boot && n == 1 {
+            h.snap("S0");
+        }
+        if phase == Phase::Boot && n == k {
+            h.snap("S1");
+        }
+        if why == StopWhy::Exit {
+            h.cmd(HostCmd::End(None));
+            return true;
+        }
+        false
+    });
+    o.join.take().unwrap().join().unwrap();
+    let logs = format!("from S1:\n{wlog}\nfresh boot:\n{}", o.log.join("\n"));
+    (w, f, logs)
+}
+
+#[test]
+fn two_vcpus_a_run_from_s1_equals_a_fresh_boot_wherever_s1_is_taken() {
+    // S1 on every exit of the boot: before vCPU 1 starts, between INIT and STARTUP, in either
+    // vCPU's turn, and on a HLT; the snapshot keeps both vCPUs, their APICs and the scheduler
+    // (from stop 36 on the guest has printed its verdict in the boot, before S1)
+    for k in 2..=40 {
+        let (w, f, logs) = smp_s1_and_fresh_at(k, "rb=1 q=2 | run");
+        if k < 36 {
+            assert_eq!(
+                f.verdict, "HYDO-ORACLE: OK smp",
+                "S1 at boot stop {k}\n{logs}"
+            );
+        }
+        assert_eq!(
+            (w.fp, w.wfp, w.extras),
+            (f.fp, f.wfp, f.extras),
+            "S1 at boot stop {k}\n{logs}"
+        );
+    }
+}
+
+#[test]
+fn two_vcpus_refuse_tick_jitter_and_one_vcpu_refuses_turns() {
+    let r = smp_runs(&["tj=5 tjpm=1000 rb=4 | run", "rb=4 qb=8:2:100 | run"]);
+    for x in &r {
+        assert!(x.verdict.starts_with("UNSUPPORTED on kvm"), "{}", x.line);
+    }
+    let one = runs_of_with(&program(5), &["rb=4 q=7 | run"], true);
+    assert!(
+        one[0].verdict.starts_with("UNSUPPORTED on kvm"),
+        "{}",
+        one[0].line
+    );
+}

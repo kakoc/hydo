@@ -26,6 +26,68 @@ pub fn load(mem: &mut [u8], image: &[u8], initrd: &[u8], cmdline: &str) -> Resul
     Ok(line.replace("hvx_boot", "hydo-kvm boot"))
 }
 
+/// [`load`] for a machine with `n` vCPUs: with more than one, the MP table lists `n`
+/// processors (APIC IDs 0 to n-1, the first the boot CPU) and the ISA bus, and no I/O APIC
+/// (docs/design/kvm-vcpus.md, "What the guest sees"): the 8259 PIC reaches vCPU 0's LINT0. One
+/// vCPU is [`load`] itself.
+pub fn load_n(
+    mem: &mut [u8],
+    image: &[u8],
+    initrd: &[u8],
+    cmdline: &str,
+    n: usize,
+) -> Result<String, String> {
+    let line = load(mem, image, initrd, cmdline)?;
+    if n > 1 {
+        mptable(mem, n);
+    }
+    Ok(line)
+}
+
+/// Where the MP floating pointer and the table go (the EBDA, as hydo-hvx's recipe).
+const MPF_ADDR: usize = 0x9fc00;
+const MPC_ADDR: usize = 0x9fc10;
+
+/// The byte that makes `b` sum to 0 (the MP specification's checksums).
+fn checksum(b: &[u8]) -> u8 {
+    0u8.wrapping_sub(b.iter().fold(0u8, |s, x| s.wrapping_add(*x)))
+}
+
+/// The MP table of `n` processors without an I/O APIC, and its floating pointer.
+fn mptable(mem: &mut [u8], n: usize) {
+    let mut t = Vec::with_capacity(64 + 20 * n);
+    t.extend_from_slice(b"PCMP");
+    t.extend_from_slice(&[0, 0, 4, 0]); // length (below), revision 1.4, checksum (below)
+    t.extend_from_slice(b"HYDO    ");
+    t.extend_from_slice(b"KVM SMP     ");
+    t.extend_from_slice(&[0; 4]); // no OEM table
+    t.extend_from_slice(&[0; 2]);
+    t.extend_from_slice(&[0; 2]); // entry count (below)
+    t.extend_from_slice(&0xfee0_0000u32.to_le_bytes());
+    t.extend_from_slice(&[0; 4]); // no extended table
+    for cpu in 0..n {
+        // a processor: APIC ID, APIC version 0x14, enabled (and the boot CPU for 0), family 6
+        t.extend_from_slice(&[0, cpu as u8, 0x14, if cpu == 0 { 3 } else { 1 }]);
+        t.extend_from_slice(&0x600u32.to_le_bytes());
+        t.extend_from_slice(&0x201u32.to_le_bytes()); // APIC and FPU
+        t.extend_from_slice(&[0; 8]);
+    }
+    t.extend_from_slice(&[1, 0]);
+    t.extend_from_slice(b"ISA   ");
+    let len = t.len() as u16;
+    t[4..6].copy_from_slice(&len.to_le_bytes());
+    t[34..36].copy_from_slice(&((n + 1) as u16).to_le_bytes());
+    t[7] = checksum(&t);
+    mem[MPC_ADDR..MPC_ADDR + t.len()].copy_from_slice(&t);
+    let mut f = [0u8; 16];
+    f[..4].copy_from_slice(b"_MP_");
+    f[4..8].copy_from_slice(&(MPC_ADDR as u32).to_le_bytes());
+    f[8] = 1; // 16 bytes
+    f[9] = 4;
+    f[10] = checksum(&f);
+    mem[MPF_ADDR..MPF_ADDR + 16].copy_from_slice(&f);
+}
+
 /// The byte ranges of the MP floating pointer and table among a recipe's writes.
 fn mp_ranges(w: &boot::Written) -> Vec<(u64, u64)> {
     // build_mptable_n writes the table at 0x9fc10 and the pointer at 0x9fc00 (the EBDA)
@@ -117,6 +179,48 @@ mod tests {
             *x = (i * 7) as u8;
         }
         b
+    }
+
+    #[test]
+    fn several_vcpus_get_an_mp_table_without_an_io_apic() {
+        let mut mem = vec![0u8; 64 << 20];
+        load_n(&mut mem, &bzimage(), b"initrd", "console=ttyS0", 3).unwrap();
+        let f = &mem[MPF_ADDR..MPF_ADDR + 16];
+        assert_eq!(&f[..4], b"_MP_");
+        assert_eq!(
+            f.iter().fold(0u8, |s, x| s.wrapping_add(*x)),
+            0,
+            "pointer checksum"
+        );
+        let len = u16::from_le_bytes([mem[MPC_ADDR + 4], mem[MPC_ADDR + 5]]) as usize;
+        let t = &mem[MPC_ADDR..MPC_ADDR + len];
+        assert_eq!(&t[..4], b"PCMP");
+        assert_eq!(
+            t.iter().fold(0u8, |s, x| s.wrapping_add(*x)),
+            0,
+            "table checksum"
+        );
+        assert_eq!(
+            u16::from_le_bytes([t[34], t[35]]),
+            4,
+            "3 processors and a bus"
+        );
+        assert_eq!(len, 44 + 3 * 20 + 8);
+        // processor entries: APIC IDs 0..3, the boot CPU first; no I/O APIC (type 2) entry
+        for cpu in 0..3 {
+            let e = &t[44 + 20 * cpu..44 + 20 * (cpu + 1)];
+            assert_eq!(
+                (e[0], e[1], e[3]),
+                (0, cpu as u8, if cpu == 0 { 3 } else { 1 })
+            );
+        }
+        assert_eq!(t[44 + 60], 1, "the bus entry");
+        // one vCPU: the recipe of before, no table
+        let mut one = vec![0u8; 64 << 20];
+        load_n(&mut one, &bzimage(), b"initrd", "console=ttyS0", 1).unwrap();
+        let mut base = vec![0u8; 64 << 20];
+        load(&mut base, &bzimage(), b"initrd", "console=ttyS0").unwrap();
+        assert!(one == base);
     }
 
     #[test]

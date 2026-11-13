@@ -52,6 +52,7 @@ pub mod msr;
 pub mod pic;
 pub mod script;
 pub mod serve;
+pub mod smp;
 pub mod spin;
 pub mod uart;
 pub mod vmm;

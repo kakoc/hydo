@@ -270,6 +270,18 @@ fn new_fd(r: i32) -> File {
 
 impl Hypervisor for Kvm {
     unsafe fn fresh(&mut self, ram: *mut u8, len: usize) -> Result<Box<dyn Cpu>, String> {
+        let mut v = self.fresh_n(ram, len, 1)?;
+        Ok(v.remove(0))
+    }
+
+    /// One VM and its `n` vCPUs (ids 0 to n-1), each with its CPUID table: the one-vCPU table
+    /// for n = 1 (the machine of every recorded value), [`crate::cpuid::table_smp`] above.
+    unsafe fn fresh_n(
+        &mut self,
+        ram: *mut u8,
+        len: usize,
+        n: usize,
+    ) -> Result<Vec<Box<dyn Cpu>>, String> {
         let vm = new_fd(chk(
             "KVM_CREATE_VM",
             ioctl(self.sys.as_raw_fd(), KVM_CREATE_VM, 0),
@@ -339,7 +351,38 @@ impl Hypervisor for Kvm {
                 ioctl(v, KVM_SET_USER_MEMORY_REGION, &region as *const _ as u64),
             )?;
         }
-        let vcpu = new_fd(chk("KVM_CREATE_VCPU", ioctl(v, KVM_CREATE_VCPU, 0))?);
+        let vm = Arc::new(vm);
+        let mut cpus: Vec<Box<dyn Cpu>> = Vec::with_capacity(n);
+        for id in 0..n.max(1) {
+            cpus.push(Box::new(self.vcpu(&vm, id, n, ram, len)?));
+        }
+        install_kick_handler()?;
+        Ok(cpus)
+    }
+
+    fn describe(&self) -> String {
+        self.desc.clone()
+    }
+}
+
+impl Kvm {
+    /// vCPU `id` of `vm` (of `n`), its `kvm_run` page mapped and its CPUID set.
+    ///
+    /// # Safety
+    /// `ram..ram+len` is the VM's guest RAM and stays mapped for the life of the vCPU.
+    unsafe fn vcpu(
+        &self,
+        vm: &Arc<File>,
+        id: usize,
+        n: usize,
+        ram: *mut u8,
+        len: usize,
+    ) -> Result<KvmCpu, String> {
+        let v = vm.as_raw_fd();
+        let vcpu = new_fd(chk(
+            "KVM_CREATE_VCPU",
+            ioctl(v, KVM_CREATE_VCPU, id as u64),
+        )?);
         let p = libc::mmap(
             std::ptr::null_mut(),
             self.run_size,
@@ -356,7 +399,7 @@ impl Hypervisor for Kvm {
         }
         // owned from here on: an error below drops it, which unmaps the page
         let cpu = KvmCpu {
-            _vm: vm,
+            _vm: vm.clone(),
             vcpu,
             run: p.cast(),
             run_size: self.run_size,
@@ -372,7 +415,11 @@ impl Hypervisor for Kvm {
             pin: self.pin.clone(),
         };
         let mut c = Box::<kvm_cpuid2>::default();
-        let t = crate::cpuid::table_with(self.level, self.cache);
+        let t = if n <= 1 {
+            crate::cpuid::table_with(self.level, self.cache)
+        } else {
+            crate::cpuid::table_smp(self.level, self.cache, n as u32, id as u32)
+        };
         c.h.nent = t.len() as u32;
         c.entries[..t.len()].copy_from_slice(&t);
         chk(
@@ -391,12 +438,7 @@ impl Hypervisor for Kvm {
             "KVM_ENABLE_CAP(ENFORCE_PV_FEATURE_CPUID)",
             ioctl(cpu.fd(), KVM_ENABLE_CAP, &pv as *const _ as u64),
         )?;
-        install_kick_handler()?;
-        Ok(Box::new(cpu))
-    }
-
-    fn describe(&self) -> String {
-        self.desc.clone()
+        Ok(cpu)
     }
 }
 
@@ -410,7 +452,8 @@ enum Last {
 }
 
 pub struct KvmCpu {
-    _vm: File,
+    /// the VM, shared by its vCPUs
+    _vm: Arc<File>,
     vcpu: File,
     run: *mut u8,
     run_size: usize,

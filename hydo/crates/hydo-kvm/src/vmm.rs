@@ -63,6 +63,18 @@
 //! the next event, as at an idle HLT, and the interrupt is delivered. The delivery point is fixed
 //! by the guest alone; the host's timing decides only how much is replayed. A run without a
 //! counter loop gives the same fingerprint with the mode on or off.
+//!
+//! # Several vCPUs (docs/design/kvm-vcpus.md)
+//!
+//! With `VmOpts::vcpus` above 1 the VM has that many vCPUs, run one at a time from this thread
+//! in turns ([`crate::smp`]): the running vCPU is `cur`, every counted exit of it advances the
+//! one clock and counts against its turn, and the turn ends after `q` exits, at a HLT, at an OUT
+//! to HYDO_PORT_RELAX (the SMP guest kernel's `cpu_relax()`), or at a spin the observer proves
+//! while another vCPU can run. Each vCPU has a local APIC in x2APIC mode that the engine emulates
+//! ([`crate::apic`]: its MSR accesses come here), the 8259 PIC reaches vCPU 0 only (its LINT0 in
+//! ExtINT mode), and the interrupt rule above runs for the vCPU about to run. INIT and STARTUP
+//! IPIs start the other vCPUs in real mode. With one vCPU none of this runs: the machine, its
+//! snapshots and its fingerprints are the ones of before.
 
 use crate::cpu::{Cpu, CpuState, Exit, Hypervisor, Reply};
 use crate::fnv::{fnv, fnv_u64, mix64, OFFSET};
@@ -71,6 +83,7 @@ use crate::machine::{Mach, Tjit};
 use crate::mem::{Mem, RamBase, RamImage, PAGE};
 use crate::msr;
 use crate::pic::Pic;
+use crate::smp::{Run, Smp};
 use crate::uart;
 use crate::{fatal, Diag};
 use hydo_hvm::machine::{Pct, PctLog, Where};
@@ -97,6 +110,8 @@ pub struct VmOpts {
     pub stale_events: bool,
     pub cmdline: String,
     pub virtio: virtio::Config,
+    /// the vCPUs (1: the machine of every recorded value; more: [`crate::smp`])
+    pub vcpus: usize,
 }
 
 /// What the watchdog calls to kick the current vCPU out of `KVM_RUN` (None between vCPUs).
@@ -116,7 +131,14 @@ pub struct Vmm {
     pub ram: Mem,
     pub ram_size: u64,
     hv: Box<dyn Hypervisor>,
-    cpu: Option<Box<dyn Cpu>>,
+    /// the VM's vCPUs, vCPU 0 first (one, or [`VmOpts::vcpus`])
+    cpus: Vec<Box<dyn Cpu>>,
+    /// the vCPU that runs now (always 0 with one vCPU)
+    cur: usize,
+    /// the vCPUs a fresh VM gets
+    ncpu: usize,
+    /// several vCPUs: the scheduler, the local APICs and the other vCPUs' MSR models (None: one)
+    pub smp: Option<Box<Smp>>,
     pub m: Mach,
     pub step: u64,
     pub console: Vec<u8>,
@@ -167,7 +189,12 @@ pub struct Vmm {
 /// a snapshot costs what the run changed, not the size of RAM and the disk.
 #[derive(Default)]
 pub struct XSnap {
+    /// vCPU 0
     pub cpu: CpuState,
+    /// vCPUs 1 to N-1 and their `kvm_run` flags (several vCPUs)
+    pub aps: Vec<(CpuState, [u8; 3])>,
+    /// the several-vCPU state ([`crate::smp`]; None with one vCPU)
+    pub smp: Option<Box<Smp>>,
     /// what KVM said at the last exit (`ready_for_interrupt_injection`, `if_flag`) and the window
     /// request ([`crate::cpu::Cpu::run_flags`]): not part of the vCPU's state that `KVM_SET_*`
     /// loads, but the interrupt rule reads them at the first loop top after a restore, before
@@ -287,11 +314,15 @@ impl Vmm {
             .name("kvm-watchdog".into())
             .spawn(move || watchdog(w2, k2))
             .ok();
+        let ncpu = o.vcpus.clamp(1, crate::smp::MAX_VCPUS);
         let mut vm = Vmm {
             ram,
             ram_size: o.ram_size,
             hv,
-            cpu: None,
+            cpus: Vec::new(),
+            cur: 0,
+            ncpu,
+            smp: (ncpu > 1).then(|| Box::new(Smp::new(ncpu))),
             m: Mach::default(),
             step: o.step,
             console: vec![0u8; CONSOLE_MAX],
@@ -323,8 +354,13 @@ impl Vmm {
             state_gave_up: 0,
             state_why: "",
         };
-        let cmdline = cmdline(&o.cmdline, vm.vio.ndev());
-        match crate::boot::load(vm.ram.bytes_mut(), kernel, initrd, &cmdline) {
+        let mut cmdline = cmdline(&o.cmdline, vm.vio.ndev());
+        if ncpu > 1 {
+            // the engine's x2APIC needs no interrupt remapping; the PIC goes to vCPU 0's LINT0
+            // only with the I/O APIC turned off (docs/design/kvm-vcpus.md)
+            cmdline.push_str(" x2apic_phys noapic");
+        }
+        match crate::boot::load_n(vm.ram.bytes_mut(), kernel, initrd, &cmdline, ncpu) {
             Ok(line) => vm.say(&line),
             Err(e) => fatal(1, &e),
         }
@@ -335,30 +371,53 @@ impl Vmm {
         let mut s = vm.cpu().save();
         s.regs = crate::boot::regs();
         s.sregs = crate::boot::sregs();
+        if let Some(sm) = &vm.smp {
+            // the local APIC on in x2APIC mode: KVM shows the APIC in CPUID from this base
+            s.sregs.apic_base = sm.apic[0].base;
+        }
         vm.cpu_mut().load(&s);
+        for i in 1..vm.cpus.len() {
+            let base = vm.smp.as_ref().map_or(0, |sm| sm.apic[i].base);
+            let mut a = vm.cpus[i].save();
+            a.sregs.apic_base = base;
+            vm.cpus[i].load(&a);
+        }
         vm
     }
 
     /// A fresh VM and vCPU around the same RAM (the boot, and every restore).
     pub fn fresh_vm(&mut self) {
-        drop(self.cpu.take());
+        self.cpus.clear();
         let (p, n) = (self.ram.ptr(), self.ram.len());
-        // SAFETY: the RAM mapping lives as long as this value, which drops its vCPU first
-        let c = match unsafe { self.hv.fresh(p, n) } {
+        // SAFETY: the RAM mapping lives as long as this value, which drops its vCPUs first
+        let made = unsafe {
+            if self.ncpu > 1 {
+                self.hv.fresh_n(p, n, self.ncpu)
+            } else {
+                self.hv.fresh(p, n).map(|c| vec![c])
+            }
+        };
+        let c = match made {
             Ok(c) => c,
             Err(e) => fatal(1, &e),
         };
+        // one thread runs every vCPU, so vCPU 0's kicker reaches whichever runs
         if let Ok(mut k) = self.kicker.lock() {
-            *k = Some(c.kicker());
+            *k = Some(c[0].kicker());
         }
-        self.cpu = Some(c);
+        self.cpus = c;
     }
 
     fn cpu(&self) -> &dyn Cpu {
-        self.cpu.as_deref().expect("a vCPU")
+        &*self.cpus[self.cur]
     }
     fn cpu_mut(&mut self) -> &mut dyn Cpu {
-        self.cpu.as_deref_mut().expect("a vCPU")
+        &mut *self.cpus[self.cur]
+    }
+
+    /// The vCPU that runs now (0 with one vCPU).
+    pub fn current(&self) -> usize {
+        self.cur
     }
 
     pub fn say(&self, s: &str) {
@@ -398,7 +457,13 @@ impl Vmm {
         if !self.pct.due(self.m.exits) {
             return;
         }
-        let timer = (self.m.timer_armed != 0, self.timer_due());
+        let timer = match &self.smp {
+            None => (self.m.timer_armed != 0, self.timer_due()),
+            Some(sm) => {
+                let d = sm.apic[self.cur].timer_deadline();
+                (d != 0, d)
+            }
+        };
         let at = if self.pct_log.is_some() {
             self.cpu().where_now()
         } else {
@@ -432,6 +497,12 @@ impl Vmm {
 
     /// The devices' lines into the PIC (level-triggered).
     fn update_levels(&mut self) {
+        if let Some(sm) = self.smp.as_mut() {
+            let now = self.m.vtime;
+            for a in sm.apic.iter_mut() {
+                a.tick(now);
+            }
+        }
         let mut l: u16 = 0;
         if self.timer_level() {
             l |= 1 << TIMER_IRQ;
@@ -455,14 +526,36 @@ impl Vmm {
         self.m.pic.set_levels(l);
     }
 
-    /// The vector the guest would take now, if any.
+    /// The vector the guest would take now, if any (with several vCPUs: the running vCPU).
     pub fn irq_pending(&mut self) -> Option<u8> {
+        if self.smp.is_some() {
+            let i = self.cur;
+            return self.pending_for(i).map(|(v, _)| v);
+        }
         self.update_levels();
         self.m.pic.pending()
     }
 
+    /// Several vCPUs: the vector vCPU `i` would take now and whether it is the PIC's. Its
+    /// APIC's vector comes first, then the PIC's, for vCPU 0 only and only through an ExtINT
+    /// LINT0 (QEMU's user-space APIC orders them the same way).
+    fn pending_for(&mut self, i: usize) -> Option<(u8, bool)> {
+        self.update_levels();
+        let sm = self.smp.as_ref()?;
+        if let Some(v) = sm.apic[i].pending() {
+            return Some((v, false));
+        }
+        if i == 0 && sm.apic[0].extint() {
+            return self.m.pic.pending().map(|v| (v, true));
+        }
+        None
+    }
+
     /// The interrupt delivery rule at the top of the run loop (see the module documentation).
     fn deliver(&mut self) {
+        if self.smp.is_some() {
+            return self.deliver_smp();
+        }
         if self.irq_pending().is_none() {
             self.cpu_mut().request_window(false);
             return;
@@ -488,6 +581,109 @@ impl Vmm {
         self.cpu_mut().inject(vector);
     }
 
+    /// The rule for the running vCPU of a machine with several vCPUs.
+    fn deliver_smp(&mut self) {
+        let i = self.cur;
+        let Some((vector, pic)) = self.pending_for(i) else {
+            self.cpu_mut().request_window(false);
+            return;
+        };
+        if !self.cpu().interruptible() {
+            self.cpu_mut().request_window(true);
+            return;
+        }
+        if pic {
+            let Some((v, line)) = self.m.pic.ack() else {
+                return;
+            };
+            if line == TIMER_IRQ {
+                self.m.timer_armed = 0;
+            }
+            debug_assert_eq!(v, vector);
+        } else if let Some(sm) = self.smp.as_mut() {
+            sm.apic[i].ack();
+        }
+        self.m.n_irq += 1;
+        if self.trace.is_some() {
+            let (ex, rip) = (self.m.exits, self.cpu().rip());
+            self.trace_line(&format!(
+                "IRQ vector {vector:#x} to vCPU {i} at exit {ex} rip {rip:x}"
+            ));
+        }
+        self.cpu_mut().request_window(false);
+        self.cpu_mut().inject(vector);
+    }
+
+    /// Several vCPUs: whether vCPU `i` can run now (ready, or halted with interrupts on and an
+    /// interrupt deliverable to it).
+    fn runnable(&mut self, i: usize) -> bool {
+        let run = self.smp.as_ref().map(|sm| sm.run[i]);
+        match run {
+            Some(Run::Ready) => true,
+            Some(Run::Halted) => self.pending_for(i).is_some(),
+            _ => false,
+        }
+    }
+
+    /// Several vCPUs, at the loop top: when the turn ended or the running vCPU cannot run, the
+    /// next vCPU that can (round robin from the one after), or, when none can, the clock's jump
+    /// to the next event, as at one vCPU's idle HLT. Some(stop) when nothing can run again.
+    fn schedule(&mut self) -> Option<i32> {
+        loop {
+            let (end, n) = {
+                let sm = self.smp.as_ref()?;
+                (sm.end, sm.n())
+            };
+            let cur = self.cur;
+            if !end && self.runnable(cur) {
+                if let Some(sm) = self.smp.as_mut() {
+                    if sm.run[cur] == Run::Halted {
+                        sm.switch_to(cur); // woken in its own turn: a new turn
+                    }
+                }
+                return None;
+            }
+            let next = (1..=n).map(|k| (cur + k) % n).find(|&j| self.runnable(j));
+            if let Some(j) = next {
+                if let Some(sm) = self.smp.as_mut() {
+                    sm.switch_to(j);
+                }
+                self.cur = j;
+                return None;
+            }
+            // nobody can run: the next event any vCPU or device waits for
+            let all_stopped = self.smp.as_ref().is_some_and(|sm| {
+                sm.run
+                    .iter()
+                    .all(|r| matches!(r, Run::Stopped | Run::WaitSipi))
+            });
+            if all_stopped {
+                return Some(STOP_HALT);
+            }
+            let t = self.next_event();
+            if t > self.m.vtime {
+                self.m.vtime = t;
+                self.m.n_hlt_jump += 1;
+                continue;
+            }
+            // nothing armed, or a due event no vCPU can take (masked, or in service)
+            return Some(STOP_IDLE);
+        }
+    }
+
+    /// Several vCPUs: whether a vCPU other than the running one can run now.
+    fn others_runnable(&mut self) -> bool {
+        let n = self.smp.as_ref().map_or(1, |sm| sm.n());
+        (0..n).any(|j| j != self.cur && self.runnable(j))
+    }
+
+    /// Several vCPUs: end the running vCPU's turn at the next loop top.
+    fn end_turn(&mut self) {
+        if let Some(sm) = self.smp.as_mut() {
+            sm.end = true;
+        }
+    }
+
     /// The next clock value the guest can wait for, 0 when nothing is armed.
     pub fn next_event(&mut self) -> u64 {
         let mut next = if self.m.timer_armed != 0 {
@@ -495,6 +691,14 @@ impl Vmm {
         } else {
             0
         };
+        if let Some(sm) = &self.smp {
+            for a in &sm.apic {
+                let d = a.timer_deadline();
+                if d != 0 && (next == 0 || d < next) {
+                    next = d;
+                }
+            }
+        }
         let now = self.m.vtime;
         let ram = Ram {
             b: self.ram.bytes_mut(),
@@ -512,6 +716,19 @@ impl Vmm {
     /// A HLT: Some(stop) when the run ends here.
     fn idle(&mut self) -> Option<i32> {
         self.m.n_hlt += 1;
+        if self.smp.is_some() {
+            // the turn ends; the scheduler runs another vCPU or moves the clock
+            let i = self.cur;
+            let off = !self.cpu().if_flag();
+            if !off && self.pending_for(i).is_some() {
+                return None; // the loop's top delivers it
+            }
+            if let Some(sm) = self.smp.as_mut() {
+                sm.run[i] = if off { Run::Stopped } else { Run::Halted };
+                sm.end = true;
+            }
+            return None;
+        }
         if !self.cpu().if_flag() {
             return Some(STOP_HALT); // cli; hlt: nothing can wake it
         }
@@ -615,6 +832,8 @@ impl Vmm {
                     self.m.halted = v as u32;
                 }
             }
+            // the SMP guest kernel's cpu_relax(): this vCPU waits for another one
+            PORT_RELAX if self.smp.is_some() => self.end_turn(),
             _ => self.unknown(format!("OUT {v:#x} to port {port:#x}")),
         }
     }
@@ -669,9 +888,20 @@ impl Vmm {
     fn handle_msr(&mut self, index: u32, value: Option<u64>) {
         self.m.n_msr += 1;
         let now = self.m.vtime;
+        if self.smp.is_some()
+            && (index == crate::apic::MSR_APIC_BASE
+                || (crate::apic::X2APIC_FIRST..=crate::apic::X2APIC_LAST).contains(&index))
+        {
+            return self.apic_msr(index, value);
+        }
+        let i = self.cur;
+        let model = match self.smp.as_mut() {
+            Some(sm) if i > 0 => &mut sm.msrs[i],
+            _ => &mut self.m.msrs,
+        };
         let a = match value {
-            None => self.m.msrs.read(index, now),
-            Some(v) => self.m.msrs.write(index, v),
+            None => model.read(index, now),
+            Some(v) => model.write(index, v),
         };
         if !msr::Msrs::known(index) {
             self.unknown(format!(
@@ -690,6 +920,102 @@ impl Vmm {
             },
         };
         self.cpu_mut().reply(r);
+    }
+
+    /// An access to the running vCPU's local APIC (several vCPUs).
+    fn apic_msr(&mut self, index: u32, value: Option<u64>) {
+        let (i, now) = (self.cur, self.m.vtime);
+        let Some(sm) = self.smp.as_mut() else {
+            return;
+        };
+        let n = sm.n();
+        let reply = match value {
+            None => match sm.apic[i].rdmsr(index, now) {
+                Some(v) => Reply::Msr {
+                    value: v,
+                    fault: false,
+                },
+                None => Reply::Msr {
+                    value: 0,
+                    fault: true,
+                },
+            },
+            Some(v) => match sm.apic[i].wrmsr(index, v, now) {
+                crate::apic::Wrote::Done => Reply::Msr {
+                    value: 0,
+                    fault: false,
+                },
+                crate::apic::Wrote::Fault => Reply::Msr {
+                    value: 0,
+                    fault: true,
+                },
+                crate::apic::Wrote::Unsupported(msg) => {
+                    let rip = self.cpu().rip();
+                    fatal(3, &format!("{msg} (vCPU {i}, rip {rip:#x})"))
+                }
+                crate::apic::Wrote::Send(snd) => {
+                    for t in crate::smp::targets(snd.dest, i, n) {
+                        self.ipi(i, t, snd.kind);
+                    }
+                    Reply::Msr {
+                        value: 0,
+                        fault: false,
+                    }
+                }
+            },
+        };
+        self.cpu_mut().reply(reply);
+    }
+
+    /// An IPI of vCPU `from` arrives at vCPU `t`.
+    fn ipi(&mut self, from: usize, t: usize, kind: crate::apic::Kind) {
+        use crate::apic::Kind;
+        if self.trace.is_some() {
+            let ex = self.m.exits;
+            self.trace_line(&format!(
+                "IPI {kind:?} from vCPU {from} to vCPU {t} at exit {ex}"
+            ));
+        }
+        let Some(sm) = self.smp.as_mut() else {
+            return;
+        };
+        match kind {
+            Kind::Fixed(v) => sm.apic[t].post(v),
+            Kind::Nmi => fatal(
+                3,
+                &format!("hydo-kvm: an NMI IPI from vCPU {from} to vCPU {t} is not emulated yet"),
+            ),
+            Kind::Init => {
+                if sm.started[t] {
+                    fatal(
+                        3,
+                        &format!(
+                            "hydo-kvm: an INIT to vCPU {t}, which already ran (CPU hot-unplug), is not emulated"
+                        ),
+                    );
+                }
+                sm.run[t] = Run::WaitSipi;
+                sm.apic[t].init();
+            }
+            Kind::Startup(v) => {
+                if sm.run[t] != Run::WaitSipi {
+                    return; // a STARTUP to a running vCPU is ignored (Linux sends two)
+                }
+                sm.run[t] = Run::Ready;
+                let base = sm.apic[t].base;
+                // the state after INIT and STARTUP: the reset state with CS = V << 8, IP 0
+                let mut a = self.cpus[t].save();
+                a.regs = crate::abi::kvm_regs {
+                    rflags: 0x2,
+                    ..crate::abi::kvm_regs::default()
+                };
+                a.sregs.cs.selector = (v as u16) << 8;
+                a.sregs.cs.base = (v as u64) << 12;
+                a.sregs.cs.limit = 0xffff;
+                a.sregs.apic_base = base;
+                self.cpus[t].load(&a);
+            }
+        }
     }
 
     // ---------------- the run loop ----------------
@@ -725,6 +1051,11 @@ impl Vmm {
                 }
             }
             if !resume {
+                if self.smp.is_some() {
+                    if let Some(stop) = self.schedule() {
+                        return stop;
+                    }
+                }
                 self.deliver();
             }
             resume = false;
@@ -808,6 +1139,13 @@ impl Vmm {
                         self.m.n_spin += 1;
                         self.set_wait(self.spin_look);
                         self.last_exit = Instant::now();
+                        if self.smp.is_some() && self.others_runnable() {
+                            // the loop waits for another vCPU: the turn ends at its canonical
+                            // state, which the guest alone fixes
+                            self.end_turn();
+                            resume = false;
+                            continue;
+                        }
                         let next = self.next_event();
                         if next > self.m.vtime {
                             self.m.vtime = next; // as at an idle HLT
@@ -879,7 +1217,8 @@ impl Vmm {
     // ---------------- the rewind mode ----------------
     /// Turn the rewind mode on or off (a run's phases, `spin=rewind`).
     pub fn set_rewind(&mut self, on: bool) {
-        if self.rw.on == on {
+        if self.rw.on == on || (on && self.smp.is_some()) {
+            // several vCPUs: no rewind mode yet (a counter loop ends the run as a SPIN)
             return;
         }
         if !on {
@@ -1057,6 +1396,9 @@ impl Vmm {
     fn count(&mut self, e: &Exit) {
         self.watch.exits.fetch_add(1, Ordering::Relaxed);
         self.m.exits += 1;
+        if let Some(sm) = self.smp.as_mut() {
+            sm.count();
+        }
         self.m.vtime = self.m.vtime.wrapping_add(self.step);
         self.pct_at_exit();
         if self.trace.is_some() {
@@ -1521,8 +1863,13 @@ impl Vmm {
     /// keeps the pages that differ from the current base. The first snapshot of a boot is always
     /// a base.
     pub fn snapshot(&mut self, s: &mut XSnap, as_base: bool) {
-        s.cpu = self.cpu().save();
-        s.flags = self.cpu().run_flags();
+        s.cpu = self.cpus[0].save();
+        s.flags = self.cpus[0].run_flags();
+        s.aps = self.cpus[1..]
+            .iter()
+            .map(|c| (c.save(), c.run_flags()))
+            .collect();
+        s.smp = self.smp.clone();
         s.m = self.m;
         let own = self.ram.private_pages(self.base.as_deref());
         if as_base || self.base.is_none() {
@@ -1573,7 +1920,7 @@ impl Vmm {
     /// guest RAM mapped from the snapshot's base again (every page the runs since wrote is
     /// dropped at once) and its own pages written back.
     pub fn restore(&mut self, s: &XSnap) {
-        drop(self.cpu.take());
+        self.cpus.clear();
         match &s.ram.base {
             Some(b) => {
                 if let Err(e) = self.ram.map_base(b) {
@@ -1600,8 +1947,16 @@ impl Vmm {
         }
         self.base = s.ram.base.clone();
         self.fresh_vm();
-        self.cpu_mut().load(&s.cpu);
-        self.cpu_mut().set_run_flags(s.flags);
+        self.cpus[0].load(&s.cpu);
+        self.cpus[0].set_run_flags(s.flags);
+        for (i, (c, f)) in s.aps.iter().enumerate() {
+            if let Some(cpu) = self.cpus.get_mut(i + 1) {
+                cpu.load(c);
+                cpu.set_run_flags(*f);
+            }
+        }
+        self.smp = s.smp.clone();
+        self.cur = s.smp.as_ref().map_or(0, |sm| sm.cur);
         self.m = s.m;
         let n = self.m.console_len as usize;
         self.console[..n].copy_from_slice(&s.con[..n]);
@@ -1651,7 +2006,7 @@ impl Vmm {
     /// The run engine's fingerprint (hydo-hvm's `xfp` with this machine's parts): the console,
     /// the vCPU, the machine state without statistics, the RAM size, the devices and all RAM.
     pub fn xfp(&self) -> u64 {
-        let mut s = self.cpu().save();
+        let mut s = self.cpus[0].save();
         if !self.stale_events || self.spin_state {
             // KVM's leftovers of a finished event depend on the host (CpuState docs): left out
             // since fingerprint epoch 2; an epoch-1 image keeps them unless the full-state cycles
@@ -1667,7 +2022,17 @@ impl Vmm {
         if self.vio.attached() {
             h = self.vio.hash(h);
         }
-        self.ram_hash(h)
+        let mut h = self.ram_hash(h);
+        if let Some(sm) = &self.smp {
+            // several vCPUs: the other vCPUs and the several-vCPU state, after every part of a
+            // one-vCPU fingerprint (none of it exists with one vCPU)
+            h = fnv(b"smp", h);
+            for c in &self.cpus[1..] {
+                h = c.save().without_stale_events().hash(h);
+            }
+            h = fnv(&sm.bytes(), h);
+        }
+        h
     }
 
     /// The parts of the end state, for HYDO_KVM_DIAG.
@@ -1722,6 +2087,12 @@ impl Vmm {
             t.push_str(&format!(
                 " full-state cycles resolved {} (looks that proved nothing {})",
                 self.state_cycles, self.state_gave_up
+            ));
+        }
+        if let Some(sm) = &self.smp {
+            t.push_str(&format!(
+                " turns {} exits per vCPU {:?}",
+                sm.turns, sm.exits
             ));
         }
         if self.rw.on || self.rw.proven != 0 {
@@ -1803,7 +2174,7 @@ impl Drop for Vmm {
         if let Some(t) = &mut self.trace {
             let _ = t.flush();
         }
-        drop(self.cpu.take());
+        self.cpus.clear();
         if let Ok(mut k) = self.kicker.lock() {
             *k = None;
         }

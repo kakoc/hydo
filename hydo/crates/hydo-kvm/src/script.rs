@@ -3,6 +3,10 @@
 //! devices, interrupt rule, snapshots, fingerprints and lock-step protocol run on any machine.
 //! Its instruction pointer is `rip - ENTRY` (the boot recipe's entry), its accumulator is `rax`,
 //! and an interrupt pushes the return point into `r15` (handlers do not nest: IF is cleared).
+//!
+//! With several vCPUs ([`Hypervisor::fresh_n`]) vCPU 0 runs the program and vCPU i the i-th
+//! program of [`Script::aps`]. An AP starts where the engine's STARTUP puts it: its instruction 0
+//! is at the real-mode CS base (`vector << 12`) with RIP 0.
 
 use crate::abi::kvm_regs;
 use crate::cpu::{Cpu, CpuState, Exit, Hypervisor, Reply};
@@ -52,12 +56,55 @@ pub struct Program {
     pub handlers: HashMap<u8, usize>,
 }
 
-/// The scripted machine maker: every fresh VM runs the same program.
+/// The scripted machine maker: every fresh VM runs the same programs.
 pub struct Script {
     pub program: Arc<Program>,
+    /// the programs of vCPUs 1, 2, ... (a machine with more vCPUs than programs runs the last
+    /// one on the rest)
+    pub aps: Vec<Arc<Program>>,
+}
+
+impl Script {
+    /// One vCPU running `program`.
+    pub fn new(program: Program) -> Script {
+        Script {
+            program: Arc::new(program),
+            aps: Vec::new(),
+        }
+    }
+}
+
+fn cpu_of(p: Arc<Program>) -> Box<dyn Cpu> {
+    Box::new(ScriptCpu {
+        p,
+        s: CpuState::default(),
+        pending: None,
+        window: false,
+        print_at: 0,
+        wait: Wait::None,
+        stepping: None,
+        ready: false,
+        ifl: false,
+    })
 }
 
 impl Hypervisor for Script {
+    unsafe fn fresh_n(
+        &mut self,
+        _ram: *mut u8,
+        _len: usize,
+        n: usize,
+    ) -> Result<Vec<Box<dyn Cpu>>, String> {
+        let mut v = vec![cpu_of(self.program.clone())];
+        for i in 1..n {
+            let p = self.aps.get(i - 1).or(self.aps.last());
+            let Some(p) = p else {
+                return Err(format!("hydo-kvm: the script has no program for vCPU {i}"));
+            };
+            v.push(cpu_of(p.clone()));
+        }
+        Ok(v)
+    }
     unsafe fn fresh(&mut self, _ram: *mut u8, _len: usize) -> Result<Box<dyn Cpu>, String> {
         Ok(Box::new(ScriptCpu {
             p: self.program.clone(),
@@ -268,11 +315,23 @@ impl ScriptCpu {
         Exit::Kick
     }
 
+    /// Where instruction 0 is: the boot recipe's entry, or for an AP started in real mode its
+    /// CS base.
+    fn origin(&self) -> u64 {
+        match self.s.sregs.cs.base {
+            0 => ENTRY,
+            b => b,
+        }
+    }
     fn pc(&self) -> usize {
-        self.s.regs.rip.wrapping_sub(ENTRY) as usize
+        self.s
+            .regs
+            .rip
+            .wrapping_add(self.s.sregs.cs.base)
+            .wrapping_sub(self.origin()) as usize
     }
     fn set_pc(&mut self, pc: usize) {
-        self.s.regs.rip = ENTRY + pc as u64;
+        self.s.regs.rip = (self.origin() + pc as u64).wrapping_sub(self.s.sregs.cs.base);
     }
     fn if_on(&self) -> bool {
         self.s.regs.rflags & (1 << 9) != 0
@@ -324,6 +383,8 @@ impl Cpu for ScriptCpu {
             (Wait::Value(_), Reply::Msr { value, fault }) => {
                 Wait::Value(Some(if fault { u64::MAX } else { value }))
             }
+            // a WRMSR's answer: whether it faulted (KVM's `msr.error`); a scripted write goes on
+            (Wait::Done, Reply::Msr { .. }) => Wait::Done,
             (w, r) => panic!("a reply {r:?} while waiting for {w:?}"),
         };
     }

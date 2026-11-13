@@ -344,6 +344,22 @@ pub trait Hypervisor: Send {
     /// # Safety
     /// `ram..ram+len` stays mapped for the life of the returned vCPU.
     unsafe fn fresh(&mut self, ram: *mut u8, len: usize) -> Result<Box<dyn Cpu>, String>;
+    /// One VM with `n` vCPUs around the same RAM, vCPU 0 first (docs/design/kvm-vcpus.md). The
+    /// default makes one; a maker without several vCPUs refuses more.
+    ///
+    /// # Safety
+    /// As [`Hypervisor::fresh`].
+    unsafe fn fresh_n(
+        &mut self,
+        ram: *mut u8,
+        len: usize,
+        n: usize,
+    ) -> Result<Vec<Box<dyn Cpu>>, String> {
+        if n > 1 {
+            return Err(format!("hydo-kvm: this vCPU maker has one vCPU, not {n}"));
+        }
+        Ok(vec![self.fresh(ram, len)?])
+    }
     /// One line naming the host (its KVM and CPU), for the engine's diagnostics.
     fn describe(&self) -> String;
 }

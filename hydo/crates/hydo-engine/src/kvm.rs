@@ -224,6 +224,7 @@ fn spawn(
         outdir: spec.outdir.clone(),
         ram_mib: Some(spec.ram_mib as u64),
         image_epoch,
+        vcpus: spec.vcpus.max(1) as usize,
     };
     let diag: Box<dyn std::io::Write + Send> = Box::new(
         std::fs::OpenOptions::new()
@@ -265,13 +266,15 @@ pub fn level_of(cpu: crate::CpuLevel) -> hydo_kvm::cpuid::Level {
     }
 }
 
-/// The machine the KVM engine gives every guest: one vCPU, at the image's CPU level (v2, or v3
-/// on a host whose KVM has AVX2: the engine refuses the run otherwise). An image that asks for
-/// several vCPUs is refused rather than run on fewer.
+/// The machine the KVM engine gives a guest: at the image's CPU level (v2, or v3 on a host whose
+/// KVM has AVX2: the engine refuses the run otherwise), with one vCPU or up to
+/// `hydo_kvm::smp::MAX_VCPUS` (docs/design/kvm-vcpus.md; they need the SMP guest kernel). A
+/// count beyond is refused rather than run on fewer.
 fn check_machine(spec: &BootSpec) -> Result<(), EngineError> {
-    if spec.vcpus != 1 {
+    if spec.vcpus == 0 || spec.vcpus as usize > hydo_kvm::smp::MAX_VCPUS {
         return Err(EngineError::Unsupported(format!(
-            "the KVM engine runs one vCPU; {} asks for {} vCPUs (several vCPUs need the hvx engine)",
+            "the KVM engine runs 1 to {} vCPUs; {} asks for {}",
+            hydo_kvm::smp::MAX_VCPUS,
             spec.image.display(),
             spec.vcpus,
         )));
@@ -395,9 +398,20 @@ mod tests {
             "/r/bin/hydo-kvm --ram-mib 2048 --image-epoch 1 --control boot one \
              /g/bzImage-kvm /g/initramfs-kafka.cpio.gz /i/x-disk.img /o rb=64 | run"
         );
+        // several vCPUs (docs/design/kvm-vcpus.md): up to hydo_kvm::smp::MAX_VCPUS
+        let two = BootSpec {
+            vcpus: 2,
+            ..spec.clone()
+        };
+        assert!(check_machine(&two).is_ok());
+        assert_eq!(
+            k.argv(&two, "one", &s).join(" "),
+            "/r/bin/hydo-kvm --ram-mib 2048 --vcpus 2 --control boot one /g/bzImage-kvm \
+             /g/initramfs-kafka.cpio.gz /i/x-disk.img /o rb=64 | run"
+        );
         for cpu in [crate::CpuLevel::V2, crate::CpuLevel::V3] {
             let more = BootSpec {
-                vcpus: 2,
+                vcpus: 9,
                 cpu,
                 ..spec.clone()
             };

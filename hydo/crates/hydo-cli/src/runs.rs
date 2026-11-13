@@ -152,13 +152,17 @@ impl RunOpts {
                 "--vcpus {n}: the vCPU count must be 1..8 (hvx's HVX_MAX_VCPUS)"
             ));
         }
-        if n > 1 && (platform == Platform::Mac || kvm) {
-            let e = if kvm { "KVM" } else { "Mac" };
+        if n > 1 && platform == Platform::Mac {
             return Err(format!(
-                "--vcpus {n}: the {e} engine runs one vCPU (several vCPUs need the hvx engine on Linux)"
+                "--vcpus {n}: the Mac engine runs one vCPU (several vCPUs need hvx or KVM on Linux)"
             ));
         }
         if let Some(m) = self.turn_margin {
+            if kvm {
+                return Err(format!(
+                    "--turn-margin {m}: the KVM engine's turns are counted in exits and need no margin"
+                ));
+            }
             if n < 2 || !(8..=(1 << 20)).contains(&m) {
                 return Err(format!(
                     "--turn-margin {m}: needs --vcpus N > 1 and a value in [8, 2^20]"
@@ -285,8 +289,12 @@ pub fn controlled_engine(
                 eprintln!("hydo: {n}");
             }
             let spec = spec_from_args(eargs, image, b.kernel, Some(b.initrd), &abspath(outdir));
-            if spec.vcpus != 1 {
-                die("the KVM engine runs one vCPU (--vcpus needs hvx)");
+            if spec.vcpus > 1 && ctx.config.kvm.kernel.is_none() {
+                // docs/design/kvm-vcpus.md: the SMP guest kernel is not pinned yet
+                die(
+                    "--vcpus on the KVM engine needs the SMP guest kernel: set HYDO_KVM_KERNEL to \
+                     bzImage-kvm-smp (SMP=1 sh hv/kvm/linux/build-kernel.sh)",
+                );
             }
             let k = hydo_engine::kvm::Kvm::for_release(&ctx.root, ctx.config.env.clone());
             (Arc::new(k), spec)
@@ -376,7 +384,7 @@ fn run_engine_try(
     let (eng, spec) = controlled_engine(ctx, image, outdir, eargs, quiet);
     // a host part this engine refuses (a combination its module refuses, a token it cannot
     // apply) is refused here, before any VM (M208)
-    if let Some(why) = hydo_engine::refusal(eng.kind(), &s) {
+    if let Some(why) = hydo_engine::refusal_on(eng.kind(), spec.vcpus, &s) {
         return Err(format!("the engine refuses the schedule: {why}"));
     }
     let a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));

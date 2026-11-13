@@ -210,7 +210,7 @@ pub enum SnapshotStore {
 
 impl BootSpec {
     /// The engine options in front of the mode, as explore.py passes them: `--ram-mib N` only for a
-    /// size other than 1024, `--vcpus N` only above 1 (hvx), `--cpu v3` only for v3 (hvx, KVM),
+    /// size other than 1024, `--vcpus N` only above 1 (hvx, KVM), `--cpu v3` only for v3 (hvx, KVM),
     /// `--cpu-cache on` only with `guest.cpu_cache` (hvx, KVM).
     pub fn engine_args(&self, kind: EngineKind) -> Vec<String> {
         let mut a = Vec::new();
@@ -218,7 +218,7 @@ impl BootSpec {
             a.push("--ram-mib".to_string());
             a.push(self.ram_mib.to_string());
         }
-        if kind == EngineKind::Hvx && self.vcpus > 1 {
+        if matches!(kind, EngineKind::Hvx | EngineKind::Kvm) && self.vcpus > 1 {
             a.push("--vcpus".to_string());
             a.push(self.vcpus.to_string());
         }
@@ -613,6 +613,35 @@ pub trait ControlledWorker {
 /// `hydo run` stops with the message, and the explorer records the run as refused, never as a
 /// failure (Milestone 208).
 pub fn refusal(kind: EngineKind, s: &hydo_schedule::Schedule) -> Option<String> {
+    refusal_on(kind, 1, s)
+}
+
+/// [`refusal`] on a machine of `vcpus` vCPUs: the KVM engine with several applies the turn
+/// tokens `q=` and `qs=` (counted in exits) and not yet tick jitter
+/// (docs/design/kvm-vcpus.md).
+pub fn refusal_on(kind: EngineKind, vcpus: u32, s: &hydo_schedule::Schedule) -> Option<String> {
+    use hydo_schedule::HostToken;
+    if kind == EngineKind::Kvm && vcpus > 1 {
+        if let Some(t) = s
+            .host
+            .iter()
+            .find(|t| matches!(t, HostToken::Tj(_) | HostToken::Tjx(_)))
+        {
+            return Some(format!(
+                "host token {t} with several vCPUs (tick jitter is one vCPU's for now) (on kvm)"
+            ));
+        }
+        let rest = hydo_schedule::Schedule {
+            host: s
+                .host
+                .iter()
+                .filter(|t| !matches!(t, HostToken::Q(_) | HostToken::Qs(_)))
+                .cloned()
+                .collect(),
+            guest: s.guest.clone(),
+        };
+        return refusal_on(kind, 1, &rest);
+    }
     // the state search's timing switch (docs/design/state-search.md) is built on KVM and the
     // Mac engine; hvx's timing is the module's
     if kind == EngineKind::Hvx && !s.branch_points().is_empty() {
