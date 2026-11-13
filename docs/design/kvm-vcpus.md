@@ -1,9 +1,10 @@
 # Several vCPUs on the KVM engine
 
-Status: a design, written on 2026-11-13. Stage 1, the KVM probe, passed on 2026-11-13 on three
-AMD and one Intel model (Milestone 213, and the section on what the probe showed). The APIC model
-(`hydo/crates/hydo-kvm/src/apic.rs`) and the SMP kernel's recipe exist; the engine does not use
-them yet, and one vCPU is the only machine. It answers AGENTS.md open item 45 ("The KVM engine: one vCPU only"). The engine it extends is
+Status: written on 2026-11-13. Stages 1 to 3 are built and passed on GitHub's AMD runners
+(Milestones 213 and 218). The sections on what the probe and the runs showed have the numbers. The engine runs
+several vCPUs with `--vcpus N` and the pinned SMP guest kernel `bzImage-kvm-smp`; with one vCPU it
+runs the code of before. Stage 4, the product and the usefulness test, is next. It answers
+AGENTS.md open item 45 ("The KVM engine: one vCPU only"). The engine it extends is
 described in `docs/design/kvm-engine.md`; this page uses that page's terms (the exit clock, the
 spin observer, the rewind mode, the full-state cycles) and does not repeat them.
 
@@ -467,6 +468,46 @@ The decision for one thread holds: a handover between two threads costs about on
 and a vCPU that changes threads costs more again. The runners' kernels are newer than Linux 6.6, so
 the cost of `synchronize_rcu()` there was not measured on its own.
 
+## Stages 2 and 3: what the runs showed
+
+Stage 2 is the engine (`hydo/crates/hydo-kvm/src/smp.rs`, `vmm.rs`, `serve.rs`, `sys.rs`). Stage 3
+is the SMP guest kernel (`hv/kvm/linux/kernel-smp.nix`), pinned in docs/BUILD-PINS.md. On this
+Mac the scripted tests of `hydo/crates/hydo-kvm/tests/engine.rs` pass. Two scripted vCPUs started
+by INIT and STARTUP give one fingerprint per turn length, and other turn lengths give other
+interleavings. A run from S1 equals a fresh boot at each of 39 boot stops. The one-vCPU pins
+pass after every change.
+
+A one-off workflow ran it on 2026-11-13 in four jobs on GitHub's `ubuntu-24.04` runners:
+https://github.com/kakoc/hydo/actions/runs/43440090997. The hosts were AMD EPYC 9V45, 9V74, 7763,
+and 9V45 again. Each had nested KVM and Linux 7.0.0. Every job passed.
+
+One vCPU, with this branch's `hydo` (two jobs):
+
+- `hv/kvm/kvm-check.sh` passed 15 of 15 checks on both hosts. The release's Redis example gave the
+  AMD values Milestone 210 recorded: `2846084b7f0ab1e2` (OK) and `bca22e72dbf0da18` (VIOLATION,
+  key k:1 lost).
+- A timing branch of the state search (Milestone 212), `disk=none dseed=1
+  pct=ec699251106e8e0c pctn=40 pctk=3000 br=40000000 pct=5be2f1a09c3d7e44 pctn=40 pctk=3000 | run`,
+  gave `2039c438b0971596` twice from a fresh boot and once from the worker's S1. Its control
+  without `br=` gave the same value. The control transcripts differ, so the controller sent
+  TIME, but the new preemption points changed nothing the fingerprint sees.
+
+Several vCPUs, with the SMP kernel built on the same runner (two jobs, EPYC 7763 and 9V45). Each
+schedule ran twice from a fresh boot, and both hosts gave the same fingerprints:
+
+| vCPUs | schedule | verdict | fp | turns (`qn=`) |
+|---|---|---|---|---|
+| 2 | `disk=none dseed=1 \| run` | OK, acked=20 | `cb3f16360593598e` | 231 |
+| 2 | `disk=none dseed=1 q=64 \| run` | OK | `2e44e4e7d6c7173a` | 399 |
+| 2 | `disk=none dseed=1 q=7 qs=1f \| run` | OK | `65afef462b5bb2cb` | 2,476 |
+| 2 | `disk=cut \| run C=12 R=everysec` | VIOLATION, key k:1 lost | `25b2b20d93cdf8fc` | 164 |
+| 4 | `disk=none dseed=1 \| run` | OK | `5ad6cb7c9b3bd84a` | 503 |
+
+Linux used the second vCPU: in the default two-vCPU run vCPU 1 made 6,396 of the workload's
+26,560 counted exits (the engine's `HYDO_KVM_DIAG` statistics). The one failed check was the run
+from the worker's S1: `hydo explore` refused `--vcpus` for KVM. Milestone 218 lets the explorer
+pass the count, and the next runner run checks S1 against a fresh boot there.
+
 ## The plan in stages
 
 **Stage 1: the KVM probe** (no change to `hydo-kvm`; done, GO). A C program `hv/kvm/smp/smpprobe.c`, in the
@@ -492,9 +533,9 @@ Go or no-go after stage 1, on at least two runner jobs:
 - If test 2 or 4 fails, or if a switch costs more than 20 µs, the work stops before any engine
   code, and the report says why.
 
-**Stage 2: the engine on hand-written and scripted guests.** Its engine part starts only after the
-state search is merged into `main`, because both change `hydo/crates/hydo-kvm`. Two parts are
-ready already:
+**Stage 2: the engine on hand-written and scripted guests** (done, GO). It started after the
+state search was merged into `main`, because both change `hydo/crates/hydo-kvm`. Two parts came
+first:
 
 - the test `engine::one_vcpu_fingerprints_are_pinned` (`hydo/crates/hydo-kvm/tests/engine.rs`)
   pins six scripted one-vCPU runs: idle, tick jitter, preemption points, another cadence, an
@@ -508,8 +549,8 @@ ready already:
 - The one-vCPU pins first, then scripted tests of each rule, then the probe's guests run through
   the engine on a runner.
 
-**Stage 3: Linux on several vCPUs.** The SMP kernel recipe (ready, not pinned), the MP table,
-and the relax port.
+**Stage 3: Linux on several vCPUs** (done, GO; the S1 check waits for the next runner run). The
+SMP kernel recipe (pinned), the MP table, and the relax port.
 Linux boots with 2 and 4 vCPUs and prints `smp: Brought up 1 node, 2 CPUs`. Each check runs twice and once
 under load, on every runner model:
 
@@ -519,8 +560,10 @@ under load, on every runner model:
 
 Then the kernel's pin.
 
-**Stage 4: the product.** `--vcpus N` for `--backend kvm` in `hydo run`, `hydo repro`, `hydo
-explain`, and `hydo explore`, and a KVM range for the turn-length search. Then `recorded.json`
+**Stage 4: the product.** `--vcpus N` for `--backend kvm` reaches the engine from `hydo run` and
+`hydo explore` since Milestone 218. Left: `hydo repro` and `hydo explain`, the explorer's turn
+tokens and a KVM range for the turn-length search, the help texts, and `bzImage-kvm-smp` in the
+Linux release. Then `recorded.json`
 entries with `vcpus` for KVM, and TIME with turn tokens. The usefulness test is the nats example
 on 2 vCPUs: whether some `q` passes and some fails. If every `q` gives one verdict, risk 1 holds,
 and the result goes into `RESULTS.md` and open item 45.

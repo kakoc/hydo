@@ -57,6 +57,17 @@ pub struct KvmBoot {
 /// up by sha256 in `dirs`, and the kernel is the KVM build paired with the recorded kernel
 /// (`hydo_kvm::kernel::twin_of`), looked up by its own sha256 in `dirs`, unless `given` names one.
 pub fn boot_files(image: &Path, dirs: &[PathBuf], given: Option<&Path>) -> Result<KvmBoot, String> {
+    boot_files_n(image, dirs, given, 1)
+}
+
+/// [`boot_files`] for a machine of `vcpus` vCPUs: with more than one, the SMP build of the
+/// image's kernel (`hydo_kvm::kernel::SMP_TWINS`, docs/design/kvm-vcpus.md).
+pub fn boot_files_n(
+    image: &Path,
+    dirs: &[PathBuf],
+    given: Option<&Path>,
+    vcpus: u32,
+) -> Result<KvmBoot, String> {
     let rec = crate::image::image_record(image)?;
     let mut note = None;
     let (kref, iref) = match &rec {
@@ -104,7 +115,7 @@ pub fn boot_files(image: &Path, dirs: &[PathBuf], given: Option<&Path>) -> Resul
             k.to_path_buf()
         }
         None => {
-            let t = hydo_kvm::kernel::twin_of(&kref).ok_or_else(|| {
+            let t = hydo_kvm::kernel::twin_for(&kref, vcpus).ok_or_else(|| {
                 format!(
                     "{} was built for the guest kernel with sha256 {kref}, which has no KVM build in \
                      this hydo (hydo_kvm::kernel::TWINS); rebuild the image with this hydo",
@@ -118,12 +129,13 @@ pub fn boot_files(image: &Path, dirs: &[PathBuf], given: Option<&Path>) -> Resul
             locate(&want, Role::Kernel, dirs).ok_or_else(|| {
                 format!(
                     "the KVM engine's guest kernel {} (Linux {}, sha256 {}) is not in {}; build it \
-                     with hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) or name it with \
+                     with {}hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) or name it with \
                      HYDO_KVM_KERNEL",
                     t.file,
                     t.version,
                     t.sha256,
-                    shown.join(", ")
+                    shown.join(", "),
+                    if vcpus > 1 { "SMP=1 sh " } else { "" }
                 )
             })?
         }
@@ -337,6 +349,13 @@ mod tests {
     #[test]
     fn the_twin_is_of_the_recorded_x86_kernel() {
         assert_eq!(hydo_kvm::kernel::KERNEL.of, X86_KERNEL.sha256);
+        // several vCPUs: the SMP build of the same kernel
+        let smp = hydo_kvm::kernel::twin_for(X86_KERNEL.sha256, 2).unwrap();
+        assert_eq!((smp.file, smp.of), ("bzImage-kvm-smp", X86_KERNEL.sha256));
+        assert_eq!(
+            hydo_kvm::kernel::twin_for(X86_KERNEL.sha256, 1),
+            hydo_kvm::kernel::twin_of(X86_KERNEL.sha256)
+        );
         assert_eq!(hydo_kvm::kernel::KERNEL.version, X86_KERNEL.version);
         assert!(hydo_kvm::kernel::twin_of(X86_KERNEL.sha256).is_some());
     }

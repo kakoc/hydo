@@ -6604,6 +6604,61 @@ The three saved regressions expect a violation.
 last line, one shrink per signature, the importer's idle job service as a fault target, clock steps
 that cannot aim at a time of day, and the identity test reading git-ignored outputs.
 
+### Milestone 218 (tentative number) — DONE, STAGES 2 AND 3 (several vCPUs on the KVM engine: the engine runs 2 to 8 vCPUs in turns of counted exits, Linux boots on them with the pinned SMP guest kernel, one fingerprint per schedule on two AMD models; one vCPU unchanged; 2026-11-13)
+
+**In short.** Stages 2 and 3 of `docs/design/kvm-vcpus.md`. With `--vcpus N` the KVM engine runs
+N vCPUs of one VM one at a time from its thread, in turns of counted exits, with an x2APIC per
+vCPU in the engine, and boots Linux with `bzImage-kvm-smp`. The release's Redis example runs on 2
+and 4 vCPUs. Each schedule gave one fingerprint twice, and the same on AMD EPYC 7763 and 9V45.
+Without the option the engine runs the code of before: `hv/kvm/kvm-check.sh` gave Milestone 210's
+AMD values, and the scripted one-vCPU pins pass. No recorded value moved.
+
+**The engine** (`hydo/crates/hydo-kvm`):
+
+- `smp.rs`: whose turn it is, the turn length (`q=` exits, or seeded lengths with `qs=` by hvx's
+  rule), each vCPU's run state (ready, halted, stopped, waiting for STARTUP), its x2APIC and its
+  MSR model.
+- `vmm.rs`: the vCPUs, vCPU 0 first. A turn ends after `q` exits, at a HLT, at an OUT to the relax
+  port `0x5f0`, or at a spin the observer proves while another vCPU can run. When no vCPU can run,
+  the clock jumps to the next event of any vCPU or device. The x2APIC's MSR exits go to the APIC
+  model: IPIs, EOI, the APIC timer in the exit clock, INIT, and STARTUP, which starts the target
+  in real mode. The 8259 PIC reaches vCPU 0 through an ExtINT LINT0. Snapshots keep every vCPU
+  with its `kvm_run` flags; the fingerprint adds the other vCPUs and the several-vCPU state after
+  every part of a one-vCPU fingerprint.
+- `cpuid::table_smp` (APIC, x2APIC, the topology leaf, ARAT), an MP table without an I/O APIC,
+  `x2apic_phys noapic` on the command line, `Hypervisor::fresh_n` (one VM file shared by its
+  vCPUs), and a program per vCPU in the scripted vCPU.
+- `hydo-kvm --vcpus N`; the RESULT line has `qn=`. Tick jitter and the rewind mode are refused with
+  several vCPUs for now.
+
+**The product.** `hydo run --backend kvm --vcpus N` and `hydo explore --backend kvm --vcpus N`
+pass the count to the engine and look up the SMP kernel by sha256 (`hydo_kvm::kernel::SMP_TWINS`,
+`hydo_engine::kvm::boot_files_n`); `hydo_engine::refusal_on` lets `q=` and `qs=` through on such a
+machine. The explorer's turn tokens (`--turns`, `--sweep turns`) stay hvx's for now.
+
+**The kernel.** `hv/kvm/linux/kernel-smp.nix` over the unchanged `kernel.nix`;
+`bzImage-kvm-smp` `a43b7bc3…`, config `d630f99e…`, pinned in docs/BUILD-PINS.md. It came out with
+the same bytes four times from sandboxed builds on two runners (`nix-build`, then `nix-build
+--check`), and from the bare-metal machine's trial build of Milestone 213.
+
+**The runs** (a one-off workflow on a temporary branch `tmp-kvm-vcpus2`, deleted afterwards:
+https://github.com/kakoc/hydo/actions/runs/43440090997; four jobs, every one green):
+
+| check | result |
+|---|---|
+| `kvm-check.sh`, one vCPU, this branch's `hydo` (EPYC 9V45 and 9V74) | 15 of 15 on both; `2846084b7f0ab1e2` OK and `bca22e72dbf0da18` VIOLATION k:1, Milestone 210's AMD values |
+| a timing branch with `br=` (Milestone 212), one vCPU | `2039c438b0971596` twice from a fresh boot and once from S1, the value of its control without `br=` |
+| 2 vCPUs, `disk=none dseed=1 \| run` | OK, `cb3f16360593598e` twice on each host, `qn=231`; vCPU 1 made 6,396 of 26,560 exits |
+| 2 vCPUs, `q=64` / `q=7 qs=1f` | OK, `2e44e4e7d6c7173a` (`qn=399`) / `65afef462b5bb2cb` (`qn=2476`), each twice on each host |
+| 2 vCPUs, `disk=cut \| run C=12 R=everysec` | VIOLATION key k:1 lost, `25b2b20d93cdf8fc`, twice on each host |
+| 4 vCPUs, `disk=none dseed=1 \| run` | OK, `5ad6cb7c9b3bd84a` (`qn=503`), twice on each host |
+| 2 vCPUs, from the worker's S1 against a fresh boot | not run: `hydo explore` refused `--vcpus` for KVM, fixed in this milestone |
+
+**Left.** The run from S1 with several vCPUs on KVM (the next runner run). `hydo repro` and `hydo
+explain` with `--vcpus` on KVM, the explorer's turn tokens for KVM, the help texts, and
+`bzImage-kvm-smp` in the Linux release. Stage 4's usefulness test, the nats example on 2 vCPUs.
+Intel KVM ran only Milestone 213's probe.
+
 ### Milestone 220 (tentative number) - DONE (`hydo report --html`: a failure as one self-contained web page, for a run, an exploration or a CI run, with the failing run's timeline and its first difference from a passing neighbour; nothing recorded moved; 2026-11-13)
 
 **In short.** `hydo report --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]` writes one

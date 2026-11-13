@@ -820,13 +820,13 @@ boot with one fingerprint: without the key VIOLATION `06e3244d55cdbe7e` (the Pyt
 crashed, `getconf` reported cache sizes of 0), with it OK `9037e4e693bab2e0` (`getconf`: 32768,
 32768, 262144, 8388608).
 
-## One vCPU
+## Several vCPUs
 
-Several vCPUs need turns of an exact length of guest work (hvx counts retired branches with the
-PMU, M66); KVM gives no instruction-exact clock, and the exit count is not one. The engine has
-one vCPU; `--vcpus` stays an hvx option (the v3 CPU level is the KVM engine's too since
-Milestone 189). A design for several vCPUs in turns of exits, not built yet, is in
-`docs/design/kvm-vcpus.md`.
+KVM gives no instruction-exact clock, so the engine cannot give turns of an exact length of guest
+work as hvx does (hvx counts retired branches with the PMU, M66). Since Milestone 218 it runs
+several vCPUs in turns of counted exits instead, with `--vcpus N` (2 to 8) and the SMP guest kernel
+`bzImage-kvm-smp`: `docs/design/kvm-vcpus.md` describes it, with its runs. Without the option the
+engine has one vCPU and runs exactly the code of before.
 
 ## AMD hosts
 

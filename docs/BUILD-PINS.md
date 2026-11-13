@@ -561,6 +561,29 @@ a sandboxed Nix. The sha256 is recorded in
 `hydo/crates/hydo-kvm/src/kernel.rs` (`KERNEL`), paired with the hvx guest kernel an image records
 (`0a9ede35…`).
 
+### The build for several virtual CPUs
+
+`bzImage-kvm-smp` (Milestone 218) is the same kernel for the KVM engine with several vCPUs
+(docs/design/kvm-vcpus.md). `hv/kvm/linux/kernel-smp.nix` builds it as an override of
+`kernel.nix`, which does not change, so `bzImage-kvm` keeps its pin. It adds
+`hv/kvm/linux/hydo-kvm-smp.patch` after `hydo-kvm-guest.patch`, and `hydo-kvm-smp.config` on top
+of `hydo-kvm.config` without that file's `CONFIG_SMP` and `CONFIG_X86_X2APIC` lines. `SMP=1 sh
+hv/kvm/linux/build-kernel.sh` runs it.
+
+| file | sha256 |
+|---|---|
+| `bzImage-kvm-smp` | `a43b7bc370fb83eb44c2bb6406e8e1b876d11e36a959c08740c2c0aecbdd77a2` |
+| `bzImage-kvm-smp.config` | `d630f99e35d0a8ad16c97026ec2161077042c2e6d78ccf8a2896f794f397bc43` |
+
+Proof: the store path is `8h1y87ik…-hydo-kvm-guest-kernel-smp-6.6.35`. Two GitHub runners
+(AMD EPYC 7763 and 9V45) each built it with a multi-user Nix 2.18.9, which builds in a sandbox:
+`nix-build`, then `nix-build --check`, the same bytes four times (run
+https://github.com/kakoc/hydo/actions/runs/43440090997). The bare-metal machine's single-user Nix
+built the same store path with the same bytes before. The RDTSC audit of its `vmlinux` lists the
+UP kernel's 10 sites and no RDTSC, RDTSCP, or RDPID. The sha256 is recorded in
+`hydo/crates/hydo-kvm/src/kernel.rs` (`KERNEL_SMP`). It is in no release yet: put it in a tree's
+`hv/kvm/linux/out/` or `build/`, or name it with `HYDO_KVM_KERNEL`.
+
 ## Headless Chromium and the GUI driver (Milestone 166, an experiment)
 
 `hydo/onboard/examples/compose-voting-browser/` (docs/design/gui-testing.md) puts a real browser

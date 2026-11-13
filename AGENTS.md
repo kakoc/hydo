@@ -254,7 +254,9 @@ clock counts VM exits. The program is signed with `hv/hvm/hv.entitlements` befor
 The details are in Milestones 48, 51, 99, 143, and 147.
 
 **The KVM engine.** `hydo/crates/hydo-kvm` runs the x86_64 images on stock Linux KVM, without the
-module or root, with one vCPU and a patched guest kernel (`bzImage-kvm`). The vCPU is at the
+module or root, with one vCPU and a patched guest kernel (`bzImage-kvm`). With `--vcpus N` it runs
+2 to 8 vCPUs in turns of counted exits with the SMP kernel `bzImage-kvm-smp`
+(`docs/design/kvm-vcpus.md`, M218). The vCPU is at the
 x86-64-v2 level, or at x86-64-v3 for `guest.cpu: v3` on a host whose KVM has AVX2 (M189;
 `hv/kvm/v3-check.sh`). It runs on Intel and on AMD (GitHub's ubuntu-24.04 runners, 2026-11-08).
 Its fingerprints are its own and differ between CPU vendors; the verdicts are the same. Details:
@@ -559,8 +561,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 43. The suite's recorded values of M121's agent boot check are older than M140 (M156).
 44. [user decision] License compliance: the sources archives must stay available; three SPDX
     expressions are approximations; a lawyer's review is open (M158).
-45. The KVM engine: one vCPU only. `docs/design/kvm-vcpus.md` designs several, and its KVM probe
-    passed on AMD and Intel (M213); the engine code waits for the state search. On AMD, RDRAND, RDSEED and TSX cannot be made to fault, so a
+45. The KVM engine with several vCPUs (M213, M218). A run from S1 has not run on KVM yet. `hydo
+    repro`, `hydo explain` and the explorer's turn tokens do not take them on KVM yet.
+    `bzImage-kvm-smp` is in no release, and Intel ran only the probe. On AMD, RDRAND, RDSEED and TSX cannot be made to fault, so a
     guest program that uses them without checking CPUID sees the host (M159, M161). A loop that
     counts in memory is still never proven (M194). The full-state cycles and the fingerprint
     without KVM's stale event fields are the default since M204 (h closed). Of the epoch-2
@@ -1006,6 +1009,10 @@ build machine, before 2026-10-13.
   known), found blind by both kinds of rules. A Redis error in Sidekiq's first scheduler cleanup
   stops all retries. Power cuts, a skipped billing day, and backward clock steps drop acknowledged
   usage by documented or environment causes. Nothing recorded moved
+- M218 (tentative number): several vCPUs on the KVM engine, stages 2 to 3. `--vcpus N` runs 2 to
+  8 vCPUs in turns of counted exits with an x2APIC per vCPU in the engine and the pinned SMP
+  kernel `bzImage-kvm-smp`. Redis on 2 and 4 vCPUs gave one fingerprint per schedule on two AMD
+  models; one vCPU gave its recorded values; nothing recorded moved
 - M220 (tentative number): `hydo report --html` writes a failure as one self-contained web page,
   for a run, an exploration, or a CI run. It shows the failing run's timeline and its first
   difference from a passing neighbour. Proven on the Redis example's power cut and a swarm

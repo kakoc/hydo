@@ -469,8 +469,15 @@ fn setup(a: Args, env: &Env) -> Cx {
     if !(1..=8).contains(&a.vcpus) {
         die("hydo explore: --vcpus must be 1..8 (hvx's HVX_MAX_VCPUS)");
     }
-    if a.vcpus > 1 && cx.ex.backend == Backend::Hvm {
-        die("hydo explore: --vcpus > 1 needs --backend hvx (the Mac VMM has one vCPU and no PMU clock)");
+    if a.vcpus > 1 && cx.ex.backend == Backend::Hvm && !cx.kvm {
+        die("hydo explore: --vcpus > 1 needs --backend hvx or kvm (the Mac VMM has one vCPU)");
+    }
+    if a.vcpus > 1 && cx.kvm {
+        // docs/design/kvm-vcpus.md: the turn tokens are not drawn for KVM yet
+        if a.turns || a.bursts || a.turn_margin.is_some() || a.sweep.as_deref() == Some("turns") {
+            die("hydo explore: --turns, --bursts, --turn-margin and --sweep turns are hvx's for now; \
+                 on KVM a schedule can carry q= and qs= itself");
+        }
     }
     if a.turns && a.vcpus < 2 {
         die(
@@ -721,7 +728,7 @@ fn make_pool(cx: &Cx) -> Pool {
         let mut spec = BootSpec {
             image,
             ram_mib: cx.ram_mib as u32,
-            vcpus: 1,
+            vcpus: cx.vcpus as u32,
             cpu: if cx.cpu == "v3" {
                 CpuLevel::V3
             } else {
@@ -740,10 +747,11 @@ fn make_pool(cx: &Cx) -> Pool {
                 cx.build.clone(),
                 cx.env.root.join("hv").join("kvm").join("linux").join("out"),
             ];
-            let b = hydo_engine::kvm::boot_files(
+            let b = hydo_engine::kvm::boot_files_n(
                 &spec.image,
                 &dirs,
                 cx.env.config.kvm.kernel.as_deref(),
+                spec.vcpus,
             )
             .unwrap_or_else(|e| die(&format!("hydo: {e}")));
             if let Some(n) = &b.note {
@@ -1253,7 +1261,7 @@ fn steer_search(cx: &Cx, pool: &Pool, seeds: &[i64]) -> SteerOut {
     let mut render = |s: &S| {
         let t = cx.render(s);
         let accepted = hydo_schedule::Schedule::parse(&t)
-            .is_ok_and(|sc| hydo_engine::refusal(kind, &sc).is_none());
+            .is_ok_and(|sc| hydo_engine::refusal_on(kind, cx.vcpus as u32, &sc).is_none());
         let back = cx.ex.parse(&t).ok().filter(|_| accepted);
         (t, back)
     };

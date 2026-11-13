@@ -81,7 +81,12 @@ if [ -z "${SMP_KERNEL:-}" ]; then
   [ "$fail" = 0 ]
   exit
 fi
-export HYDO_KVM_KERNEL="$SMP_KERNEL"
+# the pinned SMP kernel where hydo finds it by sha256 (the release's guest/, a tree's
+# hv/kvm/linux/out/: hydo_kvm::kernel::SMP_TWINS), not through HYDO_KVM_KERNEL
+mkdir -p "$REL/guest" "$REL/hv/kvm/linux/out"
+cp -f "$SMP_KERNEL" "$REL/guest/bzImage-kvm-smp"
+cp -f "$SMP_KERNEL" "$REL/hv/kvm/linux/out/bzImage-kvm-smp"
+unset HYDO_KVM_KERNEL
 say "SMP kernel: $(sha256sum "$SMP_KERNEL" | cut -c1-16)..."
 
 # 2. several vCPUs: the default turns, fixed and seeded turn lengths, a power cut, 4 vCPUs
@@ -99,6 +104,16 @@ twice "4 vCPUs" "disk=none dseed=1 | run" --vcpus 4
 w=$(from_s1 "$OUT/x" "disk=none dseed=1 | run" --vcpus 2)
 a=$(run "$OUT/a" "disk=none dseed=1 | run" --vcpus 2)
 if [ -n "$w" ] && [ "$w" = "${a%% *}" ]; then ok "2 vCPUs from S1 equals the fresh boot ($w)"; else bad "2 vCPUs from S1 equals the fresh boot (S1 ${w:-none}, fresh ${a%% *})"; fi
+
+# 3. an exploration on 2 vCPUs (every failure is run again from S1 by the explorer) and its repro
+rm -rf "$OUT/explore"
+if timeout "$T" "$H" explore --backend kvm --image "$IMG" --vcpus 2 --seeds 1-8 --strategy swarm --workers 2 --out "$OUT/explore" >> "$LOG" 2>&1; then
+  ok "2 vCPUs: explore --seeds 1-8 ($(grep -c '"type": *"run"' "$OUT/explore/events.jsonl" 2>/dev/null) runs)"
+  rr=$(timeout "$T" "$H" repro --backend kvm "$OUT/explore" 2>&1 | tee -a "$LOG" | tail -1)
+  if echo "$rr" | grep -q -E '([0-9]+) of \1'; then ok "2 vCPUs: repro of the exploration: $rr"; else bad "2 vCPUs: repro of the exploration: $rr"; fi
+else
+  bad "2 vCPUs: explore --seeds 1-8"
+fi
 
 say "smp-check: $pass passed, $fail failed ($(date -u))"
 [ "$fail" = 0 ]

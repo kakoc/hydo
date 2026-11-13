@@ -32,7 +32,29 @@ pub const KERNEL: Twin = Twin {
 /// Every pair this engine knows.
 pub const TWINS: [Twin; 1] = [KERNEL];
 
+/// The SMP build of the same kernel, for several vCPUs (docs/design/kvm-vcpus.md):
+/// hv/kvm/linux/kernel-smp.nix, `SMP=1 sh hv/kvm/linux/build-kernel.sh`.
+pub const KERNEL_SMP: Twin = Twin {
+    of: KERNEL.of,
+    file: "bzImage-kvm-smp",
+    sha256: "a43b7bc370fb83eb44c2bb6406e8e1b876d11e36a959c08740c2c0aecbdd77a2",
+    version: "6.6.35",
+};
+
+/// The SMP pairs, as [`TWINS`].
+pub const SMP_TWINS: [Twin; 1] = [KERNEL_SMP];
+
 /// The KVM build of the kernel with sha256 `of`.
 pub fn twin_of(of: &str) -> Option<Twin> {
     TWINS.iter().copied().find(|t| t.of == of)
+}
+
+/// The KVM build of the kernel with sha256 `of` for a machine of `vcpus` vCPUs: the UP build for
+/// one, the SMP build for more.
+pub fn twin_for(of: &str, vcpus: u32) -> Option<Twin> {
+    if vcpus > 1 {
+        SMP_TWINS.iter().copied().find(|t| t.of == of)
+    } else {
+        twin_of(of)
+    }
 }

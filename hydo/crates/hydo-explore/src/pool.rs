@@ -676,7 +676,7 @@ fn worker_main(
             let r = match Schedule::parse(&job.text) {
                 // a schedule the engine refuses (a combination its module refuses, a host token
                 // it cannot apply): no run, and a verdict that is never a finding (M208)
-                Ok(s) => match hydo_engine::refusal(engine.kind(), &s) {
+                Ok(s) => match hydo_engine::refusal_on(engine.kind(), spec.vcpus, &s) {
                     Some(why) => {
                         res = Some(parse_result(
                             &format!(

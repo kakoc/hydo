@@ -283,19 +283,23 @@ pub fn controlled_engine(
         Platform::Linux if ctx.kvm => {
             // the KVM build of the image's recorded kernel, and the image's initramfs
             let dirs = [ctx.guest(), ctx.p("build"), ctx.p("hv/kvm/linux/out")];
-            let b = hydo_engine::kvm::boot_files(image, &dirs, ctx.config.kvm.kernel.as_deref())
-                .unwrap_or_else(|msg| die(&msg));
+            let vcpus = eargs
+                .iter()
+                .position(|a| a == "--vcpus")
+                .and_then(|i| eargs.get(i + 1))
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(1);
+            let b = hydo_engine::kvm::boot_files_n(
+                image,
+                &dirs,
+                ctx.config.kvm.kernel.as_deref(),
+                vcpus,
+            )
+            .unwrap_or_else(|msg| die(&msg));
             if let Some(n) = &b.note {
                 eprintln!("hydo: {n}");
             }
             let spec = spec_from_args(eargs, image, b.kernel, Some(b.initrd), &abspath(outdir));
-            if spec.vcpus > 1 && ctx.config.kvm.kernel.is_none() {
-                // docs/design/kvm-vcpus.md: the SMP guest kernel is not pinned yet
-                die(
-                    "--vcpus on the KVM engine needs the SMP guest kernel: set HYDO_KVM_KERNEL to \
-                     bzImage-kvm-smp (SMP=1 sh hv/kvm/linux/build-kernel.sh)",
-                );
-            }
             let k = hydo_engine::kvm::Kvm::for_release(&ctx.root, ctx.config.env.clone());
             (Arc::new(k), spec)
         }
@@ -1550,10 +1554,16 @@ mod tests {
         let one = ["--vcpus", "1"].map(String::from);
         assert_eq!(RunOpts::of_eargs(&one), RunOpts::default());
         assert!(o.check(Platform::Linux, false).is_ok());
+        // the KVM engine runs several vCPUs (docs/design/kvm-vcpus.md); its turns need no margin
         assert!(o
             .check(Platform::Linux, true)
             .unwrap_err()
-            .contains("KVM engine runs one vCPU"));
+            .contains("need no margin"));
+        let kvm2 = RunOpts {
+            vcpus: Some(2),
+            turn_margin: None,
+        };
+        assert!(kvm2.check(Platform::Linux, true).is_ok());
         assert!(o
             .check(Platform::Mac, false)
             .unwrap_err()
