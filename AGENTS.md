@@ -492,7 +492,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 43. The suite's recorded values of M121's agent boot check are older than M140 (M156).
 44. [user decision] License compliance: the sources archives must stay available; three SPDX
     expressions are approximations; a lawyer's review is open (M158).
-45. The KVM engine: one vCPU only. On AMD, RDRAND, RDSEED and TSX cannot be made to fault, so a
+45. The KVM engine: one vCPU only. `docs/design/kvm-vcpus.md` designs several, and its KVM probe
+    passed on AMD and Intel (M213); the engine code waits for the state search. On AMD, RDRAND, RDSEED and TSX cannot be made to fault, so a
     guest program that uses them without checking CPUID sees the host (M159, M161). A loop that
     counts in memory is still never proven (M194). The full-state cycles and the fingerprint
     without KVM's stale event fields are the default since M204 (h closed). Of the epoch-2
@@ -851,6 +852,10 @@ build machine, before 2026-10-13.
   hydo's timing tokens. With a CPU limit in the guest, `disk=none pp=65536 | run` fails on every
   hvx run and `disk=none | run` passes; the test-only fix passes. The same limit fails it natively
   too. A fjall deadlock (issue 345) was tried with a stress program and not reproduced
+- M213 (tentative number): several vCPUs on the KVM engine, stage 1. The design is
+  `docs/design/kvm-vcpus.md`: turns of exits on one thread, and an x2APIC per vCPU in the engine.
+  A KVM probe ran on three AMD and one Intel runner model with one hash per turn length.
+  The one-vCPU pins, the APIC model and the SMP kernel's recipe are ready; nothing recorded moved
 
 ## Where to look
 
