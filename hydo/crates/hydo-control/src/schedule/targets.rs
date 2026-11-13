@@ -65,6 +65,39 @@ pub(super) fn read(fx: &mut F<'_>, ctx: &Ctx, letter: char, t: &Target) -> Optio
     }
 }
 
+/// Read a timed pause's target (`P=<target>@<at>~<off>:<dur>`): as [`read`], but `workload`,
+/// the workload's own process tree, is kept (Milestone 216: a pause of the test program or of
+/// the client). A target without `workload` takes [`read`]'s path exactly.
+pub(super) fn read_timed_pause(fx: &mut F<'_>, ctx: &Ctx, t: &Target) -> Option<Target> {
+    use crate::names::WORKLOAD;
+    match t {
+        Target::Service(s) if s == WORKLOAD => Some(t.clone()),
+        Target::List(l) if l.iter().any(|s| s == WORKLOAD) => {
+            let others: Vec<String> = l.iter().filter(|s| *s != WORKLOAD).cloned().collect();
+            let mut kept = vec![WORKLOAD.to_string()];
+            match others.len() {
+                0 => {}
+                1 => {
+                    if read(fx, ctx, 'P', &Target::Service(others[0].clone())).is_some() {
+                        kept.extend(others);
+                    }
+                }
+                _ => match read(fx, ctx, 'P', &Target::List(others)) {
+                    Some(Target::List(k)) => kept.extend(k),
+                    Some(Target::Service(s)) => kept.push(s),
+                    _ => {}
+                },
+            }
+            Some(if kept.len() == 1 {
+                Target::Service(kept.remove(0))
+            } else {
+                Target::List(kept)
+            })
+        }
+        _ => read(fx, ctx, 'P', t),
+    }
+}
+
 /// The services a target acts on now. A group selector is resolved here and logged.
 pub(super) fn resolve(fx: &mut F<'_>, ctx: &Ctx, letter: char, t: &Target) -> Step<Vec<String>> {
     match t {

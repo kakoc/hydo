@@ -527,6 +527,12 @@ fn setup(a: Args, env: &Env) -> Cx {
         die("hydo explore: --cluster-faults draws faults of the manifest's groups:, and this image's manifest has none (declare the cluster's nodes as a group: groups: [{name:, services: [...]}])");
     }
     cx.ex.cluster_faults = a.cluster_faults;
+    // Milestone 216: pauses of the workload's own process tree
+    if !(1..=3_600_000).contains(&a.pause_max) {
+        die("hydo explore: --pause-max is 1 to 3600000 ms of guest time");
+    }
+    cx.ex.workload_pauses = a.workload_pauses;
+    cx.ex.pause_max = a.pause_max;
     // M139: reactions (A=) from their own stream
     if let Some(r) = &a.reactive {
         cx.ex.react_fault = r == "fault" || r == "both";

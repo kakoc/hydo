@@ -60,6 +60,12 @@ pub const HVM_TJ_MAX: i64 = 1000;
 pub const REACT_SALT: u64 = 0xA5EAC7C0FFEEA5EA;
 /// The storage faults' own stream (`--storage-faults`, docs/design/storage-faults.md).
 pub const STORAGE_SALT: u64 = 0x5701A6EC0FFEE570;
+/// The workload pauses' own stream (`--pause-workload`, Milestone 216).
+pub const WP_SALT: u64 = 0x57A11C0FFEE57A11;
+/// How long a drawn pause stops the workload, ms of guest time.
+pub const WP_DURS: [i64; 6] = [10, 20, 50, 100, 200, 500];
+/// The latest drawn pause start after its step's start, ms of guest time (`--pause-max`).
+pub const WP_MAX: i64 = 1000;
 /// The cluster faults' own stream (`--cluster-faults`, Milestone 195).
 pub const CLUSTER_SALT: u64 = 0xC1B57E5C0FFEEC1B;
 /// The selectors a cluster kill or pause draws (`primary` only for a group with a probe).
@@ -152,6 +158,11 @@ pub struct Ex {
     /// `--cluster-faults` (M195): kills and pauses of a group's members and partitions of a
     /// group, from their own stream (CLUSTER_SALT).
     pub cluster_faults: bool,
+    /// `--pause-workload` (Milestone 216): a timed pause of the workload's own process tree
+    /// (`P=workload@<at>~<off>:<dur>`) from its own stream (WP_SALT), starting at most
+    /// `pause_max` ms after its step's start.
+    pub workload_pauses: bool,
+    pub pause_max: i64,
     pub cf_range: Option<(i64, i64)>,
     pub backend: Backend,
     /// hvm: the image has a data disk / tc (hvm_backend.configure).
@@ -210,6 +221,8 @@ impl Default for Ex {
             more_faults: false,
             storage_faults: false,
             cluster_faults: false,
+            workload_pauses: false,
+            pause_max: WP_MAX,
             cf_range: None,
             backend: Backend::Hvx,
             hvm_disk: false,
@@ -1071,6 +1084,41 @@ impl Ex {
         s
     }
 
+    /// `--pause-workload` (Milestone 216): in 50% of the schedules a pause of the workload's own
+    /// process tree, `P=workload@<at>~<off>:<dur>`, from its own stream (WP_SALT), so every other
+    /// field of a seed's schedule stays as it was; every draw is made whether it is used or not.
+    /// The step is any of the workload's. The start is drawn in `0..=pause_max`, for half of the
+    /// pauses evenly and for the other half on a log scale (a decade up to `pause_max`, then a
+    /// number in it): a race's window can be in the first milliseconds of a step or anywhere in
+    /// it, and its place is not known (etcd's test: 0 to 7 ms on the Mac, 151 to 163 ms on hvx).
+    /// The length is one of WP_DURS. A drawn pause takes the place of the schedule's own `P=`
+    /// (a schedule holds one).
+    pub fn add_workload_pauses(&self, mut s: S, seed: u64) -> S {
+        if !self.workload_pauses {
+            return s;
+        }
+        let mut t = SplitMix::new(seed ^ WP_SALT);
+        let on = t.below(100) < 50;
+        let at = t.rng(0, (self.norders - 1).max(0));
+        let mut decades = 0;
+        let mut top = 1i64;
+        while top < self.pause_max.max(1) {
+            top = top.saturating_mul(10);
+            decades += 1;
+        }
+        let d = t.rng(0, decades);
+        let hi = (10i64.pow(d as u32) - 1).min(self.pause_max.max(0));
+        let log_off = t.rng(0, hi);
+        let even = t.below(2) == 0;
+        let even_off = t.rng(0, self.pause_max.max(0));
+        let off = if even { even_off } else { log_off };
+        let dur = t.pick(&WP_DURS);
+        if on {
+            s.p = Some(Pause::Timed(crate::space::WORKLOAD.into(), at, off, dur));
+        }
+        s
+    }
+
     /// `--cluster-faults` (M195): for a manifest with `groups:`, from their own stream
     /// (CLUSTER_SALT), so every other field of a seed's schedule stays as it was, and every draw
     /// is made whether it is used or not: a kill of a group's members (50% of the schedules; the
@@ -1222,6 +1270,7 @@ impl Ex {
         s = self.add_reactive(s, seed);
         s = self.add_storage_faults(s, seed);
         s = self.add_cluster_faults(s, seed);
+        s = self.add_workload_pauses(s, seed);
         s = self.add_freeze_call(s, seed);
         s = self.add_protocol_faults(s, seed);
         s = self.add_grpc_faults(s, seed);
@@ -1852,6 +1901,17 @@ impl Ex {
             Some(Pause::Plus(svc, at, n)) if *n > 1 => {
                 let p = Pause::Plus(svc.clone(), *at, 1);
                 var(&|t| t.p = Some(p.clone()));
+            }
+            // a pause of the workload (Milestone 216): shorter, down to 10 ms
+            Some(Pause::Timed(svc, at, off, dur)) if svc == crate::space::WORKLOAD => {
+                if *dur > 10 {
+                    let p = Pause::Timed(svc.clone(), *at, *off, 10.max(fdiv(*dur, 2)));
+                    var(&|t| t.p = Some(p.clone()));
+                }
+                if *off > 0 {
+                    let p = Pause::Timed(svc.clone(), *at, 0, *dur);
+                    var(&|t| t.p = Some(p.clone()));
+                }
             }
             Some(Pause::Timed(svc, at, off, dur)) => {
                 if *dur > 500 {

@@ -2238,7 +2238,10 @@ fn pause_timer(fx: &mut F<'_>, ctx: &Ctx, svcs: &[String], off: u64, dur: u64) -
         e.clone(),
         None,
     )?;
-    let mid = in_flight(fx, ctx, e.clone())?;
+    // a pause of the workload's own tree (Milestone 216) is no pause of a service
+    // under a client's request: the check, a guest command, would only delay the stop
+    let wp = svcs.iter().any(|s| s == crate::names::WORKLOAD);
+    let mid = !wp && in_flight(fx, ctx, e.clone())?;
     for svc in svcs {
         svc_sig(fx, svc, Sig::Stop)?;
         log(fx, format!("PAUSED {svc} (timer, mid_request={mid})"));
@@ -2450,7 +2453,13 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         None => None,
     };
     if let Some(t) = pt {
-        match targets::read(fx, ctx, 'P', t) {
+        // the timed form may name the workload's own tree (Milestone 216)
+        let read = if ptime.is_some() {
+            targets::read_timed_pause(fx, ctx, t)
+        } else {
+            targets::read(fx, ctx, 'P', t)
+        };
+        match read {
             Some(t) => ptarget = Some(t),
             None => (pat, pup) = (-1, -1),
         }

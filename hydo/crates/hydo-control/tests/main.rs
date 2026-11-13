@@ -21,3 +21,4 @@ mod restart_may_fail;
 mod silent;
 mod start_after;
 mod storage;
+mod workload_pause;

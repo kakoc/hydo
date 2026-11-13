@@ -9,7 +9,8 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
-       [--storage-faults] [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
+       [--storage-faults] [--pause-workload [--pause-max MS]]
+       [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
         [--steer-batch N] [--steer-corpus N] [--steer-stop]] ...";
 
 /// The refusal without `--image` (Milestone 146: explore.py's default, `explore-disk.img`, is a
@@ -55,6 +56,10 @@ pub struct Args {
     pub storage_faults: bool,
     /// `--cluster-faults` (M195): draw kills, pauses and partitions of the manifest's `groups:`.
     pub cluster_faults: bool,
+    /// `--pause-workload` (Milestone 216): draw pauses of the workload's own process tree
+    /// (`P=workload@<at>~<off>:<dur>`), at most `--pause-max` ms after the step's start.
+    pub workload_pauses: bool,
+    pub pause_max: i64,
     pub freeze_call: bool,
     pub protocol_faults: bool,
     pub grpc_faults: bool,
@@ -143,6 +148,8 @@ impl Default for Args {
             more_faults: false,
             storage_faults: false,
             cluster_faults: false,
+            workload_pauses: false,
+            pause_max: crate::gen::WP_MAX,
             freeze_call: false,
             protocol_faults: false,
             grpc_faults: false,
@@ -181,7 +188,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 19] = [
+const FLAGS: [&str; 20] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -192,6 +199,7 @@ const FLAGS: [&str; 19] = [
     "more-faults",
     "storage-faults",
     "cluster-faults",
+    "pause-workload",
     "freeze-call",
     "protocol-faults",
     "grpc-faults",
@@ -203,7 +211,7 @@ const FLAGS: [&str; 19] = [
     "steer-stop",
 ];
 
-const VALUED: [&str; 49] = [
+const VALUED: [&str; 50] = [
     "seeds",
     "workers",
     "image",
@@ -230,6 +238,7 @@ const VALUED: [&str; 49] = [
     "knob-rule",
     "fc-nmax",
     "cf-range",
+    "pause-max",
     "pct-exits",
     "backend",
     "hvm-kernel",
@@ -340,6 +349,8 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "more-faults" => a.more_faults = true,
             "storage-faults" => a.storage_faults = true,
             "cluster-faults" => a.cluster_faults = true,
+            "pause-workload" => a.workload_pauses = true,
+            "pause-max" => a.pause_max = int("pause-max", v)?,
             "freeze-call" => a.freeze_call = true,
             "protocol-faults" => a.protocol_faults = true,
             "grpc-faults" => a.grpc_faults = true,

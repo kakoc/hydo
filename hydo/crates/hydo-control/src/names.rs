@@ -19,7 +19,9 @@
 //!
 //! - `K=`, `P=`, `X=`: a service, a list of services, or a selector over a group of the
 //!   manifest's `groups:` (M195): the group exists, has enough members for the selector, and
-//!   `primary` needs the group's `primary:` command.
+//!   `primary` needs the group's `primary:` command. The timed pause `P=<target>@<at>~<off>:<dur>`
+//!   may also name `workload`, the workload's own process tree (Milestone 216); the pause by
+//!   steps may not, because the workload does not run between steps.
 //! - `N=`, `O=`: a service, or a link `a-b` / `a-*` between services with `addr:`; the image needs
 //!   `network` or `oneway` in `faults:` (else it has no `tc`, and the fault was skipped); a
 //!   service's own fault acts on its `port:`, so the service needs one. A partition (`a,b/c`) or
@@ -44,6 +46,10 @@
 //! `C=` and `T=` name nothing.
 
 use crate::plan::Plan;
+
+/// The name a timed pause (`P=<target>@<at>~<off>:<dur>`) gives the workload's own process tree
+/// (Milestone 216).
+pub const WORKLOAD: &str = "workload";
 use hydo_schedule::{GuestToken, NetTarget, Pause, ReactAction, Schedule, Selector, Shape, Target};
 
 /// Refuse a schedule whose guest tokens name what `plan`'s image does not have. The error is
@@ -241,10 +247,26 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
         _ => {}
     }
     match t {
+        GuestToken::Pause(Pause::Timer { target: x, .. }) => match x {
+            Target::Service(s) if s == WORKLOAD => Ok(()),
+            Target::List(l) if l.iter().any(|s| s == WORKLOAD) => l
+                .iter()
+                .filter(|s| *s != WORKLOAD)
+                .try_for_each(|s| service(plan, t, s)),
+            _ => target(plan, t, x),
+        },
+        GuestToken::Pause(Pause::Steps { target: x, .. })
+            if matches!(x, Target::Service(s) if s == WORKLOAD)
+                || matches!(x, Target::List(l) if l.iter().any(|s| s == WORKLOAD)) =>
+        {
+            Err(format!(
+                "{t} pauses the workload between steps, where it does not run; pause it inside \
+                 a step with the timed form P=workload@<at>~<off ms>:<dur ms>"
+            ))
+        }
         GuestToken::Kill { target: x, .. }
         | GuestToken::TimedKill { target: x, .. }
-        | GuestToken::Pause(Pause::Steps { target: x, .. })
-        | GuestToken::Pause(Pause::Timer { target: x, .. }) => target(plan, t, x),
+        | GuestToken::Pause(Pause::Steps { target: x, .. }) => target(plan, t, x),
         GuestToken::Net { target, .. } | GuestToken::OneWay { target, .. } => {
             net_target(plan, t, target)
         }

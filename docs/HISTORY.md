@@ -6252,3 +6252,127 @@ database. The image without faults, `1fce9750…`, gives `8fd7ae2f4353b6de` twic
 pass the 4 KiB receive queue of the Mac and KVM engines, a limit of 1,024 control messages per
 run, and error kinds split by a ten-character request id, with `hydo errors accept` writing the
 login name into `known-errors.yaml`.
+
+### Milestone 216 (tentative number) - DONE (pauses of the workload: the timed pause stops the workload's own process tree for some guest time, as a CPU limit does, and `hydo explore --pause-workload` draws it; etcd's flaky test fails on every run of one such pause without a CPU-limit model, on the Mac and on hvx; nothing recorded moved; 2026-11-13)
+
+**In short.** Open item 80 asked for a fault that stops a process for some guest time, as a
+container's CPU limit does when its quota runs out. The pause fault already had a guest-time form,
+`P=<svc>@<at>~<off>:<dur>` (Milestone 46), on agent images and on all three engines, also for
+groups (Milestone 195). It could not name the test program. Now it can: `P=workload@0~4:45`
+stops every process of the workload 4 ms of guest time after step 0 starts, for 45 ms. No new
+token and no agent change. `hydo explore --pause-workload` draws such pauses from a stream of
+its own. On etcd's `TestCacheCompactionResync` (Milestone 211) the pause fails the test on every run
+without the cgroup `cpu.max` and the busy loops, on the Mac engine and on hvx, and its neighbours
+pass. The test-only fix passes the failing pause.
+
+**Why the existing pause and not a new token.** The first question was whether `P=...~` covers
+the item. It does with small extensions:
+
+- `P=<target>@<at>~<off>:<dur>` is a thread of the host controller (`pause_timer` in
+  `hydo-control/src/schedule.rs`). It runs `busybox sleep <off>` in the guest, sends the agent's
+  `signal STOP` with `tree` to each target's handle, sleeps `<dur>`, and sends `signal CONT`. The
+  agent signals every process of the tree, so every thread stops, as under a CPU limit.
+- The guest kernel's clock measures both times. The engines' stop clocks count other units: hvx
+  counts retired branches or exits, and the Mac and KVM count VM exits. How many of them make a
+  millisecond depends on the engine and on what the guest does. A CPU limit's period is guest
+  time, so the guest's clock is the clock to use. An engine stop at an engine clock value, as the
+  state search's `br=` does (its branch, not merged), would need each engine to report guest
+  nanoseconds at its stops.
+- Every decision is taken at the stop where the controller sees the agent's answer. That stop is a
+  pure function of the run, so a schedule with a pause of the workload replays bit for bit.
+- The pause ends on its own. While the target is stopped, the guest has only the sleep left to
+  run, and its timer ends after `<dur>` ms of guest time.
+
+The other mechanisms were left out. A cgroup v2 freezer needs the target in a cgroup of its own,
+so the agent would have to change, and the agent's bytes are inside every image. A `cpu.max`
+quota needs the guest to use CPU time, which a busy loop on the Mac or KVM does not.
+
+**What changed.**
+
+- `hydo-control`: `P=...~` may name `workload`, the handle of the workload's own run. That is
+  the test program of `workload.kind: test`. It may stand alone or in a list with services
+  (`targets::read_timed_pause`). Such a pause skips the request-in-flight check, a `pgrep` in the
+  guest that would only delay the stop. A pause of services takes its old path exactly. The names
+  check refuses `P=workload@<at>+<n>`: the workload does not run between steps. The tests are
+  `hydo-control`'s `workload_pause::`.
+- `hydo-explore`: `--pause-workload` draws `P=workload@<at>~<off>:<dur>` in half of the
+  schedules. The draws come from the stream `WP_SALT`, so every other field of a seed's schedule
+  stays. The step is one where the workload runs. The start is at most `--pause-max` ms (default
+  1000). It is drawn evenly for half of the pauses and on a log scale for the others. So about a
+  quarter of the starts fall in the first 10 ms. The length is 10, 20, 50, 100, 200, or 500 ms.
+  The fault space keeps such a pause when `faults:` has no `pause`. The shrinker tries half the
+  length (down to 10 ms) and the start 0. The tests are `hydo-explore`'s `workload_pauses::`.
+- `hydo-schedule`: nothing; the language test `workload_pauses` holds the examples.
+- `hydo guide faults` has the section `Pause the workload`. `hydo guide flaky-tests` shows the
+  pause instead of the CPU-limit model.
+
+**The proof on the Mac engine.** This tree's `hydo`, the arm64 images of Milestone 211 rebuilt to
+the same bytes (initramfs `b0664c70c7e99735…`, fixed `c7053aab15b1f584…`). Runs with a length
+of 60 ms failed for starts of 0 to 7 ms and passed from 8 ms on. At a start of 4 ms, lengths of 35
+ms or less passed and 40 ms or more failed.
+
+| image | schedule | verdict | fingerprint |
+|---|---|---|---|
+| buggy | `disk=none \| run P=workload@0~4:45` | VIOLATION, `expected cached revision 5 after compaction, got 20` | `24dedf9da7af0a08` (3 runs) |
+| buggy | `disk=none \| run P=workload@0~4:35` | OK | `b8b9b46b4027b5af` (2 runs) |
+| buggy | `disk=none \| run P=workload@0~8:45` | OK | `9402add9274c87ce` (2 runs) |
+| fixed | `disk=none \| run P=workload@0~4:45` | OK | `8171ca80d265840d` (2 runs) |
+| buggy | `disk=none \| run` | OK | `985f97632370e53b`, Milestone 211's value |
+| fixed | `disk=none \| run` | OK | `0e32a33ecd1d0a7b`, Milestone 211's value |
+
+`hydo explore --pause-workload --seeds 1-100 --workers 1` on the buggy image found 13 failures,
+all with the report's line and all reproduced. The shrinker took seed 3's failure to
+`disk=none dseed=1d0b14e4db018fed | run P=workload@0~0:50` (`a980b7222dcce5ee`, two runs).
+Milestone 211 ran 300 schedules of `--timing --preempt` on the same image, and none failed.
+
+**The proof on hvx.** The runs were on the bare-metal machine, after the state search's campaign
+ended. They used this tree's `hydo` and `hydo-hvx` over the 0.3.1 Linux release and the module
+loaded since 2026-11-08. Milestone 211's plain images were rebuilt to the same bytes
+(`8bbbfeeb482df1b9…`, fixed `9eea094c0d01475f…`). On hvx the window is later. A 60 ms pause
+passed for starts of 0 to 149 ms, failed for 151 to 163 ms except at 159 ms, and passed from 165
+to 300 ms. At a start of 155 ms, a length of 30 ms passed, and 35 ms or more failed.
+
+| image | schedule | verdict | fingerprint |
+|---|---|---|---|
+| plain | `disk=none \| run P=workload@0~155:45` | VIOLATION, the same line | `2ae2f4390bb012b8` (3 runs) |
+| plain | `disk=none \| run P=workload@0~155:30` | OK | `3244703db66dae96` (2 runs) |
+| plain | `disk=none \| run P=workload@0~170:45` | OK | `42f3053533e11faa` (2 runs) |
+| fixed | `disk=none \| run P=workload@0~155:45` | OK | `7aa29c3293e32a26` (2 runs) |
+| plain | `disk=none \| run` | OK | `5105ecd86ce54319`, Milestone 211's value |
+| fixed | `disk=none \| run` | OK | `4c4eac3a06a2181a`, Milestone 211's value |
+
+`hydo explore --pause-workload --pause-max 200 --seeds 1-200 --workers 2` found 3 failures, all
+reproduced, shrunk to `disk=none dseed=2c0e0fedbe2218a8 | run P=workload@0~154:62`
+(`fcc2301b270e5edf`, two runs). The first draw of the start was on a log scale only. It put few
+starts near 150 ms, so half of the starts are now drawn evenly. The Mac exploration of the
+preceding section ran with the new draw.
+
+**Nothing recorded moved.** A plain schedule, and a timed pause of services, take the
+controller's old path; the explorer draws nothing new without `--pause-workload`.
+
+- `hydo-bench rebaseline --check` on this Mac, in the fast mode, with this tree's programs and a
+  work folder without a run cache, one VM at a time: all 76 hvm schedules of 21 images gave their
+  recorded values, the verdicts unchanged.
+- On hvx, the pinned reproducers with this tree's `hydo` gave `a76d7fe857fdb37c` (VIOLATION,
+  order 11) and `efbde7b57264be0f` (OK). Neither the hvx engine nor the module changed, so
+  `deploy-metal.sh` was not run.
+- The explorer's `identity::` test passed without a re-record, and so did the fast tier of
+  `hydo-schedule`, `hydo-control`, `hydo-explore`, `hydo-agents` and `hydo` (300 tests).
+
+**Qdrant (Milestone 208).** Its race needs the test's thread held off while a worker thread of
+the same process takes 35 operations. A pause of the workload stops the whole process, the worker
+too, so it does not help there. Item 4 of that example's "What hydo lacked" stays open: a pause
+of one thread. On hvx, `hydo explore --pause-workload --pause-max 3000 --seeds 1-60 --workers 2`
+on its buggy image (`9aa2213aea1a5295…`, the recorded bytes) gave 60 passes. Every run read a
+queue length of 34 to 36, as without such pauses.
+
+**Also in this change.** Milestone 211 re-recorded only the explorer's quick identity golden for
+its new example, and the Formance Ledger example added a known-errors file since. Then the full
+tier's explorer corpus and the controller's identity corpus failed: the inputs of their goldens
+had changed. Both are re-recorded in a commit of their own; the controller's golden only gains
+the etcd example's lines. `hydo guide manifest` prints MANIFEST.md, so the CLI's golden answer
+for it is re-recorded too.
+
+**Left.** The KVM engine did not run a pause of the workload: the build machine was out of reach.
+A one-off workflow on the branch `tmp-workload-pause-kvm` is ready to run it on a GitHub runner.
+A pause of one thread, and pauses that repeat in every period of a CPU limit, are not built.

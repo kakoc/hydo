@@ -11,6 +11,7 @@ call`, `Clock after a power cut`, `Link faults`, and `Groups of services and par
 |---|---|---|
 | `kill` | SIGKILL a service's whole process tree, restart it later (setup + cmd + ready) | `K=<svc>@<step>+<down>`, timed `X=` |
 | `pause` | SIGSTOP / SIGCONT, also in the middle of a request | `P=<svc>@<step>+<n>`, `P=<svc>@<step>~<ms>:<ms>` |
+| (none) | the workload's own processes stop for some guest time, as under a CPU limit (section "Pause the workload") | `P=workload@<step>~<ms>:<ms>` |
 | `network` | netem delay, loss, duplication, and reordering on traffic to a service's `port:`, or on a link between two services with `addr:`. With `network: bridge` the link carries their real traffic, and the explorer draws only links between services that list each other in `depends_on`. | `N=<svc>@<from>-<to>:<netem>`, `N=a-b@...` |
 | `oneway` | the same in one direction only | `O=<svc>@<from>-<to>:req\|resp:<netem>` |
 | `cut` | power cut: only data that reached the disk survives; a fresh boot recovers and runs the final checks | `C=<step>`, host `cf=<k>` (at the k-th disk flush) |
@@ -53,6 +54,40 @@ The host tokens set up the machine the guest runs on. Each is one `key=value` wo
 
 The explorer and `hydo explore --sweep` write the other host tokens themselves (inserted ticks
 `pp=` and `xt…` on hvx, vCPU turns `q=` with several vCPUs, the run budget `rb=`).
+
+## Pause the workload
+
+A container with a CPU limit stops every thread of the container when it has used its CPU time
+for the period. A test that depends on thread timing can fail only then. The timed pause stops
+the workload's own process tree, the test program of `workload.kind: test`, in the same way:
+
+```sh
+hydo run "disk=none | run P=workload@0~4:45"
+```
+
+Before step 0, hydo starts a timer in the guest. After 4 ms of guest time, hydo stops every
+process of the workload with SIGSTOP. After 45 ms more, hydo continues them with SIGCONT. Guest
+time is the guest kernel's clock, so the numbers mean the same on every engine. The pause ends on
+its own: nothing in the workload has to run for it.
+
+- `workload` may stand in a list with services: `P=workload,db@3~20:100` stops both.
+- The pause by steps, `P=workload@<step>+<n>`, is refused: the workload does not run between
+  steps.
+- A schedule holds one `P=`, so a pause of the workload and a pause of a service do not go
+  together.
+- `faults:` does not need `pause`.
+
+`hydo explore --pause-workload` draws such a pause for half of the schedules, from a stream of
+its own:
+
+- The step is one where the workload runs.
+- The start is at most `--pause-max` ms after the step's start (default 1000). Half of the
+  starts are drawn evenly, the other half on a log scale, so about a quarter fall in the first
+  10 ms. Set `--pause-max` near the step's length in guest time.
+- The length is 10, 20, 50, 100, 200, or 500 ms.
+
+The shrinker tries the schedule without the pause, the pause at half its length (down to 10 ms),
+and the pause at the step's start. `hydo guide flaky-tests` has a worked example.
 
 ## Faults on a cluster
 
@@ -152,6 +187,7 @@ Useful options of `hydo explore`:
 - `--protocol-faults`, `--grpc-faults`, `--buggify`.
 - `--storage-faults`: `G=` and `L=` for services with `storage:`.
 - `--cluster-faults`: kills, pauses, and partitions of the services of `groups:`.
+- `--pause-workload`: pauses of the workload's own processes (section "Pause the workload").
 - `--vcpus N --turns`: several vCPUs (hvx) and drawn turn lengths `q=`. `--vcpus N --sweep turns`
   searches the turn lengths of one schedule for a change of verdict (`hydo guide flaky-tests`).
 - `--steer <id>` or `--steer-match REGEX`: an experimental steered search. It keeps the

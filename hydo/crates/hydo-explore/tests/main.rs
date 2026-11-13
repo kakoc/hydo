@@ -15,3 +15,4 @@ mod netns_links;
 mod reactive;
 mod refusals;
 mod storage_faults;
+mod workload_pauses;

@@ -391,6 +391,14 @@ exploration found the first failure after a median of 118 schedules. The plain e
 it after 72. On hvx neither found it. Design and numbers: `docs/design/steered-search.md`;
 `docs/HISTORY.md` Milestone 209.
 
+**Pauses of the workload (M216).** The timed pause may name `workload`, the workload's own
+process tree. For example, `P=workload@0~4:45` stops every process of the test program for 45 ms,
+4 ms of guest time after step 0 starts. A container's CPU limit does the same. The guest's clock
+measures both times, so such a pause means the same on every engine. `hydo explore
+--pause-workload` draws them from their own stream. The guide topic is `hydo guide faults`,
+section "Pause the workload"; the example is `hydo/onboard/examples/etcd-flaky-22796`. Details:
+`docs/HISTORY.md` Milestone 216.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -572,11 +580,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - No run showed a benefit. On Qdrant the failure sits next to passing schedules of any
       length, and on hvx the length does not move. The option stays experimental until a system
       whose value falls step by step towards its failure is found.
-80. Stalls (M211). hydo has no token that stops a process or a thread for some guest time, as a
-    container's CPU limit does. etcd's `TestCacheCompactionResync` needs such a stall of about
-    40 ms, and the example models it with a cgroup `cpu.max` and busy loops in the guest. That
-    model works only on hvx: on the Mac and KVM a busy loop makes no VM exits and uses no guest
-    time. The example is not in `hydo/onboard/recorded.json` yet.
+80. CPU-limit pauses (M211, M216). `P=workload@<at>~<off>:<dur>` stops the whole workload's
+    process tree. Two kinds are not built: a pause of one thread, which Qdrant's race needs (its
+    RESULTS.md, item 4), and pauses that repeat in every period of a CPU limit. KVM did not run such
+    a pause yet: the one-off workflow on the branch `tmp-workload-pause-kvm` runs the etcd example
+    on a GitHub runner. The etcd example is not in `hydo/onboard/recorded.json` yet.
 81. Compose builds (M214). A Docker build rarely gives the same bytes twice. Docker 28.4 writes a
     pointer into the history of an `EXPOSE` step, so each rebuild of such an image stops
     fetch-images.sh until `HYDO_ACCEPT_REBUILD=1`. The real build ran on a Mac with Docker only;
@@ -880,6 +888,10 @@ build machine, before 2026-10-13.
   `500`. It is a ledger bug since v2.4; the error logs found it, no rule did. Duplicates from
   retries without keys, and payments lost to disk faults, show only to the rule over the client's
   records. Nothing recorded moved
+- M216 (tentative number): pauses of the workload. The timed pause names the workload's own
+  process tree (`P=workload@0~4:45`), and `hydo explore --pause-workload` draws it. etcd's flaky
+  test fails on every run of one such pause without a CPU-limit model, on the Mac and on hvx; its
+  neighbours pass. Qdrant's race needs a pause of one thread. Nothing recorded moved
 
 ## Where to look
 

@@ -179,22 +179,34 @@ with a CPU limit does that: when the container has used its CPU time for the per
 threads wait. hydo's timing tokens change which thread runs next. They do not stop every thread
 for a given time, so they do not reach such a failure.
 
-Model the CPU limit in the workload instead, on hvx. Put the test in a cgroup v2 with a
-`cpu.max`, and run busy loops beside it in the same cgroup:
+A pause of the workload does. The timed pause `P=workload@<step>~<start ms>:<length ms>` stops
+every process of the workload, the test program here, at a moment of guest time inside the step:
 
 ```sh
-echo +cpu > /sys/fs/cgroup/cgroup.subtree_control
-mkdir -p /sys/fs/cgroup/ci && echo "10000 100000" > /sys/fs/cgroup/ci/cpu.max
-echo $$ > /sys/fs/cgroup/ci/cgroup.procs
+hydo run "disk=none | run P=workload@0~4:45"     # stopped 4 ms after the step's start, for 45 ms
+hydo explore --pause-workload --seeds 1-100       # draws such pauses (hydo guide faults)
 ```
 
-Mount cgroup2 on `/sys/fs/cgroup` first when `cgroup.controllers` is missing there. hvx's clock
-counts guest branches, so the busy loops use up the limit as on a real CPU. On the Mac and on
-KVM a busy loop makes no VM exits and uses no guest time, so the model does not work there. The
-example is `hydo/onboard/examples/etcd-flaky-22796` (etcd's `TestCacheCompactionResync`). Its
-test never failed under the timing tokens alone. With the limit, `disk=none pp=65536 | run`
-fails on every hvx run and `disk=none | run` passes. Check the same limit outside hydo too, with
-`systemd-run --user --scope -p CPUQuota=10%`: that test failed there in 100 of 100 runs.
+The example is `hydo/onboard/examples/etcd-flaky-22796` (etcd's `TestCacheCompactionResync`).
+Its test never failed under the timing tokens alone. With a pause of the workload:
+
+| engine | schedule | verdict | fingerprint |
+|---|---|---|---|
+| Mac | `disk=none \| run P=workload@0~4:45` | fails: `expected cached revision 5 after compaction, got 20` | `24dedf9da7af0a08` (3 runs) |
+| Mac | `disk=none \| run P=workload@0~4:35` | passes: the pause is too short | `b8b9b46b4027b5af` (2 runs) |
+| Mac | `disk=none \| run P=workload@0~8:45` | passes: the pause starts too late | `9402add9274c87ce` (2 runs) |
+| hvx | `disk=none \| run P=workload@0~155:45` | fails, with the same line | `2ae2f4390bb012b8` (3 runs) |
+| hvx | `disk=none \| run P=workload@0~155:30` | passes: the pause is too short | `3244703db66dae96` (2 runs) |
+| hvx | `disk=none \| run P=workload@0~170:45` | passes: the pause starts too late | `42f3053533e11faa` (2 runs) |
+
+The failing start differs between the engines, because each engine's guest clock runs at its own
+pace. Find it with runs of `P=workload@0~<start>:60` at several starts. Or let
+`hydo explore --pause-workload --pause-max <ms>` draw it: on hvx that exploration failed 3 of 200
+schedules with `--pause-max 200`, on the Mac 13 of 100.
+
+The same pause works on every engine, because the guest's own clock measures it. A CPU limit in
+the guest (a cgroup `cpu.max` with busy loops beside the test) works only on hvx. On the Mac and
+on KVM a busy loop makes no VM exits, so it uses no guest time and never uses up the limit.
 
 ## Steer the search by a number the test prints
 
