@@ -355,9 +355,6 @@ pub fn search(
             f.stopped = true;
             break;
         }
-        if invalid_row >= INVALID_RUN && f.corpus.is_empty() {
-            invalid_row = 0;
-        }
     }
     f
 }
