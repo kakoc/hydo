@@ -37,7 +37,8 @@ input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8
 input	hydo/onboard/examples/stack/hydo-grpcgen.yaml	72b3a42760bb79db3be04fe34d4e7a55645ed133e86008b059f0935cd3f247cf
 input	hydo/onboard/examples/stack/hydo-read.yaml	d3899b9ac926be02576d0f8e9b950bcc174682dc727791d4f1309294b3a1fb68
 input	hydo/onboard/examples/stack/hydo.yaml	369ed2074d0024dcbb5bf2218731bee7526fa006ff0e900aef339cc6cf69fb24
-input	hydo/onboard/examples/formance-ledger/hydo/hydo.yaml	095ac480a9da07d711ee7dcb2c5d04eadef54f1e32ed75c0ce34652a54500e3e
+input	hydo/onboard/examples/blnk/hydo/hydo.yaml	7e97e5e2f1ff496ca70bf59e69bf32a213acbfe5b793f72d56bb293771353a9c
+input	hydo/onboard/examples/formance-ledger/hydo/hydo.yaml	c2d48d2d9012cbeb2f305ad2e12cb70d6fd2896f07f6c098102cd7901b757308
 input	hydo/onboard/examples/ghost/hydo/hydo.yaml	e5a0a96f7d60faa87ba107f15fc1757aaf7111ade412aeeadb0424613c6392c6
 input	hydo/onboard/examples/lago/hydo/hydo.yaml	b14361ae4641e93a625e1c82b218a9ab1f297eab1d2011d4991ce5a65001d385
 input	hydo/onboard/examples/libsql-replica/hydo/hydo.yaml	e9675d508c22631f89dfe6fe2c719a96e98ffade48092f1738748187814357fd
@@ -2767,6 +2768,7 @@ chunk	hydo/onboard/examples/stack/hydo.yaml	128	500	7108b5b0336c8ea934e15d929903
 chunk	hydo/onboard/examples/stack/hydo.yaml	129	500	3fcf8454fb37c8b7706b9a1cfb8647eb2681e6d76596c327911fa7a8c56662ae
 chunk	hydo/onboard/examples/stack/hydo.yaml	130	500	e06f4f68f253835a78154328eb693508d7bea8e2df30e4fae10cfcfa5a78b0e3
 chunk	hydo/onboard/examples/stack/hydo.yaml	131	394	3e745c2c1c8162cacdaaebb108e09167a69ef4c6f479340cbfa49afe8e4b969d
+manifest	hydo/onboard/examples/blnk/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/formance-ledger/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/ghost/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/lago/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
