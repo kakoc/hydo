@@ -1,0 +1,52 @@
+{"cadence":"rb=64","control":1,"controller":"schedule","conversation":"boot","schedule":"disk=cut rb=64 | run C=12 R=always","start":"boot"}
+{"at":2432,"n":39,"seen":1,"t":"stop","why":"cadence"}
+{"at":2432,"by":"main","bytes":"{\"id\":1,\"op\":\"mkdir\",\"path\":\"/tmp/hydo\",\"v\":1}\n","id":1,"n":39,"t":"send"}
+{"at":2432,"by":"main","bytes":"{\"data\":\"\",\"id\":2,\"op\":\"write\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":2,"n":39,"t":"send"}
+{"at":2432,"by":"main","bytes":"{\"data\":\"\",\"id\":3,\"op\":\"write\",\"path\":\"/tmp/hydo/outcomes\",\"v\":1}\n","id":3,"n":39,"t":"send"}
+{"at":2432,"by":"main","bytes":"{\"data\":\"\",\"id\":4,\"op\":\"write\",\"path\":\"/tmp/hydo/failed\",\"v\":1}\n","id":4,"n":39,"t":"send"}
+{"at":2432,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"ifconfig\",\"lo\",\"127.0.0.1\",\"netmask\",\"255.0.0.0\",\"up\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"TERM=linux\"],\"id\":5,\"op\":\"run\",\"v\":1}\n","id":5,"n":39,"t":"send"}
+{"at":3584,"n":57,"seen":2,"t":"stop","why":"cadence"}
+{"id":1,"n":57,"send":1,"t":"ack"}
+{"at":3712,"n":59,"seen":3,"t":"stop","why":"cadence"}
+{"id":2,"n":59,"send":2,"t":"ack"}
+{"at":3776,"n":60,"seen":4,"t":"stop","why":"cadence"}
+{"id":3,"n":60,"send":3,"t":"ack"}
+{"at":3840,"n":61,"seen":5,"t":"stop","why":"cadence"}
+{"id":4,"n":61,"send":4,"t":"ack"}
+{"at":3968,"n":63,"seen":6,"t":"stop","why":"cadence"}
+{"id":5,"n":63,"send":5,"t":"ack"}
+{"at":4096,"n":65,"seen":7,"t":"stop","why":"cadence"}
+{"at":4096,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"ip\",\"link\",\"set\",\"lo\",\"up\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"TERM=linux\"],\"id\":6,\"op\":\"run\",\"v\":1}\n","id":6,"n":65,"t":"send"}
+{"at":4672,"n":74,"seen":8,"t":"stop","why":"cadence"}
+{"id":6,"n":74,"send":6,"t":"ack"}
+{"at":4800,"n":76,"seen":9,"t":"stop","why":"cadence"}
+{"by":"main","line":"hydo-ob: phase=serve services=[redis] steps=20","n":76,"t":"note"}
+{"by":"main","line":"HYDO-ASSERT-DECL {\"t\":\"always\",\"id\":\"redis.acked_writes_survive\",\"msg\":\"every SET the client saw acknowledged reads back with its value\"}","n":76,"t":"report"}
+{"n":76,"name":"S0","t":"snap"}
+{"by":"main","line":"hydo-ob: command: provision","n":76,"t":"note"}
+{"at":4800,"by":"main","bytes":"{\"id\":7,\"op\":\"clock_set\",\"sec\":1767225600,\"v\":1}\n","id":7,"n":76,"t":"send"}
+{"at":5120,"n":81,"seen":10,"t":"stop","why":"cadence"}
+{"id":7,"n":81,"send":7,"t":"ack"}
+{"by":"main","line":"hydo-ob: realtime clock set to 2026-01-01T00:00:00Z","n":81,"t":"note"}
+{"at":5120,"by":"main","bytes":"{\"dst\":\"/data\",\"fstype\":\"ext4\",\"id\":8,\"op\":\"mount\",\"src\":\"/dev/vda2\",\"v\":1}\n","id":8,"n":81,"t":"send"}
+{"at":5952,"n":94,"seen":11,"t":"stop","why":"cadence"}
+{"id":8,"n":94,"send":8,"t":"ack"}
+{"at":5952,"by":"main","bytes":"{\"id\":9,\"op\":\"mkdir\",\"path\":\"/data/redis\",\"v\":1}\n","id":9,"n":94,"t":"send"}
+{"by":"main","line":"hydo-ob: mounted /dev/vda2 on /data (rw)","n":94,"t":"note"}
+{"at":5952,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; exec /bin/redis-server /etc/redis.conf\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"h\":\"redis\",\"id\":10,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/redis.log\",\"stdout\":\"/tmp/hydo/redis.log\",\"v\":1}\n","id":10,"n":94,"t":"send"}
+{"at":7232,"n":114,"seen":12,"t":"stop","why":"cadence"}
+{"id":9,"n":114,"send":9,"t":"ack"}
+{"at":7296,"n":115,"seen":13,"t":"stop","why":"cadence"}
+{"id":10,"n":115,"send":10,"t":"ack"}
+{"at":7296,"by":"main","bytes":"{\"alive\":\"redis\",\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; /bin/redis-cli ping | grep -q PONG\"],\"deadline_ms\":120000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"every_ms\":1000,\"id\":11,\"op\":\"probe\",\"v\":1}\n","id":11,"n":115,"t":"send"}
+{"at":8192,"n":129,"seen":14,"t":"stop","why":"cadence"}
+{"id":11,"n":129,"send":11,"t":"ack"}
+{"at":9408,"n":148,"seen":15,"t":"stop","why":"cadence"}
+{"by":"main","line":"hydo-ob: redis ready after 0 polls","n":148,"t":"note"}
+{"at":9408,"by":"main","bytes":"{\"id\":12,\"op\":\"syncfs\",\"v\":1}\n","id":12,"n":148,"t":"send"}
+{"at":9728,"n":153,"seen":16,"t":"stop","why":"cadence"}
+{"id":12,"n":153,"send":12,"t":"ack"}
+{"by":"main","line":"hydo-ob: provisioning synced","n":153,"t":"note"}
+{"by":"main","line":"HYDO-SETUP-COMPLETE","n":153,"t":"report"}
+{"n":153,"name":"S1","t":"snap"}
+{"end":{"snapshot":"S1"},"n":153,"t":"end"}

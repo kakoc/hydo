@@ -6603,3 +6603,91 @@ The three saved regressions expect a violation.
 `eventually_` checks, the seed's records not carried into the run, a check's output beyond its
 last line, one shrink per signature, the importer's idle job service as a fault target, clock steps
 that cannot aim at a time of day, and the identity test reading git-ignored outputs.
+
+### Milestone 220 (tentative number) - DONE (`hydo report --html`: a failure as one self-contained web page, for a run, an exploration or a CI run, with the failing run's timeline and its first difference from a passing neighbour; nothing recorded moved; 2026-11-13)
+
+**In short.** `hydo report --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]` writes one
+HTML file, by default `DIR/report.html`. DIR is a run directory, an exploration directory or a
+`hydo ci run` output directory. The goal is a failure that is easy to understand and to share.
+The page holds its style sheet and one small script, the copy buttons, and loads nothing: no
+script, font, style sheet or image from anywhere else. So it opens from disk, as a CI artifact
+or as an attachment to an issue. It follows the reader's light or dark setting and has one
+column on a phone. It is made from the directory's files only, and no VM runs.
+
+**What the page shows.**
+
+- A summary: the verdict, the system (from the image's name), the engine with its vCPUs, RAM
+  and CPU level, the host's CPU, the hydo version with its fingerprint epoch, the schedule, and
+  the fingerprint.
+- Each failure. For a run, its failed checks and its diagnosis, then `hydo repro DIR` and the
+  `hydo run` command line of its schedule, each with a copy button. For an exploration, each
+  class and signature with its seeds, whether every re-run reproduced, and the minimal schedule
+  with its verdict, its two confirmation fingerprints and the replay command. A failure that
+  was not shrunk, such as an ERROR, shows its first run's schedule and command. A sentence says
+  in plain words what each class means.
+- The failing run's timeline: the events of `hydo inspect events`, now also readable for an
+  exploration's run (`consoles/<tag>.*`). It shows the faults, the service starts and signals,
+  the processes that ended, the readiness checks, the assertions, the reports, the kernel's
+  lines, the forced thread switches and the verdict, with the stop and the engine's clock of
+  each. The commands, snapshots and the guest's own output are behind a check box, which needs
+  no script. A run without control transcripts gets the events that `hydo diff` reads from its
+  consoles.
+- The first difference from a passing run, as `hydo diff` finds it: the shared events before it,
+  the events only one run has, and what differs inside them. It also shows the first
+  difference in what the checks judge, and the first forced thread switch that differs. For a
+  run the passing run is `--against`, or `--diff` (a diff.json, a `hydo diff` directory, or a
+  `hydo explain` directory, whose closest neighbour with another verdict is taken), or the
+  `hydo explain` directory given as DIR. For an exploration it is new: the minimal schedule's
+  confirmation run against each passing shrink candidate of its signature. The page picks the
+  one whose first difference comes latest, as `hydo explain` does.
+- The property table: held, failed, never reached, never evaluated, with the runs of each.
+- For a CI run: each finding's state against the base (new, pre-existing, still present,
+  changed, fixed, unverified) with a sentence each, how hydo knows it (the proof), the replays
+  on both commits, the stored first difference, and the timeline of this commit's replay.
+- A section "Versions" when the results carry them. It reads a `versions` member of the
+  document, or `versions.json` beside it. Its format is not defined yet (open item 94).
+
+**Bounds.** A timeline keeps at most 400 events, its main events first, and each text at most
+300 characters. A piece of evidence keeps at most 4,000 bytes. Only the first 4 failures of an
+exploration or a CI run get a timeline and a diff. The page says what it left out and names the
+command that shows all of it.
+
+**Code.** `hydo/crates/hydo-cli/src/htmlreport.rs` and `htmlreport/page.rs`. `hydo inspect`'s
+reader of a recorded run (`inspect::drive::Recorded`) gained `RunFiles`, the file names of a
+`hydo run` directory or of an exploration's run. `diff::load_run` reads a run from its document
+and those files, and `preempt::read_file` reads one records file. The results format is
+unchanged. `hydo report`'s help texts name `--html` (the CLI golden is re-recorded for the help
+texts only), and `hydo guide inspect` has a section "Share a failure as one page".
+
+**Proof on this Mac, with the Mac engine and one VM at a time.** The Redis example of the 0.3.1
+release was built by that release (image `fba2c11e…`) and run by this tree's `hydo`:
+
+| run | schedule | verdict | fp |
+|---|---|---|---|
+| A | `disk=cut \| run C=12 R=everysec` | VIOLATION, key k:0 lost | `a2b8d71c0c467d15` |
+| B | `disk=cut \| run C=12 R=always` | OK, acked=12 all present | `7147e75676d15194` |
+
+`hydo report --html A --against B` gave a 30 KiB page. Its timeline shows the power cut before
+step 12 and the recovery boot's check that finds `k:0` lost. Its diff shows where the two runs
+part: the knob's value in the first command, and in what the checks judge, the recovery's
+acknowledged list. `hydo explain A` ran five neighbours, and `--diff` on its directory shows the
+closest one (`without C=12`). A swarm exploration, seeds 1 to 30, gave 13 failures of 4 kinds,
+all reproduced: two shrunk violations, `lying-disk` and `unsafe-knob` (`disk=cut
+dseed=1f16055b6d41c6d9 | run C=9 R=no`), and two kinds of ERROR under disk I/O errors. Its page
+has 76 KiB. Each minimal schedule is compared with its passing shrink candidate. For
+`unsafe-knob` that is the schedule without `R=no`. The pages were looked at in headless Chrome
+at 1280 and 520 pixels, in light and in dark. Their script passes `node --check`. The recorded
+hvx runs of `tests/fixtures/inspect/` (a power cut, and an out-of-memory provisioning with its
+diagnosis) also render.
+
+**Tests.** Golden pages in `hydo/crates/hydo-cli/tests/golden/report/` (`HYDO_BLESS=1 cargo test
+-p hydo --bin hydo htmlreport` rewrites them). One is the Mac power-cut run against its passing
+neighbour, from fixtures with the scratch paths replaced by `/work`. One is an exploration on the
+explorer's scripted engine, seeds 1 to 12, with the consoles the page reads. One is the recorded
+CI run `mac-shop-ci-run`. Each page is checked for a size bound and for no address, `src=`,
+`<link>`, `@import` or `url(` at all. A test checks that a timeline of 5,050 events keeps 400,
+with every fault. Another checks that text from a run is escaped, and another the section
+"Versions".
+
+**What is left.** Open item 94: the format of the version range, a real `hydo ci run` with
+replay directories, a fresh hvx run, and a run with forced preemption points.

@@ -1,0 +1,12 @@
+hydo-ob: command: run C=12 R=always
+HYDO-ASSERT-DECL {"t":"reachable","id":"fault.paused","msg":"a service was paused (SIGSTOP)"}
+HYDO-ASSERT-DECL {"t":"sometimes","id":"fault.pause_mid_request","msg":"a pause began while a client request was in flight"}
+HYDO-ASSERT-DECL {"t":"reachable","id":"fault.clock_back","msg":"the realtime clock was stepped backwards"}
+HYDO-ASSERT-DECL {"t":"reachable","id":"fault.clock_fwd","msg":"the realtime clock was stepped forwards"}
+HYDO-ASSERT-DECL {"t":"reachable","id":"fault.oneway_req","msg":"a one-way network fault hit the req direction"}
+HYDO-ASSERT-DECL {"t":"reachable","id":"fault.oneway_resp","msg":"a one-way network fault hit the resp direction"}
+hydo-ob: workload steps 0..11 rc=0
+hydo-explore-acked: 0 1 2 3 4 5 6 7 8 9 10 11 
+hydo-explore-failed: 
+hydo-ob: POWER CUT before step 12 (all services frozen)
+hydo-explore-workload-done cut

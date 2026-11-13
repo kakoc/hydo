@@ -1,0 +1,7 @@
+hydo-fake: run disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms
+HYDO-ASSERT {"t":"eventually","id":"orders.drained","ok":true,"details":{"elapsed_s":"2.77","out":"pending=142"}}
+HYDO-ASSERT {"t":"sometimes","id":"retry.taken","ok":true}
+HYDO-ERRLOG {"svc":"kafka","src":"log","n":2,"at":"13","tpl":"connection to kafka lost <n>","ex":"connection to kafka lost 3"}
+HYDO-ERRLOG {"svc":"app","src":"log","n":1,"at":"s","tpl":"config reloaded","ex":"config reloaded"}
+HYDO-ERRLOG-SUM {"boot":"first","steps":30,"lines":2,"kinds":2,"shown":2}
+ERROR harness: guest did not finish (I/O error)

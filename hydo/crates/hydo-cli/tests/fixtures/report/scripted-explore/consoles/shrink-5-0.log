@@ -1,0 +1,5 @@
+hydo-fake: run disk=none dseed=63cbe1e459320dd7 | run C=11
+HYDO-ASSERT {"t":"eventually","id":"orders.drained","ok":true,"details":{"elapsed_s":"1.06","out":"pending=203"}}
+HYDO-ASSERT {"t":"sometimes","id":"retry.taken","ok":false}
+HYDO-ERRLOG {"svc":"app","src":"log","n":1,"at":"s","tpl":"config reloaded","ex":"config reloaded"}
+HYDO-ERRLOG-SUM {"boot":"first","steps":30,"lines":1,"kinds":1,"shown":1}

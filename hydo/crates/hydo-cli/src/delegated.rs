@@ -112,6 +112,11 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
 /// by the results reader) or of a run (its result.json); while an exploration still runs, how
 /// far its event stream has got.
 pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
+    // `--html`: one web page instead (src/htmlreport.rs)
+    if argv.iter().any(|a| a == "--html") {
+        let rest: Vec<String> = argv.iter().filter(|a| *a != "--html").cloned().collect();
+        return crate::htmlreport::cmd(&rest);
+    }
     let d = argv
         .first()
         .cloned()

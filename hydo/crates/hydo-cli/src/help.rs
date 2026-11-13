@@ -67,8 +67,14 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
   `hydo repro --regressions` replays them."
             .to_string(),
         "report" => "usage: hydo report [DIR]
+       hydo report --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]
   prints the report of an exploration (DIR's exploration.json) or of a run (DIR's result.json);
-  while an exploration still runs, how far it has got. DIR defaults to hydo-out/explore."
+  while an exploration still runs, how far it has got. DIR defaults to hydo-out/explore.
+  --html writes it as one web page instead (FILE, default DIR/report.html), for a run, an
+  exploration or a `hydo ci run` output directory: each failure with its minimal schedule and
+  the command that replays it, the failing run's timeline, where it first differs from a
+  passing run (--against, --diff, or the exploration's shrink runs), and the property table.
+  The page loads nothing, so it opens from disk and can be attached to an issue."
             .to_string(),
         "doctor" if linux => "usage: hydo doctor [--backend kvm]
   checks this machine and the installation for the hvx engine: the CPU, the kernel module and

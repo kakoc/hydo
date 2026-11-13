@@ -28,7 +28,12 @@ pub const FILE: &str = "one.preempt.jsonl";
 
 /// The records of a run directory, or None when the run wrote none (not recorded).
 pub fn read(dir: &Path) -> Option<Vec<Value>> {
-    let t = std::fs::read_to_string(dir.join(FILE)).ok()?;
+    read_file(&dir.join(FILE))
+}
+
+/// The records of one file (an exploration keeps a run's as `consoles/<tag>.preempt.jsonl`).
+pub fn read_file(f: &Path) -> Option<Vec<Value>> {
+    let t = std::fs::read_to_string(f).ok()?;
     Some(
         t.lines()
             .filter_map(|l| serde_json::from_str::<Value>(l).ok())

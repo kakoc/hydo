@@ -156,3 +156,33 @@ A violation (a check failed, no process failed) is explained by the state behind
 fault with `hydo inspect events <run dir> --kind fault,verdict`, and `start` at the stop after it.
 Then read what the check reads: the database rows, the acknowledged ids in `/tmp/hydo/acked`, and
 the service's log.
+
+## Share a failure as one page
+
+`hydo report --html` writes what the run directory knows as one web page. The page holds its own
+style and its one small script and loads nothing from the network. It opens from disk, and you
+can attach it to an issue or keep it as a CI artifact.
+
+```sh
+hydo report --html <run dir>                          # <run dir>/report.html
+hydo report --html <run dir> --against <passing run dir>
+hydo report --html hydo-out/explore -o failures.html  # an exploration
+hydo report --html <hydo ci run output dir>           # a CI run, each finding against its base
+```
+
+The page shows:
+
+- the verdict and the schedule, the system and the engine, the host's CPU, and the hydo
+  version with its fingerprint epoch;
+- each failure with its minimal schedule and the command that replays it, with a copy button;
+- the failing run's timeline: the events of `hydo inspect events`, the faults, the service
+  starts and ends, the checks, and the forced thread switches when the run recorded them;
+- where the failing run first differs from a passing run, as `hydo diff` finds it. For a run,
+  give the passing run with `--against`, or a `hydo diff` or `hydo explain` directory with
+  `--diff`. For an exploration, the page compares each minimal schedule with the passing
+  schedules the shrinker ran next to it;
+- the properties that held, failed, or were never reached;
+- for a CI run, whether each finding is new, pre-existing, still present, or fixed.
+
+A timeline keeps at most 400 events, the main ones first, and a log at most 4,000 bytes. The page
+says what it left out and which command shows all of it.

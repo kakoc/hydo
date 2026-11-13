@@ -116,7 +116,7 @@ pub fn neighbours(sched: &str) -> Vec<(String, String)> {
 
 /// How far two runs go together: the conversation and the stop of the first difference (a
 /// later first difference is a closer neighbour).
-fn reach(d: &Diff) -> (usize, u64) {
+pub fn reach(d: &Diff) -> (usize, u64) {
     match &d.first {
         None => (usize::MAX, u64::MAX),
         Some(f) => (

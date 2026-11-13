@@ -1,0 +1,3 @@
+hydo-fake: recovery of min-a
+HYDO-ERRLOG-SUM {"boot":"recovery","steps":30,"lines":0,"kinds":0,"shown":0}
+HYDO-ORACLE: VIOLATION lost acknowledged write order=11

@@ -1,0 +1,7 @@
+hydo-ob: command: oracle 0 1 2 3 4 5 6 7 8 9 10 11
+hydo-ob: realtime clock set to 2026-01-01T00:00:00Z
+hydo-ob: mounted /dev/vda2 on /data (rw)
+hydo-stack: recovering from log
+hydo-ob: redis ready after 0 polls
+HYDO-ASSERT {"t":"always","id":"redis.acked_writes_survive","ok":true,"msg":"every SET the client saw acknowledged reads back with its value","details":{"out":"acked=12 all present"}}
+HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)

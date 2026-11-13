@@ -24,6 +24,7 @@
 //! The document is [`hydo_results::Diff`] (`diff.json`); [`render`] is its view (`diff.txt`).
 
 use crate::ctx::{die, read_text, strftime, take, Ctx, OUT};
+use crate::inspect::drive::{Conv, RunFiles};
 use hydo_results::{Diff, DiffCount, DiffLine, DiffPoint, DiffSide, Divergence, Run};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -456,25 +457,26 @@ fn result_events(run: &Run) -> Vec<Ev> {
 pub fn load(dir: &Path) -> Result<Loaded, String> {
     let run = hydo_results::reader::read_run(&dir.join(hydo_results::RUN_DOC))
         .map_err(|e| format!("{e} (hydo diff compares run directories: hydo run --out DIR)"))?;
+    Ok(load_run(dir, run, &RunFiles::default()))
+}
+
+/// A run read for a diff from its document and the files `files` names in `dir` (a run
+/// directory's, or one run of an exploration: `hydo report --html`).
+pub fn load_run(dir: &Path, run: Run, files: &RunFiles) -> Loaded {
     // the transcripts the result names (the run's own files when it names none)
-    let mut files: BTreeMap<usize, PathBuf> = BTreeMap::new();
+    let mut paths: BTreeMap<usize, PathBuf> = BTreeMap::new();
     for c in &run.control {
         if let (Some(t), Some(i)) = (
             &c.transcript,
             CONVERSATIONS.iter().position(|x| *x == c.conversation),
         ) {
-            files.insert(i, dir.join(t));
+            paths.insert(i, dir.join(t));
         }
     }
-    for (i, f) in [
-        "control.boot.jsonl",
-        "control.jsonl",
-        "control.recovery.jsonl",
-    ]
-    .iter()
-    .enumerate()
-    {
-        files.entry(i).or_insert_with(|| dir.join(f));
+    for (i, c) in Conv::ALL.iter().enumerate() {
+        paths
+            .entry(i)
+            .or_insert_with(|| dir.join(files.transcript(*c)));
     }
     let consoles: Vec<String> = run
         .artifacts
@@ -488,16 +490,12 @@ pub fn load(dir: &Path) -> Result<Loaded, String> {
             .find(|c| c.ends_with(".recovery.log") == want_rec && !c.ends_with(".agent.log"))
             .map(|c| dir.join(c))
             .or_else(|| {
-                Some(dir.join(if want_rec {
-                    "one.recovery.log"
-                } else {
-                    "one.log"
-                }))
+                Some(dir.join(files.console(if want_rec { Conv::Recovery } else { Conv::Run })))
             })
     };
     let mut events = Vec::new();
     let mut levels = Vec::new();
-    for (i, f) in &files {
+    for (i, f) in &paths {
         let Ok(t) = read_text(f) else { continue };
         let conv = jsonl(&t)
             .first()
@@ -536,22 +534,22 @@ pub fn load(dir: &Path) -> Result<Loaded, String> {
     }
     events.extend(result_events(&run));
     levels.push("result".into());
-    let preempt = crate::preempt::read(dir);
+    let preempt = crate::preempt::read_file(&dir.join(files.preempt()));
     if preempt.is_some() {
         levels.push("preempt".into());
     }
-    let run_transcript = files
+    let run_transcript = paths
         .get(&1)
         .and_then(|f| read_text(f).ok())
         .and_then(|t| hydo_control::Transcript::parse(&t).ok());
-    Ok(Loaded {
+    Loaded {
         dir: dir.to_path_buf(),
         run,
         events,
         levels,
         preempt,
         run_transcript,
-    })
+    }
 }
 
 // ---------------------------------------------------------------- the alignment

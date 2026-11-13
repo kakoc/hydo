@@ -1,0 +1,36 @@
+{"cadence":"rb=64","control":1,"controller":"schedule","conversation":"recovery","schedule":"disk=cut rb=64 | run C=12 R=always","start":"resume S0"}
+{"at":4800,"n":296,"seen":9,"t":"stop","why":"start"}
+{"at":4800,"by":"runner","bytes":"\u0018{\"id\":7,\"nonce\":4800,\"op\":\"sync\",\"v\":1}\n","id":7,"n":296,"t":"send"}
+{"by":"main","line":"hydo-ob: command: oracle 0 1 2 3 4 5 6 7 8 9 10 11","n":296,"t":"note"}
+{"at":4800,"by":"main","bytes":"{\"id\":8,\"op\":\"clock_set\",\"sec\":1767225600,\"v\":1}\n","id":8,"n":296,"t":"send"}
+{"at":5184,"n":302,"seen":10,"t":"stop","why":"cadence"}
+{"id":7,"n":302,"send":22,"t":"ack"}
+{"at":5312,"n":304,"seen":11,"t":"stop","why":"cadence"}
+{"id":8,"n":304,"send":23,"t":"ack"}
+{"by":"main","line":"hydo-ob: realtime clock set to 2026-01-01T00:00:00Z","n":304,"t":"note"}
+{"at":5312,"by":"main","bytes":"{\"append\":true,\"data\":\"0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n10\\n11\\n\",\"id\":9,\"op\":\"write\",\"path\":\"/tmp/hydo/acked\",\"v\":1}\n","id":9,"n":304,"t":"send"}
+{"at":5312,"by":"main","bytes":"{\"dst\":\"/data\",\"fstype\":\"ext4\",\"id\":10,\"op\":\"mount\",\"src\":\"/dev/vda2\",\"v\":1}\n","id":10,"n":304,"t":"send"}
+{"at":5824,"n":312,"seen":12,"t":"stop","why":"cadence"}
+{"id":9,"n":312,"send":24,"t":"ack"}
+{"at":7232,"n":334,"seen":13,"t":"stop","why":"cadence"}
+{"id":10,"n":334,"send":25,"t":"ack"}
+{"at":7232,"by":"main","bytes":"{\"id\":11,\"op\":\"mkdir\",\"path\":\"/data/redis\",\"v\":1}\n","id":11,"n":334,"t":"send"}
+{"by":"main","line":"hydo-ob: mounted /dev/vda2 on /data (rw)","n":334,"t":"note"}
+{"by":"main","line":"hydo-stack: recovering from log","n":334,"t":"note"}
+{"at":7232,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; exec /bin/redis-server /etc/redis.conf\"],\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"h\":\"redis\",\"id\":12,\"op\":\"spawn\",\"stderr\":\"/tmp/hydo/redis.log\",\"stdout\":\"/tmp/hydo/redis.log\",\"v\":1}\n","id":12,"n":334,"t":"send"}
+{"at":8256,"n":350,"seen":14,"t":"stop","why":"cadence"}
+{"id":11,"n":350,"send":26,"t":"ack"}
+{"at":8384,"n":352,"seen":15,"t":"stop","why":"cadence"}
+{"id":12,"n":352,"send":27,"t":"ack"}
+{"at":8384,"by":"main","bytes":"{\"alive\":\"redis\",\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; /bin/redis-cli ping | grep -q PONG\"],\"deadline_ms\":120000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"every_ms\":1000,\"id\":13,\"op\":\"probe\",\"v\":1}\n","id":13,"n":352,"t":"send"}
+{"at":9280,"n":366,"seen":16,"t":"stop","why":"cadence"}
+{"id":13,"n":366,"send":28,"t":"ack"}
+{"at":9600,"n":371,"seen":17,"t":"stop","why":"cadence"}
+{"by":"main","line":"hydo-ob: redis ready after 0 polls","n":371,"t":"note"}
+{"at":9600,"by":"main","bytes":"{\"argv\":[\"/bin/busybox\",\"sh\",\"-c\",\". /etc/hydo/prelude.sh; lost=0\\nfor i in $(cat $HYDO_ACKED); do\\n  [ \\\"$(/bin/redis-cli GET k:$i)\\\" = \\\"v$i\\\" ] || { echo \\\"key k:$i lost\\\"; lost=1; break; }\\ndone\\n[ $lost = 0 ] && echo \\\"acked=$(wc -l < $HYDO_ACKED) all present\\\"\\n[ $lost = 0 ]\\n\"],\"capture\":3000,\"env\":[\"HOME=/\",\"HYDO_ACKED=/tmp/hydo/acked\",\"HYDO_FAILED=/tmp/hydo/failed\",\"HYDO_LOG=/tmp/hydo/redis.log\",\"HYDO_OUTCOMES=/tmp/hydo/outcomes\",\"HYDO_STEPS=20\",\"HYDO_SVC=redis\",\"TERM=linux\"],\"id\":14,\"op\":\"run\",\"v\":1}\n","id":14,"n":371,"t":"send"}
+{"at":10816,"n":390,"seen":18,"t":"stop","why":"cadence"}
+{"id":14,"n":390,"send":29,"t":"ack"}
+{"at":11904,"n":407,"seen":19,"t":"stop","why":"cadence"}
+{"by":"main","line":"HYDO-ASSERT {\"t\":\"always\",\"id\":\"redis.acked_writes_survive\",\"ok\":true,\"msg\":\"every SET the client saw acknowledged reads back with its value\",\"details\":{\"out\":\"acked=12 all present\"}}","n":407,"t":"report"}
+{"by":"main","line":"HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)","n":407,"t":"report"}
+{"end":{"verdict":"HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)"},"n":407,"t":"end"}

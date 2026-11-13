@@ -23,6 +23,7 @@ mod doctor;
 mod explain;
 mod fetch;
 mod help;
+mod htmlreport;
 mod hvxenv;
 mod inspect;
 mod migrate;
@@ -76,6 +77,9 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
                  [--out DIR] [any other explorer option]
                                                    generate, run, re-run and shrink schedules
     hydo report  [DIR]                             print the report of the last (or a given) exploration
+    hydo report  --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]
+                                                   write it as one web page to share (a run, an
+                                                   exploration or a CI run; it loads nothing)
     hydo errors  list [DIR] | accept SIG... --reason TEXT [--with F] [--during F] | check
                                                    error logs as findings: list new error kinds, accept
                                                    expected ones into hydo/known-errors.yaml (MANIFEST.md)
@@ -126,6 +130,9 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
                  [--out DIR] [any other explorer option]
                                                    generate, run, re-run and shrink schedules
     hydo report  [DIR]                             print the report of the last (or a given) exploration
+    hydo report  --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]
+                                                   write it as one web page to share (a run, an
+                                                   exploration or a CI run; it loads nothing)
     hydo errors  list [DIR] | accept SIG... --reason TEXT [--with F] [--during F] | check
                                                    error logs as findings: list new error kinds, accept
                                                    expected ones into hydo/known-errors.yaml (MANIFEST.md)

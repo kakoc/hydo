@@ -1,0 +1,3 @@
+hydo-fake: recovery of shrink-5-0
+HYDO-ERRLOG-SUM {"boot":"recovery","steps":30,"lines":0,"kinds":0,"shown":0}
+HYDO-ORACLE: OK acked=30

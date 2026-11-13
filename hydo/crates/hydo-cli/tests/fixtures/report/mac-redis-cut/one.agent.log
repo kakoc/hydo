@@ -1,0 +1,12 @@
+HYDO-AG 59 b971f083 {"nonce":9728,"ok":true,"op":"sync","re":13,"seq":16,"v":1}
+HYDO-AG 45 8e65d719 {"ok":true,"op":"run","re":14,"seq":17,"v":1}
+HYDO-AG 72 56373b11 {"ev":"done","id":14,"out":"OK\n","out_len":3,"seq":18,"status":0,"v":1}
+HYDO-AG 57 8a8e9202 {"bytes":0,"ok":true,"op":"write","re":15,"seq":19,"v":1}
+HYDO-AG 57 ffd6ee68 {"bytes":0,"ok":true,"op":"write","re":16,"seq":20,"v":1}
+HYDO-AG 57 b4da25b5 {"bytes":0,"ok":true,"op":"write","re":17,"seq":21,"v":1}
+HYDO-AG 47 723cebc5 {"ok":true,"op":"spawn","re":18,"seq":22,"v":1}
+HYDO-AG 62 00fca1cb {"ev":"exit","h":"workload","id":18,"seq":23,"status":0,"v":1}
+HYDO-AG 163 e0456a89 {"data":"0 ack\n1 ack\n2 ack\n3 ack\n4 ack\n5 ack\n6 ack\n7 ack\n8 ack\n9 ack\n10 ack\n11 ack\n","eof":true,"ok":true,"op":"read","re":19,"seq":24,"size":74,"v":1}
+HYDO-AG 57 fa848a66 {"bytes":0,"ok":true,"op":"write","re":20,"seq":25,"v":1}
+HYDO-AG 115 6d5a78db {"data":"0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n","eof":true,"ok":true,"op":"read","re":21,"seq":26,"size":26,"v":1}
+HYDO-AG 58 7fb04b97 {"ok":true,"op":"signal","procs":1,"re":22,"seq":27,"v":1}

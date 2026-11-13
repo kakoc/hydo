@@ -1,0 +1,6 @@
+hydo-fake: run disk=lying:11 dseed=63cbe1e459320dd7 | run K=mysql@9+3 N=kafka@8-21:delay,263ms C=11
+HYDO-ASSERT {"t":"eventually","id":"orders.drained","ok":true,"details":{"elapsed_s":"1.18","out":"pending=70"}}
+HYDO-ASSERT {"t":"sometimes","id":"retry.taken","ok":true}
+HYDO-ERRLOG {"svc":"mysql","src":"log","n":2,"at":"9","tpl":"connection to mysql lost <n>","ex":"connection to mysql lost 3"}
+HYDO-ERRLOG {"svc":"app","src":"log","n":1,"at":"s","tpl":"config reloaded","ex":"config reloaded"}
+HYDO-ERRLOG-SUM {"boot":"first","steps":30,"lines":2,"kinds":2,"shown":2}

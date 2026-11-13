@@ -89,6 +89,8 @@ hydo report
 ```
 
 On Linux with hydo's kernel module, this found 9 failures in 16 seconds, and all 9 reproduced.
+`hydo report --html` writes the same report as one web page, with each failure's timeline and the
+command that replays it, to attach to an issue.
 
 ## Your own project
 

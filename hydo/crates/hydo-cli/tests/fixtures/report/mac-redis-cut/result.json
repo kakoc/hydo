@@ -1,0 +1,221 @@
+{
+  "v": 1,
+  "type": "run",
+  "hydo_version": "0.3.1",
+  "epoch": 2,
+  "schedule": "disk=cut | run C=12 R=everysec",
+  "image": {
+    "path": "/work/redis/hydo-out/explore-ob-redis-arm64.cpio.gz",
+    "sha256": "fba2c11e6a371d8b22c76c33f7bce3027395669eec46a53628c0b876c7e29484",
+    "epoch": 2,
+    "kernel": "Image-explore (Linux 6.6.35, sha256 f80c565589f1fecf9ccd49d33cb0717c7a15d5cddf3bb3bec7f2dd2b335b51ac)",
+    "built_by": {
+      "version": "0.3.1",
+      "commit": "b3f730878702e034901882dd6425bfecc4f12a24"
+    },
+    "manifest_sha256": "b07d4641642318f7cba6760bad19f49130a84f3bfc279408db5e1e6036c78930"
+  },
+  "engine": {
+    "backend": "hvm",
+    "args": [],
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "verdict": {
+    "kind": "violation",
+    "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+  },
+  "fingerprints": {
+    "fp": "a2b8d71c0c467d15",
+    "wfp": "d5cd4d7a4a3595f0",
+    "ctl": "c1c6baa6a88a32a5"
+  },
+  "findings": [
+    {
+      "kind": "invariant",
+      "id": "redis.acked_writes_survive",
+      "status": "violation",
+      "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+      "details": {
+        "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+      }
+    },
+    {
+      "kind": "assertion",
+      "id": "redis.acked_writes_survive",
+      "status": "violation",
+      "message": "every SET the client saw acknowledged reads back with its value",
+      "details": {
+        "assertion": "always",
+        "details": {
+          "out": "key k:0 lost"
+        }
+      }
+    }
+  ],
+  "properties": {
+    "runs": 1,
+    "setup_complete_runs": 0,
+    "violations": 1,
+    "properties": [
+      {
+        "id": "fault.paused",
+        "assertion": "reachable",
+        "message": "a service was paused (SIGSTOP)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.pause_mid_request",
+        "assertion": "sometimes",
+        "message": "a pause began while a client request was in flight",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_back",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped backwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_fwd",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped forwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_req",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the req direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_resp",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the resp direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "redis.acked_writes_survive",
+        "assertion": "always",
+        "message": "every SET the client saw acknowledged reads back with its value",
+        "declared": false,
+        "passes": 0,
+        "fails": 1,
+        "runs_passed": 0,
+        "runs_failed": 1,
+        "verdict": "FAIL",
+        "status": "violation",
+        "first_failure": "{\"out\":\"key k:0 lost\"}"
+      }
+    ]
+  },
+  "secs": 1.0,
+  "result_line": "RESULT one fp=a2b8d71c0c467d15 wfp=d5cd4d7a4a3595f0 secs=1.0 stops=345 typed=30 inh=95b9f71153fe58d9 ctl=c1c6baa6a88a32a5 verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+  "artifacts": {
+    "consoles": [
+      "one.log",
+      "one.recovery.log"
+    ],
+    "engine_log": "engine.log"
+  },
+  "control": [
+    {
+      "conversation": "boot",
+      "controller": "schedule",
+      "cadence": "rb=64",
+      "hash": "193e101b37e8d7dd",
+      "sends": 12,
+      "stops": 16,
+      "transcript": "control.boot.jsonl"
+    },
+    {
+      "conversation": "run",
+      "controller": "schedule",
+      "cadence": "rb=64",
+      "hash": "47c59d3562900d3a",
+      "sends": 10,
+      "stops": 13,
+      "transcript": "control.jsonl"
+    },
+    {
+      "conversation": "recovery",
+      "controller": "schedule",
+      "cadence": "rb=64",
+      "hash": "7ea62d250599df5e",
+      "sends": 8,
+      "stops": 11,
+      "transcript": "control.recovery.jsonl"
+    }
+  ],
+  "diagnosis": {
+    "summary": "a check failed: VIOLATION [redis.acked_writes_survive] key k:0 lost. No service exited and every readiness check passed; look at the state behind it with hydo inspect",
+    "failure": "violation",
+    "verdict_at": {
+      "point": "recovery:345",
+      "conversation": "recovery",
+      "stop": 345,
+      "at": 10880
+    },
+    "exits": [
+      {
+        "handle": "command 14",
+        "command": "lost=0\nfor i in $(cat $HYDO_ACKED); do\n  [ \"$(/bin/redis-cli GET k:$i)\" = \"v$i\" ] || { echo \"key k:$i lost\"; lost=1; break; }\ndone\n[ $lost = 0 ] && echo \"acked=$(wc -l < $HYDO_ACKED) all present\"\n[ $lost = 0 ]",
+        "status": 1,
+        "output": "key k:0 lost\n",
+        "at": {
+          "point": "recovery:345",
+          "conversation": "recovery",
+          "stop": 345,
+          "at": 10880
+        }
+      }
+    ],
+    "likely": [],
+    "kernel": [],
+    "evidence_status": "not-collected",
+    "evidence": [],
+    "next": [
+      "hydo inspect diagnose ../runA --evidence",
+      "hydo inspect start ../runA --at end",
+      "hydo inspect events ../runA --kind exit,probe,fault,verdict"
+    ]
+  }
+}

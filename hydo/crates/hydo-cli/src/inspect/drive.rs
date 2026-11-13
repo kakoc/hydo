@@ -84,6 +84,70 @@ pub struct Recorded {
     pub eargs: Vec<String>,
     pub backend: String,
     pub transcripts: Vec<(Conv, Transcript)>,
+    /// Where the run's files are in `dir`.
+    pub files: RunFiles,
+}
+
+/// The names of a run's files in its directory: a `hydo run` directory's (`control.jsonl`,
+/// `one.log`, ...), or those of one run of an exploration, `consoles/<tag>.*` in the
+/// exploration's directory (`hydo report --html` reads those).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RunFiles {
+    /// None: a run directory; Some(tag): an exploration's run.
+    pub tag: Option<String>,
+}
+
+impl RunFiles {
+    /// An exploration's run `tag`.
+    pub fn explorer(tag: &str) -> RunFiles {
+        RunFiles {
+            tag: Some(tag.to_string()),
+        }
+    }
+
+    /// A conversation's control transcript.
+    pub fn transcript(&self, c: Conv) -> String {
+        let s = match c {
+            Conv::Boot => ".boot",
+            Conv::Run => "",
+            Conv::Recovery => ".recovery",
+        };
+        match &self.tag {
+            None => format!("control{s}.jsonl"),
+            Some(t) => format!("consoles/{t}.control{s}.jsonl"),
+        }
+    }
+
+    /// The console the host controller merged the guest's lines into (`one.log`).
+    pub fn console(&self, c: Conv) -> String {
+        let s = if c == Conv::Recovery { ".recovery" } else { "" };
+        match &self.tag {
+            None => format!("one{s}.log"),
+            Some(t) => format!("consoles/{t}{s}.log"),
+        }
+    }
+
+    /// The engine's console with the agent's own lines (`one.agent.log`).
+    pub fn agent_log(&self, c: Conv) -> String {
+        let s = if c == Conv::Recovery { ".recovery" } else { "" };
+        match &self.tag {
+            None => format!("one{s}.agent.log"),
+            Some(t) => format!("consoles/{t}{s}.agent.log"),
+        }
+    }
+
+    /// The forced preemption points' records (Milestone 208).
+    pub fn preempt(&self) -> String {
+        match &self.tag {
+            None => crate::preempt::FILE.to_string(),
+            Some(t) => format!("consoles/{t}.preempt.jsonl"),
+        }
+    }
+
+    /// The agent events a replay saw (only `hydo run` directories keep them).
+    pub fn agent_events(&self) -> Option<&'static str> {
+        self.tag.is_none().then_some(super::timeline::AGENT_EVENTS)
+    }
 }
 
 impl Recorded {
@@ -95,15 +159,17 @@ impl Recorded {
                 vec!["hydo run <image> \"<schedule>\" --out <run dir>   (then inspect that directory)".into()],
             )
         })?;
+        Recorded::of(dir, doc, RunFiles::default())
+    }
+
+    /// The run whose document is `doc`, with the files `files` names in `dir`.
+    pub fn of(dir: &Path, doc: hydo_results::Run, files: RunFiles) -> Result<Recorded, Problem> {
         let mut transcripts = Vec::new();
-        for (c, f) in [
-            (Conv::Boot, "control.boot.jsonl"),
-            (Conv::Run, "control.jsonl"),
-            (Conv::Recovery, "control.recovery.jsonl"),
-        ] {
-            if let Ok(t) = std::fs::read_to_string(dir.join(f)) {
+        for c in Conv::ALL {
+            let f = files.transcript(c);
+            if let Ok(t) = std::fs::read_to_string(dir.join(&f)) {
                 let t = Transcript::parse(&t).map_err(|e| {
-                    Problem::new("no-run", format!("{}: {e}", dir.join(f).display()), vec![])
+                    Problem::new("no-run", format!("{}: {e}", dir.join(&f).display()), vec![])
                 })?;
                 transcripts.push((c, t));
             }
@@ -153,6 +219,7 @@ impl Recorded {
             eargs,
             backend,
             transcripts,
+            files,
         })
     }
 

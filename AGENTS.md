@@ -423,6 +423,17 @@ seconds, it found the benchmark's d7 and d10 in 2 of 5 seed ranges each, and the
 exploration in 3 of 5. Neither found the second symptom of etcd issue 14685 in 5 ranges each.
 Design and numbers: `docs/design/state-search.md`; `docs/HISTORY.md` Milestone 212.
 
+**A failure as one web page (M220).** `hydo report --html [DIR] [-o FILE]` writes one HTML file
+for a run directory, an exploration directory or a `hydo ci run` output directory. It holds its
+style sheet and one small script (the copy buttons) and loads nothing. The page shows the
+summary, each failure with its minimal schedule and replay command, the failing run's timeline
+(the events of `hydo inspect events`), and the first difference from a passing run. That run is
+`--against RUN_DIR`, `--diff` (a `hydo diff` or `hydo explain` directory), or for an
+exploration the minimal schedule's passing shrink candidates. It also shows the property table,
+and for a CI run each finding's state against the base. The code is
+`hydo/crates/hydo-cli/src/htmlreport.rs`, and `hydo guide inspect` describes the page in its
+last section.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -670,6 +681,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 93. The explorer's identity test reads git-ignored files (M218). It lists every file under an
     example's `hydo/` folder, also `hydo-out/`, `.hydo/` and `images/`. A local exploration
     there makes the golden stale, so the outputs had to be moved away before `HYDO_BLESS=1`.
+94. The web page of `hydo report --html` (M220). Its section "Versions" reads a `versions`
+    member of the results document, or `versions.json` beside it, by the field names it guesses
+    (`introduced`, `last_good`, `still_present`, a list of tested versions). The version-range
+    finder's own format must be checked against it when it is merged. The CI page ran only on the
+    recorded example `mac-shop-ci-run`, which has no replay directories, so a CI finding's
+    timeline was never shown from a real `hydo ci run`. On hvx the page ran only on the recorded
+    runs of `tests/fixtures/inspect/`, and it never ran on a run with forced preemption points.
 
 ## Milestone index
 
@@ -969,6 +987,10 @@ build machine, before 2026-10-13.
   known), found blind by both kinds of rules. A Redis error in Sidekiq's first scheduler cleanup
   stops all retries. Power cuts, a skipped billing day, and backward clock steps drop acknowledged
   usage by documented or environment causes. Nothing recorded moved
+- M220 (tentative number): `hydo report --html` writes a failure as one self-contained web page,
+  for a run, an exploration, or a CI run. It shows the failing run's timeline and its first
+  difference from a passing neighbour. Proven on the Redis example's power cut and a swarm
+  exploration on the Mac. Nothing recorded moved
 
 ## Where to look
 

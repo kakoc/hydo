@@ -1,0 +1,165 @@
+{
+  "v": 1,
+  "type": "run",
+  "hydo_version": "0.3.1",
+  "epoch": 2,
+  "schedule": "disk=cut | run C=12 R=always",
+  "image": {
+    "path": "/work/redis/hydo-out/explore-ob-redis-arm64.cpio.gz",
+    "sha256": "fba2c11e6a371d8b22c76c33f7bce3027395669eec46a53628c0b876c7e29484",
+    "epoch": 2,
+    "kernel": "Image-explore (Linux 6.6.35, sha256 f80c565589f1fecf9ccd49d33cb0717c7a15d5cddf3bb3bec7f2dd2b335b51ac)",
+    "built_by": {
+      "version": "0.3.1",
+      "commit": "b3f730878702e034901882dd6425bfecc4f12a24"
+    },
+    "manifest_sha256": "b07d4641642318f7cba6760bad19f49130a84f3bfc279408db5e1e6036c78930"
+  },
+  "engine": {
+    "backend": "hvm",
+    "args": [],
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "verdict": {
+    "kind": "ok",
+    "text": "HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)"
+  },
+  "fingerprints": {
+    "fp": "7147e75676d15194",
+    "wfp": "545e2ebf9664ab33",
+    "ctl": "b4f7adea42cc337b"
+  },
+  "findings": [],
+  "properties": {
+    "runs": 1,
+    "setup_complete_runs": 0,
+    "violations": 0,
+    "properties": [
+      {
+        "id": "fault.paused",
+        "assertion": "reachable",
+        "message": "a service was paused (SIGSTOP)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.pause_mid_request",
+        "assertion": "sometimes",
+        "message": "a pause began while a client request was in flight",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_back",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped backwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_fwd",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped forwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_req",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the req direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_resp",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the resp direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "redis.acked_writes_survive",
+        "assertion": "always",
+        "message": "every SET the client saw acknowledged reads back with its value",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      }
+    ]
+  },
+  "secs": 1.3,
+  "result_line": "RESULT one fp=7147e75676d15194 wfp=545e2ebf9664ab33 secs=1.3 stops=407 typed=29 inh=6da2c87371bc217b ctl=b4f7adea42cc337b verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)",
+  "artifacts": {
+    "consoles": [
+      "one.log",
+      "one.recovery.log"
+    ],
+    "engine_log": "engine.log"
+  },
+  "control": [
+    {
+      "conversation": "boot",
+      "controller": "schedule",
+      "cadence": "rb=64",
+      "hash": "9a55eec2c2372ab1",
+      "sends": 12,
+      "stops": 16,
+      "transcript": "control.boot.jsonl"
+    },
+    {
+      "conversation": "run",
+      "controller": "schedule",
+      "cadence": "rb=64",
+      "hash": "9b595d1b546ee01f",
+      "sends": 9,
+      "stops": 11,
+      "transcript": "control.jsonl"
+    },
+    {
+      "conversation": "recovery",
+      "controller": "schedule",
+      "cadence": "rb=64",
+      "hash": "d4fb4c6cd9ac4798",
+      "sends": 8,
+      "stops": 11,
+      "transcript": "control.recovery.jsonl"
+    }
+  ]
+}

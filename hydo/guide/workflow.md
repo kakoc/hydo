@@ -119,6 +119,7 @@ hydo run "disk=none dseed=1 | run"            # one run without faults: must end
 hydo run "disk=none dseed=1 | run"            # again: the fingerprint (fp=) must be identical
 hydo explore --seeds 1-20 --strategy process  # schedules with faults; failures re-run and shrunk
 hydo report                                   # the findings, each with a minimal schedule
+hydo report --html                            # the same as one web page to share (hydo guide inspect)
 hydo save <explore dir>                       # the minimal schedules -> hydo/regressions/
 ```
 

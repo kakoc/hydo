@@ -1,0 +1,696 @@
+{
+  "v": 1,
+  "type": "exploration",
+  "hydo_version": "0.3.1",
+  "epoch": 2,
+  "mode": "seeds",
+  "config": {
+    "strategy": "random",
+    "seeds": "1-12",
+    "argv": [
+      "--seeds",
+      "1-12",
+      "--image",
+      "scripted-disk.img",
+      "--workers",
+      "1",
+      "--out",
+      "/work/explore"
+    ]
+  },
+  "image": {
+    "path": "scripted-disk.img",
+    "resolved": "/work/scripted-disk.img"
+  },
+  "engine": {
+    "backend": "hvx",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": 1,
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "summary": {
+    "schedules": 12,
+    "sweep_wall_s": 0.4,
+    "runs_per_hour": 100622.2,
+    "mean_run_s": 4.9,
+    "worker_boot_s": 2.5,
+    "total_wall_s": 0.5,
+    "failures": 4,
+    "reproduced": 4,
+    "error_kinds_new": 4,
+    "runs_with_new_error_kinds": 12
+  },
+  "failures": [
+    {
+      "signature": "VIOLATION lost acknowledged write",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-7",
+          "fp": "fd64fc3f51f009e5",
+          "verdict": "HYDO-ORACLE: VIOLATION lost acknowledged write order=11"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-7",
+        "seed": 7,
+        "role": "first",
+        "schedule": "disk=lying:11 dseed=63cbe1e459320dd7 | run K=mysql@9+3 N=kafka@8-21:delay,263ms C=11",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION lost acknowledged write order=11"
+        },
+        "fingerprints": {
+          "fp": "fd64fc3f51f009e5",
+          "wfp": "388ef33689e1883d"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "VIOLATION lost acknowledged write",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION lost acknowledged write order=11",
+            "details": {
+              "signature": "VIOLATION lost acknowledged write"
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "1136d02b9619",
+            "status": "new",
+            "message": "[mysql] connection to mysql lost <n>",
+            "details": {
+              "service": "mysql",
+              "source": "log",
+              "template": "connection to mysql lost <n>",
+              "example": "connection to mysql lost 3",
+              "lines": 2,
+              "at": [
+                "9"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "4c53c64297e2",
+            "status": "new",
+            "message": "[app] config reloaded",
+            "details": {
+              "service": "app",
+              "source": "log",
+              "template": "config reloaded",
+              "example": "config reloaded",
+              "lines": 1,
+              "at": [
+                "s"
+              ]
+            }
+          }
+        ],
+        "error_logs": {
+          "steps": 30,
+          "boots": [
+            {
+              "boot": "first",
+              "steps": 30,
+              "lines": 2,
+              "kinds": 2,
+              "shown": 2
+            },
+            {
+              "boot": "recovery",
+              "steps": 30,
+              "lines": 0,
+              "kinds": 0,
+              "shown": 0
+            }
+          ],
+          "truncated": false
+        },
+        "secs": 3.4,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-7.log",
+            "consoles/seed-7.recovery.log"
+          ]
+        }
+      }
+    },
+    {
+      "signature": "ERROR harness: guest did not finish (I/O error)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-8",
+          "fp": "1375caa7ccabfbb1",
+          "verdict": "ERROR harness: guest did not finish (I/O error)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-8",
+        "seed": 8,
+        "role": "first",
+        "schedule": "disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "ERROR harness: guest did not finish (I/O error)"
+        },
+        "fingerprints": {
+          "fp": "1375caa7ccabfbb1",
+          "wfp": "83134baacbd40f41"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR harness: guest did not finish (I/O error)",
+            "status": "error",
+            "message": "ERROR harness: guest did not finish (I/O error)",
+            "details": {
+              "signature": "ERROR harness: guest did not finish (I/O error)"
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "63f14344357a",
+            "status": "new",
+            "message": "[kafka] connection to kafka lost <n>",
+            "details": {
+              "service": "kafka",
+              "source": "log",
+              "template": "connection to kafka lost <n>",
+              "example": "connection to kafka lost 3",
+              "lines": 2,
+              "at": [
+                "13"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "4c53c64297e2",
+            "status": "new",
+            "message": "[app] config reloaded",
+            "details": {
+              "service": "app",
+              "source": "log",
+              "template": "config reloaded",
+              "example": "config reloaded",
+              "lines": 1,
+              "at": [
+                "s"
+              ]
+            }
+          }
+        ],
+        "error_logs": {
+          "steps": 30,
+          "boots": [
+            {
+              "boot": "first",
+              "steps": 30,
+              "lines": 2,
+              "kinds": 2,
+              "shown": 2
+            }
+          ],
+          "truncated": false
+        },
+        "secs": 3.1,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-8.log"
+          ]
+        }
+      }
+    },
+    {
+      "signature": "ERROR harness: guest did not finish (I/O error)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-9",
+          "fp": "c83d571cad5865fc",
+          "verdict": "ERROR harness: guest did not finish (I/O error)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-9",
+        "seed": 9,
+        "role": "first",
+        "schedule": "disk=ioerr:2 dseed=aeaf52febe706064 | run K=mysql@24+2 R=no",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "ERROR harness: guest did not finish (I/O error)"
+        },
+        "fingerprints": {
+          "fp": "c83d571cad5865fc",
+          "wfp": "718d92e4d118e6c4"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR harness: guest did not finish (I/O error)",
+            "status": "error",
+            "message": "ERROR harness: guest did not finish (I/O error)",
+            "details": {
+              "signature": "ERROR harness: guest did not finish (I/O error)"
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "1136d02b9619",
+            "status": "new",
+            "message": "[mysql] connection to mysql lost <n>",
+            "details": {
+              "service": "mysql",
+              "source": "log",
+              "template": "connection to mysql lost <n>",
+              "example": "connection to mysql lost 3",
+              "lines": 2,
+              "at": [
+                "24"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "4c53c64297e2",
+            "status": "new",
+            "message": "[app] config reloaded",
+            "details": {
+              "service": "app",
+              "source": "log",
+              "template": "config reloaded",
+              "example": "config reloaded",
+              "lines": 1,
+              "at": [
+                "s"
+              ]
+            }
+          }
+        ],
+        "error_logs": {
+          "steps": 30,
+          "boots": [
+            {
+              "boot": "first",
+              "steps": 30,
+              "lines": 2,
+              "kinds": 2,
+              "shown": 2
+            }
+          ],
+          "truncated": false
+        },
+        "secs": 6.8,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-9.log"
+          ]
+        }
+      }
+    },
+    {
+      "signature": "VIOLATION lost acknowledged write",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-12",
+          "fp": "6e482c2724184ef0",
+          "verdict": "HYDO-ORACLE: VIOLATION lost acknowledged write order=27"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-12",
+        "seed": 12,
+        "role": "first",
+        "schedule": "disk=lying:2 dseed=943ff9fc99de8f03 | run K=mysql@17+3 C=27",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION lost acknowledged write order=27"
+        },
+        "fingerprints": {
+          "fp": "6e482c2724184ef0",
+          "wfp": "29b6bb418fc2088d"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "VIOLATION lost acknowledged write",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION lost acknowledged write order=27",
+            "details": {
+              "signature": "VIOLATION lost acknowledged write"
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "1136d02b9619",
+            "status": "new",
+            "message": "[mysql] connection to mysql lost <n>",
+            "details": {
+              "service": "mysql",
+              "source": "log",
+              "template": "connection to mysql lost <n>",
+              "example": "connection to mysql lost 3",
+              "lines": 2,
+              "at": [
+                "17"
+              ]
+            }
+          },
+          {
+            "kind": "error-log",
+            "id": "4c53c64297e2",
+            "status": "new",
+            "message": "[app] config reloaded",
+            "details": {
+              "service": "app",
+              "source": "log",
+              "template": "config reloaded",
+              "example": "config reloaded",
+              "lines": 1,
+              "at": [
+                "s"
+              ]
+            }
+          }
+        ],
+        "error_logs": {
+          "steps": 30,
+          "boots": [
+            {
+              "boot": "first",
+              "steps": 30,
+              "lines": 2,
+              "kinds": 2,
+              "shown": 2
+            },
+            {
+              "boot": "recovery",
+              "steps": 30,
+              "lines": 0,
+              "kinds": 0,
+              "shown": 0
+            }
+          ],
+          "truncated": false
+        },
+        "secs": 1.5,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-12.log",
+            "consoles/seed-12.recovery.log"
+          ]
+        }
+      }
+    }
+  ],
+  "shrinks": [
+    {
+      "v": 1,
+      "type": "shrink",
+      "class": "lying-disk",
+      "signature": "VIOLATION lost acknowledged write",
+      "from_seed": 7,
+      "minimal": "disk=lying:1 dseed=63cbe1e459320dd7 | run C=11",
+      "verdict": "HYDO-ORACLE: VIOLATION lost acknowledged write order=11",
+      "tries": 19,
+      "min_class": "lying-disk",
+      "min_verdict": "HYDO-ORACLE: VIOLATION lost acknowledged write order=11",
+      "confirmations": [
+        {
+          "tag": "min-a",
+          "fp": "2bfd911ed331b44f",
+          "verdict": "HYDO-ORACLE: VIOLATION lost acknowledged write order=11"
+        },
+        {
+          "tag": "min-b",
+          "fp": "2bfd911ed331b44f",
+          "verdict": "HYDO-ORACLE: VIOLATION lost acknowledged write order=11"
+        }
+      ],
+      "identical": true,
+      "repro_command": "`hydo run --image /work/scripted-disk.img \"disk=lying:1 dseed=63cbe1e459320dd7 | run C=11\"`"
+    }
+  ],
+  "error_kinds": {
+    "unknown": "report",
+    "kinds": [
+      {
+        "signature": "07df7023b937",
+        "service": "redis",
+        "source": "log",
+        "template": "connection to redis lost <n>",
+        "example": "connection to redis lost 3",
+        "new": true,
+        "runs": 1,
+        "new_runs": 1,
+        "seeds": [
+          1
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@12+2",
+        "first_at": [
+          "12"
+        ],
+        "lines": 2,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@12+2",
+          "at": [
+            "12"
+          ],
+          "example": "connection to redis lost 3"
+        },
+        "shrink": {
+          "minimal": "disk=none dseed=910a2dec89025cc1 | run K=redis@12+1",
+          "tries": 6,
+          "confirmations": [
+            {
+              "tag": "errmin-a-07df7023b937",
+              "fp": "0549aab9e6e80c6a",
+              "verdict": "HYDO-ORACLE: OK acked=30",
+              "present": true
+            },
+            {
+              "tag": "errmin-b-07df7023b937",
+              "fp": "0549aab9e6e80c6a",
+              "verdict": "HYDO-ORACLE: OK acked=30",
+              "present": true
+            }
+          ],
+          "identical": true,
+          "repro_command": "`hydo run --image /work/scripted-disk.img \"disk=none dseed=910a2dec89025cc1 | run K=redis@12+1\"`"
+        }
+      },
+      {
+        "signature": "4c53c64297e2",
+        "service": "app",
+        "source": "log",
+        "template": "config reloaded",
+        "example": "config reloaded",
+        "new": true,
+        "runs": 12,
+        "new_runs": 12,
+        "seeds": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "first_seed": 1,
+        "first_schedule": "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@12+2",
+        "first_at": [
+          "s"
+        ],
+        "lines": 12,
+        "first_new": {
+          "seed": 1,
+          "schedule": "disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@12+2",
+          "at": [
+            "s"
+          ],
+          "example": "config reloaded"
+        }
+      },
+      {
+        "signature": "1136d02b9619",
+        "service": "mysql",
+        "source": "log",
+        "template": "connection to mysql lost <n>",
+        "example": "connection to mysql lost 3",
+        "new": true,
+        "runs": 6,
+        "new_runs": 6,
+        "seeds": [
+          2,
+          4,
+          6,
+          7,
+          9,
+          12
+        ],
+        "first_seed": 2,
+        "first_schedule": "disk=none dseed=975835de1c9756ce | run K=mysql@9+2 N=redis@7-13:duplicate,36%,loss,57%",
+        "first_at": [
+          "9"
+        ],
+        "lines": 12,
+        "first_new": {
+          "seed": 2,
+          "schedule": "disk=none dseed=975835de1c9756ce | run K=mysql@9+2 N=redis@7-13:duplicate,36%,loss,57%",
+          "at": [
+            "9"
+          ],
+          "example": "connection to mysql lost 3"
+        },
+        "shrink": {
+          "minimal": "disk=none dseed=975835de1c9756ce | run K=mysql@9+1",
+          "tries": 11,
+          "confirmations": [
+            {
+              "tag": "errmin-a-1136d02b9619",
+              "fp": "53dedc90641bb24b",
+              "verdict": "HYDO-ORACLE: OK acked=30",
+              "present": true
+            },
+            {
+              "tag": "errmin-b-1136d02b9619",
+              "fp": "53dedc90641bb24b",
+              "verdict": "HYDO-ORACLE: OK acked=30",
+              "present": true
+            }
+          ],
+          "identical": true,
+          "repro_command": "`hydo run --image /work/scripted-disk.img \"disk=none dseed=975835de1c9756ce | run K=mysql@9+1\"`"
+        }
+      },
+      {
+        "signature": "63f14344357a",
+        "service": "kafka",
+        "source": "log",
+        "template": "connection to kafka lost <n>",
+        "example": "connection to kafka lost 3",
+        "new": true,
+        "runs": 2,
+        "new_runs": 2,
+        "seeds": [
+          8,
+          10
+        ],
+        "first_seed": 8,
+        "first_schedule": "disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms",
+        "first_at": [
+          "13"
+        ],
+        "lines": 4,
+        "first_new": {
+          "seed": 8,
+          "schedule": "disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms",
+          "at": [
+            "13"
+          ],
+          "example": "connection to kafka lost 3"
+        },
+        "shrink": {
+          "minimal": "disk=none dseed=9e5651b0ef953636 | run K=kafka@13+1",
+          "tries": 14,
+          "confirmations": [
+            {
+              "tag": "errmin-a-63f14344357a",
+              "fp": "dd89aafb2aacc24e",
+              "verdict": "HYDO-ORACLE: OK acked=30",
+              "present": true
+            },
+            {
+              "tag": "errmin-b-63f14344357a",
+              "fp": "dd89aafb2aacc24e",
+              "verdict": "HYDO-ORACLE: OK acked=30",
+              "present": true
+            }
+          ],
+          "identical": true,
+          "repro_command": "`hydo run --image /work/scripted-disk.img \"disk=none dseed=9e5651b0ef953636 | run K=kafka@13+1\"`"
+        }
+      }
+    ]
+  },
+  "properties": {
+    "runs": 12,
+    "setup_complete_runs": 0,
+    "violations": 0,
+    "properties": [
+      {
+        "id": "orders.drained",
+        "assertion": "eventually",
+        "message": "",
+        "declared": false,
+        "passes": 12,
+        "fails": 0,
+        "runs_passed": 12,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok",
+        "slowest_ok_s": 3.26
+      },
+      {
+        "id": "retry.taken",
+        "assertion": "sometimes",
+        "message": "",
+        "declared": false,
+        "passes": 9,
+        "fails": 3,
+        "runs_passed": 9,
+        "runs_failed": 3,
+        "verdict": "PASS",
+        "status": "ok",
+        "first_failure": "-"
+      }
+    ]
+  },
+  "liveness": [
+    {
+      "id": "orders.drained",
+      "held_runs": 12,
+      "missed_runs": 0,
+      "slowest_s": 3.26,
+      "slowest_run": "seed-9"
+    }
+  ],
+  "artifacts": {
+    "events": "events.jsonl",
+    "report": "report.md",
+    "consoles": "consoles"
+  }
+}

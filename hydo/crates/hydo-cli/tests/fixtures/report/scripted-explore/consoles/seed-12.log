@@ -1,0 +1,6 @@
+hydo-fake: run disk=lying:2 dseed=943ff9fc99de8f03 | run K=mysql@17+3 C=27
+HYDO-ASSERT {"t":"eventually","id":"orders.drained","ok":true,"details":{"elapsed_s":"0.81","out":"pending=230"}}
+HYDO-ASSERT {"t":"sometimes","id":"retry.taken","ok":true}
+HYDO-ERRLOG {"svc":"mysql","src":"log","n":2,"at":"17","tpl":"connection to mysql lost <n>","ex":"connection to mysql lost 3"}
+HYDO-ERRLOG {"svc":"app","src":"log","n":1,"at":"s","tpl":"config reloaded","ex":"config reloaded"}
+HYDO-ERRLOG-SUM {"boot":"first","steps":30,"lines":2,"kinds":2,"shown":2}

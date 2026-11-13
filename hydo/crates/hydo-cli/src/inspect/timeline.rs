@@ -125,11 +125,13 @@ fn is_kernel(l: &str) -> bool {
 /// The engine console of a conversation, as the run directory keeps it.
 fn console_of(rec: &Recorded, c: Conv) -> Option<String> {
     let f = match c {
-        // a boot's console is kept only when the boot ended the run (no run conversation)
-        Conv::Boot if rec.transcript(Conv::Run).is_none() => "one.log",
+        // a boot's console is kept only when the boot ended the run (no run conversation); an
+        // exploration's workers boot apart from its runs
+        Conv::Boot if rec.transcript(Conv::Run).is_none() && rec.files.tag.is_none() => {
+            rec.files.console(Conv::Run)
+        }
         Conv::Boot => return None,
-        Conv::Run => "one.agent.log",
-        Conv::Recovery => "one.recovery.agent.log",
+        c => rec.files.agent_log(c),
     };
     std::fs::read_to_string(rec.dir.join(f)).ok()
 }
@@ -242,7 +244,8 @@ pub fn agent_events(rec: &Recorded) -> Vec<AgentEv> {
         }
     }
     // conversations whose console has no agent lines: what a replay saw, when it was kept
-    if let Ok(t) = std::fs::read_to_string(rec.dir.join(AGENT_EVENTS)) {
+    let kept = rec.files.agent_events().map(|f| rec.dir.join(f));
+    if let Some(Ok(t)) = kept.map(std::fs::read_to_string) {
         for l in t.lines() {
             let Ok(v) = serde_json::from_str::<Value>(l) else {
                 continue;
@@ -364,7 +367,7 @@ pub fn diff_cut(s: &str, n: usize) -> String {
 }
 
 /// The kind of a `hydo diff` event.
-fn kind_of(e: &diff::Ev) -> &'static str {
+pub fn kind_of(e: &diff::Ev) -> &'static str {
     match e.level {
         "control" if e.key.starts_with("send") => "command",
         "control" if e.key.starts_with("snap") => "snapshot",
@@ -389,7 +392,7 @@ fn kind_of(e: &diff::Ev) -> &'static str {
     }
 }
 
-fn service_of(text: &str, json: &Value) -> Option<String> {
+pub fn service_of(text: &str, json: &Value) -> Option<String> {
     if let Some(h) = json.get("h").and_then(Value::as_str) {
         return Some(h.trim_start_matches("setup:").to_string());
     }
@@ -413,12 +416,10 @@ fn service_of(text: &str, json: &Value) -> Option<String> {
 pub fn events(rec: &Recorded) -> Vec<TimelineEvent> {
     let mut keyed: Vec<((usize, u64, u8, usize), TimelineEvent)> = Vec::new();
     let merged = |c: Conv| -> String {
-        let f = match c {
-            Conv::Boot => return String::new(),
-            Conv::Run => "one.log",
-            Conv::Recovery => "one.recovery.log",
-        };
-        std::fs::read_to_string(rec.dir.join(f)).unwrap_or_default()
+        if c == Conv::Boot {
+            return String::new();
+        }
+        std::fs::read_to_string(rec.dir.join(rec.files.console(c))).unwrap_or_default()
     };
     for (ci, c) in Conv::ALL.iter().enumerate() {
         let Some(t) = rec.transcript(*c) else {
@@ -476,7 +477,7 @@ pub fn events(rec: &Recorded) -> Vec<TimelineEvent> {
     // the forced preemption points (HYDO_PREEMPT_RECORD, M208), each before the stop that
     // follows it; `at` is the point's own exit count
     let ci = Conv::ALL.iter().position(|c| *c == Conv::Run).unwrap_or(0);
-    for (i, p) in crate::preempt::read(&rec.dir)
+    for (i, p) in crate::preempt::read_file(&rec.dir.join(rec.files.preempt()))
         .unwrap_or_default()
         .into_iter()
         .enumerate()

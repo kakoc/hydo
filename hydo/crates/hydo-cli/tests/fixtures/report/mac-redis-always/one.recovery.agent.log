@@ -1,0 +1,10 @@
+HYDO-AG 57 a66632a6 {"nonce":4800,"ok":true,"op":"sync","re":7,"seq":9,"v":1}
+HYDO-AG 67 a3ff76e3 {"ok":true,"op":"clock_set","re":8,"sec":1767225600,"seq":10,"v":1}
+HYDO-AG 57 8de80c3c {"bytes":26,"ok":true,"op":"write","re":9,"seq":11,"v":1}
+HYDO-AG 47 b3c8cf26 {"ok":true,"op":"mount","re":10,"seq":12,"v":1}
+HYDO-AG 47 584bd1d0 {"ok":true,"op":"mkdir","re":11,"seq":13,"v":1}
+HYDO-AG 47 bff201de {"ok":true,"op":"spawn","re":12,"seq":14,"v":1}
+HYDO-AG 47 8884a0e0 {"ok":true,"op":"probe","re":13,"seq":15,"v":1}
+HYDO-AG 79 9493ac07 {"ev":"probe","id":13,"ok":true,"seq":16,"status":0,"tries":1,"v":1,"why":"ok"}
+HYDO-AG 45 8e65d719 {"ok":true,"op":"run","re":14,"seq":17,"v":1}
+HYDO-AG 91 6dc76310 {"ev":"done","id":14,"out":"acked=12 all present\n","out_len":21,"seq":18,"status":0,"v":1}

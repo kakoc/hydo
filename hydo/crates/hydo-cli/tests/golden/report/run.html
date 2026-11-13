@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="hydo report --html">
+<title>hydo report: redis, a check did not hold</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1d1f23;--muted:#5b616b;--line:#e1e3e7;--card:#fff;--code:#f2f3f5;
+--bad:#a8261b;--bad-bg:#fdeceb;--ok:#17703a;--ok-bg:#e6f4ea;--warn:#8a5a00;--warn-bg:#fdf3d8;
+--note:#2c5b9a;--note-bg:#e8f0fb;--add:#e6f4ea;--del:#fdeceb;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#131518;--fg:#e4e6e9;--muted:#9aa1ab;--line:#2c3037;
+--card:#1b1e22;--code:#23272d;--bad:#ff8a80;--bad-bg:#3b1f1d;--ok:#6fd38b;--ok-bg:#17301f;
+--warn:#e8bb4a;--warn-bg:#352a12;--note:#8ab8ff;--note-bg:#1a2a42;--add:#17301f;--del:#3b1f1d}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:16px 16px 48px}
+h1{font-size:1.45rem;line-height:1.3;margin:.4rem 0 .6rem}
+h2{font-size:1.15rem;margin:2rem 0 .6rem;padding-bottom:.3rem;border-bottom:1px solid var(--line)}
+h3{font-size:1rem;margin:.2rem 0 .6rem}
+h4{font-size:.95rem;margin:1rem 0 .4rem}
+p{margin:.4rem 0}
+code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:13px}
+code{background:var(--code);padding:1px 4px;border-radius:4px;overflow-wrap:anywhere}
+code.fp{white-space:nowrap;overflow-wrap:normal}
+pre{background:var(--code);padding:8px 10px;border-radius:6px;margin:.3rem 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.lead{font-size:1.02rem}
+.muted{color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:14px 0}
+.badge{display:inline-block;padding:1px 10px;border-radius:999px;font-weight:600;font-size:.88rem;white-space:nowrap}
+.bad{color:var(--bad);background:var(--bad-bg)}.ok{color:var(--ok);background:var(--ok-bg)}
+.warn{color:var(--warn);background:var(--warn-bg)}.note{color:var(--note);background:var(--note-bg)}
+dl.facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 18px;margin:.4rem 0}
+dl.facts dt{color:var(--muted)}dl.facts dd{margin:0;overflow-wrap:anywhere}
+.cmd{display:flex;gap:8px;align-items:flex-start;margin:.3rem 0}.cmd pre{flex:1;min-width:0;margin:0}
+button.copy{font:inherit;font-size:.85rem;padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
+button.copy:hover{border-color:var(--muted)}
+.scroll{overflow-x:auto;margin:.3rem 0}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;white-space:nowrap}
+td.t,td .t{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;overflow-wrap:anywhere}
+td.n{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted)}
+tr.conv td{background:var(--code);font-weight:600;color:var(--fg)}
+tr.del td{background:var(--del)}tr.add td{background:var(--add)}
+tr.same td{color:var(--muted)}
+.kind{display:inline-block;font-size:.8rem;padding:0 6px;border-radius:4px;white-space:nowrap;background:var(--code)}
+.tl label{cursor:pointer;color:var(--muted);font-size:.9rem}
+.tl input.all:not(:checked)~.scroll tr.minor{display:none}
+details{margin:.5rem 0}details>summary{cursor:pointer;font-weight:600}
+nav.toc{display:flex;flex-wrap:wrap;gap:2px 16px;font-size:.92rem;margin:.4rem 0 0}nav.toc a{color:var(--note);text-decoration:none;white-space:nowrap}
+footer{margin-top:2.5rem;font-size:.85rem;color:var(--muted)}
+@media (max-width:640px){dl.facts{grid-template-columns:minmax(0,1fr)}dl.facts dd{margin-bottom:8px}
+.c-clock{display:none}.cmd{flex-direction:column}.cmd pre{width:100%}.cmd button{align-self:flex-end}main{padding:12px 16px 40px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<p class="muted">hydo report</p>
+<h1>redis: a check did not hold</h1>
+<p class="lead">One run of the schedule <code>disk=cut | run C=12 R=everysec</code> ended with <code>HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost</code>.</p>
+<nav class="toc"><a href="#summary">Summary</a><a href="#failure">The failure</a><a href="#replay">Run it again</a><a href="#timeline">Timeline</a><a href="#diff">Against a passing run</a><a href="#checks">Checks</a></nav>
+</header>
+<section id="summary">
+<h2>Summary</h2>
+<dl class="facts">
+<dt>Result</dt><dd><span class="badge bad">failed</span> <code>HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost</code></dd>
+<dt>Schedule</dt><dd><div class="cmd"><pre>disk=cut | run C=12 R=everysec</pre><button type="button" class="copy" data-copy="disk=cut | run C=12 R=everysec" aria-label="Copy to the clipboard">Copy</button></div>
+</dd>
+<dt>System</dt><dd>redis (image <code>explore-ob-redis-arm64.cpio.gz</code>) <span class="muted">sha256 fba2c11e6a371d8b…</span></dd>
+<dt>Engine</dt><dd>the Mac engine (Apple&#39;s Hypervisor.framework)</dd>
+<dt>Host CPU</dt><dd>Apple M2 Pro (Apple)</dd>
+<dt>hydo</dt><dd>0.3.1 <span class="muted">(fingerprint epoch 2: fingerprints compare only between runs of one epoch)</span></dd>
+<dt>Fingerprint</dt><dd><code>a2b8d71c0c467d15</code> <span class="muted">(a hash of the machine's whole final state: a replay gives the same one)</span></dd>
+<dt>Wall time</dt><dd>1 s</dd>
+<dt>Run directory</dt><dd><code>hydo-out/run-cut</code></dd>
+</dl>
+</section>
+<section id="failure">
+<h2>The failure</h2>
+<ul>
+<li><span class="badge bad">failed</span> <code>redis.acked_writes_survive</code> <span class="muted">(invariant)</span>: HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost</li>
+<li><span class="badge bad">failed</span> <code>redis.acked_writes_survive</code> <span class="muted">(assertion)</span>: every SET the client saw acknowledged reads back with its value</li>
+</ul>
+<p><b>Why it failed:</b> a check failed: VIOLATION [redis.acked_writes_survive] key k:0 lost. No service exited and every readiness check passed; look at the state behind it with hydo inspect</p>
+<p>What to do next:</p>
+<ul>
+<li><code>hydo inspect diagnose ../runA --evidence</code></li>
+<li><code>hydo inspect start ../runA --at end</code></li>
+<li><code>hydo inspect events ../runA --kind exit,probe,fault,verdict</code></li>
+</ul>
+</section>
+<section id="replay">
+<h2>Run it again</h2>
+<p>The first command runs the recorded run again from a fresh boot and checks that it gives the same fingerprint. The second runs the same schedule as a new run.</p>
+<div class="cmd"><pre>hydo repro hydo-out/run-cut</pre><button type="button" class="copy" data-copy="hydo repro hydo-out/run-cut" aria-label="Copy to the clipboard">Copy</button></div>
+<div class="cmd"><pre>hydo run --image /work/redis/hydo-out/explore-ob-redis-arm64.cpio.gz &quot;disk=cut | run C=12 R=everysec&quot;</pre><button type="button" class="copy" data-copy="hydo run --image /work/redis/hydo-out/explore-ob-redis-arm64.cpio.gz &quot;disk=cut | run C=12 R=everysec&quot;" aria-label="Copy to the clipboard">Copy</button></div>
+</section>
+<section id="timeline">
+<h2>Timeline of the run</h2>
+<div class="tl">
+<p class="muted">Each row is one event, in order. <b>Stop</b> is the moment at which hydo's host side looked at the guest (<code>hydo inspect start DIR --at run:STOP</code> goes back there); <b>clock</b> is the engine's virtual clock, the same in every replay. The main events are shown; 38 more (commands, snapshots, the guest's own output) are behind the box.</p>
+<input type="checkbox" class="all" id="tl-run"> <label for="tl-run">Show every event</label>
+<div class="scroll"><table>
+<thead><tr><th>Stop</th><th class="c-clock">Clock</th><th>What</th><th>Service</th><th>Event</th></tr></thead>
+<tbody>
+<tr class="conv"><td colspan="5">Boot and setup, before the workload (the same in every run of this image)</td></tr>
+<tr class="minor"><td class="n">39</td><td class="n c-clock">2432</td><td><span class="kind ">command</span></td><td></td><td class="t">mkdir /tmp/hydo</td></tr>
+<tr class="minor"><td class="n">39</td><td class="n c-clock">2432</td><td><span class="kind ">command</span></td><td></td><td class="t">write /tmp/hydo/acked (0 bytes)</td></tr>
+<tr class="minor"><td class="n">39</td><td class="n c-clock">2432</td><td><span class="kind ">command</span></td><td></td><td class="t">write /tmp/hydo/outcomes (0 bytes)</td></tr>
+<tr class="minor"><td class="n">39</td><td class="n c-clock">2432</td><td><span class="kind ">command</span></td><td></td><td class="t">write /tmp/hydo/failed (0 bytes)</td></tr>
+<tr class="minor"><td class="n">39</td><td class="n c-clock">2432</td><td><span class="kind ">command</span></td><td></td><td class="t">run ifconfig lo 127.0.0.1 netmask 255.0.0.0 up</td></tr>
+<tr class="minor"><td class="n">65</td><td class="n c-clock">4096</td><td><span class="kind ">command</span></td><td></td><td class="t">run ip link set lo up</td></tr>
+<tr><td class="n">76</td><td class="n c-clock">4800</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: phase=serve services=[redis] steps=20</td></tr>
+<tr class="minor"><td class="n">76</td><td class="n c-clock">4800</td><td><span class="kind ">assertion declared</span></td><td></td><td class="t">HYDO-ASSERT-DECL {&quot;t&quot;:&quot;always&quot;,&quot;id&quot;:&quot;redis.acked_writes_survive&quot;,&quot;msg&quot;:&quot;every SET the client saw acknowledged reads back with its value&quot;}</td></tr>
+<tr class="minor"><td class="n">76</td><td class="n c-clock">4800</td><td><span class="kind ">snapshot</span></td><td></td><td class="t">snapshot S0</td></tr>
+<tr class="minor"><td class="n">76</td><td class="n c-clock">4800</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: command: provision</td></tr>
+<tr class="minor"><td class="n">76</td><td class="n c-clock">4800</td><td><span class="kind ">command</span></td><td></td><td class="t">clock_set</td></tr>
+<tr><td class="n">81</td><td class="n c-clock">5120</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: realtime clock set to 2026-01-01T00:00:00Z</td></tr>
+<tr class="minor"><td class="n">81</td><td class="n c-clock">5120</td><td><span class="kind ">command</span></td><td></td><td class="t">mount</td></tr>
+<tr class="minor"><td class="n">94</td><td class="n c-clock">5952</td><td><span class="kind ">command</span></td><td></td><td class="t">mkdir /data/redis</td></tr>
+<tr><td class="n">94</td><td class="n c-clock">5952</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: mounted /dev/vda2 on /data (rw)</td></tr>
+<tr><td class="n">94</td><td class="n c-clock">5952</td><td><span class="kind note">service start</span></td><td>redis</td><td class="t">spawn [redis] exec /bin/redis-server /etc/redis.conf</td></tr>
+<tr class="minor"><td class="n">115</td><td class="n c-clock">7296</td><td><span class="kind ">command</span></td><td>redis</td><td class="t">probe /bin/redis-cli ping | grep -q PONG (until ready)</td></tr>
+<tr><td class="n">148</td><td class="n c-clock">9408</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: redis ready after 0 polls</td></tr>
+<tr class="minor"><td class="n">148</td><td class="n c-clock">9408</td><td><span class="kind ">command</span></td><td></td><td class="t">syncfs</td></tr>
+<tr><td class="n">153</td><td class="n c-clock">9728</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: provisioning synced</td></tr>
+<tr><td class="n">153</td><td class="n c-clock">9728</td><td><span class="kind ">report</span></td><td></td><td class="t">HYDO-SETUP-COMPLETE</td></tr>
+<tr class="minor"><td class="n">153</td><td class="n c-clock">9728</td><td><span class="kind ">snapshot</span></td><td></td><td class="t">snapshot S1</td></tr>
+<tr><td class="n">153</td><td class="n c-clock">9728</td><td><span class="kind ">phase ended</span></td><td></td><td class="t">end at snapshot S1</td></tr>
+<tr class="conv"><td colspan="5">The workload, under the schedule&#39;s faults</td></tr>
+<tr class="minor"><td class="n">153</td><td class="n c-clock">9728</td><td><span class="kind ">command</span></td><td></td><td class="t">sync</td></tr>
+<tr class="minor"><td class="n">153</td><td class="n c-clock">9728</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: command: run C=12 R=everysec</td></tr>
+<tr class="minor"><td class="n">153</td><td class="n c-clock">9728</td><td><span class="kind ">command</span></td><td></td><td class="t">run /bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE</td></tr>
+<tr><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind ">command ended</span></td><td></td><td class="t">command ended (status 0): /bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE; output: OK</td></tr>
+<tr><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: knob R=everysec (Redis appendfsync)</td></tr>
+<tr class="minor"><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind ">assertion declared</span></td><td></td><td class="t">HYDO-ASSERT-DECL {&quot;t&quot;:&quot;reachable&quot;,&quot;id&quot;:&quot;fault.paused&quot;,&quot;msg&quot;:&quot;a service was paused (SIGSTOP)&quot;}</td></tr>
+<tr class="minor"><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind ">assertion declared</span></td><td></td><td class="t">HYDO-ASSERT-DECL {&quot;t&quot;:&quot;sometimes&quot;,&quot;id&quot;:&quot;fault.pause_mid_request&quot;,&quot;msg&quot;:&quot;a pause began while a client request was in flight&quot;}</td></tr>
+<tr class="minor"><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind ">assertion declared</span></td><td></td><td class="t">HYDO-ASSERT-DECL {&quot;t&quot;:&quot;reachable&quot;,&quot;id&quot;:&quot;fault.clock_back&quot;,&quot;msg&quot;:&quot;the realtime clock was stepped backwards&quot;}</td></tr>
+<tr class="minor"><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind ">assertion declared</span></td><td></td><td class="t">HYDO-ASSERT-DECL {&quot;t&quot;:&quot;reachable&quot;,&quot;id&quot;:&quot;fault.clock_fwd&quot;,&quot;msg&quot;:&quot;the realtime clock was stepped forwards&quot;}</td></tr>
+<tr class="minor"><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind ">assertion declared</span></td><td></td><td class="t">HYDO-ASSERT-DECL {&quot;t&quot;:&quot;reachable&quot;,&quot;id&quot;:&quot;fault.oneway_req&quot;,&quot;msg&quot;:&quot;a one-way network fault hit the req direction&quot;}</td></tr>
+<tr class="minor"><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind ">assertion declared</span></td><td></td><td class="t">HYDO-ASSERT-DECL {&quot;t&quot;:&quot;reachable&quot;,&quot;id&quot;:&quot;fault.oneway_resp&quot;,&quot;msg&quot;:&quot;a one-way network fault hit the resp direction&quot;}</td></tr>
+<tr class="minor"><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind ">command</span></td><td></td><td class="t">write /tmp/hydo/acked (0 bytes)</td></tr>
+<tr class="minor"><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind ">command</span></td><td></td><td class="t">write /tmp/hydo/outcomes (0 bytes)</td></tr>
+<tr class="minor"><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind ">command</span></td><td></td><td class="t">write /tmp/hydo/workload.log (0 bytes)</td></tr>
+<tr><td class="n">173</td><td class="n c-clock">11008</td><td><span class="kind note">service start</span></td><td>workload</td><td class="t">spawn [workload] i=$HYDO_FROM while [ $i -lt $HYDO_TO ]; do r=$(timeout 2 /bin/redis-cli SET k:$i v$i 2&gt;/dev/null) # a 2 s client deadli…</td></tr>
+<tr><td class="n">229</td><td class="n c-clock">14592</td><td><span class="kind warn">process ended</span></td><td>workload</td><td class="t">workload exited: status 0</td></tr>
+<tr><td class="n">229</td><td class="n c-clock">14592</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: workload steps 0..11 rc=0</td></tr>
+<tr class="minor"><td class="n">229</td><td class="n c-clock">14592</td><td><span class="kind ">command</span></td><td></td><td class="t">read /tmp/hydo/outcomes</td></tr>
+<tr class="minor"><td class="n">236</td><td class="n c-clock">15040</td><td><span class="kind ">command</span></td><td></td><td class="t">write /tmp/hydo/failed (0 bytes)</td></tr>
+<tr class="minor"><td class="n">236</td><td class="n c-clock">15040</td><td><span class="kind ">command</span></td><td></td><td class="t">read /tmp/hydo/acked</td></tr>
+<tr><td class="n">245</td><td class="n c-clock">15616</td><td><span class="kind ">report</span></td><td></td><td class="t">hydo-explore-acked: 0 1 2 3 4 5 6 7 8 9 10 11</td></tr>
+<tr><td class="n">245</td><td class="n c-clock">15616</td><td><span class="kind ">report</span></td><td></td><td class="t">hydo-explore-failed:</td></tr>
+<tr><td class="n">245</td><td class="n c-clock">15616</td><td><span class="kind warn">signal</span></td><td>redis</td><td class="t">signal [redis] STOP</td></tr>
+<tr><td class="n">245</td><td class="n c-clock">15616</td><td><span class="kind bad">fault</span></td><td></td><td class="t">hydo-ob: POWER CUT before step 12 (all services frozen)</td></tr>
+<tr><td class="n">245</td><td class="n c-clock">15616</td><td><span class="kind ">report</span></td><td></td><td class="t">hydo-explore-workload-done cut</td></tr>
+<tr><td class="n">249</td><td class="n c-clock">15872</td><td><span class="kind ">phase ended</span></td><td></td><td class="t">end: power cut, acknowledged [0 1 2 3 4 5 6 7 8 9 10 11], failed []</td></tr>
+<tr class="conv"><td colspan="5">The recovery boot: the machine starts again after the power cut, and the checks run</td></tr>
+<tr class="minor"><td class="n">250</td><td class="n c-clock">4800</td><td><span class="kind ">command</span></td><td></td><td class="t">sync</td></tr>
+<tr class="minor"><td class="n">250</td><td class="n c-clock">4800</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: command: oracle 0 1 2 3 4 5 6 7 8 9 10 11</td></tr>
+<tr class="minor"><td class="n">250</td><td class="n c-clock">4800</td><td><span class="kind ">command</span></td><td></td><td class="t">clock_set</td></tr>
+<tr><td class="n">258</td><td class="n c-clock">5312</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: realtime clock set to 2026-01-01T00:00:00Z</td></tr>
+<tr class="minor"><td class="n">258</td><td class="n c-clock">5312</td><td><span class="kind ">command</span></td><td></td><td class="t">write /tmp/hydo/acked (26 bytes)</td></tr>
+<tr class="minor"><td class="n">258</td><td class="n c-clock">5312</td><td><span class="kind ">command</span></td><td></td><td class="t">mount</td></tr>
+<tr class="minor"><td class="n">285</td><td class="n c-clock">7040</td><td><span class="kind ">command</span></td><td></td><td class="t">mkdir /data/redis</td></tr>
+<tr><td class="n">285</td><td class="n c-clock">7040</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: mounted /dev/vda2 on /data (rw)</td></tr>
+<tr><td class="n">285</td><td class="n c-clock">7040</td><td><span class="kind ">report</span></td><td></td><td class="t">hydo-stack: recovering from log</td></tr>
+<tr><td class="n">285</td><td class="n c-clock">7040</td><td><span class="kind note">service start</span></td><td>redis</td><td class="t">spawn [redis] exec /bin/redis-server /etc/redis.conf</td></tr>
+<tr class="minor"><td class="n">304</td><td class="n c-clock">8256</td><td><span class="kind ">command</span></td><td>redis</td><td class="t">probe /bin/redis-cli ping | grep -q PONG (until ready)</td></tr>
+<tr><td class="n">323</td><td class="n c-clock">9472</td><td><span class="kind ">readiness check</span></td><td></td><td class="t">readiness check of redis ended: ok after 1 tries, last status 0 (/bin/redis-cli ping | grep -q PONG)</td></tr>
+<tr><td class="n">323</td><td class="n c-clock">9472</td><td><span class="kind ">host note</span></td><td></td><td class="t">hydo-ob: redis ready after 0 polls</td></tr>
+<tr class="minor"><td class="n">323</td><td class="n c-clock">9472</td><td><span class="kind ">command</span></td><td></td><td class="t">run lost=0 for i in $(cat $HYDO_ACKED); do [ &quot;$(/bin/redis-cli GET k:$i)&quot; = &quot;v$i&quot; ] || { echo &quot;key k:$i lost&quot;; lost=1; brea…</td></tr>
+<tr><td class="n">345</td><td class="n c-clock">10880</td><td><span class="kind ">command ended</span></td><td></td><td class="t">command ended (status 1): lost=0 for i in $(cat $HYDO_ACKED); do [ &quot;$(/bin/redis-cli GET k:$i)&quot; = &quot;v$i&quot; ] || { echo &quot;key k:$i lost&quot;; lost=1; brea…; output: key k:0 lost</td></tr>
+<tr><td class="n">345</td><td class="n c-clock">10880</td><td><span class="kind bad">assertion</span></td><td></td><td class="t">assert redis.acked_writes_survive ok=false: every SET the client saw acknowledged reads back with its value {&quot;out&quot;:&quot;key k:0 lost&quot;}</td></tr>
+<tr><td class="n">345</td><td class="n c-clock">10880</td><td><span class="kind bad">verdict</span></td><td></td><td class="t">HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost</td></tr>
+<tr><td class="n">345</td><td class="n c-clock">10880</td><td><span class="kind ">phase ended</span></td><td></td><td class="t">end: HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost</td></tr>
+</tbody></table></div>
+<p class="muted"><code>hydo inspect events hydo-out/run-cut</code> lists every event with its details.</p>
+</div>
+</section>
+<section id="diff">
+<h2>Against a passing run</h2>
+<p>This compares the failing run with the passing run, which has the same schedule with R=always instead of R=everysec: <code>disk=cut | run C=12 R=always</code> ended with <code>HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)</code>.</p>
+<h4>Where they first part</h4>
+<p>In the workload part of the runs, at stop 153 in the failing run and stop 153 in the passing run (level control).</p>
+<div class="scroll"><table>
+<thead><tr><th></th><th>Where</th><th>Level</th><th>Event</th></tr></thead>
+<tbody>
+<tr class="same"><td>both</td><td><span class="n">stop 153</span></td><td>control</td><td><span class="t">sync</span></td></tr>
+<tr class="same"><td>both</td><td><span class="n">stop 153</span></td><td>controller</td><td><span class="t">hydo-ob: command: run C=12 R=everysec</span></td></tr>
+<tr class="del"><td>only the failing run</td><td><span class="n">stop 153</span></td><td>control</td><td><span class="t">run /bin/redis-cli CONFIG SET appendfsync $HYDO_VALUE</span></td></tr>
+<tr class="del"><td>only the failing run</td><td><span class="n">stop 173</span></td><td>controller</td><td><span class="t">hydo-ob: knob R=everysec (Redis appendfsync)</span></td></tr>
+</tbody></table></div>
+<p class="muted">Where in the workload: after <code>hydo-ob: command: run C=12 R=everysec</code>.</p>
+<h4>The first difference in what the checks judge</h4>
+<p>In the recovery boot part of the runs, at stop 345 in the failing run and stop 407 in the passing run (level assertion).</p>
+<div class="scroll"><table>
+<thead><tr><th></th><th>Where</th><th>Level</th><th>Event</th></tr></thead>
+<tbody>
+<tr class="same"><td>both</td><td><span class="n">stop 285</span></td><td>control</td><td><span class="t">spawn [redis] exec /bin/redis-server /etc/redis.conf</span></td></tr>
+<tr class="same"><td>both</td><td><span class="n">stop 304</span></td><td>control</td><td><span class="t">probe /bin/redis-cli ping | grep -q PONG (until ready)</span></td></tr>
+<tr class="same"><td>both</td><td><span class="n">stop 323</span></td><td>controller</td><td><span class="t">hydo-ob: redis ready after 0 polls</span></td></tr>
+<tr class="same"><td>both</td><td><span class="n">stop 323</span></td><td>control</td><td><span class="t">run lost=0 for i in $(cat $HYDO_ACKED); do [ &quot;$(/bin/redis-cli GET k:$i)&quot; = &quot;v$i&quot; ] || { echo &quot;key k:$i lost&quot;; lost=1; brea…</span></td></tr>
+<tr class="del"><td>only the failing run</td><td><span class="n">stop 345</span></td><td>assertion</td><td><span class="t">assert redis.acked_writes_survive ok=false: every SET the client saw acknowledged reads back with its value {&quot;out&quot;:&quot;key k:0 lost&quot;}</span></td></tr>
+<tr class="del"><td>only the failing run</td><td><span class="n">stop 345</span></td><td>verdict</td><td><span class="t">HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost</span></td></tr>
+<tr class="del"><td>only the failing run</td><td><span class="n">stop 345</span></td><td>outcome</td><td><span class="t">end: HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost</span></td></tr>
+<tr class="add"><td>only the passing run</td><td><span class="n">stop 407</span></td><td>assertion</td><td><span class="t">assert redis.acked_writes_survive ok=true: every SET the client saw acknowledged reads back with its value {&quot;out&quot;:&quot;acked=12 all present&quot;}</span></td></tr>
+<tr class="add"><td>only the passing run</td><td><span class="n">stop 407</span></td><td>verdict</td><td><span class="t">HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)</span></td></tr>
+<tr class="add"><td>only the passing run</td><td><span class="n">stop 407</span></td><td>outcome</td><td><span class="t">end: HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)</span></td></tr>
+</tbody></table></div>
+<p class="muted">Where in the workload: after <code>hydo-ob: redis ready after 0 polls</code>.</p>
+<p>What differs: <code>redis.acked_writes_survive: ok: A false B true</code></p>
+<p>What differs: <code>redis.acked_writes_survive: details.out: only in A: key k:0 lost; only in B: acked=12 all present</code></p>
+<p>What differs: <code>HYDO-ORACLE: only in A: VIOLATION [redis.acked_writes_survive] key k:0 lost; only in B: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)</code></p>
+<p>What differs: <code>end: verdict: only in A: VIOLATION [redis.acked_writes_survive] key k:0 lost; only in B: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)</code></p>
+<p class="muted">The runs differ in 3 places in all.</p>
+</section>
+<section id="checks">
+<h2>Checks and properties</h2>
+<div class="scroll"><table>
+<thead><tr><th>Result</th><th>Check</th><th>Kind</th><th>What it found</th></tr></thead>
+<tbody>
+<tr><td><span class="badge bad">failed</span></td><td><span class="t">redis.acked_writes_survive</span></td><td>invariant</td><td><span class="t">HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost</span></td></tr>
+<tr><td><span class="badge bad">failed</span></td><td><span class="t">redis.acked_writes_survive</span></td><td>assertion</td><td><span class="t">every SET the client saw acknowledged reads back with its value</span></td></tr>
+</tbody></table></div>
+<p>7 properties over this run: 0 held, 1 failed, 6 never reached. A property that is never reached was not tested by these schedules: the fault or the state it needs did not happen.</p>
+<div class="scroll"><table>
+<thead><tr><th>Result</th><th>Property</th><th>Kind</th><th>Runs held / failed</th><th>What it says</th></tr></thead>
+<tbody>
+<tr><td><span class="badge bad">failed</span></td><td><span class="t">redis.acked_writes_survive</span></td><td>always</td><td>0 / 1</td><td>every SET the client saw acknowledged reads back with its value<br><span class="muted">first failure:</span> <span class="t">{&quot;out&quot;:&quot;key k:0 lost&quot;}</span></td></tr>
+<tr><td><span class="badge warn">never reached</span></td><td><span class="t">fault.paused</span></td><td>reachable</td><td>0 / 0</td><td>a service was paused (SIGSTOP)</td></tr>
+<tr><td><span class="badge warn">never reached</span></td><td><span class="t">fault.pause_mid_request</span></td><td>sometimes</td><td>0 / 0</td><td>a pause began while a client request was in flight</td></tr>
+<tr><td><span class="badge warn">never reached</span></td><td><span class="t">fault.clock_back</span></td><td>reachable</td><td>0 / 0</td><td>the realtime clock was stepped backwards</td></tr>
+<tr><td><span class="badge warn">never reached</span></td><td><span class="t">fault.clock_fwd</span></td><td>reachable</td><td>0 / 0</td><td>the realtime clock was stepped forwards</td></tr>
+<tr><td><span class="badge warn">never reached</span></td><td><span class="t">fault.oneway_req</span></td><td>reachable</td><td>0 / 0</td><td>a one-way network fault hit the req direction</td></tr>
+<tr><td><span class="badge warn">never reached</span></td><td><span class="t">fault.oneway_resp</span></td><td>reachable</td><td>0 / 0</td><td>a one-way network fault hit the resp direction</td></tr>
+</tbody></table></div>
+</section>
+<footer>Made by <code>hydo report --html</code> from <code>hydo-out/run-cut/result.json</code>. The page is one file and loads nothing from the network. Every schedule on it replays bit for bit on the same image and hydo version.</footer>
+</main>
+<script>
+document.addEventListener('click',function(e){
+var b=e.target.closest&&e.target.closest('button.copy');if(!b)return;
+var t=b.getAttribute('data-copy');
+function done(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1500)}
+function old(){var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');
+a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();
+try{document.execCommand('copy');done()}catch(x){}document.body.removeChild(a)}
+if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t).then(done,old)}else{old()}});
+</script>
+</body>
+</html>
