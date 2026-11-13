@@ -1,6 +1,7 @@
 # A flaky Rust test under hydo (Qdrant issue 10200)
 
-This page records an attempt to reproduce an open flaky test with hydo. The test is
+This page records an attempt to reproduce an open flaky test with hydo. The result is posted
+upstream: https://github.com/qdrant/qdrant/issues/10200#issuecomment-6803314544 (2026-11-11). The test is
 `tests::wal_recovery_test::test_wal_replay_loads_pending_to_queue` in Qdrant's crate
 `collection`. The flake is a race between the test's own thread and a background worker of the
 same process. It depends on thread timing only. The last section lists what hydo lacked for a test
