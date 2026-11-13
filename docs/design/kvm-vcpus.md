@@ -1,7 +1,7 @@
 # Several vCPUs on the KVM engine
 
 Status: written on 2026-11-13. Stages 1 to 3 are built and passed on GitHub's AMD runners
-(Milestones 213 and 218). The sections on what the probe and the runs showed have the numbers. The engine runs
+(Milestones 213 and 219). The sections on what the probe and the runs showed have the numbers. The engine runs
 several vCPUs with `--vcpus N` and the pinned SMP guest kernel `bzImage-kvm-smp`; with one vCPU it
 runs the code of before. Stage 4, the product and the usefulness test, is next. It answers
 AGENTS.md open item 45 ("The KVM engine: one vCPU only"). The engine it extends is
@@ -505,7 +505,7 @@ schedule ran twice from a fresh boot, and both hosts gave the same fingerprints:
 
 Linux used the second vCPU: in the default two-vCPU run vCPU 1 made 6,396 of the workload's
 26,560 counted exits (the engine's `HYDO_KVM_DIAG` statistics). The one failed check was the run
-from the worker's S1: `hydo explore` refused `--vcpus` for KVM. Milestone 218 lets the explorer
+from the worker's S1: `hydo explore` refused `--vcpus` for KVM. Milestone 219 lets the explorer
 pass the count, and the next runner run checks S1 against a fresh boot there.
 
 ## The plan in stages
@@ -561,7 +561,7 @@ under load, on every runner model:
 Then the kernel's pin.
 
 **Stage 4: the product.** `--vcpus N` for `--backend kvm` reaches the engine from `hydo run` and
-`hydo explore` since Milestone 218. Left: `hydo repro` and `hydo explain`, the explorer's turn
+`hydo explore` since Milestone 219. Left: `hydo repro` and `hydo explain`, the explorer's turn
 tokens and a KVM range for the turn-length search, the help texts, and `bzImage-kvm-smp` in the
 Linux release. Then `recorded.json`
 entries with `vcpus` for KVM, and TIME with turn tokens. The usefulness test is the nats example

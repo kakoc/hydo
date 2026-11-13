@@ -563,7 +563,7 @@ a sandboxed Nix. The sha256 is recorded in
 
 ### The build for several virtual CPUs
 
-`bzImage-kvm-smp` (Milestone 218) is the same kernel for the KVM engine with several vCPUs
+`bzImage-kvm-smp` (Milestone 219) is the same kernel for the KVM engine with several vCPUs
 (docs/design/kvm-vcpus.md). `hv/kvm/linux/kernel-smp.nix` builds it as an override of
 `kernel.nix`, which does not change, so `bzImage-kvm` keeps its pin. It adds
 `hv/kvm/linux/hydo-kvm-smp.patch` after `hydo-kvm-guest.patch`, and `hydo-kvm-smp.config` on top

@@ -823,7 +823,7 @@ crashed, `getconf` reported cache sizes of 0), with it OK `9037e4e693bab2e0` (`g
 ## Several vCPUs
 
 KVM gives no instruction-exact clock, so the engine cannot give turns of an exact length of guest
-work as hvx does (hvx counts retired branches with the PMU, M66). Since Milestone 218 it runs
+work as hvx does (hvx counts retired branches with the PMU, M66). Since Milestone 219 it runs
 several vCPUs in turns of counted exits instead, with `--vcpus N` (2 to 8) and the SMP guest kernel
 `bzImage-kvm-smp`: `docs/design/kvm-vcpus.md` describes it, with its runs. Without the option the
 engine has one vCPU and runs exactly the code of before.

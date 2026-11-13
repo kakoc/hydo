@@ -6604,7 +6604,7 @@ The three saved regressions expect a violation.
 last line, one shrink per signature, the importer's idle job service as a fault target, clock steps
 that cannot aim at a time of day, and the identity test reading git-ignored outputs.
 
-### Milestone 218 (tentative number) — DONE, STAGES 2 AND 3 (several vCPUs on the KVM engine: the engine runs 2 to 8 vCPUs in turns of counted exits, Linux boots on them with the pinned SMP guest kernel, one fingerprint per schedule on two AMD models; one vCPU unchanged; 2026-11-13)
+### Milestone 219 (tentative number) — DONE, STAGES 2 AND 3 (several vCPUs on the KVM engine: the engine runs 2 to 8 vCPUs in turns of counted exits, Linux boots on them with the pinned SMP guest kernel, one fingerprint per schedule on two AMD models; one vCPU unchanged; 2026-11-13)
 
 **In short.** Stages 2 and 3 of `docs/design/kvm-vcpus.md`. With `--vcpus N` the KVM engine runs
 N vCPUs of one VM one at a time from its thread, in turns of counted exits, with an x2APIC per
