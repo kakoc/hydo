@@ -98,6 +98,10 @@ for seed in $SEEDS; do
 done
 # REPEAT > 1: one fingerprint per setting
 if [ "$REPEAT" -gt 1 ]; then
-  grep -E '^(1 vCPU|2 vCPUs), ' "$LOG" | sed 's/: \([0-9a-f]*\) .*/ \1/' | sort | uniq | awk '{k=$0; sub(/ [0-9a-f]+$/, "", k); n[k]++} END {for (k in n) print (n[k] == 1 ? "ONE " : "DIFFER ") n[k] " fingerprint(s): " k}' | sort | tee -a "$LOG"
+  # a run without a result has the fingerprint "none": NO-RESULT, never ONE
+  grep -E '^(1 vCPU|2 vCPUs), ' "$LOG" | sed 's/: \([0-9a-z]*\) .*/ \1/' | sort | uniq \
+    | awk '{fp = $NF; k = $0; sub(/ [0-9a-z]+$/, "", k); n[k]++; if (fp == "none") bad[k] = 1}
+      END {for (k in n) print (bad[k] ? "NO-RESULT " : (n[k] == 1 ? "ONE " : "DIFFER ")) n[k] " fingerprint(s): " k}' \
+    | sort | tee -a "$LOG"
 fi
 say "nats-check: buggy on 2 vCPUs: $pass passed, $failn failed ($(date -u))"
