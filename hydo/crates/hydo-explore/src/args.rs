@@ -2,7 +2,7 @@
 //! choices (argparse's unambiguous prefixes and `--opt=value` too). `--workers` has no fixed
 //! default any more: without it the pool is sized from the machine ([`hydo_engine::Engine::max_workers`]).
 
-pub const USAGE: &str = "usage: hydo explore [--seeds 1-200] [--strategy random|swarm|swarm-pos|process] [--workers N]
+pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|swarm|swarm-pos|process] [--workers N]
        --image IMG --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm|kvm]
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
        [--freeze-call] [--protocol-faults] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
@@ -10,7 +10,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds 1-200] [--strategy random|
        [--ram-mib N] [--known-errors FILE] [--errors report|fail]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
        [--storage-faults] [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
-        [--steer-batch N] [--steer-corpus N] [--steer-stop]] ... (explore.py's options)";
+        [--steer-batch N] [--steer-corpus N] [--steer-stop]] ...";
 
 /// The refusal without `--image` (Milestone 146: explore.py's default, `explore-disk.img`, is a
 /// shell-init image, which hydo has not run since Milestone 145).

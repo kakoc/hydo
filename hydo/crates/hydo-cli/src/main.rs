@@ -22,6 +22,7 @@ mod diff;
 mod doctor;
 mod explain;
 mod fetch;
+mod help;
 mod hvxenv;
 mod inspect;
 mod migrate;
@@ -185,10 +186,24 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
     if cmd == "skill" && rest.first().map(String::as_str) == Some("update") {
         return skillupdate::cmd_skill_update(ctx, &rest[1..]);
     }
+    let linux = ctx.platform == Platform::Linux;
+    // `hydo <command> --help` before the command looks for an image, a project or a run (M210)
+    if help::asked(rest) {
+        if let Some(text) = help::of(cmd, linux) {
+            println!("{text}");
+            return 0;
+        }
+        // a command with sub-commands answers `hydo <command> <sub> ... --help` with its help
+        if help::WITH_SUBCOMMANDS.contains(&cmd) && rest[0] != "--help" && rest[0] != "-h" {
+            return dispatch(
+                ctx,
+                &[argv[0].clone(), cmd.to_string(), "--help".to_string()],
+            );
+        }
+    }
     if matches!(cmd, "guide" | "skill" | "init") {
         return delegated::cmd_agents(ctx, cmd, rest);
     }
-    let linux = ctx.platform == Platform::Linux;
     match cmd {
         // the version this program was built as, and the commit when it is known (a tree's git, a
         // release's hydo/COMMIT, a crates.io package's .cargo_vcs_info.json: hydo-image's build.rs)

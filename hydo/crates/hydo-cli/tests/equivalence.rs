@@ -565,6 +565,89 @@ fn doctor_never_fetches() {
     let _ = std::fs::remove_dir_all(&home);
 }
 
+/// `hydo <command> --help` and `-h` print the command's options in a directory with no image,
+/// no project and no recorded run, end 0 and write nothing (M210: before, `hydo explore --help`
+/// looked for an image, `hydo doctor --help` checked the machine, `hydo report --help` read
+/// `--help` as a directory, and `hydo repro --help` printed `hydo run`'s usage). A command with
+/// sub-commands answers the help after a sub-command too.
+#[test]
+fn every_command_prints_its_help_without_an_image() {
+    let both: &[&[&str]] = &[
+        &["run"],
+        &["repro"],
+        &["repro", "--regressions"],
+        &["save"],
+        &["report"],
+        &["setup"],
+        &["doctor"],
+        &["errors"],
+        &["errors", "list"],
+        &["errors", "check"],
+        &["check-history"],
+        &["check-history", "no-such-dir"],
+        &["migrate"],
+        &["compose"],
+        &["build"],
+        &["build", "hydo.yaml"],
+        &["explore"],
+        &["explore", "--seeds", "1-3"],
+        &["diff"],
+        &["explain"],
+        &["inspect"],
+        &["inspect", "logs"],
+        &["inspect", "events"],
+        &["ci"],
+        &["ci", "compare"],
+        &["sql-gen"],
+        &["guide"],
+        &["skill"],
+        &["skill", "install"],
+        &["init"],
+    ];
+    for plat in ["linux", "mac"] {
+        let mut cases: Vec<Vec<&str>> = both.iter().map(|c| c.to_vec()).collect();
+        if plat == "linux" {
+            cases.push(vec!["module"]);
+            cases.push(vec!["module", "install"]);
+        }
+        for case in &cases {
+            for flag in ["--help", "-h"] {
+                let dir = scratch("help");
+                let home = scratch("help-home");
+                let o = Command::new(env!("CARGO_BIN_EXE_hydo"))
+                    .args(case)
+                    .arg(flag)
+                    .current_dir(&dir)
+                    .env("HYDO_CLI_PLATFORM", plat)
+                    .env("HYDO_HOME", &home)
+                    .env("HYDO_OFFLINE", "1")
+                    .env("HYDO_BACKEND", "hvx")
+                    .output()
+                    .unwrap();
+                let out = String::from_utf8_lossy(&o.stdout);
+                let err = String::from_utf8_lossy(&o.stderr);
+                let what = format!("{plat}: hydo {} {flag}", case.join(" "));
+                assert_eq!(o.status.code(), Some(0), "{what}\n{out}{err}");
+                assert!(err.is_empty(), "{what}: {err}");
+                let name = case[0];
+                assert!(
+                    out.contains(&format!("hydo {name}")) || out.contains("hydo-check"),
+                    "{what}: {out}"
+                );
+                for d in [&dir, &home] {
+                    let left: Vec<_> = std::fs::read_dir(d)
+                        .unwrap()
+                        .filter_map(Result::ok)
+                        .map(|e| e.file_name())
+                        .collect();
+                    assert!(left.is_empty(), "{what} wrote {left:?}");
+                    let _ = std::fs::remove_dir_all(d);
+                }
+            }
+        }
+    }
+}
+
 fn load_golden() -> BTreeMap<String, Value> {
     let text = std::fs::read_to_string(golden_path()).unwrap_or_default();
     text.lines()
