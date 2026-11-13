@@ -511,6 +511,16 @@ pub fn branch_schedule(a: &S, f: &S, b: i64, steps: i64) -> S {
     if out.cf.is_some() {
         out.c = None;
     }
+    // N= and O= put netem on the same root qdisc, and the strategies never draw both (gen.rs
+    // draws O= only without N=). A branch that has both gets `ERROR tc setup failed` when the
+    // windows meet, so it keeps the one of `a` and drops the one moved from `f`.
+    if out.n.is_some() && out.o.is_some() {
+        if keep.contains("n") {
+            out.o = None;
+        } else {
+            out.n = None;
+        }
+    }
     out
 }
 
@@ -580,6 +590,27 @@ mod tests {
         let b = branch_schedule(&a, &f, 29, 30);
         assert_eq!(b.c, Some(20));
         assert_eq!(b.p, None);
+    }
+
+    #[test]
+    fn a_branch_never_has_both_network_windows() {
+        let net = || vec![("loss".to_string(), 50)];
+        let mut a = st();
+        a.o = Some(("redis".into(), 18, 24, "req".into(), net()));
+        let mut f = st();
+        f.n = Some(("redis".into(), 3, 5, net()));
+        // a's O= starts by b and is kept; f's N= would meet it on the same qdisc
+        let b = branch_schedule(&a, &f, 20, 30);
+        assert_eq!(b.o, a.o);
+        assert_eq!(b.n, None);
+        // the other way round: a's N= is kept, f's O= is dropped
+        let mut a = st();
+        a.n = Some(("kafka".into(), 4, 9, net()));
+        let mut f = st();
+        f.o = Some(("mysql".into(), 2, 6, "resp".into(), net()));
+        let b = branch_schedule(&a, &f, 10, 30);
+        assert_eq!(b.n, a.n);
+        assert_eq!(b.o, None);
     }
 
     #[test]
