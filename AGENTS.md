@@ -341,6 +341,15 @@ known Lago bug: a subscription cancelled while Redis is down is never invoiced (
 6901). Only the generic rule caught usage dropped by a termination after a clock step. The
 consistency rules never failed. The example is `hydo/onboard/examples/lago` (RESULTS.md).
 
+**Blnk: business rules on a ledger with a queue (M224).** On Blnk's `main` (`67d88333`), seven
+domain rules over Blnk's tables ran beside the generic rule over the client's acknowledged
+operations. The runs used the Mac engine and hvx. Each kind found what the other did not. The overdraft
+rule found a new Blnk bug: draws that the worker coalesces, or that the queue recovery applies,
+lose their `overdraft_limit`. The bulk rule and the generic rule found another: an atomic bulk
+keeps its first transfer when a later one fails before it is queued. Only the generic rule saw
+acknowledged commits of holds lost with Redis's defaults. Both bugs have tested patches. The
+example is `hydo/onboard/examples/blnk` (RESULTS.md).
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -714,6 +723,19 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `--git` ran only in the scripted test, and `--all` and contradictions only there and in unit
     tests. Replays run one at a time. `hydo ci run` does not call it yet (stage 2 of
     `docs/design/ci.md` could, for its `new` findings).
+96. A failing `.sql` check's rows (M224). On hvx with 0.3.1 and on the Mac with this tree, every
+    violation of a SQL check read `<store>: N rows where none may be`, without the rows that
+    Milestone 192 appends. Each explanation of the Blnk example needed a `hydo inspect` session
+    with `psql`.
+97. Network links from `depends_on` only (M224). A service that talks to another without naming it
+    in `depends_on` has no link to it in the fault space. Blnk's worker reaches PostgreSQL and
+    Redis, and Blnk's Compose file names neither for it; the example names them by hand.
+98. The Linux release and `network: bridge` (M224). `hydo build` of the unpacked release stops with
+    `HYDO_IPROUTE2 not found at /nix/store/...` until `hydo setup` unpacks `guest/store.tar`. The
+    message does not name `hydo setup`.
+99. Error kinds and an operation's name (M224). A line that names a reference such as `d5_q` gets
+    the template `d#_q`, so every type of operation makes its own kind. The Blnk example's
+    `known-errors.yaml` groups them with regular expressions.
 
 ## Milestone index
 
@@ -1041,6 +1063,12 @@ build machine, before 2026-10-13.
   (`--shard I/N`, `hydo ci merge`, the action's `merge` input), and a directory history store
   (`hydo ci record`, `--history`, `reappeared`). Proven on the Mac with the Redis example's
   `everysec` change. Nothing recorded moved
+- M224 (tentative number): the Blnk onboarding, the third experiment in business bugs, on the
+  Mac engine and on hvx. Two new Blnk bugs on `main` have tested patches. Coalesced and
+  recovered draws ignore their overdraft limit (found by the overdraft rule alone). An atomic
+  bulk keeps its first transfer when a later one fails before it is queued (the bulk rule, the
+  generic rule, and the error logs). Acknowledged commits of holds are lost with Redis's defaults
+  (the generic rule alone). Nothing recorded moved
 
 ## Where to look
 

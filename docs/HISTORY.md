@@ -7182,3 +7182,70 @@ whose goldens did not move) and hydo's `ci::` unit tests, `cargo test -p hydo --
 **Not built** (open item 67): the history page (`hydo ci page`), the `workflow_run` recorder of
 pull requests, a history branch kept by the action, budgets turned into seed counts from history,
 proposed regression files, and one shrink per signature across shards.
+
+### Milestone 224 (tentative number) - DONE (Blnk onboarded on the Mac engine and on hvx as the third experiment in business bugs; two new Blnk bugs, an overdraft limit that coalesced draws ignore and an atomic bulk that keeps its first transfer, each found by a domain rule; nothing recorded moved; 2026-11-14)
+
+**In short.** Blnk, an open source ledger in Go, runs unmodified from `main` at `67d88333`
+(2026-11-11) in `hydo/onboard/examples/blnk` (RESULTS.md). Its API process saves each
+transaction as `QUEUED` in PostgreSQL 16, and a worker applies it through a Redis 7.2.4 queue.
+The latest release, v0.15.8, has four bugs fixed since on `main` (upstream issues 413, 418, 421
+and 422), so the experiment tested `main`. Seven domain rules read Blnk's tables:
+
+- balanced transactions;
+- balances and held amounts equal to their transactions;
+- one final state per queued transaction;
+- holds that never commit more than they held;
+- one transaction per reference;
+- overdraft rules;
+- atomic bulks.
+
+One generic rule compares every balance with the client's acknowledged operations. Error logs
+as findings ran beside them. The runs used the Mac engine with this tree's hydo, and hvx on the
+bare-metal machine with the published 0.3.1. No hydo code changed, and nothing recorded moved.
+
+**What was found.**
+
+- A Blnk bug, found by the overdraft rule alone. Blnk does not save `overdraft_limit`. The
+  worker loads coalesced draws, and recovered ones, from PostgreSQL without it, and an
+  `allow_overdraft` without a limit skips every balance check. On hvx it shows without a fault,
+  with concurrent draws only (`overdraft-limit-concurrent-draws`). Natively 20 of 20 bursts of 5
+  draws went past a limit of 50.00, and 0 of 20 with a two-line patch.
+- A Blnk bug, found by the bulk rule, the generic rule, and the error logs. A synchronous atomic
+  bulk in queue mode refunds only applied items when a later item fails before it is queued: a
+  Redis timeout, a request cancelled because the client gave up, or a reused reference. The
+  earlier items stay `QUEUED`, nothing marks the batch failed, and the worker applies them; the
+  answer says nothing was applied. It failed 17 of 85 explored schedules, and natively 20 of 20
+  bulks with a reused reference. The tested patch marks the batch failed, rolls back under the
+  batch lock, and records the waiting items as `REJECTED` in PostgreSQL. With it, the 6 failing
+  schedules of one exploration hold the rule, and the native bulks have no effect.
+- A deployment setting, found by the generic rule alone. With Redis's defaults (no append-only
+  file, as in Blnk's Compose file), a Redis kill or a power cut loses acknowledged commits and
+  voids of holds, which live only in Redis. `--set redis_aof=yes` passes the same schedule.
+  Upstream issue 336 drew the same line for the expiry of holds.
+- A clock effect: after an hour's backward clock step, transfers behind a lock that a killed
+  worker left were rejected after their 5 retries.
+
+Reports for both bugs are drafted, not posted.
+
+**Runs.** 85 explored schedules and about 40 directed runs:
+
+| exploration | engine | strategy | schedules | failures |
+|---|---|---|---|---|
+| e2 | Mac | `process --new-faults`, seeds 1-20 | 20 | 9: the bulk bug 6, the lost commits 2, a mistake of the wait 1 |
+| h1 | hvx | `swarm --new-faults`, seeds 101-125 | 25 | 15: the overdraft bug 1, the bulk bug 2, the lost commits 3, disk faults 9 |
+| h2 | hvx | `process --new-faults --timing --preempt`, seeds 201-220 | 20 | 8: the overdraft bug 1 (shrunk to no fault), the bulk bug 2, the lost commits 2, the wait 2, the clock 1 |
+| e4 | Mac | `process --new-faults`, seeds 41-60 | 20 | 10: the bulk bug 7, the lost commits 1, the wait 1, the clock 1 |
+
+The final images pass `disk=none | run` twice with one fingerprint on each engine
+(`c8645a2ab6f1b90f` on the Mac, `35f37b7eb11da9ed` on hvx), and the three regressions fail as
+expected on both.
+
+**Which kind of rule found what.** Each kind found what the other did not. The overdraft rule
+found the first bug, which the generic rule cannot judge, since the limit is Blnk's own decision.
+The generic rule found the lost commits, where every domain rule held. Across the three
+experiments, a domain rule found a bug only where the system enforces it across processes
+(Blnk's API, Redis, and worker), never where one database transaction does (Formance).
+
+**What hydo lacked.** Open items 96 to 99: a failing `.sql` check's verdict without its rows,
+network links only from `depends_on`, the Linux release's build of a `network: bridge` project
+before `hydo setup`, and error kinds split by an operation's name.
