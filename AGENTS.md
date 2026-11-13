@@ -531,12 +531,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     other SDKs' helpers are not built. The planted-bug example and the real-system onboardings
     come next (M196).
 67. The GitHub action ran on 2026-11-13 in a private trial repository with the 0.3.1 Redis
-    example (2-CPU runners have KVM): a push passed with 0 findings, and a pull request that set
-    `appendfsync everysec` failed with 2 new findings, each with its minimal schedule and
-    `hydo diff`, in one comment. The trial found that the action checked `/dev/kvm` before udev
-    had applied its rule; fixed in `500a0b7a`. The guide's `kakoc/hydo/action@v1` needs a tag
-    that does not exist yet (a public step, the user's decision). The GitLab template never ran.
-    Stage 2 (history, accepted findings, budgets, sharding) is not built (M197).
+    example. Its 2-CPU runners have KVM. A push passed with 0 findings. A pull request that set
+    `appendfsync everysec` failed with 2 new findings in one comment, each with its minimal
+    schedule and `hydo diff`. The trial found that the action checked `/dev/kvm` before udev had
+    applied its rule; fixed in `500a0b7a`. The tags `action-v1.0.0` and `v1` exist since then,
+    and `release.yml` starts only on full version tags. The GitLab template never ran. Stage 2
+    (history, accepted findings, budgets, sharding) is not built (M197).
 68. Agent environments: the guest has no network and one vCPU. There is no incremental state
     hash, so the full fingerprint costs about 0.8 s per call. A snapshot cannot be dropped, and a
     session on hvx holds only 5 branches (M199).
