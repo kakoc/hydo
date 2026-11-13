@@ -21,10 +21,13 @@ use std::path::Path;
 /// The service a verdict names: `ERROR service start (S)`, `ERROR S restart failed`,
 /// `ERROR restart after the faults (S)`, and the violations of a service that did not start
 /// again: `VIOLATION service cannot recover (committed data unrecoverable) (S)` (the recovery
-/// boot after a power cut) and `VIOLATION service cannot recover after the faults (S)`.
+/// boot after a power cut) and `VIOLATION service cannot recover after the faults (S)`, and a
+/// service that stopped on its own: `VIOLATION service stopped in a run without faults (S)`.
 pub fn verdict_service(v: &str) -> Option<String> {
     let v = v.trim_start_matches("HYDO-ORACLE: ");
-    if v.starts_with("VIOLATION service cannot recover") {
+    if v.starts_with("VIOLATION service cannot recover")
+        || v.starts_with("VIOLATION service stopped in a run without faults")
+    {
         let r = v.strip_suffix(')')?;
         let (_, s) = r.rsplit_once(" (")?;
         return (!s.is_empty() && !s.contains(' ')).then(|| s.to_string());
@@ -215,7 +218,10 @@ fn host_from(rec: &Recorded, evs: Vec<AgentEv>) -> Option<Diagnosis> {
         let _ = last_spawn;
         let what = if conv == Conv::Recovery {
             "while it started in the recovery boot after the power cut"
-        } else if core.contains("restart") || core.contains("after the faults") {
+        } else if core.contains("restart")
+            || core.contains("after the faults")
+            || core.contains("without faults")
+        {
             "while it was restarted"
         } else {
             "while it started"
@@ -936,6 +942,13 @@ mod tests {
                 "HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable)"
             ),
             None
+        );
+        assert_eq!(
+            verdict_service(
+                "HYDO-ORACLE: VIOLATION service stopped in a run without faults (tigerbeetle_0)"
+            )
+            .as_deref(),
+            Some("tigerbeetle_0")
         );
         assert_eq!(verdict_service("HYDO-ORACLE: ERROR provision failed"), None);
         assert_eq!(verdict_service("HYDO-ORACLE: VIOLATION [x] y"), None);

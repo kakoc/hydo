@@ -204,3 +204,50 @@ fn with_the_key_a_restart_that_succeeds_changes_nothing() {
         .iter()
         .any(|c| c.contains("client-retry")));
 }
+
+/// The worker stops on its own during the workload (its first process ends one unit after the
+/// workload starts), and every restart of it ends at once.
+const STOPS_ON_ITS_OWN: &str = "1/wl+1/134,2/+0/134,3/+0/134";
+
+#[test]
+fn a_service_that_stops_in_a_run_without_faults_is_named_and_the_checks_run() {
+    // open item 86: before, this was `ERROR restart after the faults (worker)` and no check ran
+    for k in [None, Some(true)] {
+        let r = run(&plan(k, STOPS_ON_ITS_OWN), "disk=none | run");
+        assert_eq!(
+            verdict(&r.run),
+            "HYDO-ORACLE: VIOLATION service stopped in a run without faults (worker)",
+            "{k:?}"
+        );
+        let ns = notes(&r.run.items);
+        assert!(
+            ns.iter().any(|n| n
+                == "hydo-ob: worker stopped in a run without faults and did not come back: no workload retry"),
+            "{ns:#?}"
+        );
+        assert!(
+            ns.iter()
+                .any(|n| n.starts_with("hydo-ob: the checks with worker stopped: HYDO-ORACLE: ")),
+            "{ns:#?}"
+        );
+        let cmds = runs(&r.run.items);
+        assert!(cmds.iter().any(|c| c.contains("final-check")), "{cmds:#?}");
+        assert!(
+            !cmds.iter().any(|c| c.contains("client-retry")),
+            "{cmds:#?}"
+        );
+        assert_eq!(engine_actions(&r.run), 1);
+    }
+    // a knob and timing tokens are no faults
+    let r = run(&plan(None, STOPS_ON_ITS_OWN), "disk=none tj=1 | run Q=2");
+    assert!(verdict(&r.run).contains("without faults (worker)"));
+    // with a fault, even one on another service, the verdict is the one recorded so far
+    for sched in ["disk=none | run K=db@1+1", "disk=ioerr:5 dseed=1 | run"] {
+        let r = run(&plan(None, STOPS_ON_ITS_OWN), sched);
+        assert_eq!(
+            verdict(&r.run),
+            "HYDO-ORACLE: ERROR restart after the faults (worker)",
+            "{sched}"
+        );
+    }
+}

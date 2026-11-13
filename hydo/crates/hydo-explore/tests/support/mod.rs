@@ -114,6 +114,9 @@ pub fn manifests() -> Vec<String> {
     }
     c.sort();
     out.extend(c);
+    // a local, git-ignored manifest is no example
+    let ignored = git_ignored(&out.iter().map(|m| top.join(m)).collect::<Vec<_>>());
+    out.retain(|m| !ignored.contains(&top.join(m)));
     out
 }
 
@@ -134,8 +137,56 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// The files among `paths` that the repository's ignore rules leave out (`git check-ignore`; a
+/// tracked file is never ignored). Outside a git checkout, or without git, none: a sources
+/// archive has no local outputs. Open item 93: a local exploration's `hydo-out/`, an image
+/// folder or a `.hydo/` cache inside an example's `hydo/` folder made the goldens stale.
+pub fn git_ignored(paths: &[PathBuf]) -> std::collections::BTreeSet<PathBuf> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let top = top();
+    let mut out = std::collections::BTreeSet::new();
+    if paths.is_empty() {
+        return out;
+    }
+    let child = Command::new("git")
+        .arg("-C")
+        .arg(&top)
+        .args(["check-ignore", "-z", "--stdin"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn();
+    let Ok(mut child) = child else {
+        return out;
+    };
+    let mut input = Vec::new();
+    for p in paths {
+        input.extend_from_slice(
+            p.strip_prefix(&top)
+                .unwrap_or(p)
+                .to_string_lossy()
+                .as_bytes(),
+        );
+        input.push(0);
+    }
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(&input);
+    }
+    let Ok(o) = child.wait_with_output() else {
+        return out;
+    };
+    // exit 0: some are ignored; 1: none; 128: not a repository
+    if o.status.code() == Some(0) {
+        for f in o.stdout.split(|b| *b == 0).filter(|f| !f.is_empty()) {
+            out.insert(top.join(String::from_utf8_lossy(f).as_ref()));
+        }
+    }
+    out
+}
+
 /// The pinned inputs of a manifest: the file itself, and for a `hydo/hydo.yaml` every file of its
-/// `hydo/` folder (the test composer's plan reads the folder).
+/// `hydo/` folder (the test composer's plan reads the folder) that git does not ignore.
 pub fn manifest_inputs(m: &str) -> Vec<(String, String)> {
     let top = top();
     let p = top.join(m);
@@ -144,6 +195,8 @@ pub fn manifest_inputs(m: &str) -> Vec<(String, String)> {
         let mut more = Vec::new();
         walk(p.parent().unwrap(), &mut more);
         more.retain(|f| f != &p);
+        let ignored = git_ignored(&more);
+        more.retain(|f| !ignored.contains(f));
         more.sort();
         files.extend(more);
     }

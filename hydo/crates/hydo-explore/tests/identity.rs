@@ -483,3 +483,24 @@ fn explorer_identity() {
         256,
     );
 }
+
+#[test]
+fn local_outputs_are_no_inputs() {
+    // open item 93: the git-ignored outputs of a local run inside an example's hydo/ folder
+    // (hydo-out/, images/, .hydo/) are not pinned, so they leave the goldens as they are
+    let m = "hydo/onboard/examples/formance-ledger/hydo/hydo.yaml";
+    let dir = top().join("hydo/onboard/examples/formance-ledger/hydo/hydo-out");
+    let tag = format!("identity-test-{}", std::process::id());
+    let f = dir.join(&tag);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(&f, b"a local output\n").unwrap();
+    let inputs = manifest_inputs(m);
+    let _ = std::fs::remove_file(&f);
+    let _ = std::fs::remove_dir(&dir);
+    assert!(inputs.len() > 1, "{inputs:?}");
+    assert!(!inputs.iter().any(|(p, _)| p.contains(&tag)), "{inputs:?}");
+    // a tracked file of the folder is still an input
+    assert!(inputs
+        .iter()
+        .any(|(p, _)| p.ends_with("hydo/known-errors.yaml")));
+}

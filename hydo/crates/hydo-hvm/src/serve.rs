@@ -84,7 +84,7 @@ use hydo_schedule::{Disk, HostToken, Schedule};
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex};
 
-const CTL_MAX_SENDS: usize = 1024;
+const CTL_MAX_SENDS: usize = hydo_engine_proto::MAX_SENDS;
 /// Named snapshots a worker keeps (the host's S0 and S1, an inspection's stop and its branches,
 /// docs/design/agent-environments.md). A free slot costs nothing; a used one what its state
 /// differs from the RAM base and the disk image by.
@@ -176,6 +176,9 @@ struct Book {
     /// console offset up to which lines were reported as EVENTs
     evfrom: usize,
     s: Vec<CtlSend>,
+    /// Every send before this index is typed or acknowledged for good, so the scans at each exit
+    /// start here (a snapshot's copy marks its typed sends for a retype and starts again at 0).
+    lo: usize,
 }
 
 /// A snapshot (`struct xsnap`): RAM in an unlinked file, mapped.
@@ -375,40 +378,61 @@ impl Host {
             self.emit(m);
         }
     }
-    /// every send due at this stop: retypes first (id order), then (at, id) order
+    /// Move the book's start past the sends that are settled (typed or acknowledged).
+    fn ctl_settle(&mut self) {
+        let k = &mut self.c.k;
+        while k.lo < k.s.len() && matches!(k.s[k.lo].state, Cs::Typed | Cs::Acked) {
+            k.lo += 1;
+        }
+    }
+    /// The next send to type: the pending send due at this stop first in (at, id) order.
+    fn ctl_next(&self) -> Option<usize> {
+        let mut best: Option<usize> = None;
+        for i in self.c.k.lo..self.c.k.s.len() {
+            let s = &self.c.k.s[i];
+            if s.state != Cs::Pending || s.at > self.c.at {
+                continue;
+            }
+            match best {
+                None => best = Some(i),
+                Some(b) => {
+                    let bs = &self.c.k.s[b];
+                    if s.at < bs.at || (s.at == bs.at && s.id < bs.id) {
+                        best = Some(i);
+                    }
+                }
+            }
+        }
+        best
+    }
+    /// Whether send `i` fits in the receive queue now. A send waits until it fits, so that the
+    /// guest reads every byte the host sent (open item 82: the records a recovery boot carries
+    /// came as several sends at one stop, and the bytes that did not fit were lost). A send is
+    /// never longer than the queue, so it fits once the guest has read what came before it.
+    fn ctl_fits(&self, vm: &Vmm, i: usize) -> bool {
+        self.c.k.s[i].buf.len() as u32 <= vm.rx_room()
+    }
+    /// every send due at this stop: retypes first (id order), then (at, id) order, while each
+    /// fits in the receive queue
     fn ctl_deliver(&mut self, vm: &mut Vmm) {
-        for i in 0..self.c.k.s.len() {
+        self.ctl_settle();
+        for i in self.c.k.lo..self.c.k.s.len() {
             if self.c.k.s[i].state == Cs::Retype {
                 self.ctl_type(vm, i, true);
             }
         }
-        loop {
-            let mut best: Option<usize> = None;
-            for i in 0..self.c.k.s.len() {
-                let s = &self.c.k.s[i];
-                if s.state != Cs::Pending || s.at > self.c.at {
-                    continue;
-                }
-                match best {
-                    None => best = Some(i),
-                    Some(b) => {
-                        let bs = &self.c.k.s[b];
-                        if s.at < bs.at || (s.at == bs.at && s.id < bs.id) {
-                            best = Some(i);
-                        }
-                    }
-                }
+        while let Some(b) = self.ctl_next() {
+            if !self.ctl_fits(vm, b) {
+                return; // typed at the first exit with room (ctl_due)
             }
-            let Some(b) = best else { return };
             self.ctl_type(vm, b, true);
         }
     }
-    fn ctl_due(&self) -> bool {
-        self.c
-            .k
-            .s
-            .iter()
-            .any(|s| s.state == Cs::Retype || (s.state == Cs::Pending && s.at <= self.c.at))
+    fn ctl_due(&mut self, vm: &Vmm) -> bool {
+        self.ctl_settle();
+        let k = &self.c.k;
+        k.s[k.lo..].iter().any(|s| s.state == Cs::Retype)
+            || self.ctl_next().is_some_and(|i| self.ctl_fits(vm, i))
     }
     fn ctl_drop_pending(&mut self) {
         for i in 0..self.c.k.s.len() {
@@ -474,6 +498,7 @@ impl Host {
                 s.state = Cs::Retype;
             }
         }
+        k.lo = 0;
         let cs = &mut self.snaps[slot];
         cs.k = k;
         cs.rs = self.c.rs.clone();
@@ -600,7 +625,7 @@ impl Host {
                         continue;
                     }
                     if self.c.k.s.len() >= CTL_MAX_SENDS {
-                        self.refuse(format!("send more than {CTL_MAX_SENDS} sends in one run"));
+                        self.refuse(hydo_engine_proto::too_many_sends(CTL_MAX_SENDS));
                         continue;
                     }
                     self.c.k.next_id += 1;
@@ -612,8 +637,9 @@ impl Host {
                         state: Cs::Pending,
                         buf: bytes,
                     });
-                    if at <= self.c.at {
-                        let i = self.c.k.s.len() - 1;
+                    let i = self.c.k.s.len() - 1;
+                    // typed now when it is due, no earlier send waits for room, and it fits
+                    if at <= self.c.at && self.ctl_next() == Some(i) && self.ctl_fits(vm, i) {
                         self.ctl_type(vm, i, false);
                         let at = self.c.at;
                         self.answer(Answer::Send(SendAnswer::Typed { id, at }));
@@ -622,13 +648,18 @@ impl Host {
                     }
                 }
                 HostCmd::Ack(id) => {
-                    let a = match self.c.k.s.iter_mut().find(|s| s.id == id) {
-                        None => Answer::Refused(format!("ack {id} unknown")),
-                        Some(s) if s.state == Cs::Pending => {
+                    // the sends are in id order
+                    let k = &mut self.c.k;
+                    let a = match k.s.binary_search_by_key(&id, |s| s.id) {
+                        Err(_) => Answer::Refused(format!("ack {id} unknown")),
+                        Ok(i) if k.s[i].state == Cs::Pending => {
                             Answer::Refused(format!("ack {id} not typed yet"))
                         }
-                        Some(s) => {
+                        Ok(i) => {
+                            let s = &mut k.s[i];
                             s.state = Cs::Acked;
+                            // an acknowledged send is never typed again: its bytes can go
+                            s.buf = Vec::new();
                             Answer::Ack(id)
                         }
                     };
@@ -672,7 +703,7 @@ impl Host {
         }
         self.c.last_x = x;
         self.c.at = x;
-        let why = if self.ctl_due() {
+        let why = if self.ctl_due(vm) {
             Some(StopWhy::Send)
         } else if x.wrapping_sub(self.c.k.cad0).is_multiple_of(self.c.rb) {
             Some(StopWhy::Cadence)

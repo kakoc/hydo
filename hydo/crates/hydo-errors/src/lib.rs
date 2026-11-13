@@ -1400,7 +1400,7 @@ pub fn accept(
     path: &str,
     kinds: &[Value],
     reason: Option<&str>,
-    by: &str,
+    by: Option<&str>,
     with: &[String],
     during: &[String],
     date: Option<&str>,
@@ -1448,7 +1448,11 @@ pub fn accept(
             e.push(format!("    during: [{}]", during.join(", ")));
         }
         e.push(format!("    reason: {}", q(reason)));
-        e.push(format!("    by: {}", q(by)));
+        // who decided, only when the caller names it: the list is usually tracked, and a login
+        // or host name does not belong there (open item 84)
+        if let Some(by) = by {
+            e.push(format!("    by: {}", q(by)));
+        }
         e.push(format!("    date: {}", q(&date)));
         add.push(e.join("\n"));
     }
@@ -1545,13 +1549,8 @@ fn cli_inner(
         }
         "accept" => {
             let reason = take(&mut args, "--reason")?;
-            let by = match take(&mut args, "--by")?.filter(|b| !b.is_empty()) {
-                Some(b) => b,
-                None => std::env::var("USER")
-                    .ok()
-                    .filter(|u| !u.is_empty())
-                    .unwrap_or_else(|| "unknown".into()),
-            };
+            // no default: the login name stays out of a tracked list (open item 84)
+            let by = take(&mut args, "--by")?.filter(|b| !strip(b).is_empty());
             let with = take_many(&mut args, "--with")?;
             let during = take_many(&mut args, "--during")?;
             let d = take(&mut args, "--from")?
@@ -1593,7 +1592,15 @@ fn cli_inner(
                 }
                 pick.push(hit[0].clone());
             }
-            let add = accept(&f, &pick, reason.as_deref(), &by, &with, &during, None)?;
+            let add = accept(
+                &f,
+                &pick,
+                reason.as_deref(),
+                by.as_deref(),
+                &with,
+                &during,
+                None,
+            )?;
             let _ = writeln!(
                 out,
                 "hydo: {} kind{} added to {}{}",

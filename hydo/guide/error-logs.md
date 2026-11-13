@@ -28,7 +28,8 @@ services:
   service) to include warnings, `ignore:` for a line that is known noise in every run.
 - `normalize:` (a list of regular expressions) blanks out project-specific ids the default
   template rules miss (for example `'req-[a-z0-9]+'`). Numbers, timestamps, uuids, hex numbers,
-  and client ports are blanked already.
+  client ports, random ids of 8 characters or more, and the values of `trace-id=`,
+  `request_id:` and similar keys are blanked already.
 
 ## The known list
 

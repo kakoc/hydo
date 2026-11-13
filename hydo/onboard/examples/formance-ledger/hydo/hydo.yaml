@@ -91,7 +91,7 @@ services:
       normalize: ['trace-id=[A-Za-z0-9]+', 'req=[0-9a-f]+']   # a request's trace id: one kind per message, not per request
 
 workload:
-  steps: 30   # hand: with more, the records hydo carries across a power cut outgrow the Mac engine's console queue (RESULTS.md, "What hydo lacked")
+  steps: 30   # hand: 40 outgrew the Mac engine's receive queue after a power cut until Milestone 222 (RESULTS.md, "What hydo lacked"); 30 keeps the recorded results comparable
   timeout: 600
 
 test:

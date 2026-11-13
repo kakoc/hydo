@@ -81,7 +81,7 @@ fn host() {
         &f,
         &[kj(ban)],
         Some("the startup banner: Redis logs it at its warning level"),
-        "test",
+        Some("test"),
         &[],
         &[],
         date,
@@ -91,7 +91,7 @@ fn host() {
         &f,
         &[kj(aof)],
         Some("a power cut truncates the AOF; aof-load-truncated loads what was synced"),
-        "test",
+        Some("test"),
         &["C".into()],
         &[],
         date,
@@ -101,15 +101,17 @@ fn host() {
         &f,
         &[kj(&k)],
         Some("Kafka's clients retry while kafka is down"),
-        "test",
+        Some("test"),
         &[],
         &["K=kafka".into()],
         date,
     )
     .unwrap();
-    assert!(accept(&f, &[kj(&k)], Some("again"), "test", &[], &[], date)
-        .unwrap()
-        .is_empty());
+    assert!(
+        accept(&f, &[kj(&k)], Some("again"), Some("test"), &[], &[], date)
+            .unwrap()
+            .is_empty()
+    );
     let mut kn = load_known(Some(&f)).unwrap();
     assert_eq!((kn.known.len(), kn.unknown.as_str()), (3, "report"));
     let an = analyse(
@@ -204,4 +206,40 @@ fn missing_list_is_a_message() {
         e.0.starts_with("/nonexistent/hydo/known-errors.yaml: no such file"),
         "{e}"
     );
+}
+
+#[test]
+fn accept_writes_no_name_unless_given() {
+    // open item 84: the list is usually tracked, so `hydo errors accept` without --by names no
+    // one (before, it wrote the login name as `by:`)
+    let p = parse_consoles(&src(&[("a", CON)])).unwrap();
+    let k = Value::Object(p.kinds[0].to_json());
+    let d = scratch("by");
+    let f = d.join("known-errors.yaml").display().to_string();
+    let add = accept(
+        &f,
+        std::slice::from_ref(&k),
+        Some("expected"),
+        None,
+        &[],
+        &[],
+        None,
+    )
+    .unwrap();
+    assert_eq!(add.len(), 1);
+    assert!(!add[0].contains("by:"), "{}", add[0]);
+    let text = std::fs::read_to_string(&f).unwrap();
+    assert!(
+        !text.split("known:").nth(1).unwrap().contains("by:"),
+        "{text}"
+    );
+    assert_eq!(load_known(Some(&f)).unwrap().known.len(), 1);
+    let named = d.join("named.yaml").display().to_string();
+    let add = accept(&named, &[k], Some("expected"), Some("team"), &[], &[], None).unwrap();
+    assert!(
+        add[0].contains("    by: ") && add[0].contains("team"),
+        "{}",
+        add[0]
+    );
+    let _ = std::fs::remove_dir_all(&d);
 }

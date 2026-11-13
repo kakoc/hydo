@@ -1869,9 +1869,13 @@ HYDO-ERRLOG-SUM {"boot":"first","steps":30,"lines":3,"kinds":2,"shown":2}
   them (POSIX extended regular expressions, as busybox awk reads them). Lines starting with
   `HYDO-` are never errors.
 - The template: user `normalize:` patterns first, then timestamps and dates (`<time>`, `<date>`),
-  uuids (`<uuid>`), `0x...` and long hex runs (`<hex>`), long mixed ids (`<id>`), and every other
-  number becomes `#` -- except an error code after an upper-case prefix (`MY-012592`,
-  `ORA-00942`), a number after `errno`/`code`/`error`/`status`, and a port below the ephemeral
+  uuids (`<uuid>`), `0x...` and long hex runs (`<hex>`), ids (`<id>`), and numbers (`#`). An id
+  is a mixed token of 16 characters or more; a token of 8 to 15 letters and digits that changes
+  between digits, capitals and small letters at every second character (`qjGcd4lJvd`, not
+  `thread12`); or the value after a trace, span, request or correlation key
+  (`trace-id=FXkZAHyuua`, `'request_id':'r7Kd2xQ'`) of six characters or more with a digit or
+  with capitals and small letters. Every number becomes `#`, except an error code after an
+  upper-case prefix (`MY-012592`, `ORA-00942`), a number after `errno`/`code`/`error`/`status`, and a port below the ephemeral
   range after an IPv4 address, `localhost` or a service name (`127.0.0.1:3306` becomes
   `#.#.#.#:3306`; the client side `127.0.0.1:54321` becomes `#.#.#.#:#`). Lines that differ only
   in times, counters, ids and client ports give one template, and so one kind in every run.
@@ -1902,7 +1906,7 @@ known:
     with: [C]              # optional: only in runs whose schedule has one of these faults
     during: [K=kafka]      # optional: only for lines written while one of these faults was on
     reason: "Kafka's clients retry while the broker restarts"   # required: why it is expected
-    by: user              # who decided (hydo errors accept writes it, and date:)
+    by: team              # optional: who decided (hydo errors accept writes it only with --by; it always writes date:)
 ```
 
 Fault patterns: `K` (any kill), `K=mysql`, `P=redis`, `N=kafka`, `O=`, `X=`, `F=`, `H=payments`,
@@ -1942,7 +1946,7 @@ Limits: the guest scans the logs at the end of each boot, so a kind's lines are 
 timed within a range; a log written somewhere not listed in `files:` is not seen; a service that
 rotates its own log files by renaming loses the renamed part; multi-line messages count by their
 first matching line; the templates are heuristics (a project-specific id that does not look like
-a number, hex or a long mixed token needs a `normalize:` pattern).
+a number, hex or one of these ids needs a `normalize:` pattern).
 
 ## YAML subset
 

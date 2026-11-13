@@ -46,7 +46,7 @@ pub fn unesc(s: &[u8]) -> Option<Vec<u8>> {
     Some(o)
 }
 
-pub const MAX_SENDS: usize = 1024;
+pub const MAX_SENDS: usize = hydo_engine_proto::MAX_SENDS;
 pub const MAX_SNAPS: usize = 8;
 /// The module's serial receive ring (HVX_INPUT_SZ in hvx.c).
 pub const SEND_MAX: usize = 4096;
@@ -80,6 +80,25 @@ pub struct Book {
     /// M138: where the next EVENT line of the host-call records starts.
     pub pevfrom: usize,
     pub s: Vec<Send>,
+    /// Every send before this index is typed or acknowledged for good, so the scans at each
+    /// return start here (a snapshot's copy marks its typed sends for a retype and starts again
+    /// at 0).
+    pub lo: usize,
+}
+
+impl Book {
+    /// Move the start past the sends that are settled (typed or acknowledged).
+    pub fn settle(&mut self) {
+        while self.lo < self.s.len()
+            && matches!(self.s[self.lo].state, SendState::Typed | SendState::Acked)
+        {
+            self.lo += 1;
+        }
+    }
+    /// The sends from the first one that is not settled.
+    pub fn open(&self) -> &[Send] {
+        &self.s[self.lo.min(self.s.len())..]
+    }
 }
 
 #[cfg(test)]

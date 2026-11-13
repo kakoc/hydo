@@ -1406,7 +1406,8 @@ impl Core {
 
     fn ctl_deliver(&mut self, b: &Boot, print: bool) -> usize {
         let mut n = 0;
-        for i in 0..self.c.k.s.len() {
+        self.c.k.settle();
+        for i in self.c.k.lo..self.c.k.s.len() {
             if self.c.k.s[i].state == SendState::Retype {
                 self.ctl_type(b, i, print);
                 n += 1;
@@ -1414,7 +1415,9 @@ impl Core {
         }
         loop {
             let mut best: Option<usize> = None;
-            for (i, s) in self.c.k.s.iter().enumerate() {
+            let lo = self.c.k.lo;
+            for (i, s) in self.c.k.open().iter().enumerate() {
+                let i = lo + i;
                 if s.state != SendState::Pending || s.at > self.c.at {
                     continue;
                 }
@@ -1439,14 +1442,14 @@ impl Core {
     }
 
     fn ctl_due(&self) -> bool {
-        self.c.k.s.iter().any(|s| {
+        self.c.k.open().iter().any(|s| {
             s.state == SendState::Retype || (s.state == SendState::Pending && s.at <= self.c.at)
         })
     }
 
     fn ctl_cap(&self) -> u64 {
         let mut cap = 0u64;
-        for s in &self.c.k.s {
+        for s in self.c.k.open() {
             if s.state != SendState::Pending || s.at <= self.c.at {
                 continue;
             }
@@ -1537,6 +1540,7 @@ impl Core {
                 s.state = SendState::Retype;
             }
         }
+        k.lo = 0;
         let mut tjinfo = self.c.tjinfo.clone();
         ccap(&mut tjinfo, 160);
         self.snaps[slot] = Some(Box::new(CtlSnap {
@@ -1653,10 +1657,7 @@ impl Core {
                         continue;
                     }
                     if self.c.k.s.len() >= ctl::MAX_SENDS {
-                        refuse(
-                            self,
-                            format!("send more than {} sends in one run", ctl::MAX_SENDS),
-                        );
+                        refuse(self, hydo_engine_proto::too_many_sends(ctl::MAX_SENDS));
                         continue;
                     }
                     self.c.k.next_id += 1;
@@ -1677,13 +1678,16 @@ impl Core {
                     };
                     self.emit(EngineMsg::Answer(Answer::Send(a)));
                 }
-                HostCmd::Ack(id) => match self.c.k.s.iter().position(|s| s.id == id) {
-                    None => refuse(self, format!("ack {id} unknown")),
-                    Some(i) => {
+                // the sends are in id order
+                HostCmd::Ack(id) => match self.c.k.s.binary_search_by_key(&id, |s| s.id) {
+                    Err(_) => refuse(self, format!("ack {id} unknown")),
+                    Ok(i) => {
                         if self.c.k.s[i].state == SendState::Pending {
                             refuse(self, format!("ack {id} not typed yet"));
                         } else {
                             self.c.k.s[i].state = SendState::Acked;
+                            // an acknowledged send is never typed again: its bytes can go
+                            self.c.k.s[i].buf = Vec::new();
                             self.emit(EngineMsg::Answer(Answer::Ack(id)));
                         }
                     }

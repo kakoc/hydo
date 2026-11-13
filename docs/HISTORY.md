@@ -6797,3 +6797,125 @@ is open item 95. `--found-on` now notes it when the finding's own version does n
 **Checks.** clippy and fmt; the tests of `hydo`, `hydo-results` and `hydo-agents`;
 `hydo-schema-compat`; `cargo test -p hydo --test it docs::`; `sh ci/vale.sh` on the changed
 documents; `cargo test -p hydo-agents --test it public_content::`.
+
+### Milestone 222 (tentative number) - DONE (five fixes from the onboardings of Milestones 215, 217 and 218: sends wait for room in the receive queue, a run holds 65,536 sends, request ids in the error template, no login name in `known-errors.yaml`, a verdict for a service that stops in a run without faults, and the identity test without git-ignored files; nothing recorded moved; 2026-11-13)
+
+**In short.** This milestone closes open items 82, 83, 84 and 93, and the verdict part of open
+item 86. Each fix has a test. Only runs that fail today change. The pinned reproducers, the
+KVM engine's pinned fingerprints, and the recorded hvx values of the images with error logs
+stayed as recorded.
+
+**Open item 82: the recovery boot lost its carried records.** After a power cut the host sends
+`$HYDO_ACKED`, the failed ids and `$HYDO_OUTCOMES` as messages of up to 3,000 bytes at one stop,
+without waiting for replies. The Mac and KVM engines typed every message that was due into the
+4,096-byte receive queue and dropped the bytes that did not fit. Now a due message waits in the
+engine until it fits, and every later message waits behind it (`ctl_next`, `ctl_fits` and
+`ctl_due` in `hydo-hvm` and `hydo-kvm` `serve.rs`). The engine types it at the first exit with
+room and reports it with a `SENT` line. A `SEND` that cannot be typed at once is answered
+`queued` (`SendAnswer::Queued`), as a send for a later exit always was. No message is longer than
+the queue, so each one fits once the guest has read what came before it. A run in which every
+message fits is the same exit for exit, so its fingerprint stays. The host's transcript records
+the same sends either way. hvx sends through the host-call port and was not affected.
+
+- Test: `hydo-kvm`'s `sends_wait_for_room_in_the_receive_queue`, on the scripted vCPU. A guest
+  reads 9,000 bytes, and the host sends three messages of 3,000 bytes at one stop. The first is
+  typed at once, the other two are queued and typed later, and the guest reads every byte. With
+  the old `serve.rs` the test fails: all three were "typed", and the guest never read its 9,000
+  bytes.
+- The Mac, a copy of the Formance Ledger example with 40 rounds and the full account names in
+  the client's tokens (the example itself keeps 30 rounds and short names). Its recovery boot
+  carries about 5.8 KB of records. `disk=cut dseed=1 | run C=38` with the 0.3.1 release's
+  engine: `hvmx: one: send 599: 2390 of 3122 bytes do not fit in the receive queue`, then
+  `ERROR recovery: exit budget exhausted` after 121 s. With this tree's `hydo-hvm`
+  (`HYDO_HVM_ENGINE`): `OK invariants=14 held` in 21 s, fp `3abdf57571c42ae2`, and `hydo repro`
+  gave the same fingerprint. The first boot's workload fingerprint was the same in both runs
+  (`c196b716a175de18`). `disk=none dseed=1 | run` of that image gave `68c7e500bd9d0eec` with
+  both engines.
+
+**Open item 83: at most 1,024 messages per run.** The limit was the size of the C engines'
+array, ported to every Rust engine. A slow workload sends more: queue polls, `always_` checks
+and clock reads. The limit is now `hydo_engine_proto::MAX_SENDS`, 65,536, on hvx, KVM and the
+Mac. It still guards against a host controller that sends without end, and the refusal says
+so: `send more than 65536 sends in one run (the limit against a host controller that sends
+without end)`. So that a long run stays cheap, the engines now drop the bytes of an
+acknowledged message, find an acknowledged id by binary search, and start the scans at each
+exit or return after the messages that are typed or acknowledged for good (`Book::lo`). A
+snapshot's copy of the book starts its scans at 0 again, because its typed messages become
+retypes.
+
+- Test: `hydo-kvm`'s `a_run_holds_more_than_1024_sends`: 3,000 messages of one byte in one run,
+  each acknowledged, and the guest reads all of them.
+
+**Open item 84: error kinds and request ids.** The default template (`nums` in
+`hydo-control` `schedule/errlog.rs`) made `<id>` only of a mixed token of 16 characters or
+more. Two rules are new:
+
+- A token of 8 to 15 letters and digits is `<id>` when it changes between digits, capitals and
+  small letters at every second character or more often, and repeats few characters. So
+  `qjGcd4lJvd` and `k3j9x2ab01` are ids, and `thread12`, `Http2Server`, `MY012592` and Redis's
+  banner `oO0OoO0OoO0Oo` keep their letters.
+- The value after a trace, span, request or correlation key (`trace-id=`, `request_id:`,
+  `'reqId':`) is `<id>` when it has six characters or more with a digit and a letter, or with
+  capitals and small letters. So `trace-id=FXkZAHyuua`, which has no digit, is an id too.
+  `clientId=producer-1` and `pid=4242` are as before.
+
+The first version of the first rule also took Redis's banner, which every recorded Redis run
+with error logs reports. The controller's recorded transcripts (`m123::`) showed that, and the
+rule now asks for few repeated characters. The new test `reviewed_kinds_keep_their_templates`
+gives every reviewed entry of the examples' known lists (formance-ledger, medusa,
+nats-jetstream, redis-errors, the stack, and the schema's example folder; 40 entries or more)
+its example line and compares the template with the listed one. All stay. The test
+`request_ids_are_one_kind` has the cases above.
+
+`hydo errors accept` wrote the login name (`$USER`) as `by:` into the known list, which is
+usually a tracked file. Now it writes `by:` only with `--by`. Test: `hydo-errors`'
+`accept_writes_no_name_unless_given`.
+
+**Open item 86, the verdict.** A service that stopped in a run without faults, and did not start
+again, ended the run at once with `ERROR restart after the faults (<service>)`, and no check
+ran. Such a run had no faults. A run without faults has no disk fault (`ioerr`, `lying`), no
+`cf=`, and only knobs and `Q=` in its guest part; timing tokens are allowed
+(`RunCfg::no_faults`). In such a run the controller still tries the restart. If the service
+does not come back, there is no workload retry, the final checks run, their verdict goes to the
+log (`the checks with <service> stopped: ...`), and the verdict is `HYDO-ORACLE: VIOLATION service
+stopped in a run without faults (<service>)`. A run with any fault keeps the old verdicts.
+`hydo inspect` names the service of the new verdict. The recorded verdicts `ERROR restart after
+the faults` (`hvx/redis-errors` and others) all come from runs with `disk=ioerr`, so none
+changes. Test: `restart_may_fail::a_service_that_stops_in_a_run_without_faults_is_named_and_the_checks_run`,
+which also checks that `K=db@1+1` and `disk=ioerr:5` keep the old verdict.
+
+**Open item 93: the identity test read git-ignored files.** The explorer's goldens pin every file
+of an example's `hydo/` folder. The list now leaves out the files that the repository's ignore
+rules leave out (`git check-ignore`; tracked files are always in), and so does the list of
+example manifests. Without git, nothing is left out. Test: `identity::local_outputs_are_no_inputs`
+writes a file into the Formance example's `hydo/hydo-out/` and checks that it is not an input.
+The identity goldens pass unchanged on a clean tree.
+
+**Checks.**
+
+- hvx (the bare-metal machine, this tree in its own folder, the loaded main module
+  `91D86B693F4D4035C368F9B`): `deploy-metal.sh` printed `ALL PASS (35 checks)`, and the pinned
+  reproducers gave `a76d7fe857fdb37c` (VIOLATION) and `efbde7b57264be0f` (OK).
+  `hydo-bench rebaseline --check` over the 0.3.1 Linux release, for the three images with
+  error logs (`hvx/redis-errors`, `hvx/stack-errors-fix`, `hvx/stack-errors-old`): their 6
+  schedules gave every recorded verdict, fingerprint and ctl value. Among them is
+  `disk=ioerr:5 dseed=1 | run` with `ERROR restart after the faults (redis)`. A ctl value
+  covers the error records, so these runs show that the templates of real Redis, MySQL and
+  Kafka lines stayed.
+- KVM: the scripted engine tests, among them `one_vcpu_fingerprints_are_pinned`. No real KVM
+  host ran this tree.
+- The Mac: the Formance runs above. No other recorded Mac value was run again. No Mac image
+  has error logs, and the engine change acts only when a message does not fit.
+- `cargo test --release` of hydo-control, hydo-errors, hydo-explore, hydo-engine-proto,
+  hydo-kvm, hydo-hvm, hydo-hvx and hydo, and of hydo-build, hydo-manifest and hydo-agents,
+  passed. The controller's corpora and recorded transcripts and the explorer's identity and
+  corpus goldens passed unchanged. The CLI's golden changed only in its two answers for `hydo
+  guide manifest`, which prints `MANIFEST.md`, and was re-recorded. clippy with `-D warnings`,
+  fmt, `ci/consolidate-tests.sh --check`, `sh ci/vale.sh`, `docs::` and `public_content::`
+  passed.
+
+**Left.** The engines' change ran on the Mac and in the KVM engine's scripted tests, not on a
+real KVM host. The tracked Formance example keeps 30 rounds and short names. The error rules
+were checked against the reviewed lists, the controller's corpora and six recorded hvx runs. A
+project whose lines hold other random tokens may still need `normalize:`. Open item 86 keeps
+the rest of TigerBeetle's issue 3960.

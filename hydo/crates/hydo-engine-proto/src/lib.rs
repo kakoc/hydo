@@ -360,12 +360,27 @@ impl HostMsg {
 
 // ------------------------------------------------------------------------------------ answers
 
+/// The most SENDs one run holds, on every engine. It guards against a host that sends without
+/// end; a run of a slow workload sends some thousands (queue polls, checks and clock reads). It
+/// was 1,024 before open item 83, the size of the C engines' array.
+pub const MAX_SENDS: usize = 65536;
+
+/// The refusal of a SEND past [`MAX_SENDS`].
+pub fn too_many_sends(max: usize) -> String {
+    format!(
+        "send more than {max} sends in one run (the limit against a host controller that sends \
+         without end)"
+    )
+}
+
 /// The answer to a SEND.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SendAnswer {
-    /// Typed at this stop (its `at` was not after the stop's icount).
+    /// Typed at this stop (its `at` was not after the stop's icount, and its bytes fit in the
+    /// receive queue).
     Typed { id: u64, at: u64 },
-    /// Queued; a later [`EngineMsg::Sent`] says when it was typed.
+    /// Queued: due later, or due now and waiting for room in the receive queue (the Mac and KVM
+    /// engines). A later [`EngineMsg::Sent`] says when it was typed.
     Queued { id: u64, at: u64 },
 }
 

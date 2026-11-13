@@ -168,7 +168,7 @@ fn run(op: &str, a: &Value, work: &Path, n: usize) -> Out {
                 &p.display().to_string(),
                 a["kinds"].as_array().unwrap(),
                 a["reason"].as_str(),
-                a["by"].as_str().unwrap(),
+                a["by"].as_str(),
                 &strs("with"),
                 &strs("during"),
                 Some("2026-10-30"),

@@ -154,6 +154,10 @@ struct RunCfg {
     l: Option<(String, i64, i64)>,
     /// The host token `cf=`: the engine may turn the workload's end into a power cut.
     cf: bool,
+    /// The schedule has no fault: no disk fault, no `cf=`, and only knobs and `Q=` in its guest
+    /// part (timing tokens are no faults). A service that stops in such a run stopped on its own
+    /// (open item 86).
+    no_faults: bool,
 }
 
 #[derive(Debug)]
@@ -524,10 +528,25 @@ fn repeated_fault(s: &Schedule) -> Option<char> {
 }
 
 /// Reads the guest part of a schedule for `plan`, refusing the tokens that are seams.
+/// Whether a schedule injects no fault (RunCfg::no_faults).
+fn no_faults(s: &Schedule) -> bool {
+    use hydo_schedule::{Disk, HostToken};
+    let disk_ok = !matches!(
+        s.host_token("disk"),
+        Some(HostToken::Disk(Disk::IoErr(_) | Disk::Lying(_)))
+    );
+    disk_ok
+        && s.host_token("cf").is_none()
+        && s.guest
+            .iter()
+            .all(|t| matches!(t, GuestToken::Knob { .. } | GuestToken::Concurrency { .. }))
+}
+
 fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
     let mut c = RunCfg {
         guest_text: s.guest_text(),
         cf: matches!(s.host_token("cf"), Some(hydo_schedule::HostToken::Cf(_))),
+        no_faults: no_faults(s),
         ..RunCfg::default()
     };
     // (a token naming what the image does not have is refused before, by ScheduleController::run
@@ -1729,6 +1748,19 @@ fn restart_dead(fx: &mut F<'_>, ctx: &Ctx, verdict: &str, may_fail: bool) -> Ste
         }
         log(fx, format!("{} is down; restarting it", s.name));
         if !start_svc(fx, ctx, &s.name)? {
+            if ctx.run.no_faults {
+                // open item 86: nothing stopped it, so it stopped on its own; the checks still
+                // run, and the verdict names it (stopped_without_faults)
+                log(
+                    fx,
+                    format!(
+                        "{} stopped in a run without faults and did not come back: no workload retry",
+                        s.name
+                    ),
+                );
+                down.push(s.name.clone());
+                continue;
+            }
             if may_fail && s.restart_may_fail {
                 log(
                     fx,
@@ -2837,16 +2869,44 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     // no cf= cut answered the workload's end (the engine would have moved to the recovery VM):
     // a service that stayed down is the ERROR it is without restart_may_fail
     if let Some(s) = down.first() {
+        if ctx.run.no_faults {
+            return stopped_without_faults(fx, ctx, s);
+        }
         return die_oracle(fx, format!("{NO_RESTART} ({s})"));
     }
-    restart_dead(
+    let down = restart_dead(
         fx,
         ctx,
         "HYDO-ORACLE: VIOLATION service cannot recover after the faults",
         false,
     )?;
+    if let Some(s) = down.first() {
+        return stopped_without_faults(fx, ctx, s); // only a run without faults gets here
+    }
     finish(fx, ctx)
 }
+
+/// The end of a run without faults in which service `svc` stopped and did not start again
+/// (open item 86): the final checks still run, as in [`finish`], and their outcomes are in the
+/// assertion records and the log; the verdict names the service. Before, the run ended at once
+/// with `ERROR restart after the faults (svc)`, a name for faults the run never had, and no
+/// check ran.
+fn stopped_without_faults(fx: &mut F<'_>, ctx: &Ctx, svc: &str) -> Step<()> {
+    history::finals(fx, ctx)?;
+    liveness::before_finish(fx, ctx)?;
+    let checks = errlog::final_verdict(fx, ctx)?;
+    log(fx, format!("the checks with {svc} stopped: {checks}"));
+    let v = format!("{STOPPED_WITHOUT_FAULTS} ({svc})");
+    fx.report(v.clone());
+    cost::probe(fx, ctx, "final", false)?;
+    fx.settle()?;
+    fx.end(Ending::Verdict(v))
+}
+
+/// The verdict of a service that stopped on its own in a run without faults (open item 86),
+/// followed by ` (<service>)`.
+pub const STOPPED_WITHOUT_FAULTS: &str =
+    "HYDO-ORACLE: VIOLATION service stopped in a run without faults";
 
 #[cfg(test)]
 mod tests {

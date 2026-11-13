@@ -3,7 +3,9 @@
 //! initializes the PIC as Linux does, arms the hydo timer, idles in HLT, counts ticks in its
 //! interrupt handler (EOI, re-arm), reads the clock, prints its verdict and halts.
 
-use hydo_engine_proto::{Answer, EngineMsg, HostCmd, HostMsg, Phase, Request, RunResult, StopWhy};
+use hydo_engine_proto::{
+    Answer, EngineMsg, HostCmd, HostMsg, Phase, Request, RunResult, SendAnswer, StopWhy,
+};
 use hydo_hvx::port::ChanPort;
 use hydo_kvm::layout::*;
 use hydo_kvm::script::{Op, Program, Script};
@@ -451,6 +453,143 @@ fn typed_input_is_reported_and_hashed() {
         inh.push(ex.get("inh").cloned().unwrap());
     }
     assert_eq!(inh[0], inh[1]);
+    h.quit();
+}
+
+/// A guest that reads `n` bytes from the serial input (an empty receive register reads 0),
+/// then prints its verdict and halts.
+fn reader_program(n: u64) -> Program {
+    use Op::*;
+    Program {
+        ops: vec![
+            Print(b"boot\n".to_vec()),
+            In(hydo_kvm::uart::BASE, 1), // 1
+            JmpIfBelow(1, 1),            // nothing there yet
+            Inc,
+            JmpIfCountBelow(n, 1),
+            Print(b"HYDO-ORACLE: OK read\n".to_vec()),
+            Cli,
+            Hlt,
+        ],
+        handlers: HashMap::new(),
+    }
+}
+
+#[test]
+fn sends_wait_for_room_in_the_receive_queue() {
+    // open item 82: three sends of 3,000 bytes at one stop, more than the 4,096-byte receive
+    // queue holds. The first is typed at once; the others wait until the guest has read enough,
+    // and every byte reaches the guest (before, the bytes that did not fit were dropped and the
+    // guest never read its 9,000).
+    let mut h = Host::start_program(
+        Mode::Serve {
+            boot: Some(sched("rb=64 | run")),
+        },
+        reader_program(9000),
+    );
+    boot(&mut h);
+    h.recv();
+    h.tx.send(HostMsg::Request(Request::Ctl {
+        tag: "big".into(),
+        schedule: sched("rb=64 | run"),
+    }))
+    .unwrap();
+    let mut answers = Vec::new();
+    let r = h.drive(|h, _, _, why| {
+        if answers.is_empty() {
+            for c in [b'a', b'b', b'c'] {
+                h.cmd(HostCmd::Send {
+                    at: 0,
+                    bytes: vec![c; 3000],
+                });
+                match h.answer() {
+                    Answer::Send(a) => answers.push(a),
+                    a => panic!("{a:?}"),
+                }
+            }
+        }
+        if why == StopWhy::Exit {
+            h.cmd(HostCmd::End(None));
+            return true;
+        }
+        false
+    });
+    assert!(
+        matches!(answers[0], SendAnswer::Typed { id: 1, .. }),
+        "{answers:?}"
+    );
+    assert!(
+        answers[1..]
+            .iter()
+            .all(|a| matches!(a, SendAnswer::Queued { .. })),
+        "{answers:?}"
+    );
+    assert_eq!(r.verdict, "HYDO-ORACLE: OK read", "{:?}", h.log);
+    let ex: HashMap<_, _> = r.extras.iter().cloned().collect();
+    assert_eq!(ex.get("typed").map(String::as_str), Some("3"));
+    // each queued send was reported when it was typed, in order
+    let sent: Vec<String> = h
+        .log
+        .iter()
+        .filter(|l| l.starts_with("SENT big"))
+        .cloned()
+        .collect();
+    assert_eq!(sent.len(), 2, "{sent:?}");
+    assert!(
+        sent[0].contains("id=2") && sent[1].contains("id=3"),
+        "{sent:?}"
+    );
+    h.quit();
+}
+
+#[test]
+fn a_run_holds_more_than_1024_sends() {
+    // open item 83: a run held at most 1,024 sends; a slow workload sends more
+    let n = 3000;
+    let mut h = Host::start_program(
+        Mode::Serve {
+            boot: Some(sched("rb=64 | run")),
+        },
+        reader_program(n),
+    );
+    boot(&mut h);
+    h.recv();
+    h.tx.send(HostMsg::Request(Request::Ctl {
+        tag: "many".into(),
+        schedule: sched("rb=64 | run"),
+    }))
+    .unwrap();
+    let mut sent = 0;
+    let r = h.drive(|h, _, _, why| {
+        // a few hundred sends of one byte at each stop, each acknowledged at the next stop
+        let first = sent + 1;
+        while sent < n && sent + 1 - first < 400 {
+            h.cmd(HostCmd::Send {
+                at: 0,
+                bytes: vec![b'x'],
+            });
+            match h.answer() {
+                Answer::Send(_) => sent += 1,
+                a => panic!("send {}: {a:?}", sent + 1),
+            }
+        }
+        for id in first..=sent {
+            h.cmd(HostCmd::Ack(id));
+            assert!(matches!(h.answer(), Answer::Ack(_)));
+        }
+        if why == StopWhy::Exit {
+            h.cmd(HostCmd::End(None));
+            return true;
+        }
+        false
+    });
+    assert_eq!(r.verdict, "HYDO-ORACLE: OK read");
+    let ex: HashMap<_, _> = r.extras.iter().cloned().collect();
+    assert_eq!(ex.get("typed").map(String::as_str), Some("3000"));
+    assert!(
+        hydo_engine_proto::too_many_sends(hydo_engine_proto::MAX_SENDS)
+            .starts_with("send more than 65536 sends in one run")
+    );
     h.quit();
 }
 

@@ -564,6 +564,66 @@ fn is_alnum(c: u8) -> bool {
     c.is_ascii_alphanumeric()
 }
 
+/// A mixed token of 8 to 15 letters and digits that changes between digits, capitals and small
+/// letters at every second character or more often, and repeats few characters, as a random
+/// base62 or base36 id does (`qjGcd4lJvd`, `k3j9x2ab01`). Words with a number in them change
+/// seldom (`thread12`, `Http2Server`, `MY012592`), and a pattern repeats its characters (Redis's
+/// banner `oO0OoO0OoO0Oo`): they keep their letters. Open item 84.
+fn random_like(tok: &[u8]) -> bool {
+    let class = |c: u8| {
+        if c.is_ascii_digit() {
+            0
+        } else if c.is_ascii_uppercase() {
+            1
+        } else {
+            2
+        }
+    };
+    let changes = tok
+        .windows(2)
+        .filter(|w| class(w[0]) != class(w[1]))
+        .count();
+    let distinct = tok.iter().collect::<std::collections::BTreeSet<_>>().len();
+    (8..16).contains(&tok.len())
+        && tok.iter().any(u8::is_ascii_digit)
+        && tok.iter().any(u8::is_ascii_alphabetic)
+        && 2 * changes >= tok.len()
+        && 5 * distinct >= 3 * tok.len()
+}
+
+/// The value of a request's id in `key=value` or `key: value` form, after a key that names a
+/// trace, span, request or correlation id (`trace-id=FXkZAHyuua`, `'request_id':'r7Kd2x'`,
+/// `reqId: aB3dE9`): six characters or more with a digit and a letter, or with capitals and
+/// small letters. `out` is the template so far, ending with `pre`, the text between the key and
+/// the value. Open item 84.
+fn id_value(out: &[u8], pre: &[u8], tok: &[u8]) -> bool {
+    let sep: Vec<u8> = pre.iter().copied().filter(|c| *c != b'\'').collect();
+    let sep = sep.trim_ascii();
+    if pre.len() > 4 || !(sep == b"=" || sep == b":") || tok.len() < 6 {
+        return false;
+    }
+    let digit = tok.iter().any(u8::is_ascii_digit);
+    let alpha = tok.iter().any(u8::is_ascii_alphabetic);
+    let cases =
+        tok.iter().any(u8::is_ascii_lowercase) && tok[1..].iter().any(u8::is_ascii_uppercase);
+    if !((digit && alpha) || cases) {
+        return false;
+    }
+    let key = &out[..out.len() - pre.len()];
+    let start = key
+        .iter()
+        .rposition(|c| !(c.is_ascii_alphabetic() || matches!(c, b'_' | b'-' | b'.')))
+        .map_or(0, |i| i + 1);
+    let k: Vec<u8> = key[start..]
+        .iter()
+        .filter(|c| c.is_ascii_alphabetic())
+        .map(u8::to_ascii_lowercase)
+        .collect();
+    let ends = ["traceid", "spanid", "requestid", "reqid", "correlationid"];
+    let names = ["trace", "span", "req", "request", "rid", "correlation"];
+    ends.iter().any(|e| k.ends_with(e.as_bytes())) || names.iter().any(|n| k == n.as_bytes())
+}
+
 /// nums(s): numbers become `#` unless they are part of an error code (MY-012592, errno 2) or a
 /// service port (below the ephemeral range, after an address or a known host); mixed tokens
 /// become `<hex>`, `<id>` or lose their digits.
@@ -606,7 +666,10 @@ pub fn nums(s: &[u8], hosts: &[String]) -> Vec<u8> {
         } else if tok.iter().any(u8::is_ascii_digit) {
             if tok.len() >= 8 && tok.iter().all(u8::is_ascii_hexdigit) {
                 tok = b"<hex>".to_vec();
-            } else if tok.len() >= 16 && tok.iter().any(u8::is_ascii_alphabetic) {
+            } else if (tok.len() >= 16 && tok.iter().any(u8::is_ascii_alphabetic))
+                || random_like(&tok)
+                || id_value(&out, pre, &tok)
+            {
                 tok = b"<id>".to_vec();
             } else {
                 let lead = tok.iter().take_while(|c| c.is_ascii_uppercase()).count();
@@ -628,6 +691,8 @@ pub fn nums(s: &[u8], hosts: &[String]) -> Vec<u8> {
                     tok = t;
                 }
             }
+        } else if id_value(&out, pre, &tok) {
+            tok = b"<id>".to_vec();
         }
         out.extend_from_slice(&tok);
         prev = orig;
@@ -1087,5 +1152,121 @@ mod tests {
             ),
             b"dial tcp #.#.#.#:#->#.#.#.#:3306 errno 2 thread# HY000 <hex>".to_vec()
         );
+    }
+
+    #[test]
+    fn request_ids_are_one_kind() {
+        // open item 84: the ledger's ten-character trace ids made every request its own kind
+        let t = |l: &str| String::from_utf8(norm(&clean(l.as_bytes()), &[], &[])).unwrap();
+        let a = t("level=error msg='context canceled' trace-id=qjGcd4lJvd");
+        assert_eq!(a, "level=error msg='context canceled' trace-id=<id>");
+        for other in [
+            "trace-id=FXkZAHyuua",
+            "trace-id=88clk7XNES",
+            "trace-id=KI8FV00gaR",
+        ] {
+            assert_eq!(t(&format!("level=error msg='context canceled' {other}")), a);
+        }
+        assert_eq!(
+            t(r#"{"level":"error","request_id":"r7Kd2xQ","msg":"timeout"}"#),
+            "{'level':'error','request_id':'<id>','msg':'timeout'}"
+        );
+        assert_eq!(t("ERROR reqId: aB3dE9 failed"), "ERROR reqId: <id> failed");
+        // a random id without a key, base62 and base36, from 8 characters
+        assert_eq!(t("ERROR lost k3j9x2ab01"), "ERROR lost <id>");
+        assert_eq!(t("ERROR lost Wd7xHxLla5"), t("ERROR lost hnxNvhURn2"));
+        // what stays apart: words with a number, codes, short or plain values, other keys
+        for (line, tpl) in [
+            ("ERROR thread12 died", "ERROR thread# died"),
+            ("ERROR Http2Server closed", "ERROR Http#Server closed"),
+            ("ERROR [MY-012592] HY000", "ERROR [MY-012592] HY000"),
+            ("ERROR trace-id=create", "ERROR trace-id=create"),
+            ("ERROR trace-id=Ab1", "ERROR trace-id=Ab#"),
+            (
+                "ERROR clientId=producer-1 failed",
+                "ERROR clientId=producer-# failed",
+            ),
+            ("ERROR pid=4242 user=Alice7x", "ERROR pid=# user=Alice#x"),
+            ("ERROR sha256sum mismatch", "ERROR sha#sum mismatch"),
+            // Redis's banner line, in every recorded Redis run with errors: a pattern, no id
+            (
+                "# oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo",
+                "# oO#OoO#OoO#Oo Redis is starting oO#OoO#OoO#Oo",
+            ),
+        ] {
+            assert_eq!(t(line), tpl, "{line}");
+        }
+    }
+
+    /// Every reviewed kind of the examples' known lists keeps its template: the default rules
+    /// give each entry's example line the template it was accepted with, so a change to the
+    /// rules that would turn a known kind into a new one fails here.
+    #[test]
+    fn reviewed_kinds_keep_their_templates() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let lists = [
+            ("hydo/onboard/examples/formance-ledger/hydo", "hydo.yaml"),
+            ("hydo/onboard/examples/medusa/hydo", "hydo.yaml"),
+            ("hydo/onboard/examples/nats-jetstream/hydo", "hydo.yaml"),
+            ("hydo/onboard/examples/redis-errors/hydo", "hydo.yaml"),
+            ("hydo/onboard/examples/stack", "hydo-errors.yaml"),
+            (
+                "hydo/schema/examples/project/v1/examples-redis-errors-folder/hydo",
+                "hydo.yaml",
+            ),
+        ];
+        let (mut checked, mut bad) = (0, Vec::new());
+        for (dir, manifest) in lists {
+            let d = root.join(dir);
+            let text = std::fs::read_to_string(d.join(manifest)).unwrap();
+            let m = hydo_manifest::parse_text(&text, manifest, false).unwrap();
+            let names: Vec<String> = m["services"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| s(&x["name"]))
+                .collect();
+            let plan = ErrPlan::of(&m, &names).unwrap();
+            let known = std::fs::read_to_string(d.join("known-errors.yaml")).unwrap();
+            // the entries as `hydo errors accept` writes them: JSON strings after the keys
+            let field = |e: &str, k: &str| -> Option<String> {
+                e.lines()
+                    .find_map(|l| l.trim_start().strip_prefix(&format!("{k}: ")))
+                    .and_then(|v| serde_json::from_str::<String>(v).ok())
+            };
+            for e in known.split("\n  - ").skip(1) {
+                let (Some(svc), Some(tpl), Some(ex)) = (
+                    e.lines()
+                        .find_map(|l| l.trim_start().strip_prefix("service: "))
+                        .map(|x| x.trim().to_string()),
+                    field(e, "tpl"),
+                    field(e, "example"),
+                ) else {
+                    continue;
+                };
+                if ex.len() >= 200 {
+                    continue; // the example is cut at 200 bytes, the template's line was not
+                }
+                let sv = plan.services.iter().find(|x| x.name == svc).unwrap();
+                let user: Vec<UserNorm> = sv
+                    .norm
+                    .iter()
+                    .map(|l| {
+                        let (p, r) = l.split_once('\t').unwrap();
+                        (Rx::new(p).unwrap(), r.as_bytes().to_vec())
+                    })
+                    .collect();
+                let got = norm(&clean(ex.as_bytes()), &user, &names);
+                checked += 1;
+                if got != tpl.as_bytes() {
+                    bad.push(format!(
+                        "{dir} {svc}:\n  example {ex}\n  listed  {tpl}\n  now     {}",
+                        String::from_utf8_lossy(&got)
+                    ));
+                }
+            }
+        }
+        assert!(checked >= 40, "{checked} entries checked");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 }

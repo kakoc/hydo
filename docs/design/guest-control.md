@@ -90,7 +90,12 @@ commands, so the 3,584-byte recovery line disappears.
 - **Host → guest.** The engine types a command line into the UART receive queue
   (`HVX_PUT_INPUT` on hvx, `hvm_put_input` on hvm). The guest's 8250 driver takes it through the
   instruction-timed injection path (M18; on the Mac at an exit where the guest has interrupts
-  unmasked, M48). The agent reads it from `/dev/ttyS0` in raw mode with echo off.
+  unmasked, M48). The agent reads it from `/dev/ttyS0` in raw mode with echo off. The Mac and
+  KVM engines' receive queue holds 4,096 bytes. A command that does not fit waits there, and
+  every later one waits behind it, until the guest has read enough. It is typed at the first
+  exit with room (open item 82; before, the bytes that did not fit were lost). A run holds at
+  most 65,536 commands on every engine (`hydo_engine_proto::MAX_SENDS`, 1,024 before open item
+  83), a guard against a host controller that sends without end.
 - **Guest → host.** The agent writes one framed line per reply or event to the same UART:
   `HYDO-AG <len> <crc32> <json>`. The engine reads it at its next stop (`HVX_GET_CONSOLE`; hvm
   reads its console buffer at every exit).

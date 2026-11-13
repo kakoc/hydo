@@ -373,6 +373,15 @@ strategy did. Its failures are faults a team would turn off or accept, not ledge
    the user's login, which this repository's rules forbid in tracked files; `--by` replaces it.
    Open item 84.
 
+Milestone 222 fixed all four. The engines type a message only when it fits in the receive
+queue. A run holds 65,536 messages. The default template blanks `trace-id=qjGcd4lJvd` and other
+request ids. `hydo errors accept` writes `by:` only with `--by`. A copy of this example with 40
+rounds and the full account names in the tokens ran `disk=cut dseed=1 | run C=38` on the Mac.
+Its recovery boot carried about 5.8 KB of records. Before the fix it ended with `ERROR
+recovery: exit budget exhausted` after 121 s. After the fix it ended with `OK invariants=14
+held` in 21 s, and its replay gave the same fingerprint. This example keeps its 30 rounds and
+short names, so that the results above stay comparable.
+
 Not a gap of this onboarding, but met on the way: the Mac release 0.3.1 answers `hydo explore
 --help` only next to a built image, fixed on `main` by Milestone 210.
 

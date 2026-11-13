@@ -280,7 +280,9 @@ ioctl `HVX_GET_CAPS`, which the main module has since 2026-11-08. The details ar
 **Guest control.** Every image is an agent image. The guest agent `hydo-agent` (0.3.0) is PID 1
 and runs only primitives. The host controller (`hydo/crates/hydo-control`) drives services,
 workload, faults and checks under lock-step control of the engine. Every run leaves a control
-transcript. Details: `docs/design/guest-control.md`, Milestones 116–145.
+transcript. Details: `docs/design/guest-control.md`, Milestones 116–145. Since M222 a message
+that does not fit in the Mac or KVM engine's 4,096-byte receive queue waits until it fits. A run
+holds at most 65,536 messages (`hydo_engine_proto::MAX_SENDS`).
 
 **The product.** The Rust workspace is in `hydo/crates/`. `docs/ARCHITECTURE.md` lists the
 crates. The project format (`hydo/schema/project-v1.json`), the results format
@@ -635,24 +637,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     fetch-images.sh until `HYDO_ACCEPT_REBUILD=1`. The real build ran on a Mac with Docker only;
     Linux and Podman ran only with a fake command. `ssh`, `secrets`, `dockerfile_inline` and
     `additional_contexts` are not passed to the build. No VM ran a built image.
-82. The recovery boot loses its carried records when they pass 4 KiB (M215). After a power cut
-    the host posts `$HYDO_ACKED`, the failed ids and `$HYDO_OUTCOMES` as chunks of up to 3,000
-    bytes, one after another, without waiting for a reply (`hydo_control::schedule`). The Mac and
-    KVM engines type each message into a 4,096-byte receive queue and drop what does not fit
-    (`ctl_type` says "bytes do not fit in the receive queue"). The agent never answers, and the
-    run ends after 50 million exits with `ERROR recovery: exit budget exhausted`, minutes of wall
-    time each. The Formance example keeps its records under the limit. A fix makes the engine type
-    a message only when it fits, or the host wait for each chunk's reply. It changes the control
-    transcript only of runs that fail today.
-83. A run holds at most 1,024 control messages on every engine (`CTL_MAX_SENDS`,
-    `ctl::MAX_SENDS`) (M215). A slow workload (a 3 s delay between the ledger and PostgreSQL, 30
-    rounds) sends more: queue polls, `always_` checks and clock reads. The run then ends with
-    "the controlled run broke" and no verdict, and the explorer counts an error.
-84. Error kinds and request ids (M215). The default template blanks a mixed id only from 16
-    characters and only with a digit, so the ledger's `trace-id=qjGcd4lJvd` made every request
-    its own kind. The explorer then shrank each new kind (8 by default) and stalled; `normalize:`
-    and `--errors-shrink 0` were needed. `hydo errors accept` writes the login name as `by:` into
-    the tracked `known-errors.yaml` unless `--by` is given.
 85. The state search (M212). What is left:
     - The Qdrant flaky test on KVM, the one target where only the timing varies, was not
       measured: the build machine was not reachable.
@@ -667,9 +651,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     three-replica cluster TigerBeetle clamps request timestamps to the cluster's agreed time, so
     the guest-clock construction does not carry over. Whether every replica stops is not
     checked. The release binaries are stripped, so the guest shows `panic: reached unreachable
-    code` without the assert; no build with symbols ran. hydo calls the stop of a replica in a
-    run without faults `ERROR restart after the faults`, and the eventually check never runs.
-    The Mac engine cannot boot TigerBeetle (`ERROR boot: SPIN`, open item 13).
+    code` without the assert; no build with symbols ran. The Mac engine cannot boot TigerBeetle
+    (`ERROR boot: SPIN`, open item 13). Since M222 a replica that stops in a run without faults
+    gets its own verdict, and the checks run; the `tie/` schedule did not run again with it.
 87. `eventually_` commands and checks (M218). The `eventually_` checks poll from the heal until
     their deadline before the `eventually_` commands run. So a command cannot prepare what a
     check waits for, such as Lago's billing tick. The example waits inside the command instead.
@@ -688,9 +672,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 92. Clock steps at a time (M218). The explorer steps the clock by fixed amounts only. Lago bills
     at minute 10 of the hour, on the first of the month, so a step to that time needs a hand
     schedule.
-93. The explorer's identity test reads git-ignored files (M218). It lists every file under an
-    example's `hydo/` folder, also `hydo-out/`, `.hydo/` and `images/`. A local exploration
-    there makes the golden stale, so the outputs had to be moved away before `HYDO_BLESS=1`.
 94. The web page of `hydo report --html` (M220). Its section "Versions" reads the
     `versions.json` of `hydo versions` by its types since M221. The CI page ran only on the
     recorded example `mac-shop-ci-run`, which has no replay directories, so a CI finding's
@@ -1010,6 +991,12 @@ build machine, before 2026-10-13.
   and whether the newest version still has it. `versions.json` is a results addition, shown by
   `hydo report` and its web page. Formance's account race: introduced in v2.4.0, v2.3.24
   passes, still in v2.4.18, in 2 replays. Nothing recorded moved
+- M222 (tentative number): five fixes from the onboardings. The Mac and KVM engines type a
+  message only when it fits in the receive queue, so a recovery boot keeps carried records past
+  4 KiB. A run holds 65,536 messages. The default error template blanks request ids. `hydo
+  errors accept` writes no login name. A service that stops in a run without faults gets its own
+  verdict, and the checks still run. The explorer's goldens leave out git-ignored files. Nothing
+  recorded moved
 
 ## Where to look
 
