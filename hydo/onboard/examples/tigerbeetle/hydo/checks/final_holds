@@ -1,11 +1,15 @@
 #!/bin/sh
-# hydo-msg: after the longest timeout no account keeps pending debits or credits, every hold has the timeout its client sent, and a hold is posted or voided at most once and never at or after its expiry
+# hydo-msg: no account keeps the amount of a hold whose expiry passed more than a second ago, every hold has the timeout its client sent, and a hold is posted or voided at most once and never at or after its expiry
 # The business rule of holds (helper_tb.sh): a hold reserves its amount until it is posted,
-# voided, or expires. Once the longest timeout (3 s) has passed, every hold is in one of those
-# states, so the pending balances the acknowledged operations imply are zero on every account;
-# final_ledger checks the posted side and that every acknowledged hold, post and void is there.
-# The console gets each hold's timestamp and timeout ("tb-hold <timestamp> <timeout>"): its expiry
-# instant is timestamp + timeout seconds (RESULTS.md, "Holds and expiry").
+# voided, or expires. TigerBeetle measures a timeout on its own timestamps, which never run
+# behind the guest's clock: a hold whose expiry is more than a second behind the guest's clock now
+# must have expired, unless it was posted or voided. So an account's pending debits (credits) may
+# hold only the amounts of the holds still due to expire. After a clock step backwards the holds
+# expire late, by the guest's clock: that is not a fault. final_ledger checks the posted side and
+# that every acknowledged hold, post and void is there.
+# The console gets each hold's timestamp, its timeout, and the timestamp of its post or void (0
+# when none): "tb-hold <timestamp> <timeout> <settled>". The hold's expiry instant is timestamp +
+# timeout seconds (RESULTS.md, "Holds and expiry").
 . ${HYDO_WORKLOAD:-/hydo/workload}/helper_tb.sh
 W=/tmp/hydo/check-holds; rm -rf $W; mkdir -p $W
 tb 10 "lookup_accounts id=1" | grep -q '"id": "1"' || { echo "the cluster did not answer"; exit 2; }
@@ -19,9 +23,13 @@ case $? in 0|1) ;; *) echo "the cluster did not answer query_transfers"; exit 2 
 flat $W/accounts.json a > $W/accounts
 flat $W/transfers.json t > $W/found
 [ "$(wc -l < $W/accounts)" = "$TB_ACCOUNTS" ] || { echo "lookup_accounts returned $(wc -l < $W/accounts) of $TB_ACCOUNTS accounts"; exit 1; }
-awk '$5 == "[pending]" { print "tb-hold", $7, $8 }' $W/found > /dev/console 2>/dev/null
+awk '$5 == "[pending]" { ts[$1] = $7; to[$1] = $8; ord[++n] = $1 }
+     $5 == "[post_pending_transfer]" || $5 == "[void_pending_transfer]" { st[$6] = $7 }
+     END { for (i = 1; i <= n; i++) print "tb-hold", ts[ord[i]], to[ord[i]], (ord[i] in st) ? st[ord[i]] : 0 }' \
+  $W/found > /dev/console 2>/dev/null
 
-awk -v H=$TB_HOLD -v acc=$W/accounts -v fnd=$W/found '
+now=$(date +%s)
+awk -v H=$TB_HOLD -v acc=$W/accounts -v fnd=$W/found -v now=$now '
   # a 19-digit timestamp as seconds and nanoseconds (awk numbers are exact to 2^53 only)
   function sec(t) { return substr(t, 1, length(t) - 9) + 0 }
   function nsec(t) { return substr(t, length(t) - 8) + 0 }
@@ -29,7 +37,7 @@ awk -v H=$TB_HOLD -v acc=$W/accounts -v fnd=$W/found '
     while ((getline l < fnd) > 0) {
       split(l, a, " ")
       if (a[5] == "[pending]") {
-        nholds++; ts[a[1]] = a[7]; to[a[1]] = a[8]
+        nholds++; ts[a[1]] = a[7]; to[a[1]] = a[8]; dr[a[1]] = a[2]; cr[a[1]] = a[3]; amt[a[1]] = a[4]
         if (a[8] != int((a[1] - H) / 100000) % 10) { badto++; if (badto <= 5) badtol = badtol " " a[1] }
       } else if (a[5] == "[post_pending_transfer]" || a[5] == "[void_pending_transfer]") {
         nset++; p = a[6]; n[p]++; sts[a[1]] = a[7]; of[a[1]] = p
@@ -37,6 +45,8 @@ awk -v H=$TB_HOLD -v acc=$W/accounts -v fnd=$W/found '
       }
     }
     for (p in n) if (n[p] > 1) { twice++; if (twice <= 5) twicel = twicel " " p }
+    # the most each account may still hold: the holds neither settled nor more than 1 s past due
+    for (h in ts) if (!(h in n) && sec(ts[h]) + to[h] >= now - 1) { maxd[dr[h]] += amt[h]; maxc[cr[h]] += amt[h]; due++ }
     for (s in of) {
       p = of[s]; if (!(p in ts)) { orphan++; if (orphan <= 5) orphanl = orphanl " " s; continue }
       es = sec(ts[p]) + to[p]; en = nsec(ts[p]); ss = sec(sts[s]); sn = nsec(sts[s])
@@ -44,18 +54,18 @@ awk -v H=$TB_HOLD -v acc=$W/accounts -v fnd=$W/found '
     }
     while ((getline l < acc) > 0) {
       split(l, a, " ")
-      if (a[4] != 0 || a[5] != 0) { left++; leftl = leftl " account " a[1] ": debits_pending " a[4] " credits_pending " a[5] }
+      if (a[4] > maxd[a[1]] + 0 || a[5] > maxc[a[1]] + 0) { left++; leftl = leftl " account " a[1] ": debits_pending " a[4] " (at most " maxd[a[1]] + 0 ") credits_pending " a[5] " (at most " maxc[a[1]] + 0 ")" }
     }
-    if (left) print "pending balances after every timeout:" leftl
+    if (left) print "pending amounts of holds past their expiry:" leftl
     if (twice) print "holds settled more than once:" twicel
     if (late) print "settled at or after the expiry:" latel
     if (orphan) print "settlements of no hold in the ledger:" orphanl
     if (badto) print "holds with another timeout than sent:" badtol
     if (badp) print "settlements of another hold than sent:" badpl
-    if (left) { printf "%d accounts keep pending balances after every hold expired\n", left; exit 1 }
+    if (left) { printf "%d accounts keep the amounts of holds past their expiry\n", left; exit 1 }
     if (twice || late || orphan) { printf "%d holds settled twice, %d settled late, %d settlements without a hold\n", twice, late, orphan; exit 1 }
     if (badto || badp) { printf "%d holds and %d settlements differ from what was sent\n", badto, badp; exit 1 }
-    printf "holds ok: %d holds, %d posted or voided, no pending balance left\n", nholds, nset
+    printf "holds ok: %d holds, %d posted or voided, %d not yet due by the clock, no expired amount left\n", nholds, nset, due + 0
   }' > $W/verdict
 rc=$?
 cat $W/verdict

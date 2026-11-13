@@ -1,0 +1,10 @@
+#!/bin/sh
+# hydo: timeout=120
+# Create the accounts 1 and 2 (ledger 700, code 10), before any fault.
+. ${HYDO_WORKLOAD:-/hydo/workload}/helper_tie.sh
+for attempt in 1 2 3 4 5; do
+  tb 20 "create_accounts id=1 code=10 ledger=700, id=2 code=10 ledger=700" > /tmp/accounts.out
+  tb 20 "lookup_accounts id=1, id=2" | grep -c '"ledger": "700"' | grep -q -x 2 && { echo "accounts: 2 created"; exit 0; }
+  echo "attempt $attempt: the accounts are not confirmed yet"
+done
+exit 1

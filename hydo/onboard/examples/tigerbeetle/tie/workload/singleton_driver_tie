@@ -1,0 +1,136 @@
+#!/bin/sh
+# hydo: timeout=230
+# Two holds X (timeout t) and Y (timeout t - d) whose timestamps differ by exactly d seconds, so
+# that both expire at one instant e, and a trigger hold Z that expires 8,191 ns or more before e.
+# Then the replica's expiry pulse is made to have the timestamp e + V (the knob V, default 0).
+# TigerBeetle gives the i-th of the n holds a pulse expires (in the order of their expiry) the
+# timestamp T - n + i; at T = e that is e - 1 for X, before X's expiry, and 0.16.29 and later stop
+# on `assert(expires_at <= timestamp_event)` (issue 3960). RESULTS.md, "Issue 3960".
+#
+# How the timestamps are placed (TigerBeetle, one replica): a request's timestamp is the larger
+# of the replica's last timestamp + 1 and the realtime clock, and a batch of n events adds n.
+# - An anchor sets the guest's clock to a whole second s and sends one transfer through a REPL
+#   session that is already running; it reaches the replica W ns after the clock was set. Then
+#   the clock goes an hour back, so that the counter alone timestamps what follows: + 1 for a new
+#   client session, + 1 + n for a batch of n.
+# - W takes a few values (a few milliseconds apart), each exactly. Eight anchors give the most
+#   frequent value; after the next anchor with it, at s1, come the batches Z and X, one hold per
+#   second t = L..L+K. Anchors at s1 + d (d = 1, 2, ...) look
+#   for a W equal to the first; there the counter puts the batch Y exactly d seconds after X.
+# - Anchors at s1 + t look for that W again. There the counter is a few nanoseconds before Z_t's
+#   expiry, and one batch of refused transfers (id 0) moves it to e - 1 - D + V: the replica
+#   sends the pulse right after that batch, with the timestamp e + V. At a second whose W
+#   differs, the clock runs for 0.25 s, so that the replica expires that second's holds itself.
+. ${HYDO_WORKLOAD:-/hydo/workload}/helper_tie.sh
+W=/tmp/hydo/tie; mkdir -p $W
+OFF=$(cat /tmp/hydo/tie.offset 2>/dev/null || echo 0)
+case $OFF in [0-9]*) ;; *) OFF=0 ;; esac
+NS=1000000000
+X0=1767229200               # 2026-01-01 01:00:00 UTC, after the guest's start time
+BACK=$((X0 - 3600))         # an hour back: the counter alone timestamps the requests
+L=20; K=100                 # the tied holds expire L..L+K seconds after the first anchor
+# A pulse adds 8,190 to the counter since 0.16.29 (the most holds it may expire), and nothing
+# before: its timestamp T is the counter + 1 + D.
+case $($TB version 2>/dev/null | grep -o '0\.[0-9]*\.[0-9]*' | head -1) in
+  0.[0-9].*|0.1[0-5].*|0.16.[0-9]|0.16.1[0-9]|0.16.2[0-8]) D=0 ;;
+  *) D=8190 ;;
+esac
+GAP=$((D ? 8189 : 100))     # refused transfers between Z and X: X's expiry minus Z's is GAP + 25
+
+batch() {   # batch <n> [<events>]: one client call: n refused transfers (id 0), then <events>
+  awk -v n="$1" -v ev="$2" 'BEGIN {
+    printf "create_transfers"
+    for (i = 0; i < n; i++) printf "%s id=0", (i ? "," : " ")
+    if (ev != "") printf "%s %s", (n ? "," : ""), ev }' > $W/stmt
+  tb 60 "$(cat $W/stmt)" > /dev/null
+}
+holds() {   # holds <id base> <timeout minus t>: one hold per t = L..L+K, timeout t - <minus>
+  awk -v b="$1" -v m="$2" -v l=$L -v k=$K 'BEGIN { for (t = l; t <= l + k; t++)
+    printf "%sid=%d debit_account_id=1 credit_account_id=2 amount=1 ledger=700 code=10 flags=pending timeout=%d", (t > l ? ", " : ""), b + t, t - m }'
+}
+clock() { date -s "@$1" > /dev/null; }
+sts() {   # sts <id>...: through the session (+ 1): "id timestamp" lines in $W/ts
+  _s="lookup_transfers"; _sep=" "
+  for _i in "$@"; do _s="$_s$_sep id=$_i"; _sep=","; done
+  rq "$_s"
+  awk '/"id":/ { gsub(/[",]/, "", $2); id = $2 } /"timestamp":/ { gsub(/[",]/, "", $2); print id, $2 }' $SESS.last > $W/ts
+}
+get() { awk -v id="$1" '$1 == id { print $2 }' $W/ts; }
+AID=9000
+anchor() {   # anchor <second>: one transfer at that second; sets TS (its timestamp) and WA (its W)
+  AID=$((AID + 1)); sleep 0.05; clock $1
+  rq "create_transfers id=$AID debit_account_id=1 credit_account_id=2 amount=1 ledger=700 code=10"
+  clock $BACK
+  sts $AID; TS=$(get $AID); WA=$((TS - $1 * NS))
+}
+
+session_start || { say "the REPL session did not start"; exit 1; }
+# the most frequent W of eight anchors (nothing else is created yet), then the first anchor
+# with that W
+s1=$X0; : > $W/ws
+while [ $s1 -lt $((X0 + 8)) ]; do anchor $s1; echo $WA >> $W/ws; s1=$((s1 + 1)); done
+W1=$(sort $W/ws | uniq -c | sort -k1,1nr -k2,2n | awk 'NR == 1 { print $2 }')
+say "W of the first eight anchors: $(tr '\n' ' ' < $W/ws); the most frequent: $W1"
+try=0
+while :; do   # up to three tries; a new try starts after every hold of the last one expired
+  ZB=$((91000 + 10000 * try)); XB=$((92000 + 10000 * try)); YB=$((93000 + 10000 * try))
+  while :; do
+    anchor $s1; [ "$WA" = "$W1" ] && break
+    s1=$((s1 + 1)); [ $s1 -lt $((X0 + 200)) ] || { say "no anchor with W $W1"; exit 1; }
+  done
+  batch 0 "$(holds $ZB 0)"                                 # Z_t, timeout t
+  batch $GAP
+  batch 0 "$(holds $XB 0)"                                 # X_t, timeout t
+  sts $((ZB + L)) $((XB + L)); z=$(get $((ZB + L))); x=$(get $((XB + L)))
+  say "anchor $s1: W $W1; Z_$L $z, X_$L $x (X - Z = $((x - z)))"
+  d=1; while [ $d -lt $L ]; do
+    anchor $((s1 + d))
+    say "anchor s1 + $d: W $WA"
+    [ "$WA" = "$W1" ] && break
+    d=$((d + 1))
+  done
+  [ $d -lt $L ] && break
+  try=$((try + 1)); [ $try -lt 3 ] || { say "no anchor matched W $W1 in three tries"; exit 1; }
+  s1=$((s1 + L + K + 1))
+done
+prev=$((TS + 1)); want=$((x + d * NS)); k=$((want - prev - 3))
+while [ $k -gt $((8189 - K - 1)) ]; do batch 8189; prev=$((prev + 8191)); k=$((want - prev - 3)); done
+[ $k -ge 0 ] || { say "Y cannot be placed: the counter is $((-k)) ns past X + $d s"; exit 1; }
+batch $k "$(holds $YB $d)"                               # Y_t, timeout t - d, d seconds after X_t
+sts $((YB + L)); y=$(get $((YB + L)))
+say "Y_$L $y = X_$L + $d s + $((y - want))"
+[ "$y" = "$want" ] || { say "Y is not $d s after X; the counter model is wrong"; exit 1; }
+
+t=$L; while [ $t -le $((L + K)) ]; do
+  anchor $((s1 + t))
+  if [ "$WA" != "$W1" ]; then
+    say "anchor s1 + $t: W $WA, not $W1; the replica expires second $t's holds"
+    clock $((s1 + t)); sleep 0.25; clock $BACK
+    t=$((t + 1)); continue
+  fi
+  rq "lookup_accounts id=1"                                # + 1
+  before=$(grep '"debits_pending"' $SESS.last | tr -dc 0-9)
+  prev=$((TS + 2))
+  e0=$((z + (t - L) + t * NS)); e=$((x + (t - L) + t * NS))
+  [ $prev -lt $e0 ] || { say "the counter ($prev) is past Z_$t's expiry ($e0)"; exit 1; }
+  p=$((e - 1 - D + OFF)); n=$((p - prev - 2))
+  while [ $n -gt 8189 ]; do
+    m=$((n - 8189)); [ $m -gt 8189 ] && m=8189
+    [ $((prev + 2 + m)) -lt $e0 ] || { say "no room before Z_$t's expiry"; exit 1; }
+    batch $m; prev=$((prev + 2 + m)); n=$((p - prev - 2))
+  done
+  [ $n -ge 1 ] || { say "no room for the last batch"; exit 1; }
+  say "anchor s1 + $t: W $WA; Z_$t expires $e0, X_$t and Y_$t expire $e; a batch of $n moves the counter to $p; the pulse: e + $OFF; account 1's pending debits: $before"
+  batch $n
+  break
+done
+[ $t -le $((L + K)) ] || { say "no second matched W $W1"; exit 1; }
+sleep 2
+if tb 10 "lookup_accounts id=1" | grep -q '"id": "1"'; then
+  tb 10 "lookup_accounts id=1" | grep -E '"debits_(pending|posted)"' | tr -d ' \n' > $W/acc
+  say "after the pulse the replica answers: $(cat $W/acc) (before the pulse: $before pending)"
+  exit 0
+fi
+say "after the pulse the replica does not answer"
+tail -n 12 /tmp/hydo/tigerbeetle_0.log 2>/dev/null | grep -v -E 'on_connect|message_bus' > /dev/console 2>/dev/null
+exit 1
