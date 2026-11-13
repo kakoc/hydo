@@ -867,9 +867,9 @@ impl Cpu for KvmCpu {
         s.cs.l == 1 && r.rflags & RFLAGS_TF == 0 && d.dr7 & 0xff == 0
     }
 
-    fn user_without_tsd(&self) -> bool {
+    fn tsd(&self) -> bool {
         let s = self.get::<kvm_sregs>(KVM_GET_SREGS, "KVM_GET_SREGS");
-        s.cs.dpl == 3 && s.cr4 & (1 << 2) == 0
+        s.cr4 & (1 << 2) != 0
     }
 
     fn step_to(&mut self, step: Option<&crate::spin::Step>) {

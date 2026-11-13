@@ -37,7 +37,7 @@ pub const TWINS: [Twin; 1] = [KERNEL];
 pub const KERNEL_SMP: Twin = Twin {
     of: KERNEL.of,
     file: "bzImage-kvm-smp",
-    sha256: "17415b1f447957c150c3036f85f952c5b475c7f3a0327262a3d06a7cc9aaf2bf",
+    sha256: "9314f836b6af8a29ee6b0051b8dcb6805fd7d02b4a94054806eb86b316afa965",
     version: "6.6.35",
 };
 

@@ -42,6 +42,25 @@ diff -ruN a/arch/x86/include/asm/vdso/processor.h b/arch/x86/include/asm/vdso/pr
  }
  
  struct getcpu_cache;
+diff -ruN a/arch/x86/kernel/cpu/common.c b/arch/x86/kernel/cpu/common.c
+--- a/arch/x86/kernel/cpu/common.c
++++ b/arch/x86/kernel/cpu/common.c
+@@ -476,6 +476,15 @@
+ 		cr4 |= X86_CR4_PCIDE;
+ 	if (static_branch_likely(&cr_pinning))
+ 		cr4 = (cr4 & ~cr4_pinned_mask) | cr4_pinned_bits;
++	/*
++	 * hydo's KVM engine: user-space RDTSC must fault on every CPU, so
++	 * that the kernel emulates it with the exit clock (hydo.c). head_64.S
++	 * starts every other CPU with CR4 = PAE | PGE (and MCE), so TSD is
++	 * set again here, before the CPU runs anything else. Without it, the
++	 * other CPUs' RDTSC read the host's TSC (docs/design/kvm-vcpus.md).
++	 */
++	if (hydo_tsd_forced())
++		cr4 |= X86_CR4_TSD;
+ 
+ 	__write_cr4(cr4);
+ 
 diff -ruN a/arch/x86/kernel/hydo.c b/arch/x86/kernel/hydo.c
 --- a/arch/x86/kernel/hydo.c
 +++ b/arch/x86/kernel/hydo.c
@@ -77,26 +96,7 @@ diff -ruN a/arch/x86/kernel/hydo.c b/arch/x86/kernel/hydo.c
  	if (request_irq(0, hydo_timer_interrupt,
  			IRQF_NOBALANCING | IRQF_IRQPOLL | IRQF_TIMER, "timer", NULL))
  		pr_err("hydo: cannot get IRQ 0 for the timer\n");
-@@ -160,6 +171,18 @@
- {
- 	if (!hypervisor_is_type(X86_HYPER_HYDO))
- 		return 0;
-+#ifdef CONFIG_SMP
-+	/*
-+	 * cr4_set_bits() sets TSD on this CPU only. Every other CPU starts
-+	 * with the real-mode trampoline's CR4 (mmu_cr4_features), which
-+	 * cr4_init() keeps: with TSD in it, user-space RDTSC faults and is
-+	 * emulated with the exit clock on every CPU. Without it, RDTSC on
-+	 * the other CPUs read the host's TSC (docs/design/kvm-vcpus.md).
-+	 */
-+	mmu_cr4_features |= X86_CR4_TSD;
-+	if (trampoline_cr4_features)
-+		*trampoline_cr4_features = mmu_cr4_features;
-+#endif
- 	cr4_set_bits(X86_CR4_TSD);
- 	hydo_tsd_on = true;
- 	return 0;
-@@ -184,15 +207,26 @@
+@@ -184,15 +195,26 @@
  	x86_platform.legacy.no_vga = 1;
  	paravirt_set_sched_clock(hydo_sched_clock);
  	preset_lpj = HYDO_LPJ;

@@ -635,17 +635,6 @@ impl Vmm {
                 (sm.end, sm.n())
             };
             let cur = self.cur;
-            if end && self.cpus[cur].user_without_tsd() {
-                // user code with CR4.TSD clear reads the host's TSC with RDTSC, and no exit
-                // shows it: a guest kernel that does not keep TSD on every CPU
-                let rip = self.cpu().rip();
-                fatal(
-                    3,
-                    &format!(
-                        "hydo-kvm: vCPU {cur} runs user code with CR4.TSD clear (rip {rip:#x}): its RDTSC would read the host's TSC; the guest kernel must set TSD on every CPU"
-                    ),
-                );
-            }
             if !end && self.runnable(cur) {
                 if let Some(sm) = self.smp.as_mut() {
                     if sm.run[cur] == Run::Halted {
@@ -2056,6 +2045,7 @@ impl Vmm {
         }
         let mut h = self.ram_hash(h);
         if let Some(sm) = &self.smp {
+            self.tsd_guard(sm);
             // several vCPUs: the other vCPUs and the several-vCPU state, after every part of a
             // one-vCPU fingerprint (none of it exists with one vCPU)
             h = fnv(b"smp", h);
@@ -2065,6 +2055,30 @@ impl Vmm {
             h = fnv(&sm.bytes(), h);
         }
         h
+    }
+
+    /// Several vCPUs, at every fingerprint: when vCPU 0 has CR4.TSD set (the guest kernel makes
+    /// user-space RDTSC fault and emulates it with the exit clock), every vCPU that started must
+    /// have it too. A vCPU without it reads the host's TSC in user space with no exit to show it,
+    /// so the run is not deterministic; it ends here (the determinism bug of Milestone 219, where
+    /// the guest kernel set TSD on the boot CPU only). User code seldom makes an exit, so a check
+    /// of user code at the turn ends would not see it.
+    fn tsd_guard(&self, sm: &Smp) {
+        if !self.cpus[0].tsd() {
+            return;
+        }
+        for i in 1..self.cpus.len() {
+            let up = sm.started.get(i).copied().unwrap_or(false)
+                && sm.run.get(i).is_some_and(|r| *r != Run::WaitSipi);
+            if up && !self.cpus[i].tsd() {
+                fatal(
+                    3,
+                    &format!(
+                        "hydo-kvm: vCPU {i} runs with CR4.TSD clear while vCPU 0 has it set: its user-space RDTSC reads the host's TSC; the guest kernel must set TSD on every CPU"
+                    ),
+                );
+            }
+        }
     }
 
     /// The parts of the end state, for HYDO_KVM_DIAG.
