@@ -6121,3 +6121,84 @@ changes `hydo-kvm` and is not merged yet):
 
 **Left.** Stage 2's engine code waits for the state search's merge. The SMP kernel was not booted
 and is not pinned. Intel KVM ran only the probe, on one runner model.
+
+### Milestone 214 (tentative number): DONE (Compose services with `build:` in one import: `hydo compose` builds their images with Docker and pins each file's digest; fetch-images.sh builds a missing file again and stops at other bytes; 2026-11-13)
+
+**In short.** Before, a service with `build:` was imported unpinned. fetch-images.sh printed the
+`docker build` and `docker save` commands to run by hand, and a second `hydo compose` read the
+file and pinned it. Now one `hydo compose` does all of it when a Docker command answers. The
+manifest then has the image's own settings (its `HEALTHCHECK`, `EXPOSE` and `VOLUME`) from the
+first import, and the lock file pins the file's digest. A later build that gives other bytes
+stops fetch-images.sh until the user accepts it.
+
+**The choice.** The task allowed either fetch-images.sh or `hydo compose` to run the build.
+`hydo compose` builds, because only the importer can read the built file's settings into
+`hydo.yaml`. A build in the script alone would still need a second import, which also rewrites a
+`hydo.yaml` that the user has edited by then. `hydo compose` builds without asking, because an AI
+agent or a CI job cannot answer a prompt; `--no-build` turns it off. fetch-images.sh keeps a
+build of its own for the files that are missing later: a fresh checkout (`hydo/images/` is
+git-ignored) or the other architecture.
+
+**What changed** (`hydo/crates/hydo-compose`):
+
+- `src/localbuild.rs`: the Docker command is `--docker <cli>`, else `docker`, else `podman`; it
+  counts when `<cli> version` exits 0. Without one, the message names what to install: Docker
+  Engine on Linux, Docker Desktop or Colima on a Mac, or Podman. When the command is there and
+  its engine does not run, it names how to start it.
+- `hydo compose`: for a local build whose file and pin for this machine's guest are missing, it
+  runs `<cli> build --platform linux/<arch> -t <tag>` with Compose's `context`, `dockerfile`,
+  `args`, `target`, `labels`, `network`, `extra_hosts`, `shm_size`, `no_cache` and `pull`. Before,
+  only the context, `dockerfile:` and `target:` were passed. `ssh`, `secrets`, `dockerfile_inline`
+  and `additional_contexts` get a warning. `<cli> save` writes the file that `hydo.yaml` names.
+  The lock entry has `local_build: true` and the platforms' digests and settings, as a registry
+  image's entry has them. A file whose digest differs from its pin is pinned again, with a
+  warning. On a Mac, where only the arm64 file exists, the settings come from it.
+- fetch-images.sh calls `hydo-fetch-image build <arch> <file> <tag> <lock> <ref> -- <args>` for
+  each missing file. The same digest as the pin puts the file in place. No pin yet records one
+  and says to run `hydo compose` again for the settings. Another digest keeps the build as
+  `<file>.rebuilt` and exits 1, and says whether the settings changed too.
+  `HYDO_ACCEPT_REBUILD=1` takes it and re-pins it. `HYDO_DOCKER` names another command. These
+  are the script's variables, so hydo-config's inventory leaves them out, as it does every shell
+  script's.
+- `src/ocilocal.rs`: the importer's reader of `docker save` archives read only the files of the
+  top directory and the `.json` files. Docker 25 and later keep the config at
+  `blobs/sha256/<hex>`, so the first real run failed: the digest of the config it read (an empty
+  file, `e3b0c442…`) did not match. Files under `blobs/` below 4 MiB are read now. hydo-build's
+  own reader was right.
+- The two compose help texts of the `hydo` command, the importer's usage text, `hydo guide workflow`,
+  MANIFEST.md "From Docker Compose" (a table row for `build:`), the crate's README and
+  `docs/YOUR-PROJECT.md` describe it.
+
+**Tests.** `cargo test -p hydo-compose` passed: 13 tests of the integration program, 10 unit
+tests. `tests/local_build.rs` has six tests with a fake Docker command that saves prepared
+archives. They cover the build arguments, the settings read from the file, the pin, a second
+import that builds nothing, and a rebuild with the same bytes. They also cover other bytes with
+the same settings (stopped, then accepted) and other settings, a file replaced by hand (pinned
+again), and no Docker. The golden `compose_equals_python` passes `--no-build`, so its answers do
+not depend on whether the machine has Docker. It was re-recorded for the 34 cases with a local
+build and the 3 usage cases; no other case and no rc changed. Two new cases import
+`tests/fixtures/local-build`. The golden of the `hydo` command changed in the 4 compose usage answers and
+the 2 `hydo guide manifest` hashes. `cargo test -p hydo`, `-p hydo-agents` (with
+`public_content::`), `-p hydo-config`, clippy with `-D warnings` and `cargo fmt` passed.
+
+**The real run** on this Mac with Docker 28.4 (Colima, the containerd image store), from
+`tests/fixtures/local-build` (busybox 1.36.1, about 2 MB):
+
+| step | result |
+|---|---|
+| `hydo compose docker-compose.yml --out hydo/hydo.yaml` | built linux/arm64, `port: 8080` and `ready:` from the image's `HEALTHCHECK`, pinned `sha256:87dde3d5…` |
+| the file deleted, `sh hydo/fetch-images.sh` | built `sha256:e214799c…`, stopped with status 1, kept `…-arm64-oci.rebuilt`, the settings the same |
+| `HYDO_ACCEPT_REBUILD=1 sh hydo/fetch-images.sh` | built `sha256:31d5fa05…`, accepted and re-pinned, status 0, the `.rebuilt` file removed |
+| `sh hydo/fetch-images.sh` again | nothing built, status 0 |
+| `hydo-build hydo/hydo.yaml --arch arm64 --check` | `OK (1 services, 1 invariants, 20 workload steps)` |
+
+Every build of that Dockerfile gave other bytes, also with every step cached. The two configs
+differ in one history line: Docker 28.4's BuildKit writes a Go pointer into the history of an
+`EXPOSE` step (`EXPOSE &{[{{7 0} {7 0}}] 0x400108b340}` and `… 0x4003889dc0}`). The pin makes
+that visible, as intended, but such an image stops fetch-images.sh on every rebuild. The image
+`shop-app:latest` was removed afterwards; BuildKit's cache keeps the busybox layer.
+
+**Left** (open item 81). The real run was on a Mac only, with Docker; Linux and Podman ran only
+with the fake command. `hydo compose` builds for this machine's guest only, and fetch-images.sh
+builds the other one on request (`sh fetch-images.sh all`). `ssh`, `secrets`,
+`dockerfile_inline` and `additional_contexts` are not passed. No VM ran the built image.
