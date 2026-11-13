@@ -1,6 +1,8 @@
 //! `--sweep turns` (M205): where a schedule's verdict changes with the vCPU turn length.
 //!
-//! With several vCPUs, hvx runs them in turns of exactly `q=` guest branches. A race between
+//! With several vCPUs, hvx runs them in turns of exactly `q=` guest branches, and the KVM engine
+//! in turns of `q=` counted VM exits (docs/design/kvm-vcpus.md; the defaults below differ by
+//! engine, because the units do). A race between
 //! threads can then depend only on the turn length: nats-server's flaky test 8363 fails at
 //! `q=18800` and passes at `q=18700` on two vCPUs, each twice with one fingerprint
 //! (hydo/onboard/examples/nats-flaky-8363). This sweep finds such boundaries for one schedule:
@@ -18,10 +20,45 @@
 
 /// The default `--turn-range`: from 64 branches to twice the module's default turn (2^20).
 pub const RANGE: &str = "64-2097152";
+/// The default `--turn-range` on KVM: from 1 exit to 16 times the engine's default turn of 256
+/// exits.
+pub const RANGE_KVM: &str = "1-4096";
 /// The default `--turn-points`.
 pub const POINTS: u64 = 12;
 /// The default `--turn-resolution`.
 pub const RESOLUTION: u64 = 100;
+/// The default `--turn-resolution` on KVM: exact (one exit), because a KVM turn length is
+/// coarse.
+pub const RESOLUTION_KVM: u64 = 1;
+
+/// The turn range searched: `--turn-range`, or the engine's default.
+pub fn range_of(a: &crate::args::Args, kvm: bool) -> String {
+    match &a.turn_range {
+        Some(r) => r.clone(),
+        None if kvm => RANGE_KVM.into(),
+        None => RANGE.into(),
+    }
+}
+
+/// The resolution of the narrowing: `--turn-resolution`, or the engine's default.
+pub fn resolution_of(a: &crate::args::Args, kvm: bool) -> u64 {
+    match a.turn_resolution {
+        Some(r) => r.max(1) as u64,
+        None if kvm => RESOLUTION_KVM,
+        None => RESOLUTION,
+    }
+}
+
+/// `n` turn-length units: guest branches on hvx, counted VM exits on KVM.
+pub fn amount(n: u64, kvm: bool) -> String {
+    let unit = match (kvm, n == 1) {
+        (true, true) => "exit",
+        (true, false) => "exits",
+        (false, true) => "branch",
+        (false, false) => "branches",
+    };
+    format!("{n} {unit}")
+}
 /// The most runs a sweep makes before it stops narrowing (a guard; a sweep with defaults on one
 /// boundary takes about 25).
 pub const MAX_RUNS: usize = 400;
@@ -179,6 +216,22 @@ mod tests {
         );
         assert_eq!(with_q("disk=none", 9), "disk=none q=9 | run");
         assert!(hydo_schedule::Schedule::parse(&with_q("disk=none | run", 18800)).is_ok());
+    }
+
+    #[test]
+    fn the_defaults_depend_on_the_engine() {
+        let mut a = crate::args::Args::default();
+        assert_eq!(range_of(&a, false), RANGE);
+        assert_eq!(range_of(&a, true), RANGE_KVM);
+        assert_eq!(resolution_of(&a, false), RESOLUTION);
+        assert_eq!(resolution_of(&a, true), RESOLUTION_KVM);
+        a.turn_range = Some("8-64".into());
+        a.turn_resolution = Some(4);
+        assert_eq!(range_of(&a, true), "8-64");
+        assert_eq!(resolution_of(&a, false), 4);
+        assert_eq!(amount(1, true), "1 exit");
+        assert_eq!(amount(4096, true), "4096 exits");
+        assert_eq!(amount(100, false), "100 branches");
     }
 
     #[test]

@@ -87,12 +87,14 @@ pub struct Args {
     pub no_compose: bool,
     pub bursts: bool,
     pub turn_margin: Option<i64>,
-    /// `--sweep turns` (M205): the turn lengths searched, `LO-HI`.
-    pub turn_range: String,
+    /// `--sweep turns` (M205): the turn lengths searched, `LO-HI` (None: the engine's default,
+    /// [`crate::turns::range_of`]).
+    pub turn_range: Option<String>,
     /// `--sweep turns`: the coarse grid's size.
     pub turn_points: i64,
-    /// `--sweep turns`: a boundary is narrowed until its lengths are at most this far apart.
-    pub turn_resolution: i64,
+    /// `--sweep turns`: a boundary is narrowed until its lengths are at most this far apart
+    /// (None: the engine's default, [`crate::turns::resolution_of`]).
+    pub turn_resolution: Option<i64>,
     pub ram_mib: Option<i64>,
     pub known_errors: Option<String>,
     pub errors: Option<String>,
@@ -200,9 +202,9 @@ impl Default for Args {
             no_compose: false,
             bursts: false,
             turn_margin: None,
-            turn_range: crate::turns::RANGE.into(),
+            turn_range: None,
             turn_points: crate::turns::POINTS as i64,
-            turn_resolution: crate::turns::RESOLUTION as i64,
+            turn_resolution: None,
             ram_mib: None,
             known_errors: None,
             errors: None,
@@ -452,9 +454,9 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "cpu" => a.cpu = Some(choice("cpu", v, &["v2", "v3"])?),
             "vcpus" => a.vcpus = int("vcpus", v)?,
             "turn-margin" => a.turn_margin = Some(int("turn-margin", v)?),
-            "turn-range" => a.turn_range = val,
+            "turn-range" => a.turn_range = Some(val),
             "turn-points" => a.turn_points = int("turn-points", v)?,
-            "turn-resolution" => a.turn_resolution = int("turn-resolution", v)?,
+            "turn-resolution" => a.turn_resolution = Some(int("turn-resolution", v)?),
             "ram-mib" => a.ram_mib = Some(int("ram-mib", v)?),
             "known-errors" => a.known_errors = Some(val),
             "errors" => a.errors = Some(choice("errors", v, &["report", "fail"])?),

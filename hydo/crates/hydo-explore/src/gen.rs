@@ -26,6 +26,8 @@ pub const X_OFF_MAX: i64 = 250;
 pub const TURNS_SALT: u64 = 0x7A4E5C0FFEE7A4E5;
 pub const BURSTS_SALT: u64 = 0xB0B5EED5C0FFEE77;
 pub const Q_DEFAULT: i64 = 1 << 20;
+/// The KVM engine's default turn with several vCPUs, in counted exits (`hydo_kvm::smp::Q_DEFAULT`).
+pub const KVM_Q_DEFAULT: i64 = 256;
 pub const CLOCK_DELTAS: [i64; 10] = [
     -30 * 86400,
     -86400,
@@ -177,6 +179,10 @@ pub struct Ex {
     pub hvm_tc: bool,
     pub turns: bool,
     pub bursts: bool,
+    /// The KVM engine with several vCPUs (docs/design/kvm-vcpus.md): its turns `q=` count VM
+    /// exits (default [`KVM_Q_DEFAULT`]), so `--turns` draws their lengths from exit ranges, and
+    /// `render` keeps `q=` and `qs=`, which the one-vCPU engines refuse.
+    pub turns_in_exits: bool,
     pub freeze_call: bool,
     pub fc_nmax: i64,
     pub fc_pairs: Vec<(String, String)>,
@@ -242,6 +248,7 @@ impl Default for Ex {
             hvm_tc: false,
             turns: false,
             bursts: false,
+            turns_in_exits: false,
             freeze_call: false,
             fc_nmax: FC_NMAX,
             fc_pairs: Vec::new(),
@@ -601,7 +608,18 @@ impl Ex {
                 0 => 1,
                 v => v,
             };
-            let q = if x < 10 {
+            // the same draws on every engine; only the ranges differ. A KVM turn ends only at a
+            // counted exit, so it is coarse: a third of the drawn turns are short (a switch
+            // after at most 32 exits), the rest around the default of 256 exits
+            let q = if self.turns_in_exits {
+                if x < 35 {
+                    t.rng(1, 32)
+                } else if x < 65 {
+                    t.rng(33, KVM_Q_DEFAULT - 1)
+                } else {
+                    t.rng(KVM_Q_DEFAULT / 2, 2 * KVM_Q_DEFAULT)
+                }
+            } else if x < 10 {
                 t.rng(1, 100)
             } else if x < 20 {
                 t.rng(101, 10000)
@@ -1333,6 +1351,15 @@ impl Ex {
     }
 
     // ------------------------------------------------------------ engines
+    /// The engine's default turn length: branches on hvx, exits on KVM.
+    pub fn q_default(&self) -> i64 {
+        if self.turns_in_exits {
+            KVM_Q_DEFAULT
+        } else {
+            Q_DEFAULT
+        }
+    }
+
     /// hvm_backend.hvm_supported: the part of a schedule the Mac engine can run (`render` has
     /// dropped `cf=` before, which hvmx cannot apply either).
     pub fn hvm_supported(&self, s: &S) -> S {
@@ -1348,7 +1375,9 @@ impl Ex {
         s.rb = None;
         s.pp = None;
         s.xt = None;
-        s.q = None;
+        if !self.turns_in_exits {
+            s.q = None;
+        }
         s.qb = None;
         if let Some(Tj::Seed { max, .. }) = &mut s.tj {
             if *max > HVM_TJ_MAX {
@@ -1938,8 +1967,9 @@ impl Ex {
             if qs != 0 {
                 var(&|t| t.q = Some((q, 0)));
             }
-            if q != 0 && q < Q_DEFAULT {
-                var(&|t| t.q = Some((Q_DEFAULT.min(q * 8), qs)));
+            let qd = self.q_default();
+            if q != 0 && q < qd {
+                var(&|t| t.q = Some((qd.min(q * 8), qs)));
             }
         }
         if let Some((blen, bq, pm, bs)) = s.qb {
@@ -2572,5 +2602,63 @@ fn grpc_candidates(s: &S, var: Var<'_>) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod turn_tests {
+    use super::*;
+
+    /// `--turns` on KVM draws from the same stream as on hvx: the same seeds get a turn token,
+    /// seeded or not, with the same `qs=`; only the length is in exits.
+    #[test]
+    fn kvm_turns_are_drawn_in_exits_on_the_seeds_of_hvx() {
+        let hvx = Ex {
+            turns: true,
+            ..Ex::default()
+        };
+        let kvm = Ex {
+            turns_in_exits: true,
+            ..hvx.clone()
+        };
+        let (mut on, mut short) = (0, 0);
+        for seed in 1..=2000u64 {
+            let a = hvx.add_turns(S::default(), seed).q;
+            let b = kvm.add_turns(S::default(), seed).q;
+            assert_eq!(a.map(|t| t.1), b.map(|t| t.1), "seed {seed}");
+            if let Some((q, _)) = b {
+                on += 1;
+                assert!((1..=2 * KVM_Q_DEFAULT).contains(&q), "seed {seed}: q={q}");
+                if q <= 32 {
+                    short += 1;
+                }
+            }
+        }
+        assert!((900..1100).contains(&on), "{on}");
+        assert!((250..450).contains(&short), "{short} of {on}");
+        assert_eq!(kvm.q_default(), KVM_Q_DEFAULT);
+        assert_eq!(hvx.q_default(), Q_DEFAULT);
+    }
+
+    /// The Mac engine and KVM with one vCPU drop the turn tokens; KVM with several keeps `q=`
+    /// and `qs=`, and drops hvx's bursts.
+    #[test]
+    fn only_kvm_with_several_vcpus_keeps_q_on_an_exit_counted_engine() {
+        let s = S {
+            q: Some((12, 0x1f)),
+            qb: Some((2000, 20, 50, 1)),
+            ..S::default()
+        };
+        let mac = Ex {
+            backend: Backend::Hvm,
+            ..Ex::default()
+        };
+        assert_eq!(mac.hvm_supported(&s).q, None);
+        let kvm = Ex {
+            turns_in_exits: true,
+            ..mac
+        };
+        assert_eq!(kvm.hvm_supported(&s).q, Some((12, 0x1f)));
+        assert_eq!(kvm.hvm_supported(&s).qb, None);
     }
 }

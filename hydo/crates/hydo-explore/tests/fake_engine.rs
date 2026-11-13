@@ -164,6 +164,14 @@ fn run(prog: &mut Command, dir: &Path, out: &Path) -> String {
             },
         )
         .env(
+            "HYDO_FAKE_KVM_TURNS",
+            if out.to_string_lossy().contains("kvm_turns_") {
+                "1"
+            } else {
+                ""
+            },
+        )
+        .env(
             "HYDO_FAKE_STEER",
             if out.to_string_lossy().contains("steer_") {
                 "1"
@@ -457,6 +465,25 @@ const SCENARIOS: &[(&str, &[&str])] = &[
             "--sweep-with",
             "disk=none dseed=8363 | run",
         ],
+    ),
+    // the KVM engine's turns of VM exits: drawn turn tokens, and the turn-length search with its
+    // KVM range and resolution, on the scripted shape of nats-server's flaky test on KVM
+    // (HYDO_FAKE_KVM_TURNS, set for the scenarios named kvm_turns_*)
+    (
+        "kvm_turns_explore",
+        &[
+            "--backend",
+            "kvm",
+            "--seeds",
+            "1-40",
+            "--vcpus",
+            "2",
+            "--turns",
+        ],
+    ),
+    (
+        "kvm_turns_sweep",
+        &["--backend", "kvm", "--sweep", "turns", "--vcpus", "2"],
     ),
     // M209: the steered search on a scripted distance (HYDO-STEER records of fake.distance, the
     // failure at distance 0), and the same seeds without mutants (the plain exploration's
@@ -984,6 +1011,20 @@ mod engine {
                     "HYDO-ORACLE: VIOLATION [ats.test_passes] pass=1 fail=1 3 vs 2".into()
                 };
             }
+        }
+        // the KVM turn scenarios (HYDO_FAKE_KVM_TURNS): nats-server's flaky test on the KVM
+        // engine with two vCPUs (its RESULTS.md), which passes with turns of 3 and of 8 to 32
+        // exits and fails otherwise, the default turns of 256 exits too
+        if std::env::var("HYDO_FAKE_KVM_TURNS").is_ok_and(|v| !v.is_empty()) {
+            let q: u64 = re(r"(?:^|\s)q=(\d+)")
+                .captures(host)
+                .map(|c| c[1].parse().unwrap())
+                .unwrap_or(256);
+            verdict = if q == 3 || (8..=32).contains(&q) {
+                "HYDO-ORACLE: OK pass=2 of 2".into()
+            } else {
+                "HYDO-ORACLE: VIOLATION [ats.test_passes] pass=1 fail=1 3 vs 2".into()
+            };
         }
         // the steered search's scenario (M209; HYDO_FAKE_STEER, set for the scenarios named
         // steer_*): a distance the guest reports in HYDO-STEER records, |K step - 17| + |K down

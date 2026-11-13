@@ -2244,7 +2244,7 @@
       "type": "object",
       "properties": {
         "q": {
-          "description": "The turn length in guest branches (`q=`).",
+          "description": "The turn length `q=`: guest branches on hvx, counted VM exits on KVM.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0

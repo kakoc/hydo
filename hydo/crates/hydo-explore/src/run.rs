@@ -473,11 +473,12 @@ fn setup(a: Args, env: &Env) -> Cx {
         die("hydo explore: --vcpus > 1 needs --backend hvx or kvm (the Mac VMM has one vCPU)");
     }
     if a.vcpus > 1 && cx.kvm {
-        // docs/design/kvm-vcpus.md: the turn tokens are not drawn for KVM yet
-        if a.turns || a.bursts || a.turn_margin.is_some() || a.sweep.as_deref() == Some("turns") {
-            die("hydo explore: --turns, --bursts, --turn-margin and --sweep turns are hvx's for now; \
-                 on KVM a schedule can carry q= and qs= itself");
+        // docs/design/kvm-vcpus.md: the KVM engine's turns are q= counted exits (qs= seeds
+        // them); the bursts qb= and the stop margin are the module's
+        if a.bursts || a.turn_margin.is_some() {
+            die("hydo explore: --bursts and --turn-margin are hvx's; on KVM --turns draws q= and qs= (turns of VM exits)");
         }
+        cx.ex.turns_in_exits = true;
     }
     if a.turns && a.vcpus < 2 {
         die(
@@ -488,7 +489,7 @@ fn setup(a: Args, env: &Env) -> Cx {
         if a.vcpus < 2 {
             die("hydo explore: --sweep turns needs --vcpus N > 1 (the turn length q= exists only with several vCPUs)");
         }
-        if let Err(e) = crate::turns::parse_range(&a.turn_range) {
+        if let Err(e) = crate::turns::parse_range(&crate::turns::range_of(&a, cx.kvm)) {
             die(&format!("hydo explore: {e}"));
         }
     }
@@ -1694,7 +1695,7 @@ fn fmt_value(v: f64) -> String {
 /// `turn_sweep` and, as its failures, the failing length of every boundary.
 fn turn_sweep(cx: &Cx, pool: &Pool, t0: Instant, image_sha: ShaThread) -> i32 {
     use crate::turns::{self, Outcome};
-    let (lo, hi) = turns::parse_range(&cx.a.turn_range).unwrap_or_else(|e| die(&e));
+    let (lo, hi) = turns::parse_range(&turns::range_of(&cx.a, cx.kvm)).unwrap_or_else(|e| die(&e));
     let base =
         cx.a.sweep_with
             .clone()
@@ -1703,9 +1704,11 @@ fn turn_sweep(cx: &Cx, pool: &Pool, t0: Instant, image_sha: ShaThread) -> i32 {
         die(&format!("hydo explore: --sweep-with {base:?}: {e}"));
     }
     let grid = cx.a.turn_points.max(2) as u64;
-    let resolution = cx.a.turn_resolution.max(1) as u64;
+    let resolution = turns::resolution_of(&cx.a, cx.kvm);
     eprintln!(
-        "turn sweep: {base:?} with q= from {lo} to {hi} ({grid} lengths, then bisected to {resolution} branches)"
+        "turn sweep: {base:?} with q= from {lo} to {} ({grid} lengths, then bisected to {})",
+        turns::amount(hi, cx.kvm),
+        turns::amount(resolution, cx.kvm)
     );
     let mut res: HashMap<String, Res> = HashMap::new();
     let outcome = |tag: &str, r: &Res| {

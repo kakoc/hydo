@@ -127,7 +127,8 @@ pub fn report(doc: &Exploration) -> String {
     let mut l: Vec<String> = vec!["# Explorer report".into(), String::new()];
     table(doc, &mut l);
     if let Some(t) = &doc.turn_sweep {
-        l.extend(turn_sweep_md(t));
+        let kvm = doc.engine.backend.as_deref() == Some("kvm");
+        l.extend(turn_sweep_md(t, kvm));
     }
     if let Some(s) = &doc.steer {
         l.extend(steer_md(s));
@@ -335,15 +336,16 @@ fn steer_md(s: &hydo_results::SteerSearch) -> Vec<String> {
     l
 }
 
-fn turn_sweep_md(t: &hydo_results::TurnSweep) -> Vec<String> {
+fn turn_sweep_md(t: &hydo_results::TurnSweep, kvm: bool) -> Vec<String> {
+    let amount = |n| crate::turns::amount(n, kvm);
     let mut l = vec![
         String::new(),
         "## vCPU turn lengths (`--sweep turns`)".into(),
         String::new(),
         format!(
-            "The schedule `{}` ran with every turn length `q=` of a grid of {} lengths from {} to {} branches; \
-             each pair of neighbouring lengths with different verdict kinds was bisected until they were at most {} branches apart.",
-            t.base, t.grid, t.lo, t.hi, t.resolution
+            "The schedule `{}` ran with every turn length `q=` of a grid of {} lengths from {} to {}; \
+             each pair of neighbouring lengths with different verdict kinds was bisected until they were at most {} apart.",
+            t.base, t.grid, t.lo, amount(t.hi), amount(t.resolution)
         ),
         String::new(),
     ];

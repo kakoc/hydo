@@ -1573,7 +1573,7 @@ pub struct TurnSweep {
 /// One turn length of a turn sweep (added in M205).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct TurnPoint {
-    /// The turn length in guest branches (`q=`).
+    /// The turn length `q=`: guest branches on hvx, counted VM exits on KVM.
     pub q: u64,
     /// The schedule that ran.
     pub schedule: String,
