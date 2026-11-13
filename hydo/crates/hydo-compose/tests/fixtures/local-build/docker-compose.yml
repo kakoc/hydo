@@ -1,0 +1,16 @@
+# A service built locally (Compose `build:`), for the importer's tests and for one real run with
+# Docker (M214): context, dockerfile, args, target and labels go to `docker build`; ssh: does
+# not, with a warning.
+name: shop
+services:
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.hydo
+      target: run
+      args:
+        GREETING: hello
+      labels:
+        org.example.team: shop
+      ssh: [default]
+    ports: ["8080:8080"]

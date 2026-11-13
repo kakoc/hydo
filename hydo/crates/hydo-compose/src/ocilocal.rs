@@ -53,10 +53,12 @@ fn tar_files(path: &str) -> R<Vec<Member>> {
         };
         let mut b = Vec::new();
         if en.header().entry_type().is_file() {
-            // only small files are needed (manifest.json and the config)
+            // only small files are needed (manifest.json and the config); the archives of
+            // Docker 25 and later keep the config at blobs/sha256/<hex>, without .json (M214)
             if name == "manifest.json"
                 || name.ends_with(".json")
                 || !name.contains('/') && en.size() < (16 << 20)
+                || name.starts_with("blobs/") && en.size() < (4 << 20)
             {
                 en.read_to_end(&mut b)
                     .map_err(|x| ComposeError(format!("{path}: {x}")))?;

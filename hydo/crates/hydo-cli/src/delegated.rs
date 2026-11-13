@@ -154,7 +154,7 @@ pub fn cmd_errors(_ctx: &Ctx, argv: &[String]) -> i32 {
 pub fn cmd_compose(ctx: &Ctx, argv: &[String]) -> i32 {
     if argv.is_empty() || argv[0] == "-h" || argv[0] == "--help" {
         die("usage: hydo compose <docker-compose.yaml> [--out hydo.yaml] [--images-dir DIR] [--env-file F] \
-             [--profile P] [--use-env] [--no-resolve] [--lock FILE]");
+             [--profile P] [--use-env] [--no-resolve] [--lock FILE] [--no-build] [--docker CLI]");
     }
     hydo_compose::main_clock(argv, ctx.config.cli.init_clock_start)
 }

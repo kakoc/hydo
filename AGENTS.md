@@ -330,6 +330,13 @@ maintainers: the shared cases, and the Go module with its frozen copy in `hydo/s
 test in its language (M188). The examples are in `hydo/onboard/examples/`;
 `hydo/onboard/MANIFEST.md` is the project format's reference.
 
+**Compose services built locally (M214).** For a service with `build:`, `hydo compose` builds
+the image with Docker (`docker`, else `podman`, or `--docker CLI`) for this machine's guest, with
+Compose's build settings. It reads the image's settings from the saved file and pins the file's
+digest in the lock file (`local_build: true`). fetch-images.sh builds a missing file with
+`hydo-fetch-image build` and stops at a digest other than the pin until `HYDO_ACCEPT_REBUILD=1`.
+`--no-build` leaves the builds to the script. Reference: `hydo guide workflow`.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -584,6 +591,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     40 ms, and the example models it with a cgroup `cpu.max` and busy loops in the guest. That
     model works only on hvx: on the Mac and KVM a busy loop makes no VM exits and uses no guest
     time. The example is not in `hydo/onboard/recorded.json` yet.
+81. Compose builds (M214). A Docker build rarely gives the same bytes twice. Docker 28.4 writes a
+    pointer into the history of an `EXPOSE` step, so each rebuild of such an image stops
+    fetch-images.sh until `HYDO_ACCEPT_REBUILD=1`. The real build ran on a Mac with Docker only;
+    Linux and Podman ran only with a fake command. `ssh`, `secrets`, `dockerfile_inline` and
+    `additional_contexts` are not passed to the build. No VM ran a built image.
 
 ## Milestone index
 
@@ -856,6 +868,9 @@ build machine, before 2026-10-13.
   `docs/design/kvm-vcpus.md`: turns of exits on one thread, and an x2APIC per vCPU in the engine.
   A KVM probe ran on three AMD and one Intel runner model with one hash per turn length.
   The one-vCPU pins, the APIC model and the SMP kernel's recipe are ready; nothing recorded moved
+- M214 (tentative number): one import for Compose services with `build:`. `hydo compose` builds
+  their images with Docker and pins each file's digest; fetch-images.sh builds a missing file and
+  stops at other bytes until they are accepted. Nothing recorded moved
 
 ## Where to look
 

@@ -18,6 +18,7 @@
 //!   both).
 
 pub mod interp;
+pub mod localbuild;
 pub mod ocilocal;
 pub mod pyval;
 pub mod registry;
@@ -530,6 +531,23 @@ fn safe_dash(s: &str) -> String {
         .collect()
 }
 
+/// The lock entry of an image built locally (`local_build: true`), without platforms: the
+/// fields a registry image's entry has (M214).
+pub fn local_entry(r: &str) -> Result<Y, ComposeError> {
+    let (reg, repo, tag, digest) = parse_ref(r);
+    file_stem(&reg, &repo, tag.as_deref(), digest.as_deref())?;
+    Ok(Y::Map(vec![
+        (Y::s("ref"), Y::s(r)),
+        (Y::s("name"), Y::Str(short_name(&reg, &repo))),
+        (Y::s("tag"), opt_y(tag)),
+        (Y::s("index_digest"), opt_y(digest)),
+        (Y::s("registry"), Y::s(&reg)),
+        (Y::s("repo"), Y::s(&repo)),
+        (Y::s("platforms"), Y::Map(Vec::new())),
+        (Y::s("local_build"), Y::Bool(true)),
+    ]))
+}
+
 fn opt_y(v: Option<String>) -> Y {
     v.map(Y::Str).unwrap_or(Y::Null)
 }
@@ -731,9 +749,10 @@ struct Svc {
     /// The Compose restart policy, in its words (`restart:` or `deploy.restart_policy`), M134.
     restart: Option<String>,
     mounts: Vec<Mount>,
-    /// Built locally (`build:` with no image file, lock entry or registry image yet): the
-    /// arguments of `docker build` that make it, for fetch-images.sh.
-    build: Option<String>,
+    /// Built locally (`build:`, not a published image of the registry or the lock): the
+    /// arguments of `docker build` after `-t <tag>`, relative to the output's folder, where
+    /// fetch-images.sh runs (M214).
+    build: Option<Vec<String>>,
 }
 
 /// The options of one import.
@@ -750,6 +769,10 @@ pub struct Opts {
     pub lock: Option<String>,
     /// The `guest.clock_start` written (`HYDO_INIT_CLOCK_START`); None: today at 00:00 UTC.
     pub clock_start: Option<i64>,
+    /// `--no-build`: never run Docker for a `build:` service (M214).
+    pub no_build: bool,
+    /// `--docker CLI`: the Docker CLI to build with (else docker, else podman).
+    pub docker: Option<String>,
 }
 
 pub struct Importer<'a> {
@@ -782,6 +805,8 @@ pub struct Importer<'a> {
     data_mib: i128,
     cpu: Option<String>,
     svcs: Vec<Svc>,
+    /// The Docker CLI found for local builds, looked for once (M214).
+    docker: Option<localbuild::Docker>,
 }
 
 fn lookup<'a>(v: &'a [(String, String)], k: &str) -> Option<&'a String> {
@@ -830,6 +855,7 @@ impl<'a> Importer<'a> {
             data_mib: 256,
             cpu: None,
             svcs: Vec::new(),
+            docker: None,
         }
     }
 
@@ -973,10 +999,13 @@ impl<'a> Importer<'a> {
         self.lock_dirty = false;
     }
 
-    /// `docker build`'s arguments for a Compose `build:` (a context, or a mapping with
-    /// `context:`, `dockerfile:` and `target:`), with the paths relative to the output directory,
-    /// where fetch-images.sh runs.
-    fn build_args(&self, b: &Y) -> String {
+    /// `docker build`'s arguments (after `-t <tag>`) for a Compose `build:`: a context, or a
+    /// mapping with `context:`, `dockerfile:`, `args:`, `target:`, `labels:`, `network:`,
+    /// `extra_hosts:`, `shm_size:`, `no_cache:` and `pull:` (M214; before, only the context,
+    /// `dockerfile:` and `target:`). The paths are relative to the output directory, where
+    /// fetch-images.sh runs. The platform is the guest's (`--platform`, added when it runs), so
+    /// `platforms:` is not passed. The second list names the keys that are not passed.
+    fn build_args(&self, b: &Y) -> (Vec<String>, Vec<String>) {
         let (ctx, file, target) = if b.is_map() {
             let opt = |k: &str| b.get(k).filter(|v| v.truthy()).map(pstr);
             (
@@ -996,6 +1025,7 @@ impl<'a> Importer<'a> {
         };
         let cdir = local(&ctx);
         let mut a: Vec<String> = Vec::new();
+        let mut skipped: Vec<String> = Vec::new();
         if let Some(f) = file {
             // dockerfile: is relative to the context
             let f = if cdir.contains("://") || f.starts_with('/') {
@@ -1004,50 +1034,197 @@ impl<'a> Importer<'a> {
                 relpath(&join(&join(&self.cdir, &ctx), &f), &self.odir)
             };
             a.push("-f".into());
-            a.push(shlex::quote(&f));
+            a.push(f);
         }
         if let Some(t) = target {
             a.push("--target".into());
-            a.push(shlex::quote(&t));
+            a.push(t);
         }
-        a.push(shlex::quote(&cdir));
-        a.join(" ")
+        // KEY=VALUE pairs of a mapping or a list; a key without a value stays bare (args: Docker
+        // then takes the value from its own environment)
+        let pairs = |v: &Y, sep: &str| -> Vec<String> {
+            match v {
+                Y::Map(m) => m
+                    .iter()
+                    .map(|(k, v)| match v {
+                        Y::Null => pstr(k),
+                        _ => format!("{}{sep}{}", pstr(k), pstr(v)),
+                    })
+                    .collect(),
+                Y::Seq(l) => l.iter().map(pstr).collect(),
+                _ => Vec::new(),
+            }
+        };
+        for (key, flag, sep) in [
+            ("args", "--build-arg", "="),
+            ("labels", "--label", "="),
+            ("extra_hosts", "--add-host", ":"),
+        ] {
+            for x in pairs(b.getn(key), sep) {
+                a.push(flag.into());
+                a.push(x);
+            }
+        }
+        for (key, flag) in [("network", "--network"), ("shm_size", "--shm-size")] {
+            if let Some(v) = b.get(key).filter(|v| v.truthy()) {
+                a.push(flag.into());
+                a.push(pstr(v));
+            }
+        }
+        for (key, flag) in [("no_cache", "--no-cache"), ("pull", "--pull")] {
+            if b.getn(key).truthy() {
+                a.push(flag.into());
+            }
+        }
+        for k in b.iter_keys().iter().filter(|_| b.is_map()).map(pstr) {
+            let known = [
+                "context",
+                "dockerfile",
+                "target",
+                "args",
+                "labels",
+                "extra_hosts",
+                "network",
+                "shm_size",
+                "no_cache",
+                "pull",
+                "platforms",
+                "tags",
+                "cache_from",
+                "cache_to",
+            ];
+            if !known.contains(&k.as_str()) {
+                skipped.push(k);
+            }
+        }
+        a.push(cdir);
+        (a, skipped)
     }
 
-    /// The image of `r` is already pinned without a registry: by the lock file, or by an image
-    /// file in the images directory (`<stem>-amd64.docker.tar`, read by its content).
-    fn image_known(&self, r: &str) -> R<bool> {
-        if self.lock.get(r).is_some() {
-            return Ok(true);
-        }
+    /// The images directory, relative to the output's folder (`--images-dir`, else `images`).
+    fn images_dir(&self) -> String {
+        self.o
+            .images_dir
+            .clone()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "images".into())
+    }
+
+    /// The two image files of `r` (x86_64, arm64), relative to the output's folder.
+    fn image_files(&self, r: &str) -> R<(String, String)> {
         let (reg, repo, tag, digest) = parse_ref(r);
         let stem = file_stem(&reg, &repo, tag.as_deref(), digest.as_deref())?;
-        let idir = join(
-            &self.odir,
-            self.o
-                .images_dir
-                .as_deref()
-                .filter(|s| !s.is_empty())
-                .unwrap_or("images"),
-        );
-        Ok(exists(&join(&idir, &format!("{stem}-amd64.docker.tar"))))
+        let idir = self.images_dir();
+        Ok((
+            format!("{idir}/{stem}-amd64.docker.tar"),
+            format!("{idir}/{stem}-arm64-oci"),
+        ))
     }
 
-    /// The image of a service built locally whose file is not there yet: no platforms, no
-    /// digest, never looked up in a registry (`local_build`).
-    fn local_info(&self, r: &str) -> R<Y> {
-        let (reg, repo, tag, digest) = parse_ref(r);
-        file_stem(&reg, &repo, tag.as_deref(), digest.as_deref())?;
-        Ok(Y::Map(vec![
-            (Y::s("ref"), Y::s(r)),
-            (Y::s("name"), Y::Str(short_name(&reg, &repo))),
-            (Y::s("tag"), opt_y(tag)),
-            (Y::s("index_digest"), opt_y(digest)),
-            (Y::s("registry"), Y::s(&reg)),
-            (Y::s("repo"), Y::s(&repo)),
-            (Y::s("platforms"), Y::Map(Vec::new())),
-            (Y::s("local_build"), Y::Bool(true)),
-        ]))
+    /// The image of `r` is a local build already: an image file of either architecture is there,
+    /// or the lock pins it as a local build.
+    fn local_known(&self, r: &str) -> R<bool> {
+        if self
+            .lock
+            .get(r)
+            .is_some_and(|e| e.getn("local_build").truthy())
+        {
+            return Ok(true);
+        }
+        let (x86, arm) = self.image_files(r)?;
+        Ok(exists(&join(&self.odir, &x86)) || exists(&join(&self.odir, &arm)))
+    }
+
+    /// The image of a service built locally (M214). When neither this machine's file nor a pin
+    /// for its architecture is there, it is built now (unless --no-build, or no Docker CLI
+    /// answers: the second value then says why it is not pinned). The files there are read for
+    /// their digest and settings, and the lock records them as the pin (a file whose digest
+    /// differs from the lock's pin re-pins it, with a warning). The platforms of the result are
+    /// empty when nothing is pinned.
+    fn local_build_info(
+        &mut self,
+        r: &str,
+        args: &[String],
+        tag: &str,
+        wh: &str,
+    ) -> R<(Y, String)> {
+        let (x86, arm) = self.image_files(r)?;
+        let pin = self
+            .lock
+            .get(r)
+            .filter(|e| e.getn("local_build").truthy())
+            .cloned();
+        let host = localbuild::host_arch();
+        let pk = localbuild::plat_key(host);
+        let host_file = if host == "x86_64" { &x86 } else { &arm };
+        let pinned_here = pin.as_ref().is_some_and(|p| p.getn("platforms").has(pk));
+        let mut why = String::new();
+        if !exists(&join(&self.odir, host_file)) && !pinned_here {
+            if self.o.no_build {
+                why = "--no-build".into();
+            } else {
+                let d = self
+                    .docker
+                    .get_or_insert_with(|| localbuild::find_docker(self.o.docker.as_deref()))
+                    .clone();
+                match d {
+                    localbuild::Docker::Found(d) => {
+                        std::fs::create_dir_all(&self.odir)
+                            .map_err(|e| ComposeError::os(e, &self.odir))?;
+                        let built = localbuild::build(
+                            "hydo-compose",
+                            &d,
+                            &self.odir,
+                            host,
+                            tag,
+                            args,
+                            host_file,
+                        )
+                        .and_then(|(part, _)| {
+                            localbuild::place(&part, &join(&self.odir, host_file))
+                        });
+                        if let Err(e) = built {
+                            why = format!("the build failed: {e}");
+                        }
+                    }
+                    other => why = localbuild::docker_hint(&other),
+                }
+            }
+        }
+        let mut plats = pin
+            .as_ref()
+            .and_then(|p| p.get("platforms"))
+            .filter(|p| p.is_map())
+            .cloned()
+            .unwrap_or(Y::Map(Vec::new()));
+        for (a, f) in [("amd64", &x86), ("arm64", &arm)] {
+            let path = join(&self.odir, f);
+            if !exists(&path) {
+                continue;
+            }
+            let p = ocilocal::config_from_file(&path, a)?;
+            if let Some(old) = plats.get(a) {
+                if old.getn("digest") != p.getn("digest") {
+                    self.w.warn(
+                        "build",
+                        format!(
+                            "{wh}: the file {f} is {}, but {} pinned {}: re-pinned to the file",
+                            pstr(p.getn("digest")),
+                            hydo_manifest::py::basename(&self.lock_path),
+                            pstr(old.getn("digest"))
+                        ),
+                    );
+                }
+            }
+            plats.set(Y::s(a), p);
+        }
+        let mut info = local_entry(r)?;
+        info.set(Y::s("platforms"), plats.clone());
+        if plats.truthy() && self.lock.get(r) != Some(&info) {
+            self.lock.set(Y::s(r), info.clone());
+            self.lock_dirty = true;
+        }
+        Ok((info, why))
     }
 
     /// Docker Compose's project name (`name:`, else the Compose file's directory), as it names
@@ -1337,26 +1514,36 @@ impl<'a> Importer<'a> {
                 );
             }
         }
-        // A service built locally (`build:`): its image is a file the user makes with Docker (or
-        // an OCI layout), never a pull of the tag, which usually names only the local build.
-        // An image file already in the images directory, or a lock entry, pins it as before; a
-        // tag the registry has (a published image the Compose file also builds) is pinned by
-        // digest as before; otherwise the service is imported as a local build, and
-        // fetch-images.sh says how to make the file.
-        let mut local_build: Option<String> = None;
+        // A service built locally (`build:`): its image is a file that Docker builds, never a
+        // pull of the tag, which usually names only the local build. A lock entry of the
+        // registry pins a published image the Compose file also builds, by digest as before; a
+        // tag the registry has, when nothing local is there yet, too. Otherwise the service is a
+        // local build (M214): hydo compose builds its file now when it can, the lock pins the
+        // file's digest, and fetch-images.sh builds it again where it is missing.
+        let mut local_build: Option<Vec<String>> = None;
         let rf = if s.has("build") {
-            let ctxt = self.build_args(s.getn("build"));
+            let (bargs, skipped) = self.build_args(s.getn("build"));
+            for k in skipped {
+                self.w.warn(
+                    "build",
+                    format!("{wh}: build.{k}: not passed to docker build; ignored"),
+                );
+            }
             match s.get("image") {
                 Some(img) => {
                     let rf = pstr(img);
-                    if !self.image_known(&rf)? {
-                        local_build = Some(ctxt);
+                    let published = self
+                        .lock
+                        .get(&rf)
+                        .is_some_and(|e| !e.getn("local_build").truthy());
+                    if !published {
+                        local_build = Some(bargs);
                     }
                     rf
                 }
                 None => {
                     // Docker Compose names the image of a build without image: <project>-<service>
-                    local_build = Some(ctxt);
+                    local_build = Some(bargs);
                     format!(
                         "{}-{}",
                         self.compose_project(),
@@ -1370,37 +1557,51 @@ impl<'a> Importer<'a> {
             };
             pstr(img)
         };
-        let info = match &local_build {
-            Some(_) if !self.o.no_resolve && s.get("image").is_some() => {
-                // a tag the registry may have; a refusal (401, 404) leaves it a local build
-                match self.image_info(&rf) {
-                    Ok(i) => {
+        let (reg, repo, tag, digest) = parse_ref(&rf);
+        let tag_ref = match &tag {
+            Some(t) if !t.is_empty() => format!("{}:{t}", short_name(&reg, &repo)),
+            _ => short_name(&reg, &repo),
+        };
+        let mut why_unpinned = String::new();
+        let info = match local_build.clone() {
+            Some(b) => {
+                let published = if !self.o.no_resolve
+                    && s.get("image").is_some()
+                    && !self.local_known(&rf)?
+                {
+                    // a tag the registry may have; a refusal (401, 404) leaves it a local build
+                    match self.image_info(&rf) {
+                        Ok(i) => Some(i),
+                        Err(e) => {
+                            self.w.warn(
+                                "build",
+                                format!("{wh}: image {rf} is not in its registry ({e}): imported as a local build"),
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                match published {
+                    Some(i) => {
                         local_build = None;
                         i
                     }
-                    Err(e) => {
-                        self.w.warn(
-                            "build",
-                            format!("{wh}: image {rf} is not in its registry ({e}): imported as a local build"),
-                        );
-                        self.local_info(&rf)?
+                    None => {
+                        let (i, why) = self.local_build_info(&rf, &b, &tag_ref, &wh)?;
+                        why_unpinned = why;
+                        i
                     }
                 }
             }
-            Some(_) => self.local_info(&rf)?,
             None => self.image_info(&rf)?,
         };
         if s.has("build") && local_build.is_none() && pstr(info.getn("from")) != "local file" {
             self.w.warn("build", format!("{wh}: build: ignored, the image {rf} is used (build and push it, or `docker save` your local build and point image: at the file)"));
         }
-        let (reg, repo, tag, digest) = parse_ref(&rf);
         let stem = file_stem(&reg, &repo, tag.as_deref(), digest.as_deref())?;
-        let idir = self
-            .o
-            .images_dir
-            .clone()
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "images".into());
+        let idir = self.images_dir();
         let plat = info.getn("platforms").clone();
         if let Some(p) = s.get("platform").filter(|p| p.truthy()) {
             let ps = pstr(p);
@@ -1412,12 +1613,35 @@ impl<'a> Importer<'a> {
         let x86 = format!("{idir}/{stem}-amd64.docker.tar");
         let unresolved = info.getn("unresolved").truthy() || local_build.is_some();
         let arm = format!("{idir}/{stem}-arm64-oci");
+        let fetch = self.out_dir_file("fetch-images.sh");
         if let Some(b) = &local_build {
-            comments.push(format!("image {rf}: built locally (build:), NOT pinned yet: fetch-images.sh says how to make its file; run hydo compose again once it is there to pin it by the file's content"));
-            self.w.warn(
-                "build",
-                format!("{wh}: image {rf} is built locally (build:): make its file with `docker build -t {rf} {b} && docker save -o {x86} {rf}` (on a Mac, or for arm64: an OCI layout of it at {arm}), then run hydo compose again to pin it by the file's content"),
-            );
+            let lockname = hydo_manifest::py::basename(&self.lock_path);
+            if plat.truthy() {
+                comments.push(format!(
+                    "image {tag_ref}: built locally (build:) with docker build {}; pinned by its content in {lockname}",
+                    localbuild::quoted(b)
+                ));
+            } else {
+                comments.push(format!("image {tag_ref}: built locally (build:), NOT pinned yet: sh {fetch} builds it; then run hydo compose again, so that this file takes the image's settings"));
+            }
+            for a in ["amd64", "arm64"] {
+                if let Some(p) = plat.get(a) {
+                    comments.push(format!("  linux/{a}: {}", pstr(p.getn("digest"))));
+                }
+            }
+            if !why_unpinned.is_empty() {
+                // the same text on every machine: fetch-images.sh names the architecture
+                let how = format!(
+                    "sh {fetch} builds it with Docker (docker build {}, then docker save; without Docker it prints both commands); then run hydo compose again, so that hydo.yaml takes the image's settings (its HEALTHCHECK, EXPOSE and VOLUME)",
+                    localbuild::quoted(b)
+                );
+                let text = if why_unpinned == "--no-build" {
+                    format!("{wh}: image {tag_ref} is built locally (build:) and not built now (--no-build): {how}")
+                } else {
+                    format!("{wh}: image {tag_ref} is built locally (build:) and is not pinned, because {why_unpinned}. Then {how}")
+                };
+                self.w.warn("build", text);
+            }
         }
         let image = if plat.has("arm64") || unresolved {
             Img::Two(x86, arm)
@@ -1429,14 +1653,13 @@ impl<'a> Importer<'a> {
             Some(t) if !t.is_empty() => format!("{iname}:{t}"),
             _ => iname.clone(),
         };
-        if unresolved {
-            if local_build.is_none() {
-                comments.push(format!("image {rf}: NOT resolved to a digest (--no-resolve); fetch-images.sh fetches the tag, which can change"));
-                self.w.warn(
-                    "image",
-                    format!("{wh}: image {rf} is not pinned by digest (--no-resolve)"),
-                );
-            }
+        if local_build.is_some() {
+        } else if unresolved {
+            comments.push(format!("image {rf}: NOT resolved to a digest (--no-resolve); fetch-images.sh fetches the tag, which can change"));
+            self.w.warn(
+                "image",
+                format!("{wh}: image {rf} is not pinned by digest (--no-resolve)"),
+            );
         } else {
             comments.push(format!(
                 "image {rf} = {}/{}@{}",
@@ -1456,6 +1679,14 @@ impl<'a> Importer<'a> {
                 }
             }
         }
+        // a local build made on a Mac has only its arm64 file: its settings come from there
+        let mut info = info;
+        if local_build.is_some() && !plat.has("amd64") && plat.has("arm64") {
+            let mut p = plat.clone();
+            p.set(Y::s("amd64"), plat.getn("arm64").clone());
+            info.set(Y::s("platforms"), p);
+        }
+        let plat = info.getn("platforms").clone();
         let am = plat
             .get("amd64")
             .filter(|x| x.truthy())
@@ -2812,36 +3043,41 @@ impl<'a> Importer<'a> {
         for s in &self.svcs {
             let info = &s.info;
             if let (Some(b), Img::Two(x86, arm)) = (&s.build, &s.image) {
-                // built locally: nothing to fetch; say how to make the file, and stop at the end
-                // when it is not there
+                // built locally (M214): `hydo-fetch-image build` builds the file of each
+                // architecture that is missing and checks it against the lock's pin; the script
+                // goes on with the other images and stops at the end when one could not be made
                 if local.contains(x86) {
                     continue;
                 }
                 local.push(x86.clone());
-                let (x, a, t) = (
-                    shlex::quote(x86),
-                    shlex::quote(arm),
-                    shlex::quote(&s.image_ref),
-                );
+                let lock = shlex::quote(&relpath(
+                    &hydo_manifest::py::abspath(&self.lock_path),
+                    &self.odir,
+                ));
+                let rf = shlex::quote(&pstr(info.getn("ref")));
+                let t = shlex::quote(&s.image_ref);
                 l.push(format!(
-                    "# {} is built locally (build:): nothing is fetched. Make its file once with Docker:",
+                    "# {} is built locally (build:): docker build with Compose's build settings, then",
                     s.image_ref
                 ));
                 l.push(format!(
-                    "#   docker build -t {t} {b} && docker save -o {x} {t}"
+                    "# docker save, checked against the pin in {lock} (HYDO_DOCKER=<cli> names"
                 ));
-                l.push(format!("#   (arm64, for the Mac: docker buildx build --platform linux/arm64 -t {t} -o type=oci,tar=false,dest={a} {b})"));
                 l.push(
-                    "# then run hydo compose again: it pins the image by the file's content."
+                    "# another Docker CLI; HYDO_ACCEPT_REBUILD=1 takes a build of other bytes and re-pins it)."
                         .into(),
                 );
-                l.push(format!(
-                    "[ -f {x} ] || [ -e {a} ] || {{ echo {} >&2; LOCAL=1; }}",
-                    shlex::quote(&format!(
-                        "fetch-images.sh: {x86} is built locally (build:): docker build -t {} {b} && docker save -o {x86} {}",
-                        s.image_ref, s.image_ref
-                    ))
-                ));
+                for (arch, other, test, path) in [
+                    ("x86_64", "arm64", "-f", x86),
+                    ("arm64", "x86_64", "-e", arm),
+                ] {
+                    l.push(format!(
+                        "[ \"$A\" = {other} ] || [ {test} {} ] || \"$F\" build --docker \"${{HYDO_DOCKER:-}}\" --accept \"${{HYDO_ACCEPT_REBUILD:-0}}\" {arch} {} {t} {lock} {rf} -- {} || LOCAL=1",
+                        shlex::quote(path),
+                        shlex::quote(path),
+                        localbuild::quoted(b)
+                    ));
+                }
                 continue;
             }
             let mut img: Vec<(&str, &String)> = match &s.image {
@@ -2885,7 +3121,7 @@ impl<'a> Importer<'a> {
         }
         done.sort();
         if !local.is_empty() {
-            l.push("[ -z \"${LOCAL:-}\" ] || exit 1".into());
+            l.push("[ -z \"${LOCAL:-}\" ] || { echo \"fetch-images.sh: an image built locally is missing (above)\" >&2; exit 1; }".into());
         }
         if done.is_empty() {
             return l.join("\n") + "\n";
@@ -2970,6 +3206,7 @@ pub fn main_with_clock(
                 | "--env-file"
                 | "--profile"
                 | "--network"
+                | "--docker"
         ) {
             if i + 1 >= a.len() {
                 eprintln!("hydo-compose: {x} needs a value");
@@ -2983,6 +3220,7 @@ pub fn main_with_clock(
                 "--name" => o.name = Some(v),
                 "--images-dir" => o.images_dir = Some(v),
                 "--lock" => o.lock = Some(v),
+                "--docker" => o.docker = Some(v),
                 _ => o.network = Some(v),
             }
             i += 2;
@@ -2994,6 +3232,9 @@ pub fn main_with_clock(
             i += 1;
         } else if x == "--no-addr" {
             o.no_addr = true;
+            i += 1;
+        } else if x == "--no-build" {
+            o.no_build = true;
             i += 1;
         } else if x.starts_with('-') {
             eprintln!("hydo-compose: unknown option {x}");

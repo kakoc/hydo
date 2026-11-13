@@ -14,7 +14,9 @@ on it from your own code. To use hydo, install the command with `cargo install h
 - `hydo compose`, which turns a `docker-compose.yaml` into a starting `hydo.yaml`: services,
   health checks as readiness checks, volumes, restart policies, and addresses.
 - Service images pinned by digest, read from the registry directly.
-- The program `hydo-fetch-image`, which downloads a pinned image.
+- Services with a Compose `build:`, built with Docker and pinned by the digest of the saved file.
+- The program `hydo-fetch-image`, which downloads a pinned image, or builds a `build:` service's
+  image and checks it against its pin.
 
 ## License
 
