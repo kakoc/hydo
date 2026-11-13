@@ -22,7 +22,7 @@ machine was busy with another agent's timing measurement, and the build machine 
   1. **A ledger bug.** Two transactions that first use one account at the same moment, in two
      different assets, race when they create the account, and one fails with `500 INTERNAL`.
      v2.3.24 does not do this. It shows without any fault, and natively with two `curl`
-     commands.
+     commands. A one-clause patch fixes it: 0 of 200 pairs fail with it, against 196 without.
   2. **A client mistake.** A client that retries without idempotency keys records a payment two
      or three times when an answer is lost after the commit.
   3. **A documented behaviour.** A backdated transfer can leave an account below zero at a past
@@ -51,6 +51,7 @@ machine was busy with another agent's timing measurement, and the build machine 
 | file | what it is |
 |---|---|
 | `build.sh` | builds `bin/ledger-<arch>` from the tag v2.4.18 (`83cd8dc7`) and `bin/ledgerc-<arch>` from `client/`, static Linux programs for amd64 and arm64, and checks their sha256 against its pins |
+| `fix-new-account-race.patch` | the tested fix of finding 1, against v2.4.18 (below) |
 | `client/main.go` | `ledgerc`, the test client: every workload operation and the four checks that need Go (standard library only) |
 | `hydo/hydo.yaml` | PostgreSQL 16 as the ledger's own `docker-compose.yml` runs it, and `ledger serve` with automatic schema upgrades, each in its own network namespace. Also the knob `S` (`synchronous_commit`) and 30 rounds of up to 6 concurrent commands |
 | `hydo/workload/` | `first_init` creates the ledger `main`; nine `parallel_driver_` commands, one per operation (below); `helper_sql.conf` from `hydo sql-gen --workloads none` |
@@ -169,6 +170,42 @@ tag. 200 pairs of deposits from `world`, each pair to a new account, one in `USD
 | v2.4.18 | 192 | 8 |
 | v2.4.18, both deposits in `USD/2` | 0 | 200 |
 | v2.3.24 | 0 | 200 |
+
+**The fix, tested natively.** `fix-new-account-race.patch` adds `ON CONFLICT (ledger, address) DO
+UPDATE` to the insert of `UpsertAccounts`. The clause waits for the other transaction's insert and
+then changes the row as the CTE's `updated_rows` changes an existing account:
+
+- the metadata of the request is merged into the row;
+- `first_usage` becomes the earlier of the two dates;
+- `updated_at` is set.
+
+As in `updated_rows`, the row changes only when the request adds metadata or has an earlier date.
+
+The metadata to merge comes from `data_batch`, not from `excluded`. In v2.4 the inserted row
+also holds the schema's default metadata, which applies only when an account is created, so
+`excluded.metadata` would overwrite the other transaction's values with defaults. The ledger's
+transactions run at PostgreSQL's default isolation level, read committed, at which `ON CONFLICT DO
+UPDATE` updates a row that another transaction committed after the statement began.
+`ON CONFLICT DO NOTHING` also stops the `500`, but it drops the second transaction's changes to
+the account. The last row of the table below shows that.
+
+The test used the same Mac and PostgreSQL 16.16 in Docker, with a new database for each row.
+Each row sent 200 pairs of requests, each pair to a new account:
+
+| ledger | the two requests of a pair | pairs with one `500` | pairs with two `200` | the 200 accounts afterwards |
+|---|---|---|---|---|
+| v2.4.18 | `USD/2` and `EUR/2` | 196 | 4 | 106 accounts lack the `USD/2` deposit, and 90 lack the `EUR/2` one |
+| v2.4.18 with the patch | `USD/2` and `EUR/2` | 0 | 200 | each has both deposits, and its `first_usage` is the date of its first move |
+| v2.4.18 with the patch | both in `USD/2` | 0 | 200 | each has 200 cents |
+| v2.4.18 with the patch | `USD/2` with the account metadata `a=1`, and `EUR/2` dated one hour back with `b=2` | 0 | 200 | each holds `a` and `b`, and its `first_usage` is the earlier date |
+| v2.4.18 with `DO NOTHING` | the same as the previous row | 0 | 200 | 4 hold `a` and `b`, and 108 have the earlier `first_usage` |
+
+The unmodified build failed 196 pairs in this run and 192 in the first one. The ledger's own
+storage tests passed on the patched tree: `go test -tags it ./internal/storage/ledger/`, 49 tests
+with 215 subtests, against PostgreSQL 16.16 in Docker (`POSTGRES_VERSION=16.16`). To build the
+patched ledger, apply the patch in the clone after `build.sh` has checked out the tag
+(`git -C work/ledger apply ../../fix-new-account-race.patch`). Then run the `go build` line of
+`build.sh` there. `build.sh` itself checks out the tag again and checks the unpatched pins.
 
 **Under hydo.** The error logs found it, not a business rule. The first sighting was exploration
 `e5` (seed 11, `K=ledger@12+1 N=postgres@7-9:delay,809ms T=22:300`): a new error kind in a run
