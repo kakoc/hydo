@@ -6006,3 +6006,64 @@ says that the kernel module `hvx.ko` was not tried with a cargo install.
 
 **Left.** The kernel module after a cargo install was not tried. The rest of the epoch-2 KVM
 values (open item 45) have not run on AMD.
+
+### Milestone 211 — DONE (an etcd flaky test, issue 22796, made to fail on every run of one hvx schedule under a CPU limit in the guest; hydo's timing tokens alone never reach it; a fjall race tried and not reproduced; 2026-11-13)
+
+**In short.** The next flaky test after Qdrant's is etcd's `TestCacheCompactionResync`
+(issue 22796, opened 2026-11-11, no fix). It fails when the whole test process gets no CPU for
+about 40 ms at one moment. Without a CPU limit it never failed: 0 of 8,000 native runs, and 0 of
+about 1,000 hydo schedules on hvx and on the Mac. With a CPU limit in the guest that two busy
+loops use up, `disk=none pp=65536 | run` fails on every run on hvx (`a69b353e5e4c2528`, three
+runs) and `disk=none | run` passes (`c5ff83b44504bb74`). A test-only change passes the failing
+schedule. The same CPU limit fails the test natively too, in 190 of 200 runs, so hydo adds little
+here. The example is `hydo/onboard/examples/etcd-flaky-22796` (RESULTS.md). Nothing recorded
+moved; no hydo code changed.
+
+**How the candidate was picked.** The shortlist, from open GitHub issues of 2026:
+
+- etcd-io/etcd#22796, `TestCacheCompactionResync`: Go, a small module, two days old, a
+  quarantine pull request closed unmerged. Risk: a race against a 50 ms timer.
+- fjall-rs/fjall#345: the last blocking `send(WorkerMessage::Flush)` into the bounded worker queue
+  can deadlock both workers. Its reporter found it by reading the code and did not reproduce it.
+  Risk: no test exists; a stress program must be written.
+- tursodatabase/turso#11399, `test_sync_pull_waits_for_open_write_transaction`: Rust, `Busy`
+  errors under nextest. Risk: the test starts a local Turso server.
+- quickwit-oss/quickwit#6565, `test_drain_is_called`: Rust, already explained by a commenter,
+  who made it fail in 41% to 47% of runs under CPU contention. Risk: little left to show.
+- hashicorp/raft#711, `TestRaft_HasExistingState`: Go, fails in about 1 of 15 runs of the whole
+  package with `-count=3`. Risk: the whole package runs for minutes, and the cause is unknown.
+
+databendlabs/databend#20728 and temporalio/temporal#12694 were left out: both test programs are
+large, and temporal's needs `-race` and a host saturated by other processes.
+
+**The cause.** After the test sends a compaction error, the cache's `getWatchLoop` waits 50 ms and
+restores the store from the stub's second snapshot (revision 20). The test polls `Ready()` every
+10 ms and then calls `Get`, which must return revision 5. A `time.Sleep(60ms)` before the test's
+`Get` made it fail on 3 of 3 runs with the report's line. The CI job runs four test programs and
+the compiler in a pod with a limit of 4 CPUs, so the pod can stop for part of a 100 ms period.
+`getWatchLoop` reads `defaultConfig()`, so the option `WithInitialBackoff` has no effect there.
+
+**Under hydo.** Every value is in the example's RESULTS.md. On images without a CPU limit:
+
+- hvx, 1 vCPU, `--timing --preempt`: 0 of 200 failed.
+- hvx, 2 vCPUs: the turn sweep (12 lengths) and 100 schedules with `--turns --timing` passed.
+- Mac, `--timing --preempt`: 0 of 300 failed, and dense `pct=` points did not change that.
+
+The manifest's parameters `limit` and `busy` put the workload in a cgroup v2 with that `cpu.max`
+and run busy loops beside the test. With `limit="10000 100000" busy=2`, 38 of 100 hvx schedules
+of `--timing --preempt` failed, all reproduced. Every failure had `pp=` (26 of 32) or `xt=` (12
+of 17), and none of the 51 schedules without them failed. The tick period has a boundary between
+`pp=129024` (fails, `0fe47c2cf2ee41f7`) and `pp=130048` (passes, `0c928e2eca742e38`), each twice.
+The fixed program passed the failing schedule (`0f32443537bd2c09`) and all 100 schedules.
+
+**The fjall race, tried and not reproduced.** A stress program (not committed) opens a fjall
+3.1.13 database with two worker threads and 1 KiB memtables, runs 8 writers on 4 keyspaces and
+drops the database, 20 rounds per run. A watchdog reports a hang after 10 s without an insert. A
+probe build of fjall counted 26 sends of `Flush` on a full queue in 5 rounds on the Mac, so the
+queue does fill. No hang occurred: 230 rounds on the Mac, 200 on Linux, 100 hvx schedules with
+`--timing --preempt` (2,000 rounds), and 46 hvx schedules on 2 vCPUs with `--turns --timing`
+(920 rounds) before that exploration's 15-minute limit ended it.
+
+**What hydo lacked.** hydo has no token that stops a process or a thread for some guest time.
+On the Mac and KVM a busy loop makes no VM exits, so a CPU limit in the guest works only on hvx.
+Both are open item 80.

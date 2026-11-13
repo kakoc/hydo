@@ -172,6 +172,30 @@ before any VM, for example a hand-written `tjmax=500000` with `pp=65536`. `hydo 
 the reason. The explorer records such a run with the class `refused` and counts it in
 `refused`, never as a failure.
 
+## A test that fails when its whole process stops
+
+Some tests fail only when the whole test process gets no CPU for some milliseconds. A container
+with a CPU limit does that: when the container has used its CPU time for the period, all its
+threads wait. hydo's timing tokens change which thread runs next. They do not stop every thread
+for a given time, so they do not reach such a failure.
+
+Model the CPU limit in the workload instead, on hvx. Put the test in a cgroup v2 with a
+`cpu.max`, and run busy loops beside it in the same cgroup:
+
+```sh
+echo +cpu > /sys/fs/cgroup/cgroup.subtree_control
+mkdir -p /sys/fs/cgroup/ci && echo "10000 100000" > /sys/fs/cgroup/ci/cpu.max
+echo $$ > /sys/fs/cgroup/ci/cgroup.procs
+```
+
+Mount cgroup2 on `/sys/fs/cgroup` first when `cgroup.controllers` is missing there. hvx's clock
+counts guest branches, so the busy loops use up the limit as on a real CPU. On the Mac and on
+KVM a busy loop makes no VM exits and uses no guest time, so the model does not work there. The
+example is `hydo/onboard/examples/etcd-flaky-22796` (etcd's `TestCacheCompactionResync`). Its
+test never failed under the timing tokens alone. With the limit, `disk=none pp=65536 | run`
+fails on every hvx run and `disk=none | run` passes. Check the same limit outside hydo too, with
+`systemd-run --user --scope -p CPUQuota=10%`: that test failed there in 100 of 100 runs.
+
 ## Steer the search by a number the test prints
 
 The steered search is experimental: on the one test it was measured on, it did not help (the

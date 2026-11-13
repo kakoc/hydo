@@ -360,6 +360,10 @@ and the class `test-failed`. The guide topic is `hydo guide flaky-tests`; the ex
 `hydo/onboard/examples/nats-flaky-8363`. Proof runs: `docs/HISTORY.md` Milestone 205. Since M206 an
 entry of `hydo/onboard/recorded.json` can name `vcpus` (and `turn_margin`), and the example's
 turn-length pair on 2 vCPUs is recorded there.
+Since M211 the example `hydo/onboard/examples/etcd-flaky-22796` has a test that fails only
+when its whole process gets no CPU for about 40 ms. hydo's timing tokens alone never reach it.
+It fails on hvx under a CPU limit in the guest (the manifest's `limit` and `busy`), and so does
+the test outside hydo.
 
 **Refused schedules and the preemption record (M208).** An engine refuses a host part it
 cannot arm before any VM: `hydo_engine::refusal`. For hvx this is the module's rule in
@@ -570,6 +574,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - No run showed a benefit. On Qdrant the failure sits next to passing schedules of any
       length, and on hvx the length does not move. The option stays experimental until a system
       whose value falls step by step towards its failure is found.
+80. Stalls (M211). hydo has no token that stops a process or a thread for some guest time, as a
+    container's CPU limit does. etcd's `TestCacheCompactionResync` needs such a stall of about
+    40 ms, and the example models it with a cgroup `cpu.max` and busy loops in the guest. That
+    model works only on hvx: on the Mac and KVM a busy loop makes no VM exits and uses no guest
+    time. The example is not in `hydo/onboard/recorded.json` yet.
 
 ## Milestone index
 
@@ -833,6 +842,11 @@ build machine, before 2026-10-13.
   run (before, `hydo explore --help` looked for an image). `cargo install hydo` and `hydo setup`
   ran on Linux: on a GitHub runner with KVM the Redis example gave the quickstart's verdicts, so
   the README offers cargo on Linux too (open item 50 closed)
+- M211: etcd's flaky `TestCacheCompactionResync` (issue 22796). It needs the test process held
+  off the CPU for about 40 ms. It never failed natively without a CPU limit (0 of 8,000) or under
+  hydo's timing tokens. With a CPU limit in the guest, `disk=none pp=65536 | run` fails on every
+  hvx run and `disk=none | run` passes; the test-only fix passes. The same limit fails it natively
+  too. A fjall deadlock (issue 345) was tried with a stress program and not reproduced
 
 ## Where to look
 

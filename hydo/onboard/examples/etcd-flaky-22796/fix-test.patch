@@ -1,0 +1,55 @@
+diff --git a/cache/cache_test.go b/cache/cache_test.go
+index 3a70c05..d4c78b9 100644
+--- a/cache/cache_test.go
++++ b/cache/cache_test.go
+@@ -437,9 +437,13 @@ func TestCacheCompactionResync(t *testing.T) {
+ 			{Key: []byte("baz"), Value: []byte("new_baz"), ModRevision: 18, CreateRevision: 18, Version: 1},
+ 		},
+ 	}
++	kv := newKVStub(firstSnapshot, secondSnapshot)
++	// The cache retries the watch 50ms after the compaction and then loads the second snapshot.
++	// Hold that second Get until Phase 3, so a slow test goroutine cannot see it early.
++	kv.holdAfter, kv.hold = 1, make(chan struct{})
+ 	fakeClient := &clientv3.Client{
+ 		Watcher: newMockWatcher(16),
+-		KV:      newKVStub(firstSnapshot, secondSnapshot),
++		KV:      kv,
+ 	}
+ 	cache, err := New(fakeClient, "")
+ 	if err != nil {
+@@ -479,6 +483,7 @@ func TestCacheCompactionResync(t *testing.T) {
+ 
+ 	t.Log("Phase 3: resync after compaction")
+ 	mw.resetRegistered()
++	close(kv.hold)
+ 	mw.triggerCreatedNotify()
+ 	<-mw.registered
+ 	expectSnapshotRev := int64(20)
+@@ -625,6 +630,10 @@ type kvStub struct {
+ 	queued      []*clientv3.GetResponse
+ 	defaultResp *clientv3.GetResponse
+ 	defaultErr  error
++	// hold, when set, blocks every Get after the first holdAfter ones until it is closed.
++	hold      chan struct{}
++	holdAfter int
++	gets      int
+ }
+ 
+ func newKVStub(resps ...*clientv3.GetResponse) *kvStub {
+@@ -635,7 +644,15 @@ func newKVStub(resps ...*clientv3.GetResponse) *kvStub {
+ 	}
+ }
+ 
+-func (s *kvStub) Get(_ context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
++func (s *kvStub) Get(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
++	if s.hold != nil && s.gets >= s.holdAfter {
++		select {
++		case <-s.hold:
++		case <-ctx.Done():
++			return nil, ctx.Err()
++		}
++	}
++	s.gets++
+ 	if s.defaultErr != nil {
+ 		return nil, s.defaultErr
+ 	}

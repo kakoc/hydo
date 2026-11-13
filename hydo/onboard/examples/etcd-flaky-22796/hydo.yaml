@@ -1,0 +1,72 @@
+# A flaky Go unit test inside one program: etcd issue 22796, TestCacheCompactionResync in the
+# module go.etcd.io/etcd/cache/v3. No services: the workload runs the compiled test program once,
+# as etcd's CI does (-test.cpu=1, so GOMAXPROCS=1), and the invariant turns a "--- FAIL" into a
+# violation with the test's own failure line. `limit` and `busy` model a CI container with a CPU
+# limit that other work shares: the test and `busy` busy loops run in one cgroup with that cpu.max.
+# Build the programs first: sh build-test.sh (bin/cache-{buggy,fixed}-{amd64,arm64}.test).
+#   hydo build hydo.yaml                                     # buggy, amd64, no CPU limit
+#   hydo build hydo.yaml --set "limit=10000 100000" --set busy=2   # 10 ms of CPU per 100 ms
+#   hydo build hydo.yaml --set variant=fixed                 # fix-test.patch applied
+#   hydo build hydo.yaml --arch arm64 --set arch=arm64       # for the Mac engine (no limit)
+#   hydo run --backend hvx "disk=none dseed=975835de1c9756ce pp=65536 | run"
+# The busy loops make no VM exits, so the limit needs hvx (its clock counts guest branches).
+# RESULTS.md has the schedules, rates and fingerprints; `hydo guide flaky-tests` the method.
+name: etcd-flaky-22796
+description: etcd's flaky TestCacheCompactionResync (issue 22796), one test process per run.
+
+params:
+  variant: buggy        # buggy | fixed: which program of build-test.sh runs
+  arch: amd64           # amd64 | arm64: the program's architecture, the same as the image's
+  count: "1"            # -test.count: iterations in the one process
+  cpu: "1"              # -test.cpu: GOMAXPROCS for the test; etcd's CI uses 1
+  limit: ""             # a CPU limit for the test, as cgroup v2 cpu.max "<quota> <period>" in µs,
+                        #   e.g. "20000 100000"; empty: no limit
+  busy: "0"             # busy loops beside the test, in the same cgroup (they share the limit)
+
+root:
+  files:
+    - {src: "bin/cache-{{variant}}-{{arch}}.test", dst: /bin/cache.test, mode: "0755"}
+
+data:
+  size_mib: 64
+  dirs: [t]
+
+workload:
+  kind: test              # a test program run once: one step, no service faults, class test-failed
+  steps: 1
+  run: |
+    [ "$HYDO_FROM" = 0 ] || exit 0    # the test runs once, in step 0
+    echo "hydo-etcd: cpus=$(grep -c ^processor /proc/cpuinfo) cpu={{cpu}} count={{count}} variant={{variant}} limit={{limit}} busy={{busy}}" > /dev/console
+    cd /data/t
+    limit="{{limit}}"
+    if [ -n "$limit" ]; then          # this shell and its children go into a cgroup with the limit
+      { [ -f /sys/fs/cgroup/cgroup.controllers ] || mount -t cgroup2 none /sys/fs/cgroup
+        echo +cpu > /sys/fs/cgroup/cgroup.subtree_control
+        mkdir -p /sys/fs/cgroup/ci
+        echo "$limit" > /sys/fs/cgroup/ci/cpu.max
+        echo $$ > /sys/fs/cgroup/ci/cgroup.procs
+        echo "hydo-etcd: cgroup $(cat /proc/self/cgroup) cpu.max $(cat /sys/fs/cgroup/ci/cpu.max)"; } > /dev/console 2>&1
+    fi
+    : > busy.pids
+    i=0
+    while [ $i -lt {{busy}} ]; do (while :; do :; done) & echo $! >> busy.pids; i=$((i+1)); done
+    /bin/cache.test -test.run '^TestCacheCompactionResync$' -test.count={{count}} -test.cpu={{cpu}} \
+      -test.v -test.timeout=60s > out 2>&1
+    echo "rc=$?" >> out
+    for p in $(cat busy.pids); do kill $p; done
+    [ -n "$limit" ] && echo "cpu.stat: $(tr '\n' ' ' < /sys/fs/cgroup/ci/cpu.stat)" >> out
+    sed 's/^/hydo-etcd: /' out | head -60 > /dev/console
+    sync
+    echo 0 >> $HYDO_ACKED
+
+invariants:
+  - id: etcd.test_passes
+    msg: every iteration of TestCacheCompactionResync passes in one test process
+    cmd: |
+      [ -f /data/t/out ] || { echo "no test output"; exit 1; }
+      pass=$(grep -c -- '--- PASS' /data/t/out)
+      fail=$(grep -c -- '--- FAIL' /data/t/out)
+      if [ "$fail" = 0 ] && [ "$pass" = "{{count}}" ]; then echo "pass=$pass of {{count}}"; exit 0; fi
+      line=$(grep -m1 'cache_test.go:[0-9]*: \(expected\|cache\|Watch\|Get\|unexpected\|initial\)' /data/t/out | sed 's/^ *//')
+      [ -n "$line" ] || line=$(grep -m1 'panic:' /data/t/out)
+      echo "pass=$pass fail=$fail ${line:-$(tail -1 /data/t/out)}"; exit 1
