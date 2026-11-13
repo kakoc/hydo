@@ -28,18 +28,21 @@ failure hydo finds is a line you can run again tomorrow, or paste into an issue.
 
 ## Install
 
-macOS on Apple Silicon, with Homebrew or with cargo:
-
-```sh
-brew install kakoc/tap/hydo
-```
+hydo runs on macOS on Apple Silicon, and on Linux on Intel or AMD with the KVM that comes with
+the kernel. On either, install it with cargo:
 
 ```sh
 cargo install hydo --locked
 hydo setup        # downloads the release's guest files and checks each one by sha256
 ```
 
-Linux, on Intel or AMD, with the KVM that comes with the kernel:
+On a Mac, Homebrew works too:
+
+```sh
+brew install kakoc/tap/hydo
+```
+
+On Linux without cargo, use the release tarball:
 
 ```sh
 curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.1/hydo-linux-0.3.1.tar.gz
@@ -48,9 +51,9 @@ tar xzf hydo-linux-0.3.1.tar.gz
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
-Then run `hydo doctor`. It checks the machine. `cargo install` on Linux was only compiled, not
-run, so use the tarball there. [docs/INSTALL.md](docs/INSTALL.md) has the checksums and hydo's own
-kernel module.
+Then run `hydo doctor`. It checks the machine. On Linux your user must be able to open
+`/dev/kvm`, and `hydo doctor --backend kvm` checks that. [docs/INSTALL.md](docs/INSTALL.md) has
+the checksums and hydo's own kernel module.
 
 ## Make Redis lose a write
 

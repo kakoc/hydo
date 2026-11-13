@@ -75,16 +75,23 @@ export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor
 ```
 
-## With cargo, on a Mac
+## With cargo
+
+This works on a Mac and on Linux. You need Rust 1.90 or later. On Linux, run the doctor with `--backend kvm`:
 
 ```sh
 cargo install hydo --locked
 hydo setup
-hydo doctor
+hydo doctor                  # on Linux: hydo doctor --backend kvm
 ```
 
 `cargo install` builds only the `hydo` command. `hydo setup` downloads the release for your
 platform into `~/.hydo/versions/0.3.1` (`HYDO_HOME` names another folder than `~/.hydo`) and
-checks every file by sha256. On Linux, this path was
-only compiled, not run; use the tarball there.
+checks every file by sha256. The examples are in `~/.hydo/versions/0.3.1/examples`.
+
+On Linux this gives the KVM engine, and your user must be able to open `/dev/kvm`, as for the
+tarball. On a GitHub ubuntu-24.04 runner (AMD EPYC 7763, 4 vCPUs), `cargo install` took 2
+minutes 10 seconds and `hydo setup` took 5 seconds. The Redis example built to the recorded
+image (sha256 `668bf8ad…`) and gave the verdicts of the Linux quickstart, section 6. The kernel
+module `hvx.ko` was not tried with a cargo install; use the tarball for it.
 

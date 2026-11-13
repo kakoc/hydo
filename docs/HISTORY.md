@@ -5938,3 +5938,71 @@ tree over the published 0.3.1 Mac release, in a new work folder: all 21 images b
 recorded bytes, all 76 schedules gave their recorded values (among them the 16 that the branch had
 not run: release-redis, voting, redis-oci and release-ledger-spin), and the worker pool gave a
 fresh boot's values on one schedule of every image. No recorded value moved.
+
+### Milestone 210 — DONE (`hydo <command> --help` without an image; `cargo install hydo` and `hydo setup` run on Linux, so the README offers cargo there too; 2026-11-13)
+
+**In short.** Every `hydo <command> --help` and `-h` now prints the command's options and ends
+with status 0. It needs no image, no project, and no recorded run. `cargo install hydo --locked`
+followed by `hydo setup` ran on Linux for the first time, on a GitHub runner with KVM. The Redis
+example built to its recorded image and gave the verdicts of the Linux quickstart. The README
+and `docs/INSTALL.md` now offer cargo on Linux, and open item 50 is closed. Nothing recorded
+moved.
+
+**The help.** The 0.3.1 release notes listed `hydo explore --help` as a known defect: it looked
+for an image and stopped without one. A check of every command's `--help` and `-h` in an empty
+directory found more:
+
+- `hydo doctor --help` checked the machine.
+- `hydo report --help` read `--help` as a directory.
+- `hydo repro --help` printed `hydo run`'s usage.
+- `hydo build --help`, in a folder with `hydo/hydo.yaml`, started a build.
+- `hydo save`, `hydo compose` and `hydo module` printed their usage as an error, with status 1.
+- After a sub-command, `hydo errors list --help`, `hydo inspect logs --help`, `hydo ci compare
+  --help`, `hydo skill install --help` and `hydo check-history DIR --help` read `--help` as an
+  argument.
+
+The new file `hydo/crates/hydo-cli/src/help.rs` answers these commands before they do anything
+else. `hydo explore --help` prints its own usage, hydo's defaults (the image, `--out
+hydo-out/explore`, the seeds 1-20), and the explorer's full option list. A command with
+sub-commands prints its own help after a sub-command too. The words after `--` belong to the
+program that `hydo inspect exec` starts, so `hydo inspect exec DIR -- ls --help` still runs
+`ls --help`. The explorer's usage text says `--seeds A-B` instead of its internal default
+`1-200`, and no longer names `explore.py`. The commands that had a working help keep it.
+
+The new test is `equivalence::every_command_prints_its_help_without_an_image`. It covers 30
+commands, and two more on Linux. It runs each with `--help` and with `-h` in an empty directory
+both as the Linux and as the Mac command. It requires status 0, an empty stderr, the command's name in
+the output, and nothing written. Two unit tests are in `help.rs`. The golden file
+`tests/golden/cli.jsonl` changed in two answers only: `compose --help` on both platforms now ends
+0 and prints on stdout.
+
+**`cargo install hydo` on Linux.** Before, it was checked only with `cargo check` (Milestone
+169), so the README offered cargo only on the Mac. A one-off workflow on a temporary branch
+`tmp-cargo-linux`, deleted afterwards, ran the published 0.3.1 from crates.io on GitHub's
+ubuntu-24.04 runner: https://github.com/kakoc/hydo/actions/runs/43375819063. The runner had an
+AMD EPYC 7763 with 4 vCPUs and Linux 7.0.0-1017-azure, with nested virtualization. A udev rule
+gave its user `/dev/kvm`, as in Milestone 190's AMD check. The steps and their results:
+
+| step | result |
+|---|---|
+| `cargo install hydo --locked --version 0.3.1` (rustc 1.100.0, stable) | built in 2 min 10 s; `hydo --version` printed `hydo 0.3.1 (b3f730878702…)` |
+| `hydo setup` | fetched `hydo-linux-0.3.1.tar.gz` (67.8 MB) from the GitHub release, checked and unpacked it into `~/.hydo/versions/0.3.1` in 4.6 s |
+| `hydo doctor --backend kvm` | `doctor: all checks passed` |
+| `hydo build hydo.yaml` in a copy of `~/.hydo/versions/0.3.1/examples/redis` | `explore-ob-redis-disk.img` with sha256 `668bf8ad…`, the image recorded on Intel (`recorded.json`, `kvm/release-redis`) |
+| `hydo run --backend kvm "disk=none \| run"` | `OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)`, `fp=2846084b7f0ab1e2`, `ctl=ff77abf64599af16` |
+| `hydo run --backend kvm "disk=cut \| run C=12 R=everysec"` | `VIOLATION [redis.acked_writes_survive] key k:1 lost`, `fp=bca22e72dbf0da18`, `ctl=f4b7017fdcd089fd` |
+| `hydo repro` of the second run | `REPRODUCED`, `hydo: 1 of 1 reproduced with the recorded fingerprint` |
+
+The verdicts and the control fingerprints (`ctl=`) are the Intel recordings'. The fingerprints
+differ from Intel's (`b04d1932dfb20e09`, `1b61c2c7501a6f25`), as KVM fingerprints do between
+CPU vendors. These are the first epoch-2 values on AMD; the Linux quickstart, section 6, says so
+now. The install cache's Linux side fetched from the real GitHub release for the first time
+(open item 47 said it had run only against a local server).
+
+**Documents.** README.md "Install" offers cargo for both platforms first, then Homebrew on the
+Mac, and the tarball for Linux without cargo. It says that on Linux the user must be able to
+open `/dev/kvm`. docs/INSTALL.md "With cargo" covers both platforms. It gives the run's numbers and
+says that the kernel module `hvx.ko` was not tried with a cargo install.
+
+**Left.** The kernel module after a cargo install was not tried. The rest of the epoch-2 KVM
+values (open item 45) have not run on AMD.

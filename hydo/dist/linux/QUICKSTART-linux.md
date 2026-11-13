@@ -361,7 +361,8 @@ schedules end `OK` (`b04d1932dfb20e09`) and `VIOLATION … key k:1 lost` (`1b61c
 These values come from an Intel Core i7-13700HX. Its performance cores and its efficiency cores
 give the same values. A KVM fingerprint holds for one CPU vendor. hydo 0.3.0 (fingerprint epoch
 1) ran on two AMD CPUs, an EPYC 9V45 and an EPYC 9V74 (GitHub's ubuntu-24.04 runners). They gave
-the same verdicts as Intel, with other fingerprints. hydo 0.3.1 (epoch 2) has not run on AMD yet.
+the same verdicts as Intel, with other fingerprints. hydo 0.3.1 (epoch 2) did the same on an EPYC
+7763: both schedules gave the Intel verdicts, with other fingerprints.
 
 On the Intel machine the exploration finds 11 failures, and its report gives three minimal
 schedules:

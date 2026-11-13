@@ -217,7 +217,8 @@ Each paragraph gives the current values and where the details are.
 - The skill release `skill-v1.2.0`.
 
 The release index `hydo/dist/releases.txt` pins every published archive. Since 0.2.0 the Linux
-release ships the KVM engine, and the Mac programs are signed and notarized. How to release:
+release ships the KVM engine, and the Mac programs are signed and notarized. `cargo install hydo`
+followed by `hydo setup` works on the Mac and, since M210, on Linux with KVM. How to release:
 `docs/RELEASING.md` and `docs/PUBLISHING.md`.
 
 **Registry publishing from GitHub Actions.** A tag `v<version>` starts
@@ -490,14 +491,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 45. The KVM engine: one vCPU only. On AMD, RDRAND, RDSEED and TSX cannot be made to fault, so a
     guest program that uses them without checking CPUID sees the host (M159, M161). A loop that
     counts in memory is still never proven (M194). The full-state cycles and the fingerprint
-    without KVM's stale event fields are the default since M204 (h closed); the epoch-2 values
-    have not run on an AMD host yet.
+    without KVM's stale event fields are the default since M204 (h closed). Of the epoch-2
+    values, only the Redis example's two schedules ran on AMD, with the Intel verdicts (M210).
 46. Homebrew: no Linux formula (M168).
-47. The install cache: no pruning; the Linux side ran only against a local server (M162).
+47. The install cache: no pruning (M162). Its Linux side fetched from GitHub in M210.
 48. [user decision] The Rust test SDK is unpublished until the user decides about code-first
     tests (M160, M163).
 49. `hydo diff` and `hydo explain`: deeper levels need engine additions (M165).
-50. `cargo install hydo` on Linux was checked only with `cargo check` (M169).
 51. The GUI experiment is not a general feature yet (M166).
 52. The skill: `hydo skill update` never ran against the real GitHub API (M170).
 53. The benchmark images and the browser example are not in `recorded.json` (M164, M177).
@@ -829,6 +829,10 @@ build machine, before 2026-10-13.
   manifest `steer:` entry, or a pattern. It did not help: on Qdrant's flaky test it found the
   failure later than the plain exploration on KVM (median 118 against 72 schedules), and neither
   found it on hvx. Nothing recorded moved
+- M210: `hydo <command> --help` prints the command's options without an image, a project, or a
+  run (before, `hydo explore --help` looked for an image). `cargo install hydo` and `hydo setup`
+  ran on Linux: on a GitHub runner with KVM the Redis example gave the quickstart's verdicts, so
+  the README offers cargo on Linux too (open item 50 closed)
 
 ## Where to look
 
