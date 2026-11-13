@@ -446,3 +446,6 @@ In the order in which they cost time. Each is an open item in `AGENTS.md`.
    5 minutes, 1 hour, 1 day, 30 days, a year). Billing depends on times of day: Lago bills at
    minute 10 of the hour, on the first of the month. The schedules that start the biller in the
    middle of the faults were written by hand, with a step of 900 s.
+7. **The explorer's identity test reads git-ignored files.** It lists every file under an
+   example's `hydo/` folder, also `hydo-out/`, `.hydo/` and `images/`. With this example's local
+   explorations in place, its golden could not be re-recorded until they were moved away.

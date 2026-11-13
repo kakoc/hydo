@@ -6545,3 +6545,61 @@ hydo-control, hydo-explore, hydo-build and hydo-manifest. Those inputs include
 `.github/workflows/release.yml`, `action/action.yml`, and the etcd and Formance examples. The
 goldens now also name this example's manifests, and they were not re-recorded.
 `public_content::` and `docs::` pass.
+
+### Milestone 218 (tentative number) - DONE (Lago onboarded on the Mac engine as an experiment in business bugs; a subscription cancelled while Redis is down is never invoiced, known upstream as lago-api issue 6901; 2026-11-13)
+
+**In short.** Lago v1.57.0, open-source usage-based billing (a Rails API, a Sidekiq worker and a
+clockwork clock on PostgreSQL 15 and Redis 7), runs unmodified from its official images in
+`hydo/onboard/examples/lago` (RESULTS.md). The import started from Lago's own
+`docker-compose.yml`, cut down to six of its eight services: the web front end and the PDF
+renderer are left out. The experiment gave it two kinds of rules. Seven billing rules read Lago's
+own tables: every acknowledged event stored once, every acknowledged event of a charge paid in
+advance charged once, invoice totals equal to their fees, one invoice per subscription and
+period, every period invoiced after its billing tick, and every invoice in a final state. One
+generic rule compares the client's acknowledged operations with Lago's totals per subscription,
+and knows nothing about billing. Every run used the Mac engine with the published 0.3.1 release
+files. The bare-metal machine ran another agent's campaign. Nothing recorded moved, and no hydo
+code changed.
+
+**What was found.**
+
+- A Lago bug, known upstream as lago-api issue 6901 (open). A subscription that is cancelled
+  while Redis is down is terminated in PostgreSQL, but `BillSubscriptionJob.perform_after_commit`
+  fails at its uniqueness lock and the API answers 500. The retry gets 404, and the period is
+  never invoiced. The swarm exploration found it without being told (seed 36). The hand
+  schedule `disk=none | run K=redis@1+4` gives `30be47e1ed697d48` twice, and five requests
+  reproduce it with Docker and without hydo. A comment for the issue is drafted, not posted.
+- A Sidekiq bug, not Lago's: a Redis error during the first `cleanup` of Sidekiq's scheduler
+  thread (in `initial_wait`, outside the loop's `rescue`) ends the thread. Lock retries of
+  `Invoices::CreatePayInAdvanceChargeJob` then wait in the `schedule` set for good, and
+  acknowledged transfers are never charged. Not checked outside hydo.
+- Documented or known behaviour: a power cut loses the jobs that make fees paid in advance
+  (Redis without an append-only file in Lago's own file, and Sidekiq's open-source fetch; the
+  build parameter `redis_aof=yes` separates the two). A billing day that the clock skips is never
+  invoiced (Lago issue 354). After a backward clock step of 30 s or more, a termination can fall
+  before usage that Lago already acknowledged, which is then never billed. These are clock and
+  deployment effects.
+- The consistency rules (totals, one invoice per period, one fee per event, final states, events
+  stored) never failed.
+
+**Which kind of rule found what.** The generic rule failed in every run that broke a business
+result: 11 of 20 in exploration A, 3 of 20 in B, 3 of 16 hand schedules. The billing rules failed
+in 8, 3 and 3 of them, and named the mechanism each time. The three that only the generic rule
+caught were usage dropped by a termination after a clock step. Two billing rules (transfers
+charged, periods invoiced) did all of the billing rules' work.
+
+**Runs.** 56 schedules and about 30 directed runs on the Mac engine:
+
+| exploration | strategy | schedules | failures |
+|---|---|---|---|
+| A | `process --new-faults`, seeds 1-20, before the check fixes | 20 | 12, all clock or power-cut effects |
+| B | `swarm --new-faults`, seeds 21-40, the final image | 20 | 8: the Lago bug, a skipped billing day, a clock artifact, 4 disk I/O errors, a lying disk |
+| C | hand schedules at the billing tick (`T=0:900`) with one fault each | 16 | 3, Redis killed or cut off (the Sidekiq scheduler) |
+
+The final image, `af496f66…`, passes `disk=none | run` twice with one fingerprint (RESULTS.md).
+The three saved regressions expect a violation.
+
+**What hydo lacked.** Open items 87 to 93: `eventually_` commands that run after the
+`eventually_` checks, the seed's records not carried into the run, a check's output beyond its
+last line, one shrink per signature, the importer's idle job service as a fault target, clock steps
+that cannot aim at a time of day, and the identity test reading git-ignored outputs.
