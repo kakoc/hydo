@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=30
+# a new shop's first two sales arrive at once, one in each asset (../../client/main.go, "open")
+exec /bin/ledgerc op open

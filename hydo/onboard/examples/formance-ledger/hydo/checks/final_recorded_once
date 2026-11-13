@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo-msg: every operation is recorded once: an acknowledged one exactly once (all of its transactions), an unanswered one at most once, a refused one never
+# Rule 1e (RESULTS.md): retries after a lost answer reuse the idempotency key, so they must not
+# add a second copy. Reads the ledger through its API (../../client/main.go, checkModel).
+exec /bin/ledgerc check once

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=120
+# create the ledger "main" (POST /v2/main), before the window under test
+exec /bin/ledgerc init

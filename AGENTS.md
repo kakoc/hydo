@@ -317,6 +317,13 @@ digest in the lock file (`local_build: true`). fetch-images.sh builds a missing 
 `hydo-fetch-image build` and stops at a digest other than the pin until `HYDO_ACCEPT_REBUILD=1`.
 `--no-build` leaves the builds to the script. Reference: `hydo guide workflow`.
 
+**Business rules: what found what (M215).** On Formance Ledger, rules over the ledger's own
+state (balances, moves, effective volumes, overdraft, reverts, bulks, the audit log) found
+nothing. A duplicate from a retry without a key, and a payment lost on a lying disk, showed only
+to the rule that replays the client's acknowledged operations. A real ledger bug (a `500` when
+two transactions first use one account in two assets) showed only in the error logs. The
+example is `hydo/onboard/examples/formance-ledger` (RESULTS.md).
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -575,6 +582,24 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     fetch-images.sh until `HYDO_ACCEPT_REBUILD=1`. The real build ran on a Mac with Docker only;
     Linux and Podman ran only with a fake command. `ssh`, `secrets`, `dockerfile_inline` and
     `additional_contexts` are not passed to the build. No VM ran a built image.
+82. The recovery boot loses its carried records when they pass 4 KiB (M215). After a power cut
+    the host posts `$HYDO_ACKED`, the failed ids and `$HYDO_OUTCOMES` as chunks of up to 3,000
+    bytes, one after another, without waiting for a reply (`hydo_control::schedule`). The Mac and
+    KVM engines type each message into a 4,096-byte receive queue and drop what does not fit
+    (`ctl_type` says "bytes do not fit in the receive queue"). The agent never answers, and the
+    run ends after 50 million exits with `ERROR recovery: exit budget exhausted`, minutes of wall
+    time each. The Formance example keeps its records under the limit. A fix makes the engine type
+    a message only when it fits, or the host wait for each chunk's reply. It changes the control
+    transcript only of runs that fail today.
+83. A run holds at most 1,024 control messages on every engine (`CTL_MAX_SENDS`,
+    `ctl::MAX_SENDS`) (M215). A slow workload (a 3 s delay between the ledger and PostgreSQL, 30
+    rounds) sends more: queue polls, `always_` checks and clock reads. The run then ends with
+    "the controlled run broke" and no verdict, and the explorer counts an error.
+84. Error kinds and request ids (M215). The default template blanks a mixed id only from 16
+    characters and only with a digit, so the ledger's `trace-id=qjGcd4lJvd` made every request
+    its own kind. The explorer then shrank each new kind (8 by default) and stalled; `normalize:`
+    and `--errors-shrink 0` were needed. `hydo errors accept` writes the login name as `by:` into
+    the tracked `known-errors.yaml` unless `--by` is given.
 
 ## Milestone index
 
@@ -850,6 +875,11 @@ build machine, before 2026-10-13.
 - M214 (tentative number): one import for Compose services with `build:`. `hydo compose` builds
   their images with Docker and pins each file's digest; fetch-images.sh builds a missing file and
   stops at other bytes until they are accepted. Nothing recorded moved
+- M215 (tentative number): the Formance Ledger onboarding, an experiment in business bugs on the
+  Mac engine. Two first uses of one account in two assets race, and one payment fails with
+  `500`. It is a ledger bug since v2.4; the error logs found it, no rule did. Duplicates from
+  retries without keys, and payments lost to disk faults, show only to the rule over the client's
+  records. Nothing recorded moved
 
 ## Where to look
 

@@ -1,0 +1,117 @@
+# Formance Ledger v2.4.18 (a double-entry ledger with an HTTP API, Go) on PostgreSQL 16, as the
+# ledger's own docker-compose.yml runs it: `ledger serve` with automatic schema upgrades against
+# postgres:16-alpine (max_connections=200). The observability services of that file (Prometheus,
+# the OpenTelemetry collector, Jaeger) are left out: the ledger exports nothing unless told to.
+# RESULTS.md says what was hunted and found.
+#
+# The programs come from source, as static Linux programs (no image of the ledger is needed):
+#   sh ../build.sh            # bin/ledger-<arch> (upstream v2.4.18) and bin/ledgerc-<arch> (the client)
+#   sh fetch-images.sh        # PostgreSQL by digest
+#   hydo build hydo.yaml --arch arm64 --set arch=arm64     # the Mac engine
+#   hydo build hydo.yaml                                    # x86_64: hvx, KVM
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-40 --strategy process --new-faults
+#
+# The client (../client, `ledgerc`) runs every operation through the ledger's v2 API with an
+# idempotency key and retries an attempt that got no answer with the same key. `ik=0` turns the
+# keys off (a client mistake, kept to show which checks see it).
+format: 1
+name: formance-ledger
+description: "Formance Ledger (double-entry ledger, Go) on PostgreSQL 16: payments, fees, currency exchange, credit lines, reverts and atomic bulks under faults, checked against the ledger's promises and against what the client saw acknowledged"
+hydo_version: "0.3"
+
+params:
+  arch: amd64   # amd64 | arm64: the programs' architecture, the same as the image's
+  ik: "1"       # 1: the client sends idempotency keys (the API's way to retry safely); 0: it does not
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 1536
+  clock_after_cut: 60        # the ledger stamps transactions with the time; no real machine's clock runs back across a power loss
+  outcomes_after_cut: true   # the model check reads $HYDO_OUTCOMES, also in the recovery boot
+
+data:
+  size_mib: 768   # PostgreSQL's data directory (the fault target)
+  dirs: [vol/postgres]
+
+root:
+  files:
+    - {src: "../bin/ledger-{{arch}}", dst: /bin/ledger, mode: "0755"}
+    - {src: "../bin/ledgerc-{{arch}}", dst: /bin/ledgerc, mode: "0755"}
+  text:
+    /etc/hosts: |
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 postgres
+      10.89.0.12 ledger
+    # PostgreSQL's synchronous_commit, set with ALTER SYSTEM and a reload (the knob S)
+    /etc/pg-sync-commit.sh: |
+      exec timeout 30 hydo-oci postgres psql -X -q -U ledger -h 127.0.0.1 -d ledger -c "ALTER SYSTEM SET synchronous_commit = '$1'" -c "SELECT pg_reload_conf()"
+
+env:
+  LEDGER_URL: "http://10.89.0.12:3068"
+  LEDGERC_IK: "{{ik}}"
+
+services:
+  # docker-compose.yml's postgres: the same image (by digest), user, password, database and
+  # max_connections; its data directory on the data disk
+  - name: postgres
+    image: {x86_64: images/postgres-16-alpine-amd64.docker.tar, arm64: images/postgres-16-alpine-arm64-oci}
+    image_ref: "postgres:16.16-alpine3.24"
+    cmd: [docker-entrypoint.sh, postgres, -c, max_connections=200]
+    env:
+      POSTGRES_USER: "ledger"
+      POSTGRES_PASSWORD: "ledger"
+      POSTGRES_DB: "ledger"
+      PGDATA: /data/postgres
+    addr: 10.89.0.11
+    port: 5432
+    ready: "timeout 10 hydo-oci postgres pg_isready -q -U ledger -h 127.0.0.1"
+    ready_timeout: 120
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/postgres, dst: /data/postgres, copy_up: true}
+  # docker-compose.yml's ledger: `ledger serve` with AUTO_UPGRADE, BULK_PARALLEL=10 and a pool of 40
+  # connections, without the OpenTelemetry exporters. Stateless; restarted as a deployment would be.
+  - name: ledger
+    cmd: >-
+      /bin/ledger serve --bind 0.0.0.0:3068 --auto-upgrade --bulk-parallel 10
+      --postgres-uri 'postgresql://ledger:ledger@10.89.0.11:5432/ledger?sslmode=disable'
+      --postgres-max-open-conns 40 --postgres-max-idle-conns 40 --postgres-conn-max-idle-time 5m
+    addr: 10.89.0.12
+    port: 3068
+    depends_on: [postgres]
+    ready: "timeout 5 /bin/ledgerc ready"
+    ready_timeout: 120
+    restart: always
+    errors:
+      normalize: ['trace-id=[A-Za-z0-9]+', 'req=[0-9a-f]+']   # a request's trace id: one kind per message, not per request
+
+workload:
+  steps: 30   # hand: with more, the records hydo carries across a power cut outgrow the Mac engine's console queue (RESULTS.md, "What hydo lacked")
+  timeout: 600
+
+test:
+  parallel: 6
+  per_round: 3
+  round_ms: 400
+  command_timeout: 40
+  drain_timeout: 60
+  check_every: 2
+
+# synchronous_commit: on (the default) waits for the WAL flush before PostgreSQL acknowledges a
+# commit; off acknowledges first, so a power cut may lose the last acknowledged transactions
+# (documented by PostgreSQL). A finding with S=off and a power cut is an unsafe setting.
+knobs:
+  - token: S
+    name: postgres synchronous_commit
+    default: "on"
+    values: ["on", "off"]
+    set: sh /etc/pg-sync-commit.sh $HYDO_VALUE
+
+errors: true
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

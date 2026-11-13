@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo-msg: faults do not change the business result: the operations the client saw determine every account, in the API and in PostgreSQL
+# Rule kind 2 (RESULTS.md). It reads only the client's records ($HYDO_ACKED, $HYDO_OUTCOMES) and
+# what the ledger holds; the expected volumes come from the operations' postings alone.
+hydo-sql read sql db "SELECT accounts_address, asset, input::text AS input, output::text AS output FROM _default.accounts_volumes WHERE ledger = 'main'" > /tmp/pg-volumes.jsonl || { echo "postgres unreadable"; exit 2; }
+exec /bin/ledgerc check model /tmp/pg-volumes.jsonl

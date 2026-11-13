@@ -1,0 +1,16 @@
+# found by `hydo explore` (seed 15): durable-defaults, on the image built with `--set ik=0`: the
+# client retries without idempotency keys, and an answer lost after the commit makes the retry
+# record the operation twice. With the keys (the default build) the same schedule must pass:
+# the ledger answers the retry from the key (RESULTS.md, finding 2).
+# verdict: HYDO-ORACLE: VIOLATION [acked_determine_ledger] 23 acknowledged and 2 unanswered operations (1 of them applied): 0 missing, 2 duplicated, 0 partial, 0 refused but applied, 0 foreign; 0 volumes differ 
+# composition: r0: parallel_driver_exchange | r1: parallel_driver_exchange | r3: parallel_driver_backdated, parallel_driver_credit, parallel_driver_bulk | r4: parallel_driver_backdated, parallel_driver_exchange, parallel_driver_transfer | r5: parallel_driver_backdated, parallel_driver_transfer | r6: parallel_driver_deposit, parallel_driver_credit | r7: parallel_driver_transfer, parallel_driver_exchange | r8: par
+# commands: first_init parallel_driver_backdated parallel_driver_bulk parallel_driver_credit parallel_driver_deposit parallel_driver_exchange parallel_driver_repay parallel_driver_revert parallel_driver_transfer
+# command-sha: parallel_driver_backdated 64177e8dcfa716c2
+# command-sha: parallel_driver_bulk c84d435d648ee179
+# command-sha: parallel_driver_credit 463ce6e608458a4b
+# command-sha: parallel_driver_deposit 91d0089ab41b0c09
+# command-sha: parallel_driver_exchange 4f3f7631d248fa49
+# command-sha: parallel_driver_transfer 814b33b7073f5498
+# note: the resolved composition is too long for a schedule line; a saved regression carries it as W=@0f93a842cc82 (unconfirmed)
+# expect: ok
+disk=none dseed=b988c2bd3620cc45 | run O=ledger@20-25:resp:loss,81% W=ca251a75,p5,q3,r200,oparallel_driver_repay+parallel_driver_revert
