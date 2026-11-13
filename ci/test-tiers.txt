@@ -59,6 +59,7 @@ hydo-control::m123                       full
 hydo-control::react                      fast
 hydo-control::restart                    fast
 hydo-control::restart_may_fail           fast
+hydo-control::search                     fast
 hydo-control::storage                    fast
 hydo-control::silent                     fast
 hydo-control::start_after                fast
