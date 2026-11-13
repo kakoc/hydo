@@ -1,0 +1,14 @@
+# Stage 2 of docs/design/ci.md: a time budget per kind of run. The seed range stays fixed, and the
+# budget stops the exploration at a seed boundary when the rest of the run would not fit.
+format: 1
+engine: kvm
+pr:
+  seeds: 1-200
+  strategy: process
+  budget: 10m
+nightly:
+  seeds: 1-5000
+  strategy: process
+  options: [--more-faults, --new-faults]
+  budget: 1h30m
+fail_on: [new, reappeared, regression]

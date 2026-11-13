@@ -48,13 +48,31 @@ pub fn headline(r: &CiRun) -> String {
             parts.push(format!("{changed} changed"));
         }
     } else {
-        parts.push(plural(r.findings.len(), "finding", "findings"));
+        let open = r
+            .findings
+            .iter()
+            .filter(|f| f.state != ci_state::ACCEPTED)
+            .count();
+        parts.push(plural(open, "finding", "findings"));
+    }
+    let back = of_state(r, ci_state::REAPPEARED).len();
+    if back > 0 {
+        parts.push(format!("{back} reappeared"));
+    }
+    let accepted = of_state(r, ci_state::ACCEPTED).len();
+    if accepted > 0 {
+        parts.push(format!("{accepted} accepted"));
     }
     if regs.replayed > 0 {
         parts.push(format!(
             "{} of {} regressions as expected",
             regs.as_expected, regs.replayed
         ));
+    }
+    if r.budget.partial {
+        if let (Some(c), Some(p)) = (r.budget.completed, r.budget.planned) {
+            parts.push(format!("partial: {c} of {p} seeds"));
+        }
     }
     let verdict = match r.outcome.exit {
         0 => "passed",
@@ -191,6 +209,25 @@ pub fn markdown(r: &CiRun, sets: &[(String, String)]) -> String {
         }
         o.push('\n');
     }
+    let back = of_state(r, ci_state::REAPPEARED);
+    if !back.is_empty() {
+        o.push_str(
+            "**Reappeared** (the history recorded it fixed; it fails again here, and the base \
+             passes its schedule):\n\n",
+        );
+        table(&mut o, &back, &sets);
+        for f in &back {
+            if let Some(at) = &f.fixed_at {
+                let _ = writeln!(
+                    o,
+                    "\n{} was recorded fixed at {}.",
+                    code(&f.title),
+                    short(at)
+                );
+            }
+        }
+        o.push('\n');
+    }
     let fixed = of_state(r, ci_state::FIXED);
     if !fixed.is_empty() {
         o.push_str("**Fixed by this change** (replayed here and passed):\n\n");
@@ -247,15 +284,76 @@ pub fn markdown(r: &CiRun, sets: &[(String, String)]) -> String {
         list(&mut o, &old);
         o.push('\n');
     }
+    let accepted = of_state(r, ci_state::ACCEPTED);
+    if !accepted.is_empty() {
+        o.push_str(
+            "**Accepted** (`hydo/known-findings.yaml`; reported, never failing the run):\n\n",
+        );
+        for f in &accepted {
+            let a = f.accepted.as_ref();
+            let _ = writeln!(
+                o,
+                "- {} ({}): {}{}{}",
+                code(&f.title),
+                code(&f.minimal),
+                a.map(|a| a.state.as_str()).unwrap_or("?"),
+                a.map(|a| format!(", accepted: {}", a.reason.replace('\n', " ")))
+                    .unwrap_or_default(),
+                a.filter(|a| !a.who.is_empty())
+                    .map(|a| format!(" ({})", a.who))
+                    .unwrap_or_default()
+            );
+        }
+        o.push('\n');
+    }
+    if !r.stale_accepted.is_empty() {
+        o.push_str(
+            "**Accepted findings this run did not find** (remove an entry from \
+             `hydo/known-findings.yaml` when it no longer reproduces):\n\n",
+        );
+        for s in &r.stale_accepted {
+            let what = match s.why.as_str() {
+                "replay-ok" => "its schedule passes here: it no longer reproduces".to_string(),
+                "replay-other" => format!(
+                    "its schedule now fails differently: {}",
+                    code(
+                        &s.replay
+                            .as_ref()
+                            .and_then(|r| r.verdict.as_deref())
+                            .map(hydo_explore::report::sig_key)
+                            .unwrap_or_default()
+                    )
+                ),
+                _ => "not found by the exploration, and its schedule could not be replayed"
+                    .to_string(),
+            };
+            let _ = writeln!(
+                o,
+                "- `{}` {}: {what}",
+                s.key,
+                if s.title.is_empty() {
+                    String::new()
+                } else {
+                    code(&s.title)
+                }
+            );
+        }
+        o.push('\n');
+    }
     let unv = of_state(r, ci_state::UNVERIFIED);
     if !unv.is_empty() {
         o.push_str("**Could not be replayed** (a person should look):\n\n");
         for f in &unv {
-            let why = f
-                .replays
-                .iter()
-                .find_map(|x| x.refused.clone())
-                .unwrap_or_else(|| "the replay gave no result".into());
+            let why = if f.proof.as_deref() == Some("head-replay-ok-partial") {
+                "its schedule passes here, but the run's budget cut its exploration short, so it is \
+                 not called fixed"
+                    .to_string()
+            } else {
+                f.replays
+                    .iter()
+                    .find_map(|x| x.refused.clone())
+                    .unwrap_or_else(|| "the replay gave no result".into())
+            };
             let _ = writeln!(o, "- {} ({}): {why}", code(&f.title), code(&f.minimal));
         }
         o.push('\n');
@@ -325,13 +423,51 @@ pub fn markdown(r: &CiRun, sets: &[(String, String)]) -> String {
         }
         _ => o.push_str("Result: the run could not be completed.\n\n"),
     }
-    o.push_str("<details><summary>What ran</summary>\n\n");
     let b = &r.budget;
+    if let Some(s) = &b.shard {
+        let _ = writeln!(
+            o,
+            "Shard {s}: seeds {} of {}. `hydo ci merge` makes the run's report from all shards.\n",
+            b.seeds,
+            b.range.as_deref().unwrap_or("?")
+        );
+    }
+    if b.partial {
+        let done = b.completed_seeds.as_deref().filter(|c| !c.is_empty());
+        let _ = writeln!(
+            o,
+            "**Partial run**: {} of {} seeds explored ({}){}. The seeds explored do not depend \
+             on the machine's speed: they are the first ones in seed order, so `--seeds {}` \
+             explores the same schedules again. A partial run calls no finding fixed.\n",
+            b.completed.unwrap_or(0),
+            b.planned.unwrap_or(0),
+            done.map(|c| format!("seeds {c}"))
+                .unwrap_or_else(|| "none".into()),
+            match (b.time_limit_s, r.shards.is_empty()) {
+                (Some(t), true) => format!(", stopped by the time budget of {}", wall(t)),
+                (_, false) => ", from the shards given".to_string(),
+                _ => String::new(),
+            },
+            done.unwrap_or("-"),
+        );
+    } else if let Some(t) = b.time_limit_s {
+        let _ = writeln!(
+            o,
+            "The time budget of {} let the run explore all {} seeds.\n",
+            wall(t),
+            b.completed.unwrap_or(0)
+        );
+    }
+    o.push_str("<details><summary>What ran</summary>\n\n");
     let _ = writeln!(
         o,
         "- {} (seeds {}, strategy {}{}), {}, {}, {}.",
         plural(r.summary.runs as usize, "run", "runs"),
-        b.seeds,
+        match b.completed_seeds.as_deref() {
+            Some(c) if c != b.seeds =>
+                format!("{} of {}", if c.is_empty() { "none" } else { c }, b.seeds),
+            _ => b.seeds.clone(),
+        },
         b.strategy,
         if b.options.is_empty() {
             String::new()
@@ -419,6 +555,36 @@ pub fn markdown(r: &CiRun, sets: &[(String, String)]) -> String {
         "- hydo {} (fingerprint epoch {}).",
         r.hydo.version, r.hydo.epoch
     );
+    for s in &r.shards {
+        let _ = writeln!(
+            o,
+            "- Shard {}: seeds {}{}, {}, {}, {}, exit status {}.",
+            s.shard,
+            s.seeds,
+            s.completed_seeds
+                .as_deref()
+                .filter(|c| *c != s.seeds)
+                .map(|c| format!(" (explored {})", if c.is_empty() { "none" } else { c }))
+                .unwrap_or_default(),
+            plural(s.runs as usize, "run", "runs"),
+            plural(s.replays as usize, "replay", "replays"),
+            wall(s.wall_s),
+            s.exit
+        );
+    }
+    if let Some(h) = &r.history {
+        let _ = writeln!(
+            o,
+            "- History {}{}: {} open and {} fixed findings before this run.",
+            h.store,
+            h.branch
+                .as_deref()
+                .map(|b| format!(", branch {b}"))
+                .unwrap_or_default(),
+            h.open,
+            h.fixed
+        );
+    }
     if let Some(u) = &r.ci.run_url {
         let _ = writeln!(o, "- Job: {u}");
     }
@@ -426,7 +592,7 @@ pub fn markdown(r: &CiRun, sets: &[(String, String)]) -> String {
     o
 }
 
-fn wall(s: f64) -> String {
+pub fn wall(s: f64) -> String {
     let s = s.round() as u64;
     if s >= 60 {
         format!("{} min {} s", s / 60, s % 60)
@@ -490,6 +656,15 @@ pub fn junit(r: &CiRun) -> String {
                 xml(&f.state),
                 xml(&f.title),
                 xml(&f.minimal),
+                xml(&detail)
+            );
+        } else if f.state == ci_state::ACCEPTED {
+            sf += 1;
+            let _ = write!(
+                cases_f,
+                "      <skipped message=\"accepted ({}): {}\"/>\n      <system-out>{}</system-out>\n",
+                xml(f.accepted.as_ref().map(|a| a.state.as_str()).unwrap_or("")),
+                xml(f.accepted.as_ref().map(|a| a.reason.as_str()).unwrap_or("")),
                 xml(&detail)
             );
         } else if f.state == ci_state::PRESENT || f.state == ci_state::PRE_EXISTING {
@@ -602,6 +777,7 @@ mod tests {
                 seeds: "1-60".into(),
                 strategy: "process".into(),
                 options: vec!["--protocol-faults".into()],
+                ..Default::default()
             },
             outcome: hydo_results::CiOutcome {
                 exit: 1,
@@ -663,5 +839,49 @@ mod tests {
         assert!(j.contains("name=\"VIOLATION &lt;x&gt; &amp; y\""));
         assert!(j.contains("<skipped message=\"present on the base"));
         assert_eq!(xml("a\u{1}b"), "a b");
+    }
+
+    /// Stage 2: an accepted finding, an entry that no longer reproduces, and a budget's cut.
+    #[test]
+    fn accepted_stale_and_partial_are_said() {
+        let mut r = run();
+        r.findings[0].accepted = Some(hydo_results::CiAccepted {
+            reason: "documented window".into(),
+            state: "new".into(),
+            ..Default::default()
+        });
+        r.findings[0].state = "accepted".into();
+        r.stale_accepted.push(hydo_results::CiStaleAcceptance {
+            key: "f1:invariant:00000000aa".into(),
+            title: "VIOLATION [old]".into(),
+            reason: "r".into(),
+            why: "replay-ok".into(),
+            replay: None,
+        });
+        r.budget.time_limit_s = Some(90.0);
+        r.budget.completed_seeds = Some("1-8".into());
+        r.budget.planned = Some(60);
+        r.budget.completed = Some(8);
+        r.budget.partial = true;
+        r.outcome = hydo_results::CiOutcome {
+            fail_on: vec!["new".into()],
+            ..Default::default()
+        };
+        super::super::run::decide(&mut r);
+        let m = markdown(&r, &[]);
+        assert!(
+            m.starts_with("### hydo: no new findings, 1 accepted, partial: 8 of 60 seeds (passed)"),
+            "{m}"
+        );
+        assert!(m.contains("new, accepted: documented window"), "{m}");
+        assert!(m.contains("`f1:invariant:00000000aa` `VIOLATION [old]`: its schedule passes here"));
+        assert!(m.contains("**Partial run**: 8 of 60 seeds explored (seeds 1-8), stopped by the time budget of 1 min 30 s"));
+        assert!(m.contains("(seeds 1-8 of 1-60, strategy"), "{m}");
+        let j = junit(&r);
+        assert!(
+            j.contains("<skipped message=\"accepted (new): documented window\"/>"),
+            "{j}"
+        );
+        assert!(j.contains("failures=\"0\""));
     }
 }

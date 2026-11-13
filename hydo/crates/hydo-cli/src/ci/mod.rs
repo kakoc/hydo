@@ -1,21 +1,30 @@
-//! `hydo ci`: hydo in a team's continuous integration, stage 1 of docs/design/ci.md.
+//! `hydo ci`: hydo in a team's continuous integration, stages 1 and 2 of docs/design/ci.md.
 //!
 //! - `hydo ci run` (src/ci/run.rs): build or reuse the image, explore, compare with the base
 //!   commit by replay, replay the saved regressions, and write `ci-run.json`, `report.md`,
 //!   `junit.xml` and an exit code (0 passed, 1 failed by the policy, 2 not completed). It reads
 //!   flags, `hydo/ci.yaml` (hydo_manifest::ci) and the CI system's variables (src/ci/env.rs), and
-//!   runs the same on a laptop.
+//!   runs the same on a laptop. Stage 2: accepted findings (`hydo/known-findings.yaml`), a time
+//!   budget cut at a seed boundary, shards (src/ci/seeds.rs) and the history store
+//!   (src/ci/history.rs).
 //! - `hydo ci compare <base ci-run.json> <head ci-run.json>`: the report of two recorded runs,
 //!   offline, by finding key (no replay, so nothing is proven fixed).
+//! - `hydo ci accept <key>` (src/ci/accept.rs): add an entry to `hydo/known-findings.yaml`.
+//! - `hydo ci merge` (src/ci/merge.rs): the shards' `ci-run.json` into one run and one report.
+//! - `hydo ci record` (src/ci/history.rs): add a run to the history store.
 //!
 //! hydo never calls a CI platform's API: comments and status checks are the adapters' work
 //! (`action/` for GitHub, `ci/gitlab/` for GitLab, the generic recipe in `hydo guide ci`).
 
+pub mod accept;
 pub mod env;
+pub mod history;
 pub mod inputkey;
 pub mod key;
+pub mod merge;
 pub mod report;
 pub mod run;
+pub mod seeds;
 
 use crate::ctx::{die, take, Ctx};
 use hydo_results::{ci_state, CiRun};
@@ -28,22 +37,48 @@ pub const HELP: &str = r#"hydo ci -- hydo in continuous integration (hydo guide 
                 [--base-run CI-RUN.JSON] [--image IMG] [--base-image IMG] [--backend kvm|hvx]
                 [--seeds A-B] [--strategy S] [--option OPT ...] [--workers N] [--set KEY=VALUE ...]
                 [--fail-on new,reappeared,regression,...] [--cache DIR]
+                [--budget DURATION] [--shard I/N] [--known FILE] [--history DIR]
         build (or reuse) the image, explore it, replay each finding on the base commit's image
         (new, pre-existing), replay the base's findings here (fixed, present, changed), replay
         the saved regressions, and write ci-run.json, report.md and junit.xml into --out
         (default hydo-ci). Exit status: 0 passed, 1 failed by fail_on, 2 not completed.
         The CI system's variables give the commit, the base branch and the change number on
         GitHub Actions, GitLab CI, CircleCI, Jenkins, Buildkite and Azure Pipelines; flags win.
+        --budget 10m: stop drawing schedules when the rest of the run would not fit (at a seed
+        boundary, in seed order; the report names the seeds explored). --shard 2/4: explore the
+        second of four parts of the seed range (merge the shards with hydo ci merge).
+        --known: the accepted findings (default hydo/known-findings.yaml). --history: a
+        directory written by hydo ci record; its open findings are replayed here.
 
     hydo ci compare <base ci-run.json> <head ci-run.json> [--out DIR]
         the report of two recorded CI runs by finding key, offline (no replay: a finding the head
         did not find is listed as not found, never as fixed)
+
+    hydo ci accept <finding key> --reason TEXT [--who NAME] [--from CI-RUN.JSON|DIR]
+                   [--file hydo/known-findings.yaml] [--project DIR]
+        accept a finding: hydo ci run reports it as accepted and never fails on it. The title and
+        the minimal schedule come from --from (default hydo-ci/ci-run.json, when it exists); a
+        unique prefix of the key is enough there. --who is written as given, and left empty
+        without it.
+
+    hydo ci merge <shard ci-run.json or directory> ... [--out DIR] [--fail-on ...]
+        one CI run and one report from the shards of one run (hydo ci run --shard I/N), by
+        finding key, in shard order; a missing shard makes the merged run partial. Exit status
+        as for hydo ci run.
+
+    hydo ci record <ci-run.json or directory> --store DIR [--branch NAME]
+        add a run to the history store (v1/<project>/runs/, findings.jsonl, state.json): a
+        finding seen failing is new or reappeared, one proven fixed by replay is fixed, and one
+        not found keeps its state
 "#;
 
 pub fn cmd_ci(ctx: &Ctx, argv: &[String]) -> i32 {
     match argv.first().map(String::as_str) {
         Some("run") => run::cmd_run(ctx, &argv[1..]),
         Some("compare") => cmd_compare(&argv[1..]),
+        Some("accept") => accept::cmd_accept(&argv[1..]),
+        Some("merge") => merge::cmd_merge(&argv[1..]),
+        Some("record") => history::cmd_record(&argv[1..]),
         Some("-h" | "--help" | "help") => {
             print!("{HELP}");
             0
@@ -85,12 +120,20 @@ pub fn compare(base: &CiRun, head: &CiRun) -> CiRun {
         .collect();
     r.findings = head.findings.iter().filter(open).cloned().collect();
     for f in &mut r.findings {
-        if base_keys.contains(f.key.as_str()) {
-            f.state = ci_state::PRESENT.into();
-            f.proof = Some("by-key".into());
+        let state = if base_keys.contains(f.key.as_str()) {
+            ci_state::PRESENT
         } else {
-            f.state = ci_state::NEW.into();
-            f.proof = Some("by-key".into());
+            ci_state::NEW
+        };
+        f.proof = Some("by-key".into());
+        // an accepted finding stays accepted, with the state the comparison gives it
+        match f
+            .accepted
+            .as_mut()
+            .filter(|_| f.state == ci_state::ACCEPTED)
+        {
+            Some(a) => a.state = state.into(),
+            None => f.state = state.into(),
         }
     }
     for f in base.findings.iter().filter(open) {

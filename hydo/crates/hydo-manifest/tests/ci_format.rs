@@ -104,3 +104,61 @@ fn what_is_refused_says_why() {
     assert_eq!(ci::parse_seeds("7"), Some((7, 7)));
     assert_eq!(FailOn::parse("pre-existing"), Some(FailOn::PreExisting));
 }
+
+/// Stage 2: a budget per kind of run, in wall time.
+#[test]
+fn budgets_are_durations() {
+    let d = schema_dir().join("examples/ci/v1/stage2.yaml");
+    let c = ci::parse(&std::fs::read_to_string(&d).unwrap(), "stage2.yaml").unwrap();
+    assert_eq!(c.budget("pr").budget.as_deref(), Some("10m"));
+    assert_eq!(c.budget("push").budget.as_deref(), Some("10m"));
+    let p = ci::parse_duration;
+    assert_eq!(p("10m"), Some(600.0));
+    assert_eq!(p("1h30m"), Some(5400.0));
+    assert_eq!(p("2m30s"), Some(150.0));
+    assert_eq!(p("45"), Some(45.0));
+    assert_eq!(p("0"), None);
+    assert_eq!(p("10x"), None);
+    assert_eq!(p("m"), None);
+    assert_eq!(p("10m5"), None);
+    let e = ci::parse("pr:\n  budget: soon\n", "hydo/ci.yaml")
+        .unwrap_err()
+        .message;
+    assert_eq!(
+        e,
+        "hydo/ci.yaml: pr.budget: \"soon\" is not a duration like 10m, 90s or 1h30m"
+    );
+}
+
+/// `hydo/known-findings.yaml`, format 1: its committed schema is the generated one, and it only
+/// grows from the released one (new after 0.3.1, so the released copy is the first schema).
+#[test]
+fn the_known_findings_schema_is_committed_and_only_grows() {
+    use hydo_manifest::known_findings as kf;
+    let p = schema_dir().join("known-findings-v1.json");
+    if std::env::var_os("HYDO_BLESS").is_some_and(|v| v == "1") {
+        std::fs::write(&p, kf::schema_text()).unwrap();
+    }
+    let want = std::fs::read_to_string(&p)
+        .unwrap_or_else(|e| panic!("{}: {e} (write it with HYDO_BLESS=1)", p.display()));
+    assert!(
+        want == kf::schema_text(),
+        "{} differs from the generated schema; rewrite it with HYDO_BLESS=1",
+        p.display()
+    );
+    let r = schema_dir().join("released/known-findings-v1.json");
+    if std::env::var_os("HYDO_RELEASE_SCHEMA").is_some_and(|v| v == "1") {
+        std::fs::write(&r, kf::schema_text()).unwrap();
+    }
+    let old: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&r).unwrap()).unwrap();
+    let b: Vec<String> = check(&old, &kf::schema(), &Rules::new(Readers::Current))
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert!(b.is_empty(), "not additions:\n  {}", b.join("\n  "));
+    let ex = schema_dir().join("examples/known-findings/v1/redis.yaml");
+    let k = kf::parse(&std::fs::read_to_string(&ex).unwrap(), "redis.yaml").unwrap();
+    assert_eq!(k.accepted.len(), 1);
+    assert_eq!(k.accepted[0].who.as_deref(), Some(""));
+}

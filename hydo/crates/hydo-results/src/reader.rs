@@ -14,8 +14,8 @@
 //!    ignored; any other line that is not JSON is an error.
 
 use crate::v1::{
-    CiRun, DiagnosisDoc, Diff, End, Exploration, Inspect, InspectError, Run, Shrink, Start,
-    Timeline, VersionsDoc,
+    CiFindingEvent, CiLedger, CiRun, DiagnosisDoc, Diff, End, Exploration, Inspect, InspectError,
+    Run, Shrink, Start, Timeline, VersionsDoc,
 };
 use crate::{EVENTS, EXPLORATION_DOC, RUN_DOC};
 use serde_json::Value;
@@ -46,6 +46,9 @@ pub enum Record {
     CiRun(Box<CiRun>),
     /// `versions.json` (`hydo versions`, added in Milestone 221).
     Versions(Box<VersionsDoc>),
+    /// The history store: `findings.jsonl` and `state.json` (`hydo ci record`; added in stage 2).
+    CiFindingEvent(Box<CiFindingEvent>),
+    CiLedger(Box<CiLedger>),
 }
 
 /// A record the reader skipped (rule 3).
@@ -149,6 +152,8 @@ pub fn record(v: Value) -> Result<Option<Record>, String> {
         "inspect-error" => Record::InspectError(de(v, &ty)?),
         "ci-run" => Record::CiRun(de(v, &ty)?),
         "versions" => Record::Versions(de(v, &ty)?),
+        "finding-event" => Record::CiFindingEvent(de(v, &ty)?),
+        "ci-ledger" => Record::CiLedger(de(v, &ty)?),
         _ => return Ok(None),
     }))
 }

@@ -1,0 +1,11 @@
+# Findings this project accepts: `hydo ci run` reports each as accepted and never fails a
+# run on it (hydo guide ci). Add entries with `hydo ci accept <key> --reason ...`; remove an
+# entry when a run reports that it no longer reproduces.
+format: 1
+accepted:
+  - key: f1:invariant:5ef675c8c9
+    title: "VIOLATION [redis.acked_writes_survive] key k:# lost"
+    schedule: "disk=cut dseed=70c9101f818fe74 | run C=14"
+    reason: "appendfsync everysec: Redis documents the loss of up to one second of acknowledged writes"
+    who: ""
+    date: "2026-11-13"

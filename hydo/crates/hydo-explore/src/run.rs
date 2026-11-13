@@ -2224,6 +2224,11 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     let mut t_sweep = 0.0;
     let mut rep: HashMap<String, Res> = HashMap::new();
     let mut nrefused: u64 = 0;
+    // `--time-limit` (stage 2 of docs/design/ci.md): only a plain seed range has one
+    let limit = a.time_limit.filter(|_| pre_res.is_none());
+    let planned = seeds.len();
+    let mut ndone = seeds.len();
+    let mut cut = false;
     let (shrunk, errors, res_all) = std::thread::scope(|sc| {
         let pool = &pool;
         let mut chains = Vec::new();
@@ -2295,7 +2300,29 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                 }
                 next += 1;
             }
+            // the time limit: no first run after the seeds finalized so far (the cut is at a
+            // seed boundary in seed order, so what was explored does not depend on which runs
+            // a fast or slow machine had in flight; their results are dropped)
+            if let (Some(l), Some(b)) = (limit, batch.as_mut()) {
+                if !cut && next < slot.len() && t0.elapsed().as_secs_f64() >= l {
+                    b.cancel();
+                    cut = true;
+                    eprintln!(
+                        "hydo explore: --time-limit {l} s: stopped before seed {} ({} of {} seeds explored)",
+                        seeds[next],
+                        next,
+                        seeds.len()
+                    );
+                }
+            }
         }
+        if cut {
+            ndone = next;
+            for s in slot.iter_mut().skip(next) {
+                *s = None;
+            }
+        }
+        let seeds = &seeds[..ndone];
         t_sweep = match &fc_info {
             Some((i, _)) => {
                 i["stage1_wall_s"].as_f64().unwrap_or(0.0)
@@ -2362,6 +2389,17 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
             (agg, an_runs, done)
         });
         (shrunk, errors, all)
+    });
+    let seeds: Vec<i64> = seeds[..ndone].to_vec();
+    let time_limit = limit.map(|l| hydo_results::TimeLimit {
+        limit_s: l,
+        planned: planned as u64,
+        explored: ndone as u64,
+        explored_seeds: match (seeds.first(), seeds.last()) {
+            (Some(a), Some(b)) => Some(format!("{a}-{b}")),
+            _ => None,
+        },
+        cut,
     });
     // the re-runs, in seed order
     let mut failures = Vec::new();
@@ -2444,6 +2482,7 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
             (qw > 0.0).then(|| round1(qw))
         },
         cache_hits: (cache_hits > 0).then_some(cache_hits as u64),
+        time_limit,
         ..Summary::default()
     };
     if nrefused > 0 {

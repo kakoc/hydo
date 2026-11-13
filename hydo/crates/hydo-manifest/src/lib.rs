@@ -27,6 +27,7 @@
 
 pub mod ci;
 pub mod composer;
+pub mod known_findings;
 pub mod messages;
 pub mod migrate;
 pub mod model;

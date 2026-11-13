@@ -1,0 +1,57 @@
+{
+  "v": 1,
+  "type": "ci-ledger",
+  "project": "redis",
+  "branches": {
+    "main": {
+      "findings": {
+        "f1:invariant:5ef675c8c9": {
+          "key": "f1:invariant:5ef675c8c9",
+          "kind": "invariant",
+          "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+          "state": "open",
+          "accepted": false,
+          "minimal": "disk=cut dseed=d82f06888e3f4c60 | run C=18 R=everysec",
+          "schedules": [
+            "disk=cut dseed=d82f06888e3f4c60 | run C=18 R=everysec",
+            "disk=lying:4 dseed=3ad321e37b2251e8 | run C=10"
+          ],
+          "first_seen": "85aaf609fbd3",
+          "last_seen": "85aaf609fbd3",
+          "seen": 1
+        },
+        "f1:run-error:e268a28f36": {
+          "key": "f1:run-error:e268a28f36",
+          "kind": "run-error",
+          "title": "ERROR restart after the faults (redis)",
+          "state": "open",
+          "accepted": false,
+          "minimal": "disk=ioerr:3 dseed=689f05f483a044f2 | run K=redis@12+1 N=redis@6-8:loss,13%,duplicate,49%",
+          "schedules": [
+            "disk=ioerr:3 dseed=689f05f483a044f2 | run K=redis@12+1 N=redis@6-8:loss,13%,duplicate,49%"
+          ],
+          "first_seen": "85aaf609fbd3",
+          "last_seen": "85aaf609fbd3",
+          "seen": 1
+        },
+        "f1:run-error:fb45877380": {
+          "key": "f1:run-error:fb45877380",
+          "kind": "run-error",
+          "title": "ERROR redis restart failed",
+          "state": "open",
+          "accepted": false,
+          "minimal": "disk=ioerr:3 dseed=724427aafa8ad21f | run K=redis@11+4",
+          "schedules": [
+            "disk=ioerr:3 dseed=724427aafa8ad21f | run K=redis@11+4"
+          ],
+          "first_seen": "85aaf609fbd3",
+          "last_seen": "85aaf609fbd3",
+          "seen": 1
+        }
+      },
+      "last_run": "local:20261113T223515",
+      "last_commit": "85aaf609fbd3",
+      "runs": 1
+    }
+  }
+}

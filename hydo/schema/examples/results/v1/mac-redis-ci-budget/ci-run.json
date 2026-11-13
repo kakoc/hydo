@@ -1,0 +1,162 @@
+{
+  "v": 1,
+  "type": "ci-run",
+  "id": "local:20261113T223118",
+  "ci": {
+    "name": "local"
+  },
+  "project": {
+    "name": "redis",
+    "dir": ".",
+    "manifest": "hydo/hydo.yaml",
+    "manifest_sha256": "643e246186d3b9ac45bddccc3746d9024433110e0d2e763ab9c66972c59eaa0f"
+  },
+  "trigger": "pull_request",
+  "commit": "99aa62966cbf048e5d54f2c7a928e1f3fdad2c27",
+  "branch": "everysec",
+  "base": {
+    "commit": "85aaf609fbd3bf9af05fbe9d877b629731682e36",
+    "findings_from": "explored",
+    "image": {
+      "input_key": "ik1-7ff48d474be8df86024f0b9e613a8ee0",
+      "sha256": "d8d408b7c0ae3bf2703a03ec61a7cc8e1aa123899fbc65b94b8f27725a61a647",
+      "reused": true,
+      "given": false,
+      "path": "/tmp/ci/cache/images/ik1-7ff48d474be8df86024f0b9e613a8ee0/explore-ob-redis-arm64.cpio.gz"
+    }
+  },
+  "hydo": {
+    "version": "0.3.1",
+    "commit": "2dd5eaf58cb409bbca3581771766138ad39b45ef",
+    "epoch": 2
+  },
+  "engine": {
+    "backend": "hvm",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": 1,
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "image": {
+    "input_key": "ik1-0f0dea02670e5d728a964dc0dc18cd06",
+    "sha256": "a867ab1388f934002d22f1d4dbad2b78329677d78ce1b2d95556f50e15fea8dd",
+    "reused": true,
+    "given": false,
+    "path": "/tmp/ci/cache/images/ik1-0f0dea02670e5d728a964dc0dc18cd06/explore-ob-redis-arm64.cpio.gz"
+  },
+  "budget": {
+    "mode": "pr",
+    "seeds": "1-20",
+    "strategy": "swarm",
+    "options": [],
+    "time_limit_s": 90.0,
+    "completed_seeds": "1-8",
+    "planned": 20,
+    "completed": 8,
+    "partial": true
+  },
+  "summary": {
+    "runs": 25,
+    "failures": 5,
+    "findings": 1,
+    "states": {
+      "accepted": 1
+    },
+    "replays": 2,
+    "vacuous_passes": 0,
+    "regressions": {
+      "replayed": 0,
+      "as_expected": 0
+    },
+    "wall_s": 78.2
+  },
+  "coverage": {
+    "faults": {
+      "C": 5,
+      "K": 2,
+      "N": 4,
+      "disk": 6
+    },
+    "services": {
+      "redis": 6
+    },
+    "properties": {
+      "declared": 6,
+      "reached": 1,
+      "not_exercised": [
+        "fault.paused",
+        "fault.pause_mid_request",
+        "fault.clock_back",
+        "fault.clock_fwd",
+        "fault.oneway_req",
+        "fault.oneway_resp"
+      ]
+    }
+  },
+  "findings": [
+    {
+      "key": "f1:invariant:5ef675c8c9",
+      "kind": "invariant",
+      "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "state": "accepted",
+      "proof": "base-replay-ok",
+      "minimal": "disk=lying:1 dseed=eac0b527c5ac67d9 | run C=20",
+      "schedules": [
+        "disk=lying:1 dseed=eac0b527c5ac67d9 | run C=20",
+        "disk=cut dseed=dd8d1ecadadb959b | run C=9"
+      ],
+      "fp": "ab8e119a5b359694",
+      "classes": [
+        "lying-disk",
+        "unsafe-knob"
+      ],
+      "repro": "`hydo run --image /tmp/ci/cache/images/ik1-0f0dea02670e5d728a964dc0dc18cd06/explore-ob-redis-arm64.cpio.gz \"disk=lying:1 dseed=eac0b527c5ac67d9 | run C=20\"`",
+      "replays": [
+        {
+          "on": "base",
+          "schedule": "disk=lying:1 dseed=eac0b527c5ac67d9 | run C=20",
+          "verdict": "HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "b270768249035c05",
+          "dir": "replays/001-base"
+        },
+        {
+          "on": "head",
+          "schedule": "disk=lying:1 dseed=eac0b527c5ac67d9 | run C=20",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+          "fp": "ab8e119a5b359694",
+          "key": "f1:invariant:5ef675c8c9",
+          "dir": "replays/002-head"
+        }
+      ],
+      "diff": "the first difference in what the checks judge (assertion level, after `hydo-ob: redis ready after 1 polls`) is `redis.acked_writes_survive: ok: A true B false` (A is the base, B this change)",
+      "source": "explored",
+      "accepted": {
+        "reason": "appendfsync everysec: Redis documents the loss of up to one second of acknowledged writes",
+        "date": "2026-11-13",
+        "state": "new"
+      }
+    }
+  ],
+  "regressions": [],
+  "nondeterminism": [],
+  "outcome": {
+    "exit": 0,
+    "fail_on": [
+      "new",
+      "reappeared",
+      "regression"
+    ],
+    "failed_by": []
+  },
+  "artifacts": {
+    "exploration": "explore/exploration.json",
+    "base_exploration": "base-explore/exploration.json",
+    "report": "report.md",
+    "junit": "junit.xml"
+  }
+}

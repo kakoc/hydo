@@ -6919,3 +6919,91 @@ real KVM host. The tracked Formance example keeps 30 rounds and short names. The
 were checked against the reviewed lists, the controller's corpora and six recorded hvx runs. A
 project whose lines hold other random tokens may still need `normalize:`. Open item 86 keeps
 the rest of TigerBeetle's issue 3960.
+### Milestone 223 (tentative number) — DONE (hydo in a team's CI, stage 2: accepted findings, time budgets, shards and their merge, and a history store; 2026-11-13)
+
+**Why.** Open item 67 left stage 2 of `docs/design/ci.md` unbuilt. The trial of 2026-11-13 showed
+the most pressing gap: a known failure, such as the Redis `appendfsync everysec` window, fails
+every pull request that brings it back, and a team then turns the check off.
+
+**Built** (`hydo/crates/hydo-cli/src/ci/`, `hydo ci --help`, `hydo guide ci` sections 9 to 12):
+
+1. **Accepted findings.** `hydo/known-findings.yaml` is a new versioned file
+   (`hydo_manifest::known_findings`). Its schema `hydo/schema/known-findings-v1.json` has a
+   released copy and is checked with `hydo-schema-compat`; an example is in
+   `hydo/schema/examples/known-findings/v1/`. Each entry has `key`, `title`, `schedule`,
+   `reason`, `who` and `date`. Like `ci.yaml` it is not staged into the image, and the image
+   input key leaves it out. `hydo ci accept <key> --reason ...` (src/ci/accept.rs) takes the
+   title and the minimal schedule from a recorded `ci-run.json`, and a unique prefix of a key of
+   that run is enough. It appends the entry and keeps the file's other text. `who` is written only
+   from `--who` and is empty otherwise. `hydo ci run` gives an accepted finding the state
+   `accepted` and keeps the state it would have had in `CiFinding.accepted.state`. `fail_on`
+   never fails on it, and `junit.xml` shows it as a skipped test. An entry the exploration did
+   not find is replayed with its schedule. When the schedule passes, the entry is listed in
+   `CiRun.stale_accepted` and in the report's section `Accepted findings this run did not find`.
+2. **Time budgets.** `budget:` per mode in `hydo/ci.yaml` (`10m`, `90s`, `1h30m`) or `--budget`.
+   The explorer has a new option, `--time-limit SECONDS`, for a plain seed range only. When the
+   limit has passed it cancels the first runs still queued. It keeps the seeds already finalized
+   in seed order and drops the results of runs that were in flight, so the explored seeds are
+   always the first ones of the range (`Summary.time_limit`: `planned`, `explored`,
+   `explored_seeds`, `cut`). Re-runs and shrinks of those seeds finish as usual. `hydo ci run`
+   now builds the base's image before any exploration. It keeps 15 % of the budget for replays
+   and regressions, gives this commit's exploration half of the rest when the base is explored
+   too, and explores the base over exactly the seeds this commit explored. A partial run never
+   calls a finding `fixed`: a passing replay there is `unverified` with the proof
+   `head-replay-ok-partial`. The scripted-engine scenario `time_limit_cuts_at_a_seed_boundary`
+   checks the cut, and that `--seeds 1-<explored>` gives the same first runs.
+3. **Shards.** `--shard I/N` explores the I-th of N contiguous parts of the seed range
+   (src/ci/seeds.rs; the first parts are one seed longer when the range does not divide). Each
+   shard compares its part with the base and replays its own findings; only the first replays the
+   saved regressions. `hydo ci merge` (src/ci/merge.rs) checks that the shards are one run and
+   combines them by finding key in shard order, without a VM. A shard that proved a key new by a
+   base replay makes it `new`, a key some shard's base found makes it `present`, and `fixed` needs
+   every shard. A missing shard makes the merged run partial and failing. Each shard shrinks its
+   own failures, so a signature found by two shards is shrunk twice; the merge keeps the lowest
+   shard's minimal schedule, which is the one a single run shrinks. The action has a new input,
+   `merge`, which runs `hydo ci merge` on the shards' downloaded outputs and skips the `/dev/kvm`
+   step. `hydo guide ci` section 11 has the matrix workflow; actionlint 1.7.12 and shellcheck
+   report nothing for it and for the action's scripts. It never ran on GitHub.
+4. **History.** A directory store (src/ci/history.rs), the first form of section 4.5. `hydo ci
+   record <ci-run.json> --store DIR` writes `v1/<project>/runs/<id>.json`, appends a
+   `finding-event` to `v1/<project>/findings.jsonl` for each change of state, and rewrites
+   `v1/<project>/state.json` (a `ci-ledger`, per branch). Both are results-format additions with
+   an example in `hydo/schema/examples/results/v1/mac-redis-ci-history/`. A finding seen failing
+   is `new` on the branch, or `reappeared` after `fixed`. A finding proven fixed by replay
+   becomes `fixed`, and one the run did not find keeps its state. A pull request's run needs
+   `--branch`, and a shard's run must be merged first. `hydo ci run --history DIR` reads the
+   ledger of the target branch. It replays the open findings that neither exploration found, as
+   it replays the base's findings. Such a finding is called fixed only when the base still fails
+   it the same way, and a new finding that the ledger has fixed becomes `reappeared`. `--base
+   main` now also names the base branch when no flag or CI variable does.
+
+Results-format additions: `Summary.time_limit`, `CiBudget.time_limit_s`, `completed_seeds`,
+`planned`, `completed`, `partial`, `shard` and `range`, `CiFinding.source`, `accepted` and
+`fixed_at`, `CiRun.stale_accepted`, `shards` and `history`, the states `accepted` and
+`reappeared`, and the documents `finding-event` and `ci-ledger`. `hydo/ci.yaml` format 1 adds
+`budget`. The schema checks pass against the released schemas.
+
+**Proof, on this Mac** (the Mac engine, one VM at a time, `workers: 1`, under a load average of
+about 50 from other sessions). A throwaway git repository holds the 0.3.1 release's Redis
+example, with `pr: {seeds: 1-20, strategy: swarm}`. The base commit has `appendfsync always`,
+and the change sets `appendfsync everysec`, as in the trial. The first five rows were made twice,
+once in a directory that another session deleted, with the same findings each time:
+
+| Run | Result |
+|---|---|
+| The change against the base | exit 1, `hydo: 1 new finding, 1 changed (failed)`: `VIOLATION [redis.acked_writes_survive] key k:# lost` (`f1:invariant:5ef675c8c9`), minimal schedule `disk=cut dseed=70c9101f818fe74 \| run C=14`, the base passes it; 49 runs, 4 replays, both images built |
+| `hydo ci accept f1:inv --reason ...`, committed | the entry with that key and schedule, `who: ""` |
+| The change with the entry | exit 0, `hydo: no new findings, 1 changed, 1 accepted (passed)`, both images from the image cache (the same input keys) |
+| `--budget 90s` | exit 0, `hydo: no new findings, 1 accepted, partial: 8 of 20 seeds (passed)`; the explorer stopped before seed 9, the base explored seeds 1-8, the run took 78 s |
+| `--shard 1/2`, `--shard 2/2`, `hydo ci merge` | exit 0, the same three keys with the same states and minimal schedules as the single run, and the same fault counts (`C` 12, `K` 10, `N` 13, `disk` 17); 63 runs against 49, because both shards shrank the violation |
+| A nightly run of the base commit, seeds 21-60, recorded with `hydo ci record` | 3 `new` events on `main` in `findings.jsonl` |
+| The change with `--history` | the three keys found by the explorations again, so no history finding was replayed |
+| The change with `--history --seeds 1-8` | `hydo: no new findings, 2 fixed, 1 accepted (passed)`: neither exploration found the two run errors of the nightly run; their schedules pass on the change and fail on the base (proof `head-replay-ok-base-fails`). The same keys are present on other schedules of seeds 1-20, which is the limit that section 6.1 describes: a finding can be gone from its schedules and still exist |
+
+Tests: `cargo test` of hydo-manifest, hydo-results, hydo-explore (every scripted-engine scenario,
+whose goldens did not move) and hydo's `ci::` unit tests, `cargo test -p hydo --test it docs::`,
+`cargo test -p hydo-agents --test it public_content::`, clippy and fmt. Nothing recorded moved.
+
+**Not built** (open item 67): the history page (`hydo ci page`), the `workflow_run` recorder of
+pull requests, a history branch kept by the action, budgets turned into seed counts from history,
+proposed regression files, and one shrink per signature across shards.

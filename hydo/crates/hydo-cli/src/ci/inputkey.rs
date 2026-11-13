@@ -6,8 +6,9 @@
 //!
 //! - `hydo <version> <commit>`: the builder itself, with the pins compiled into it;
 //! - `arch <x86_64|arm64>` and every `set <KEY>=<VALUE>`;
-//! - `file <path> <sha256>` for the manifest and every file of its `hydo/` folder (but `ci.yaml`,
-//!   which is not staged into the image: changing a budget keeps the image);
+//! - `file <path> <sha256>` for the manifest and every file of its `hydo/` folder (but `ci.yaml`
+//!   and `known-findings.yaml`, which are not staged into the image: changing a budget or accepting
+//!   a finding keeps the image);
 //! - `src <path> <hash>` for every `src:` path the manifest stages, a file's or a directory's
 //!   content (every file's relative path, executable bit and sha256): the content, not the git
 //!   object, so a working tree with uncommitted changes gets the key of what it builds;
@@ -152,7 +153,7 @@ pub fn input_key(i: &Inputs) -> (Vec<String>, String) {
         walk(mdir, mdir, &mut all);
         files = all
             .into_iter()
-            .filter(|(r, _, _)| r != "ci.yaml")
+            .filter(|(r, _, _)| r != "ci.yaml" && r != "known-findings.yaml")
             .map(|(r, _, _)| mdir.join(r))
             .collect();
     }
@@ -220,6 +221,12 @@ mod tests {
         assert!(k1.starts_with("ik1-") && k1.len() == 4 + 32);
         std::fs::write(d.join("hydo/ci.yaml"), "format: 1\npr: {seeds: 1-9}\n").unwrap();
         assert_eq!(k(&[]), k1, "ci.yaml is not an input of the image");
+        std::fs::write(
+            d.join("hydo/known-findings.yaml"),
+            "format: 1\naccepted: []\n",
+        )
+        .unwrap();
+        assert_eq!(k(&[]), k1, "nor are the accepted findings");
         std::fs::write(d.join("bin/app"), "v2").unwrap();
         let k2 = k(&[]);
         assert_ne!(k2, k1, "a staged file changed");

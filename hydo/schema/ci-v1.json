@@ -130,6 +130,13 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "budget": {
+          "description": "The wall time the whole CI run may take (`10m`, `90s`, `1h30m`; added in stage 2). The\nexploration stops drawing new schedules when the rest of the run would not fit, at a seed\nboundary in seed order, and the run reports the seeds it explored. Default: no limit.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false

@@ -18,6 +18,7 @@
 //!   seeds: 1-200
 //!   strategy: process
 //!   options: [--more-faults]
+//!   budget: 10m                       # stage 2: stop drawing schedules when the run would not fit
 //! fail_on: [new, reappeared, regression]
 //! ```
 
@@ -109,6 +110,11 @@ pub struct Budget {
     /// The explorer's workers; default: sized from the machine.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workers: Option<u64>,
+    /// The wall time the whole CI run may take (`10m`, `90s`, `1h30m`; added in stage 2). The
+    /// exploration stops drawing new schedules when the rest of the run would not fit, at a seed
+    /// boundary in seed order, and the run reports the seeds it explored. Default: no limit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget: Option<String>,
 }
 
 /// `hydo/ci.yaml`.
@@ -221,8 +227,39 @@ pub fn from_value(v: Value, name: &str) -> Result<CiConfig, ManifestError> {
                 )));
             }
         }
+        if let Some(s) = b.as_ref().and_then(|b| b.budget.as_deref()) {
+            if parse_duration(s).is_none() {
+                return Err(err(format!(
+                    "{name}: {m}.budget: {s:?} is not a duration like 10m, 90s or 1h30m"
+                )));
+            }
+        }
     }
     Ok(c)
+}
+
+/// A duration in seconds: `600`, `90s`, `10m`, `2h`, `1h30m`, `2m30s` (more than zero).
+pub fn parse_duration(s: &str) -> Option<f64> {
+    let s = s.trim();
+    if let Ok(n) = s.parse::<f64>() {
+        return (n.is_finite() && n > 0.0).then_some(n);
+    }
+    let (mut total, mut num) = (0.0, String::new());
+    for c in s.chars() {
+        if c.is_ascii_digit() || c == '.' {
+            num.push(c);
+            continue;
+        }
+        let n: f64 = num.parse().ok()?;
+        num.clear();
+        total += n * match c {
+            'h' => 3600.0,
+            'm' => 60.0,
+            's' => 1.0,
+            _ => return None,
+        };
+    }
+    (num.is_empty() && total > 0.0).then_some(total)
 }
 
 /// A seed range `lo-hi` (or one seed), as the explorer reads it.

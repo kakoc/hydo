@@ -274,6 +274,9 @@ fn scenario(name: &str, args: &[&str]) {
     if name == CACHE_SCENARIO {
         return cache_scenario();
     }
+    if name == TIME_LIMIT_SCENARIO {
+        return time_limit_scenario();
+    }
     let dir = scratch(name);
     let out = dir.join("out");
     let mut cmd = match std::env::var("HYDO_FAKE_EXPLORER") {
@@ -592,9 +595,79 @@ const SCENARIOS: &[(&str, &[&str])] = &[
     ),
     // no golden: cache_scenario() checks the result cache's key instead
     (CACHE_SCENARIO, &[]),
+    // no golden: time_limit_scenario() checks where the cut is
+    (TIME_LIMIT_SCENARIO, &[]),
 ];
 
 const CACHE_SCENARIO: &str = "cache_key_is_the_image_bytes";
+const TIME_LIMIT_SCENARIO: &str = "time_limit_cuts_at_a_seed_boundary";
+
+/// `--time-limit` (stage 2 of docs/design/ci.md, section 7.3) stops drawing first runs at a seed
+/// boundary in seed order: the explored seeds are the first ones of the range, whatever runs were
+/// in flight, and exploring exactly those seeds without a limit gives the same first runs.
+fn time_limit_scenario() {
+    let dir = scratch(TIME_LIMIT_SCENARIO);
+    let explore = |n: u32, seeds: &str, limit: Option<&str>| -> (serde_json::Value, Vec<String>) {
+        let out = dir.join(format!("out{n}"));
+        let mut c = Command::new(env!("CARGO_BIN_EXE_hydo-explore"));
+        c.args(["--seeds", seeds])
+            .args(IMAGE)
+            .args(["--workers", "2", "--out"])
+            .arg(&out);
+        if let Some(l) = limit {
+            c.args(["--time-limit", l]);
+        }
+        let o = c
+            .env("HYDO_FAKE_ENGINE", "1")
+            .env("HYDO_SCRIPTED_ENGINE", engine_path())
+            .env("HYDO_BUILD", &dir)
+            .env_remove("HYDO_EXPLORE_CACHE")
+            .env_remove("HYDO_QUIET_FILE")
+            .env_remove("HYDO_BLESS")
+            .env("HYDO_FAKE_HIST", "")
+            .current_dir(top())
+            .output()
+            .expect("run");
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+        let t = std::fs::read_to_string(out.join("exploration.json")).expect("exploration.json");
+        let doc: serde_json::Value = serde_json::from_str(&t).expect("json");
+        let ev = std::fs::read_to_string(out.join("events.jsonl")).expect("events.jsonl");
+        let first: Vec<String> = ev
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter(|r| r["type"] == "run" && r["role"] == "first")
+            .map(|r| format!("{} {}", r["seed"], r["fingerprints"]["fp"]))
+            .collect();
+        (doc["summary"].clone(), first)
+    };
+    // a limit that has passed when the first run comes back
+    let (s, first) = explore(1, "1-40", Some("0.000001"));
+    let tl = &s["time_limit"];
+    assert_eq!(tl["cut"], true, "{s}");
+    assert_eq!(tl["planned"], 40);
+    let n = tl["explored"].as_u64().unwrap();
+    assert!(n < 40, "{s}");
+    assert_eq!(s["schedules"], n);
+    assert_eq!(first.len() as u64, n);
+    for (i, f) in first.iter().enumerate() {
+        assert!(
+            f.starts_with(&format!("{} ", i + 1)),
+            "seed order: {first:?}"
+        );
+    }
+    if n > 0 {
+        assert_eq!(tl["explored_seeds"], format!("1-{n}"));
+        let (s2, again) = explore(2, &format!("1-{n}"), None);
+        assert!(s2.get("time_limit").is_none());
+        assert_eq!(again, first, "the same seeds give the same first runs");
+    }
+    // a limit the exploration never reaches
+    let (s3, all) = explore(3, "1-6", Some("3600"));
+    assert_eq!(s3["time_limit"]["cut"], false);
+    assert_eq!(s3["time_limit"]["explored_seeds"], "1-6");
+    assert_eq!(all.len(), 6);
+    let _ = std::fs::remove_dir_all(&dir);
+}
 
 /// The result cache (`HYDO_EXPLORE_CACHE`) answers a schedule only for the same image bytes
 /// (docs/design/ci.md section 7.2): an exploration run twice is answered from the cache the second

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hydo/known-findings.yaml, format 1",
+  "description": "`hydo/known-findings.yaml`.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "description": "The format of this file: 1.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "accepted": {
+      "description": "The accepted findings.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Accepted"
+      },
+      "default": []
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Accepted": {
+      "description": "One accepted finding.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "The finding key, `f1:<kind>:<10 hex>`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "The finding's title when it was accepted (for people; the key decides).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedule": {
+          "description": "The minimal schedule it was accepted with.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why it is expected (required).",
+          "type": "string"
+        },
+        "who": {
+          "description": "Who accepted it (optional; hydo never fills it in by itself).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "date": {
+          "description": "The day it was accepted, `YYYY-MM-DD`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "reason"
+      ]
+    }
+  },
+  "$comment": "Generated from hydo-manifest's known findings (hydo/crates/hydo-manifest/src/known_findings.rs); do not edit. Within format 1 keys are only added. HYDO_BLESS=1 cargo test -p hydo-manifest --test it ci_format:: rewrites it."
+}

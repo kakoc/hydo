@@ -22,15 +22,19 @@
 //! 7. `ci-run.json`, `report.md`, `junit.xml`, and the exit status: 0 passed, 1 failed by the
 //!    policy (`fail_on`), 2 not completed (every `hydo: ` stop in this command exits 2).
 
-use super::{env, inputkey, key, report};
+use super::{env, history, inputkey, key, report, seeds};
 use crate::ctx::{abspath, die, take, Ctx, Platform, DIE_CODE};
 use crate::runs;
 use hydo_manifest::ci::{CiConfig, FailOn};
 use hydo_results::{
     ci_state, CiArtifacts, CiBase, CiBudget, CiCoverage, CiFinding, CiHydo, CiImage,
     CiNondeterminism, CiOutcome, CiProject, CiProperties, CiRegressionCounts, CiReplay, CiRun,
-    CiSummary, CiSystem, Exploration,
+    CiStaleAcceptance, CiSummary, CiSystem, Exploration,
 };
+use report::wall;
+
+/// The part of a budget kept for the replays and the saved regressions after the explorations.
+const RESERVE: f64 = 0.15;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -68,6 +72,23 @@ fn git(dir: &Path, args: &[&str]) -> Option<String> {
         .success()
         .then(|| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .filter(|s| !s.is_empty())
+}
+
+/// The checked-out branch of a directory's repository (None for a detached head).
+pub fn git_branch_name(dir: &Path) -> Option<String> {
+    git(dir, &["rev-parse", "--abbrev-ref", "HEAD"]).filter(|b| b != "HEAD")
+}
+
+/// A finding accepted by an entry of `hydo/known-findings.yaml`: reported as accepted, with the
+/// state it would have had.
+fn accept(f: &mut CiFinding, a: &hydo_manifest::known_findings::Accepted) {
+    f.accepted = Some(hydo_results::CiAccepted {
+        reason: a.reason.clone(),
+        who: a.who.clone().unwrap_or_default(),
+        date: a.date.clone(),
+        state: f.state.clone(),
+    });
+    f.state = ci_state::ACCEPTED.into();
 }
 
 fn sha_of(p: &Path) -> Option<String> {
@@ -262,11 +283,14 @@ fn given(p: &str) -> Built {
 }
 
 /// What one CI run explores.
+#[derive(Clone)]
 struct Plan {
     seeds: String,
     strategy: String,
     options: Vec<String>,
     workers: Option<u64>,
+    /// `hydo explore --time-limit`: seconds from the explorer's start.
+    time_limit: Option<f64>,
 }
 
 /// The exploration of `image` into `dir` (in this process, as `hydo explore`).
@@ -291,6 +315,10 @@ fn explore(
     if let Some(w) = p.workers {
         a.push("--workers".into());
         a.push(w.to_string());
+    }
+    if let Some(l) = p.time_limit {
+        a.push("--time-limit".into());
+        a.push(format!("{l:.1}"));
     }
     a.extend(p.options.iter().cloned());
     println!("hydo ci: {label}: hydo explore {}", a.join(" "));
@@ -710,6 +738,11 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     let fail_on_flag = take(&mut args, "--fail-on");
     let cache_flag = take(&mut args, "--cache");
     let set_flags = take_all(&mut args, "--set");
+    let budget_flag = take(&mut args, "--budget");
+    let shard_flag = take(&mut args, "--shard");
+    // paths of the caller's directory (the run works in the project's)
+    let known_flag = take(&mut args, "--known").map(|k| abspath(Path::new(&k)));
+    let history_flag = take(&mut args, "--history").map(|h| abspath(Path::new(&h)));
     let no_base = take_flag(&mut args, "--no-base");
     if !args.is_empty() {
         die(&format!(
@@ -808,13 +841,48 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         workers: workers_flag
             .map(|w| w.parse().unwrap_or_else(|_| die(&format!("--workers {w}"))))
             .or(b.workers),
+        time_limit: None,
     };
-    if hydo_manifest::ci::parse_seeds(&plan.seeds).is_none() {
+    let Some((lo, hi)) = hydo_manifest::ci::parse_seeds(&plan.seeds) else {
         die(&format!(
             "--seeds {}: expected a range like 1-200",
             plan.seeds
-        ));
-    }
+        ))
+    };
+    // --shard I/N: the I-th of N contiguous parts of the range (src/ci/seeds.rs)
+    let range = plan.seeds.clone();
+    let mut plan = plan;
+    let shard = shard_flag.map(|s| {
+        let (i, n) = seeds::parse_shard(&s)
+            .unwrap_or_else(|| die(&format!("--shard {s}: expected I/N with 1 <= I <= N")));
+        let (a, b) = seeds::shard_of(lo, hi, i, n).unwrap_or_else(|| {
+            die(&format!(
+                "--shard {s}: the range {range} has fewer than {n} seeds"
+            ))
+        });
+        plan.seeds = format!("{a}-{b}");
+        (i, n)
+    });
+    let budget_s: Option<f64> = budget_flag.or(b.budget.clone()).map(|d| {
+        hydo_manifest::ci::parse_duration(&d).unwrap_or_else(|| {
+            die(&format!(
+                "--budget {d}: expected a duration like 10m, 90s or 1h30m"
+            ))
+        })
+    });
+    let known_given = known_flag.is_some();
+    let known_path =
+        known_flag.unwrap_or_else(|| project.join(hydo_manifest::known_findings::DEFAULT_PATH));
+    let accepted_list = if known_path.is_file() {
+        let t = std::fs::read_to_string(&known_path)
+            .unwrap_or_else(|e| die(&format!("{}: {e}", known_path.display())));
+        hydo_manifest::known_findings::parse(&t, &known_path.display().to_string())
+            .unwrap_or_else(|e| die(&e.message))
+    } else if known_given {
+        die(&format!("no such file: {}", known_path.display()))
+    } else {
+        hydo_manifest::known_findings::KnownFindings::default()
+    };
     let fail_on: Vec<String> = match fail_on_flag {
         Some(f) => f
             .split(',')
@@ -848,7 +916,18 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         .clone()
         .or_else(|| git(&project, &["rev-parse", "--abbrev-ref", "HEAD"]))
         .filter(|b| b != "HEAD");
-    let base_branch = base_branch_flag.or(cienv.base_branch.clone());
+    // `--base main` names a branch too: the base branch, when nothing else names one
+    let base_branch = base_branch_flag.or(cienv.base_branch.clone()).or_else(|| {
+        let r = base_flag.as_deref()?;
+        let name = r.strip_prefix("origin/").unwrap_or(r);
+        [
+            format!("refs/heads/{name}"),
+            format!("refs/remotes/origin/{name}"),
+        ]
+        .iter()
+        .any(|x| git(&project, &["rev-parse", "--verify", "--quiet", x]).is_some())
+        .then(|| name.to_string())
+    });
     let resolve = |r: &str| {
         git(
             &project,
@@ -876,6 +955,24 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         ctx.backend_name(),
         base_commit.as_deref().unwrap_or("none")
     );
+    // the history store: the ledger of the pull request's target branch, or of this run's branch
+    let hist = history_flag.as_ref().map(|d| {
+        let br = base_branch
+            .clone()
+            .filter(|_| mode == "pr")
+            .or(branch.clone())
+            .unwrap_or_else(|| die("--history: this run names no branch (give --base-branch)"));
+        let pname = project_name(&manifest_of(&project, &cfg));
+        let h = history::load(d, &d.display().to_string(), &pname, &br).unwrap_or_else(|e| die(&e));
+        let s = h.summary();
+        println!(
+            "hydo ci: history {}: branch {br}, {} open and {} fixed findings",
+            d.display(),
+            s.open,
+            s.fixed
+        );
+        h
+    });
 
     // this commit's image and its exploration
     let manifest = manifest_of(&project, &cfg);
@@ -884,13 +981,9 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         None => ensure_image(&ctx, &project, &cfg, &sets, &cache, "this commit")
             .unwrap_or_else(|e| die(&e)),
     };
-    let explore_dir = out.join("explore");
-    let doc =
-        explore(&ctx, &head.path, &plan, &explore_dir, "this commit").unwrap_or_else(|e| die(&e));
-    let (mut found, nondet, route_class) = findings_of(&doc);
-    let (cov, nruns) = coverage(&doc, &explore_dir);
 
-    // the base: its image, and its findings
+    // the base: its image (before any exploration, so that a budget knows whether the base is
+    // explored too), and its findings
     let mut base = CiBase {
         branch: base_branch.clone(),
         commit: base_commit.clone(),
@@ -925,6 +1018,53 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         None
     };
     drop(_checkout.take());
+
+    // this commit's exploration, within the budget: the base is explored over the same seeds
+    // afterwards (unless its findings come from its run or its image is this one), and the
+    // replays and regressions need time too, so the exploration gets its share of what is left
+    let same_image = base_img
+        .as_ref()
+        .is_some_and(|bi| bi.ci.sha256.is_some() && bi.ci.sha256 == head.ci.sha256);
+    let base_explored = base_run.is_none() && base_img.is_some() && !same_image;
+    if let Some(total) = budget_s {
+        let left = total * (1.0 - RESERVE) - t0.elapsed().as_secs_f64();
+        let share = if base_explored { left / 2.0 } else { left };
+        plan.time_limit = Some(share.max(1.0));
+        println!(
+            "hydo ci: budget {}: {:.0} s left, {:.0} s for this commit's exploration{}",
+            wall(total),
+            left.max(0.0),
+            share.max(1.0),
+            if base_explored {
+                " and as much for the base's"
+            } else {
+                ""
+            }
+        );
+    }
+    let explore_dir = out.join("explore");
+    let doc =
+        explore(&ctx, &head.path, &plan, &explore_dir, "this commit").unwrap_or_else(|e| die(&e));
+    let (mut found, nondet, route_class) = findings_of(&doc);
+    for f in &mut found {
+        f.source = Some("explored".into());
+    }
+    let (cov, nruns) = coverage(&doc, &explore_dir);
+    // what the budget let this commit explore: the base explores exactly the same seeds
+    let tl = doc.summary.time_limit.clone();
+    let partial = tl.as_ref().is_some_and(|t| t.cut);
+    let completed_seeds = tl
+        .as_ref()
+        .map(|t| t.explored_seeds.clone().unwrap_or_default());
+    let base_plan = Plan {
+        seeds: completed_seeds
+            .clone()
+            .filter(|_| partial)
+            .unwrap_or_else(|| plan.seeds.clone()),
+        time_limit: None,
+        ..plan.clone()
+    };
+
     let mut base_findings: Vec<CiFinding> = Vec::new();
     let mut base_explore = None;
     if let Some(f) = &base_run {
@@ -943,12 +1083,15 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     } else if let Some(bi) = &base_img {
         base.missing = None;
         base.findings_from = "explored".into();
-        if bi.ci.sha256.is_some() && bi.ci.sha256 == head.ci.sha256 {
+        if same_image {
             println!("hydo ci: the base's image is this commit's (the same bytes): its findings are the same");
             base_findings = found.clone();
+        } else if partial && completed_seeds.as_deref() == Some("") {
+            println!("hydo ci: the budget let this commit explore no seed: the base explores none either");
         } else {
             let d = out.join("base-explore");
-            let bdoc = explore(&ctx, &bi.path, &plan, &d, "the base").unwrap_or_else(|e| die(&e));
+            let bdoc =
+                explore(&ctx, &bi.path, &base_plan, &d, "the base").unwrap_or_else(|e| die(&e));
             base_findings = findings_of(&bdoc).0;
             base_explore = Some("base-explore/exploration.json".to_string());
         }
@@ -1055,9 +1198,29 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         f.proof = Some(proof.into());
     }
     let head_keys: BTreeSet<String> = found.iter().map(|f| f.key.clone()).collect();
+    // the history store's open findings of the branch that neither exploration found: replayed
+    // here like the base's (docs/design/ci.md section 6.1: the ledger is a regression suite that
+    // maintains itself)
+    let base_keys: BTreeSet<String> = base_findings.iter().map(|f| f.key.clone()).collect();
+    let from_history: Vec<CiFinding> = hist
+        .as_ref()
+        .map(|h| {
+            h.open()
+                .into_iter()
+                .filter(|f| !head_keys.contains(&f.key) && !base_keys.contains(&f.key))
+                .collect()
+        })
+        .unwrap_or_default();
     let mut gone = Vec::new();
-    for b in base_findings.iter().filter(|b| !head_keys.contains(&b.key)) {
-        let mut g = b.clone();
+    let replay_these: Vec<(CiFinding, &str)> = base_findings
+        .iter()
+        .filter(|b| !head_keys.contains(&b.key))
+        .map(|b| (b.clone(), "base"))
+        .chain(from_history.into_iter().map(|f| (f, "history")))
+        .collect();
+    for (b, source) in replay_these {
+        let mut g = b;
+        g.source = Some(source.into());
         g.replays.clear();
         g.diff = None;
         let mut scheds = g.schedules.clone();
@@ -1088,7 +1251,7 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
             // the same pair of verdicts is already reported from this change's side
             continue;
         }
-        let (state, proof) = if same {
+        let (mut state, mut proof) = if same {
             (ci_state::PRESENT, "head-replay-fails")
         } else if other {
             (ci_state::CHANGED, "head-replay-other")
@@ -1097,6 +1260,28 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         } else {
             (ci_state::UNVERIFIED, "head-not-replayed")
         };
+        if state == ci_state::FIXED && source == "history" {
+            // the history may be older than the base: fixed by this change only when the base
+            // still fails it the same way
+            if let Some(bi) = base_img.as_ref() {
+                let (r, keys, _) = rp.run(bi, "base", &g.minimal);
+                let base_fails = keys.contains(&g.key);
+                g.replays.push(r);
+                if !base_fails {
+                    println!(
+                        "hydo ci: {} (open in the history) passes on the base too: not this change's",
+                        g.title
+                    );
+                    continue;
+                }
+                proof = "head-replay-ok-base-fails";
+            }
+        }
+        if state == ci_state::FIXED && partial {
+            // a run its budget cut short never calls a finding fixed (docs/design/ci.md 7.3)
+            state = ci_state::UNVERIFIED;
+            proof = "head-replay-ok-partial";
+        }
         g.state = state.into();
         g.proof = Some(proof.into());
         gone.push(g);
@@ -1111,8 +1296,86 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     }
     found.extend(gone);
 
-    // the saved regressions
-    let regressions = runs::replay_regressions(&ctx, &head.path, &out.join("regressions"));
+    // reappeared: recorded fixed on the branch, failing again here, and the base passes it
+    if let Some(h) = &hist {
+        for f in found
+            .iter_mut()
+            .filter(|f| f.state == ci_state::NEW && f.source.as_deref() == Some("explored"))
+        {
+            if let Some(at) = h.fixed_at(&f.key) {
+                f.state = ci_state::REAPPEARED.into();
+                f.fixed_at = Some(at);
+            }
+        }
+    }
+
+    // accepted findings (hydo/known-findings.yaml): reported, never failing; an entry this run
+    // did not find is replayed with its schedule, to tell whether the entry can go
+    let mut stale = Vec::new();
+    for a in &accepted_list.accepted {
+        let stale_of = |why: &str, replay: Option<CiReplay>| CiStaleAcceptance {
+            key: a.key.clone(),
+            title: a.title.clone().unwrap_or_default(),
+            reason: a.reason.clone(),
+            why: why.into(),
+            replay,
+        };
+        if let Some(f) = found.iter_mut().find(|f| f.key == a.key) {
+            if f.state == ci_state::FIXED {
+                stale.push(stale_of(
+                    "replay-ok",
+                    f.replays.iter().rev().find(|r| r.on == "head").cloned(),
+                ));
+            } else {
+                accept(f, a);
+            }
+            continue;
+        }
+        let Some(s) = a.schedule.as_deref() else {
+            stale.push(stale_of("not-replayed", None));
+            continue;
+        };
+        let (r, keys, _) = rp.run(&head, "head", s);
+        if keys.contains(&a.key) {
+            let mut f = CiFinding {
+                key: a.key.clone(),
+                kind: a.key.split(':').nth(1).unwrap_or("invariant").to_string(),
+                title: a
+                    .title
+                    .clone()
+                    .or_else(|| r.verdict.as_deref().map(hydo_explore::report::sig_key))
+                    .unwrap_or_default(),
+                state: ci_state::PRESENT.into(),
+                proof: Some("accepted-replay-fails".into()),
+                minimal: s.to_string(),
+                schedules: vec![s.to_string()],
+                fp: r.fp.clone(),
+                replays: vec![r],
+                source: Some("accepted".into()),
+                ..CiFinding::default()
+            };
+            accept(&mut f, a);
+            found.push(f);
+        } else if r.verdict.is_some() && keys.is_empty() {
+            stale.push(stale_of("replay-ok", Some(r)));
+        } else if r.verdict.is_some() {
+            stale.push(stale_of("replay-other", Some(r)));
+        } else {
+            stale.push(stale_of("not-replayed", Some(r)));
+        }
+    }
+
+    // the saved regressions (with shards, the first shard replays them: they are the same runs
+    // on every shard)
+    let regressions = if shard.is_none_or(|(i, _)| i == 1) {
+        runs::replay_regressions(&ctx, &head.path, &out.join("regressions"))
+    } else {
+        println!(
+            "hydo ci: shard {}: the first shard replays the saved regressions",
+            plan.seeds
+        );
+        Vec::new()
+    };
 
     let mut r = CiRun {
         id: format!(
@@ -1158,6 +1421,21 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
             seeds: plan.seeds.clone(),
             strategy: plan.strategy.clone(),
             options: plan.options.clone(),
+            time_limit_s: budget_s,
+            completed_seeds: completed_seeds
+                .clone()
+                .or_else(|| shard.map(|_| plan.seeds.clone())),
+            planned: tl
+                .as_ref()
+                .map(|t| t.planned)
+                .or_else(|| shard.map(|_| doc.summary.schedules)),
+            completed: tl
+                .as_ref()
+                .map(|t| t.explored)
+                .or_else(|| shard.map(|_| doc.summary.schedules)),
+            partial,
+            shard: shard.map(|(i, n)| format!("{i}/{n}")),
+            range: shard.map(|_| range.clone()),
         },
         summary: CiSummary {
             runs: nruns,
@@ -1181,6 +1459,8 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
             report: "report.md".into(),
             junit: "junit.xml".into(),
         },
+        stale_accepted: stale,
+        history: hist.as_ref().map(|h| h.summary()),
         ..CiRun::default()
     };
     r.summary.wall_s = (t0.elapsed().as_secs_f64() * 10.0).round() / 10.0;

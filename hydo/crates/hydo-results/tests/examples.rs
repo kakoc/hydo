@@ -209,6 +209,12 @@ fn note(s: &mut Seen, r: &Record) {
         Record::Versions(_) => {
             s.types.insert("versions".into());
         }
+        Record::CiFindingEvent(_) => {
+            s.types.insert("finding-event".into());
+        }
+        Record::CiLedger(_) => {
+            s.types.insert("ci-ledger".into());
+        }
     }
 }
 
@@ -276,6 +282,8 @@ fn every_example_parses_and_is_valid() {
         "inspect sockets",
         "inspect-error",
         "ci-run",
+        "finding-event",
+        "ci-ledger",
     ] {
         assert!(seen.types.contains(t), "no example has a {t} record");
     }

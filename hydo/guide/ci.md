@@ -13,7 +13,8 @@ system. The CI system only runs it, keeps its files and, if you want, posts its 
 4. It replays every finding's minimal schedule on the other commit's image, so each finding gets
    a state that a run proves (the table in section 7).
 5. It replays the saved regressions in `hydo/regressions/`.
-6. It writes `ci-run.json`, `report.md` and `junit.xml` into its output directory (default
+6. It marks the findings that `hydo/known-findings.yaml` accepts (section 9).
+7. It writes `ci-run.json`, `report.md` and `junit.xml` into its output directory (default
    `hydo-ci`).
 
 Its exit status is 0 when the run passed and 1 when it failed by the project's policy
@@ -49,6 +50,7 @@ pr:                             # what a pull request explores
   strategy: process
   options: [--protocol-faults]
   workers: 2
+  budget: 10m                   # the wall time the whole run may take (section 10)
 push: {seeds: 1-60}             # a push to a branch (default: as pr)
 nightly: {seeds: 1-2000}        # a scheduled run (default: as push)
 fail_on: [new, reappeared, regression]
@@ -182,7 +184,9 @@ its numbers as `#`. Rewording a check's message keeps the key when the check pri
 | `present` | Still there. | Found on the base and here. |
 | `changed` | Both fail, differently. | One commit's schedule fails on the other commit with another finding key. |
 | `fixed` | This change removed it. | Found on the base; its minimal schedules pass here, and this run's exploration did not find it. |
-| `unverified` | Not decided. | A replay was refused or gave no result. A person should look. |
+| `unverified` | Not decided. | A replay was refused or gave no result. A person should look. A run that its budget cut short (section 10) calls a finding whose replay passes `unverified`, not `fixed`. |
+| `reappeared` | Fixed earlier, back now. | Found here, the base passes its schedule, and the history (section 12) recorded it fixed on the branch. |
+| `accepted` | A person decided it is expected. | Its key is in `hydo/known-findings.yaml` (section 9). `ci-run.json` keeps the state it would have had. |
 
 A finding is never called fixed because an exploration did not find it: only a passing replay
 proves that.
@@ -195,3 +199,127 @@ hydo ci compare base/ci-run.json head/ci-run.json --out compared/
 
 It compares by finding key only and runs nothing, so it calls nothing `fixed`: a base finding
 that the head did not find is listed as `unverified`.
+
+## 9. Accepting a finding
+
+A finding the team expects, for example a documented trade-off of a setting, would otherwise
+fail every pull request that brings it back. Accept it by its key from a recorded run:
+
+```sh
+hydo ci accept f1:invariant:5ef6 --reason "appendfsync everysec: Redis documents the loss of up to one second of writes"
+```
+
+- The key comes from `ci-run.json` or `junit.xml`. A unique prefix of a key of the run is enough.
+- `--from` names the run (default `hydo-ci/ci-run.json`). The run gives the entry its title and
+  minimal schedule.
+- `--who NAME` records who accepted it. Without the flag the field stays empty; hydo never fills
+  it from a login or a host name.
+- The entry goes into `hydo/known-findings.yaml`. Commit the file with the change it belongs to,
+  so reviewers see it.
+
+The file is not put into the image, so accepting a finding keeps the image and its fingerprints.
+Its schema is `hydo/schema/known-findings-v1.json` in hydo's repository:
+
+```yaml
+format: 1
+accepted:
+  - key: f1:invariant:5ef675c8c9
+    title: "VIOLATION [redis.acked_writes_survive] key k:# lost"
+    schedule: "disk=cut dseed=70c9101f818fe74 | run C=14"
+    reason: "appendfsync everysec: Redis documents the loss of up to one second of writes"
+    who: ""
+    date: "2026-11-13"
+```
+
+`hydo ci run` lists an accepted finding in the report's section `Accepted`, with the state it
+would have had, and `fail_on` never fails on it. In `junit.xml` it is a skipped test. When the
+exploration does not find an accepted key, the run replays the entry's schedule. If the schedule
+passes, the report's section `Accepted findings this run did not find` names the entry, so that
+the file can be cleaned.
+
+## 10. Time budgets
+
+`budget:` in the settings of a run's mode (`pr`, `push`, `nightly`), or `--budget 10m`, is the
+wall time the whole run may take. It accepts `90s`, `10m`, `1h30m` or a number of seconds.
+
+- The seed range stays fixed. The exploration stops drawing new schedules when the rest of the
+  run would not fit: the base's exploration of the same seeds, the replays, and the regressions.
+- The cut is at a seed boundary in seed order. The explored seeds are always the first ones of
+  the range, so they do not depend on how fast the runner is.
+- The base explores exactly the seeds the head explored, so the comparison stays like for like.
+- The report says how far the run got, for example `Partial run: 7 of 20 seeds explored (seeds
+  1-7)`. `--seeds 1-7` explores the same schedules again on any machine.
+- A partial run never calls a finding `fixed`, because part of the range was not explored.
+
+The explorer's own option is `hydo explore --time-limit SECONDS`, with the same cut.
+
+## 11. Shards
+
+`--shard I/N` explores the I-th of N contiguous parts of the seed range, so N jobs share one run.
+Each shard compares its part with the base and replays its own findings. Only the first shard
+replays the saved regressions. `hydo ci merge` makes one `ci-run.json`, one `report.md` and one
+`junit.xml` from the shards, by finding key, in shard order. It runs no VM:
+
+```sh
+hydo ci run --base main --shard 1/2 --out shard-1
+hydo ci run --base main --shard 2/2 --out shard-2
+hydo ci merge shard-1 shard-2 --out hydo-ci
+```
+
+A missing shard makes the merged run partial, and the merged run then fails. On GitHub Actions a
+matrix gives the shards, and the action's `merge` input runs the merge:
+
+```yaml
+jobs:
+  shard:
+    runs-on: ubuntu-24.04
+    strategy: {fail-fast: false, matrix: {shard: [1, 2, 3]}}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: kakoc/hydo/action@v1
+        with:
+          hydo-version: 0.3.1
+          args: --shard ${{ matrix.shard }}/3
+          comment: "false"
+          artifact-name: hydo-shard-${{ matrix.shard }}
+  merge:
+    needs: shard
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: {pattern: hydo-shard-*, path: shards}
+      - uses: kakoc/hydo/action@v1
+        with:
+          hydo-version: 0.3.1
+          merge: shards/*
+```
+
+A shard job fails by `fail_on` for its own part of the range. The merge job's result is the
+run's result.
+
+## 12. History across runs
+
+The history store is a directory that keeps the findings of a branch across runs. A team keeps it
+in a branch of its own repository, for example `hydo-history`, checked out next to the code. hydo
+writes only files there; the workflow commits and pushes them.
+
+```sh
+hydo ci record hydo-ci --store ../hydo-history          # after a push or a nightly run of main
+hydo ci run --base main --history ../hydo-history       # in a pull request
+```
+
+- `hydo ci record` adds `ci-run.json` to `v1/<project>/runs/`. It appends each change of a
+  finding's state to `v1/<project>/findings.jsonl` and rewrites `v1/<project>/state.json`.
+- A finding that failed is `new` on the branch the first time, and `reappeared` when the history
+  had it fixed. A finding the run proved fixed by replay becomes `fixed`. A finding the run did not
+  find keeps its state: absence after a bounded search proves nothing.
+- It records the runs of the branch itself. A pull request's run needs `--branch NAME`, and a
+  shard's run must be merged first.
+- `hydo ci run --history DIR` reads the ledger of the pull request's target branch. It replays
+  every open finding that neither exploration found, so a finding of a nightly run is checked on
+  every pull request. A finding the history has fixed that this change brings back is
+  `reappeared`.
+
+Record only from trusted runs: a pull request from a fork must not get a token that can push to
+the history branch.

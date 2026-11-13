@@ -41,6 +41,13 @@
     {
       "description": "Added in Milestone 221 (`hydo versions`).",
       "$ref": "#/$defs/VersionsDoc"
+    },
+    {
+      "description": "The history store's ledger (`hydo ci record`; added in stage 2).",
+      "$ref": "#/$defs/CiFindingEvent"
+    },
+    {
+      "$ref": "#/$defs/CiLedger"
     }
   ],
   "$defs": {
@@ -2119,11 +2126,61 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "time_limit": {
+          "description": "`--time-limit` stopped drawing first runs (added in stage 2 of docs/design/ci.md): how\nfar the seed range got. Absent when the option was not given.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "schedules",
         "failures"
+      ]
+    },
+    "TimeLimit": {
+      "description": "How far an exploration with `--time-limit` got (added in stage 2 of docs/design/ci.md). The\ncut is at a seed boundary in seed order: the explored seeds are always the first `explored`\nof the range, so `--seeds <explored_seeds>` gives the same schedules again on any machine.",
+      "type": "object",
+      "properties": {
+        "limit_s": {
+          "description": "The limit, in seconds from the explorer's start.",
+          "type": "number",
+          "format": "double"
+        },
+        "planned": {
+          "description": "The seeds of the range, and the first ones explored.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "explored": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "explored_seeds": {
+          "description": "The explored seeds as a range (`1-37`); absent when none was explored.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cut": {
+          "description": "The limit stopped the exploration before the end of the range.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "limit_s",
+        "planned",
+        "explored",
+        "cut"
       ]
     },
     "TurnSweep": {
@@ -4214,6 +4271,31 @@
         },
         "artifacts": {
           "$ref": "#/$defs/CiArtifacts"
+        },
+        "stale_accepted": {
+          "description": "Entries of `hydo/known-findings.yaml` whose finding this run did not find (added in stage\n2).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiStaleAcceptance"
+          }
+        },
+        "shards": {
+          "description": "The shards a merged run was made from (`hydo ci merge`; added in stage 2).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiShardRun"
+          }
+        },
+        "history": {
+          "description": "What the run took from the history store (added in stage 2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiHistory"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -4411,6 +4493,7 @@
           "type": "string"
         },
         "seeds": {
+          "description": "The seed range this run was given (with `--shard`, the shard's part of `range`).",
           "type": "string"
         },
         "strategy": {
@@ -4422,6 +4505,57 @@
             "type": "string"
           },
           "default": []
+        },
+        "time_limit_s": {
+          "description": "The wall-time budget of the whole CI run, in seconds (`budget:` of the mode in\n`hydo/ci.yaml`, or `--budget`; added in stage 2).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "completed_seeds": {
+          "description": "The seeds explored, as ranges (`1-37`, or `1-37,101-140` for merged shards); absent when\nthe run had no budget and no shards (added in stage 2).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "planned": {
+          "description": "The seeds planned and the seeds explored (added in stage 2).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "completed": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "partial": {
+          "description": "The budget stopped the exploration before the end of its seeds, or a shard is missing\nfrom a merged run. A partial run never calls a finding `fixed` (added in stage 2).",
+          "type": "boolean",
+          "default": false
+        },
+        "shard": {
+          "description": "`--shard I/N`: this run explored the I-th of N parts of `range` (added in stage 2).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "range": {
+          "description": "The whole seed range a shard is a part of (added in stage 2).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -4658,6 +4792,31 @@
             "string",
             "null"
           ]
+        },
+        "source": {
+          "description": "Where the finding came from (added in stage 2): `explored` (this commit's exploration),\n`base` (a finding of the base replayed here), `history` (an open finding of the history\nstore replayed here) or `accepted` (an entry of `hydo/known-findings.yaml` replayed here).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "accepted": {
+          "description": "The entry of `hydo/known-findings.yaml` that accepts it (added in stage 2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiAccepted"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixed_at": {
+          "description": "The commit where the history store last recorded it fixed (a `reappeared` finding; added\nin stage 2).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -4717,6 +4876,33 @@
       "required": [
         "on",
         "schedule"
+      ]
+    },
+    "CiAccepted": {
+      "description": "An accepted finding's entry (`hydo/known-findings.yaml`; added in stage 2).",
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "who": {
+          "description": "Who accepted it, as the entry names them (empty when it names nobody).",
+          "type": "string"
+        },
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "The state the finding has without the acceptance (`new`, `present`, ...).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "state"
       ]
     },
     "CiRegression": {
@@ -4843,6 +5029,131 @@
       "required": [
         "report",
         "junit"
+      ]
+    },
+    "CiStaleAcceptance": {
+      "description": "An entry of `hydo/known-findings.yaml` whose finding this run did not find (added in stage\n2): when its saved schedule passed here, the entry can be removed from the file.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "default": ""
+        },
+        "reason": {
+          "type": "string"
+        },
+        "why": {
+          "description": "`replay-ok` (its saved schedule passed here) or `not-replayed` (the entry has no\nschedule, or the replay was refused or gave no result: only absence speaks for it).",
+          "type": "string"
+        },
+        "replay": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiReplay"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "reason",
+        "why"
+      ]
+    },
+    "CiShardRun": {
+      "description": "One shard of a merged CI run (`hydo ci merge`; added in stage 2).",
+      "type": "object",
+      "properties": {
+        "shard": {
+          "description": "`I/N`.",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "seeds": {
+          "type": "string"
+        },
+        "completed_seeds": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "failures": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "replays": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "wall_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "exit": {
+          "description": "The shard's own exit status by the policy.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "shard",
+        "id",
+        "seeds",
+        "runs",
+        "failures",
+        "replays",
+        "wall_s",
+        "exit"
+      ]
+    },
+    "CiHistory": {
+      "description": "What a CI run took from the history store (`--history`; added in stage 2).",
+      "type": "object",
+      "properties": {
+        "store": {
+          "description": "The store's directory, as given.",
+          "type": "string"
+        },
+        "branch": {
+          "description": "The branch whose record was read.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "open": {
+          "description": "The record's open findings, and its fixed ones.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fixed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "store",
+        "open",
+        "fixed"
       ]
     },
     "VersionsDoc": {
@@ -5095,6 +5406,229 @@
       "required": [
         "version",
         "outcome"
+      ]
+    },
+    "CiFindingEvent": {
+      "description": "One change of a finding's state on a branch, appended to the history store's\n`v1/<project>/findings.jsonl` by `hydo ci record` (docs/design/ci.md section 4.4; added in\nstage 2). The ledger's state is the fold of these events.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/CiFindingEventType"
+        },
+        "key": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "event": {
+          "description": "`new` (first seen on the branch), `reappeared` (seen again after `fixed`), `fixed`,\n`accepted` (a person accepted it), `unaccepted` (its entry was removed).",
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ci_run": {
+          "description": "The CI run that recorded it (its `id`).",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "minimal": {
+          "type": "string",
+          "default": ""
+        },
+        "proof": {
+          "description": "What decided it (the finding's `proof` in that run).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "engine": {
+          "description": "`<backend>/<host CPU vendor>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hydo": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_input_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "key",
+        "project",
+        "branch",
+        "event",
+        "ci_run",
+        "title"
+      ]
+    },
+    "CiFindingEventType": {
+      "description": "The `type` of this record: always `\"finding-event\"`.",
+      "type": "string",
+      "enum": [
+        "finding-event"
+      ]
+    },
+    "CiLedger": {
+      "description": "`v1/<project>/state.json` of the history store: the fold of `findings.jsonl`, rewritten by\nevery `hydo ci record` and read by `hydo ci run --history` (added in stage 2).",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/CiLedgerType"
+        },
+        "project": {
+          "type": "string"
+        },
+        "branches": {
+          "description": "By branch name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/CiLedgerBranch"
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "project"
+      ]
+    },
+    "CiLedgerType": {
+      "description": "The `type` of this record: always `\"ci-ledger\"`.",
+      "type": "string",
+      "enum": [
+        "ci-ledger"
+      ]
+    },
+    "CiLedgerBranch": {
+      "description": "One branch of the ledger (added in stage 2).",
+      "type": "object",
+      "properties": {
+        "findings": {
+          "description": "By finding key.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/CiLedgerFinding"
+          },
+          "default": {}
+        },
+        "last_run": {
+          "description": "The last recorded CI run and its commit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runs": {
+          "description": "Recorded runs.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        }
+      }
+    },
+    "CiLedgerFinding": {
+      "description": "One finding of a branch in the ledger (added in stage 2).",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "state": {
+          "description": "`open` or `fixed`.",
+          "type": "string"
+        },
+        "accepted": {
+          "description": "Accepted in `hydo/known-findings.yaml` when it was last seen.",
+          "type": "boolean",
+          "default": false
+        },
+        "minimal": {
+          "type": "string"
+        },
+        "schedules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "first_seen": {
+          "description": "The commit and the CI run where it was first seen, last seen failing, and recorded fixed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_seen": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fixed_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seen": {
+          "description": "Recorded runs that saw it failing.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "title",
+        "state",
+        "minimal"
       ]
     }
   }

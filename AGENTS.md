@@ -460,6 +460,24 @@ and `junit.xml`. `hydo ci compare` compares two recorded runs offline. The setti
 `action/action.yml` and the GitLab template `action/gitlab/hydo.gitlab-ci.yml`; `hydo guide ci`
 is the recipe for other systems.
 
+**hydo in a team's CI, stage 2 (M223).** Four parts are built in a first form:
+
+- Accepted findings: `hydo/known-findings.yaml` (format 1, `hydo/schema/known-findings-v1.json`,
+  not staged into the image) and `hydo ci accept <key> --reason ...`. An accepted finding gets
+  the state `accepted` and never fails a run. An entry whose schedule passes is listed for
+  removal.
+- Time budgets: `budget:` per mode in `hydo/ci.yaml` or `--budget`. The exploration is cut at a
+  seed boundary in seed order (`hydo explore --time-limit`), the base explores the same seeds,
+  and a partial run never calls a finding fixed.
+- Shards: `--shard I/N` takes the I-th contiguous part of the seed range. `hydo ci merge` makes
+  one run from the shards by finding key, without a VM; the action's `merge` input runs it.
+- History: `hydo ci record` writes a directory store (`v1/<project>/runs/`, `findings.jsonl`,
+  `state.json`), and `hydo ci run --history` replays the branch's open findings and marks
+  `reappeared` ones.
+
+The history page, the `workflow_run` recorder and budgets from history are not built (open item
+67).
+
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 51 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
 facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
@@ -583,8 +601,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `appendfsync everysec` failed with 2 new findings in one comment, each with its minimal
     schedule and `hydo diff`. The trial found that the action checked `/dev/kvm` before udev had
     applied its rule; fixed in `500a0b7a`. The tags `action-v1.0.0` and `v1` exist since then,
-    and `release.yml` starts only on full version tags. The GitLab template never ran. Stage 2
-    (history, accepted findings, budgets, sharding) is not built (M197).
+    and `release.yml` starts only on full version tags. The GitLab template never ran (M197).
+    Stage 2 (M223) ran only on this Mac with the Mac engine. The action's `merge` input and the
+    matrix example of `hydo guide ci` passed actionlint and shellcheck but never ran on GitHub.
+    These parts are not built:
+    - the history page (`hydo ci page`) and the `workflow_run` recorder of pull requests;
+    - a history branch that the action keeps;
+    - budgets turned into seed counts from history, and proposed regression files;
+    - one shrink per signature across shards (each shard shrinks its own).
 68. Agent environments: the guest has no network and one vCPU. There is no incremental state
     hash, so the full fingerprint costs about 0.8 s per call. A snapshot cannot be dropped, and a
     session on hvx holds only 5 branches (M199).
@@ -997,6 +1021,12 @@ build machine, before 2026-10-13.
   errors accept` writes no login name. A service that stops in a run without faults gets its own
   verdict, and the checks still run. The explorer's goldens leave out git-ignored files. Nothing
   recorded moved
+- M223 (tentative number): hydo in a team's CI, stage 2. Accepted findings
+  (`hydo/known-findings.yaml`, `hydo ci accept`), a time budget cut at a seed boundary
+  (`budget:`, `--budget`, `hydo explore --time-limit`), shards merged without a VM
+  (`--shard I/N`, `hydo ci merge`, the action's `merge` input), and a directory history store
+  (`hydo ci record`, `--history`, `reappeared`). Proven on the Mac with the Redis example's
+  `everysec` change. Nothing recorded moved
 
 ## Where to look
 

@@ -40,6 +40,9 @@ inputs:
   github-token:
     description: The token for the comment (needs pull-requests write).
     default: ${{ github.token }}
+  merge:
+    description: "Directories that hold shards' ci-run.json (hydo ci run --shard I/N), split at spaces, globs allowed; when set, the action runs hydo ci merge on them instead of hydo ci run, and needs no /dev/kvm."
+    default: ""
 
 outputs:
   exit-code:
@@ -53,6 +56,7 @@ runs:
   using: composite
   steps:
     - name: Make /dev/kvm usable
+      if: inputs.merge == ''
       shell: bash
       run: |
         # GitHub's Linux runners have KVM; the device is opened by the runner's user
@@ -104,7 +108,7 @@ runs:
         echo "$HOME/.hydo/versions/$v/bin" >> "$GITHUB_PATH"
 
     - name: Fetch the base commit
-      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      if: inputs.merge == '' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       env:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -118,14 +122,25 @@ runs:
         OUT: ${{ inputs.out }}
         MODE: ${{ inputs.mode }}
         ARGS: ${{ inputs.args }}
+        MERGE: ${{ inputs.merge }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set +e
         read -ra extra <<< "$ARGS"
-        cmd=(hydo ci run --project "$PROJECT" --out "$OUT")
-        [ -n "$MODE" ] && cmd+=(--mode "$MODE")
-        # a pull request is compared with the base branch's tip it was opened against
-        [ -n "$BASE_SHA" ] && cmd+=(--base "$BASE_SHA")
+        if [ -n "$MERGE" ]; then
+          # the shards' outputs (globs expand here), merged without a VM
+          read -ra shards <<< "$MERGE"
+          cmd=(hydo ci merge)
+          for s in "${shards[@]}"; do
+            for d in $s; do cmd+=("$d"); done
+          done
+          cmd+=(--out "$OUT")
+        else
+          cmd=(hydo ci run --project "$PROJECT" --out "$OUT")
+          [ -n "$MODE" ] && cmd+=(--mode "$MODE")
+          # a pull request is compared with the base branch's tip it was opened against
+          [ -n "$BASE_SHA" ] && cmd+=(--base "$BASE_SHA")
+        fi
         "${cmd[@]}" "${extra[@]}"
         rc=$?
         echo "exit-code=$rc" >> "$GITHUB_OUTPUT"

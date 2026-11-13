@@ -1480,6 +1480,27 @@ pub struct Summary {
     /// and they are not failures (added in Milestone 208).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refused: Option<u64>,
+    /// `--time-limit` stopped drawing first runs (added in stage 2 of docs/design/ci.md): how
+    /// far the seed range got. Absent when the option was not given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_limit: Option<TimeLimit>,
+}
+
+/// How far an exploration with `--time-limit` got (added in stage 2 of docs/design/ci.md). The
+/// cut is at a seed boundary in seed order: the explored seeds are always the first `explored`
+/// of the range, so `--seeds <explored_seeds>` gives the same schedules again on any machine.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TimeLimit {
+    /// The limit, in seconds from the explorer's start.
+    pub limit_s: f64,
+    /// The seeds of the range, and the first ones explored.
+    pub planned: u64,
+    pub explored: u64,
+    /// The explored seeds as a range (`1-37`); absent when none was explored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explored_seeds: Option<String>,
+    /// The limit stopped the exploration before the end of the range.
+    pub cut: bool,
 }
 
 /// Where an exploration's files are, relative to its directory.
@@ -1769,6 +1790,12 @@ pub mod ci_state {
     pub const FIXED: &str = "fixed";
     /// Cannot be replayed (the schedule is refused, or the replay gave no result).
     pub const UNVERIFIED: &str = "unverified";
+    /// A person decided it is expected (`hydo/known-findings.yaml`); the state it would have
+    /// had is in `CiAccepted::state` (added in stage 2).
+    pub const ACCEPTED: &str = "accepted";
+    /// Recorded fixed earlier on the branch (the history store), failing again, and not on the
+    /// base (added in stage 2).
+    pub const REAPPEARED: &str = "reappeared";
 }
 
 /// Where a CI run ran (added after 0.2.0).
@@ -1852,10 +1879,34 @@ pub struct CiHydo {
 pub struct CiBudget {
     /// `pr`, `push` or `nightly`.
     pub mode: String,
+    /// The seed range this run was given (with `--shard`, the shard's part of `range`).
     pub seeds: String,
     pub strategy: String,
     #[serde(default)]
     pub options: Vec<String>,
+    /// The wall-time budget of the whole CI run, in seconds (`budget:` of the mode in
+    /// `hydo/ci.yaml`, or `--budget`; added in stage 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_limit_s: Option<f64>,
+    /// The seeds explored, as ranges (`1-37`, or `1-37,101-140` for merged shards); absent when
+    /// the run had no budget and no shards (added in stage 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_seeds: Option<String>,
+    /// The seeds planned and the seeds explored (added in stage 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planned: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed: Option<u64>,
+    /// The budget stopped the exploration before the end of its seeds, or a shard is missing
+    /// from a merged run. A partial run never calls a finding `fixed` (added in stage 2).
+    #[serde(default)]
+    pub partial: bool,
+    /// `--shard I/N`: this run explored the I-th of N parts of `range` (added in stage 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shard: Option<String>,
+    /// The whole seed range a shard is a part of (added in stage 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range: Option<String>,
 }
 
 /// The saved regressions a CI run replayed (added after 0.2.0).
@@ -1976,6 +2027,76 @@ pub struct CiFinding {
     /// the same finding, renamed").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub renamed_from: Option<String>,
+    /// Where the finding came from (added in stage 2): `explored` (this commit's exploration),
+    /// `base` (a finding of the base replayed here), `history` (an open finding of the history
+    /// store replayed here) or `accepted` (an entry of `hydo/known-findings.yaml` replayed here).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// The entry of `hydo/known-findings.yaml` that accepts it (added in stage 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted: Option<CiAccepted>,
+    /// The commit where the history store last recorded it fixed (a `reappeared` finding; added
+    /// in stage 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixed_at: Option<String>,
+}
+
+/// An accepted finding's entry (`hydo/known-findings.yaml`; added in stage 2).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiAccepted {
+    pub reason: String,
+    /// Who accepted it, as the entry names them (empty when it names nobody).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub who: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<String>,
+    /// The state the finding has without the acceptance (`new`, `present`, ...).
+    pub state: String,
+}
+
+/// An entry of `hydo/known-findings.yaml` whose finding this run did not find (added in stage
+/// 2): when its saved schedule passed here, the entry can be removed from the file.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiStaleAcceptance {
+    pub key: String,
+    #[serde(default)]
+    pub title: String,
+    pub reason: String,
+    /// `replay-ok` (its saved schedule passed here) or `not-replayed` (the entry has no
+    /// schedule, or the replay was refused or gave no result: only absence speaks for it).
+    pub why: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay: Option<CiReplay>,
+}
+
+/// One shard of a merged CI run (`hydo ci merge`; added in stage 2).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiShardRun {
+    /// `I/N`.
+    pub shard: String,
+    pub id: String,
+    pub seeds: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_seeds: Option<String>,
+    pub runs: u64,
+    pub failures: u64,
+    pub replays: u64,
+    pub wall_s: f64,
+    /// The shard's own exit status by the policy.
+    pub exit: u64,
+}
+
+/// What a CI run took from the history store (`--history`; added in stage 2).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiHistory {
+    /// The store's directory, as given.
+    pub store: String,
+    /// The branch whose record was read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// The record's open findings, and its fixed ones.
+    pub open: u64,
+    pub fixed: u64,
 }
 
 /// One saved regression a CI run replayed (added after 0.2.0).
@@ -2066,6 +2187,107 @@ pub struct CiRun {
     pub nondeterminism: Vec<CiNondeterminism>,
     pub outcome: CiOutcome,
     pub artifacts: CiArtifacts,
+    /// Entries of `hydo/known-findings.yaml` whose finding this run did not find (added in stage
+    /// 2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stale_accepted: Vec<CiStaleAcceptance>,
+    /// The shards a merged run was made from (`hydo ci merge`; added in stage 2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shards: Vec<CiShardRun>,
+    /// What the run took from the history store (added in stage 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history: Option<CiHistory>,
+}
+
+tag!(CiFindingEventType, "finding-event");
+tag!(CiLedgerType, "ci-ledger");
+
+/// One change of a finding's state on a branch, appended to the history store's
+/// `v1/<project>/findings.jsonl` by `hydo ci record` (docs/design/ci.md section 4.4; added in
+/// stage 2). The ledger's state is the fold of these events.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiFindingEvent {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: CiFindingEventType,
+    pub key: String,
+    pub project: String,
+    pub branch: String,
+    /// `new` (first seen on the branch), `reappeared` (seen again after `fixed`), `fixed`,
+    /// `accepted` (a person accepted it), `unaccepted` (its entry was removed).
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    /// The CI run that recorded it (its `id`).
+    pub ci_run: String,
+    pub title: String,
+    #[serde(default)]
+    pub minimal: String,
+    /// What decided it (the finding's `proof` in that run).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof: Option<String>,
+    /// `<backend>/<host CPU vendor>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydo: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_input_key: Option<String>,
+}
+
+/// One finding of a branch in the ledger (added in stage 2).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiLedgerFinding {
+    pub key: String,
+    pub kind: String,
+    pub title: String,
+    /// `open` or `fixed`.
+    pub state: String,
+    /// Accepted in `hydo/known-findings.yaml` when it was last seen.
+    #[serde(default)]
+    pub accepted: bool,
+    pub minimal: String,
+    #[serde(default)]
+    pub schedules: Vec<String>,
+    /// The commit and the CI run where it was first seen, last seen failing, and recorded fixed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_seen: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixed_at: Option<String>,
+    /// Recorded runs that saw it failing.
+    #[serde(default)]
+    pub seen: u64,
+}
+
+/// One branch of the ledger (added in stage 2).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiLedgerBranch {
+    /// By finding key.
+    #[serde(default)]
+    pub findings: std::collections::BTreeMap<String, CiLedgerFinding>,
+    /// The last recorded CI run and its commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_run: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_commit: Option<String>,
+    /// Recorded runs.
+    #[serde(default)]
+    pub runs: u64,
+}
+
+/// `v1/<project>/state.json` of the history store: the fold of `findings.jsonl`, rewritten by
+/// every `hydo ci record` and read by `hydo ci run --history` (added in stage 2).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiLedger {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: CiLedgerType,
+    pub project: String,
+    /// By branch name.
+    #[serde(default)]
+    pub branches: std::collections::BTreeMap<String, CiLedgerBranch>,
 }
 
 // ------------------------------------------------------------------ versions
@@ -2220,6 +2442,9 @@ pub enum AnyV1 {
     CiRun(Box<CiRun>),
     /// Added in Milestone 221 (`hydo versions`).
     Versions(Box<VersionsDoc>),
+    /// The history store's ledger (`hydo ci record`; added in stage 2).
+    CiFindingEvent(Box<CiFindingEvent>),
+    CiLedger(Box<CiLedger>),
 }
 
 impl Run {

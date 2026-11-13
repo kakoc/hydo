@@ -6,8 +6,15 @@ CI settings in `hydo/ci.yaml`, the action under `action/`): `hydo ci run` and `h
 (`hydo/crates/hydo-cli/src/ci/`), `engine.host_cpu` in every result, the explorer cache keyed by
 the image's bytes and the engine, `hydo/ci.yaml` format 1, `ci-run.json`, the GitHub Action
 (`action/action.yml`), the GitLab template (`action/gitlab/hydo.gitlab-ci.yml`) and the generic
-recipe (`hydo guide ci`); docs/HISTORY.md has the milestone. Stages 2 to 4 are not built. It
-answers the user's question of 2026-11-08 ("is
+recipe (`hydo guide ci`); docs/HISTORY.md has the milestone. Stage 2 is built in a first form
+(docs/HISTORY.md Milestone 223, a tentative number, 2026-11-13): accepted findings
+(`hydo/known-findings.yaml`, `hydo ci accept`, the state `accepted`), a wall-time budget per kind
+of run cut at a seed boundary (`budget:`, `--budget`, `hydo explore --time-limit`), shards
+(`--shard I/N`) merged without a VM (`hydo ci merge`, which section 9 puts in stage 3), and a
+history store as a directory (`hydo ci record`, `--history`, the ledger with `new`, `fixed` and
+`reappeared`). Not built from stage 2: the history page (`hydo ci page`), the `workflow_run`
+recorder, budgets turned into seed counts from history, and proposed regression files. Stages 3
+and 4 are not built otherwise. It answers the user's question of 2026-11-08 ("is
 it scalable into a real solution? ... what was running, when, what's history, what was checked,
 found ... I don't have the whole picture of its evolution") and replaces the short "CI mode (to be
 discussed)" section of `hydo/PRODUCT.md` once the user agrees with it.

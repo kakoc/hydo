@@ -13,7 +13,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
         [--steer-batch N] [--steer-corpus N] [--steer-stop]]
        [--search state [--state-mix N] [--state-corpus N] [--state-rare N] [--state-snaps N]
-        [--state-stop]] ...";
+        [--state-stop]] [--time-limit SECONDS] ...";
 
 /// The refusal without `--image` (Milestone 146: explore.py's default, `explore-disk.img`, is a
 /// shell-init image, which hydo has not run since Milestone 145).
@@ -122,6 +122,10 @@ pub struct Args {
     pub state_snaps: i64,
     /// `--state-stop`: stop after the round of the first failure.
     pub state_stop: bool,
+    /// `--time-limit SECONDS` (stage 2 of docs/design/ci.md): stop drawing first runs once this
+    /// many seconds have passed since the explorer started, at a seed boundary in seed order (the
+    /// runs already made are re-run and shrunk as usual). Only for a plain seed range.
+    pub time_limit: Option<f64>,
 }
 
 impl Default for Args {
@@ -205,6 +209,7 @@ impl Default for Args {
             state_rare: 2,
             state_snaps: 2,
             state_stop: false,
+            time_limit: None,
         }
     }
 }
@@ -233,7 +238,7 @@ const FLAGS: [&str; 21] = [
     "state-stop",
 ];
 
-const VALUED: [&str; 55] = [
+const VALUED: [&str; 56] = [
     "seeds",
     "workers",
     "image",
@@ -289,6 +294,7 @@ const VALUED: [&str; 55] = [
     "state-corpus",
     "state-rare",
     "state-snaps",
+    "time-limit",
 ];
 
 fn choice(name: &str, v: &str, ok: &[&str]) -> Result<String, String> {
@@ -447,6 +453,18 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "state-corpus" => a.state_corpus = Some(int("state-corpus", v)?),
             "state-rare" => a.state_rare = int("state-rare", v)?,
             "state-snaps" => a.state_snaps = int("state-snaps", v)?,
+            "time-limit" => {
+                a.time_limit = Some(
+                    v.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite() && *x > 0.0)
+                        .ok_or_else(|| {
+                            format!(
+                            "argument --time-limit: invalid value: '{v}' (seconds, more than 0)"
+                        )
+                        })?,
+                )
+            }
             other => return Err(format!("unrecognized arguments: --{other}")),
         }
         i += 1;
@@ -477,6 +495,15 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "argument --state-snaps: 0 to 8 snapshots per run; --state-corpus: 1 to 48 states"
                 .into(),
         );
+    }
+    if a.time_limit.is_some()
+        && (a.sweep.is_some()
+            || a.schedule.is_some()
+            || a.steer.is_some()
+            || a.steer_match.is_some()
+            || a.search.as_deref() == Some("state"))
+    {
+        return Err("argument --time-limit: only for a plain seed range (not with --sweep, --schedule, --steer, --steer-match or --search state)".into());
     }
     if a.image.is_empty() {
         return Err(NO_IMAGE.into());
