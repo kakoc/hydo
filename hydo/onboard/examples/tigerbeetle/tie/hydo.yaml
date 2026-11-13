@@ -1,0 +1,66 @@
+# Issue 3960 of TigerBeetle, made to happen on purpose: two holds (pending transfers) whose
+# expiries fall on the same nanosecond, and an expiry pulse whose timestamp is that nanosecond.
+# TigerBeetle 0.16.29 and later then stop on `assert(expires_at <= timestamp_event)`
+# (RESULTS.md, "Issue 3960: two holds that expire on the same nanosecond"). One replica, the
+# same release binary as hydo/hydo-single.yaml.
+#
+#   sh fetch-tigerbeetle.sh 0.17.9 0.16.28
+#   hydo build tie/hydo.yaml                          # TigerBeetle 0.17.9
+#   hydo build tie/hydo.yaml --set tb=0.16.28 --out img-0.16.28
+#   hydo run "disk=none dseed=1 | run V=0"            # the replica stops, also after a restart
+#   hydo run "disk=none dseed=1 | run V=1"            # the pulse one nanosecond later: OK
+format: 1
+name: tigerbeetle-tie
+description: "TigerBeetle, one replica: two holds that expire on the same nanosecond, expired by a pulse at that nanosecond"
+hydo_version: "0.3"
+
+params:
+  tb: "0.17.9"
+
+guest:
+  ram_mib: 3072   # the replica allocates 2.1 GiB at start
+  cpu: v3         # the release binary is built for x86-64-v3 with AES-NI
+
+data:
+  size_mib: 1536  # the formatted data file is 1.06 GiB
+  dirs: [tb]
+
+root:
+  files:
+    - {src: "../bin/{{tb}}/tigerbeetle", dst: /opt/tb/tigerbeetle, mode: "0755"}
+
+env:
+  TB_ADDRESSES: "127.0.0.1:3001"
+
+errors: true
+
+services:
+  - name: tigerbeetle_0
+    setup: "[ -f /data/tb/0_0.tigerbeetle ] || /opt/tb/tigerbeetle format --cluster=0 --replica=0 --replica-count=1 /data/tb/0_0.tigerbeetle"
+    cmd: /opt/tb/tigerbeetle start --addresses=127.0.0.1:3001 --cache-grid=64MiB /data/tb/0_0.tigerbeetle
+    port: 3001
+    ready: "nc -z -w 2 127.0.0.1 3001"
+    ready_timeout: 300
+    errors: {format: none, match: "error\\(|panic"}
+
+knobs:
+  - token: V
+    name: how many nanoseconds after the tied expiry the pulse lands
+    default: "none"   # none or 0: at the tied expiry, the abort; 1 or more: later, no abort.
+                      # V=0 and V=1 run the same commands up to the last batch (an explicit
+                      # value runs the set command at the start; the default runs none)
+    values: ["none", "0", "1", "2"]
+    set: "mkdir -p /tmp/hydo && echo $HYDO_VALUE > /tmp/hydo/tie.offset"
+
+workload:
+  steps: 40
+  timeout: 300
+
+test:
+  parallel: 1
+  per_round: 1
+  round_ms: 500
+  command_timeout: 240
+  drain_timeout: 240
+
+faults: [kill, pause, clock]

@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: within=30 after=heal poll=1
+# hydo-msg: after the workload, the replica answers a lookup within 30 seconds
+. ${HYDO_WORKLOAD:-/hydo/workload}/helper_tie.sh
+tb 5 "lookup_accounts id=1" | grep -q '"id": "1"'

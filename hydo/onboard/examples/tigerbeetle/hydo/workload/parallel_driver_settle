@@ -1,0 +1,29 @@
+#!/bin/sh
+# hydo: timeout=40
+# Posts (the full amount) or voids one acknowledged hold, both drawn from HYDO_SEED. TigerBeetle
+# refuses a hold that already expired, was posted or was voided: that refusal is the answer, an
+# outcome `failed`, not an error. Sent again with the same id when no answer came within 10 s.
+. ${HYDO_WORKLOAD:-/hydo/workload}/helper_tb.sh
+W=/tmp/hydo/settle.$HYDO_CMD_ID; mkdir -p $W
+grep -E '^1[0-9]{11}$' "$HYDO_ACKED" 2>/dev/null | sort -u > $W/holds
+n=$(wc -l < $W/holds)
+[ "$n" -gt 0 ] || { echo "settle: no acknowledged hold yet"; exit 0; }
+hold=$(sed -n "$((HYDO_SEED % n + 1))p" $W/holds)
+if [ $((HYDO_SEED / 7 % 2)) = 0 ]; then
+  id=$((hold + TB_HOLD))
+  stmt="create_transfers id=$id pending_id=$hold amount=340282366920938463463374607431768211455 flags=post_pending_transfer"
+else
+  id=$((hold + 2 * TB_HOLD))
+  stmt="create_transfers id=$id pending_id=$hold flags=void_pending_transfer"
+fi
+echo $id > $W/ids
+for attempt in 1 2 3; do
+  tb_create 10 "$stmt" > $W/status
+  if [ ! -s $W/status ]; then
+    echo "$id unknown" >> "$HYDO_OUTCOMES"; echo "settle $hold: no answer (attempt $attempt)"; continue
+  fi
+  echo "settle $hold (attempt $attempt):"
+  outcomes $W/ids $W/status
+  exit $?
+done
+exit 1

@@ -324,6 +324,12 @@ to the rule that replays the client's acknowledged operations. A real ledger bug
 two transactions first use one account in two assets) showed only in the error logs. The
 example is `hydo/onboard/examples/formance-ledger` (RESULTS.md).
 
+**TigerBeetle's issue 3960 (M217).** Two holds whose expiries fall on one nanosecond, and an
+expiry pulse at that nanosecond, stop a TigerBeetle replica from 0.16.29 on. The example's `tie/`
+makes it happen with ordinary requests and the guest's clock, on hvx, every run; the stopped
+replica stops again at every restart. Blind schedules never gave a tie. The details are in the
+example's RESULTS.md (the section on issue 3960).
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -629,6 +635,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - hvx has no timing branches: its snapshots of `tj=`, `xt=`, `pp=`, `q=` and `cf=` schedules
       stay refused, so the search cannot branch towards d11.
     - A search runs on one worker, because the snapshots live in one engine process.
+86. TigerBeetle's issue 3960 (M217). The directed schedule `tie/` runs one replica only. In a
+    three-replica cluster TigerBeetle clamps request timestamps to the cluster's agreed time, so
+    the guest-clock construction does not carry over. Whether every replica stops is not
+    checked. The release binaries are stripped, so the guest shows `panic: reached unreachable
+    code` without the assert; no build with symbols ran. hydo calls the stop of a replica in a
+    run without faults `ERROR restart after the faults`, and the eventually check never runs.
+    The Mac engine cannot boot TigerBeetle (`ERROR boot: SPIN`, open item 13).
 
 ## Milestone index
 
@@ -918,6 +931,11 @@ build machine, before 2026-10-13.
   process tree (`P=workload@0~4:45`), and `hydo explore --pause-workload` draws it. etcd's flaky
   test fails on every run of one such pause without a CPU-limit model, on the Mac and on hvx; its
   neighbours pass. Qdrant's race needs a pause of one thread. Nothing recorded moved
+- M217 (tentative number): TigerBeetle's issue 3960, two holds that expire on the same
+  nanosecond. 150 blind schedules with holds gave no tie. With the guest's clock set by the
+  workload, 0.16.29, 0.16.45 and 0.17.9 stop on every run and at every restart. The pulse 1 ns
+  later passes, and so does 0.16.28. Two false findings of the new hold check fixed. Nothing recorded
+  moved
 
 ## Where to look
 

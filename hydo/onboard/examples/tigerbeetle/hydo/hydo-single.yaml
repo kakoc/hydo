@@ -15,6 +15,7 @@ params:
 guest:
   ram_mib: 3072   # the replica allocates 2.1 GiB at start
   cpu: v3         # the release binary is built for x86-64-v3 with AES-NI
+  clock_after_cut: 60   # holds expire by the clock: after a power cut it must not run backwards
 
 data:
   size_mib: 1536  # the formatted data file is 1.06 GiB

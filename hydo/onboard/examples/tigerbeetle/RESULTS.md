@@ -36,6 +36,13 @@ newest, 2026-07-06), 0.16.45 and 0.16.29, the static x86_64 binaries of the GitH
   lost at every power cut", reproducible, twice the same fingerprint), caused by what a check
   sees in the recovery boot; it is explained below and documented now.
 
+- **Does hydo reach TigerBeetle's issue 3960, two holds that expire on the same nanosecond?**
+  Not blind. In 150 explored schedules with holds and settlements, no two holds had one expiry.
+  The schedules had kills, pauses, clock steps, and thread timing. With the guest's clock set by the workload,
+  yes: one command places the tie and the expiry pulse on it, and 0.16.29, 0.16.45 and 0.17.9
+  stop on every run, twice with one fingerprint, while the pulse one nanosecond later passes and
+  0.16.28 passes. The stopped replica stops again at every restart ("Issue 3960" at the end).
+
 ## What was hunted
 
 Sources: Jepsen's analysis of TigerBeetle 0.16.11 (https://jepsen.io/analyses/tigerbeetle-0.16.11,
@@ -62,19 +69,23 @@ on 0.16.45 and 0.16.29.
 | file | what it is |
 |---|---|
 | `docker-compose.yaml` | TigerBeetle's documented three-replica Compose file, the release pinned (`TB_VERSION`, default 0.17.9) |
-| `fetch-tigerbeetle.sh` | downloads the static x86_64 binary of each release from GitHub into `bin/<version>/tigerbeetle`, checked by sha256 |
+| `fetch-tigerbeetle.sh` | downloads the static Linux binary of each release from GitHub into `bin/<version>/tigerbeetle`, checked by sha256: 0.17.9, 0.16.45, 0.16.29 and 0.16.28 for x86_64, and three arm64 binaries |
 | `hydo/hydo.yaml` | three replicas (from `hydo compose`; hand changes marked `hand:`), `network: bridge`, `params: tb` chooses the release, `guest.ram_mib: 8192` since Milestone 179 (with 3072 MiB it ran out of memory; "Three replicas in 8 GiB" below) |
 | `hydo/hydo-single.yaml` | one replica (a cluster of one), the same workload and checks: what fits |
 | `hydo/workload/helper_tb.sh` | the client: TigerBeetle's own REPL (`tigerbeetle repl --command=...`, built into the server binary, so there is no client to build), every call under `timeout`; parses both REPL answer formats (0.16 and 0.17 differ) |
 | `hydo/workload/first_accounts` | accounts 1..8 on ledger 700, before any fault |
+| `hydo/workload/parallel_driver_hold` | a batch of 1 to 8 holds (pending transfers) with timeouts of 1, 2 or 3 s, all drawn from `HYDO_SEED`; the id encodes the hold's place in its batch, its timeout, accounts and amount; sent again with the same ids when unanswered |
+| `hydo/workload/parallel_driver_settle` | posts or voids one acknowledged hold, drawn from `HYDO_SEED`; TigerBeetle's refusal of an expired or settled hold is an answer, not an error |
 | `hydo/workload/parallel_driver_transfer` | one transfer between two accounts chosen from `HYDO_SEED`; the transfer id encodes accounts and amount; an attempt without an answer in 10 s is unknown and is sent again with the same id (TigerBeetle answers `exists` if the first one was applied) |
-| `hydo/checks/final_ledger` | every acknowledged transfer is in the ledger (`query_transfers`), with what its id says; no transfer that no client sent; every account's posted debits and credits equal the sum of its transfers |
+| `hydo/checks/final_ledger` | every acknowledged transfer is in the ledger (`query_transfers`), with what its id says; no transfer that no client sent; every account's posted debits and credits equal the sum of its transfers and posted holds |
+| `hydo/checks/final_holds` | no account keeps the amount of a hold whose expiry is more than 1 s behind the guest's clock; every hold has its client's timeout; a hold is posted or voided at most once and never at or after its expiry; it prints `tb-hold <timestamp> <timeout> <settled>` for every hold |
+| `tie/` | issue 3960 made to happen: one replica and one command that places two holds on one expiry nanosecond and the pulse on it ("Issue 3960" below) |
 | `hydo/checks/eventually_serves` | after the faults, the cluster answers a lookup within 60 s |
 
 Build and run (Linux, x86_64):
 
 ```sh
-sh fetch-tigerbeetle.sh                                   # 0.17.9, 0.16.45, 0.16.29
+sh fetch-tigerbeetle.sh                                   # 0.17.9, 0.16.45, 0.16.29, 0.16.28
 hydo build hydo/hydo-single.yaml                          # one replica, 0.17.9
 hydo build hydo/hydo-single.yaml --set tb=0.16.29 --out img-0.16.29
 hydo run "disk=none dseed=1 | run"
@@ -355,3 +366,154 @@ reaches the guest; with `HYDO_KVM_SPIN_SECS=600` it spun until stopped. On hvx t
 interrupts such a loop, which is why the cluster runs there. This is a limit of the KVM engine
 for any program that busy-polls without system calls (AGENTS.md open item 45 (c)), not of the v3
 CPU; TigerBeetle stays an hvx example (docs/design/kvm-engine.md, "x86-64-v3").
+
+## Issue 3960: two holds that expire on the same nanosecond (Milestone 217)
+
+TigerBeetle's issue 3960 (opened 2026-11-10) reports a replica that stops on
+`assert(expires_at <= timestamp_event)` in `src/state_machine.zig`. It shows the stop with a
+unit test of the state machine. The questions here: does hydo find it with an ordinary workload
+of holds, can hydo replay it, and what does it do to a replica.
+
+### Holds and expiry
+
+A hold is a pending transfer. It reserves its amount (`debits_pending`, `credits_pending`) until
+a client posts it, voids it, or its timeout passes. Its expiry instant is its timestamp plus its
+timeout in seconds. A replica expires holds in a pulse: an operation that the primary sends to
+itself when its clock passes the earliest expiry, at most every 100 ms.
+
+The releases differ in the timestamps of a pulse:
+
+- Up to 0.16.28, a pulse adds nothing to the replica's timestamp, and every hold it expires gets
+  the pulse's timestamp T.
+- Since 0.16.29 (commit `499fcd4b1`, "Rework AccountBalances"), a pulse adds 8,190 ns, so T is
+  8,191 ns after the replica's previous timestamp. The pulse expires every hold whose expiry is
+  at or before T. Of its n holds, in the order of their expiry, the k-th gets the timestamp
+  T - n + k, with k from 1. The assert demands that this timestamp is not before the hold's
+  expiry.
+
+So the stop needs two or more holds with one expiry close to T. For two holds with the expiry
+e, the pulse must have T = e exactly: the first of them then gets e - 1. At T = e + 1 they get e
+and e + 1, and nothing stops. Two holds share an expiry only when their timestamps differ by a
+whole number of seconds, to the nanosecond, and their timeouts by the same number of seconds.
+
+### The blind search
+
+The single replica (`hydo/hydo-single.yaml`, 0.17.9) with the drivers of holds and settlements,
+on hvx, one worker (one VM of this session at a time), `HYDO_QUIET_FILE=/var/tmp/hydo-QUIET`.
+The image is `4eda7fdf…`.
+
+| strategy and options | seeds | runs | failures | wall |
+|---|---|---|---|---|
+| `--strategy process --more-faults` | 1-30 | 30 | 0 | 360 s |
+| `--strategy process --more-faults` | 101-130 | 30 | 0 | 361 s |
+| `--strategy process --timing` | 1-30 | 30 | 0 | 334 s |
+| `--strategy process --new-faults` (clock steps, pauses, one-way loss) | 1-30 | 30 | 0 | 335 s |
+| `--strategy random --timing --new-faults` | 201-230 | 30 | 7, all disk faults | 720 s |
+
+The seven failures of the last row need a disk fault. Five have I/O errors (`panic: latent
+sector error`), and two have a lying disk and a power cut (`VIOLATION service cannot recover`).
+Both are TigerBeetle's documented behaviour for a replica without a peer (the section
+"Explorations"). No run
+logged `reached unreachable code`. In 2,110 s of explorations, issue 3960 did not come.
+
+The statistics of the holds come from the lines `tb-hold <timestamp> <timeout> <settled>` of
+every run (the scripts are not tracked). These explorations, and the two before the fixes that
+follow, ran 95 distinct workloads with 2,983 holds in 651 batches:
+
+- No two holds shared an expiry instant, and no group of m holds had its expiries within m - 1
+  ns, the condition of the stop.
+- A tie needs two batches whose first timestamps are a whole number of seconds apart, to within
+  the batch size (at most 7 ns here). Of the 1,880 pairs of batches at least 0.5 s apart, the
+  closest was 543,848 ns away from a whole number of seconds.
+- hvx moves those distances towards whole seconds at the millisecond scale: 108 pairs were within
+  10 ms (uniform timestamps give 37.6) and 10 within 1 ms (3.8). The workload's rounds are 500
+  ms, and in a busy stretch the guest's time advances in ticks of 999,848 ns. No pair came within
+  100 µs.
+
+Two false findings came first. Both were the new check's, and both are fixed:
+
+- 19 of the first 30 runs failed `holds` after a power cut. The recovery boot's clock started at
+  `guest.clock_start` again, about 10 s before the holds' timestamps. So no hold expired in the
+  check's 4 s. `guest.clock_after_cut: 60` is in every manifest of the example now (hydo's guide
+  says so for checks that compare times across a cut).
+- 12 of the next 30 failed `holds` after a clock step backwards (`T=13:-337`). TigerBeetle
+  measures a timeout on its own timestamps, which do not run backwards. So the holds expired 337 s
+  late by the guest's clock. The check now demands only that a hold whose expiry is more than 1 s
+  behind the guest's clock holds no amount.
+
+### Issue 3960 replayed: the directed schedule
+
+`tie/` holds one replica, the same release binary, and one command,
+`tie/workload/singleton_driver_tie`. The command makes the tie and the pulse with ordinary client
+requests and the guest's clock (`date -s @<second>` sets it to a whole second, to the
+nanosecond). The method uses two facts about a replica:
+
+- A request's timestamp is the larger of the replica's last timestamp + 1 and its realtime clock,
+  and a batch of n events adds n. With the clock an hour back, the replica timestamps every
+  request by this counter alone: + 1 for a new client session, + 1 + n for a batch.
+- Under hvx, a request through a REPL session that already runs reaches the replica W ns after
+  the clock was set. W takes a few exact values, k ticks of 999,848 ns plus 1 ns. The runs saw
+  999,849, 1,999,697, 2,999,545, 3,999,393, 4,999,241 and 5,999,089 ns.
+
+An anchor is one transfer right after the command set the clock to a whole second. The command
+first makes eight anchors and takes their most frequent W. The next anchor with that W is at the
+second s1. Right after it the command sends three batches. The first has the holds Z_t for t =
+20 to 120. The second has 8,189 refused transfers (id 0, each one nanosecond of the counter). The
+third has the holds X_t. Z_t and X_t have the timeout t, so
+Z_t expires 8,214 ns before X_t (205 ns on 0.16.28, with 100 refused transfers). Then it makes
+anchors at s1 + 1, s1 + 2, and so on, until one shows the same W, at s1 + d. There the counter
+is exactly d seconds after the one at s1. One batch then puts each hold Y_t at X_t + d seconds,
+with the timeout t - d. X_t and Y_t expire on the same nanosecond e_t. Last, it sets the clock to s1 + t for t =
+20, 21, and so on. At the first second with the same W, the counter is a few nanoseconds before
+Z_t's expiry. One batch of refused transfers moves it to e_t - 8,191 + V (e_t - 1 + V on
+0.16.28). The replica sends the pulse right after that batch: T = e_t + V. `V` is a knob of the
+manifest (`V=0`, `V=1`). At a second with another W the clock runs for 0.25 s, and the replica
+expires that second's holds itself.
+
+Every schedule ran twice from a fresh boot on the bare-metal machine (hvx). Both runs gave the
+same fp and the same ctl. The image is `hydo build tie/hydo.yaml --set tb=<release>`.
+
+| release | schedule | what the command printed | verdict | fp | ctl |
+|---|---|---|---|---|---|
+| 0.17.9 | `disk=none dseed=1 \| run V=0` | the pulse at e_26; "after the pulse the replica does not answer" | `ERROR restart after the faults (tigerbeetle_0)`; the replica logs `panic: reached unreachable code`, and after hydo restarts it, again | `f291537d8a266c67` | `055ab32a376d4623` |
+| 0.17.9 | `disk=none dseed=1 \| run V=1` | the pulse at e_31 + 1; pending debits 270 before, 267 after (the three holds of second 31 expired) | OK | `9b5d243994b8a8be` | `4fbb329de97e36e5` |
+| 0.16.45 | `disk=none dseed=1 \| run V=0` | the pulse at e_20 | `ERROR restart after the faults`, the same panic twice | `171200ffc4859485` | `c589c217a3f93954` |
+| 0.16.29 | `disk=none dseed=1 \| run V=0` | the pulse at e_29 | `ERROR restart after the faults`, the same panic twice | `84620a7023e63331` | `f97be9e2af57d1e5` |
+| 0.16.28 | `disk=none dseed=1 \| run V=0` | the pulse at e_22; pending debits 297 before, 294 after (the three holds of second 22 expired) | OK | `bd504f1894c2b0fd` | `66e25a6a848119fe` |
+
+The disk images: 0.17.9 `bd43859c…`, 0.16.45 `d2fd855e…`, 0.16.29 `b08e9cf9…`, 0.16.28
+`965c14a2…`.
+
+The release binary has no debug information. The replica's log shows only `thread 119 panic:
+reached unreachable code`, then `Unable to dump stack trace: debug info stripped`. Three facts
+tie the panic to the assert of issue 3960. It comes when the pulse's timestamp is the tied expiry,
+and not one nanosecond later. It comes on the three later releases that ran, and not on 0.16.28. The
+rule of "Holds and expiry" gives the pulse's three holds Z, X, Y the timestamps e - 2, e - 1
+and e, so X gets a timestamp before its expiry.
+
+The two runs of a pair differ before the pulse. `V=0` and `V=1` change the schedule's text, so
+the guest's first values differ, and so do the W of the anchors and the second that matched. Each
+run prints its own arithmetic, so each shows where its pulse landed.
+
+The replica does not come back. After the workload, hydo restarts the stopped service. The
+restarted replica logs `state_machine_open_callback: sync_ops=0..0` and then the same panic
+(`hydo-ob: tigerbeetle_0 DIED`; hydo's diagnosis: killed by SIGABRT, status 134). A replica
+executes the operations of its write-ahead log again at start, the pulse among them, with the
+same timestamp. A client's ordinary requests, holds with timeouts and transfers, thus stop a replica
+for good once two holds share an expiry and a pulse lands on it.
+
+### Three replicas
+
+Not done. In a cluster a request's timestamp is the replica's clock clamped to the cluster's
+agreed time. The clamp ignores a step of the guest's clock until the replicas agree on a new
+time, after 2 to 20 s. The counter of the directed schedule needs a clock an hour behind the
+replica's last timestamp, so the construction does not carry over to `hydo/hydo.yaml`. The pulse
+is a replicated operation with its timestamp in its prepare, so every replica that executes it
+executes the same expiries; no run checked this.
+
+### Other engines
+
+The Mac engine cannot run TigerBeetle. With the arm64 release binary, the boot ends `ERROR boot:
+SPIN` (a guest loop without VM exits: TigerBeetle polls io_uring's completion queue from user
+space; open item 13). On the Mac itself, without hydo, 0.17.9 ran 120 s of batches of 8,000 holds
+and 101 s of TigerBeetle's own benchmark with `--transfer-pending`, and never stopped.

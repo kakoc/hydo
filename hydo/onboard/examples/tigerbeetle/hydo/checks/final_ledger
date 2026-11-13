@@ -1,7 +1,9 @@
 #!/bin/sh
-# hydo-msg: every acknowledged transfer is in the ledger with what it moved, no transfer the clients never sent is there, and every balance is the sum of its transfers
+# hydo-msg: every acknowledged transfer is in the ledger with what it moved, no transfer the clients never sent is there, and every posted balance is the sum of its transfers and posted holds
 # Reads the 8 accounts and every transfer of the ledger (query_transfers) back from the cluster,
-# then compares (awk): see helper_tb.sh for the id encoding. In the recovery boot after a power
+# then compares (awk): see helper_tb.sh for the id encoding. A hold (flags pending) and the void
+# of a hold move nothing posted; the post of a hold moves the hold's amount (final_holds checks
+# the pending side). In the recovery boot after a power
 # cut $HYDO_OUTCOMES is empty (hydo carries only the acknowledged and the failed ids), so the
 # "no client sent it" part is checked only when the outcomes are there.
 . ${HYDO_WORKLOAD:-/hydo/workload}/helper_tb.sh
@@ -17,14 +19,6 @@ case $? in 0|1) ;; *) echo "the cluster did not answer query_transfers"; exit 2 
 awk '{print $1}' "$HYDO_OUTCOMES" 2>/dev/null | sort -u > $W/attempted
 sort -u "$HYDO_ACKED" 2>/dev/null > $W/acked
 
-# JSON objects -> "id a b c" lines (accounts: id debits credits; transfers: id debit credit amount)
-flat() {
-  awk -v want="$2" '
-    /"id":/ { gsub(/[",]/, "", $2); id = $2 }
-    { k = $1; gsub(/[":]/, "", k); v = $2; gsub(/[",]/, "", v); f[k] = v }
-    /^}/ { if (want == "a") print id, f["debits_posted"], f["credits_posted"];
-           else print id, f["debit_account_id"], f["credit_account_id"], f["amount"]; delete f }' "$1"
-}
 flat $W/accounts.json a > $W/accounts
 flat $W/transfers.json t > $W/found
 [ "$(wc -l < $W/accounts)" = "$TB_ACCOUNTS" ] || { echo "lookup_accounts returned $(wc -l < $W/accounts) of $TB_ACCOUNTS accounts"; exit 1; }
@@ -38,7 +32,7 @@ awk -v acc=$W/accounts -v att=$W/attempted -v ack=$W/acked -v fnd=$W/found '
       x = id; cr = x % 10; x = int(x / 10); dr = x % 10; x = int(x / 10); amt = x % 1000
       if (a[2] != dr || a[3] != cr || a[4] != amt) { bad++; if (bad <= 5) badl = badl " " id }
       if (natt && !(id in attempted)) { phantom++; if (phantom <= 5) phl = phl " " id }
-      deb[a[2]] += a[4]; cre[a[3]] += a[4]
+      if (a[5] == "[]" || a[5] == "[post_pending_transfer]") { deb[a[2]] += a[4]; cre[a[3]] += a[4] }
     }
     for (id in acked) if (!(id in found)) { lost++; if (lost <= 5) lostl = lostl " " id }
     while ((getline l < acc) > 0) {

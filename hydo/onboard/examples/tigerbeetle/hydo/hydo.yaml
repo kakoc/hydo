@@ -40,6 +40,7 @@ network: bridge   # each service in its own network namespace at its addr: (MANI
 guest:
   ram_mib: 8192   # hand: three replicas of about 2.1 GiB each (above)
   cpu: v3         # hand: the release binary is built for x86-64-v3 with AES-NI
+  clock_after_cut: 60   # hand: holds expire by the clock: after a power cut it must not run backwards
 
 data:
   size_mib: 3584  # hand: each formatted data file is 1.06 GiB (the whole disk must stay under 4 GiB)

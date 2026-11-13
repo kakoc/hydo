@@ -6483,3 +6483,65 @@ to 9.9 s for a fresh run. Branches failed in 0.5 to 7.7 % of the runs, fresh run
 - the shrinker and `br=`;
 - timing branches on hvx;
 - one worker per search.
+
+### Milestone 217 (tentative number) — DONE (TigerBeetle's issue 3960, two holds that expire on the same nanosecond: not found blind; replayed on hvx with the guest's clock; the replica stops on 0.16.29, 0.16.45 and 0.17.9 and stops again at every restart; nothing recorded moved; 2026-11-13)
+
+**In short.** TigerBeetle's issue 3960 shows a replica that stops on `assert(expires_at <=
+timestamp_event)` in its expiry pulse, with a unit test of the state machine. The example
+`hydo/onboard/examples/tigerbeetle` got holds (pending transfers with timeouts), settlements and
+a business check of holds, and a second project, `tie/`, that makes the tie on purpose. Every
+run used hydo 0.3.1's Linux release and hvx on the bare-metal machine. One or two VMs of this
+session ran at a time. No hydo code changed. The example's RESULTS.md has the details (the section on issue
+3960).
+
+**The condition.** Since 0.16.29 (commit `499fcd4b1`) a pulse at the timestamp T gives the k-th
+of its n expired holds the timestamp T - n + k. Two holds with one expiry e and a pulse at T = e
+give the first of them e - 1, before its expiry. Up to 0.16.28 every expired hold gets T.
+
+**Blind.** The single replica with the drivers `parallel_driver_hold` and
+`parallel_driver_settle` ran 150 schedules: the process strategy twice with `--more-faults`,
+once with `--timing`, once with `--new-faults`, and the random strategy with both (2,110 s). The
+only failures were 7 disk-fault runs of the random strategy, TigerBeetle's documented behaviour.
+Over 95 distinct workloads (2,983 holds in 651 batches) no two holds shared an expiry. The
+nearest pair of batches was 543,848 ns from a whole number of seconds apart, where a tie needs at
+most 7 ns. hvx puts more pairs within 10 ms of whole seconds than uniform times would (108
+against 37.6), but none within 100 µs.
+
+**Two false findings of the new check, fixed.** The recovery boot's clock started at
+`guest.clock_start` again, so after a power cut no hold expired (19 of 30 runs). Every manifest
+of the example sets `guest.clock_after_cut: 60` now. After a backward clock step the holds
+expired late by the guest's clock (12 of 30), since TigerBeetle's timestamps never run
+backwards. `final_holds` now demands only that a hold more than 1 s past its expiry holds no
+amount.
+
+**Directed.** `tie/workload/singleton_driver_tie` sets the guest's clock to whole seconds with
+`date -s` for one request each and an hour back in between. With the clock behind, the replica
+timestamps by its counter alone (+ 1 per client session, + 1 + n per batch of n). A request
+through a running REPL session (under `script`, which gives the REPL a terminal) reaches the
+replica k × 999,848 + 1 ns after the clock was set. Anchors with equal k let the counter put Y
+exactly d seconds after X, and put the pulse on the tied expiry + V (the knob `V`). Twice each,
+one fingerprint each:
+
+| release | schedule | verdict | fp |
+|---|---|---|---|
+| 0.17.9 | `disk=none dseed=1 \| run V=0` | `ERROR restart after the faults (tigerbeetle_0)`: `panic: reached unreachable code`, and again after hydo's restart (SIGABRT) | `f291537d8a266c67` |
+| 0.17.9 | `... V=1` | OK; the pulse expired the three holds | `9b5d243994b8a8be` |
+| 0.16.45 | `... V=0` | `ERROR restart after the faults`, the same panic twice | `171200ffc4859485` |
+| 0.16.29 | `... V=0` | `ERROR restart after the faults`, the same panic twice | `84620a7023e63331` |
+| 0.16.28 | `... V=0` | OK; the pulse at the tie expired the three holds | `bd504f1894c2b0fd` |
+
+The release binaries are stripped, so the log names no assert; the panic comes exactly at T = e
+and on the releases since the change. A restarted replica executes the pulse from its
+write-ahead log again and stops: holds and transfers of ordinary clients stop a replica for
+good.
+
+**Not done** (open item 86): the three-replica cluster, the Mac engine (`ERROR boot: SPIN`, open
+item 13), and a build with symbols. An upstream comment is drafted, not posted.
+
+**Tests.** `cargo test -p hydo-explore --test it identity::` passes after re-recording the quick
+golden with `HYDO_BLESS=1`: only its `input` lines of the example changed. Four full-tier
+goldens already name other changed inputs on main: the corpus and answer goldens of
+hydo-control, hydo-explore, hydo-build and hydo-manifest. Those inputs include
+`.github/workflows/release.yml`, `action/action.yml`, and the etcd and Formance examples. The
+goldens now also name this example's manifests, and they were not re-recorded.
+`public_content::` and `docs::` pass.

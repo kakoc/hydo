@@ -1,0 +1,22 @@
+#!/bin/sh
+# hydo: timeout=40
+# A batch of 1..8 holds (pending transfers), each between two accounts with an amount and a
+# timeout of 1, 2 or 3 seconds, all drawn from HYDO_SEED (helper_tb.sh). A hold that nobody posts
+# or voids expires after its timeout and gives its amount back. A batch without an answer in 10 s
+# is unknown and is sent again with the same ids (TigerBeetle answers `exists` for an applied one).
+. ${HYDO_WORKLOAD:-/hydo/workload}/helper_tb.sh
+W=/tmp/hydo/hold.$HYDO_CMD_ID; mkdir -p $W
+holds_of "$HYDO_SEED" "$HYDO_CMD_ID" > $W/holds
+awk '{ print $1 }' $W/holds > $W/ids
+stmt=$(awk '{ printf "%s id=%s debit_account_id=%s credit_account_id=%s amount=%s ledger=700 code=10 flags=pending timeout=%s", (NR > 1 ? "," : "create_transfers"), $1, $2, $3, $4, $5 }' $W/holds)
+for attempt in 1 2 3; do
+  tb_create 10 "$stmt" > $W/status
+  if [ ! -s $W/status ]; then
+    awk -v o="$HYDO_OUTCOMES" '{ print $1 " unknown" >> o }' $W/ids
+    echo "holds: no answer (attempt $attempt)"; continue
+  fi
+  echo "holds: $(wc -l < $W/ids) sent (attempt $attempt)"
+  outcomes $W/ids $W/status
+  exit $?
+done
+exit 1
