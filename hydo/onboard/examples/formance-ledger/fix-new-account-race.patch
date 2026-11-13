@@ -1,0 +1,20 @@
+diff --git a/internal/storage/ledger/accounts.go b/internal/storage/ledger/accounts.go
+index f162286..a9dcd0a 100644
+--- a/internal/storage/ledger/accounts.go
++++ b/internal/storage/ledger/accounts.go
+@@ -186,6 +186,15 @@ func (store *Store) UpsertAccounts(ctx context.Context, accounts ...ledger.Accou
+ 							d.address_array
+ 						FROM data_batch d
+ 						WHERE d.address NOT IN (SELECT address FROM existing_accounts)
++						-- A concurrent transaction may have inserted the account after this
++						-- statement's snapshot: wait for it, then update the row as updated_rows does.
++						ON CONFLICT (ledger, address) DO UPDATE
++						SET
++							metadata = accounts.metadata || (SELECT b.metadata FROM data_batch b WHERE b.address = excluded.address),
++							first_usage = LEAST(excluded.first_usage, accounts.first_usage),
++							updated_at = excluded.updated_at
++						WHERE excluded.first_usage < accounts.first_usage
++							OR NOT accounts.metadata @> (SELECT b.metadata FROM data_batch b WHERE b.address = excluded.address)
+ 						RETURNING address, metadata, first_usage, updated_at, insertion_date,
+ 							(SELECT batch_index FROM data_batch WHERE address = ?1.accounts.address)
+ 					)
