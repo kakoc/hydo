@@ -195,6 +195,20 @@ Useful options of `hydo explore`:
   little. On the one test it was measured on it found the failure later than the plain
   exploration. The section "Steer the search by a number the test prints" of
   `hydo guide flaky-tests` shows it.
+- `--search state`: an experimental state search. A run takes up to 2 snapshots at stops whose
+  console shows something rare. Later runs, the branches, start from such a snapshot. Each
+  branch draws new faults for the remaining steps. On KVM and on the Mac it also draws new
+  timing, with the host token `br=`. The search runs on one worker and writes `state-search.jsonl`. On the bug
+  benchmark and on etcd 3.5.5 it found no failure sooner than the plain exploration.
+  - `--state-mix N`: branches per 1,000 schedules (default 500). `0` runs the plain
+    exploration's schedules with the same bookkeeping.
+  - `--state-corpus N`: the most snapshots kept (default 4 on hvx, 32 otherwise).
+  - `--state-rare N`: a console feature is rare when at most N runs showed it (default 2).
+  - `--state-snaps N`: the most snapshots of one run (default 2).
+  - `--state-stop`: stop after the round of the first failure.
+
+  Use `--no-shrink` with it: the shrinker does not know `br=`. The design and the numbers are in
+  `docs/design/state-search.md` in hydo's repository.
 - `--workers N`.
 
 hydo's own benchmark showed that where faults land, and in what combination, matters more than

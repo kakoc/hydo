@@ -1,9 +1,9 @@
 # State search: exploring from mid-run snapshots
 
-Status: design, written before the prototype. The prototype is opt-in
-(`hydo explore --search state`). Without the option nothing changes. The section
-[Measurement plan](#measurement-plan) says how the benefit is measured. The results go into
-`docs/HISTORY.md`.
+Status: experimental (Milestone 212). The design was written before the prototype. The
+prototype is opt-in (`hydo explore --search state`), and without the option nothing changes. It
+was measured on the bug benchmark and on etcd 3.5.5, and it did not help (section
+[The answer](#the-answer)).
 
 ## The problem
 
@@ -119,12 +119,14 @@ used again.
 A branch is one new schedule, B, built from the entry's schedule, A, and from the strategy's
 schedule of a fresh seed, F:
 
-- The host part is A's. On KVM, F's timing tokens are added after the branch point (see
-  [Timing after the branch point](#timing-after-the-branch-point)).
+- The host part is A's. On KVM and on the Mac, F's timing tokens are added after the branch
+  point (see [Timing after the branch point](#timing-after-the-branch-point)).
 - A fault of A whose first step is at or before the end of the step range in progress at the
   snapshot is kept. The section [Why a branch starts at a step range](#why-a-branch-starts-at-a-step-range)
   explains this rule.
 - A fault of F of a kind that B does not have yet is moved into the remaining steps and added.
+  A network window (`N=`) and a one-way window (`O=`) use the same netem queue, and the
+  strategies never draw both. So B keeps A's window of the two and drops F's.
 - The settings of the whole run, such as the durability settings and the concurrency, are A's.
 
 The search then checks B against the record of A. It runs B's controller over A's recorded stops,
@@ -151,8 +153,8 @@ other programs start, and the run differs from its first step.
 So a branch keeps the range that runs at its snapshot. Let b be the step where that range ends.
 B keeps every fault of A that starts at or before b, and F's faults go into the steps after b.
 The fault that ends the range at b is one of the kept faults, so B ends its range at b too. On
-KVM the timing changes at the snapshot itself. On hvx and on the Mac a fault branch from a
-snapshot inside a range runs that range as A did, and the first difference is at step b.
+KVM and on the Mac a timing branch changes the timing at the snapshot itself. A fault branch
+from a snapshot inside a range runs that range as A did, and the first difference is at step b.
 
 ### Mixing branches and fresh runs
 
@@ -200,9 +202,10 @@ Three other signals were considered and not built:
 ## Timing after the branch point
 
 On KVM and on the Mac the timing tokens are tick jitter (`tj=`, delays counted in VM exits) and
-forced preemption points (`pct=`, `pctn=`, `pctk=`). Today every engine refuses a mid-run snapshot
-of a schedule with timing tokens, because the timing state is not in the snapshot. The prototype
-changes the KVM engine in two places, both inert for every existing run:
+forced preemption points (`pct=`, `pctn=`, `pctk=`). Before the prototype every engine refused a
+mid-run snapshot of a schedule with timing tokens, because the timing state was not in the
+snapshot. The prototype changes the KVM and the Mac engines in two places, both inert for every
+existing run:
 
 - `SNAP` is accepted with tick jitter and preemption points, and the snapshot keeps both
   structures. `RESUME` restores them. Before the change no run could take such a snapshot, and
@@ -219,8 +222,8 @@ disk=none dseed=c7ab56057c8da907 pct=ec699251106e8e0c pctn=40 pctk=3000 br=81234
 
 The engine never sees `br=`. The host controller removes it and the tokens after it from the
 engine's schedule. Its runner sends `TIME` at that stop. A branch and a run from S1 do this
-alike. A branch of a branch has two `br=` tokens. hvx and the Mac refuse `br=` before any VM
-starts, with the reason, as they refuse other host tokens they cannot apply (Milestone 208).
+alike. A branch of a branch has two `br=` tokens. hvx refuses `br=` before any VM starts, with
+the reason, as it refuses other host tokens it cannot apply (Milestone 208).
 
 ## The replayable schedule
 
@@ -245,7 +248,7 @@ check covers branches too. The prototype adds two tests on real engines:
 |---|---|---|---|
 | hvx | in memory, every non-zero page, 8 names per worker | yes, no engine change | no: snapshots of tj/xt/pp/q/cf schedules stay refused |
 | KVM | pages that differ from S1, 64 names | yes, no engine change | yes, with the engine change of the preceding section |
-| the Mac | pages that differ from S1, 64 names | yes, no engine change | no: `TIME` is not built |
+| the Mac | pages that differ from S1, 64 names | yes, no engine change | yes, with the same engine change as KVM |
 
 A schedule that the engine cannot snapshot (on hvx, one with `cf=`, `pp=`, `xt=`, `q=` or `tj=`)
 still runs, and it takes no snapshot. So on hvx the state search has no states for such runs.
@@ -287,12 +290,135 @@ The targets are the ones where plain search is slow:
 Before the long runs, tests 1 and 2 of [The replayable schedule](#the-replayable-schedule) run on
 each engine used.
 
+## Measurements
+
+All measurements ran on hvx on the bare-metal machine. Each exploration had one worker, and two
+explorations ran side by side. Each target ran 5 seed ranges: 1001 on, 2001 on, and so on to 5001.
+The plain exploration ran with `--search state --state-mix 0`, so both columns have the same
+bookkeeping. No exploration used `--state-stop`. Each one ran its whole budget, so the same runs
+give the first detection and the failure classes. The budgets were 60 plain runs against 80
+state-search runs on the benchmark, and 80 against 100 on etcd. These budgets cost about the
+same worker seconds, because a branch is cheaper than a fresh run.
+
+### The bug benchmark
+
+The images are hydo-bench's agent images of each defect. The manifest is the benchmark's,
+without the concurrency knob `Q`. The options were `--strategy process --more-faults --cf-range
+1-309 --durable-only --no-shrink --state-corpus 3`. A run detects the defect when it fails, its
+verdict matches the defect's signature (`hydo/crates/hydo-bench/src/defects.rs`), and its
+schedule passes on the defect's control image in a run from a fresh boot. This is hydo-bench's
+rule. The control image is `explore-ob-bench-nf` for d4, d6 and d7, and `explore-ob-bench-control`
+for d10.
+
+Each cell gives the run number and the worker seconds up to the first detection. "none" gives
+the worker seconds of the whole budget. "branch" marks a detection by a branch.
+
+| defect | seeds | plain | state search |
+|---|---|---|---|
+| d7 | 1001– | none, 489 s | none, 503 s |
+| d7 | 2001– | run 2, 42 s | run 2, 28 s |
+| d7 | 3001– | run 23, 246 s | run 49, 390 s |
+| d7 | 4001– | run 49, 418 s | none, 524 s |
+| d7 | 5001– | none, 495 s | none, 519 s |
+| d10 | 1001– | none, 514 s | none, 570 s |
+| d10 | 2001– | none, 513 s | none, 624 s |
+| d10 | 3001– | run 13, 149 s | run 7, 95 s, branch |
+| d10 | 4001– | run 4, 28 s | run 4, 30 s |
+| d10 | 5001– | run 57, 474 s | none, 573 s |
+| d4 | 1001– | run 57, 455 s | none, 496 s |
+| d4 | 2001– | run 18, 148 s | run 22, 186 s |
+| d4 | 3001– | run 2, 23 s | run 2, 24 s |
+| d4 | 4001– | run 11, 98 s | run 15, 115 s |
+| d4 | 5001– | run 1, 18 s | run 1, 18 s |
+| d6 | 1001– | run 10, 32 s | run 6, 21 s, branch |
+| d6 | 2001– | run 2, 27 s | run 2, 28 s |
+| d6 | 3001– | run 2, 28 s | run 2, 29 s |
+| d6 | 4001– | run 10, 88 s | run 6, 40 s, branch |
+| d6 | 5001– | run 1, 19 s | run 1, 19 s |
+
+The medians over the 5 ranges count a range without a detection as its budget:
+
+| defect | ranges with a detection, plain | state search | median worker seconds, plain | state search |
+|---|---|---|---|---|
+| d7 | 3 of 5 | 2 of 5 | 418 s | 503 s (no detection) |
+| d10 | 3 of 5 | 2 of 5 | 474 s | 570 s (no detection) |
+| d4 | 5 of 5 | 4 of 5 | 98 s | 115 s |
+| d6 | 5 of 5 | 5 of 5 | 28 s | 28 s |
+
+The state search was earlier in 3 of the 20 ranges, each time by a branch. These were d10 from
+3001, and d6 from 1001 and from 4001. d6 is one of the two easy control defects. The state search was later,
+or found nothing, in 6 ranges. In the other 11 ranges both found the same schedule of the same
+seed at the same run number, or neither found the defect. The plain exploration's schedules are
+the state search's fresh schedules, and the first rounds come before the corpus has an entry.
+
+At equal worker seconds (the smaller of the two totals of a range), the counts of distinct
+failure classes are these. A class is a verdict with every number made `#`. The counts leave out
+`ERROR tc setup failed`, a fault of the prototype (below).
+
+| target | plain, per range | state search, per range | plain, sum | state search, sum |
+|---|---|---|---|---|
+| d7 | 0, 1, 1, 1, 1 | 0, 1, 1, 1, 0 | 4 | 3 |
+| d10 | 0, 0, 1, 1, 1 | 0, 0, 1, 1, 0 | 3 | 2 |
+| d4 | 1, 1, 2, 2, 2 | 0, 1, 2, 2, 1 | 8 | 6 |
+| d6 | 2, 1, 1, 1, 1 | 1, 1, 1, 1, 1 | 6 | 5 |
+
+The state search found no class that the plain exploration missed in the same range.
+
+### The etcd issue 14685
+
+The image is the etcd example's 3.5.5 image (`hydo/onboard/examples/etcd`), with `--strategy
+process --durable-only --no-shrink --state-corpus 3`. The target was the second symptom of the
+issue, `client.revisions_monotonic`, which the plain exploration finds rarely (open item 8). No
+exploration found it: neither the 5 plain explorations (80 runs each, 816 to 879 s) nor the 5
+state searches (100 runs each, 810 to 866 s). The first symptom, `etcd.members_agree`, came in
+each of the 10 explorations at run 1, 2 or 6, always from a fresh schedule of the same seed in
+both columns. The classes at equal worker seconds were 1, 2, 1, 1, 1 for both.
+
+### What the branches did
+
+| target | plain runs, median s, failed | fresh runs of the state search | branches |
+|---|---|---|---|
+| d7 | 300, 6.1 s, 3.0 % | 206, 6.7 s, 2.4 % | 194, 4.1 s, 7.7 % |
+| d10 | 300, 6.1 s, 1.3 % | 206, 6.6 s, 1.5 % | 194, 4.8 s, 0.5 % |
+| d4 | 300, 5.5 s, 6.7 % | 206, 6.0 s, 6.8 % | 194, 4.5 s, 2.1 % |
+| d6 | 300, 6.1 s, 30.0 % | 206, 6.5 s, 30.6 % | 194, 4.0 s, 33.5 % |
+| etcd | 400, 9.7 s, 15.5 % | 270, 9.9 s, 17.0 % | 230, 5.4 s, 4.3 % |
+
+A branch cost about two thirds of a fresh run, and on etcd about half. It failed less often than
+a fresh run on d10, d4, and etcd. On d7 branches failed more often, but these failures were
+mostly repeats of a parent that fails on the control image too. In the d7 search of seeds
+4001–4080, all 14 runs with d7's signature failed on the control image as well, so none was a
+detection.
+
+17 branches ended with `ERROR tc setup failed`. Each had both an `N=` window and an `O=` window,
+which the strategies never draw together, and the two windows met. The branch rule now drops
+the fresh seed's window of the two (section [A branch](#a-branch)). The measurements ran before
+this fix. 1,006 branches ran. One more was drawn and dropped as invalid, because its controller
+did not send its parent's commands.
+
+## The answer
+
+The state search did not help on the measured targets. On d7 and d10, the two slow defects, it
+found the defect in 2 of 5 ranges, against 3 of 5 for the plain exploration. Its median was the
+whole budget. On d4 it was later in 3 ranges and equal in 2. On etcd's second symptom neither
+found anything. It was earlier in 3 of 20 ranges, two of them on the easy defect d6. The numbers
+rest on 5 ranges per target with small budgets, so a small benefit cannot be ruled out. A large
+one would have shown.
+
+The branches were cheaper, as the design expected, but they did not fail more often. A branch
+keeps its parent's faults up to the snapshot and adds the fresh seed's faults later. On these
+targets the failure depends on where and with what the early faults fall, which a branch does
+not change. The lesson of the earlier milestones holds here too.
+
+Not measured: the Qdrant flaky test on KVM, the one target where only the timing varies. The
+build machine, which runs KVM, was not reachable during the measurement.
+
 ## Limits of the prototype
 
 - One worker per search.
 - The results formats are unchanged. The search writes its own record, `state-search.jsonl`, in
   the exploration's folder: one line per run with its origin, its parent and stop, its cost, and
   its new features.
-- No timing branches on hvx and on the Mac.
+- No timing branches on hvx.
 - The shrinker does not know `br=`. A shrink candidate of a timing branch loses its branch
   point, so the measurements run with `--no-shrink`.

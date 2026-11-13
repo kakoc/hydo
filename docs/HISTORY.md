@@ -6376,3 +6376,110 @@ for it is re-recorded too.
 **Left.** The KVM engine did not run a pause of the workload: the build machine was out of reach.
 A one-off workflow on the branch `tmp-workload-pause-kvm` is ready to run it on a GitHub runner.
 A pause of one thread, and pauses that repeat in every period of a CPU limit, are not built.
+
+### Milestone 212 — DONE (an experimental state search: exploration from mid-run snapshots, with new faults and timing for the rest of a run; on the bug benchmark and on etcd 3.5.5 it did not help; 2026-11-13)
+
+**In short.** `hydo explore --search state` keeps snapshots that runs took at rare moments and
+runs the rest of a run again from them, with new faults. It is experimental and opt-in, and
+without the option nothing changes. On hvx it did not help. It ran on the slow benchmark defects d7 and
+d10 at about the same worker seconds as the plain exploration. It found each defect in 2 of 5
+seed ranges, and the plain exploration in 3 of 5. On etcd 3.5.5 neither found the second symptom of issue 14685 in
+5 ranges each. Its branches cost about two thirds of a fresh run and did not fail more often.
+The Qdrant flaky test on KVM was not measured.
+
+**Why, and what was different from the earlier attempts.** The explorer draws every schedule
+from its seed and runs it from S1. The user approved (2026-11-13) closing that gap by exploring
+from mid-run states near rare events. The design, written before the prototype, is
+`docs/design/state-search.md`. It names why Milestones 41, 43, 44, 45, 139, and 209 found
+nothing. Milestone 45, the closest, branched one schedule at its rarest assertion with 6 tick
+jitter variants. The variants repeated each other, and its budget counted a variant as a run.
+The state search changes three things:
+
+- A branch draws new faults for the rest of the run, moved into the remaining steps. On KVM and
+  on the Mac it also draws new timing.
+- The cost is the worker's wall time. It includes the snapshots and the restores.
+- Half of the schedules stay the plain exploration's.
+
+**Built** (opt-in; without `--search state` nothing changes):
+
+- `hydo explore --search state` and its options:
+  - `--state-mix`: branches per 1,000 once the corpus has an entry, default 500. With 0 the
+    search runs the plain exploration's schedules with the same bookkeeping and no snapshots.
+  - `--state-corpus` (default 4 on hvx, 32 otherwise), `--state-rare` (default 2),
+    `--state-snaps` (snapshots per run, default 2), and `--state-stop`.
+
+  The search runs on one worker, which holds the snapshots (hydo-explore `src/state.rs`,
+  `run.rs` `state_search`). Each run is a line of `state-search.jsonl` in the exploration's
+  folder. The results formats are unchanged.
+- The host controller (hydo-control `src/search.rs`). `RecLink` records every stop of a run (the
+  engine's report and the commands sent). It takes `SNAP` at stops whose guest console shows a
+  rare feature: an SDK assertion record, or a console-line class with numbers made `#`. For a
+  target whose console shows no feature, it takes `SNAP` at stops spread over the median guest
+  clock. `BranchLink` replays a parent's stops to a branch's controller, requires the parent's
+  commands, and goes live at the snapshot after `RESUME`, with no resynchronisation.
+  `agent::check_branch` runs that replay without a VM first and refuses a branch whose prefix
+  differs. The runner gained `Link::before_step` and `Link::timing`, both inert for every
+  existing link.
+- A branch's schedule is one schedule string. A fault branch is an ordinary schedule. A timing
+  branch has the new host token `br=<clock>` followed by timing tokens. The parser has
+  `branch_points`, `without_branch_points`, and `BRANCH_KEYS` (hydo-schedule). The host
+  controller takes the token out of the engine's schedule. At the first stop whose clock
+  reaches it, the controller sends the new engine command `TIME <tokens>` (`SwitchLink`). A
+  branch and a run from S1 do this alike.
+- The KVM and Mac engines keep tick jitter and forced preemption points in a snapshot (before,
+  such a `SNAP` was refused) and take `TIME`. hvx refuses `TIME`, and `hydo_engine::refusal`
+  refuses `br=` for hvx before any VM.
+- A branch keeps the step range in progress. The controller runs the workload in step ranges
+  split at fault steps (`HYDO_FROM`, `HYDO_TO`), so a new fault inside the running range would
+  change the run from that range's start. A branch keeps every fault of its parent that starts at
+  or before the end of the range in progress, and moves the fresh seed's faults after it.
+- After the measurements: a branch never has both an `N=` and an `O=` window. The strategies
+  never draw both, and 17 measured branches with both ended in `ERROR tc setup failed` where the
+  windows met. The branch keeps its parent's window and drops the fresh seed's
+  (`state::tests::a_branch_never_has_both_network_windows`).
+
+**Checks.** Branches replay bit for bit from a fresh boot. On hvx, 6 of 6 branches of the d7
+image gave their fingerprints again under `hydo run`. On the Mac, 9 of 9 fault branches of the Redis
+example did, and 9 of 9 timing branches. The Mac fast `hydo-bench rebaseline --check` gave all
+76 schedules their recorded values. On hvx, the recorded schedules of etcd-3.5.5, redis,
+redis-netem, redis-freeze and redis-hist gave every recorded value, and the pinned reproducers
+gave `a76d7fe857fdb37c` and `efbde7b57264be0f`. The tests are these:
+
+- hydo-control's `search::a_branch_equals_its_schedule_run_from_s1`;
+- the unit tests of `state.rs`: the branch rule, branch points, the range in progress, and the
+  search's determinism;
+- hydo-schedule's `branch_points`.
+
+ The explorer's identity goldens did not change.
+
+**Measurements** (hvx, the bare-metal machine; the tables are in `docs/design/state-search.md`,
+section "Measurements"). Each target ran 5 seed ranges. The plain exploration ran with
+`--state-mix 0`. The budgets were 60 plain runs against 80 state-search runs on the benchmark,
+and 80 against 100 on etcd, which cost about the same worker seconds. A benchmark detection is a
+failure with the defect's signature whose schedule passes on the control image from a fresh
+boot (hydo-bench's rule). The control runs are why the raw counts mislead: in the d7 search of
+seeds 4001–4080, all 14 runs with d7's signature failed on the control image too.
+
+| target | ranges with a detection, plain | state search | median worker seconds, plain | state search |
+|---|---|---|---|---|
+| d7 | 3 of 5 | 2 of 5 | 418 s | 503 s (no detection) |
+| d10 | 3 of 5 | 2 of 5 | 474 s | 570 s (no detection) |
+| d4 | 5 of 5 | 4 of 5 | 98 s | 115 s |
+| d6 | 5 of 5 | 5 of 5 | 28 s | 28 s |
+| etcd 14685, `client.revisions_monotonic` | 0 of 5 | 0 of 5 | none in 816–879 s | none in 810–866 s |
+
+The state search was earlier in 3 of 20 benchmark ranges, each time by a branch (d10 once, d6
+twice), and later or without a detection in 6. At equal worker seconds the plain explorations
+showed 21 distinct failure classes over the 20 benchmark ranges and the state searches 16. The
+state search found no class that the plain exploration missed in the same range. On etcd the
+classes were the same in every range. A branch's median wall time was 4.0 to 5.4 s, against 6.0
+to 9.9 s for a fresh run. Branches failed in 0.5 to 7.7 % of the runs, fresh runs in 1.5 to
+30.6 %.
+
+**Left** (open item 85):
+
+- the Qdrant flaky test on KVM;
+- the KVM engine's change on a real KVM host;
+- the shrinker and `br=`;
+- timing branches on hvx;
+- one worker per search.

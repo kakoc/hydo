@@ -399,6 +399,17 @@ measures both times, so such a pause means the same on every engine. `hydo explo
 section "Pause the workload"; the example is `hydo/onboard/examples/etcd-flaky-22796`. Details:
 `docs/HISTORY.md` Milestone 216.
 
+**State search (M212, experimental and opt-in).** It did not help on the targets it was
+measured on, so treat it as an experiment. `hydo explore --search state` takes snapshots at
+stops whose console shows something rare. Half of the later schedules are branches: they start
+from such a snapshot and draw new faults for the remaining steps. On KVM and the Mac they also
+draw new timing, with the host token `br=` and the engine command `TIME`. The rest are the plain
+exploration's schedules in seed order. The search runs on one worker and writes
+`state-search.jsonl`; the results formats are unchanged. On hvx, at about the same worker
+seconds, it found the benchmark's d7 and d10 in 2 of 5 seed ranges each, and the plain
+exploration in 3 of 5. Neither found the second symptom of etcd issue 14685 in 5 ranges each.
+Design and numbers: `docs/design/state-search.md`; `docs/HISTORY.md` Milestone 212.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -608,6 +619,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     its own kind. The explorer then shrank each new kind (8 by default) and stalled; `normalize:`
     and `--errors-shrink 0` were needed. `hydo errors accept` writes the login name as `by:` into
     the tracked `known-errors.yaml` unless `--by` is given.
+85. The state search (M212). What is left:
+    - The Qdrant flaky test on KVM, the one target where only the timing varies, was not
+      measured: the build machine was not reachable.
+    - The KVM engine's change (timing kept in a snapshot, and `TIME`) ran only in the scripted
+      tests, never on a real KVM host. The Mac engine's change ran on the Mac.
+    - The shrinker does not know `br=`: a shrink candidate of a timing branch loses its branch
+      point. Explorations with timing branches need `--no-shrink`.
+    - hvx has no timing branches: its snapshots of `tj=`, `xt=`, `pp=`, `q=` and `cf=` schedules
+      stay refused, so the search cannot branch towards d11.
+    - A search runs on one worker, because the snapshots live in one engine process.
 
 ## Milestone index
 
@@ -876,6 +897,11 @@ build machine, before 2026-10-13.
   hydo's timing tokens. With a CPU limit in the guest, `disk=none pp=65536 | run` fails on every
   hvx run and `disk=none | run` passes; the test-only fix passes. The same limit fails it natively
   too. A fjall deadlock (issue 345) was tried with a stress program and not reproduced
+- M212: an experimental state search, `hydo explore --search state`. Runs take snapshots at
+  rare console features, and branches run the rest of a run from them with new faults (and new
+  timing on KVM and the Mac, `br=`). On hvx it did not help: d7 and d10 in 2 of 5 seed ranges
+  against 3 of 5 for the plain exploration, and neither found etcd 14685's second symptom.
+  Nothing recorded moved
 - M213 (tentative number): several vCPUs on the KVM engine, stage 1. The design is
   `docs/design/kvm-vcpus.md`: turns of exits on one thread, and an x2APIC per vCPU in the engine.
   A KVM probe ran on three AMD and one Intel runner model with one hash per turn length.
