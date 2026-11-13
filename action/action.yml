@@ -61,8 +61,13 @@ runs:
             | sudo tee /etc/udev/rules.d/99-hydo-kvm.rules > /dev/null
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          # udev applies the rule asynchronously: wait for it, up to 10 s (2026-11-13: without
+          # the wait the check below ran first on a private repository's runner)
+          sudo udevadm settle --timeout=10 || true
+          for _ in 1 2 3 4 5 6 7 8 9 10; do [ -w /dev/kvm ] && break; sleep 1; done
         fi
         if [ ! -w /dev/kvm ]; then
+          ls -l /dev/kvm || true
           echo "::error::/dev/kvm is not usable on this runner: hydo's KVM engine needs it (hydo guide ci, 'Runners')"
           exit 2
         fi
