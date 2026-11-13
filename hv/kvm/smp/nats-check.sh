@@ -8,9 +8,9 @@
 #     [OUT=<dir>] [T=<seconds per command>] [QS="1 2 4 ..."] [SEEDS="1 2 ..."] [REPEAT=1] \
 #     [KEEP=1] sh hv/kvm/smp/nats-check.sh
 #
-# REPEAT runs each turn length that many times; KEEP=1 keeps every run's folder as
-# OUT/r-<turns>-<k> (with the engine's diagnostics, HYDO_KVM_DIAG: which part of the end state a
-# fingerprint differs in).
+# REPEAT runs each turn length, and each default-turn run, that many times; KEEP=1 keeps every
+# turn length's run folder as OUT/r-<turns>-<k> (with the engine's diagnostics, HYDO_KVM_DIAG:
+# which part of the end state a fingerprint differs in).
 #
 # Needs Go (build-test.sh fetches the module's toolchain). Each run prints one line: the turn
 # length, the fingerprint and the verdict. Every wait has a time limit. It writes only under OUT.
@@ -56,15 +56,24 @@ run() { # <image> <dir> <schedule> [options]
   echo "${fp:-none} cpus=${cpus:-?} $(echo "$r" | sed -n 's/.*verdict=//p' | cut -c1-90)"
 }
 
-say "1 vCPU, buggy: $(run "$(img buggy)" "$OUT/r" "disk=none | run")"
+# each of the default-turn runs REPEAT times too (one fingerprint each, below)
+k=1
+while [ "$k" -le "$REPEAT" ]; do
+  say "1 vCPU, buggy: $(run "$(img buggy)" "$OUT/r" "disk=none | run")"
+  k=$((k + 1))
+done
 # the pinned SMP kernel where hydo finds it by sha256 (the release's guest/, a tree's
 # hv/kvm/linux/out/: hydo_kvm::kernel::SMP_TWINS), not through HYDO_KVM_KERNEL
 mkdir -p "$REL/guest" "$REL/hv/kvm/linux/out"
 cp -f "$SMP_KERNEL" "$REL/guest/bzImage-kvm-smp"
 cp -f "$SMP_KERNEL" "$REL/hv/kvm/linux/out/bzImage-kvm-smp"
 unset HYDO_KVM_KERNEL
-say "2 vCPUs, fixed, default turns: $(run "$(img fixed)" "$OUT/r" "disk=none | run" --vcpus 2)"
-say "2 vCPUs, buggy, default turns: $(run "$(img buggy)" "$OUT/r" "disk=none | run" --vcpus 2)"
+k=1
+while [ "$k" -le "$REPEAT" ]; do
+  say "2 vCPUs, fixed, default turns: $(run "$(img fixed)" "$OUT/r" "disk=none | run" --vcpus 2)"
+  say "2 vCPUs, buggy, default turns: $(run "$(img buggy)" "$OUT/r" "disk=none | run" --vcpus 2)"
+  k=$((k + 1))
+done
 dir() { # <label> <k>: the run's folder
   if [ "$KEEP" = 1 ]; then echo "$OUT/r-$1-$2"; else echo "$OUT/r"; fi
 }
@@ -89,6 +98,6 @@ for seed in $SEEDS; do
 done
 # REPEAT > 1: one fingerprint per setting
 if [ "$REPEAT" -gt 1 ]; then
-  grep -E '^2 vCPUs, buggy, q=' "$LOG" | sed 's/: \([0-9a-f]*\) .*/ \1/' | sort | uniq | awk '{k=$0; sub(/ [0-9a-f]+$/, "", k); n[k]++} END {for (k in n) print (n[k] == 1 ? "ONE " : "DIFFER ") n[k] " fingerprint(s): " k}' | sort | tee -a "$LOG"
+  grep -E '^(1 vCPU|2 vCPUs), ' "$LOG" | sed 's/: \([0-9a-f]*\) .*/ \1/' | sort | uniq | awk '{k=$0; sub(/ [0-9a-f]+$/, "", k); n[k]++} END {for (k in n) print (n[k] == 1 ? "ONE " : "DIFFER ") n[k] " fingerprint(s): " k}' | sort | tee -a "$LOG"
 fi
 say "nats-check: buggy on 2 vCPUs: $pass passed, $failn failed ($(date -u))"
