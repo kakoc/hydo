@@ -183,6 +183,8 @@ Only finding 1 qualifies.
 
 ### 1. A subscription cancelled while Redis is down is never invoiced (a Lago bug, known upstream: lago-api issue 6901)
 
+Confirmed upstream on v1.57.0, with the steps below and the uniqueness-lock detail: https://github.com/getlago/lago-api/issues/6901#issuecomment-6864157424 (2026-11-13).
+
 Found by `eventually_1_billing_tick`, `final_november_invoiced` and `final_business_result` in
 the second exploration's seed 36: `disk=none dseed=3fbd7e58fbfa188e | run K=redis@4+4
 N=db-api@6-9:delay,20ms,reorder,29% P=redis@0~10:18788 W=b6bdf82a,p1,q2,r750`. It ends with
