@@ -2068,6 +2068,139 @@ pub struct CiRun {
     pub artifacts: CiArtifacts,
 }
 
+// ------------------------------------------------------------------ versions
+
+tag!(VersionsType, "versions");
+
+/// The values of [`VersionOutcome::outcome`] hydo writes (`hydo versions`).
+pub mod version_outcome {
+    /// The minimal schedule failed with the finding's key: the same check said the same thing.
+    pub const REPRODUCED: &str = "reproduced";
+    /// The minimal schedule passed: the run's checks held and the finding's key is absent.
+    pub const PASSES: &str = "passes";
+    /// The run failed with another finding (another check, or a run error). The version neither
+    /// shows nor clears the finding, so the search leaves it undecided.
+    pub const FAILS_OTHERWISE: &str = "fails-otherwise";
+    /// The version could not be built, or the schedule did not run on it: the schedule names
+    /// what the version lacks, or the engine gave no result.
+    pub const CANNOT_RUN: &str = "cannot-run";
+    /// The search did not need this version.
+    pub const NOT_REPLAYED: &str = "not-replayed";
+}
+
+/// What one version of the system did with a finding's minimal schedule (`hydo versions`; added
+/// in Milestone 221).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct VersionOutcome {
+    /// The version as given: a manifest parameter's value (`3.5.5`), a git revision, or an
+    /// image's name.
+    pub version: String,
+    /// See [`version_outcome`].
+    pub outcome: String,
+    /// The replay's fingerprint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<String>,
+    /// The finding key of a failing verdict (`f1:<kind>:<10 hex>`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// Why the version could not run, or the other findings of a run that passed (new error
+    /// kinds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<String>,
+    /// A git revision's commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    /// SHA-256 of the version's image.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_sha256: Option<String>,
+    /// The image came from the image cache by its input key, not from a build.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_reused: Option<bool>,
+    /// The outcome is the finding's own recorded run on the same image, not a new replay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorded: Option<bool>,
+    /// The replay's number in the search (1: the first replay).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay: Option<u64>,
+    /// The replay's run directory, relative to the directory of `versions.json`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+}
+
+/// One finding's minimal schedule replayed on several versions of the system, oldest first
+/// (`hydo versions`; added in Milestone 221). The search assumes one change point: the versions
+/// before it pass and the versions from it on reproduce, or the other way round for a fix.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Versions {
+    /// The minimal schedule replayed.
+    pub schedule: String,
+    /// The finding key the replays are compared with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// The finding's normalized statement (numbers as `#`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Where the finding came from: a run directory, an exploration directory, a reference
+    /// image, a version, or the first failing end of the versions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub found_on: Option<String>,
+    /// How the versions were made: `param <KEY>` (`hydo build --set <KEY>=<version>`), `git` (a
+    /// checkout of each revision, its build command, then `hydo build`) or `images` (given
+    /// images).
+    pub source: String,
+    /// Every version, oldest first; the ones the search did not need are `not-replayed`.
+    #[serde(default)]
+    pub versions: Vec<VersionOutcome>,
+    /// The oldest version that reproduced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_bad: Option<String>,
+    /// The version that passed right before `first_bad`. Absent: `first_bad` is the oldest
+    /// version decided, so the finding is at least that old.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_good: Option<String>,
+    /// The newest version that reproduced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_bad: Option<String>,
+    /// The first version that passed after `last_bad`: where the finding was fixed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixed_in: Option<String>,
+    /// Whether the newest version reproduced. Absent: the newest version was not decided.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub still_present_in_newest: Option<bool>,
+    /// Set when the replays contradict a single change point (reproduced, passes, reproduced):
+    /// the decided versions in order with their outcomes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contradiction: Option<String>,
+    /// Replays run. A version answered by the finding's own record is not counted.
+    pub replays: u64,
+    /// The answer in one sentence.
+    pub summary: String,
+    #[serde(default)]
+    pub notes: Vec<String>,
+}
+
+/// `versions.json`: findings replayed on versions of the system (`hydo versions`; added in
+/// Milestone 221). `hydo report` prints each finding's summary with the report of the run or
+/// exploration it came from.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct VersionsDoc {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: VersionsType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydo_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
+    /// The engine every replay ran on.
+    pub engine: Engine,
+    /// What was given: a run directory, an exploration directory, or a schedule.
+    pub from: String,
+    #[serde(default)]
+    pub findings: Vec<Versions>,
+}
+
 /// Any version-1 record or document (the schema's root).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
@@ -2085,6 +2218,8 @@ pub enum AnyV1 {
     InspectError(Box<InspectError>),
     /// Added after 0.2.0 (`hydo ci run`).
     CiRun(Box<CiRun>),
+    /// Added in Milestone 221 (`hydo versions`).
+    Versions(Box<VersionsDoc>),
 }
 
 impl Run {

@@ -136,3 +136,4 @@ hydo::docs                               fast
 hydo::equivalence                        fast
 hydo::migrate                            fast
 hydo::readme                             fast
+hydo::versions                           fast

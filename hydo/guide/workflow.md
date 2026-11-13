@@ -129,3 +129,36 @@ fails, the cause is the folder or a real bug. Read the `hydo: diagnosis:` lines,
 kernel's messages. Then look inside the run with `hydo inspect` (`hydo guide inspect`) before you
 change the image. The
 full build also checks the backend's limits (the arm64 build refuses `guest.cpu: v3`).
+
+## Which versions have a finding
+
+`hydo versions` says in which versions of the system a finding is present. It replays the
+finding's minimal schedule on each version and gives each version one outcome:
+
+- `reproduced`: the same check failed with the same finding key;
+- `passes`: the checks held;
+- `fails-otherwise`: another check or a run error failed the run;
+- `cannot-run`: the version did not build, or the schedule names something the version lacks.
+
+Give the finding as a run directory, an exploration directory (each of its findings), or a
+schedule. Give the versions oldest first, in one of three forms:
+
+```sh
+hydo versions hydo-out/explore --param version=0.16.28,0.16.29,0.17.9   # hydo build --set version=<v>
+hydo versions hydo-out/runs/run-1 --git v1.4.0..v1.6.0 --build 'sh build.sh'  # a checkout of each commit
+hydo versions "disk=none | run K=db@5+1" --images old=a-disk.img,new=b-disk.img
+```
+
+The search replays the newest version and the oldest first. Then it bisects for the first
+version that reproduces and the last that passes. It assumes one change point and says when the
+replays contradict it. `--all` replays every version. One replay per version is enough, because
+hydo replays exactly: a verdict is exact for one engine and image. A flaky test's verdict is
+exact too, but another engine, vCPU count or turn length can give another verdict.
+
+- `--build CMD` runs before each build, with `HYDO_VERSION` set to the version. A version whose
+  command fails is `cannot-run`, and the search steps over it.
+- A run directory's finding is its verdict's key. When the checks held, it is the first new
+  error kind. `--key f1:error-log:<10 hex>` names another; `ci-run.json` lists the keys.
+- An image cache keeps each version's image by its inputs, so a second search builds nothing new.
+- The answer is `versions.json` next to the replays, and `hydo report <dir>` prints it with the
+  report of the run or exploration.

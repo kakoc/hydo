@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-54 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 35 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 4 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+54 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 35 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 6 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -79,7 +79,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 |---|---|---|---|---|---|
 | `HYDO_QUIET_FILE` | user | path | - | hydo-explore, hydo-bench | While this file exists, the explorer starts no new VM (waits, checking every 30 s, at most 2 hours): a quiet window on a shared machine. |
 | `HYDO_EXPLORE_CACHE` | user | path | - | hydo-explore, hydo-bench | A result cache: a deterministic exploration resumes from the results recorded there. |
-| `HYDO_SCRIPTED_ENGINE` | developer | path | - | hydo-explore | The explorer's tests only (M145): a scripted engine program that answers every schedule as a pure function of its text, instead of the host controller over a real engine (`hydo_explore::scripted`). |
+| `HYDO_SCRIPTED_ENGINE` | developer | path | - | hydo-explore, hydo-cli | The explorer's tests only (M145): a scripted engine program that answers every schedule as a pure function of its text, instead of the host controller over a real engine (`hydo_explore::scripted`). `hydo versions`' tests use it too (M221): it also builds a stand-in image per version (`<program> build <manifest> <out dir> KEY=VALUE...`). |
 
 ## The Mac engine (`hydo_config::hvm::Engine`, `hydo_config::hvm::Options`)
 
@@ -290,6 +290,8 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_REBASE_INPUTS` | passed | path | - | set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh | The folder of the inputs the staging script makes or fetches once (M164). |
 | `HYDO_REBASE_PLATFORM` | passed | text | - | set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh | The platform being re-baselined: `hvx`, `hvm` or `kvm` (M164). |
 | `HYDO_REBASE_RELEASE` | passed | path | - | set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh | The unpacked release whose guest files the staging script's prefix uses (M164). |
+| `HYDO_VERSION` | passed | text | - | set by hydo versions for its --build command | The version being built, for the `--build` command of `hydo versions` (M221). |
+| `HYDO_SCRIPTED_IMAGE` | passed | path | - | set by hydo versions for HYDO_SCRIPTED_ENGINE | The image of a replay, for the scripted engine program of `hydo versions`' tests (M221). |
 
 ## Removed
 

@@ -6691,3 +6691,109 @@ with every fault. Another checks that text from a run is escaped, and another th
 
 **What is left.** Open item 94: the format of the version range, a real `hydo ci run` with
 replay directories, a fresh hvx run, and a run with forced preemption points.
+
+### Milestone 221 (tentative number) - DONE (`hydo versions`: in which versions of the system a finding is present, by replay and bisection; Formance Ledger's account race is introduced in v2.4.0 and still present in v2.4.18; nothing recorded moved; 2026-11-13)
+
+**In short.** Until now the versions of each finding were found by hand. Examples are the
+TigerBeetle example's table for issue 3960 (M217), etcd 3.5.5 against 3.5.6 (M78, M206), and
+Formance v2.3.24 against v2.4.18 (M215). `hydo versions` does it in one command. It takes a
+finding and a list of the system's versions, oldest first. It builds each version's image, replays the finding's minimal
+schedule on it, and says where the finding was introduced and whether the newest version still
+has it. The code is `hydo/crates/hydo-cli/src/versions.rs`. The guide's section is `hydo guide
+workflow`, "Which versions have a finding".
+
+**The command.**
+
+- The finding is a run directory, an exploration directory (each of its findings, or `--finding
+  N`), or a schedule. A schedule's finding is named by `--image` (one replay there) or by the
+  first failing end of the versions. `--key` picks one finding key, for example a new error kind in
+  a run that passed its checks.
+- The versions are one of three forms. `--param KEY=V1,V2,...` builds each with `hydo build
+  --set KEY=<version>`. `--git REV,REV,...` or `--git A..B` checks out each revision as a
+  detached worktree. `A..B` is A and every first-parent commit after it up to B, labelled by its
+  tag when it has one. `--images NAME=IMG,...` takes ready images. `--build CMD` runs before
+  each build with `HYDO_VERSION` set. `--set` adds a parameter to every build.
+- Each version gets one outcome. `reproduced`: the replay gave the finding's key (the CI's
+  finding key, M197). `passes`: the checks held. `fails-otherwise`: another finding failed the
+  run. `cannot-run`: the version did not build, or the schedule was refused or gave no result.
+- The search replays the newest version and the oldest, each stepping inward past undecided
+  versions. Then it bisects every range between two decided versions whose outcomes differ. It
+  assumes one change point and writes `contradiction` when the decided versions change more than
+  once. `--found-on V` replays the finding's own version first. `--all` replays every version.
+  A version whose image has the bytes of the finding's recorded run is answered by that record.
+- Builds and replays run as child `hydo build` and `hydo run` processes. A failed build is that
+  version's outcome and never ends the search. Images are kept in an image cache by a key over
+  their inputs: `vk1-<hex>` over the CI's input-key lines, the build command, and for `--git` the
+  commit. The build's intermediates are deleted.
+
+**The results addition.** `versions.json` (`hydo_results::VersionsDoc`, type `versions`) has one
+`Versions` per finding. Each has the schedule, the key and title, `source`, every version with
+its `outcome`, `fingerprint`, `verdict`, `image_sha256` and replay number, and the answer:
+`first_bad`, `last_good`, `last_bad`, `fixed_in`, `still_present_in_newest`, `contradiction`,
+`replays` and a `summary` sentence. `hydo versions <dir>` writes it to `<dir>/versions/`.
+`hydo report <dir>` adds the summary to the report, and `hydo report --html` (M220) shows a
+section "Versions" read by these types. That page had guessed the field names before (open item
+94). The schema gains the four types, and `hydo-schema-compat` and the results tests pass. The
+proof's document is `hydo/schema/examples/results/v1/mac-formance-versions/versions.json`.
+
+**Tests.** `tests/versions.rs` runs the command on the scripted engine. Its program builds a
+stand-in image per version (`<program> build <manifest> <out> KEY=VALUE...`) and answers a
+replay from the version in the image (`HYDO_SCRIPTED_IMAGE`). The four tests:
+
+| test | versions | the answer |
+|---|---|---|
+| bisection | 1 to 8 from a parameter, the bug from 6, version 5 does not build | replays 8, 1, 4, 6; introduced in 6, 4 passes, 5 not decided; a second search builds only 5 |
+| contradiction | `--all` over 1 to 4, the bug in 2 and 4; and `--found-on 2` over 1 to 5, the bug in 2 only | `contradiction` names the sequence; first bad 2, fixed in 3 |
+| run directory | a recorded `result.json` | its key; `hydo report` prints the `versions:` line |
+| git | tags r1 to r6 of a scratch repository, the bug from r4 | introduced in r4, r3 passes; every worktree removed |
+
+Unit tests in `versions.rs` cover the search order, the answer, and the sentences.
+
+**The proof on the Mac engine.** Formance Ledger's finding 1 (M215): two first uses of one
+account in two assets race, and PostgreSQL logs `duplicate key value violates unique constraint
+'accounts_ledger'` (error kind `027af89500d5`). A copy of the example in the session's scratch
+folder took the ledger's release as a parameter (`../bin/ledger-{{ledger}}-{{arch}}`). Its
+known-errors list no longer accepted the finding's two kinds. A `--build` script compiled each
+tag for linux/arm64 with Go 1.27.3. With this tree's `hydo` in the 0.3.1 Mac release:
+
+```sh
+hydo build hydo/hydo.yaml --set arch=arm64 --set ledger=v2.4.18
+hydo run "disk=none | run" --out run-2.4.18     # OK; 2 new error kinds, fp f479b8a7e9865610
+hydo versions run-2.4.18 --key f1:error-log:21b4dcd9d9 --manifest hydo/hydo.yaml \
+  --set arch=arm64 --param ledger=v2.3.24,v2.4.0,v2.4.9,v2.4.18 --build 'sh ../build-version.sh'
+```
+
+```text
+  version  outcome          fingerprint       replay  verdict
+  v2.3.24  passes           e08898ae773d1f14  1       HYDO-ORACLE: OK invariants=14 held (...)
+  v2.4.0   reproduced       a1a0a244d9473280  2       HYDO-ORACLE: OK invariants=14 held (...)
+  v2.4.9   not-replayed     -                 -
+  v2.4.18  reproduced       f479b8a7e9865610  record  HYDO-ORACLE: OK invariants=14 held (...)
+
+introduced in v2.4.0 (v2.3.24 passes); still present in v2.4.18, the newest version tried (2 replays for 4 versions)
+```
+
+The command built the v2.4.18 image with the bytes of the hand build (`62a8dd2a…`). So the
+recorded run answered it. The whole search took 5 min 44 s: two Go builds, three image builds,
+and two replays. This agrees with M215's native table, where v2.3.24 had no failing pair. The
+CTE came with pull request 1064, which is in every v2.4 release. `hydo report run-2.4.18` prints
+the `versions:` line, and `hydo report --html` shows the section.
+
+**On hvx.** The bare-metal machine ran the etcd example with this tree's `hydo` in a prefix made
+from the 0.3.0 Linux release. It used the loaded main module and ran one VM at a time through
+`~/bin/hvx-run`. The versions were `--param version=3.5.4,3.5.5,3.5.6,3.6.8,3.6.9,3.6.15` with a
+`--build` that fetches each release archive by its sha256 in `build.sh`:
+
+- 3.5.4 is `cannot-run`, because `build.sh` pins no sha256 for it. The search stepped over it.
+- 3.6.15 and 3.5.5 built in about 20 s each; the second schedule took both from the cache.
+- M206's schedule `disk=none dseed=1 | run K=etcd2@20+1 P=etcd1@26+1` passed on both
+  (`bec857d03b73a3a4`, `61c319982a25dd06`). So did `disk=cut dseed=1 | run C=30`.
+
+The recorded 3.5.5 image (`b4dc0195…`) came from the re-baseline's staging. That build kept the
+file owners and used the 0.3.1 release's files. These images have other bytes (`ad7c028e…`). M206 found the
+schedule by a sweep of 256 schedules, so its verdict depends on the guest's exact timing. That
+is open item 95. `--found-on` now notes it when the finding's own version does not reproduce.
+
+**Checks.** clippy and fmt; the tests of `hydo`, `hydo-results` and `hydo-agents`;
+`hydo-schema-compat`; `cargo test -p hydo --test it docs::`; `sh ci/vale.sh` on the changed
+documents; `cargo test -p hydo-agents --test it public_content::`.

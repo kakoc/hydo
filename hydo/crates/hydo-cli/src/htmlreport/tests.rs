@@ -259,21 +259,59 @@ fn versions_are_shown_when_the_results_carry_them() {
     hydo_results::write_document(&d.join(hydo_results::RUN_DOC), &run).unwrap();
     let without = page_of(&d, "d", None);
     assert!(!without.contains("id=\"versions\""));
-    std::fs::write(
-        d.join("versions.json"),
-        r#"{"findings":[{"finding":"f1:invariant:d4f25624c2","introduced":"7.0.0",
-            "last_good":"6.2.14","still_present":["7.2.4","7.4.0"],
-            "tested":[{"version":"6.2.14","verdict":"ok"},{"version":"7.0.0","verdict":"violation"}]}]}"#,
-    )
-    .unwrap();
+    // `hydo versions <dir>` writes its answer into `<dir>/versions/versions.json`
+    let o = |version: &str, outcome: &str, fp: Option<&str>, replay: Option<u64>| {
+        hydo_results::VersionOutcome {
+            version: version.into(),
+            outcome: outcome.into(),
+            fingerprint: fp.map(str::to_string),
+            verdict: fp.map(|_| "HYDO-ORACLE: OK invariants=3 held".to_string()),
+            replay,
+            ..Default::default()
+        }
+    };
+    let doc = hydo_results::VersionsDoc {
+        engine: hydo_results::Engine {
+            backend: Some("hvm".into()),
+            ..Default::default()
+        },
+        from: "d".into(),
+        findings: vec![hydo_results::Versions {
+            schedule: "disk=cut | run C=12 R=everysec".into(),
+            key: Some("f1:invariant:d4f25624c2".into()),
+            title: Some("VIOLATION [redis.acked_writes_survive] key k:# lost".into()),
+            source: "param version".into(),
+            versions: vec![
+                o("6.2.14", "passes", Some("1111111111111111"), Some(2)),
+                o("7.0.0", "reproduced", Some("2222222222222222"), Some(3)),
+                o("7.2.4", "not-replayed", None, None),
+                o("7.4.0", "reproduced", Some("3333333333333333"), Some(1)),
+            ],
+            first_bad: Some("7.0.0".into()),
+            last_good: Some("6.2.14".into()),
+            last_bad: Some("7.4.0".into()),
+            still_present_in_newest: Some(true),
+            replays: 3,
+            summary: "introduced in 7.0.0 (6.2.14 passes); still present in 7.4.0, the newest \
+                      version tried"
+                .into(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    std::fs::create_dir_all(d.join("versions")).unwrap();
+    hydo_results::write_document(&d.join("versions").join(hydo_results::VERSIONS_DOC), &doc)
+        .unwrap();
     let html = page_of(&d, "d", None);
     let _ = std::fs::remove_dir_all(&d);
     assert!(html.contains("id=\"versions\""));
     for want in [
         "Introduced in</dt><dd>7.0.0",
         "The last version without it</dt><dd>6.2.14",
-        "Still present in</dt><dd>7.2.4, 7.4.0",
-        "<td>6.2.14</td><td>ok</td>",
+        "Still present in the newest version</dt><dd>yes (7.4.0)",
+        "<td>6.2.14</td><td><span class=\"badge ok\">passes</span></td>",
+        "<td>7.2.4</td><td>not replayed</td>",
+        "introduced in 7.0.0 (6.2.14 passes)",
     ] {
         assert!(html.contains(want), "the page lacks {want:?}");
     }

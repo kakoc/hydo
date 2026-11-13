@@ -206,6 +206,9 @@ fn note(s: &mut Seen, r: &Record) {
         Record::CiRun(_) => {
             s.types.insert("ci-run".into());
         }
+        Record::Versions(_) => {
+            s.types.insert("versions".into());
+        }
     }
 }
 

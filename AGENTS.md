@@ -434,6 +434,16 @@ and for a CI run each finding's state against the base. The code is
 `hydo/crates/hydo-cli/src/htmlreport.rs`, and `hydo guide inspect` describes the page in its
 last section.
 
+**Which versions have a finding (M221).** `hydo versions <run dir | explore dir | "<schedule>">`
+replays a finding's minimal schedule on versions of the system, oldest first. The versions are a
+manifest parameter's values (`--param KEY=V1,V2`), git revisions (`--git A..B`, a checkout and a
+`--build` command each), or images (`--images`). Each version is `reproduced` (the same finding
+key), `passes`, `fails-otherwise` or `cannot-run`. The search replays the newest and the oldest
+version, then bisects, assuming one change point, and names a contradiction. Images come from a
+cache by input key. The answer is `versions.json` (the results addition `VersionsDoc`), and
+`hydo report` prints it. Reference: `hydo guide workflow`, "Which versions have a finding";
+proof: `docs/HISTORY.md` Milestone 221.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -681,13 +691,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 93. The explorer's identity test reads git-ignored files (M218). It lists every file under an
     example's `hydo/` folder, also `hydo-out/`, `.hydo/` and `images/`. A local exploration
     there makes the golden stale, so the outputs had to be moved away before `HYDO_BLESS=1`.
-94. The web page of `hydo report --html` (M220). Its section "Versions" reads a `versions`
-    member of the results document, or `versions.json` beside it, by the field names it guesses
-    (`introduced`, `last_good`, `still_present`, a list of tested versions). The version-range
-    finder's own format must be checked against it when it is merged. The CI page ran only on the
+94. The web page of `hydo report --html` (M220). Its section "Versions" reads the
+    `versions.json` of `hydo versions` by its types since M221. The CI page ran only on the
     recorded example `mac-shop-ci-run`, which has no replay directories, so a CI finding's
     timeline was never shown from a real `hydo ci run`. On hvx the page ran only on the recorded
     runs of `tests/fixtures/inspect/`, and it never ran on a run with forced preemption points.
+95. `hydo versions` (M221). A timing-sensitive finding depends on its image's exact bytes. etcd
+    14685's schedule of M206 passed on 3.5.5 images built with `--param` outside the
+    re-baseline's staging, so no hvx finding reproduced in the proof; `--found-on` warns of this.
+    `--git` ran only in the scripted test, and `--all` and contradictions only there and in unit
+    tests. Replays run one at a time. `hydo ci run` does not call it yet (stage 2 of
+    `docs/design/ci.md` could, for its `new` findings).
 
 ## Milestone index
 
@@ -991,6 +1005,11 @@ build machine, before 2026-10-13.
   for a run, an exploration, or a CI run. It shows the failing run's timeline and its first
   difference from a passing neighbour. Proven on the Redis example's power cut and a swarm
   exploration on the Mac. Nothing recorded moved
+- M221 (tentative number): `hydo versions` replays a finding on versions of the system (a
+  manifest parameter, git revisions, or images). It bisects for where the finding was introduced
+  and whether the newest version still has it. `versions.json` is a results addition, shown by
+  `hydo report` and its web page. Formance's account race: introduced in v2.4.0, v2.3.24
+  passes, still in v2.4.18, in 2 replays. Nothing recorded moved
 
 ## Where to look
 

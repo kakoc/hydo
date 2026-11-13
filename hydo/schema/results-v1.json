@@ -37,6 +37,10 @@
     {
       "description": "Added after 0.2.0 (`hydo ci run`).",
       "$ref": "#/$defs/CiRun"
+    },
+    {
+      "description": "Added in Milestone 221 (`hydo versions`).",
+      "$ref": "#/$defs/VersionsDoc"
     }
   ],
   "$defs": {
@@ -4839,6 +4843,258 @@
       "required": [
         "report",
         "junit"
+      ]
+    },
+    "VersionsDoc": {
+      "description": "`versions.json`: findings replayed on versions of the system (`hydo versions`; added in\nMilestone 221). `hydo report` prints each finding's summary with the report of the run or\nexploration it came from.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/VersionsType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "engine": {
+          "description": "The engine every replay ran on.",
+          "$ref": "#/$defs/Engine"
+        },
+        "from": {
+          "description": "What was given: a run directory, an exploration directory, or a schedule.",
+          "type": "string"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Versions"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "engine",
+        "from"
+      ]
+    },
+    "VersionsType": {
+      "description": "The `type` of this record: always `\"versions\"`.",
+      "type": "string",
+      "enum": [
+        "versions"
+      ]
+    },
+    "Versions": {
+      "description": "One finding's minimal schedule replayed on several versions of the system, oldest first\n(`hydo versions`; added in Milestone 221). The search assumes one change point: the versions\nbefore it pass and the versions from it on reproduce, or the other way round for a fix.",
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "description": "The minimal schedule replayed.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The finding key the replays are compared with.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "The finding's normalized statement (numbers as `#`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "found_on": {
+          "description": "Where the finding came from: a run directory, an exploration directory, a reference\nimage, a version, or the first failing end of the versions.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "How the versions were made: `param <KEY>` (`hydo build --set <KEY>=<version>`), `git` (a\ncheckout of each revision, its build command, then `hydo build`) or `images` (given\nimages).",
+          "type": "string"
+        },
+        "versions": {
+          "description": "Every version, oldest first; the ones the search did not need are `not-replayed`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionOutcome"
+          },
+          "default": []
+        },
+        "first_bad": {
+          "description": "The oldest version that reproduced.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_good": {
+          "description": "The version that passed right before `first_bad`. Absent: `first_bad` is the oldest\nversion decided, so the finding is at least that old.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_bad": {
+          "description": "The newest version that reproduced.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fixed_in": {
+          "description": "The first version that passed after `last_bad`: where the finding was fixed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "still_present_in_newest": {
+          "description": "Whether the newest version reproduced. Absent: the newest version was not decided.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "contradiction": {
+          "description": "Set when the replays contradict a single change point (reproduced, passes, reproduced):\nthe decided versions in order with their outcomes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replays": {
+          "description": "Replays run. A version answered by the finding's own record is not counted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "summary": {
+          "description": "The answer in one sentence.",
+          "type": "string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "schedule",
+        "source",
+        "replays",
+        "summary"
+      ]
+    },
+    "VersionOutcome": {
+      "description": "What one version of the system did with a finding's minimal schedule (`hydo versions`; added\nin Milestone 221).",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The version as given: a manifest parameter's value (`3.5.5`), a git revision, or an\nimage's name.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "See [`version_outcome`].",
+          "type": "string"
+        },
+        "fingerprint": {
+          "description": "The replay's fingerprint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "The finding key of a failing verdict (`f1:<kind>:<10 hex>`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "why": {
+          "description": "Why the version could not run, or the other findings of a run that passed (new error\nkinds).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commit": {
+          "description": "A git revision's commit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_sha256": {
+          "description": "SHA-256 of the version's image.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_reused": {
+          "description": "The image came from the image cache by its input key, not from a build.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "recorded": {
+          "description": "The outcome is the finding's own recorded run on the same image, not a new replay.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "replay": {
+          "description": "The replay's number in the search (1: the first replay).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "dir": {
+          "description": "The replay's run directory, relative to the directory of `versions.json`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "outcome"
       ]
     }
   }

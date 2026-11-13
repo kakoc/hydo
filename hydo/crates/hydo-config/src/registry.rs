@@ -242,8 +242,9 @@ variables! {
     HYDO_EXPLORE_CACHE: Pool, User, "path", "", "hydo-explore, hydo-bench";
     /// The explorer's tests only (M145): a scripted engine program that answers every schedule as a
     /// pure function of its text, instead of the host controller over a real engine
-    /// (`hydo_explore::scripted`).
-    HYDO_SCRIPTED_ENGINE: Pool, Developer, "path", "", "hydo-explore";
+    /// (`hydo_explore::scripted`). `hydo versions`' tests use it too (M221): it also builds a
+    /// stand-in image per version (`<program> build <manifest> <out dir> KEY=VALUE...`).
+    HYDO_SCRIPTED_ENGINE: Pool, Developer, "path", "", "hydo-explore, hydo-cli";
 
     // ------------------------------------------------------------------ Hvm
     /// Which Mac engine runs: `inproc` the Rust engine in this process (one VM per process; the
@@ -620,6 +621,10 @@ variables! {
     HYDO_REBASE_PLATFORM: Passed, Passed, "text", "", "set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh";
     /// The unpacked release whose guest files the staging script's prefix uses (M164).
     HYDO_REBASE_RELEASE: Passed, Passed, "path", "", "set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh";
+    /// The version being built, for the `--build` command of `hydo versions` (M221).
+    HYDO_VERSION: Passed, Passed, "text", "", "set by hydo versions for its --build command";
+    /// The image of a replay, for the scripted engine program of `hydo versions`' tests (M221).
+    HYDO_SCRIPTED_IMAGE: Passed, Passed, "path", "", "set by hydo versions for HYDO_SCRIPTED_ENGINE";
 }
 
 /// The variables removed in M144 and later.

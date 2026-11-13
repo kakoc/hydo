@@ -1,0 +1,65 @@
+{
+  "v": 1,
+  "type": "versions",
+  "hydo_version": "0.3.1",
+  "epoch": 2,
+  "engine": {
+    "backend": "hvm"
+  },
+  "from": "run-2.4.18",
+  "findings": [
+    {
+      "schedule": "disk=none | run",
+      "key": "f1:error-log:21b4dcd9d9",
+      "title": "new error kind 027af89500d5: [postgres] <time> UTC [#] ERROR: duplicate key value violates unique constraint 'accounts_ledger'",
+      "found_on": "run-2.4.18",
+      "source": "param ledger",
+      "versions": [
+        {
+          "version": "v2.3.24",
+          "outcome": "passes",
+          "fingerprint": "e08898ae773d1f14",
+          "verdict": "HYDO-ORACLE: OK invariants=14 held (compose.commands: started=58 ok=44 failed=14 timeout=0 violation=0 killed=0 skipped=0)",
+          "image_sha256": "14594464673071cae2d6583f69e4468cf108c8ac5b738b0680482ce7f5bec1df",
+          "image_reused": false,
+          "replay": 1,
+          "dir": "runs/01-01-v2.3.24"
+        },
+        {
+          "version": "v2.4.0",
+          "outcome": "reproduced",
+          "fingerprint": "a1a0a244d9473280",
+          "verdict": "HYDO-ORACLE: OK invariants=14 held (compose.commands: started=58 ok=44 failed=14 timeout=0 violation=0 killed=0 skipped=0)",
+          "key": "f1:error-log:21b4dcd9d9",
+          "image_sha256": "7c8b2a43fe31b74bfe0a81a4463ece2260af9a85cd91f476705fb6c7a6eb4e38",
+          "image_reused": false,
+          "replay": 2,
+          "dir": "runs/01-02-v2.4.0"
+        },
+        {
+          "version": "v2.4.9",
+          "outcome": "not-replayed"
+        },
+        {
+          "version": "v2.4.18",
+          "outcome": "reproduced",
+          "fingerprint": "f479b8a7e9865610",
+          "verdict": "HYDO-ORACLE: OK invariants=14 held (compose.commands: started=58 ok=44 failed=14 timeout=0 violation=0 killed=0 skipped=0)",
+          "key": "f1:error-log:21b4dcd9d9",
+          "image_sha256": "62a8dd2a23ef745a71d5b2c940701934a7fc0d8e1045032163be556b8d32fb08",
+          "image_reused": false,
+          "recorded": true
+        }
+      ],
+      "first_bad": "v2.4.0",
+      "last_good": "v2.3.24",
+      "last_bad": "v2.4.18",
+      "still_present_in_newest": true,
+      "replays": 2,
+      "summary": "introduced in v2.4.0 (v2.3.24 passes); still present in v2.4.18, the newest version tried",
+      "notes": [
+        "one replay per version: hydo replays a schedule exactly, so each verdict is exact for this engine and image"
+      ]
+    }
+  ]
+}

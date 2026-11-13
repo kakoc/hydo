@@ -121,9 +121,24 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
         .first()
         .cloned()
         .unwrap_or_else(|| pjoin(OUT, "explore"));
-    let r =
-        hydo_results::read_dir(Path::new(&d)).unwrap_or_else(|e| die(&format!("no report: {e}")));
-    let text = match r {
+    // `hydo versions`' answer (M221): next to the report of the run or exploration it came from,
+    // or alone for a directory with only versions.json
+    let versions = hydo_results::versions_of(Path::new(&d));
+    let r = match hydo_results::read_dir(Path::new(&d)) {
+        Ok(r) => r,
+        Err(e) => match &versions {
+            Some((p, v)) if p.parent() == Some(Path::new(&d)) => {
+                let mut o = std::io::stdout().lock();
+                for f in &v.findings {
+                    let _ = o.write_all(crate::versions::text(f).as_bytes());
+                    let _ = o.write_all(b"\n");
+                }
+                return 0;
+            }
+            _ => die(&format!("no report: {e}")),
+        },
+    };
+    let mut text = match r {
         hydo_results::Results::Run { run, .. } => hydo_explore::md::run_report(&run),
         hydo_results::Results::Exploration { doc: Some(doc), .. } => hydo_explore::md::report(&doc),
         hydo_results::Results::Exploration {
@@ -143,6 +158,13 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
         }
         hydo_results::Results::Exploration { .. } => die(&format!("no report in {d}")),
     };
+    if let Some((p, v)) = &versions {
+        let md = text.starts_with('#');
+        if !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str(&crate::versions::report_lines(v, p, md));
+    }
     let mut o = std::io::stdout().lock();
     let _ = o.write_all(text.as_bytes());
     0

@@ -770,119 +770,95 @@ fn checks_html(run: &Run) -> String {
 
 // ---------------------------------------------------------------- versions
 
-/// A `versions` member of a results document, or `versions.json` next to it: where a finding was
-/// introduced and where it is still present (the version-range finder). Read leniently: its
-/// fields are shown by the names it uses.
-fn versions_raw(dir: &Path, doc_file: &str) -> Option<Value> {
-    let raw = std::fs::read_to_string(dir.join(doc_file))
-        .ok()
-        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-        .and_then(|v| v.get("versions").cloned())
-        .filter(|v| !v.is_null());
-    raw.or_else(|| {
-        std::fs::read_to_string(dir.join("versions.json"))
-            .ok()
-            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-    })
+/// `hydo versions`' answer for this directory (Milestone 221): `versions.json` next to the
+/// results document, or in its `versions/` folder, where `hydo versions <dir>` writes it
+/// (`hydo_results::versions_of`).
+fn versions_raw(dir: &Path, _doc_file: &str) -> Option<hydo_results::VersionsDoc> {
+    hydo_results::versions_of(dir).map(|(_, d)| d)
 }
 
-fn scalar(v: &Value) -> Option<String> {
-    match v {
-        Value::String(s) => Some(s.clone()),
-        Value::Number(n) => Some(n.to_string()),
-        Value::Bool(b) => Some(b.to_string()),
-        _ => None,
-    }
-}
-
-fn versions_html(v: &Value) -> String {
-    let items: Vec<&Value> = match v {
-        Value::Array(a) => a.iter().collect(),
-        Value::Object(o) => match o
-            .get("findings")
-            .or_else(|| o.get("ranges"))
-            .and_then(Value::as_array)
-        {
-            Some(a) => a.iter().collect(),
-            None => vec![v],
-        },
-        _ => return String::new(),
-    };
-    let label = |k: &str| -> String {
-        match k {
-            "introduced" | "introduced_in" | "first_bad" => "Introduced in".into(),
-            "last_good" | "good" | "last_ok" => "The last version without it".into(),
-            "still_present" | "present_in" | "last_bad" | "latest" | "still_present_in" => {
-                "Still present in".into()
-            }
-            "fixed_in" | "fixed" => "Fixed in".into(),
-            other => other.replace('_', " "),
-        }
-    };
-    let mut s = String::from(
-        "<p>The versions of the system this finding was tested on, from the results' version \
-         search.</p>\n",
+fn versions_html(doc: &hydo_results::VersionsDoc) -> String {
+    let mut s = format!(
+        "<p>The finding's minimal schedule replayed on versions of the system, oldest first \
+         (<code>hydo versions</code>, on the {} engine). One replay per version is enough: hydo \
+         replays exactly, so each verdict is exact for that engine and image.</p>\n",
+        esc(doc.engine.backend.as_deref().unwrap_or("recorded"))
     );
-    for it in items {
-        let Some(o) = it.as_object() else { continue };
+    for v in &doc.findings {
         s.push_str("<div class=\"card\">\n");
-        if let Some(t) = ["finding", "key", "title", "signature", "schedule"]
-            .iter()
-            .find_map(|k| o.get(*k).and_then(scalar))
-        {
-            s.push_str(&format!("<h3>{}</h3>\n", code(&t)));
-        }
+        s.push_str(&format!(
+            "<h3>{}</h3>\n",
+            code(v.title.as_deref().unwrap_or(&v.schedule))
+        ));
+        s.push_str(&format!("<p>{}</p>\n", esc(&v.summary)));
         let mut rows: Vec<(String, String)> = Vec::new();
-        for (k, val) in o {
-            if ["finding", "key", "title", "signature"].contains(&k.as_str()) {
-                continue;
+        let mut fact = |k: &str, x: &Option<String>| {
+            if let Some(x) = x {
+                rows.push((k.to_string(), esc(x)));
             }
-            if let Some(x) = scalar(val) {
-                rows.push((label(k), esc(&x)));
-            } else if let Some(list) = val
-                .as_array()
-                .filter(|l| l.iter().all(|x| scalar(x).is_some()))
-            {
-                rows.push((
-                    label(k),
-                    esc(&list
-                        .iter()
-                        .filter_map(scalar)
-                        .collect::<Vec<_>>()
-                        .join(", ")),
-                ));
-            }
+        };
+        fact("Introduced in", &v.first_bad);
+        fact("The last version without it", &v.last_good);
+        fact("Fixed in", &v.fixed_in);
+        let newest = v.versions.last().map(|r| r.version.clone());
+        fact(
+            "Still present in the newest version",
+            &v.still_present_in_newest.map(|p| {
+                format!(
+                    "{} ({})",
+                    if p { "yes" } else { "no" },
+                    newest.clone().unwrap_or_default()
+                )
+            }),
+        );
+        fact("Contradiction", &v.contradiction);
+        rows.push(("Schedule".into(), code(&v.schedule)));
+        if let Some(k) = &v.key {
+            rows.push(("Finding key".into(), code(k)));
         }
+        rows.push(("Versions from".into(), esc(&v.source)));
+        rows.push((
+            "Replays".into(),
+            esc(&format!("{} for {} versions", v.replays, v.versions.len())),
+        ));
         s.push_str(&facts(&rows));
-        for (k, val) in o {
-            let Some(list) = val.as_array() else { continue };
-            if !list.iter().all(Value::is_object) || list.is_empty() {
-                continue;
-            }
-            let mut cols: Vec<String> = Vec::new();
-            for x in list {
-                for c in x.as_object().into_iter().flat_map(|m| m.keys()) {
-                    if !cols.contains(c) && cols.len() < 5 {
-                        cols.push(c.clone());
+        let rows: Vec<(String, Vec<String>)> = v
+            .versions
+            .iter()
+            .map(|r| {
+                let word = match r.outcome.as_str() {
+                    hydo_results::version_outcome::REPRODUCED => badge("bad", "reproduced"),
+                    hydo_results::version_outcome::PASSES => badge("ok", "passes"),
+                    hydo_results::version_outcome::FAILS_OTHERWISE => {
+                        badge("warn", "fails otherwise")
                     }
-                }
-            }
-            let rows: Vec<(String, Vec<String>)> = list
-                .iter()
-                .take(60)
-                .map(|x| {
-                    (
-                        String::new(),
-                        cols.iter()
-                            .map(|c| esc(&x.get(c).and_then(scalar).unwrap_or_default()))
-                            .collect(),
-                    )
-                })
-                .collect();
-            s.push_str(&format!("<h4>{}</h4>\n", esc(&label(k))));
-            let head: Vec<&str> = cols.iter().map(String::as_str).collect();
-            s.push_str(&table(&head, &rows));
-        }
+                    hydo_results::version_outcome::CANNOT_RUN => badge("warn", "cannot run"),
+                    other => esc(&other.replace('-', " ")),
+                };
+                let how = match (r.recorded, r.replay) {
+                    (Some(true), _) => "the finding's own run".to_string(),
+                    (_, Some(n)) => format!("replay {n}"),
+                    _ => String::new(),
+                };
+                (
+                    String::new(),
+                    vec![
+                        esc(&r.version),
+                        word,
+                        r.fingerprint.as_deref().map(code).unwrap_or_default(),
+                        esc(&how),
+                        esc(&cut(
+                            r.verdict.as_deref().or(r.why.as_deref()).unwrap_or(""),
+                            200,
+                        )),
+                    ],
+                )
+            })
+            .collect();
+        s.push_str(&table(
+            &["Version", "Outcome", "Fingerprint", "From", "Verdict"],
+            &rows,
+        ));
         s.push_str("</div>\n");
     }
     s

@@ -8,3 +8,4 @@ mod docs;
 mod equivalence;
 mod migrate;
 mod readme;
+mod versions;

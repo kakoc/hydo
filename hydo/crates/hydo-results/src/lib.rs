@@ -46,6 +46,27 @@ pub const EXPLORATION_DOC: &str = "exploration.json";
 pub const EVENTS: &str = "events.jsonl";
 /// A diff's document (added in M165).
 pub const DIFF_DOC: &str = "diff.json";
+/// `hydo versions`' document (added in Milestone 221): findings replayed on versions of the
+/// system.
+pub const VERSIONS_DOC: &str = "versions.json";
+
+/// The `versions.json` that belongs to a run or exploration directory: `<dir>/versions.json`, or
+/// `<dir>/versions/versions.json` (where `hydo versions <dir>` writes it). None when there is
+/// none or it does not read.
+pub fn versions_of(dir: &std::path::Path) -> Option<(std::path::PathBuf, v1::VersionsDoc)> {
+    [
+        dir.join(VERSIONS_DOC),
+        dir.join("versions").join(VERSIONS_DOC),
+    ]
+    .into_iter()
+    .find_map(|p| {
+        let text = std::fs::read_to_string(&p).ok()?;
+        match reader::document(&text).ok()? {
+            reader::Record::Versions(d) => Some((p, *d)),
+            _ => None,
+        }
+    })
+}
 
 /// One stream record as a line: compact JSON and a newline.
 pub fn to_line<T: serde::Serialize>(rec: &T) -> String {

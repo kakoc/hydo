@@ -15,7 +15,7 @@
 
 use crate::v1::{
     CiRun, DiagnosisDoc, Diff, End, Exploration, Inspect, InspectError, Run, Shrink, Start,
-    Timeline,
+    Timeline, VersionsDoc,
 };
 use crate::{EVENTS, EXPLORATION_DOC, RUN_DOC};
 use serde_json::Value;
@@ -44,6 +44,8 @@ pub enum Record {
     InspectError(Box<InspectError>),
     /// `ci-run.json` (`hydo ci run`, added after 0.2.0).
     CiRun(Box<CiRun>),
+    /// `versions.json` (`hydo versions`, added in Milestone 221).
+    Versions(Box<VersionsDoc>),
 }
 
 /// A record the reader skipped (rule 3).
@@ -146,6 +148,7 @@ pub fn record(v: Value) -> Result<Option<Record>, String> {
         "inspect" => Record::Inspect(de(v, &ty)?),
         "inspect-error" => Record::InspectError(de(v, &ty)?),
         "ci-run" => Record::CiRun(de(v, &ty)?),
+        "versions" => Record::Versions(de(v, &ty)?),
         _ => return Ok(None),
     }))
 }

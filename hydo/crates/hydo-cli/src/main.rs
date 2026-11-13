@@ -10,8 +10,8 @@
 //! (hydo-errors), history checks (hydo-history), compose (hydo-compose), guide/skill/init
 //! (hydo-agents), migrate (hydo-manifest, src/migrate.rs), build (hydo-build, src/build.rs),
 //! explore (hydo-explore), diff and explain (src/diff.rs, src/explain.rs, M165: where two runs
-//! first differ), ci (src/ci/: hydo in continuous integration, docs/design/ci.md). No command
-//! runs Python.
+//! first differ), ci (src/ci/: hydo in continuous integration, docs/design/ci.md), versions
+//! (src/versions.rs, M221: which versions of the system have a finding). No command runs Python.
 
 mod build;
 mod cache;
@@ -34,6 +34,7 @@ mod runs;
 mod setup;
 mod skillupdate;
 mod sqlgen;
+mod versions;
 
 use ctx::{Ctx, Platform};
 
@@ -155,7 +156,7 @@ fn main() {
     // the engine of the commands that run guests (Linux: hvx, or KVM with --backend kvm)
     if matches!(
         argv.get(1).map(String::as_str),
-        Some("run" | "repro" | "explore" | "doctor" | "inspect")
+        Some("run" | "repro" | "explore" | "doctor" | "inspect" | "versions")
     ) {
         ctx.take_backend(&mut argv);
         // without --backend or HYDO_BACKEND: the engine this machine has (KVM when there is no
@@ -165,7 +166,7 @@ fn main() {
     // repro and inspect of a recorded run follow the engine it recorded (`hydo repro <dir>`,
     // `hydo inspect <sub> <dir>` and `hydo inspect start <dir>`), unless one was chosen
     match argv.get(1).map(String::as_str) {
-        Some("repro") => {
+        Some("repro" | "versions") => {
             if let Some(d) = argv.get(2).filter(|a| !a.starts_with('-')) {
                 ctx.follow_recorded_backend(std::path::Path::new(d));
             }
@@ -235,6 +236,9 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         // hydo in continuous integration (docs/design/ci.md; `hydo ci --help`, `hydo guide ci`;
         // the main help is a recorded answer)
         "ci" => ci::cmd_ci(ctx, rest),
+        // M221: in which versions of the system a finding is present (`hydo versions --help`,
+        // `hydo guide workflow`; the main help is a recorded answer)
+        "versions" => versions::cmd_versions(ctx, rest),
         // ready-made SQL workloads and checks for the hydo/ folder (`hydo sql-gen --help`; the
         // main help is a recorded answer)
         "sql-gen" => sqlgen::cmd_sql_gen(rest),
