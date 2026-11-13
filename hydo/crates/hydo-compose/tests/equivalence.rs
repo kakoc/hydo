@@ -155,6 +155,9 @@ fn argv(case: &serde_json::Value) -> Vec<String> {
         return args;
     }
     let mut v = vec![format!("proj/{}", s(case, "compose"))];
+    // never run Docker for a build: service (M214): the answers must not depend on whether this
+    // machine has Docker
+    v.push("--no-build".to_string());
     if !args.iter().any(|a| a == "--out") {
         v.extend(["--out".to_string(), "proj/hydo.yaml".to_string()]);
     }

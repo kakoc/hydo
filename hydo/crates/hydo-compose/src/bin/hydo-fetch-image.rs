@@ -5,6 +5,8 @@
 //! of a digest, the tag of `<tag>` is resolved now (an image `hydo compose --no-resolve` did not
 //! pin; the tag can move). Every blob is checked against its digest; the archive's tar headers
 //! are fixed (mode 0644, owner 0, time 0). fetch-images.sh, which `hydo compose` writes, calls it.
+//! `hydo-fetch-image build ...` builds the image of a Compose `build:` service with Docker and
+//! checks it against the lock file's pin (`hydo_compose::localbuild`).
 
 const USAGE: &str = "fetch_image -- copy ONE image from a Docker registry by manifest digest into a `docker save`
 style archive, without skopeo.
@@ -13,6 +15,9 @@ style archive, without skopeo.
     e.g. hydo-fetch-image docker.io/library/redis sha256:16b1... redis:alpine images/redis-alpine-amd64.docker.tar
     hydo-fetch-image <registry>/<repository> linux/amd64|linux/arm64 <name:tag> <out.tar>
                      (not pinned: resolves the tag now)
+    hydo-fetch-image build ...
+                     (builds a Compose `build:` service's image with Docker; `build` alone
+                     prints its usage)
 ";
 
 /// The digest of the platform's manifest that `<repo>:<tag of name_tag>` names now.
@@ -31,6 +36,10 @@ fn resolve(repo: &str, platform: &str, name_tag: &str) -> Result<String, String>
 
 fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
+    if a.first().map(String::as_str) == Some("build") {
+        // a Compose `build:` service's image (M214): hydo_compose::localbuild
+        std::process::exit(hydo_compose::localbuild::build_main(&a[1..]));
+    }
     if a.len() != 4 {
         eprint!("{USAGE}");
         std::process::exit(1);

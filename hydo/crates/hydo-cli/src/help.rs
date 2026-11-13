@@ -95,9 +95,10 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
             }
         ),
         "compose" => "usage: hydo compose <docker-compose.yaml> [--out hydo.yaml] [--images-dir DIR] [--env-file F]
-                    [--profile P] [--use-env] [--no-resolve] [--lock FILE]
+                    [--profile P] [--use-env] [--no-resolve] [--lock FILE] [--no-build] [--docker CLI]
   writes a hydo.yaml from a Docker Compose file: its services, their images and how they start.
-  `hydo guide services` describes the result."
+  It builds the image of a service with build: with Docker and pins it in the lock file
+  (--no-build leaves that to fetch-images.sh). `hydo guide services` describes the result."
             .to_string(),
         "module" if linux => "usage: hydo module build|install|uninstall|load|unload|status [--name NAME] [--dry-run] [--param KEY=VALUE ...]
        hydo module udev install|remove|status [--name NAME] [--group GROUP] [--mode 0660] [--no-adduser] [--dry-run]

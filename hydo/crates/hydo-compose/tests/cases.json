@@ -2170,5 +2170,31 @@
   "env": {},
   "setup": null,
   "raw": false
+ },
+ {
+  "name": "fixture-local-build-noresolve",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/local-build",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
+ },
+ {
+  "name": "fixture-local-build-loopback",
+  "fixture": "hydo/crates/hydo-compose/tests/fixtures/local-build",
+  "compose": "docker-compose.yml",
+  "args": [
+   "--no-resolve",
+   "--network",
+   "loopback"
+  ],
+  "lock": "none",
+  "env": {},
+  "setup": null,
+  "raw": false
  }
 ]

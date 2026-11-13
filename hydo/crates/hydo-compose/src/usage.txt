@@ -3,15 +3,21 @@ Compose").
 
     hydo-compose <docker-compose.yaml> [--out hydo.yaml] [--name NAME] [--images-dir DIR]
                  [--env-file FILE ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE]
-                 [--network bridge|loopback] [--no-addr]
+                 [--network bridge|loopback] [--no-addr] [--no-build] [--docker CLI]
 
 What it does, per Compose service (the table in MANIFEST.md lists every key):
-  * image: resolved to digests with skopeo (the index digest and the linux/amd64 + linux/arm64
-    manifest digests; tags are never trusted at build time). The image config (ports, healthcheck,
-    volumes, user, CPU variant) is read with `skopeo inspect --config`. Everything resolved is
+  * image: resolved to digests from the registry (the index digest and the linux/amd64 +
+    linux/arm64 manifest digests; tags are never trusted at build time). The image config (ports,
+    healthcheck, volumes, user, CPU variant) is read from the registry too. Everything resolved is
     recorded in a lock file (default hydo-compose.lock.json next to the output), so a second run
     needs no network and gives the same manifest. A script fetch-images.sh (next to the output)
     copies the images by digest into --images-dir (default images/) -- hydo-build never pulls.
+  * build: (a service built locally) -> built now with Docker for this machine's guest
+    (linux/arm64 on a Mac, linux/amd64 elsewhere) with Compose's context, dockerfile, args,
+    target and labels, saved to the image file the manifest names, and pinned by its digest in
+    the lock file. fetch-images.sh builds it again where the file is missing and stops when the
+    new build's digest differs from the pin. --no-build: only fetch-images.sh builds it.
+    --docker CLI: the Docker CLI to build with (else docker, else podman).
   * command / entrypoint / environment / env_file / working_dir / user -> the service's cmd /
     entrypoint / env / workdir / user (Compose semantics: strings are split into words, $$ is $).
   * depends_on (incl. condition: service_healthy) -> depends_on (hydo starts a service only after

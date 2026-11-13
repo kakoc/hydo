@@ -38,6 +38,9 @@ This page takes you from an empty repository to your first exploration. Read the
    sh hydo/fetch-images.sh
    ```
 
+   When Docker runs, the first command also builds the image of each service with `build:`, and
+   pins it by its digest. `hydo guide workflow` describes what happens without Docker.
+
    The import writes a numbered-steps `workload.run` and a `TODO` invariant as placeholders.
    Delete both from `hydo/hydo.yaml`, but keep `workload.steps` and `workload.timeout`: the
    commands in `hydo/workload/` are the workload, and the checks in `hydo/checks/` are the

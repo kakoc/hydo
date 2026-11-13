@@ -60,10 +60,26 @@ need a fix by hand. It also
 writes a numbered-steps `workload.run` and a `TODO` invariant: delete both (keep `workload.steps`
 and `workload.timeout`), and write the test as commands in `hydo/workload/` and `hydo/checks/`
 (or as a `test:` section in the file). Keep the generated comments that
-say where each value came from. A service built locally (`build:`) is never pulled.
-fetch-images.sh prints the `docker build` and `docker save` commands that make its file, and
-stops until the file is there. Then run `hydo compose` again, to pin it by the file's content.
-The reference is `hydo guide manifest`, section `From Docker Compose`.
+say where each value came from. The reference is `hydo guide manifest`, section `From Docker
+Compose`.
+
+**A service built locally** (`build:`) is never pulled. When a Docker command answers (`docker`, else
+`podman`; `--docker <cli>` names another), `hydo compose` builds the image for this machine's
+guest: linux/arm64 on a Mac, linux/amd64 on Linux. It passes Compose's `context`, `dockerfile`,
+`args`, `target` and `labels`, and saves the image where `hydo.yaml` names it. It reads the
+image's healthcheck, ports and volumes from the file, and records the file's digest as the pin in
+`hydo-compose.lock.json`.
+
+- Without Docker, `hydo compose` names what to install. Later, `sh hydo/fetch-images.sh` builds
+  the image and records the pin. Run `hydo compose` again then, so that `hydo.yaml` takes the
+  image's settings.
+- fetch-images.sh builds every such image whose file is missing, for example in a fresh checkout.
+  When the new build has another digest than the pin, it stops and keeps the build as
+  `<file>.rebuilt`. `HYDO_ACCEPT_REBUILD=1 sh hydo/fetch-images.sh` takes it and records the new
+  pin.
+- Expect that stop on another machine: a Docker build rarely gives the same bytes twice. Docker
+  28.4 writes a memory address into the history of an `EXPOSE` line, so each build differs.
+- `hydo compose --no-build` leaves every build to fetch-images.sh.
 
 ## Where each program comes from
 
