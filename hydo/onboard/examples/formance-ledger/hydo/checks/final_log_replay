@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo-msg: the log alone gives the ledger: replaying its transactions gives every balance, and it holds each transaction once
+# Rule 1h through the API (RESULTS.md): the ledger is built from its log (../../client/main.go,
+# checkLogReplay).
+exec /bin/ledgerc check log-replay

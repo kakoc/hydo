@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=30
+# one client operation (../../client/main.go, "transfer"): its token goes to $HYDO_ACKED when acknowledged
+exec /bin/ledgerc op transfer

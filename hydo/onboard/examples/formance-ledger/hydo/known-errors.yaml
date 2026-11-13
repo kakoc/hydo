@@ -1,0 +1,250 @@
+# Known error kinds: lines a service writes to its log that are expected (hydo/onboard/MANIFEST.md,
+# "Error logs as findings"). Each entry needs a reason; `hydo errors accept` appends them.
+#   sig:    the kind's signature (or match: a regular expression on its template)
+#   with:   only in runs whose schedule has one of these faults (K=mysql, C, disk, R=everysec)
+#   during: only for lines written while one of these faults was on
+format: 1
+unknown: report       # report: a new kind is a finding; fail: it also fails the run
+known:
+  - sig: 2f3eebbe759c
+    service: postgres
+    tpl: "<time> UTC [#] ERROR: relation '_system.goose_db_version' does not exist at character #"
+    example: "2026-01-01 00:00:01.024 UTC [180] ERROR:  relation '_system.goose_db_version' does not exist at character 15"
+    reason: "the first start of the ledger probes for its goose migration table before it creates the system schema"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: d5d5969914c3
+    service: postgres
+    tpl: "<time> UTC [#] ERROR: relation '_system.ledgers' does not exist at character #"
+    example: "2026-01-01 00:00:01.025 UTC [180] ERROR:  relation '_system.ledgers' does not exist at character 53"
+    reason: "the first start of the ledger reads the ledger list before its system schema exists"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 7b050995aeef
+    service: postgres
+    tpl: "<time> UTC [#] ERROR: relation '_default.goose_db_version' does not exist at character #"
+    example: "2026-01-01 00:00:02.035 UTC [180] ERROR:  relation '_default.goose_db_version' does not exist at character 15"
+    reason: "the first start of the ledger probes for the goose migration table of the default bucket before it creates the bucket"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 553842b58e13
+    service: ledger
+    tpl: "time='<time>' level=error msg='failed to connect to `user=ledger database=ledger`: #.#.#.#:5432 (#.#.#.#): failed to receive message: context canceled' *"
+    example: "time='2026-01-01T00:00:17Z' level=error msg='failed to connect to `user=ledger database=ledger`: 10.89.0.11:5432 (10.89.0.11): failed to receive message: context canceled' trace-id=Wd7xHxLla5"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 6c4166203708
+    service: ledger
+    tpl: "time='<time>' level=error msg='context canceled' *"
+    example: "time='2026-01-01T00:00:13Z' level=error msg='context canceled' trace-id=a9QcT6kcpC"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 43e1e26676b8
+    service: ledger
+    tpl: "time='<time>' level=error msg='unexpected error while forging log: failed to insert log: context canceled' *"
+    example: "time='2026-01-01T00:00:36Z' level=error msg='unexpected error while forging log: failed to insert log: context canceled' trace-id=FXkZAHyuua"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 6912e86802d1
+    service: ledger
+    tpl: "time='<time>' level=error msg='failed to rollback transaction: failed to deallocate cached statement(s): conn closed' *"
+    example: "time='2026-01-01T00:00:29Z' level=error msg='failed to rollback transaction: failed to deallocate cached statement(s): conn closed' trace-id=irdrkIN6Sw"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 6b3ae031872d
+    service: ledger
+    tpl: "time='<time>' level=error msg='failed to rollback transaction: conn closed' *"
+    example: "time='2026-01-01T00:00:14Z' level=error msg='failed to rollback transaction: conn closed' trace-id=CvwRcSOFm8"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 771ed12dc89d
+    service: ledger
+    tpl: "time='<time>' level=error msg='unexpected error while forging log: context canceled' *"
+    example: "time='2026-01-01T00:00:23Z' level=error msg='unexpected error while forging log: context canceled' trace-id=hnxNvhURn2"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 8973f4c4f586
+    service: ledger
+    tpl: "time='<time>' level=error msg='failed to start transaction: context canceled' *"
+    example: "time='2026-01-01T00:00:15Z' level=error msg='failed to start transaction: context canceled' trace-id=yP3bAdOAVD"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 8c1bc43e897f
+    service: ledger
+    tpl: "time='<time>' level=error msg='failed to connect to `user=ledger database=ledger`: #.#.#.#:5432 (#.#.#.#): failed SASL auth: context canceled' *"
+    example: "time='2026-01-01T00:00:23Z' level=error msg='failed to connect to `user=ledger database=ledger`: 10.89.0.11:5432 (10.89.0.11): failed SASL auth: context canceled' trace-id=UyNn0Vpf8d"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: a5b74f84dd2b
+    service: ledger
+    tpl: "time='<time>' level=error msg='failed to connect to `user=ledger database=ledger`: #.#.#.#:5432 (#.#.#.#): ValidateConnect failed: context canceled' *"
+    example: "time='2026-01-01T00:00:14Z' level=error msg='failed to connect to `user=ledger database=ledger`: 10.89.0.11:5432 (10.89.0.11): ValidateConnect failed: context canceled' trace-id=HInwjCz8wa"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: de7e7b9e2dcd
+    service: ledger
+    tpl: "time='<time>' level=error msg='counting ledgers in bucket: context canceled' *"
+    example: "time='2026-01-01T00:00:16Z' level=error msg='counting ledgers in bucket: context canceled' trace-id=88clk7XNES"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: fcf9c102020d
+    service: ledger
+    tpl: "time='<time>' level=error msg='unexpected error while forging log: failed to insert moves: context canceled' *"
+    example: "time='2026-01-01T00:00:29Z' level=error msg='unexpected error while forging log: failed to insert moves: context canceled' trace-id=irdrkIN6Sw"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: eceb2d1e10f8
+    service: ledger
+    tpl: "time='<time>' level=error msg='failed to connect to `user=ledger database=ledger`: #.#.#.#:5432 (#.#.#.#): dial error: dial tcp #.#.#.#:5432: operation was canceled' *"
+    example: "time='2026-01-01T00:00:21Z' level=error msg='failed to connect to `user=ledger database=ledger`: 10.89.0.11:5432 (10.89.0.11): dial error: dial tcp 10.89.0.11:5432: operation was canceled' trace-id=zS"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 5fd8a605ad26
+    service: ledger
+    tpl: "time='<time>' level=error msg='failed to connect to `user=ledger database=ledger`: #.#.#.#:5432 (#.#.#.#): dial error: dial tcp #.#.#.#:5432: connect: connection refused' *"
+    example: "time='2025-12-31T23:59:39Z' level=error msg='failed to connect to `user=ledger database=ledger`: 10.89.0.11:5432 (10.89.0.11): dial error: dial tcp 10.89.0.11:5432: connect: connection refused' trace-"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 4289929b0c10
+    service: ledger
+    tpl: "time='<time>' level=error msg='unexpected error while forging log: failed to insert transaction: context canceled' *"
+    example: "time='2026-01-01T00:00:08Z' level=error msg='unexpected error while forging log: failed to insert transaction: context canceled' trace-id=5j47NfJZ65"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 8d94c81c28b7
+    service: ledger
+    tpl: "time='<time>' level=error msg='unexpected error while forging log: failed to update balances: context canceled' *"
+    example: "time='2026-01-01T00:00:12Z' level=error msg='unexpected error while forging log: failed to update balances: context canceled' trace-id=KI8FV00gaR"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 908dfe95a48b
+    service: ledger
+    tpl: "time='<time>' level=error msg='unexpected error while forging log: upserting accounts: upserting accounts: context canceled' *"
+    example: "time='2026-01-01T00:00:14Z' level=error msg='unexpected error while forging log: upserting accounts: upserting accounts: context canceled' trace-id=Iw9XsqjKwo"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: b73f72eb1a42
+    service: ledger
+    tpl: "time='<time>' level=error msg='failed to connect to `user=ledger database=ledger`: #.#.#.#:5432 (#.#.#.#): server error: FATAL: the database system is starting up (SQLSTATE #P#)' *"
+    example: "time='2026-01-01T00:00:03Z' level=error msg='failed to connect to `user=ledger database=ledger`: 10.89.0.11:5432 (10.89.0.11): server error: FATAL: the database system is starting up (SQLSTATE 57P03)'"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 11c82010f878
+    service: ledger
+    tpl: "time='<time>' level=error msg='failed to commit transaction: context canceled' *"
+    example: "time='2026-01-01T00:05:18Z' level=error msg='failed to commit transaction: context canceled' trace-id=oEGY93JVbJ"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: f42dd92e4744
+    service: postgres
+    tpl: "<time> UTC [#] FATAL: terminating connection due to unexpected postmaster exit"
+    example: "2025-12-31 23:59:39.875 UTC [241] FATAL:  terminating connection due to unexpected postmaster exit"
+    with: [K=postgres, P=postgres, N, O, C]
+    reason: "PostgreSQL reports its own kill, restart, recovery after a power cut, or a client that stalled during authentication under a fault"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 9023a11207bc
+    service: postgres
+    tpl: "<time> UTC [#] FATAL: the database system is starting up"
+    example: "2026-01-01 00:00:03.422 UTC [310] FATAL:  the database system is starting up"
+    with: [K=postgres, P=postgres, N, O, C]
+    reason: "PostgreSQL reports its own kill, restart, recovery after a power cut, or a client that stalled during authentication under a fault"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 31eec9c62b0b
+    service: postgres
+    tpl: "<time> UTC [#] FATAL: the database system is not yet accepting connections"
+    example: "2026-01-01 00:00:21.212 UTC [545] FATAL:  the database system is not yet accepting connections"
+    with: [K=postgres, P=postgres, N, O, C]
+    reason: "PostgreSQL reports its own kill, restart, recovery after a power cut, or a client that stalled during authentication under a fault"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: aa7dcdbb0ae5
+    service: postgres
+    tpl: "<time> UTC [#] FATAL: canceling authentication due to timeout"
+    example: "2026-01-01 00:03:49.683 UTC [751] FATAL:  canceling authentication due to timeout"
+    with: [K=postgres, P=postgres, N, O, C]
+    reason: "PostgreSQL reports its own kill, restart, recovery after a power cut, or a client that stalled during authentication under a fault"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 027af89500d5
+    service: postgres
+    tpl: "<time> UTC [#] ERROR: duplicate key value violates unique constraint 'accounts_ledger'"
+    example: "2026-01-01 00:00:02.599 UTC [246] ERROR:  duplicate key value violates unique constraint 'accounts_ledger'"
+    reason: "a known ledger bug, not expected behaviour: two transactions that first use one account in two assets at once race in UpsertAccounts, and one fails with 500 INTERNAL (RESULTS.md, finding 1); accepted so that explorations show other kinds"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 60dceeb43638
+    service: ledger
+    tpl: "time='<time>' level=error msg='unexpected error while forging log: upserting accounts: upserting accounts: ERROR: duplicate key value violates unique constraint /'accounts_ledger/' (SQLSTATE #)' *"
+    example: "time='2026-01-01T00:00:02Z' level=error msg='unexpected error while forging log: upserting accounts: upserting accounts: ERROR: duplicate key value violates unique constraint /'accounts_ledger/' (SQLS"
+    reason: "a known ledger bug, not expected behaviour: two transactions that first use one account in two assets at once race in UpsertAccounts, and one fails with 500 INTERNAL (RESULTS.md, finding 1); accepted so that explorations show other kinds"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 05b9a027f0b1
+    service: ledger
+    tpl: "time='<time>' level=error msg='failed to rollback transaction: context canceled' *"
+    example: "time='2027-01-01T00:00:10Z' level=error msg='failed to rollback transaction: context canceled' trace-id=70bJYz8Xky"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 0d9028a355e1
+    service: ledger
+    tpl: "time='<time>' level=error msg='error starting transaction: context canceled' *"
+    example: "time='2027-01-01T00:00:15Z' level=error msg='error starting transaction: context canceled' trace-id=CxPijbinUv"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 1c9cef2c70ce
+    service: ledger
+    tpl: "time='<time>' level=error msg='unexpected error while forging log: failed to execute program: failed to resolve balances: could not get balances: context canceled' *"
+    example: "time='2025-12-31T00:00:28Z' level=error msg='unexpected error while forging log: failed to execute program: failed to resolve balances: could not get balances: context canceled' trace-id=uj74sMKAvG"
+    with: [K=postgres, P=postgres, K=ledger, P=ledger, N, O, C]
+    reason: "the ledger loses or cancels its PostgreSQL connection or request while PostgreSQL is down, paused, cut off by a network fault or the ledger itself is stopped; the request fails and the client sees an error or no answer"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: d11beed1dd98
+    service: postgres
+    tpl: "<time> UTC [#] ERROR: deadlock detected"
+    example: "2026-01-01 00:01:12.076 UTC [663] ERROR:  deadlock detected"
+    reason: "PostgreSQL breaks a deadlock between two ledger transactions; the ledger retries the transaction on a deadlock (forgeLogRetry), and the client sees one answer"
+    by: "onboarding"
+    date: "2026-11-13"

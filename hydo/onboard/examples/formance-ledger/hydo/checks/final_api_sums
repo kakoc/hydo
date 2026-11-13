@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo-msg: every balance the API reports is the sum of the postings of the transactions the API reports
+# Rule 1b through the API (RESULTS.md): the ledger agrees with itself.
+exec /bin/ledgerc check api-sums

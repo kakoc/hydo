@@ -6202,3 +6202,53 @@ that visible, as intended, but such an image stops fetch-images.sh on every rebu
 with the fake command. `hydo compose` builds for this machine's guest only, and fetch-images.sh
 builds the other one on request (`sh fetch-images.sh all`). `ssh`, `secrets`,
 `dockerfile_inline` and `additional_contexts` are not passed. No VM ran the built image.
+
+### Milestone 215 (tentative number) — DONE (Formance Ledger onboarded on the Mac engine as an experiment in business bugs; a race of two first uses of one account fails a payment with `500`, found by the error logs and by no business rule; 2026-11-13)
+
+**In short.** Formance Ledger v2.4.18, a double-entry ledger in Go on PostgreSQL 16, runs
+unmodified from its tag in `hydo/onboard/examples/formance-ledger` (RESULTS.md). The experiment
+gave it two kinds of rules. Eight domain rules read the ledger's own state: balanced
+transactions, balances equal to the sum of the postings, effective volumes, no overdraft, one
+transaction per operation, reverts, atomic bulks, and the audit log. One rule compares the
+ledger with what the client saw acknowledged. Every run used the Mac engine with the published
+0.3.1. The bare-metal machine ran another agent's timing measurement, and the build machine was
+off. Nothing recorded moved, and no hydo code changed.
+
+**What was found.**
+
+- A ledger bug, found by the error logs and by no rule. Two transactions that first use one
+  account at the same moment, in two different assets, race in `UpsertAccounts`. Both insert
+  the account, and the second fails on the unique index `accounts_ledger` with `500 INTERNAL`.
+  The check-then-insert came with the ledger's pull request 1064 (v2.4). Natively, 192 of 200
+  such pairs fail one request on v2.4.18, and none on v2.3.24, which used `ON CONFLICT`. Under
+  hydo it shows in the run without faults (fp `8fd7ae2f4353b6de`, twice). The client retries a
+  `500` with the same idempotency key, so no business rule fails. An upstream issue is drafted,
+  not posted.
+- A client mistake, found by rule 1.5 and the client-record rule, and by no rule over the
+  ledger's state. Without idempotency keys, an answer lost after the commit makes the retry
+  record the operation again. The explorer found it in 1 of 20 schedules and shrank it to
+  `O=ledger@20-25:resp:loss,81%` (`3b4c45cc98cd20b9`, twice). The saved regression passes on the
+  default image, where every unanswered operation took effect at most once.
+- Expected losses: a lying disk, or `synchronous_commit=off`, lost 3 to 34 acknowledged
+  operations at a power cut in 5 of 36 swarm schedules. Again only the client-record rules saw
+  it, since each loss is a whole transaction gone.
+- A documented behaviour: a backdated transfer can leave a past balance below zero, since the
+  ledger checks only the final balance.
+
+**Runs.** 156 explored schedules and 21 directed runs, on hydo 0.3.1's Mac release:
+
+| exploration | strategy | schedules | failures |
+|---|---|---|---|
+| e1, e2 | `process --new-faults` | 70 | 0 |
+| e5, the client without keys | `process --new-faults` | 20 | 1 (the client mistake) |
+| e3 | `swarm --new-faults` | 36 | 16, all lying disk, I/O errors or `S=off` with a cut |
+| e4 | `process --new-faults --timing --preempt` | 30 | 0 |
+
+The directed runs aimed at answers lost after the commit (slow and lossy windows on the ledger's
+port, pauses). Every SQL rule returned the broken rows on a deliberate break of a native
+database. The image without faults, `1fce9750…`, gives `8fd7ae2f4353b6de` twice.
+
+**What hydo lacked.** Open items 82 to 84: a recovery boot that hangs when its carried records
+pass the 4 KiB receive queue of the Mac and KVM engines, a limit of 1,024 control messages per
+run, and error kinds split by a ten-character request id, with `hydo errors accept` writing the
+login name into `known-errors.yaml`.
