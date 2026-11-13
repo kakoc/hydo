@@ -1030,6 +1030,16 @@ fn tag_items(cx: &Cx, seeds: &[i64], points: &[S]) -> Vec<(String, String)> {
 
 fn run(mut cx: Cx) -> i32 {
     let _ = std::fs::create_dir_all(&cx.out);
+    if cx.a.search.as_deref() == Some("state") {
+        if cx.steer.is_some() || cx.a.sweep.is_some() || cx.a.schedule.is_some() {
+            die("hydo explore: --search state goes with a seeded exploration (--seeds), without --steer, --sweep or --schedule");
+        }
+        // the snapshots live in one engine process (docs/design/state-search.md)
+        if cx.a.workers.is_some_and(|w| w != 1) {
+            eprintln!("hydo explore: --search state runs on one worker (its snapshots live in that engine)");
+        }
+        cx.a.workers = Some(1);
+    }
     cx.ev = Events::create(&cx.out.join(hydo_results::EVENTS));
     let t0 = Instant::now();
     let pool = make_pool(&cx);
@@ -1147,6 +1157,9 @@ fn run(mut cx: Cx) -> i32 {
             if cx.steer.is_some() {
                 let (seeds, items, pre, info) = steer_search(&cx, &pool, &seeds);
                 (seeds, items, Some(pre), None, None, Some(info))
+            } else if cx.a.search.as_deref() == Some("state") {
+                let (seeds, items, pre) = state_search(&cx, &pool, &seeds);
+                (seeds, items, Some(pre), None, None, None)
             } else {
                 let items: Vec<(String, String)> = seeds
                     .iter()
@@ -1385,6 +1398,232 @@ fn steer_search(cx: &Cx, pool: &Pool, seeds: &[i64]) -> SteerOut {
         SteerInfo { runs, doc, wall_s },
     )
 }
+
+/// `--search state` (docs/design/state-search.md, [`crate::state`]): the first runs chosen round
+/// by round, fresh schedules and branches from the corpus of mid-run states, then handed to the
+/// flow as results (re-runs from S1, shrinks and reports as for any exploration). Each run's
+/// record of the search is a line of `state-search.jsonl`. The run numbers are the tags'
+/// numbers; an invalid branch (its prefix differed from its parent's) took a number but ran no VM.
+fn state_search(cx: &Cx, pool: &Pool, seeds: &[i64]) -> StateOut {
+    use crate::state::{self, Job, Outcome, Params, Snap};
+    use std::io::Write;
+    let lo = seeds.first().copied().unwrap_or(1).max(0) as u64;
+    let hvx = !cx.kvm && cx.ex.backend == Backend::Hvx;
+    let corpus = cx.a.state_corpus.unwrap_or(if hvx { 4 } else { 32 }) as usize;
+    let snaps = cx.a.state_snaps as usize;
+    // hvx keeps 8 named snapshots (S0, S1 and 6 more), KVM and the Mac 64
+    let spare = if hvx {
+        6usize.saturating_sub(corpus).max(1)
+    } else {
+        (62 - corpus).min(4 * snaps.max(1))
+    };
+    let p = Params {
+        mix: cx.a.state_mix as u64,
+        batch: state::BATCH,
+        corpus,
+        spare,
+        rare: cx.a.state_rare as u64,
+        snaps_per_run: snaps,
+        budget: seeds.len(),
+        stop: cx.a.state_stop,
+        stream_seed: state::stream_seed(lo),
+        first_seed: lo,
+        steps: cx.ex.norders,
+        timing: !hvx && (cx.ex.timing || cx.ex.preempt),
+    };
+    eprintln!(
+        "state search: {} schedules, {} branches per 1000, a corpus of {} states ({} spare names), rare = seen in at most {} runs, {} snapshots per run{}",
+        p.budget,
+        p.mix,
+        p.corpus,
+        p.spare,
+        p.rare,
+        p.snaps_per_run,
+        if p.timing { ", timing branches (br=)" } else { "" }
+    );
+    let t0 = Instant::now();
+    let mut res: HashMap<String, (String, Res)> = HashMap::new();
+    let mut fresh = |sd: u64| cx.render(&cx.ex.compose_seed(&cx.a.strategy, sd, cx.a.durable_only));
+    let timing = p.timing;
+    let steps = p.steps;
+    let mut branch = |e: &state::Entry, fs: u64| -> Option<String> {
+        let (main, br) = state::split_br(&e.text);
+        let a = cx.ex.parse(&main).ok()?;
+        let f = cx
+            .ex
+            .compose_seed(&cx.a.strategy, fs % 1_000_000_007, cx.a.durable_only);
+        let b = state::branch_schedule(&a, &f, e.b, steps);
+        let mut text = state::with_host_words(&cx.render(&b), &br);
+        if timing {
+            let words = format!(" br={}{}", e.at, state::timing_words(&cx.render(&f)));
+            text = state::with_host_words(&text, &words);
+        }
+        // it must read back as a schedule
+        hydo_schedule::Schedule::parse(&text).ok()?;
+        Some(text)
+    };
+    let mut log = std::fs::File::create(cx.out.join("state-search.jsonl")).ok();
+    let strs = |x: &Value| -> Vec<String> {
+        x.as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|s| s.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mut run = |jobs: &[Job]| -> Vec<Outcome> {
+        let items: Vec<(String, String, hydo_engine::SearchReq)> = jobs
+            .iter()
+            .map(|j| {
+                let req = hydo_engine::SearchReq {
+                    snap_names: j.names.clone(),
+                    counts: j.counts.clone(),
+                    rare: j.rare,
+                    any_new: j.any_new,
+                    branch_from: j.from.clone(),
+                    spread: j.spread.clone(),
+                };
+                (j.tag.clone(), j.text.clone(), req)
+            })
+            .collect();
+        let got = pool.run_search(&items);
+        let mut outs = Vec::new();
+        for j in jobs {
+            let mut r = got.get(&j.tag).map(|x| x.1.clone()).unwrap_or_default();
+            let st = r.remove("state").unwrap_or(Value::Null);
+            let job_s = r.remove("job_s").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let v = r
+                .get("verdict")
+                .filter(|v| !v.is_null())
+                .map(py_str)
+                .unwrap_or_else(|| "ERROR no result".into());
+            let invalid = st["invalid"].as_str().map(str::to_string);
+            let snaps: Vec<Snap> = st["snaps"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(|s| Snap {
+                            name: s["name"].as_str().unwrap_or("").into(),
+                            stop: s["stop"].as_u64().unwrap_or(0),
+                            at: s["at"].as_u64().unwrap_or(0),
+                            new: strs(&s["new"]),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let ranges: Vec<(u64, u64, u64)> = st["ranges"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| Some((x[0].as_u64()?, x[1].as_u64()?, x[2].as_u64()?)))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let failed =
+                verdict_kind(&v) != "ok" && !hydo_engine::is_refused(&v) && invalid.is_none();
+            let o = Outcome {
+                failed,
+                verdict: v.clone(),
+                features: strs(&st["features"]),
+                snaps,
+                ranges,
+                job_s,
+                clock: st["clock"].as_u64().unwrap_or(0),
+                invalid: invalid.clone(),
+            };
+            eprintln!(
+                "state search: {:<9} {:<6} {:<9} {:>6.1}s clock={} snaps={} {}",
+                j.tag,
+                if j.from.is_some() { "branch" } else { "fresh" },
+                if invalid.is_some() {
+                    "invalid"
+                } else {
+                    verdict_kind(&v)
+                },
+                job_s,
+                o.clock,
+                o.snaps.len(),
+                invalid.as_deref().unwrap_or("")
+            );
+            if let Some(l) = log.as_mut() {
+                let line = json!({
+                    "tag": j.tag,
+                    "schedule": j.text,
+                    "from": j.from,
+                    "verdict": v,
+                    "kind": verdict_kind(&v),
+                    "failed": o.failed,
+                    "job_s": job_s,
+                    "clock": o.clock,
+                    "clock0": st["clock0"],
+                    "snaps": st["snaps"],
+                    "features": o.features.len(),
+                    "ranges": st["ranges"],
+                    "invalid": invalid,
+                });
+                let _ = writeln!(l, "{line}");
+            }
+            if invalid.is_none() {
+                res.insert(j.tag.clone(), (j.text.clone(), r));
+            }
+            outs.push(o);
+        }
+        outs
+    };
+    let found = state::search(&p, &mut fresh, &mut branch, &mut run);
+    let wall = t0.elapsed().as_secs_f64();
+    let (mut fresh_n, mut branch_n, mut secs) = (0, 0, 0.0);
+    let mut first: Option<(usize, String, f64)> = None;
+    for m in &found.made {
+        secs += m.outcome.job_s;
+        match m.origin {
+            state::Origin::Fresh { .. } => fresh_n += 1,
+            state::Origin::Branch { .. } => branch_n += 1,
+        }
+        if m.outcome.failed && first.is_none() {
+            first = Some((m.run, m.tag.clone(), secs));
+        }
+    }
+    let summary = json!({
+        "summary": true,
+        "runs": found.made.len(),
+        "fresh": fresh_n,
+        "branches": branch_n,
+        "invalid": found.invalid,
+        "invalid_why": found.invalid_why,
+        "job_s": secs,
+        "wall_s": wall,
+        "corpus": found.corpus.len(),
+        "features": found.counts.len(),
+        "stopped": found.stopped,
+        "first_failure_run": first.as_ref().map(|f| f.0),
+        "first_failure_tag": first.as_ref().map(|f| f.1.clone()),
+        "first_failure_job_s": first.as_ref().map(|f| f.2),
+    });
+    if let Some(l) = log.as_mut() {
+        let _ = writeln!(l, "{summary}");
+    }
+    println!("state search: {summary}");
+    let seeds: Vec<i64> = found
+        .made
+        .iter()
+        .filter_map(|m| m.tag.strip_prefix("seed-")?.parse().ok())
+        .collect();
+    let items = found
+        .made
+        .iter()
+        .map(|m| (m.tag.clone(), m.text.clone()))
+        .collect();
+    (seeds, items, res)
+}
+
+/// The run numbers, the tags and schedules, and the results of a state search.
+type StateOut = (
+    Vec<i64>,
+    Vec<(String, String)>,
+    HashMap<String, (String, Res)>,
+);
 
 /// A value as people read it: a whole number without a fraction.
 fn fmt_value(v: f64) -> String {

@@ -11,7 +11,9 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
        [--storage-faults] [--pause-workload [--pause-max MS]]
        [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
-        [--steer-batch N] [--steer-corpus N] [--steer-stop]] ...";
+        [--steer-batch N] [--steer-corpus N] [--steer-stop]]
+       [--search state [--state-mix N] [--state-corpus N] [--state-rare N] [--state-snaps N]
+        [--state-stop]] ...";
 
 /// The refusal without `--image` (Milestone 146: explore.py's default, `explore-disk.img`, is a
 /// shell-init image, which hydo has not run since Milestone 145).
@@ -107,6 +109,19 @@ pub struct Args {
     pub steer_corpus: i64,
     /// `--steer-stop`: stop after the round of the first failure.
     pub steer_stop: bool,
+    /// `--search state` (docs/design/state-search.md): explore from mid-run snapshots.
+    pub search: Option<String>,
+    /// `--state-mix N`: branches per thousand schedules once the corpus has an entry (0: the
+    /// plain exploration's schedules with the search's bookkeeping and no snapshots).
+    pub state_mix: i64,
+    /// `--state-corpus N`: the most states the corpus keeps (default: 4 on hvx, 32 otherwise).
+    pub state_corpus: Option<i64>,
+    /// `--state-rare N`: a feature is rare when at most N runs showed it.
+    pub state_rare: i64,
+    /// `--state-snaps N`: the most snapshots one run takes.
+    pub state_snaps: i64,
+    /// `--state-stop`: stop after the round of the first failure.
+    pub state_stop: bool,
 }
 
 impl Default for Args {
@@ -184,11 +199,17 @@ impl Default for Args {
             steer_batch: crate::steer::BATCH as i64,
             steer_corpus: crate::steer::CORPUS as i64,
             steer_stop: false,
+            search: None,
+            state_mix: 500,
+            state_corpus: None,
+            state_rare: 2,
+            state_snaps: 2,
+            state_stop: false,
         }
     }
 }
 
-const FLAGS: [&str; 20] = [
+const FLAGS: [&str; 21] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -209,9 +230,10 @@ const FLAGS: [&str; 20] = [
     "no-compose",
     "bursts",
     "steer-stop",
+    "state-stop",
 ];
 
-const VALUED: [&str; 50] = [
+const VALUED: [&str; 55] = [
     "seeds",
     "workers",
     "image",
@@ -262,6 +284,11 @@ const VALUED: [&str; 50] = [
     "steer-mix",
     "steer-batch",
     "steer-corpus",
+    "search",
+    "state-mix",
+    "state-corpus",
+    "state-rare",
+    "state-snaps",
 ];
 
 fn choice(name: &str, v: &str, ok: &[&str]) -> Result<String, String> {
@@ -414,6 +441,12 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "steer-mix" => a.steer_mix = int("steer-mix", v)?,
             "steer-batch" => a.steer_batch = int("steer-batch", v)?,
             "steer-corpus" => a.steer_corpus = int("steer-corpus", v)?,
+            "state-stop" => a.state_stop = true,
+            "search" => a.search = Some(choice("search", v, &["plain", "state"])?),
+            "state-mix" => a.state_mix = int("state-mix", v)?,
+            "state-corpus" => a.state_corpus = Some(int("state-corpus", v)?),
+            "state-rare" => a.state_rare = int("state-rare", v)?,
+            "state-snaps" => a.state_snaps = int("state-snaps", v)?,
             other => return Err(format!("unrecognized arguments: --{other}")),
         }
         i += 1;
@@ -432,6 +465,18 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
     }
     if !(1..=64).contains(&a.steer_batch) || !(1..=1024).contains(&a.steer_corpus) {
         return Err("argument --steer-batch: 1 to 64 schedules per round; --steer-corpus: 1 to 1024 schedules".into());
+    }
+    if !(0..=1000).contains(&a.state_mix) {
+        return Err(format!(
+            "argument --state-mix: {}: branches per thousand schedules, 0 to 1000",
+            a.state_mix
+        ));
+    }
+    if !(0..=8).contains(&a.state_snaps) || a.state_corpus.is_some_and(|c| !(1..=48).contains(&c)) {
+        return Err(
+            "argument --state-snaps: 0 to 8 snapshots per run; --state-corpus: 1 to 48 states"
+                .into(),
+        );
     }
     if a.image.is_empty() {
         return Err(NO_IMAGE.into());

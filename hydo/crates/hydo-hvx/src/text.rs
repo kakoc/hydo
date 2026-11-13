@@ -140,6 +140,12 @@ pub fn read_command(ln: &[u8]) -> Cmd {
     if ln == b"CUT" {
         return Cmd::Host(HostCmd::Cut);
     }
+    if ln == b"TIME" {
+        return Cmd::Host(HostCmd::Time(String::new()));
+    }
+    if let Some(r) = ln.strip_prefix(b"TIME ") {
+        return Cmd::Host(HostCmd::Time(lossy(r)));
+    }
     let mut l = "unknown command ".to_string();
     ctl::esc(ln, &mut l);
     Cmd::Bad(l)

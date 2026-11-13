@@ -22,6 +22,33 @@ fn refused(s: &str, why: &str) {
     }
 }
 
+/// The state search's branch points (docs/design/state-search.md): `br=<clock>` and the timing
+/// that follows it; the run's own tokens are the ones before the first `br=`.
+#[test]
+fn branch_points() {
+    let t =
+        "disk=none dseed=1 pct=5 pctn=3 pctk=100 br=900 tj=7 tjpm=100 br=1200 | run K=redis@5+2";
+    round_trip(t);
+    let s = Schedule::parse(t).unwrap();
+    assert!(matches!(s.host_token("pct"), Some(HostToken::Pct(5))));
+    assert!(s.host_token("tj").is_none());
+    let bp = s.branch_points();
+    assert_eq!(bp.len(), 2);
+    assert_eq!(bp[0].0, 900);
+    assert_eq!(bp[0].1.len(), 2);
+    assert!(bp[1].1.is_empty());
+    assert_eq!(
+        s.without_branch_points().to_string(),
+        "disk=none dseed=1 pct=5 pctn=3 pctk=100 | run K=redis@5+2"
+    );
+    // a second pct= after br= is the branch point's, not a repeated token
+    round_trip("disk=none pct=5 pctn=3 br=900 pct=6 pctn=3 | run");
+    refused("disk=none br=900 dseed=1 | run", "after br=");
+    refused("disk=none br=900 br=800 | run", "go up");
+    refused("disk=none br=900 pctn=3 | run", "without pct=");
+    refused("disk=none br=900 pct=1 pct=2 | run", "twice");
+}
+
 /// The committed sample: about 1,700 strings from the explorer corpus, chosen so that every token
 /// kind and every rule appears (picked from corpus.py's output before M107, by pattern, then every 900th line).
 #[test]

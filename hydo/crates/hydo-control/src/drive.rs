@@ -207,6 +207,16 @@ pub fn run(
     from: RunFrom,
     policy: &Policy,
 ) -> Result<Ran, DriveError> {
+    // a schedule's branch points (`br=`, docs/design/state-search.md): the runner sends the
+    // engine TIME at each; the engine's own schedule has none of them
+    let points = crate::search::SwitchLink::points_of(schedule);
+    let mut sw;
+    let link: &mut dyn Link = if points.is_empty() {
+        link
+    } else {
+        sw = crate::search::SwitchLink::new(link, points);
+        &mut sw
+    };
     let start = match from {
         RunFrom::Restored => Start::Resume(b.s1.0.clone()),
         RunFrom::Here(stop) => Start::Here {

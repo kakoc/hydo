@@ -37,6 +37,8 @@ struct Job {
     reply: Sender<Done>,
     /// Set when the batch no longer needs the job: a worker drops it unrun.
     cancel: Arc<AtomicBool>,
+    /// A state search's run (docs/design/state-search.md): its result gets `state`.
+    search: Option<hydo_engine::SearchReq>,
 }
 
 #[derive(Default)]
@@ -473,6 +475,7 @@ impl Pool {
                     text: text.clone(),
                     reply: tx.clone(),
                     cancel: cancel.clone(),
+                    search: None,
                 },
                 high,
             );
@@ -498,6 +501,40 @@ impl Pool {
         let mut out = HashMap::new();
         while let Some((tag, text, r)) = b.next_done() {
             out.insert(tag, (text, r));
+        }
+        out
+    }
+
+    /// The state search's runs (docs/design/state-search.md), never from the cache: each result
+    /// has `state` (the snapshots taken, the features, the guest clock, an invalid branch's
+    /// reason) and `job_s` (the worker's wall time for the job). The search runs on one worker,
+    /// which holds its snapshots, so the jobs run in the order given.
+    pub fn run_search(
+        &self,
+        items: &[(String, String, hydo_engine::SearchReq)],
+    ) -> HashMap<String, (String, Res)> {
+        let (tx, rx) = channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        for (tag, text, req) in items {
+            self.push(
+                Job {
+                    tag: tag.clone(),
+                    text: text.clone(),
+                    reply: tx.clone(),
+                    cancel: cancel.clone(),
+                    search: Some(req.clone()),
+                },
+                false,
+            );
+        }
+        let mut out = HashMap::new();
+        for _ in items {
+            match rx.recv() {
+                Ok((tag, text, r)) => {
+                    out.insert(tag, (text, r));
+                }
+                Err(_) => break,
+            }
         }
         out
     }
@@ -559,6 +596,7 @@ impl Batch<'_> {
                 text: text.to_string(),
                 reply: self.tx.clone(),
                 cancel: self.cancel.clone(),
+                search: None,
             },
             self.high,
         );
@@ -632,6 +670,7 @@ fn worker_main(
         }
         quiet_wait(h.pool.quiet_file.as_deref());
         let mut res = None;
+        let mut state: Option<(hydo_engine::SearchRun, f64)> = None;
         for attempt in 0..2 {
             let Some(wk) = w.as_mut() else { break };
             let r = match Schedule::parse(&job.text) {
@@ -648,7 +687,16 @@ fn worker_main(
                         ));
                         break;
                     }
-                    None => wk.run(&job.tag, &s),
+                    None => match &job.search {
+                        None => wk.run(&job.tag, &s),
+                        Some(req) => {
+                            let t0 = Instant::now();
+                            wk.run_search(&job.tag, &s, req).map(|(rr, sr)| {
+                                state = Some((sr, t0.elapsed().as_secs_f64()));
+                                rr
+                            })
+                        }
+                    },
                 },
                 Err(e) => {
                     // a schedule the engines would refuse: no run (explore.py sent it and
@@ -688,6 +736,10 @@ fn worker_main(
             }
         }
         let mut res = res.unwrap_or_else(|| error_result("", i));
+        if let Some((sr, secs)) = state {
+            res.insert("state".into(), search_json(&sr));
+            res.insert("job_s".into(), json!(secs));
+        }
         if !py_str(&res["verdict"]).starts_with("ERROR worker") {
             host_checks(&h, &job.tag, &mut res);
             host_errlog(&h, &job.tag, &job.text, &mut res);
@@ -701,6 +753,20 @@ fn worker_main(
     if let Some(x) = w {
         let _ = x.close();
     }
+}
+
+/// A state search run's record as the result carries it.
+fn search_json(sr: &hydo_engine::SearchRun) -> Value {
+    json!({
+        "snaps": sr.snaps.iter().map(|s| json!({
+            "name": s.name, "stop": s.stop, "at": s.at, "new": s.new,
+        })).collect::<Vec<_>>(),
+        "features": sr.features,
+        "clock": sr.clock,
+        "clock0": sr.clock0,
+        "ranges": sr.ranges.iter().map(|r| json!([r.0, r.1, r.2])).collect::<Vec<_>>(),
+        "invalid": sr.invalid,
+    })
 }
 
 /// This worker is gone: when it was the last one, answer every queued job with an error result.

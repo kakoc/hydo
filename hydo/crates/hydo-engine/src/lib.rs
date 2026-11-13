@@ -488,6 +488,68 @@ pub trait Worker {
 
     /// Tear the worker down (QUIT) and wait for the engine to exit.
     fn close(self: Box<Self>) -> Result<(), EngineError>;
+
+    /// The state search's run (docs/design/state-search.md): `schedule` from S1, or with
+    /// [`SearchReq::branch_from`] from that snapshot of an earlier run of this worker, taking
+    /// snapshots at stops that show rare features. Workers that cannot do it say so.
+    fn run_search(
+        &mut self,
+        tag: &str,
+        schedule: &Schedule,
+        req: &SearchReq,
+    ) -> Result<(RunResult, SearchRun), EngineError> {
+        let _ = (tag, schedule, req);
+        Err(EngineError::Unsupported(
+            "this worker has no state search (docs/design/state-search.md)".into(),
+        ))
+    }
+}
+
+/// What the state search asks of one run (docs/design/state-search.md).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SearchReq {
+    /// The snapshot names this run may take, in order (empty: it takes none).
+    pub snap_names: Vec<String>,
+    /// The number of runs that showed each feature so far.
+    pub counts: std::collections::BTreeMap<String, u64>,
+    /// A feature is rare when its count is at most this.
+    pub rare: u64,
+    /// Also take a snapshot at the first stop of each feature new to the run when no feature is
+    /// rare (the corpus is empty).
+    pub any_new: bool,
+    /// Branch: run from this snapshot, which an earlier run of this worker took.
+    pub branch_from: Option<String>,
+    /// For a target whose console shows no features: snapshots at the first stops this much
+    /// guest clock past the run's start (a branch: its snapshot), whatever they show.
+    pub spread: Vec<u64>,
+}
+
+/// One snapshot a run took.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SearchSnap {
+    pub name: String,
+    /// The stop's number and clock value.
+    pub stop: u64,
+    pub at: u64,
+    /// The features this stop showed for the first time in the run.
+    pub new: Vec<String>,
+}
+
+/// What the state search learns from one run besides its RESULT.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SearchRun {
+    pub snaps: Vec<SearchSnap>,
+    /// Every feature the run showed, once each, in the order first seen.
+    pub features: Vec<String>,
+    /// The guest clock the run advanced (from S1, or from the branch point).
+    pub clock: u64,
+    /// The clock value of the run's first stop (a branch: its snapshot's).
+    pub clock0: u64,
+    /// The workload step ranges the controller ran, as (first step, end step, stop of the end).
+    pub ranges: Vec<(u64, u64, u64)>,
+    /// A branch whose controller did not send the parent's commands up to the snapshot: why.
+    /// No VM ran.
+    pub invalid: Option<String>,
 }
 
 /// A [`ControlledEngine`]'s booted engine ([`ControlledBoot::ready`]): it runs controlled runs
@@ -551,6 +613,14 @@ pub trait ControlledWorker {
 /// `hydo run` stops with the message, and the explorer records the run as refused, never as a
 /// failure (Milestone 208).
 pub fn refusal(kind: EngineKind, s: &hydo_schedule::Schedule) -> Option<String> {
+    // the state search's timing switch (docs/design/state-search.md) is built on KVM and the
+    // Mac engine; hvx's timing is the module's
+    if kind == EngineKind::Hvx && !s.branch_points().is_empty() {
+        return Some(format!(
+            "br= (a branch point that changes the timing) is not supported on {}",
+            kind.name()
+        ));
+    }
     match kind {
         EngineKind::Hvx => hydo_hvx::sched::refusal(s),
         EngineKind::Hvm | EngineKind::Kvm => hydo_hvm::machine::host_token_problem(s),

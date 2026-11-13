@@ -120,7 +120,17 @@ pub enum HostToken {
     /// `spin=rewind`: run this schedule in the engine's rewind mode (hvm, serve.c; the KVM
     /// engine since Milestone 161).
     SpinRewind,
+    /// `br=<clock>`: a branch point of the state search (docs/design/state-search.md). The
+    /// timing tokens after it replace the run's timing from the first stop whose clock value is
+    /// at least `<clock>`. The host controller takes it and what follows out of the engine's
+    /// schedule and sends the engine `TIME` at that stop.
+    Br(u64),
 }
+
+/// The keys a branch point's segment may hold: the timing an engine changes at a stop.
+pub const BRANCH_KEYS: [&str; 9] = [
+    "tj", "tjpm", "tjmax", "tjlo", "tjhi", "tjx", "pct", "pctn", "pctk",
+];
 
 /// The longest explicit lists the module takes (hvx_abi.h HVX_TJ_MAX_EXPLICIT, HVX_XT_MAX_EXPLICIT).
 pub const MAX_EXPLICIT: usize = 32;
@@ -158,6 +168,7 @@ impl HostToken {
             HostToken::Pctn(_) => "pctn",
             HostToken::Pctk(_) => "pctk",
             HostToken::SpinRewind => "spin",
+            HostToken::Br(_) => "br",
         }
     }
 
@@ -280,6 +291,7 @@ impl HostToken {
             "pct" => HostToken::Pct(host_hex(v, "pct=")?),
             "pctn" => HostToken::Pctn(host_dec(v, "pctn=")?),
             "pctk" => HostToken::Pctk(host_dec(v, "pctk=")?),
+            "br" => HostToken::Br(host_dec(v, "br=")?),
             "spin" => {
                 if v != "rewind" {
                     return Err(err(format!("spin={v}: the only value is rewind")));
@@ -322,7 +334,8 @@ impl fmt::Display for HostToken {
             | HostToken::Q(v)
             | HostToken::Qm(v)
             | HostToken::Pctn(v)
-            | HostToken::Pctk(v) => write!(f, "{k}={v}"),
+            | HostToken::Pctk(v)
+            | HostToken::Br(v) => write!(f, "{k}={v}"),
             HostToken::Tjx(l) => {
                 f.write_str("tjx=")?;
                 for (i, (a, b)) in l.iter().enumerate() {
