@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: timeout=60
+# The customer cust4 cancels: its subscription sub4 ends now (DELETE /api/v1/subscriptions/sub4).
+# Lago bills what is not billed yet on a termination invoice. The workload sends no events to
+# sub4 during the run, so its billed usage stays the two seed events of November.
+. /hydo/workload/helper_lib.sh
+C terminate sub4

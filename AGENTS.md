@@ -330,6 +330,13 @@ makes it happen with ordinary requests and the guest's clock, on hvx, every run;
 replica stops again at every restart. Blind schedules never gave a tie. The details are in the
 example's RESULTS.md (the section on issue 3960).
 
+**Lago: business rules on a billing system (M218).** On Lago v1.57.0, seven billing rules over
+Lago's tables ran beside one generic rule over the client's acknowledged operations. The faults
+were kills, pauses, network faults, power cuts, and clock steps aimed at the billing tick. Both kinds found a
+known Lago bug: a subscription cancelled while Redis is down is never invoiced (lago-api issue
+6901). Only the generic rule caught usage dropped by a termination after a clock step. The
+consistency rules never failed. The example is `hydo/onboard/examples/lago` (RESULTS.md).
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -642,6 +649,27 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     code` without the assert; no build with symbols ran. hydo calls the stop of a replica in a
     run without faults `ERROR restart after the faults`, and the eventually check never runs.
     The Mac engine cannot boot TigerBeetle (`ERROR boot: SPIN`, open item 13).
+87. `eventually_` commands and checks (M218). The `eventually_` checks poll from the heal until
+    their deadline before the `eventually_` commands run. So a command cannot prepare what a
+    check waits for, such as Lago's billing tick. The example waits inside the command instead.
+88. A seed's client records (M218). `$HYDO_ACKED` and `$HYDO_OUTCOMES` of the `first_` commands
+    are not the run's files, so operations made in the seed are not in the client's records. The
+    Lago example writes them to the data disk.
+89. A check's output (M218). Only a check's last line reaches the verdict and `result.json`. A
+    check that lists what differs must also write to `/dev/console`, or each explanation needs a
+    replay with `hydo inspect`.
+90. One shrink per signature (M218). The explorer shrinks the first failure of each signature,
+    so a signature with several causes is explained by one of them. A check has to split its
+    own last lines by cause.
+91. The importer's job services (M218). `hydo compose` keeps a one-shot job that others wait for
+    (`service_completed_successfully`) as a service that sleeps. The explorer draws faults on
+    it: 6 of 20 schedules in the Lago example.
+92. Clock steps at a time (M218). The explorer steps the clock by fixed amounts only. Lago bills
+    at minute 10 of the hour, on the first of the month, so a step to that time needs a hand
+    schedule.
+93. The explorer's identity test reads git-ignored files (M218). It lists every file under an
+    example's `hydo/` folder, also `hydo-out/`, `.hydo/` and `images/`. A local exploration
+    there makes the golden stale, so the outputs had to be moved away before `HYDO_BLESS=1`.
 
 ## Milestone index
 
@@ -936,6 +964,11 @@ build machine, before 2026-10-13.
   workload, 0.16.29, 0.16.45 and 0.17.9 stop on every run and at every restart. The pulse 1 ns
   later passes, and so does 0.16.28. Two false findings of the new hold check fixed. Nothing recorded
   moved
+- M218 (tentative number): the Lago onboarding, an experiment in business bugs on the Mac
+  engine. A subscription cancelled while Redis is down is never invoiced (lago-api issue 6901,
+  known), found blind by both kinds of rules. A Redis error in Sidekiq's first scheduler cleanup
+  stops all retries. Power cuts, a skipped billing day, and backward clock steps drop acknowledged
+  usage by documented or environment causes. Nothing recorded moved
 
 ## Where to look
 

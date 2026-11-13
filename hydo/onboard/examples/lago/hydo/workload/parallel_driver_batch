@@ -1,0 +1,17 @@
+#!/bin/sh
+# hydo: timeout=60
+# Three usage events of one subscription in one batch request (POST /api/v1/events/batch),
+# retried with the same transaction ids after a lost answer.
+. /hydo/workload/helper_lib.sh
+s=${HYDO_SEED:-0}
+sub=sub$((1 + s % 3))
+if [ $((s / 3 % 2)) = 0 ]; then code=api_calls; else code=transfers; fi
+a=$((1 + s / 6 % 7)); b=$((1 + s / 42 % 7)); c=$((1 + s / 294 % 7))
+op=b$HYDO_CMD_ID
+ids="$op.1,units:$sub:$code,$a $op.2,units:$sub:$code,$b $op.3,units:$sub:$code,$c"
+C batch "$op" "$sub" "$code" "$a" "$b" "$c"
+case $? in
+  0) record ack $ids ;;
+  1) record failed $ids; exit 1 ;;
+  *) record unknown $ids; exit 1 ;;
+esac

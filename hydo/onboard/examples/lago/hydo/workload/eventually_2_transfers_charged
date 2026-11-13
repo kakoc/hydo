@@ -1,0 +1,29 @@
+#!/bin/sh
+# hydo: timeout=150
+# Every acknowledged event of the charge paid in advance gets its fee within 120 s after the
+# faults (the fee is made by background jobs: Lago's worker, through Redis).
+. /hydo/workload/helper_lib.sh
+acked | grep ',units:[a-z0-9]*:transfers,' | cut -d, -f1 | sort -u > /tmp/tr.acked
+a=$(wc -l < /tmp/tr.acked)
+i=0
+while :; do
+  if Q "select pay_in_advance_event_transaction_id from fees where pay_in_advance and deleted_at is null" > /tmp/tr.all; then
+    sort -u /tmp/tr.all > /tmp/tr.charged
+    comm -23 /tmp/tr.acked /tmp/tr.charged > /tmp/tr.missing
+    m=$(wc -l < /tmp/tr.missing)
+    [ "$m" = 0 ] && { echo "all $a acknowledged transfers are charged (after ${i} s)"; exit 0; }
+  fi
+  [ $i -ge 120 ] && break
+  sleep 5; i=$((i + 5))
+done
+echo "not charged: $(tr '\n' ' ' < /tmp/tr.missing)" | tee /dev/console
+# Lago stamps an event with its own clock when the client sends no timestamp; after a clock
+# step back past the subscription's start, the event belongs to no subscription and is never
+# charged (Lago bills events only inside a subscription's dates). Name those apart.
+Q "select e.transaction_id from events e join subscriptions s on s.external_id = e.external_subscription_id
+   where e.timestamp < s.started_at" | sort -u > /tmp/tr.before
+b=$(comm -12 /tmp/tr.missing /tmp/tr.before | wc -l)
+o=$((m - b))
+[ "$o" = 0 ] && echo "$b of $a acknowledged transfers have no fee: Lago stamped them before their subscription started"
+[ "$o" != 0 ] && echo "$o of $a acknowledged transfers have no fee 120 s after the faults"
+exit 1

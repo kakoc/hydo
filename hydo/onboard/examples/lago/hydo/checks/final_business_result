@@ -1,0 +1,14 @@
+#!/bin/sh
+# hydo-msg: faults do not change the business result: every total Lago bills equals what the client saw acknowledged
+# The rule knows only the client's outcome lines ("<op>,<key>,<amount> ack|failed|unknown") and
+# what Lago reports per key (helper_client.rb report): acknowledged amounts must be there once,
+# amounts without an answer at most once, refused ones not at all (workload/helper_ledger.awk).
+. /hydo/workload/helper_lib.sh
+C report > /tmp/lago-report.txt || exit 2
+outcomes > /tmp/lago-outcomes.txt
+awk -f /hydo/workload/helper_ledger.awk /tmp/lago-outcomes.txt /tmp/lago-report.txt > /tmp/lago-ledger.txt
+rc=$?
+# hydo keeps only a check's last line; the console keeps every line, for the report
+sed 's/^/lago-ledger: /' /tmp/lago-report.txt /tmp/lago-ledger.txt > /dev/console
+cat /tmp/lago-ledger.txt
+exit $rc

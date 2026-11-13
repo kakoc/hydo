@@ -1,0 +1,6 @@
+# Finding 2 of RESULTS.md (Lago issue 354): the clock steps over December 1, the billing day of
+# every monthly calendar subscription, and November is never invoiced for the three
+# subscriptions that are still active.
+# commands: anytime_redeliver eventually_1_billing_tick eventually_2_transfers_charged first_seed parallel_driver_batch parallel_driver_event serial_driver_terminate
+# expect: violation
+disk=none | run T=0:86400

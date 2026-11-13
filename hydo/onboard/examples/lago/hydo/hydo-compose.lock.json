@@ -1,0 +1,223 @@
+{
+ "generated_by": "hvx/onboard/hydo-compose",
+ "images": {
+  "getlago/api:v1.57.0": {
+   "index_digest": "sha256:24678b61b372e5ca02f9bb4687c9aec012f8ba8a3539d28c4cbe989f131f3aed",
+   "name": "getlago/api",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "/app/scripts/start.sh"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "BUNDLE_PATH=/usr/local/bundle",
+       "BUNDLE_WITHOUT=development test",
+       "GEM_HOME=/usr/local/bundle",
+       "LD_PRELOAD=/usr/lib/libjemalloc.so.2",
+       "PATH=/usr/local/bundle/bin:/home/nonroot/bundle/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+       "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
+       "SEGMENT_WRITE_KEY=bGgCpDWlRwahlEgjcAkGV7TItow7WBD8",
+       "GOCARDLESS_CLIENT_ID=OJWZfIzwIwf5Ww6W4vhE_njHXYifFbfNcwEqQDW9_MBX5fbt-Vq6DDD5NfE4kHz0",
+       "GOCARDLESS_CLIENT_SECRET=g7C5vA_ccCv65GUU68svhyIbppXE15EC1JDg9ci0hHu09-r3ReUCDXjGipa6TTpS",
+       "BUNDLE_WITH="
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": "nonroot",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "/app/scripts/start.sh"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "BUNDLE_PATH=/usr/local/bundle",
+       "BUNDLE_WITHOUT=development test",
+       "GEM_HOME=/usr/local/bundle",
+       "LD_PRELOAD=/usr/lib/libjemalloc.so.2",
+       "PATH=/usr/local/bundle/bin:/home/nonroot/bundle/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+       "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
+       "SEGMENT_WRITE_KEY=bGgCpDWlRwahlEgjcAkGV7TItow7WBD8",
+       "GOCARDLESS_CLIENT_ID=OJWZfIzwIwf5Ww6W4vhE_njHXYifFbfNcwEqQDW9_MBX5fbt-Vq6DDD5NfE4kHz0",
+       "GOCARDLESS_CLIENT_SECRET=g7C5vA_ccCv65GUU68svhyIbppXE15EC1JDg9ci0hHu09-r3ReUCDXjGipa6TTpS",
+       "BUNDLE_WITH="
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": "nonroot",
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:8e74b935cc902b363ecbd2050fef0375721ce5e21f2f59e39aece35e79c63d4c",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "getlago/api:v1.57.0",
+   "registry": "docker.io",
+   "repo": "getlago/api",
+   "tag": "v1.57.0"
+  },
+  "getlago/postgres-partman:15.0-alpine": {
+   "index_digest": "sha256:27a1e3a1138a69b5a0911ce125dfa613b9ced07604a2d781b9d31141f7f96036",
+   "name": "getlago/postgres-partman",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "LANG=en_US.utf8",
+       "PG_MAJOR=15",
+       "PG_VERSION=15.0",
+       "PG_SHA256=72ec74f4a7c16e684f43ea42e215497fcd4c55d028a68fb72e99e61ff40da4d6",
+       "PGDATA=/var/lib/postgresql/data",
+       "PARTMAN_VERSION=v5.4.0"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": null
+     },
+     "digest": "sha256:ff4616c24367f3643aac27061a0c4e757ca8f78af967249cb4b3fd64049d290d",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "LANG=en_US.utf8",
+       "PG_MAJOR=15",
+       "PG_VERSION=15.0",
+       "PG_SHA256=72ec74f4a7c16e684f43ea42e215497fcd4c55d028a68fb72e99e61ff40da4d6",
+       "PGDATA=/var/lib/postgresql/data",
+       "PARTMAN_VERSION=v5.4.0"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": null
+     },
+     "digest": "sha256:4bfb4eb22be0f9149efb04724ecb573ad1374a6b8b717bece93cae50491cc68f",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "getlago/postgres-partman:15.0-alpine",
+   "registry": "docker.io",
+   "repo": "getlago/postgres-partman",
+   "tag": "15.0-alpine"
+  },
+  "redis:7.4.7-alpine": {
+   "index_digest": "sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf",
+   "name": "redis",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "redis-server"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GOSU_VERSION=1.17",
+       "REDIS_VERSION=7.4.7",
+       "REDIS_DOWNLOAD_URL=http://download.redis.io/releases/redis-7.4.7.tar.gz",
+       "REDIS_DOWNLOAD_SHA=c97e57b0df330a9e091cacff012bebe763c275398cf36ff44cdba876814b595b"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:b9f6cf0cab55fdd102fd2182deeae150457943d33439d18c6e2fc5666d3228c1",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "redis-server"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GOSU_VERSION=1.17",
+       "REDIS_VERSION=7.4.7",
+       "REDIS_DOWNLOAD_URL=http://download.redis.io/releases/redis-7.4.7.tar.gz",
+       "REDIS_DOWNLOAD_SHA=c97e57b0df330a9e091cacff012bebe763c275398cf36ff44cdba876814b595b"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:eaa5baba4031beadea0a970d578807f96ff6caf9282f1878f316059ed889a178",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "redis:7.4.7-alpine",
+   "registry": "docker.io",
+   "repo": "library/redis",
+   "tag": "7.4.7-alpine"
+  }
+ }
+}

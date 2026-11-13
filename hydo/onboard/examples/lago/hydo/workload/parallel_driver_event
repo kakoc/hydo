@@ -1,0 +1,17 @@
+#!/bin/sh
+# hydo: timeout=60
+# One usage event of one subscription, with a transaction id of its own. The client retries a
+# lost answer with the same id (Lago's deduplication key).
+. /hydo/workload/helper_lib.sh
+s=${HYDO_SEED:-0}
+sub=sub$((1 + s % 3))
+if [ $((s / 3 % 2)) = 0 ]; then code=api_calls; else code=transfers; fi
+n=$((1 + s / 6 % 20))
+op=e$HYDO_CMD_ID
+id="$op,units:$sub:$code,$n"
+C event "$op" "$sub" "$code" "$n"
+case $? in
+  0) record ack "$id" ;;
+  1) record failed "$id"; exit 1 ;;
+  *) record unknown "$id"; exit 1 ;;
+esac
