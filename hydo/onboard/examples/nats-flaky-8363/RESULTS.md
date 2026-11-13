@@ -128,29 +128,33 @@ the count.
 Since Milestone 219 the KVM engine runs several vCPUs, in turns of a number of VM exits
 (`docs/design/kvm-vcpus.md`). A turn can end only at an exit, and the window of the previous section has none. The
 question was whether a turn boundary at another exit still lets the other vCPU run in time.
-It does. `hv/kvm/smp/nats-check.sh` ran on GitHub's runners on 2026-11-13, on AMD EPYC 7763 and
-9V74 (run https://github.com/kakoc/hydo/actions/runs/43446326976). Each run was a fresh boot of
-`hydo run --backend kvm`, and the guest saw 2 CPUs (`cpus=2`):
+It does. `hv/kvm/smp/nats-check.sh` ran on GitHub's runners on 2026-11-13, on AMD EPYC 9V45 and
+two EPYC 7763 (run https://github.com/kakoc/hydo/actions/runs/43496814855), with the SMP guest
+kernel `b40b2711…`. Each setting ran three times from fresh boots of `hydo run --backend kvm`, and
+the guest saw 2 CPUs (`cpus=2`). Every setting gave one fingerprint in its three runs, and the
+same fingerprint on all three hosts:
 
-| image | vCPUs | schedule | verdict on both hosts |
+| image | vCPUs | schedule | verdict on all hosts |
 |---|---|---|---|
 | buggy | 1 | `disk=none \| run` | VIOLATION (`d6cb9210afe66ff9`) |
-| fixed | 2 | `disk=none \| run` | OK (`b0db8d6cd5ef6e7c`) |
-| buggy | 2 | `disk=none \| run` (turns of 256 exits) | VIOLATION (`faa5cb0dacbd2877`) |
-| buggy | 2 | `q=2`, `3`, `4`, `6`, `8`, `16`, `24`, `32` | OK |
-| buggy | 2 | `q=1`, `12`, `48`, `64`, `96`, `128`, `192`, `256`, `384`, `512`, `768`, `1024`, `2048`, `4096` | VIOLATION |
-| buggy | 2 | `q=64 qs=4`, `q=64 qs=6` | OK |
-| buggy | 2 | `q=64 qs=1`, `2`, `3`, `5` | VIOLATION |
+| fixed | 2 | `disk=none \| run` | OK (`91fe8b1ca94b85a6`) |
+| buggy | 2 | `disk=none \| run` (turns of 256 exits) | VIOLATION (`fb300564e3e41a6b`) |
+| buggy | 2 | `q=3`, `8`, `12`, `16`, `24`, `32` | OK |
+| buggy | 2 | `q=1`, `2`, `4`, `6`, `48`, `64`, `96`, `128`, `192`, `256`, `384`, `512`, `768`, `1024`, `2048`, `4096` | VIOLATION |
+| buggy | 2 | `q=64 qs=4` | OK |
+| buggy | 2 | `q=64 qs=1`, `2`, `3`, `5`, `6` | VIOLATION |
 
-So 10 of the 28 turn settings pass and 18 fail, with the same verdict on both hosts for each
-setting. Short turns of 2 to 32 exits let the other vCPU run between `Unregister()` and the count,
-as hvx's turns of at most about 18,700 branches do. One exit (`q=1`) fails again, and so does
-`q=12`, so the verdict is not monotonic in the turn length here either.
+So 7 of the 28 turn settings pass and 21 fail. Turns of 8 to 32 exits let the other vCPU run
+between `Unregister()` and the count. The verdict is not monotonic in the turn length: `q=3`
+passes, while `q=2`, `q=4` and `q=6` fail.
 
-The fingerprints were the same on both hosts for 24 of the 28 settings. They differed at `q=12`,
-`q=1024`, `q=2048` and `q=4096`, with equal verdicts. Each setting ran once per host, so this run
-cannot tell whether a host's own runs agree there. The design's section on stage 4 has what was
-checked about it.
+An earlier run (https://github.com/kakoc/hydo/actions/runs/43446326976) counted 10 passing
+settings, but its kernel had a determinism bug: a program's RDTSC on vCPU 1 read the host's TSC
+(Milestone 219 in `docs/HISTORY.md`). Go's runtime reads the TSC, so those verdicts depended on
+the host's time. Against the valid run, `q=2`, `q=4`, `q=6` and `q=64 qs=6` passed there and fail
+now, `q=12` failed there and passes now, and the other 23 settings have the same verdict. That run
+also gave other fingerprints on each host at `q=12`, `q=1024`, `q=2048` and `q=4096`. The fixed
+kernel has not run on Intel yet.
 
 ## On hvx: several vCPUs, a turn-length boundary
 

@@ -6604,7 +6604,7 @@ The three saved regressions expect a violation.
 last line, one shrink per signature, the importer's idle job service as a fault target, clock steps
 that cannot aim at a time of day, and the identity test reading git-ignored outputs.
 
-### Milestone 219 (tentative number) — DONE, STAGES 2 AND 3 (several vCPUs on the KVM engine: the engine runs 2 to 8 vCPUs in turns of counted exits, Linux boots on them with the pinned SMP guest kernel, one fingerprint per schedule on two AMD models; one vCPU unchanged; 2026-11-13)
+### Milestone 219 (tentative number) — DONE, STAGES 2 TO 4 (several vCPUs on the KVM engine: the engine runs 2 to 8 vCPUs in turns of counted exits, Linux boots on them with the pinned SMP guest kernel; a determinism bug of the guest kernel found and fixed, after which every schedule gave one fingerprint on two AMD models; nats-server's flaky test passes at 7 of 28 turn settings; one vCPU unchanged; 2026-11-13)
 
 **In short.** Stages 2 and 3 of `docs/design/kvm-vcpus.md`. With `--vcpus N` the KVM engine runs
 N vCPUs of one VM one at a time from its thread, in turns of counted exits, with an x2APIC per
@@ -6612,6 +6612,11 @@ vCPU in the engine, and boots Linux with `bzImage-kvm-smp`. The release's Redis 
 and 4 vCPUs. Each schedule gave one fingerprint twice, and the same on AMD EPYC 7763 and 9V45.
 Without the option the engine runs the code of before: `hv/kvm/kvm-check.sh` gave Milestone 210's
 AMD values, and the scripted one-vCPU pins pass. No recorded value moved.
+
+The first SMP kernel had a determinism bug: vCPU 1 ran user code with CR4.TSD clear, so a
+program's RDTSC there read the TSC of the host's CPU. The section "The determinism bug" below has
+the cause, how it was found, and the fix. Every several-vCPU value in the tables before that
+section was made with the kernel that had the bug and is superseded by the values in it.
 
 **The engine** (`hydo/crates/hydo-kvm`):
 
@@ -6636,10 +6641,11 @@ pass the count to the engine and look up the SMP kernel by sha256 (`hydo_kvm::ke
 `hydo_engine::kvm::boot_files_n`); `hydo_engine::refusal_on` lets `q=` and `qs=` through on such a
 machine. The explorer's turn tokens (`--turns`, `--sweep turns`) stay hvx's for now.
 
-**The kernel.** `hv/kvm/linux/kernel-smp.nix` over the unchanged `kernel.nix`;
-`bzImage-kvm-smp` `a43b7bc3…`, config `d630f99e…`, pinned in docs/BUILD-PINS.md. It came out with
-the same bytes four times from sandboxed builds on two runners (`nix-build`, then `nix-build
---check`), and from the bare-metal machine's trial build of Milestone 213.
+**The kernel.** `hv/kvm/linux/kernel-smp.nix` over the unchanged `kernel.nix`. The first pin was
+`bzImage-kvm-smp` `a43b7bc3…`, config `d630f99e…`. It came out with the same bytes four times
+from sandboxed builds on two runners (`nix-build`, then `nix-build --check`), and from the
+bare-metal machine's trial build of Milestone 213. It had the determinism bug below; the pin now
+is `b40b2711…`.
 
 **The runs** (a one-off workflow on a temporary branch `tmp-kvm-vcpus2`, deleted afterwards:
 https://github.com/kakoc/hydo/actions/runs/43440090997; four jobs, every one green):
@@ -6670,17 +6676,108 @@ both green):
   one per host, with equal verdicts. Each ran once per host, so the cause is not known yet: a
   per-model difference inside the guest (Zen 3 against Zen 4), or a host-timed difference in the
   engine. `HYDO_KVM_DIAG` now lists each vCPU's state, its APIC, and the scheduler, and a repeat
-  run on a branch `tmp-kvm-vcpus4` keeps every run's folder.
+  run on a branch `tmp-kvm-vcpus4` keeps every run's folder. The cause was the determinism bug
+  below, and with the fixed kernel 7 of the 28 settings pass.
 
 Also in this milestone: with several vCPUs a proven exit-free cycle with interrupts off ends the
 vCPU's turn at the cycle's smallest state when another vCPU can run (before, it ended the run as a
 deadlock); a cycle with a state that has interrupts on is resolved as before. The `--vcpus` help
 text names KVM, and `hydo guide flaky-tests` and the manifest reference describe it.
 
-**Left.** The cause of the four fingerprints that differ between the two hosts. `hydo repro` of one
-run's folder and `hydo explain` with `--vcpus` on KVM, the explorer's turn tokens and turn-length
-search for KVM, and `bzImage-kvm-smp` in the Linux release. Intel KVM ran only Milestone 213's
-probe.
+**The determinism bug.** A repeat run on a temporary branch `tmp-kvm-vcpus4`
+(https://github.com/kakoc/hydo/actions/runs/43464674850; Intel Xeon 6975P-C, AMD EPYC 9V74 and
+7763) ran `q=2`, `q=12`, `q=1024` and `q=2048` three times each. `q=2` gave one fingerprint on
+each host. The other three gave three fingerprints in three runs on every host, with equal
+verdicts. So the differences between hosts in the stage 4 run were a determinism bug, not a
+difference between CPU models. In the engine's diagnostics every vCPU's registers, both APICs,
+the scheduler, the clock and every exit count were equal, and only one 1 MiB block of RAM
+differed.
+
+How it was found:
+
+1. RAM dumps (`hv/kvm/smp/nats-diff.sh`, run
+   https://github.com/kakoc/hydo/actions/runs/43468063420; AMD EPYC 7763 and 9V45, Intel Xeon
+   Platinum 8573C) compared two runs of `q=12` word by word. One 8-byte word differed, at guest
+   physical address `0x3fed52a0`, with values of about 2 to 3.4 × 10^10: the size of the guest's
+   TSC after some seconds. The guest's exits were the same in both runs, so the guest stores the
+   value without branching on it.
+2. A temporary watch in the engine logged every change of that word with the exit, the vCPU and
+   RIP (run https://github.com/kakoc/hydo/actions/runs/43482338111, on a branch
+   `tmp-kvm-vcpus7`; AMD EPYC 9V45 and 7763, Intel Xeon 6975P-C). The first change that differs
+   comes at the same exit on every host, on vCPU 1: exit 17880 for `q=12`, and exit 17600 for
+   `q=1024` at another word, `0x1e6f188`. The next word there holds about 56 ms in nanoseconds,
+   a pair of a TSC reading and a clock reading, as Go's runtime keeps in `ticks.startTicks` and
+   `startTime`.
+3. The same run checked the engine. Many looks of the spin observer (`HYDO_KVM_SPIN_MS=1`),
+   almost none (60 s), and the engine pinned to one host CPU each still gave three fingerprints in
+   three runs. So neither the observer nor the host's scheduling is the cause.
+
+The cause. The guest patch makes user-space RDTSC fault, so that the kernel returns the exit
+clock instead. `hydo_tsd_init()`, an early initcall, sets CR4.TSD for it. KVM does not trap
+RDTSC, so without TSD a program reads the TSC of the host's CPU, which KVM offsets but does not
+stop. The initcall
+sets TSD only on the boot CPU, and Linux 6.6.35 drops it twice on every other CPU:
+
+- `secondary_startup_64` in `arch/x86/kernel/head_64.S` loads CR4 with MCE, PAE and PGE only;
+- `cpu_init()` in `arch/x86/kernel/cpu/common.c` clears VME, PVI, TSD, and DE.
+
+On the boot CPU, `cpu_init()` runs before the initcall, so the boot CPU keeps TSD. One vCPU never
+had the bug.
+
+The fix took three tries:
+
+| try | change | run | result |
+|---|---|---|---|
+| 1 | TSD in `mmu_cr4_features` and the real-mode trampoline's CR4 | 43472281045 | no effect: `head_64.S` drops it; `q=12`, `1024`, `2048` and `4096` still gave three fingerprints on every host |
+| 2 | TSD in `cr4_init()` | 43487988684 | no effect: `cpu_init()` clears it again. The new engine guard stopped every run with several vCPUs |
+| 3 | TSD again in `cpu_init()`, right after its clear | 43496814855 | one fingerprint per schedule |
+
+The fix (`hv/kvm/linux/hydo-kvm-smp.patch`) is try 3. `cpu_init()` sets TSD again right after its
+clear when `hydo_tsd_forced()` is true, before the CPU can run user code. The patch of try 1 is
+gone. In run 43487988684 the "ONE" lines of `nats-check.sh` were three runs without a result each,
+all with the fingerprint `none`; the script now prints NO-RESULT for such a setting.
+
+The guard. With several vCPUs, every fingerprint now checks that each started vCPU has CR4.TSD set
+when vCPU 0 has it, and the run ends with a message otherwise. Try 1 also had a guard, which
+looked at a vCPU that was in user code at the end of its turn. User code seldom makes an exit, so
+that guard never fired. The new guard is what stopped the runs of try 2.
+
+The kernel. `bzImage-kvm-smp` is now `b40b2711…`, config `d630f99e…` (unchanged), store path
+`r23ms6f5…-hydo-kvm-guest-kernel-smp-6.6.35`. The bare-metal machine's trial build gave it first,
+without warnings. In run 43496814855 each of three runners built it twice in a sandbox, with the
+same bytes six times. The RDTSC audit lists the UP kernel's 10 sites.
+
+**The runs with the fixed kernel** (run https://github.com/kakoc/hydo/actions/runs/43496814855, on
+a temporary branch `tmp-kvm-vcpus9`, deleted afterwards; AMD EPYC 9V45 and two EPYC 7763; every job
+green). Every value below was the same on all three hosts, so the two AMD models agree:
+
+- `hv/kvm/kvm-check.sh`, one vCPU: 15 of 15 checks.
+- `hv/kvm/smp/smp-check.sh`: 13 of 13 checks. An exploration of 8 seeds on 2 vCPUs made 21 runs,
+  and `hydo repro` of it reproduced 5 of 5 with the recorded fingerprint.
+- `hv/kvm/smp/nats-check.sh`: 31 settings, each run three times; every setting gave one
+  fingerprint. The 28 turn settings and their verdicts are in the example's `RESULTS.md`.
+
+The Redis example's new several-vCPU values (each schedule twice on each host):
+
+| vCPUs | schedule | verdict | fp | turns (`qn=`) |
+|---|---|---|---|---|
+| 2 | `disk=none dseed=1 \| run` | OK, acked=20 | `851da6841d14cbad` | 229 |
+| 2 | `disk=none dseed=1 q=64 \| run` | OK | `cc2a072b654ecfe2` | 432 |
+| 2 | `disk=none dseed=1 q=7 qs=1f \| run` | OK | `dcb22e9bc56af461` | 2,407 |
+| 2 | `disk=cut \| run C=12 R=everysec` | VIOLATION, key k:1 lost | `c3c57641abcec195` | 159 |
+| 4 | `disk=none dseed=1 \| run` | OK | `b5fab129b81cb213` | 504 |
+
+A run from the worker's S1 on 2 vCPUs gave the fresh boot's `851da6841d14cbad`. In the default
+two-vCPU run, vCPU 1 made 6,338 of the workload's 26,368 counted exits. One vCPU kept its values:
+the timing branch with `br=` gave `2039c438b0971596`, and nats-server's buggy test
+`d6cb9210afe66ff9` (VIOLATION).
+
+**Left.** The fix ran only on AMD. The earlier runs on Intel (Xeon 6975P-C and Platinum 8573C) had
+the bug. A run with the fixed kernel on an Intel host is still to do. Also left:
+
+- `hydo repro` of one run's folder and `hydo explain` with `--vcpus` on KVM;
+- the explorer's turn tokens and turn-length search for KVM;
+- `bzImage-kvm-smp` in the Linux release.
 
 ### Milestone 220 (tentative number) - DONE (`hydo report --html`: a failure as one self-contained web page, for a run, an exploration or a CI run, with the failing run's timeline and its first difference from a passing neighbour; nothing recorded moved; 2026-11-13)
 

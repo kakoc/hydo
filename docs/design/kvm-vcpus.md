@@ -2,7 +2,9 @@
 
 Status: written on 2026-11-13. Stages 1 to 4 ran on GitHub's AMD runners (Milestones 213 and
 219). The usefulness test of stage 4 passed: turn boundaries at exits reach the passing order of
-the nats example. The sections on what the probe and the runs showed have the numbers. The
+the nats example. Stage 4 also found a determinism bug in the SMP guest kernel, which is fixed;
+the fixed kernel ran on AMD only. The sections on what the probe and the runs showed have the
+numbers. The
 engine runs several vCPUs with `--vcpus N` and the pinned SMP guest kernel `bzImage-kvm-smp`; with
 one vCPU it runs the code of before. It answers
 AGENTS.md open item 45 ("The KVM engine: one vCPU only"). The engine it extends is
@@ -318,6 +320,9 @@ ACPI. The command line adds `x2apic_phys noapic`.
   remapping (`try_to_enable_x2apic`).
 - The one-shot timer on IRQ 0 is not registered, so there is no global clock event. Every CPU
   uses its APIC timer from `setup_percpu_clockev`, as a Jailhouse guest does.
+- `cpu_init()` sets CR4.TSD again right after it clears TSD, so user-space RDTSC faults on every
+  CPU and returns the exit clock. Without it, a program's RDTSC on another CPU read the host's TSC
+  (the section "The determinism bug").
 
 The engine's kernel table (`hydo_kvm::kernel::TWINS`) pairs the image's recorded hvx kernel with
 both KVM builds: the UP build for one vCPU and the SMP build for several. Images do not change.
@@ -412,6 +417,9 @@ Each claim has its test:
   one vCPU.
 - One vCPU is unchanged: the pinned scripted fingerprints, `kvm-check.sh` 16 of 16, and the KVM
   entries of `recorded.json` with `hydo-bench rebaseline --check`.
+- No vCPU reads the host's TSC: with several vCPUs, every fingerprint checks that each started
+  vCPU has CR4.TSD set when vCPU 0 has it, and the run ends otherwise. A check at the end of a turn
+  would not do it, because user code seldom makes an exit.
 
 ## Testing without the build machine
 
@@ -504,6 +512,9 @@ schedule ran twice from a fresh boot, and both hosts gave the same fingerprints:
 | 2 | `disk=cut \| run C=12 R=everysec` | VIOLATION, key k:1 lost | `25b2b20d93cdf8fc` | 164 |
 | 4 | `disk=none dseed=1 \| run` | OK | `5ad6cb7c9b3bd84a` | 503 |
 
+These values were made with the first SMP kernel, which had the determinism bug of stage 4. The
+section "The determinism bug" has the values of the fixed kernel.
+
 Linux used the second vCPU: in the default two-vCPU run vCPU 1 made 6,396 of the workload's
 26,560 counted exits (the engine's `HYDO_KVM_DIAG` statistics). The one failed check was the run
 from the worker's S1: `hydo explore` refused `--vcpus` for KVM. Milestone 219 lets the explorer
@@ -524,21 +535,53 @@ here: 10 settings pass and 18 fail, with one verdict per setting on both hosts (
 turn boundary at the exit before the race window, here the reschedule IPI or a clock read, lets
 the other vCPU's thread run in time.
 
-**Fingerprints across the two hosts.** 24 of the 28 settings gave one fingerprint on both hosts.
-`q=12`, `q=1024`, `q=2048` and `q=4096` gave one per host, with the same verdicts. Each setting
-ran once per host, so it is not known whether a host's own runs agree at those settings. The two
-possible causes are different, and only another run can tell them apart:
+These numbers were made with the first SMP kernel and are not valid, as the next section shows.
+With the fixed kernel, 7 settings pass and 21 fail (the example's `RESULTS.md`).
 
-- A host-dependent result inside the guest, such as an instruction whose flags are undefined or
-  the FPU's last-instruction pointers. Fingerprints already compare only between hosts of one CPU
-  model ("Where fingerprints compare" in `docs/design/kvm-engine.md`). The two hosts are Zen 3
-  and Zen 4.
-- A difference that the host's timing causes in the engine, which would be a determinism bug.
+### The determinism bug
 
-The engine's diagnostics (`HYDO_KVM_DIAG`) now also list each vCPU's state, its APIC, and the
-scheduler, so two runs' diagnostics show which part differs. A repeat run on the branch
-`tmp-kvm-vcpus4` runs `q=2`, `q=12`, `q=1024` and `q=2048` three times each on three hosts, and
-keeps every run's folder.
+In the stage 4 run, `q=12`, `q=1024`, `q=2048` and `q=4096` gave one fingerprint per host. A repeat
+run (https://github.com/kakoc/hydo/actions/runs/43464674850) ran `q=12`, `q=1024` and `q=2048`
+three times each, and each gave three fingerprints in three runs on every host. So it was a
+determinism bug, not a difference between CPU models.
+
+How it was found:
+
+1. RAM dumps of two runs of `q=12` (`hv/kvm/smp/nats-diff.sh`) differed in one 8-byte word. Its
+   values had the size of the guest's TSC after some seconds. Every exit, register, and APIC was
+   equal, so the guest stored the value without branching on it.
+2. A temporary watch in the engine logged each change of that word with the exit, the vCPU, and
+   RIP. The first change that differs came at the same exit on every host, on vCPU 1. The word
+   next to it held a clock reading in nanoseconds, as in the pair of a TSC reading and a clock
+   reading that Go's runtime keeps.
+3. More or fewer looks of the spin observer, and the engine pinned to one host CPU, changed
+   nothing.
+
+The cause: the guest patch makes user-space RDTSC fault, so that the kernel returns the exit clock.
+It sets CR4.TSD on the boot CPU only. Linux drops TSD twice on every other CPU: in
+`secondary_startup_64` (`head_64.S`), which loads CR4 with MCE, PAE and PGE only, and in
+`cpu_init()`, which clears it. KVM does not trap RDTSC, so a program on vCPU 1 read the host's
+TSC. One vCPU never had the bug. The fix sets TSD again in `cpu_init()`, after its clear. Two
+earlier tries, TSD in the trampoline's CR4 and TSD in `cr4_init()`, had no effect, because
+`head_64.S` and `cpu_init()` came after them. Milestone 219 in `docs/HISTORY.md` has the runs.
+
+With the fixed kernel (`b40b2711…`, docs/BUILD-PINS.md), run
+https://github.com/kakoc/hydo/actions/runs/43496814855 on AMD EPYC 9V45 and two EPYC 7763 gave
+these results, the same on all three hosts:
+
+- `smp-check.sh` 13 of 13, `kvm-check.sh` 15 of 15.
+- `nats-check.sh`: 31 settings, three runs each, one fingerprint per setting.
+- The Redis example on several vCPUs, each schedule twice:
+
+| vCPUs | schedule | verdict | fp | turns (`qn=`) |
+|---|---|---|---|---|
+| 2 | `disk=none dseed=1 \| run` | OK, acked=20 | `851da6841d14cbad` | 229 |
+| 2 | `disk=none dseed=1 q=64 \| run` | OK | `cc2a072b654ecfe2` | 432 |
+| 2 | `disk=none dseed=1 q=7 qs=1f \| run` | OK | `dcb22e9bc56af461` | 2,407 |
+| 2 | `disk=cut \| run C=12 R=everysec` | VIOLATION, key k:1 lost | `c3c57641abcec195` | 159 |
+| 4 | `disk=none dseed=1 \| run` | OK | `b5fab129b81cb213` | 504 |
+
+The earlier runs on Intel had the bug, and the fixed kernel has not run on Intel yet.
 
 **A fix found while reviewing the spin paths.** On one vCPU, a proven cycle with interrupts off is a
 deadlock, and the run ends. With several vCPUs, another vCPU can release such a vCPU. Since

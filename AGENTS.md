@@ -561,12 +561,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 43. The suite's recorded values of M121's agent boot check are older than M140 (M156).
 44. [user decision] License compliance: the sources archives must stay available; three SPDX
     expressions are approximations; a lawyer's review is open (M158).
-45. The KVM engine with several vCPUs (M213, M219). Four nats schedules on 2 vCPUs gave other
-    fingerprints on EPYC 7763 than on 9V74, with equal verdicts; the cause is not known yet. `hydo
-    repro` of a run's folder and `hydo explain` were not run on KVM with several vCPUs, and the
-    explorer does not draw KVM turn tokens. `bzImage-kvm-smp` is in no release, and Intel ran only
-    the probe. On AMD, RDRAND, RDSEED and TSX cannot be made to fault, so a
-    guest program that uses them without checking CPUID sees the host (M159, M161). A loop that
+45. The KVM engine with several vCPUs (M213, M219). The first SMP kernel let vCPU 1 run user code
+    without CR4.TSD, so a program's RDTSC there read the host's TSC. The fixed kernel `b40b2711…`
+    gave one fingerprint per schedule on AMD EPYC 9V45 and 7763. It has not run on Intel, where
+    the earlier runs had the bug. In run 43487988684 the "ONE" lines of `nats-check.sh` were runs
+    without a result; the script now prints NO-RESULT for them. `hydo repro` of a run's folder and
+    `hydo explain` were not run on KVM with several vCPUs, and the explorer does not draw KVM turn
+    tokens. `bzImage-kvm-smp` is in no release. On AMD, RDRAND, RDSEED and TSX cannot be made to
+    fault, so a guest program that uses them without checking CPUID sees the host (M159, M161). A loop that
     counts in memory is still never proven (M194). The full-state cycles and the fingerprint
     without KVM's stale event fields are the default since M204 (h closed). Of the epoch-2
     values, only the Redis example's two schedules ran on AMD, with the Intel verdicts (M210).
@@ -1011,12 +1013,13 @@ build machine, before 2026-10-13.
   known), found blind by both kinds of rules. A Redis error in Sidekiq's first scheduler cleanup
   stops all retries. Power cuts, a skipped billing day, and backward clock steps drop acknowledged
   usage by documented or environment causes. Nothing recorded moved
-- M219 (tentative number): several vCPUs on the KVM engine, stages 2 to 4. `--vcpus N` runs 2 to
-  8 vCPUs in turns of counted exits with an x2APIC per vCPU in the engine and the pinned SMP
-  kernel `bzImage-kvm-smp`. Redis on 2 and 4 vCPUs gave one fingerprint per schedule on two AMD
-  models, and a run from S1 the fresh boot's. nats-server's flaky test passes at 10 of 28 turn
-  settings on 2 vCPUs and fails at the rest; one vCPU gave its recorded values; nothing recorded
-  moved
+- M219 (tentative number): several vCPUs on the KVM engine, stages 2 to 4. `--vcpus N` runs 2 to 8
+  vCPUs in turns of counted exits with an x2APIC per vCPU in the engine and the pinned SMP kernel
+  `bzImage-kvm-smp`. A determinism bug is fixed: Linux cleared CR4.TSD on every CPU but the boot
+  CPU, so a program's RDTSC there read the host's TSC. With the fixed kernel, every schedule of
+  Redis on 2 and 4 vCPUs and of 31 nats settings gave one fingerprint on two AMD models. A run from
+  S1 gave the fresh boot's. nats-server's flaky test passes at 7 of 28 turn settings on 2 vCPUs; one
+  vCPU gave its recorded values; nothing recorded moved
 - M220 (tentative number): `hydo report --html` writes a failure as one self-contained web page,
   for a run, an exploration, or a CI run. It shows the failing run's timeline and its first
   difference from a passing neighbour. Proven on the Redis example's power cut and a swarm

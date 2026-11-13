@@ -572,15 +572,19 @@ hv/kvm/linux/build-kernel.sh` runs it.
 
 | file | sha256 |
 |---|---|
-| `bzImage-kvm-smp` | `a43b7bc370fb83eb44c2bb6406e8e1b876d11e36a959c08740c2c0aecbdd77a2` |
+| `bzImage-kvm-smp` | `b40b2711a845dcf8622bf5230e0cb4d775b27ad2c297b16b0e5a8d631e23aac3` |
 | `bzImage-kvm-smp.config` | `d630f99e35d0a8ad16c97026ec2161077042c2e6d78ccf8a2896f794f397bc43` |
 
-Proof: the store path is `8h1y87ik…-hydo-kvm-guest-kernel-smp-6.6.35`. Two GitHub runners
-(AMD EPYC 7763 and 9V45) each built it with a multi-user Nix 2.18.9, which builds in a sandbox:
-`nix-build`, then `nix-build --check`, the same bytes four times (run
-https://github.com/kakoc/hydo/actions/runs/43440090997). The bare-metal machine's single-user Nix
+Proof: the store path is `r23ms6f5…-hydo-kvm-guest-kernel-smp-6.6.35`. Three GitHub runners
+(AMD EPYC 9V45 and two EPYC 7763) each built it twice with a multi-user Nix 2.18.9, which builds
+in a sandbox: `nix-build`, then `nix-build --check`. The six builds gave the same bytes (run
+https://github.com/kakoc/hydo/actions/runs/43496814855). The bare-metal machine's single-user Nix
 built the same store path with the same bytes before. The RDTSC audit of its `vmlinux` lists the
-UP kernel's 10 sites and no RDTSC, RDTSCP, or RDPID. The sha256 is recorded in
+UP kernel's 10 sites and no RDTSC, RDTSCP, or RDPID.
+
+The first pin, `a43b7bc3…` (store path `8h1y87ik…`), let the other CPUs run user code without
+CR4.TSD, so a program's RDTSC there read the host's TSC (Milestone 219, "The determinism bug").
+Since then `hydo-kvm-smp.patch` sets TSD again in `cpu_init()`; the config did not change. The sha256 is recorded in
 `hydo/crates/hydo-kvm/src/kernel.rs` (`KERNEL_SMP`). It is in no release yet: put it in a tree's
 `hv/kvm/linux/out/` or `build/`, or name it with `HYDO_KVM_KERNEL`.
 
