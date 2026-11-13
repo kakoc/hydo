@@ -117,6 +117,14 @@ impl Link for LockstepLink<'_, '_> {
         self.cut
     }
 
+    fn timing(&mut self, tokens: &str) -> Result<(), LinkError> {
+        self.ls
+            .timing(tokens)
+            .map_err(err)?
+            .map(|_| ())
+            .map_err(|e| LinkError(format!("the engine refused TIME: {e}")))
+    }
+
     fn cont(&mut self) -> Result<(), LinkError> {
         self.ls.cont().map_err(err)
     }

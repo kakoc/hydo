@@ -177,9 +177,15 @@ console lines, the lines that the guest's programs write to `/dev/console`:
 
 A feature's count is the number of runs, fresh or branched, that showed it. A stop is a candidate
 for a snapshot when it shows a feature for the first time in its run and the feature's count is at
-most 2. When no feature is rare, the first stop of each new line class in a run is a candidate
-until the corpus has entries. A target whose console is the same in every run therefore still
-gets states, and the search then runs the rest of a run again with new faults and timing.
+most 2. While the corpus is empty, the first stop of each new feature in a run is a candidate.
+
+The guest's console does not carry the workload's own output. The controller sends the workload's
+standard output to a file (`workload.log`), so the console shows only what a program writes to
+`/dev/console`, such as the SDK's records. A target without SDK records can show no feature at
+all. For such a target the search takes its snapshots by clock. With k snapshots per run,
+snapshot j is at the first stop past j/(k+1) of the median guest clock of the runs so far. The
+search then runs the rest of a run again with new faults and timing, from a state that no
+signal chose.
 
 Three other signals were considered and not built:
 
@@ -212,7 +218,8 @@ disk=none dseed=c7ab56057c8da907 pct=ec699251106e8e0c pctn=40 pctk=3000 br=81234
 ```
 
 The engine never sees `br=`. The host controller removes it and the tokens after it from the
-engine's schedule. Its runner sends `TIME` at that stop. A branch and a run from S1 do this alike. A branch of a branch has two `br=` tokens. hvx and the Mac refuse `br=` before any VM
+engine's schedule. Its runner sends `TIME` at that stop. A branch and a run from S1 do this
+alike. A branch of a branch has two `br=` tokens. hvx and the Mac refuse `br=` before any VM
 starts, with the reason, as they refuse other host tokens they cannot apply (Milestone 208).
 
 ## The replayable schedule
@@ -287,5 +294,5 @@ each engine used.
   the exploration's folder: one line per run with its origin, its parent and stop, its cost, and
   its new features.
 - No timing branches on hvx and on the Mac.
-- No shrinking of a branch's schedule as a unit: the shrinker treats `br=` and the tokens after it
-  as one part that it keeps.
+- The shrinker does not know `br=`. A shrink candidate of a timing branch loses its branch
+  point, so the measurements run with `--no-shrink`.

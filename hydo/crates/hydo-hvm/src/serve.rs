@@ -589,6 +589,9 @@ impl Host {
                     self.answer(a);
                 }
                 HostCmd::Snap { name, retype } => self.ctl_snap_cmd(vm, &name, retype),
+                // the state search's timing switch (docs/design/state-search.md) is built on
+                // KVM only; hydo_engine::refusal refuses br= schedules for hvm before any VM
+                HostCmd::Time(_) => self.refuse("time not on hvm".into()),
                 HostCmd::DiskOff | HostCmd::Cut => {
                     let cut = matches!(cmd, HostCmd::Cut);
                     let no = if self.c.phase != Phase::Workload {

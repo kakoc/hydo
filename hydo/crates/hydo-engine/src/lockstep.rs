@@ -272,6 +272,17 @@ impl<'a> Lockstep<'a> {
         }
     }
 
+    /// The timing from this stop on (`TIME`, the state search's branch point). Err(reason) when
+    /// the engine refuses.
+    pub fn timing(&mut self, tokens: &str) -> Result<Result<u64, String>, EngineError> {
+        self.cmd(HostCmd::Time(tokens.to_string()))?;
+        match self.answer()? {
+            Answer::Refused(e) => Ok(Err(e)),
+            Answer::Time { at } => Ok(Ok(at)),
+            a => Err(EngineError::Protocol(a.line())),
+        }
+    }
+
     /// Run on to the next stop.
     pub fn cont(&mut self) -> Result<(), EngineError> {
         self.cmd(HostCmd::Cont)

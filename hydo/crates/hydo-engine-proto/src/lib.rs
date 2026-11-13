@@ -245,6 +245,10 @@ pub enum HostCmd {
     DiskOff,
     /// A power cut at this stop (agent images, M126): the run goes on in the recovery VM.
     Cut,
+    /// `TIME <host tokens>`: the run's timing from this stop on (the state search's branch point,
+    /// docs/design/state-search.md): tick jitter and forced preemption points, the points drawn
+    /// among the next `pctk` exits. Empty tokens switch the timing off. Answer `OK time at=<n>`.
+    Time(String),
     Cont,
     End(Option<String>),
 }
@@ -260,6 +264,8 @@ impl HostCmd {
             }
             HostCmd::DiskOff => "DISKOFF".into(),
             HostCmd::Cut => "CUT".into(),
+            HostCmd::Time(t) if t.is_empty() => "TIME".into(),
+            HostCmd::Time(t) => format!("TIME {t}"),
             HostCmd::Cont => "CONT".into(),
             HostCmd::End(None) => "END".into(),
             HostCmd::End(Some(v)) => format!("END {v}"),
@@ -273,11 +279,15 @@ impl HostCmd {
             "CONT" => return Some(HostCmd::Cont),
             "DISKOFF" => return Some(HostCmd::DiskOff),
             "CUT" => return Some(HostCmd::Cut),
+            "TIME" => return Some(HostCmd::Time(String::new())),
             "END" => return Some(HostCmd::End(None)),
             _ => {}
         }
         if let Some(v) = line.strip_prefix("END ") {
             return Some(HostCmd::End(Some(v.to_string())));
+        }
+        if let Some(v) = line.strip_prefix("TIME ") {
+            return Some(HostCmd::Time(v.to_string()));
         }
         if let Some(r) = line.strip_prefix("SEND at=") {
             let (at, text) = r.split_once(' ')?;
@@ -391,6 +401,10 @@ pub enum Answer {
     Cut {
         at: u64,
     },
+    /// `OK time at=<n>`: the timing of `TIME` is in force from the stop at `at`.
+    Time {
+        at: u64,
+    },
     /// `ERR <reason>`: the command was refused (the reason starts with the command's word, for
     /// example `snap s unacked=1,2`).
     Refused(String),
@@ -407,6 +421,7 @@ impl Answer {
             }
             Answer::DiskOff(d) => format!("OK diskoff at={} cut={}", d.at, d.cut as u8),
             Answer::Cut { at } => format!("OK cut at={at}"),
+            Answer::Time { at } => format!("OK time at={at}"),
             Answer::Refused(r) => format!("ERR {r}"),
         }
     }
@@ -460,6 +475,9 @@ impl Answer {
                 Answer::DiskOff(DiskOff { at, cut })
             }
             "cut" => Answer::Cut {
+                at: kv(w.next(), "at=")?,
+            },
+            "time" => Answer::Time {
                 at: kv(w.next(), "at=")?,
             },
             _ => return None,
@@ -825,6 +843,8 @@ mod tests {
             },
             HostCmd::DiskOff,
             HostCmd::Cut,
+            HostCmd::Time(String::new()),
+            HostCmd::Time("pct=5 pctn=3 pctk=100".into()),
             HostCmd::Cont,
             HostCmd::End(None),
             HostCmd::End(Some("HYDO-ORACLE: OK".into())),

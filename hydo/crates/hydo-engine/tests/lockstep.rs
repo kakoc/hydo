@@ -127,6 +127,9 @@ fn replay(name: &str, text: &str, chan: bool) {
                         HostCmd::DiskOff => {
                             s.diskoff().unwrap().unwrap();
                         }
+                        HostCmd::Time(t) => {
+                            s.timing(t).unwrap().unwrap();
+                        }
                         HostCmd::Cut => {
                             s.cut().unwrap().unwrap();
                             break;

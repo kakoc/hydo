@@ -37,6 +37,7 @@ pub mod run;
 pub mod sched;
 pub mod scripted;
 pub mod space;
+pub mod state;
 pub mod steer;
 pub mod turns;
 

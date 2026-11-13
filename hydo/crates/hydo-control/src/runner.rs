@@ -67,6 +67,19 @@ pub trait Link {
     fn engine_cut(&self) -> bool {
         false
     }
+    /// Called at every stop after the runner acknowledged the agent's replies (and typed the
+    /// resynchronisation after a restore), before the controller decides: where the state search
+    /// takes its snapshots and where a branch goes live (docs/design/state-search.md). A link
+    /// that wraps another calls the inner one first.
+    fn before_step(&mut self, _stop: &StopInfo, _seen: &[Seen]) -> Result<(), LinkError> {
+        Ok(())
+    }
+    /// The run's timing from this stop on (the engine's `TIME`; a schedule's `br=` point).
+    fn timing(&mut self, _tokens: &str) -> Result<(), LinkError> {
+        Err(LinkError(
+            "this engine link cannot change the timing at a stop (br=)".into(),
+        ))
+    }
 }
 
 /// How a conversation ends at the engine (M126).
@@ -344,6 +357,7 @@ pub fn run_with(
                 by: "runner".into(),
             });
         }
+        link.before_step(&stop, &seen)?;
         let next_id = session.as_ref().map(|s| s.position().0).unwrap_or(1);
         let mut out = Out::new(next_id);
         ctl.step(&stop, &seen, &mut out);

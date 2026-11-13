@@ -35,6 +35,7 @@ pub mod replay;
 pub mod runner;
 pub mod schedule;
 pub mod seams;
+pub mod search;
 pub mod transcript;
 
 pub use control::{

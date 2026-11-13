@@ -18,6 +18,7 @@ mod m123;
 mod react;
 mod restart;
 mod restart_may_fail;
+mod search;
 mod silent;
 mod start_after;
 mod storage;

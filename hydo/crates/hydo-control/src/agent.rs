@@ -56,7 +56,11 @@ pub fn default_cadence(kind: EngineKind) -> u64 {
 pub fn engine_schedule(s: &Schedule, cadence: u64) -> Result<(Schedule, Schedule), String> {
     let mut full = s.clone();
     match s.host_token("rb") {
-        None => full.host.push(HostToken::Rb(cadence)),
+        None => {
+            // before any branch point (`br=`): rb= is the run's own token
+            let at = full.main_host().len();
+            full.host.insert(at, HostToken::Rb(cadence))
+        }
         Some(HostToken::Rb(n)) if *n == cadence => {}
         Some(t) => {
             return Err(format!(
@@ -65,8 +69,9 @@ pub fn engine_schedule(s: &Schedule, cadence: u64) -> Result<(Schedule, Schedule
             ))
         }
     }
+    // the branch points (`br=`) are the host controller's: the runner sends TIME at each
     let eng = Schedule {
-        host: full.host.clone(),
+        host: full.main_host().to_vec(),
         guest: Vec::new(),
     };
     Ok((full, eng))
@@ -647,6 +652,7 @@ impl Engine for AgentEngine {
                     cadence: self.cadence,
                     outdir: spec.outdir.clone(),
                     spin_rewind: self.spin_rewind,
+                    recs: std::collections::HashMap::new(),
                 }))
             }
             Err(e) => {
@@ -684,6 +690,85 @@ pub struct AgentWorker {
     cadence: u64,
     outdir: PathBuf,
     spin_rewind: bool,
+    /// The state search's recordings: each snapshot's parent stops up to the snapshot
+    /// (docs/design/state-search.md).
+    recs: std::collections::HashMap<String, Arc<Vec<crate::search::RecStop>>>,
+}
+
+/// The driver of a state search's run: a recording run from S1, or a branch from a snapshot.
+struct SearchDriver<'b> {
+    booted: &'b Booted,
+    schedule: &'b Schedule,
+    policy: crate::search::SnapPolicy,
+    parent: Option<&'b [crate::search::RecStop]>,
+    ran: Option<Ran>,
+    stops: Vec<crate::search::RecStop>,
+    features: Vec<String>,
+    taken: Vec<crate::search::Taken>,
+}
+
+impl Driver for SearchDriver<'_> {
+    fn drive(&mut self, ls: &mut Lockstep<'_>) -> Result<RunResult, EngineError> {
+        use crate::search::{BranchLink, RecLink};
+        let r = {
+            let mut link = LockstepLink::new(ls);
+            let r = {
+                let mut br;
+                let inner: &mut dyn crate::runner::Link = match self.parent {
+                    Some(p) => {
+                        br = BranchLink::new(p, Some(&mut link));
+                        &mut br
+                    }
+                    None => &mut link,
+                };
+                let mut rec = RecLink::new(inner, self.policy.clone());
+                let r = drive::run(
+                    &mut rec,
+                    self.booted,
+                    self.schedule,
+                    RunFrom::Restored,
+                    &Policy::Schedule,
+                );
+                self.stops = std::mem::take(&mut rec.stops);
+                self.features = std::mem::take(&mut rec.features);
+                self.taken = std::mem::take(&mut rec.taken);
+                r
+            };
+            r.map(|ran| (ran, link.result.take()))
+        };
+        match r {
+            Ok((ran, result)) => {
+                let result = result
+                    .or_else(|| RunResult::parse(ran.result_line()))
+                    .ok_or_else(|| EngineError::Protocol(ran.result_line().to_string()))?;
+                self.ran = Some(ran);
+                Ok(result)
+            }
+            Err(DriveError::Run(RunError::Link(e))) => Err(EngineError::Protocol(e.0)),
+            Err(e) => end_broken(ls, &e),
+        }
+    }
+}
+
+/// Whether a branch's schedule sends its parent's commands up to the parent's snapshot: its
+/// controller over the parent's recorded stops, without a VM (docs/design/state-search.md).
+pub fn check_branch(
+    booted: &Booted,
+    schedule: &Schedule,
+    parent: &[crate::search::RecStop],
+) -> Result<(), String> {
+    let mut br = crate::search::BranchLink::new(parent, None);
+    match drive::run(
+        &mut br,
+        booted,
+        schedule,
+        RunFrom::Restored,
+        &Policy::Schedule,
+    ) {
+        Err(DriveError::Run(RunError::Link(e))) if e.0 == crate::search::REACHED => Ok(()),
+        Err(e) => Err(e.to_string()),
+        Ok(_) => Err("state search: the branch's run ended before its snapshot".into()),
+    }
 }
 
 impl AgentWorker {
@@ -738,6 +823,106 @@ impl AgentWorker {
     pub fn booted(&self) -> &Booted {
         &self.booted
     }
+
+    /// [`Worker::run_search`]: see docs/design/state-search.md.
+    fn search_once(
+        &mut self,
+        tag: &str,
+        schedule: &Schedule,
+        req: &hydo_engine::SearchReq,
+    ) -> Result<(RunResult, hydo_engine::SearchRun), EngineError> {
+        use hydo_engine::{SearchRun, SearchSnap};
+        let (full, eng) = match engine_schedule(schedule, self.cadence) {
+            Ok(x) => x,
+            Err(e) => return Ok((refused(tag, &unsupported_verdict(&e)), SearchRun::default())),
+        };
+        if let Err(u) = drive::check(&self.booted.plan, &full) {
+            return Ok((
+                refused(tag, &unsupported_verdict(&u.to_string())),
+                SearchRun::default(),
+            ));
+        }
+        let parent = match &req.branch_from {
+            None => None,
+            Some(name) => match self.recs.get(name) {
+                Some(r) => Some(r.clone()),
+                None => {
+                    let why = format!("state search: no recording of snapshot {name}");
+                    return Ok((
+                        refused(tag, &why),
+                        SearchRun {
+                            invalid: Some(why),
+                            ..SearchRun::default()
+                        },
+                    ));
+                }
+            },
+        };
+        if let Some(p) = &parent {
+            if let Err(why) = check_branch(&self.booted, &full, p) {
+                return Ok((
+                    refused(tag, &format!("state search: {why}")),
+                    SearchRun {
+                        invalid: Some(why),
+                        ..SearchRun::default()
+                    },
+                ));
+            }
+        }
+        let skip = parent.as_ref().map(|p| p.len() - 1).unwrap_or(0);
+        // the names this run may take are free again: their old recordings go
+        for n in &req.snap_names {
+            self.recs.remove(n);
+        }
+        let mut d = SearchDriver {
+            booted: &self.booted,
+            schedule: &full,
+            policy: crate::search::SnapPolicy {
+                names: req.snap_names.clone(),
+                counts: req.counts.clone(),
+                rare: req.rare,
+                any_new: req.any_new,
+                skip,
+                spread: req.spread.clone(),
+            },
+            parent: parent.as_deref().map(|v| v.as_slice()),
+            ran: None,
+            stops: Vec::new(),
+            features: Vec::new(),
+            taken: Vec::new(),
+        };
+        let r = match &req.branch_from {
+            Some(name) => self.inner.resume(tag, name, &mut d, None)?,
+            None => self.inner.run_controlled(tag, &eng, &mut d, None)?,
+        };
+        let (stops, features, taken, ran) = (d.stops, d.features, d.taken, d.ran);
+        let (clock, clock0) = crate::search::clock(&stops, skip);
+        let mut out = SearchRun {
+            features,
+            clock,
+            clock0,
+            ..SearchRun::default()
+        };
+        for t in &taken {
+            self.recs
+                .insert(t.name.clone(), Arc::new(stops[..=t.index].to_vec()));
+            out.snaps.push(SearchSnap {
+                name: t.name.clone(),
+                stop: t.stop.n,
+                at: t.stop.at,
+                new: t.new.clone(),
+            });
+        }
+        Ok(match ran {
+            Some(ran) => {
+                out.ranges = crate::search::ranges(&ran.run.transcript);
+                let prefix = format!("{tag}.");
+                write_run_files(&self.outdir, tag, &prefix, &ran, None);
+                (with_ctl(&r, &ran.ctl()), out)
+            }
+            None => (r, out),
+        })
+    }
 }
 
 impl Worker for AgentWorker {
@@ -747,6 +932,15 @@ impl Worker for AgentWorker {
 
     fn run(&mut self, tag: &str, schedule: &Schedule) -> Result<RunResult, EngineError> {
         self.run_with(tag, schedule, &Policy::Schedule)
+    }
+
+    fn run_search(
+        &mut self,
+        tag: &str,
+        schedule: &Schedule,
+        req: &hydo_engine::SearchReq,
+    ) -> Result<(RunResult, hydo_engine::SearchRun), EngineError> {
+        self.search_once(tag, schedule, req)
     }
 
     fn close(self: Box<Self>) -> Result<(), EngineError> {

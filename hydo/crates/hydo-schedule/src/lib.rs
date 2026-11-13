@@ -62,7 +62,7 @@ pub use guest::{
     Buggify, Direction, Freeze, FreezeDir, GuestToken, NetTarget, Netem, Pause, ProtocolFault,
     React, ReactAction, ResetKind, Rule, Status, RESERVED,
 };
-pub use host::{Disk, HostToken, MAX_EXPLICIT};
+pub use host::{Disk, HostToken, BRANCH_KEYS, MAX_EXPLICIT};
 pub use storage::{mix, CorruptKind, Corruption, Edit, MAX_FLIPS, MAX_LEN};
 pub use target::{binomial, component_links, subset, Selector, Shape, Target};
 
@@ -111,9 +111,32 @@ impl Schedule {
             )));
         }
         let mut hs: Vec<HostToken> = Vec::new();
+        // the tokens of the current segment: the run's own, then each branch point's (br=)
+        let mut seg = 0;
         for w in host.split_ascii_whitespace() {
             let t = HostToken::parse(w)?;
-            if hs.iter().any(|x| x.key() == t.key()) {
+            if let HostToken::Br(at) = t {
+                if let Some(HostToken::Br(last)) =
+                    hs.iter().rev().find(|x| matches!(x, HostToken::Br(_)))
+                {
+                    if at <= *last {
+                        return Err(err(format!(
+                            "br={at} after br={last}: the branch points go up"
+                        )));
+                    }
+                }
+                hs.push(t);
+                seg = hs.len();
+                continue;
+            }
+            if seg > 0 && !host::BRANCH_KEYS.contains(&t.key()) {
+                return Err(err(format!(
+                    "{}= after br=: a branch point changes only the timing ({})",
+                    t.key(),
+                    host::BRANCH_KEYS.join("=, ")
+                )));
+            }
+            if hs[seg..].iter().any(|x| x.key() == t.key()) {
                 // the engines read the first occurrence (strstr) and ignore the rest
                 return Err(err(format!("host token {}= appears twice", t.key())));
             }
@@ -160,7 +183,20 @@ impl Schedule {
 
     /// Rules that join several tokens.
     fn check(&self) -> Result<(), ParseError> {
-        let has = |k: &str| self.host.iter().any(|t| t.key() == k);
+        for (_, seg) in self.branch_points() {
+            Schedule {
+                host: seg,
+                guest: Vec::new(),
+            }
+            .check_host()?;
+        }
+        self.check_host()
+    }
+
+    /// The rules of [`Schedule::check`] on the run's own host tokens (before any `br=`).
+    fn check_host(&self) -> Result<(), ParseError> {
+        let main = self.main_host();
+        let has = |k: &str| main.iter().any(|t| t.key() == k);
         if let Some(HostToken::Cf(_)) = self.host_token("cf") {
             // hvx_explore.c parse_sched: cf= needs the volatile write cache (disk=cut) and no C=
             if self.disk() != Disk::Cut {
@@ -211,9 +247,44 @@ impl Schedule {
         Ok(())
     }
 
-    /// The first host token with this key.
+    /// The first host token with this key, among the run's own tokens (before any `br=`).
     pub fn host_token(&self, key: &str) -> Option<&HostToken> {
-        self.host.iter().find(|t| t.key() == key)
+        self.main_host().iter().find(|t| t.key() == key)
+    }
+
+    /// The run's own host tokens: the ones before the first branch point (`br=`).
+    pub fn main_host(&self) -> &[HostToken] {
+        let end = self
+            .host
+            .iter()
+            .position(|t| matches!(t, HostToken::Br(_)))
+            .unwrap_or(self.host.len());
+        &self.host[..end]
+    }
+
+    /// The branch points (`br=<clock>`), each with the timing tokens that follow it
+    /// (docs/design/state-search.md).
+    pub fn branch_points(&self) -> Vec<(u64, Vec<HostToken>)> {
+        let mut out: Vec<(u64, Vec<HostToken>)> = Vec::new();
+        for t in &self.host {
+            match t {
+                HostToken::Br(at) => out.push((*at, Vec::new())),
+                t => {
+                    if let Some(last) = out.last_mut() {
+                        last.1.push(t.clone());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// The schedule without its branch points: what the engine arms at the run's start.
+    pub fn without_branch_points(&self) -> Schedule {
+        Schedule {
+            host: self.main_host().to_vec(),
+            guest: self.guest.clone(),
+        }
     }
 
     /// The disk fault (`none` when there is no `disk=` token, as in the engines).
