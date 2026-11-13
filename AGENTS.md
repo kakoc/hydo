@@ -529,8 +529,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 66. Messaging checks: no VM ran one yet, and per-window measures, `Exploration.messages` and the
     other SDKs' helpers are not built. The planted-bug example and the real-system onboardings
     come next (M196).
-67. `hydo ci run` ran only on this Mac, not on Linux. The action and the GitLab template never
-    ran on GitHub or GitLab; a trial needs a throwaway public repository, the user's decision.
+67. The GitHub action ran on 2026-11-13 in a private trial repository with the 0.3.1 Redis
+    example (2-CPU runners have KVM): a push passed with 0 findings, and a pull request that set
+    `appendfsync everysec` failed with 2 new findings, each with its minimal schedule and
+    `hydo diff`, in one comment. The trial found that the action checked `/dev/kvm` before udev
+    had applied its rule; fixed in `500a0b7a`. The guide's `kakoc/hydo/action@v1` needs a tag
+    that does not exist yet (a public step, the user's decision). The GitLab template never ran.
     Stage 2 (history, accepted findings, budgets, sharding) is not built (M197).
 68. Agent environments: the guest has no network and one vCPU. There is no incremental state
     hash, so the full fingerprint costs about 0.8 s per call. A snapshot cannot be dropped, and a
