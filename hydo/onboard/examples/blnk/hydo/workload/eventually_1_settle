@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=3600
+# After the faults: wait for the queue and run Blnk's queue recovery (helper_settle.sh). The checks
+# then judge the final state.
+. /hydo/workload/helper_settle.sh
+settle

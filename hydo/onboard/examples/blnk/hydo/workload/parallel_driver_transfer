@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# one client operation (../../client/main.go, "transfer"): a transfer between two users, who never run short.
+# Its token goes to $HYDO_ACKED when acknowledged.
+exec /bin/blnkc op transfer

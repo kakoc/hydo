@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# one client operation (../../client/main.go, "overdraw"): a transfer from the empty account, which Blnk must reject.
+# Its token goes to $HYDO_ACKED when acknowledged.
+exec /bin/blnkc op overdraw

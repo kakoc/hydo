@@ -1,0 +1,85 @@
+diff --git a/transaction_bulk.go b/transaction_bulk.go
+index 4108817..b6e363c 100644
+--- a/transaction_bulk.go
++++ b/transaction_bulk.go
+@@ -423,6 +423,59 @@ func (l *Blnk) markQueuedAtomicBatchFailed(ctx context.Context, batchID string)
+ 	return nil
+ }
+ 
++// failSyncQueuedAtomicBatch fails a synchronous atomic bulk request in queue mode
++// whose items could not all be queued. It marks the batch failed, so the worker
++// rejects the items already queued, and takes the batch lock that the worker
++// holds while it applies an item. Both live in Redis, which may be what failed,
++// so it also records the items still waiting as REJECTED in PostgreSQL: the
++// worker then finds their outcome reference used and drops their tasks. Then it
++// rolls back what was applied.
++func (l *Blnk) failSyncQueuedAtomicBatch(ctx context.Context, batchID string, isInflight bool) (int, error) {
++	if err := l.markQueuedAtomicBatchFailed(ctx, batchID); err != nil {
++		logrus.WithError(err).WithField("batch_id", batchID).Error("failed to mark atomic batch as failed")
++	}
++	locker := redlock.NewLocker(l.redis, atomicBatchLockKey(batchID), model.GenerateUUIDWithSuffix("loc"))
++	lockCfg := l.Config().Transaction
++	if err := locker.WaitLock(ctx, lockCfg.LockDuration, lockCfg.LockWaitTimeout); err != nil {
++		logrus.WithError(err).WithField("batch_id", batchID).Error("failed to acquire lock for atomic batch")
++	} else {
++		defer l.releaseSingleLock(ctx, locker)
++	}
++	if err := l.rejectWaitingBatchItems(ctx, batchID); err != nil {
++		return 0, err
++	}
++	_, count, err := l.rollbackBatchTransactions(ctx, batchID, isInflight)
++	return count, err
++}
++
++// rejectWaitingBatchItems records a REJECTED outcome for every item of the batch
++// that is still QUEUED. An item whose outcome the worker has already written is
++// left to the rollback.
++func (l *Blnk) rejectWaitingBatchItems(ctx context.Context, batchID string) error {
++	items, err := l.datasource.GetTransactionsByParent(ctx, batchID, 1000, 0)
++	if err != nil {
++		return err
++	}
++	for _, item := range items {
++		if item.Status != StatusQueued {
++			continue
++		}
++		rejected := createQueueCopy(item, item.Reference)
++		rejected.Status = StatusRejected
++		md := make(map[string]interface{}, len(item.MetaData)+1)
++		for k, v := range item.MetaData {
++			md[k] = v
++		}
++		md["blnk_rejection_reason"] = ErrAtomicBatchFailed.Error()
++		rejected.MetaData = md
++		model.ApplyPrecision(rejected)
++		if _, err := l.datasource.RecordTransaction(ctx, rejected); err != nil && !IsDuplicateReferenceError(err) {
++			return err
++		}
++	}
++	return nil
++}
++
+ // failQueuedAtomicBatch rolls back a queued atomic batch that has been marked
+ // as failed, then reports it with bulk_transaction.failed. Every rejected item
+ // of the batch runs it until the batch is reported. The rollback skips what is
+@@ -589,7 +642,19 @@ func (l *Blnk) CreateBulkTransactions(ctx context.Context, req *model.BulkTransa
+ 
+ 		var responseError string
+ 		if req.Atomic {
+-			_, count, rollbackErr := l.rollbackBatchTransactions(ctx, batchID, req.Inflight)
++			// The items queued before the failing one are saved and enqueued, and the
++			// worker would apply them later. Mark the batch failed first, so the worker
++			// rejects them, and roll back under the batch lock, so an item the worker
++			// is applying right now is refunded too. The request may have been
++			// cancelled (the client gave up), which must not stop the rollback.
++			rbCtx := context.WithoutCancel(ctx)
++			var count int
++			var rollbackErr error
++			if !req.SkipQueue {
++				count, rollbackErr = l.failSyncQueuedAtomicBatch(rbCtx, batchID, req.Inflight)
++			} else {
++				_, count, rollbackErr = l.rollbackBatchTransactions(rbCtx, batchID, req.Inflight)
++			}
+ 			responseError = batchFailureMessage(err, req.Inflight, count, rollbackErr)
+ 		} else {
+ 			responseError = fmt.Sprintf("%s. Previous transactions were not rolled back.", err.Error())

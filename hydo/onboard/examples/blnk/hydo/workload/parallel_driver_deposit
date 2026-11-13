@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# one client operation (../../client/main.go, "deposit"): money from outside (@world) to a user, or to a shop as a sale.
+# Its token goes to $HYDO_ACKED when acknowledged.
+exec /bin/blnkc op deposit

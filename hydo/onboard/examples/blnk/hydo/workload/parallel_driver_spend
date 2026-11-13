@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# one client operation (../../client/main.go, "spend"): a shop pays a user; shops run short, so Blnk must refuse some.
+# Its token goes to $HYDO_ACKED when acknowledged.
+exec /bin/blnkc op spend

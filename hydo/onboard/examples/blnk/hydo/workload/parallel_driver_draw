@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# one client operation (../../client/main.go, "draw"): a draw on a credit line, which may go below zero down to its overdraft limit.
+# Its token goes to $HYDO_ACKED when acknowledged.
+exec /bin/blnkc op draw

@@ -1,0 +1,26 @@
+diff --git a/transaction_coalescing.go b/transaction_coalescing.go
+index e28c05b..47127de 100644
+--- a/transaction_coalescing.go
++++ b/transaction_coalescing.go
+@@ -656,4 +656,7 @@ func restoreTransactionFlagsFromMetadata(transaction *model.Transaction) {
+ 	if v, ok := transaction.MetaData["allow_overdraft"].(bool); ok {
+ 		transaction.AllowOverdraft = v
+ 	}
++	if v, ok := transaction.MetaData["overdraft_limit"].(float64); ok {
++		transaction.OverdraftLimit = v
++	}
+ }
+diff --git a/transaction_queue.go b/transaction_queue.go
+index 0c6365d..fb54be9 100644
+--- a/transaction_queue.go
++++ b/transaction_queue.go
+@@ -406,6 +406,9 @@ func setTransactionMetadata(transaction *model.Transaction) {
+ 	if transaction.AllowOverdraft {
+ 		transaction.MetaData["allow_overdraft"] = true
+ 	}
++	if transaction.OverdraftLimit > 0 {
++		transaction.MetaData["overdraft_limit"] = transaction.OverdraftLimit
++	}
+ }
+ 
+ // createQueueCopy creates a new copy of a transaction specifically for queueing.

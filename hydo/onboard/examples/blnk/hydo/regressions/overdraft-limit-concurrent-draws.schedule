@@ -1,0 +1,13 @@
+# finding 1 (RESULTS.md), a Blnk bug, without a fault: concurrent draws on the credit lines are coalesced by the worker, and a credit line goes past its overdraft limit. Found on hvx (the timing exploration h2, seed 202); passes on the build with the fixes (--set blnk=blnk-fixed).
+# found by `hydo explore` (seed 202): durable-defaults
+# verdict: HYDO-ORACLE: VIOLATION [no_overdraft] db: 1 rows where none may be
+# composition: r0: parallel_driver_draw | r1: parallel_driver_overdraw | r2: parallel_driver_overdraw | r3: parallel_driver_repay | r4: parallel_driver_transfer | r5: parallel_driver_repay | r7: parallel_driver_spend | r8: parallel_driver_transfer | r9: parallel_driver_repay | r12: parallel_driver_transfer | r14: parallel_driver_overdraw | r16: parallel_driver_transfer | r18: parallel_driver_spend | r19: paralle
+# commands: eventually_1_settle first_init parallel_driver_bulk parallel_driver_deposit parallel_driver_draw parallel_driver_hold parallel_driver_overdraw parallel_driver_repay parallel_driver_spend parallel_driver_transfer
+# command-sha: parallel_driver_draw fa692860f0653105
+# command-sha: parallel_driver_overdraw 34fae4aed8ea6499
+# command-sha: parallel_driver_repay 76db36e41d09ecab
+# command-sha: parallel_driver_spend 334814ed5a126d80
+# command-sha: parallel_driver_transfer ae254a71252b703b
+# note: the resolved composition is too long for a schedule line; a saved regression carries it as W=@88db6f851e6b (unconfirmed)
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=62b1aba8e728944c | run W=e48d5d25,p3,q1,r200,oparallel_driver_bulk+parallel_driver_deposit+parallel_driver_hold

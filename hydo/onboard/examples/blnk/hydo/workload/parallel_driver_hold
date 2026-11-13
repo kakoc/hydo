@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=110
+# one client operation (../../client/main.go, "hold"): an inflight hold for the merchant, a partial commit, then a commit of the rest or a void.
+# Its token goes to $HYDO_ACKED when acknowledged.
+exec /bin/blnkc op hold

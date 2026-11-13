@@ -1,0 +1,138 @@
+# Blnk (an open-source ledger in Go: queued and inflight transactions, overdraft limits, atomic
+# bulks) on PostgreSQL 16 and Redis 7.2, as Blnk's own docker-compose.yaml runs it: `blnk start`
+# (the API, after `blnk migrate up`) and `blnk workers` (the queue's workers), both reading
+# blnk.json. The search (Typesense), tracing and monitoring profiles of that file are left out.
+# RESULTS.md says what was hunted and found.
+#
+# The programs come from source, as static Linux programs (no image of Blnk is needed):
+#   sh ../build.sh            # bin/blnk-<arch> (upstream main, 67d88333) and bin/blnkc-<arch> (the client)
+#   sh fetch-images.sh        # PostgreSQL and Redis by digest
+#   hydo build hydo.yaml --arch arm64 --set arch=arm64     # the Mac engine
+#   hydo build hydo.yaml                                    # x86_64: hvx, KVM
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-40 --strategy process --new-faults
+#
+# The client (../client, `blnkc`) sends every operation through Blnk's API with a reference of
+# its own, and retries an attempt that got no answer with the same reference.
+format: 1
+name: blnk
+description: "Blnk (open-source ledger, Go) on PostgreSQL 16 and Redis 7.2: queued transfers, inflight holds with partial commits and voids, overdraft limits and atomic bulks under faults, checked against the ledger's rules and against what the client saw acknowledged"
+hydo_version: "0.3"
+
+params:
+  arch: amd64        # amd64 | arm64: the programs' architecture, the same as the image's
+  redis_aof: "no"    # no: Redis as Blnk's file runs it (its defaults: no append-only file); yes: every write on disk
+  blnk: blnk         # blnk: upstream 67d88333; blnk-fixed: with the two tested fixes (../build.sh, RESULTS.md)
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 1536
+  clock_after_cut: 60        # Blnk stamps transactions with the time; no real machine's clock runs back across a power loss
+  outcomes_after_cut: true   # the model check reads $HYDO_OUTCOMES, also in the recovery boot
+
+data:
+  size_mib: 768   # PostgreSQL's and Redis's data directories (the fault target)
+  dirs: [vol/postgres, vol/redis]
+
+root:
+  files:
+    - {src: "../bin/{{blnk}}-{{arch}}", dst: /bin/blnk, mode: "0755"}
+    - {src: "../bin/blnkc-{{arch}}", dst: /bin/blnkc, mode: "0755"}
+  text:
+    /etc/hosts: |
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 postgres
+      10.89.0.12 redis
+      10.89.0.13 server
+      10.89.0.14 worker
+    # blnk-init.sh's blnk.json (the compose defaults), with the services' addresses. Blnk reads
+    # ./blnk.json, so both services start in /etc/blnk.
+    /etc/blnk/blnk.json: |
+      {
+        "project_name": "Blnk",
+        "data_source": { "dns": "postgres://postgres:password@10.89.0.11:5432/blnk?sslmode=disable" },
+        "redis": { "dns": "10.89.0.12:6379" },
+        "server": { "port": "5001" }
+      }
+
+env:
+  BLNK_URL: "http://10.89.0.13:5001"
+
+services:
+  # docker-compose.yaml's postgres: postgres:16 (pinned as 16.16, the Alpine variant), its user,
+  # password and database; its data directory on the data disk
+  - name: postgres
+    image: {x86_64: images/postgres-16-alpine-amd64.docker.tar, arm64: images/postgres-16-alpine-arm64-oci}
+    image_ref: "postgres:16.16-alpine3.24"
+    cmd: [docker-entrypoint.sh, postgres]
+    env:
+      TZ: "Etc/UTC"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "password"
+      POSTGRES_DB: "blnk"
+      PGDATA: /data/postgres
+    addr: 10.89.0.11
+    port: 5432
+    ready: "timeout 10 hydo-oci postgres pg_isready -q -U postgres -h 127.0.0.1"
+    ready_timeout: 120
+    restart: on-failure
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/postgres, dst: /data/postgres, copy_up: true}
+  # docker-compose.yaml's redis: redis:7.2.4 with its defaults (RDB snapshots, no append-only
+  # file). Its /data is the container's own layer there, which a restart keeps: here the data disk.
+  - name: redis
+    image: {x86_64: images/redis-7.2.4-amd64.docker.tar, arm64: images/redis-7.2.4-arm64-oci}
+    image_ref: "redis:7.2.4"
+    cmd: ["redis-server", "--appendonly", "{{redis_aof}}", "--appendfsync", "always"]
+    addr: 10.89.0.12
+    port: 6379
+    ready: "timeout 5 hydo-oci redis redis-cli -p 6379 ping"
+    ready_timeout: 120
+    restart: on-failure
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {src: /data/vol/redis, dst: /data}
+  # docker-compose.yaml's server: "blnk migrate up && exec blnk start"
+  - name: server
+    setup: "cd /etc/blnk && /bin/blnk migrate up"
+    cmd: "sh -c 'cd /etc/blnk && exec /bin/blnk start'"
+    addr: 10.89.0.13
+    port: 5001
+    depends_on: [postgres, redis]
+    ready: "timeout 5 /bin/blnkc ready"
+    ready_timeout: 120
+    restart: on-failure
+  # docker-compose.yaml's worker: "blnk workers". hand: it starts after the server too, whose
+  # setup runs the migrations; in Compose it waits only for postgres and redis and restarts until
+  # the tables exist. Its depends_on also gives hydo the links worker-postgres and worker-redis
+  # for network faults.
+  - name: worker
+    cmd: "sh -c 'cd /etc/blnk && exec /bin/blnk workers'"
+    addr: 10.89.0.14
+    port: 5004
+    depends_on: [postgres, redis, server]
+    ready: "timeout 5 /bin/blnkc ready http://127.0.0.1:5004/health"
+    ready_timeout: 120
+    restart: on-failure
+
+workload:
+  steps: 30
+  timeout: 900
+
+test:
+  parallel: 6
+  per_round: 3
+  round_ms: 400
+  command_timeout: 120
+  drain_timeout: 90
+  check_every: 2
+
+errors: true
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

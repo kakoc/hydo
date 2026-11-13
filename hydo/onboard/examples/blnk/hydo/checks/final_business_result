@@ -1,0 +1,9 @@
+#!/bin/sh
+# hydo-msg: faults do not change the business result: the operations the client saw determine every balance, in PostgreSQL and in the API
+# Rule 2 (RESULTS.md). It reads only the client's records ($HYDO_ACKED, $HYDO_OUTCOMES) and what
+# Blnk holds; the expected balances come from the client's own amounts (../../client/main.go,
+# checkModel).
+. /hydo/workload/helper_lib.sh
+dump_tx > /tmp/model-tx.jsonl || { echo "postgres unreadable"; exit 2; }
+dump_bal > /tmp/model-bal.jsonl || { echo "postgres unreadable"; exit 2; }
+exec /bin/blnkc check model /tmp/model-tx.jsonl /tmp/model-bal.jsonl

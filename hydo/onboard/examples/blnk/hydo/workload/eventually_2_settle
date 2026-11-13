@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=3600
+# The second wait for the queue (helper_settle.sh), for a backward clock step longer than the first
+# wait covers. With nothing pending it ends after two polls.
+. /hydo/workload/helper_settle.sh
+settle

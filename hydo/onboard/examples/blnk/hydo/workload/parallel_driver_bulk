@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# one client operation (../../client/main.go, "bulk"): two transfers in one atomic bulk; one time in three the second comes from the empty account.
+# Its token goes to $HYDO_ACKED when acknowledged.
+exec /bin/blnkc op bulk

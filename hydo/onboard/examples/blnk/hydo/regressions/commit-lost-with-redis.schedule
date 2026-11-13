@@ -1,0 +1,16 @@
+# finding 3 (RESULTS.md), a deployment setting: Redis killed for one round loses two acknowledged commits of holds. With --set redis_aof=yes the longer form of this schedule passes.
+# found by `hydo explore` (seed 10): durable-defaults
+# verdict: HYDO-ORACLE: VIOLATION [business_result] 38 acknowledged and 0 unanswered operations (0 of them in Blnk): 2 missing, 0 refused but applied, 0 never final, 0 with a wrong result, 0 bulks not atomic, 0 
+# composition: r0: parallel_driver_hold | r1: parallel_driver_deposit | r2: parallel_driver_hold | r3: parallel_driver_repay | r4: parallel_driver_draw | r5: parallel_driver_spend | r6: parallel_driver_bulk | r7: parallel_driver_repay | r8: parallel_driver_deposit | r9: parallel_driver_overdraw | r10: parallel_driver_draw | r11: parallel_driver_repay | r12: parallel_driver_spend | r13: parallel_driver_deposit | 
+# commands: eventually_1_settle first_init parallel_driver_bulk parallel_driver_deposit parallel_driver_draw parallel_driver_hold parallel_driver_overdraw parallel_driver_repay parallel_driver_spend parallel_driver_transfer
+# command-sha: parallel_driver_bulk 84cc6698e5b69186
+# command-sha: parallel_driver_deposit e83baf832bfcceb6
+# command-sha: parallel_driver_draw fa692860f0653105
+# command-sha: parallel_driver_hold c17a1ab8ae5507a2
+# command-sha: parallel_driver_overdraw 34fae4aed8ea6499
+# command-sha: parallel_driver_repay 76db36e41d09ecab
+# command-sha: parallel_driver_spend 334814ed5a126d80
+# command-sha: parallel_driver_transfer ae254a71252b703b
+# note: the resolved composition is too long for a schedule line; a saved regression carries it as W=@603ec1635147 (unconfirmed)
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=c054734a6f769762 | run K=redis@21+1 N=worker-*@14-20:delay,100ms W=a36fcf62,p5,q1,r800

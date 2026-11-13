@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=180
+# fund the accounts from @world (users 5,000.00 each, shops 20.00 each), before the window under test
+exec /bin/blnkc init

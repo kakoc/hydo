@@ -1,0 +1,16 @@
+# finding 2 (RESULTS.md), a Blnk bug: Redis paused for 4 rounds; two atomic bulks keep their first transfer although the second was never queued. Passes on the build with the fixes (--set blnk=blnk-fixed).
+# found by `hydo explore` (seed 1): durable-defaults
+# verdict: HYDO-ORACLE: VIOLATION [bulk_atomic] db: 2 rows where none may be
+# composition: r0: parallel_driver_deposit | r1: parallel_driver_transfer, parallel_driver_repay | r2: parallel_driver_spend | r3: parallel_driver_repay | r4: parallel_driver_deposit | r5: parallel_driver_repay, parallel_driver_hold, parallel_driver_repay | r6: parallel_driver_transfer, parallel_driver_spend | r7: parallel_driver_hold, parallel_driver_repay | r8: parallel_driver_transfer, parallel_driver_deposit
+# commands: eventually_1_settle first_init parallel_driver_bulk parallel_driver_deposit parallel_driver_draw parallel_driver_hold parallel_driver_overdraw parallel_driver_repay parallel_driver_spend parallel_driver_transfer
+# command-sha: parallel_driver_bulk 84cc6698e5b69186
+# command-sha: parallel_driver_deposit e83baf832bfcceb6
+# command-sha: parallel_driver_draw fa692860f0653105
+# command-sha: parallel_driver_hold c17a1ab8ae5507a2
+# command-sha: parallel_driver_overdraw 34fae4aed8ea6499
+# command-sha: parallel_driver_repay 76db36e41d09ecab
+# command-sha: parallel_driver_spend 334814ed5a126d80
+# command-sha: parallel_driver_transfer ae254a71252b703b
+# note: the resolved composition is too long for a schedule line; a saved regression carries it as W=@db8398b75356 (unconfirmed)
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=4127cc1347fae6ba | run P=redis@9+4 W=3e71cf9e,p5,q3,r800

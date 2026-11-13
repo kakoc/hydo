@@ -1,0 +1,102 @@
+# Known error kinds: lines a service writes to its log that are expected (hydo/onboard/MANIFEST.md,
+# "Error logs as findings"). Each entry needs a reason; `hydo errors accept` appends them.
+#   sig:    the kind's signature (or match: a regular expression on its template)
+#   with:   only in runs whose schedule has one of these faults (K=mysql, C, disk, R=everysec)
+#   during: only for lines written while one of these faults was on
+format: 1
+unknown: report       # report: a new kind is a finding; fail: it also fails the run
+known:
+  - sig: 6fd363c8e6f1
+    service: server
+    tpl: "time='<time>' level=error msg='API error' details='sql: no rows in result set'"
+    example: "time='2026-01-01T00:00:04Z' level=error msg='API error' details='sql: no rows in result set'"
+    reason: "the client polls GET /transactions/reference/<ref> until the worker has written the outcome; Blnk logs each 404 on the way as an API error"
+    by: "onboarding"
+    date: "2026-11-13"
+  - match: "msg='transaction validation failed' error='reference [a-z-]+#(\\.#)?_q has already been used'"
+    service: worker
+    example: "time='2026-01-01T00:00:06Z' level=error msg='transaction validation failed' error='reference d5_q has already been used'"
+    reason: "the worker applied the transaction in a coalesced batch with an earlier one, and the transaction's own task then finds its outcome reference used and drops it: the case that upstream pull request 423 (issue 421) left as it was (one entry for every kind of operation: the reference names it)"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: 47e420bb4ae7
+    service: worker
+    tpl: "time='<time>' level=error msg='failed to apply transaction to balances' error='insufficient funds in source balance'"
+    example: "time='2026-01-01T00:00:07Z' level=error msg='failed to apply transaction to balances' error='insufficient funds in source balance'"
+    reason: "a refusal the workload provokes on purpose: a shop's spend or a transfer from the empty account without funds, or a draw beyond the credit line's overdraft limit"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: c7e493f78532
+    service: worker
+    tpl: "time='<time>' level=error msg='failed to apply transaction to balances' error='transaction exceeds overdraft limit'"
+    example: "time='2026-01-01T00:00:18Z' level=error msg='failed to apply transaction to balances' error='transaction exceeds overdraft limit'"
+    reason: "a refusal the workload provokes on purpose: a shop's spend or a transfer from the empty account without funds, or a draw beyond the credit line's overdraft limit"
+    by: "onboarding"
+    date: "2026-11-13"
+  - sig: ab1857f1953a
+    service: worker
+    tpl: "time='<time>' level=error msg='queued atomic bulk transaction rejected' batch_id=bulk_<uuid> error='transaction rejected'"
+    example: "time='2026-01-01T00:00:08Z' level=error msg='queued atomic bulk transaction rejected' batch_id=bulk_806f0378-e1f5-4f35-8a07-d7167e826348 error='transaction rejected'"
+    reason: "an atomic bulk whose second transfer comes from the empty account is rejected as a whole, on purpose"
+    by: "onboarding"
+    date: "2026-11-13"
+  # Reviewed from the explorations e2 (Mac) and h1 (hvx). Each regular expression stands for a
+  # group of kinds that differ only in the operation that the line names.
+  - match: "redis (eval|command) error|failed to (register queued atomic batch item|check atomic batch|acquire lock)|failed to acquire lock"
+    service: server
+    with: [K=redis, P=redis, N, O, C]
+    reason: "Redis is down, paused or cut off, or was lost at a power cut: the API cannot enqueue, lock or check a batch; the transaction stays QUEUED in PostgreSQL for the queue recovery, or the request fails"
+    by: "onboarding"
+    date: "2026-11-13"
+  - match: "redis (eval|command) error|Dequeue error|Failed to (write server state data|forward scheduled tasks|delete expired completed tasks)|failed to acquire lock"
+    service: worker
+    with: [K=redis, P=redis, N, O, C]
+    reason: "Redis is down, paused or cut off, or was lost at a power cut: asynq and the worker's locks cannot reach it"
+    by: "onboarding"
+    date: "2026-11-13"
+  - match: "the database system is (starting up|not yet accepting connections|shutting down)|terminating connection due to unexpected postmaster exit"
+    service: postgres
+    with: [K=postgres, P=postgres, C, disk]
+    reason: "PostgreSQL restarts after a kill or a power cut and refuses connections until it has recovered"
+    by: "onboarding"
+    date: "2026-11-13"
+  - match: "dial tcp #.#.#.#:5432|database system is (starting up|not yet accepting connections)|INTERNAL_SERVER_ERROR: (Fail|Datab)|failed to claim outbox|balance lookup failed|failed to get source/destination"
+    service: server
+    with: [K=postgres, P=postgres, N, O, C]
+    reason: "PostgreSQL is down, paused, restarting or cut off: the API's queries fail and the request is answered with an error or not at all"
+    by: "onboarding"
+    date: "2026-11-13"
+  - match: "dial tcp #.#.#.#:5432|database system is (starting up|not yet accepting connections)|INTERNAL_SERVER_ERROR: (Fail|Datab)|saving transaction to db error"
+    service: worker
+    with: [K=postgres, P=postgres, N, O, C]
+    reason: "PostgreSQL is down, paused, restarting or cut off: the worker cannot read or save, and asynq retries the task"
+    by: "onboarding"
+    date: "2026-11-13"
+  - match: "duplicate key value violates unique constraint 'idx_transactions_reference_unique'"
+    service: postgres
+    with: [K, P=server, P=postgres, P=redis, P=worker, N, O, C]
+    reason: "a client's retry after a lost or slow answer reuses its reference; Blnk refuses the second save with TXN_DUPLICATE_REFERENCE, as documented"
+    by: "onboarding"
+    date: "2026-11-13"
+  - match: "duplicate key value violates unique constraint|TXN_DUPLICATE_REFERENCE: reference [a-z]#(\\.#)? has already been used"
+    service: server
+    with: [K, P=server, P=postgres, P=redis, P=worker, N, O, C]
+    reason: "a client's retry after a lost or slow answer reuses its reference; Blnk refuses the second save with TXN_DUPLICATE_REFERENCE, as documented"
+    by: "onboarding"
+    date: "2026-11-13"
+  - match: "context canceled"
+    service: server
+    with: [K, P=server, P=postgres, P=redis, N, O, C]
+    reason: "the client gave up on a slow request (its timeout is 4 s) while a fault held the API, PostgreSQL or Redis; the request's context is cancelled"
+    by: "onboarding"
+    date: "2026-11-13"
+  - match: "sync bulk transaction error|bulk transaction API error|failed to rollback batch transactions"
+    service: server
+    reason: "the lines of finding 2 (RESULTS.md), a Blnk bug: an atomic bulk whose later item fails before it is queued keeps its earlier items; accepted so that explorations show other kinds"
+    by: "onboarding"
+    date: "2026-11-13"
+  - match: "failed to process stuck transaction|failed to apply transaction to balances' error='insufficient funds|stuck queue recovery pass"
+    service: server
+    reason: "the queue recovery that eventually_1_settle runs (POST /transactions/recover): a recovered spend without funds fails this pass, and Blnk rejects it after 3 attempts"
+    by: "onboarding"
+    date: "2026-11-13"
