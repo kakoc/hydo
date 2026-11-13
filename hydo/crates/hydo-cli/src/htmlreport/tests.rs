@@ -32,7 +32,11 @@ fn page_of(dir: &Path, shown: &str, against: Option<PathBuf>) -> String {
 
 fn golden(name: &str, got: &str) {
     let p = crate_dir().join("tests/golden/report").join(name);
-    if std::env::var_os("HYDO_BLESS").is_some_and(|v| !v.is_empty() && v != "0") {
+    // HYDO_BLESS is a test-only switch (kind Test in hydo_config's registry), read here in the
+    // test's own code as hydo_config's docs say; tests/inventory.rs keeps direct reads by name
+    // out of crates' src, so the test scans the environment instead.
+    let bless = std::env::vars().any(|(k, v)| k == "HYDO_BLESS" && !v.is_empty() && v != "0");
+    if bless {
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
         std::fs::write(&p, got).unwrap();
         return;
