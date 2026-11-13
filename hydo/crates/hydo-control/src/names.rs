@@ -270,7 +270,7 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
         GuestToken::Net { target, .. } | GuestToken::OneWay { target, .. } => {
             net_target(plan, t, target)
         }
-        GuestToken::Cut(_) | GuestToken::Clock { .. } => Ok(()),
+        GuestToken::Cut(_) | GuestToken::Clock { .. } | GuestToken::ClockTo { .. } => Ok(()),
         GuestToken::Corrupt { svc, .. } => {
             service(plan, t, svc)?;
             if plan.storage_of(svc).is_some() {
@@ -387,6 +387,7 @@ fn start_step(t: &GuestToken) -> Option<u64> {
         | GuestToken::Pause(Pause::Timer { at, .. })
         | GuestToken::Cut(at)
         | GuestToken::Clock { at, .. }
+        | GuestToken::ClockTo { at, .. }
         | GuestToken::Corrupt { at, .. }
         | GuestToken::PowerLoss { at, .. } => Some(*at),
         GuestToken::Net { from, .. } | GuestToken::OneWay { from, .. } => Some(*from),

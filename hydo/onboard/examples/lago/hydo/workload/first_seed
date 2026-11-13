@@ -11,10 +11,8 @@ until C wait; do
   sleep 1
 done
 C seed || exit 1
-# hydo keeps $HYDO_ACKED and $HYDO_OUTCOMES from the start of the run on; the seed's own
-# acknowledged events go to the data disk, and the checks read both (helper_lib.sh: acked, outcomes)
-HYDO_ACKED=/data/seed/acked; HYDO_OUTCOMES=/data/seed/outcomes
-: > $HYDO_ACKED; : > $HYDO_OUTCOMES
+# the seed's acknowledged events are the client's records too: test.first_records keeps them in
+# the run's $HYDO_ACKED and $HYDO_OUTCOMES
 for n in 1 2 3 4; do
   C event "s${n}a" "sub$n" api_calls 5 > /dev/null && record ack "s${n}a,units:sub$n:api_calls,5" || exit 1
   C event "s${n}b" "sub$n" api_calls 7 > /dev/null && record ack "s${n}b,units:sub$n:api_calls,7" || exit 1

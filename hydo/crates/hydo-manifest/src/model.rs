@@ -419,7 +419,7 @@ choice!(
 );
 choice!(
     /// Where an eventually property's deadline counts from.
-    Anchor { Heal = "heal", Start = "start" }
+    Anchor { Heal = "heal", Start = "start", Commands = "commands" }
 );
 choice!(
     /// A ready-made history checker.
@@ -680,6 +680,13 @@ pub struct Project {
     /// (docs/design/steered-search.md).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub steer: Option<Vec<SteerValue>>,
+    /// Times a clock fault may step the guest's clock to, in the schedule language's form
+    /// (`@HH:MM[:SS]`, `@:MM[:SS]`, `@hour`, `@day`, `@month`, `@year`, each with an optional
+    /// offset such as `+10m` or `-2s`; UTC): `hydo explore` draws `T=<at>:<point>` among its
+    /// clock steps, so a time of day or a calendar boundary that the system acts on is reached
+    /// (MANIFEST.md "Clock steps to a time").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock_points: Option<Vec<Text>>,
     /// The test composer's plan (the hydo/ folder fills it too).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub test: Option<Test>,
@@ -825,6 +832,13 @@ pub struct Service {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = false))]
     pub restart_may_fail: Option<bool>,
+    /// true: a one-shot job, such as a database migration, that other services run in their
+    /// setup: before they start (`hydo compose` writes it for Docker Compose's
+    /// service_completed_successfully). Its own process only idles, so hydo explore never draws
+    /// a fault on it (MANIFEST.md "One-shot jobs").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub job: Option<bool>,
     /// When hydo starts this service: ready (the default) waits until every service before it in
     /// the start order passed its readiness check; started waits only until each of them was
     /// started, so a cluster whose readiness check needs its peers can start (Docker Compose's
@@ -1618,6 +1632,12 @@ pub struct Test {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = 0))]
     pub budget_ms: Option<i64>,
+    /// true: what the first commands write to $HYDO_ACKED and $HYDO_OUTCOMES during
+    /// provisioning stays in those files for the run, so operations made in the seed are among
+    /// the client's records (default false: the run's files start empty).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub first_records: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commands: Option<Vec<TestCommand>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

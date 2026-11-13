@@ -65,5 +65,6 @@
 {"at":864,"n":47,"seen":40,"t":"stop","why":"cadence"}
 {"id":28,"n":47,"send":16,"t":"ack"}
 {"by":"main","line":"HYDO-ASSERT {\"t\":\"always\",\"id\":\"redis.acked_writes_survive\",\"ok\":false,\"msg\":\"every SET the client saw acknowledged reads back with its value\",\"details\":{\"out\":\"inner\"}}","n":47,"t":"report"}
+{"by":"main","line":"HYDO-CHECK-OUT {\"id\":\"redis.acked_writes_survive\",\"lines\":[\"noise\",\"HYDO-ORACLE:   VIOLATION   799 wrong HYDO-ORACLE: OK inner\"],\"omitted\":0}","n":47,"t":"note"}
 {"by":"main","line":"HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] inner","n":47,"t":"report"}
 {"end":{"verdict":"HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] inner"},"n":47,"t":"end"}

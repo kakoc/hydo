@@ -9,7 +9,8 @@ use hydo_results::{
     kind, status, Artifacts, Counters, ErrorLogs, Finding, Fingerprints, Liveness, Property,
     PropertyTable, Run, Verdict,
 };
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
@@ -346,6 +347,53 @@ pub fn merged_text(consoles: &[String], r: &Res) -> String {
     text
 }
 
+/// The host controller's `HYDO-CHECK-OUT {"id":..,"lines":[..],"omitted":n}` notes in a run's
+/// consoles (Milestone 225): the output of each failing check before its last line, bounded.
+/// The first note of an id wins.
+pub fn check_outputs(text: &str) -> BTreeMap<String, (Vec<Value>, u64)> {
+    let mut out = BTreeMap::new();
+    for l in text.split('\n') {
+        let Some(i) = l.find("HYDO-CHECK-OUT {") else {
+            continue;
+        };
+        let Ok(v) = serde_json::from_str::<Value>(&l[i + "HYDO-CHECK-OUT ".len()..]) else {
+            continue;
+        };
+        let (Some(id), Some(lines)) = (
+            v.get("id").and_then(Value::as_str),
+            v.get("lines").and_then(Value::as_array),
+        ) else {
+            continue;
+        };
+        let omitted = v.get("omitted").and_then(Value::as_u64).unwrap_or(0);
+        out.entry(id.to_string())
+            .or_insert_with(|| (lines.clone(), omitted));
+    }
+    out
+}
+
+/// The failing checks' output (results addition of Milestone 225): an invariant or assertion
+/// finding whose id has a `HYDO-CHECK-OUT` note gets `details.output` (the lines) and, when
+/// lines were left out, `details.output_omitted`.
+pub fn attach_check_outputs(findings: &mut [Finding], text: &str) {
+    let outs = check_outputs(text);
+    if outs.is_empty() {
+        return;
+    }
+    for f in findings.iter_mut() {
+        if f.kind != kind::INVARIANT && f.kind != kind::ASSERTION {
+            continue;
+        }
+        if let Some((lines, omitted)) = outs.get(&f.id) {
+            f.details
+                .insert("output".into(), Value::Array(lines.clone()));
+            if *omitted > 0 {
+                f.details.insert("output_omitted".into(), json!(omitted));
+            }
+        }
+    }
+}
+
 /// A run's result as a record. `consoles` = (path relative to the document's directory, text)
 /// of the run's consoles, the run's own first.
 pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> Run {
@@ -354,6 +402,7 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
     findings.extend(invariant_finding(&guest_verdict(r)));
     let texts: Vec<String> = consoles.iter().map(|c| c.1.clone()).collect();
     findings.extend(assertion_findings(&merged_text(&texts, r)));
+    attach_check_outputs(&mut findings, &texts.concat());
     if let Some(Value::Array(fs)) = r.get(CHECKS) {
         findings.extend(
             fs.iter()

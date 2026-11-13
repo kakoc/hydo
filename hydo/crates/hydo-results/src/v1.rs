@@ -1318,6 +1318,10 @@ pub struct Shrink {
     /// Test composer: why the minimal schedule keeps the seed form.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stable_note: Option<String>,
+    /// `hydo explore --shrink-causes N` (added in M225): the fault kinds of the failure this
+    /// shrink started from (`C T- disk=cut`), which tell the shrinks of one signature apart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fault_kinds: Option<String>,
 }
 
 /// An error kind's first run in which it was new.

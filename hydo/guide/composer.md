@@ -32,7 +32,7 @@ leave `W=` out (seed 0 with the manifest's defaults).
 | `serial_driver_<name>` | repeatedly, never two at once, only when no other driver runs | yes | anytime only |
 | `singleton_driver_<name>` | once, in a run with no other driver (1 run in 4 when there are other drivers) | yes | anytime only |
 | `anytime_<name>` | in rounds, at any time | yes | anything |
-| `eventually_<name>` | once each after the faults stop (and in the recovery boot after a power cut) | none | nothing |
+| `eventually_<name>` | once each after the faults stop (and in the recovery boot after a power cut); before the `eventually_` checks with `after=commands` (`hydo guide checks`), else after them | none | nothing |
 | `finally_<name>` | at the end, only if every started command ran to completion | none | nothing |
 | `helper_<anything>` | never: shared code that commands source or call | | |
 
@@ -69,6 +69,12 @@ so a typo does not silently do nothing.
 | `HYDO_ACKED` | file: append one id per line for every operation the client saw acknowledged (carried across a power cut) |
 | `HYDO_OUTCOMES` | file: append `<id> ack\|failed\|unknown` per attempt; the last line per id wins. It is carried across a power cut only with `guest.outcomes_after_cut: true`, and then the recovery boot's file holds the last outcome of every id. Without that key the file is empty there. A check that looks ids up in it then checks nothing after a power cut. |
 | `HYDO_FAILED` | file (checks only): ids whose last outcome was `failed` |
+
+A `first_` command sees these files too, but each run starts with them empty, so an operation
+that a `first_` command recorded is not among the run's records. When the seed's operations
+count, for example in a check that compares every acknowledged amount with the system's total,
+set `test.first_records: true` in `hydo.yaml`. Then the run's files start with the lines of the
+`first_` commands.
 | the manifest's `env:` | exported to every command; `shell:` helpers are sourced too |
 
 ## A command, end to end

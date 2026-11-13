@@ -219,6 +219,8 @@ services:                      # may be empty ([] or left out): a project that i
     logs: [/data/db/log/*.log]            # its own log files besides its output (absolute paths,
                                           #   shell patterns allowed): the diagnosis and `hydo
                                           #   inspect logs` show their last lines too
+    job: false                            # true: a one-shot job that its dependents run in their
+                                          #   setup:; never a fault target (see "One-shot jobs")
 
   - name: cache                # a service whose files come from a Docker/OCI image (see below)
     image: images/redis.tar    # a `docker save` tar or an OCI layout directory, relative to
@@ -269,7 +271,8 @@ invariants:                    # required, at least one
   - id: orders.drained         # bounded liveness (see "Liveness" below)
     type: eventually
     cmd: /bin/count-pending | grep -qx 0      # exit 0 = satisfied now, anything else = not yet
-    after: heal                # anchor: heal (default) | start
+    after: heal                # anchor: heal (default) | start | commands (after the
+                               #   eventually commands of the test composer)
     within: 10                 # required: deadline in whole seconds of guest time (1..3600)
     poll: 1                    # seconds between checks (default 1); no every:/final: here
 
@@ -293,6 +296,10 @@ faults: [kill, pause, network, oneway, cut, clock, disk]   # which kinds make se
 errors: true                   # error logs as findings (see "Error logs as findings" below): scan
                                #   every service's log; or a mapping: level: error|warning,
                                #   max: 40 (kinds printed per boot), services: [names]
+
+clock_points: ["@:10", "@month+10m"]   # times a clock fault may step the clock to (UTC; see
+                               #   "Clock steps to a time"): hydo explore draws T=<at>:<point>
+                               #   among its fixed steps
 
 steer:                         # numbers in the console that say how close a run came to failing,
   - id: queue_len              #   for hydo explore --steer queue_len (see "Values that steer the
@@ -534,6 +541,30 @@ force while it starts (see "Restart policies"), so a service that crashes becaus
 depends on is not ready yet is started again, as under Docker. Without the key every service
 starts and is checked in turn, command for command as before.
 
+### One-shot jobs (`services[].job`)
+
+A one-shot job, such as a database migration, runs once and ends; other services wait for it.
+hydo runs such a job's command in the `setup:` of each service that waits for it, once per boot,
+and keeps the job's own service as a process that only idles, so that `hydo-oci <job>` can still
+run its image. `job: true` says that the service is such a job: `hydo explore` never draws a
+kill, pause, network fault, link, freeze or storage fault on it, because a fault on an idle
+process tests nothing. A hand schedule can still name it.
+
+```yaml
+  - name: migrate
+    image: images/api.tar
+    entrypoint: [/.hydo/busybox, sleep, "2147483647"]
+    job: true
+  - name: api
+    depends_on: [migrate, db]
+    setup: "[ -f /tmp/hydo/job.migrate.done ] || { hydo-oci migrate ./scripts/migrate.sh && : > /tmp/hydo/job.migrate.done; }"
+```
+
+`hydo compose` writes `job: true` for every service that another one waits for with Docker
+Compose's `condition: service_completed_successfully` (Milestone 225). Before that, the explorer
+drew faults on the idle service: in 6 of 20 schedules of the Lago example. Without the key a
+service is a fault target as before.
+
 ### Variables every command sees
 
 | variable | meaning |
@@ -575,6 +606,7 @@ every run of a schedule. Anchors:
 |---|---|
 | `heal` (default) | the end of fault injection: the workload's last step has run. Everything hydo then does to heal -- lift network faults, end pauses, restart killed services, the workload's `retry` -- counts against the deadline. After a power cut: the start of the recovery boot (the services' crash recovery counts). Solo: after the last step. |
 | `start` | the start of the workload (after a power cut: the start of the recovery boot) |
+| `commands` | the end of the test composer's `eventually` commands. With such a check the `eventually` commands run first, in name order, then the check is polled. So a command can make what the check waits for happen, for example a step of the clock to a billing time. Without `eventually` commands: the end, before the `final` invariants. |
 
 From the anchor hydo polls `cmd` in the background every `poll` seconds (each call bounded
 by `within + 1` s). Exit 0 = satisfied; any other status = not yet. At the end (`finish`,
@@ -657,6 +689,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `O=<svc>@<from>-<to>:req\|resp:<netem>` | one direction only |
 | `C=<at>` | power cut before step `at` |
 | `T=<at>:<delta>` | step the realtime clock by `delta` seconds |
+| `T=<at>:@<point>` | set the realtime clock to the next instant of a time of day or a calendar boundary, in UTC (`@00:10`, `@:10-2s`, `@month+10m`); see "Clock steps to a time" |
 | `N=<a>-<b>@...`, `N=<a>-*@...` | netem on the link between two services with `addr:` (or between `a` and every other one); see "Link faults" |
 | `O=<a>-<b>@<from>-<to>:req\|resp:<netem>` | one direction of a link: `req` = packets from `a` to `b`, `resp` = from `b` to `a` |
 | `N=<a>,<b>/<c>@...`, `N=<group>.<shape>@...` | a partition: netem on every link between two components, or the links that a shape over a group cuts (`halves`, `isolate`, `ring`, `bridge`, `primary`); see "Groups of services and partitions" |
@@ -828,6 +861,39 @@ Sweeping every packet is expensive (M76: 1,125 runs, 2 h 26 min for two links ov
 Every point is an ordinary schedule and every failure is re-run twice, as in the full sweep;
 `exploration.json` (`freeze_sweep`) lists the centres, windows and rounds. Without `--fc-adaptive` the sweep is
 unchanged.
+
+### Clock steps to a time (`T=<at>:@<point>`, `clock_points:`)
+
+`T=<at>:<delta>` steps the realtime clock by a fixed number of seconds. A system that acts at a
+time of day or at a calendar boundary needs the clock to reach that time: a biller that runs at
+minute 10 of every hour, or a monthly invoice on the first of the month. `T=<at>:@<point>` sets
+the clock, before step `at`, to the next instant of a point, in UTC (Milestone 225):
+
+| point | the instants |
+|---|---|
+| `@HH:MM`, `@HH:MM:SS` | that time of every day |
+| `@:MM`, `@:MM:SS` | that minute and second of every hour |
+| `@hour`, `@day`, `@month`, `@year` | the start of every hour, day, month (the first, 00:00) or year (1 January) |
+
+An offset may follow: a sign and whole units in descending order, each once and not zero, as
+in `+10m`, `-2s` or `+1d2h` (units `d`, `h`, `m`, `s`; hours below 24, minutes and seconds
+below 60). The clock goes to the first instant whose value plus the offset is after the clock's
+current value, so the step always goes forward. From 2026-11-30 23:55, `@month+10m` and `@:10`
+step to 2026-12-01 00:10, and `@:10-2s` to 00:09:58. Each point has one spelling (`@00:10`, not
+`@00:10:00`; `+10m`, not `+600s`), because the guest logs the token; another spelling is refused
+with the canonical one in the message. The controller logs `CLOCK JUMP of <n>s to <point>
+(<time>) before step <at>` and the same `fault.clock_fwd` record as a step forward.
+
+`clock_points:` (a list of points) makes `hydo explore` draw these steps too. With it, each clock
+fault of a generated schedule picks among the ten fixed steps and the listed points:
+
+```yaml
+faults: [kill, pause, network, cut, clock]
+clock_points: ["@:10-2s", "@month+10m"]   # Lago bills at minute 10 of the hour; November on December 1
+```
+
+Without the key the explorer draws exactly the schedules it drew before. The shrinker removes a
+step to a time as a whole; it does not halve it.
 
 ### Clock after a power cut (`guest.clock_after_cut`)
 
@@ -1449,6 +1515,9 @@ test:
   budget_ms: 0                 # 0 = none; else no command starts later than this after round 0
   check_every: 2               # default period of `always` checks (seconds of guest time)
   check_within: 30             # default deadline of `eventually` checks
+  first_records: false         # true: what the first commands write to $HYDO_ACKED and
+                               #   $HYDO_OUTCOMES stays in those files for the run (see "Command
+                               #   kinds"); default: the run's files start empty
   commands:
     - {name: place_order, kind: parallel_driver, run: [/bin/shoptest, driver, place_order]}
     - {name: audit, kind: serial_driver, run: [/bin/shoptest, driver, audit], timeout: 120}
@@ -1486,7 +1555,8 @@ entries to the model ("The project format" has the exact mapping: commands and c
 an error, so typos do not silently do nothing). Each file becomes `run: [/hydo/<dir>/<file>]`;
 the whole directory, helpers included, is copied to `/hydo/<dir>/` on the read-only root. A
 text file may carry a header in its first 4 KiB: `# hydo: timeout=30` (commands), `# hydo:
-every=1` / `# hydo: within=10 after=start poll=1` (checks), `# hydo-msg: <description>`.
+every=1` / `# hydo: within=10 after=start poll=1` (checks; `after=heal`, `start` or `commands`),
+`# hydo-msg: <description>`.
 
 ### Command kinds (when they run)
 
@@ -1497,7 +1567,7 @@ every=1` / `# hydo: within=10 after=start poll=1` (checks), `# hydo-msg: <descri
 | `serial_driver` | repeatedly, never two at once; waits until no other driver runs | yes | anytime only |
 | `singleton_driver` | once per run, in a run that has no other drivers: when a plan has one, 1 run in 4 (or every run, without other drivers) is such a run | yes | anytime only |
 | `anytime` | in rounds, any time | yes | anything |
-| `eventually` | after the faults stop (after the heal, the host's "go", and in the recovery boot after a power cut), once each, in name order | none | nothing |
+| `eventually` | after the faults stop (after the heal, the host's "go", and in the recovery boot after a power cut), once each, in name order; with an `eventually` check anchored at `commands`, before the `eventually` checks are resolved, else after them | none | nothing |
 | `finally` | at the end, after the `eventually` commands, only when every command started in this boot ran to completion (no timeout, no drain kill, no power cut), so never in a recovery boot | none | nothing |
 
 **Exit status.** A driver or anytime command: 0 = ok, **100 = the command saw a violation**
@@ -1508,9 +1578,19 @@ ERROR provision failed`). An `eventually` or `finally` command is an invariant: 
 anything else is a violation. A check: 0 holds, 1 violated, 2 could not be evaluated now (as
 any invariant); a check that times out counts as 2.
 
+**A failing check's output.** The verdict and the check's `HYDO-ASSERT` record keep the last
+line of its output. When a check, an `eventually` check or an `eventually` or `finally` command
+fails and its output has more lines, the host controller adds one `HYDO-CHECK-OUT` line to the
+console (Milestone 225): the last 20 lines, each cut to 300 bytes, at most 2,000 bytes in all.
+`result.json` carries them in the failing finding's `details.output` (and
+`details.output_omitted`, the number of earlier lines left out), and `hydo report` prints them
+under the finding; an exploration's `report.md` prints them for the first failure of each
+signature. The line is a note, like the init's log lines: no fingerprint and no control
+transcript's hash covers it, so a check needs no second copy of its output on `/dev/console`.
+
 **Check kinds.** `final`: once at the end (an `always` invariant with `final: true`).
 `always`: also every `every` seconds while the workload runs (`check_every` by default).
-`eventually`: bounded liveness, polled after `after` (`heal` default, or `start`) until it
+`eventually`: bounded liveness, polled after `after` (`heal` default, `start`, or `commands`) until it
 holds or `within` seconds pass (MANIFEST "Liveness").
 `linearizable` / `list_append` (alias `list-append`), a retired spelling in `test.checks`
 (format 1 reads it, `hydo migrate` moves it to the top-level `checks:`, its home): a ready-made
@@ -1523,6 +1603,14 @@ host checks the history after the run. Fields: `history` (required), `model`/`in
 `checks/linearizable_<name>` or `checks/list_append_<name>` is the read-back, with
 `# hydo: history=kv model=register` (or `consistency=...`) in its header. They become top-level
 `checks:` entries, not invariants. Example: `examples/redis-composed-hist/`.
+
+**Records of the `first` commands.** A `first` command runs in provisioning, before the
+snapshot every schedule starts from. By default each run starts with empty `$HYDO_ACKED` and
+`$HYDO_OUTCOMES`, so an operation that a `first` command made and recorded there is not among
+the run's records. A check that compares the client's records with the system's totals then
+sees the seed's operations as counted twice. With `test.first_records: true` the run's files
+keep the lines the `first` commands wrote, and the run's own lines follow them. They are also
+carried into the recovery boot after a power cut, as the run's are.
 
 **Environment of a command.** Everything an invariant sees (`HYDO_ACKED`, `HYDO_OUTCOMES`,
 the manifest's `env:`), plus `HYDO_CMD` (its id), `HYDO_CMD_ID` (its entry number, unique in
@@ -2068,7 +2156,7 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | `ports:`, `expose:` | `port:` = the first CONTAINER port (`"8080:80"` -> 80); else the image's `EXPOSE`. Network faults (`N=`/`O=`) act on that port. |
 | (each service) | `network: bridge` and its own network namespace with `addr:` 10.89.0.11, .12, ... (see "Service networks"), and `/etc/hosts` (`root.text`, mounted into every image root) maps the Compose service names, `container_name`, `hostname`, network `aliases`, `links` aliases and `extra_hosts` to them (`host-gateway` -> 10.89.0.1). `--network loopback`: the Milestone 84 layout, one shared loopback network with `addr:` 127.0.0.11, .12, ... (link faults then act on nothing, see "Link faults"). `--no-addr`: one shared loopback network, every name -> 127.0.0.1 (the arm64 build, whose kernel has no network namespaces; `hydo compose` on a Mac passes it). |
 | `depends_on:` (list or map) | `depends_on:`. By default hydo starts a service only after the services before it passed their `ready:`, so `service_healthy` and `service_started` both hold. When every dependency in the long form says `condition: service_started`, the service also gets `start_after: started`: it starts once they have started, as in Compose (section "Starting services together"). |
-| `depends_on.<job>.condition: service_completed_successfully` | the job service idles (`/.hydo/busybox sleep`) and its command runs once per boot in the `setup:` of every service that waits for it (also before a restart and in crash recovery). |
+| `depends_on.<job>.condition: service_completed_successfully` | the job service idles (`/.hydo/busybox sleep`), has `job: true` (never a fault target, see "One-shot jobs"), and its command runs once per boot in the `setup:` of every service that waits for it (also before a restart and in crash recovery). |
 | `healthcheck:` (else the image's `HEALTHCHECK`) | `ready: timeout <t> hydo-oci <svc> <test>`: `CMD` as argv, `CMD-SHELL`/a string through `/bin/sh -c`, as the service's `user:` (busybox `chpst`), polled every second; `ready_timeout` = `start_period + interval x retries + 60` s (120..600). Without one: `nc -z -w 2 <addr> <port>`, or `true` (with a TODO) when there is no port. |
 | `volumes:` named / anonymous, the image's `VOLUME`s | a directory `/data/vol/<name>` on the data disk (the fault target; listed in `data.dirs`), mounted on the target with `copy_up` (on first use it gets the image's content, owner and mode, as a Docker named volume). Several services naming one volume share it. `external: true` starts empty (warning). A volume on `/data` is the data disk's root already, except when several services have their own named volume on `/data` (the nodes of a cluster), or when one has and another service keeps a named volume elsewhere on the data disk (Redis's `redis_data:/data` beside PostgreSQL's volume: the Redis image's entrypoint chowns everything under its `/data` to its own user, which took PostgreSQL's files away from PostgreSQL): then each gets `{src: /data/vol/<name>, dst: /data}` (services naming one volume share it). |
 | `volumes:` bind mount of an existing file or directory | copied into the read-only root (`root.files`, `/etc/hydo/compose/bind/<n>-<name>`) and mounted on the target; read-only in effect (a warning for a directory not marked `:ro`: if the program writes there, make it a named volume). A source that does not exist becomes an empty data-disk directory (Docker creates it). Host paths `/etc/localtime`, `/etc/timezone`, `/var/run/docker.sock`, `/proc`, `/sys`, `/dev`, ... are skipped with a warning. |

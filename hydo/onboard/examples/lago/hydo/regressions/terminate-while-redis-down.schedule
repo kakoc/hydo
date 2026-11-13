@@ -3,6 +3,6 @@
 # answers 500; the client's retry gets 404 (the subscription is no longer active). No invoice for
 # sub4 is ever made, and its November usage is never billed. The default composition (W seed 0)
 # terminates sub4 in round 2; Redis is killed before round 1 and restarted before round 5.
-# commands: anytime_redeliver eventually_1_billing_tick eventually_2_transfers_charged first_seed parallel_driver_batch parallel_driver_event serial_driver_terminate
+# commands: anytime_redeliver eventually_1_billing_tick first_seed parallel_driver_batch parallel_driver_event serial_driver_terminate
 # expect: violation
 disk=none | run K=redis@1+4

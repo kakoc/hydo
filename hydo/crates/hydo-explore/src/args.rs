@@ -7,7 +7,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
        [--freeze-call] [--protocol-faults] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
-       [--ram-mib N] [--known-errors FILE] [--errors report|fail]
+       [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
        [--storage-faults] [--pause-workload [--pause-max MS]]
        [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
@@ -89,6 +89,9 @@ pub struct Args {
     pub known_errors: Option<String>,
     pub errors: Option<String>,
     pub errors_shrink: i64,
+    /// `--shrink-causes N` (Milestone 225): shrink up to N failures of one class and signature
+    /// whose schedules have different fault kinds (default 1: the first failure only).
+    pub shrink_causes: i64,
     /// M139: `--reactive fault|heal|both` (None: no reactions).
     pub reactive: Option<String>,
     pub react_events: Option<String>,
@@ -193,6 +196,7 @@ impl Default for Args {
             known_errors: None,
             errors: None,
             errors_shrink: 8,
+            shrink_causes: 1,
             reactive: None,
             react_events: None,
             heal_events: None,
@@ -238,7 +242,7 @@ const FLAGS: [&str; 21] = [
     "state-stop",
 ];
 
-const VALUED: [&str; 56] = [
+const VALUED: [&str; 57] = [
     "seeds",
     "workers",
     "image",
@@ -280,6 +284,7 @@ const VALUED: [&str; 56] = [
     "known-errors",
     "errors",
     "errors-shrink",
+    "shrink-causes",
     "reactive",
     "react-events",
     "heal-events",
@@ -437,6 +442,12 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "known-errors" => a.known_errors = Some(val),
             "errors" => a.errors = Some(choice("errors", v, &["report", "fail"])?),
             "errors-shrink" => a.errors_shrink = int("errors-shrink", v)?,
+            "shrink-causes" => {
+                a.shrink_causes = int("shrink-causes", v)?;
+                if !(1..=16).contains(&a.shrink_causes) {
+                    return Err("argument --shrink-causes: a number from 1 to 16".into());
+                }
+            }
             "reactive" => a.reactive = Some(choice("reactive", v, &["both", "fault", "heal"])?),
             "react-events" => a.react_events = Some(val),
             "heal-events" => a.heal_events = Some(val),

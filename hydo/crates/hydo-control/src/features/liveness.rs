@@ -8,7 +8,9 @@
 //!   (also when the original returned at once because the range was empty);
 //! - `start_all() { [ $2 = recovery ] && { live_anchor heal; live_anchor start; }; orig; }` ->
 //!   [`before_start_all`];
-//! - `finish() { live_resolve; orig; }` -> [`before_finish`].
+//! - `finish() { live_resolve; orig; }` -> [`before_finish`]; since Milestone 225 an invariant
+//!   anchored at `commands` makes the `eventually` commands run first and stamps that anchor
+//!   after them.
 //!
 //! `live_anchor <a>` stamps the anchor's uptime once and starts one background monitor per
 //! eventually invariant anchored there. `live_monitor` runs the check under `timeout <within+1>`
@@ -249,6 +251,8 @@ fn live_resolve(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             ),
         );
         if !ok {
+            // the check's output before its last line (Milestone 225)
+            super::check_output(fx, &inv.id, &res.out);
             let key = inv.key.clone();
             fx.effect(|h, _| {
                 if h.violated.is_none() {
@@ -287,10 +291,23 @@ pub(super) fn before_start_all(fx: &mut F<'_>, ctx: &Ctx, recovery: bool) -> Ste
     live_anchor(fx, ctx, "start")
 }
 
-/// The finish wrapper: resolve every eventually invariant before the final invariants.
+/// Whether an eventually invariant counts from the `eventually` commands (`after: commands`,
+/// Milestone 225).
+fn after_commands(ctx: &Ctx) -> bool {
+    eventually(ctx).any(|i| ctx.plan.invariants[i].live.as_ref().unwrap().after == "commands")
+}
+
+/// The finish wrapper: resolve every eventually invariant before the final invariants. With an
+/// invariant anchored at `commands`, the `eventually` commands run first (in manifest order, as
+/// final_verdict would run them), then that anchor is stamped and its monitors start; the
+/// monitors of `heal` and `start` went on meanwhile.
 pub(super) fn before_finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     if !active(ctx) {
         return Ok(());
+    }
+    if after_commands(ctx) {
+        super::early_commands(fx, ctx)?;
+        live_anchor(fx, ctx, "commands")?;
     }
     live_resolve(fx, ctx)
 }

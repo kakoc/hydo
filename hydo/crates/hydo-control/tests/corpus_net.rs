@@ -479,6 +479,12 @@ fn sweep(
     for (i, st, n, text) in every.iter().take(max_points) {
         if let Some(l) = suite.run(g, b, text) {
             points += 1;
+            // a failing check's output note (M225) may quote an OK line; the run's lines decide
+            let l: String = l
+                .lines()
+                .filter(|x| !x.contains(hydo_control::schedule::CHECK_OUT_PREFIX))
+                .collect::<Vec<_>>()
+                .join("\n");
             if !l.contains("HYDO-ORACLE: OK") {
                 failing.push((*i, *st, *n));
             }

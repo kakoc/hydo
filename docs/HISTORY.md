@@ -7249,3 +7249,86 @@ experiments, a domain rule found a bug only where the system enforces it across 
 **What hydo lacked.** Open items 96 to 99: a failing `.sql` check's verdict without its rows,
 network links only from `depends_on`, the Linux release's build of a `network: bridge` project
 before `hydo setup`, and error kinds split by an operation's name.
+
+### Milestone 225 (tentative number) - DONE (what the Lago onboarding lacked: eventually checks after the eventually commands, the first commands' records in the run, a failing check's output in `result.json`, several shrinks per signature, one-shot jobs off the fault targets, and clock steps to a time; the Lago example without its workarounds still finds lago-api 6901; nothing recorded moved; 2026-11-14)
+
+**In short.** Milestone 218's Lago onboarding left open items 87 to 92. Each is now an addition
+that changes nothing for a manifest, a plan or an exploration without it. Milestones 222 to
+224 were taken on main while this one was made.
+
+| item | what was missing | what hydo has now |
+|---|---|---|
+| 87 | the `eventually` checks were polled from the heal and resolved before the `eventually` commands ran | the anchor `after: commands` (`# hydo: after=commands`): the `eventually` commands run first, in name order, the anchor is stamped after them, and final_verdict keeps their results instead of running them again. `LIVE_ANCHORS` and the schema's `Anchor` gain `commands` |
+| 88 | the `first` commands' `$HYDO_ACKED` and `$HYDO_OUTCOMES` lines were emptied at the run's start | `test.first_records: true`: the run does not empty the two files, so the lines of provisioning (in the snapshot S1) stay, also across a power cut. The plan meta gets `first_records` only when it is set |
+| 89 | only a check's last line reached the verdict and `result.json` | a failing check, eventually check, or `eventually`/`finally` command with more than one line of output gets one `HYDO-CHECK-OUT {"id","lines","omitted"}` note: its last 20 lines, each cut to 300 bytes, at most 2,000 bytes. A note is outside the control transcript's hash and the fingerprint. `result.json` carries the lines as the finding's `details.output` (and `details.output_omitted`); `hydo report` prints them under the finding, and `report.md` gets a section "Output of the failing checks" for the first failure of each signature |
+| 90 | one shrink per class and signature | `hydo explore --shrink-causes N` (1 to 16, default 1): later failures of a signature are shrunk too while their fault kinds differ from those already chosen (`run::fault_kinds`: the host keys, the disk's class, the guest letters, a clock step's direction). `Shrink.fault_kinds` (a results addition) and `report.md` name them |
+| 91 | the idle service of a one-shot job was a fault target | `services[].job: true`: the explorer's space leaves the service out of every target list (kills, pauses, network faults, links, freezes, storage). `hydo compose` writes it for `service_completed_successfully` |
+| 92 | clock steps by fixed amounts only | `T=<at>:@<point>[<offset>]` (hydo-schedule's `ClockPoint`): `@HH:MM[:SS]`, `@:MM[:SS]`, `@hour`, `@day`, `@month`, `@year`, with an offset such as `+10m` or `-2s`, in UTC; the clock goes to the first instant whose value plus the offset is after the clock's current value. Each point has one spelling. The top-level `clock_points:` makes the explorer draw them: one draw over the ten fixed steps and the points, so a manifest without the key draws as before. The shrinker removes such a step, it does not halve it |
+
+**Tests.** The schedule language's tests have the clock points (the calendar, the next instant
+from a given clock, the canonical text and the refusals). `hydo-control`'s new `tests/lago_gaps.rs`
+runs the composed Redis example's plan on the scripted agent: the old order without
+`after: commands`, the new order with it (the command once, before the anchor, before the check's
+record), the writes that empty the record files with and without `first_records`, and the note's
+bounds. `features.rs` has three schedules with clock points (path `T-to`). `hydo-explore`'s new
+`tests/lago_gaps.rs` checks that `clock_points:` changes only `T=` of every strategy's schedules,
+that every schedule and shrink candidate parses canonically and passes the controller's names
+check, that a job is never named, the fault kinds, and the notes in the findings and in `hydo
+report`. The scripted engine's scenario `stack_shrink_causes` (`--seeds 1-40 --new-faults
+--more-faults --shrink-causes 3`) shrinks 3 failures of `assertion clock.monotonic` (fault kinds
+`K T-`, `K P T- X`, `C N P T- disk=cut`) and 3 of the lying disk's lost write.
+
+**Goldens.** Re-recorded, each checked line by line:
+
+- `hydo-manifest`'s answers: only the messages that list the known keys and the anchors (741
+  error answers); no accepted manifest's data moved. The schema files gained the keys.
+- `hydo-compose`'s golden: the 7 cases with a job, and their text without the two new lines
+  hashes to the old answer.
+- `hydo-control`: `features-quick.txt` (only the counts, each stream's last chunk and the paths:
+  the three new schedules come last), `examples/redis-0.jsonl` and `examples-net/net-0.jsonl` (one
+  `HYDO-CHECK-OUT` note each), `corpus-quick.txt` and `m123-quick.txt` (input digests only).
+  `corpus_net.rs` classified a failing freeze point by any line with `HYDO-ORACLE: OK`, which the
+  new note can quote; it now leaves the note out, and its golden is unchanged.
+- `hydo-explore`: `corpus-full.txt` and `identity-quick.txt` moved with the Lago example's files.
+  With the example's files of before this milestone, both pass against their old goldens, so no
+  answer of an unchanged input moved. The fake engine's 23 old scenarios are unchanged.
+
+**The Lago example without its workarounds** (RESULTS.md, "The re-run without the workarounds";
+the Mac engine, hydo built in this tree with the published 0.3.1 release files, image
+`9621369557acf427…`):
+
+- `first_seed` records into `$HYDO_ACKED` and `$HYDO_OUTCOMES` (`test.first_records: true`); the
+  data disk's `seed/` and the checks' second file are gone.
+- `eventually_1_billing_tick` only moves the clock. The two waits are checks with
+  `after=commands`: `checks/eventually_november_billed` (150 s) and
+  `checks/eventually_transfers_charged` (120 s, until now the command
+  `eventually_2_transfers_charged`).
+- `final_business_result` no longer copies its lines to `/dev/console`.
+- `migrate` has `job: true`, and `clock_points: ["@:10-2s", "@month+9m58s"]`.
+
+`disk=none | run` passed twice with `833ba34749c6a408` (ctl `16f00393795a0108`); the
+`commands` anchor came 0.05 s after the heal's, and the checks held 5 s and 15 s after it.
+`hydo repro --regressions`: 3 of 3 as expected. lago-api 6901 (`disk=none | run K=redis@1+4`)
+gave `e9603e35d6daf000` twice; its `result.json` now lists the business rule's totals that differ
+(`units:sub4:api_calls: reported 0, acknowledged 12`, and transfers of `sub1` and `sub3`) without
+a replay. With the new clock steps: `T=0:@:10-2s K=redis@1+4` (`07cacde684ea81b4`) gives the
+same bug at the billing tick, `T=0:@:10-2s N=redis@1-4:loss,100%` (`381e3364588a72e9`) a transfer
+without its fee (finding 3's pattern), and `T=0:@day+23h55m` (`3fbb11ed436b62ef`) the skipped
+billing day (finding 4).
+
+Three explorations without shrinking, 60 schedules: `--strategy swarm --new-faults` seeds 21-40
+(6 failures) and 41-60 (10), and `--strategy process --new-faults` seeds 1-20 (9); every failure
+reproduced. No schedule named `migrate` (6 of 20 did in Milestone 218's first exploration), and
+three stepped the clock to a clock point. One of those found a new candidate: a subscription
+cancelled shortly before the billing tick is invoiced twice for November, by the periodic and by
+the termination invoice (`disk=none dseed=cb7302cecc8929b7 | run P=api_clock@7+2 T=3:@:10-2s
+O=db-api@0-3:resp:loss,74% W=740c6cfa,p1,q1,r1500`, `ead9b89d0f62183b` three times; RESULTS.md
+finding 8). Only the generic rule caught it, and its output in `result.json` named the total.
+The other failures are causes Milestone 218 described: power cuts, disk faults, clock steps. No
+exploration drew lago-api 6901's schedule: with `migrate` out of the services, B's seed 36 now
+kills PostgreSQL instead of Redis.
+
+**What is left.** Open item 90 stays for causes with the same fault kinds. Open item 100 is the
+Lago example's new candidate (not checked outside hydo, no regression saved), and its billing
+rule that counts only recurring invoices. Everything ran on the Mac engine and in the scripted
+tests; no run used hvx or KVM.

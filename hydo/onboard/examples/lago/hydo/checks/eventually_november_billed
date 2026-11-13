@@ -1,0 +1,22 @@
+#!/bin/sh
+# hydo: within=150 after=commands poll=5
+# hydo-msg: within 150 s of the billing tick, every subscription's November usage is on a finalized invoice and every invoice is final
+# Polled from the end of the eventually commands, so from the billing tick that
+# workload/eventually_1_billing_tick moves the clock to. Every subscription needs a finalized
+# periodic or termination invoice for November, and every invoice a final state (finalized,
+# voided or closed). Before the last line it names the invoices that are not final.
+. /hydo/workload/helper_lib.sh
+missing='select count(*) from subscriptions s where not exists (
+  select 1 from invoice_subscriptions i join invoices v on v.id = i.invoice_id
+  where i.subscription_id = s.id and v.status = 1
+    and i.invoicing_reason in ($$subscription_periodic$$, $$subscription_terminating$$)
+    and i.charges_from_datetime < $$2026-11-02$$ and i.charges_to_datetime >= $$2026-11-30$$)'
+open='select count(*) from invoices where status not in (1, 2, 6)'
+a=$(Q "$missing") || exit 2
+b=$(Q "$open") || exit 2
+[ "$a" = 0 ] && [ "$b" = 0 ] && { echo "every subscription has its November invoice"; exit 0; }
+Q "select invoice_type, status, created_at from invoices where status not in (1, 2, 6)" | sed 's/^/open invoice: /'
+[ "$a" != 0 ] && [ "$b" != 0 ] && echo "$a subscriptions without a November invoice and $b invoices not final"
+[ "$a" != 0 ] && [ "$b" = 0 ] && echo "$a subscriptions without a November invoice"
+[ "$a" = 0 ] && echo "$b invoices not in a final state"
+exit 1

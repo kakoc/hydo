@@ -14,6 +14,7 @@ mod fakes;
 mod features;
 mod groups;
 mod image_guest;
+mod lago_gaps;
 mod m123;
 mod react;
 mod restart;

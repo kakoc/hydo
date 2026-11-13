@@ -161,6 +161,7 @@ pub fn report(doc: &Exploration) -> String {
             fs.len()
         ));
     }
+    l.extend(failure_outputs(&by));
     l.extend(["", "## Minimal reproducers", ""].map(String::from));
     let turns_re = regex::Regex::new(r"(?:^|\s)(?:qs?|qb)=").expect("p");
     for v in &doc.shrinks {
@@ -178,6 +179,9 @@ pub fn report(doc: &Exploration) -> String {
             "- from seed {}, {} shrink runs",
             v.from_seed, v.tries
         ));
+        if let Some(fk) = &v.fault_kinds {
+            l.push(format!("- the failure's fault kinds: {fk}"));
+        }
         l.push(format!("- minimal schedule: `{minimal}`"));
         l.push(format!(
             "- needs a tick-timing change: {}",
@@ -431,6 +435,68 @@ fn branch_report(doc: &Exploration) -> String {
 }
 
 /// A run document as text for people (`hydo report <run dir>`).
+/// A failing check's output before its last line (`details.output`, Milestone 225), one line
+/// each after `prefix`, and how many earlier lines were left out.
+pub fn output_lines(f: &hydo_results::Finding, prefix: &str) -> Vec<String> {
+    let Some(Value::Array(ls)) = f.details.get("output") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    if let Some(n) = f.details.get("output_omitted").and_then(Value::as_u64) {
+        out.push(format!("{prefix}({n} earlier lines left out)"));
+    }
+    out.extend(
+        ls.iter()
+            .map(|x| format!("{prefix}{}", x.as_str().unwrap_or(""))),
+    );
+    out
+}
+
+/// The failing checks' output of the first failure of each signature (Milestone 225), in the
+/// order of the failures table. Empty when no failure has any.
+fn failure_outputs(
+    by: &std::collections::BTreeMap<(String, String), Vec<&Failure>>,
+) -> Vec<String> {
+    let mut l = Vec::new();
+    for ((c, sig), fs) in by {
+        let Some(f) = fs.first() else { continue };
+        let mut body = Vec::new();
+        let mut shown: Vec<&str> = Vec::new();
+        for x in &f.run.findings {
+            let o = output_lines(x, "    ");
+            // a check is an invariant and an assertion property: its output once
+            if !o.is_empty() && !shown.contains(&x.id.as_str()) {
+                shown.push(&x.id);
+                body.push(format!("- `{}`:", x.id));
+                body.push(String::new());
+                body.extend(o);
+                body.push(String::new());
+            }
+        }
+        if body.is_empty() {
+            continue;
+        }
+        l.push(format!(
+            "### {c}: `{sig}` (seed {})",
+            f.run.seed.map(|s| s.to_string()).unwrap_or_default()
+        ));
+        l.push(String::new());
+        l.extend(body);
+    }
+    if !l.is_empty() {
+        let mut h = vec![
+            String::new(),
+            "## Output of the failing checks".into(),
+            String::new(),
+            "The lines each failing check printed before its last line, in the first run of each signature.".into(),
+            String::new(),
+        ];
+        h.extend(l);
+        return h;
+    }
+    l
+}
+
 pub fn run_report(r: &hydo_results::Run) -> String {
     let mut l = vec![
         format!("schedule: {}", r.schedule),
@@ -467,6 +533,7 @@ pub fn run_report(r: &hydo_results::Run) -> String {
                 f.id,
                 head(&f.message, 120)
             ));
+            l.extend(output_lines(f, "    | "));
         }
     }
     for m in &r.messages {

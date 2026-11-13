@@ -79,7 +79,13 @@ pub const GUEST_MAX: usize = 500;
 
 pub(crate) fn known_test() -> Vec<&'static str> {
     let mut v: Vec<&str> = PARAMS.iter().map(|p| p.0).collect();
-    v.extend(["commands", "checks", "regressions", "description"]);
+    v.extend([
+        "commands",
+        "checks",
+        "regressions",
+        "description",
+        "first_records",
+    ]);
     v
 }
 
@@ -696,6 +702,16 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
         };
         par.insert(k.to_string(), v);
     }
+    let first_records = match t.get("first_records") {
+        None | Some(Value::Bool(false)) => false,
+        Some(Value::Bool(true)) => true,
+        Some(v) => {
+            return Err(err(format!(
+                "test.first_records: true or false (got {})",
+                repr(v)
+            )))
+        }
+    };
     let mut cmds: Vec<Map<String, Value>> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
     for (i, c) in or_iter(t.get("commands"))?.iter().enumerate() {
@@ -1078,6 +1094,10 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
         ("steps", n(steps)),
         ("stable_compose", n(1)),
     ]);
+    // Milestone 225: only when set, so the plan meta of every other plan stays byte for byte
+    if first_records {
+        meta["first_records"] = Value::Bool(true);
+    }
     for r in regs.iter_mut() {
         let st = regression_status(&Value::Object(r.clone()), &meta, None)?;
         if Value::String(st.schedule.clone()) != r["schedule"] {

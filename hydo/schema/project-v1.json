@@ -275,6 +275,16 @@
         "$ref": "#/$defs/SteerValue"
       }
     },
+    "clock_points": {
+      "description": "Times a clock fault may step the guest's clock to, in the schedule language's form\n(`@HH:MM[:SS]`, `@:MM[:SS]`, `@hour`, `@day`, `@month`, `@year`, each with an optional\noffset such as `+10m` or `-2s`; UTC): `hydo explore` draws `T=<at>:<point>` among its\nclock steps, so a time of day or a calendar boundary that the system acts on is reached\n(MANIFEST.md \"Clock steps to a time\").",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Text"
+      }
+    },
     "test": {
       "description": "The test composer's plan (the hydo/ folder fills it too).",
       "anyOf": [
@@ -657,6 +667,14 @@
         },
         "restart_may_fail": {
           "description": "true: the restart at the heal (after the faults, before workload.retry) may fail. If the\nservice does not come back then, the run goes on without workload.retry; a power cut at\nthe k-th flush (cf=) still reaches its recovery boot, which gives the verdict; without a\ncut the verdict is ERROR naming the service. Default false: a service that does not come\nback is at once ERROR (MANIFEST.md \"A restart after the faults that may fail\").",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
+        "job": {
+          "description": "true: a one-shot job, such as a database migration, that other services run in their\nsetup: before they start (`hydo compose` writes it for Docker Compose's\nservice_completed_successfully). Its own process only idles, so hydo explore never draws\na fault on it (MANIFEST.md \"One-shot jobs\").",
           "type": [
             "boolean",
             "null"
@@ -1445,7 +1463,8 @@
       "type": "string",
       "enum": [
         "heal",
-        "start"
+        "start",
+        "commands"
       ]
     },
     "HistoryCheck": {
@@ -3167,6 +3186,14 @@
           ],
           "format": "int64",
           "default": 0
+        },
+        "first_records": {
+          "description": "true: what the first commands write to $HYDO_ACKED and $HYDO_OUTCOMES during\nprovisioning stays in those files for the run, so operations made in the seed are among\nthe client's records (default false: the run's files start empty).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
         },
         "commands": {
           "type": [

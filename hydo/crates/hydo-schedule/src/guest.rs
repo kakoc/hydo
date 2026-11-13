@@ -7,6 +7,7 @@
 //! (leading zeros, upper-case hex, an empty field) is refused with a message, and every accepted
 //! token prints back byte for byte.
 
+use crate::clock::ClockPoint;
 use crate::compose::Compose;
 use crate::num::{dec, err, hex, name, sdec};
 use crate::storage::Corruption;
@@ -698,6 +699,9 @@ pub enum GuestToken {
     Cut(u64),
     /// `T=<at>:<delta>`: the realtime clock stepped by delta seconds (signed) before step at.
     Clock { at: u64, delta: i64 },
+    /// `T=<at>:@<point>[<offset>]`: the realtime clock set to the next instant of a time of day
+    /// or a calendar boundary (UTC) before step at (Milestone 225; [`ClockPoint`]).
+    ClockTo { at: u64, to: ClockPoint },
     /// `Q=<n>[d]`: n concurrent requests; `d` = every request sent twice (the stack's client).
     Concurrency { n: u64, double: bool },
     /// `X=<target>@<at>~<off>`: a timer armed before step at kills the target after off ms.
@@ -776,7 +780,7 @@ impl GuestToken {
             GuestToken::Net { .. } => 'N',
             GuestToken::OneWay { .. } => 'O',
             GuestToken::Cut(_) => 'C',
-            GuestToken::Clock { .. } => 'T',
+            GuestToken::Clock { .. } | GuestToken::ClockTo { .. } => 'T',
             GuestToken::Concurrency { .. } => 'Q',
             GuestToken::TimedKill { .. } => 'X',
             GuestToken::Buggify(_) => 'B',
@@ -887,12 +891,21 @@ impl GuestToken {
             }
             'C' => GuestToken::Cut(dec(v, what)?),
             'T' => {
-                let (a, d) = v
-                    .split_once(':')
-                    .ok_or_else(|| err(format!("{what}: T=<at>:<delta seconds>")))?;
-                GuestToken::Clock {
-                    at: dec(a, what)?,
-                    delta: sdec(d, what)?,
+                let (a, d) = v.split_once(':').ok_or_else(|| {
+                    err(format!(
+                        "{what}: T=<at>:<delta seconds> or T=<at>:@<point>[<offset>]"
+                    ))
+                })?;
+                if d.starts_with('@') {
+                    GuestToken::ClockTo {
+                        at: dec(a, what)?,
+                        to: ClockPoint::parse(d, what)?,
+                    }
+                } else {
+                    GuestToken::Clock {
+                        at: dec(a, what)?,
+                        delta: sdec(d, what)?,
+                    }
                 }
             }
             'Q' => {
@@ -1012,6 +1025,7 @@ impl fmt::Display for GuestToken {
             }
             GuestToken::Cut(c) => write!(f, "C={c}"),
             GuestToken::Clock { at, delta } => write!(f, "T={at}:{delta}"),
+            GuestToken::ClockTo { at, to } => write!(f, "T={at}:{to}"),
             GuestToken::Concurrency { n, double } => {
                 write!(f, "Q={n}{}", if *double { "d" } else { "" })
             }

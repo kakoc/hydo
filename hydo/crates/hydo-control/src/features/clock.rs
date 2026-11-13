@@ -6,6 +6,8 @@
 //!   more than 5 s off the request, and print the fault.clock_back or fault.clock_fwd record.
 //!   The second read is the `clock_set` reply's time, which the agent reads right after setting
 //!   the clock; when the set is refused, a `clock_get` reads it, as the shell's `date +%s` would.
+//! - `T=<at>:@<point>` (Milestone 225): the same, with the delta that sets the clock to the
+//!   point's next instant (`hydo_schedule::ClockPoint::next_after` of the first read).
 //! - `guest.clock_after_cut`: at a power cut the first boot reads its clock after failed_ids
 //!   (hydo-init-clock.sh appends `clock=<epoch>` to the acknowledged ids, so the acked line shows
 //!   it); the recovery boot sets its clock to that epoch plus clock_after_cut seconds before it
@@ -18,6 +20,7 @@
 
 use super::{call, die_oracle, log, utc, xassert, Ctx, Step, F};
 use hydo_agent_proto::msg::{ClockGet, ClockSet, Command, Reply};
+use hydo_schedule::ClockPoint;
 
 /// `$BB date +%s` (None when the agent cannot read the clock: the shell's empty output).
 fn date_now(fx: &mut F<'_>) -> Step<Option<i64>> {
@@ -34,6 +37,27 @@ fn text(v: Option<i64>) -> String {
 /// The T= branch of explore_run before step `p`.
 pub(super) fn clock_jump(fx: &mut F<'_>, p: i64, delta: i64) -> Step<()> {
     let tnow = date_now(fx)?;
+    jump(fx, p, tnow, delta, None)
+}
+
+/// `T=<at>:@<point>` before step `p`: the clock is set to the point's next instant after the
+/// clock's value (Milestone 225). The step is the difference, so the 5 s check, the records and
+/// the log line are those of a step by that amount; the log line names the point too. A clock
+/// that cannot be read steps from 0, as `clock_jump` does.
+pub(super) fn clock_to(fx: &mut F<'_>, p: i64, to: &ClockPoint) -> Step<()> {
+    let tnow = date_now(fx)?;
+    let now = tnow.unwrap_or(0);
+    let delta = to.next_after(now) - now;
+    jump(fx, p, tnow, delta, Some(to))
+}
+
+fn jump(
+    fx: &mut F<'_>,
+    p: i64,
+    tnow: Option<i64>,
+    delta: i64,
+    to: Option<&ClockPoint>,
+) -> Step<()> {
     let set = call(
         fx,
         Command::ClockSet(ClockSet {
@@ -48,10 +72,13 @@ pub(super) fn clock_jump(fx: &mut F<'_>, p: i64, delta: i64) -> Step<()> {
             date_now(fx)?
         }
     };
+    let point = to
+        .map(|t| format!(" to {t} ({})", utc(tnow.unwrap_or(0) + delta)))
+        .unwrap_or_default();
     log(
         fx,
         format!(
-            "CLOCK JUMP of {delta}s before step {p} (realtime {} -> {})",
+            "CLOCK JUMP of {delta}s{point} before step {p} (realtime {} -> {})",
             text(tnow),
             text(tnew)
         ),

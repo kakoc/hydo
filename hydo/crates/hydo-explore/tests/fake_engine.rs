@@ -394,6 +394,18 @@ const SCENARIOS: &[(&str, &[&str])] = &[
             KNOWN,
         ],
     ),
+    // M225: several shrinks of one signature, each with other fault kinds
+    (
+        "stack_shrink_causes",
+        &[
+            "--seeds",
+            "1-40",
+            "--new-faults",
+            "--more-faults",
+            "--shrink-causes",
+            "3",
+        ],
+    ),
     (
         "stack_swarm_pos_preempt",
         &[

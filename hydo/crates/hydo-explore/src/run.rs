@@ -1985,7 +1985,59 @@ fn shrink(
     (cur, cur_v, tries)
 }
 
-fn shrink_violation(cx: &Cx, pool: &Pool, k: usize, key: (String, String), f: &Rec) -> Shrunk {
+/// The fault kinds of a schedule, for `--shrink-causes` (Milestone 225): the host part's keys
+/// besides `dseed=` (the disk's class, `disk=cut`, `disk=ioerr`, `disk=lying`, when not none) and
+/// the guest tokens' letters besides `W=`, with a clock step's direction (`T-` back, `T+`
+/// forward, `T@` to a time), sorted and joined by spaces; `none` without a fault.
+pub fn fault_kinds(text: &str) -> String {
+    let (host, guest) = text.split_once('|').unwrap_or((text, ""));
+    let mut ks: Vec<String> = Vec::new();
+    for w in host.split_whitespace() {
+        let (k, v) = w.split_once('=').unwrap_or((w, ""));
+        match k {
+            "dseed" => {}
+            "disk" if v == "none" => {}
+            "disk" => ks.push(format!("disk={}", v.split(':').next().unwrap_or(v))),
+            _ => ks.push(k.to_string()),
+        }
+    }
+    for w in guest.split_whitespace().skip(1) {
+        let (k, v) = w.split_once('=').unwrap_or((w, ""));
+        match k {
+            "W" => {}
+            "T" => {
+                let d = v.split_once(':').map(|x| x.1).unwrap_or("");
+                ks.push(
+                    if d.starts_with('@') {
+                        "T@"
+                    } else if d.starts_with('-') {
+                        "T-"
+                    } else {
+                        "T+"
+                    }
+                    .into(),
+                );
+            }
+            _ => ks.push(k.to_string()),
+        }
+    }
+    ks.sort();
+    ks.dedup();
+    if ks.is_empty() {
+        "none".into()
+    } else {
+        ks.join(" ")
+    }
+}
+
+fn shrink_violation(
+    cx: &Cx,
+    pool: &Pool,
+    k: usize,
+    key: (String, String),
+    f: &Rec,
+    cause: Option<String>,
+) -> Shrunk {
     let (prefix, ma, mb) = if k == 0 {
         (
             "shrink".to_string(),
@@ -2087,6 +2139,9 @@ fn shrink_violation(cx: &Cx, pool: &Pool, k: usize, key: (String, String), f: &R
     }
     let mut rec = Map::new();
     rec.insert("from_seed".into(), f["seed"].clone());
+    if let Some(c) = cause {
+        rec.insert("fault_kinds".into(), json!(c));
+    }
     rec.insert("minimal".into(), json!(mt));
     rec.insert("verdict".into(), json!(mv));
     rec.insert("tries".into(), json!(n));
@@ -2228,7 +2283,8 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
         .collect();
     let mut slot: Vec<Option<(String, Res)>> = vec![None; items.len()];
     let mut fails: Vec<(Rec, Run)> = Vec::new();
-    let mut reps: Vec<(String, String)> = Vec::new();
+    // the (class, signature) keys seen, each with the fault kinds of the failures chosen to shrink
+    let mut reps: Vec<((String, String), Vec<String>)> = Vec::new();
     let mut t_sweep = 0.0;
     let mut rep: HashMap<String, Res> = HashMap::new();
     let mut nrefused: u64 = 0;
@@ -2296,13 +2352,28 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                         .collect();
                     repro_batches.push(pool.batch(&ritems, true));
                     let key = (py_str(&rec["class"]), sig_key(&v));
-                    if !reps.contains(&key) {
-                        reps.push(key.clone());
-                        if !a.no_shrink && verdict_kind(&v) == "violation" {
-                            let k = chains.len();
-                            let f = rec.clone();
-                            chains.push(sc.spawn(move || shrink_violation(cx, pool, k, key, &f)));
+                    // --shrink-causes N (M225): later failures of a key are shrunk too while
+                    // their fault kinds differ from those already chosen, up to N per key
+                    let cause = fault_kinds(&py_str(&rec["schedule"]));
+                    let chosen = match reps.iter_mut().find(|(k, _)| *k == key) {
+                        None => {
+                            reps.push((key.clone(), vec![cause.clone()]));
+                            true
                         }
+                        Some((_, cs)) => {
+                            let more = cs.len() < a.shrink_causes as usize && !cs.contains(&cause);
+                            if more {
+                                cs.push(cause.clone());
+                            }
+                            more
+                        }
+                    };
+                    if chosen && !a.no_shrink && verdict_kind(&v) == "violation" {
+                        let k = chains.len();
+                        let f = rec.clone();
+                        let cause = (a.shrink_causes > 1).then_some(cause);
+                        chains
+                            .push(sc.spawn(move || shrink_violation(cx, pool, k, key, &f, cause)));
                     }
                     fails.push((rec, run));
                 }
@@ -2736,6 +2807,7 @@ impl Cx {
             stable: st("stable"),
             stable_schedule: st("stable_schedule"),
             stable_note: st("stable_note"),
+            fault_kinds: st("fault_kinds"),
             minimal,
             ..hydo_results::Shrink::default()
         }

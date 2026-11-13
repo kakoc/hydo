@@ -380,7 +380,10 @@ fn take(to: &mut S, from: &S, part: &str) {
         "N" => to.n = from.n.clone(),
         "C" => to.c = from.c,
         "P" => to.p = from.p.clone(),
-        "T" => to.t = from.t,
+        "T" => {
+            to.t = from.t;
+            to.tp = from.tp.clone();
+        }
         "O" => to.o = from.o.clone(),
         "Q" => to.cq = from.cq,
         "X" => to.x = from.x.clone(),

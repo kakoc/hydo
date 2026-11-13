@@ -26,7 +26,7 @@ guest:
 
 data:
   size_mib: 1792   # the data disk: every volume lives here (the fault target)
-  dirs: [vol/lago_postgres_data, vol/anon-db-var-lib-postgresql-data, vol/lago_redis_data, vol/lago_storage_data, seed]   # hand: seed/ holds the seed's own acknowledged events
+  dirs: [vol/lago_postgres_data, vol/anon-db-var-lib-postgresql-data, vol/lago_redis_data, vol/lago_storage_data]
 
 root:
   share_images: true   # hand: migrate, api, api_worker and api_clock run one image; one unpacked tree in guest RAM, not four
@@ -97,7 +97,7 @@ services:
   # image getlago/api:v1.57.0 = docker.io/getlago/api@sha256:24678b61b372e5ca02f9bb4687c9aec012f8ba8a3539d28c4cbe989f131f3aed
   #   linux/amd64: sha256:8ccbea4191f30d85ee98dd0fa9b7091128286f764aedb122831e78180fa69faa
   #   linux/arm64: sha256:8e74b935cc902b363ecbd2050fef0375721ce5e21f2f59e39aece35e79c63d4c
-  # a one-shot job (others depend on it with service_completed_successfully): it idles here and its command runs in the setup: of each service that waits for it
+  # a one-shot job (others depend on it with service_completed_successfully): it idles here, its command runs in the setup: of each service that waits for it, and job: true keeps the explorer's faults off it
   - name: migrate
     image: {x86_64: images/getlago-api-v1.57.0-amd64.docker.tar, arm64: images/getlago-api-v1.57.0-arm64-oci}
     image_ref: "getlago/api:v1.57.0"
@@ -134,6 +134,7 @@ services:
     addr: 10.89.0.13
     depends_on: [db]
     ready: "true"
+    job: true   # a one-shot job: never a fault target (MANIFEST.md "One-shot jobs")
     mounts:
       - {src: /etc/hosts, dst: /etc/hosts}
       - {tmpfs: true, dst: /run, copy_up: true}
@@ -300,5 +301,11 @@ test:
   command_timeout: 90
   drain_timeout: 120
   check_within: 180
+  first_records: true   # hand: the seed's acknowledged events (first_seed) are among the run's records
 
 faults: [kill, pause, network, oneway, cut, clock, disk]
+# hand: Lago's clock service starts the biller at minute 10 of every hour, and November is billed on
+# December 1; the explorer's clock faults also step to 2 s before such a tick and to the month's
+# first tick (MANIFEST.md "Clock steps to a time")
+clock_points: ["@:10-2s", "@month+9m58s"]
+

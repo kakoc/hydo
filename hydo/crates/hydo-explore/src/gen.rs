@@ -187,6 +187,9 @@ pub struct Ex {
     pub react_events: Vec<String>,
     /// The assertion ids a heal reaction waits for (`--heal-events`).
     pub heal_events: Vec<String>,
+    /// The manifest's `clock_points:` (Milestone 225): clock steps to a time (`T=<at>:@...`)
+    /// drawn beside the fixed amounts of [`CLOCK_DELTAS`]. Empty: exactly the old draws.
+    pub clock_points: Vec<String>,
 }
 
 impl Default for Ex {
@@ -237,6 +240,7 @@ impl Default for Ex {
             pf_targets: Vec::new(),
             grpc_on: false,
             grpc_targets: Vec::new(),
+            clock_points: Vec::new(),
             compose: true,
             react_fault: false,
             react_heal: false,
@@ -443,7 +447,7 @@ impl Ex {
         }
         if on.contains(&"clock") {
             let at = self.pos_start(&mut r, p("clock"));
-            s.t = Some((at, r.pick(&CLOCK_DELTAS)));
+            self.clock_draw(&mut s, &mut r, at);
         }
         if on.contains(&"disk") {
             let opts = [
@@ -491,7 +495,7 @@ impl Ex {
             match *k {
                 "K" => s.k = Some((r.pick(&self.svcs), a, b - a)),
                 "P" => s.p = Some(Pause::Plus(r.pick(&self.pause_svcs), a, b - a)),
-                "T" => s.t = Some((a, r.pick(&CLOCK_DELTAS))),
+                "T" => self.clock_draw(&mut s, &mut r, a),
                 _ => {
                     if r.below(2) != 0 {
                         let svc = r.pick(&self.net_svcs);
@@ -634,7 +638,7 @@ impl Ex {
         }
         if t.below(100) < p_on {
             let at = t.rng(0, n_ - 1);
-            s.t = Some((at, t.pick(&CLOCK_DELTAS)));
+            self.clock_draw(&mut s, &mut t, at);
         }
         if t.below(100) < p_on {
             let svc = t.pick(&self.net_svcs);
@@ -1375,7 +1379,10 @@ impl Ex {
             None => {}
         }
         if let Some((at, d)) = s.t {
-            g.push(format!("T={at}:{d}"));
+            match &s.tp {
+                Some(tp) => g.push(format!("T={at}:{tp}")),
+                None => g.push(format!("T={at}:{d}")),
+            }
         }
         if let Some((svc, a, b, d, kinds)) = &s.o {
             g.push(format!("O={svc}@{a}-{b}:{d}:{}", netem_args(kinds)));
@@ -1561,8 +1568,15 @@ impl Ex {
                     }
                 }
                 "T" => {
-                    let (at, d) = split2(v, ':')?;
-                    s.t = Some((pint(at)?, pint(d)?));
+                    let (at, d) = v.split_once(':').ok_or("T=: no :")?;
+                    if d.starts_with('@') {
+                        hydo_schedule::ClockPoint::parse(d, "T=").map_err(|e| e.message)?;
+                        s.t = Some((pint(at)?, 0));
+                        s.tp = Some(d.to_string());
+                    } else {
+                        s.t = Some((pint(at)?, pint(d)?));
+                        s.tp = None;
+                    }
                 }
                 "O" => {
                     let (svc, rest) = v.split_once('@').ok_or("O=: no @")?;
@@ -1611,6 +1625,28 @@ impl Ex {
             }
         }
         Ok(s)
+    }
+
+    /// One clock fault at step `at`: a fixed amount of [`CLOCK_DELTAS`], or with the manifest's
+    /// `clock_points:` one of those points too (one draw over both lists, so a manifest without
+    /// the key draws exactly as before).
+    fn clock_draw(&self, s: &mut S, r: &mut SplitMix, at: i64) {
+        if self.clock_points.is_empty() {
+            s.t = Some((at, r.pick(&CLOCK_DELTAS)));
+            s.tp = None;
+            return;
+        }
+        let i = r.below((CLOCK_DELTAS.len() + self.clock_points.len()) as i64) as usize;
+        match i.checked_sub(CLOCK_DELTAS.len()) {
+            None => {
+                s.t = Some((at, CLOCK_DELTAS[i]));
+                s.tp = None;
+            }
+            Some(k) => {
+                s.t = Some((at, 0));
+                s.tp = Some(self.clock_points[k].clone());
+            }
+        }
     }
 
     // ------------------------------------------------------------ classes
@@ -1669,7 +1705,10 @@ impl Ex {
             var(&|t| t.p = None);
         }
         if s.t.is_some() {
-            var(&|t| t.t = None);
+            var(&|t| {
+                t.t = None;
+                t.tp = None;
+            });
         }
         if s.o.is_some() {
             var(&|t| t.o = None);
@@ -1925,7 +1964,7 @@ impl Ex {
             }
             _ => {}
         }
-        if let Some((at, d)) = s.t {
+        if let (Some((at, d)), None) = (s.t, &s.tp) {
             if d.abs() > 30 {
                 let half = (d as f64 / 2.0) as i64;
                 var(&|t| t.t = Some((at, half)));

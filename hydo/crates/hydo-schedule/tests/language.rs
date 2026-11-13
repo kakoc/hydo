@@ -775,3 +775,132 @@ fn target_shapes_cut() {
     let c = component_links(&[vec!["a".into()], vec!["b".into(), "c".into()]]);
     assert_eq!(c.len(), 4);
 }
+
+// ---------------------------------------------------------------- clock steps to a time
+
+fn utc_at(y: i64, mo: u32, d: u32, h: i64, mi: i64, s: i64) -> i64 {
+    days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + s
+}
+
+fn p(t: &str) -> ClockPoint {
+    ClockPoint::parse(t, "T=").unwrap_or_else(|e| panic!("{t}: {e}"))
+}
+
+/// Clock steps to a time (`T=<at>:@<point>`): the civil calendar the points count in.
+#[test]
+fn clock_point_calendar() {
+    assert_eq!(days_from_civil(1970, 1, 1), 0);
+    assert_eq!(days_from_civil(2000, 3, 1), 11017);
+    for z in [-800_000i64, -1, 0, 1, 11016, 11017, 20_000, 2_000_000] {
+        let (y, m, d) = civil_from_days(z);
+        assert_eq!(days_from_civil(y, m, d), z);
+    }
+    assert_eq!(civil_from_days(days_from_civil(2024, 2, 29)), (2024, 2, 29));
+}
+
+/// Where a clock point steps the clock to, from a given clock value.
+#[test]
+fn clock_point_next_instant() {
+    // Lago's example: 2026-11-30 23:55 UTC
+    let now = utc_at(2026, 11, 30, 23, 55, 0);
+    assert_eq!(now, 1796082900);
+    assert_eq!(
+        p("@month+10m").next_after(now),
+        utc_at(2026, 12, 1, 0, 10, 0)
+    );
+    assert_eq!(p("@:10").next_after(now), utc_at(2026, 12, 1, 0, 10, 0));
+    assert_eq!(p("@:10-2s").next_after(now), utc_at(2026, 12, 1, 0, 9, 58));
+    assert_eq!(p("@00:10").next_after(now), utc_at(2026, 12, 1, 0, 10, 0));
+    assert_eq!(p("@23:56").next_after(now), utc_at(2026, 11, 30, 23, 56, 0));
+    assert_eq!(p("@23:55").next_after(now), utc_at(2026, 12, 1, 23, 55, 0));
+    assert_eq!(p("@hour").next_after(now), utc_at(2026, 12, 1, 0, 0, 0));
+    assert_eq!(p("@day").next_after(now), utc_at(2026, 12, 1, 0, 0, 0));
+    assert_eq!(p("@year").next_after(now), utc_at(2027, 1, 1, 0, 0, 0));
+    assert_eq!(
+        p("@month-1m").next_after(now),
+        utc_at(2026, 11, 30, 23, 59, 0)
+    );
+    // the offset decides which boundary is next: at 00:05 on the 1st, @month+10m is 00:10
+    let now = utc_at(2026, 12, 1, 0, 5, 0);
+    assert_eq!(
+        p("@month+10m").next_after(now),
+        utc_at(2026, 12, 1, 0, 10, 0)
+    );
+    assert_eq!(p("@month").next_after(now), utc_at(2027, 1, 1, 0, 0, 0));
+    // December to January, and a leap day
+    assert_eq!(
+        p("@month").next_after(utc_at(2026, 12, 31, 12, 0, 0)),
+        utc_at(2027, 1, 1, 0, 0, 0)
+    );
+    assert_eq!(
+        p("@day").next_after(utc_at(2028, 2, 28, 1, 0, 0)),
+        utc_at(2028, 2, 29, 0, 0, 0)
+    );
+    // always forward, also exactly at a boundary
+    let b = utc_at(2026, 12, 1, 0, 10, 0);
+    assert_eq!(p("@:10").next_after(b), b + 3600);
+    assert_eq!(p("@:10:30").next_after(b), b + 30);
+}
+
+/// A clock point's one spelling, and what is refused.
+#[test]
+fn clock_point_text() {
+    for s in [
+        "disk=none | run T=0:@month+10m",
+        "disk=none | run T=0:@:10-2s",
+        "disk=none dseed=1 | run K=redis@1+4 T=3:@00:10",
+        "disk=cut dseed=1 | run C=6 T=2:@day+1h",
+    ] {
+        round_trip(s);
+    }
+    let t = Schedule::parse("disk=none | run T=3:@:10").unwrap();
+    match &t.guest[0] {
+        GuestToken::ClockTo { at, to } => {
+            assert_eq!(*at, 3);
+            assert_eq!(to.every, Every::Hour { m: 10, s: 0 });
+            assert_eq!(to.offset, 0);
+            assert_eq!(t.guest[0].letter(), 'T');
+        }
+        g => panic!("{g:?}"),
+    }
+    // the fixed steps keep their meaning
+    let t = Schedule::parse("disk=none | run T=3:-30").unwrap();
+    assert!(matches!(
+        t.guest[0],
+        GuestToken::Clock { at: 3, delta: -30 }
+    ));
+    refused("disk=none | run T=3:@00:10:00", "write \"@00:10\"");
+    refused("disk=none | run T=3:@noon", "is not @HH:MM");
+    for t in [
+        "@00:10",
+        "@23:59:59",
+        "@:10",
+        "@:10:30",
+        "@hour",
+        "@day",
+        "@month",
+        "@year",
+        "@month+10m",
+        "@:10-2s",
+        "@day+1d2h3m4s",
+        "@hour-59m59s",
+    ] {
+        assert_eq!(p(t).to_string(), t);
+    }
+    let no = |t: &str, why: &str| {
+        let e = ClockPoint::parse(t, "T=").unwrap_err().message;
+        assert!(e.contains(why), "{t}: {e}");
+    };
+    no("00:10", "starts with @");
+    no("@00:10:00", "write \"@00:10\"");
+    no("@month+600s", "write \"@month+10m\"");
+    no("@month+0s", "without the offset");
+    no("@month+", "needs a number");
+    no("@24:00", "above 23");
+    no("@0:10", "two digits");
+    no("@:60", "above 59");
+    no("@week", "is not @HH:MM");
+    no("@month+10", "<number><unit>");
+    no("@month+10w", "not s, m, h or d");
+    no("@month+4000d", "ten years");
+}

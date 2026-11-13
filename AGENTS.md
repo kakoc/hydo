@@ -350,6 +350,25 @@ keeps its first transfer when a later one fails before it is queued. Only the ge
 acknowledged commits of holds lost with Redis's defaults. Both bugs have tested patches. The
 example is `hydo/onboard/examples/blnk` (RESULTS.md).
 
+**What the Lago onboarding lacked (M225).** Six additions, each a format-1 or results addition
+that changes nothing for a manifest without it:
+
+- An `eventually` check with `after: commands` (`# hydo: after=commands`) counts from the end of
+  the `eventually` commands, which then run before it.
+- `test.first_records: true` keeps the `first` commands' `$HYDO_ACKED` and `$HYDO_OUTCOMES` lines
+  in the run.
+- A failing check's lines before its last one go into a `HYDO-CHECK-OUT` console note, which no
+  fingerprint covers. They reach `result.json` (`findings[].details.output`), `hydo report` and
+  `report.md`.
+- `hydo explore --shrink-causes N` shrinks several failures of one signature with other fault
+  kinds (`Shrink.fault_kinds`).
+- `services[].job: true` keeps the explorer's faults off a one-shot job; `hydo compose` writes it.
+- `T=<at>:@<point>` sets the clock to a time of day or a calendar boundary (`@:10-2s`,
+  `@month+10m`, UTC), and `clock_points:` lets the explorer draw such steps.
+
+The references are four sections of MANIFEST.md (Liveness, Command kinds, One-shot jobs, and
+Clock steps to a time) and `hydo guide checks`, `composer` and `faults`.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -694,24 +713,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     code` without the assert; no build with symbols ran. The Mac engine cannot boot TigerBeetle
     (`ERROR boot: SPIN`, open item 13). Since M222 a replica that stops in a run without faults
     gets its own verdict, and the checks run; the `tie/` schedule did not run again with it.
-87. `eventually_` commands and checks (M218). The `eventually_` checks poll from the heal until
-    their deadline before the `eventually_` commands run. So a command cannot prepare what a
-    check waits for, such as Lago's billing tick. The example waits inside the command instead.
-88. A seed's client records (M218). `$HYDO_ACKED` and `$HYDO_OUTCOMES` of the `first_` commands
-    are not the run's files, so operations made in the seed are not in the client's records. The
-    Lago example writes them to the data disk.
-89. A check's output (M218). Only a check's last line reaches the verdict and `result.json`. A
-    check that lists what differs must also write to `/dev/console`, or each explanation needs a
-    replay with `hydo inspect`.
-90. One shrink per signature (M218). The explorer shrinks the first failure of each signature,
-    so a signature with several causes is explained by one of them. A check has to split its
-    own last lines by cause.
-91. The importer's job services (M218). `hydo compose` keeps a one-shot job that others wait for
-    (`service_completed_successfully`) as a service that sleeps. The explorer draws faults on
-    it: 6 of 20 schedules in the Lago example.
-92. Clock steps at a time (M218). The explorer steps the clock by fixed amounts only. Lago bills
-    at minute 10 of the hour, on the first of the month, so a step to that time needs a hand
-    schedule.
+90. One shrink per cause (M218, M225). `hydo explore --shrink-causes N` shrinks up to N failures
+    of one signature, each with other fault kinds. Two causes with the same fault kinds, such as
+    Lago's two kinds of clock step back, still share one shrink. The default stays 1. Open items
+    87, 88, 89, 91 and 92 were closed in M225: `after: commands`, `test.first_records`, a failing
+    check's output in `result.json`, `services[].job`, and `T=<at>:@<point>` with
+    `clock_points:`. They ran on the Mac engine and in the scripted tests only. No run used hvx
+    or KVM.
 94. The web page of `hydo report --html` (M220). Its section "Versions" reads the
     `versions.json` of `hydo versions` by its types since M221. The CI page ran only on the
     recorded example `mac-shop-ci-run`, which has no replay directories, so a CI finding's
@@ -726,7 +734,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 96. A failing `.sql` check's rows (M224). On hvx with 0.3.1 and on the Mac with this tree, every
     violation of a SQL check read `<store>: N rows where none may be`, without the rows that
     Milestone 192 appends. Each explanation of the Blnk example needed a `hydo inspect` session
-    with `psql`.
+    with `psql`. Since M225 a failing check's lines before its last one, the rows among them, are
+    in `result.json` (`details.output`) and `hydo report`; the verdict line still lacks them.
 97. Network links from `depends_on` only (M224). A service that talks to another without naming it
     in `depends_on` has no link to it in the fault space. Blnk's worker reaches PostgreSQL and
     Redis, and Blnk's Compose file names neither for it; the example names them by hand.
@@ -736,6 +745,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 99. Error kinds and an operation's name (M224). A line that names a reference such as `d5_q` gets
     the template `d#_q`, so every type of operation makes its own kind. The Blnk example's
     `known-errors.yaml` groups them with regular expressions.
+100. Lago's invoice twice (M225). A subscription cancelled shortly before the billing tick got
+    a periodic and a termination invoice for November (the Lago example's RESULTS.md, finding
+    8). It was not checked outside hydo, no upstream issue was searched, and no regression is
+    saved. The billing rule `final_one_invoice_per_period` counts only recurring invoices, so
+    only the generic rule caught it.
 
 ## Milestone index
 
@@ -1069,6 +1083,12 @@ build machine, before 2026-10-13.
   bulk keeps its first transfer when a later one fails before it is queued (the bulk rule, the
   generic rule, and the error logs). Acknowledged commits of holds are lost with Redis's defaults
   (the generic rule alone). Nothing recorded moved
+- M225 (tentative number): what the Lago onboarding lacked. Eventually checks after the eventually
+  commands (`after: commands`), the first commands' records in the run (`test.first_records`), a
+  failing check's output in `result.json`, `--shrink-causes`, `services[].job`, and clock steps to
+  a time (`T=<at>:@<point>`, `clock_points:`). The Lago example without its workarounds still
+  finds lago-api 6901, and a step to the billing tick found a subscription invoiced twice.
+  Nothing recorded moved
 
 ## Where to look
 

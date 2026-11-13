@@ -70,6 +70,11 @@ pub struct Space {
     /// as for 4 steps and every fault's step is folded into the workload's own steps; no fault
     /// kind is drawn unless `faults:` lists it; a failure is in the class `test-failed`.
     pub test: bool,
+    /// The services with `job: true` (Milestone 225): one-shot jobs, never a fault target, so
+    /// they are left out of every list above.
+    pub jobs: Vec<String>,
+    /// `clock_points:` (Milestone 225): the times a clock fault may step the clock to.
+    pub clock_points: Vec<String>,
 }
 
 fn arr(v: Option<&Value>) -> Vec<Value> {
@@ -96,8 +101,18 @@ impl Space {
     /// manifest_space.Space(text...) after hydo-manifest's reading: `m` validated, `compose` the
     /// plan meta (None without a plan).
     pub fn new(m: Value, compose: Option<Value>) -> Result<Space, String> {
-        let services = arr(m.get("services"));
         let name_of = |s: &Value| str_of(s.get("name").unwrap_or(&Value::Null));
+        // a one-shot job (`job: true`) runs before its dependents and then only idles: no fault
+        // is drawn on it
+        let is_job = |s: &Value| s.get("job") == Some(&Value::Bool(true));
+        let all_services = arr(m.get("services"));
+        let jobs: Vec<String> = all_services
+            .iter()
+            .filter(|s| is_job(s))
+            .map(name_of)
+            .collect();
+        let services: Vec<Value> = all_services.into_iter().filter(|s| !is_job(s)).collect();
+        let clock_points: Vec<String> = arr(m.get("clock_points")).iter().map(str_of).collect();
         let svcs: Vec<String> = services.iter().map(name_of).collect();
         let ported: Vec<String> = services
             .iter()
@@ -186,7 +201,10 @@ impl Space {
             knobs.push((tok, safe, vals));
         }
         let name = m.get("name").map(str_of).unwrap_or_else(|| "?".to_string());
-        let storage = hydo_manifest::storage::of_manifest(&m);
+        let storage: Vec<_> = hydo_manifest::storage::of_manifest(&m)
+            .into_iter()
+            .filter(|(n, _)| !jobs.contains(n))
+            .collect();
         let storage_svcs: Vec<String> = storage.iter().map(|(n, _)| n.clone()).collect();
         let own_fs_svcs: Vec<String> = storage
             .iter()
@@ -194,6 +212,8 @@ impl Space {
             .map(|(n, _)| n.clone())
             .collect();
         Ok(Space {
+            jobs,
+            clock_points,
             test,
             storage_svcs,
             own_fs_svcs,
@@ -384,6 +404,7 @@ impl Space {
             pairs
         };
         ex.knob_tokens = self.knobs.iter().map(|(t, _, _)| t.clone()).collect();
+        ex.clock_points = self.clock_points.clone();
         if self.has_fault("freeze") {
             ex.fc_pairs = self.fc_pairs.clone();
             ex.fc_match = self.fc_match();
@@ -414,6 +435,7 @@ impl Space {
         }
         if !self.has_fault("clock") {
             s.t = None;
+            s.tp = None;
         }
         let net_ok = |x: &str| {
             self.ported.iter().any(|p| p == x)

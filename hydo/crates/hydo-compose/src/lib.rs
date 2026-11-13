@@ -2228,7 +2228,7 @@ impl<'a> Importer<'a> {
             "2147483647".into(),
         ]);
         svc.cmd = None;
-        svc.comments.push("a one-shot job (others depend on it with service_completed_successfully): it idles here and its command runs in the setup: of each service that waits for it".into());
+        svc.comments.push("a one-shot job (others depend on it with service_completed_successfully): it idles here, its command runs in the setup: of each service that waits for it, and job: true keeps the explorer's faults off it".into());
     }
 
     /// The service's restart policy in Compose's words and where it came from: `deploy.
@@ -2957,6 +2957,9 @@ impl<'a> Importer<'a> {
             }
             if let Some(r) = &s.restart {
                 l.push_str(&format!("    restart: {}\n", dumps_str(r)));
+            }
+            if s.job.is_some() {
+                l.push_str("    job: true   # a one-shot job: never a fault target (MANIFEST.md \"One-shot jobs\")\n");
             }
             l.push_str("    mounts:\n");
             for m in &s.mounts {

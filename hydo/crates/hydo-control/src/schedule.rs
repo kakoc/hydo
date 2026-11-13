@@ -143,6 +143,9 @@ struct RunCfg {
     x: Option<(Target, i64, u64)>,
     /// T=: (at, delta seconds).
     t: Option<(i64, i64)>,
+    /// T=<at>:@<point>: the point the clock is set to (then `t`'s delta is 0); None for a step
+    /// by a fixed amount.
+    tto: Option<hydo_schedule::ClockPoint>,
     /// N= and O= (NET-FAULTS reads their typed fields).
     n: Option<netfault::NetTok>,
     o: Option<netfault::NetTok>,
@@ -216,6 +219,9 @@ struct Host {
     restart: restart::State,
     /// The reactions (M139, features/react.rs).
     react: react::State,
+    /// `after: commands` (Milestone 225): the `eventually` commands' results, by invariant
+    /// index, when they ran before the eventually checks that count from them.
+    early: BTreeMap<usize, (u32, String)>,
 }
 
 /// One thread of the controller.
@@ -377,6 +383,7 @@ impl ScheduleController {
             starting: BTreeSet::new(),
             restart: Default::default(),
             react: Default::default(),
+            early: BTreeMap::new(),
         };
         Ok(ScheduleController {
             flow: Flow::new(host, Part::Main),
@@ -627,7 +634,14 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             // trigger binds its queue in the frozen service's namespace (the freeze command's
             // netns, M131), so no F= is refused any more.
             // SEAM(Clock): T=, driven by features/clock.rs
-            GuestToken::Clock { at, delta } => c.t = Some((*at as i64, *delta)),
+            GuestToken::Clock { at, delta } => {
+                c.t = Some((*at as i64, *delta));
+                c.tto = None;
+            }
+            GuestToken::ClockTo { at, to } => {
+                c.t = Some((*at as i64, 0));
+                c.tto = Some(*to);
+            }
             // M139: reactions (features/react.rs)
             GuestToken::React(r) => c.a.push(r.clone()),
             // the storage faults of one service (schedule/storage.rs)
@@ -1792,6 +1806,66 @@ fn svc_sig(fx: &mut F<'_>, s: &str, sig: Sig) -> Step<()> {
     Ok(())
 }
 
+/// How much of a failing check's output [`check_output`] keeps: its last lines, each cut to
+/// [`CHECK_OUT_LINE`] bytes, at most [`CHECK_OUT_BYTES`] in all (Milestone 225).
+pub const CHECK_OUT_LINES: usize = 20;
+pub const CHECK_OUT_LINE: usize = 300;
+pub const CHECK_OUT_BYTES: usize = 2000;
+/// The note that carries a failing check's output (Milestone 225).
+pub const CHECK_OUT_PREFIX: &str = "HYDO-CHECK-OUT";
+
+/// A failing check's output beyond its last line, bounded: one `HYDO-CHECK-OUT {"id":...,
+/// "lines":[...],"omitted":n}` note, the first time the check `id` fails in this conversation
+/// (Milestone 225). The verdict and the HYDO-ASSERT record keep only the last line; the note
+/// gives `result.json` (`findings[].details.output`) and `hydo report` the lines before it.
+/// A note is for people: no control transcript's hash and no fingerprint covers it, so a run
+/// stays the run it was. Nothing is written for an output of one line, or of none.
+fn check_output(fx: &mut F<'_>, id: &str, out: &str) {
+    if let Some(n) = check_output_note(id, out) {
+        let mark = format!("check-out.{id}");
+        if fx.effect_bool(|h, _| h.marks.insert(mark)) {
+            fx.note(n);
+        }
+    }
+}
+
+/// The note of [`check_output`] (None for an output of fewer than two lines).
+pub fn check_output_note(id: &str, out: &str) -> Option<String> {
+    let ls: Vec<&str> = lines(out)
+        .into_iter()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with("HYDO-ASSERT"))
+        .collect();
+    if ls.len() < 2 {
+        return None;
+    }
+    let mut kept: Vec<String> = Vec::new();
+    let mut bytes = 0;
+    for l in ls.iter().rev().take(CHECK_OUT_LINES) {
+        let l = cut_line(l, CHECK_OUT_LINE);
+        if bytes + l.len() > CHECK_OUT_BYTES {
+            break;
+        }
+        bytes += l.len();
+        kept.push(l);
+    }
+    kept.reverse();
+    let omitted = ls.len() - kept.len();
+    let v = serde_json::json!({"id": id, "lines": kept, "omitted": omitted});
+    Some(format!("{CHECK_OUT_PREFIX} {v}"))
+}
+
+/// At most `n` bytes of `s`, on a character boundary, with `...` when cut.
+fn cut_line(s: &str, n: usize) -> String {
+    if s.len() <= n {
+        return s.to_string();
+    }
+    let mut i = n.saturating_sub(3);
+    while !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    format!("{}...", &s[..i])
+}
+
 /// assert_once: one HYDO-ASSERT record per (invariant, outcome).
 fn assert_once(fx: &mut F<'_>, ctx: &Ctx, i: usize, ok: bool, details: &str) {
     let inv = &ctx.plan.invariants[i];
@@ -1854,6 +1928,7 @@ fn eval_inv_with(
         2 => Ok((2, r.out)),
         _ => {
             assert_once(fx, ctx, i, false, &d);
+            check_output(fx, &inv.id, &r.out);
             let key = inv.key.clone();
             fx.effect(|h, _| {
                 if h.violated.is_none() {
@@ -1864,6 +1939,23 @@ fn eval_inv_with(
             Ok((1, r.out))
         }
     }
+}
+
+/// `after: commands` (Milestone 225): the `eventually` commands as invariants, in manifest
+/// order, before the eventually checks anchored at `commands` start; final_verdict then keeps
+/// their results instead of running them again.
+fn early_commands(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
+    for (i, inv) in ctx.plan.invariants.iter().enumerate() {
+        if !inv.final_ || !composer::is_eventually_cmd(ctx, &inv.cmd) {
+            continue;
+        }
+        let r = eval_inv(fx, ctx, i)?;
+        fx.effect(|h, _| {
+            h.early.insert(i, r);
+            Memo::Unit
+        });
+    }
+    Ok(())
 }
 
 /// periodic_loop: every `every` seconds of guest time while the workload runs, with the
@@ -1926,7 +2018,11 @@ fn final_verdict(fx: &mut F<'_>, ctx: &Ctx) -> Step<String> {
         if !inv.final_ {
             continue;
         }
-        let (rc, out) = eval_inv(fx, ctx, i)?;
+        // an eventually command that ran before the checks anchored at `commands` keeps its result
+        let (rc, out) = match fx.shared.early.get(&i).cloned() {
+            Some(r) => r,
+            None => eval_inv(fx, ctx, i)?,
+        };
         match rc {
             0 => {
                 nheld += 1;
@@ -2535,7 +2631,13 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         .collect();
     pts.sort();
     pts.dedup();
+    // test.first_records (Milestone 225): the records the first commands wrote in
+    // provisioning stay (the snapshot S1 holds them); otherwise the run's files start empty
+    let keep = plan.compose.as_ref().is_some_and(|c| c.first_records);
     for f in [l.acked(), l.outcomes(), format!("{}/workload.log", l.dir)] {
+        if keep && f != format!("{}/workload.log", l.dir) {
+            continue;
+        }
         post(fx, write_cmd(&f, "", false))?;
     }
     cost::probe(fx, ctx, "start", true)?; // HYDO_COST=full: before the workload
@@ -2702,7 +2804,10 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
         // SEAM(Clock): `p == tat`: the clock step, its 5 s check, fault.clock_back/fwd.
         if p == tat {
-            clock::clock_jump(fx, p, tdelta)?;
+            match &cfg.tto {
+                Some(to) => clock::clock_to(fx, p, to)?,
+                None => clock::clock_jump(fx, p, tdelta)?,
+            }
         }
         // M139: a reaction is armed before its step, after that step's faults
         for (i, r) in &reactions {

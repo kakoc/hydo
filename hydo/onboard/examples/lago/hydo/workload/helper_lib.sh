@@ -16,7 +16,7 @@ record() {
   return 0
 }
 
-# acked, outcomes: the client's records of the whole test, the seed's (first_seed, on the data
-# disk) and the run's ($HYDO_ACKED, $HYDO_OUTCOMES), seed first.
-acked() { cat /data/seed/acked "$HYDO_ACKED" 2>/dev/null; }
-outcomes() { cat /data/seed/outcomes "$HYDO_OUTCOMES" 2>/dev/null; }
+# acked, outcomes: the client's records of the whole test. With test.first_records the run's
+# $HYDO_ACKED and $HYDO_OUTCOMES start with the seed's (first_seed).
+acked() { cat "$HYDO_ACKED" 2>/dev/null; }
+outcomes() { cat "$HYDO_OUTCOMES" 2>/dev/null; }

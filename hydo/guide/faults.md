@@ -1,7 +1,8 @@
 # Faults, knobs, and exploring
 
 The full reference is in `hydo guide manifest`, in the sections `Fault tokens`, `Freeze at a
-call`, `Clock after a power cut`, `Link faults`, and `Groups of services and partitions`.
+call`, `Clock steps to a time`, `Clock after a power cut`, `Link faults`, `One-shot jobs` and
+`Groups of services and partitions`.
 
 ## Which faults a project allows
 
@@ -15,7 +16,7 @@ call`, `Clock after a power cut`, `Link faults`, and `Groups of services and par
 | `network` | netem delay, loss, duplication, and reordering on traffic to a service's `port:`, or on a link between two services with `addr:`. With `network: bridge` the link carries their real traffic, and the explorer draws only links between services that list each other in `depends_on`. | `N=<svc>@<from>-<to>:<netem>`, `N=a-b@...` |
 | `oneway` | the same in one direction only | `O=<svc>@<from>-<to>:req\|resp:<netem>` |
 | `cut` | power cut: only data that reached the disk survives; a fresh boot recovers and runs the final checks | `C=<step>`, host `cf=<k>` (at the k-th disk flush) |
-| `clock` | step the realtime clock (like an NTP step) | `T=<step>:<seconds>` |
+| `clock` | step the realtime clock (like an NTP step), or set it to the next instant of a time of day or a calendar boundary (section "Clock steps to a time") | `T=<step>:<seconds>`, `T=<step>:@<point>` |
 | `disk` | I/O errors, a lying disk that drops acknowledged writes | host `disk=ioerr:<p>`, `disk=lying:<p>` |
 | `freeze` | stop a service at the n-th packet it sends to or receives from a peer (on a Mac: a release with the second guest kernel) | `F=<svc>><peer>@<step>#<n>:<ms>` |
 | `protocol` | faults on fakes and proxies (`hydo guide outside-services`) | `H=...` |
@@ -143,6 +144,30 @@ streams (or every eighth packet), then every packet in a widening window around 
 it maps a narrow failing band with a fraction of the runs of `--sweep freeze`, which tries every
 packet.
 
+## Clock steps to a time
+
+A system that acts at a time of day or on a date needs the clock to reach that time while the
+faults happen. Examples are a biller at minute 10 of every hour, a monthly invoice on the first
+of the month, and a certificate that expires at midnight. `T=<step>:@<point>` sets the clock,
+before the step, to the next instant of the point, in UTC. A point is `@00:10` (a time of day),
+`@:10` (a minute of every hour), or `@hour`, `@day`, `@month` or `@year` (the start of the next
+one). An offset can
+follow, such as `@:10-2s` or `@month+10m`. The step always goes forward.
+
+```sh
+hydo run "disk=none | run T=0:@:10-2s K=redis@1+4"   # 2 s before the next minute 10, then Redis down
+```
+
+List the times in `hydo.yaml` so that the explorer draws them among its clock steps:
+
+```yaml
+faults: [kill, pause, network, cut, clock]
+clock_points: ["@:10-2s", "@month+10m"]
+```
+
+Without `clock_points:` the explorer draws only steps by fixed amounts (30 s, 5 minutes, 1 hour,
+1 day, 30 days and a year, forward or back).
+
 ## Clock after a power cut
 
 Every boot starts its clock at `guest.clock_start`. Without `guest.clock_after_cut`, the recovery
@@ -209,6 +234,10 @@ Useful options of `hydo explore`:
 
   Use `--no-shrink` with it: the shrinker does not know `br=`. The design and the numbers are in
   `docs/design/state-search.md` in hydo's repository.
+- `--shrink-causes N`: shrink up to N failures of one signature, each with other fault kinds
+  than the ones already chosen (default 1: only the first failure). One last line can have
+  several causes; with `--shrink-causes 3` a "fee missing" from a power cut and one from a clock
+  step back each get their own minimal schedule. `report.md` names each shrink's fault kinds.
 - `--workers N`.
 
 hydo's own benchmark showed that where faults land, and in what combination, matters more than

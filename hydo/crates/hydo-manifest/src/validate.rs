@@ -50,6 +50,7 @@ pub const KNOWN_TOP: &[&str] = &[
     "errors",
     "groups",
     "steer",
+    "clock_points",
 ];
 /// The keys of a `groups:` entry (Milestone 195).
 pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "description"];
@@ -74,6 +75,7 @@ pub const KNOWN_SVC: &[&str] = &[
     "mounts",
     "restart",
     "restart_may_fail",
+    "job",
     "writable",
     "storage",
     "start_after",
@@ -91,7 +93,7 @@ pub const KNOWN_INV: &[&str] = &[
     "after",
     "poll",
 ];
-pub const LIVE_ANCHORS: &[&str] = &["heal", "start"];
+pub const LIVE_ANCHORS: &[&str] = &["heal", "start", "commands"];
 pub(crate) const KNOWN_WORKLOAD: &[&str] = &[
     "kind",
     "steps",
@@ -526,6 +528,11 @@ pub fn validate(m: &mut Value) -> R<()> {
                 )));
             }
         }
+        if let Some(b) = obj_get(s, "job") {
+            if !b.is_boolean() {
+                return Err(err(format!("{wh}: job: must be true or false")));
+            }
+        }
         if let Some(a) = obj_get(s, "start_after") {
             if !in_strs(a, &["ready", "started"]) {
                 return Err(err(format!(
@@ -810,6 +817,7 @@ pub fn validate(m: &mut Value) -> R<()> {
     validate_network(m)?;
     validate_groups(m)?;
     validate_steer(m)?;
+    validate_clock_points(m)?;
     validate_checks(m, &ids)?;
     validate_world(m)?;
     validate_errors(m)?;
@@ -834,6 +842,29 @@ fn validate_network(m: &Value) -> R<()> {
                 )));
             }
         }
+    }
+    Ok(())
+}
+
+/// `clock_points:` (Milestone 225): the times a clock fault may step the clock to, each a
+/// clock point of the schedule language (`T=<at>:@<point>`).
+fn validate_clock_points(m: &Value) -> R<()> {
+    let Some(vs) = obj_get(m, "clock_points") else {
+        return Ok(());
+    };
+    let Value::Array(vs) = vs else {
+        return Err(err(
+            "clock_points: a list of clock points such as \"@:10\" or \"@month+10m\"",
+        ));
+    };
+    for (i, v) in vs.iter().enumerate() {
+        let Value::String(t) = v else {
+            return Err(err(format!(
+                "clock_points[{i}]: a clock point in quotes, such as \"@month+10m\""
+            )));
+        };
+        hydo_schedule::ClockPoint::parse(t, &format!("clock_points[{i}]"))
+            .map_err(|e| err(e.message))?;
     }
     Ok(())
 }

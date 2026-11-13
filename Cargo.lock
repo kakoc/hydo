@@ -764,6 +764,7 @@ dependencies = [
 name = "hydo-manifest"
 version = "0.3.1"
 dependencies = [
+ "hydo-schedule",
  "hydo-schema-compat",
  "indexmap",
  "libc",

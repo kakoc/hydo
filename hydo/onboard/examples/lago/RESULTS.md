@@ -26,7 +26,10 @@ another agent's measurement campaign for the whole session, so no run used hvx.
   6901, open). Lago commits the termination to PostgreSQL, cannot enqueue the job that bills it,
   and answers 500. The client's retry gets 404, and nothing bills that period later. The
   exploration found it without being told, in a swarm schedule that killed and paused Redis. It
-  reproduces with Docker and without hydo in five requests (finding 1).
+  reproduces with Docker and without hydo in five requests (finding 1). The re-run after
+  Milestone 225 found a second candidate with a clock step to the billing tick: a subscription
+  cancelled shortly before the tick is invoiced twice for November (finding 8, not yet checked
+  outside hydo).
 - **What else did hydo find that a Lago operator should know?** None of these is counted as a
   Lago bug:
   1. A power cut loses acknowledged usage that is charged in advance. The event is in
@@ -104,8 +107,9 @@ is billed in arrears.
 - `guest.clock_start` at 2026-11-30 23:55 UTC, so that every run starts five minutes before the
   end of the billing period, `clock_after_cut: 60` and `outcomes_after_cut: true`;
 - the workload folder mounted into the API image, so the client runs with the image's Ruby;
-- `seed/` on the data disk, for the seed's own records (see "What hydo lacked");
-- the build parameter `redis_aof` (default `no`, as in Lago's file).
+- the build parameter `redis_aof` (default `no`, as in Lago's file);
+- since hydo's fixes of the gaps below (Milestone 225, section "The re-run without the
+  workarounds"): `test.first_records: true`, `job: true` on `migrate`, and `clock_points:`.
 
 ## The workload
 
@@ -130,10 +134,13 @@ the organization's API key, as a customer's billing integration does.
 - `eventually_1_billing_tick`: after the faults, the clock moves forward to 2 s before Lago's
   next billing tick: minute 10 of the hour, and at the earliest 2026-12-01 00:10. Lago's clock
   service then starts the biller. A run lasts less than a minute of guest time, so this is the
-  step that waiting would make. The command then waits up to 150 s for every subscription's
-  November invoice and for every invoice to reach a final state.
-- `eventually_2_transfers_charged`: waits up to 120 s for every acknowledged `transfers` event to
-  have its fee.
+  step that waiting would make. Since Milestone 225 the command only moves the clock. The two
+  checks `checks/eventually_november_billed` and `checks/eventually_transfers_charged` wait for
+  the billing, from the end of this command (`after=commands`).
+
+Until Milestone 225 the command also waited up to 150 s for the November invoices, and a second
+command, `eventually_2_transfers_charged`, waited up to 120 s for the fees. The findings below
+name those commands as the runs reported them.
 
 Every operation is recorded as `<op>,<key>,<amount> ack|failed|unknown`, for example
 `e17,units:sub1:transfers,3 ack`. The key is the total that the operation adds to. A timeout,
@@ -145,11 +152,11 @@ duplicate) is `failed`.
 | rule | kind | the rule | how it is read |
 |---|---|---|---|
 | `final_acked_events_stored` | billing | every acknowledged event is stored once under its transaction id | the client's ids against `events` (psql) |
-| `eventually_2_transfers_charged` | billing | every acknowledged event of the charge paid in advance gets its fee within 120 s | the client's ids against `fees.pay_in_advance_event_transaction_id` |
+| `eventually_transfers_charged` (until Milestone 225 the command `eventually_2_transfers_charged`) | billing | every acknowledged event of the charge paid in advance gets its fee within 120 s of the billing tick | the client's ids against `fees.pay_in_advance_event_transaction_id` |
 | `final_one_fee_per_transfer.sql` | billing | an event is charged in advance at most once | SQL over `fees` |
 | `final_invoice_total_is_sum_of_fees.sql` | billing | a finalized invoice's fees amount is the sum of its fees, and its total is that minus coupons and credits plus taxes | SQL over `invoices` and `fees` |
 | `final_one_invoice_per_period.sql` | billing | a subscription is never invoiced twice for one billing period | SQL over `invoice_subscriptions` |
-| `eventually_1_billing_tick`, `final_november_invoiced.sql` | billing | every subscription's November usage is on a finalized invoice (periodic, or the termination invoice) within 150 s of the billing tick | SQL over `invoice_subscriptions` and `invoices` |
+| `eventually_november_billed` (until Milestone 225 inside `eventually_1_billing_tick`), `final_november_invoiced.sql` | billing | every subscription's November usage is on a finalized invoice (periodic, or the termination invoice) within 150 s of the billing tick | SQL over `invoice_subscriptions` and `invoices` |
 | `final_invoices_final.sql` | billing | every invoice ends finalized, voided, or closed | SQL over `invoices` |
 | `final_business_result` | generic | every total Lago reports equals the acknowledged operations. Acknowledged amounts must be there once, unanswered ones at most once, and refused ones not at all | the outcome lines against `helper_client.rb report` |
 
@@ -421,33 +428,116 @@ does not say whether the event, the fee, or the invoice is missing.
 
 ## What hydo lacked
 
-In the order in which they cost time. Each is an open item in `AGENTS.md`.
+In the order in which they cost time. Each was an open item in `AGENTS.md`; Milestone 225 added
+the first six, and the next section shows the example without the workarounds they needed.
 
-1. **`eventually_` commands run after the `eventually_` checks.** The first design moved the
+1. **`eventually_` commands ran after the `eventually_` checks.** The first design moved the
    clock to the billing tick in an `eventually_` command and polled the November invoices in an
    `eventually_` check. The check polled for its whole 180 s from the heal, and failed, before
-   the command ran. The order is the reverse of what "after the faults, the `eventually_`
-   commands, the `finally_` commands and the checks" suggests. The fix here was to wait inside
-   the command itself, which makes the command the rule.
-2. **A seed's records are not carried into the run.** The seed's events are acknowledged
-   operations too. `$HYDO_ACKED` and `$HYDO_OUTCOMES` of the `first_` commands are not the
-   run's files, so the generic rule saw Lago's totals as counting the seed's units twice. The
-   seed now writes its own records to `/data/seed/`, and the checks read both files.
-3. **A check's output beyond its last line is lost.** The generic rule's useful output is the
-   list of totals that differ. Only the last line reaches the verdict and `result.json`. Each
+   the command ran. The fix here was to wait inside the command itself, which made the command
+   the rule. Now a check with `after=commands` counts from the end of the `eventually_` commands,
+   which run first.
+2. **A seed's records were not carried into the run.** The seed's events are acknowledged
+   operations too, but `$HYDO_ACKED` and `$HYDO_OUTCOMES` of the `first_` commands were not the
+   run's files. So the generic rule saw Lago's totals as counting the seed's units twice. The
+   seed wrote its own records to `/data/seed/`, and the checks read both files. Now
+   `test.first_records: true` keeps the seed's lines in the run's files.
+3. **A check's output beyond its last line was lost.** The generic rule's useful output is the
+   list of totals that differ. Only the last line reached the verdict and `result.json`. Each
    explanation needed a replay with `hydo inspect` until the check also wrote its lines to
-   `/dev/console`.
-4. **One signature, several causes, one shrink.** The explorer shrinks the first failure of each
+   `/dev/console`. Now a failing check's last 20 lines are in `result.json`
+   (`details.output`), in `hydo report`, and in `report.md`.
+4. **One signature, several causes, one shrink.** The explorer shrank the first failure of each
    signature. "Transfers have no fee" had three causes (a power cut, a clock step back, a clock
-   before the subscription's start); only the clock step was shrunk. The check now gives the
-   clock case its own last line.
-5. **The importer's idle job service is a fault target.** `hydo compose` keeps the one-shot
+   before the subscription's start); only the clock step was shrunk. The check gives the clock
+   case its own last line. Now `hydo explore --shrink-causes N` shrinks up to N failures of a
+   signature whose fault kinds differ. The two clock causes have the same fault kinds, so the
+   check keeps its own last line for the second one.
+5. **The importer's idle job service was a fault target.** `hydo compose` kept the one-shot
    `migrate` service as a service that sleeps. The explorer drew pauses, kills and link faults
-   on it in 6 of the first exploration's 20 schedules, where they test nothing.
-6. **Clock steps cannot aim at a time.** The explorer steps the clock by fixed amounts (30 s,
+   on it in 6 of the first exploration's 20 schedules, where they test nothing. Now it has
+   `job: true`, and no schedule of the re-run names it.
+6. **Clock steps could not aim at a time.** The explorer stepped the clock by fixed amounts (30 s,
    5 minutes, 1 hour, 1 day, 30 days, a year). Billing depends on times of day: Lago bills at
    minute 10 of the hour, on the first of the month. The schedules that start the biller in the
-   middle of the faults were written by hand, with a step of 900 s.
+   middle of the faults were written by hand, with a step of 900 s. Now `T=<at>:@:10-2s` steps to
+   2 s before the next tick, and `clock_points:` makes the explorer draw such steps.
 7. **The explorer's identity test reads git-ignored files.** It lists every file under an
    example's `hydo/` folder, also `hydo-out/`, `.hydo/` and `images/`. With this example's local
-   explorations in place, its golden could not be re-recorded until they were moved away.
+   explorations in place, its golden could not be re-recorded until they were moved away. This
+   is open item 93, left to another change.
+
+## The re-run without the workarounds (Milestone 225)
+
+The same image setup on the Mac engine, with hydo built in this tree after Milestone 225 and the
+published 0.3.1 release files. The final image is `explore-ob-lago-arm64.cpio.gz`, sha256
+`9621369557acf427…`; the data disk is unchanged (`2d0069a698397d61…`). What changed:
+
+- `first_seed` records into `$HYDO_ACKED` and `$HYDO_OUTCOMES` (`test.first_records: true`).
+  The data disk's `seed/` directory and the checks' second file are gone.
+- `eventually_1_billing_tick` only moves the clock to the tick. The two waits are now checks
+  that count from the end of that command (`after=commands`): `checks/eventually_november_billed`
+  (150 s) and `checks/eventually_transfers_charged` (120 s; it was the command
+  `eventually_2_transfers_charged`). Each check makes one attempt per poll instead of looping.
+- `final_business_result` no longer copies its lines to `/dev/console`; on a failure it prints
+  what Lago reported before the totals that differ.
+- `migrate` has `job: true`, and `clock_points: ["@:10-2s", "@month+9m58s"]` lets the explorer
+  step to 2 s before an hourly tick and to the month's first tick.
+
+| run | schedule | result |
+|---|---|---|
+| no faults, twice | `disk=none \| run` | OK `833ba34749c6a408` both times (ctl `16f00393795a0108`); the seed's 8 events are in the run's acknowledged ids; the `commands` anchor came 0.05 s after the heal's, and the two checks held 5 s and 15 s after it |
+| the saved regressions | `hydo repro --regressions` | 3 of 3 as expected: `power-cut-loses-queued-fees` `baf7c25493b0d851` (4 of 9 transfers without a fee), `skipped-billing-day` `3acb64e49408afc0`, `terminate-while-redis-down` `e9603e35d6daf000` |
+| lago-api 6901, twice | `disk=none \| run K=redis@1+4` | VIOLATION `e9603e35d6daf000` both times: `1 subscriptions without a November invoice` |
+| 6901 at the billing tick | `disk=none \| run T=0:@:10-2s K=redis@1+4` | VIOLATION `07cacde684ea81b4`, the same bug; the log says `CLOCK JUMP of 892s to @:10-2s (2026-12-01T00:09:58Z)` |
+| Redis cut off at the tick | `disk=none \| run T=0:@:10-2s N=redis@1-4:loss,100%` | VIOLATION `381e3364588a72e9`: 1 of 11 transfers without a fee (finding 3's pattern) |
+| the billing day skipped | `disk=none \| run T=0:@day+23h55m` | VIOLATION `3fbb11ed436b62ef`: 3 subscriptions without a November invoice (finding 4) |
+
+The output of the failing checks now explains a run without a replay. For lago-api 6901,
+`result.json` lists the generic rule's totals that differ:
+`units:sub4:api_calls: reported 0, acknowledged 12`, and transfers of `sub1` and `sub3` that
+were still missing when the 120 s ran out (`3 of 11 acknowledged transfers have no fee`). Until
+now that check had 270 s, because it ran after the billing command's own wait; the Redis kill at
+the worker's start also meets Sidekiq's scheduler (finding 3), which was not looked into further.
+
+Three explorations without shrinking (`--no-shrink`, `--workers 1`; the fault space changed, so
+the seeds draw other schedules than in A and B):
+
+| exploration | schedules | wall | failures (all reproduced) | by cause |
+|---|---|---|---|---|
+| D: `--strategy swarm --new-faults --seeds 21-40` | 20 | 18 min | 6 | disk I/O errors that PostgreSQL or the API cannot restart after 4, a transfer without its fee after a Redis kill and a step back 1, the clock behind the migrations 1 (finding 7) |
+| E: `--strategy swarm --new-faults --seeds 41-60` | 20 | 25 min | 10 | lying disks 5 (lost events, a service that cannot recover), disk I/O errors 4, a power cut that left a termination invoice in `generating` 1 |
+| F: `--strategy process --new-faults --seeds 1-20` | 20 | 19 min | 9 | power cuts that lose fees 3 (finding 2), the clock behind the migrations 3 (finding 7), a skipped billing day 1 (finding 4), a step back before a termination 1 (finding 6), **a subscription invoiced twice for November** 1 (finding 8, below) |
+
+No schedule of the 60 named `migrate` (6 of 20 did in A). Three drew a step to a clock point
+(`T=9:@month+9m58s`, `T=8:@:10-2s`, `T=3:@:10-2s`), and the last of them found finding 8. None
+drew the schedule of lago-api 6901: in B its seed 36 killed Redis, and with `migrate` out of the
+list of services the same seed now kills PostgreSQL. The saved regression and the hand schedules
+above find it on every run.
+
+### 8. A subscription cancelled shortly before the billing tick is invoiced twice for November (not yet checked outside hydo)
+
+Found by `final_business_result` alone in exploration F's seed 7: `disk=none
+dseed=cb7302cecc8929b7 | run P=api_clock@7+2 T=3:@:10-2s O=db-api@0-3:resp:loss,74%
+W=740c6cfa,p1,q1,r1500`, `ead9b89d0f62183b` in the exploration, in its re-run and in a third
+run. The rule's output in `result.json` says `units:sub4:api_calls: reported 24, acknowledged 12`.
+A replay (`hydo inspect exec ... --at end`) read Lago's rows for `sub4`:
+
+| invoice | created | reason | charges | fees |
+|---|---|---|---|---|
+| 1, finalized | 2026-12-01 00:10:00 | `subscription_periodic` | 11-01 00:00 to 11-30 23:59:59 | the base fee, 12 units of `api_calls` |
+| 2, finalized | 2026-12-01 00:10:02 | `subscription_terminating` | 11-01 00:00 to 11-30 23:56:28 | the base fee, 12 units of `api_calls` |
+
+1. The responses from PostgreSQL to the API are lost for rounds 0 to 2, so the first
+   cancellation times out after 60 s; the retry is acknowledged. `sub4` was terminated at 23:56:28.
+2. The clock steps to 00:09:58 before round 3, 13 minutes later, before the termination's
+   invoice was made.
+3. At 00:10:00 the periodic biller invoices November for `sub4` although it is terminated, and
+   2 s later the termination invoice bills November up to 23:56 again. Both are finalized: the
+   customer pays the base fee and the usage twice.
+
+**Decision: probably a Lago bug, not checked outside hydo yet.** In production it needs a
+termination whose invoice is not made before the next billing tick: a worker backlog or a Redis
+outage of minutes before minute 10 of an hour. The billing rule `final_one_invoice_per_period`
+did not see it, because it counts only recurring invoices, and a termination invoice is not
+one. No upstream issue was searched, and no regression is saved yet.

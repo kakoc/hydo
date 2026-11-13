@@ -4,6 +4,6 @@
 # `hydo build hydo.yaml --set redis_aof=yes` the same schedule passes.
 # Found by the explorer (seed 8), in the seed form; the command list below is the one W= was
 # drawn against.
-# commands: anytime_redeliver eventually_1_billing_tick eventually_2_transfers_charged first_seed parallel_driver_batch parallel_driver_event serial_driver_terminate
+# commands: anytime_redeliver eventually_1_billing_tick first_seed parallel_driver_batch parallel_driver_event serial_driver_terminate
 # expect: violation
 disk=cut dseed=629bfb2777cb6c08 | run C=10 P=api_worker@5+5 T=0:300 W=340bcd65,p1,q1,r3000

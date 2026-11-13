@@ -28,6 +28,7 @@ libc = "0.2"
 schemars = { version = "1.2.1", features = ["indexmap2", "preserve_order"] }
 indexmap = { version = "2", features = ["serde"] }
 serde_path_to_error = "0.1.20"
+hydo-schedule = { workspace = true }
 
 [dev-dependencies]
 hydo-schema-compat = { path = "../hydo-schema-compat" }

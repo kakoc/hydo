@@ -9,7 +9,7 @@ input	hydo/onboard/examples/redis/hydo.yaml	c34c172a137dd89e266d8e4e73288f9d9dc7
 input	hydo/onboard/examples/rust-kv/hydo.yaml	417a6848bf266242b33f2191e4eb173ad8e3187d53c444c03dcc7c7b68615bea
 input	hydo/onboard/examples/shop/hydo.yaml	eaacf3830712aae4e796373238760925ec2a4eb282f51c21002d3da8a58d31f8
 boot	redis-live	redis-live#0	snapshot	a13bcd0ff7df6031
-counts	redis-live	recovery:error=2 recovery:ok=31 recovery:violation=32 run:cut=65 run:error=12 run:ok=63 run:violation=90 token:B=4 token:C=66 token:K=124 token:P=119 token:R=41 token:T=114
+counts	redis-live	recovery:error=2 recovery:ok=31 recovery:violation=33 run:cut=66 run:error=12 run:ok=65 run:violation=90 token:B=4 token:C=67 token:K=124 token:P=119 token:R=41 token:T=117
 boot-transcript	redis-live	a13bcd0ff7df6031
 chunk	redis-live	0	500	c7629eb522ea596456773ee146391d3956d9f8c42af8a644006af8ece2b1d614
 chunk	redis-live	1	500	29b65f6df1e4bc96c1ed9ab7b58f1ece628b01648d09bfb70d4b66773394f9a3
@@ -59,9 +59,10 @@ chunk	redis-live	44	500	bb31bc55e15b6673de61e472903b1d0423f024aa005b0d22efbc3018
 chunk	redis-live	45	500	c448484a147c5edce1a206afa199698746f38a6dd63cb74d9d075b1a1117dd63
 chunk	redis-live	46	500	05823ea36890fdd3edf12407da701e4c9d6689b429c49f38353eeb5e622925da
 chunk	redis-live	47	500	8f4891559eb659f4dc3a5d0183256875d28af9ff038f77338b5276dedab10303
-chunk	redis-live	48	282	efc3327ec7f32e1ba6527d00aaa0c01e0ea95d81f17595c63f05854b9de183d6
+chunk	redis-live	48	500	468790ea3800342911e0c16daaf1e3c250c12f5e943a6d2f08b81e9785f1840c
+chunk	redis-live	49	45	bb162932d59037a510b906c1eec28d34f156e5a08153b5ccbc046c528d7e4682
 boot	compose-voting-loopback	compose-voting-loopback#0	snapshot	3e5ac7ff708736c9
-counts	compose-voting-loopback	recovery:error=2 recovery:ok=38 recovery:violation=36 run:cut=76 run:error=15 run:ok=104 run:violation=99 token:B=4 token:C=78 token:K=148 token:N=101 token:O=23 token:P=145 token:T=136
+counts	compose-voting-loopback	recovery:error=2 recovery:ok=39 recovery:violation=36 run:cut=77 run:error=15 run:ok=104 run:violation=101 token:B=4 token:C=79 token:K=148 token:N=101 token:O=23 token:P=145 token:T=139
 boot-transcript	compose-voting-loopback	3e5ac7ff708736c9
 chunk	compose-voting-loopback	0	500	5da8adef6deaac36bca7db9208dbc63c017edfb593f289e59c52203aa8d95b8c
 chunk	compose-voting-loopback	1	500	cbc17a3d9df2898e11f44448c1650815816d31bdf10eb2444329bfa545df89b5
@@ -150,9 +151,10 @@ chunk	compose-voting-loopback	83	500	5aa713d49b5408eb8b89e513e44ae16a8a9bc58c98e
 chunk	compose-voting-loopback	84	500	6f26ee3aa1c92bd7517a891b5627cd9385f85cc071fa922de454dcec62ed1296
 chunk	compose-voting-loopback	85	500	28efd48f9a55680649468a6ffd424342b3e9e60ecaccf8560eb8bce93a0d389c
 chunk	compose-voting-loopback	86	500	59f914f4e5f887a52097b0356dae759b96cf0d1b4ec737acb482e54ddefd9c20
-chunk	compose-voting-loopback	87	224	5dfe9fd04ec7765042cc66567372650f0053d3e88d4f3ead2bde8bb73ac3360f
+chunk	compose-voting-loopback	87	500	088da4e4567661861699e3710417b823a2db700859da0e751b3869b09313e2f3
+chunk	compose-voting-loopback	88	40	c24f4d7e679350c69396687edbc41597e461091e220d757129da24b0d92e37ad
 boot	rust-kv	rust-kv#0	snapshot	337989eadf11ee38
-counts	rust-kv	recovery:error=4 recovery:ok=71 recovery:violation=16 run:cut=91 run:error=29 run:ok=230 run:violation=32 token:B=203 token:C=95 token:K=186 token:N=132 token:O=35 token:P=173 token:S=63 token:T=164
+counts	rust-kv	recovery:error=4 recovery:ok=72 recovery:violation=16 run:cut=92 run:error=29 run:ok=232 run:violation=32 token:B=203 token:C=96 token:K=186 token:N=132 token:O=35 token:P=173 token:S=63 token:T=167
 boot-transcript	rust-kv	337989eadf11ee38
 chunk	rust-kv	0	500	61cc2f7e0e9591e01bafbc1eed9d9cb840de7b4f3629fd21f22c46ceeb47009f
 chunk	rust-kv	1	500	a517209ed81d0a9911fbdfdccc414bc5fca854f33d91a80577a3ad262dfda3ce
@@ -221,9 +223,10 @@ chunk	rust-kv	63	500	27d1ef8247b1a0af1d3507221c8f4f9cbbe0270e34d0a329049df3dad5a
 chunk	rust-kv	64	500	7e429ef47e7310b7b646de55580a9b6c1578a57f2be504586f7e10e03326e3a4
 chunk	rust-kv	65	500	5d8b6db3342af7d27158c112ae60a302afa6c1eac62d77edf8fde5c17118ba30
 chunk	rust-kv	66	500	24515b56689b7aafa80641177d963f6d99d6819d8d5fc81fb00c3a378ffb6623
-chunk	rust-kv	67	426	6a440a9f3a8be8e2b3a6040100f263d58d7d44dd25bf70df7d744a92e8082b94
+chunk	rust-kv	67	500	f23e87199ac674c99ecf963acb329a016059c7e7756e0a53c7ffe2eb2905f371
+chunk	rust-kv	68	94	d41a351fc3662d20df3f29a9daea7c4ea13163f477f1b86481cf6cf05c4a062a
 boot	node-kv	node-kv#0	snapshot	78b5679268864e80
-counts	node-kv	recovery:error=3 recovery:ok=77 recovery:violation=13 run:cut=93 run:error=30 run:ok=172 run:violation=27 token:B=163 token:C=98 token:K=155 token:P=152 token:S=43 token:T=145
+counts	node-kv	recovery:error=3 recovery:ok=78 recovery:violation=13 run:cut=94 run:error=30 run:ok=174 run:violation=27 token:B=163 token:C=99 token:K=155 token:P=152 token:S=43 token:T=148
 boot-transcript	node-kv	78b5679268864e80
 chunk	node-kv	0	500	445de8e5ef3fc902c2c0c91e7da6dcd179209eae1144cdd147df1cf991f74e49
 chunk	node-kv	1	500	b943861a7007ccda2258767fc267d6cd00f27bf177bf83fcd3d86da5630409b4
@@ -266,9 +269,9 @@ chunk	node-kv	37	500	3e81fe69374b7d436195074b22cafe42d4a4f706c390a23c4bd845c4183
 chunk	node-kv	38	500	91f0571ed094e10d132f4b6b501396547149488494429dc39f81ff0121fa9c49
 chunk	node-kv	39	500	22471cdc962c406db5e7f311959981d84bff66802d15657b83ad2d418ff2efec
 chunk	node-kv	40	500	13bac1b31b4df1309ddbae4483672d6b0255fd47aae69dd689640311191ac5c6
-chunk	node-kv	41	216	b0d3eb43f01b767c99c1172c3078ee0c216ac6f5f8522f45bb0223d364cdff8b
+chunk	node-kv	41	384	14336910a1ccfeacfb8f54df4c855c09985741d251166c23fa75b46df438d59d
 boot	python-kv-mac	python-kv-mac#0	snapshot	bb989a1e0b2c18a4
-counts	python-kv-mac	recovery:error=2 recovery:ok=67 recovery:violation=12 run:cut=81 run:error=25 run:ok=195 run:violation=31 token:B=169 token:C=83 token:K=167 token:P=158 token:S=47 token:T=152
+counts	python-kv-mac	recovery:error=2 recovery:ok=68 recovery:violation=12 run:cut=82 run:error=25 run:ok=197 run:violation=31 token:B=169 token:C=84 token:K=167 token:P=158 token:S=47 token:T=155
 boot-transcript	python-kv-mac	bb989a1e0b2c18a4
 chunk	python-kv-mac	0	500	45c9a1a47ab94d6a1074fed944424e4e48db81f81eec1bb7b939746903e91540
 chunk	python-kv-mac	1	500	f1578ef6726e708add28287f3ff62f7b837b2b571d3fff7319fc3ea387538c5a
@@ -312,9 +315,9 @@ chunk	python-kv-mac	38	500	21ab7d5886616baa713b0804fdd54bedf97e4335e82c341288cdc
 chunk	python-kv-mac	39	500	d27633c4484ffaf56c7a3abd56edd65507f12b0e48c96d6da6a4df38c812b813
 chunk	python-kv-mac	40	500	c5ec05003deeefe45f82d7d9a6c5ce657935926feceefc806b0709b588752fbd
 chunk	python-kv-mac	41	500	c84899a45520757999d917e64c4058859d66065991007bef863575cb3d6435a6
-chunk	python-kv-mac	42	175	0cab724571d007c14b9162f542ea0204d4ce196b8496843f1dc06f71d7d93199
+chunk	python-kv-mac	42	343	28a8bcfeecbcd46a5946217ab08e1b3c4a4d5773d8df6d3171717f69e1bdbb8d
 boot	redis+clock_after_cut	redis+clock_after_cut#0	snapshot	0f6ea451bec9c4f4
-counts	redis+clock_after_cut	recovery:error=3 recovery:ok=62 recovery:violation=6 run:cut=71 run:error=17 run:ok=113 run:violation=28 token:B=4 token:C=73 token:K=122 token:P=117 token:R=38 token:T=112
+counts	redis+clock_after_cut	recovery:error=3 recovery:ok=62 recovery:violation=7 run:cut=72 run:error=17 run:ok=115 run:violation=28 token:B=4 token:C=74 token:K=122 token:P=117 token:R=38 token:T=115
 boot-transcript	redis+clock_after_cut	0f6ea451bec9c4f4
 chunk	redis+clock_after_cut	0	500	3755825dcc8bebf9b4a224ba11f678df09592da9274a659a342ca6b28f620b0f
 chunk	redis+clock_after_cut	1	500	cc57584516526615263f7edb23165932210af37360640837c9f0f2b301b72b94
@@ -346,9 +349,10 @@ chunk	redis+clock_after_cut	26	500	e1b25c913283538a8041e9b772bbf1fd21bb20a00af6b
 chunk	redis+clock_after_cut	27	500	f0a9998169742beb1c98179b1c2c360dfbac88019e3837689aaeef6a7a134394
 chunk	redis+clock_after_cut	28	500	9f26766d71fd31e799f7c3b460f8f15741292dc3dec98d18536a797ce903efc9
 chunk	redis+clock_after_cut	29	500	09c730e51df0115cd86352ac4aa6ca40bda93e089a7af00c27908a04ef41419c
-chunk	redis+clock_after_cut	30	466	9b701d5bc44dc0070bda1fd7cb39c7b2dbc024012404c389ac8f9964996dbbb3
+chunk	redis+clock_after_cut	30	500	487228af30cc504e303ab6e481eded353113cc7322625669b2571454ca609d73
+chunk	redis+clock_after_cut	31	140	9488f4843a7570708441496e674c23c79098bf7c77c4846aa10050457045d9c4
 boot	redis-live+clock_after_cut+start	redis-live+clock_after_cut+start#0	snapshot	cddc6e7b0b23bc0d
-counts	redis-live+clock_after_cut+start	recovery:error=1 recovery:ok=5 recovery:violation=57 run:cut=63 run:error=10 run:ok=7 run:violation=150 token:B=4 token:C=66 token:K=124 token:P=119 token:R=41 token:T=114
+counts	redis-live+clock_after_cut+start	recovery:error=1 recovery:ok=5 recovery:violation=58 run:cut=64 run:error=10 run:ok=8 run:violation=151 token:B=4 token:C=67 token:K=124 token:P=119 token:R=41 token:T=117
 boot-transcript	redis-live+clock_after_cut+start	cddc6e7b0b23bc0d
 chunk	redis-live+clock_after_cut+start	0	500	00ca9a9217a9c5704546173b806431cba6cbb51f250320a88ba226fd24edd75b
 chunk	redis-live+clock_after_cut+start	1	500	de77c719765d879d37cece5fb7ccbf5c6b117b19468a785a2e5e96fdadfd7544
@@ -407,9 +411,10 @@ chunk	redis-live+clock_after_cut+start	53	500	06dff9af877f0fc511d87bb9ac447626b0
 chunk	redis-live+clock_after_cut+start	54	500	d34ce3f191318100b91a659b1b399e0e1f2be342e13637ff96eb82f69bcaf0df
 chunk	redis-live+clock_after_cut+start	55	500	d51729da4a9fd28409d5eb4d8e64552a5931a92d1e6945ef8cc2dc097e819856
 chunk	redis-live+clock_after_cut+start	56	500	f7c424536ceaf5b2707b69699c327cb5e3582aef555d0666256606ac20946870
-chunk	redis-live+clock_after_cut+start	57	295	ebf1c21edddbf8dc2b994d37e609e6a7cb73b645cb053c8ccffe4a39670c510c
+chunk	redis-live+clock_after_cut+start	57	500	187d8cb34bb175df1d84a45eb28bc07332fa5be44d41a6577f4841527d70bd4a
+chunk	redis-live+clock_after_cut+start	58	106	42c6d9c592071cb8683a5397f0cf3d23fdca6995dc517642e5d53055587dea79
 boot	redis-live+heal+heal	redis-live+heal+heal#0	snapshot	afcb298817273c35
-counts	redis-live+heal+heal	recovery:ok=3 recovery:violation=62 run:cut=65 run:error=10 run:ok=8 run:violation=147 token:B=4 token:C=66 token:K=124 token:P=119 token:R=41 token:T=114
+counts	redis-live+heal+heal	recovery:ok=3 recovery:violation=63 run:cut=66 run:error=10 run:ok=9 run:violation=148 token:B=4 token:C=67 token:K=124 token:P=119 token:R=41 token:T=117
 boot-transcript	redis-live+heal+heal	afcb298817273c35
 chunk	redis-live+heal+heal	0	500	efaf4df729fda449a097010e4560998701e0867c4b6ab45f56724b974dd0b266
 chunk	redis-live+heal+heal	1	500	e5ae72677c52588bdfe103bcbe360ea4d36f3238c0470bfbdf7f3850d62edfc4
@@ -464,9 +469,10 @@ chunk	redis-live+heal+heal	49	500	e16fd4c0244d907e5c40ea43aec15a2e6fda5fa048d1cf
 chunk	redis-live+heal+heal	50	500	18741ecf9975729175983746bd5ad81c269c05f6f95a7e4e227ae7218e4314db
 chunk	redis-live+heal+heal	51	500	eb7fd29c09899a918157c1baa3b86d1cacda831fca45d2ccb26ae9a8e3ac962e
 chunk	redis-live+heal+heal	52	500	c3b23348f139801cca838d6d3d33af8c2d50cb3f6de07aabff52e925000abf53
-chunk	redis-live+heal+heal	53	359	8f26a4ff3885c70e402015cf8459404f053149d040bd1a4d35de44f00fa093f3
+chunk	redis-live+heal+heal	53	500	0a5ff03c5cf3bde4b4eda254df7e90d9568e10f7987156acc53591d19cc4c327
+chunk	redis-live+heal+heal	54	152	bbd392009e2b43040931222c92307872286068a85e4bbfce1f8f93800c28d0c2
 boot	redis-live+steps0	redis-live+steps0#0	snapshot	bc2eed66c0159f4a
-counts	redis-live+steps0	recovery:violation=1 run:cut=1 run:error=3 run:ok=23 run:violation=202 token:B=4 token:C=66 token:K=123 token:P=119 token:R=41 token:T=114
+counts	redis-live+steps0	recovery:violation=1 run:cut=1 run:error=3 run:ok=24 run:violation=204 token:B=4 token:C=67 token:K=123 token:P=119 token:R=41 token:T=117
 boot-transcript	redis-live+steps0	bc2eed66c0159f4a
 chunk	redis-live+steps0	0	500	a407cec13834d4d4144e37560d37a06b0920015ad604a0e152ce39699097b019
 chunk	redis-live+steps0	1	500	aec93fb1e43775d952d86767b3a26b024b9efb343a948f05519616c5e96678d8
@@ -511,9 +517,10 @@ chunk	redis-live+steps0	39	500	8c080f541366cb69825ab5a35a0597ddd802adff406383431
 chunk	redis-live+steps0	40	500	eece4408ba6fd2b1951a5dd1c07dbb2abc977c7fdd55acde14082c3a002e542f
 chunk	redis-live+steps0	41	500	b4541ce9d664e515e21a18f0252a3873dddb9338ac5a5ecd97b3741c7f87b862
 chunk	redis-live+steps0	42	500	5197d14ec2902dfb3dae9cb2994b6805846ec81e8ba998545701ec5c0593c933
-chunk	redis-live+steps0	43	357	e97d19e1db109e5c7843dc45bb75b3f3c5bc61f21cd0a0dd6dd7a28e9dd7359c
+chunk	redis-live+steps0	43	500	41a720a68b24a4e452c57d45b76ba74f64390a51b85ca8586936a5b8080f9482
+chunk	redis-live+steps0	44	158	85cb27659e9d175c51f2a154deac52553077d00d62a88aa5e7fdb96307695e06
 boot	rust-kv+clock_after_cut	rust-kv+clock_after_cut#0	snapshot	337989eadf11ee38
-counts	rust-kv+clock_after_cut	recovery:error=4 recovery:ok=71 recovery:violation=16 run:cut=91 run:error=29 run:ok=230 run:violation=32 token:B=203 token:C=95 token:K=186 token:N=132 token:O=35 token:P=173 token:S=63 token:T=164
+counts	rust-kv+clock_after_cut	recovery:error=4 recovery:ok=72 recovery:violation=16 run:cut=92 run:error=29 run:ok=232 run:violation=32 token:B=203 token:C=96 token:K=186 token:N=132 token:O=35 token:P=173 token:S=63 token:T=167
 boot-transcript	rust-kv+clock_after_cut	337989eadf11ee38
 chunk	rust-kv+clock_after_cut	0	500	38a527077c8ee7ac63fffd220f6bbedd1c817c65c7db17b409b9a5233a58fdad
 chunk	rust-kv+clock_after_cut	1	500	d532acfec752fd0a698a922ef79bfcb639160e76c393078c65d91e9236a9532b
@@ -584,9 +591,9 @@ chunk	rust-kv+clock_after_cut	65	500	0d792b8a759d9d81bf1e13156d3c5983715db972773
 chunk	rust-kv+clock_after_cut	66	500	a4ea0b4a3bac6ba5ff0e50c75cc9774bb7544144745a33b73f68e85b54271fa4
 chunk	rust-kv+clock_after_cut	67	500	8353a25d07c6a8c36ca509f1a1bce6a715358ebd8a3db0095d341d593f9cbe2e
 chunk	rust-kv+clock_after_cut	68	500	1a96cdfeb329cec7ff871168690d1bd9277503f9a7c9c6554e546c233b7829a5
-chunk	rust-kv+clock_after_cut	69	2	092ce0cd167f1948a77795440ac913828edd280f083650c898207a1717b6be59
+chunk	rust-kv+clock_after_cut	69	176	9cabe737b9ac44fc3267cdcfd3d7707c87a08fed731f8b8c7065c792fbdf2788
 boot	shop+clock_after_cut	shop+clock_after_cut#0	snapshot	594be9aedcdd87cf
-counts	shop+clock_after_cut	recovery:error=6 recovery:ok=16 recovery:violation=39 run:cut=61 run:error=26 run:ok=38 run:violation=84 token:B=4 token:C=62 token:H=102 token:K=106 token:P=109 token:T=98
+counts	shop+clock_after_cut	recovery:error=6 recovery:ok=16 recovery:violation=40 run:cut=62 run:error=27 run:ok=38 run:violation=85 token:B=4 token:C=63 token:H=102 token:K=106 token:P=109 token:T=101
 boot-transcript	shop+clock_after_cut	594be9aedcdd87cf
 chunk	shop+clock_after_cut	0	500	f7340bda41aa582e62b67982b972cf471b45d6fc0249a541ec4b2e2a7f305a4d
 chunk	shop+clock_after_cut	1	500	ed0f3e288128bf8fd7451935083a32a98934d67d77d60db3fddfd5f5a6043f5d
@@ -647,9 +654,9 @@ chunk	shop+clock_after_cut	55	500	22e8dd3bc837660f96989c4357fb12644fca1832f18484
 chunk	shop+clock_after_cut	56	500	87bec8a160935d74f24a9bedf409cf119c27245d9673cf7d77ed8916a8d2e688
 chunk	shop+clock_after_cut	57	500	565f53d9e2e0698f120c49787e63ac512848f33633b6e79c7b2ddf8afe8f6818
 chunk	shop+clock_after_cut	58	500	e8a1a261060bc96857853a08f2f4424d1a93a6592aaffbfa2cff8b0643069516
-chunk	shop+clock_after_cut	59	16	2e95f5891f1a2d8a2bf1ba9e10e8c7546f46895902736e698840b428320e271c
+chunk	shop+clock_after_cut	59	381	bc8650454bdf2b44557eeddbc18521806af4dbd8aff9d6d2ef0f8fd07a8926b8
 boot	redis-bridge	redis-bridge#0	snapshot	0943e07aac57836a
-counts	redis-bridge	recovery:error=5 recovery:ok=36 recovery:violation=49 run:cut=90 run:error=47 run:ok=130 run:violation=91 token:B=4 token:C=94 token:F=88 token:H=177 token:K=174 token:N=121 token:O=36 token:P=163 token:T=156
+counts	redis-bridge	recovery:error=5 recovery:ok=37 recovery:violation=49 run:cut=91 run:error=47 run:ok=131 run:violation=92 token:B=4 token:C=95 token:F=88 token:H=177 token:K=174 token:N=121 token:O=36 token:P=163 token:T=159
 boot-transcript	redis-bridge	0943e07aac57836a
 chunk	redis-bridge	0	500	c7524a80d04aa5a0b2b0a38e6ff2f45e02315de1bd1ac01d5320dd7521d8d4f1
 chunk	redis-bridge	1	500	1f5856de7cfab3f6c44ffc96858b7db630d922f9f445f7c805d4b8a038ef9ca6
@@ -780,10 +787,11 @@ chunk	redis-bridge	125	500	2f6f59b14de4571be26228c8a8776919e88b56bd108328d088e77
 chunk	redis-bridge	126	500	05199444d5c18d5ed8585bb25c13c80d6bc675072ceb4d03aeb19828ddd2674d
 chunk	redis-bridge	127	500	d304d05f93b7e6cb754f2dbac18251f039f1a300a8698db9cbf38c61ba587817
 chunk	redis-bridge	128	500	01d6e8b75c93c0f865befcd306b802ec9bff65952f854f153368aa82f1173c33
-chunk	redis-bridge	129	444	b1698880e4b161712eea50158c1496572ba9000cba5f74137e0c347d2a6db8b7
+chunk	redis-bridge	129	500	b14f53d6f003fcd97a1b17cc4205e39f669fd0a74bb2104b011c6631328d1ef2
+chunk	redis-bridge	130	347	786fcc5ca038b8187664d2483dcd43e70165f1ee57e63bf4561db65fc884aa03
 boot	redis-bridge+clock_after_cut	redis-bridge+clock_after_cut#0	error	8200034db913a8b5
 boot	redis-bridge+clock_after_cut	redis-bridge+clock_after_cut#1	snapshot	0943e07aac57836a
-counts	redis-bridge+clock_after_cut	recovery:error=5 recovery:ok=36 recovery:violation=49 run:cut=90 run:error=47 run:ok=130 run:violation=91 token:B=4 token:C=94 token:F=88 token:H=177 token:K=174 token:N=121 token:O=36 token:P=163 token:T=156
+counts	redis-bridge+clock_after_cut	recovery:error=5 recovery:ok=37 recovery:violation=49 run:cut=91 run:error=47 run:ok=131 run:violation=92 token:B=4 token:C=95 token:F=88 token:H=177 token:K=174 token:N=121 token:O=36 token:P=163 token:T=159
 boot-transcript	redis-bridge+clock_after_cut	0943e07aac57836a
 chunk	redis-bridge+clock_after_cut	0	500	c7524a80d04aa5a0b2b0a38e6ff2f45e02315de1bd1ac01d5320dd7521d8d4f1
 chunk	redis-bridge+clock_after_cut	1	500	b36060d30f5d505739417b5f01d28f9120c1629b6401b205fa078723c4eae1ed
@@ -916,5 +924,5 @@ chunk	redis-bridge+clock_after_cut	127	500	e918423e3b46e0515db4abb1846237ab7b920
 chunk	redis-bridge+clock_after_cut	128	500	faf0d1fcc636f5dec4552cb3d423f6a26b353ac6a925f0732fb6f44bbcfad5ce
 chunk	redis-bridge+clock_after_cut	129	500	9de86d4fa61b9a22d7231672c8af6e8f10b3bc83e6896ba54596702f7720968e
 chunk	redis-bridge+clock_after_cut	130	500	d506ad9c6693107192b95b39c10f0b5955636c62da9e2a2d61bb715b84441420
-chunk	redis-bridge+clock_after_cut	131	19	cbf0cf51ab99182ffb5cc60abcfd1c0388b046f5b12c4f10a77c3632bd0207e2
-paths	recovery:anchor-heal=490 recovery:anchor-start=490 recovery:clock-set-refused=41 recovery:eventually-not-ok=315 recovery:eventually-ok=278 recovery:live-attempt=2453 recovery:live-expired=237 recovery:live-late=78 recovery:live-ok=278 recovery:recovery-clock=335 recovery:status-143=83 run:T-back=739 run:T-fwd=625 run:T-not-applied=138 run:T-set-refused=138 run:anchor-heal=1579 run:anchor-start=2134 run:buggify=737 run:clock-set-refused=138 run:cut-clock=421 run:cut-clock-world=138 run:eventually-not-ok=1069 run:eventually-ok=951 run:live-attempt=7510 run:live-expired=804 run:live-late=265 run:live-ok=951 run:status-143=240
+chunk	redis-bridge+clock_after_cut	131	428	5d1fdc21f866558383a72d6cb15e218ec72b3bf5ab6f0c72295a07e82a54ef2e
+paths	recovery:anchor-heal=497 recovery:anchor-start=497 recovery:clock-set-refused=41 recovery:eventually-not-ok=317 recovery:eventually-ok=285 recovery:live-attempt=2478 recovery:live-expired=238 recovery:live-late=79 recovery:live-ok=285 recovery:recovery-clock=340 recovery:status-143=83 run:T-back=739 run:T-fwd=662 run:T-not-applied=138 run:T-set-refused=138 run:T-to=37 run:anchor-heal=1596 run:anchor-start=2158 run:buggify=737 run:clock-set-refused=138 run:cut-clock=426 run:cut-clock-world=140 run:eventually-not-ok=1078 run:eventually-ok=966 run:live-attempt=7588 run:live-expired=810 run:live-late=268 run:live-ok=966 run:status-143=241

@@ -50,6 +50,7 @@
 //! text), [`Schedule::host_text`] / [`Schedule::guest_text`] (the two halves as the engines see
 //! them), [`Schedule::has_power_cut`] (a `C=` token or a `cf=` host token: a recovery boot follows).
 
+mod clock;
 mod compose;
 mod guest;
 mod host;
@@ -57,6 +58,7 @@ mod num;
 mod storage;
 mod target;
 
+pub use clock::{civil_from_days, days_from_civil, ClockPoint, Every};
 pub use compose::{Compose, Omit, RangeItem, RangeList, ResolvedField, SeedField, WORKLOAD_KINDS};
 pub use guest::{
     Buggify, Direction, Freeze, FreezeDir, GuestToken, NetTarget, Netem, Pause, ProtocolFault,

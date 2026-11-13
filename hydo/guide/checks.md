@@ -10,7 +10,7 @@ The full reference is in `hydo guide manifest`, in the sections `Invariants`, `L
 |---|---|---|
 | `final_<name>` | once at the end of the run (after the heal, the retries and the `eventually_` commands); after a power cut, in the recovery boot | none |
 | `always_<name>` | also every `every` seconds of guest time while the workload runs | `# hydo: every=1` |
-| `eventually_<name>` | polled after the anchor until it holds or the deadline passes: bounded liveness | `# hydo: within=20 after=heal poll=1` (`after=start` counts from the start of the workload) |
+| `eventually_<name>` | polled after the anchor until it holds or the deadline passes: bounded liveness | `# hydo: within=20 after=heal poll=1` (`after=start` counts from the start of the workload, `after=commands` from the end of the `eventually_` commands) |
 | `linearizable_<name>` | the file is the final read-back; the host checks the recorded history | `# hydo: history=kv model=register` (or `model=cas`, `initial=any`) |
 | `list_append_<name>` | the same, for list appends | `# hydo: history=log consistency=strict-serializable` |
 
@@ -25,13 +25,22 @@ example `lost 3 of 20 acknowledged messages`. A list of ids in it makes every co
 finding.
 The last output line is the explanation; it becomes the details of the property's
 `HYDO-ASSERT` record and, for the first violation, of the verdict line
-`HYDO-ORACLE: VIOLATION [<id>] <details>`. Start every check by testing that the store answers,
+`HYDO-ORACLE: VIOLATION [<id>] <details>`. When the check fails, the lines before it are kept
+too. Up to the last 20 lines (2,000 bytes) go into `result.json` as the finding's
+`details.output`, and `hydo report` prints them under the finding. So a check that lists what
+differs needs no copy of its output on `/dev/console`. Start every check by testing that the store answers,
 and `exit 2` if not, so a killed service is not reported as a violation. An `eventually_` check
 returns 0 when satisfied and anything else for "not yet"; a missed deadline is a violation.
 To choose `within=`, look at two outputs. `hydo run` prints how many seconds of guest time each
 `eventually_` check needed. An exploration's `report.md` (section `Liveness`) gives, per check,
 the slowest run that held in time, the deadline, and the slowest run that held only after it,
 with the deadline that run needed.
+
+An `eventually_` check that waits for something an `eventually_` command makes happen takes
+`after=commands`. The `eventually_` commands then run first, and the check's deadline counts from
+their end. With the default `after=heal` the check is polled from the end of the faults, before
+the commands run. So a command that steps the clock to a billing time cannot help a check that
+waits for the invoice.
 
 Use `always_` for properties that can break and heal during the run (stale reads, a negative
 balance seen for a moment). An `always_` check runs only while the workload lasts, so keep the

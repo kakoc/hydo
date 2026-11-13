@@ -8,6 +8,7 @@ mod support;
 mod cluster_faults;
 mod corpus;
 mod identity;
+mod lago_gaps;
 mod liveness_deadline;
 mod messages_results;
 mod names;

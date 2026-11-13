@@ -44,6 +44,10 @@ rules that matter most:
   power at a `cf=` cut. The run then goes on without `workload.retry`, and a power cut's recovery
   boot still gives the verdict. Without a cut the verdict is ERROR, naming the service. The
   reference is `hydo guide manifest`, section `A restart after the faults that may fail`.
+- `job: true` for a one-shot job, such as a database migration, whose command the services that
+  wait for it run in their `setup:`. Its own service only idles, so the explorer never draws a
+  fault on it. `hydo compose` writes the key for Compose's `condition:
+  service_completed_successfully` (`hydo guide manifest`, section `One-shot jobs`).
 - `provision`: schemas, topics, users: what must exist before the window under test. Seed data
   that belongs to the test is a `first_<name>` command instead.
 - Images: `image:` plus `mounts:` (bind, volume, tmpfs) and `user:`; tools inside an image run as

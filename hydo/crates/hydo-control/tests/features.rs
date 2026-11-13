@@ -263,6 +263,10 @@ fn written_here(p: &Plan) -> Vec<String> {
         format!("disk=none | run B=1 B=deadbeef,500,20 K={a}@{mid}+1"),
         format!("disk=cut | run B=ff,1000,1000 C={mid}"),
         "rb=1 | run T=1:60".to_string(),
+        // clock steps to a time (M225): a calendar boundary and a minute of every hour
+        format!("disk=none | run T={mid}:@month+10m"),
+        "disk=none | run T=0:@:10-2s".to_string(),
+        format!("disk=cut | run T=1:@day C={mid}"),
     ];
     v.dedup();
     v
@@ -361,6 +365,7 @@ fn paths_of(items: &[Item], conv: &str, cov: &mut BTreeMap<String, usize>) {
                     (": late after ", "live-late"),
                     (": expired after ", "live-expired"),
                     ("date -s failed", "T-set-refused"),
+                    ("s to @", "T-to"),
                     ("recovery boot: realtime clock set to", "recovery-clock"),
                     ("BUGGIFY ", "buggify"),
                     ("liveness anchor 'heal'", "anchor-heal"),
@@ -531,6 +536,7 @@ fn the_feature_controllers_recorded_transcripts() {
         "run:status-143",
         "run:T-back",
         "run:T-fwd",
+        "run:T-to",
         "run:T-set-refused",
         "run:T-not-applied",
         "run:clock-set-refused",

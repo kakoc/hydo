@@ -174,6 +174,8 @@ pub struct S {
     pub p: Option<Pause>,
     /// T=at:delta
     pub t: Option<(i64, i64)>,
+    /// T=at:@point (Milestone 225): the point's text; then `t`'s delta is 0.
+    pub tp: Option<String>,
     /// O=svc@a-b:dir:netem
     pub o: Option<(String, i64, i64, String, Kinds)>,
     /// `Q=n[d]`

@@ -88,6 +88,9 @@ pub struct ComposePlan {
     pub has_first: bool,
     /// The project's own provisioning before `) && compose.sh first`.
     pub own_provision: Option<String>,
+    /// `test.first_records` (Milestone 225): the run's `$HYDO_ACKED` and `$HYDO_OUTCOMES` keep
+    /// what provisioning (the `first` commands) wrote to them.
+    pub first_records: bool,
 }
 
 fn int(v: &Value) -> i64 {
@@ -171,6 +174,7 @@ impl ComposePlan {
             saved,
             has_first,
             own_provision,
+            first_records: meta.get("first_records") == Some(&Value::Bool(true)),
         }))
     }
 }
@@ -1400,6 +1404,18 @@ pub(super) fn eval(
     Ok(None)
 }
 
+/// Whether an invariant's command is `compose.sh end IDX` of an `eventually` command.
+pub(super) fn is_eventually_cmd(ctx: &Ctx, cmd: &str) -> bool {
+    let Some(cp) = ctx.plan.compose.as_ref() else {
+        return false;
+    };
+    cmd.strip_prefix(SH)
+        .and_then(|r| r.strip_prefix(" end "))
+        .and_then(|i| i.parse::<usize>().ok())
+        .and_then(|i| cp.commands.get(i))
+        .is_some_and(|c| c.kind == "eventually")
+}
+
 /// endc IDX: an eventually or finally command as an invariant.
 fn end_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize, exports: &BTreeMap<String, String>) -> Step<Ran> {
     let c = &plan(ctx).commands[i];
@@ -1453,6 +1469,10 @@ fn end_cmd(fx: &mut F<'_>, ctx: &Ctx, i: usize, exports: &BTreeMap<String, Strin
     let (asserts, last) = asserts_and_last(&out);
     for a in asserts {
         fx.report(a);
+    }
+    if st != 0 {
+        // the command's output before its last line (Milestone 225)
+        super::check_output(fx, &c.id, &String::from_utf8_lossy(&out));
     }
     Ok(if st == 0 {
         Ran {
