@@ -1,0 +1,19 @@
+#!/bin/sh
+# hydo: timeout=900
+# Before the snapshot every run starts from: 24,000 messages of 1,000 bytes in the stream, so that
+# each node's store holds several 8 MB blocks and a corrupted block can lie in the middle of the
+# stream (Jepsen's finding 3.2). Each acknowledged value goes to $HYDO_ACKED, which
+# test.first_records keeps for the run, so the checks also look for every one of them.
+. /hydo/workload/helper_lib.sh
+NB=/bin/natsbulk-$(uname -m)
+timeout 800 $NB fill f 24000 1000 > /tmp/natsbulk.out 2> /tmp/natsbulk.err; rc=$?
+cat /tmp/natsbulk.err
+n=$(grep -c . /tmp/natsbulk.out)
+cat /tmp/natsbulk.out >> "$HYDO_ACKED"
+rm -f /tmp/natsbulk.out /tmp/natsbulk.err
+echo "fill rc=$rc acknowledged=$n" | tee /dev/console
+# the files of the stream on each node, on the console (which blocks there are)
+for d in /data/vol/n1-data /data/vol/n2-data /data/vol/n3-data; do
+  find "$d" -path '*streams/jepsen/msgs/*' -type f -exec ls -l {} \; 2>/dev/null | awk '{ print "fill:", $5, $9 }' > /dev/console
+done
+exit $rc

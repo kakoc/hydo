@@ -637,7 +637,7 @@ impl Space {
             s.x = None;
         }
         if s.g.as_ref().is_some_and(|g| {
-            !self.storage_fault_allowed("corrupt") || !self.storage_svcs.contains(&g.svc)
+            !self.storage_fault_allowed("corrupt") || !self.storage_target_ok(&g.svc)
         }) {
             s.g = None;
         }
@@ -743,6 +743,30 @@ impl Space {
         for a in s.a.iter_mut() {
             a.at = at(a.at);
         }
+    }
+
+    /// A G= target whose every service has `storage:` (Milestone 245: a list, or a group's
+    /// selector over a group whose members all have it; a plain service as before).
+    pub fn storage_target_ok(&self, t: &str) -> bool {
+        if let Some((g, _)) = t.split_once('.') {
+            return self
+                .groups
+                .iter()
+                .find(|x| x.name == g)
+                .is_some_and(|x| x.members.iter().all(|m| self.storage_svcs.contains(m)));
+        }
+        t.split(',')
+            .all(|x| self.storage_svcs.iter().any(|s| s == x))
+    }
+
+    /// The groups whose every member has `storage:` (the G= selectors `--corrupt-several` draws).
+    pub fn storage_groups(&self) -> Vec<&SpaceGroup> {
+        self.groups
+            .iter()
+            .filter(|g| {
+                !g.members.is_empty() && g.members.iter().all(|m| self.storage_svcs.contains(m))
+            })
+            .collect()
     }
 
     /// A K=, P= or X= target this project has (M195): a plain service is left to the other

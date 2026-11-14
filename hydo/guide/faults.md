@@ -22,11 +22,16 @@ call`, `Clock steps to a time`, `Clock after a power cut`, `Link faults`, `One-s
 | `freeze` | stop a service at the n-th packet it sends to or receives from a peer (on a Mac: a release with the second guest kernel) | `F=<svc>><peer>@<step>#<n>:<ms>` |
 | `protocol` | faults on fakes and proxies (`hydo guide outside-services`) | `H=...` |
 | `corrupt` | bit flips, zeroed ranges or truncation of one file in a service's `storage:` directory, while the service runs or while it is down | `G=<svc>@<step>[+<down>]:flip\|zero\|trunc[,n=][,len=][,file=][,seed=]` |
-| `powerloss` | a power loss of one service: what it had not written back to its own file system (`storage: {dir:, size_mib:}`) is lost, the others run on | `L=<svc>@<step>+<down>` |
+| `powerloss` | a power loss of one service: what it had not written back to its own file system (`storage: {dir:, size_mib:}`) is lost, the others run on | `L=<svc>@<step>+<down>[:strict]` |
 
 `<step>` counts the workload's steps: a step is one numbered part of `workload.run`, or one round
 of commands of the test composer (`workload.steps` sets how many). A fault at step n happens
 before step n runs.
+
+`G=` takes a list or a group's selector too, as `K=` does: `G=n1,n3@10+2:flip` corrupts one file
+of each service (section "Faults on a cluster"). `L=<svc>@<step>+<down>:strict` is a harsher
+power loss. The service loses every write it had not synced, also what Linux had written back.
+With `network: bridge` its peers hear nothing from it while it is down.
 
 Leave out kinds that cannot apply (no `network` for a project whose services have no port).
 `corrupt` and `powerloss` need `services[].storage` (`hydo guide manifest`, "Storage faults of
@@ -151,6 +156,7 @@ groups:
 | `K=nodes.majority@5+2` | kills floor(n/2)+1 members (`nodes.majority.1` picks the next subset) |
 | `K=nodes.primary@5+1` | kills the member that `primary:` prints before round 5 |
 | `P=nodes.minority@3+2` | pauses floor(n/2) members; `X=` takes the same targets |
+| `G=nodes.majority@5+2:flip,file=.blk` | kills floor(n/2)+1 members, flips a bit in one `.blk` file of each, starts them again before round 7; `G=n1,n3@5+2:...` names them |
 | `N=nodes.halves@3-9:loss,100%` | cuts the links between two halves of the group (both ways) |
 | `N=nodes.isolate.2@3-9:loss,100%` | cuts the third member off from the others |
 | `N=nodes.primary@3-9:loss,100%` | cuts the leader off from the others |
@@ -363,7 +369,8 @@ Useful options of `hydo explore`:
 - `--concurrency`: concurrent clients, through a manifest knob `Q`.
 - `--durable-only`: only durable settings and an honest disk.
 - `--protocol-faults`, `--grpc-faults`, `--buggify`.
-- `--storage-faults`: `G=` and `L=` for services with `storage:`.
+- `--storage-faults`: `G=` and `L=` for services with `storage:`. Add `--corrupt-several` to
+  make half of the `G=` tokens hit several services: a group's selector, or a list of two.
 - `--cluster-faults`: kills, pauses, and partitions of the services of `groups:`.
 - `--pause-workload`: pauses of the workload's own processes (section "Pause the workload").
 - `--pause-thread <name>`: pauses of named threads of the workload, with `--pause-min` and

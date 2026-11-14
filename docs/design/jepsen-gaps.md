@@ -13,7 +13,8 @@ differences from this proposal:
   identity corpus records that behaviour.
 - The explorer option is `--cluster-faults`, which draws both node sets and partitions.
 - A selector's index follows the selector (`nodes.majority.2`), and `G=` and `L=` stay one
-  service.
+  service. Milestone 245 gave `G=` the list and the selectors too (`G=n1,n3@...`,
+  `G=nodes.majority@...`, docs/design/storage-faults.md); `L=` stays one service.
 
 Sources read (the `main` branches on 2026-11-08):
 

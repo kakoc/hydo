@@ -20,15 +20,21 @@
 //!   What the service wrote and the kernel had written back stays (a disk that kept every write
 //!   it was given); what it had not is gone. The other services run on. The service starts again
 //!   before step at+down.
+//! - **The strict `L=`** (Milestone 245; [`strict_start`], [`links_up`]): before the first step
+//!   the guest's periodic writeback is turned off and the service's file system mounted again
+//!   without `auto_da_alloc`, so its disk receives only what it syncs; at the loss its bridge
+//!   port is set down right after it stops (its peers hear nothing, also not the end of its
+//!   connections) and up again before it starts.
 //! - **`G=`, corruption** ([`corrupt`]): with `+down` the service is killed first and started
-//!   again before step at+down; without it the files change under the running service. The
+//!   again before step at+down; without it the files change under the running service. A list
+//!   or a group's selector (Milestone 245) kills every service first, then corrupts each. The
 //!   changes are written through the page cache with busybox `dd`, so they are subject to the
 //!   same durability as any write (a later whole-guest power cut may take them away).
 
 use super::{bb, busybox, call, die_oracle, log, run, sh, svc_sig, xassert, Ctx, F};
 use crate::flow::Step;
 use crate::plan::PlanStorage;
-use hydo_agent_proto::msg::{Command, Mkdir, Mount, Read, Reply, Sig, Signal};
+use hydo_agent_proto::msg::{Command, Mkdir, Mount, MountFlag, Read, Reply, Sig, Signal};
 use hydo_schedule::{Corruption, Edit};
 
 /// The assertion declarations of a schedule with G= or L= (type, id, message).
@@ -231,10 +237,172 @@ pub(super) fn corrupt(fx: &mut F<'_>, ctx: &Ctx, svc: &str, how: &Corruption, p:
     Ok(())
 }
 
-/// L=: the power loss of one service (the module comment). Ok(()) also when the service has no
-/// own file system (logged, nothing done); a file system that does not come back is the
-/// verdict `HYDO-ORACLE: VIOLATION <svc> storage unmountable after its power loss (...)`.
-pub(super) fn power_loss(fx: &mut F<'_>, ctx: &Ctx, svc: &str, p: i64) -> Step<bool> {
+/// The kernel's name of a partition (`/dev/vda6` -> `vda6`).
+fn dev_name(dev: &str) -> String {
+    dev.rsplit('/').next().unwrap_or(dev).to_string()
+}
+
+/// The sectors written to a partition since the guest's boot (the seventh number of
+/// `/sys/class/block/<name>/stat`), None when the file cannot be read.
+fn sectors_written(fx: &mut F<'_>, ctx: &Ctx, name: &str) -> Step<Option<u64>> {
+    let b = bb(ctx);
+    let r = run(
+        fx,
+        sh(ctx, format!("{b} cat /sys/class/block/{name}/stat")),
+        Vec::new(),
+        Some(512),
+    )?;
+    Ok(r.out
+        .split_whitespace()
+        .nth(6)
+        .and_then(|x| x.parse::<u64>().ok()))
+}
+
+/// A strict `L=` (Milestone 245), before the workload's first step: from now on Linux writes no
+/// dirty page back on its own, so the service's disk receives only what it syncs.
+///
+/// - `vm.dirty_writeback_centisecs` is set to 0: the kernel's flusher threads no longer write
+///   dirty pages back after 30 s. The setting is the guest's, so every service's unsynced
+///   writes stay in the page cache too: they see no difference while they run (their reads hit
+///   the cache), but a whole-guest power cut in the same run takes more of them away.
+/// - The service's own file system is mounted again without ext4's `auto_da_alloc`, which writes
+///   a file's data back when a program replaces the file by a rename or truncates it to zero.
+///
+/// What still reaches the disk without a sync: the journal's metadata every 5 s, and dirty data
+/// beyond the kernel's dirty thresholds (`vm.dirty_background_ratio`). The power loss logs both
+/// the dirty pages and the sectors written to the partition, so a run shows what was written.
+/// Returns the partition's sectors written so far, None when the service has no own file system
+/// (the power loss then logs it and does nothing).
+pub(super) fn strict_start(fx: &mut F<'_>, ctx: &Ctx, svc: &str) -> Step<Option<u64>> {
+    let l = &ctx.plan.layout;
+    let Some((st, dev)) = ctx
+        .plan
+        .storage_of(svc)
+        .and_then(|s| s.dev(l).map(|d| (s, d)))
+    else {
+        return Ok(None);
+    };
+    let b = bb(ctx);
+    let r = run(
+        fx,
+        sh(
+            ctx,
+            format!(
+                "w=/proc/sys/vm/dirty_writeback_centisecs; {b} cat $w; echo 0 > $w && {b} cat $w"
+            ),
+        ),
+        Vec::new(),
+        Some(512),
+    )?;
+    if r.status != 0 {
+        return die_oracle(
+            fx,
+            format!(
+                "HYDO-ORACLE: ERROR strict power loss of {svc}: the kernel's periodic writeback \
+                 could not be turned off ({})",
+                r.out.trim()
+            ),
+        );
+    }
+    let was = r.out.split_whitespace().next().unwrap_or("?").to_string();
+    let mut flags = ctx.mount_flags.clone();
+    flags.push(MountFlag::Remount);
+    let id = fx.send(Command::Mount(Mount {
+        src: dev.clone(),
+        dst: st.dir.clone(),
+        fstype: l.data_fstype.clone(),
+        flags: Some(flags),
+        data: Some(format!("{},noauto_da_alloc", vol_data(ctx))),
+    }))?;
+    if let Err(e) = fx.reply(id)? {
+        return die_oracle(
+            fx,
+            format!(
+                "HYDO-ORACLE: ERROR strict power loss of {svc}: {dev} could not be mounted \
+                 again without auto_da_alloc ({})",
+                e.msg
+            ),
+        );
+    }
+    let name = dev_name(&dev);
+    let sectors = sectors_written(fx, ctx, &name)?.unwrap_or(0);
+    log(
+        fx,
+        format!(
+            "STRICT power loss of {svc} armed: no periodic writeback (vm.dirty_writeback_centisecs \
+             {was} -> 0), {dev} without auto_da_alloc, {sectors} sectors written to it so far"
+        ),
+    );
+    Ok(Some(sectors))
+}
+
+/// The service's links on the bridge cut or given back (network: bridge): its bridge port
+/// `vh<i>` set down or up. Down, nothing the service's namespace sends leaves it and nothing
+/// reaches it, so its peers hear nothing, as from a machine without power; its kernel's
+/// answers to them (the end of its connections when it is killed) are lost too. Ok(false)
+/// without network: bridge (logged).
+fn links(fx: &mut F<'_>, ctx: &Ctx, svc: &str, up: bool) -> Step<bool> {
+    if !ctx.plan.bridge || ctx.plan.layout.ip.is_empty() {
+        if !up {
+            log(
+                fx,
+                format!(
+                    "L: {svc}'s links are not cut (the manifest has no network: bridge, so the \
+                     services share one network)"
+                ),
+            );
+        }
+        return Ok(false);
+    }
+    let vh = super::netns::veth(ctx, svc);
+    let mut argv: Vec<String> = ctx
+        .plan
+        .layout
+        .ip
+        .split_whitespace()
+        .map(str::to_string)
+        .collect();
+    argv.extend(
+        ["link", "set", vh.as_str(), if up { "up" } else { "down" }]
+            .iter()
+            .map(|x| x.to_string()),
+    );
+    let r = run(fx, argv, Vec::new(), Some(512))?;
+    if r.status != 0 {
+        return die_oracle(
+            fx,
+            format!(
+                "HYDO-ORACLE: ERROR power loss of {svc}: its bridge port {vh} could not be set {} \
+                 ({})",
+                if up { "up" } else { "down" },
+                r.out.trim()
+            ),
+        );
+    }
+    Ok(true)
+}
+
+/// A strict power loss's service is back: its links first (before it starts again).
+pub(super) fn links_up(fx: &mut F<'_>, ctx: &Ctx, svc: &str, when: &str) -> Step<()> {
+    if links(fx, ctx, svc, true)? {
+        log(fx, format!("LINKS of {svc} back {when}"));
+    }
+    Ok(())
+}
+
+/// L=: the power loss of one service (the module comment). Gives (whether the service is down,
+/// whether its links are cut); (false, false) also when the service has no own file system
+/// (logged, nothing done); a file system that does not come back is the verdict
+/// `HYDO-ORACLE: VIOLATION <svc> storage unmountable after its power loss (...)`. `strict`
+/// (Milestone 245): the sectors [`strict_start`] found written; the service's links are cut
+/// right after it stops, and the dirty pages and the partition's writes are logged.
+pub(super) fn power_loss(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    svc: &str,
+    p: i64,
+    strict: Option<u64>,
+) -> Step<(bool, bool)> {
     let l = &ctx.plan.layout;
     let Some((st, dev)) = ctx
         .plan
@@ -245,7 +413,7 @@ pub(super) fn power_loss(fx: &mut F<'_>, ctx: &Ctx, svc: &str, p: i64) -> Step<b
             fx,
             format!("L: {svc} has no own file system (storage.size_mib), ignored"),
         );
-        return Ok(false);
+        return Ok((false, false));
     };
     // the instant the power goes: every thread of the service stops
     super::post(
@@ -257,8 +425,39 @@ pub(super) fn power_loss(fx: &mut F<'_>, ctx: &Ctx, svc: &str, p: i64) -> Step<b
             wait_stopped: Some(true),
         }),
     )?;
-    let name = dev.rsplit('/').next().unwrap_or(&dev).to_string();
+    let name = dev_name(&dev);
     let b = bb(ctx);
+    let mut cut = false;
+    if let Some(before) = strict {
+        // its machine is gone: no packet leaves or reaches it, also not the end of its
+        // connections when its processes are killed below
+        cut = links(fx, ctx, svc, false)?;
+        let r = run(
+            fx,
+            sh(
+                ctx,
+                format!("{b} grep -E '^(Dirty|Writeback):' /proc/meminfo"),
+            ),
+            Vec::new(),
+            Some(512),
+        )?;
+        let mem: Vec<String> = r
+            .out
+            .lines()
+            .map(|x| x.split_whitespace().collect::<Vec<_>>().join(" "))
+            .collect();
+        let now = sectors_written(fx, ctx, &name)?.unwrap_or(0);
+        log(
+            fx,
+            format!(
+                "STRICT power loss of {svc} before step {p}: {} sectors written to {dev} since \
+                 the run's start; the guest's {}{}",
+                now.saturating_sub(before),
+                mem.join(", "),
+                if cut { "; its links cut" } else { "" }
+            ),
+        );
+    }
     let r = run(
         fx,
         sh(
@@ -325,13 +524,23 @@ pub(super) fn power_loss(fx: &mut F<'_>, ctx: &Ctx, svc: &str, p: i64) -> Step<b
             ),
         );
     }
-    log(
-        fx,
-        format!(
-            "POWER LOSS of {svc} before step {p} ({dev} shut down and mounted again; what was not written back is lost)"
-        ),
-    );
+    if strict.is_some() {
+        log(
+            fx,
+            format!(
+                "POWER LOSS of {svc} before step {p} ({dev} shut down and mounted again; what was not synced is lost{})",
+                if cut { "; its links stay cut until it starts again" } else { "" }
+            ),
+        );
+    } else {
+        log(
+            fx,
+            format!(
+                "POWER LOSS of {svc} before step {p} ({dev} shut down and mounted again; what was not written back is lost)"
+            ),
+        );
+    }
     let (t, id, msg) = POWER_LOSS_DECL;
     xassert(fx, t, id, msg);
-    Ok(true)
+    Ok((true, cut))
 }

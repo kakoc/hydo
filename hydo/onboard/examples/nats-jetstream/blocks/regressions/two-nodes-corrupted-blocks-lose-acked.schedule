@@ -1,0 +1,8 @@
+# Jepsen's NATS 2.12.1 analysis, section 3.2 (nats-server issue 7549): corrupted blocks on two
+# of the three nodes lose acknowledged messages. 64 KiB of the first stream block of n1 and n3
+# are zeroed while both are down (steps 10 to 12). Before step 16 n2, the one node that kept
+# every message, is killed for 6 steps, so a corrupted node leads the stream; the readers then
+# miss the messages of the corrupted block after its first bad one. Values: RESULTS.md,
+# "Corrupted blocks on two nodes".
+# expect: violation
+disk=none | run G=n1,n3@10+2:zero,len=65536,file=jepsen/msgs/1.blk K=n2@16+6

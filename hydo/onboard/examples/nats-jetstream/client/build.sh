@@ -8,3 +8,7 @@ mkdir -p ../bin
 CGO_ENABLED=0 GOOS=linux GOARCH=$arch GOFLAGS=-mod=mod \
   go build -trimpath -buildvcs=false -ldflags "-s -w -buildid=" -o "../bin/natsjs-$arch" .
 shasum -a 256 "../bin/natsjs-$arch"
+# the bulk publisher of blocks/ (a program of its own, so natsjs keeps its bytes)
+CGO_ENABLED=0 GOOS=linux GOARCH=$arch GOFLAGS=-mod=mod \
+  go build -trimpath -buildvcs=false -ldflags "-s -w -buildid=" -o "../bin/natsbulk-$arch" ./bulk
+shasum -a 256 "../bin/natsbulk-$arch"

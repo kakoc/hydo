@@ -28,6 +28,9 @@ services:
     cmd: web-server
     ready: \"true\"
     storage: web
+groups:
+  - name: st
+    services: [db, web]
 workload:
   steps: 8
   run: client
@@ -186,6 +189,167 @@ fn a_kill_and_a_storage_fault_on_one_service_restart_it_once() {
         "{:#?}",
         notes(&r.run.items)
     );
+}
+
+/// Milestone 245: `G=` on a list kills every service of it first, then corrupts each (the k-th
+/// with the seed plus k), and starts each again; a group's selector is resolved and logged.
+#[test]
+fn a_corruption_of_several_services_kills_all_first() {
+    let r = run(&plan(), "disk=none | run G=db,web@3+2:flip,seed=5");
+    let ns = notes(&r.run.items);
+    let at = |s: &str| {
+        ns.iter()
+            .position(|n| n.contains(s))
+            .unwrap_or_else(|| panic!("{s}: {ns:#?}"))
+    };
+    let (kd, kw) = (
+        at("KILLED db before step 3 (to corrupt its files)"),
+        at("KILLED web before step 3 (to corrupt its files)"),
+    );
+    let (gd, gw) = (
+        at("G: no file to change in /data/db"),
+        at("G: no file to change in /data/web"),
+    );
+    assert!(kd < kw && kw < gd && gd < gw, "{ns:#?}");
+    assert!(at("restarting db before step 5") < at("restarting web before step 5"));
+    verdict(&r.run);
+    let r = run(&plan(), "disk=none | run G=st.all@3:zero");
+    let ns = notes(&r.run.items);
+    assert!(has(&ns, "G: st.all = db,web"), "{ns:#?}");
+    assert!(!has(&ns, "KILLED"), "{ns:#?}");
+    // one known service in a list takes the plain path: the same fault lines as the plain token
+    // (the scripted guest's later answers depend on the schedule's text)
+    let fault_lines = |sched: &str| -> Vec<String> {
+        notes(&run(&plan(), sched).run.items)
+            .into_iter()
+            .filter(|n| n.contains("KILLED") || n.contains("G: ") || n.contains("restarting"))
+            .collect()
+    };
+    let a = fault_lines("disk=none | run G=web@3+2:flip,seed=5");
+    let b = fault_lines("disk=none | run G=web,nosuch@3+2:flip,seed=5");
+    assert_eq!(
+        b,
+        [
+            vec!["hydo-ob: G: no service nosuch, ignored".to_string()],
+            a
+        ]
+        .concat()
+    );
+}
+
+/// Milestone 245: the strict power loss turns the periodic writeback off and mounts the
+/// service's file system again without auto_da_alloc before the first step, logs what reached
+/// the disk at the loss, and, without network: bridge, says that the links are not cut.
+#[test]
+fn a_strict_power_loss_stops_the_writeback_first() {
+    let r = run(&plan(), "disk=none | run L=db@2+2:strict");
+    let cs = runs(&r.run.items);
+    let ns = notes(&r.run.items);
+    let wb = cs
+        .iter()
+        .position(|c| c.contains("echo 0 > $w"))
+        .unwrap_or_else(|| panic!("{cs:#?}"));
+    let fe = cs
+        .iter()
+        .position(|c| c.contains("trigger_fs_error"))
+        .unwrap();
+    assert!(wb < fe);
+    let m = mounts(&r.run.items);
+    assert_eq!(
+        m[0],
+        (
+            "/dev/vda5".into(),
+            "/data/db".into(),
+            Some("errors=remount-ro,noauto_da_alloc".into())
+        ),
+        "{m:?}"
+    );
+    assert!(r.run.items.iter().any(|i| matches!(i,
+        Item::Send { cmd: Command::Mount(m), .. }
+            if m.flags.as_ref().is_some_and(|f| f.contains(&hydo_agent_proto::msg::MountFlag::Remount)))));
+    assert!(has(&ns, "STRICT power loss of db armed"), "{ns:#?}");
+    assert!(has(&ns, "STRICT power loss of db before step 2"), "{ns:#?}");
+    assert!(has(&ns, "L: db's links are not cut"), "{ns:#?}");
+    assert!(
+        has(
+            &ns,
+            "POWER LOSS of db before step 2 (/dev/vda5 shut down and mounted again; what was not synced is lost)"
+        ),
+        "{ns:#?}"
+    );
+    assert!(has(&ns, "restarting db before step 4"), "{ns:#?}");
+    // the plain power loss sends none of it
+    let r = run(&plan(), "disk=none | run L=db@2+2");
+    assert!(!runs(&r.run.items).iter().any(|c| c.contains("echo 0 > $w")));
+    assert!(!has(&notes(&r.run.items), "STRICT"));
+}
+
+/// Milestone 245: with network: bridge the strict power loss sets the service's bridge port down
+/// right after it stops, and up again before it starts (or at the end, if it is down then).
+#[test]
+fn a_strict_power_loss_cuts_the_links_while_down() {
+    let text = "name: storage-bridge
+network: bridge
+data:
+  dirs: [db]
+services:
+  - name: db
+    cmd: db-server
+    ready: db-ping
+    addr: 10.89.0.11
+    port: 4001
+    storage: {dir: db, size_mib: 64}
+  - name: peer
+    cmd: peer-server
+    ready: \"true\"
+    addr: 10.89.0.12
+    port: 4002
+workload:
+  steps: 8
+  run: client
+invariants:
+  - id: all.done
+    final: true
+    cmd: final-check
+faults: [kill, powerloss, network]
+";
+    let m = hydo_manifest::from_embedded(text, None)
+        .unwrap_or_else(|e| panic!("the manifest: {e}\n{text}"));
+    let p = Plan::from_manifest(&m).unwrap();
+    for (s, back) in [
+        (
+            "disk=none | run L=db@2+2:strict",
+            "LINKS of db back before step 4",
+        ),
+        (
+            "disk=none | run L=db@6+9:strict",
+            "LINKS of db back at the end",
+        ),
+    ] {
+        let r = run(&p, s);
+        let cs = runs(&r.run.items);
+        let ns = notes(&r.run.items);
+        let down = cs
+            .iter()
+            .position(|c| c.ends_with("link set vh1 down"))
+            .unwrap_or_else(|| panic!("{s}: {cs:#?}"));
+        let up = cs
+            .iter()
+            .position(|c| c.ends_with("link set vh1 up"))
+            .unwrap_or_else(|| panic!("{s}: {cs:#?}"));
+        let fe = cs
+            .iter()
+            .position(|c| c.contains("trigger_fs_error"))
+            .unwrap();
+        assert!(down < fe && fe < up, "{s}: {cs:#?}");
+        assert!(has(&ns, back), "{s}: {ns:#?}");
+        assert!(has(&ns, "its links cut"), "{s}: {ns:#?}");
+    }
+    // the plain power loss leaves the links alone
+    let r = run(&p, "disk=none | run L=db@2+2");
+    assert!(!runs(&r.run.items)
+        .iter()
+        .any(|c| c.contains("link set vh1")));
 }
 
 /// An image service has its storage directory bound into its root (`mounts:`); that bind kept the

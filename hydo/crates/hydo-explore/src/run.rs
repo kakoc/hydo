@@ -556,6 +556,13 @@ fn setup(a: Args, env: &Env) -> Cx {
     }
     cx.ex.more_faults = a.more_faults;
     cx.ex.storage_faults = a.storage_faults;
+    // Milestone 245: a drawn G= on several services at once
+    if a.corrupt_several && !a.storage_faults {
+        die(
+            "hydo explore: --corrupt-several changes the G= that --storage-faults draws; give both",
+        );
+    }
+    cx.ex.corrupt_several = a.corrupt_several;
     // M195: kills, pauses and partitions of the manifest's groups
     let has_groups = m
         .as_ref()

@@ -11,12 +11,19 @@
 //!   longer than `from` does not qualify). `file=` keeps only files whose path (relative to the
 //!   storage directory) contains the text; `seed=` chooses the file and the places (default 0).
 //!   The choice is a pure
-//!   function of the token and of the directory's contents at that moment.
-//! - `L=<svc>@<at>+<down>`: before step `at` the service is stopped, its own file system (a
-//!   service with `storage: {size_mib: ...}`) is shut down so that nothing more reaches its disk,
-//!   the service is killed and the file system mounted again (its journal replayed); what the
-//!   service had written but the kernel had not yet written back is lost. It starts again before
-//!   step `at+down`.
+//!   function of the token and of the directory's contents at that moment. Since Milestone 245
+//!   the service may be a list (`G=n1,n3@...`) or a group's selector (`G=nodes.minority@...`), as
+//!   for `K=`: each service gets its own corruption, the k-th of them (from 0) with the seed
+//!   plus k, so one service's corruption is the token's as before.
+//! - `L=<svc>@<at>+<down>[:strict]`: before step `at` the service is stopped, its own file
+//!   system (a service with `storage: {size_mib: ...}`) is shut down so that nothing more reaches
+//!   its disk, the service is killed and the file system mounted again (its journal replayed);
+//!   what the service had written but the kernel had not yet written back is lost. It starts
+//!   again before step `at+down`. `:strict` (Milestone 245): from the run's start Linux writes
+//!   no dirty data back on its own (no periodic writeback, and the service's file system without
+//!   ext4's writeback at a rename or a truncation), so every write the service had not synced is
+//!   lost; and the service's network links are cut from its stop to its start, so its peers hear
+//!   nothing from it instead of seeing its connections closed.
 
 use crate::num::{dec, err, hex};
 use crate::ParseError;
@@ -72,6 +79,19 @@ impl Corruption {
 
     pub fn seed(&self) -> u64 {
         self.seed.unwrap_or(0)
+    }
+
+    /// The corruption of the k-th service (from 0) of a `G=` list or group selector: the seed
+    /// plus k, so the first service's is the token's own and two services with the same files
+    /// get different places (Milestone 245).
+    pub fn nth(&self, k: u64) -> Corruption {
+        if k == 0 {
+            return self.clone();
+        }
+        Corruption {
+            seed: Some(self.seed().wrapping_add(k)),
+            ..self.clone()
+        }
     }
 
     pub(crate) fn parse(s: &str, what: &str) -> Result<Corruption, ParseError> {

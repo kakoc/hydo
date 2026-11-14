@@ -10226,3 +10226,109 @@ fmt and clippy have nothing new to check.
 **Left** (AGENTS.md open item 119). The kernel variant for the Mac and KVM engines, with its pins.
 A `guest.modules:` key, so that a project names modules and the release supplies them. Faults on
 one pod by name. More than one node, and operators from images.
+
+
+### Milestone 245 (tentative number) - DONE (`G=` on several services and the strict power loss `L=...:strict`; on hvx one VM reaches Jepsen's NATS 2.12.1 finding 3.2 with corrupted middle blocks on two nodes; nothing recorded moved; 2026-11-14)
+
+**In short.** Milestone 235 left two gaps between hydo and Jepsen's NATS 2.12.1 finding 3.2
+(corrupted `.blk` files on two of five nodes), and two ways in which hydo's power loss of one
+service was milder than a real one (open items 38 and 61). This milestone closes all four inside
+one VM. `G=` takes a list of services or a group's selector, and a workload fills several 8 MB
+blocks per node. With both, hvx reaches 3.2: the replicas differ for good, and with the intact
+node killed 2,456 acknowledged messages are lost. `L=<svc>@<at>+<down>:strict` loses every
+write the service had not synced, and its peers hear nothing from it while it is down.
+
+**`G=` on several services.** The token is `G=<target>@<at>[+<down>]:<corruption>`, where the
+target is a service, a list (`G=n1,n3@...`) or a group's selector (`G=nodes.majority@...`), as
+for `K=` (Milestone 195):
+
+- `hydo-schedule`: `GuestToken::Corrupt` has a `Target`, and `Corruption::nth(k)` gives the k-th
+  service (from 0) the seed plus k, so one service's corruption is the token's own. The describer
+  says "damaged files of `n1` and `n3`".
+- `hydo-control`: the target is read and resolved as for `K=` (a selector's choice is logged,
+  `G: nodes.majority = n1,n2`). With `+<down>` every service is killed first, then each gets its
+  corruption, then each starts again; a plain service sends exactly the commands it sent before.
+  The names check wants `storage:` on every service a target can name. A second `G=` is still
+  refused, and its message now names the list and the selector.
+- `hydo-explore`: the explorer reads and writes the list, the space's filter checks every
+  service, and the shrinker takes a list or a selector towards fewer services. The opt-in
+  `--corrupt-several` (with `--storage-faults`) turns half of the drawn `G=` tokens into a
+  group's selector (`minority`, `majority`, `all`) when a group's every member has `storage:`,
+  else into a list of two; its draws come from a stream of their own (`CORRUPT_SEVERAL_SALT`).
+
+**The strict power loss.** `L=<svc>@<at>+<down>:strict` (docs/design/storage-faults.md, section
+"The strict power loss"):
+
+- Before the first step the controller sets `vm.dirty_writeback_centisecs` to 0 and mounts the
+  service's own file system again without `auto_da_alloc`, and logs the partition's sectors
+  written so far. Linux then writes back nothing on its own, so the disk holds what the service
+  synced, the journal's metadata, and dirty data beyond the kernel's thresholds.
+- At the loss, right after the service's processes stop, its bridge port `vh<i>` is set down
+  (`network: bridge`), and the dirty pages and the sectors written since the start are logged.
+  The port is set up again before the service starts again, or at the end if it is still down.
+- Engine-side dropping of the partition's unflushed writes (the design's option 2) was not
+  chosen. Every ext4 journal commit flushes the whole disk every 5 s, so it would drop almost
+  nothing, and it needs a change of all three engines and of the hvx module. The writeback
+  setting is the guest's, so it works on every engine unchanged; its cost is that the other
+  services' unsynced writes stay in memory too (open item 61).
+
+**The NATS example.** `hydo/onboard/examples/nats-jetstream/blocks/` (new; `storage/` is
+unchanged) is `storage/` with a first command that publishes 24,000 messages of 1 KB before the
+snapshot every run starts from, `test.first_records: true`, and a check that reads the stream
+one message at a time. The bulk publisher and reader is a new program, `client/bulk/`
+(`natsbulk`), so that `natsjs` and the other images keep their bytes. Its RESULTS.md, section
+"Several nodes' corrupted blocks, and the strict power loss", has every table; in brief, on the
+default image:
+
+| schedule | verdict | fp |
+|---|---|---|
+| `disk=none \| run` | OK, 24,457 acknowledged messages read back | `524ae0f8c706a3c1` |
+| `G=n1,n3@10+2:flip,n=32,file=jepsen/msgs/1.blk` | VIOLATION, the replicas diverge (n1 7,241 and n3 8,073 messages deleted), twice | `575135a56fdc857f` |
+| `G=n1,n3@10+2:zero,len=65536,file=jepsen/msgs/1.blk K=n2@16+6` | VIOLATION, lost 2,456 of 24,446 acknowledged messages, twice | `2336929ebcaa0ec4` |
+| `G=n1@10+2:flip,n=32,file=jepsen/msgs/1.blk` | VIOLATION, the replicas diverge | `e3490b5fb6819c5e` |
+| the same flips in `3.blk`, the last block | OK | `04619d5fb5f45caa` |
+| the same flips on the `storage/` image (one block) | OK | `48c4d8c6d2aafa1e` |
+
+So the blocks decide the divergence (one corrupted node is enough), and the loss of acknowledged
+messages needs a majority of corrupted nodes with one of them leading. An fsync before every
+acknowledgement does not prevent it: the `always` image loses 5,209. Both 3.2 schedules are saved
+in `blocks/regressions/`. The plain `L=` and the plain `G=` on the `storage/` images built with
+this milestone's `hydo` gave Milestone 235's fingerprints and `ctl` values for 3.5
+(`de74a8ee1b353f37`, `46628f4bd1bd5cc3`). With `:strict`, `P=n1@60+92 L=n2@150+2 K=n3@152+6`
+loses 10 messages where the plain `L=` loses 3: 3,072 sectors reached n2's partition in 75 s
+with the plain form and 2,296 with the strict one. The first 3.5 schedule passes under `:strict`
+on the default image, because the stream stalls until the node with the messages is back.
+
+**The explorer on `blocks/`.** `hydo explore --seeds 1-8 --strategy process --storage-faults
+--corrupt-several --cluster-faults --workers 2 --no-shrink` drew `G=nodes.majority@140:trunc,...`
+and `G=nodes.all@237+1:zero,...`. Its seed 2 lost 4 acknowledged messages after flips in a middle
+block of the running stream leader. The kernel's out-of-memory killer ended the exploration after
+5 seeds, when other sessions' VMs filled the bare-metal machine's memory. Seeds that end with a
+whole-guest cut ran out of time in their recovery boot (`TIMEOUT recovery`).
+
+**Tests.** `cargo fmt --all --check` and Vale ran on the Mac. Everything else ran on the
+bare-metal machine, in a copy of this tree with Rust 1.90.0:
+
+- `cargo clippy -D warnings` with all targets on `hydo-schedule`, `hydo-control`,
+  `hydo-explore` and `hydo`;
+- the tests of `hydo-schedule`, `hydo-control` (`--test it`, with the core controller's corpus),
+  `hydo-explore` (`--test it`, with `identity::` and `corpus::`), `hydo-agents` (with
+  `public_content::`), `hydo-release`, `hydo-config`'s `inventory` and `hydo-schema-compat`;
+- `sh ci/consolidate-tests.sh --check`.
+
+All pass. `cargo test -p hydo --test it` ran on the Mac after the rebase onto `9841eedd` and
+passed (41 tests). On the bare-metal machine two of its tests depend on that machine's PATH and
+Nix paths, and they fail the same way on the base commit there:
+`onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path`, and the answer to
+`build .../stack/hydo.yaml --check` in `equivalence::cli_matches_golden`. New tests: `hydo-schedule`'s `storage_faults` (the list, the selector,
+`:strict`, `nth` and the refusals), three in `hydo-control`'s `storage::`, two cases in
+`silent::`, and `hydo-explore`'s
+`storage_faults::several_services_change_only_the_corruption_target`. The scripted guest of the
+control tests answers the strict power loss's commands, and the corpus golden did not change.
+Re-recorded on purpose: the CLI's golden answer for `hydo guide manifest` (MANIFEST.md changed).
+
+**Left** (open items 38, 61 and 120). Five nodes; the Mac engine and KVM did not run `blocks/` or
+`:strict`; the strict form's writeback setting is the whole guest's; a closed socket of the dead
+node can still send its end after the port is up; the explorer does not draw `:strict`. Seed 2's
+loss of 4 acknowledged messages was not investigated, and neither were the 46
+`HVX_HC_PUT: No space left on device` lines per explorer worker on the `blocks/` image.

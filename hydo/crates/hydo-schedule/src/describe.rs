@@ -513,7 +513,9 @@ fn thread_words(th: &ThreadSel) -> String {
     }
 }
 
-fn corruption_words(c: &Corruption) -> String {
+/// What a corruption does, after "hydo". `plural`: the target is several services, and each
+/// gets one changed file.
+fn corruption_words(c: &Corruption, plural: bool) -> String {
     let mut s = match c.kind {
         CorruptKind::Flip => {
             let n = c.flips();
@@ -525,7 +527,11 @@ fn corruption_words(c: &Corruption) -> String {
             None => "cuts a piece off the end of".into(),
         },
     };
-    s.push_str(" one of its files");
+    s.push_str(if plural {
+        " one file of each"
+    } else {
+        " one of its files"
+    });
     if let Some(f) = &c.file {
         s.push_str(&format!(" whose name contains {}", code(f)));
     }
@@ -865,8 +871,13 @@ fn guest_noun(t: &GuestToken, knobs: &[KnobInfo]) -> Option<String> {
         ),
         GuestToken::Freeze(f) => format!("a freeze of {}", code(&f.svc)),
         GuestToken::React(r) => format!("a reaction to {}", code(&r.event)),
-        GuestToken::Corrupt { svc, at, .. } => {
-            format!("a damaged file of {} {}", code(svc), after(*at))
+        GuestToken::Corrupt { target, at, .. } => {
+            let (who, pl) = target_words(target);
+            if pl {
+                format!("damaged files of {who} {}", after(*at))
+            } else {
+                format!("a damaged file of {who} {}", after(*at))
+            }
         }
         GuestToken::PowerLoss { svc, at, .. } => {
             format!("a power loss of {} {}", code(svc), after(*at))
@@ -1248,34 +1259,57 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
             .at(r.at)
             .fault(kind, ctx)
         }
-        GuestToken::Corrupt { svc, at, down, how } => {
-            let s = code(svc);
+        GuestToken::Corrupt {
+            target,
+            at,
+            down,
+            how,
+        } => {
+            let (s, pl) = target_words(target);
+            let (runs, a_file) = if pl {
+                ("run", "a file of each of")
+            } else {
+                ("runs", "a file of")
+            };
             let sentence = match down {
                 Some(d) => format!(
-                    "{}, hydo stops {s}, {} and starts it again {}.",
+                    "{}, hydo stops {s}, {} and starts {} again {}.",
                     cap(&after(*at)),
-                    corruption_words(how),
+                    corruption_words(how, pl),
+                    it_them(pl),
                     after(at + d)
                 ),
                 None => format!(
-                    "{}, while {s} runs, hydo {}.",
+                    "{}, while {s} {runs}, hydo {}.",
                     cap(&after(*at)),
-                    corruption_words(how)
+                    corruption_words(how, pl)
                 ),
             };
-            fault(sentence, format!("damage a file of {s} {}", after(*at)))
+            fault(sentence, format!("damage {a_file} {s} {}", after(*at)))
                 .at(*at)
-                .fault("damaged files", format!("after hydo damaged a file of {s}"))
+                .fault("damaged files", format!("after hydo damaged {a_file} {s}"))
         }
-        GuestToken::PowerLoss { svc, at, down } => {
+        GuestToken::PowerLoss {
+            svc,
+            at,
+            down,
+            strict,
+        } => {
             let s = code(svc);
-            fault(
+            let what = if *strict {
                 format!(
-                    "{}, {s} loses power on its own: what it had not yet written to its disk is \
-                     lost. It starts again {}.",
-                    cap(&after(*at)),
+                    "every write it had not synced to its disk is lost, and the other services \
+                     hear nothing from it until it starts again {}.",
                     after(at + down)
-                ),
+                )
+            } else {
+                format!(
+                    "what it had not yet written to its disk is lost. It starts again {}.",
+                    after(at + down)
+                )
+            };
+            fault(
+                format!("{}, {s} loses power on its own: {what}", cap(&after(*at))),
                 format!("{s} loses power {}", after(*at)),
             )
             .at(*at)

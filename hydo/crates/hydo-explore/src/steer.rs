@@ -300,7 +300,7 @@ fn slots(s: &mut S) -> Vec<Slot<'_>> {
             v.push(slot(d, Step, 1));
         }
     }
-    if let Some((_, at, down)) = s.l.as_mut() {
+    if let Some((_, at, down, _)) = s.l.as_mut() {
         v.push(slot(at, Step, 0));
         v.push(slot(down, Step, 1));
     }

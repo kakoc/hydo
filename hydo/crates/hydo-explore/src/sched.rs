@@ -198,15 +198,18 @@ pub struct S {
     pub rb: Option<i64>,
     /// A= reactions (M139), in token order.
     pub a: Vec<Ra>,
-    /// G=svc@at[+down]:what (corruption of one service's files).
+    /// G=target@at[+down]:what (corruption of the files of a service, a list of services or a
+    /// group's selector, Milestone 245).
     pub g: Option<Gz>,
-    /// L=svc@at+down (a power loss of one service).
-    pub l: Option<(String, i64, i64)>,
+    /// L=svc@at+down[:strict] (a power loss of one service; the last field is `:strict`,
+    /// Milestone 245).
+    pub l: Option<(String, i64, i64, bool)>,
     /// U= upgrades (Milestone 238), each the text after `U=`, in token order.
     pub u: Vec<String>,
 }
 
-/// A G= token: (service, step, steps down or None for in place, the corruption's text).
+/// A G= token: (target, step, steps down or None for in place, the corruption's text). The
+/// target is a service, a list `a,b` or a group's selector `<group>.<selector>` (Milestone 245).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Gz {
     pub svc: String,

@@ -581,6 +581,20 @@ impl Fake {
                     self.live_attempt(&r.argv)
                 } else if a1 == "ifconfig" || a1 == "ip" || script.contains(".log.old") {
                     (2, 0, String::new())
+                } else if script.contains("trigger_fs_error")
+                    || (script.contains(" umount ") && script.contains("usleep 50000"))
+                {
+                    // a service's power loss (M183): the file system is shut down
+                    (2, 0, String::new())
+                } else if script.contains("dirty_writeback_centisecs") {
+                    // a strict power loss (Milestone 245): the old value, then the new one
+                    (2, 0, "500\n0\n".to_string())
+                } else if script.contains("cat /sys/class/block/") && script.ends_with("/stat") {
+                    // a partition's statistics; the seventh number is the sectors written
+                    let n = 1000 + self.h(&["stat", &script, &t.to_string()]) % 1000;
+                    (2, 0, format!("  120 0 960 4 30 0 {n} 9 0 12 13 0 0 0 0\n"))
+                } else if script.contains("^(Dirty|Writeback):") {
+                    (2, 0, "Dirty:  1234 kB\nWriteback:  0 kB\n".to_string())
                 } else if Self::env_of(&r.env, "HYDO_VALUE").is_some() {
                     let bad = self.h(&["knob", &script]).is_multiple_of(37);
                     (4, if bad { 1 } else { 0 }, String::new())

@@ -1,0 +1,30 @@
+#!/bin/sh
+# hydo-msg: after the faults every node's replica of the stream holds the same messages
+# Jepsen's split brain: acknowledged messages present on some nodes and missing on others, for
+# good. Each node reports its own replica's state on its monitoring port (/jsz); the replicas
+# get 60 s to catch up after the heal. A node that does not answer is "cannot evaluate now" (2).
+state_of() {   # state_of <node>: "msgs=<n> first=<seq> last=<seq> deleted=<n>", or "no-stream"
+  j=$(timeout 5 wget -q -T 4 -O - "http://$1:8222/jsz?accounts=true&streams=true" 2>/dev/null | tr -d ' \n\t') || return 1
+  [ -n "$j" ] || return 1
+  case $j in *'"name":"jepsen"'*) ;; *) echo "no-stream"; return 0 ;; esac
+  s=$(echo "$j" | grep -o '"state":{[^}]*}' | head -n 1)   # the one stream's state (/jsz has no other)
+  f() { echo "$s" | grep -o "\"$1\":[0-9]*" | head -n 1 | cut -d: -f2; }
+  echo "msgs=$(f messages) first=$(f first_seq) last=$(f last_seq) deleted=$(f num_deleted)"
+}
+end=$(( $(date +%s) + 60 ))
+while :; do
+  all=""; down=""
+  for n in n1 n2 n3; do
+    st=$(state_of "$n") || { down="$down $n"; continue; }
+    all="$all
+$n $st"
+  done
+  distinct=$(echo "$all" | grep . | cut -d' ' -f2- | sort -u | grep -c .)
+  [ -z "$down" ] && [ "$distinct" = 1 ] && { echo "replicas agree:$(echo "$all" | head -n 2 | tail -n 1 | cut -d' ' -f2-)"; exit 0; }
+  [ "$(date +%s)" -ge "$end" ] && break
+  sleep 2
+done
+echo "$all" | grep .
+[ -n "$down" ] && { echo "cannot read the replicas of:$down"; exit 2; }
+echo "replicas diverge: the nodes hold different messages 60 s after the heal"
+exit 1

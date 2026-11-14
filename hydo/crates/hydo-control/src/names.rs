@@ -31,8 +31,9 @@
 //! - `F=`: the image has `freeze` in `faults:`; the frozen service is a service, its peer a
 //!   service or `workload`.
 //! - `H=`: a fake or proxy (`fakes:`/`proxies:`), or one of its routes as `<name>.<route>`.
-//! - `G=`: a service with `storage:` (M183); `L=`: a service whose `storage:` has its own file
-//!   system (`size_mib:`). The controller would otherwise log "has no storage, ignored".
+//! - `G=`: a service with `storage:` (M183), or since Milestone 245 a list of them or a group's
+//!   selector whose every member has `storage:`; `L=`: a service whose `storage:` has its own
+//!   file system (`size_mib:`). The controller would otherwise log "has no storage, ignored".
 //! - `A=`: the action's service (`kill-`, `stop-`, `cont-`). The event is an assertion id that
 //!   only the running program declares, so it cannot be checked before the run.
 //! - `W=`: a test composer plan (`test:` or the `hydo/` folder).
@@ -271,16 +272,27 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
             net_target(plan, t, target)
         }
         GuestToken::Cut(_) | GuestToken::Clock { .. } | GuestToken::ClockTo { .. } => Ok(()),
-        GuestToken::Corrupt { svc, .. } => {
-            service(plan, t, svc)?;
-            if plan.storage_of(svc).is_some() {
-                return Ok(());
+        GuestToken::Corrupt { target: x, .. } => {
+            // Milestone 245: a list or a group's selector too; every service it can name has
+            // storage: (a group's every member, since the selector picks among them)
+            target(plan, t, x)?;
+            let svcs: Vec<String> = match x {
+                Target::Group { group, .. } => plan
+                    .group(group)
+                    .map(|g| g.services.clone())
+                    .unwrap_or_default(),
+                x => x.named().iter().map(|s| s.to_string()).collect(),
+            };
+            for svc in &svcs {
+                if plan.storage_of(svc).is_none() {
+                    return Err(format!(
+                        "{t} corrupts the storage of the service {svc}, which has no storage: in \
+                         the manifest (services with storage:: {})",
+                        list(plan.storage.iter().map(|s| s.svc.clone()))
+                    ));
+                }
             }
-            Err(format!(
-                "{t} corrupts the storage of the service {svc}, which has no storage: in the \
-                 manifest (services with storage:: {})",
-                list(plan.storage.iter().map(|s| s.svc.clone()))
-            ))
+            Ok(())
         }
         GuestToken::PowerLoss { svc, .. } => {
             service(plan, t, svc)?;

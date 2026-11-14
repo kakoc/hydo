@@ -1,0 +1,8 @@
+# Jepsen's NATS 2.12.1 analysis, section 3.2 (nats-server issue 7549): bit flips in a block in
+# the middle of the stream, on two of the three nodes, leave the replicas different for good.
+# n1 and n3 are killed before step 10, 32 bits of their first stream block (jepsen/msgs/1.blk,
+# 8 MB of 1 KB messages, followed by more blocks) are flipped, and both start again before
+# step 12. Each drops the messages of that block from its first bad one on, and neither fills
+# the gap from n2, which kept every message. Values: RESULTS.md, "Corrupted blocks on two nodes".
+# expect: violation
+disk=none | run G=n1,n3@10+2:flip,n=32,file=jepsen/msgs/1.blk

@@ -511,7 +511,16 @@ rollbacks"; details: `docs/HISTORY.md` Milestone 238.
 puts each node's store on a file system of its own. On hvx it reaches two of Jepsen's NATS 2.12.1
 findings in one VM. `P=n1@2+10 L=n2@10+2 K=n3@12+6` loses acknowledged messages (3.5), and one
 node's zeroed metadata snapshot deletes the stream (3.3). The section "One node's storage faults"
-of its RESULTS.md has the values, and what 3.2 still needs inside one VM.
+of its RESULTS.md has the values.
+
+**Several nodes' storage faults and the strict power loss (M245).** `G=` takes a list or a
+group's selector (`G=n1,n3@...`, `G=nodes.majority@...`), and `hydo explore --storage-faults
+--corrupt-several` draws them. `L=<svc>@<at>+<down>:strict` turns the guest's periodic writeback
+off from the run's start and sets the node's bridge port down while it is down
+(docs/design/storage-faults.md). On hvx the NATS example's `blocks/` reaches Jepsen's 3.2. Its
+stream has three 8 MB blocks per node. Flipped bits in the first block of two nodes leave the
+replicas different for good, and with the intact node killed 2,456 acknowledged messages are
+lost. The details are in the section "Several nodes' corrupted blocks" of its RESULTS.md.
 
 **Function contracts (M241, a prototype on the Mac engine).** `// hydo: requires` and `ensures`
 comments next to a function, with `old()` and `result`, are checked at every call. The
@@ -816,14 +825,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 36. [user decision] Copy-on-write VMs, a shared read-only root, and the host-call port on the Mac
     engine are not built (M138, M140).
 37. The M48 Mac boot fingerprint was never taken with the Rust engine (M147).
-38. NATS JetStream (M141, M235). On hvx, one VM reaches Jepsen's 3.3 and 3.5 with `G=` and
-    `L=` (`examples/nats-jetstream/storage/`); the Mac runs of 3.1 and 3.4 have no x86_64 run.
-    3.2 is not reached: NATS 2.12.1 repaired every corrupted `.blk` of one node. Two parts are
-    missing, and neither needs a second VM:
-    - A schedule corrupts one node only: a second `G=` is refused. `G=` with a list of services,
-      as `K=` takes, would corrupt two nodes in one run.
-    - The stream fits in its first 8 MB block, so a gap in the middle of the stream cannot form.
-      A workload that publishes about 80,000 messages per run would make one.
+38. NATS JetStream (M141, M235, M245). On hvx, one VM reaches Jepsen's 3.2, 3.3 and 3.5
+    (`examples/nats-jetstream/storage/` and `blocks/`); the Mac runs of 3.1 and 3.4 have no
+    x86_64 run. What is left:
+    - Five nodes, the shape of most of Jepsen's runs, were not run.
+    - The Mac engine and KVM did not run `blocks/` or the strict `L=`.
+    - Under the strict `L=` the first schedule of 3.5 passes on the default image, because the
+      stream stalls until the node with the messages is back. Which part of the strict form
+      decides that (the writeback or the silent links) was not separated.
+    - Seed 2 of the exploration on `blocks/` lost 4 acknowledged messages after 4 flipped bits in
+      a middle block of the running stream leader, with the replicas in agreement. Not
+      investigated.
 39. [user decision] `~/hydo/build/explore-binlog-ret-xr-nq-disk.img` and old benchmark image sets
     on the bare-metal machine wait for deletion (M145, M146).
 41. [user decision] Public content: freeze-sweep results without the system they were measured on
@@ -863,9 +875,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     yet (M179, M192).
 58. `tls:` and `writable:` were not run on hvx or arm64 (M180).
 60. Ready-made SQL workloads: the MySQL dialect and arm64 ran only in unit tests (M182).
-61. Storage faults: `L=` keeps writes the disk had not flushed (M183), also what Linux wrote back
-    after its default 30 s without an fsync. The peers see the node's connections closed at once,
-    not a silent node (M235).
+61. Storage faults (M183, M235, M245). The plain `L=` keeps what Linux wrote back without a sync,
+    and its peers see the node's connections closed. `L=...:strict` (M245) drops the first and
+    silences the node. What is left of the strict form:
+    - The writeback setting is the whole guest's, so the other services keep their unsynced
+      writes in memory too, and a whole-guest cut in the same run takes more of them.
+    - Dirty data beyond `vm.dirty_background_ratio` and the journal's metadata still reach the
+      disk without a sync.
+    - A closed socket of the dead node sends its end again after a timeout, which can reach a
+      peer after the bridge port is up again. Without `network: bridge` no link is cut.
+    - It ran on hvx only, and the explorer does not draw it.
 62. [user decision] `guest.outcomes_after_cut` stays opt-in until an epoch change (M184). The
     epoch 2 (M204) did not take it in: it was not among the defaults the user named.
 63. [user decision] Trusted publishing works since 0.3.0. The npm entry expires after two days
@@ -1139,6 +1158,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The explorations of the example ran 48 schedules; the one with `--new-faults` was stopped
       after 8 runs, before it shrank its failure, on a loaded machine. Each cluster is one minute
       old, so every step back of more than an hour meets k3s's certificates.
+120. The hvx engine's host-call port (M245). In `hydo explore` on the NATS example's `blocks/`
+    image each of the two workers logged `HVX_HC_PUT: No space left on device` 46 times, and the
+    runs still finished. `hydo run` of the same image logged none. Not investigated.
 
 ## Milestone index
 
@@ -1613,6 +1635,12 @@ build machine, before 2026-10-13.
   kernel's own modules, so no kernel changes. Two boots give one fingerprint; a StatefulSet's
   pods elect a leader on a Lease, and a forward clock step gives two leaders at once. The Mac and
   KVM kernels lack the options; an opt-in variant is designed, not built. Nothing recorded moved
+- M245 (tentative number): `G=` on several services, as a list or a group's selector, and
+  `hydo explore --corrupt-several`. The strict power loss `L=...:strict` turns off the periodic
+  writeback from the run's start and silences the node while it is down. On hvx the NATS
+  example's `blocks/` reaches Jepsen's finding 3.2 with them. Corrupted middle blocks on two of
+  three nodes leave the replicas different, and lose 2,456 acknowledged messages when the intact
+  node is killed. Nothing recorded moved
 
 ## Where to look
 

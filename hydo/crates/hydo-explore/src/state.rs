@@ -397,7 +397,7 @@ fn starts(s: &S) -> Vec<(&'static str, i64)> {
     if let Some(g) = &s.g {
         v.push(("g", g.at));
     }
-    if let Some((_, at, _)) = &s.l {
+    if let Some((_, at, _, _)) = &s.l {
         v.push(("l", *at));
     }
     v
@@ -487,7 +487,7 @@ pub fn branch_schedule(a: &S, f: &S, b: i64, steps: i64) -> S {
     if take("l") {
         out.l =
             f.l.as_ref()
-                .and_then(|(s, at, d)| mv(*at).map(|x| (s.clone(), x, *d)));
+                .and_then(|(s, at, d, st)| mv(*at).map(|x| (s.clone(), x, *d, *st)));
     }
     // the protocol-fault windows and the reactions: a's that start by b, then f's moved
     out.h.retain(|h| h.a <= b);

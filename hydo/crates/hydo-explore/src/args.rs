@@ -9,7 +9,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
-       [--storage-faults] [--upgrades] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
+       [--storage-faults [--corrupt-several]] [--upgrades] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
        [--pause-lengths MS[,MS...]]
        [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
         [--steer-batch N] [--steer-corpus N] [--steer-stop]]
@@ -57,6 +57,9 @@ pub struct Args {
     /// `--storage-faults`: draw G= (corruption) and L= (one service's power loss) for the
     /// services with `storage:` (docs/design/storage-faults.md).
     pub storage_faults: bool,
+    /// `--corrupt-several` (Milestone 245, with `--storage-faults`): a drawn G= on several
+    /// services at once, a list or a group's selector.
+    pub corrupt_several: bool,
     /// `--cluster-faults` (M195): draw kills, pauses and partitions of the manifest's `groups:`.
     pub cluster_faults: bool,
     /// `--upgrades` (Milestone 238): draw upgrades (`U=`) of the services with `versions:`.
@@ -181,6 +184,7 @@ impl Default for Args {
             concurrency: false,
             more_faults: false,
             storage_faults: false,
+            corrupt_several: false,
             cluster_faults: false,
             workload_pauses: false,
             upgrades: false,
@@ -234,7 +238,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 22] = [
+const FLAGS: [&str; 23] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -244,6 +248,7 @@ const FLAGS: [&str; 22] = [
     "concurrency",
     "more-faults",
     "storage-faults",
+    "corrupt-several",
     "cluster-faults",
     "upgrades",
     "pause-workload",
@@ -406,6 +411,7 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "concurrency" => a.concurrency = true,
             "more-faults" => a.more_faults = true,
             "storage-faults" => a.storage_faults = true,
+            "corrupt-several" => a.corrupt_several = true,
             "cluster-faults" => a.cluster_faults = true,
             "pause-workload" => a.workload_pauses = true,
             "upgrades" => a.upgrades = true,

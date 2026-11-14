@@ -62,6 +62,8 @@ pub const HVM_TJ_MAX: i64 = 1000;
 pub const REACT_SALT: u64 = 0xA5EAC7C0FFEEA5EA;
 /// The storage faults' own stream (`--storage-faults`, docs/design/storage-faults.md).
 pub const STORAGE_SALT: u64 = 0x5701A6EC0FFEE570;
+/// The stream of `--corrupt-several` (Milestone 245): G= on several services at once.
+pub const CORRUPT_SEVERAL_SALT: u64 = 0xC0BB5E7E2A1C0FFE;
 /// The workload pauses' own stream (`--pause-workload`, Milestone 216).
 pub const WP_SALT: u64 = 0x57A11C0FFEE57A11;
 /// How long a drawn pause stops the workload, ms of guest time.
@@ -159,6 +161,9 @@ pub struct Ex {
     pub more_faults: bool,
     /// `--storage-faults`: G= and L= from their own stream (STORAGE_SALT).
     pub storage_faults: bool,
+    /// `--corrupt-several` (Milestone 245): a drawn G= on several services, from its own stream
+    /// (CORRUPT_SEVERAL_SALT).
+    pub corrupt_several: bool,
     /// `--cluster-faults` (M195): kills and pauses of a group's members and partitions of a
     /// group, from their own stream (CLUSTER_SALT).
     pub cluster_faults: bool,
@@ -241,6 +246,7 @@ impl Default for Ex {
             concurrency: false,
             more_faults: false,
             storage_faults: false,
+            corrupt_several: false,
             cluster_faults: false,
             workload_pauses: false,
             upgrades: false,
@@ -1122,8 +1128,57 @@ impl Ex {
         }
         if l_on && sp.storage_fault_allowed("powerloss") {
             if let Some(svc) = pick(&sp.own_fs_svcs, l_svc) {
-                s.l = Some((svc, l_at, l_n));
+                s.l = Some((svc, l_at, l_n, false));
             }
+        }
+        s
+    }
+
+    /// `--corrupt-several` (Milestone 245, with `--storage-faults`): in half of the schedules
+    /// whose `G=` was drawn, the corruption hits several services at once, from its own stream
+    /// (CORRUPT_SEVERAL_SALT), so every other field stays as it was and only `G=`'s target
+    /// changes. With a group whose every member has `storage:` the target is one of its
+    /// selectors (`minority`, `majority`, `all`, with a drawn index), else a list of two
+    /// services with `storage:`. Every draw is made whether it is used or not.
+    pub fn add_corrupt_several(&self, mut s: S, seed: u64) -> S {
+        if !self.corrupt_several {
+            return s;
+        }
+        let Some(sp) = &self.space else {
+            return s;
+        };
+        let mut t = SplitMix::new(seed ^ CORRUPT_SEVERAL_SALT);
+        let on = t.below(100) < 50;
+        let group = t.next();
+        let sel = t.below(3);
+        let idx = t.below(4);
+        let a = t.next();
+        let b = t.next();
+        let Some(g) = s.g.as_mut() else {
+            return s;
+        };
+        if !on {
+            return s;
+        }
+        let groups = sp.storage_groups();
+        if !groups.is_empty() {
+            let gr = groups[(group % groups.len() as u64) as usize];
+            let n = gr.members.len();
+            let mut w = ["minority", "majority", "all"][sel as usize];
+            if w == "minority" && n < 2 {
+                w = "majority";
+            }
+            g.svc = if w != "all" && idx > 0 {
+                format!("{}.{w}.{idx}", gr.name)
+            } else {
+                format!("{}.{w}", gr.name)
+            };
+        } else if sp.storage_svcs.len() >= 2 {
+            let l = &sp.storage_svcs;
+            let i = (a % l.len() as u64) as usize;
+            let j = (i + 1 + (b % (l.len() as u64 - 1)) as usize) % l.len();
+            let (i, j) = (i.min(j), i.max(j));
+            g.svc = format!("{},{}", l[i], l[j]);
         }
         s
     }
@@ -1408,6 +1463,7 @@ impl Ex {
         s = self.add_more_faults(s, seed, strategy);
         s = self.add_reactive(s, seed);
         s = self.add_storage_faults(s, seed);
+        s = self.add_corrupt_several(s, seed);
         s = self.add_cluster_faults(s, seed);
         s = self.add_workload_pauses(s, seed);
         s = self.add_freeze_call(s, seed);
@@ -1558,8 +1614,11 @@ impl Ex {
         if let Some(z) = &s.g {
             g.push(crate::sched::render_g(z));
         }
-        if let Some((svc, at, down)) = &s.l {
-            g.push(format!("L={svc}@{at}+{down}"));
+        if let Some((svc, at, down, strict)) = &s.l {
+            g.push(format!(
+                "L={svc}@{at}+{down}{}",
+                if *strict { ":strict" } else { "" }
+            ));
         }
         for u in &s.u {
             g.push(format!("U={u}"));
@@ -1764,9 +1823,13 @@ impl Ex {
                     });
                 }
                 "L" => {
+                    let (v, strict) = match v.strip_suffix(":strict") {
+                        Some(x) => (x, true),
+                        None => (v, false),
+                    };
                     let (svc, rest) = split2(v, '@')?;
                     let (at, down) = split2(rest, '+')?;
-                    s.l = Some((svc.into(), pint(at)?, pint(down)?));
+                    s.l = Some((svc.into(), pint(at)?, pint(down)?, strict));
                 }
                 "U" => s.u.push(v.to_string()),
                 k if self.knob_tokens.iter().any(|t| t == k) => {
@@ -1959,11 +2022,24 @@ impl Ex {
                     });
                 }
             }
+            // Milestone 245: a list or a group's selector towards fewer services
+            for t2 in self.shrink_target(&z.svc, false) {
+                var(&|t| {
+                    if let Some(z) = &mut t.g {
+                        z.svc = t2.clone();
+                    }
+                });
+            }
         }
-        if let Some((svc, at, down)) = &s.l {
+        if let Some((svc, at, down, strict)) = &s.l {
             var(&|t| t.l = None);
             if *down > 1 {
-                let l = (svc.clone(), *at, 1);
+                let l = (svc.clone(), *at, 1, *strict);
+                var(&|t| t.l = Some(l.clone()));
+            }
+            // Milestone 245: the strict power loss towards the plain one
+            if *strict {
+                let l = (svc.clone(), *at, *down, false);
                 var(&|t| t.l = Some(l.clone()));
             }
         }

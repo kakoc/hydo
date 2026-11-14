@@ -28,7 +28,8 @@ Hunted here: 3.1 with its version pair (2.10.22 against 2.10.23), and 3.4 as a c
 finding (the default `sync_interval` against `sync_interval: always`, on 2.12.1 and 2.10.23). Not
 hunted in Milestone 141: 3.2 and 3.3 (hydo had no file-corruption fault), 3.5 (hydo's power cut was
 the whole guest's: one data disk, every node at once). Milestone 183 added both faults, and the
-section "One node's storage faults (Milestone 235)" below hunts 3.2, 3.3 and 3.5 with them.
+section "One node's storage faults (Milestone 235)" below hunts 3.2, 3.3 and 3.5 with them, and the
+section "Several nodes' corrupted blocks, and the strict power loss (Milestone 245)" reaches 3.2.
 
 ## The project
 
@@ -466,7 +467,7 @@ was not investigated further. The exploration did not draw the schedules of 3.5 
 faults in a narrow order on chosen nodes, written by hand in the preceding sections. The explorer was run without
 shrinking, because each run is 150 s of guest time.
 
-### 3.2, not reached: corrupted `.blk` files of one node
+### 3.2 with a stream of one block: not reached
 
 NATS 2.12.1 repaired every corruption of one node's `.blk` files that was tried. These runs used
 copies of the manifest from before the readers were added. The copies had 30 or 600 rounds. The 600 rounds
@@ -502,13 +503,132 @@ from Jepsen's runs explain why the loss did not happen here:
 |---|---|---|
 | one node loses what it had not synced, the others run on (3.5) | yes: `L=` on the node's own file system | none |
 | one node's files corrupted (3.2, 3.3) | yes: `G=` | none |
-| two nodes' files corrupted in one run (3.2, and 3.3 on five nodes) | no: one `G=` per schedule | `G=` takes a list of services, as `K=` does (`G=n1,n3@...`): the token in `hydo-schedule`, one corruption per service in the controller, the explorer's draw. No engine, module or agent change, and no recorded value moves, because the list form is new |
-| more than one block of stream data per node (3.2's gap in the middle) | the workload's size | a command that publishes in batches, about 80,000 messages of 100 bytes (more than an 8 MB block); no hydo change |
+| two nodes' files corrupted in one run (3.2, and 3.3 on five nodes) | yes since Milestone 245: `G=n1,n3@...` or `G=nodes.majority@...` | built: the list and the group's selector in `hydo-schedule`, one corruption per service in the controller, `--corrupt-several` in the explorer |
+| more than one block of stream data per node (3.2's gap in the middle) | yes: `blocks/` publishes 24,000 messages of 1 KB before the snapshot | none in hydo |
 | five nodes (most of Jepsen's runs) | a manifest with five services | guest RAM: the three nodes ran in 1 GiB |
-| writes the kernel had handed to the disk but not flushed are lost at the power loss (open item 61) | no: `L=` keeps them. Jepsen's LazyFS drops every write that was not fsynced, also one that Linux wrote back after its default 30 s | the engines drop the unflushed writes of the node's partition (option 2 of docs/design/storage-faults.md), or the manifest's `provision` turns off the kernel's periodic writeback (`vm.dirty_writeback_centisecs=0`) |
-| the peers see the node go silent | no: the guest's kernel closes the dead node's connections, so the peers see them closed at once | `L=` cuts the node's link (a network fault) for the time it is down |
+| writes the kernel wrote back without a sync are lost at the power loss (open item 61) | yes since Milestone 245: `L=<svc>@<at>+<down>:strict` | built: the guest's periodic writeback off from the run's start (docs/design/storage-faults.md) |
+| the peers see the node go silent | yes since Milestone 245, with `:strict` and `network: bridge` | built: the node's bridge port down while it is down |
 
 Separate virtual machines are needed only for a separate kernel or a separate clock per node:
 one node's kernel crash, one node's memory pressure, or clocks that drift apart. Linux keeps one
 realtime clock per kernel; its time namespaces move only the monotonic and boot clocks. None of
 3.2, 3.3 and 3.5 needs them.
+
+## Several nodes' corrupted blocks, and the strict power loss (Milestone 245)
+
+Milestone 245 built the parts that the preceding table names. `G=` takes a list of services or a
+group's selector (`G=n1,n3@...`, `G=nodes.majority@...`), and `L=<svc>@<at>+<down>:strict` is a
+harsher power loss of one service (`hydo guide faults`). Every run used hvx on the bare-metal
+machine, with this milestone's `hydo` inside a copy of the 0.3.2 Linux release, and images built
+there. "Twice" means two runs from a fresh boot that gave one fingerprint and one `ctl` value.
+
+### The setup: `blocks/`
+
+`blocks/hydo.yaml` is the cluster of `storage/hydo.yaml` with these changes:
+
+- The first command `workload/first_fill` publishes 24,000 messages of 1 KB before the snapshot
+  that every run starts from. It uses `natsbulk`, a client of its own (`client/bulk/`), so that
+  `natsjs` and the other manifests' images keep their bytes. With `test.first_records: true` the
+  24,000 values stay among the acknowledged ones, so the checks look for each of them.
+- Each node's stream then has three blocks: `jepsen/msgs/1.blk` and `2.blk` hold 8 MB each, and
+  `3.blk` is the last one. A cut of 1 MB leaves `1.blk` at 7,339,502 bytes.
+- The check `final_acked_readable` reads the stream with `natsbulk read`, one message at a time by
+  its sequence, in at most 150 s. `natsjs read` gives the whole read 20 s, and with 24,000
+  messages its ordered consumer got `no responders` on every attempt.
+- Each node's file system has 384 MiB, the guest 2 GiB, and there is no reader during the faults.
+
+The image is `071160781d5d4d5d…` (default `sync_interval`) and `c273173c32e9fea0…` (`always`).
+Without faults, `disk=none | run` passes: all 24,457 acknowledged messages are read back, and the
+replicas agree (fp `524ae0f8c706a3c1`). A first version published 150,000 messages of 100 bytes.
+Its runs ended in `TIMEOUT workload`, because the host reads the 1.2 MB list of acknowledged
+values from the guest in pieces of 3,000 bytes.
+
+### Corrupted blocks on two nodes: 3.2, reached
+
+| schedule | verdict | the replicas after the heal | fp | ctl |
+|---|---|---|---|---|
+| `G=n1,n3@10+2:flip,n=32,file=jepsen/msgs/1.blk` | VIOLATION [replicas_agree], twice | n1 17,216 (7,241 deleted), n2 24,457, n3 16,384 (8,073 deleted) | `575135a56fdc857f` | `d23017be675ff418` |
+| `G=n1,n3@10+2:zero,len=65536,file=jepsen/msgs/1.blk K=n2@16+6` | VIOLATION [acked_readable] lost 2,456 of 24,446 acknowledged messages (leader n3), twice | n1 19,237 (5,209 deleted), n2 24,446, n3 21,990 (2,456 deleted) | `2336929ebcaa0ec4` | `b23c952824d09669` |
+| `G=n1,n3@10+2:flip,n=32,file=jepsen/msgs/1.blk K=n2@16+6` | VIOLATION, lost 8,073 of 24,447 (leader n3) | n1 7,241 and n3 8,073 deleted | `992959583f4fb7a9` | `6c7827406d4f3fb9` |
+| the second row on the `always` image | VIOLATION, lost 5,209 of 24,441 (leader n1) | n1 5,209 and n3 2,456 deleted | `e153b692d250382c` | `e7c36e1b68f97fdb` |
+
+Each fault apart, on the default image, one run each:
+
+| schedule | verdict | fp |
+|---|---|---|
+| `K=n2@16+6` (no corruption) | OK | `d5c3a90189ae46eb` |
+| `G=n1@10+2:flip,n=32,file=jepsen/msgs/1.blk` (one node) | VIOLATION [replicas_agree]: n1 has 7,241 deleted, n2 and n3 hold every message | `e3490b5fb6819c5e` |
+| `G=n1,n3@10+2:flip,n=32,file=jepsen/msgs/3.blk` (the last block at step 10) | OK | `04619d5fb5f45caa` |
+| `G=n1,n3@10+2:flip,n=32,file=jepsen/msgs/1.blk` on the `storage/` image (one block) | OK | `48c4d8c6d2aafa1e` |
+
+What happens is Jepsen's "Swiss cheese". A node whose block in the middle of the stream has a bad
+message drops that block's messages from the first bad one to the block's end. The stream state
+counts them as `deleted`, and the node never gets them back from its peers. Its log says nothing
+about the bad block: `hydo inspect logs` of the first row shows on n1 and n3 only the warnings of
+any restart (`Stream state outdated, last block has additional entries, will rebuild`).
+
+The same flip in the last block, or in a stream of one block, is repaired by the normal catch-up.
+So the many blocks decide the divergence, and one corrupted node is enough for it. Acknowledged
+messages are lost when a corrupted node leads the stream. With two of three nodes corrupted, the
+kill of the intact node n2 leaves a majority of corrupted nodes, and one of them leads. An fsync
+before every acknowledgement does not help: the `always` image loses 5,209 messages.
+
+The first round, on a build of `blocks/` with an earlier check, found the same in more forms:
+zeroed ranges, a 1 MB cut (1,011 deleted on each corrupted node), the corruption under the
+running nodes followed by `K=n1,n3@14+4`, `G=nodes.majority@10+2:...,file=jepsen/msgs/2.blk`, and
+`G=nodes.all@...`.
+
+The first two rows are saved as `blocks/regressions/two-nodes-corrupted-blocks-diverge.schedule`
+and `two-nodes-corrupted-blocks-lose-acked.schedule`.
+
+`hydo explore --seeds 1-8 --strategy process --storage-faults --corrupt-several --cluster-faults
+--workers 2 --no-shrink` on the default image finished 5 seeds. Then the bare-metal machine ran
+short of memory, shared with other sessions' VMs, and the kernel ended the exploration. The draws
+included `G=nodes.majority@140:trunc,seed=7c0ecfff`, which cut the metadata's `peers.idx` of n1
+and n2 (OK), and `G=nodes.all@237+1:zero,...` with a whole-guest cut. A drawn `G=` names no
+`file=`, so it hits any file of the node. In seed 2 the 4 flips of `G=n3@167:flip,n=4,...` hit
+`jepsen/msgs/2.blk`, a middle block, under the running n3, which led the stream at the end: 4
+acknowledged messages were lost, and the replicas agree. That case was not investigated further.
+Seeds 1 and 5 end with `C=300`, and their recovery boots ran out of time (`TIMEOUT recovery`): a
+cut of every node does not fit this image's time limits.
+
+### 3.5 with the strict power loss
+
+The images of `storage/` built with this milestone's `hydo` give the values of the section "One
+node's storage faults" for the plain `L=`. The schedule of 3.5 gave `de74a8ee1b353f37` (default)
+and `46628f4bd1bd5cc3` (10 s), with the `ctl` values of Milestone 235. So the plain `L=` and a
+`G=` on one service did not change. The strict loss, each row twice unless it says once:
+
+| schedule | image | plain `L=` | `L=...:strict` | strict fp |
+|---|---|---|---|---|
+| `P=n1@2+10 L=n2@10+2 K=n3@12+6` | default | VIOLATION, lost 4 of 207 (once) | OK, 13 publishes failed | `1c5614b58207ded3` |
+| the same | 10 s | VIOLATION, lost 4 of 207 (once) | VIOLATION, lost 4 of 207 | `1175284d776d200c` |
+| the same | `always` | OK (Milestone 235) | OK, 6 publishes failed | `8cded8a4bec51f4a` |
+| `P=n1@60+92 L=n2@150+2 K=n3@152+6` | default | VIOLATION, lost 3 of 219 (once) | VIOLATION, lost 10 of 203 | `7758d99f0cf02392` |
+| the same | 10 s | VIOLATION, lost 1 of 219 (once) | OK (once) | `0809b4f138a589b8` |
+| `P=n1@2+10 L=n2@10+2:strict` | default | | OK (once) | `098a0468fa7aab13` |
+| `L=n2@10+2:strict K=n3@12+6` | default | | OK (once) | `0fb18880bb542c26` |
+
+What reached n2's disk, from the strict run's log lines and, for the plain run, from `hydo inspect
+exec` at the run's start and just before step 150:
+
+| schedule | image | sectors written to n2's partition since the run's start | dirty pages at the loss |
+|---|---|---|---|
+| `P=n1@60+92 L=n2@150+2 K=n3@152+6`, plain | default | 3,072 | 68 kB |
+| the same, strict | default | 2,296 | 336 kB |
+| `P=n1@2+10 L=n2@10+2:strict K=n3@12+6` | default | 0 | 32 kB |
+| the same | 10 s | 496 | 96 kB |
+| the same | `always` | 904 | 76 kB |
+
+The second schedule shows the writeback. n1 is paused for 46 s, and n2 loses its power 75 s into
+the workload. With the plain `L=`, Linux has written back what n2 wrote more than 30 s before the
+loss, and 3 messages are lost. With `:strict` only what NATS synced reached the disk, 776 sectors
+less, and 10 messages are lost. In the first schedule the loss comes 5 s after the start, before
+any writeback, so the disks are the same in both modes. There the silent links change the
+elections instead. With the plain `L=`, n1 leads the stream after the restarts and lacks the 4
+messages. With `:strict`, the stream reports `NO quorum, stalled` until n3 starts again, and n3
+still has them. The verdict of a schedule can thus go either way, so a hunt for 3.5 should try both
+forms.
+
+The Mac engine did not run these schedules. The strict form changes no engine: it is a setting of
+the guest and a bridge port, the same on every engine.

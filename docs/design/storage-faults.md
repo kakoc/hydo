@@ -62,6 +62,16 @@ The listing is sorted on the host, so the order `find` prints does not matter.
 - `file=`: only files whose path relative to the storage directory contains the text;
 - `seed=`: chooses the file and the places (default 0).
 
+Since Milestone 245 the service may also be a list (`G=n1,n3@...`) or a group's selector
+(`G=nodes.majority@...`), as for `K=` (`docs/design/jepsen-gaps.md`). Jepsen's finding 3.2 on
+NATS 2.12.1 needed corrupted files on two nodes in one run, and a schedule holds one `G=`. The
+controller resolves the target before the step, as it does for `K=`, and logs a selector's
+choice (`G: nodes.majority = n1,n2`). With `+<down>` it kills every service of the target
+first, then corrupts each service's files, then starts each again before step `at+down`. The
+k-th service of the target, counted from 0, gets the seed plus k. So two nodes with the same
+files get different places, and one service gets exactly the token's corruption. A plain service
+takes the path it took before, with no command more, so no recorded transcript moves.
+
 The keys come in this order, each at most once, so that a token prints back byte for byte (the
 guest logs the guest part as written). The letter is `G`: of the letters no manifest knob and no
 recorded schedule uses, the identity corpus has an unknown knob `Z=1`, which a reserved `Z` would
@@ -162,6 +172,72 @@ A file system that does not mount again is the verdict `VIOLATION <svc> storage 
 its power loss`; a service that does not start again is `ERROR <svc> restart failed (after its
 power loss)` (as `K=`; with `restart_may_fail` it is left to the heal).
 
+## The strict power loss: `L=<svc>@<at>+<down>:strict`
+
+### What the plain `L=` keeps
+
+The plain `L=` is milder than a real power loss in two ways, and the NATS onboarding met both
+(Milestone 235, open item 61):
+
+- **Writes that Linux wrote back without a sync stay.** Linux writes a dirty page back about
+  30 s after the program wrote it, also without a sync. A service that syncs every two minutes, as NATS
+  does by default, keeps on its disk most of what it never synced. Jepsen's LazyFS drops every
+  write that was not synced.
+- **The peers see the dead node's connections closed at once.** The killed processes' sockets
+  are closed by the guest's kernel, which sends their ends to the peers. A machine that loses its
+  power sends nothing: its peers hear silence until their own timeouts fire.
+
+### Options for the writes
+
+1. **The engines drop the unflushed writes of the service's partition** (option 2 of the plain `L=`). This
+   covers only what Linux handed to the disk and did not flush. Every journal commit of
+   every ext4 file system on the guest's one disk flushes the whole disk, by default every 5 s.
+   So almost nothing would be dropped. It also needs a change of all three engines and of the
+   hvx kernel module.
+2. **Linux does not write anything back on its own.** The guest sets
+   `vm.dirty_writeback_centisecs` to 0 before the workload starts, so the flusher threads stop
+   their periodic writeback. A dirty page then reaches the disk through a sync of its file
+   or of its file system. It also does when the dirty pages pass the kernel's thresholds
+   (`vm.dirty_background_ratio`, 10% of the memory that can hold them). It works the same on
+   hvx, the Mac and KVM, and it changes no engine and no image.
+
+### Choice: option 2, from the run's start
+
+At the stop before step 0, a strict `L=` does three things:
+
+- It sets `vm.dirty_writeback_centisecs` to 0.
+- It mounts the service's own file system again without ext4's `auto_da_alloc`. That option
+  writes a file's data back when a program replaces the file by a rename or truncates it to
+  zero, which is a writeback without a sync. The remount syncs the file system once, so the
+  state at the run's start is on the disk.
+- It logs the sectors written to the partition so far.
+
+At the loss, after the service's processes are stopped, it logs the guest's dirty pages and the
+sectors written to the partition since the run's start. Then the file system is shut down as
+for the plain `L=`. What stays on the disk is what the service synced, the journal's metadata,
+and dirty data beyond the thresholds. The log line shows the dirty pages, so a run that crossed a
+threshold can be told apart.
+
+The setting is the guest's, not the service's: partitions of one disk share one writeback
+device, and Linux has no periodic writeback interval per file system. The other services keep
+their unsynced writes in the page cache too. While they run they see no difference, because
+their reads come from the page cache. A whole-guest power cut (`C=`, `cf=`) in the same run
+takes more of their writes away than it would without the strict `L=`. That is also what a
+real power cut does to a program that does not sync.
+
+### The links
+
+With `network: bridge` every service has its own network namespace, joined to the bridge by
+the port `vh<i>`. Right after the service's processes stop, a strict `L=` sets that port down
+with the pinned `ip`. Nothing the namespace sends leaves it, and nothing reaches it. The ends of
+the killed processes' connections are lost on the way, so the peers see a silent node. The port
+goes up again before the service starts again, or at the end of the workload if the service is
+still down then. Then the namespace's kernel answers a peer's next packet on an old connection
+with a reset, as a rebooted machine does. One difference stays: a closed socket of the killed
+service sends its end again after a timeout, and such a retry can reach a peer after the port is
+up. Without `network: bridge` the services share one network namespace, so the links cannot be
+cut; the run logs `L: <svc>'s links are not cut`.
+
 ## The explorer
 
 `--storage-faults` (opt-in, like `--more-faults`) draws, from a stream of its own (so every other
@@ -173,6 +249,13 @@ list, `storage:` is the opt-in). The shrinker drops each token, shortens the tim
 step and a flip to one bit. A failure with `G=` has the class `corrupted-files`; a relaxed knob
 with `L=` is `unsafe-knob`, as with a whole-guest cut.
 
+With `--corrupt-several` as well (Milestone 245), half of the drawn `G=` tokens hit several
+services. The target is a group's selector (`minority`, `majority` or `all`) when a group's
+every member has `storage:`, else a list of two services. The draws come from a stream of their
+own, so every other field of a seed's schedule stays as it was. The shrinker takes such a target
+towards fewer services, as it does for `K=`, and a strict `L=` towards the plain one. The
+explorer does not draw `:strict`; a schedule written by hand may use it.
+
 ## What stays the same
 
 No engine, kernel module, guest kernel or agent changed; images of manifests without `storage:`
@@ -183,7 +266,11 @@ tokens). The project format gained an optional key and two `faults:` values (add
 ## Left for later
 
 - The disk-cache half of a service's power loss (option 2): the engines drop the unflushed writes
-  of the partition's block range at the same stop; hvm and KVM first, hvx on a side module.
+  of the partition's block range at the same stop; hvm and KVM first, hvx on a side module. The
+  strict `L=` makes it matter less, because Linux then hands the disk almost nothing that was
+  not synced.
+- A strict power loss of one service whose writeback setting is its own: it needs a disk per
+  service, because Linux keeps one writeback interval for the whole guest.
 - Corruption at the block level below the file system (misdirected or lost writes of one
   service), which option 2's request would also make possible.
 - A corruption that changes bytes the kernel has cached but the disk does not (or the reverse):

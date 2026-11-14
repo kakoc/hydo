@@ -62,7 +62,8 @@ fn storage_faults_only_add_tokens_and_follow_the_rules() {
                     inplace += 1;
                 }
             }
-            if let Some((svc, at, down)) = &s.l {
+            if let Some((svc, at, down, strict)) = &s.l {
+                assert!(!strict);
                 l += 1;
                 assert_eq!(svc, "n2");
                 assert!(*at >= 1 && *at < 20 && (1..=3).contains(down));
@@ -120,4 +121,96 @@ fn the_manifest_decides_which_storage_faults() {
         "disk=none dseed=1 | run G=n1@4:zero,len=512,seed=3 L=n2@5+2"
     );
     assert_eq!(e.finding_class(&s), "corrupted-files");
+}
+
+/// `--corrupt-several` (Milestone 245): only the drawn `G=`'s target changes, to a group's
+/// selector when a group's every member has `storage:`, else to a list of two services; every
+/// schedule passes the controller's names check and round-trips, and so does every shrink
+/// candidate, which takes the target towards fewer services. A strict `L=` written by hand
+/// round-trips and shrinks towards the plain one.
+#[test]
+fn several_services_change_only_the_corruption_target() {
+    let mut m = manifest(None);
+    let plain = ex(&m, true);
+    let mut several = ex(&m, true);
+    several.corrupt_several = true;
+    let p = plan(&m);
+    let (mut lists, mut same) = (0, 0);
+    for seed in 1..=400u64 {
+        let base = plain.compose_seed("random", seed, false);
+        let s = several.compose_seed("random", seed, false);
+        let mut rest = s.clone();
+        rest.g = base.g.clone();
+        assert_eq!(rest, base, "{seed}");
+        if let (Some(a), Some(b)) = (&base.g, &s.g) {
+            if a.svc == b.svc {
+                same += 1;
+            } else {
+                assert_eq!(b.svc, "n1,n2", "{seed}");
+                lists += 1;
+            }
+            assert_eq!((a.at, a.down, &a.how), (b.at, b.down, &b.how));
+        }
+        check_all(&several, &p, &s);
+    }
+    assert!(lists > 0 && same > 0, "{lists} {same}");
+    // with a group of the services with storage: its selectors
+    m["groups"] = json!([{"name": "pair", "services": ["n1", "n2"]}]);
+    let mut g = ex(&m, true);
+    g.corrupt_several = true;
+    let p = plan(&m);
+    let mut sel = 0;
+    for seed in 1..=400u64 {
+        let s = g.compose_seed("process", seed, false);
+        if let Some(z) = &s.g {
+            if z.svc.starts_with("pair.") {
+                sel += 1;
+                let cs = g.candidates(&s, None);
+                assert!(
+                    cs.iter()
+                        .any(|c| c.g.as_ref().is_some_and(|x| x.svc != z.svc)),
+                    "{z:?}"
+                );
+            }
+        }
+        check_all(&g, &p, &s);
+    }
+    assert!(sel > 0);
+    // a hand-written strict L= and a list G=
+    let t = "disk=none dseed=1 | run G=n1,n2@4+1:flip L=n2@5+2:strict";
+    let s = plain.parse(t).unwrap();
+    assert_eq!(plain.render(&s), t);
+    assert_eq!(s.l, Some(("n2".to_string(), 5, 2, true)));
+    let cs = plain.candidates(&s, None);
+    assert!(cs
+        .iter()
+        .any(|c| c.l == Some(("n2".to_string(), 5, 2, false))));
+    assert!(cs
+        .iter()
+        .any(|c| c.g.as_ref().is_some_and(|x| x.svc == "n1" || x.svc == "n2")));
+    // a list naming a service without storage is dropped by the space's filter
+    let s = plain
+        .parse("disk=none dseed=1 | run G=n1,n3@4:flip")
+        .unwrap();
+    assert_eq!(plain.render(&s), "disk=none dseed=1 | run");
+}
+
+fn plan(m: &Value) -> hydo_control::Plan {
+    let text = serde_json::to_string(m).unwrap();
+    let mm = hydo_manifest::from_embedded(&text, None).unwrap();
+    hydo_control::Plan::from_manifest(&mm).unwrap()
+}
+
+fn check_all(e: &Ex, p: &hydo_control::Plan, s: &hydo_explore::sched::S) {
+    let text = e.render(s);
+    let parsed = Schedule::parse(&text).unwrap_or_else(|x| panic!("{text}: {x}"));
+    assert_eq!(parsed.to_string(), text);
+    assert_eq!(e.render(&e.parse(&text).unwrap()), text);
+    hydo_control::names::check(p, &parsed).unwrap_or_else(|x| panic!("{text}: {x}"));
+    for c in e.candidates(s, None) {
+        let t = e.render(&c);
+        let pc = Schedule::parse(&t).unwrap_or_else(|x| panic!("candidate {t}: {x}"));
+        assert_eq!(e.render(&e.parse(&t).unwrap()), t);
+        hydo_control::names::check(p, &pc).unwrap_or_else(|x| panic!("{t}: {x}"));
+    }
 }

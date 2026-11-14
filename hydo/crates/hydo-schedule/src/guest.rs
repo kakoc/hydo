@@ -788,18 +788,27 @@ pub enum GuestToken {
     Compose(Compose),
     /// `A=`: a reaction to an assertion record (M139).
     React(React),
-    /// `G=<svc>@<at>[+<down>]:<corruption>`: change bytes of one file in the service's storage
-    /// directory before step at; with `+down` while the service is down (killed before, started
-    /// again before step at+down). See `storage.rs`.
+    /// `G=<target>@<at>[+<down>]:<corruption>`: change bytes of one file in the storage
+    /// directory of each service of the target before step at; with `+down` while the services
+    /// are down (killed before, started again before step at+down). The target is a service, a
+    /// list or a group's selector, as for `K=` (Milestone 245). See `storage.rs`.
     Corrupt {
-        svc: String,
+        target: Target,
         at: u64,
         down: Option<u64>,
         how: Corruption,
     },
-    /// `L=<svc>@<at>+<down>`: a power loss of one service (its own file system shut down,
-    /// unwritten data lost) before step at; it starts again before step at+down.
-    PowerLoss { svc: String, at: u64, down: u64 },
+    /// `L=<svc>@<at>+<down>[:strict]`: a power loss of one service (its own file system shut
+    /// down, unwritten data lost) before step at; it starts again before step at+down. With
+    /// `strict` (Milestone 245) Linux writes nothing back on its own from the run's start, so
+    /// every write the service had not synced is lost, and the service's network links are cut
+    /// while it is down. See `storage.rs`.
+    PowerLoss {
+        svc: String,
+        at: u64,
+        down: u64,
+        strict: bool,
+    },
     /// `U=<target>@<at>[/<gap>][+<back>]:<version>`: services switched to another version of
     /// themselves (Milestone 238, `upgrade.rs`).
     Upgrade(Upgrade),
@@ -1037,16 +1046,30 @@ impl GuestToken {
             'A' => GuestToken::React(React::parse(v)?),
             'U' => GuestToken::Upgrade(Upgrade::parse(v, what)?),
             'L' => {
+                let (v, strict) = match v.split_once(':') {
+                    Some((x, "strict")) => (x, true),
+                    Some(_) => {
+                        return Err(err(format!(
+                            "{what}: <svc>@<at>+<n>[:strict] (the only word after : is strict)"
+                        )))
+                    }
+                    None => (v, false),
+                };
                 let (svc, at, down) = at_plus(v, what)?;
-                GuestToken::PowerLoss { svc, at, down }
+                GuestToken::PowerLoss {
+                    svc,
+                    at,
+                    down,
+                    strict,
+                }
             }
             'G' => {
-                let form =
-                    "<svc>@<at>[+<down>]:<flip|zero|trunc>[,n=][,len=][,range=][,file=][,seed=]";
-                let (svc, r) = v
+                let form = "<target>@<at>[+<down>]:<flip|zero|trunc>[,n=][,len=][,range=]\
+                            [,file=][,seed=]";
+                let (t, r) = v
                     .split_once('@')
                     .ok_or_else(|| err(format!("{what}: {form}")))?;
-                name(svc, what)?;
+                let target = Target::parse(t, what)?;
                 let (when, how) = r
                     .split_once(':')
                     .ok_or_else(|| err(format!("{what}: {form}")))?;
@@ -1055,7 +1078,7 @@ impl GuestToken {
                     None => (dec(when, what)?, None),
                 };
                 GuestToken::Corrupt {
-                    svc: svc.to_string(),
+                    target,
                     at,
                     down,
                     how: Corruption::parse(how, what)?,
@@ -1141,14 +1164,30 @@ impl fmt::Display for GuestToken {
             GuestToken::Freeze(x) => write!(f, "F={x}"),
             GuestToken::Compose(w) => write!(f, "W={w}"),
             GuestToken::React(r) => write!(f, "A={r}"),
-            GuestToken::Corrupt { svc, at, down, how } => {
-                write!(f, "G={svc}@{at}")?;
+            GuestToken::Corrupt {
+                target,
+                at,
+                down,
+                how,
+            } => {
+                write!(f, "G={target}@{at}")?;
                 if let Some(d) = down {
                     write!(f, "+{d}")?;
                 }
                 write!(f, ":{how}")
             }
-            GuestToken::PowerLoss { svc, at, down } => write!(f, "L={svc}@{at}+{down}"),
+            GuestToken::PowerLoss {
+                svc,
+                at,
+                down,
+                strict,
+            } => {
+                write!(f, "L={svc}@{at}+{down}")?;
+                if *strict {
+                    f.write_str(":strict")?;
+                }
+                Ok(())
+            }
             GuestToken::Upgrade(u) => write!(f, "U={u}"),
             GuestToken::Knob { letter, value } => write!(f, "{letter}={value}"),
         }

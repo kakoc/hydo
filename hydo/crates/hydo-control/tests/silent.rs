@@ -99,6 +99,12 @@ fn storage_faults_name_a_service_with_storage() {
     );
     let e = refused(&s, "disk=none | run L=nosuch@10+2");
     assert!(e.contains("which this image does not have"), "{e}");
+    // Milestone 245: the strict power loss, and G= on a list or a group's selector
+    accepted(&s, "disk=none dseed=1 | run L=redis@10+2:strict");
+    let e = refused(&s, "disk=none | run G=redis,nosuch@10:flip");
+    assert!(e.contains("which this image does not have"), "{e}");
+    let e = refused(&s, "disk=none | run G=nodes.all@10:flip");
+    assert!(e.contains("names the group nodes"), "{e}");
 }
 
 #[test]

@@ -551,15 +551,54 @@ fn storage_faults() {
         "disk=none dseed=0 | run G=n2@7:flip,n=2,range=4096-8192",
         "disk=none dseed=0 | run L=n1@12+3",
         "disk=cut dseed=0 | run L=n1@12+3 P=n2@13+2 C=20",
+        // Milestone 245: a list or a group's selector, and the strict power loss
+        "disk=none dseed=0 | run G=n1,n3@10+2:flip,n=4,file=.blk,seed=3",
+        "disk=none dseed=0 | run G=nodes.minority@10:trunc,file=.blk",
+        "disk=none dseed=0 | run G=nodes.minority.2@10+1:zero,len=4096",
+        "disk=none dseed=0 | run G=nodes.all@10+1:flip",
+        "disk=none dseed=0 | run L=n1@12+3:strict",
+        "disk=cut dseed=0 | run L=n1@12+3:strict P=n2@13+2 C=20",
     ] {
         round_trip(s);
     }
+    let s = Schedule::parse("disk=none | run G=n1,n3@4:flip L=n2@6+1:strict").unwrap();
+    assert_eq!(
+        s.guest,
+        vec![
+            GuestToken::Corrupt {
+                target: Target::List(vec!["n1".into(), "n3".into()]),
+                at: 4,
+                down: None,
+                how: Corruption {
+                    kind: CorruptKind::Flip,
+                    n: None,
+                    len: None,
+                    range: None,
+                    file: None,
+                    seed: None,
+                },
+            },
+            GuestToken::PowerLoss {
+                svc: "n2".into(),
+                at: 6,
+                down: 1,
+                strict: true,
+            },
+        ]
+    );
+    // the k-th service of a list gets the seed plus k; the first keeps the token's own
+    let GuestToken::Corrupt { how, .. } = &s.guest[0] else {
+        unreachable!()
+    };
+    assert_eq!(how.nth(0), *how);
+    assert_eq!(how.nth(2).seed, Some(2));
+    assert_eq!(how.nth(2).to_string(), "flip,seed=2");
     let s = Schedule::parse("disk=none | run G=n1@4+2:flip,n=3,seed=b L=n2@6+1").unwrap();
     assert_eq!(
         s.guest,
         vec![
             GuestToken::Corrupt {
-                svc: "n1".into(),
+                target: Target::Service("n1".into()),
                 at: 4,
                 down: Some(2),
                 how: Corruption {
@@ -575,13 +614,25 @@ fn storage_faults() {
                 svc: "n2".into(),
                 at: 6,
                 down: 1,
+                strict: false,
             },
         ]
     );
     assert_eq!(s.guest[0].letter(), 'G');
     assert_eq!(s.guest[1].letter(), 'L');
     assert!(RESERVED.contains('G') && RESERVED.contains('L'));
-    refused("disk=none | run G=n1@4", "<svc>@<at>");
+    refused("disk=none | run G=n1@4", "<target>@<at>");
+    refused("disk=none | run G=n1,n1@4:flip", "named twice");
+    refused("disk=none | run G=nodes.most@4:flip", "not a selector");
+    refused(
+        "disk=none | run L=n1@4+1:harsh",
+        "the only word after : is strict",
+    );
+    refused(
+        "disk=none | run L=n1@4+1:",
+        "the only word after : is strict",
+    );
+    refused("disk=none | run L=n1,n2@4+1", "not a service name");
     refused("disk=none | run G=n1@4:melt", "flip, zero or trunc");
     refused(
         "disk=none | run G=n1@4:flip,len=3",
