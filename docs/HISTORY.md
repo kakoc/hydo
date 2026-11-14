@@ -7876,3 +7876,96 @@ the code:
 The page tests check two more rules: no machine path above the details, and every link has a
 target on the page.
 
+### Milestone 229 (tentative number) - DONE (`hydo onboard` starts onboarding with one command; the Claude Code plugin is `hydo` and its command `/hydo:onboard`; docs/ONBOARD.md with a worked messages example that runs on the Mac engine; nothing recorded moved; 2026-11-14)
+
+**In short.** A user who wanted to onboard a message broker found no clear start in the README,
+and the plugin install failed for them because they missed `/plugin marketplace add kakoc/hydo`.
+The user decided to rename freely and keep no old names (2026-11-14). hydo now has one command,
+`hydo onboard`, that starts the folder and installs the skill; the plugin is `hydo` and the skill
+`onboard`, so Claude Code calls it `/hydo:onboard`; and docs/ONBOARD.md explains the three parts
+with a worked example.
+
+**The plugin and the skill.**
+
+- The plugin folder `plugin/` has Claude Code's standard layout: `.claude-plugin/plugin.json`
+  names the plugin `hydo`, and `skills/onboard/` holds the skill in the Agent Skills format. The
+  marketplace `.claude-plugin/marketplace.json` lists it as `hydo` from `./plugin`. The install
+  is `/plugin marketplace add kakoc/hydo`, then `/plugin install hydo@hydo`.
+- Checked with Claude Code 2.1.323 in a throwaway configuration (`CLAUDE_CONFIG_DIR`): `claude
+  plugin validate .` and `claude plugin validate plugin` pass, and after `claude plugin
+  marketplace add` of the tree and `claude plugin install hydo@hydo` the session's init event
+  lists the skill `hydo:onboard`.
+- A skills-directory plugin, a folder under `.claude/skills/` with a `.claude-plugin/plugin.json`,
+  loads as `hydo@skills-dir`. With `SKILL.md` at the folder's root its command was `/hydo`, not
+  `/hydo:onboard`; with the standard layout it is `/hydo:onboard`. That is why the skill moved
+  into `plugin/skills/onboard/` and why `hydo skill install --agent claude` copies the whole
+  plugin folder to `.claude/skills/hydo`. The other tools get the skill folder alone as
+  `.agents/skills/onboard`.
+- The skill's version is 2.0.0 (a renamed skill, plugin and command), in `SKILL.md`,
+  `plugin.json` and the marketplace entry. The skill release archive holds the plugin folder as
+  `hydo/`; `hydo skill update` puts the plugin folder into a `hydo` copy and the skill folder into
+  an `onboard` copy. A folder counts as hydo's skill only when its `SKILL.md` is named `onboard`
+  and has `hydo-min:`, so another tool's skill of the same name is never replaced.
+- The releases ship `plugin/` instead of `skill/hydo-onboard/`; `hydo-agents` embeds `plugin/`
+  through `embed/plugin`. The repository links `.claude/skills/hydo` to `plugin/` and
+  `.agents/skills/onboard` to `plugin/skills/onboard`.
+- The old name stays in three places on purpose: the salt `hydo-onboard:` of
+  `hydo_build::image::uuid_from` (its UUIDs are inside every image), the comments of the recorded
+  example manifests compose-voting and miniflux and their schema copies (their bytes are inside
+  recorded images), and docs/HISTORY.md.
+
+**`hydo onboard [DIR] [--agent NAME ...] [--no-skill] [--no-resolve]`** (`hydo/crates/hydo-cli/src/onboard.rs`):
+
+1. It says what it found: a Compose file and its services, the Dockerfiles, the main language by
+   file count, and an existing `hydo/` folder.
+2. With a Compose file and no `hydo/`, it runs `hydo compose <file> --out hydo/hydo.yaml
+   --images-dir images` and adds the `.gitignore` lines and the `AGENTS.md` section that `hydo
+   init` adds. Without a Compose file it runs `hydo init`. An existing `hydo/` is never changed.
+3. It installs the skill for the AI tools it finds: a `.claude/`, `.codex/`, `.cursor/` or
+   `.gemini/` folder, `.github/copilot-instructions.md`, or the `claude`, `codex`, `cursor-agent`,
+   `cursor`, `gemini` or `copilot` command on `PATH`. `--agent` names the tools instead, and
+   `--no-skill` installs none.
+4. It prints the next step: `Next: open Claude Code here and run /hydo:onboard` for Claude Code,
+   the onboard skill for another tool, and without a tool the three parts to fill in with
+   `hydo guide workflow`.
+
+`hydo onboard --help` answers before anything else (Milestone 210), and the main help lists the
+command. `tests/onboard.rs` runs it in scratch repositories with their own `HOME` and a `PATH` of
+stand-in tools: a Compose project with `.claude/`, a plain project with `codex`, an existing
+`hydo/`, no AI tool, `--agent`, `--no-skill` and `--help`.
+
+**The pages.** docs/ONBOARD.md "Onboard your system" (in `ci/vale.sh` and in the docs test's
+user pages) gives the three parts, the three paths (a Compose file, no Compose file, an AI tool),
+what a good first result is, what to do when the first run fails, and the worked example.
+`hydo guide workflow` starts with `hydo onboard`, `hydo guide` names the new plugin commands, and
+`hydo init`'s `AGENTS.md` section names the skill `onboard`. The README was rewritten on `main`
+in parallel (`79789388`) and was not changed here.
+
+**The example** `hydo/onboard/examples/messages-tutorial/`: `tinyq`, a queue of 316 lines of Go
+(one channel, a log synced before each answer, a resent id stored once, the oldest
+unacknowledged message handed out), which is also its client and writes `HYDO-HIST queue`
+records. Producers are `parallel_driver_produce` (one in four sends twice), the consumer is
+`serial_driver_consume`, and the check is `type: messages` with `delivery: at-least-once`,
+`duplicates: {by: message, window_ms: 600000}`, `order: {kind: fifo, scope: key}` and
+`after_ack: no-redelivery`. The setting `S=never` makes tinyq answer before it syncs. The fault
+kinds leave out `disk`: a first exploration with it found two `io-errors` runs, a drain that
+cannot write and a restart on a failing disk, which the tutorial does not check. Runs on the Mac
+engine with this branch's `hydo` inside the unpacked 0.3.2 Mac release, Go 1.27.3:
+
+| run | result |
+|---|---|
+| `hydo run "disk=none \| run"`, twice | `fp=be992f7e466b6db5` both times, OK; no-loss 24 judged, duplicates 8, after-ack 24, order 21 |
+| `hydo run "disk=cut \| run C=10 S=never"` | VIOLATION `[queue.no-loss] m10 was acknowledged to process 10 at 0.727 s and never delivered` |
+| `hydo run "disk=cut \| run C=10"` | OK |
+| `hydo explore --seeds 1-20 --workers 1` | 20 schedules, 1 failure, reproduced; class `unsafe-knob`, shrunk in 29 runs to `disk=cut dseed=362259904816818c \| run C=10 S=never W=:p1,r50,cparallel_driver_produce,1.1.0.1802048978`, two runs `e3b769740bd36ed5`; 2 passing runs with an early power cut judged no order |
+
+**Goldens.** The CLI and agents goldens (the help texts, the skill's paths and names), the
+hydo-compose golden (its TODO comment names `/hydo:onboard`), and the explorer's identity and
+corpus goldens (the new example) are re-recorded. The full identity golden only grew; the corpus
+golden of before still passes with the new example moved aside, so no answer of an unchanged
+input moved.
+
+**Open.** The skill release `skill-v2.0.0` is not published (the lead tags it after the merge).
+`hydo onboard` ran only on this Mac; the example did not run on Linux, where `build.sh` builds an
+x86_64 queue. Claude Code users who installed the old plugin `hydo-onboard@hydo` keep it until
+they remove it; the marketplace no longer lists it.

@@ -1,4 +1,4 @@
-//! `hydo onboard` (Milestone 228) in a scripted environment: each case is a scratch repository
+//! `hydo onboard` (Milestone 229) in a scripted environment: each case is a scratch repository
 //! with its own HOME and a PATH that holds only the stand-in AI tools the case wants (scripts
 //! that do nothing), so what the command finds is exactly what the case set up. No network, no
 //! VM: the Compose case passes `--no-resolve`.

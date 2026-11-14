@@ -370,7 +370,7 @@ repository. What did not, and how each is fixed:
 
 - **Files read at compile time from outside the crate.** `hydo-cli`'s `setup.rs` compiled in
   `hydo/dist/<platform>/assets.sha256` and `guest-programs.sha256`, `hydo-image`'s `releases.rs` the
-  release index `hydo/dist/releases.txt` (Milestone 162), and `hydo-agents`' build script embedded the skill folder (since Milestone 228 the plugin folder `plugin/`) and `hydo/onboard/MANIFEST.md`. Each crate now reads
+  release index `hydo/dist/releases.txt` (Milestone 162), and `hydo-agents`' build script embedded the skill folder (since Milestone 229 the plugin folder `plugin/`) and `hydo/onboard/MANIFEST.md`. Each crate now reads
   them through links inside its directory (`hydo-cli/pins/<platform>/*.sha256`, `hydo-image/pins/releases.txt`,
   `hydo-agents/embed/plugin` and `embed/MANIFEST.md`); git keeps the links, the tree
   builds the same bytes through them, and `cargo package` copies the linked files' contents
@@ -537,7 +537,7 @@ The skill is published separately from hydo (Milestone 170), so its process can 
 hydo releases while the facts always come from the user's own hydo (`hydo guide`):
 
 - One plugin folder, `plugin/`, in Claude Code's standard plugin layout
-  (`.claude-plugin/plugin.json` and `skills/onboard/`, Milestone 228). The skill folder
+  (`.claude-plugin/plugin.json` and `skills/onboard/`, Milestone 229). The skill folder
   `plugin/skills/onboard/` is in the Agent Skills format (https://agentskills.io/specification),
   the same files for every tool. Claude Code takes the plugin from the marketplace entry, whose
   `source` is `./plugin`, so nothing is copied or linked; `hydo skill install --agent claude`

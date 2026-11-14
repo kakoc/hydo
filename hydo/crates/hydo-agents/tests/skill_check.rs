@@ -1,5 +1,5 @@
 //! The repository check of the skills (it replaced skills/check.py in M108): the published skill
-//! `onboard` in the Claude Code plugin folder `plugin/` (`plugin/skills/onboard/`, Milestone 228)
+//! `onboard` in the Claude Code plugin folder `plugin/` (`plugin/skills/onboard/`, Milestone 229)
 //! and the contributor skills in `skills/`. It checks the Agent Skills specification
 //! (https://agentskills.io/specification), the skill's version and its plugin, and the guide
 //! (hydo/guide/) the skill relies on (Milestone 170).

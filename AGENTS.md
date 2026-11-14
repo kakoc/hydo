@@ -332,8 +332,11 @@ optional `primary:` command that prints the current primary. `K=`, `P=` and `X=`
 --cluster-faults` draws them from their own stream. The reference is the section `Groups of
 services and partitions` of `hydo/onboard/MANIFEST.md`.
 
-**Onboarding and SDKs.** The skill `skills/hydo-onboard/` holds the process; every hydo fact is
-in the guide `hydo/guide/`, printed by `hydo guide <topic>`. The assertion SDKs are in `sdk/`
+**Onboarding and SDKs.** `hydo onboard` starts a repository's `hydo/` folder and installs the
+skill (M229). The skill `onboard` in the Claude Code plugin `hydo` (`plugin/skills/onboard/`;
+`/plugin marketplace add kakoc/hydo`, `/plugin install hydo@hydo`, then `/hydo:onboard`) holds
+the process; every hydo fact is in the guide `hydo/guide/`, printed by `hydo guide <topic>`.
+docs/ONBOARD.md is the user's page. The assertion SDKs are in `sdk/`
 (Rust is the reference), with the shared cases in `sdk/cases/`. `sdk/README.md` is for SDK
 maintainers: the shared cases, and the Go module with its frozen copy in `hydo/stack` (section
 "The Go module and the frozen copy in `hydo/stack`"). Every code example on the package pages is a
@@ -820,6 +823,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 103. The plain report page (M228). A fresh reader's review is fixed. Every error verdict but a
     failed restart gets the title `The run stopped early`. A service's own log is not in an
     exploration's files, so the page can only name the command that shows it.
+104. `hydo onboard` and the plugin `hydo` (M229). The skill release `skill-v2.0.0` is not
+    published, so `hydo skill update` still installs 1.2.0 under the old name until it is.
+    `hydo onboard` ran only on the Mac, and the messages tutorial did not run on Linux.
 
 ## Milestone index
 
@@ -1183,6 +1189,11 @@ build machine, before 2026-10-13.
   again. The specialists' details are folded at the bottom. Every schedule token has words
   (`hydo_schedule::describe`) and every failure class a label and advice
   (`hydo_explore::advice`). Nothing recorded moved
+- M229 (tentative number): `hydo onboard` finds a repository's parts, starts `hydo/` with
+  `hydo compose` or `hydo init`, installs the skill for the AI tools it finds, and prints the next
+  step. The plugin is `hydo` in `plugin/` and the skill `onboard`, so the command is
+  `/hydo:onboard` (skill 2.0.0). docs/ONBOARD.md has a worked messages example that runs on the
+  Mac engine. Nothing recorded moved
 
 ## Where to look
 
@@ -1206,10 +1217,11 @@ build machine, before 2026-10-13.
   hvx, or the Mac engine's `hydo`.
 - Review changes to the determinism engines with special care. Keep the baseline fingerprints
   passing.
-- To onboard a project, follow the skill `skills/hydo-onboard/SKILL.md`. After a change, run
+- To onboard a project, follow the skill `plugin/skills/onboard/SKILL.md`. After a change, run
   `cargo test -p hydo-agents --test it skill_check:: -- --nocapture`. Put a fact about hydo into
-  `hydo/guide/`, never into the skill. A skill change raises its `metadata.version` and the
-  plugin entry's version together (`docs/RELEASING.md`).
+  `hydo/guide/`, never into the skill. A skill change raises its `metadata.version`, the
+  version in `plugin/.claude-plugin/plugin.json` and the marketplace entry's version together
+  (`docs/RELEASING.md`).
 - To write documentation, follow the skill `skills/hydo-docs/SKILL.md` and run `sh ci/vale.sh`.
 - For kernel and VMX work, use the Intel SDM Vol. 3C (the VMX chapters), the KVM source, and the
   tutorial series Hypervisor From Scratch.

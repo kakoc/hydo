@@ -1,7 +1,7 @@
 //! The skill's own releases (Milestone 170): the onboarding skill is released separately from
 //! hydo, as the GitHub release `skill-v<version>` with two assets, `hydo-skill-<version>.tar.gz`
 //! (the Claude Code plugin folder as `hydo/`, with the skill in `hydo/skills/onboard/`; Milestone
-//! 228) and `SHA256SUMS`. [`pack`] makes the archive reproducibly (the same bytes from the same
+//! 229) and `SHA256SUMS`. [`pack`] makes the archive reproducibly (the same bytes from the same
 //! folder on any machine: sorted entries, every time 0, owner 0:0, modes 0644 or 0755, gzip
 //! without a name or time); [`unpack`] takes one apart for `hydo skill update`, refusing anything
 //! but plain files and directories below `hydo/`.

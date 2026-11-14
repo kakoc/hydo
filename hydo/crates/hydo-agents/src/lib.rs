@@ -18,7 +18,7 @@
 //! Since Milestone 170 the process and the facts are apart. The onboarding skill `onboard` is an
 //! Agent Skills folder (<https://agentskills.io/specification>) inside the Claude Code plugin
 //! `hydo`: plugin/ in hydo's repository and in a release holds `.claude-plugin/plugin.json` and
-//! `skills/onboard/` (Milestone 228). In Claude Code its command is `/hydo:onboard`. The skill is
+//! `skills/onboard/` (Milestone 229). In Claude Code its command is `/hydo:onboard`. The skill is
 //! the process only, with its own version (`metadata.version`) and its own releases
 //! (`skill-v<version>`, [`release`]). The facts of this hydo (the project format's keys, commands,
 //! options, fault kinds, limits, examples, `hydo init`'s template) are the guide, hydo/guide/ in

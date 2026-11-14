@@ -1,4 +1,4 @@
-//! `hydo onboard [DIR] [--agent NAME ...] [--no-skill] [--no-resolve]` (Milestone 228): the one
+//! `hydo onboard [DIR] [--agent NAME ...] [--no-skill] [--no-resolve]` (Milestone 229): the one
 //! command that starts onboarding a repository. It says what it found (a Compose file and its
 //! services, Dockerfiles, the main language by files, an existing hydo/ folder), starts the
 //! folder (`hydo compose` when there is a Compose file, else `hydo init`; an existing hydo/ folder

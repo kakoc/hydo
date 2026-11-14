@@ -287,7 +287,7 @@ version can never be replaced on any registry (only yanked, deprecated or retrac
 
 ## Releasing the onboarding skill (separate from hydo releases)
 
-The onboarding skill `onboard` (Milestone 170; named `onboard` since Milestone 228) is the
+The onboarding skill `onboard` (Milestone 170; named `onboard` since Milestone 229) is the
 process of onboarding a project; hydo's facts are in the guide built into each `hydo`
 (`hydo/guide/`, `hydo guide`). It lives in the Claude Code plugin folder `plugin/`:
 `plugin/.claude-plugin/plugin.json` names the plugin `hydo`, and `plugin/skills/onboard/` is the
