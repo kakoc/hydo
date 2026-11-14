@@ -791,11 +791,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 99. Error kinds and an operation's name (M224). A line that names a reference such as `d5_q` gets
     the template `d#_q`, so every type of operation makes its own kind. The Blnk example's
     `known-errors.yaml` groups them with regular expressions.
-100. Lago's invoice twice (M225). A subscription cancelled shortly before the billing tick got
-    a periodic and a termination invoice for November (the Lago example's RESULTS.md, finding
-    8). It was not checked outside hydo, no upstream issue was searched, and no regression is
-    saved. The billing rule `final_one_invoice_per_period` counts only recurring invoices, so
-    only the generic rule caught it.
+100. Lago's invoice twice (M225). A subscription whose cancellation is not committed yet at the
+    hourly billing run gets a periodic and a termination invoice for one period. The Lago
+    example's RESULTS.md, finding 8, has the cause and a tested fix. It is a Lago bug, and no
+    upstream issue describes it. It reproduces with Docker when the database's answers to the
+    termination are held for 16 minutes across the billing run: 3 of 3 subscriptions got two
+    invoices. Without such a delay it cannot happen, because the run comes 10 minutes after the
+    period ends. An issue is drafted, not posted; posting it is the user's decision. The saved
+    regression `cancel-before-billing-tick` depends on the image's bytes: on the image before it,
+    the original schedule gave OK. A change to the example's files can turn it into OK, and then
+    it needs a new schedule. The billing rule `final_one_invoice_per_period` still counts only
+    periodic invoices.
 101. `hydo repro`, run by a user on the run directory of a run that root made (`sudo hydo run`),
     ends with an error that the engine cannot start (a missing file); as root it reproduces. Found
     in 0.3.2's verification on hvx. The message should name the directory's owner (the 0.3.2

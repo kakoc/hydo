@@ -1,0 +1,10 @@
+# Finding 8 of RESULTS.md: a subscription that is cancelled shortly before the billing tick is
+# invoiced twice for November. The database's answers to the API are lost in rounds 1 and 2, so
+# the termination of sub4 (terminated_at 23:56:28) is not committed yet when the clock steps to
+# 00:09:58. At 00:10:00 the periodic biller still reads sub4 as active and invoices November; at
+# 00:10:02 the termination commits and its invoice bills November up to 23:56 again. Shrunk by
+# hand from exploration F's seed 7 (`dseed=cb7302cecc8929b7`, `P=api_clock@7+2` dropped); the
+# command list below is the one W= was drawn against.
+# commands: anytime_redeliver eventually_1_billing_tick first_seed parallel_driver_batch parallel_driver_event serial_driver_terminate
+# expect: violation
+disk=none | run T=3:@:10-2s O=db-api@1-3:resp:loss,74% W=740c6cfa,p1,q1,r1500

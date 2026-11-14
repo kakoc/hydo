@@ -27,9 +27,11 @@ another agent's measurement campaign for the whole session, so no run used hvx.
   and answers 500. The client's retry gets 404, and nothing bills that period later. The
   exploration found it without being told, in a swarm schedule that killed and paused Redis. It
   reproduces with Docker and without hydo in five requests (finding 1). The re-run after
-  Milestone 225 found a second candidate with a clock step to the billing tick: a subscription
-  cancelled shortly before the tick is invoiced twice for November (finding 8, not yet checked
-  outside hydo).
+  Milestone 225 found a second bug, with lost database answers and a clock step to the billing
+  tick: **a subscription whose cancellation is still uncommitted at the hourly billing run is
+  invoiced twice for one period**. No upstream issue describes it. It reproduces with Docker and
+  without hydo when the database's answers to the termination are held for 16 minutes across
+  the billing run (finding 8).
 - **What else did hydo find that a Lago operator should know?** None of these is counted as a
   Lago bug:
   1. A power cut loses acknowledged usage that is charged in advance. The event is in
@@ -55,7 +57,8 @@ another agent's measurement campaign for the whole session, so no run used hvx.
   subscription has no November invoice"). The generic rule said only which total was short, and
   by how much.
 - **What did the consistency rules find?** Nothing. An invoice's total always equals the sum of
-  its fees. No subscription was invoiced twice for one period, no event was charged twice, no
+  its fees. No subscription got two periodic invoices for one period (the rule does not count
+  the termination invoice of finding 8), no event was charged twice, no
   invoice stayed in a state that is not final, and no acknowledged event was missing from
   PostgreSQL. Those rules held in every run.
 
@@ -515,29 +518,107 @@ drew the schedule of lago-api 6901: in B its seed 36 killed Redis, and with `mig
 list of services the same seed now kills PostgreSQL. The saved regression and the hand schedules
 above find it on every run.
 
-### 8. A subscription cancelled shortly before the billing tick is invoiced twice for November (not yet checked outside hydo)
+### 8. A subscription cancelled shortly before the billing tick is invoiced twice (a Lago bug, reproduced without hydo; no upstream issue found)
 
 Found by `final_business_result` alone in exploration F's seed 7: `disk=none
 dseed=cb7302cecc8929b7 | run P=api_clock@7+2 T=3:@:10-2s O=db-api@0-3:resp:loss,74%
-W=740c6cfa,p1,q1,r1500`, `ead9b89d0f62183b` in the exploration, in its re-run and in a third
-run. The rule's output in `result.json` says `units:sub4:api_calls: reported 24, acknowledged 12`.
-A replay (`hydo inspect exec ... --at end`) read Lago's rows for `sub4`:
+W=740c6cfa,p1,q1,r1500`. On the image `9621369557acf427…` it gave `ead9b89d0f62183b` four times:
+in the exploration, in its re-run, in a third run, and once more for this check. The rule's output
+in `result.json` says `units:sub4:api_calls: reported 24, acknowledged 12`. A replay
+(`hydo inspect exec ... --at end`) read Lago's rows for `sub4`:
 
 | invoice | created | reason | charges | fees |
 |---|---|---|---|---|
 | 1, finalized | 2026-12-01 00:10:00 | `subscription_periodic` | 11-01 00:00 to 11-30 23:59:59 | the base fee, 12 units of `api_calls` |
 | 2, finalized | 2026-12-01 00:10:02 | `subscription_terminating` | 11-01 00:00 to 11-30 23:56:28 | the base fee, 12 units of `api_calls` |
 
-1. The responses from PostgreSQL to the API are lost for rounds 0 to 2, so the first
-   cancellation times out after 60 s; the retry is acknowledged. `sub4` was terminated at 23:56:28.
-2. The clock steps to 00:09:58 before round 3, 13 minutes later, before the termination's
-   invoice was made.
-3. At 00:10:00 the periodic biller invoices November for `sub4` although it is terminated, and
-   2 s later the termination invoice bills November up to 23:56 again. Both are finalized: the
-   customer pays the base fee and the usage twice.
+The subscription row has `terminated_at` 23:56:28.44 and `updated_at` 00:10:02.13. So the API
+set `terminated_at` at 23:56:28, inside the termination's transaction, and the transaction wrote
+the row and committed 13 minutes later on the guest's clock:
 
-**Decision: probably a Lago bug, not checked outside hydo yet.** In production it needs a
-termination whose invoice is not made before the next billing tick: a worker backlog or a Redis
-outage of minutes before minute 10 of an hour. The billing rule `final_one_invoice_per_period`
-did not see it, because it counts only recurring invoices, and a termination invoice is not
-one. No upstream issue was searched, and no regression is saved yet.
+1. The database's answers to the API are lost in rounds 0 to 2. No attempt of the cancellation
+   in these rounds gets an answer within the client's 10 s. One of those requests has locked
+   the row (`with_lock`) and set `terminated_at`, and then waits for the database.
+2. The fault ends, and the clock steps from 23:56 to 00:09:58 before round 3. The request is
+   still waiting, so its transaction is still open.
+3. At 00:10:00 the hourly biller reads `sub4` as active and invoices November. At 00:10:02 the
+   termination commits, and its invoice bills November up to 23:56:28 again. Both invoices are
+   finalized. A later attempt of the cancellation gets 404, which the client counts as done.
+
+**The cause in Lago's code** (lago-api v1.57.0; `main` at `2e119262` has the same code):
+
+1. `Subscriptions::TerminateService` sets `terminated_at` to the current time and the status
+   `terminated` inside `subscription.with_lock`, and commits at the end of the block. Until the
+   commit, every other session reads the subscription as active.
+2. `Subscriptions::OrganizationBillingService` selects the subscriptions to bill by
+   `subscriptions.status = active`, and `Invoices::SubscriptionService` checks `active?` again.
+   Neither takes the row lock, so both read the state before the termination. They invoice the
+   whole period.
+3. After the commit, the termination's `BillSubscriptionJob` bills from the start of the period
+   to `terminated_at`. The duplicate check (`CreateInvoiceSubscriptionService#duplicated_invoices?`)
+   and the unique index `index_uniq_invoice_subscriptions_on_charges_from_to_datetime` cover only
+   periodic invoices, so nothing compares the termination invoice with the periodic one.
+
+**What the lost answers contribute.** They keep the termination's transaction open. A
+termination that commits in milliseconds never meets the biller with this result: the biller
+runs at minute 10 of the hour, and a monthly period ends at midnight in the customer's time zone.
+A termination before midnight that commits before the tick is not selected. A termination after
+midnight bills only the new period. So the transaction must stay open from before midnight until
+after the tick, at least 10 minutes in a time zone with a whole-hour offset. The clock step in
+hydo's schedule only makes those 10 minutes pass in a few seconds. In production the same needs a
+network delay of 10 minutes or more between the API and PostgreSQL that does not break the
+connection. Nothing in Lago's defaults ends such a request: Puma has no request timeout, and
+`LAGO_DATABASE_IDLE_TX_TIMEOUT` (PostgreSQL's `idle_in_transaction_session_timeout`) is off
+unless it is set. Linux keeps a TCP connection through about 15 minutes of retransmissions.
+
+**Reproduced without hydo** (2026-11-14, Docker on this Mac, Lago v1.57.0 from this example's
+`docker-compose.yaml`). The API reaches PostgreSQL through a small TCP proxy. When the proxy sees
+the termination's `UPDATE "subscriptions" ... "terminated_at"`, it holds the database's answers
+on that connection for 16 minutes. Customers in the time zone `Atlantic/Azores` (UTC-1 in
+November), with monthly anniversary plans that renew on the 14th, so that their period ended at
+01:00 UTC. The time zone was set in the database, because the API accepts it only with a
+license.
+
+| subscription | what happened | invoices |
+|---|---|---|
+| `held1`, `held2`, `held3` | cancelled at 00:56:01, 00:56:11 and 00:56:21 UTC (23:56 local), answers held until 01:12:01 | each two, finalized, 11.20 USD each: the periodic one at 01:10:00 for 10-14 to 11-14 00:59:59, and the termination one at 01:12:01 for 10-14 to 23:56 local |
+| `ctrl1` | cancelled at 00:57:30 without a hold; the API's three threads were busy, so it ran at 01:12:01 | periodic 11.20 USD at 01:10:00, termination 0.33 USD for 01:00 to 01:12 UTC (correct) |
+| `plain1` | not cancelled | periodic 11.20 USD (correct) |
+
+With the answers held across the billing run, 3 of 3 subscriptions were invoiced twice.
+
+**A fix, tested the same way.** In `Invoices::SubscriptionService`, a periodic invoice first
+locks its subscriptions (`lock_subscriptions!`, which activation billing already uses), bills
+only those still active, and keeps the lock until its invoice subscriptions exist. The worker ran
+with that change, and the next hour repeated the test in `America/Argentina/Buenos_Aires`
+(UTC-3; an earlier try with `America/Noronha` billed nothing, because Lago accepts only the
+zones of Rails' list):
+
+| subscription | what happened | invoices |
+|---|---|---|
+| `fx2held1`, `fx2held2` | cancelled at 02:56:01 and 02:56:11 UTC (23:56 local), answers held until 03:12:01 | each one, the termination invoice, 11.20 USD for 10-14 to 23:56 local. Their periodic jobs waited 121.6 s for the lock, then found the subscription terminated and made nothing |
+| `fx2ctrl` | cancelled at 02:57:20 UTC (23:57 local) without a hold | one, the termination invoice, 11.20 USD (correct; the change does not touch this case, because the biller already reads the subscription as terminated) |
+| `fx2plain` | not cancelled | periodic 11.20 USD (correct) |
+
+Lago's own tests were not run with the change.
+
+**The schedule as a regression.** Which schedules show the bug depends on where the lost answers
+stop the request. When they stop it before the API sets `terminated_at`, the termination
+happens after the tick and is billed correctly. Every hydo run of one schedule on one image gives
+one result, but an image with other bytes moves the point where the request waits. After the
+regression file was first added, the image changed (`c00b630a459c365c…`), and on it the original
+schedule gave OK (`57345a0a048cbbfb`), as did the regression's first version. Of four
+neighbouring schedules on that image, two showed the bug: `loss,60%` and the fault in rounds 1
+and 2 only. The saved regression `hydo/regressions/cancel-before-billing-tick.schedule` is
+`disk=none | run T=3:@:10-2s O=db-api@1-3:resp:loss,74% W=740c6cfa,p1,q1,r1500`. On the image
+with it (`129f1938e3b5ffb9…`) it gave VIOLATION `67e39fdc213992b6` with `hydo run` and with
+`hydo repro --regressions`, which ran 4 of 4 regressions as expected. A change to any file of the
+example changes the image and can turn this regression into OK. Then search a schedule again
+with the variants above.
+
+**Decision: a Lago bug, not known upstream.** No issue or pull request in getlago/lago-api or
+getlago/lago describes it (searched 2026-11-14 for duplicate, double and twice invoices,
+termination, and periodic billing, open and closed). Pull request 4795 serializes two periodic
+jobs of one day, and it leaves termination jobs out on purpose. v1.57.0 is the newest release.
+The billing rule `final_one_invoice_per_period` did not see the bug, because it counts only
+periodic invoices.

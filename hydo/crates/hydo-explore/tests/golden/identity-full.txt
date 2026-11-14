@@ -126,6 +126,7 @@ input	hydo/onboard/examples/lago/hydo/checks/final_one_invoice_per_period.sql	5c
 input	hydo/onboard/examples/lago/hydo/fetch-images.sh	42bb9284070c66ac5f924a64134b017657a8e1fa8854d3631e2cceca25fdb3b5
 input	hydo/onboard/examples/lago/hydo/hydo-compose.lock.json	a83c2f4393fbffa7493ffc471d28249d7bf82acccd18aef1aff7766d78b8b0aa
 input	hydo/onboard/examples/lago/hydo/hydo.generated.yaml	c0e063fc86e71e90a238b7473e03edd87a7d7fcca41052951be7994ea731898a
+input	hydo/onboard/examples/lago/hydo/regressions/cancel-before-billing-tick.schedule	87986d61a8831aa22bca5e5f8a5624cc215247355e743274f3c5ce8e3db90857
 input	hydo/onboard/examples/lago/hydo/regressions/power-cut-loses-queued-fees.schedule	9c917d3db43782595341017e66a8ce74783cd843c692f5d663bfc4a6eae40277
 input	hydo/onboard/examples/lago/hydo/regressions/skipped-billing-day.schedule	702169389ab077cabf05bf0c7fb177d97c8f3ba2427d0101c931d942c2ceb122
 input	hydo/onboard/examples/lago/hydo/regressions/terminate-while-redis-down.schedule	3bea0b900dd45baf7bdcd7aabf2d4e564394fef20153e59ecf67f32b081fe885
