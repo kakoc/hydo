@@ -122,7 +122,7 @@ To install the skill as a Claude Code plugin without `hydo onboard`, type these 
 - [What hydo does not do](docs/LIMITS.md).
 - [How hydo is built](docs/ARCHITECTURE.md) and [how to contribute](CONTRIBUTING.md).
 
-The current release is hydo 0.3.2. It is experimental: formats and commands can change between
+The current release is hydo 0.3.3. It is experimental: formats and commands can change between
 versions.
 
 ## License

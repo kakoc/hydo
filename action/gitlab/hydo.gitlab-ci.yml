@@ -11,7 +11,7 @@
 #   hydo:
 #     extends: .hydo
 #     variables:
-#       HYDO_VERSION: "0.3.2"
+#       HYDO_VERSION: "0.3.3"
 #     tags: [kvm]               # a runner whose jobs can open /dev/kvm (hydo guide ci, "Runners")
 #
 # The note needs a project access token with the `api` scope in the CI/CD variable
@@ -21,7 +21,7 @@
 .hydo:
   image: ubuntu:24.04
   variables:
-    HYDO_VERSION: ""            # required: the hydo release (for example 0.3.2)
+    HYDO_VERSION: ""            # required: the hydo release (for example 0.3.3)
     HYDO_PROJECT: "."           # the directory that holds hydo/hydo.yaml
     HYDO_OUT: hydo-ci
     HYDO_ARGS: ""               # more arguments for hydo ci run

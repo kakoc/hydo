@@ -26,7 +26,7 @@ this tree: `guest/hydo-agent` (`hydo/crates/hydo-agent/build.sh`, checked agains
 `hydo-build`), `guest/hydo-world`, `guest/hydo-world-tls` (since 0.3.0), `guest/hydo-read`
 (`hydo/crates/hydo-read/build.sh`; its bytes depend on the kind of host that builds it,
 docs/BUILD-PINS.md), `guest/hydo-sql` (since 0.3.0; the same holds for it) and `guest/hydo-grpc`
-(`hydo/grpcgen/build-client.sh`, pinned `21db8ce0…` since 0.3.2). Since Milestone 107 the release contains no Python and
+(`hydo/grpcgen/build-client.sh`, pinned `a62d9f17…` since 0.3.3). Since Milestone 107 the release contains no Python and
 needs none; the Python CLI (`hydo/dist/linux/hydo`) and every Python module behind it are
 deleted (commit `2a58c4b` has them). The Mac release's `hydo` is the same program and behaves
 the same (Milestone 107); only `hydo module` is Linux-only.

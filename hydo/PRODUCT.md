@@ -8,7 +8,7 @@ every feature is in `docs/HISTORY.md`, by milestone.
 
 ## What a release contains
 
-hydo 0.3.2 contains every feature on this page unless the page says
+hydo 0.3.3 contains every feature on this page unless the page says
 otherwise. The releases are:
 
 - the Linux release, with the hvx engine and the KVM engine;
@@ -35,8 +35,8 @@ hydo/
 The parts of that description:
 
 - **Services.** `hydo compose` writes `hydo.yaml` from a Docker Compose file. It pins every image
-  by digest. The next release also builds the services that have `build:` with Docker
-  (Milestone 214, on `main`; `hydo guide workflow`). `hydo/onboard/MANIFEST.md` is the reference of every key.
+  by digest. It also builds the services that have `build:` with Docker (Milestone 214,
+  `hydo guide workflow`). `hydo/onboard/MANIFEST.md` is the reference of every key.
 - **The workload.** The test composer runs the commands in `hydo/workload/` in seeded sequences
   and concurrent mixes (Milestone 86, `hydo guide composer`). For a gRPC system on Linux,
   `hydo-grpc-gen` writes those commands from the `.proto` files (Milestone 91). For a SQL
