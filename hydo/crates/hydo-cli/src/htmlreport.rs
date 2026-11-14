@@ -17,6 +17,7 @@ mod page;
 mod story;
 #[cfg(test)]
 mod tests;
+pub mod text;
 
 use crate::ctx::{die, pjoin, take, OUT};
 use crate::diff;
@@ -452,47 +453,15 @@ fn key_of(run: &Run) -> Option<String> {
 
 /// "What held": the passing runs and the runs with a working disk and safe settings, in one or
 /// two sentences.
-fn held_html(pr: &story::Project, first: &[&Run], total: u64) -> String {
-    let mut s = String::from("<div class=\"card\">");
-    if first.is_empty() {
-        s.push_str("<p>The runs that passed are not recorded.</p></div>\n");
-        return s;
-    }
-    let passed: Vec<&&Run> = first.iter().filter(|r| r.verdict.kind == "ok").collect();
-    let np = passed.len();
-    s.push_str(&format!(
-        "<p>{}{np} of {total} runs passed every check.",
-        pill(if np > 0 { "ok" } else { "bad" }, "Passed")
-    ));
-    let durable: Vec<&&Run> = first
-        .iter()
-        .filter(|r| {
-            matches!(
-                story::class_of(r, pr).as_str(),
-                "durable-defaults" | "test-failed"
-            )
-        })
-        .collect();
-    let bad = durable.iter().filter(|r| r.verdict.kind != "ok").count();
-    if !durable.is_empty() && bad == 0 && np < first.len() {
-        let kinds = story::fault_kinds(durable.iter().map(|r| r.schedule.as_str()), pr);
-        s.push_str(&format!(
-            " With a working disk and your safe settings, none of the {} runs failed{}.",
-            durable.len(),
-            if kinds.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    ", {} included",
-                    esc(&describe::and_list(
-                        &kinds.iter().map(|k| k.to_string()).collect::<Vec<_>>()
-                    ))
-                )
-            }
-        ));
-    }
-    s.push_str("</p></div>\n");
-    s
+fn held_html(h: Option<&Held>) -> String {
+    let Some(h) = h else {
+        return "<div class=\"card\"><p>The runs that passed are not recorded.</p></div>\n".into();
+    };
+    format!(
+        "<div class=\"card\"><p>{}{}</p></div>\n",
+        pill(if h.passed > 0 { "ok" } else { "bad" }, "Passed"),
+        esc(&h.words())
+    )
 }
 
 /// The checks that held or were never reached, and the faults the runs never had (for the
@@ -1443,13 +1412,118 @@ struct Prob<'a> {
     key: Option<String>,
 }
 
-fn exploration_page(
+/// One problem as the page and the terminal show it (Milestone 230: `hydo report` prints the same
+/// problems as the page).
+pub struct Item {
+    pub problem: advice::Problem,
+    /// Runs that show it, of all runs.
+    pub runs: Option<(usize, u64)>,
+    /// What happens, in one or two sentences (plain words with backquotes).
+    pub happens: String,
+    /// The error lines of the new kinds: service, line and runs (at most 5).
+    pub lines: Vec<(String, String, u64)>,
+    /// New kinds beyond those 5.
+    pub more_lines: usize,
+    /// The command that shows it again.
+    pub command: String,
+    /// The id of its runs in the page's details.
+    pub link: String,
+}
+
+/// What an exploration's page and `hydo report` say, before either is written.
+pub struct ExStory<'a> {
+    pub pr: story::Project,
+    pub total: u64,
+    /// "hydo found 3 problems in your Redis setup".
+    pub title: String,
+    /// The lead paragraph (plain words).
+    pub lead: String,
+    /// The fault kinds of the runs, in words.
+    pub kinds: Vec<&'static str>,
+    /// The problems, the most attention first.
+    pub items: Vec<Item>,
+    /// The problems made of failing runs (the error-line problem is not one).
+    pub failure_problems: usize,
+    /// What held: the runs that passed, and the runs with a working disk and safe settings.
+    pub held: Option<Held>,
+    /// `hydo explore` with the next seeds.
+    pub explore_more: String,
+    /// The finding key of the first problem to accept.
+    pub accept: Option<String>,
+    groups: Vec<((String, String), Vec<&'a Failure>)>,
+    problem_of: Vec<usize>,
+    new_kinds: Vec<&'a hydo_results::ErrorKind>,
+    by_tag: BTreeMap<String, &'a Run>,
+}
+
+/// "What held" in numbers.
+pub struct Held {
+    pub passed: usize,
+    pub total: u64,
+    /// The runs with a working disk and safe settings when none of them failed (and some other
+    /// run did), with their fault kinds.
+    pub durable: Option<(usize, Vec<&'static str>)>,
+}
+
+impl Held {
+    /// The sentences of "What held" (plain words).
+    pub fn words(&self) -> String {
+        let mut s = format!("{} of {} runs passed every check.", self.passed, self.total);
+        if let Some((n, kinds)) = &self.durable {
+            s.push_str(&format!(
+                " With a working disk and your safe settings, none of the {n} runs failed{}.",
+                if kinds.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        ", {} included",
+                        describe::and_list(
+                            &kinds.iter().map(|k| k.to_string()).collect::<Vec<_>>()
+                        )
+                    )
+                }
+            ));
+        }
+        s
+    }
+}
+
+/// "What held" from the first runs (None when they are not recorded).
+fn held_of(pr: &story::Project, first: &[&Run], total: u64) -> Option<Held> {
+    if first.is_empty() {
+        return None;
+    }
+    let passed = first.iter().filter(|r| r.verdict.kind == "ok").count();
+    let durable: Vec<&&Run> = first
+        .iter()
+        .filter(|r| {
+            matches!(
+                story::class_of(r, pr).as_str(),
+                "durable-defaults" | "test-failed"
+            )
+        })
+        .collect();
+    let bad = durable.iter().filter(|r| r.verdict.kind != "ok").count();
+    let durable = (!durable.is_empty() && bad == 0 && passed < first.len()).then(|| {
+        (
+            durable.len(),
+            story::fault_kinds(durable.iter().map(|r| r.schedule.as_str()), pr),
+        )
+    });
+    Some(Held {
+        passed,
+        total,
+        durable,
+    })
+}
+
+/// The story of an exploration: its problems, what held, and what to run next.
+pub fn exploration_story<'a>(
     dir: &Path,
-    doc: &Exploration,
-    events: Option<&Stream>,
-    extra: &Extra,
-) -> String {
-    let shown = extra.shown_dir.clone();
+    doc: &'a Exploration,
+    events: Option<&'a Stream>,
+    shown: &str,
+) -> ExStory<'a> {
     let by_tag = runs_by_tag(events);
     let s_ = &doc.summary;
     let pr = story::project(dir, Some(&doc.image.path), &[]);
@@ -1602,29 +1676,12 @@ fn exploration_page(
             " Your services also wrote error lines that your list of known errors does not have.",
         );
     }
-    let mut body = top(
-        &format!(
-            "hydo report · {}exploration of {} run{}",
-            if pr.named {
-                format!("project <b>{}</b> · ", esc(&pr.label))
-            } else {
-                String::new()
-            },
-            total,
-            if total == 1 { "" } else { "s" }
-        ),
-        &esc(&title),
-        &esc(&lead),
-    );
     // the problems
-    if n_problems > 0 {
-        body.push_str(&h2("start", "Start here"));
-    }
-    let mut n = 0;
+    let mut items: Vec<Item> = Vec::new();
     for &i in &order {
         let x = &probs[i];
-        n += 1;
-        let cmd = story::replay_command(&pr, Some(&doc.image.path), Some(&doc.engine), &x.schedule);
+        let command =
+            story::replay_command(&pr, Some(&doc.image.path), Some(&doc.engine), &x.schedule);
         // what happens: what the first failing run showed for a service that did not come back,
         // else what failed; and why
         let first = x.failures[0];
@@ -1672,20 +1729,17 @@ fn exploration_page(
                 ));
             }
         }
-        body.push_str(&card(&Card {
-            n,
-            problem: &x.problem,
-            state: None,
+        items.push(Item {
+            problem: x.problem.clone(),
             runs: Some((x.failures.len(), total)),
             happens,
-            more: String::new(),
-            command: cmd,
-            after: String::new(),
-            link: Some(format!("f{}", x.groups[0] + 1)),
-        }));
+            lines: Vec::new(),
+            more_lines: 0,
+            command,
+            link: format!("f{}", x.groups[0] + 1),
+        });
     }
     if !new_kinds.is_empty() {
-        n += 1;
         let k0 = new_kinds[0];
         let one = advice::problem(
             "",
@@ -1721,59 +1775,29 @@ fn exploration_page(
             },
             ..one
         };
-        let mut more = String::from("<ul>\n");
-        for k in new_kinds.iter().take(5) {
-            more.push_str(&format!(
-                "<li>{} {} <span class=\"muted\">({} run{})</span></li>\n",
-                code(&k.service),
-                code(&cut(&k.template, 160)),
-                k.new_runs,
-                if k.new_runs == 1 { "" } else { "s" }
-            ));
-        }
-        if new_kinds.len() > 5 {
-            more.push_str(&format!("<li>and {} more</li>\n", new_kinds.len() - 5));
-        }
-        more.push_str("</ul>\n");
         let runs = s_.runs_with_new_error_kinds.unwrap_or(0) as usize;
-        body.push_str(&card(&Card {
-            n,
-            problem: &p,
-            state: None,
-            runs: (runs > 0).then_some((runs, total)),
+        items.push(Item {
             happens: format!("{} {}", p.what, p.why).trim().to_string(),
-            more,
-            command: format!("hydo errors {}", quote(&shown)),
-            after: String::new(),
-            link: Some("errors".into()),
-        }));
+            problem: p,
+            runs: (runs > 0).then_some((runs, total)),
+            lines: new_kinds
+                .iter()
+                .take(5)
+                .map(|k| (k.service.clone(), k.template.clone(), k.new_runs))
+                .collect(),
+            more_lines: new_kinds.len().saturating_sub(5),
+            command: format!("hydo errors {}", quote(shown)),
+            link: "errors".into(),
+        });
     }
-    // what held
-    body.push_str(&h2("held", "What held"));
-    body.push_str(&held_html(&pr, &first, total));
-    // next
-    body.push_str(&h2("next", "Next"));
-    let mut s = format!(
-        "<div class=\"card\"><p>Run more runs to look further: {}</p>\n",
-        code(&explore_more(
-            &pr,
-            &doc.image.path,
-            doc.config.seeds.as_deref()
-        ))
-    );
+    let held = held_of(&pr, &first, total);
+    let explore_more = explore_more(&pr, &doc.image.path, doc.config.seeds.as_deref());
     let accept = order
         .iter()
         .map(|&i| &probs[i])
         .find(|x| x.problem.attention != advice::Attention::Look)
-        .or_else(|| order.first().map(|&i| &probs[i]));
-    if let Some(k) = accept.and_then(|x| x.key.as_ref()) {
-        s.push_str(&format!(
-            "<p>Accept a problem you consider expected, so that it no longer fails your CI: {}</p>\n",
-            code(&format!("hydo ci accept {k} --reason \"…\""))
-        ));
-    }
-    s.push_str("</div>\n");
-    body.push_str(&s);
+        .or_else(|| order.first().map(|&i| &probs[i]))
+        .and_then(|x| x.key.clone());
     // details: which problem each group of failures is
     let mut problem_of: Vec<usize> = vec![0; groups.len()];
     for (n, &i) in order.iter().enumerate() {
@@ -1781,17 +1805,110 @@ fn exploration_page(
             problem_of[gi] = n + 1;
         }
     }
+    ExStory {
+        pr,
+        total,
+        title,
+        lead,
+        kinds,
+        items,
+        failure_problems: probs.len(),
+        held,
+        explore_more,
+        accept,
+        groups,
+        problem_of,
+        new_kinds,
+        by_tag,
+    }
+}
+
+fn exploration_page(
+    dir: &Path,
+    doc: &Exploration,
+    events: Option<&Stream>,
+    extra: &Extra,
+) -> String {
+    let shown = extra.shown_dir.clone();
+    let st = exploration_story(dir, doc, events, &shown);
+    let pr = &st.pr;
+    let total = st.total;
+    let mut body = top(
+        &format!(
+            "hydo report · {}exploration of {} run{}",
+            if pr.named {
+                format!("project <b>{}</b> · ", esc(&pr.label))
+            } else {
+                String::new()
+            },
+            total,
+            if total == 1 { "" } else { "s" }
+        ),
+        &esc(&st.title),
+        &esc(&st.lead),
+    );
+    // the problems
+    if !st.items.is_empty() {
+        body.push_str(&h2("start", "Start here"));
+    }
+    for (n, it) in st.items.iter().enumerate() {
+        let mut more = String::new();
+        if !it.lines.is_empty() {
+            more.push_str("<ul>\n");
+            for (svc, line, runs) in &it.lines {
+                more.push_str(&format!(
+                    "<li>{} {} <span class=\"muted\">({} run{})</span></li>\n",
+                    code(svc),
+                    code(&cut(line, 160)),
+                    runs,
+                    if *runs == 1 { "" } else { "s" }
+                ));
+            }
+            if it.more_lines > 0 {
+                more.push_str(&format!("<li>and {} more</li>\n", it.more_lines));
+            }
+            more.push_str("</ul>\n");
+        }
+        body.push_str(&card(&Card {
+            n: n + 1,
+            problem: &it.problem,
+            state: None,
+            runs: it.runs,
+            happens: it.happens.clone(),
+            more,
+            command: it.command.clone(),
+            after: String::new(),
+            link: Some(it.link.clone()),
+        }));
+    }
+    // what held
+    body.push_str(&h2("held", "What held"));
+    body.push_str(&held_html(st.held.as_ref()));
+    // next
+    body.push_str(&h2("next", "Next"));
+    let mut s = format!(
+        "<div class=\"card\"><p>Run more runs to look further: {}</p>\n",
+        code(&st.explore_more)
+    );
+    if let Some(k) = &st.accept {
+        s.push_str(&format!(
+            "<p>Accept a problem you consider expected, so that it no longer fails your CI: {}</p>\n",
+            code(&format!("hydo ci accept {k} --reason \"…\""))
+        ));
+    }
+    s.push_str("</div>\n");
+    body.push_str(&s);
     body.push_str(&share(&exploration_details(
         dir,
         doc,
         events,
-        &by_tag,
-        &groups,
-        &problem_of,
-        &new_kinds,
+        &st.by_tag,
+        &st.groups,
+        &st.problem_of,
+        &st.new_kinds,
         &shown,
     )));
-    page::document(&format!("{title} (hydo report)"), &body)
+    page::document(&format!("{} (hydo report)", st.title), &body)
 }
 
 #[allow(clippy::too_many_arguments)]

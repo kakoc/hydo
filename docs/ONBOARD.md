@@ -225,11 +225,12 @@ before it syncs its log. The default, `S=always`, syncs first. Explore 20 seeds:
 
 ```sh
 hydo explore --seeds 1-20 --workers 1
-hydo report
+hydo report --details
 ```
 
 The exploration ran 20 schedules on the Mac engine and found one failure, which reproduced. It
-shrank the failure to one producer and a power cut, and named its class `unsafe-knob`:
+shrank the failure to one producer and a power cut, and named its class `unsafe-knob`.
+`hydo report` says the same in words; `--details` shows the minimal schedule and the verdict:
 
 ```text
 - minimal schedule: `disk=cut dseed=362259904816818c | run C=10 S=never W=:p1,r50,cparallel_driver_produce,1.1.0.1802048978`

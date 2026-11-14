@@ -7995,3 +7995,96 @@ input moved.
 `hydo onboard` ran only on this Mac; the example did not run on Linux, where `build.sh` builds an
 x86_64 queue. Claude Code users who installed the old plugin `hydo-onboard@hydo` keep it until
 they remove it; the marketplace no longer lists it.
+
+### Milestone 230 (tentative number) - DONE (`hydo report` and the end of `hydo explore` in the terminal say what the page says: the problems in plain words, how often each happened, whether it is a bug and the command that shows it again; the technical report moved to `hydo report --details`; every machine reader keeps its bytes; the README's animated terminal shows the new output from a real run; nothing recorded moved; 2026-11-14)
+
+**Why.** After Milestone 228 the web page spoke to a developer who does not know hydo, and the
+terminal did not. `hydo explore` ended with a JSON line of timings and counts, and `hydo report`
+printed `report.md`: tables of classes and signatures, fingerprints, and the property table.
+
+**`hydo report`.** For an exploration it now prints the problems as the page shows them, from the
+same code. `htmlreport::exploration_story` computes the title, the problems ranked by attention,
+what held, and the next commands once. `exploration_page` writes HTML from it, and
+`htmlreport/text.rs` writes the terminal's words. The text has a headline with the failed runs,
+the fault kinds tried, and how the failures replayed. For each problem it gives the title, the
+label and the runs, what happens, "Is it a bug?" and the command. Then come "What held" and the
+next commands. Sentences wrap at 80 columns and commands never wrap. `hydo report --details`
+prints the old text, `report.md`'s. A run directory and an exploration that has not finished
+print what they printed before.
+
+**The end of `hydo explore`.** When stdout is a terminal, `hydo explore` ends with two or three
+lines, for example `hydo ran your system 30 times: 13 failed, in 3 different ways. Each failing
+run failed again the same way when hydo replayed it.` and `See them: hydo report (as one web
+page: hydo report --html)`. The count of ways is the report's count of problems, because both come
+from the story. When stdout is not a terminal, or with `--json`, it ends as before with the
+summary line and `hydo: report: ...`. `hydo_explore::Env` has `plain_end`, and only `hydo
+explore` in a terminal sets it. The `hydo-explore` program, `hydo ci run` (through
+`delegated::explore_with(.., false)`) and every test keep the summary line.
+
+**Machine readers kept.** They were found by searching the tree:
+
+- `exploration.json`, `events.jsonl`, `report.md` and `result.json` are unchanged; the scripts
+  (for example `hv/kvm/smp/turns-check.sh`) read `exploration.json`;
+- the summary line on stdout, which hydo-explore's `tests/fake_engine.rs` records as
+  `summary.txt`, is unchanged outside a terminal;
+- `hydo ci run` and its `report.md` and `junit.xml` are unchanged;
+- the skill tells an agent to use the guide's commands and parses no output; its text did not
+  change, so its version stays.
+
+**Proof that no other answer moved.**
+
+- The pages of `hydo report --html` before and after are byte-identical for 11 recorded inputs:
+  the Redis explorations and runs of Milestone 228, the scripted exploration, two CI runs, the CLI
+  test's two exploration fixtures, two Lago explorations and two older explorations. `hydo report
+  --details` printed exactly the old `hydo report` text for all of them.
+- The CLI golden changed only in its four `hydo report` answers. It gained the two `hydo report
+  --details` steps, whose answers equal the old `hydo report` answers byte for byte.
+- The explorer's `identity::` and `corpus::` goldens and the scripted-engine scenarios passed
+  without a change.
+
+**Tests.** `htmlreport::tests::the_terminal_says_what_the_page_says` checks the scripted
+exploration's text: the page's title and problems in the page's order, each command, what held,
+the next commands, and no hydo word outside the commands. Its lines fit 80 columns apart from
+commands. A directory other than the default one is named in the commands. The test also checks
+the end of `hydo explore`. The golden is `tests/golden/report/exploration.txt`.
+
+**A real run.** On this Mac the Redis example ran as a repository with its `hydo/` folder, with
+this branch's `hydo` in the unpacked 0.3.2 Mac release. `hydo onboard` found the folder, left it
+as it was and installed the skill. `hydo build` made the image `fba2c11e6a371d8b`, Milestone
+228's. `hydo explore --seeds 1-30 --strategy swarm` ran in a terminal (`script`) in 35 s. It found
+13 failures, all reproduced, with Milestone 228's three minimal schedules, and ended with the two
+lines above. `hydo report` then printed:
+
+```text
+hydo found 3 problems in your Redis setup (13 of 30 runs failed)
+Faults tried: a faulty disk, crashes, power cuts, network faults and disk
+errors. Each failing run failed again the same way when hydo replayed it.
+
+1. redis did not start again after disk errors
+   Worth a look, 5 of 30 runs.
+   redis exited with status 1 during the disk errors, and again after hydo
+   restarted it. The command also keeps this run's network faults and crashes.
+   Is it a bug? Decide whether your system must survive a failing disk. If it
+   must, look at the service's log in the run; if not, accept this finding.
+   See it again: hydo run "disk=ioerr:3 dseed=fd403ef8d08fa636 | run K=redis@16+1 N=redis@0-8:loss,7%"
+...
+What held: 17 of 30 runs passed every check. With a working disk and your safe
+settings, none of the 9 runs failed, network faults, power cuts and crashes
+included.
+```
+
+**The README's terminal.** `docs/img/hero.svg` (10,665 bytes, CSS animation only, no script and no
+web font; with reduced motion it shows the last frame) shows that run: `hydo onboard`,
+`/hydo:onboard`, `hydo explore --seeds 1-30 --strategy swarm` and `hydo report`. Every line is the
+real output, shortened only with `…`, and no line is a comment. The card shows the Redis example,
+because no Blnk exploration was kept. Paused frames at 1.5 s, 8.5 s, 14 s and 27.5 s were checked
+in headless Chrome. The README's alt text says the same.
+
+**Pages.** Both quickstarts describe the new report and name `--html` and `--details` for the
+classes and the property table. docs/ONBOARD.md quotes `--details` where it shows the minimal
+schedule. `hydo guide workflow` and `hydo guide faults` list `hydo report --details`.
+`hydo report --help` and `hydo explore --help` describe the new output and `--json`.
+
+**Open.** A run directory's `hydo report` is still the technical summary, and the lines that
+`hydo explore` prints on stderr before its runs are technical too (`fault space:` with JSON).
+`hydo ci run` keeps its own report. The real run used the Mac engine only.

@@ -512,7 +512,10 @@ last section. Since M228 the page is in plain words for a developer who does not
 says what broke and when it happens, as the schedule in sentences (`hydo_schedule::describe`).
 It says whether it is a bug, with a label from the failure's class (`hydo_explore::advice`), and
 it shows what hydo saw and the command to run in the project's folder. An exploration's failures are problems ranked by attention. Everything for
-specialists is in one folded section at the bottom.
+specialists is in one folded section at the bottom. Since M230 `hydo report` prints an
+exploration's problems in the same words (`htmlreport/text.rs`), and `hydo report --details`
+prints the technical report. `hydo explore` in a terminal ends with the problems counted. Outside
+a terminal, or with `--json`, it ends with the JSON summary line that scripts read.
 
 **Which versions have a finding (M221).** `hydo versions <run dir | explore dir | "<schedule>">`
 replays a finding's minimal schedule on versions of the system, oldest first. The versions are a
@@ -835,6 +838,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
     milestone and the values it moves; the pass removes the lines. None are waiting.
+106. The terminal in plain words (M230). A run directory's `hydo report` and the lines `hydo
+    explore` prints before its runs (`fault space:` with JSON) are still technical. The real run
+    used the Mac engine only.
 
 ## Milestone index
 
@@ -1203,6 +1209,11 @@ build machine, before 2026-10-13.
   step. The plugin is `hydo` in `plugin/` and the skill `onboard`, so the command is
   `/hydo:onboard` (skill 2.0.0). docs/ONBOARD.md has a worked messages example that runs on the
   Mac engine. Nothing recorded moved
+- M230 (tentative number): `hydo report` prints an exploration's problems as the page does, in
+  plain words, and `hydo report --details` prints the technical report. `hydo explore` in a
+  terminal ends with how many runs failed and in how many ways; outside a terminal, or with
+  `--json`, it ends with the summary line as before. The README's terminal shows a real run.
+  Nothing recorded moved
 
 ## Where to look
 

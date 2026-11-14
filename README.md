@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/img/hero.svg" width="860" alt="An animated terminal in the repository of Blnk, a ledger. hydo onboard finds its Docker Compose file with 8 services and installs the Claude Code skill. In Claude Code, /hydo:onboard writes a client and the rules. hydo explore runs 20 schedules of faults: 9 fail, and all 9 fail again on a second run. hydo report gives one command per failure: a Redis pause that makes an atomic bulk keep its first transfer, and a Redis kill that loses two confirmed operations.">
+  <img src="docs/img/hero.svg" width="860" alt="An animated terminal in a repository with the Redis example. hydo onboard finds its hydo/ folder and installs the Claude Code skill, whose command is /hydo:onboard. hydo explore runs Redis 30 times with different faults: 13 runs fail, in 3 different ways, and each failing run fails again the same way when hydo replays it. hydo report lists the 3 problems, each with a label, how many runs show it, and the command that shows it again: Redis does not start again after disk errors, Redis loses confirmed data after a power cut with appendfsync set to no, and Redis loses confirmed data with a faulty disk.">
 </p>
 
 <h1 align="center">hydo</h1>

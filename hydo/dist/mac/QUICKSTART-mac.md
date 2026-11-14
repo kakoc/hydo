@@ -200,23 +200,34 @@ hydo report
 ```
 
 hydo runs as many virtual machines at once as the Mac's cores and memory allow; add
-`--workers 2` to keep it to two. The report lists every failure with its class (the cause) and
-says whether it reproduced. For each class of VIOLATION it gives the minimal schedule,
-found by shrinking (removing faults while the failure stays), and the
-`hydo run --image <image> "<schedule>"` command that replays it. A run that ended `ERROR` gets no
-minimal schedule; `hydo repro hydo-out/explore` re-runs it.
+`--workers 2` to keep it to two. In a terminal, `hydo explore` ends with how many runs failed,
+in how many ways, and whether each failing run failed again when hydo replayed it.
 
-In this example the failures are all expected kinds:
+`hydo report` prints each problem it found:
 
-- the disk that loses acknowledged writes (`lying-disk`);
-- injected disk errors (`io-errors`);
-- the relaxed `appendfsync` settings (`unsafe-knob`: a knob such as `R=` set to a relaxed value).
+- the problem in one line, how often it happened, and a label (`Worth a look`, `Expected for
+  this setting` or `Expected`);
+- what happens, and whether it is a bug;
+- the `hydo run` command that shows it again, with the fewest faults that still cause it.
+
+`hydo report --html` writes the same problems as one web page, with each failure's timeline.
+`hydo report --details` prints the technical report. It gives each failure's class (the cause),
+the minimal schedules and their fingerprints, and a table of properties.
+
+In this example every problem comes from a fault that the example asks for:
+
+- Redis lost data it had confirmed, with a faulty disk that loses acknowledged writes (the class
+  `lying-disk`);
+- redis did not start again after disk errors (`io-errors`);
+- Redis lost data it had confirmed after a power cut, with `appendfsync` set to a relaxed value
+  (`unsafe-knob`: a knob such as `R=` set to a relaxed value).
 
 With the default settings and an honest disk Redis loses nothing (the `disk=cut | run C=12` run
-of section 2). The exploration finds 11 failures. The report's last table lists properties:
-hydo's own `fault.*` properties (which fault the runs reached) and the invariants. A program that uses hydo's SDKs adds its own
-assertions there (`hydo guide sdks`); this example has none, so its invariant is marked
-`[not in catalog]`, as every invariant of a `hydo.yaml` is.
+of section 2). The exploration finds 11 failures. The table of properties in `hydo report
+--details` lists hydo's own `fault.*` properties (which fault the runs reached) and the
+invariants. A program that uses hydo's SDKs adds its own assertions there (`hydo guide sdks`);
+this example has none, so its invariant is marked `[not in catalog]`, as every invariant of a
+`hydo.yaml` is.
 
 ## 4. Reproduce a failure
 

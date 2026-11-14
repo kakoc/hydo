@@ -233,7 +233,8 @@ The key covers both kinds of power cut: `C=` and a cut at the k-th disk flush (`
 hydo explore --seeds 1-50 --strategy process     # a Jepsen-style fault process: the best so far
 hydo explore --seeds 1-50 --strategy swarm       # fault categories switched on and off per run
 hydo explore --sweep kill                        # every kill point (also cut, net, pause, clock, ...)
-hydo report                                      # findings with minimal schedules
+hydo report                                      # each problem, with the command that shows it
+hydo report --details                            # classes, signatures and minimal schedules
 hydo repro <explore dir>                         # re-run every failure, compare fingerprints
 hydo save <explore dir>                          # minimal schedules -> hydo/regressions/
 ```

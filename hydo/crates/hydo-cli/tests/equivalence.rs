@@ -756,7 +756,11 @@ fn cli_matches_golden() {
             &root,
             plat,
             with_explore,
-            &[&["report"], &["report", "hydo-out/explore"]],
+            &[
+                &["report"],
+                &["report", "hydo-out/explore"],
+                &["report", "--details"],
+            ],
         );
         n += same(
             &root,

@@ -30,6 +30,7 @@ fn main() {
     let env = hydo_explore::Env {
         root: root(&config.paths),
         cli: false,
+        plain_end: false,
         config,
     };
     std::process::exit(hydo_explore::main_with(&argv, &env));

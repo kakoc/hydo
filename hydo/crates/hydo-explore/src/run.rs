@@ -47,6 +47,9 @@ use std::time::Instant;
 pub struct Env {
     pub root: PathBuf,
     pub cli: bool,
+    /// The caller ends the output for a person (`hydo explore` in a terminal, Milestone 230): the
+    /// summary line is not printed. The documents and report.md are written as always.
+    pub plain_end: bool,
     pub config: hydo_config::Config,
 }
 
@@ -1869,7 +1872,9 @@ fn turn_sweep(cx: &Cx, pool: &Pool, t0: Instant, image_sha: ShaThread) -> i32 {
     doc.failures = failures;
     let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
     let _ = std::fs::write(cx.out.join("report.md"), md::report(&doc));
-    println!("{}", md::summary_line(&doc));
+    if !cx.env.plain_end {
+        println!("{}", md::summary_line(&doc));
+    }
     0
 }
 
@@ -2691,7 +2696,9 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     doc.liveness = results::liveness(&with);
     let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
     let _ = std::fs::write(cx.out.join("report.md"), md::report(&doc));
-    println!("{}", md::summary_line(&doc));
+    if !cx.env.plain_end {
+        println!("{}", md::summary_line(&doc));
+    }
     0
 }
 

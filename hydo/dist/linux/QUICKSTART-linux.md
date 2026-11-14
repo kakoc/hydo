@@ -250,17 +250,24 @@ decides how schedules are drawn: `swarm` switches whole kinds of faults on and o
 and `process` injects faults as a process over the run. `hydo guide faults` lists the other
 options and explains them.
 
-The report lists every failure with its class (the cause, such as `lying-disk`) and its
-signature (the verdict with keys and numbers blanked), and says whether it reproduced. For each
-class of VIOLATION it gives the minimal schedule, found by shrinking (removing faults while the
-failure stays), and the `hydo run --image <image> "<schedule>"` command that replays it. A run
-that ended `ERROR` gets no minimal schedule; `hydo repro hydo-out/explore` re-runs it. The
-report's last table lists properties: hydo's own `fault.*` properties (which fault the runs
-reached) and the invariants. A program that uses hydo's SDKs adds its own assertions there
-(`hydo guide sdks`); this example has none, so its invariant is marked `[not in catalog]`, as
-every invariant of a `hydo.yaml` is. `NOT EXERCISED` means no run reached a property.
+In a terminal, `hydo explore` ends with how many runs failed, in how many ways, and whether
+each failing run failed again when hydo replayed it. `hydo report` prints each problem it found:
 
-For this example expect only these expected kinds:
+- the problem in one line, how often it happened, and a label (`Worth a look`, `Expected for
+  this setting` or `Expected`);
+- what happens, and whether it is a bug;
+- the `hydo run` command that shows it again, with the fewest faults that still cause it.
+
+`hydo report --html` writes the same problems as one web page, with each failure's timeline.
+`hydo report --details` prints the technical report. It gives each failure's class (the cause,
+such as `lying-disk`) and signature (the verdict with keys and numbers blanked), whether it
+reproduced, the minimal schedules, and a table of properties. The table lists hydo's own `fault.*`
+properties (which fault the runs reached) and the invariants. A program that uses hydo's SDKs
+adds its own assertions there (`hydo guide sdks`). This example has none, so its invariant is
+marked `[not in catalog]`, as every invariant of a `hydo.yaml` is. `NOT EXERCISED` means no run
+reached a property.
+
+For this example expect only these classes in `hydo report --details`:
 
 - a disk that loses acknowledged writes (`lying-disk`);
 - injected disk errors (`io-errors`);

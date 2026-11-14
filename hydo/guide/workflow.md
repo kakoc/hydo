@@ -131,7 +131,8 @@ hydo build hydo/hydo.yaml                     # the guest image (x86_64 on Linux
 hydo run "disk=none dseed=1 | run"            # one run without faults: must end HYDO-ORACLE: OK
 hydo run "disk=none dseed=1 | run"            # again: the fingerprint (fp=) must be identical
 hydo explore --seeds 1-20 --strategy process  # schedules with faults; failures re-run and shrunk
-hydo report                                   # the findings, each with a minimal schedule
+hydo report                                   # each problem in words, with the command that shows it
+hydo report --details                         # the technical report: classes, minimal schedules
 hydo report --html                            # the same as one web page to share (hydo guide inspect)
 hydo save <explore dir>                       # the minimal schedules -> hydo/regressions/
 ```

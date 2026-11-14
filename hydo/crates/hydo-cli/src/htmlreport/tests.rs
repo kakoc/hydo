@@ -446,3 +446,78 @@ fn versions_are_shown_when_the_results_carry_them() {
     }
     loads_nothing(&html);
 }
+
+/// `hydo report` in the terminal (Milestone 230) says what the page says: the same title, the
+/// same problems in the same order with their labels, sentences and commands, what held and what
+/// to run next, in words without hydo's own (the commands aside), within 80 columns apart from
+/// the command lines. The end of `hydo explore` in a terminal counts the same problems.
+#[test]
+fn the_terminal_says_what_the_page_says() {
+    let dir = fixture("scripted-explore");
+    let html = page_of(&dir, "hydo-out/explore", None);
+    let (doc, events) = match hydo_results::read_dir(&dir).unwrap() {
+        hydo_results::Results::Exploration {
+            doc: Some(doc),
+            events,
+            ..
+        } => (doc, events),
+        _ => panic!("an exploration"),
+    };
+    let text = text::exploration(&dir, &doc, events.as_ref(), "hydo-out/explore");
+    let st = exploration_story(&dir, &doc, events.as_ref(), "hydo-out/explore");
+    assert!(text.starts_with(&format!("{} (4 of 12 runs failed)\n", st.title)));
+    assert!(html.contains(&format!("<h1>{}</h1>", esc(&st.title))));
+    let mut at = 0;
+    for (n, it) in st.items.iter().enumerate() {
+        let head = format!("{}. {}", n + 1, page::plain(&it.problem.title));
+        let head: String = head
+            .split_whitespace()
+            .take(6)
+            .collect::<Vec<_>>()
+            .join(" ");
+        let i = text[at..]
+            .find(&head)
+            .unwrap_or_else(|| panic!("the terminal lacks {head:?} after byte {at}"));
+        at += i + head.len();
+        assert!(html.contains(&md(&it.problem.title)));
+        assert!(
+            it.link == "errors" || text.contains(&format!("   See it again: {}\n", it.command))
+        );
+    }
+    for want in [
+        "Faults tried: ",
+        "What held: ",
+        "Next:\n",
+        "Each failure's timeline, as one web page: hydo report --html\n",
+        "More runs: hydo explore --image scripted-disk.img --seeds 13-112\n",
+        "hydo ci accept f1:invariant:",
+    ] {
+        assert!(text.contains(want), "the terminal lacks {want:?}");
+    }
+    // the words are the page's: no hydo jargon outside the commands
+    let words: String = text
+        .lines()
+        .map(|l| l.split(": hydo ").next().unwrap_or(""))
+        .map(|l| format!("<p>{}</p>", esc(l)))
+        .collect();
+    plain_words(&words);
+    for l in text.lines() {
+        assert!(
+            l.chars().count() <= 80 || l.contains(": hydo "),
+            "a line wider than 80 columns: {l:?}"
+        );
+    }
+    // a directory other than the default one is named in the commands
+    let other = text::exploration(&dir, &doc, events.as_ref(), "runs/x");
+    assert!(other.contains("hydo report --html runs/x\n"));
+    // the end of hydo explore
+    let end = text::explore_end(&dir, "hydo-out/explore").expect("an exploration");
+    assert_eq!(
+        end,
+        "hydo ran your system 12 times: 4 failed, in 2 different ways. Each failing run\n\
+         failed again the same way when hydo replayed it. Your services also wrote error\n\
+         lines that your list of known errors does not have.\n\
+         See them: hydo report   (as one web page: hydo report --html)\n"
+    );
+    golden("exploration.txt", &text);
+}

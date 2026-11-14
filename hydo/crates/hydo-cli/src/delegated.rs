@@ -24,7 +24,19 @@ pub fn known_errors_default() -> Option<String> {
 /// `hydo explore`: the explorer (the hydo-explore crate) in this process. Without `--workers` the
 /// pool is sized from the machine and the image (hydo-explore), no longer a fixed 2 (Linux) or 4
 /// (Mac).
+///
+/// In a terminal it ends with the problems counted in words and the command that shows them
+/// (Milestone 230). When stdout is not a terminal, or with `--json`, it ends as before: the
+/// explorer's summary as one JSON line and the report's path, which scripts and tests read.
 pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
+    use std::io::IsTerminal;
+    let json = argv.iter().any(|a| a == "--json");
+    let args: Vec<String> = argv.iter().filter(|a| *a != "--json").cloned().collect();
+    explore_with(ctx, &args, !json && std::io::stdout().is_terminal())
+}
+
+/// `hydo explore` with the end for a person (`plain`) or for a program (the summary line).
+pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
     let mut args = argv.to_vec();
     let linux = ctx.platform == Platform::Linux;
     let image = find_image(ctx, &mut args);
@@ -88,6 +100,7 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
     let env = hydo_explore::Env {
         root: ctx.root.clone(),
         cli: true,
+        plain_end: plain,
         config: if linux {
             hvxenv::explore_config(ctx)
         } else {
@@ -98,6 +111,12 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
     let i = args.iter().position(|a| a == "--out").unwrap_or(0);
     let out = args.get(i + 1).cloned().unwrap_or_default();
     let report = pjoin(&out, "report.md");
+    if rc == 0 && plain {
+        if let Some(end) = crate::htmlreport::text::explore_end(Path::new(&out), &out) {
+            print!("{end}");
+            return rc;
+        }
+    }
     if rc == 0 && Path::new(&report).exists() {
         println!(
             "hydo: report: {report}   (hydo report {out}; hydo repro {out} re-runs every failure)"
@@ -117,8 +136,11 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
         let rest: Vec<String> = argv.iter().filter(|a| *a != "--html").cloned().collect();
         return crate::htmlreport::cmd(&rest);
     }
+    // `--details`: the technical report (report.md's text) instead of the problems in words
+    let details = argv.iter().any(|a| a == "--details");
     let d = argv
-        .first()
+        .iter()
+        .find(|a| *a != "--details")
         .cloned()
         .unwrap_or_else(|| pjoin(OUT, "explore"));
     // `hydo versions`' answer (M221): next to the report of the run or exploration it came from,
@@ -140,7 +162,14 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
     };
     let mut text = match r {
         hydo_results::Results::Run { run, .. } => hydo_explore::md::run_report(&run),
-        hydo_results::Results::Exploration { doc: Some(doc), .. } => hydo_explore::md::report(&doc),
+        hydo_results::Results::Exploration { doc: Some(doc), .. } if details => {
+            hydo_explore::md::report(&doc)
+        }
+        hydo_results::Results::Exploration {
+            doc: Some(doc),
+            events,
+            ..
+        } => crate::htmlreport::text::exploration(Path::new(&d), &doc, events.as_ref(), &d),
         hydo_results::Results::Exploration {
             doc: None,
             events: Some(ev),

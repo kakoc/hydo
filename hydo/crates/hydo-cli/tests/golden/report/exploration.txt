@@ -1,0 +1,43 @@
+hydo found 3 problems in your system (4 of 12 runs failed)
+Faults tried: disk errors, crashes, network faults, a faulty disk and power
+cuts. Each failing run failed again the same way when hydo replayed it.
+
+1. The run stopped early after disk errors
+   Worth a look, 2 of 12 runs.
+   The run stopped before your checks could run, with the error harness: guest
+   did not finish (I/O error). hydo made the disk return read and write errors.
+   The command also keeps this run's network faults.
+   Is it a bug? Decide whether your system must survive a failing disk. If it
+   must, look at the service's log in the run; if not, accept this finding.
+   See it again: hydo run --image scripted-disk.img "disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms"
+
+2. Your system failed your check with a faulty disk
+   Expected, 2 of 12 runs.
+   hydo made the disk faulty: it threw away writes that it had already
+   confirmed, as a broken or misconfigured disk can. No system keeps data that
+   its disk throws away.
+   Is it a bug? Nothing, unless your production disks can throw away confirmed
+   writes. If you do not expect such disks, accept this finding.
+   See it again: hydo run --image scripted-disk.img "disk=lying:1 dseed=63cbe1e459320dd7 | run C=11"
+
+3. Your services wrote 4 kinds of error line that your list of known errors does
+   not have
+   Worth a look, 12 of 12 runs.
+   Your project's list of known errors (errors: in hydo.yaml) does not have
+   these lines.
+   - redis: connection to redis lost <n> (1 run)
+   - app: config reloaded (12 runs)
+   - mysql: connection to mysql lost <n> (6 runs)
+   - kafka: connection to kafka lost <n> (2 runs)
+   Is it a bug? If the line is harmless, add it to the list of known errors. If
+   not, look at what led to it in the run.
+   See them: hydo errors hydo-out/explore
+
+What held: 8 of 12 runs passed every check. With a working disk and your safe
+settings, none of the 7 runs failed, network faults, crashes and power cuts
+included.
+
+Next:
+   Each failure's timeline, as one web page: hydo report --html
+   More runs: hydo explore --image scripted-disk.img --seeds 13-112
+   Accept an expected problem, so that it no longer fails your CI: hydo ci accept f1:invariant:b85cf53e33 --reason "…"

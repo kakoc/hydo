@@ -322,7 +322,7 @@ fn explore(
     }
     a.extend(p.options.iter().cloned());
     println!("hydo ci: {label}: hydo explore {}", a.join(" "));
-    let rc = crate::delegated::cmd_explore(ctx, &a);
+    let rc = crate::delegated::explore_with(ctx, &a, false);
     match hydo_results::read_dir(dir) {
         Ok(hydo_results::Results::Exploration { doc: Some(d), .. }) => Ok(*d),
         _ => Err(format!(

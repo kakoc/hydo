@@ -33,13 +33,15 @@ pub fn of(cmd: &str, linux: bool) -> Option<String> {
     let text = match cmd {
         "explore" => format!(
             "usage: hydo explore [IMG] [--image IMG] [--seeds 1-20] [--strategy random|swarm|swarm-pos|process]
-                    [--workers N] [--out DIR]{backend} [any other explorer option]
+                    [--workers N] [--out DIR] [--json]{backend} [any other explorer option]
   generates schedules from seeds, runs each from a fresh boot, runs every failure again to check
   that it reproduces, and shrinks it to the fewest faults that still cause it.
   IMG defaults to {img} that `hydo build` wrote in ./hydo-out (or ./.hydo).
   Without --out the results go to hydo-out/explore; without --seeds, --schedule or --sweep the
   seeds are 1-20; without --workers the pool is sized from the machine and the image.
-  `hydo report` prints the report, `hydo repro hydo-out/explore` runs every failure again, and
+  In a terminal it ends with how many runs failed and in how many ways. When its output is not a
+  terminal, or with --json, it ends with the summary as one JSON line and the report's path
+  instead. `hydo report` prints the problems it found, `hydo repro hydo-out/explore` runs every failure again, and
   `hydo save hydo-out/explore` keeps the minimal schedules as regressions. `hydo guide faults`
   lists the fault kinds.
 
@@ -67,10 +69,14 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
   directory (default hydo/regressions). `hydo build` puts them into the image, and
   `hydo repro --regressions` replays them."
             .to_string(),
-        "report" => "usage: hydo report [DIR]
+        "report" => "usage: hydo report [DIR] [--details]
        hydo report --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]
-  prints the report of an exploration (DIR's exploration.json) or of a run (DIR's result.json);
-  while an exploration still runs, how far it has got. DIR defaults to hydo-out/explore.
+  prints the problems an exploration found (DIR's exploration.json): for each, what happens,
+  whether it is a bug, and the command that shows it again; then what held and what to run
+  next. --details prints the technical report instead (DIR/report.md's text: classes,
+  signatures, minimal schedules, fingerprints and the property table). For a run (DIR's
+  result.json) it prints the run's summary; while an exploration still runs, how far it has
+  got. DIR defaults to hydo-out/explore.
   --html writes it as one web page instead (FILE, default DIR/report.html), for a run, an
   exploration or a `hydo ci run` output directory: each failure with its minimal schedule and
   the command that replays it, the failing run's timeline, where it first differs from a
