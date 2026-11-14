@@ -72,6 +72,10 @@ Each example folder holds the project's hydo setup and the recorded runs.
   of the step, and lets `min-replicas-to-write` accept writes that no replica has. A new bug,
   reported as [valkey#5406](https://github.com/valkey-io/valkey/issues/5406)
   ([the example](hydo/onboard/examples/valkey/)).
+- **Temporal 1.32.2.** After the clock steps back, one PostgreSQL crash leaves the server without
+  its database for as long as the step. A new bug, reported as
+  [temporal#13099](https://github.com/temporalio/temporal/issues/13099)
+  ([the example](hydo/onboard/examples/temporal/)).
 - **Formance Ledger v2.4.** Two transactions that use a new account at the same moment, in two
   currencies, race, and one fails with `500`. A new bug, reported as
   [ledger#2542](https://github.com/formancehq/ledger/issues/2542)
@@ -86,6 +90,10 @@ Each example folder holds the project's hydo setup and the recorded runs.
   subscription invoiced twice for one month, a new bug
   ([lago-api#7164](https://github.com/getlago/lago-api/issues/7164),
   [the example](hydo/onboard/examples/lago/)).
+- **River v0.51.2.** After a PostgreSQL crash, two workers act as leader at once, and a periodic
+  job runs twice. A new bug, reported as
+  [river#1602](https://github.com/riverqueue/river/issues/1602)
+  ([the example](hydo/onboard/examples/river/)).
 
 ## Your own project
 

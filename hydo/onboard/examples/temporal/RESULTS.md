@@ -137,7 +137,7 @@ latest time that the server or the client saw. Every command of the client recor
 sees (`clock/<ns>` in `$HYDO_ACKED`), and `first_clock` records it before any fault. The check
 prints `excused: ...` when it uses the excuse.
 
-### 2. After a backward clock step, one crash of PostgreSQL takes the server down for the length of the step (a Temporal bug; no upstream report found)
+### 2. After a backward clock step, one crash of PostgreSQL takes the server down for the length of the step (a Temporal bug, reported as [temporalio/temporal#13099](https://github.com/temporalio/temporal/issues/13099))
 
 The first exploration on the Mac failed in seed 13 with
 `K=postgresql@9+1 N=temporal@4-5:loss,23% P=postgresql@6+1 T=1:-3600`. For 120 s its visibility
