@@ -1,5 +1,8 @@
 [package]
 name = "hydo-schedule"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
 description = "hydo's schedule language as types: parse and print a schedule string byte for byte"
 readme = "README.md"
 version.workspace = true
@@ -21,3 +24,8 @@ test = false
 [dependencies]
 
 [dev-dependencies]
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"
