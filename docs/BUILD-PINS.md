@@ -610,6 +610,55 @@ release (`guest/bzImage-kvm-smp` in `hydo/dist/linux/assets.sha256`), taken from
 machine's store path `r23ms6f5…`, whose bytes are the pin. In a tree, put it in
 `hv/kvm/linux/out/` or `build/`, or name it with `HYDO_KVM_KERNEL`.
 
+## The guest kernels with cgroups (Milestone 234, the fingerprint epoch 3)
+
+An image built at the fingerprint epoch 3 or later boots a guest kernel with cgroups on the Mac
+and KVM engines, so that a pause of threads runs there (docs/design/guest-cgroups.md). The four
+kernels are the four above with the lines of `hv/kvm/linux/hydo-kvm-cgroups.config` (the same
+lines as `hv/hvm/explore/hvm-cgroups.config`) added to their lists. The kernels above stay pinned
+for the images built before.
+
+The Mac kernels are built with `hv/hvm/explore/build-guest-cg.sh`, from the inputs of
+"Mac guest kernel for service networks" above: kernel.org's `linux-6.6.35.tar.xz` and the Arm GNU
+Toolchain 13.3.Rel1, both checked by sha256. `NETNS=0` gives `Image-explore-cg` from
+`Image-explore`'s list, and `NETNS=1` gives `Image-explore-netns-cg` from `Image-explore-netns`'s
+list. On the bare-metal machine each was built twice, in two directories, with the same bytes:
+
+| file | bytes | sha256 |
+|---|---|---|
+| `Image-explore-cg` | 6,801,416 | `84ea22e8ee85b59c91f07405ee0b48cc7758b1815c26b8174a447f708430b0f9` |
+| `Image-explore-cg.config` | 51,467 | `ec618069b851048e92f59ea3ff3ecfd49b9c0d96c86d944aff77d9cc1bfcd8e4` |
+| `Image-explore-netns-cg` | 7,411,720 | `603633696d91eea958a2a5818e4c54413a81befa78bc339b6d867b89113ef6a9` |
+| `Image-explore-netns-cg.config` | 55,939 | `1cff509d0edf5f4a71dda470f1d5194293e4b9622f6c4b56528ea35427ab5798` |
+
+The `.config` of `Image-explore-netns-cg` differs from `Image-explore-netns`'s in five lines: the
+four of the list and `CONFIG_SCHED_MM_CID=y`, which Kconfig turns on by itself with cgroups.
+`Image-explore` itself was built with nixpkgs' aarch64 cross gcc, so `Image-explore-cg` also has
+another compiler than its predecessor. The sha256 values are in `hydo/crates/hydo-image/src/kernels.rs`
+(`ARM64_KERNEL_CG`, `ARM64_NETNS_KERNEL_CG`) and in `hydo/dist/mac/assets.sha256`. In a tree, put
+them in `hv/hvm/explore/out/`.
+
+The KVM kernels are built by `hv/kvm/linux/kernel-cg.nix` with the pinned nixpkgs: `CGROUPS=1 sh
+hv/kvm/linux/build-kernel.sh` gives `bzImage-kvm-cg`, and `CGROUPS=1 SMP=1` gives
+`bzImage-kvm-smp-cg`. The recipe appends the list to `kernel.nix`'s or `kernel-smp.nix`'s and
+changes neither, so `bzImage-kvm` and `bzImage-kvm-smp` keep their pins.
+
+| file | bytes | sha256 |
+|---|---|---|
+| `bzImage-kvm-cg` | 3,159,040 | `f0e2d441f334437fa4a5053645dd21057cba4843d890b7d9fda90f7be50da9bc` |
+| `bzImage-kvm-cg.config` | 51,561 | `227705d99ca5f6afcd6977acd1fcc5e96f3a2b3b2b2babf2362b3277c82db10b` |
+| `bzImage-kvm-smp-cg` | 3,412,992 | `f24a52e3f76c782b4bb559bb5d47d3e1acce8c8e862aa8201268abeccb8c1f01` |
+| `bzImage-kvm-smp-cg.config` | 52,869 | `20942c75229e56cba7fbee8dcfd6c12a7994094931756f3f51f323f2981a67c1` |
+
+Proof: the store paths are `0wznmb49…-hydo-kvm-guest-kernel-cg-6.6.35` and
+`ifwl96cx…-hydo-kvm-guest-kernel-smp-cg-6.6.35`. A GitHub runner built each with a multi-user Nix
+2.18.9, which builds in a sandbox: `nix-build`, then `nix-build --check`, the same bytes (run
+43587372581). The bare-metal machine's single-user Nix, outside a sandbox, built the same bytes
+first. There a `nix-build --check` of each gave the same `vmlinux` and `.config` but another
+`bzImage` (`00a295c2…` and `333c1d4b…`), as Milestone 159 saw outside the sandbox. The sha256
+values are in `hydo/crates/hydo-kvm/src/kernel.rs` (`KERNEL_CG`, `KERNEL_SMP_CG`) and in
+`hydo/dist/linux/assets.sha256`. In a tree, put them in `hv/kvm/linux/out/` or `build/`.
+
 ## Headless Chromium and the GUI driver (Milestone 166, an experiment)
 
 `hydo/onboard/examples/compose-voting-browser/` (docs/design/gui-testing.md) puts a real browser

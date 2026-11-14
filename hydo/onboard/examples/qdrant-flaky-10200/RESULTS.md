@@ -243,9 +243,47 @@ The shrinker took seed 25's failure to
 `disk=none dseed=a208c12cf0c7b709 | run P=workload/tests::wal_reco@0~4433:250`
 (`0707cd8c6a773944`, two runs).
 
-The Mac and KVM engines refuse a pause of threads before any VM: their guest kernels (the arm64
-kernels and `bzImage-kvm`) are built without cgroups. An arm64 build of the test, cross-compiled
-on the Mac with Rust 1.99.0, passed on the Mac engine without a pause (`length: 13`).
+Until Milestone 234 the Mac and KVM engines refused a pause of threads before any VM: their
+guest kernels (the arm64 kernels and `bzImage-kvm`) were built without cgroups.
+
+### On the Mac engine: a pause of the test's thread (Milestone 234)
+
+Since the fingerprint epoch 3 an image boots a guest kernel with cgroups on the Mac and KVM engines
+(docs/design/guest-cgroups.md). `pause-check.sh` ran on this example on an M2 Pro, with an arm64
+build of the two test programs (Rust 1.99.0, cross-compiled on the Mac; not in the tree) and the
+images built by Milestone 234's `hydo`. The debug copy's timed output put the reload between
+0.38 s and 0.40 s of guest uptime, with the workload's start at 0.03 s. Pauses of 500 ms at every
+millisecond from 320 to 400 ms gave:
+
+| result | starts (ms) |
+|---|---|
+| VIOLATION, `length: 0, op_num: Some(500)` | 321, 342, 344, 346, 348, 349, 350, 355, 356, 357, 358 |
+| OK, other lengths | the other starts from 320 to 371, and 375 to 377 and 386 to 400 |
+| ERROR, `unexpected output "sh: write error: No such process"` | 372 to 374 and 378 to 385 |
+
+| schedule | image | verdict | fingerprint |
+|---|---|---|---|
+| `disk=none \| run` | buggy | OK, `length: 7` | `36279e8f25318e06` (2 runs) |
+| `disk=none \| run P=workload/tests::wal_reco@0~321:500` | buggy | VIOLATION, `length: 0, op_num: Some(500)` | `f8b4f53073649991` (2 runs) |
+| the same | fixed | OK, `length: 0, op_num: Some(500)` | `c690edc3ee96c13d` |
+| `disk=none \| run P=workload@0~321:500` | buggy | OK, `length: 28` | `b37e3d0712f33311` |
+
+The ERROR starts fall where the test process ends: the freeze script listed the test's thread,
+and the thread had exited before the script moved it into the cgroup. The script then reports
+an error instead of stopping nothing (AGENTS.md open item 80).
+
+### On the KVM engine: a pause of the test's thread (Milestone 234)
+
+`pause-check.sh` ran on GitHub's runners with the x86_64 test programs that `build-test.sh` built
+there (run 43587372581). With one vCPU it passed every check on four hosts (AMD EPYC 9V45 and 9V74,
+Intel Xeon Platinum 8370C and 6975P-C). The reload came at 3.32 s of guest uptime, with the
+workload's start at 3.08 s. Of the 81 starts from 209 to 289 ms only 239 ms failed, on every
+host. `P=workload/tests::wal_reco@0~239:500` failed twice with one fingerprint per CPU model
+(`517beb2033fd7b73` on both AMD models, `ba0774908428fd3e` on the 8370C, `54f19a65de224f96` on the
+6975P-C). The fixed test passed with that pause, and so did a pause of the whole workload.
+
+With two vCPUs no start from 390 to 460 ms failed the test: 50 passed, and 21 (390 to 410 ms)
+ended in ERROR with the queue already full (`length: 35`). A wider window was not searched.
 
 ## Crash and disk faults
 
@@ -365,5 +403,6 @@ the extra point changes when the timer interrupts come, not which thread is stop
 | file | what it is |
 |---|---|
 | `build-test.sh` | builds and checks the two test programs and the C library files they load |
+| `pause-check.sh` | on the Mac or KVM engine: finds a start where a pause of the test's thread fails the test, and checks it (Milestone 234) |
 | `hydo.yaml` | the project: one test process per run, the invariant on its output |
 | `upstream-comment-draft.md` | a draft comment for issue 10200, not posted |

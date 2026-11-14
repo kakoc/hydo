@@ -611,15 +611,22 @@ pub trait ControlledWorker {
 /// branches or less, too many extra ticks); the Mac and KVM engines refuse the host tokens only
 /// hvx applies ([`hydo_hvm::machine::host_token_problem`]). A refused schedule tests nothing:
 /// `hydo run` stops with the message, and the explorer records the run as refused, never as a
-/// failure (Milestone 208).
+/// failure (Milestone 208). The image is taken to be of this hydo's fingerprint epoch.
 pub fn refusal(kind: EngineKind, s: &hydo_schedule::Schedule) -> Option<String> {
-    refusal_on(kind, 1, s)
+    refusal_on(kind, 1, hydo_image::EPOCH, s)
 }
 
-/// [`refusal`] on a machine of `vcpus` vCPUs: the KVM engine with several applies the turn
+/// [`refusal`] on a machine of `vcpus` vCPUs for an image built at the fingerprint epoch
+/// `epoch` (its record; `BootSpec::epoch`): the KVM engine with several vCPUs applies the turn
 /// tokens `q=` and `qs=` (counted in exits) and not yet tick jitter
-/// (docs/design/kvm-vcpus.md).
-pub fn refusal_on(kind: EngineKind, vcpus: u32, s: &hydo_schedule::Schedule) -> Option<String> {
+/// (docs/design/kvm-vcpus.md), and the Mac and KVM engines run a pause of threads only on an
+/// image of epoch 3 or later, whose guest kernel has cgroups (Milestone 234).
+pub fn refusal_on(
+    kind: EngineKind,
+    vcpus: u32,
+    epoch: u64,
+    s: &hydo_schedule::Schedule,
+) -> Option<String> {
     use hydo_schedule::HostToken;
     if kind == EngineKind::Kvm && vcpus > 1 {
         if let Some(t) = s
@@ -640,12 +647,13 @@ pub fn refusal_on(kind: EngineKind, vcpus: u32, s: &hydo_schedule::Schedule) -> 
                 .collect(),
             guest: s.guest.clone(),
         };
-        return refusal_on(kind, 1, &rest);
+        return refusal_on(kind, 1, epoch, &rest);
     }
-    // Milestone 226: a pause of threads freezes them with the guest kernel's cgroup v2 freezer;
-    // the Mac engine's arm64 kernels and the KVM engine's bzImage-kvm are built without cgroups
-    // (allnoconfig and a list); hvx boots the x86_64 kernel that has them
-    if kind != EngineKind::Hvx {
+    // Milestone 226: a pause of threads freezes them with the guest kernel's cgroup v2 freezer.
+    // hvx boots the x86_64 kernel that has always had them; the Mac and KVM engines boot an image
+    // built at epoch 3 or later with a kernel that has them (Milestone 234), and an older image
+    // with the kernel it was recorded with, which has none (allnoconfig and a list)
+    if kind != EngineKind::Hvx && !hydo_image::defaults(epoch, "").cgroups {
         if let Some(t) = s.guest.iter().find(|t| {
             matches!(
                 t,
@@ -656,9 +664,10 @@ pub fn refusal_on(kind: EngineKind, vcpus: u32, s: &hydo_schedule::Schedule) -> 
             )
         }) {
             return Some(format!(
-                "{t}: a pause of threads needs the guest kernel's cgroup v2 freezer, and the guest \
-                 kernels of the Mac and KVM engines have no cgroups; pause the whole workload \
-                 (P=workload@...) or run on hvx (on {})",
+                "{t}: a pause of threads needs the guest kernel's cgroup v2 freezer, and this \
+                 image was built at fingerprint epoch {epoch}, whose guest kernels of the Mac and \
+                 KVM engines have no cgroups; rebuild the image with this hydo (hydo build), \
+                 pause the whole workload (P=workload@...), or run on hvx (on {})",
                 kind.name()
             ));
         }
@@ -696,25 +705,39 @@ pub fn native(root: &std::path::Path, config: hydo_config::Env) -> Box<dyn Contr
 
 #[cfg(test)]
 mod thread_pause_tests {
-    use super::{refusal, EngineKind};
+    use super::{refusal, refusal_on, EngineKind};
 
-    /// Milestone 226: the Mac and KVM engines refuse a pause of threads before any VM (their
-    /// guest kernels have no cgroups); hvx runs it, and every engine runs a pause of the whole
-    /// workload.
+    /// Milestone 226: a pause of threads needs cgroups in the guest kernel. hvx's has them.
+    /// Since Milestone 234 the Mac and KVM engines boot an image built at epoch 3 or later with
+    /// kernels that have them; an image built before boots the kernels it was recorded with,
+    /// which have none, so the pause is refused before any VM with a message to rebuild it.
+    /// Every engine runs a pause of the whole workload.
     #[test]
-    fn only_hvx_runs_a_pause_of_threads() {
+    fn a_pause_of_threads_needs_an_image_of_epoch_3_off_hvx() {
         let t = hydo_schedule::Schedule::parse("disk=none | run P=workload/w#2@0~5:45").unwrap();
         for (k, name) in [(EngineKind::Hvm, "hvm"), (EngineKind::Kvm, "kvm")] {
-            let why = refusal(k, &t).expect("refused");
-            assert!(
-                why.contains("cgroup v2 freezer") && why.ends_with(&format!("(on {name})")),
-                "{why}"
-            );
+            for e in [1, 2] {
+                let why = refusal_on(k, 1, e, &t).expect("refused");
+                assert!(
+                    why.contains("cgroup v2 freezer")
+                        && why.contains(&format!("epoch {e}"))
+                        && why.contains("rebuild the image")
+                        && why.ends_with(&format!("(on {name})")),
+                    "{why}"
+                );
+            }
+            assert_eq!(refusal_on(k, 1, 3, &t), None);
+            assert_eq!(refusal(k, &t), None);
         }
-        assert_eq!(refusal(EngineKind::Hvx, &t), None);
+        assert_eq!(refusal_on(EngineKind::Kvm, 2, 3, &t), None);
+        assert!(refusal_on(EngineKind::Kvm, 2, 2, &t).is_some());
+        for e in [1, 2, 3] {
+            assert_eq!(refusal_on(EngineKind::Hvx, 1, e, &t), None);
+        }
         let w = hydo_schedule::Schedule::parse("disk=none | run P=workload@0~5:45").unwrap();
-        assert_eq!(refusal(EngineKind::Hvm, &w), None);
-        assert_eq!(refusal(EngineKind::Kvm, &w), None);
+        for k in [EngineKind::Hvm, EngineKind::Kvm] {
+            assert_eq!(refusal_on(k, 1, 2, &w), None);
+        }
     }
 }
 

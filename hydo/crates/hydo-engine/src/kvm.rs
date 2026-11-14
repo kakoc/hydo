@@ -55,7 +55,8 @@ pub struct KvmBoot {
 /// The KVM kernel and the initramfs for `image`: the image's record names its kernel and
 /// initramfs by sha256 (M155; an image without one: the x86_64 defaults); the initramfs is looked
 /// up by sha256 in `dirs`, and the kernel is the KVM build paired with the recorded kernel
-/// (`hydo_kvm::kernel::twin_of`), looked up by its own sha256 in `dirs`, unless `given` names one.
+/// (`hydo_kvm::kernel::twin_of`) for the image's fingerprint epoch (the build with cgroups from
+/// epoch 3 on, M234), looked up by its own sha256 in `dirs`, unless `given` names one.
 pub fn boot_files(image: &Path, dirs: &[PathBuf], given: Option<&Path>) -> Result<KvmBoot, String> {
     boot_files_n(image, dirs, given, 1)
 }
@@ -115,7 +116,10 @@ pub fn boot_files_n(
             k.to_path_buf()
         }
         None => {
-            let t = hydo_kvm::kernel::twin_for(&kref, vcpus).ok_or_else(|| {
+            let epoch = rec
+                .as_ref()
+                .map_or(hydo_image::EPOCH_BEFORE_RECORDS, |r| r.epoch);
+            let t = hydo_kvm::kernel::twin_for(&kref, vcpus, epoch).ok_or_else(|| {
                 format!(
                     "{} was built for the guest kernel with sha256 {kref}, which has no KVM build in \
                      this hydo (hydo_kvm::kernel::TWINS); rebuild the image with this hydo",
@@ -129,13 +133,14 @@ pub fn boot_files_n(
             locate(&want, Role::Kernel, dirs).ok_or_else(|| {
                 format!(
                     "the KVM engine's guest kernel {} (Linux {}, sha256 {}) is not in {}; build it \
-                     with {}hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) or name it with \
-                     HYDO_KVM_KERNEL",
+                     with {}{}sh hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) or name it \
+                     with HYDO_KVM_KERNEL",
                     t.file,
                     t.version,
                     t.sha256,
                     shown.join(", "),
-                    if vcpus > 1 { "SMP=1 sh " } else { "" }
+                    if t.epochs.0 >= 3 { "CGROUPS=1 " } else { "" },
+                    if vcpus > 1 { "SMP=1 " } else { "" }
                 )
             })?
         }
@@ -348,16 +353,26 @@ mod tests {
 
     #[test]
     fn the_twin_is_of_the_recorded_x86_kernel() {
-        assert_eq!(hydo_kvm::kernel::KERNEL.of, X86_KERNEL.sha256);
-        // several vCPUs: the SMP build of the same kernel
-        let smp = hydo_kvm::kernel::twin_for(X86_KERNEL.sha256, 2).unwrap();
-        assert_eq!((smp.file, smp.of), ("bzImage-kvm-smp", X86_KERNEL.sha256));
+        use hydo_kvm::kernel::{twin_for, twin_of, KERNEL, KERNEL_CG, KERNEL_SMP, KERNEL_SMP_CG};
+        assert_eq!(KERNEL.of, X86_KERNEL.sha256);
+        assert_eq!(KERNEL.version, X86_KERNEL.version);
+        // an image built at epoch 2 or before boots the builds it was recorded with; several
+        // vCPUs: the SMP build of the same kernel
+        for e in [1, 2] {
+            assert_eq!(twin_for(X86_KERNEL.sha256, 1, e), Some(KERNEL));
+            assert_eq!(twin_for(X86_KERNEL.sha256, 2, e), Some(KERNEL_SMP));
+        }
+        // from epoch 3 (M234): the builds with cgroups
+        for e in [3, hydo_image::EPOCH] {
+            assert_eq!(twin_for(X86_KERNEL.sha256, 1, e), Some(KERNEL_CG));
+            assert_eq!(twin_for(X86_KERNEL.sha256, 4, e), Some(KERNEL_SMP_CG));
+        }
         assert_eq!(
-            hydo_kvm::kernel::twin_for(X86_KERNEL.sha256, 1),
-            hydo_kvm::kernel::twin_of(X86_KERNEL.sha256)
+            (KERNEL_CG.file, KERNEL_SMP_CG.file),
+            ("bzImage-kvm-cg", "bzImage-kvm-smp-cg")
         );
-        assert_eq!(hydo_kvm::kernel::KERNEL.version, X86_KERNEL.version);
-        assert!(hydo_kvm::kernel::twin_of(X86_KERNEL.sha256).is_some());
+        assert_eq!(twin_of(&"ab".repeat(32), 3), None);
+        assert_eq!(hydo_kvm::kernel::all().count(), 4);
     }
 
     #[test]

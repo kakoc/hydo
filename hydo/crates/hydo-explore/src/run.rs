@@ -470,6 +470,9 @@ fn setup(a: Args, env: &Env) -> Cx {
             Some(v) => v.as_bool() == Some(true),
             None => d.cpu_cache,
         };
+    } else {
+        // the Mac engine: the epoch decides whether its guest kernel has cgroups (M234)
+        cx.epoch = hydo_engine::image::image_epoch(&cx.hvm_image()).0;
     }
     if cx.cpu_cache {
         eprintln!("guest CPU: the cache leaves of CPUID (guest.cpu_cache)");
@@ -582,8 +585,13 @@ fn setup(a: Args, env: &Env) -> Cx {
         cx.ex.pause_lengths = v;
     }
     // Milestone 226: pauses of threads of the workload
-    if a.pause_threads.is_some() && cx.ex.backend != Backend::Hvx {
-        die("hydo explore: --pause-thread needs the guest kernel's cgroup v2 freezer, and the guest kernels of the Mac and KVM engines have no cgroups; use --pause-workload, or explore on hvx");
+    // (Milestone 234: the Mac and KVM engines' guest kernels have cgroups for images built at
+    // the fingerprint epoch 3 and later)
+    if a.pause_threads.is_some()
+        && cx.ex.backend != Backend::Hvx
+        && !hydo_image::defaults(cx.epoch, "").cgroups
+    {
+        die(&format!("hydo explore: --pause-thread needs the guest kernel's cgroup v2 freezer, and this image was built at fingerprint epoch {}, whose guest kernels of the Mac and KVM engines have no cgroups; rebuild the image with this hydo (hydo build), use --pause-workload, or explore on hvx", cx.epoch));
     }
     if let Some(list) = &a.pause_threads {
         let mut targets: Vec<String> = Vec::new();
@@ -1336,8 +1344,9 @@ fn steer_search(cx: &Cx, pool: &Pool, seeds: &[i64]) -> SteerOut {
     };
     let mut render = |s: &S| {
         let t = cx.render(s);
-        let accepted = hydo_schedule::Schedule::parse(&t)
-            .is_ok_and(|sc| hydo_engine::refusal_on(kind, cx.vcpus as u32, &sc).is_none());
+        let accepted = hydo_schedule::Schedule::parse(&t).is_ok_and(|sc| {
+            hydo_engine::refusal_on(kind, cx.vcpus as u32, cx.epoch, &sc).is_none()
+        });
         let back = cx.ex.parse(&t).ok().filter(|_| accepted);
         (t, back)
     };

@@ -14,13 +14,16 @@ State of hydo 0.3.3 (2026-11-14).
 - **kvm** (`--backend kvm`, or `HYDO_BACKEND=kvm`; in the Linux release since 0.2.0): the same x86_64 images on
   stock Linux KVM (`/dev/kvm`, no module, no root; also in a VM with nested virtualization). Guest
   time is counted in VM exits, as on the Mac. It needs the KVM build of the image's guest kernel
-  (`bzImage-kvm`; `hydo doctor --backend kvm` says whether it is there). Its fingerprints are its
-  own: `hydo repro` across engines compares verdicts.
+  (`bzImage-kvm-cg` for an image built at fingerprint epoch 3 or later, `bzImage-kvm` for an older
+  one; `hydo doctor --backend kvm` says whether it is there). Its fingerprints are its own: `hydo
+  repro` across engines compares verdicts.
 - **hvm** (the Mac release, `hydo-mac-<version>`): arm64 guests on an Apple Silicon Mac, through
   Hypervisor.framework. The arm64 build (`hydo-build --arch arm64`, which the Mac release runs)
   supports every manifest feature except `guest.cpu: v3`. `network: bridge`, `addr:` and `faults:
-  [freeze]` build the image for a second Mac guest kernel, `Image-explore-netns`, which the image
-  records and hydo boots by itself.
+  [freeze]` build the image for a second Mac guest kernel, `Image-explore-netns-cg`, which the image
+  records and hydo boots by itself. An image built at fingerprint epoch 3 or later boots
+  `Image-explore-cg` or `Image-explore-netns-cg`, which have cgroups; an older image boots
+  `Image-explore` or `Image-explore-netns`, the kernels it was recorded with.
 - **hydo's repository on x86_64 Linux**: the `hydo-build` program (`cargo build --release -p
   hydo-build`) with the helper programs built from source (`hydo/crates/hydo-world/build.sh` for
   `hydo-world`, `hydo/crates/hydo-read/build.sh` for `hydo-read`, `hydo/onboard/hydo-grpc-gen` for
@@ -67,7 +70,7 @@ is Rust programs only and needs no Python.
 | tick jitter (`--timing`, `tj=`) | yes (branch-counted ticks) | yes (counted in VM exits) | yes (counted in VM exits) |
 | forced preemption (`--preempt`) | yes (`pp=`, `xt=`) | yes (`pct=`, counted in VM exits) | yes (`pct=`, counted in VM exits) |
 | pauses of the workload (`P=workload@<at>~<off>:<dur>`, `--pause-workload`) | yes | yes (not run on kvm yet) | yes |
-| pauses of threads of the workload (`P=workload/<thread>@<at>~<off>:<dur>`, `--pause-thread`) | yes | no (the guest kernel has no cgroups; refused before any VM) | no (the arm64 guest kernels have no cgroups; refused before any VM) |
+| pauses of threads of the workload (`P=workload/<thread>@<at>~<off>:<dur>`, `--pause-thread`) | yes | yes for an image built at fingerprint epoch 3 or later (the guest kernel `bzImage-kvm-cg`); an older image is refused before any VM | yes for an image built at fingerprint epoch 3 or later (`Image-explore-cg`); an older image is refused before any VM |
 | code coverage (Intel Processor Trace) | yes | no | no |
 | a counter loop with no VM exits (`while (flag) n++`) | interrupted by the PMU clock | resolved in the rewind mode (`spin=rewind`, automatic) | resolved in the rewind mode (automatic) |
 

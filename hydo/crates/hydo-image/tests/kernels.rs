@@ -73,13 +73,17 @@ fn records() {
     let x = kernels::record_for("x86_64", false);
     assert_eq!(x.kernel.file, "bzImage");
     assert_eq!(x.initrd.as_ref().unwrap().file, "initramfs-kafka.cpio.gz");
-    assert_eq!(
-        kernels::record_for("arm64", false).kernel.file,
-        "Image-explore"
-    );
+    // since the fingerprint epoch 3 (M234) the arm64 images get the kernels with cgroups; the
+    // x86_64 record still names hvx's kernel, which has always had them
+    let a = kernels::record_for("arm64", false);
+    assert_eq!(a.kernel.file, "Image-explore-cg");
+    assert_eq!(a.kernel.sha256, kernels::ARM64_KERNEL_CG.sha256);
     let n = kernels::record_for("arm64", true);
-    assert_eq!(n.kernel.file, "Image-explore-netns");
+    assert_eq!(n.kernel.file, "Image-explore-netns-cg");
+    assert_eq!(n.kernel.sha256, kernels::ARM64_NETNS_KERNEL_CG.sha256);
     assert!(n.initrd.is_none());
+    assert_eq!(a.epoch, hydo_image::EPOCH);
+    assert!(hydo_image::defaults(a.epoch, "arm64").cgroups);
 }
 
 #[test]

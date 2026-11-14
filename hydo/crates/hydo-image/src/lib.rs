@@ -57,8 +57,10 @@ pub const VERSION: u64 = 1;
 /// The fingerprint epoch of this hydo (see the crate documentation: increase it at every
 /// re-baseline). Epoch 2 (Milestone 204): `guest.cpu_cache` and `root.fix_pyc` on when absent,
 /// and the KVM engine's full-state cycles and fingerprint without KVM's leftover event fields
-/// ([`defaults`]).
-pub const EPOCH: u64 = 2;
+/// ([`defaults`]). Epoch 3 (Milestone 234): the Mac and KVM engines' guest kernels with cgroups
+/// (`Image-explore-cg`, `Image-explore-netns-cg`, `bzImage-kvm-cg`, `bzImage-kvm-smp-cg`;
+/// docs/design/guest-cgroups.md), so a pause of threads runs on every engine.
+pub const EPOCH: u64 = 3;
 
 /// The epoch of a run, exploration or cache entry that recorded none (written before M155).
 pub const EPOCH_BEFORE_RECORDS: u64 = 1;
@@ -77,6 +79,10 @@ pub struct EpochDefaults {
     /// The KVM fingerprint hashes what KVM keeps of an exception or interrupt it has finished
     /// with (the leftovers of `KVM_GET_VCPU_EVENTS`, which depend on the host): before epoch 2.
     pub kvm_stale_events: bool,
+    /// The Mac and KVM engines boot the image with a guest kernel that has cgroups, so a pause of
+    /// threads (`P=workload/<thread>@...`, Milestone 226) runs there: from epoch 3 (Milestone
+    /// 234). hvx's guest kernel has always had them.
+    pub cgroups: bool,
 }
 
 /// The defaults of an image built at `epoch` for `arch` (`x86_64` or `arm64`).
@@ -86,6 +92,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         cpu_cache: two && arch == "x86_64",
         kvm_full_state: two,
         kvm_stale_events: !two,
+        cgroups: epoch >= 3,
     }
 }
 
@@ -361,7 +368,7 @@ mod tests {
     fn canonical_sorts_and_reads_back() {
         let r = kernels::record_for("x86_64", false);
         let t = canonical(&r);
-        assert!(t.starts_with("{\"arch\":\"x86_64\",\"epoch\":2,\"initrd\":{"));
+        assert!(t.starts_with("{\"arch\":\"x86_64\",\"epoch\":3,\"initrd\":{"));
         assert!(t.ends_with("}\n") && !t.contains(": "));
         assert_eq!(parse_record(&t).unwrap(), r);
         let mut v: Value = serde_json::from_str(&t).unwrap();
@@ -379,7 +386,7 @@ mod tests {
 
     #[test]
     fn epochs() {
-        // a run without an epoch is from epoch 1, before this hydo's epoch 2 (M204)
+        // a run without an epoch is from epoch 1, before this hydo's epoch (3 since M234)
         assert_eq!(
             comparable(None),
             Compare::Verdicts {
@@ -403,11 +410,22 @@ mod tests {
         // an image built at epoch 1 keeps every default it was built with (M204)
         let one = defaults(1, "x86_64");
         assert!(!one.cpu_cache && !one.kvm_full_state && one.kvm_stale_events);
+        assert!(!one.cgroups);
         let two = defaults(2, "x86_64");
-        assert!(two.cpu_cache && two.kvm_full_state && !two.kvm_stale_events);
+        assert!(two.cpu_cache && two.kvm_full_state && !two.kvm_stale_events && !two.cgroups);
         // arm64 has no CPUID
         assert!(!defaults(2, "arm64").cpu_cache);
-        assert_eq!(defaults(EPOCH, "x86_64"), two);
+        // epoch 3 (M234): the Mac and KVM guest kernels with cgroups; the rest as at epoch 2
+        let three = defaults(3, "x86_64");
+        assert_eq!(
+            three,
+            EpochDefaults {
+                cgroups: true,
+                ..two
+            }
+        );
+        assert!(defaults(3, "arm64").cgroups);
+        assert_eq!(defaults(EPOCH, "x86_64"), three);
     }
 
     #[test]

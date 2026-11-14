@@ -232,12 +232,14 @@
     },
     {
       "id": "linux",
-      "name": "Linux kernel (the two arm64 guest kernels)",
+      "name": "Linux kernel (the four arm64 guest kernels)",
       "version": "6.6.35",
       "license": "GPL-2.0-only WITH Linux-syscall-note",
       "files": [
         "hv/hvm/explore/out/Image-explore",
-        "hv/hvm/explore/out/Image-explore-netns"
+        "hv/hvm/explore/out/Image-explore-netns",
+        "hv/hvm/explore/out/Image-explore-cg",
+        "hv/hvm/explore/out/Image-explore-netns-cg"
       ],
       "texts": [
         "hydo/dist/licenses/linux-6.6.35/COPYING",
@@ -262,10 +264,12 @@
         "hv/hvm/services/svc.config",
         "hv/hvm/explore/hvm-explore.config",
         "hv/hvm/explore/hvm-netns.config",
+        "hv/hvm/explore/hvm-cgroups.config",
         "hv/hvm/explore/build-guest.sh",
-        "hv/hvm/explore/build-guest-netns.sh"
+        "hv/hvm/explore/build-guest-netns.sh",
+        "hv/hvm/explore/build-guest-cg.sh"
       ],
-      "note": "Both kernels are kernel.org's Linux 6.6.35 with hydo's two changes (hv/hvm/linux/apply-cntpct.py, the arch timer reading CNTPCT, and hv/hvm/explore/apply-hvcidle.py, idle by HVC) and configured with allnoconfig plus the listed configuration fragments; Image-explore by hv/hvm/explore/build-guest.sh (nixpkgs's aarch64 cross gcc), Image-explore-netns by build-guest-netns.sh (the Arm GNU Toolchain 13.3.Rel1) with hvm-netns.config added (docs/BUILD-PINS.md)."
+      "note": "Both kernels are kernel.org's Linux 6.6.35 with hydo's two changes (hv/hvm/linux/apply-cntpct.py, the arch timer reading CNTPCT, and hv/hvm/explore/apply-hvcidle.py, idle by HVC) and configured with allnoconfig plus the listed configuration fragments; Image-explore by hv/hvm/explore/build-guest.sh (nixpkgs's aarch64 cross gcc), Image-explore-netns by build-guest-netns.sh (the Arm GNU Toolchain 13.3.Rel1) with hvm-netns.config added; Image-explore-cg and Image-explore-netns-cg (for images built at the fingerprint epoch 3 and later) by build-guest-cg.sh with the same toolchain, the lists of the first two and hvm-cgroups.config added (docs/BUILD-PINS.md)."
     },
     {
       "id": "busybox-1.36.1",

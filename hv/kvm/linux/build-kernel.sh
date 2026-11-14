@@ -2,10 +2,12 @@
 # Build the KVM engine's guest kernel (kernel.nix) with the pinned nixpkgs and copy bzImage-kvm
 # and its .config to $OUT. CHECK=1 then rebuilds it with `nix-build --check`, which fails unless
 # the second build has the same bytes. SMP=1 builds the kernel for several vCPUs instead
-# (kernel-smp.nix: bzImage-kvm-smp, docs/design/kvm-vcpus.md). Low priority on purpose: nice 19,
-# $JOBS compile jobs.
+# (kernel-smp.nix: bzImage-kvm-smp, docs/design/kvm-vcpus.md). CGROUPS=1 builds the kernel of
+# images built at the fingerprint epoch 3 and later, with cgroups (kernel-cg.nix: bzImage-kvm-cg,
+# or bzImage-kvm-smp-cg with SMP=1; docs/design/guest-cgroups.md). Low priority on purpose:
+# nice 19, $JOBS compile jobs.
 #
-#   [NIXPKGS=<nixpkgs>] [OUT=<dir>] [JOBS=8] [CHECK=1] [SMP=1] sh hv/kvm/linux/build-kernel.sh
+#   [NIXPKGS=<nixpkgs>] [OUT=<dir>] [JOBS=8] [CHECK=1] [SMP=1] [CGROUPS=1] sh hv/kvm/linux/build-kernel.sh
 #
 # nix-build must be on PATH (on the bare-metal machine: . ~/hydo-nixb-work/nixenv.sh).
 # Pins: docs/BUILD-PINS.md "The KVM engine's guest kernel".
@@ -16,14 +18,20 @@ OUT=${OUT:-$PWD/out}
 JOBS=${JOBS:-8}
 RECIPE=kernel.nix
 NAME=bzImage-kvm
+ARGS=
 if [ "${SMP:-0}" = 1 ]; then
   RECIPE=kernel-smp.nix
   NAME=bzImage-kvm-smp
 fi
+if [ "${CGROUPS:-0}" = 1 ]; then
+  RECIPE=kernel-cg.nix
+  NAME=$NAME-cg
+  if [ "${SMP:-0}" = 1 ]; then ARGS="--arg smp true"; fi
+fi
 mkdir -p "$OUT"
 build() {
   nice -n 19 nix-build --no-out-link --cores "$JOBS" --max-jobs 1 "$@" \
-    "$HERE/$RECIPE" --arg nixpkgs "$NIXPKGS"
+    "$HERE/$RECIPE" --arg nixpkgs "$NIXPKGS" $ARGS
 }
 r=$(build)
 if [ "${CHECK:-0}" = 1 ]; then

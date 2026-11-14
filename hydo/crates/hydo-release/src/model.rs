@@ -295,7 +295,10 @@ pub fn asset_release_path(p: Platform, asset: &str) -> Option<String> {
                 return Some(format!("guest/tc/{f}"));
             }
             match a {
-                "Image-explore" | "Image-explore-netns" => Some(format!("hv/hvm/explore/out/{a}")),
+                "Image-explore"
+                | "Image-explore-netns"
+                | "Image-explore-cg"
+                | "Image-explore-netns-cg" => Some(format!("hv/hvm/explore/out/{a}")),
                 "busybox"
                 | "mke2fs"
                 | "hydo_fc"

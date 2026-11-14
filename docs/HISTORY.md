@@ -9502,3 +9502,170 @@ recorded images keep their bytes until the next release re-pins it.
 keeps no state and sends no webhooks; the SMTP proxy records connections, not messages; an
 emulator's state is lost at a power cut. vercel-labs/emulate would add stateful providers with
 webhooks but needs an image with Node.js 24.
+
+### Milestone 234 (tentative number) - DONE (a pause of threads on the Mac and KVM engines: the fingerprint epoch 3 gives their images guest kernels with cgroups, and images built before keep the kernels they were recorded with; Qdrant's flaky test fails under a pause of its thread on the Mac engine and on KVM with one vCPU on four hosts; with two vCPUs no failing start was found in the window tried; the recorded values wait for the next re-recording pass; 2026-11-14)
+
+**In short.** The user decided (2026-11-14) that a pause of threads,
+`P=workload/<thread>[#<k>]@<at>~<off>:<dur>` (Milestone 226), must run on the Mac and KVM engines
+too, knowing that it is an epoch change. Four new guest kernels have cgroups:
+`Image-explore-cg` and `Image-explore-netns-cg` for the Mac engine, `bzImage-kvm-cg` and
+`bzImage-kvm-smp-cg` for the KVM engine. `hydo_image::EPOCH` is 3. An image built at epoch 3
+boots them; an image built before boots the kernels it was recorded with and keeps its values
+(option A of docs/design/guest-cgroups.md, the user's choice). The releases ship both kernel
+sets. On the Mac engine Qdrant's flaky test fails under a pause of its thread
+(`P=workload/tests::wal_reco@0~321:500`, twice with one fingerprint), its neighbours pass, and
+the fixed test passes. Images built by 0.3.2 give their recorded values under this hydo.
+
+**The design** is docs/design/guest-cgroups.md: the options (`CONFIG_CGROUPS`, and the `cpu`
+controller with `cpu.max` for CPU limits), how each kernel is built and pinned, how an image gets
+its kernel, what the releases ship and why, and option B, which the user did not take.
+
+**The kernels.** docs/BUILD-PINS.md "The guest kernels with cgroups" has the pins.
+
+- The Mac kernels: `hv/hvm/explore/build-guest-cg.sh` (`NETNS=0` or `1`) with the pinned
+  kernel.org tarball and Arm GNU Toolchain 13.3.Rel1, the lists of `Image-explore` and
+  `Image-explore-netns` and `hv/hvm/explore/hvm-cgroups.config`. On the bare-metal machine each
+  was built twice in two directories with the same bytes: `Image-explore-cg` `84ea22e8…`
+  (6,801,416 bytes) and `Image-explore-netns-cg` `60363369…` (7,411,720 bytes). The netns
+  kernel's `.config` differs from its predecessor's in the four lines and in
+  `CONFIG_SCHED_MM_CID=y`, which Kconfig turns on with cgroups.
+- The KVM kernels: `hv/kvm/linux/kernel-cg.nix` (`CGROUPS=1 [SMP=1] sh
+  hv/kvm/linux/build-kernel.sh`) appends `hv/kvm/linux/hydo-kvm-cgroups.config` to the lists of
+  `kernel.nix` and `kernel-smp.nix`, which do not change. The bare-metal machine's single-user
+  Nix (no sandbox) built `bzImage-kvm-cg` `f0e2d441…` (3,159,040 bytes) and `bzImage-kvm-smp-cg`
+  `f24a52e3…` (3,412,992 bytes). The SMP kernel's `.config` differs from `bzImage-kvm-smp`'s in
+  the four lines and `CONFIG_SCHED_MM_CID=y`; the one-vCPU kernel has the four lines and, without
+  SMP, no `CONFIG_SCHED_MM_CID`. A `nix-build --check` of each there gave the same `vmlinux` and
+  `.config` and another `bzImage` (`00a295c2…`, `333c1d4b…`), the difference Milestone 159 saw
+  outside the sandbox. A sandboxed Nix on a GitHub runner built both twice with the bare-metal
+  machine's first bytes (run 43587372581), so those are the pins.
+
+**The code.**
+
+- `hydo-image`: `EPOCH` 3; `EpochDefaults::cgroups` (from epoch 3); `kernels::ARM64_KERNEL_CG`,
+  `ARM64_NETNS_KERNEL_CG` and `arm64_kernel(netns)`; `record_for` names the kernels with cgroups.
+  `KNOWN` has six files. The release index's test allows a kernel newer than the tree's published
+  version (the tree is still 0.3.2; the next version's own lines name the new kernels).
+- `hydo-kvm`: each `Twin` names the epochs of the images it boots; `twin_for(of, vcpus, epoch)`;
+  `KERNEL_CG`, `KERNEL_SMP_CG` and `all()`.
+- `hydo-engine`: the KVM boot files take the image's epoch from its record; `refusal_on(kind,
+  vcpus, epoch, schedule)` refuses a pause of threads on the Mac and KVM engines only for an image
+  older than epoch 3, with a message that says to rebuild it (test
+  `a_pause_of_threads_needs_an_image_of_epoch_3_off_hvx`).
+- `hydo-explore`: the explorer reads the epoch of a Mac engine's image too, and `--pause-thread`
+  refuses only an older image off hvx. `hydo run` and the worker pools pass the image's epoch.
+- `hydo-build`: an arm64 image that needs the second kernel names `Image-explore-netns-cg` in
+  `/etc/hydo/kernel` and in its output line. The `mkfs` VM of `hydo build` on the Mac still boots
+  `Image-explore`, so the kernel does not move the data disk's bytes.
+- `hydo` (`doctor`, `setup`) and `hydo-release`: the new kernels are release assets; `hydo doctor`
+  checks the kernels of this epoch. Both releases' `build-release.sh`, `assets.sha256` and
+  `third-party.json` ship both kernel sets.
+
+**The proof on the Mac.** An M2 Pro, this branch's `hydo` inside the unpacked 0.3.2 Mac release,
+with the two new kernels in its `hv/hvm/explore/out/`.
+
+- The Redis and ledger-spin examples of the release, built by this hydo (epoch 3, records naming
+  `Image-explore-cg`; `706c8b95…` and `01de4c87…`): each of their 9 recorded schedules ran three
+  times from fresh boots, with one fingerprint each and the recorded verdict: `a62eee5332a5b9d2`,
+  `474b2874e7ef0fa2`, `2e5f02d8ff33394f`, `73003d8719968b04`, `60fce47442a90394`,
+  `5ec87958b9bdfd53`, `6fb5fda69ef6915a` (Redis, in the list's order), `242d5b9411ab049b` and
+  `365ed39c02392c02` (ledger-spin).
+- Qdrant's example with an arm64 build of its two test programs (Rust 1.99.0, cross-compiled on
+  this Mac, not in the tree), by `pause-check.sh`, 5 checks of 5. Without a pause the test passes
+  twice with `36279e8f25318e06` (`length: 7`). The debug copy's timed output put the reload at
+  0.38 s to 0.40 s of guest uptime, with the workload's start at 0.03 s. Pauses of 500 ms at
+  every millisecond from 320 to 400 ms failed at 11 starts (321, 342, 344, 346, 348 to 350 and 355
+  to 358) with the upstream report's `length: 0, op_num: Some(500)`, and 59 passed.
+  `P=workload/tests::wal_reco@0~321:500` failed twice with `f8b4f53073649991`, the fixed test
+  passes with it (`c690edc3ee96c13d`), and a pause of the whole workload at that start passes
+  (`b37e3d0712f33311`, `length: 28`). The control transcript says `PAUSED workload/tests::wal_reco
+  (timer, threads 36 tests::wal_reco)`.
+- The other 11 starts, 372 to 374 and 378 to 385 ms, ended with `ERROR
+  P=workload/tests::wal_reco: unexpected output "sh: write error: No such process"`. They fall
+  where the test process ends: Milestone 226's freeze script listed the test's thread, and the
+  thread exited before the script moved it into the cgroup. The script reports that as an error
+  instead of stopping nothing. Fixing it changes the controller's commands for every pause of
+  threads, also on hvx and on images of epoch 2, so it is left for a change of its own (open item
+  80).
+- A pause of threads on the epoch-3 Redis image ran (`PAUSED nothing: no thread of the workload
+  matches workload/nosuch (timer; its threads: timeout)`).
+
+**An image built at epoch 2 keeps its values.** The 0.3.2 Mac release's own `hydo` built its Redis and
+ledger-spin examples with the recorded bytes (`fba2c11e…` and `e053fdb0…`, epoch 2, records
+naming `Image-explore`). This branch's `hydo` ran their 9 recorded schedules and gave every
+recorded fingerprint and verdict (`d817d69781986987`, `a2b8d71c0c467d15`, `7147e75676d15194`,
+`05614d64b872327a`, `d00e55f15592e438`, `82de2d5e4ea932ef`, `ad3f51d8bd2d1a89`,
+`84ac90f4d4d3d0ad`, `8836949fb1366db3`). A pause of threads on the epoch-2 Redis image is
+refused before any VM: `the engine refuses the schedule: P=workload/nosuch@0~100:10: a pause of
+threads needs the guest kernel's cgroup v2 freezer, and this image was built at fingerprint
+epoch 2, whose guest kernels of the Mac and KVM engines have no cgroups; rebuild the image with
+this hydo (hydo build), pause the whole workload (P=workload@...), or run on hvx (on hvm)`.
+`hydo run` also prints M204's note that the image was built at epoch 2 and that fingerprints
+across epochs are not compared.
+
+**hvx.** hvx's kernel and engine did not change. On the bare-metal machine this branch's
+`hydo` and `hydo-hvx` ran the pinned reproducers' epoch-2 images in `~/hydo/build/m204` through
+`~/bin/hvx-run`, as `deploy-metal.sh` does, each twice: `a76d7fe857fdb37c` (VIOLATION, order 11;
+ctl `84a3f0619a00b9e2`) and `efbde7b57264be0f` (OK; ctl `087df49b7b36b10a`), the recorded values.
+The module was not reloaded, and `deploy-metal.sh` was not run.
+
+**KVM.** Neither this Mac nor the bare-metal machine may run KVM, and the build machine cannot be
+reached. A one-off workflow on a temporary branch `tmp-cgroups-kvm`, deleted afterwards, ran on
+GitHub's runners (run 43587372581). It built both KVM kernels twice in a sandboxed Nix (the pins),
+this tree's `hydo`, and the example's two test programs with `build-test.sh`. Then eight jobs ran,
+four with 1 vCPU and four with 2 vCPUs, on AMD EPYC 9V45, 9V74 and 7763, and on Intel Xeon
+Platinum 8370C and 6975P-C.
+
+- The release's Redis example, built by this hydo (epoch 3): four schedules, each twice with one
+  fingerprint, on every job.
+- The same example built by 0.3.2's `hydo` (epoch 2): this hydo gave 0.3.2's fingerprints and
+  verdicts on every job, and refused a pause of threads on that image.
+- A verdict changed with the epoch. `disk=cut | run C=12 R=everysec`, the Linux quickstart's
+  example of a lost write, gives VIOLATION (key k:1 lost) at epoch 2 and OK at epoch 3 with one
+  vCPU, on every host of this run and of the run before (43585014553): `d16d6d1801742436` on the
+  AMD models, `9b0ef72b32bb0390` and `05fd677d929d76c1` on the Intel ones. With two vCPUs it stays VIOLATION, and on the Mac too. The kernel with
+  cgroups moves the guest's timing, so the power cut at step 12 finds no unsynced acknowledged
+  write. The other three schedules kept their verdicts.
+- `pause-check.sh` with one vCPU passed every check on the four hosts (AMD EPYC 9V45 and 9V74,
+  Intel Xeon Platinum 8370C and 6975P-C). The reload came at 3.32 s to 3.34 s of guest uptime with
+  the workload's start at 3.08 s. Of the 81 starts from 209 to 289 ms one failed, 239 ms, the same
+  on every host. `P=workload/tests::wal_reco@0~239:500` failed twice with one fingerprint per CPU
+  model: `517beb2033fd7b73` on both AMD models, `ba0774908428fd3e` on the 8370C,
+  `54f19a65de224f96` on the 6975P-C. On each host the fixed test passed with that pause and a pause
+  of the whole workload passed.
+- With two vCPUs the four jobs passed every check but one: no start from 390 to 460 ms failed the
+  test. Of those 71 starts, 50 passed and 21 (390 to 410 ms) ended in ERROR, with the test's queue
+  already full (`length: 35`); the logs kept do not say which error. A wider window was not
+  searched.
+
+**What moves** (AGENTS.md open item 105). Every image built at epoch 3 has new bytes, because
+its record says epoch 3, so every recorded run's fingerprint moves on all three platforms: hvm
+21 images and 76 runs, kvm 6 and 17, hvx 43 and 141. The values are not re-recorded here (the
+batch rule); docs/REBASELINE.md section 24 records the decisions. `recorded.json`'s `epoch`
+becomes 3 in the pass. Nothing else moved: the hvx engine, the module, the controller and the
+agent did not change, and the pinned reproducers' images stay at epoch 2.
+
+**Tests.** On the bare-metal machine, in a copy of this tree (Rust 1.90.0): `cargo fmt
+--all --check`; `cargo clippy -D warnings` on `hydo-image`, `hydo-kvm`, `hydo-engine`,
+`hydo-explore`, `hydo`, `hydo-build`, `hydo-release` and `hydo-bench`; the tests of those
+packages and of `hydo-agents`; `docs::`, `public_content::`, `hydo-config`'s `inventory`,
+`test_tiers::`, `sh ci/consolidate-tests.sh --check`, and the explorer's `identity::` and
+`corpus::` tests, also with `HYDO_IDENT_FULL=1`. All pass except two tests of `hydo-release`,
+`third_party::linux_list_is_complete` and `mac_list_is_complete`: both `build-release.sh` files
+write `$REL/plugin` (Milestone 229), which neither `third-party.json` lists. They fail the same
+way on `main` at `c1597a75`. New or changed tests: `hydo-image` `epoch_defaults`, `records` and
+the release index's test; `hydo-engine` `a_pause_of_threads_needs_an_image_of_epoch_3_off_hvx` and
+`the_twin_is_of_the_recorded_x86_kernel`; `hydo` `the_built_in_lists_parse_and_map_into_the_release`
+(two more assets on each platform). Re-recorded on purpose: the explorer's scripted-engine
+goldens (only `"epoch"` moves; the 8 readable lines differ in it alone, 42 more are kept as
+sha256), the CLI's golden answer for `hydo guide manifest` (MANIFEST.md changed), and the
+skill folder's sha256 in the agents golden (the guide's pages changed). Vale passes on every changed page it covers.
+
+**Left** (AGENTS.md open item 80). A failing start of the thread pause on KVM with two vCPUs, and
+the cause of the ERROR runs there. The new verdict of `C=12 R=everysec` on KVM at epoch 3, which
+the re-recording pass meets (open item 105). The freeze script's error when a listed thread exits
+before it is moved (the Mac's 11 ERROR starts); its fix changes the controller's commands for every
+pause of threads. A pause of a service's thread and pauses that repeat in every period of a CPU
+limit are not built; the `cpu` controller is now in every engine's kernel for images of epoch 3,
+so the etcd example's `limit` can run on the Mac and KVM engines too, which was not tried. The
+re-recording pass (open item 105).

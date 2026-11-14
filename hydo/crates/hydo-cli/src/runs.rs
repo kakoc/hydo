@@ -251,7 +251,10 @@ pub fn mac_kernel_for(ctx: &Ctx, image: &Path, quiet: bool) -> PathBuf {
         eprintln!("hydo: {n}");
     }
     let k = b.kernel;
-    if !quiet && k != mac_kernel(ctx) {
+    // the default kernel of images built before the fingerprint epoch 3, or of this epoch's
+    // images (with cgroups, M234), needs no line
+    let now = mac_kernel(ctx).with_file_name(hydo_image::kernels::arm64_kernel(false).file);
+    if !quiet && k != mac_kernel(ctx) && k != now {
         let rel = k.strip_prefix(&ctx.root).unwrap_or(&k);
         println!(
             "hydo: guest kernel {} (recorded in the image)",
@@ -440,7 +443,7 @@ fn run_engine_edited(
     let (eng, spec) = controlled_engine(ctx, image, outdir, eargs, quiet);
     // a host part this engine refuses (a combination its module refuses, a token it cannot
     // apply) is refused here, before any VM (M208)
-    if let Some(why) = hydo_engine::refusal_on(eng.kind(), spec.vcpus, &s) {
+    if let Some(why) = hydo_engine::refusal_on(eng.kind(), spec.vcpus, spec.epoch, &s) {
         return Err(format!("the engine refuses the schedule: {why}"));
     }
     let mut a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));

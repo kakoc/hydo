@@ -220,6 +220,12 @@ of the other engines; with a pairing table every existing image runs on the KVM 
 and the record keeps meaning "the kernel lineage this image was built for". When a later hydo
 changes the guest kernel, the new kernel gets its KVM twin in the same table.
 
+Since the fingerprint epoch 3 (Milestone 234, docs/design/guest-cgroups.md) the table has a
+second twin of hvx's kernel: `bzImage-kvm-cg` (and `bzImage-kvm-smp-cg`), the same kernel with
+cgroups. hvx's kernel did not change, so its sha256 cannot tell the images apart. Each twin
+therefore names the epochs of the images it boots, and `hydo_kvm::kernel::twin_for` takes the
+epoch from the image's record. An image built at epoch 2 or before keeps `bzImage-kvm`.
+
 The image's initramfs is used as it is: it insmods hvx's kernel's modules, which fail on this
 kernel (it has every driver built in), and it goes on to mount `/dev/vda1` and switch to it, as it
 was written to do (its errors are ignored by design). The host controller's own `insmod`s of

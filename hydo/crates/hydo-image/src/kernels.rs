@@ -2,9 +2,14 @@
 //! kernel an image names.
 //!
 //! The kernels are the releases' pinned files (`hydo/dist/linux/assets.sha256`: `guest/bzImage`
-//! and `guest/initramfs-kafka.cpio.gz`; `hydo/dist/mac/assets.sha256`: `Image-explore` and
-//! `Image-explore-netns`; docs/BUILD-PINS.md). `tests/kernels.rs` checks this table against those
-//! pin files and the command lines against the engines'.
+//! and `guest/initramfs-kafka.cpio.gz`; `hydo/dist/mac/assets.sha256`: `Image-explore`,
+//! `Image-explore-netns`, and since the fingerprint epoch 3 `Image-explore-cg` and
+//! `Image-explore-netns-cg`; docs/BUILD-PINS.md). `tests/kernels.rs` checks this table against
+//! those pin files and the command lines against the engines'.
+//!
+//! An image records the kernel it was built for, so an image built at epoch 2 or before keeps
+//! naming `Image-explore` or `Image-explore-netns` and keeps its fingerprints; [`record_for`]
+//! names the kernels with cgroups (Milestone 234, docs/design/guest-cgroups.md).
 //!
 //! A run looks the image's kernel up by sha256 ([`find`]): among the files with a known kernel
 //! name (and the name the image records) in the directories the caller gives (a release's
@@ -75,8 +80,36 @@ pub const ARM64_NETNS_KERNEL: Known = Known {
     version: "6.6.35",
 };
 
+/// The default arm64 guest kernel of images built at the fingerprint epoch 3 and later
+/// (Milestone 234): `Image-explore`'s list with cgroups (`hv/hvm/explore/build-guest-cg.sh`
+/// `NETNS=0`), so a pause of threads runs on the Mac engine.
+pub const ARM64_KERNEL_CG: Known = Known {
+    arch: "arm64",
+    role: Role::Kernel,
+    file: "Image-explore-cg",
+    sha256: "84ea22e8ee85b59c91f07405ee0b48cc7758b1815c26b8174a447f708430b0f9",
+    version: "6.6.35",
+};
+
+/// The second arm64 guest kernel with cgroups, from the fingerprint epoch 3 on
+/// (`build-guest-cg.sh` `NETNS=1`).
+pub const ARM64_NETNS_KERNEL_CG: Known = Known {
+    arch: "arm64",
+    role: Role::Kernel,
+    file: "Image-explore-netns-cg",
+    sha256: "603633696d91eea958a2a5818e4c54413a81befa78bc339b6d867b89113ef6a9",
+    version: "6.6.35",
+};
+
 /// Every file of the table.
-pub const KNOWN: [Known; 4] = [X86_KERNEL, X86_INITRD, ARM64_KERNEL, ARM64_NETNS_KERNEL];
+pub const KNOWN: [Known; 6] = [
+    X86_KERNEL,
+    X86_INITRD,
+    ARM64_KERNEL,
+    ARM64_NETNS_KERNEL,
+    ARM64_KERNEL_CG,
+    ARM64_NETNS_KERNEL_CG,
+];
 
 /// The x86_64 kernel command line of an agent image's boot (hydo-hvx's `ROOTFS_CMDLINE` and
 /// ` quiet loglevel=1`).
@@ -98,6 +131,16 @@ fn kernel_of(k: &Known, cmdline: &str) -> Kernel {
     }
 }
 
+/// The arm64 kernel `hydo build` gives an image of this epoch (`netns`: an image that needs the
+/// second kernel): the kernels with cgroups since epoch 3 (Milestone 234).
+pub fn arm64_kernel(netns: bool) -> &'static Known {
+    if netns {
+        &ARM64_NETNS_KERNEL_CG
+    } else {
+        &ARM64_KERNEL_CG
+    }
+}
+
 /// The record `hydo build` writes into an image of `arch` (`netns`: an arm64 image that needs the
 /// second kernel).
 pub fn record_for(arch: &str, netns: bool) -> ImageRecord {
@@ -105,14 +148,7 @@ pub fn record_for(arch: &str, netns: bool) -> ImageRecord {
         ImageRecord {
             arch: "arm64".into(),
             epoch: EPOCH,
-            kernel: kernel_of(
-                if netns {
-                    &ARM64_NETNS_KERNEL
-                } else {
-                    &ARM64_KERNEL
-                },
-                ARM64_CMDLINE,
-            ),
+            kernel: kernel_of(arm64_kernel(netns), ARM64_CMDLINE),
             initrd: None,
             ..ImageRecord::default()
         }

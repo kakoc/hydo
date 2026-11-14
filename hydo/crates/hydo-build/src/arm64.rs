@@ -7,7 +7,8 @@
 //! The root tree is the x86 image's, with two differences: the whole root is the initramfs and a
 //! small /init waits for /dev/vda2; tc is the pinned aarch64 iproute2 with exactly the shared
 //! libraries its loader opens. A manifest with network: bridge, an addr: or the freeze fault boots
-//! the second kernel, Image-explore-netns, and says so in /etc/hydo/kernel.
+//! the second kernel, Image-explore-netns-cg since the fingerprint epoch 3 (Image-explore-netns
+//! before), and says so in /etc/hydo/kernel.
 
 use crate::elfdeps::Elfdeps;
 use crate::fsx::{self, io_fail, is_link, lexists};
@@ -22,9 +23,10 @@ use std::process::Command;
 
 pub const BUSYBOX_ARM64: &str = "/nix/store/zbc5fx2yszji1a4aw2ff46m0p99c6yxb-busybox-static-aarch64-unknown-linux-musl-1.36.1/bin/busybox";
 pub const TC_ARM64: &str = "/nix/store/qmhi9c99dpgxyfg6cipf8xbmcvsr1vx2-iproute2-6.8.0/bin/tc";
-pub const NETNS_KERNEL: &str = "Image-explore-netns";
-pub const NETNS_KERNEL_SHA256: &str =
-    "806807e7be5f55dae342f796ccc6e20c35514b3684a8c0d4633901a8ac0aa609";
+/// The second arm64 kernel of this hydo's images (with cgroups since the fingerprint epoch 3,
+/// Milestone 234; the image record names it too).
+pub const NETNS_KERNEL: &str = hydo_image::kernels::ARM64_NETNS_KERNEL_CG.file;
+pub const NETNS_KERNEL_SHA256: &str = hydo_image::kernels::ARM64_NETNS_KERNEL_CG.sha256;
 pub const IP_ARM64: &str = "/nix/store/qmhi9c99dpgxyfg6cipf8xbmcvsr1vx2-iproute2-6.8.0/bin/ip";
 pub const IPTABLES_ARM64: &str = "/nix/store/y6j6xf1bfshzhdw7hip3swpgd6fqfs3b-iptables-1.8.10";
 const IPT_FILES: &[&str] = &[
@@ -506,8 +508,9 @@ pub fn build(
         outln(
             io,
             &format!(
-                "hydo-build: this image boots the guest kernel {NETNS_KERNEL} (sha256 {}), not Image-explore: it needs {}; recorded in the image as /etc/hydo/kernel",
+                "hydo-build: this image boots the guest kernel {NETNS_KERNEL} (sha256 {}), not {}: it needs {}; recorded in the image as /etc/hydo/kernel",
                 &NETNS_KERNEL_SHA256[..16],
+                hydo_image::kernels::arm64_kernel(false).file,
                 why.join(", ")
             ),
         );

@@ -246,9 +246,13 @@ is published and only then (a line names a file that must exist at
 - `archive <version> linux <sha256> hydo-linux-<version>.tar.gz` and the same for `mac`, with the
   sha256 of the published `SHA256SUMS` asset;
 - one `file <version> <platform> <sha256> <path>` line per guest kernel and initramfs in each
-  tarball (today `guest/bzImage`, `guest/bzImage-kvm` (since 0.2.0) and `guest/initramfs-kafka.cpio.gz` for Linux,
-  `hv/hvm/explore/out/Image-explore` and `Image-explore-netns` for the Mac), with the sha256 of
-  the tarball's own `SHA256SUMS` line.
+  tarball (today `guest/bzImage`, `guest/bzImage-kvm` (since 0.2.0), `guest/bzImage-kvm-smp`
+  (since 0.3.2), `guest/bzImage-kvm-cg` and `guest/bzImage-kvm-smp-cg` (from the first release
+  with Milestone 234) and `guest/initramfs-kafka.cpio.gz` for Linux,
+  `hv/hvm/explore/out/Image-explore`, `Image-explore-netns`, and from that release
+  `Image-explore-cg` and `Image-explore-netns-cg` for the Mac), with the sha256 of
+  the tarball's own `SHA256SUMS` line. The release that first ships the kernels with cgroups
+  also sets `HYDO_KERNEL_CG` and `HYDO_KERNEL_NETNS_CG` for the Mac's `build-release.sh`.
 
 Never change a line that is there. `cargo test -p hydo-image` checks the format. The release
 tarballs and `build-release.sh` do not change for this: the index is in the program, not in the

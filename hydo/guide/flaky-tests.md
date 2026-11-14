@@ -275,9 +275,17 @@ hydo explore --pause-thread tests::wal_reco --pause-min 4400 --pause-max 4500 \
 ```
 
 On hvx it found 6 failures in 100 schedules, all reproduced, and shrank one to a 250 ms pause at
-4,433 ms. With starts drawn from 0 to 5,000 ms it found none in 300 schedules. A pause of threads needs the guest kernel's cgroup
-v2 freezer, so it runs on hvx only. The Mac and KVM engines refuse it: their guest kernels have no
-cgroups.
+4,433 ms. With starts drawn from 0 to 5,000 ms it found none in 300 schedules.
+
+A pause of threads needs the guest kernel's cgroup v2 freezer. hvx's guest kernel has it. On the
+Mac and KVM engines, an image built at fingerprint epoch 3 or later boots a guest kernel with it.
+An older image is refused there, with a message to rebuild it. Each engine counts guest time in its
+own way, so the failing start differs. On the Mac engine, with an arm64 build of the test, the
+reload comes at about 0.35 s after the workload starts. Pauses of 500 ms from 320 to 400 ms failed
+at 11 starts. One of them is `P=workload/tests::wal_reco@0~321:500` (`f8b4f53073649991`, 2 runs).
+The fixed test passes with that pause. `pause-check.sh` in the example finds such a start on the
+Mac or KVM engine: it reads the reload's time from a copy with timed output, then tries every
+millisecond around it.
 
 ## Steer the search by a number the test prints
 

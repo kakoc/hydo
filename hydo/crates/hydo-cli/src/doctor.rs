@@ -135,7 +135,9 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
         }
     }
     let dirs = [ctx.guest(), ctx.p("build"), ctx.p("hv/kvm/linux/out")];
-    let k = hydo_kvm::kernel::KERNEL;
+    // the build that boots images of this hydo's fingerprint epoch (with cgroups since epoch 3,
+    // M234); an image built before boots bzImage-kvm, which the Linux release ships too
+    let k = hydo_kvm::kernel::KERNEL_CG;
     let want = hydo_image::FileRef {
         file: k.file.into(),
         sha256: k.sha256.into(),
@@ -163,7 +165,7 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
             &k.sha256[..16]
         ),
         &format!(
-            "{} (the Linux release ships it), or build it with hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) and put it in guest/, or name it with HYDO_KVM_KERNEL",
+            "{} (the Linux release ships it), or build it with CGROUPS=1 sh hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) and put it in guest/, or name it with HYDO_KVM_KERNEL",
             get_command()
         ),
         false,
@@ -171,7 +173,7 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
     // the build for several vCPUs (`--vcpus N`, docs/design/kvm-vcpus.md; in the Linux release
     // since 0.3.2): a warning, because a run on one vCPU never needs it
     if ctx.config.kvm.kernel.is_none() {
-        let s = hydo_kvm::kernel::KERNEL_SMP;
+        let s = hydo_kvm::kernel::KERNEL_SMP_CG;
         let want = hydo_image::FileRef {
             file: s.file.into(),
             sha256: s.sha256.into(),
@@ -195,7 +197,7 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
                 &s.sha256[..16]
             ),
             &format!(
-                "{} (the Linux release ships it since 0.3.2), or build it with SMP=1 sh hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) and put it in guest/",
+                "{} (the Linux release ships it), or build it with CGROUPS=1 SMP=1 sh hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) and put it in guest/",
                 get_command()
             ),
             true,
@@ -216,7 +218,9 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
 /// its program and guest kernel, and whether this machine's `/dev/kvm` can be used now. A
 /// missing file is a warning (hvx runs without it); `hydo doctor --backend kvm` checks the rest.
 fn kvm_state(c: &mut Checks, ctx: &Ctx) {
-    let k = hydo_kvm::kernel::KERNEL;
+    // the build that boots images of this hydo's fingerprint epoch (with cgroups since epoch 3,
+    // M234); an image built before boots bzImage-kvm, which the Linux release ships too
+    let k = hydo_kvm::kernel::KERNEL_CG;
     let want = hydo_image::FileRef {
         file: k.file.into(),
         sha256: k.sha256.into(),
@@ -730,7 +734,7 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
     let hvmx = hydo_engine::hvm::program(&ctx.root, &ctx.config.hvm);
     for p in [
         hvmx.clone(),
-        ctx.p("hv/hvm/explore/out/Image-explore"),
+        ctx.p("hv/hvm/explore/out/Image-explore-cg"),
         ctx.guest().join("busybox"),
         ctx.guest().join("mke2fs"),
         ctx.guest().join("tc-closure.txt"),
@@ -745,7 +749,7 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
         );
     }
     for p in [
-        ctx.p("hv/hvm/explore/out/Image-explore-netns"),
+        ctx.p("hv/hvm/explore/out/Image-explore-netns-cg"),
         ctx.guest().join("hydo_fc"),
         // the pinned aarch64 ip and iptables, in the release's store tree (HYDO_ARM64_STORE)
         ctx.guest()

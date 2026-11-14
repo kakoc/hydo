@@ -117,8 +117,14 @@ After 4,433 ms of guest time in step 0, hydo stops every thread of the workload 
 
 To find a thread's name, run that schedule with a name no thread has, at a start where the threads
 exist. The guest kernel's cgroup v2 freezer stops the threads, in a cgroup of the workload's own
-cgroup tree. No image needs a rebuild. The pause runs on hvx only: the guest kernels of the Mac
-and KVM engines have no cgroups, so those engines refuse it before any VM boots.
+cgroup tree.
+
+The pause runs on every engine for an image built at fingerprint epoch 3 or later, that is, by
+a hydo with Milestone 234. Such an image boots a guest kernel with cgroups on the Mac and KVM
+engines too. An image built before boots the kernels it was recorded with, and those have no
+cgroups on the Mac and KVM engines. Those engines then refuse the pause before any VM boots, and
+the message says to rebuild the image with `hydo build`. hvx's guest kernel has always had
+cgroups, so hvx runs the pause on every image.
 
 `hydo explore --pause-thread <name>[,<name>...]` draws such pauses, as `--pause-workload` draws
 pauses of the workload. With both options, the target is drawn among the workload and the names.

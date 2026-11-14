@@ -167,7 +167,7 @@ These rules are in force. Do not break them.
 - Keep existing fingerprints stable. A new module feature must be opt-in and inert when off, so
   that every recorded baseline stays the same. Check this with `deploy-metal.sh` and the pinned
   reproducers before and after the change.
-- The fingerprint epoch rule. `hydo_image::EPOCH` (now 2, since M204; 1 from M155) names the
+- The fingerprint epoch rule. `hydo_image::EPOCH` (now 3, since M234; 2 from M204, 1 from M155) names the
   generation of fingerprints. Raise it by one in the same commit as any change that moves a
   recorded fingerprint. Such changes are changes of an engine, the host controller, the agent pin
   or the guest kernels, or of a default that an image's run depends on. Add a section of
@@ -260,7 +260,9 @@ this way. Other tags, such as the action's moving tag `v1`, do not start it. `pa
 dry-runs the packages on every pull request that changes one. The details are in
 `docs/PUBLISHING.md`, section "Publishing from GitHub Actions" (M186).
 
-**Fingerprints.** The fingerprint epoch is 2 (M204; 1 from M155). The pinned reproducers are
+**Fingerprints.** The fingerprint epoch is 3 (M234; 2 from M204, 1 from M155). An image built at
+epoch 3 boots the Mac and KVM guest kernels with cgroups; its values wait for the next
+re-recording pass (open item 105). The pinned reproducers are
 `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` under `hydo run`: `a76d7fe857fdb37c`
 (VIOLATION, order 11) on `explore-ob-stack-old-disk.img` (`dab0e76c…`) and `efbde7b57264be0f`
 (OK) on `explore-ob-stack-fix-disk.img` (`d61cbf00…`), in `~/hydo/build/m204` on the bare-metal
@@ -279,14 +281,17 @@ crate `hydo-hvx`, which runs inside `hydo` when the process can open `/dev/hvx`.
 `hv/hvx/SAFETY.md`.
 
 **The Mac engine.** `hydo/crates/hydo-hvm` runs arm64 Linux 6.6.35 through Hypervisor.framework,
-with two guest kernels: `Image-explore`, and `Image-explore-netns` for `network: bridge`. Its
-clock counts VM exits. The program is signed with `hv/hvm/hv.entitlements` before it runs.
+with two guest kernels: `Image-explore`, and `Image-explore-netns` for `network: bridge`. An image
+built at the fingerprint epoch 3 or later boots their builds with cgroups, `Image-explore-cg` and
+`Image-explore-netns-cg` (M234, `docs/design/guest-cgroups.md`). Its clock counts VM exits. The program is signed with `hv/hvm/hv.entitlements` before it runs.
 The details are in Milestones 48, 51, 99, 143, and 147.
 
 **The KVM engine.** `hydo/crates/hydo-kvm` runs the x86_64 images on stock Linux KVM, without the
 module or root, with one vCPU and a patched guest kernel (`bzImage-kvm`). With `--vcpus N` it runs
 2 to 8 vCPUs in turns of counted exits with the SMP kernel `bzImage-kvm-smp`
-(`docs/design/kvm-vcpus.md`, M219), and `hydo explore --turns` and `--sweep turns` draw and search
+(`docs/design/kvm-vcpus.md`, M219). An image built at the fingerprint epoch 3 or later boots their
+builds with cgroups, `bzImage-kvm-cg` and `bzImage-kvm-smp-cg` (M234; `hydo_kvm::kernel` picks by
+the image's epoch), and `hydo explore --turns` and `--sweep turns` draw and search
 those turns (M227). The vCPU is at the
 x86-64-v2 level, or at x86-64-v3 for `guest.cpu: v3` on a host whose KVM has AVX2 (M189;
 `hv/kvm/v3-check.sh`). It runs on Intel and on AMD (GitHub's ubuntu-24.04 runners, 2026-11-08).
@@ -617,9 +622,10 @@ section "Pause the workload"; the example is `hydo/onboard/examples/etcd-flaky-2
 **Pauses of threads (M226).** `P=workload/<thread>[#<k>]@<at>~<off>:<dur>` stops only the
 workload's threads of that name (`/proc/<pid>/task/<tid>/comm`), or the k-th of them, and the
 other threads run on. The guest kernel's cgroup v2 freezer stops them; the agent and the images
-are unchanged. It runs on hvx only: the Mac and KVM engines refuse it, because their guest
-kernels have no cgroups. `hydo explore --pause-thread <name>` draws it, with `--pause-min` and
-`--pause-lengths`. On hvx `P=workload/tests::wal_reco@0~4433:500` fails Qdrant's flaky test on
+are unchanged. Since M234 it runs on every engine for an image built at the fingerprint epoch 3
+or later. On the Mac and KVM engines an older image boots kernels without cgroups, and the pause
+is refused before any VM with a message to rebuild the image. `hydo explore --pause-thread
+<name>` draws it, with `--pause-min` and `--pause-lengths`. On hvx `P=workload/tests::wal_reco@0~4433:500` fails Qdrant's flaky test on
 every run. The guide's section is "Pause threads of the workload" in `hydo guide faults`, and
 the details are in `docs/HISTORY.md` Milestone 226.
 
@@ -898,8 +904,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 80. CPU-limit pauses (M211, M216, M226). `P=workload@<at>~<off>:<dur>` stops the whole
     workload's process tree, and `P=workload/<thread>@...` (M226) only named threads, on hvx.
     What is left:
-    - A pause of threads on the Mac and KVM engines needs guest kernels with cgroups (an epoch
-      change) or a ptrace command in the agent (new bytes in every image).
+    - A pause of threads runs on the Mac and KVM engines since M234 (the fingerprint epoch 3:
+      guest kernels with cgroups). It fails Qdrant's test on the Mac at 11 of 81 starts. On KVM
+      with one vCPU it fails it at 1 of 81 starts (239 ms) on four AMD and Intel hosts. With two vCPUs
+      no start from 390 to 460 ms failed it on KVM: 50 passed and 21 ended in ERROR. A wider
+      window was not searched, and the ERROR's cause was not read.
+    - The freeze script ends the run with an error when a thread it listed exits before it is
+      moved into the cgroup. On the Mac this happened at 11 of the 81 starts, where the test
+      process ends. Fixing it changes the controller's commands for every pause of threads,
+      also on hvx and on epoch-2 images.
     - A pause of a service's thread, and pauses that repeat in every period of a CPU limit, are
       not built.
     - The blind exploration does not find Qdrant's 1 ms windows: 0 of 300 schedules with starts
@@ -991,7 +1004,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     the messages tutorial did not run on Linux. 0.3.3 is the first published hydo with it.
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
-    milestone and the values it moves; the pass removes the lines. None are waiting.
+    milestone and the values it moves; the pass removes the lines.
+    - M234 (the fingerprint epoch 3): every image of `hydo/onboard/recorded.json` gets new bytes
+      on all three platforms, because its record says epoch 3. So every recorded run's
+      fingerprint moves. The list has 21 images and 76 runs for hvm, 6 and 17 for kvm, and 43
+      and 141 for hvx. Set the list's `epoch` to 3 in the pass. On the Mac and KVM the images
+      also boot the kernels with cgroups. One verdict changes on KVM with one vCPU: the release
+      Redis example's `disk=cut | run C=12 R=everysec` gives OK at epoch 3 on four hosts. It was
+      VIOLATION at epoch 2, and stays VIOLATION with two vCPUs and on the Mac. The Linux
+      quickstart shows it as a lost write, so decide in the pass whether to accept the verdict or
+      show another schedule there. The pinned reproducers' images in `~/hydo/build/m204` stay at
+      epoch 2 and keep their values.
 106. The terminal in plain words (M230). A run directory's `hydo report` and the lines `hydo
     explore` prints before its runs (`fault space:` with JSON) are still technical. The real run
     used the Mac engine only.
@@ -1507,12 +1530,18 @@ build machine, before 2026-10-13.
   stripe | smtp | s3` runs stripe-mock, Mailpit or rclone's S3 server from a pinned image, behind
   a fault proxy of the same name; `idempotent: true` on an `http` proxy's route. The checkout
   example's double charge found blind on hvx. Skill 2.2.0. Nothing recorded moved
+- M234 (tentative number): a pause of threads on the Mac and KVM engines. The fingerprint epoch 3
+  gives their images guest kernels with cgroups (`Image-explore-cg`, `Image-explore-netns-cg`,
+  `bzImage-kvm-cg`, `bzImage-kvm-smp-cg`); an image built before keeps its kernels and its
+  values. Qdrant's flaky test fails under a pause of its thread on the Mac and on KVM with one
+  vCPU, and the fix passes. Every recorded value moves and waits for the next pass (open item
+  105); on KVM with one vCPU the quickstart's `C=12 R=everysec` passes at epoch 3
 
 ## Where to look
 
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.
 - `docs/REBASELINE.md`: the recorded fingerprints by section; section 13 is epoch 1, section 19
-  is epoch 2.
+  is epoch 2, section 24 is epoch 3.
 - `docs/BUILD-PINS.md`: the pinned toolchain and guest programs.
 - `docs/CI.md`: what CI runs, where, and how long it takes.
 - `docs/RELEASING.md` and `docs/PUBLISHING.md`: the release and publishing steps.

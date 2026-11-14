@@ -11,6 +11,10 @@
 #     (with the HVC idle, the default);
 #   - the second arm64 kernel Image-explore-netns (for network: bridge, addr: and the freeze):
 #     $HYDO_KERNEL_NETNS, a file built by hv/hvm/explore/build-guest-netns.sh (docs/BUILD-PINS.md);
+#   - the two arm64 kernels with cgroups of images built at the fingerprint epoch 3 and later
+#     (Milestone 234), Image-explore-cg and Image-explore-netns-cg: $HYDO_KERNEL_CG and
+#     $HYDO_KERNEL_NETNS_CG, built by hv/hvm/explore/build-guest-cg.sh NETNS=0 and NETNS=1
+#     (docs/BUILD-PINS.md); the two above stay for images built before;
 #   - the freeze helper hydo_fc: $HYDO_FC_BIN, hydo/onboard/hydo_fc.c compiled for aarch64 with the
 #     pinned Arm GNU toolchain (docs/BUILD-PINS.md; the toolchain is an x86_64 Linux program, so on
 #     a Mac it runs in an x86_64 Linux container);
@@ -68,6 +72,14 @@ fi
 if [ ! -f "$A/Image-explore-netns" ]; then
   [ -n "$HYDO_KERNEL_NETNS" ] || { echo "set HYDO_KERNEL_NETNS to an Image-explore-netns built by hv/hvm/explore/build-guest-netns.sh" >&2; exit 1; }
   cp "$HYDO_KERNEL_NETNS" "$A/Image-explore-netns"
+fi
+if [ ! -f "$A/Image-explore-cg" ]; then
+  [ -n "$HYDO_KERNEL_CG" ] || { echo "set HYDO_KERNEL_CG to an Image-explore-cg built by NETNS=0 sh hv/hvm/explore/build-guest-cg.sh" >&2; exit 1; }
+  cp "$HYDO_KERNEL_CG" "$A/Image-explore-cg"
+fi
+if [ ! -f "$A/Image-explore-netns-cg" ]; then
+  [ -n "$HYDO_KERNEL_NETNS_CG" ] || { echo "set HYDO_KERNEL_NETNS_CG to an Image-explore-netns-cg built by NETNS=1 sh hv/hvm/explore/build-guest-cg.sh" >&2; exit 1; }
+  cp "$HYDO_KERNEL_NETNS_CG" "$A/Image-explore-netns-cg"
 fi
 if [ ! -f "$A/hydo_fc" ]; then
   [ -n "$HYDO_FC_BIN" ] || { echo "set HYDO_FC_BIN to hydo/onboard/hydo_fc.c built for aarch64 with the pinned toolchain (docs/BUILD-PINS.md)" >&2; exit 1; }
@@ -159,9 +171,10 @@ mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
 # (the property table is made by the explorer itself since M115: no hydo/assert tool in the release)
 cp "$TOP/hv/hvm/hv.entitlements" "$REL/hv/hvm/"
-# both arm64 kernels: hydo-build records Image-explore-netns in an image that needs it
-# (/etc/hydo/kernel) and the engine boots the kernel the image names
-cp "$A/Image-explore" "$A/Image-explore-netns" "$REL/hv/hvm/explore/out/"
+# the arm64 kernels: hydo-build records the kernel an image needs (the second one for service
+# networks; since the fingerprint epoch 3 the ones with cgroups, M234) and the engine boots the
+# kernel the image names, so an image built before epoch 3 keeps its kernels
+cp "$A/Image-explore" "$A/Image-explore-netns" "$A/Image-explore-cg" "$A/Image-explore-netns-cg" "$REL/hv/hvm/explore/out/"
 cp "$A/busybox" "$A/mke2fs" "$REL/guest/"; chmod 755 "$REL/guest/busybox" "$REL/guest/mke2fs"
 # guest/hydo-world: the in-guest program of fakes: and proxies: (hydo/crates/hydo-world, Rust since
 # M111), a static aarch64 musl build made here on the Mac; `hydo build` stages it

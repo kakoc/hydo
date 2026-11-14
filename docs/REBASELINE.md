@@ -3483,3 +3483,28 @@ python-kv-hist, rust-kv, the shop's two images, the gRPC demo's two images). The
 images and runs that moved at 0.3.1 and 0.3.2. Every verdict is unchanged, every moved run gave
 the same values twice, and every worker-pool run gave its fresh boot's values. KVM's images carry
 none of these programs, so no KVM value moves.
+
+## 24. The fingerprint epoch 3 (M234, 2026-11-14)
+
+The user decided (2026-11-14) that a pause of threads must run on the Mac and KVM engines too,
+knowing that this is an epoch change (docs/design/guest-cgroups.md, docs/HISTORY.md "Milestone
+234"). This section records the decisions. Under the rule "Re-recording runs in batches"
+(AGENTS.md), the values are not re-recorded with the change: `hydo/onboard/recorded.json` keeps
+its epoch-2 values and its `epoch` 2 until the next re-recording pass (AGENTS.md open item 105).
+
+**The fingerprint epoch is 3.** An image built at epoch 3 boots guest kernels with cgroups on the
+Mac engine (`Image-explore-cg`, `Image-explore-netns-cg`) and on the KVM engine (`bzImage-kvm-cg`,
+`bzImage-kvm-smp-cg`); hvx's kernel had cgroups already and does not change. The Mac engine finds
+an image's kernel by the sha256 its record names, and the KVM engine picks its build by the
+image's epoch (`hydo_kvm::kernel::twin_for`). So an image built at epoch 2 or before boots the
+kernels it was recorded with and gives its recorded values under this hydo.
+
+**What moves.** Every image built at epoch 3 has new bytes, because its record
+`/etc/hydo/image.json` says epoch 3, so every run of the list gets a new fingerprint on all three
+platforms: hvm 21 images and 76 runs, kvm 6 images and 17 runs, hvx 43 images and 141 runs. On
+the Mac and KVM the new kernels move them too. Until the pass, `hydo-bench rebaseline --check`
+reports every image as moved (exit status 3). The pass also shows whether a verdict or a recorded
+ctl value moves; at epoch 2 none did on the Mac and KVM.
+
+**The pinned reproducers** stay the stack example's epoch-2 images in `~/hydo/build/m204`, with
+their values `a76d7fe857fdb37c` and `efbde7b57264be0f`: this hydo boots them as before.

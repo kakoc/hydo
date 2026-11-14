@@ -293,8 +293,16 @@ mod tests {
         let ix = Index::parse(INDEX_TEXT).unwrap();
         assert!(!ix.archives.is_empty());
         let all = index();
+        let ver = crate::hydo_version();
         for k in KNOWN {
             let p = platform_of_arch(k.arch);
+            // a tree between releases whose version is still the published one: a kernel new
+            // since that release (Milestone 234's kernels with cgroups) is in no archive yet; the
+            // next version's own lines ([`Index::with_own`]) name it once the version is raised
+            let published = ix.archive(p, ver).is_some_and(|a| a.sha256.is_some());
+            if published && ix.with_sha256(p, k.sha256).is_empty() {
+                continue;
+            }
             let m = all.with_sha256(p, k.sha256);
             assert!(
                 m.iter().any(|m| m.version == crate::hydo_version()),
