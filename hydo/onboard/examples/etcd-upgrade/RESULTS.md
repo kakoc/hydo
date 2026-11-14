@@ -46,3 +46,29 @@ sha256 `5506039765f748b7…`.
 The passing run is etcd's documented path: every member to 3.5.26 first, one member every 3
 steps, then every member to 3.6.0-rc.2. Its `result.json` lists six switches under `upgrades`,
 each with `"started":true`.
+
+## The same with etcd 3.6.0
+
+The second image holds 3.6.0 in place of 3.6.0-rc.2 (`build.sh 3.5.5 3.6.0 3.5.26`, sha256
+`4bb371e024b26d67…`). etcd's issue says that 3.6.0-rc.3 resolved the issue. The release 3.6.0
+still stops on such data with the same two log lines, as etcd's blog post says:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none dseed=0 \| run U=etcd1@5:3.6.0` | `VIOLATION [upgrade.started] etcd1 did not start on version 3.6.0 before step 5 (it ran 3.5.5)` | `8c1b48147f614cc2` |
+| `disk=none dseed=0 \| run U=etcd.all@3/3:3.6.0` | the same, before step 3: the rolling upgrade stops at its first member | `44591083908c663f` |
+| `disk=none dseed=0 \| run U=etcd.all@3/3:3.5.26 U=etcd.all@12/3:3.6.0` | OK, 90 acknowledged writes readable | `6ed968a93c4eea92` |
+
+## A blind exploration
+
+`hydo explore --upgrades --seeds 1-24 --workers 1` on the 3.6.0 image drew a `U=` in 11 of the
+24 schedules, among kills, network faults, power cuts and disk faults. It found 8 failures and
+reproduced each. Two are the upgrade bug, found without a hand-written schedule:
+
+| seed | schedule | class |
+|---|---|---|
+| 5 | `disk=none dseed=63033b0ca389c35a \| run U=etcd1@0:3.6.0` | `upgrade` |
+| 14 | `disk=none dseed=6aa9d61435dbe63e \| run U=etcd.all@8/3:3.6.0` | `upgrade` |
+
+The minimal schedule of the class is seed 5's, with the fingerprint `6c93dceb5756d55d` on two
+runs. The other six failures come from the drawn disk faults (`io-errors`, `lying-disk`).

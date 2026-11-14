@@ -8531,3 +8531,91 @@ the dry run of `release.yml` passed on `main` (run 43608139044):
   has `hydo` and `hydo-assert` 0.3.3, PyPI and npm have `hydo-assert` 0.3.3 (npm served it two
   minutes after the publish), and the Go tag `sdk/go/v0.3.3` exists.
 
+### Milestone 238 (tentative number) - DONE (upgrade testing: `services[].versions` and the token `U=` switch a service to another version of itself during a run, as a rolling upgrade or a rollback does, and `hydo explore --upgrades` draws it; an etcd cluster grown with learners reaches etcd issue 19557 with one token, and etcd's documented path through 3.5.26 passes; nothing recorded moved; 2026-11-14)
+
+**In short.** Rolling upgrades are a frequent cause of outages: old and new versions run side by
+side and read each other's data. hydo had no way to change a service's program during a run. Now
+a manifest lists the versions a service can run, and `U=<target>@<at>[/<gap>][+<back>]:<version>`
+stops the service, switches its version and starts it again on the same data. The design is
+docs/design/upgrades.md.
+
+**The manifest (a format-1 addition).** `services[].version` names the version that `cmd:`,
+`setup:` and `ready:` run, and `services[].versions` lists the others, each with its own commands
+where they differ. Every command of a service with versions sees `$HYDO_VERSION`; a service
+without them gets no such variable. A version name is a letter or digit, then letters, digits,
+`.`, `_` and `-`, at most 40 bytes (`hydo_schedule::version_name_ok`). A `{{param}}` may name a
+version. Versions of an image service (`image:`) are refused for now.
+
+**The token.** `U=` takes a service, a list or a group selector. A target of several services is
+switched one member at a time, the k-th before step `at + k*gap`, each once the one before it is
+ready again. `+<back>` rolls each member back `back` steps after its own switch; a downgrade can
+also be a second `U=`. The host controller (`hydo-control/src/schedule/upgrade.rs`) sends SIGTERM
+to the service's tree, starts a grace thread that sends SIGKILL after 10 s of guest time, waits
+for the process's end, switches the version and calls `start_svc`. The switch comes after the
+step's `K=` restarts. A service that is down at its switch only gets the version, and its restart
+uses it. A service that does not start on its new version ends the run with `HYDO-ORACLE:
+VIOLATION [upgrade.started] <svc> did not start on version <v> before step <p> (it ran <old>)`.
+The letter `U` is reserved, so no knob may use it.
+
+**Records.** Each switch writes the note `HYDO-UPGRADE {"service","step","from","to","rollback",
+"started"}`, and `result.json` lists them as `upgrades` (the results addition `Run.upgrades`,
+`UpgradeSwitch`). A run with `U=` declares and reaches `fault.upgraded`. At a power cut (and at
+the end of a `cf=` run) the report line `hydo-explore-versions: <svc>=<v> ...` carries the switched
+versions; `RecoveryInputs.versions` reads it from the transcript, so the recovery boot starts each
+service on the version it ran at the cut. `hydo inspect diagnose` names the service of an
+`[upgrade.started]` verdict and collects its log.
+
+**The explorer.** `hydo explore --upgrades` adds a `U=` to 60% of the schedules from its own
+stream (`UPGRADE_SALT`): half rolling upgrades of a group whose members all have versions (0 to 3
+steps apart), the rest one service, a quarter with a rollback. Version names come from the image's
+`/etc/hydo/params` (`Space::with_params`). The class of such a failure is `upgrade`, after the
+disk and corruption classes. The shrinker tries the schedule without each `U=`, without its
+rollback and without its gap. `--upgrades` without any service with versions is refused.
+
+**The proof: etcd issue 19557.** The example `hydo/onboard/examples/etcd-upgrade` grows a
+three-member cluster with learners: `etcd1` starts alone, and `etcd2` and `etcd3` join as learners
+and are promoted, one at a time. From etcd 3.5.1 to 3.5.19 a promotion reaches only v2store, so
+etcd 3.6 finds two learners in v3store and stops at its start (fixed in 3.5.20; etcd's upgrade
+notes ask for 3.5.26 before 3.6). The image holds 3.5.5, 3.6.0-rc.2 or 3.6.0, and 3.5.26. The runs
+on hvx, each from a fresh boot, with this milestone's `hydo` in a copy of the unpacked 0.3.2
+Linux release:
+
+| image (new version) | schedule | verdict | fingerprint |
+|---|---|---|---|
+| 3.6.0-rc.2 (`5506039765f748b7…`) | `disk=none dseed=0 \| run` | OK, 90 writes readable | `3b95c737a83238b8` |
+| 3.6.0-rc.2 | `disk=none dseed=0 \| run U=etcd1@5:3.6.0-rc.2`, twice | `VIOLATION [upgrade.started] etcd1 did not start on version 3.6.0-rc.2 before step 5 (it ran 3.5.5)` | `55cbbb73b00549a1` both times |
+| 3.6.0-rc.2 | `disk=none dseed=0 \| run U=etcd.all@3/3:3.5.26 U=etcd.all@12/3:3.6.0-rc.2` | OK, six switches started | `95f11b3eacae70f6` |
+| 3.6.0 (`4bb371e024b26d67…`) | `disk=none dseed=0 \| run U=etcd1@5:3.6.0` | the same violation for 3.6.0 | `8c1b48147f614cc2` |
+| 3.6.0 | `disk=none dseed=0 \| run U=etcd.all@3/3:3.6.0` | the same violation, before step 3 | `44591083908c663f` |
+| 3.6.0 | `disk=none dseed=0 \| run U=etcd.all@3/3:3.5.26 U=etcd.all@12/3:3.6.0` | OK, six switches started | `6ed968a93c4eea92` |
+
+`hydo inspect diagnose --evidence` of the failing rc.2 run replays it and reads etcd1's log:
+`"msg":"bootstrap failed","error":"membership: too many learner members in cluster"`, then
+`"msg":"discovery failed"` at level fatal. So 3.6.0 still fails on such data, as etcd's blog says;
+the reverted-learner fix of 3.6.0-rc.3 does not help a cluster with two promoted learners.
+
+**Blind exploration.** `hydo explore --upgrades --seeds 1-24 --workers 1` on the 3.6.0 image
+(hvx, strategy random, 20 minutes): 24 schedules, 11 with a `U=` among the other faults, 8
+failures, all 8 reproduced. Seed 5 drew `U=etcd1@0:3.6.0` and seed 14 the rolling upgrade
+`U=etcd.all@8/3:3.6.0`; both failed with `[upgrade.started]` in the class `upgrade`, and the
+minimal schedule `disk=none dseed=63033b0ca389c35a | run U=etcd1@0:3.6.0` gave `6c93dceb5756d55d`
+twice. Seed 2's upgrade to 3.5.26 under a kill and a partition passed. The other failures are
+the disk classes (`io-errors`, `lying-disk`); one of them, seed 8, is an upgrade to 3.5.26 on a
+disk with I/O errors, whose class is `io-errors` because the disk's class comes first. Five
+schedules drew an upgrade after their power cut, which never comes.
+
+**Tests.** hydo-schedule `language::upgrades` and the describe examples; hydo-control `upgrade::`
+(nine tests on the scripted agent: a rolling upgrade, `$HYDO_VERSION`, a rollback and a downgrade
+token, a version that does not start, the SIGTERM grace period, a member that is down at its
+switch, a power cut's carried versions, the names check, no variable without versions);
+hydo-explore `upgrades::` (the own stream, no draw without versions or the option, parameters,
+the shrink); the diagnosis's `verdict_service`. The goldens: the explorer's identity and corpus
+goldens of before pass with the new example moved aside, and are re-recorded with it; the control
+corpus golden only gains the new example and `messages-tutorial`, which it lacked; the manifest
+answers change in the list of known service keys and in the mutants the new input brings; the CLI
+golden in `hydo guide manifest`. The schemas `project-v1.json` and `results-v1.json` grow, and
+hydo-schema-compat passes.
+
+**Open (open item 109).** Versions of image services; the explorer draws one `U=` per schedule and
+only the selector `all` for a group; the state search does not move `U=`; the Mac and KVM engines
+ran `U=` only on the scripted agent; the grace period is fixed at 10 s.

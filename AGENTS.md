@@ -453,6 +453,18 @@ explorations came from the plan, and the guides now say how to avoid each:
 The report shows a long clock step also in hours and minutes. The skill is 2.0.2. Nothing
 recorded moved. The details are in `docs/HISTORY.md` Milestone 240.
 
+**Upgrades (M238, tentative number).** A service may list the versions it can run
+(`services[].version` and `services[].versions`, a format-1 addition). The guest token
+`U=<target>@<at>[/<gap>][+<back>]:<version>` switches it during a run. hydo stops the service with
+a SIGTERM and a SIGKILL 10 s of guest time later, and starts the new version on the same data. A list or a group selector is a
+rolling upgrade, and `+<back>` rolls back. A member that does not start on its new version ends
+the run with `VIOLATION [upgrade.started]`, and a power cut carries the versions to the recovery
+boot. `result.json` lists the switches as `upgrades` (a results addition), and `hydo explore
+--upgrades` draws them (class `upgrade`). The example `hydo/onboard/examples/etcd-upgrade`
+reaches etcd issue 19557 on hvx with `U=etcd1@5:3.6.0`, and etcd's documented path through
+3.5.26 passes. Design: `docs/design/upgrades.md`; guide: `hydo guide faults`, "Upgrades and
+rollbacks"; details: `docs/HISTORY.md` Milestone 238.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -904,6 +916,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     "no image given" with two images could list them. `hydo explore` prints `fault space:` as
     JSON, and the kinds it lists include pauses and clock steps that run only with
     `--new-faults`.
+109. Upgrades (M238). Versions of an image service (`image:`) are refused. The explorer draws one
+    `U=` per schedule and only the selector `all` for a group, and the state search does not move
+    `U=`. The Mac and KVM engines ran `U=` only on the scripted agent. The grace period after
+    SIGTERM is fixed at 10 s. The example is not in `hydo/onboard/recorded.json`.
 
 ## Milestone index
 
@@ -1300,6 +1316,11 @@ build machine, before 2026-10-13.
   messages`. An `eventually_` command retries by itself. A clock step against durations on the
   wall clock is a real finding. A long step reads in hours and minutes. Skill 2.0.2. Nothing
   recorded moved
+- M238 (tentative number): upgrade testing. `services[].versions` and `U=` switch a service to
+  another version during a run, member by member, with rollbacks. `hydo explore --upgrades` draws
+  them. An etcd cluster grown with learners reaches etcd issue 19557 ("too many learner
+  members in cluster") on 3.6.0-rc.2 and 3.6.0 with one token. The documented path through
+  3.5.26 passes. Nothing recorded moved
 
 ## Where to look
 
