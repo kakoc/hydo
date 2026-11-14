@@ -27,6 +27,7 @@
 
 pub mod ci;
 pub mod composer;
+pub mod emulators;
 pub mod known_findings;
 pub mod messages;
 pub mod migrate;
@@ -192,6 +193,7 @@ pub fn validator_keys() -> Vec<(&'static str, Vec<&'static str>)> {
         ("Proxy", v::KNOWN_PROXY.to_vec()),
         ("FakeRoute", v::KNOWN_ROUTE.to_vec()),
         ("ProxyRoute", v::KNOWN_PROXY_ROUTE.to_vec()),
+        ("Emulator", emulators::KNOWN.to_vec()),
         ("Webhook", v::KNOWN_HOOK.to_vec()),
         ("Tls", v::KNOWN_TLS.to_vec()),
         ("HistoryCheck", v::known_check_all()),

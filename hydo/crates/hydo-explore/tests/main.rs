@@ -7,6 +7,7 @@ mod support;
 
 mod cluster_faults;
 mod corpus;
+mod emulators;
 mod identity;
 mod lago_gaps;
 mod liveness_deadline;

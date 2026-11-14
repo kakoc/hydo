@@ -9391,3 +9391,114 @@ warnings and notes of the two imports name what did not map:
 was imported on the bare-metal machine; the import's own call of `helm` and `kubectl kustomize`
 ran in no test. The Mac engine ran neither import (the Mac was not to run VMs that day). `hydo
 onboard` found a chart and manifests only in the unit test. Open item 114 lists the limits.
+
+### Milestone 242 (tentative number) - DONE (ready-made emulators of outside services: `emulators:` with `use: stripe | smtp | s3` runs stripe-mock, Mailpit or rclone's S3 server from an image pinned by digest, behind a fault proxy of the same name; `idempotent: true` on an `http` proxy's route; the checkout example's planted double charge found blind on hvx; nothing recorded moved; 2026-11-14)
+
+**Why.** A project declared each outside service as a fake: every route, its answer in the
+provider's format, its saved objects. A fake of Stripe needs about ten routes before a Stripe
+client accepts the answers. Projects exist that answer like a provider. They do not fail like
+one, but hydo's proxy makes the failures (`H=`). So hydo now runs such an emulator as a service
+inside the guest, with its proxy in front. The design and the candidates are in
+`docs/design/emulators.md`.
+
+**The candidates** (checked 2026-11-14; the design's table has the details):
+
+| Emulator | License | Runtime | Image | Decision |
+|---|---|---|---|---|
+| stripe-mock 0.206.0 | MIT | one static Go program | 9.6 MB | `use: stripe` |
+| Mailpit 1.33.1 | MIT | one static Go program | 15.0 MB | `use: smtp` |
+| rclone 1.76.0, `serve s3` | MIT | one static Go program | 34.7 MB | `use: s3` |
+| Versity S3 Gateway | Apache-2.0 | Go | not fetched | no: it checks signatures over the `Host` header, which hydo's proxy rewrites |
+| vercel-labs/emulate | Apache-2.0 | TypeScript on Node.js 24, npm only | none published | later: needs an image hydo builds and pins |
+| LocalStack | changed 2026-03 | Python | about 1 GB | no: its image needs an account's token |
+| MinIO | AGPL-3.0 | Go | none since 2025-10 | no: no published images, the repository is archived |
+
+The image sizes are the fetched archives. All three chosen emulators were first tried with Docker
+on this Mac: a payment intent with `metadata[order]`, an SMTP message read back through Mailpit's
+search API, and a signed S3 `PUT` with a wrong `Host` header that rclone accepted.
+
+**What changed.**
+
+1. `emulators:` (a format-1 addition; `hydo_manifest::emulators`, the model's `Emulator`, the
+   schema). Keys: `use`, `name`, `port`, `ref`, `tls` (stripe), `buckets` (s3), `description`.
+   The validator expands each entry before its other checks:
+   - a service `<name>_emulator` with `image:` (`emulators/<emulator>-<version>-<arch>.docker.tar`
+     beside the manifest), `entrypoint:`, `ready: tcp:<port>` and `port:`, placed first in
+     `services:`;
+   - a proxy `<name>` on the port the system calls (12111, 1025, 9000). Stripe's has 15 routes,
+     `idempotency: header:Idempotency-Key` and `tls: {hosts: [api.stripe.com]}`. S3's has 6
+     routes. SMTP's is a TCP proxy;
+   - for s3, `/data/<name>` with the buckets, and `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`,
+     `AWS_SECRET_ACCESS_KEY` and `AWS_REGION` in `env:` where the manifest has none.
+
+   The expansion removes `emulators:` and leaves `_emulators` (names and image pins) in the
+   validated data. Validating that data again changes nothing.
+2. `hydo build` fetches a missing emulator image by the pinned digest
+   (`hydo_compose::registry::fetch_image`, the code of `hydo-fetch-image`) and prints which. It
+   does so with `--check` too, because the check reads every image service's image.
+   hydo-build alone refuses a missing file as before. hydo ships no emulator, so no third-party
+   list of a release changes.
+3. The explorer's fault space leaves an emulator's service out, as it leaves out a `job: true`
+   service. `H=` on its proxy is its fault.
+4. `idempotent: true` on a route of an `http` proxy (a format-1 addition; `hydo-world`
+   `serve.rs`). stripe-mock keeps no state, so it treated a retry with the same key as a new
+   payment, and a correct client showed a double charge in the record. Now a repeat of a key that
+   took effect gets the service's first answer, does not reach the service, and is recorded as
+   `fx=0 out=replay orig=<seq>`, as on a fake. The first answers are not carried across a power
+   cut. The validator refuses the key on `grpc` proxies. Without the key a proxy forwards as
+   before.
+5. Documents: `hydo guide outside-services` ("Ready-made emulators"), MANIFEST.md ("Ready-made
+   emulators", "Idempotent proxy routes"), `docs/design/emulators.md`, and the skill's step 6,
+   which offers an emulator for each provider in the catalog. The skill is 2.2.0.
+
+**The proof** (the bare-metal machine, hvx, this branch's `hydo`, `hydo-world` and
+`hydo-world-tls` inside the unpacked 0.3.2 Linux release; `hydo/onboard/examples/checkout`,
+242 lines of Go that charge through `https://api.stripe.com`, put the receipt into S3 and mail
+it; `src/key_buggy.go` makes a new idempotency key per try):
+
+| Image | Schedule or command | Result |
+|---|---|---|
+| fixed | `disk=none \| run` | OK `fp=2419ffbe836fb182` |
+| buggy | `disk=none \| run H=stripe.payment_intent@3-4:status=500,effect=yes` | VIOLATION `[stripe.charged_at_most_once] stripe.payment_intent: ref o3 took effect 3 times (records 10,11,12)` `fp=3884fc23ddc03321` |
+| fixed | the same | OK `fp=d0ed3445d829f5a1`; the retries are `fx=0 replay+status500` |
+| buggy | `disk=none \| run H=stripe.payment_intent@3-4:delay=3000` | VIOLATION, o3 3 times, `fp=6c548970b20f44e4` |
+| fixed | the same | OK `fp=d92392bfc6209af3` |
+| buggy | `hydo explore --seeds 1-240 --protocol-faults` | 240 schedules, 5 failures, each reproduced; minimal schedules `disk=none dseed=118e846ea93bc949 \| run H=stripe.payment_intent@4-5:drop` (`af456b6763e45693` twice) and `... H=stripe.payment_intent@2-5:status=500,effect=yes,p=50` (`697297ee352d0eb5` twice) |
+| fixed | `hydo explore --seeds 41-240 --protocol-faults` | 200 schedules, no failure |
+
+`hydo repro` of each of the five directed runs printed `REPRODUCED` with the recorded
+fingerprint. The fault space of every exploration named only `checkout` as a service, and no
+written schedule names an emulator's service. Each run took 1.0 to 1.4 s of wall time.
+
+**Nothing recorded moved.** A manifest without `emulators:` or an idempotent proxy route gets the
+same validated data, the same image and the same draws. The released `hydo-world` is pinned, so
+recorded images keep their bytes until the next release re-pins it.
+
+**Tests** (on the bare-metal machine; the Mac ran no build).
+
+- `hydo-manifest` `emulators::tests` (the expansion of each entry, the refusals, the manifest's
+  own `env:` winning, a second validation changing nothing, `idempotent` refused on a `grpc`
+  proxy); `hydo-world` `proxy_idempotent::` (a repeat of a key gets the first answer without
+  reaching the service; `status=500,effect=yes` then a retry; a route without the key forwards
+  every request); `hydo-explore` `emulators::` (over 1,200 schedules with `--protocol-faults`
+  draw `H=` on the emulators' proxies and never name their services).
+- Goldens re-recorded with `HYDO_BLESS=1` for the new key and the new input. Before the new
+  example was added, `hydo-manifest` `equivalence::` differed only in the unknown-field messages
+  (the known keys now list `emulators` and, for proxy routes, `idempotent`). With the example
+  moved aside, the explorer's `identity::` and `corpus::` goldens and the controller's
+  `corpus::` golden passed as recorded, so no answer of an unchanged input moved. The re-recorded
+  files are the schema, the two equivalence goldens of `hydo-manifest` and `hydo-build` (whose
+  mutants are drawn from the list of inputs, so they changed with it), the CLI and agents goldens
+  (`hydo guide manifest`, the skill 2.2.0), and the three corpus goldens. The CLI golden's
+  `hydo build stack/hydo.yaml --check` line stays as recorded: its warning names the `/nix/store`
+  paths missing on the machine, and the bare-metal machine has one of them.
+- fmt, clippy with `-D warnings`, `sh ci/consolidate-tests.sh --check`, `sh ci/vale.sh`, and
+  `cargo test` of `hydo-manifest`, `hydo-world`, `hydo-explore`, `hydo-build`, `hydo`,
+  `hydo-agents` (`skill_check::`, `public_content::`), `hydo-release`, `hydo-config`,
+  `hydo-schema-compat`, `hydo-compose` and `hydo-control`. The two new test files are in the fast
+  tier.
+
+**Open** (AGENTS.md open item 116). The emulators ran on hvx with loopback networking only. stripe-mock
+keeps no state and sends no webhooks; the SMTP proxy records connections, not messages; an
+emulator's state is lost at a power cut. vercel-labs/emulate would add stateful providers with
+webhooks but needs an image with Node.js 24.

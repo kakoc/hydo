@@ -513,7 +513,7 @@ pub struct Req<'a> {
     pub body: &'a [u8],
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Resp {
     pub status: u16,
     pub headers: Hdrs,

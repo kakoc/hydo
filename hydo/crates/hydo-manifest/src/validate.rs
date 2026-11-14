@@ -53,6 +53,7 @@ pub const KNOWN_TOP: &[&str] = &[
     "clock_points",
     "perf",
     "contracts",
+    "emulators",
 ];
 /// The keys of a `groups:` entry (Milestone 195).
 pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "description"];
@@ -221,8 +222,15 @@ pub(crate) const KNOWN_ROUTE: &[&str] = &[
 ];
 pub(crate) const KNOWN_SAVE: &[&str] = &["key", "fields"];
 pub(crate) const KNOWN_SIGN: &[&str] = &["header", "secret", "payload", "value", "encoding"];
-pub(crate) const KNOWN_PROXY_ROUTE: &[&str] =
-    &["name", "method", "path", "ref", "effect", "description"];
+pub(crate) const KNOWN_PROXY_ROUTE: &[&str] = &[
+    "name",
+    "method",
+    "path",
+    "ref",
+    "effect",
+    "idempotent",
+    "description",
+];
 pub(crate) const KNOWN_HOOK: &[&str] = &[
     "url",
     "method",
@@ -521,7 +529,16 @@ pub fn validate(m: &mut Value) -> R<()> {
     if !m.is_object() {
         return Err(err("the manifest must be a mapping"));
     }
+    // emulators: become services and proxies (Milestone 242); what they became stays in
+    // _emulators, which only the expansion writes
+    let emu = m
+        .as_object_mut()
+        .and_then(|o| o.remove(crate::emulators::META));
     unknown(m, KNOWN_TOP, "top level")?;
+    crate::emulators::expand(m)?;
+    if let Some(e) = emu {
+        m[crate::emulators::META] = e;
+    }
     if let Some(b) = obj_get(m, "buggify") {
         if !b.is_boolean() {
             return Err(err("buggify: must be true or false"));
@@ -1595,6 +1612,12 @@ fn validate_world(m: &Value) -> R<()> {
                             return Err(err(format!("{rw}: {k} is true or false")));
                         }
                     }
+                }
+                if kind == "proxies"
+                    && obj_get(r, "idempotent").is_some_and(truthy)
+                    && proto.as_str() != Some("http")
+                {
+                    return Err(err(format!("{rw}: idempotent: true only on an http proxy")));
                 }
                 if obj_get(r, "idempotent").is_some_and(truthy)
                     && !obj_get(e, "idempotency").is_some_and(truthy)

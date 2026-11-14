@@ -528,6 +528,17 @@ Services become names in `/etc/hosts`; probes become `ready:`. Secret values go 
 The mapping and the refusals are in `docs/design/k8s-import.md`; the proof is in
 `docs/HISTORY.md` Milestone 243.
 
+**Ready-made emulators of outside services (M242).** One `emulators:` line gives a project Stripe
+(stripe-mock), SMTP (Mailpit) or S3 (`rclone serve s3`). The validator expands each entry into a
+service `<name>_emulator` from the emulator's image and a fault proxy `<name>` in front of it, so
+`H=`, the record and `hydo-world check` work as for a fake. `hydo build` fetches the images by
+pinned digests into `emulators/` beside the manifest; hydo ships none of them. The explorer
+draws no fault on an emulator's service. An `http` proxy route takes `idempotent: true`: a
+repeated key gets the first answer, recorded as a replay. On hvx the example
+`hydo/onboard/examples/checkout` found its planted double charge blind (5 of 200 schedules), and
+every replay gave its fingerprint. The design is `docs/design/emulators.md`; the details are in
+`docs/HISTORY.md` Milestone 242.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -1048,6 +1059,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     hide the host's `/nix/store` or leave the warning out of the digest (M243). The `hydo`
     test's recorded answer of `hydo build <stack example> --check` differs on the bare-metal machine
     for the same reason.
+116. Emulators (M242). They ran on hvx only, with loopback networking: not on the Mac or KVM
+    engines, not with `network: bridge`. stripe-mock keeps no state and sends no webhooks, and the
+    SMTP proxy records connections, not messages. An emulator's state is lost at a power cut.
+    vercel-labs/emulate (Stripe and Resend with state, and many other providers) needs an image
+    with Node.js 24 that hydo would build and pin. The changed `hydo-world` reaches a release at
+    its next re-pin.
 
 ## Milestone index
 
@@ -1486,6 +1503,10 @@ build machine, before 2026-10-13.
   Helm chart or a Kustomize folder, through the Compose importer; `hydo onboard` runs it. Secret
   values stay out of hydo.yaml through the format-1 addition `services[].env_file`. Bitnami's
   Redis chart and the voting app's manifests ran on hvx. Nothing recorded moved
+- M242 (tentative number): ready-made emulators of outside services. `emulators:` with `use:
+  stripe | smtp | s3` runs stripe-mock, Mailpit or rclone's S3 server from a pinned image, behind
+  a fault proxy of the same name; `idempotent: true` on an `http` proxy's route. The checkout
+  example's double charge found blind on hvx. Skill 2.2.0. Nothing recorded moved
 
 ## Where to look
 

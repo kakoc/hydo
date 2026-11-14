@@ -4,4 +4,5 @@
 //! `<name>::<test>`: `cargo test -p hydo-world --test it <name>::`.
 
 mod objects_sign;
+mod proxy_idempotent;
 mod xcheck;

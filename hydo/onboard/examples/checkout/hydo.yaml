@@ -1,0 +1,66 @@
+# Ready-made emulators of outside services (Milestone 242, `hydo guide outside-services`).
+#
+# checkout (src/, Go) takes orders over HTTP. It charges each order through Stripe
+# (https://api.stripe.com), keeps its receipt in S3 (the bucket receipts), and mails the receipt
+# over SMTP. Three lines under `emulators:` give it all three: stripe-mock, rclone's S3 server and
+# Mailpit run as services, each behind a fault proxy that hydo-world records. `hydo build`
+# fetches their images by digest into emulators/ next to this file.
+#
+# One planted bug (src/key_buggy.go): every try of a charge gets a new idempotency key, so a charge
+# that took effect but whose answer was lost is taken twice. build.sh builds both programs.
+#   disk=none | run                                                        -> OK
+#   disk=none | run H=stripe.payment_intent@3-4:status=500,effect=yes      -> buggy: VIOLATION
+#                                       [stripe.charged_at_most_once]; fixed: OK (a replay)
+name: checkout
+description: an order service that charges through Stripe, stores receipts in S3 and mails them, against emulators.
+
+params:
+  variant: fixed                 # fixed | buggy: which checkout program goes into the image
+  bin: "../../../../build"       # where build.sh put checkout-fixed and checkout-buggy
+
+guest:
+  ram_mib: 1024
+
+root:
+  files:
+    - {src: "{{bin}}/checkout-{{variant}}", dst: /bin/checkout, mode: "0755"}
+
+emulators:
+  - use: stripe                  # https://api.stripe.com; H= targets stripe.<route>
+    ref: form:metadata[order]    # the order a payment is for, in the record
+  - use: s3                      # $AWS_ENDPOINT_URL_S3 is http://127.0.0.1:9000
+    buckets: [receipts]
+    ref: path:2                  # PUT /receipts/<order>
+  - use: smtp                    # SMTP at 127.0.0.1:1025; Mailpit's API at 127.0.0.1:8025
+    name: email
+
+services:
+  - name: checkout
+    cmd: /bin/checkout server
+    ready: tcp:8080
+    port: 8080
+
+workload:
+  steps: 8                       # step i: place order i
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if checkout place $i 2>> /tmp/hydo/checkout-client.log; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+  timeout: 300
+  process: checkout place
+
+invariants:
+  - id: stripe.charged_at_most_once
+    msg: Stripe took the money for an order at most once
+    cmd: hydo-world check at-most-once stripe.payment_intent
+  - id: stripe.acked_order_charged
+    msg: every order the service acknowledged was charged
+    cmd: hydo-world check effect-for-acked stripe.payment_intent --ref 'o{id}'
+  - id: receipts.stored_and_mailed
+    msg: every acknowledged order has its receipt in S3 and in the mailbox
+    cmd: checkout check
+
+faults: [kill, pause, protocol]

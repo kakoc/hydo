@@ -541,6 +541,10 @@ choice!(
     FakeProtocol { Http = "http", Grpc = "grpc" }
 );
 choice!(
+    /// The catalog entry of an emulator.
+    EmulatorKind { Stripe = "stripe", Smtp = "smtp", S3 = "s3" }
+);
+choice!(
     /// A fault proxy's protocol.
     ProxyProtocol { Http = "http", Grpc = "grpc", Tcp = "tcp" }
 );
@@ -669,6 +673,12 @@ pub struct Project {
     /// Fault proxies in front of real services.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxies: Option<Vec<Proxy>>,
+    /// Ready-made emulators of outside services (Milestone 242, docs/design/emulators.md): one
+    /// entry runs a pinned emulator (a Docker/OCI image, fetched by `hydo build`) as a service,
+    /// with a fault proxy of the same name in front of it, so that `H=` faults and the record
+    /// work as for a fake. Its service keeps the explorer's other faults off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emulators: Option<Vec<Emulator>>,
     /// Error logs as findings: true, or a mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub errors: Option<ErrorsSetting>,
@@ -1303,6 +1313,12 @@ impl Default for Param<HistoryType> {
     }
 }
 
+impl Default for Param<EmulatorKind> {
+    fn default() -> Self {
+        Param::Value(EmulatorKind::Stripe)
+    }
+}
+
 impl Default for Param<CommandKind> {
     fn default() -> Self {
         Param::Value(CommandKind::ParallelDriver)
@@ -1601,6 +1617,43 @@ pub struct ProxyRoute {
     pub reference: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect: Option<bool>,
+    /// http proxies (Milestone 242): a repeat of an idempotency key that took effect gets the
+    /// service's first answer and does not reach the service, as a provider that keeps
+    /// idempotency keys answers; needs the proxy's idempotency:.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotent: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
+}
+
+/// A ready-made emulator of an outside service (Milestone 242): `use:` names the catalog entry.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct Emulator {
+    /// The catalog entry: stripe (stripe-mock behind HTTPS for api.stripe.com), smtp (Mailpit),
+    /// s3 (rclone's S3 server).
+    #[serde(rename = "use")]
+    pub uses: Param<EmulatorKind>,
+    /// [a-z][a-z0-9_]*: the proxy's name, which H= tokens and the record's checks use (default:
+    /// the use: value). The emulator's service is <name>_emulator.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<Text>,
+    /// The port the system calls (the proxy's plain listener; default: stripe 12111, smtp 1025,
+    /// s3 9000).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<i64>,
+    /// Where a request's business reference is (an extractor such as form:metadata[order]),
+    /// for the record and its checks.
+    #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<Text>,
+    /// stripe: HTTPS for api.stripe.com with the image's test CA (default true); false leaves
+    /// only the plain port.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
+    pub tls: Option<bool>,
+    /// s3: buckets that exist from the start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub buckets: Option<Vec<Text>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

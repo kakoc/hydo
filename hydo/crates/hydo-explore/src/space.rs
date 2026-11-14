@@ -165,7 +165,13 @@ impl Space {
             .filter(|s| is_job(s))
             .map(name_of)
             .collect();
-        let services: Vec<Value> = all_services.into_iter().filter(|s| !is_job(s)).collect();
+        // an emulator's service (`emulators:`, Milestone 242) stands for the outside world: its
+        // faults are H= tokens on its proxy, so no other fault is drawn on it either
+        let emulators = hydo_manifest::emulators::services(&m);
+        let services: Vec<Value> = all_services
+            .into_iter()
+            .filter(|s| !is_job(s) && !emulators.contains(&name_of(s)))
+            .collect();
         let clock_points: Vec<String> = arr(m.get("clock_points")).iter().map(str_of).collect();
         let svcs: Vec<String> = services.iter().map(name_of).collect();
         let ported: Vec<String> = services

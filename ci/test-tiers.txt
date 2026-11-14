@@ -80,6 +80,7 @@ hydo-errors::equivalence                 fast
 hydo-explore                             fast
 hydo-explore::cluster_faults             fast
 hydo-explore::corpus                     full
+hydo-explore::emulators                  fast
 hydo-explore::fake_engine                fast
 hydo-explore::identity                   fast
 hydo-explore::lago_gaps                  fast
@@ -140,6 +141,7 @@ hydo-schema-compat::rules                fast
 hydo-tools                               fast
 hydo-world::bin/hydo-world               fast
 hydo-world::objects_sign                 fast
+hydo-world::proxy_idempotent             fast
 hydo-world::xcheck                       full
 hydo::agents_equivalence                 fast
 hydo::bin/hydo                           fast

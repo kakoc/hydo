@@ -247,6 +247,16 @@
         "$ref": "#/$defs/Proxy"
       }
     },
+    "emulators": {
+      "description": "Ready-made emulators of outside services (Milestone 242, docs/design/emulators.md): one\nentry runs a pinned emulator (a Docker/OCI image, fetched by `hydo build`) as a service,\nwith a fault proxy of the same name in front of it, so that `H=` faults and the record\nwork as for a fake. Its service keeps the explorer's other faults off.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Emulator"
+      }
+    },
     "errors": {
       "description": "Error logs as findings: true, or a mapping.",
       "anyOf": [
@@ -3083,6 +3093,13 @@
             "null"
           ]
         },
+        "idempotent": {
+          "description": "http proxies (Milestone 242): a repeat of an idempotency key that took effect gets the\nservice's first answer and does not reach the service, as a provider that keeps\nidempotency keys answers; needs the proxy's idempotency:.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -3097,6 +3114,94 @@
       "additionalProperties": false,
       "required": [
         "name"
+      ]
+    },
+    "Emulator": {
+      "description": "A ready-made emulator of an outside service (Milestone 242): `use:` names the catalog entry.",
+      "type": "object",
+      "properties": {
+        "use": {
+          "description": "The catalog entry: stripe (stripe-mock behind HTTPS for api.stripe.com), smtp (Mailpit),\ns3 (rclone's S3 server).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EmulatorKind"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        "name": {
+          "description": "[a-z][a-z0-9_]*: the proxy's name, which H= tokens and the record's checks use (default:\nthe use: value). The emulator's service is <name>_emulator.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "port": {
+          "description": "The port the system calls (the proxy's plain listener; default: stripe 12111, smtp 1025,\ns3 9000).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "ref": {
+          "description": "Where a request's business reference is (an extractor such as form:metadata[order]),\nfor the record and its checks.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tls": {
+          "description": "stripe: HTTPS for api.stripe.com with the image's test CA (default true); false leaves\nonly the plain port.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "buckets": {
+          "description": "s3: buckets that exist from the start.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "use"
+      ]
+    },
+    "EmulatorKind": {
+      "description": "The catalog entry of an emulator.",
+      "type": "string",
+      "enum": [
+        "stripe",
+        "smtp",
+        "s3"
       ]
     },
     "ErrorsSetting": {

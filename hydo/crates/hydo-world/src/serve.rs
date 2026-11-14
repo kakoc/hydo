@@ -474,6 +474,14 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
     }
     let (r#ref, idem) = (v.extract(&ref_spec), v.extract(&e.idempotency));
 
+    // a repeat of an idempotent request on an HTTP proxy (Milestone 242): the service's first
+    // answer, stored when it came (None: not stored, e.g. after a power cut; it is forwarded)
+    let mut replayed: Option<Option<http1::Resp>> = None;
+    let idem_key = {
+        let mut key = format!("{}/{}/", e.name, rname).into_bytes();
+        key.extend_from_slice(&idem);
+        key
+    };
     let (rule, ans_seq, heal, missing, obj) = {
         let mut st = w.lock_gate().await;
         let rule = st.request_rule(&e.name, &rname);
@@ -486,16 +494,19 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
         if !apply {
             out = "-".into(); // the outside world never acted on it
         }
-        let mut key = format!("{}/{}/", e.name, rname).into_bytes();
-        key.extend_from_slice(&idem);
+        let key = idem_key.clone();
         let mut extra = String::new();
-        if fake && fx && rt.is_some_and(|r| r.idempotent) && !idem.is_empty() {
+        let idem_route = fake || e.protocol == "http";
+        if idem_route && fx && rt.is_some_and(|r| r.idempotent) && !idem.is_empty() {
             if let Some(&s) = st.idem.get(&key) {
                 // a repeat of an idempotent request: same answer, no new effect
                 fx = false;
                 ans_seq = s;
                 out = "replay".into();
                 extra = format!(" orig={s}");
+                if !fake {
+                    replayed = Some(st.answers.get(&key).cloned());
+                }
             }
         }
         // objects.rs: a request about an object the fake does not have takes no effect
@@ -565,7 +576,9 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
     ];
     // the real service's answer (proxy) comes first: the fault acts on what it answered
     let mut up: Option<Result<http1::Resp, String>> = None;
-    if !fake && apply {
+    if let Some(Some(first)) = replayed.take() {
+        up = Some(Ok(first));
+    } else if !fake && apply {
         up = Some(match rt::or_gone(gone, forward(e, &rq)).await {
             Some(r) => r,
             None => Err(http1::url_err(
@@ -574,6 +587,15 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
                 "context canceled",
             )),
         });
+        // the first answer of an idempotent route, for the repeats of its key
+        if let (Some(Ok(resp)), Some(r)) = (&up, rt) {
+            if r.idempotent && !idem.is_empty() && e.protocol == "http" {
+                let mut st = w.lock();
+                if st.idem.get(&idem_key) == Some(&ans_seq) {
+                    st.answers.insert(idem_key.clone(), resp.clone());
+                }
+            }
+        }
     }
     if let Some(r) = &rule {
         if r.delay_ms > 0 {

@@ -26,6 +26,10 @@ pub struct St {
     pub rules: Vec<Arc<Rule>>,
     /// "<endpoint>/<route>/<idempotency key>" -> seq of the first effect
     pub idem: BTreeMap<Vec<u8>, i64>,
+    /// HTTP proxies' `idempotent: true` routes: the same key -> the service's first answer,
+    /// which a repeat gets instead of reaching the service again (Milestone 242). Not carried
+    /// across a power cut: a repeat after a cut reaches the service, recorded as a replay.
+    pub answers: BTreeMap<Vec<u8>, crate::http1::Resp>,
     /// webhooks not delivered yet (carried across a power cut)
     pending: BTreeMap<i64, Hook>,
     /// reorder: the webhook held back per "<fake>.<route>"
@@ -175,6 +179,7 @@ impl World {
                 logf,
                 rules: Vec::new(),
                 idem: BTreeMap::new(),
+                answers: BTreeMap::new(),
                 pending: BTreeMap::new(),
                 held: BTreeMap::new(),
                 hook_n: 0,

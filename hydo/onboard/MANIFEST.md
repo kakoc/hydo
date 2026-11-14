@@ -58,8 +58,8 @@ directory, each with `model.json`, the model it reads into; `INDEX` lists them).
 
 **Top-level keys:** `format`, `hydo_version`, `name` (required), `description`, `guest`,
 `network`, `root`, `data`, `env`, `shell`, `params`, `services`, `provision`, `workload`,
-`knobs`, `invariants`, `checks`, `faults`, `freeze_match`, `fakes`, `proxies`, `errors`,
-`buggify`, `test`.
+`knobs`, `invariants`, `checks`, `faults`, `freeze_match`, `fakes`, `proxies`, `emulators`,
+`errors`, `buggify`, `test`.
 
 **The `hydo/` folder is not a second format.** It is a directory convention: files next to the
 manifest (`hydo/hydo.yaml`, or any manifest whose directory has them) fill parts of the same
@@ -1413,8 +1413,16 @@ proxies:
     service: redis             # forward to that service's addr:port (or to: 127.0.0.1:6379)
     protocol: tcp              # tcp (any protocol; one connection = one request) | http | grpc
     # http/grpc proxies may have ref:, idempotency: and routes: (name/method/path/ref/effect only),
-    # which name the requests in the records and as H= targets
+    # which name the requests in the records and as H= targets; a route of an http proxy may also
+    # have idempotent: true (below)
 ```
+
+**Idempotent proxy routes** (`idempotent: true` on a route of an `http` proxy with
+`idempotency:`, Milestone 242): a repeat of an idempotency key that took effect gets the service's
+first answer, does not reach the service, and is recorded as a replay (`fx=0 out=replay
+orig=<seq>`), as a provider that keeps idempotency keys answers. The proxy keeps the first
+answers in memory: after a power cut a repeat reaches the service again, still recorded as a
+replay. The emulators below use it; without the key a proxy forwards every request.
 
 **Extractors** (`idempotency:`, `ref:`): `header:<Name>`, `json:<field>` (dotted path into a JSON
 body), `query:<name>`, `form:<name>` (a bracketed name too: Stripe and Rails send
@@ -1448,6 +1456,42 @@ provider's signature check (a timestamp, the body, the endpoint secret) passes.
 (`/pkg.Service/Method`), its answer `message:` (hex protobuf bytes, default empty) and `code:`
 (gRPC status, default 0); an error rule answers trailers-only with `grpc-status`. Status codes in
 `H=` rules may be numbers or names (`status=UNAVAILABLE`).
+
+### Ready-made emulators (`emulators:`)
+
+An entry runs a pinned emulator of an outside service as a service, with a fault proxy of the same
+name in front of it (Milestone 242; design: docs/design/emulators.md). The validator expands it
+before every other check, so the rest of this reference applies to what it becomes.
+
+```yaml
+emulators:
+  - use: stripe                # required: stripe | smtp | s3
+    name: stripe               # [a-z][a-z0-9_]*, default: the use: value; the proxy's name
+    port: 12111                # the port the system calls (default: stripe 12111, smtp 1025, s3 9000)
+    ref: form:metadata[order]  # the proxy's ref: extractor
+    tls: true                  # stripe only (default true): HTTPS for api.stripe.com
+  - use: s3
+    buckets: [receipts]        # s3 only: directories /data/<name>/<bucket>, made in setup:
+```
+
+| `use:` | image (fetched by digest) | service `<name>_emulator` | proxy `<name>` |
+|---|---|---|---|
+| `stripe` | `docker.io/stripe/stripe-mock`, v0.206.0 | `/bin/stripe-mock -http-port 22111` | http, `idempotency: header:Idempotency-Key`, 15 routes (the POST routes `idempotent: true`), `tls: {hosts: [api.stripe.com]}` |
+| `smtp` | `docker.io/axllent/mailpit`, v1.33.1 | `/mailpit --smtp 127.0.0.1:11025 --listen 127.0.0.1:8025 --smtp-auth-accept-any --smtp-auth-allow-insecure --disable-version-check` | tcp |
+| `s3` | `docker.io/rclone/rclone`, 1.76.0 | `rclone serve s3 --addr 127.0.0.1:19000 /data/<name>`, `setup:` makes the buckets | http, 6 routes |
+
+- The service has `image:` (`emulators/<emulator>-<version>-<amd64|arm64>.docker.tar` beside the
+  manifest), `entrypoint:`, `ready: tcp:<port>` and `port:`. A second emulator of one kind gets the
+  next port (22112, ...). The emulators' services come first in `services:`.
+- `hydo build` (also with `--check`) fetches a missing image file by the digest this hydo pins,
+  as `hydo-fetch-image` does. hydo-build alone does not fetch: it refuses a missing file as for
+  any image service.
+- `s3` adds `<name>` to `data.dirs` and sets `AWS_ENDPOINT_URL_S3=http://127.0.0.1:<port>`
+  (`10.89.0.1` with `network: bridge`), `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
+  `AWS_REGION=us-east-1` in `env:`, each unless `env:` has it.
+- The validated data keeps `_emulators` (the expanded names and the image pins). The explorer
+  draws no kill, pause, freeze or network fault on an emulator's service; `H=` on the proxy is its
+  fault. A schedule written by hand may still name the service.
 
 ### HTTPS for fakes and proxies (`tls:`)
 

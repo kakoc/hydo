@@ -117,6 +117,15 @@ pub fn cmd_build(ctx: &Ctx, argv: &[String]) -> i32 {
             )
         }
     };
+    let arch = if ctx.platform == Platform::Mac {
+        "arm64"
+    } else {
+        "x86_64"
+    };
+    // also for --check: the build reads every image service's image, an emulator's too
+    if let Err(e) = fetch_emulators(ctx, &hb_argv[0], arch, &rest) {
+        die(&e);
+    }
     hb_argv.extend(rest.iter().cloned());
     let bctx = hydo_build::Ctx {
         onboard: ctx.onboard(),
@@ -163,4 +172,59 @@ fn next_hint(ctx: &Ctx, out: &Path) -> String {
     format!(
         "hydo: next:  hydo run {backend}{image}\"disk=none | run\"     or     hydo explore {backend}{image}--seeds 1-20"
     )
+}
+
+/// The images of the manifest's `emulators:` (Milestone 242) that are not next to it yet, fetched
+/// by the digest that this hydo pins (`hydo_manifest::emulators::CATALOG`) into
+/// `emulators/<file>-<arch>.docker.tar` beside the manifest, as `hydo-fetch-image` fetches an
+/// image service's. A manifest that does not load is left to the build, which says why.
+fn fetch_emulators(ctx: &Ctx, manifest: &str, arch: &str, rest: &[String]) -> Result<(), String> {
+    let mut sets = Vec::new();
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        if a == "--set" {
+            if let Some((k, v)) = it.next().and_then(|kv| kv.split_once('=')) {
+                sets.push((k.to_string(), v.to_string()));
+            }
+        }
+    }
+    let opts = hydo_manifest::LoadOptions {
+        arch: arch.to_string(),
+        sets,
+        onboard_dir: ctx.onboard(),
+        version_check_warn: true,
+    };
+    let Ok(loaded) = hydo_manifest::load_until_images(Path::new(manifest), &opts).0 else {
+        return Ok(());
+    };
+    let dir = abspath(Path::new(manifest))
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    for img in hydo_manifest::emulators::images(&loaded.manifest.data, arch) {
+        let out = dir.join(&img.path);
+        if out.exists() {
+            continue;
+        }
+        eprintln!(
+            "hydo: fetching the image of {} ({}@{}, {arch}) into {}",
+            img.service,
+            img.repo,
+            img.digest,
+            out.display()
+        );
+        if let Some(p) = out.parent() {
+            std::fs::create_dir_all(p).map_err(|e| format!("{}: {e}", p.display()))?;
+        }
+        let part = out.with_extension("tar.part");
+        hydo_compose::registry::fetch_image(
+            &img.repo,
+            &img.digest,
+            &img.tag,
+            &part.to_string_lossy(),
+        )
+        .map_err(|e| format!("fetching the image of {}: {e}", img.service))?;
+        std::fs::rename(&part, &out).map_err(|e| format!("{}: {e}", out.display()))?;
+    }
+    Ok(())
 }

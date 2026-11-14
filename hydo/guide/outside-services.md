@@ -4,6 +4,52 @@ The full reference is in `hydo guide manifest`, in the sections `Fake outside se
 protocol faults`, `gRPC faults`, and `gRPC services: generated drivers`. Everything on this page is x86_64
 only and needs a build from hydo's repository (`hydo guide capabilities`).
 
+## Ready-made emulators of outside services
+
+For a provider in this table, write one `emulators:` entry instead of a fake. hydo runs the
+emulator as a service and puts a fault proxy of the same name in front of it. `H=` faults, the
+record and the checks below then work as for a fake.
+
+| `use:` | The emulator | The system calls | Its H= routes |
+|---|---|---|---|
+| `stripe` | stripe-mock 0.206.0 (MIT) | `https://api.stripe.com` (the SDK unchanged), or `http://127.0.0.1:12111` | `payment_intent`, `payment_intent_confirm`, `payment_intent_capture`, `payment_intent_cancel`, `charge`, `refund`, `customer`, `checkout_session`, `subscription`, `invoice`, `transfer`, `payout`, `other_post`, `delete`, `read` |
+| `smtp` | Mailpit 1.33.1 (MIT) | SMTP at `127.0.0.1:1025`; Mailpit's HTTP API at `127.0.0.1:8025` | `conn` (one connection = one message) |
+| `s3` | rclone 1.76.0, `rclone serve s3` (MIT) | `$AWS_ENDPOINT_URL_S3` (`http://127.0.0.1:9000`), path-style | `create_bucket`, `put_object`, `post`, `delete`, `head`, `read` |
+
+```yaml
+emulators:
+  - use: stripe
+    ref: form:metadata[order]    # the business reference in the record (an extractor, as for a fake)
+  - use: s3
+    buckets: [receipts]          # buckets that exist from the start
+  - use: smtp
+    name: email                  # the proxy's name, which H= and the checks use (default: the use: value)
+```
+
+Each entry also takes `port:` (the port the system calls) and, for `stripe`, `tls: false` (only
+the plain port). An entry makes a service `<name>_emulator`. The explorer draws no fault on it;
+the outside world's faults are `H=` tokens on the proxy. `hydo build`, also with `--check`,
+fetches each emulator's image by its pinned digest into `emulators/` next to the manifest: keep
+that folder out of git.
+The `s3` entry sets `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
+`AWS_REGION` in `env:` unless the manifest sets them. An image service of the system sets them in
+its own `env:`. The S3 server accepts requests with any signature or none.
+
+What the emulators do and do not do:
+
+- stripe-mock checks each request against Stripe's API description and answers with Stripe's
+  example objects. It keeps no state: a read returns an example, not what the system created. The
+  proxy keeps Stripe's idempotency: a repeat of an `Idempotency-Key` gets the first answer and is
+  recorded as a replay (`fx=0`), so `hydo-world check at-most-once stripe.payment_intent` counts
+  real double charges only. stripe-mock sends no webhooks; declare a fake for them.
+- Mailpit keeps the mail it received. A check reads it from its API, for example
+  `GET http://127.0.0.1:8025/api/v1/search?query=subject:"Receipt o7"` (`messages_count`).
+- The S3 server keeps objects as files under `/data/<name>`.
+- An emulator's state is inside the guest: a power cut loses what it held in memory. The record of
+  the proxy survives a cut; a check over an emulator's own state is valid in runs without a cut.
+
+The example `hydo/onboard/examples/checkout` in hydo's repository uses all three.
+
 ## Fakes: outside services the system calls
 
 A payment provider, an email API or a webhook sender cannot be reached from the guest. Declare it
