@@ -7909,10 +7909,11 @@ with a worked example.
 - The releases ship `plugin/` instead of `skill/hydo-onboard/`; `hydo-agents` embeds `plugin/`
   through `embed/plugin`. The repository links `.claude/skills/hydo` to `plugin/` and
   `.agents/skills/onboard` to `plugin/skills/onboard`.
-- The old name stays in three places on purpose: the salt `hydo-onboard:` of
-  `hydo_build::image::uuid_from` (its UUIDs are inside every image), the comments of the recorded
-  example manifests compose-voting and miniflux and their schema copies (their bytes are inside
-  recorded images), and docs/HISTORY.md.
+- The old name stays in four places on purpose: the salt `hydo-onboard:` of
+  `hydo_build::image::uuid_from` (its UUIDs are inside every image); the comments of the example
+  manifests that an earlier `hydo compose` or skill run wrote (compose-voting and miniflux, whose
+  bytes are inside recorded images, lago's and libsql-replica's, which the explorer's goldens pin)
+  and their schema copies; miniflux's RESULTS.md, a record of its run; and docs/HISTORY.md.
 
 **`hydo onboard [DIR] [--agent NAME ...] [--no-skill] [--no-resolve]`** (`hydo/crates/hydo-cli/src/onboard.rs`):
 
