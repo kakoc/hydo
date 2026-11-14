@@ -175,6 +175,12 @@ These rules are in force. Do not break them.
   different epochs compare only verdicts. A default that changes with an epoch is keyed on the
   epoch in the image's record (`hydo_image::defaults`), so that an image built before keeps
   running as it did.
+- Re-recording runs in batches, not per change (user, 2026-11-14). The recorded values stay
+  strict, but a change that moves recorded values does not re-record the examples itself. It
+  says which values it moves in its milestone and in open item 105. The lead re-records them in
+  one pass overnight or before a release (`hydo-bench rebaseline`, the full-tier goldens, the
+  KVM runners), and every value is re-recorded before a release is published. Quick checks
+  during the day stay the pinned reproducers and the tests of the changed crates.
 
 ## Language policy
 
@@ -823,9 +829,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 103. The plain report page (M228). A fresh reader's review is fixed. Every error verdict but a
     failed restart gets the title `The run stopped early`. A service's own log is not in an
     exploration's files, so the page can only name the command that shows it.
-104. `hydo onboard` and the plugin `hydo` (M229). The skill release `skill-v2.0.0` is not
-    published, so `hydo skill update` still installs 1.2.0 under the old name until it is.
-    `hydo onboard` ran only on the Mac, and the messages tutorial did not run on Linux.
+104. `hydo onboard` and the plugin `hydo` (M229). The skill release `skill-v2.0.0` was published
+    on 2026-11-14, and `hydo skill update` installs it. `hydo onboard` ran only on the Mac, and
+    the messages tutorial did not run on Linux. No published hydo has `hydo onboard` yet; it is planned for 0.3.3.
+105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
+    coordination rules"). Each change that moves recorded values adds a line here with its
+    milestone and the values it moves; the pass removes the lines. None are waiting.
 
 ## Milestone index
 
