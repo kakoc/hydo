@@ -5,7 +5,8 @@ These are the limits of hydo 0.3.2. The [README](../README.md) shows what it doe
 - A run gives the same fingerprint again when four things are the same:
   - the engine;
   - the image;
-  - the CPU model (for the KVM engine, the CPU vendor);
+  - the CPU model (for the KVM engine on AMD, the EPYC models measured share their
+    fingerprints);
   - the fingerprint epoch, a number that hydo raises when a new version changes fingerprints.
     `hydo repro` says when the epoch differs.
 - Across machines, the recorded examples gave the same verdicts. The Redis example gave the same

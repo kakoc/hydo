@@ -223,6 +223,26 @@ Since 0.2.0 the Linux release ships the KVM engine, and the Mac programs are sig
 `cargo install hydo` followed by `hydo setup` works on the Mac and, since M210, on Linux with KVM.
 How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`.
 
+**hydo 0.3.2: prepared, not published** (`docs/HISTORY.md` "The 0.3.2 release"). It adds
+Milestones 210–227 to 0.3.1; plans keep `hydo_version: "0.3"`, and the fingerprint epoch stays 2.
+The Linux release ships the KVM engine's SMP guest kernel `guest/bzImage-kvm-smp`, so
+`--backend kvm --vcpus N` runs from it. Release step 6a ran on quick candidates and its fixes are
+in. The released schemas (`hydo/schema/released/`) are the current ones again, a step that
+0.2.0 to 0.3.1 skipped and docs/RELEASING.md step 1 now names. The release commit is `4910b682`.
+Its five files and `SHA256SUMS` are in `hydo/dist/out/0.3.2/` of the main checkout (git-ignored),
+each platform built twice to the same bytes:
+
+- `hydo-linux-0.3.2.tar.gz` `e631182c1a2da3b7ef512e7478d6fd555630d8b9ba1e332796b95017e625fa5a`;
+- `hydo-linux-0.3.2-sources.tar.gz` `58dbf9944d1f20f370ad7ed2addbf923651843d3571a2982942b89fe2329e5f7`;
+- `hydo-mac-0.3.2.tar.gz`, signed and notarized,
+  `7c7f94d0f6ec014578e052355ba2efaf1cd1f40db6f2e741ddf7d006427eaa58`;
+- `hydo-mac-0.3.2-sources.tar.gz` `bd5abc9010f871f9166ec39bbed7957ab6f626d9d3c0be16176ada20c21671ec`;
+- `hydo-mac-0.3.2-signatures.tar.gz` `25d7f92da55514a79b6003f8b47db6adf8c9c0b264d564386ad1b9fa97cea624`.
+
+The prepared material (release notes, the Homebrew formula, the release-index lines) is in
+`hydo/dist/out/0.3.2/prepared/`. The KVM verification runs on GitHub's runners through the
+one-off branch `tmp-rel-032-kvm`, because the build machine cannot be reached.
+
 **Registry publishing from GitHub Actions.** A tag `v<major>.<minor>.<patch>` starts
 `.github/workflows/release.yml`. It publishes the crates, the PyPI and npm packages, and the Go tag
 with each registry's trusted publishing, so no token is stored. 0.3.0 and 0.3.1 were published
@@ -260,7 +280,9 @@ module or root, with one vCPU and a patched guest kernel (`bzImage-kvm`). With `
 those turns (M227). The vCPU is at the
 x86-64-v2 level, or at x86-64-v3 for `guest.cpu: v3` on a host whose KVM has AVX2 (M189;
 `hv/kvm/v3-check.sh`). It runs on Intel and on AMD (GitHub's ubuntu-24.04 runners, 2026-11-08).
-Its fingerprints are its own and differ between CPU vendors; the verdicts are the same. Details:
+Its fingerprints are its own. They differ between CPU vendors and, on Intel, between CPU models.
+In 0.3.2's KVM run two Xeon models and the i7-13700HX each differ. The AMD EPYC 7763, 9V45, and
+9V74 agree (open item 102). The verdicts are the same. Details:
 `docs/design/kvm-engine.md`, Milestones 159, 161, 175 and 189, and open item 45 in
 `docs/HISTORY.md` Milestone 187. Some guest loops make no VM exits and store to memory, for
 example TigerBeetle's polling of io_uring. The full-state cycles prove such a loop by the whole
@@ -771,6 +793,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     8). It was not checked outside hydo, no upstream issue was searched, and no regression is
     saved. The billing rule `final_one_invoice_per_period` counts only recurring invoices, so
     only the generic rule caught it.
+101. `hydo repro`, run by a user on the run directory of a run that root made (`sudo hydo run`),
+    ends with an error that the engine cannot start (a missing file); as root it reproduces. Found
+    in 0.3.2's verification on hvx. The message should name the directory's owner (the 0.3.2
+    release).
+102. On Intel, KVM fingerprints differ between CPU models with the same verdicts. The Redis
+    quickstart's schedules gave other values on a Xeon Platinum 8370C and on a Xeon 6975P-C than
+    on the i7-13700HX they were recorded on. Each one was deterministic (0.3.2's KVM run on
+    GitHub's runners). The AMD EPYC models measured agree with each other. Find the cause: a value that
+    depends on the CPU model and reaches guest memory or a fingerprinted field. Compare two Intel
+    models' `HYDO_KVM_DIAG` output and the parts of the fingerprint. The explorer's result cache
+    keys KVM runs by the CPU's vendor and model since 0.3.2.
 
 ## Milestone index
 
@@ -1120,6 +1153,13 @@ build machine, before 2026-10-13.
   failures, and every failure reproduced. M219's kernel fix holds on Intel. On Intel a run from a
   worker's S1 on 2 vCPUs differed from a fresh boot. The snapshotting machine now goes on in a
   fresh VM; its proof run passed on five Intel and three AMD hosts. Nothing recorded moved
+- The 0.3.2 release (no milestone number): the version raised, `hydo-world`, `hydo-world-tls`
+  and `hydo-grpc` re-pinned, and the SMP guest kernel in the Linux release. Release step 6a ran
+  on quick candidates, and its fixes are in: one install block per method in the README, what
+  `hydo init` writes, and a `hydo build --check` warning for its placeholders. The released
+  schemas are the current ones, the explorer's full identity golden is re-recorded, and the
+  examples are re-recorded (epoch 2). Both releases are built twice to the same bytes, the Mac one
+  signed and notarized, and verified on hvx and the Mac; nothing is published
 
 ## Where to look
 

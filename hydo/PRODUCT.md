@@ -108,7 +108,8 @@ hydo has three engines, and each one gives its own fingerprints:
 A failure replays exactly with the same engine, the same image, and a hydo of the same epoch. The
 same schedule also runs on the other engines, but it is a new run with other fingerprints. A
 failure that hvx or KVM found runs x86_64 guests, so it does not replay on a Mac, which runs arm64
-guests. KVM's fingerprints also differ between Intel and AMD CPUs, but the verdicts are the same.
+guests. KVM's fingerprints also differ between Intel and AMD CPUs, and on Intel between CPU models,
+but the verdicts are the same.
 
 ## Known gaps
 

@@ -576,6 +576,9 @@ last-instruction pointers can differ between CPU microarchitectures and vendors;
 rely on the former, and the latter are saved by the guest's context switches into its RAM. So:
 within one host, and between the cores of a hybrid CPU (measured below), fingerprints compare;
 across vendors or generations, compare verdicts (as `hydo repro` does across fingerprint epochs).
+Measured at 0.3.2 on GitHub's runners: on Intel the Redis quickstart's schedules gave one
+fingerprint per CPU model (a Xeon Platinum 8370C, a Xeon 6975P-C and the i7-13700HX each differ),
+while the AMD EPYC 7763, 9V45 and 9V74 agree with each other (AGENTS.md open item 102).
 Other host differences the guest can see and CPUID cannot hide: the MXCSR_MASK the guest's own
 FXSAVE writes into its RAM (the engine leaves it out of the vCPU part of the fingerprint, but not
 out of RAM), and how a KVM version batches string I/O and splits MMIO accesses (the number of

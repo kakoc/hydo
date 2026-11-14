@@ -346,7 +346,8 @@ images on the KVM that comes with Linux (`/dev/kvm`). Use it on a machine where 
 machines). It needs x86_64 Linux 5.10 or later with `/dev/kvm` usable by your user. Run
 `hydo doctor --backend kvm` first. Add yourself to the group `kvm` only if it says that
 `/dev/kvm` is not usable (`sudo usermod -aG kvm "$USER"`, then log in again). It runs on Intel
-and AMD CPUs; its fingerprints differ between the two vendors, and its verdicts do not.
+and AMD CPUs. Its fingerprints differ between CPU vendors, and on Intel between CPU models; its
+verdicts do not.
 
 ```sh
 ./hydo-linux-0.3.2/install.sh --no-module     # nothing to build or load
@@ -384,8 +385,10 @@ A host power cut at the k-th disk flush (`cf=`) and inserted ticks (`pp=`, `xtâ€
 alone; the explorer draws the faults both engines apply. With the image of section 2, the two
 schedules end `OK` (`b04d1932dfb20e09`) and `VIOLATION â€¦ key k:1 lost` (`1b61c2c7501a6f25`).
 These values come from an Intel Core i7-13700HX. Its performance cores and its efficiency cores
-give the same values. A KVM fingerprint holds for one CPU vendor. On AMD EPYC CPUs the same
-schedules give the same verdicts with other fingerprints.
+give the same values. On Intel a KVM fingerprint holds for one CPU model: a Xeon Platinum 8370C
+and a Xeon 6975P-C each gave the same verdicts with fingerprints of their own. The AMD EPYC
+models measured (7763, 9V45, 9V74) gave one set of fingerprints among them, other than Intel's,
+with the same verdicts.
 
 On the Intel machine the exploration finds 11 failures, and its report gives three minimal
 schedules:

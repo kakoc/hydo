@@ -930,10 +930,13 @@ fn cache_identity(cx: &Cx) -> (String, String) {
         "hvx" => std::fs::read_to_string("/sys/module/hvx/srcversion")
             .map(|s| format!("module={}", s.trim()))
             .unwrap_or_else(|_| "module=?".into()),
+        // the vendor and the model: on Intel a KVM fingerprint holds for one CPU model only
+        // (0.3.2's runs on a Xeon 8370C, a Xeon 6975P-C and an i7-13700HX), so a cached result
+        // of another model must not stand for this one
         _ => format!(
             "cpu={}",
             hydo_engine::host_cpu()
-                .map(|c| c.0)
+                .map(|c| format!("{} {}", c.0, c.1))
                 .unwrap_or_else(|| "?".into())
         ),
     };

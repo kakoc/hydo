@@ -169,7 +169,8 @@ hydo doctor --backend kvm
 - GitHub's macOS runners cannot run a guest. A self-hosted Apple Silicon Mac runs `hvm`.
 
 A finding replays with the same fingerprint only on the same engine and, on KVM, the same host CPU
-vendor (`engine.host_cpu` in every result). Elsewhere hydo compares verdicts.
+(`engine.host_cpu` in every result). On Intel that is the same CPU model; on AMD, the EPYC models
+measured share their fingerprints. Elsewhere hydo compares verdicts.
 
 ## 7. The states of a finding
 
