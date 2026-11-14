@@ -62,7 +62,7 @@ is Rust programs only and needs no Python.
 | storage faults of one service `G=`, `L=` (services with `storage:`; `L=` needs `size_mib:`) | yes | yes | yes |
 | disk faults `disk=cut`, `disk=ioerr:<p>`, `disk=lying:<p>` | yes | yes | yes |
 | a power cut at the k-th disk FLUSH (`cf=`), `--more-faults` (it draws `cf=`) | yes | no | no |
-| several vCPUs (`--vcpus N`, `--turns`) | yes | no | no |
+| several vCPUs (`--vcpus N`, `--turns`, `--sweep turns`) | yes (turns of guest branches) | yes (turns of VM exits, the SMP guest kernel `bzImage-kvm-smp`) | no |
 | tick jitter (`--timing`, `tj=`) | yes (branch-counted ticks) | yes (counted in VM exits) | yes (counted in VM exits) |
 | forced preemption (`--preempt`) | yes (`pp=`, `xt=`) | yes (`pct=`, counted in VM exits) | yes (`pct=`, counted in VM exits) |
 | pauses of the workload (`P=workload@<at>~<off>:<dur>`, `--pause-workload`) | yes | yes (not run on kvm yet) | yes |

@@ -252,8 +252,9 @@ Useful options of `hydo explore`:
 - `--pause-workload`: pauses of the workload's own processes (section "Pause the workload").
 - `--pause-thread <name>`: pauses of named threads of the workload, with `--pause-min` and
   `--pause-lengths` (section "Pause threads of the workload").
-- `--vcpus N --turns`: several vCPUs (hvx) and drawn turn lengths `q=`. `--vcpus N --sweep turns`
-  searches the turn lengths of one schedule for a change of verdict (`hydo guide flaky-tests`).
+- `--vcpus N --turns`: several vCPUs (hvx and KVM) and drawn turn lengths `q=`. `--vcpus N
+  --sweep turns` searches the turn lengths of one schedule for a change of verdict (`hydo guide
+  flaky-tests`).
 - `--steer <id>` or `--steer-match REGEX`: an experimental steered search. It keeps the
   schedules whose runs came closest to failing, by a number the system prints, and changes them a
   little. On the one test it was measured on it found the failure later than the plain

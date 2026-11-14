@@ -81,12 +81,13 @@ hydo run --vcpus 2 "disk=none q=18051 | run"
 
 - On the KVM engine with several vCPUs (`--backend kvm --vcpus N`, up to 8), the vCPUs take turns
   of `q=` VM exits (default 256), so a turn can end only at an exit. That still reaches races
-  whose threads meet at a wake-up or a clock read. The nats-server test fails at the default turns
-  and at `q=12`, and passes at `q=2` to `q=8` on two vCPUs, the same on two AMD hosts. The values
-  are in the example's `RESULTS.md`; `hydo explore --sweep turns` does not search KVM turns yet.
+  whose threads meet at a wake-up or a clock read. On two vCPUs the nats-server test passes at
+  `q=3`, `q=8`, `q=12`, `q=16`, `q=24` and `q=32`. It fails at the default turns, at `q=1`, `q=2`,
+  `q=4` and `q=6`, and at `q=48` and longer. The verdicts are the same on five AMD hosts and one
+  Intel host; the values are in the example's `RESULTS.md`.
 
 ```sh
-hydo run --backend kvm --vcpus 2 "disk=none q=4 | run"
+hydo run --backend kvm --vcpus 2 "disk=none q=16 | run"
 ```
 
 The run's `result.json` records the vCPU count, so `hydo repro <run dir>` runs it again on as many
@@ -110,6 +111,16 @@ second time. The options are:
 The sweep prints each boundary with the `hydo run` command of both lengths. `report.md` has the
 same, and every length it ran with its verdict and fingerprint. `exploration.json` has them in
 `turn_sweep`, and `hydo repro <out dir>` runs the failing length of every boundary again.
+
+On KVM the turn lengths are VM exits, so the sweep's defaults are other ones: 12 lengths from
+1 to 4,096 exits (`--turn-range 1-4096`), narrowed to one exit (`--turn-resolution 1`). On the
+nats-server image the default KVM sweep made 20 runs and found two boundaries: `q=15` fails and
+`q=16` passes, and `q=39` passes and `q=40` fails. Both hosts it ran on, AMD EPYC 9V74 and 7763,
+gave the same fingerprints.
+
+```sh
+hydo explore --backend kvm --vcpus 2 --sweep turns --out turns
+```
 
 The verdict need not change only once. The sweep bisects only between the lengths it ran, so a
 narrow band of other verdicts between two grid points stays hidden. On the nats-server image the
@@ -174,6 +185,13 @@ hydo explore --vcpus 2 --turns --timing --seeds 1-60
 this exploration gave 56 failures and 4 passes at the fingerprint epoch 1. Every pass had turns
 of at most 9,096 branches.
 Each failure is in the class `test-failed`.
+
+On KVM, `--turns` draws a turn length in exits. A third of the drawn lengths are 1 to 32 exits,
+a third 33 to 255, and the rest 128 to 512, around the default of 256. On the nats-server image,
+`hydo explore --backend kvm --vcpus 2 --turns --seeds 1-40` drew a turn length for 21 schedules.
+It gave 8 passes and 32 failures. `hydo repro` ran the 32 failures and the minimal schedule
+again, and all 33 gave their recorded fingerprints. `--bursts` and `--turn-margin` are hvx's
+options.
 
 On hvx, `--preempt` draws a shorter tick period (`pp=65536` or `pp=16384`) or extra ticks
 (`xt=`). With `--timing` too, the drawn tick jitter stays below half of that period, because hvx

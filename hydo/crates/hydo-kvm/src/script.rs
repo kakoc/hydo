@@ -62,7 +62,7 @@ pub struct Script {
     /// the programs of vCPUs 1, 2, ... (a machine with more vCPUs than programs runs the last
     /// one on the rest)
     pub aps: Vec<Arc<Program>>,
-    /// The vCPUs change their state in a load, as a host's KVM can (Milestone 226): DR6 reads
+    /// The vCPUs change their state in a load, as a host's KVM can (Milestone 227): DR6 reads
     /// back one more than the value loaded, so the state read back after a load is not the state
     /// loaded. The guest programs never read DR6, and the fingerprint hashes it. Off: a load
     /// keeps every part, as before.

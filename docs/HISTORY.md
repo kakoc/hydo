@@ -7469,3 +7469,98 @@ cgroups (an epoch change) or a ptrace command in the agent (new image bytes). A 
 service (`P=<svc>/<thread>`) is not built. Pauses that repeat in every period of a CPU limit are
 not built. The blind exploration does not find a window of 1 ms; a draw of starts near the
 moments when the named thread blocks would need the engine to report them.
+### Milestone 227 (tentative number) - DONE (the explorer draws KVM turn lengths and searches them; Milestone 219's kernel fix holds on Intel; on Intel a run from a worker's S1 snapshot gave another fingerprint than a fresh boot, with several vCPUs only, and a fix waits for its run; 2026-11-14)
+
+**In short.** `hydo explore --backend kvm --vcpus N` now draws the turn tokens `q=` and `qs=`
+with `--turns`, and `--sweep turns` searches KVM turn lengths. On nats-server's flaky test both
+find passing and failing schedules, and every failure reproduced. A run on six GitHub hosts,
+one of them Intel, showed that Milestone 219's kernel fix holds there too. The same run found a
+new difference on the Intel host only: with 2 vCPUs, a run from an explorer worker's S1 ended
+with another fingerprint than the fresh boot, with the same verdict. One-vCPU values did not
+move.
+
+**The explorer** (`hydo/crates/hydo-explore`):
+
+- `--turns` on KVM with several vCPUs draws from the stream hvx uses, so the same seeds get a
+  turn token and the same `qs=`. Only the lengths differ, because a KVM turn is a number of
+  counted VM exits (default 256). A third of the drawn lengths are 1 to 32 exits, a third 33 to
+  255, and the rest 128 to 512.
+- Before, the explorer dropped `q=` and `qs=` from every schedule for the Mac and KVM engines,
+  also from a schedule written by hand. On KVM with several vCPUs it keeps them now.
+- The shrinker's step to a longer turn stops at KVM's default of 256 exits.
+- `--sweep turns` has KVM defaults: lengths from 1 to 4,096 exits (`--turn-range`), narrowed to
+  one exit (`--turn-resolution`). `report.md` says exits there.
+- `--bursts` and `--turn-margin` stay refused on KVM, because only hvx's module applies them.
+- Without these options nothing changed: every fake-engine scenario, the quick identity golden
+  and the corpus golden are as before. Two new fake-engine scenarios, `kvm_turns_explore` and
+  `kvm_turns_sweep`, run them on a scripted copy of the nats verdict table.
+- `hv/kvm/smp/turns-check.sh` runs both on the real nats example on a host with `/dev/kvm`.
+
+**The run** (https://github.com/kakoc/hydo/actions/runs/43527210060, a one-off workflow on a
+temporary branch `tmp-kvm-turns`, deleted afterwards; two jobs for the explorer and six for the
+hosts). Each job built `bzImage-kvm-smp` with a sandboxed Nix and got the pin `b40b2711…`; the
+host jobs built it twice.
+
+The explorer, `turns-check.sh` on AMD EPYC 9V74 and 7763, 7 of 7 checks on both, with the same
+fingerprints on both:
+
+| check | result |
+|---|---|
+| `hydo explore --backend kvm --vcpus 2 --turns --seeds 1-40` | 21 schedules with a drawn turn length, each 1 to 512 exits; 8 passed, 32 failed; the explorer reproduced 32 of 32 |
+| `hydo repro` of that exploration | 33 of 33 with the recorded fingerprint |
+| `hydo explore --backend kvm --vcpus 2 --sweep turns` | 20 runs; boundaries at `q=15` (fails) / `q=16` (passes) and `q=39` (passes) / `q=40` (fails), each length one fingerprint twice |
+| `hydo repro` of the sweep | 2 of 2 |
+
+The passing schedules of the exploration had `q=16`, `q=26`, and seeded turns with `q=7`, `15`,
+`17`, `26`, `36` and `135`. The sweep's lengths that `nats-check.sh` also ran from fresh boots
+(`q=1`, `2`, `16`, `32` and `4096`) gave the fresh boots' fingerprints.
+
+The hosts, `smp-check.sh` and `nats-check.sh` with `REPEAT=3`:
+
+| host | `nats-check.sh` | `smp-check.sh` |
+|---|---|---|
+| AMD EPYC 9V74 (three hosts), 9V45, 7763 | 31 of 31 settings ONE, the same fingerprints on all five | 13 of 13 |
+| Intel Xeon 6975P-C | 31 of 31 settings ONE, with fingerprints of its own | 11 of 13 |
+
+Every setting had a real fingerprint, and every host gave the verdicts of the example's
+`RESULTS.md`: 7 of the 28 turn settings pass. So the kernel fix of Milestone 219 holds on Intel.
+On Intel the Redis example on 2 vCPUs gave `336869d674c85757` (default turns, `qn=229`),
+`545e65bb7890dd84` (`q=64`), `ff73e513f05d98ad` (`q=7 qs=1f`), `33bbb08f63126ef6` (the power
+cut) and, on 4 vCPUs, `c97101859c049431`, each twice. The one-vCPU checks gave
+`cc72581995fd656f` from a fresh boot and from S1.
+
+**The Intel S1 difference.** Two checks of `smp-check.sh` failed on the Intel host only:
+
+- `2 vCPUs from S1 equals the fresh boot`: the run from the explorer worker's S1 gave
+  `d25d8c657ebe3746`, the fresh boot `336869d674c85757`. The verdict, the turn count
+  (`qn=229`) and the control transcript (`ctl=1c0625b4e495b9e2`) were the same.
+- `repro of the exploration`: 4 of 5. The minimal schedule `disk=lying:1 dseed=eac0b527c5ac67d9
+  | run C=20` gave `f6ee32068f7a6a4c` from a fresh boot and `dff2589a3d990f49` in the explorer.
+
+A fresh boot runs on in the VM that took S1. A run from S1 starts in a fresh VM with the saved
+vCPU states loaded. With one vCPU the two agree on Intel, and with two vCPUs they agree on AMD.
+So the difference is KVM state that a load into a fresh VM does not give back on Intel. The
+equal transcripts and turn counts say that the guest did not run differently, so the difference
+is in a part of the state that the fingerprint hashes and the guest does not read.
+
+**The fix** (`hydo/crates/hydo-kvm/src/vmm.rs`). With several vCPUs, the machine that takes a
+snapshot now goes on in a fresh VM with the snapshot's vCPU states loaded, as every run restored
+from it does. A fresh boot and a run from S1 then start from the same KVM state by construction.
+With one vCPU the machine goes on in its VM, as before, so no one-vCPU value can move. After each
+load with several vCPUs the engine reads every vCPU back and prints the parts that differ from
+the state loaded (`hydo-kvm: vCPU <i> read back after a load differs at exit <n>: ...`, at most
+16 lines per process), so the next run names the part. A scripted test,
+`two_vcpus_a_run_from_s1_equals_a_fresh_boot_when_a_load_changes_the_state`, gives the scripted
+vCPU a load that changes DR6. Without the fix it fails, with the fix it passes. The six scripted
+one-vCPU pins pass. On AMD the S1 checks passed before the fix, so a load there gives the state
+back; the next run checks that the AMD several-vCPU values did not move. The fix has not run on
+an Intel host yet.
+
+**Left.**
+
+- A runner run of the fix on several hosts, Intel among them: `smp-check.sh`, `turns-check.sh`
+  and `kvm-check.sh` (a branch `tmp-kvm-s1` is ready).
+- `hydo repro` of one run's folder and `hydo explain` with `--vcpus` on KVM; `bzImage-kvm-smp`
+  in the Linux release.
+
+**The proof run of the S1 fix.** Run 43535344097 on eight hosts (five Intel: Xeon 6975P-C and Xeon Platinum 8573C; three AMD: EPYC 9V74 and 7763): smp-check 13 of 13, turns-check 7 of 7 and kvm-check 15 of 15 on every host. The engine's read-back lines appear on Intel only and name one kind of field: the hidden attributes of unusable null segments (DS, FS), which Intel's VMX normalises when a state is loaded and the guest never reads. Since the snapshotting machine goes on in a VM loaded from the snapshot, a run from S1 and a fresh boot start from the same state on both vendors.

@@ -1,10 +1,12 @@
 # Several vCPUs on the KVM engine
 
-Status: written on 2026-11-13. Stages 1 to 4 ran on GitHub's AMD runners (Milestones 213 and
-219). The usefulness test of stage 4 passed: turn boundaries at exits reach the passing order of
+Status: written on 2026-11-13. Stages 1 to 4 ran on GitHub's runners (Milestones 213, 219 and
+226). The usefulness test of stage 4 passed: turn boundaries at exits reach the passing order of
 the nats example. Stage 4 also found a determinism bug in the SMP guest kernel, which is fixed;
-the fixed kernel ran on AMD only. The sections on what the probe and the runs showed have the
-numbers. The
+the fixed kernel gave one fingerprint per schedule on AMD and on Intel. The explorer draws KVM
+turn lengths and searches them since Milestone 227. On Intel a run from a worker's S1 differed
+from a fresh boot; the fix passed its proof run on Intel and AMD. The sections on what the probe and the runs showed
+have the numbers. The
 engine runs several vCPUs with `--vcpus N` and the pinned SMP guest kernel `bzImage-kvm-smp`; with
 one vCPU it runs the code of before. It answers
 AGENTS.md open item 45 ("The KVM engine: one vCPU only"). The engine it extends is
@@ -336,7 +338,9 @@ next to `guest/bzImage-kvm`.
 `CpuState` and its `kvm_run` flags (Milestone 175's fix, per vCPU), each vCPU's APIC and engine MSR
 model, and the scheduler state. The scheduler state is the current vCPU, the exits left in its turn,
 the turn count, and each vCPU's run state. A restore creates a fresh VM with N vCPUs and loads each
-of them.
+of them. Since Milestone 227 the machine that takes a snapshot goes on in a fresh VM with the
+snapshot's states loaded, too, so a fresh boot and a run from S1 start from the same KVM state
+(section "Stage 4: the explorer and Intel").
 
 **The full-state cycles** (Milestone 194) save and compare the running vCPU's whole state and the
 VM's dirty pages. During one turn the other vCPUs are stopped, so the proof holds as on one vCPU.
@@ -581,13 +585,40 @@ these results, the same on all three hosts:
 | 2 | `disk=cut \| run C=12 R=everysec` | VIOLATION, key k:1 lost | `c3c57641abcec195` | 159 |
 | 4 | `disk=none dseed=1 \| run` | OK | `b5fab129b81cb213` | 504 |
 
-The earlier runs on Intel had the bug, and the fixed kernel has not run on Intel yet.
+The earlier runs on Intel had the bug. The fixed kernel ran on Intel in Milestone 227 (next
+section).
 
 **A fix found while reviewing the spin paths.** On one vCPU, a proven cycle with interrupts off is a
 deadlock, and the run ends. With several vCPUs, another vCPU can release such a vCPU. Since
 Milestone 219, with several vCPUs such a cycle ends the turn at its smallest state when another
 vCPU can run. A cycle with a state that has interrupts on is resolved as before, so no value of
 these runs can move with the fix.
+
+### Stage 4: the explorer and Intel
+
+Since Milestone 227, `hydo explore --backend kvm --vcpus N --turns` draws `q=` and `qs=`. It uses
+hvx's stream with lengths in exits: a third 1 to 32, a third 33 to 255, and the rest 128 to 512.
+`--sweep turns` searches 1 to 4,096 exits and narrows a boundary to one exit. Run
+https://github.com/kakoc/hydo/actions/runs/43527210060 ran both on the nats example on AMD EPYC
+9V74 and 7763, with the same results on both hosts:
+
+- the exploration of seeds 1 to 40 gave 8 passes and 32 failures, and `hydo repro` gave 33 of 33;
+- the sweep found boundaries between `q=15` and `q=16` and between `q=39` and `q=40`, each
+  length with one fingerprint twice.
+
+The same run ran `nats-check.sh` with `REPEAT=3` on six hosts: an Intel Xeon 6975P-C and five AMD
+hosts. Every one of the 31 settings gave one fingerprint on every host, with the same verdicts
+everywhere. `smp-check.sh` passed 13 of 13 on the AMD hosts and 11 of 13 on the Intel host. There
+a run from the explorer worker's S1 on 2 vCPUs ended with `d25d8c657ebe3746` and the fresh boot
+with `336869d674c85757`. The verdict, the turn count and the control transcript were the same.
+One vCPU from S1 agreed with the fresh boot there.
+
+A fresh boot runs on in the VM that took S1, and a run from S1 starts in a fresh VM with the saved
+states loaded. On Intel, with several vCPUs, a load did not give back all of the state that the
+fingerprint hashes. Since Milestone 227 the machine that takes a snapshot with several vCPUs goes
+on in a fresh VM with the snapshot's states loaded, as a run from it does. The engine also prints
+each part of a vCPU's state that reads back changed after a load. With one vCPU nothing changed.
+The fix passed on Intel and AMD: run 43535344097: on eight hosts (five Intel: Xeon 6975P-C and Xeon Platinum 8573C; three AMD: EPYC 9V74 and 7763) smp-check passed 13 of 13, turns-check 7 of 7 and kvm-check 15 of 15; the engine's read-back lines name the field on Intel only: the hidden attributes of unusable null segments (DS, FS), which Intel's VMX normalises in a load.
 
 ## The plan in stages
 
@@ -646,8 +677,6 @@ engine from `hydo run`, `hydo explore` and `hydo repro` of an exploration since 
 the help text says so. Left:
 
 - `hydo repro` of one run's folder and `hydo explain` with several vCPUs on KVM were not run;
-- the explorer's turn tokens (`--turns`) and a KVM range for the turn-length search (`--sweep
-  turns`);
 - `bzImage-kvm-smp` in the Linux release;
 - `recorded.json` entries with `vcpus` for KVM, and TIME with turn tokens.
 

@@ -1939,7 +1939,7 @@ impl Vmm {
             // several vCPUs: the machine goes on in a fresh VM with the snapshot's vCPU states
             // loaded, exactly as every run restored from the snapshot starts. On an Intel host a
             // run from the explorer worker's S1 ended with another fingerprint than the fresh
-            // boot that went on from its own S1 (Milestone 226), with the same verdict, turns
+            // boot that went on from its own S1 (Milestone 227), with the same verdict, turns
             // and control transcript: KVM's vCPU state after KVM_SET_* is not always what
             // KVM_GET_* read before, and a fresh VM is not the VM that ran. With one vCPU the
             // machine goes on in its VM, as every recorded value was made.

@@ -1167,7 +1167,7 @@ fn two_vcpus_a_run_from_s1_equals_a_fresh_boot_wherever_s1_is_taken() {
     }
 }
 
-/// A host whose KVM changes a vCPU's state in a load (Milestone 226: on an Intel host a run from
+/// A host whose KVM changes a vCPU's state in a load (Milestone 227: on an Intel host a run from
 /// the worker's S1 ended with another fingerprint than the fresh boot's, with the same verdict,
 /// turns and control transcript). With several vCPUs the machine that takes a snapshot goes on
 /// in a fresh VM with the snapshot's states loaded, as a run restored from it does, so the two

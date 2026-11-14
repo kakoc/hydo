@@ -2089,8 +2089,9 @@ vCPUs take turns of exactly `q=` guest branches; on KVM turns of `q=` VM exits (
 the SMP guest kernel `bzImage-kvm-smp`. `q=` is a host token of the schedule, so the turn length is
 in the schedule and the vCPU count is not. A run's `result.json` records both
 options (`engine.args`), so `hydo repro <run dir>` repeats them, and an exploration's "by hand"
-lines carry them. `hydo explore --vcpus N --sweep turns` searches the turn lengths of one schedule
-for the lengths where the verdict changes (`hydo guide flaky-tests`). Since M205 several vCPUs run
+lines carry them. `hydo explore --vcpus N --turns` draws turn lengths, and `--sweep turns`
+searches the turn lengths of one schedule for the lengths where the verdict changes, on KVM in
+exits since Milestone 227 (`hydo guide flaky-tests`). Since M205 several vCPUs run
 with the host-call port: the engine reads the port's records at every return of a run call.
 
 Inside the image: `/etc/hydo/hydo.yaml` (the manifest as written), `/etc/hydo/manifest.sh`

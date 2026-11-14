@@ -256,7 +256,8 @@ The details are in Milestones 48, 51, 99, 143, and 147.
 **The KVM engine.** `hydo/crates/hydo-kvm` runs the x86_64 images on stock Linux KVM, without the
 module or root, with one vCPU and a patched guest kernel (`bzImage-kvm`). With `--vcpus N` it runs
 2 to 8 vCPUs in turns of counted exits with the SMP kernel `bzImage-kvm-smp`
-(`docs/design/kvm-vcpus.md`, M219). The vCPU is at the
+(`docs/design/kvm-vcpus.md`, M219), and `hydo explore --turns` and `--sweep turns` draw and search
+those turns (M227). The vCPU is at the
 x86-64-v2 level, or at x86-64-v3 for `guest.cpu: v3` on a host whose KVM has AVX2 (M189;
 `hv/kvm/v3-check.sh`). It runs on Intel and on AMD (GitHub's ubuntu-24.04 runners, 2026-11-08).
 Its fingerprints are its own and differ between CPU vendors; the verdicts are the same. Details:
@@ -598,13 +599,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 43. The suite's recorded values of M121's agent boot check are older than M140 (M156).
 44. [user decision] License compliance: the sources archives must stay available; three SPDX
     expressions are approximations; a lawyer's review is open (M158).
-45. The KVM engine with several vCPUs (M213, M219). The first SMP kernel let vCPU 1 run user code
-    without CR4.TSD, so a program's RDTSC there read the host's TSC. The fixed kernel `b40b2711…`
-    gave one fingerprint per schedule on AMD EPYC 9V45 and 7763. It has not run on Intel, where
-    the earlier runs had the bug. In run 43487988684 the "ONE" lines of `nats-check.sh` were runs
-    without a result; the script now prints NO-RESULT for them. `hydo repro` of a run's folder and
-    `hydo explain` were not run on KVM with several vCPUs, and the explorer does not draw KVM turn
-    tokens. `bzImage-kvm-smp` is in no release. On AMD, RDRAND, RDSEED and TSX cannot be made to
+45. The KVM engine with several vCPUs (M213, M219, M227). The fixed SMP kernel `b40b2711…` gave
+    one fingerprint per schedule on Intel Xeon 6975P-C and five AMD hosts (M227). On that Intel
+    host a run from an explorer worker's S1 on 2 vCPUs ended with another fingerprint than the
+    fresh boot. Its verdict and transcript were the same. The fix (the snapshotting machine goes on in
+    a fresh VM with the loaded states) passed on Intel and AMD (run 43535344097: on eight hosts (five Intel: Xeon 6975P-C and Xeon Platinum 8573C; three AMD: EPYC 9V74 and 7763) smp-check passed 13 of 13, turns-check 7 of 7 and kvm-check 15 of 15; the engine's read-back lines name the field on Intel only: the hidden attributes of unusable null segments (DS, FS), which Intel's VMX normalises in a load). `hydo repro` of a run's folder
+    and `hydo explain` were not run on KVM with several vCPUs. `bzImage-kvm-smp` is in no
+    release. On AMD, RDRAND, RDSEED and TSX cannot be made to
     fault, so a guest program that uses them without checking CPUID sees the host (M159, M161). A loop that
     counts in memory is still never proven (M194). The full-state cycles and the fingerprint
     without KVM's stale event fields are the default since M204 (h closed). Of the epoch-2
@@ -1110,6 +1111,11 @@ build machine, before 2026-10-13.
   `hydo explore --pause-thread`. On hvx a pause of Qdrant's test thread fails its flaky test on
   every run, its neighbours pass, and the fixed test passes. The Mac and KVM engines refuse it
   (no cgroups in their guest kernels). Nothing recorded moved
+- M227 (tentative number): `hydo explore --backend kvm --vcpus N` draws turn lengths in exits
+  (`--turns`) and searches them (`--sweep turns`); on the nats example both find passes and
+  failures, and every failure reproduced. M219's kernel fix holds on Intel. On Intel a run from a
+  worker's S1 on 2 vCPUs differed from a fresh boot. The snapshotting machine now goes on in a
+  fresh VM; its proof run passed on five Intel and three AMD hosts. Nothing recorded moved
 
 ## Where to look
 

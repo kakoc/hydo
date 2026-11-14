@@ -153,8 +153,33 @@ settings, but its kernel had a determinism bug: a program's RDTSC on vCPU 1 read
 (Milestone 219 in `docs/HISTORY.md`). Go's runtime reads the TSC, so those verdicts depended on
 the host's time. Against the valid run, `q=2`, `q=4`, `q=6` and `q=64 qs=6` passed there and fail
 now, `q=12` failed there and passes now, and the other 23 settings have the same verdict. That run
-also gave other fingerprints on each host at `q=12`, `q=1024`, `q=2048` and `q=4096`. The fixed
-kernel has not run on Intel yet.
+also gave other fingerprints on each host at `q=12`, `q=1024`, `q=2048` and `q=4096`.
+
+The fixed kernel ran on Intel on 2026-11-14 (run
+https://github.com/kakoc/hydo/actions/runs/43527210060, Milestone 227). On six hosts, an Intel
+Xeon 6975P-C and five AMD hosts (three EPYC 9V74, a 9V45 and a 7763), every one of the 31
+settings gave one fingerprint in three runs. Every host gave the verdicts of the table above.
+The five AMD hosts gave the same fingerprints, and the Intel host gave its own, as KVM
+fingerprints differ between CPU vendors.
+
+### The explorer on two vCPUs
+
+Since Milestone 227 the explorer draws KVM turn lengths. The same run ran
+`hv/kvm/smp/turns-check.sh` on AMD EPYC 9V74 and 7763, with the same results on both hosts:
+
+- `hydo explore --backend kvm --vcpus 2 --turns --seeds 1-40` drew a turn length for 21 of 40
+  schedules, each from 1 to 512 exits. 8 schedules passed and 32 failed. The explorer reproduced
+  its 32 failures, and `hydo repro` of the exploration gave 33 of 33 with the recorded
+  fingerprint (the failures and the minimal schedule `disk=none dseed=975835de1c9756ce | run`).
+- The passing schedules had `q=16`, `q=26`, and the seeded turns `q=7`, `q=15`, `q=17`, `q=26`,
+  `q=36` and `q=135` with a `qs=`.
+- `hydo explore --backend kvm --vcpus 2 --sweep turns` ran 12 lengths from 1 to 4,096 exits and
+  narrowed them to one exit, 20 runs in all. It found two boundaries: `q=15` fails and `q=16`
+  passes, and `q=39` passes and `q=40` fails. Each of the four lengths gave one fingerprint
+  twice, and `hydo repro` of the sweep gave 2 of 2.
+
+The sweep's `q=2`, `q=16` and `q=32` gave the fingerprints of the table's fresh boots. The table
+did not run `q=10`, `q=15` and `q=40` to `q=44`.
 
 ## On hvx: several vCPUs, a turn-length boundary
 
