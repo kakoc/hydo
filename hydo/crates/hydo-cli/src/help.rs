@@ -66,7 +66,8 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
         "onboard" => crate::onboard::HELP.to_string(),
         "save" => "usage: hydo save <explore dir> [--to hydo/regressions]
   saves the minimal schedules of an exploration as regressions, one file each in the --to
-  directory (default hydo/regressions). `hydo build` puts them into the image, and
+  directory (default hydo/regressions, or regressions inside the hydo/ folder). `hydo build`
+  puts them into the image, and
   `hydo repro --regressions` replays them."
             .to_string(),
         "report" => "usage: hydo report [DIR] [--details]

@@ -1456,9 +1456,21 @@ fn slug(s: &str) -> String {
     out
 }
 
+/// Where `hydo save` writes without `--to`: `hydo/regressions` from the repository's root, and
+/// `regressions` from inside the `hydo/` folder itself (a `hydo.yaml` here and no
+/// `hydo/hydo.yaml`), where `hydo run` and `hydo explore` also work. Before, a save from inside
+/// the folder wrote a second `hydo/hydo/regressions` that no build read (the Valkey onboarding).
+fn default_regressions_dir(cwd: &Path) -> String {
+    if cwd.join("hydo.yaml").is_file() && !cwd.join("hydo").join("hydo.yaml").is_file() {
+        "regressions".into()
+    } else {
+        "hydo/regressions".into()
+    }
+}
+
 pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
-    let to = take(&mut args, "--to").unwrap_or_else(|| "hydo/regressions".into());
+    let to = take(&mut args, "--to").unwrap_or_else(|| default_regressions_dir(Path::new(".")));
     if args.len() != 1
         || !Path::new(&args[0])
             .join(hydo_results::EXPLORATION_DOC)
@@ -1509,6 +1521,30 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::final_verdict_line;
+
+    /// `hydo save` from inside the `hydo/` folder writes into its `regressions/`, not into a
+    /// nested `hydo/hydo/regressions` (the Valkey onboarding's friction).
+    #[test]
+    fn save_writes_into_the_folder_it_runs_in() {
+        let d = std::env::temp_dir().join(format!("hydo-save-dir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("hydo")).unwrap();
+        // the repository's root: hydo/hydo.yaml below it
+        std::fs::write(d.join("hydo").join("hydo.yaml"), "format: 1\n").unwrap();
+        assert_eq!(super::default_regressions_dir(&d), "hydo/regressions");
+        // inside the hydo/ folder
+        assert_eq!(
+            super::default_regressions_dir(&d.join("hydo")),
+            "regressions"
+        );
+        // anywhere else
+        std::fs::create_dir_all(d.join("other")).unwrap();
+        assert_eq!(
+            super::default_regressions_dir(&d.join("other")),
+            "hydo/regressions"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
 
     /// The RESULT line prints the guest's checks only; when the host's checks change the verdict,
     /// `hydo run` prints the final one (the libSQL onboarding's friction item 8).
