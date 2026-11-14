@@ -275,7 +275,7 @@ judge are counted, not judged: a `T=` clock step inside the pair's interval, or 
 boots.
 
 `result.json` has each check under `messages`: the declaration with every default, each claim's
-status with its judged and undecided counts, and the measures. `hydo report <run dir>` prints
+status with its judged and undecided counts, and the measures. `hydo report --details <run dir>` prints
 them. The measures are the sends and their outcomes, the lost messages per group, the excused
 ones, the duplicate rate, redeliveries by cause, reorders, latencies, and the availability of
 each operation.

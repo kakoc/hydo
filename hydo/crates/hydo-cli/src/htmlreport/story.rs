@@ -237,8 +237,9 @@ pub fn verdict_pill(run: &Run, what: &What) -> (&'static str, &'static str) {
 
 // ------------------------------------------------------------------ the schedule in words
 
-/// "When it happens": the schedule's sentences, numbered, and the outcome.
-pub fn steps_html(schedule: &str, pr: &Project, outcome: Option<String>) -> String {
+/// "When it happens": the schedule's sentences and the outcome, in order (plain words with
+/// backquotes).
+pub fn steps(schedule: &str, pr: &Project, outcome: Option<String>) -> Vec<String> {
     let mut items: Vec<String> = describe::describe_text(schedule, &pr.knobs)
         .into_iter()
         .filter(|s| s.part != Part::Quiet)
@@ -250,12 +251,61 @@ pub fn steps_html(schedule: &str, pr: &Project, outcome: Option<String>) -> Stri
     if let Some(o) = outcome {
         items.push(o);
     }
-    let mut s = String::from("<div class=\"card\"><ol class=\"steps\">\n");
-    for i in items {
-        s.push_str(&format!("<li>{}</li>\n", md(&i)));
+    items
+}
+
+/// A sentence without its explanation in parentheses at the end ("The disk fails some reads and
+/// writes with an error (rate 3: a larger number means more errors)." is "The disk fails some
+/// reads and writes with an error."), for the short lists of an exploration's problems.
+pub fn short(sentence: &str) -> String {
+    let s = sentence.replace(", as in a crash,", "");
+    match s.rfind(" (") {
+        Some(i) if s.ends_with(").") && s[i..].contains(": ") => format!("{}.", &s[..i]),
+        _ => s,
     }
-    s.push_str("</ol></div>\n");
+}
+
+/// The steps of a problem of an exploration: [`steps`] in [`short`] sentences, without the
+/// sentence on how a disk with a cache behaves (`disk=cut`: the power cut is its own step).
+pub fn short_steps(schedule: &str, pr: &Project, outcome: Option<String>) -> Vec<String> {
+    let mut items: Vec<String> = describe::describe_text(schedule, &pr.knobs)
+        .into_iter()
+        .filter(|s| s.part != Part::Quiet && s.token != "disk=cut")
+        .map(|s| short(&s.sentence))
+        .collect();
+    if items.is_empty() {
+        items.push("Your workload runs with no fault.".into());
+    }
+    if let Some(o) = outcome {
+        items.push(o);
+    }
+    items
+}
+
+/// How many of a schedule's words change the run (its faults and settings).
+pub fn fault_count(schedule: &str, pr: &Project) -> usize {
+    describe::describe_text(schedule, &pr.knobs)
+        .iter()
+        .filter(|s| s.part != Part::Quiet)
+        .count()
+}
+
+/// The numbered steps as HTML (without a card around them).
+pub fn steps_list(items: &[String]) -> String {
+    let mut s = String::from("<ol class=\"steps\">\n");
+    for i in items {
+        s.push_str(&format!("<li>{}</li>\n", md(i)));
+    }
+    s.push_str("</ol>\n");
     s
+}
+
+/// "When it happens": the schedule's sentences, numbered, and the outcome.
+pub fn steps_html(schedule: &str, pr: &Project, outcome: Option<String>) -> String {
+    format!(
+        "<div class=\"card\">{}</div>\n",
+        steps_list(&steps(schedule, pr, outcome))
+    )
 }
 
 /// "In hydo's words: `disk=cut` = ..., `C=12` = ...": the words of the schedule that change
@@ -340,25 +390,26 @@ pub fn replay_command(
     w.join(" ")
 }
 
-/// The line before a replay command.
-pub fn needs_first(pr: &Project, image: Option<&str>) -> String {
+/// The sentence before a replay command (plain words with backquotes).
+pub fn needs_first_words(pr: &Project, image: Option<&str>) -> String {
     match (&pr.folder, image_arg(pr, image)) {
         (Some(f), _) if pr.needs_build => format!(
-            "<p>In your project folder ({}), after <code>hydo build</code>, this failure repeats \
-             exactly, every time you run it:</p>\n",
-            code(f)
+            "In your project folder (`{f}`), after `hydo build`, this failure repeats exactly, \
+             every time you run it:"
         ),
         (Some(f), _) => format!(
-            "<p>In your project folder ({}), this failure repeats exactly, every time you run \
-             it:</p>\n",
-            code(f)
+            "In your project folder (`{f}`), this failure repeats exactly, every time you run it:"
         ),
-        (None, Some(i)) => format!(
-            "<p>Next to the image {}, this failure repeats exactly, every time you run it:</p>\n",
-            code(&i)
-        ),
-        (None, None) => "<p>This failure repeats exactly, every time you run it:</p>\n".to_string(),
+        (None, Some(i)) => {
+            format!("Next to the image `{i}`, this failure repeats exactly, every time you run it:")
+        }
+        (None, None) => "This failure repeats exactly, every time you run it:".to_string(),
     }
+}
+
+/// The line before a replay command.
+pub fn needs_first(pr: &Project, image: Option<&str>) -> String {
+    format!("<p>{}</p>\n", md(&needs_first_words(pr, image)))
 }
 
 /// The replay command with what it needs first, its copy button, and the words of its
@@ -538,10 +589,72 @@ fn found_phrase(found: &str) -> String {
     format!("your check found `{found}`")
 }
 
+/// One line of "What hydo saw": its mark, the mark's colour, the words (plain with backquotes),
+/// a muted note after them, and lines quoted under it (a service's last log lines).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Seen {
+    pub mark: &'static str,
+    pub class: &'static str,
+    pub words: String,
+    pub note: Option<String>,
+    pub quote: Vec<String>,
+}
+
+impl Seen {
+    fn new(mark: &'static str, class: &'static str, words: String) -> Seen {
+        Seen {
+            mark,
+            class,
+            words,
+            ..Seen::default()
+        }
+    }
+}
+
+/// The most log lines a "What hydo saw" line quotes, and the longest one.
+const LOG_LINES: usize = 2;
+const LOG_CHARS: usize = 160;
+
+/// The failing service's last log lines from a diagnosis whose replay read them: (the service,
+/// the lines, at most [`LOG_LINES`], each cut to [`LOG_CHARS`] characters).
+pub fn log_tail(d: &hydo_results::Diagnosis) -> Option<(String, Vec<String>)> {
+    let svc = d.service.clone()?;
+    let want = format!("the log of {svc}");
+    let e = d.evidence.iter().find(|e| e.what == want)?;
+    let lines: Vec<String> = e
+        .text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .take(LOG_LINES)
+        .rev()
+        .map(|l| {
+            super::page::cut(
+                &l.split_whitespace().collect::<Vec<_>>().join(" "),
+                LOG_CHARS,
+            )
+        })
+        .collect();
+    (!lines.is_empty()).then_some((svc, lines))
+}
+
+/// The line that quotes a service's last log lines; `how` says where they come from.
+pub fn log_seen(svc: &str, lines: Vec<String>, how: &str) -> Seen {
+    Seen {
+        note: Some(how.to_string()),
+        quote: lines,
+        ..Seen::new("▤", "m-note", format!("`{svc}`'s log ends"))
+    }
+}
+
 /// "What hydo saw" for one run: what the workload had confirmed, the faults as they happened,
-/// the restart, the services that ended, and what the check found.
-pub fn evidence_html(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -> String {
-    let mut s = String::from("<div class=\"card evidence\">\n");
+/// the restart, the services that ended with the last lines of the failing one's log, and what
+/// the check found.
+pub fn seen(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -> Vec<Seen> {
+    let mut s: Vec<Seen> = Vec::new();
     let acked = acked(evs);
     let found = match what {
         What::Check { found, .. } => found.clone(),
@@ -550,10 +663,10 @@ pub fn evidence_html(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project
     if let Some((a, f)) = &acked {
         let n = a.len();
         let items = found.as_deref().and_then(|x| items_of(x, a));
-        s.push_str(&line(
+        s.push(Seen::new(
             "✔",
             "m-ok",
-            &md(&match (n, items) {
+            match (n, items) {
                 (0, _) => "No step of your workload was confirmed before the faults.".to_string(),
                 (n, Some(i)) => format!(
                     "{} confirmed {i} ({n} step{})",
@@ -565,17 +678,17 @@ pub fn evidence_html(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project
                     pr.system,
                     if n == 1 { "" } else { "s" }
                 ),
-            }),
+            },
         ));
         if !f.is_empty() {
-            s.push_str(&line(
+            s.push(Seen::new(
                 "?",
                 "m-warn",
-                &esc(&format!(
+                format!(
                     "{} step{} got no answer",
                     f.len(),
                     if f.len() == 1 { "" } else { "s" }
-                )),
+                ),
             ));
         }
     }
@@ -584,18 +697,22 @@ pub fn evidence_html(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project
         if let Some(w) = fault_words(&e.text) {
             n += 1;
             if n <= 4 {
-                s.push_str(&line("⚡", "m-warn", &md(w.trim_end_matches('.'))));
+                s.push(Seen::new(
+                    "⚡",
+                    "m-warn",
+                    w.trim_end_matches('.').to_string(),
+                ));
             }
         }
     }
     if evs.iter().any(|e| e.conversation == "recovery") {
-        s.push_str(&line(
+        s.push(Seen::new(
             "↻",
             "m-note",
-            &esc(&format!(
+            format!(
                 "The machine started again, and {} started from what was on its disk",
                 pr.system
-            )),
+            ),
         ));
     }
     for e in evs.iter().filter(|e| e.kind == "exit").take(3) {
@@ -605,46 +722,85 @@ pub fn evidence_html(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project
         if who == "workload" || st.trim() == "0" {
             continue;
         }
-        s.push_str(&line(
+        s.push(Seen::new(
             "✘",
             "m-bad",
-            &md(&format!("`{who}` exited with status {}", st.trim())),
+            format!("`{who}` exited with status {}", st.trim()),
         ));
     }
+    if let Some((svc, lines)) = run.diagnosis.as_ref().and_then(log_tail) {
+        s.push(log_seen(&svc, lines, "from a replay"));
+    }
     if run.verdict.kind == "ok" {
-        s.push_str(&line("✔", "m-ok", "Every check held"));
+        s.push(Seen::new("✔", "m-ok", "Every check held".into()));
     } else {
         let stops = matches!(what, What::Check { found: Some(_), .. })
             && check_command(run).is_some_and(|c| c.contains("break"));
-        let last = match what {
-            What::Check { found: Some(f), .. } => format!(
-                "`{f}`{}",
-                if stops {
-                    " <span class=\"muted\">(the check stops at the first one)</span>"
-                } else {
-                    ""
-                }
-            ),
+        let words = match what {
+            What::Check { found: Some(f), .. } => format!("`{f}`"),
             What::Check { .. } => "Your check failed".into(),
             What::NoRestart { service: Some(x) } => format!("`{x}` did not start again"),
             What::NoRestart { service: None } => "A service did not start again".into(),
             What::Error { text } => format!("The run stopped with `{text}`"),
             What::ErrorLine { service, line } => format!("`{service}` wrote `{line}`"),
         };
-        // the muted note is HTML; the rest is plain words
-        let (words, note) = match last.split_once(" <span") {
-            Some((w, n)) => (w.to_string(), format!(" <span{n}")),
-            None => (last, String::new()),
-        };
-        s.push_str(&line("✘", "m-bad", &format!("{}{note}", md(&words))));
+        s.push(Seen {
+            note: stops.then(|| "the check stops at the first one".to_string()),
+            ..Seen::new("✘", "m-bad", words)
+        });
     }
-    s.push_str("</div>\n");
     s
+}
+
+/// The lines of "What hydo saw" as HTML (without a card around them).
+pub fn seen_lines(lines: &[Seen]) -> String {
+    let mut s = String::new();
+    for l in lines {
+        let mut h = md(&l.words);
+        if let Some(n) = &l.note {
+            h.push_str(&format!(" <span class=\"muted\">({})</span>", esc(n)));
+        }
+        if !l.quote.is_empty() {
+            h.push_str(&format!(
+                "<pre class=\"log\">{}</pre>",
+                esc(&l.quote.join("\n"))
+            ));
+        }
+        s.push_str(&line(l.mark, l.class, &h));
+    }
+    s
+}
+
+/// "What hydo saw" for one run, as a card.
+pub fn evidence_html(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -> String {
+    format!(
+        "<div class=\"card evidence\">\n{}</div>\n",
+        seen_lines(&seen(run, evs, what, pr))
+    )
+}
+
+/// The disk fault of a schedule as the first sentence of a lead, when the run had one: the
+/// disk's faults are no event of the run, so the lead says them first.
+fn disk_sentence(schedule: &str) -> Option<&'static str> {
+    match Schedule::parse(schedule).ok()?.disk() {
+        hydo_schedule::Disk::IoErr(_) => {
+            Some("The disk failed some of the system's reads and writes with an error.")
+        }
+        hydo_schedule::Disk::Lying(_) => {
+            Some("The disk threw away some writes that it had confirmed.")
+        }
+        _ => None,
+    }
 }
 
 /// The lead paragraph of a run: what the workload had confirmed, the first faults, and what the
 /// check found.
 pub fn lead_of(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -> String {
+    md(&lead_words(run, evs, what, pr))
+}
+
+/// [`lead_of`] in plain words with backquotes.
+pub fn lead_words(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -> String {
     let mut parts: Vec<String> = Vec::new();
     if let Some((a, f)) = acked(evs) {
         let ran = a.len() + f.len();
@@ -679,9 +835,15 @@ pub fn lead_of(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -> S
             f.clone()
         });
     }
+    // a disk fault is no event: say it first, so that the lead starts with what happened
+    if let Some(d) = disk_sentence(&run.schedule) {
+        parts.insert(0, d.to_string());
+    }
     let recovered = evs.iter().any(|e| e.conversation == "recovery");
     let after = if recovered {
         format!("When {} started again, ", pr.system)
+    } else if parts.is_empty() {
+        String::new()
     } else {
         "Then ".to_string()
     };
@@ -697,7 +859,11 @@ pub fn lead_of(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -> S
             What::ErrorLine { service, line } => format!("{after}`{service}` wrote `{line}`."),
         });
     }
-    md(&parts.join(" "))
+    let mut s = parts.join(" ");
+    if !s.starts_with('`') {
+        s = capitalize(&s);
+    }
+    s
 }
 
 fn lower_first(s: &str) -> String {
@@ -783,22 +949,6 @@ pub fn fault_kinds<'a>(
         }
     }
     kinds
-}
-
-/// The fault kinds every one of the schedules has.
-pub fn common_kinds<'a>(
-    mut schedules: impl Iterator<Item = &'a str>,
-    pr: &Project,
-) -> Vec<&'static str> {
-    let Some(first) = schedules.next() else {
-        return Vec::new();
-    };
-    let mut common = fault_kinds(std::iter::once(first), pr);
-    for s in schedules {
-        let k = fault_kinds(std::iter::once(s), pr);
-        common.retain(|x| k.contains(x));
-    }
-    common
 }
 
 /// The faults that hydo declares as reachability records (`fault.*`) in plain words, with the

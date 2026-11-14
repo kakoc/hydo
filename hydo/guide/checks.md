@@ -27,7 +27,7 @@ The last output line is the explanation; it becomes the details of the property'
 `HYDO-ASSERT` record and, for the first violation, of the verdict line
 `HYDO-ORACLE: VIOLATION [<id>] <details>`. When the check fails, the lines before it are kept
 too. Up to the last 20 lines (2,000 bytes) go into `result.json` as the finding's
-`details.output`, and `hydo report` prints them under the finding. So a check that lists what
+`details.output`, and `hydo report --details` prints them under the finding. So a check that lists what
 differs needs no copy of its output on `/dev/console`. Start every check by testing that the store answers,
 and `exit 2` if not, so a killed service is not reported as a violation. An `eventually_` check
 returns 0 when satisfied and anything else for "not yet"; a missed deadline is a violation.

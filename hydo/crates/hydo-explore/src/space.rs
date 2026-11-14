@@ -375,7 +375,75 @@ impl Space {
             .is_some_and(|c| truthy(c) && c.get("composed").is_some_and(truthy))
     }
 
-    /// `describe()`: the "fault space:" line.
+    /// The fault kinds the explorer draws in this space, in words, as one line for a person
+    /// (Milestone 247; before, `hydo explore` printed [`Space::describe`] as JSON). The random
+    /// and swarm strategies draw pauses, clock jumps and one-way network faults only with
+    /// `--new-faults`; the line says what that option adds.
+    pub fn plain(&self, new_faults: bool, strategy: &str) -> String {
+        let words = |k: &str| -> &'static str {
+            match k {
+                "kill" => "crashes",
+                "network" => "network faults",
+                "cut" => "power cuts",
+                "disk" => "disk faults",
+                "pause" => "pauses",
+                "clock" => "clock jumps",
+                "oneway" => "one-way network faults",
+                _ => "",
+            }
+        };
+        let all = new_faults || matches!(strategy, "swarm-pos" | "process");
+        let mut on: Vec<String> = Vec::new();
+        let mut more: Vec<&str> = Vec::new();
+        for k in ["kill", "network", "cut", "disk", "pause", "clock", "oneway"] {
+            if !self.has_fault(k) {
+                continue;
+            }
+            if all || matches!(k, "kill" | "network" | "cut" | "disk") {
+                on.push(words(k).to_string());
+            } else {
+                more.push(words(k));
+            }
+        }
+        if !self.knobs.is_empty() {
+            let toks: Vec<&str> = self.knobs.iter().map(|(t, _, _)| t.as_str()).collect();
+            on.push(format!(
+                "your setting{} {}",
+                if toks.len() == 1 { "" } else { "s" },
+                toks.join(", ")
+            ));
+        }
+        let list = |xs: &[String]| -> String {
+            match xs {
+                [] => String::new(),
+                [x] => x.clone(),
+                [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+            }
+        };
+        let mut s = format!(
+            "hydo explore: the faults it draws: {}",
+            if on.is_empty() {
+                "none of the project's kinds".to_string()
+            } else {
+                list(&on)
+            }
+        );
+        if !self.svcs.is_empty() {
+            s.push_str(&format!(
+                " (service{}: {})",
+                if self.svcs.len() == 1 { "" } else { "s" },
+                self.svcs.join(", ")
+            ));
+        }
+        s.push('.');
+        if !more.is_empty() {
+            let more: Vec<String> = more.iter().map(|m| m.to_string()).collect();
+            s.push_str(&format!(" --new-faults adds {}.", list(&more)));
+        }
+        s
+    }
+
+    /// `describe()`: the fault space as JSON (`fault-space.json` in the exploration's folder).
     pub fn describe(&self) -> Value {
         let mut d = Map::new();
         d.insert("project".into(), json!(self.name));

@@ -14,7 +14,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
         [--steer-batch N] [--steer-corpus N] [--steer-stop]]
        [--search state [--state-mix N] [--state-corpus N] [--state-rare N] [--state-snaps N]
-        [--state-stop]] [--time-limit SECONDS] ...";
+        [--state-stop]] [--time-limit SECONDS] [--no-diagnose] ...";
 
 /// The refusal without `--image` (Milestone 146: explore.py's default, `explore-disk.img`, is a
 /// shell-init image, which hydo has not run since Milestone 145).

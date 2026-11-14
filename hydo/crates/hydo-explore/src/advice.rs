@@ -106,6 +106,9 @@ pub struct Problem {
     pub why: String,
     /// What to do.
     pub todo: String,
+    /// What to do, for a page that shows the command that accepts the finding right under it:
+    /// [`Problem::todo`] without its sentence about accepting.
+    pub decide: String,
 }
 
 /// The verdict's words without hydo's prefix.
@@ -508,12 +511,34 @@ pub fn problem(
                 .to_string(),
         ),
     };
+    // the advice under which a page shows the command that accepts the finding: without the
+    // sentence that says to accept it (Milestone 247: an exploration's problem carries its own
+    // `hydo ci accept` line)
+    let decide = match (class, what) {
+        (_, What::ErrorLine { .. }) => todo.clone(),
+        ("lying-disk", _) => "No, not in your system: it lost what the disk threw away.".into(),
+        ("unsafe-knob", _) => todo
+            .strip_suffix(" If losing it is fine for you, accept this finding.")
+            .unwrap_or(&todo)
+            .to_string(),
+        ("io-errors", _) => "Decide whether your system must survive a failing disk.".into(),
+        ("corrupted-files", _) => {
+            "Decide whether your system must detect damaged files, for example with checksums."
+                .into()
+        }
+        ("refused" | "upgrade" | "test-failed", _) => todo.clone(),
+        (_, What::Check { .. }) => "Replay the run and look at the moment it failed. If the rule \
+                                    must hold, this is a bug; if not, change the check."
+            .into(),
+        _ => todo.clone(),
+    };
     Problem {
         attention,
         title: capitalize(&title),
         what: what_words(what),
         why,
         todo,
+        decide,
     }
 }
 
@@ -702,7 +727,7 @@ mod tests {
                 if !matches!(w, What::ErrorLine { .. }) {
                     assert_eq!(p.attention, want, "{class} {w:?}");
                 }
-                for text in [&p.title, &p.why, &p.todo, &p.what] {
+                for text in [&p.title, &p.why, &p.todo, &p.what, &p.decide] {
                     assert!(!text.is_empty());
                     let low = text.to_lowercase();
                     for j in [
@@ -726,9 +751,18 @@ mod tests {
                     }
                 }
                 assert!(
-                    p.why.ends_with('.') && p.todo.ends_with('.') && p.what.ends_with('.'),
+                    p.why.ends_with('.')
+                        && p.todo.ends_with('.')
+                        && p.what.ends_with('.')
+                        && p.decide.ends_with('.'),
                     "{p:?}"
                 );
+                // the advice under an accept command does not say to accept
+                if !matches!(w, What::ErrorLine { .. })
+                    && !matches!(class, "upgrade" | "test-failed")
+                {
+                    assert!(!p.decide.contains("accept"), "{class} {w:?}: {}", p.decide);
+                }
             }
         }
     }

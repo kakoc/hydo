@@ -411,7 +411,9 @@ fn card(c: &Card) -> String {
             p.attention.id()
         ));
     }
-    s.push_str(&format!("<p>{}</p>\n", md(&c.happens)));
+    if !c.happens.is_empty() {
+        s.push_str(&format!("<p>{}</p>\n", md(&c.happens)));
+    }
     s.push_str(&c.more);
     s.push_str(&format!("<p><b>Is it a bug?</b> {}</p>\n", md(&p.todo)));
     s.push_str(&copy_block(&c.command));
@@ -576,6 +578,20 @@ fn events_of(dir: &Path, run: &Run, files: &RunFiles) -> Vec<TimelineEvent> {
         .collect()
 }
 
+/// A command hydo runs in the guest for itself: the modules and `tc` calls of a network fault
+/// (the modules' `insmod` ends with status 254 on a kernel that has them built in), and the
+/// rotation of a service's log. Its events are details, not the system's story.
+fn hydo_own(text: &str) -> bool {
+    let cmd = text.split_once("): ").map(|x| x.1).unwrap_or(text);
+    let cmd = cmd.strip_prefix("run ").unwrap_or(cmd).trim_start();
+    let prog = cmd.split_whitespace().next().unwrap_or("");
+    let args = cmd[prog.len()..].trim_start();
+    (prog.ends_with("busybox") && args.starts_with("insmod "))
+        || prog == "insmod"
+        || prog.ends_with("/bin/tc")
+        || (cmd.contains("cat /tmp/hydo/") && cmd.contains(".log.old"))
+}
+
 /// An event's label, its colour, and whether it is a detail hidden until the reader asks.
 fn kind_label(e: &TimelineEvent) -> (&'static str, &'static str, bool) {
     let t = e.text.as_str();
@@ -583,6 +599,7 @@ fn kind_label(e: &TimelineEvent) -> (&'static str, &'static str, bool) {
         "fault" => ("fault", "bad", false),
         "exit" => ("process ended", "warn", false),
         "probe" => ("readiness check", "", false),
+        "done" if hydo_own(t) => ("hydo's own command", "", true),
         "done" => ("command ended", "", false),
         "refused" => ("refused", "warn", false),
         "kernel" => ("kernel", "warn", false),
@@ -657,8 +674,8 @@ fn timeline_html(id: &str, evs: &[TimelineEvent], more: &str) -> String {
         "<p class=\"muted\">Each row is one event, in order. <b>Stop</b> is the moment at which \
          hydo's host side looked at the guest (<code>hydo inspect start DIR --at run:STOP</code> \
          goes back there); <b>clock</b> is the engine's virtual clock, the same in every replay. \
-         The main events are shown; {minor_kept} more (commands, snapshots, the guest's own \
-         output) are behind the box.</p>\n"
+         The main events are shown; {minor_kept} more (commands, hydo's own setup, snapshots, \
+         the guest's own output) are behind the box.</p>\n"
     ));
     s.push_str(&format!(
         "<input type=\"checkbox\" class=\"all\" id=\"{id}\"> <label for=\"{id}\">Show every event</label>\n"
@@ -857,6 +874,8 @@ fn status_words(s: &str) -> (&'static str, &'static str) {
         "violation" => ("bad", "failed"),
         "not-exercised" => ("warn", "never reached"),
         "not-evaluated" => ("warn", "never evaluated"),
+        // a run that stopped with an error (0.3.3's readers saw `unknown ERROR ...`)
+        "error" => ("bad", "stopped the run"),
         _ => ("warn", "unknown"),
     }
 }
@@ -1408,9 +1427,15 @@ struct Prob<'a> {
     failures: Vec<&'a Failure>,
     /// The schedule that shows it: the minimal one, else the first failure's.
     schedule: String,
+    /// The minimal schedule's verdict, when hydo shrank it.
+    min_verdict: Option<String>,
     /// What a passing neighbour of its minimal schedule shows (HTML).
     neighbour: Option<String>,
-    key: Option<String>,
+    /// The finding keys of its groups, one per signature.
+    keys: Vec<String>,
+    /// A service that did not start again: one problem per class and service, whatever the
+    /// verdict's words (`ERROR redis restart failed`, `ERROR restart after the faults (redis)`).
+    service: Option<(String, Option<String>)>,
 }
 
 /// One problem as the page and the terminal show it (Milestone 230: `hydo report` prints the same
@@ -1419,16 +1444,52 @@ pub struct Item {
     pub problem: advice::Problem,
     /// Runs that show it, of all runs.
     pub runs: Option<(usize, u64)>,
-    /// What happens, in one or two sentences (plain words with backquotes).
+    /// What happens, in one or two sentences (plain words with backquotes): the error-line
+    /// problem's; a failure's steps say it.
     pub happens: String,
+    /// "When it happens": the steps of the schedule that shows it, the outcome last (plain words
+    /// with backquotes).
+    pub steps: Vec<String>,
+    /// Why the steps are a whole failing run's (hydo did not shorten it), when they are.
+    pub whole_run: Option<&'static str>,
+    /// "What hydo saw" in that run: the failing service's end and its last log lines, or the
+    /// error.
+    pub seen: Vec<story::Seen>,
     /// The error lines of the new kinds: service, line and runs (at most 5).
     pub lines: Vec<(String, String, u64)>,
     /// New kinds beyond those 5.
     pub more_lines: usize,
     /// The command that shows it again.
     pub command: String,
+    /// The finding keys `hydo ci accept` takes for it, one per signature, each under the first
+    /// problem it covers.
+    pub accept: Vec<String>,
+    /// The run whose failing service's log the explorer reads by a replay: the run this problem
+    /// shows, when it stopped with an error.
+    pub replay: Option<String>,
     /// The id of its runs in the page's details.
     pub link: String,
+}
+
+/// The folder of an exploration's replays: `replays/<tag>/` is a fresh run of run `tag`'s
+/// schedule, as `hydo run` makes it, with its diagnosis and the failing service's log (`hydo
+/// explore` makes one for a problem whose run stopped with an error, Milestone 247:
+/// [`crate::delegated::explore_replays`]).
+pub const REPLAYS: &str = "replays";
+
+/// The diagnosis of the replay of an exploration's run `tag`, when the replay ended with the same
+/// failure (`verdict`, numbers aside).
+fn diagnosis_of(dir: &Path, tag: &str, verdict: &str) -> Option<hydo_results::Diagnosis> {
+    let run =
+        hydo_results::reader::read_run(&dir.join(REPLAYS).join(tag).join(hydo_results::RUN_DOC))
+            .ok()?;
+    let same =
+        hydo_explore::report::sig_key(&run.verdict.text) == hydo_explore::report::sig_key(verdict);
+    if same {
+        run.diagnosis
+    } else {
+        None
+    }
 }
 
 /// What an exploration's page and `hydo report` say, before either is written.
@@ -1449,9 +1510,8 @@ pub struct ExStory<'a> {
     pub held: Option<Held>,
     /// `hydo explore` with the next seeds.
     pub explore_more: String,
-    /// The finding key of the first problem to accept.
-    pub accept: Option<String>,
     groups: Vec<((String, String), Vec<&'a Failure>)>,
+    /// The problem (from 1) each group of failures is shown as.
     problem_of: Vec<usize>,
     new_kinds: Vec<&'a hydo_results::ErrorKind>,
     by_tag: BTreeMap<String, &'a Run>,
@@ -1564,10 +1624,16 @@ pub fn exploration_story<'a>(
         let schedule = sh
             .map(|x| x.minimal.clone())
             .unwrap_or_else(|| fs[0].run.schedule.clone());
-        let class = if c.is_empty() {
-            story::class_of(&fs[0].run, &pr)
-        } else {
-            c.clone()
+        // the class of the schedule the problem shows: a minimal schedule that needs fewer
+        // faults than the run it came from has its own (a failure found with a faulty disk whose
+        // minimal schedule has a working disk is not the disk's)
+        let class = match sh
+            .and_then(|x| x.min_class.clone())
+            .filter(|m| !m.is_empty())
+        {
+            Some(m) => m,
+            None if c.is_empty() => story::class_of(&fs[0].run, &pr),
+            None => c.clone(),
         };
         let what = story::what_of(&fs[0].run, &pr);
         let p = advice::problem(
@@ -1583,24 +1649,34 @@ pub fn exploration_story<'a>(
                 (!w.is_empty()).then_some(w)
             })
         });
-        match probs
-            .iter_mut()
-            .find(|x| x.problem.title == p.title && x.problem.attention == p.attention)
-        {
+        let service = match &what {
+            What::NoRestart { service } => Some((class.clone(), service.clone())),
+            _ => None,
+        };
+        let key = key_of(&fs[0].run);
+        match probs.iter_mut().find(|x| {
+            (service.is_some() && x.service == service)
+                || (x.problem.title == p.title && x.problem.attention == p.attention)
+        }) {
             Some(x) => {
                 x.groups.push(gi);
                 x.failures.extend(fs.iter().copied());
                 if x.neighbour.is_none() {
                     x.neighbour = neighbour;
                 }
+                if let Some(k) = key.filter(|k| !x.keys.contains(k)) {
+                    x.keys.push(k);
+                }
             }
             None => probs.push(Prob {
-                key: key_of(&fs[0].run),
+                keys: key.into_iter().collect(),
                 problem: p,
                 groups: vec![gi],
                 failures: fs.clone(),
                 schedule,
+                min_verdict: sh.and_then(|x| x.min_verdict.clone()),
                 neighbour,
+                service,
             }),
         }
     }
@@ -1637,7 +1713,7 @@ pub fn exploration_story<'a>(
         story::fault_kinds(first.iter().map(|r| r.schedule.as_str()), &pr)
     };
     let mut lead = format!(
-        "hydo ran your system {total} time{}, each time with different faults{}.",
+        "hydo ran your system {total} time{} with different faults{}.",
         if total == 1 { "" } else { "s" },
         if kinds.is_empty() {
             String::new()
@@ -1651,15 +1727,11 @@ pub fn exploration_story<'a>(
     if s_.failures == 0 {
         lead.push_str(" Every run passed your checks.");
     } else {
+        // the title counts the problems, and each one its runs
         lead.push_str(&format!(
-            " {} run{} failed{}.",
+            " {} run{} failed.",
             s_.failures,
             if s_.failures == 1 { "" } else { "s" },
-            match probs.len() {
-                1 if s_.failures > 1 => ", all in the same way".to_string(),
-                1 => String::new(),
-                n => format!(", in {n} different ways"),
-            }
         ));
         let rep = s_.reproduced.unwrap_or(0);
         if rep == s_.failures {
@@ -1681,70 +1753,103 @@ pub fn exploration_story<'a>(
     let mut items: Vec<Item> = Vec::new();
     for &i in &order {
         let x = &probs[i];
-        let command =
-            story::replay_command(&pr, Some(&doc.image.path), Some(&doc.engine), &x.schedule);
-        // what happens: what the first failing run showed for a service that did not come back,
-        // else what failed; and why
-        let first = x.failures[0];
-        let what = story::what_of(&first.run, &pr);
-        let mut happens = match &what {
-            What::NoRestart { service: Some(svc) } => first
-                .run
-                .tag
-                .as_ref()
-                .and_then(|tag| {
-                    let run = by_tag.get(tag)?;
-                    let evs = events_of(dir, run, &RunFiles::explorer(tag));
-                    story::exit_story(&evs, svc, x.schedule.contains("disk=ioerr"))
-                })
-                .unwrap_or_else(|| x.problem.what.clone()),
-            What::Check { .. } => String::new(),
-            _ => x.problem.what.clone(),
-        };
-        // the service's own story says what the disk errors did
-        if happens.is_empty() || !matches!(what, What::NoRestart { .. }) {
-            if !happens.is_empty() {
-                happens.push(' ');
-            }
-            happens.push_str(&x.problem.why);
-        }
-        // a command hydo did not shrink keeps the run's other faults
+        // a command hydo did not shrink repeats a whole failing run (0.3.3, a reader of the
+        // quickstart asked why): the one with the fewest faults
         let shrunk = x.groups.iter().any(|&gi| {
             let ((c, sig), _) = &groups[gi];
             doc.shrinks
                 .iter()
                 .any(|s| &s.class == c && &s.signature == sig)
         });
-        if !shrunk {
-            let common =
-                story::common_kinds(x.failures.iter().map(|f| f.run.schedule.as_str()), &pr);
-            let others: Vec<String> = story::fault_kinds(std::iter::once(x.schedule.as_str()), &pr)
-                .into_iter()
-                .filter(|k| !common.contains(k))
-                .map(str::to_string)
-                .collect();
-            // the command is not minimal: say so, and why (0.3.3, a reader of the quickstart)
-            happens.push_str(if first.run.verdict.kind == "error" {
-                " hydo shrinks failed checks, not runs that stop with an error, so the command \
-                 repeats the whole failing run, with faults the problem may not need."
-            } else {
-                " hydo did not shrink this failure, so the command repeats the whole failing run, \
-                 with faults the problem may not need."
-            });
-            if !others.is_empty() {
-                happens.push_str(&format!(
-                    " It also keeps this run's {}.",
-                    describe::and_list(&others)
-                ));
+        let first = if shrunk {
+            x.failures[0]
+        } else {
+            x.failures
+                .iter()
+                .copied()
+                .min_by_key(|f| story::fault_count(&f.run.schedule, &pr))
+                .unwrap_or(x.failures[0])
+        };
+        let schedule = if shrunk {
+            x.schedule.clone()
+        } else {
+            first.run.schedule.clone()
+        };
+        let command =
+            story::replay_command(&pr, Some(&doc.image.path), Some(&doc.engine), &schedule);
+        // when it happens: the steps of the schedule that shows it, and the outcome of its run
+        let what = match &x.min_verdict {
+            Some(v) => advice::what_of(v, &first.run.findings),
+            None => story::what_of(&first.run, &pr),
+        };
+        let power_cut =
+            story::fault_kinds(std::iter::once(schedule.as_str()), &pr).contains(&"power cuts");
+        // the title says that a service did not start again
+        let outcome = (!matches!(what, What::NoRestart { .. }))
+            .then(|| story::outcome_line(&first.run, &what, power_cut));
+        let steps = story::short_steps(&schedule, &pr, outcome);
+        let error = first.run.verdict.kind == "error";
+        let whole_run = (!shrunk).then_some("the whole failing run");
+        // what hydo saw: the failing service's end with its last log lines, or the error
+        let tag = first.run.tag.as_deref();
+        let log = tag
+            .and_then(|t| diagnosis_of(dir, t, &first.run.verdict.text))
+            .as_ref()
+            .and_then(story::log_tail);
+        let mut seen: Vec<story::Seen> = Vec::new();
+        match &what {
+            What::NoRestart { service: Some(svc) } => {
+                let ended = tag.and_then(|t| {
+                    let run = by_tag.get(t)?;
+                    let evs = events_of(dir, run, &RunFiles::explorer(t));
+                    story::exit_story(&evs, svc, schedule.contains("disk=ioerr"))
+                });
+                // the title says that it did not start again; this says how it ended
+                if let Some(w) = ended {
+                    seen.push(story::Seen {
+                        mark: "✘",
+                        class: "m-bad",
+                        words: w.trim_end_matches('.').to_string(),
+                        ..Default::default()
+                    });
+                }
+            }
+            What::Error { text } => seen.push(story::Seen {
+                mark: "✘",
+                class: "m-bad",
+                words: format!("The run stopped with `{text}`"),
+                ..Default::default()
+            }),
+            _ => {}
+        }
+        if let Some((svc, lines)) = log {
+            // under the service's own line when there is one
+            match seen.last_mut() {
+                Some(l) if l.words.starts_with(&format!("`{svc}`")) => {
+                    l.words.push_str(". Its log ends");
+                    l.note = Some("from a replay".into());
+                    l.quote = lines;
+                }
+                _ => seen.push(story::log_seen(&svc, lines, "from a replay")),
             }
         }
+        let accept = x.keys.clone();
+        let mut problem = x.problem.clone();
+        if !accept.is_empty() {
+            problem.todo = problem.decide.clone();
+        }
         items.push(Item {
-            problem: x.problem.clone(),
+            problem,
             runs: Some((x.failures.len(), total)),
-            happens,
+            happens: String::new(),
+            steps,
+            whole_run,
+            seen,
             lines: Vec::new(),
             more_lines: 0,
             command,
+            accept,
+            replay: if error { first.run.tag.clone() } else { None },
             link: format!("f{}", x.groups[0] + 1),
         });
     }
@@ -1789,6 +1894,9 @@ pub fn exploration_story<'a>(
             happens: format!("{} {}", p.what, p.why).trim().to_string(),
             problem: p,
             runs: (runs > 0).then_some((runs, total)),
+            steps: Vec::new(),
+            whole_run: None,
+            seen: Vec::new(),
             lines: new_kinds
                 .iter()
                 .take(5)
@@ -1796,17 +1904,13 @@ pub fn exploration_story<'a>(
                 .collect(),
             more_lines: new_kinds.len().saturating_sub(5),
             command: format!("hydo errors {}", quote(shown)),
+            accept: Vec::new(),
+            replay: None,
             link: "errors".into(),
         });
     }
     let held = held_of(&pr, &first, total);
     let explore_more = explore_more(&pr, &doc.image.path, doc.config.seeds.as_deref());
-    let accept = order
-        .iter()
-        .map(|&i| &probs[i])
-        .find(|x| x.problem.attention != advice::Attention::Look)
-        .or_else(|| order.first().map(|&i| &probs[i]))
-        .and_then(|x| x.key.clone());
     // details: which problem each group of failures is
     let mut problem_of: Vec<usize> = vec![0; groups.len()];
     for (n, &i) in order.iter().enumerate() {
@@ -1824,7 +1928,6 @@ pub fn exploration_story<'a>(
         failure_problems: probs.len(),
         held,
         explore_more,
-        accept,
         groups,
         problem_of,
         new_kinds,
@@ -1862,6 +1965,21 @@ fn exploration_page(
     }
     for (n, it) in st.items.iter().enumerate() {
         let mut more = String::new();
+        if !it.steps.is_empty() {
+            more.push_str(&format!(
+                "<p class=\"when\"><b>When it happens</b>{}</p>\n{}",
+                it.whole_run
+                    .map(|w| format!(" <span class=\"muted\">({})</span>", esc(w)))
+                    .unwrap_or_default(),
+                story::steps_list(&it.steps)
+            ));
+        }
+        if !it.seen.is_empty() {
+            more.push_str(&format!(
+                "<div class=\"seen\">\n{}</div>\n",
+                story::seen_lines(&it.seen)
+            ));
+        }
         if !it.lines.is_empty() {
             more.push_str("<ul>\n");
             for (svc, line, runs) in &it.lines {
@@ -1886,7 +2004,18 @@ fn exploration_page(
             happens: it.happens.clone(),
             more,
             command: it.command.clone(),
-            after: String::new(),
+            after: if it.accept.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "<p class=\"small\">If it is expected: {}</p>\n",
+                    it.accept
+                        .iter()
+                        .map(|k| code(&format!("hydo ci accept {k} --reason \"…\"")))
+                        .collect::<Vec<_>>()
+                        .join("<br>")
+                )
+            },
             link: Some(it.link.clone()),
         }));
     }
@@ -1895,18 +2024,10 @@ fn exploration_page(
     body.push_str(&held_html(st.held.as_ref()));
     // next
     body.push_str(&h2("next", "Next"));
-    let mut s = format!(
-        "<div class=\"card\"><p>Run more runs to look further: {}</p>\n",
+    body.push_str(&format!(
+        "<div class=\"card\"><p>Run more runs to look further: {}</p></div>\n",
         code(&st.explore_more)
-    );
-    if let Some(k) = &st.accept {
-        s.push_str(&format!(
-            "<p>Accept a problem you consider expected, so that it no longer fails your CI: {}</p>\n",
-            code(&format!("hydo ci accept {k} --reason \"…\""))
-        ));
-    }
-    s.push_str("</div>\n");
-    body.push_str(&s);
+    ));
     body.push_str(&share(&exploration_details(
         dir,
         doc,
@@ -1986,6 +2107,25 @@ fn exploration_details(
     let mut s = format!("<div class=\"card\">{}</div>\n", facts(&f));
     if !groups.is_empty() {
         s.push_str(&h3("failures", "The failures by class and signature"));
+        let shrunk = |c: &str, sig: &str| {
+            doc.shrinks
+                .iter()
+                .any(|x| x.class == c && x.signature == sig)
+        };
+        // a group without a minimal schedule of its own is shown in the card of the first group
+        // of its problem (one problem under two verdicts: `ERROR redis restart failed` and
+        // `ERROR restart after the faults (redis)`)
+        let card_of: Vec<usize> = (0..groups.len())
+            .map(|i| {
+                let ((c, sig), _) = &groups[i];
+                if shrunk(c, sig) {
+                    return i;
+                }
+                (0..i)
+                    .find(|&j| problem_of[j] == problem_of[i])
+                    .unwrap_or(i)
+            })
+            .collect();
         let mut rows: Vec<(String, Vec<String>)> = Vec::new();
         for (i, ((c, sig), fs)) in groups.iter().enumerate() {
             let minimal = doc
@@ -1997,7 +2137,7 @@ fn exploration_details(
             rows.push((
                 String::new(),
                 vec![
-                    format!("<a href=\"#f{}\">{}</a>", i + 1, i + 1),
+                    format!("<a href=\"#f{}\">{}</a>", card_of[i] + 1, i + 1),
                     format!("<a href=\"#p{0}\">problem {0}</a>", problem_of[i]),
                     esc(c),
                     format!("<span class=\"t\">{}</span>", esc(sig)),
@@ -2025,17 +2165,24 @@ fn exploration_details(
         ));
         s.push_str("<p class=\"muted\">The class names the kind of fault that led to it; the signature is the verdict with its numbers left out, so failures with the same cause fall together.</p>\n");
         for (i, ((c, sig), fs)) in groups.iter().enumerate() {
+            if card_of[i] != i {
+                continue;
+            }
             let sh = doc
                 .shrinks
                 .iter()
                 .find(|x| &x.class == c && &x.signature == sig);
+            let also: Vec<(&str, usize)> = (i + 1..groups.len())
+                .filter(|&j| card_of[j] == i)
+                .map(|j| (groups[j].0 .1.as_str(), groups[j].1.len()))
+                .collect();
             s.push_str(&failure_card(
                 i + 1,
                 dir,
                 doc,
-                c,
-                sig,
+                (c, sig),
                 fs,
+                &also,
                 sh,
                 events,
                 by_tag,
@@ -2112,9 +2259,9 @@ fn failure_card(
     n: usize,
     dir: &Path,
     doc: &Exploration,
-    class: &str,
-    sig: &str,
+    (class, sig): (&str, &str),
     fs: &[&Failure],
+    also: &[(&str, usize)],
     sh: Option<&Shrink>,
     events: Option<&Stream>,
     by_tag: &BTreeMap<String, &Run>,
@@ -2171,6 +2318,21 @@ fn failure_card(
             },
         ),
     ];
+    if !also.is_empty() {
+        f.push((
+            "Also as".into(),
+            also.iter()
+                .map(|(sig, k)| {
+                    format!(
+                        "<span class=\"t\">{}</span> <span class=\"muted\">({})</span>",
+                        esc(sig),
+                        esc(&plural(*k as u64, "schedule"))
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("<br>"),
+        ));
+    }
     if first.timing_only == Some(true) {
         f.push((
             "Timing".into(),
@@ -2247,10 +2409,36 @@ fn failure_card(
         timeline_tag = first.run.tag.clone();
     }
     s.push_str(&facts(&f));
-    if let Some(d) = &first.run.diagnosis {
+    // the explorer's replay of this card's runs (Milestone 247), of the first that has one
+    let replayed = fs
+        .iter()
+        .copied()
+        .chain(
+            doc.failures
+                .iter()
+                .filter(|f| also.iter().any(|(sig, _)| *sig == f.signature)),
+        )
+        .find_map(|f| {
+            let t = f.run.tag.as_deref()?;
+            diagnosis_of(dir, t, &f.run.verdict.text).map(|d| (t, d))
+        });
+    if let Some(d) = first
+        .run
+        .diagnosis
+        .as_ref()
+        .or(replayed.as_ref().map(|(_, d)| d))
+    {
         s.push_str(&format!(
             "<p><b>Why it failed:</b> {}</p>\n",
             esc(&d.summary)
+        ));
+    }
+    if let Some((t, _)) = &replayed {
+        s.push_str(&format!(
+            "<p class=\"muted\">hydo ran the schedule of the run {} again to read the service&#39;s \
+             log: {}</p>\n",
+            code(t),
+            code(&pjoin(&pjoin(shown, REPLAYS), t))
         ));
     }
     if n > DETAILED {

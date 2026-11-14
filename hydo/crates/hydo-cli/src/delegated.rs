@@ -37,7 +37,14 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
 
 /// `hydo explore` with the end for a person (`plain`) or for a program (the summary line).
 pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
-    let mut args = argv.to_vec();
+    // `--no-diagnose`: no replay that reads the failing service's log of a problem whose runs
+    // stopped with an error (Milestone 247; as `hydo run --no-diagnose`)
+    let diagnose = !argv.iter().any(|a| a == "--no-diagnose");
+    let mut args: Vec<String> = argv
+        .iter()
+        .filter(|a| *a != "--no-diagnose")
+        .cloned()
+        .collect();
     let linux = ctx.platform == Platform::Linux;
     let image = find_image(ctx, &mut args);
     if !args.iter().any(|a| a == "--out") {
@@ -111,6 +118,12 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
     let i = args.iter().position(|a| a == "--out").unwrap_or(0);
     let out = args.get(i + 1).cloned().unwrap_or_default();
     let report = pjoin(&out, "report.md");
+    // the scripted engine of the tests runs no image
+    if rc == 0 && diagnose && ctx.config.pool.scripted_engine.is_none() {
+        for (tag, why) in explore_replays(ctx, Path::new(&out)) {
+            eprintln!("hydo: the replay of {tag} did not read the failing service's log: {why}");
+        }
+    }
     if rc == 0 && plain {
         if let Some(end) = crate::htmlreport::text::explore_end(Path::new(&out), &out) {
             print!("{end}");
@@ -123,6 +136,79 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
         );
     }
     rc
+}
+
+/// The most problems of one exploration that [`explore_replays`] runs again.
+const REPLAYS_MAX: usize = 4;
+
+/// The last step of `hydo explore` (Milestone 247): a service's own log is in no file of an
+/// exploration, so for each problem whose run stopped with an error (at most [`REPLAYS_MAX`]),
+/// its schedule runs once more from a fresh boot, as `hydo run` runs it, into `replays/<tag>/` of
+/// the exploration's folder, with `hydo run`'s diagnosis, whose replay reads the failing
+/// service's log (`logs/<service>.log` there). `hydo report` quotes the log's last lines under the
+/// problem when that run ended with the same failure. The exploration's own files do not change.
+/// Returns the runs that gave no diagnosis, with the reason.
+pub fn explore_replays(ctx: &Ctx, dir: &Path) -> Vec<(String, String)> {
+    let Ok(hydo_results::Results::Exploration {
+        doc: Some(doc),
+        events,
+        ..
+    }) = hydo_results::read_dir(dir)
+    else {
+        return Vec::new();
+    };
+    let shown = dir.display().to_string();
+    let replays: Vec<(String, String)> =
+        crate::htmlreport::exploration_story(dir, &doc, events.as_ref(), &shown)
+            .items
+            .iter()
+            .filter_map(|i| i.replay.clone())
+            .take(REPLAYS_MAX)
+            .filter_map(|tag| {
+                let f = doc
+                    .failures
+                    .iter()
+                    .find(|f| f.run.tag.as_deref() == Some(tag.as_str()))?;
+                Some((tag, f.run.schedule.clone()))
+            })
+            .collect();
+    let image = Path::new(&doc.image.path);
+    let mut opts = crate::runs::RunOpts::of_eargs(doc.engine.args.as_deref().unwrap_or(&[]));
+    if opts.vcpus.is_none() {
+        opts.vcpus = doc.engine.vcpus.filter(|n| *n > 1).map(|n| n as u32);
+    }
+    let mut failed = Vec::new();
+    for (tag, sched) in replays {
+        let out = dir.join(crate::htmlreport::REPLAYS).join(&tag);
+        let _ = std::fs::create_dir_all(&out);
+        let why = match crate::runs::try_run_to_dir(
+            ctx,
+            image,
+            doc.image.sha256.clone(),
+            &sched,
+            &out,
+            &opts,
+        ) {
+            Err(w) => Some(w),
+            Ok(None) => Some(format!("no result (engine.log in {})", out.display())),
+            Ok(Some(mut run)) if run.verdict.kind != "ok" => {
+                match crate::inspect::diagnose::for_run(ctx, &out, true) {
+                    Some(d) => {
+                        run.diagnosis = Some(d);
+                        hydo_results::write_document(&out.join(hydo_results::RUN_DOC), &run)
+                            .err()
+                            .map(|e| e.to_string())
+                    }
+                    None => Some("no diagnosis".into()),
+                }
+            }
+            Ok(Some(run)) => Some(format!("it ended with {}", run.verdict.text)),
+        };
+        if let Some(w) = why {
+            failed.push((tag, w));
+        }
+    }
+    failed
 }
 
 // ---------------------------------------------------------------- report (Rust)
@@ -184,8 +270,12 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
         },
     };
     let mut text = match r {
-        hydo_results::Results::Run { run, .. } => {
+        hydo_results::Results::Run { run, .. } if details => {
             hydo_explore::md::run_report(&run) + &held_lines(Path::new(&d))
+        }
+        // the plain summary of the run's web page (Milestone 247)
+        hydo_results::Results::Run { run, .. } => {
+            crate::htmlreport::text::run(Path::new(&d), &run, &d)
         }
         hydo_results::Results::Exploration { doc: Some(doc), .. } if details => {
             hydo_explore::md::report(&doc)

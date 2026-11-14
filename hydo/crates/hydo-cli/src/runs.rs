@@ -47,6 +47,17 @@ pub fn find_image(ctx: &Ctx, args: &mut Vec<String>) -> PathBuf {
             if imgs.is_empty() {
                 imgs = glob_simple(Path::new(PROJECT_OUT), "", built);
             }
+            if imgs.len() > 1 {
+                // name them (0.3.3's readers had two and had to look which)
+                die(&format!(
+                    "no image given, and there are {} images: {}; pass one with --image",
+                    imgs.len(),
+                    imgs.iter()
+                        .map(|p| p.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
             if imgs.len() != 1 {
                 die(&format!(
                     "no image given and {} *{} in ./{} or ./{} (run `hydo build hydo.yaml` here, or pass --image)",

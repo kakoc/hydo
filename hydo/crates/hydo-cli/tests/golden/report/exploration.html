@@ -40,9 +40,11 @@ pre{background:var(--code);padding:8px 10px;border-radius:8px;margin:6px 0;white
 .verdictline{display:flex;gap:10px;align-items:center;margin:14px 0 4px;flex-wrap:wrap}
 ol.steps{margin:4px 0 0;padding-left:22px}ol.steps li{margin:6px 0}
 .evidence{border-left:3px solid var(--bad)}
-.evidence div{margin:5px 0;padding-left:22px;text-indent:-22px}
-.evidence .mark{display:inline-block;width:22px;text-indent:0;font-weight:700}
-.evidence .m-ok{color:var(--ok)}.evidence .m-bad{color:var(--bad)}.evidence .m-warn{color:var(--warn)}.evidence .m-note{color:var(--muted)}
+.evidence div,.seen div{margin:5px 0;padding-left:22px;text-indent:-22px}
+.evidence .mark,.seen .mark{display:inline-block;width:22px;text-indent:0;font-weight:700}
+.m-ok{color:var(--ok)}.m-bad{color:var(--bad)}.m-warn{color:var(--warn)}.m-note{color:var(--muted)}
+pre.log{text-indent:0;margin:4px 0 0;font-size:13px}
+p.when{margin:10px 0 0}
 .cmdrow{display:flex;gap:8px;align-items:stretch;margin:8px 0}
 .cmd{flex:1;min-width:0;margin:0;background:var(--code);border-radius:8px;padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
 button.copy{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;padding:0 14px;cursor:pointer}
@@ -82,25 +84,41 @@ a{color:var(--note)}
 <header>
 <p class="eyebrow">hydo report · exploration of 12 runs</p>
 <h1>hydo found 3 problems in your system</h1>
-<p class="lead">hydo ran your system 12 times, each time with different faults: disk errors, crashes, network faults, a faulty disk and power cuts. 4 runs failed, in 2 different ways. Each failing run failed again the same way when hydo replayed it. Your services also wrote error lines that your list of known errors does not have.</p>
+<p class="lead">hydo ran your system 12 times with different faults: disk errors, crashes, network faults, a faulty disk and power cuts. 4 runs failed. Each failing run failed again the same way when hydo replayed it. Your services also wrote error lines that your list of known errors does not have.</p>
 </header>
 <h2 id="start">Start here</h2>
 <div class="card problem" id="p1"><div class="num">1</div><div>
 <h3>The run stopped early after disk errors</h3>
 <p><span class="pill bad">Worth a look</span><span class="muted">2 of 12 runs</span></p>
 <div class="bar look"><span style="width:17%"></span></div>
-<p>The run stopped before your checks could run, with the error <code>harness: guest did not finish (I/O error)</code>. hydo made the disk return read and write errors. hydo shrinks failed checks, not runs that stop with an error, so the command repeats the whole failing run, with faults the problem may not need. It also keeps this run&#39;s network faults.</p>
-<p><b>Is it a bug?</b> Decide whether your system must survive a failing disk. If it must, look at the service&#39;s log in the run; if not, accept this finding.</p>
+<p class="when"><b>When it happens</b> <span class="muted">(the whole failing run)</span></p>
+<ol class="steps">
+<li>The disk fails some reads and writes with an error.</li>
+<li>hydo kills <code>kafka</code> after 13 steps and starts it again after 16 steps.</li>
+<li>During steps 24 to 27, the network on the way to <code>redis</code> delays every packet by 79 ms.</li>
+<li>The run stops with an error before your checks run.</li>
+</ol>
+<div class="seen">
+<div><span class="mark m-bad">✘</span>The run stopped with <code>harness: guest did not finish (I/O error)</code></div>
+</div>
+<p><b>Is it a bug?</b> Decide whether your system must survive a failing disk.</p>
 <div class="cmdrow"><pre class="cmd">hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;" aria-label="Copy to the clipboard">Copy</button></div>
+<p class="small">If it is expected: <code>hydo ci accept f1:run-error:b90a956980 --reason &quot;…&quot;</code></p>
 <p class="small"><a href="#f2">Open this failure →</a></p>
 </div></div>
 <div class="card problem" id="p2"><div class="num">2</div><div>
 <h3>Your system failed your check with a faulty disk</h3>
 <p><span class="pill ok">Expected</span><span class="muted">2 of 12 runs</span></p>
 <div class="bar expected"><span style="width:17%"></span></div>
-<p>hydo made the disk faulty: it threw away writes that it had already confirmed, as a broken or misconfigured disk can. No system keeps data that its disk throws away.</p>
-<p><b>Is it a bug?</b> No, not in your system: it lost what the disk threw away. It matters only if your production disks can throw away confirmed writes. If you do not expect such disks, accept this finding.</p>
+<p class="when"><b>When it happens</b></p>
+<ol class="steps">
+<li>The disk is faulty: it throws away some writes that it had already confirmed, even ones flushed to disk.</li>
+<li>The power goes out after 11 steps, before the 12th step.</li>
+<li>After the restart, your check finds <code>lost acknowledged write</code>.</li>
+</ol>
+<p><b>Is it a bug?</b> No, not in your system: it lost what the disk threw away.</p>
 <div class="cmdrow"><pre class="cmd">hydo run --image scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;" aria-label="Copy to the clipboard">Copy</button></div>
+<p class="small">If it is expected: <code>hydo ci accept f1:invariant:b85cf53e33 --reason &quot;…&quot;</code></p>
 <p class="small"><a href="#f1">Open this failure →</a></p>
 </div></div>
 <div class="card problem" id="p3"><div class="num">3</div><div>
@@ -121,9 +139,7 @@ a{color:var(--note)}
 <h2 id="held">What held</h2>
 <div class="card"><p><span class="pill ok">Passed</span>8 of 12 runs passed every check. With a working disk and your safe settings, none of the 7 runs failed, network faults, crashes and power cuts included.</p></div>
 <h2 id="next">Next</h2>
-<div class="card"><p>Run more runs to look further: <code>hydo explore --image scripted-disk.img --seeds 13-112</code></p>
-<p>Accept a problem you consider expected, so that it no longer fails your CI: <code>hydo ci accept f1:invariant:b85cf53e33 --reason &quot;…&quot;</code></p>
-</div>
+<div class="card"><p>Run more runs to look further: <code>hydo explore --image scripted-disk.img --seeds 13-112</code></p></div>
 <details class="share" id="details"><summary>Details for a bug report</summary>
 <div class="card"><dl class="facts">
 <dt>Image</dt><dd>image <code>scripted-disk.img</code></dd>
@@ -161,7 +177,7 @@ a{color:var(--note)}
 </dl>
 <details open><summary>What happened in the run <code>min-a</code></summary>
 <div class="tl">
-<p class="muted">Each row is one event, in order. <b>Stop</b> is the moment at which hydo's host side looked at the guest (<code>hydo inspect start DIR --at run:STOP</code> goes back there); <b>clock</b> is the engine's virtual clock, the same in every replay. The main events are shown; 2 more (commands, snapshots, the guest's own output) are behind the box.</p>
+<p class="muted">Each row is one event, in order. <b>Stop</b> is the moment at which hydo's host side looked at the guest (<code>hydo inspect start DIR --at run:STOP</code> goes back there); <b>clock</b> is the engine's virtual clock, the same in every replay. The main events are shown; 2 more (commands, hydo's own setup, snapshots, the guest's own output) are behind the box.</p>
 <input type="checkbox" class="all" id="tl-1"> <label for="tl-1">Show every event</label>
 <div class="scroll"><table>
 <thead><tr><th>Stop</th><th class="c-clock">Clock</th><th>What</th><th>Service</th><th>Event</th></tr></thead>
@@ -227,7 +243,7 @@ a{color:var(--note)}
 </dl>
 <details><summary>What happened in the run <code>seed-8</code></summary>
 <div class="tl">
-<p class="muted">Each row is one event, in order. <b>Stop</b> is the moment at which hydo's host side looked at the guest (<code>hydo inspect start DIR --at run:STOP</code> goes back there); <b>clock</b> is the engine's virtual clock, the same in every replay. The main events are shown; 2 more (commands, snapshots, the guest's own output) are behind the box.</p>
+<p class="muted">Each row is one event, in order. <b>Stop</b> is the moment at which hydo's host side looked at the guest (<code>hydo inspect start DIR --at run:STOP</code> goes back there); <b>clock</b> is the engine's virtual clock, the same in every replay. The main events are shown; 2 more (commands, hydo's own setup, snapshots, the guest's own output) are behind the box.</p>
 <input type="checkbox" class="all" id="tl-2"> <label for="tl-2">Show every event</label>
 <div class="scroll"><table>
 <thead><tr><th>Stop</th><th class="c-clock">Clock</th><th>What</th><th>Service</th><th>Event</th></tr></thead>

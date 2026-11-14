@@ -470,7 +470,7 @@ recorded value:
   start` says that its session holds the guest's memory.
 - `hydo build --check` warns about missing `root.files` sources.
 - From the Valkey onboarding:
-  - `hydo report <run dir>` prints what each check said the last time it held;
+  - `hydo report --details <run dir>` prints what each check said the last time it held;
   - the property table tags a project's check `[the project's own check]`;
   - the lock file names `hydo compose`;
   - the commit advice comes only in a git repository;
@@ -1020,23 +1020,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       epoch 2 and keep their values.
     - M252: KVM fingerprints of epoch-3 images leave out DR6's host bits. Record the epoch-3 KVM
       values with a hydo that has M252, so that they hold on every Intel model.
-106. The terminal in plain words (M230). A run directory's `hydo report` and the lines `hydo
-    explore` prints before its runs (`fault space:` with JSON) are still technical. The real run
-    used the Mac engine only.
+106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
+    explore` prints before its runs are in plain words since M247. The real runs of both
+    milestones used the Mac engine only.
 107. The onboarding fixes of M239 ran on the Mac engine only. `hydo run --memory` counts only the
     processes alive at the end, so a run with kills gives low peaks. `tcp:` probes ran with one
     service, not with `network: bridge`.
-108. What the 0.3.3 docs review left (the release notes list it too). `hydo report` of a single
-    run's directory prints the technical summary; only its web page is in plain words (open item
-    106). An exploration's report does not show a failing service's last log lines for a run that
-    stopped with an error. Its timelines include hydo's own setup events (`HYDO-ASSERT-DECL`, the
-    netem module's `insmod` status 254). A problem there has no "When it happens" section. One problem can
-    appear under two signatures (`ERROR redis restart failed` and `ERROR restart after the faults
-    (redis)`). The disk-error page starts with the sentence `Then redis did not start again.` and
-    labels the failure `unknown ERROR`. `hydo ci accept` stands under "Next" instead of under its problem.
-    "no image given" with two images could list them. `hydo explore` prints `fault space:` as
-    JSON, and the kinds it lists include pauses and clock steps that run only with
-    `--new-faults`.
+108. What the 0.3.3 docs review left is done in M247. The replay at the end of `hydo explore`
+    ran on the Mac engine only, on one disk-error schedule of the Redis example. It did not run
+    on hvx or KVM, or on a problem whose service writes its own log files (`logs:`).
 109. Upgrades (M238). Versions of an image service (`image:`) are refused. The explorer draws one
     `U=` per schedule and only the selector `all` for a group, and the state search does not move
     `U=`. The Mac and KVM engines ran `U=` only on the scripted agent. The grace period after
@@ -1545,6 +1537,13 @@ build machine, before 2026-10-13.
   only in DR6's bits 11 and 16, which KVM reads back from the hardware. From the fingerprint
   epoch 3 on they leave the fingerprint, so Intel models agree; older images keep their values.
   `HYDO_KVM_DIAG` writes every part of the end state. Nothing recorded moved
+- M247 (tentative number): the report gaps of 0.3.3's fresh readers. `hydo report <run dir>`
+  prints the run page's plain summary, and `--details` the old text. An exploration's problem
+  has numbered steps, its own `hydo ci accept` lines, and the failing service's last log lines
+  from one more run that `hydo explore` makes (`--no-diagnose` skips it; run on the Mac). A
+  service that did not start again is one problem. The disk-error page starts with the disk.
+  `hydo explore` prints its fault kinds in words, with the JSON in `fault-space.json`. A replay
+  takes the run conversation's schedule, not an explorer boot's. Nothing recorded moved
 
 ## Where to look
 

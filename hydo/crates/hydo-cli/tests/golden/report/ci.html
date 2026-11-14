@@ -40,9 +40,11 @@ pre{background:var(--code);padding:8px 10px;border-radius:8px;margin:6px 0;white
 .verdictline{display:flex;gap:10px;align-items:center;margin:14px 0 4px;flex-wrap:wrap}
 ol.steps{margin:4px 0 0;padding-left:22px}ol.steps li{margin:6px 0}
 .evidence{border-left:3px solid var(--bad)}
-.evidence div{margin:5px 0;padding-left:22px;text-indent:-22px}
-.evidence .mark{display:inline-block;width:22px;text-indent:0;font-weight:700}
-.evidence .m-ok{color:var(--ok)}.evidence .m-bad{color:var(--bad)}.evidence .m-warn{color:var(--warn)}.evidence .m-note{color:var(--muted)}
+.evidence div,.seen div{margin:5px 0;padding-left:22px;text-indent:-22px}
+.evidence .mark,.seen .mark{display:inline-block;width:22px;text-indent:0;font-weight:700}
+.m-ok{color:var(--ok)}.m-bad{color:var(--bad)}.m-warn{color:var(--warn)}.m-note{color:var(--muted)}
+pre.log{text-indent:0;margin:4px 0 0;font-size:13px}
+p.when{margin:10px 0 0}
 .cmdrow{display:flex;gap:8px;align-items:stretch;margin:8px 0}
 .cmd{flex:1;min-width:0;margin:0;background:var(--code);border-radius:8px;padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
 button.copy{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;padding:0 14px;cursor:pointer}

@@ -185,8 +185,14 @@ impl Recorded {
                 vec![format!("hydo run <image> \"{}\" --out <new run dir>", doc.schedule)],
             ));
         }
+        // the run conversation's schedule first: an explorer worker's boot transcript names only
+        // the boot's (`rb=64 | run`), and a replay with it drops the run's host faults (a
+        // `disk=ioerr` run then diverged at its first missing exit, Milestone 247)
         let header_sched = transcripts
             .iter()
+            .find(|(c, _)| *c == Conv::Run)
+            .into_iter()
+            .chain(transcripts.iter())
             .find_map(|(_, t)| t.header.schedule.clone())
             .unwrap_or_else(|| doc.schedule.clone());
         let schedule = Schedule::parse(&header_sched).map_err(|e| {
@@ -931,4 +937,39 @@ impl Controller for WorkCtl<'_, '_> {
 #[allow(dead_code)]
 pub fn actions(out: Out) -> Vec<Action> {
     out.into_actions()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A replay takes its schedule from the run conversation, not from a boot transcript that
+    /// names another one (an explorer worker's boot is `rb=64 | run`; Milestone 247).
+    #[test]
+    fn the_schedule_is_the_run_conversation_s() {
+        let d = std::env::temp_dir().join(format!("hydo-drive-sched-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let head = |conv: &str, sched: &str, start: &str| {
+            format!(
+                "{{\"cadence\":\"rb=64\",\"control\":1,\"controller\":\"schedule\",\"conversation\":\"{conv}\",\"schedule\":\"{sched}\",\"start\":\"{start}\"}}\n"
+            )
+        };
+        std::fs::write(
+            d.join("control.boot.jsonl"),
+            head("boot", "rb=64 | run", "boot"),
+        )
+        .unwrap();
+        let run = "disk=ioerr:2 dseed=b613668d49c766aa rb=64 | run";
+        std::fs::write(d.join("control.jsonl"), head("run", run, "resume S1")).unwrap();
+        let doc = hydo_results::Run::new(
+            "disk=ioerr:2 dseed=b613668d49c766aa | run",
+            hydo_results::Verdict::default(),
+            "0123456789abcdef",
+        );
+        let rec = Recorded::of(&d, doc, RunFiles::default());
+        let _ = std::fs::remove_dir_all(&d);
+        let rec = rec.unwrap_or_else(|p| panic!("{}", p.message));
+        assert_eq!(rec.schedule.to_string(), run);
+    }
 }

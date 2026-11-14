@@ -224,12 +224,18 @@ fn a_scripted_exploration() {
     no_machine_paths_and_links_resolve(&html);
     for want in [
         "<h1>hydo found 3 problems in your system</h1>",
-        "4 runs failed, in 2 different ways.",
+        "4 runs failed.",
         "Start here",
         "The run stopped early after disk errors",
-        "hydo shrinks failed checks, not runs that stop with an error",
-        "It also keeps this run&#39;s network faults.",
-        "<p><b>Is it a bug?</b> No, not in your system: it lost what the disk threw away.",
+        // each problem says when it happens, in steps (Milestone 247)
+        "<p class=\"when\"><b>When it happens</b> <span class=\"muted\">(the whole failing run)</span></p>",
+        "<li>The disk fails some reads and writes with an error.</li>",
+        "<li>The run stops with an error before your checks run.</li>",
+        "The run stopped with <code>harness: guest did not finish (I/O error)</code>",
+        "<li>After the restart, your check finds <code>lost acknowledged write</code>.</li>",
+        "<p><b>Is it a bug?</b> No, not in your system: it lost what the disk threw away.</p>",
+        // each problem's own accept command, under it
+        "If it is expected: <code>hydo ci accept f1:run-error:",
         "<a href=\"#f2\">Open this failure →</a>",
         "<a href=\"#p1\">problem 1</a>",
         "What held",
@@ -259,6 +265,14 @@ fn a_scripted_exploration() {
     let look = html.find("The run stopped early").unwrap();
     let expected = html.find("failed your check with a faulty disk").unwrap();
     assert!(look < expected);
+    // "Next" has only the general lines; the accept commands stand under their problems
+    let next = &plain[plain.find("id=\"next\"").unwrap()..];
+    assert!(!next.contains("hydo ci accept"), "{next}");
+    // hydo's own setup is folded in the timelines: the network modules' insmod ends with 254
+    let details = &html[html.find("<details class=\"share\"").unwrap()..];
+    for row in details.split("<tr").filter(|r| r.contains("insmod")) {
+        assert!(row.starts_with(" class=\"minor\""), "{row}");
+    }
     golden("exploration.html", &html);
 }
 
@@ -491,10 +505,14 @@ fn the_terminal_says_what_the_page_says() {
         "Next:\n",
         "Each failure's timeline, as one web page: hydo report --html\n",
         "More runs: hydo explore --image scripted-disk.img --seeds 13-112\n",
-        "hydo ci accept f1:invariant:",
+        "   When it happens (the whole failing run):\n",
+        "     1. The disk fails some reads and writes with an error.\n",
+        "   ✘ The run stopped with harness: guest did not finish (I/O error)\n",
+        "   If it is expected: hydo ci accept f1:invariant:",
     ] {
         assert!(text.contains(want), "the terminal lacks {want:?}");
     }
+    assert!(!text[text.find("\nNext:\n").unwrap()..].contains("hydo ci accept"));
     // the words are the page's: no hydo jargon outside the commands
     let words: String = text
         .lines()
@@ -521,4 +539,219 @@ fn the_terminal_says_what_the_page_says() {
          See them: hydo report   (as one web page: hydo report --html)\n"
     );
     golden("exploration.txt", &text);
+}
+
+/// `hydo report <run dir>` in the terminal (Milestone 247) says what the run's page says above
+/// its details: the title, the lead, the steps, "Is it a bug?", what hydo saw and the replay
+/// command, from the page's own story code, and no count of findings (`findings: 2` counted one
+/// failure twice: the invariant and its assertion).
+#[test]
+fn the_terminal_says_what_a_run_page_says() {
+    let dir = fixture("redis/hydo-out/run-cut");
+    let run = hydo_results::reader::read_run(&dir.join(hydo_results::RUN_DOC)).unwrap();
+    let text = text::run(&dir, &run, "hydo-out/run-cut");
+    let html = page_of(&dir, "hydo-out/run-cut", None);
+    assert!(text.starts_with(
+        "Redis lost data it had confirmed, after a power cut, with Redis appendfsync set\nto everysec\n"
+    ));
+    for want in [
+        "Your workload ran 12 steps and Redis confirmed all 12. Then the power was cut\nbefore the 13th step. When Redis started again, key k:0 was gone.\n",
+        "\nWhen it happens:\n",
+        "   3. The power goes out after 12 steps, before the 13th step.\n",
+        "   4. After the restart, your check finds key k:0 lost.\n",
+        "Is it a bug? Expected for this setting.",
+        "\nWhat hydo saw:\n",
+        "   ✔ Redis confirmed k:0 … k:11 (12 steps)\n",
+        "   ✘ key k:0 lost (the check stops at the first one)\n",
+        "   hydo run \"disk=cut | run C=12 R=everysec\"\n",
+        "As one web page: hydo report --html hydo-out/run-cut\n",
+        "The technical report: hydo report --details hydo-out/run-cut\n",
+    ] {
+        assert!(text.contains(want), "the terminal lacks {want:?}:\n{text}");
+    }
+    assert!(!text.contains("findings:"), "{text}");
+    assert!(html.contains("The power goes out after 12 steps, before the 13th step."));
+    let words: String = text
+        .lines()
+        .map(|l| l.split(": hydo ").next().unwrap_or(""))
+        .filter(|l| !l.trim_start().starts_with("hydo "))
+        .map(|l| format!("<p>{}</p>", esc(l)))
+        .collect();
+    plain_words(&words);
+    golden("run.txt", &text);
+}
+
+/// A run whose diagnosis read the failing service's log: the page and the terminal quote its
+/// last lines under the service's end, and say that a replay read them (Milestone 247). The run
+/// is `hydo inspect`'s recorded hvx run of a bad configuration.
+#[test]
+fn a_failing_service_s_last_log_lines_are_quoted() {
+    let dir = crate_dir().join("tests/fixtures/inspect/badconf");
+    let run = hydo_results::reader::read_run(&dir.join(hydo_results::RUN_DOC)).unwrap();
+    let text = text::run(&dir, &run, "badconf");
+    assert!(
+        text.contains(
+            "   ▤ redis's log ends (from a replay):\n       | >>> 'appendfsync \"sometimes\"'\n       | argument(s) must be one of the following: everysec, always, no\n"
+        ),
+        "{text}"
+    );
+    let html = page_of(&dir, "badconf", None);
+    assert!(html.contains(
+        "<code>redis</code>&#39;s log ends <span class=\"muted\">(from a replay)</span><pre class=\"log\">&gt;&gt;&gt; &#39;appendfsync &quot;sometimes&quot;&#39;\nargument(s) must be one of the following: everysec, always, no</pre>"
+    ));
+    // a finding of a run that stopped with an error has a plain label (0.3.3: `unknown ERROR`)
+    assert!(html.contains(
+        "<span class=\"badge bad\">stopped the run</span> <code>ERROR service start (redis)</code>"
+    ));
+    assert!(!html.contains(">unknown<"));
+    plain_words(&html);
+}
+
+fn failure(tag: &str, schedule: &str, verdict: &str) -> Failure {
+    let mut run = Run::new(
+        schedule,
+        hydo_results::Verdict {
+            kind: "error".into(),
+            text: format!("HYDO-ORACLE: {verdict}"),
+            ..Default::default()
+        },
+        "0123456789abcdef",
+    );
+    run.tag = Some(tag.into());
+    run.class = Some("io-errors".into());
+    Failure {
+        signature: verdict.into(),
+        reproduced: true,
+        run,
+        ..Default::default()
+    }
+}
+
+/// `ERROR redis restart failed` and `ERROR restart after the faults (redis)` are one failure: one
+/// problem by its class and service, with both signatures in the details, an accept command for
+/// each finding key under it, the run with the fewest faults as its command, and nothing under
+/// "Next" but the general lines (0.3.3's docs review).
+#[test]
+fn one_problem_under_two_signatures() {
+    let d = std::env::temp_dir().join(format!("hydo-htmlreport-m-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    let doc = Exploration {
+        image: Image {
+            path: "/x/explore-ob-redis-arm64.cpio.gz".into(),
+            ..Default::default()
+        },
+        summary: hydo_results::Summary {
+            schedules: 30,
+            failures: 3,
+            reproduced: Some(3),
+            ..Default::default()
+        },
+        failures: vec![
+            failure(
+                "seed-12",
+                "disk=ioerr:3 dseed=fd403ef8d08fa636 | run K=redis@16+1 N=redis@0-8:loss,7%",
+                "ERROR redis restart failed",
+            ),
+            failure(
+                "seed-13",
+                "disk=ioerr:3 dseed=281cc34161f446f4 | run K=redis@1+1",
+                "ERROR restart after the faults (redis)",
+            ),
+            failure(
+                "seed-28",
+                "disk=ioerr:2 dseed=b613668d49c766aa | run",
+                "ERROR restart after the faults (redis)",
+            ),
+        ],
+        ..Default::default()
+    };
+    hydo_results::write_document(&d.join(hydo_results::EXPLORATION_DOC), &doc).unwrap();
+    let st = exploration_story(&d, &doc, None, "hydo-out/explore");
+    assert_eq!(st.items.len(), 1);
+    let it = &st.items[0];
+    assert_eq!(
+        it.problem.title,
+        "`redis` did not start again after disk errors"
+    );
+    assert_eq!(it.runs, Some((3, 30)));
+    assert_eq!(it.accept.len(), 2, "{:?}", it.accept);
+    assert!(it.accept.iter().all(|k| k.starts_with("f1:run-error:")));
+    assert_eq!(
+        it.command,
+        "hydo run --image explore-ob-redis-arm64.cpio.gz \"disk=ioerr:2 dseed=b613668d49c766aa | run\""
+    );
+    assert_eq!(
+        it.steps,
+        ["The disk fails some reads and writes with an error."]
+    );
+    assert_eq!(it.replay.as_deref(), Some("seed-28"));
+    assert_eq!(
+        it.problem.todo,
+        "Decide whether your system must survive a failing disk."
+    );
+    let html = page_of(&d, "hydo-out/explore", None);
+    let _ = std::fs::remove_dir_all(&d);
+    let details = &html[html.find("<details class=\"share\"").unwrap()..];
+    // one card for the problem, with both verdicts
+    assert_eq!(details.matches("<div class=\"card\" id=\"f").count(), 1);
+    assert!(details.contains(
+        "<dt>Also as</dt><dd><span class=\"t\">ERROR restart after the faults (redis)</span> <span class=\"muted\">(2 schedules)</span></dd>"
+    ));
+    assert_eq!(details.matches("<a href=\"#p1\">problem 1</a>").count(), 2);
+    plain_words(&html);
+    no_machine_paths_and_links_resolve(&html);
+}
+
+/// A run with disk errors and no other fault: the page's first sentence says what the disk did
+/// (0.3.3: it started with "Then redis did not start again.").
+#[test]
+fn a_disk_error_run_starts_with_the_disk() {
+    let run = Run::new(
+        "disk=ioerr:2 dseed=b613668d49c766aa | run",
+        hydo_results::Verdict {
+            kind: "error".into(),
+            text: "HYDO-ORACLE: ERROR restart after the faults (redis)".into(),
+            ..Default::default()
+        },
+        "0123456789abcdef",
+    );
+    let pr = story::Project {
+        system: "Redis".into(),
+        ..Default::default()
+    };
+    let what = story::what_of(&run, &pr);
+    assert_eq!(
+        story::lead_words(&run, &[], &what, &pr),
+        "The disk failed some of the system's reads and writes with an error. Then `redis` did \
+         not start again."
+    );
+}
+
+/// hydo's own commands in the guest are details of a timeline: the network fault's modules
+/// (whose `insmod` ends with 254 when the kernel has them built in) and its `tc` calls.
+#[test]
+fn hydo_s_own_commands_are_details() {
+    let ev = |text: &str| TimelineEvent {
+        point: None,
+        conversation: "run".into(),
+        stop: Some(1),
+        at: Some(1),
+        kind: "done".into(),
+        text: text.into(),
+        service: None,
+        details: None,
+    };
+    for t in [
+        "command ended (status 254): /bin/busybox insmod /lib/modules/sch_netem.ko; output: insmod: can't insert",
+        "command ended (status 0): /nix/store/x-iproute2-6.8.0/bin/tc qdisc del dev lo root",
+    ] {
+        assert!(kind_label(&ev(t)).2, "{t}");
+    }
+    assert!(
+        !kind_label(&ev(
+            "command ended (status 1): lost=0 for i in $(cat $HYDO_ACKED)"
+        ))
+        .2
+    );
 }

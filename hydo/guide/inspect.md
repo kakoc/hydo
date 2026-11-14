@@ -200,12 +200,19 @@ For one run, the page shows these parts, in this order. Every line is a fact of 
 With a passing run (`--against`, or a `hydo diff` or `hydo explain` directory with `--diff`),
 "Is this a bug?" also says how that run differed and that it passed.
 
-For an exploration, the page groups the failures into problems, the ones worth a look first.
-Each problem shows how many runs show it, the label, what happens, whether it is a bug, the
-command, and a link to its runs in the details. A section "What held" says how many runs passed.
-A section "Next" gives the command for more runs and the `hydo ci accept` command for a problem
-you accept. For a CI run, each problem also says whether it is new in the change, already on the
-base commit, or fixed.
+`hydo report <run dir>` prints these parts in the terminal, and `hydo report --details <run dir>`
+prints the technical report: the verdict, the fingerprints, each finding, and the property table.
+
+For an exploration, the page groups the failures into problems, the ones worth a look first. A
+service that did not start again is one problem, whatever words its verdicts use. Each problem
+shows how many runs show it, the label, and "When it happens" as numbered steps of its minimal
+schedule. A problem hydo did not shrink shows the failing run with the fewest faults. For runs
+that stopped with an error, it shows how the failing service ended and the last lines of its
+log, from the replay `hydo explore` made (`hydo guide faults`, `--no-diagnose`). Then come
+whether it is a bug, the command, a `hydo ci accept` command for each of its findings, and a link
+to its runs in the details. A section "What held" says how many runs passed. A section "Next"
+gives the command for more runs. For a CI run, each problem also says whether it is new in the
+change, already on the base commit, or fixed.
 
 The folded section "Details for a bug report" at the bottom keeps the rest. A link in a
 problem opens it at that problem's runs:
@@ -214,7 +221,9 @@ problem opens it at that problem's runs:
 - the engine, the host's CPU, and the hydo version with its fingerprint epoch;
 - the image and the run's folder, and the `hydo repro` command;
 - the failing run's timeline: the events of `hydo inspect events`, the faults, the service
-  starts and ends, the checks, and the forced thread switches when the run recorded them;
+  starts and ends, the checks, and the forced thread switches when the run recorded them. hydo's
+  own setup (the declared assertions, the network fault's modules and `tc` calls) is shown with
+  "Show every event";
 - where the failing run first differs from a passing run, as `hydo diff` finds it. For an
   exploration, the page compares each minimal schedule with the passing schedules the shrinker
   ran next to it;

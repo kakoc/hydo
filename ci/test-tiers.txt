@@ -82,6 +82,7 @@ hydo-explore::cluster_faults             fast
 hydo-explore::corpus                     full
 hydo-explore::emulators                  fast
 hydo-explore::fake_engine                fast
+hydo-explore::fault_space_line           fast
 hydo-explore::identity                   fast
 hydo-explore::lago_gaps                  fast
 hydo-explore::liveness_deadline          fast

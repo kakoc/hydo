@@ -40,9 +40,11 @@ pre{background:var(--code);padding:8px 10px;border-radius:8px;margin:6px 0;white
 .verdictline{display:flex;gap:10px;align-items:center;margin:14px 0 4px;flex-wrap:wrap}
 ol.steps{margin:4px 0 0;padding-left:22px}ol.steps li{margin:6px 0}
 .evidence{border-left:3px solid var(--bad)}
-.evidence div{margin:5px 0;padding-left:22px;text-indent:-22px}
-.evidence .mark{display:inline-block;width:22px;text-indent:0;font-weight:700}
-.evidence .m-ok{color:var(--ok)}.evidence .m-bad{color:var(--bad)}.evidence .m-warn{color:var(--warn)}.evidence .m-note{color:var(--muted)}
+.evidence div,.seen div{margin:5px 0;padding-left:22px;text-indent:-22px}
+.evidence .mark,.seen .mark{display:inline-block;width:22px;text-indent:0;font-weight:700}
+.m-ok{color:var(--ok)}.m-bad{color:var(--bad)}.m-warn{color:var(--warn)}.m-note{color:var(--muted)}
+pre.log{text-indent:0;margin:4px 0 0;font-size:13px}
+p.when{margin:10px 0 0}
 .cmdrow{display:flex;gap:8px;align-items:stretch;margin:8px 0}
 .cmd{flex:1;min-width:0;margin:0;background:var(--code);border-radius:8px;padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
 button.copy{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;padding:0 14px;cursor:pointer}
@@ -91,7 +93,8 @@ a{color:var(--note)}
 <li>Redis appendfsync is set to <code>everysec</code>, not its safe value <code>always</code>.</li>
 <li>The power goes out after 12 steps, before the 13th step.</li>
 <li>After the restart, your check finds <code>key k:0 lost</code>.</li>
-</ol></div>
+</ol>
+</div>
 <h2 id="bug">Is this a bug?</h2>
 <div class="card"><p><span class="pill warn">Expected for this setting</span></p>
 <p>Redis appendfsync is set to <code>everysec</code>, and its safe value is <code>always</code>. With that setting, a power cut can lose data that the system had already confirmed.</p>
@@ -142,7 +145,7 @@ a{color:var(--note)}
 </ul>
 <h3 id="timeline">Timeline of the run</h3>
 <div class="tl">
-<p class="muted">Each row is one event, in order. <b>Stop</b> is the moment at which hydo's host side looked at the guest (<code>hydo inspect start DIR --at run:STOP</code> goes back there); <b>clock</b> is the engine's virtual clock, the same in every replay. The main events are shown; 38 more (commands, snapshots, the guest's own output) are behind the box.</p>
+<p class="muted">Each row is one event, in order. <b>Stop</b> is the moment at which hydo's host side looked at the guest (<code>hydo inspect start DIR --at run:STOP</code> goes back there); <b>clock</b> is the engine's virtual clock, the same in every replay. The main events are shown; 38 more (commands, hydo's own setup, snapshots, the guest's own output) are behind the box.</p>
 <input type="checkbox" class="all" id="tl-run"> <label for="tl-run">Show every event</label>
 <div class="scroll"><table>
 <thead><tr><th>Stop</th><th class="c-clock">Clock</th><th>What</th><th>Service</th><th>Event</th></tr></thead>

@@ -9759,3 +9759,114 @@ epoch, four at epoch 2, and the AMD form's value is the same at both epochs). On
 machine: `cargo fmt --all --check`, clippy `-D warnings` on `hydo-kvm`, every `hydo-kvm` test,
 `public_content::` and `docs::`. Vale has no findings. The one-off branch `tmp-intel-fp-kvm` held
 both workflows and is deleted.
+
+### Milestone 247 (tentative number) - DONE (the report gaps that 0.3.3's fresh readers found: `hydo report <run dir>` prints the run page's plain summary; an exploration's problems have numbered steps, the failing service's last log lines from a replay that `hydo explore` makes, and their own `hydo ci accept` lines; one problem per class and service; the disk-error page's first sentence and a plain label; the timelines fold hydo's own setup; `hydo explore` prints its fault kinds in one plain line; nothing recorded moved; 2026-11-14)
+
+**Why.** Release step 6a of 0.3.3 (section "The 0.3.3 release") deferred eight findings of its
+two fresh readers to open items 106 and 108. Each one below says what a reader saw before and
+what they see now. The samples were made from recorded files only: the Redis example's
+exploration of Milestone 230 on the Mac engine (30 schedules), a disk-error replay of a CI run,
+the power-cut run of the report's fixtures, and `hydo inspect`'s recorded hvx run of a bad
+configuration (`tests/fixtures/inspect/badconf`).
+
+**What changed.**
+
+1. `hydo report <run dir>` in the terminal. Before, it printed the technical summary: the
+   schedule, the verdict, `fp=`, the image path, `findings: 2` (an invariant and its assertion
+   for one failure), and the property table. Now it prints the run page's plain part from the
+   same story code (`htmlreport::text::run`): the title, the lead, "When it happens" as numbered
+   steps, "Is it a bug?" with the label, "What hydo saw" with its marks, and the replay command,
+   then three `Next:` lines. `hydo report --details <run dir>` prints the old text.
+2. An exploration's problems, in the terminal and on the page:
+   - "When it happens" lists the numbered steps of the minimal schedule, the outcome last. A
+     problem that hydo did not shrink shows the failing run with the fewest faults, marked
+     "(the whole failing run)". Before, the first failing run's schedule had a paragraph of 36
+     words on why it was not shrunk. The disk sentence of `disk=cut` and a sentence's
+     explanation in parentheses are left out of these short lists.
+   - For a run that stopped with an error, a line says how the failing service ended, and its
+     log's last 2 lines follow, marked "(from a replay)". A service's log is in no file of an
+     exploration (open item 103). So `hydo explore` now ends with one more run for each problem
+     whose runs stopped with an error, at most 4. That run uses the problem's schedule, runs as
+     `hydo run` does (`runs::try_run_to_dir`), goes into `replays/<tag>/`, and gets `hydo run`'s
+     diagnosis (`diagnose::for_run`), whose replay reads the log. The report quotes the log only
+     when that run ended with the same signature. `--no-diagnose` skips it.
+   - Each problem has its own `If it is expected: hydo ci accept <key> --reason "…"` line, one
+     for each finding key of its signatures. "Next" keeps only the general lines. Under an
+     accept line, "Is it a bug?" leaves out its sentence about accepting (`Problem::decide`).
+   - A problem's advice uses the class of its minimal schedule when the shrinker found one
+     (`Shrink.min_class`). Before, the composed Redis example's failure found with a faulty disk,
+     whose minimal schedule has a working disk, said "No, not in your system: it lost what the
+     disk threw away". Now it is "Worth a look".
+3. One problem under one signature. A service that did not start again is one problem by class
+   and service, so `ERROR redis restart failed` and `ERROR restart after the faults (redis)`
+   merge whatever their titles. The details show one card for both, with the row "Also as" for
+   the second verdict, and the table keeps a row for each signature.
+4. The disk-error page. Before, a run with only `disk=ioerr` began "Then redis did not start
+   again." Now a disk fault is the lead's first sentence: "The disk failed some of the system's
+   reads and writes with an error. Then `redis` did not start again." The details' finding of a
+   run that stopped with an error reads `stopped the run ERROR restart after the faults (redis)`
+   instead of `unknown ERROR …`.
+5. The timelines fold hydo's own commands behind "Show every event": the network fault's
+   `insmod` calls (status 254 on a kernel with the modules built in), its `tc` calls, and a
+   log's rotation. The assertion declarations were folded already.
+6. `hydo explore`'s first lines. The line `fault space: {"project": "redis", …}` is now one line
+   in words, `hydo explore: the faults it draws: crashes, network faults, power cuts, disk faults
+   and your setting R (service: redis). --new-faults adds pauses, clock jumps and one-way network
+   faults.` The JSON goes to `fault-space.json` in the exploration's folder. With two images in
+   `./hydo-out`, "no image given" names both.
+
+**Samples** (in the session's scratchpad, `report-samples-v4/`: each page, its screenshot and
+its terminal text). The plain part of a page, above its details, counted in words:
+
+| Page | 0.3.3 | Now | The approved v3 sample |
+|---|---|---|---|
+| Redis exploration, 30 runs | 412 | 367 | 373 |
+| Redis power cut, one run | 298 | 298 | 298 |
+| Redis disk errors, one run | 256 | 269 | none |
+| The fixtures' scripted exploration | 449 | 426 | none |
+
+**What moved.** No recorded value moved, and no VM ran for the goldens. The goldens whose words
+changed were re-recorded: `tests/golden/report/{run,exploration,ci}.html` (the style sheet and the
+cards), `exploration.txt`, the new `run.txt`, and four `report` answers of
+`tests/golden/cli.jsonl` (the composed Redis example's exploration report on Linux and the Mac).
+The explorer's own tests and every other answer of `cli.jsonl` are unchanged.
+
+**Checks.** `cargo fmt --check`; `cargo clippy -p hydo -p hydo-explore --all-targets -D
+warnings`; `cargo test -p hydo` (146 unit tests, 40 in `it`), `-p hydo-explore` (36, 27 and 33),
+`-p hydo-release --test it`, `-p hydo-config --test inventory`, `-p hydo-agents --test it
+public_content::`; `sh ci/consolidate-tests.sh --check`; `sh ci/vale.sh`.
+
+**The replay at the end of `hydo explore`, on the Mac engine.** `hydo explore --strategy swarm
+--seeds 28-28 --workers 1` on the Redis example's image of Milestone 230 (built by 0.3.2, epoch
+2) failed once, `disk=ioerr:2 dseed=b613668d49c766aa | run`, with `ERROR restart after the
+faults (redis)` and `fp=bde948e166babdb7`. Its rerun gave the same fingerprint, and so did the
+replay in `replays/seed-28/`. That is also the value 0.3.2 recorded for this seed in Milestone 230.
+The replay's diagnosis wrote `logs/redis.log`, and `hydo report` printed:
+
+```text
+   ✘ redis exited with status 1 during the disk errors. Its log ends (from a
+     replay):
+       | *** FATAL AOF MANIFEST FILE ERROR ***
+       | 102:M 01 Jan 2026 00:00:00.060 # Read AOF manifest failed
+```
+
+**A replay that diverged, and why it is no determinism bug.** A first version read the log by
+`hydo inspect`'s replay of the exploration's own run, with the worker's boot transcript
+(`worker-1.control.boot.jsonl`). That replay stopped with "the replay diverged from its
+transcript: stop 293 at 18688 after 21 agent lines (recorded at 18688 after 23)". The two
+missing agent lines are `redis`'s exit and the workload's exit. The cause was the replay's
+input, not the engine:
+
+- `Recorded::of` took the schedule from the first transcript that names one, the boot's.
+- A worker's boot transcript names `rb=64 | run`, so the replay ran without `disk=ioerr:2`.
+  `redis` then did not fail, and the agent lines were missing at stop 293.
+- The recordings agree: the stops and agent-line counts of 0.3.2's run, this hydo's run and the
+  `hydo run` replay are identical (stop 193 after 21 lines, stop 293 after 23, the verdict at
+  stop 342).
+- `hydo run` recordings name the whole schedule in both transcripts. `hydo inspect start
+  replays/seed-28 --at run:306` held the stop after 293, and the diagnosis replay reached stop
+  342.
+
+`Recorded::of` now takes the run conversation's schedule first (`inspect::drive` test
+`the_schedule_is_the_run_conversation_s`). Nothing else read an explorer's boot transcript, so no
+command changed its answer.

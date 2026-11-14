@@ -338,6 +338,14 @@ Useful options of `hydo explore`:
   several causes; with `--shrink-causes 3` a "fee missing" from a power cut and one from a clock
   step back each get their own minimal schedule. `report.md` names each shrink's fault kinds.
 - `--workers N`.
+- `--no-diagnose`: no extra run at the end. Without it, for each problem whose runs stopped with
+  an error (at most 4), `hydo explore` runs that schedule once more, as `hydo run` does, into
+  `replays/<run>/` of the exploration's folder. That run's diagnosis reads the failing service's
+  log, and `hydo report` quotes the log's last lines under the problem.
+
+Before its runs, `hydo explore` prints one line with the fault kinds it draws and the ones that
+`--new-faults` adds. The whole fault space, as JSON, is `fault-space.json` in the exploration's
+folder.
 
 hydo's own benchmark showed that where faults land, and in what combination, matters more than
 how the next schedule is chosen. So prefer `--strategy process` with `--more-faults`. With

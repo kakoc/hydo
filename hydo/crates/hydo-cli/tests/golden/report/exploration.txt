@@ -4,24 +4,27 @@ cuts. Each failing run failed again the same way when hydo replayed it.
 
 1. The run stopped early after disk errors
    Worth a look, 2 of 12 runs.
-   The run stopped before your checks could run, with the error harness: guest
-   did not finish (I/O error). hydo made the disk return read and write errors.
-   hydo shrinks failed checks, not runs that stop with an error, so the command
-   repeats the whole failing run, with faults the problem may not need. It also
-   keeps this run's network faults.
-   Is it a bug? Decide whether your system must survive a failing disk. If it
-   must, look at the service's log in the run; if not, accept this finding.
+   When it happens (the whole failing run):
+     1. The disk fails some reads and writes with an error.
+     2. hydo kills kafka after 13 steps and starts it again after 16 steps.
+     3. During steps 24 to 27, the network on the way to redis delays every
+        packet by 79 ms.
+     4. The run stops with an error before your checks run.
+   ✘ The run stopped with harness: guest did not finish (I/O error)
+   Is it a bug? Decide whether your system must survive a failing disk.
    See it again: hydo run --image scripted-disk.img "disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms"
+   If it is expected: hydo ci accept f1:run-error:b90a956980 --reason "…"
 
 2. Your system failed your check with a faulty disk
    Expected, 2 of 12 runs.
-   hydo made the disk faulty: it threw away writes that it had already
-   confirmed, as a broken or misconfigured disk can. No system keeps data that
-   its disk throws away.
-   Is it a bug? No, not in your system: it lost what the disk threw away. It
-   matters only if your production disks can throw away confirmed writes. If you
-   do not expect such disks, accept this finding.
+   When it happens:
+     1. The disk is faulty: it throws away some writes that it had already
+        confirmed, even ones flushed to disk.
+     2. The power goes out after 11 steps, before the 12th step.
+     3. After the restart, your check finds lost acknowledged write.
+   Is it a bug? No, not in your system: it lost what the disk threw away.
    See it again: hydo run --image scripted-disk.img "disk=lying:1 dseed=63cbe1e459320dd7 | run C=11"
+   If it is expected: hydo ci accept f1:invariant:b85cf53e33 --reason "…"
 
 3. Your services wrote 4 kinds of error line that your list of known errors does
    not have
@@ -43,4 +46,3 @@ included.
 Next:
    Each failure's timeline, as one web page: hydo report --html
    More runs: hydo explore --image scripted-disk.img --seeds 13-112
-   Accept an expected problem, so that it no longer fails your CI: hydo ci accept f1:invariant:b85cf53e33 --reason "…"

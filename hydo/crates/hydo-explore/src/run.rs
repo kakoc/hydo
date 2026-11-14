@@ -38,6 +38,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
+/// The file in an exploration's folder with its fault space as JSON (Milestone 247).
+pub const FAULT_SPACE: &str = "fault-space.json";
+
 /// Where the explorer runs: the repository or release root (hydo/, hv/), whether it was
 /// started by the `hydo` command (the reports' "by hand" lines then name `hydo run`), and the
 /// configuration its program read at its start (M144: the images and the wrapper in
@@ -406,7 +409,20 @@ fn setup(a: Args, env: &Env) -> Cx {
         if cx.env.config.pool.scripted_engine.is_none() {
             agent_space(&img, a.schedule.as_deref());
         }
-        eprintln!("fault space: {}", dumps_line(&sp.describe()));
+        // one plain line; the whole fault space as JSON in the exploration's folder (Milestone
+        // 247: before, this line was the JSON)
+        let file = cx.out.join(FAULT_SPACE);
+        let _ = std::fs::create_dir_all(&cx.out);
+        let saved = std::fs::write(&file, dumps_line(&sp.describe()) + "\n").is_ok();
+        eprintln!(
+            "{}{}",
+            sp.plain(a.new_faults, &a.strategy),
+            if saved {
+                format!(" The whole fault space: {}", file.display())
+            } else {
+                String::new()
+            }
+        );
         sp.apply(&mut cx.ex);
     }
     let m = cx.ex.space.as_ref().map(|s| s.m.clone());

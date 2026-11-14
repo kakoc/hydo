@@ -5,16 +5,21 @@
 //! `hydo report --details`.
 
 use super::page::plain;
-use super::ExStory;
+use super::{story, ExStory};
 use crate::ctx::{pjoin, OUT};
+use crate::inspect::drive::RunFiles;
 use crate::inspect::work::quote;
-use hydo_results::{Exploration, Stream};
+use hydo_explore::advice;
+use hydo_results::{Exploration, Run, Stream};
+use hydo_schedule::Schedule;
 use std::path::Path;
 
 /// The width the sentences are wrapped to (commands are never wrapped).
 const WIDTH: usize = 80;
 /// The indent of a problem's lines.
 const INDENT: &str = "   ";
+/// The indent of a problem's numbered steps, under its own number.
+const STEPS: &str = "     ";
 
 /// `text` without backquotes, wrapped to [`WIDTH`] with `indent` before every line.
 fn wrap(text: &str, indent: &str) -> String {
@@ -127,7 +132,18 @@ fn render(st: &ExStory, doc: &Exploration, shown: &str) -> String {
             ));
         }
         o.push_str(&format!("{INDENT}{label}.\n"));
-        o.push_str(&wrap(&it.happens, INDENT));
+        if !it.happens.is_empty() {
+            o.push_str(&wrap(&it.happens, INDENT));
+        }
+        if !it.steps.is_empty() {
+            let head = match it.whole_run {
+                Some(w) => format!("When it happens ({w}):"),
+                None => "When it happens:".to_string(),
+            };
+            o.push_str(&wrap(&head, INDENT));
+            o.push_str(&numbered(&it.steps, STEPS));
+        }
+        o.push_str(&seen(&it.seen, INDENT));
         // one new kind is already in the sentence
         let list: &[(String, String, u64)] = if it.lines.len() > 1 { &it.lines } else { &[] };
         for (svc, line, runs) in list {
@@ -147,6 +163,11 @@ fn render(st: &ExStory, doc: &Exploration, shown: &str) -> String {
             "See it again"
         };
         o.push_str(&format!("{INDENT}{again}: {}\n", it.command));
+        for k in &it.accept {
+            o.push_str(&format!(
+                "{INDENT}If it is expected: hydo ci accept {k} --reason \"…\"\n"
+            ));
+        }
     }
     // what held
     if let Some(h) = &st.held {
@@ -162,12 +183,112 @@ fn render(st: &ExStory, doc: &Exploration, shown: &str) -> String {
         ));
     }
     o.push_str(&format!("{INDENT}More runs: {}\n", st.explore_more));
-    if let Some(k) = &st.accept {
-        o.push_str(&format!(
-            "{INDENT}Accept an expected problem, so that it no longer fails your CI: hydo ci accept \
-             {k} --reason \"…\"\n"
+    o
+}
+
+/// Numbered steps, each wrapped under its number.
+fn numbered(items: &[String], indent: &str) -> String {
+    let mut o = String::new();
+    for (i, s) in items.iter().enumerate() {
+        let num = format!("{indent}{}. ", i + 1);
+        let more = " ".repeat(num.chars().count());
+        o.push_str(&hang(&num, s, &more));
+    }
+    o
+}
+
+/// The lines of "What hydo saw", each with its mark; a quoted log line under its line, as it
+/// is (log lines are never wrapped).
+fn seen(lines: &[story::Seen], indent: &str) -> String {
+    let mut o = String::new();
+    for l in lines {
+        let mut w = l.words.clone();
+        if let Some(n) = &l.note {
+            w.push_str(&format!(" ({n})"));
+        }
+        if !l.quote.is_empty() {
+            w.push(':');
+        }
+        let first = format!("{indent}{} ", l.mark);
+        let more = format!("{indent}  ");
+        o.push_str(&hang(&first, &w, &more));
+        for q in &l.quote {
+            o.push_str(&format!("{indent}    | {q}\n"));
+        }
+    }
+    o
+}
+
+/// `hydo report <run dir>` in the terminal: the page's plain part in words. The title, the lead,
+/// "When it happens", "Is it a bug?", "What hydo saw" and "See it again", from the page's own
+/// story code; `hydo report --details` prints the technical report.
+pub fn run(dir: &Path, run: &Run, shown: &str) -> String {
+    let evs = super::events_of(dir, run, &RunFiles::default());
+    let notes: Vec<&str> = evs.iter().map(|e| e.text.as_str()).collect();
+    let image = run.image.as_ref().map(|i| i.path.as_str());
+    let pr = story::project(dir, image, &notes);
+    let what = story::what_of(run, &pr);
+    let class = story::class_of(run, &pr);
+    let sched = Schedule::parse(&run.schedule).ok();
+    let failed = run.verdict.kind != "ok";
+    let problem = advice::problem(&class, &what, &pr.system, sched.as_ref(), &pr.knobs);
+    let mut o = String::new();
+    o.push_str(&hang(
+        "",
+        &if failed {
+            problem.title.clone()
+        } else {
+            format!("{} passed every check in this run", pr.system)
+        },
+        "",
+    ));
+    o.push_str(&wrap(&story::lead_words(run, &evs, &what, &pr), ""));
+    let recovered = evs.iter().any(|e| e.conversation == "recovery");
+    o.push_str("\nWhen it happens:\n");
+    o.push_str(&numbered(
+        &story::steps(
+            &run.schedule,
+            &pr,
+            Some(story::outcome_line(run, &what, recovered)),
+        ),
+        INDENT,
+    ));
+    if failed {
+        o.push('\n');
+        o.push_str(&wrap(
+            &format!(
+                "Is it a bug? {}. {} {}",
+                problem.attention.words(),
+                problem.why,
+                problem.todo
+            ),
+            "",
         ));
     }
+    o.push_str("\nWhat hydo saw:\n");
+    o.push_str(&seen(&story::seen(run, &evs, &what, &pr), INDENT));
+    o.push('\n');
+    o.push_str(&wrap(&story::needs_first_words(&pr, image), ""));
+    o.push_str(&format!(
+        "{INDENT}{}\n",
+        story::replay_command(&pr, image, run.engine.as_ref(), &run.schedule)
+    ));
+    o.push_str("\nNext:\n");
+    o.push_str(&format!(
+        "{INDENT}As one web page: hydo report --html {}\n",
+        quote(shown)
+    ));
+    if failed {
+        let folder = pr.results_rel.clone().unwrap_or_else(|| shown.to_string());
+        o.push_str(&format!(
+            "{INDENT}Look inside at the moment it failed: hydo inspect start {} --at end\n",
+            quote(&folder)
+        ));
+    }
+    o.push_str(&format!(
+        "{INDENT}The technical report: hydo report --details {}\n",
+        quote(shown)
+    ));
     o
 }
 

@@ -1,0 +1,32 @@
+Redis lost data it had confirmed, after a power cut, with Redis appendfsync set
+to everysec
+Your workload ran 12 steps and Redis confirmed all 12. Then the power was cut
+before the 13th step. When Redis started again, key k:0 was gone.
+
+When it happens:
+   1. The disk keeps recent writes in a cache that a power cut loses, as real
+      disks do.
+   2. Redis appendfsync is set to everysec, not its safe value always.
+   3. The power goes out after 12 steps, before the 13th step.
+   4. After the restart, your check finds key k:0 lost.
+
+Is it a bug? Expected for this setting. Redis appendfsync is set to everysec,
+and its safe value is always. With that setting, a power cut can lose data that
+the system had already confirmed. If confirmed data must survive a power loss,
+keep Redis appendfsync at always. If losing it is fine for you, accept this
+finding.
+
+What hydo saw:
+   ✔ Redis confirmed k:0 … k:11 (12 steps)
+   ⚡ The power was cut before the 13th step
+   ↻ The machine started again, and Redis started from what was on its disk
+   ✘ key k:0 lost (the check stops at the first one)
+
+In your project folder (redis), this failure repeats exactly, every time you run
+it:
+   hydo run "disk=cut | run C=12 R=everysec"
+
+Next:
+   As one web page: hydo report --html hydo-out/run-cut
+   Look inside at the moment it failed: hydo inspect start hydo-out/run-cut --at end
+   The technical report: hydo report --details hydo-out/run-cut
