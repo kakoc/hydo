@@ -459,6 +459,7 @@ pub const KVM_SET_XSAVE: u64 = iow(0xa5, std::mem::size_of::<kvm_xsave>());
 pub const KVM_GET_XCRS: u64 = ior(0xa6, std::mem::size_of::<kvm_xcrs>());
 pub const KVM_SET_XCRS: u64 = iow(0xa7, std::mem::size_of::<kvm_xcrs>());
 pub const KVM_SET_CPUID2: u64 = iow(0x90, std::mem::size_of::<kvm_cpuid2_header>());
+pub const KVM_GET_CPUID2: u64 = iowr(0x91, std::mem::size_of::<kvm_cpuid2_header>());
 pub const KVM_GET_VCPU_EVENTS: u64 = ior(0x9f, std::mem::size_of::<kvm_vcpu_events>());
 pub const KVM_SET_VCPU_EVENTS: u64 = iow(0xa0, std::mem::size_of::<kvm_vcpu_events>());
 pub const KVM_GET_DEBUGREGS: u64 = ior(0xa1, std::mem::size_of::<kvm_debugregs>());

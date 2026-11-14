@@ -790,6 +790,17 @@ impl Cpu for KvmCpu {
         }
     }
 
+    fn cpuid_now(&self) -> Vec<kvm_cpuid_entry2> {
+        let mut c = Box::<kvm_cpuid2>::default();
+        c.h.nent = CPUID_MAX as u32;
+        // SAFETY: a kvm_cpuid2 with room for nent entries
+        let r = unsafe { ioctl(self.fd(), KVM_GET_CPUID2, &mut *c as *mut kvm_cpuid2 as u64) };
+        if r != 0 {
+            return Vec::new();
+        }
+        c.entries[..(c.h.nent as usize).min(CPUID_MAX)].to_vec()
+    }
+
     fn load(&mut self, s: &CpuState) {
         self.set(KVM_SET_SREGS, &s.sregs, "KVM_SET_SREGS");
         self.set(KVM_SET_REGS, &s.regs, "KVM_SET_REGS");

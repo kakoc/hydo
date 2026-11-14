@@ -331,6 +331,11 @@ pub trait Cpu: Send {
     fn request_window(&mut self, on: bool);
     fn save(&self) -> CpuState;
     fn load(&mut self, s: &CpuState);
+    /// The CPUID table KVM holds for the vCPU now, with the bits KVM keeps in step with the
+    /// guest's state (diagnostics, HYDO_KVM_DIAG); empty where there is none.
+    fn cpuid_now(&self) -> Vec<crate::abi::kvm_cpuid_entry2> {
+        Vec::new()
+    }
     /// The instruction pointer (diagnostics).
     fn rip(&self) -> u64;
     /// The general registers.

@@ -2146,6 +2146,76 @@ impl Vmm {
         );
         let _ = writeln!(t, "{phase} events {:?}", s.events);
         let _ = writeln!(t, "{phase} debugregs {:x?}", s.debugregs);
+        // every part of the fingerprint's vCPU state on its own line, so that two hosts' lines
+        // name the part that differs (open item 102)
+        let sr = &s.sregs;
+        for (name, g) in [
+            ("cs", &sr.cs),
+            ("ds", &sr.ds),
+            ("es", &sr.es),
+            ("fs", &sr.fs),
+            ("gs", &sr.gs),
+            ("ss", &sr.ss),
+            ("tr", &sr.tr),
+            ("ldt", &sr.ldt),
+        ] {
+            let _ = writeln!(
+                t,
+                "{phase} seg {name} sel {:#06x} base {:#x} limit {:#x} type {} p {} dpl {} db {} s {} l {} g {} avl {} unusable {}",
+                g.selector, g.base, g.limit, g.type_, g.present, g.dpl, g.db, g.s, g.l, g.g,
+                g.avl, g.unusable
+            );
+        }
+        let _ = writeln!(
+            t,
+            "{phase} dt gdt {:#x}/{:#x} idt {:#x}/{:#x}",
+            sr.gdt.base, sr.gdt.limit, sr.idt.base, sr.idt.limit
+        );
+        let _ = writeln!(
+            t,
+            "{phase} cr cr0 {:#x} cr2 {:#x} cr3 {:#x} cr4 {:#x} cr8 {:#x} efer {:#x} apic_base {:#x} irq_bitmap {:x?}",
+            sr.cr0, sr.cr2, sr.cr3, sr.cr4, sr.cr8, sr.efer, sr.apic_base, sr.interrupt_bitmap
+        );
+        let f = &s.fpu;
+        let _ = writeln!(
+            t,
+            "{phase} fpu fcw {:#x} fsw {:#x} ftwx {:#x} fop {:#x} fip {:#x} fdp {:#x} mxcsr {:#x} fpr {:016x} xmm {:016x}",
+            f.fcw,
+            f.fsw,
+            f.ftwx,
+            f.last_opcode,
+            f.last_ip,
+            f.last_dp,
+            f.mxcsr,
+            fnv(format!("{:?}", f.fpr).as_bytes(), OFFSET),
+            fnv(format!("{:?}", f.xmm).as_bytes(), OFFSET)
+        );
+        // the XSAVE image's legacy area and header (576 bytes): MXCSR_MASK and the words the
+        // fingerprint leaves out are here too
+        let n = s.xsave.len().min(144);
+        let _ = writeln!(t, "{phase} xsave-head {:08x?}", &s.xsave[..n]);
+        let cpuid = self.cpu().cpuid_now();
+        let mut ch = OFFSET;
+        for e in &cpuid {
+            for v in [e.function, e.index, e.flags, e.eax, e.ebx, e.ecx, e.edx] {
+                ch = fnv(&v.to_le_bytes(), ch);
+            }
+        }
+        let _ = writeln!(t, "{phase} cpuid {ch:016x} entries {}", cpuid.len());
+        for e in &cpuid {
+            let _ = writeln!(
+                t,
+                "{phase} cpuid {:08x}.{:x} flags {:x} {:08x} {:08x} {:08x} {:08x}",
+                e.function, e.index, e.flags, e.eax, e.ebx, e.ecx, e.edx
+            );
+        }
+        let mb = self.m.without_stats().bytes();
+        let mb: String = mb.iter().map(|b| format!("{b:02x}")).collect();
+        let _ = writeln!(t, "{phase} mach-bytes {mb}");
+        if self.vio.attached() {
+            let _ = writeln!(t, "{phase} vio {:016x}", self.vio.hash(OFFSET));
+        }
+        let _ = writeln!(t, "{phase} ram-all {:016x}", self.ram_hash(OFFSET));
         let _ = writeln!(
             t,
             "{phase} mach {:016x} exits {} vtime {}",

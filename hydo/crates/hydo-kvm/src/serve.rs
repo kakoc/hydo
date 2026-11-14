@@ -456,6 +456,26 @@ impl Host {
             Some(old) => old.x,
             None => XSnap::default(),
         };
+        if self.o.diag && (name == "S0" || name == "S1") {
+            // the state every run starts from, so that two hosts' runs can be compared before
+            // the workload too (open item 102)
+            let phase = format!("snap-{name}");
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(format!("{}/snap.diag", self.outdir))
+            {
+                let _ = f.write_all(vm.diag_lines(&phase).as_bytes());
+                let _ = writeln!(f, "{phase} stats {}", vm.stats());
+            }
+            if self.o.diag_ram_mib > 0 {
+                let n = ((self.o.diag_ram_mib << 20) as usize).min(vm.ram.len());
+                let _ = std::fs::write(
+                    format!("{}/snap.{phase}.ram", self.outdir),
+                    &vm.ram.bytes()[..n],
+                );
+            }
+        }
         // S0 and S1, which every run restores, become RAM bases of their own
         vm.snapshot(&mut x, name == "S0" || name == "S1");
         let mut k = self.c.k.clone();
