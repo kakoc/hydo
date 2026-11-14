@@ -1091,11 +1091,17 @@ fn two_vcpus_start_by_ipi_interleave_by_turn_length_and_repeat() {
 
 /// The two-vCPU guest with S1 at boot stop `k`: from the worker's S1, and from a fresh boot.
 fn smp_s1_and_fresh_at(k: u64, s: &str) -> (RunResult, RunResult, String) {
+    smp_s1_and_fresh_on(two_vcpus(), k, s)
+}
+
+/// [`smp_s1_and_fresh_at`] on the scripted machine `m`.
+fn smp_s1_and_fresh_on(m: Script, k: u64, s: &str) -> (RunResult, RunResult, String) {
+    let quirk = m.load_quirk;
     let (mut h, _) = Host::start_machine(
         Mode::Serve {
             boot: Some(sched(s)),
         },
-        two_vcpus(),
+        m,
         2,
         KvmOptions::default(),
     );
@@ -1119,8 +1125,9 @@ fn smp_s1_and_fresh_at(k: u64, s: &str) -> (RunResult, RunResult, String) {
     let w = to_the_end(&mut h);
     let wlog = h.log.join("\n");
     h.quit();
-    let (mut o, _) =
-        Host::start_machine(Mode::One(sched(s)), two_vcpus(), 2, KvmOptions::default());
+    let mut fresh = two_vcpus();
+    fresh.load_quirk = quirk;
+    let (mut o, _) = Host::start_machine(Mode::One(sched(s)), fresh, 2, KvmOptions::default());
     let f = o.drive(|h, n, phase, why| {
         if phase == Phase::Boot && n == 1 {
             h.snap("S0");
@@ -1152,6 +1159,29 @@ fn two_vcpus_a_run_from_s1_equals_a_fresh_boot_wherever_s1_is_taken() {
                 "S1 at boot stop {k}\n{logs}"
             );
         }
+        assert_eq!(
+            (w.fp, w.wfp, w.extras),
+            (f.fp, f.wfp, f.extras),
+            "S1 at boot stop {k}\n{logs}"
+        );
+    }
+}
+
+/// A host whose KVM changes a vCPU's state in a load (Milestone 226: on an Intel host a run from
+/// the worker's S1 ended with another fingerprint than the fresh boot's, with the same verdict,
+/// turns and control transcript). With several vCPUs the machine that takes a snapshot goes on
+/// in a fresh VM with the snapshot's states loaded, as a run restored from it does, so the two
+/// still give one fingerprint.
+#[test]
+fn two_vcpus_a_run_from_s1_equals_a_fresh_boot_when_a_load_changes_the_state() {
+    for k in [2, 9, 17, 30] {
+        let mut m = two_vcpus();
+        m.load_quirk = true;
+        let (w, f, logs) = smp_s1_and_fresh_on(m, k, "rb=1 q=2 | run");
+        assert_eq!(
+            f.verdict, "HYDO-ORACLE: OK smp",
+            "S1 at boot stop {k}\n{logs}"
+        );
         assert_eq!(
             (w.fp, w.wfp, w.extras),
             (f.fp, f.wfp, f.extras),

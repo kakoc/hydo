@@ -1935,6 +1935,55 @@ impl Vmm {
         }
         s.vio = self.vio.attached().then(|| self.vio.save());
         s.con = self.console[..self.m.console_len as usize].to_vec();
+        if self.smp.is_some() {
+            // several vCPUs: the machine goes on in a fresh VM with the snapshot's vCPU states
+            // loaded, exactly as every run restored from the snapshot starts. On an Intel host a
+            // run from the explorer worker's S1 ended with another fingerprint than the fresh
+            // boot that went on from its own S1 (Milestone 226), with the same verdict, turns
+            // and control transcript: KVM's vCPU state after KVM_SET_* is not always what
+            // KVM_GET_* read before, and a fresh VM is not the VM that ran. With one vCPU the
+            // machine goes on in its VM, as every recorded value was made.
+            self.fresh_vm();
+            self.load_cpus(s);
+        }
+    }
+
+    /// Load a snapshot's vCPU states and `kvm_run` flags into the VM's vCPUs (a fresh VM).
+    fn load_cpus(&mut self, s: &XSnap) {
+        self.cpus[0].load(&s.cpu);
+        self.cpus[0].set_run_flags(s.flags);
+        for (i, (c, f)) in s.aps.iter().enumerate() {
+            if let Some(cpu) = self.cpus.get_mut(i + 1) {
+                cpu.load(c);
+                cpu.set_run_flags(*f);
+            }
+        }
+        if !s.aps.is_empty() {
+            self.note_round_trip(s);
+        }
+    }
+
+    /// Several vCPUs: say (on the engine's diagnostics, at most 16 times per process) which
+    /// parts of a vCPU's state read back from KVM differ from the state just loaded. They are
+    /// what KVM changes in a load, which the fingerprint sees and the guest may not.
+    fn note_round_trip(&self, s: &XSnap) {
+        static NOTES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let states = std::iter::once(&s.cpu).chain(s.aps.iter().map(|(c, _)| c));
+        for (i, want) in states.enumerate() {
+            let Some(cpu) = self.cpus.get(i) else {
+                continue;
+            };
+            let got = cpu.save();
+            let d = crate::cpu::differences(want, &got);
+            if d.is_empty() || NOTES.fetch_add(1, Ordering::Relaxed) >= 16 {
+                continue;
+            }
+            self.say(&format!(
+                "hydo-kvm: vCPU {i} read back after a load differs at exit {}: {}",
+                self.m.exits,
+                d.join("; ")
+            ));
+        }
     }
 
     /// Restore a snapshot into a fresh VM (input typed but not read is dropped, as on the Mac):
@@ -1968,14 +2017,7 @@ impl Vmm {
         }
         self.base = s.ram.base.clone();
         self.fresh_vm();
-        self.cpus[0].load(&s.cpu);
-        self.cpus[0].set_run_flags(s.flags);
-        for (i, (c, f)) in s.aps.iter().enumerate() {
-            if let Some(cpu) = self.cpus.get_mut(i + 1) {
-                cpu.load(c);
-                cpu.set_run_flags(*f);
-            }
-        }
+        self.load_cpus(s);
         self.smp = s.smp.clone();
         self.cur = s.smp.as_ref().map_or(0, |sm| sm.cur);
         self.m = s.m;

@@ -213,6 +213,71 @@ impl CpuState {
     }
 }
 
+/// The parts in which two vCPU states differ, each as `name: a -> b` (empty: none): the
+/// registers, each segment and descriptor table, the control registers, the FPU and XSAVE
+/// state, the MSRs, the events and the debug registers.
+pub fn differences(a: &CpuState, b: &CpuState) -> Vec<String> {
+    let mut d = Vec::new();
+    let mut part = |name: &str, x: String, y: String| {
+        if x != y {
+            d.push(format!("{name}: {x} -> {y}"));
+        }
+    };
+    part("regs", format!("{:x?}", a.regs), format!("{:x?}", b.regs));
+    let (s, t) = (&a.sregs, &b.sregs);
+    for (name, x, y) in [
+        ("cs", &s.cs, &t.cs),
+        ("ds", &s.ds, &t.ds),
+        ("es", &s.es, &t.es),
+        ("fs", &s.fs, &t.fs),
+        ("gs", &s.gs, &t.gs),
+        ("ss", &s.ss, &t.ss),
+        ("tr", &s.tr, &t.tr),
+        ("ldt", &s.ldt, &t.ldt),
+    ] {
+        part(name, format!("{x:x?}"), format!("{y:x?}"));
+    }
+    part("gdt", format!("{:x?}", s.gdt), format!("{:x?}", t.gdt));
+    part("idt", format!("{:x?}", s.idt), format!("{:x?}", t.idt));
+    for (name, x, y) in [
+        ("cr0", s.cr0, t.cr0),
+        ("cr2", s.cr2, t.cr2),
+        ("cr3", s.cr3, t.cr3),
+        ("cr4", s.cr4, t.cr4),
+        ("cr8", s.cr8, t.cr8),
+        ("efer", s.efer, t.efer),
+        ("apic_base", s.apic_base, t.apic_base),
+    ] {
+        part(name, format!("{x:#x}"), format!("{y:#x}"));
+    }
+    part(
+        "interrupt_bitmap",
+        format!("{:x?}", s.interrupt_bitmap),
+        format!("{:x?}", t.interrupt_bitmap),
+    );
+    part("fpu", format!("{:x?}", a.fpu), format!("{:x?}", b.fpu));
+    if a.xsave != b.xsave {
+        let w: Vec<usize> = (0..a.xsave.len().max(b.xsave.len()))
+            .filter(|&i| a.xsave.get(i) != b.xsave.get(i))
+            .take(8)
+            .collect();
+        part("xsave words", format!("{w:?}"), String::new());
+    }
+    part("xcr0", format!("{:#x}", a.xcr0), format!("{:#x}", b.xcr0));
+    part("msrs", format!("{:x?}", a.msrs), format!("{:x?}", b.msrs));
+    part(
+        "events",
+        format!("{:?}", a.events),
+        format!("{:?}", b.events),
+    );
+    part(
+        "debugregs",
+        format!("{:x?}", a.debugregs),
+        format!("{:x?}", b.debugregs),
+    );
+    d
+}
+
 /// The XSAVE components a v3 guest may enable (x87, SSE, AVX: `crate::cpuid::XCR0_V3`).
 const XCR0_GUEST: u64 = crate::cpuid::XCR0_V3 as u64;
 /// The 32-bit word of a standard XSAVE image that holds the low half of the header's XSTATE_BV

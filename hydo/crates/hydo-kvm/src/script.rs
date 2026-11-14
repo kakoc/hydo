@@ -62,6 +62,11 @@ pub struct Script {
     /// the programs of vCPUs 1, 2, ... (a machine with more vCPUs than programs runs the last
     /// one on the rest)
     pub aps: Vec<Arc<Program>>,
+    /// The vCPUs change their state in a load, as a host's KVM can (Milestone 226): DR6 reads
+    /// back one more than the value loaded, so the state read back after a load is not the state
+    /// loaded. The guest programs never read DR6, and the fingerprint hashes it. Off: a load
+    /// keeps every part, as before.
+    pub load_quirk: bool,
 }
 
 impl Script {
@@ -70,13 +75,15 @@ impl Script {
         Script {
             program: Arc::new(program),
             aps: Vec::new(),
+            load_quirk: false,
         }
     }
 }
 
-fn cpu_of(p: Arc<Program>) -> Box<dyn Cpu> {
+fn cpu_of(p: Arc<Program>, quirk: bool) -> Box<dyn Cpu> {
     Box::new(ScriptCpu {
         p,
+        quirk,
         s: CpuState::default(),
         pending: None,
         window: false,
@@ -95,19 +102,20 @@ impl Hypervisor for Script {
         _len: usize,
         n: usize,
     ) -> Result<Vec<Box<dyn Cpu>>, String> {
-        let mut v = vec![cpu_of(self.program.clone())];
+        let mut v = vec![cpu_of(self.program.clone(), self.load_quirk)];
         for i in 1..n {
             let p = self.aps.get(i - 1).or(self.aps.last());
             let Some(p) = p else {
                 return Err(format!("hydo-kvm: the script has no program for vCPU {i}"));
             };
-            v.push(cpu_of(p.clone()));
+            v.push(cpu_of(p.clone(), self.load_quirk));
         }
         Ok(v)
     }
     unsafe fn fresh(&mut self, _ram: *mut u8, _len: usize) -> Result<Box<dyn Cpu>, String> {
         Ok(Box::new(ScriptCpu {
             p: self.program.clone(),
+            quirk: self.load_quirk,
             s: CpuState::default(),
             pending: None,
             window: false,
@@ -136,6 +144,8 @@ enum Wait {
 
 pub struct ScriptCpu {
     p: Arc<Program>,
+    /// [`Script::load_quirk`]
+    quirk: bool,
     s: CpuState,
     pending: Option<u8>,
     window: bool,
@@ -437,6 +447,9 @@ impl Cpu for ScriptCpu {
         self.s.events.interrupt.injected = 0;
         self.print_at = s.regs.r14 as usize;
         self.wait = Wait::None;
+        if self.quirk {
+            self.s.debugregs.dr6 = s.debugregs.dr6.wrapping_add(1);
+        }
     }
 
     fn rip(&self) -> u64 {
