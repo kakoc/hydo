@@ -540,6 +540,51 @@ fn setup(a: Args, env: &Env) -> Cx {
     }
     cx.ex.workload_pauses = a.workload_pauses;
     cx.ex.pause_max = a.pause_max;
+    // Milestone 226: the earliest start and the lengths of a drawn pause
+    if a.pause_min < 0 || a.pause_min > a.pause_max {
+        die("hydo explore: --pause-min is 0 to --pause-max ms of guest time");
+    }
+    cx.ex.pause_min = a.pause_min;
+    if let Some(list) = &a.pause_lengths {
+        let mut v = Vec::new();
+        for x in list.split(',') {
+            match x.parse::<i64>() {
+                Ok(n) if (1..=3_600_000).contains(&n) && !x.starts_with('0') => v.push(n),
+                _ => die(&format!(
+                    "hydo explore: --pause-lengths {x:?}: each length is 1 to 3600000 ms of \
+                     guest time, written without leading zeros, several with commas"
+                )),
+            }
+        }
+        cx.ex.pause_lengths = v;
+    }
+    // Milestone 226: pauses of threads of the workload
+    if a.pause_threads.is_some() && cx.ex.backend != Backend::Hvx {
+        die("hydo explore: --pause-thread needs the guest kernel's cgroup v2 freezer, and the guest kernels of the Mac and KVM engines have no cgroups; use --pause-workload, or explore on hvx");
+    }
+    if let Some(list) = &a.pause_threads {
+        let mut targets: Vec<String> = Vec::new();
+        if a.workload_pauses {
+            targets.push(crate::space::WORKLOAD.to_string());
+        }
+        for n in list.split(',') {
+            let t = format!("{}/{n}", crate::space::WORKLOAD);
+            let probe = format!("disk=none | run P={t}@0~0:10");
+            if let Err(e) = hydo_schedule::Schedule::parse(&probe) {
+                die(&format!(
+                    "hydo explore: --pause-thread {n:?}: {} (a thread name as \
+                     /proc/<pid>/task/<tid>/comm shows it, optionally #<k> for the k-th thread \
+                     of that name; several names with commas)",
+                    e.message
+                ));
+            }
+            if !targets.contains(&t) {
+                targets.push(t);
+            }
+        }
+        cx.ex.workload_pauses = true;
+        cx.ex.pause_targets = targets;
+    }
     // M139: reactions (A=) from their own stream
     if let Some(r) = &a.reactive {
         cx.ex.react_fault = r == "fault" || r == "both";

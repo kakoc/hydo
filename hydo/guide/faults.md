@@ -13,6 +13,7 @@ call`, `Clock steps to a time`, `Clock after a power cut`, `Link faults`, `One-s
 | `kill` | SIGKILL a service's whole process tree, restart it later (setup + cmd + ready) | `K=<svc>@<step>+<down>`, timed `X=` |
 | `pause` | SIGSTOP / SIGCONT, also in the middle of a request | `P=<svc>@<step>+<n>`, `P=<svc>@<step>~<ms>:<ms>` |
 | (none) | the workload's own processes stop for some guest time, as under a CPU limit (section "Pause the workload") | `P=workload@<step>~<ms>:<ms>` |
+| (none) | named threads of the workload stop for some guest time, and its other threads run on (section "Pause threads of the workload") | `P=workload/<thread>@<step>~<ms>:<ms>` |
 | `network` | netem delay, loss, duplication, and reordering on traffic to a service's `port:`, or on a link between two services with `addr:`. With `network: bridge` the link carries their real traffic, and the explorer draws only links between services that list each other in `depends_on`. | `N=<svc>@<from>-<to>:<netem>`, `N=a-b@...` |
 | `oneway` | the same in one direction only | `O=<svc>@<from>-<to>:req\|resp:<netem>` |
 | `cut` | power cut: only data that reached the disk survives; a fresh boot recovers and runs the final checks | `C=<step>`, host `cf=<k>` (at the k-th disk flush) |
@@ -89,6 +90,42 @@ its own:
 
 The shrinker tries the schedule without the pause, the pause at half its length (down to 10 ms),
 and the pause at the step's start. `hydo guide flaky-tests` has a worked example.
+
+## Pause threads of the workload
+
+A race between two threads of one process needs one thread held off while the other runs. A
+pause of the workload stops both. A thread pause stops only the threads it names:
+
+```sh
+hydo run "disk=none | run P=workload/tests::wal_reco@0~4433:500"
+```
+
+After 4,433 ms of guest time in step 0, hydo stops every thread of the workload whose name is
+`tests::wal_reco`. After 500 ms more, it lets them run again. The other threads run on.
+
+- The name is the thread's name as Linux keeps it in `/proc/<pid>/task/<tid>/comm`: at most 15
+  bytes. A longer name is refused with its first 15 bytes, for example `tokio-runtime-w`.
+- A name has letters, digits, and `_ . : + -`. `*` matches any characters, and `?` matches one
+  character, such as a space.
+- `#<k>` picks the k-th thread of that name, counted from 1 in the order the threads were
+  created: `P=workload/tokio-rt-worker#2@0~100:200`. Without `#<k>`, every thread of that name
+  stops.
+- The threads are those of every process of the workload when the pause starts.
+- When no thread matches, nothing stops. The control transcript then names the threads the
+  workload had: `PAUSED nothing: no thread of the workload matches workload/nosuch (timer; its
+  threads: busybox, collection.test, tests::wal_reco, tokio-rt-worker (4))`.
+
+To find a thread's name, run that schedule with a name no thread has, at a start where the threads
+exist. The guest kernel's cgroup v2 freezer stops the threads, in a cgroup of the workload's own
+cgroup tree. No image needs a rebuild. The pause runs on hvx only: the guest kernels of the Mac
+and KVM engines have no cgroups, so those engines refuse it before any VM boots.
+
+`hydo explore --pause-thread <name>[,<name>...]` draws such pauses, as `--pause-workload` draws
+pauses of the workload. With both options, the target is drawn among the workload and the names.
+Two more options narrow the draw:
+
+- `--pause-min <ms>`: the earliest start (default 0). The starts lie between it and `--pause-max`.
+- `--pause-lengths <ms>,...`: the lengths to draw from (default 10, 20, 50, 100, 200, and 500).
 
 ## Faults on a cluster
 
@@ -213,6 +250,8 @@ Useful options of `hydo explore`:
 - `--storage-faults`: `G=` and `L=` for services with `storage:`.
 - `--cluster-faults`: kills, pauses, and partitions of the services of `groups:`.
 - `--pause-workload`: pauses of the workload's own processes (section "Pause the workload").
+- `--pause-thread <name>`: pauses of named threads of the workload, with `--pause-min` and
+  `--pause-lengths` (section "Pause threads of the workload").
 - `--vcpus N --turns`: several vCPUs (hvx) and drawn turn lengths `q=`. `--vcpus N --sweep turns`
   searches the turn lengths of one schedule for a change of verdict (`hydo guide flaky-tests`).
 - `--steer <id>` or `--steer-match REGEX`: an experimental steered search. It keeps the

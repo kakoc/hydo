@@ -163,6 +163,13 @@ pub struct Ex {
     /// `pause_max` ms after its step's start.
     pub workload_pauses: bool,
     pub pause_max: i64,
+    /// `--pause-thread` (Milestone 226): the targets a drawn pause names, `workload/<name>`
+    /// (and `workload` with `--pause-workload`); empty: `workload` only.
+    pub pause_targets: Vec<String>,
+    /// `--pause-min` (Milestone 226): the earliest start of a drawn pause (default 0).
+    pub pause_min: i64,
+    /// `--pause-lengths` (Milestone 226): the lengths a drawn pause takes; empty: WP_DURS.
+    pub pause_lengths: Vec<i64>,
     pub cf_range: Option<(i64, i64)>,
     pub backend: Backend,
     /// hvm: the image has a data disk / tc (hvm_backend.configure).
@@ -226,6 +233,9 @@ impl Default for Ex {
             cluster_faults: false,
             workload_pauses: false,
             pause_max: WP_MAX,
+            pause_targets: Vec::new(),
+            pause_min: 0,
+            pause_lengths: Vec::new(),
             cf_range: None,
             backend: Backend::Hvx,
             hvm_disk: false,
@@ -1096,7 +1106,8 @@ impl Ex {
     /// number in it): a race's window can be in the first milliseconds of a step or anywhere in
     /// it, and its place is not known (etcd's test: 0 to 7 ms on the Mac, 151 to 163 ms on hvx).
     /// The length is one of WP_DURS. A drawn pause takes the place of the schedule's own `P=`
-    /// (a schedule holds one).
+    /// (a schedule holds one). With `--pause-thread` (Milestone 226) the target is one of
+    /// `pause_targets`, drawn last.
     pub fn add_workload_pauses(&self, mut s: S, seed: u64) -> S {
         if !self.workload_pauses {
             return s;
@@ -1104,21 +1115,35 @@ impl Ex {
         let mut t = SplitMix::new(seed ^ WP_SALT);
         let on = t.below(100) < 50;
         let at = t.rng(0, (self.norders - 1).max(0));
+        // Milestone 226: the starts lie in pause_min..=pause_max; the draws are made over the
+        // span, so a pause_min of 0 (the default) keeps Milestone 216's schedules
+        let span = (self.pause_max - self.pause_min).max(0);
         let mut decades = 0;
         let mut top = 1i64;
-        while top < self.pause_max.max(1) {
+        while top < span.max(1) {
             top = top.saturating_mul(10);
             decades += 1;
         }
         let d = t.rng(0, decades);
-        let hi = (10i64.pow(d as u32) - 1).min(self.pause_max.max(0));
+        let hi = (10i64.pow(d as u32) - 1).min(span);
         let log_off = t.rng(0, hi);
         let even = t.below(2) == 0;
-        let even_off = t.rng(0, self.pause_max.max(0));
-        let off = if even { even_off } else { log_off };
-        let dur = t.pick(&WP_DURS);
+        let even_off = t.rng(0, span);
+        let off = self.pause_min + if even { even_off } else { log_off };
+        let dur = if self.pause_lengths.is_empty() {
+            t.pick(&WP_DURS)
+        } else {
+            t.pick(&self.pause_lengths)
+        };
+        // Milestone 226: the target, after every earlier draw, so `--pause-workload` alone keeps
+        // its schedules
+        let target = if self.pause_targets.is_empty() {
+            crate::space::WORKLOAD.to_string()
+        } else {
+            t.pick(&self.pause_targets)
+        };
         if on {
-            s.p = Some(Pause::Timed(crate::space::WORKLOAD.into(), at, off, dur));
+            s.p = Some(Pause::Timed(target, at, off, dur));
         }
         s
     }
@@ -1222,6 +1247,10 @@ impl Ex {
     /// (two left: each alone), a partition shape becomes the isolation of one member.
     pub fn shrink_target(&self, t: &str, net: bool) -> Vec<String> {
         let mut out = Vec::new();
+        if crate::space::is_workload(t) {
+            // the workload, or threads of it (Milestone 226): no smaller target
+            return out;
+        }
         if net {
             if let Some((g, shape)) = t.split_once('.') {
                 if !shape.starts_with("isolate") {
@@ -1942,7 +1971,7 @@ impl Ex {
                 var(&|t| t.p = Some(p.clone()));
             }
             // a pause of the workload (Milestone 216): shorter, down to 10 ms
-            Some(Pause::Timed(svc, at, off, dur)) if svc == crate::space::WORKLOAD => {
+            Some(Pause::Timed(svc, at, off, dur)) if crate::space::is_workload(svc) => {
                 if *dur > 10 {
                     let p = Pause::Timed(svc.clone(), *at, *off, 10.max(fdiv(*dur, 2)));
                     var(&|t| t.p = Some(p.clone()));

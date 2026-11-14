@@ -642,6 +642,27 @@ pub fn refusal_on(kind: EngineKind, vcpus: u32, s: &hydo_schedule::Schedule) -> 
         };
         return refusal_on(kind, 1, &rest);
     }
+    // Milestone 226: a pause of threads freezes them with the guest kernel's cgroup v2 freezer;
+    // the Mac engine's arm64 kernels and the KVM engine's bzImage-kvm are built without cgroups
+    // (allnoconfig and a list); hvx boots the x86_64 kernel that has them
+    if kind != EngineKind::Hvx {
+        if let Some(t) = s.guest.iter().find(|t| {
+            matches!(
+                t,
+                hydo_schedule::GuestToken::Pause(hydo_schedule::Pause::Timer {
+                    thread: Some(_),
+                    ..
+                })
+            )
+        }) {
+            return Some(format!(
+                "{t}: a pause of threads needs the guest kernel's cgroup v2 freezer, and the guest \
+                 kernels of the Mac and KVM engines have no cgroups; pause the whole workload \
+                 (P=workload@...) or run on hvx (on {})",
+                kind.name()
+            ));
+        }
+    }
     // the state search's timing switch (docs/design/state-search.md) is built on KVM and the
     // Mac engine; hvx's timing is the module's
     if kind == EngineKind::Hvx && !s.branch_points().is_empty() {
@@ -670,6 +691,30 @@ pub fn native(root: &std::path::Path, config: hydo_config::Env) -> Box<dyn Contr
         EngineKind::Hvx => Box::new(hvx::Hvx::for_release(root, config)),
         EngineKind::Hvm => Box::new(hvm::Hvm::for_release(root, config)),
         EngineKind::Kvm => Box::new(kvm::Kvm::for_release(root, config)),
+    }
+}
+
+#[cfg(test)]
+mod thread_pause_tests {
+    use super::{refusal, EngineKind};
+
+    /// Milestone 226: the Mac and KVM engines refuse a pause of threads before any VM (their
+    /// guest kernels have no cgroups); hvx runs it, and every engine runs a pause of the whole
+    /// workload.
+    #[test]
+    fn only_hvx_runs_a_pause_of_threads() {
+        let t = hydo_schedule::Schedule::parse("disk=none | run P=workload/w#2@0~5:45").unwrap();
+        for (k, name) in [(EngineKind::Hvm, "hvm"), (EngineKind::Kvm, "kvm")] {
+            let why = refusal(k, &t).expect("refused");
+            assert!(
+                why.contains("cgroup v2 freezer") && why.ends_with(&format!("(on {name})")),
+                "{why}"
+            );
+        }
+        assert_eq!(refusal(EngineKind::Hvx, &t), None);
+        let w = hydo_schedule::Schedule::parse("disk=none | run P=workload@0~5:45").unwrap();
+        assert_eq!(refusal(EngineKind::Hvm, &w), None);
+        assert_eq!(refusal(EngineKind::Kvm, &w), None);
     }
 }
 

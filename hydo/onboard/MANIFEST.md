@@ -685,6 +685,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `P=<svc>@<at>+<n>` | SIGSTOP before step `at`, SIGCONT before step `at+n` |
 | `P=<svc>@<at>~<off>:<dur>` | pause after `off` ms of guest time for `dur` ms, while steps run (whole milliseconds) |
 | `P=workload@<at>~<off>:<dur>` | a pause of the workload (Milestone 216): the same for the workload's own process tree, as a CPU limit stops it. `workload` may stand in a list with services. `hydo explore --pause-workload` draws it (`hydo guide faults`, "Pause the workload") |
+| `P=workload/<thread>[#<k>]@<at>~<off>:<dur>` | a pause of threads of the workload (Milestone 226): the same for the workload's threads of that name (`/proc/<pid>/task/<tid>/comm`, at most 15 bytes, `*` and `?` as wildcards), or only the k-th of them (from 1, in the order they were created). The other threads run on. `hydo explore --pause-thread <name>` draws it (`hydo guide faults`, "Pause threads of the workload") |
 | `N=<svc>@<from>-<to>:<netem>` | `tc netem` on traffic to the service's `port` for steps `[from,to)` |
 | `O=<svc>@<from>-<to>:req\|resp:<netem>` | one direction only |
 | `C=<at>` | power cut before step `at` |

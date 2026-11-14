@@ -62,7 +62,8 @@ pub use clock::{civil_from_days, days_from_civil, ClockPoint, Every};
 pub use compose::{Compose, Omit, RangeItem, RangeList, ResolvedField, SeedField, WORKLOAD_KINDS};
 pub use guest::{
     Buggify, Direction, Freeze, FreezeDir, GuestToken, NetTarget, Netem, Pause, ProtocolFault,
-    React, ReactAction, ResetKind, Rule, Status, RESERVED,
+    React, ReactAction, ResetKind, Rule, Status, ThreadSel, RESERVED, THREAD_NAME_MAX,
+    THREAD_TARGET,
 };
 pub use host::{Disk, HostToken, BRANCH_KEYS, MAX_EXPLICIT};
 pub use storage::{mix, CorruptKind, Corruption, Edit, MAX_FLIPS, MAX_LEN};

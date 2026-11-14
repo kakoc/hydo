@@ -171,13 +171,80 @@ pub enum Pause {
     /// `P=<target>@<at>+<n>`: stopped before step at, continued before step at+n.
     Steps { target: Target, at: u64, steps: u64 },
     /// `P=<target>@<at>~<off>:<dur>`: a timer armed before step at stops it after off ms, for
-    /// dur ms.
+    /// dur ms. With `thread` (`P=workload/<name>[#<k>]@<at>~<off>:<dur>`, Milestone 226) the
+    /// target is `workload` and only the named threads of the workload's processes stop.
     Timer {
         target: Target,
         at: u64,
         off_ms: u64,
         dur_ms: u64,
+        thread: Option<ThreadSel>,
     },
+}
+
+/// The threads that a timed pause of the workload stops (Milestone 226). `workload/<name>` is
+/// every thread of the workload's processes whose name (`/proc/<pid>/task/<tid>/comm`) matches
+/// `<name>`. `workload/<name>#<k>` is the k-th of them (from 1) in the order of their thread
+/// ids, which is the order in which they were created. `<name>` has at most 15 bytes, the part
+/// of a thread's name that Linux keeps, of letters, digits and `_ . : + -`. `*` matches any run
+/// of characters and `?` one character (a space in a name, for example).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ThreadSel {
+    pub name: String,
+    pub nth: Option<u64>,
+}
+
+/// The longest thread name Linux keeps (TASK_COMM_LEN - 1).
+pub const THREAD_NAME_MAX: usize = 15;
+
+/// The target word before a thread pause's `/`: `P=workload/<thread>@...`.
+pub const THREAD_TARGET: &str = "workload";
+
+impl ThreadSel {
+    fn parse(s: &str, what: &str) -> Result<ThreadSel, ParseError> {
+        let (name, nth) = match s.split_once('#') {
+            Some((n, k)) => {
+                let k = dec(k, what)?;
+                if k == 0 {
+                    return Err(err(format!(
+                        "{what}: the threads of one name are counted from #1"
+                    )));
+                }
+                (n, Some(k))
+            }
+            None => (s, None),
+        };
+        let ok = |b: u8| {
+            b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b':' | b'+' | b'-' | b'*' | b'?')
+        };
+        if name.is_empty() || !name.bytes().all(ok) {
+            return Err(err(format!(
+                "{what}: {name:?} is not a thread name (letters, digits, '_', '.', ':', '+' and \
+                 '-', with '*' for any characters and '?' for one, such as a space)"
+            )));
+        }
+        if name.len() > THREAD_NAME_MAX {
+            return Err(err(format!(
+                "{what}: Linux keeps the first {THREAD_NAME_MAX} bytes of a thread's name; write \
+                 {:?}",
+                &name[..THREAD_NAME_MAX]
+            )));
+        }
+        Ok(ThreadSel {
+            name: name.to_string(),
+            nth,
+        })
+    }
+}
+
+impl fmt::Display for ThreadSel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.name)?;
+        if let Some(k) = self.nth {
+            write!(f, "#{k}")?;
+        }
+        Ok(())
+    }
 }
 
 /// `O=`'s direction: `req` (packets to the service's port) or `resp` (packets from it).
@@ -821,7 +888,20 @@ impl GuestToken {
                     let (t, r) = v
                         .split_once('@')
                         .ok_or_else(|| err(format!("{what}: <svc>@<at>~<off>:<dur>")))?;
-                    let target = Target::parse(t, what)?;
+                    // threads of the workload (Milestone 226): `workload/<name>[#<k>]`
+                    let (target, thread) = match t.split_once('/') {
+                        Some((w, th)) if w == THREAD_TARGET => (
+                            Target::Service(w.to_string()),
+                            Some(ThreadSel::parse(th, what)?),
+                        ),
+                        Some(_) => {
+                            return Err(err(format!(
+                                "{what}: a pause of threads names threads of the workload: \
+                                 P=workload/<thread name>[#<k>]@<at>~<off>:<dur>"
+                            )))
+                        }
+                        None => (Target::parse(t, what)?, None),
+                    };
                     let (a, r) = r
                         .split_once('~')
                         .ok_or_else(|| err(format!("{what}: <svc>@<at>~<off>:<dur>")))?;
@@ -833,6 +913,7 @@ impl GuestToken {
                         at: dec(a, what)?,
                         off_ms: dec(o, what)?,
                         dur_ms: dec(d, what)?,
+                        thread,
                     })
                 } else {
                     let (target, at, steps) = target_at_plus(v, what)?;
@@ -999,7 +1080,15 @@ impl fmt::Display for GuestToken {
                 at,
                 off_ms,
                 dur_ms,
+                thread: None,
             }) => write!(f, "P={target}@{at}~{off_ms}:{dur_ms}"),
+            GuestToken::Pause(Pause::Timer {
+                target,
+                at,
+                off_ms,
+                dur_ms,
+                thread: Some(th),
+            }) => write!(f, "P={target}/{th}@{at}~{off_ms}:{dur_ms}"),
             GuestToken::Net {
                 target,
                 from,

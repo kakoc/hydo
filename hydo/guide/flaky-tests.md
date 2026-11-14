@@ -218,6 +218,49 @@ The same pause works on every engine, because the guest's own clock measures it.
 the guest (a cgroup `cpu.max` with busy loops beside the test) works only on hvx. On the Mac and
 on KVM a busy loop makes no VM exits, so it uses no guest time and never uses up the limit.
 
+## A test that fails when one thread stops
+
+Some tests race two threads of one process: a check in the test's thread against a background
+worker. Such a test fails only when the check's thread stops at the wrong moment while the worker
+runs on. A pause of the workload stops both threads, so it does not reach the race. A pause of a
+thread does:
+
+```sh
+hydo run "disk=none | run P=workload/nosuch@0~3000:10"           # names the workload's threads
+hydo run "disk=none | run P=workload/tests::wal_reco@0~4433:500" # stops the test's thread only
+```
+
+The first run stops nothing. Its control transcript names the threads the workload has at that
+moment: `busybox, collection.test, tests::wal_reco, tokio-rt-worker (4)`. The test's thread is
+named after the test, cut to 15 bytes.
+
+The example is `hydo/onboard/examples/qdrant-flaky-10200` (Qdrant's
+`test_wal_replay_loads_pending_to_queue`). The test reads the length of a queue that a worker
+empties, and fails at 0. On hvx with one vCPU, without a pause, it reads 35 on every run:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none \| run P=workload/tests::wal_reco@0~4433:500` | fails: `length: 0, op_num: Some(500)`, the line of the upstream report | `4ae6099ea6e753a6` (3 runs) |
+| `disk=none \| run P=workload/tests::wal_reco@0~4432:500` | passes: the pause starts 1 ms early, `length: 35` | `ab031f4dc2b53472` (3 runs) |
+| `disk=none \| run P=workload/tests::wal_reco@0~4433:200` | passes: the pause is too short, `length: 3` | `f929e23e369aa175` (2 runs) |
+| `disk=none \| run P=workload@0~4433:500` | passes: the whole process stops, `length: 35` | `fe44e7e86b9ea884` (2 runs) |
+| the failing schedule on the fixed test | passes | `50b14ca4fb2e871d` (2 runs) |
+
+The pause fails the test only when it starts while the test's thread waits for a blocking task,
+in windows of about 1 ms that come back every 2 to 4 ms. Find the moment from the test's own
+output first: a run whose output lines carry the guest's uptime shows when the test reloads the
+data. Then let the explorer draw starts around it:
+
+```sh
+hydo explore --pause-thread tests::wal_reco --pause-min 4400 --pause-max 4500 \
+  --pause-lengths 500,1000 --seeds 1-100
+```
+
+On hvx it found 6 failures in 100 schedules, all reproduced, and shrank one to a 250 ms pause at
+4,433 ms. With starts drawn from 0 to 5,000 ms it found none in 300 schedules. A pause of threads needs the guest kernel's cgroup
+v2 freezer, so it runs on hvx only. The Mac and KVM engines refuse it: their guest kernels have no
+cgroups.
+
 ## Steer the search by a number the test prints
 
 The steered search is experimental: on the one test it was measured on, it did not help (the

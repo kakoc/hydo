@@ -486,10 +486,55 @@ fn workload_pauses() {
             at: 0,
             off_ms: 180,
             dur_ms: 60,
+            thread: None,
         })]
     );
     refused("disk=none | run P=workload@0~010:40", "leading zero");
     refused("disk=none | run P=workload@0~10", "<svc>@<at>~<off>:<dur>");
+}
+
+/// A pause of threads of the workload (Milestone 226): `workload/<name>[#<k>]`, a thread name as
+/// Linux keeps it (15 bytes), with `*` and `?`, and the k-th thread of that name from 1.
+#[test]
+fn thread_pauses() {
+    for s in [
+        "disk=none | run P=workload/tests::wal_reco@0~150:500",
+        "disk=none | run P=workload/tokio-runtime-w#2@0~5:45",
+        "disk=none | run P=workload/C1?CompilerThre@3~0:10",
+        "disk=none | run P=workload/rocksdb:*#1@0~1:20",
+    ] {
+        round_trip(s);
+    }
+    let s = Schedule::parse("disk=none | run P=workload/tokio-runtime-w#2@0~5:45").unwrap();
+    assert_eq!(
+        s.guest,
+        vec![GuestToken::Pause(Pause::Timer {
+            target: Target::Service("workload".into()),
+            at: 0,
+            off_ms: 5,
+            dur_ms: 45,
+            thread: Some(ThreadSel {
+                name: "tokio-runtime-w".into(),
+                nth: Some(2),
+            }),
+        })]
+    );
+    refused(
+        "disk=none | run P=workload/tokio-runtime-worker@0~5:45",
+        "write \"tokio-runtime-w\"",
+    );
+    refused("disk=none | run P=workload/w#0@0~5:45", "counted from #1");
+    refused("disk=none | run P=workload/w#01@0~5:45", "leading zero");
+    refused("disk=none | run P=workload/@0~5:45", "is not a thread name");
+    refused(
+        "disk=none | run P=workload/a[b]@0~5:45",
+        "is not a thread name",
+    );
+    refused(
+        "disk=none | run P=redis/io_thd@0~5:45",
+        "threads of the workload",
+    );
+    refused("disk=none | run P=workload/w@0+2", "");
 }
 
 /// The storage faults of one service (docs/design/storage-faults.md): G= corrupts files in its

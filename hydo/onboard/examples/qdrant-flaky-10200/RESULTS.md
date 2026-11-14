@@ -196,6 +196,56 @@ sibling test `test_wal_replay_tolerates_corrupt_tail_entry` (issue 10103, on Win
 is the same slowness or an artifact of the turn scheduler was not checked. The fixed program
 passes, because its test waits for the worker with `plunge_async` before the 2-second loop.
 
+### On hvx: a pause of the test's thread (Milestone 226)
+
+The timed pause can name threads of the workload: `P=workload/<thread name>@<at>~<off>:<dur>`
+(`hydo guide faults`, section "Pause threads of the workload"). The guest kernel's cgroup v2
+freezer stops the named threads, and the other threads of the process run on. The test's thread
+is named after the test, cut to the 15 bytes Linux keeps: `tests::wal_reco`. At 3 s into the
+step the workload's threads were `busybox`, `collection.test`, `tests::wal_reco` and four
+`tokio-rt-worker` threads.
+
+A run whose output lines carried the guest's uptime showed when the test reloads the shard: the
+line `Reduced applied_seq` came 4.39 s after the workload started, and the queue line 0.12 s
+later. Pauses of the test's thread at starts from 0 to 4,250 ms passed, and so did pauses of
+every `tokio-rt-worker` thread. In the reload, a 500 ms pause fails the test when it starts while
+the test's thread waits for the blocking task that counts deferred points. Those windows are
+about 1 ms wide: of the starts 4,420 to 4,440 ms, 4,422, 4,426, 4,429, 4,431, 4,433 and
+4,436 ms failed. Then the worker applies all 35 queued operations, and the test reads the report's
+line. Each schedule below ran from a fresh boot, with the images of the table above
+(`9aa2213aea1a5295…`, fixed `4fbac285d9940f02…`) and one vCPU:
+
+| image | schedule | verdict | fingerprint |
+|---|---|---|---|
+| buggy | `disk=none \| run P=workload/tests::wal_reco@0~4433:500` | VIOLATION, `length: 0, op_num: Some(500)` | `4ae6099ea6e753a6` (3 runs) |
+| buggy | `disk=none \| run P=workload/tests::wal_reco@0~4432:500` | OK, `length: 35` | `ab031f4dc2b53472` (3 runs) |
+| buggy | `disk=none \| run P=workload/tests::wal_reco@0~4434:500` | OK, `length: 35` | `3f2ae9a4cced6ab7` (2 runs) |
+| buggy | `disk=none \| run P=workload/tests::wal_reco@0~4433:200` | OK, `length: 3` | `f929e23e369aa175` (2 runs) |
+| buggy | `disk=none \| run P=workload@0~4433:500` (the whole process) | OK, `length: 35` | `fe44e7e86b9ea884` (2 runs) |
+| buggy | `disk=none \| run` | OK, `length: 35` | `240f9805a28e2544` (2 runs, the value above) |
+| fixed | `disk=none \| run P=workload/tests::wal_reco@0~4433:500` | OK, `length: 0, op_num: Some(500)` | `50b14ca4fb2e871d` (2 runs) |
+
+The length that the test reads falls with the length of the pause. An earlier build of the pause,
+whose guest command differed by one test, failed at 4,430 ms. At that start, pauses of 10, 20, 50,
+100 and 200 ms read 34, 31, 24, 19 and 5, and 500 ms read 0. So the worker takes about one
+operation every 6 ms while the test's thread is stopped.
+
+The explorer draws such pauses with `--pause-thread`. With the starts narrowed to the reload, it
+found the failure; over the whole test, it did not:
+
+| what | schedules | failures |
+|---|---|---|
+| `hydo explore --pause-thread tests::wal_reco --pause-min 4400 --pause-max 4500 --pause-lengths 500,1000 --seeds 1-100 --workers 2` | 100 | 6, all reproduced |
+| the same with the starts from 0 to 5,000 ms (`--pause-max 5000`, no `--pause-min`) | 300 | 0 |
+
+The shrinker took seed 25's failure to
+`disk=none dseed=a208c12cf0c7b709 | run P=workload/tests::wal_reco@0~4433:250`
+(`0707cd8c6a773944`, two runs).
+
+The Mac and KVM engines refuse a pause of threads before any VM: their guest kernels (the arm64
+kernels and `bzImage-kvm`) are built without cgroups. An arm64 build of the test, cross-compiled
+on the Mac with Rust 1.99.0, passed on the Mac engine without a pause (`length: 13`).
+
 ## Crash and disk faults
 
 The test simulates the crash itself: it stops the shard without a flush and loads it again inside
@@ -261,6 +311,9 @@ the extra point changes when the timer interrupts come, not which thread is stop
   programs 172 explored schedules and 6 hand runs.
 - Milestone 208, KVM on the build machine: the 8 runs of `hydo-bench rebaseline --check
   --thorough`, and 5 hand runs with and without the preemption records.
+- Milestone 226, hvx on the bare-metal machine: about 170 hand runs with pauses of threads, and
+  800 explored schedules (two builds of the pause, 400 each) with their shrink runs. The Mac: 12
+  runs of the arm64 build.
 
 ## What hydo lacked, ranked
 
@@ -292,6 +345,9 @@ the extra point changes when the timer interrupts come, not which thread is stop
    216's pause of the workload, `P=workload@<at>~<off>:<dur>`, stops the whole test process, the
    worker too. So it does not reach this race. `hydo explore --pause-workload --pause-max 3000
    --seeds 1-60` on hvx gave 60 passes, each with a queue length of 34 to 36.
+   Milestone 226 added the pause of one thread, `P=workload/tests::wal_reco@0~4433:500`. It
+   fails the test on hvx on every run, as described in the section "On hvx: a pause of the test's
+   thread".
 5. **One find in 100 schedules.** The KVM exploration found the failure in 4 of 400 schedules. The
    distribution of the test's queue length (2 to 36, mostly 18) showed how close each run came,
    but the explorer cannot steer by such a number. A value printed by the test could serve as a

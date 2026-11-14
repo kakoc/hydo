@@ -9,7 +9,8 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
-       [--storage-faults] [--pause-workload [--pause-max MS]]
+       [--storage-faults] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
+       [--pause-lengths MS[,MS...]]
        [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
         [--steer-batch N] [--steer-corpus N] [--steer-stop]]
        [--search state [--state-mix N] [--state-corpus N] [--state-rare N] [--state-snaps N]
@@ -62,6 +63,13 @@ pub struct Args {
     /// (`P=workload@<at>~<off>:<dur>`), at most `--pause-max` ms after the step's start.
     pub workload_pauses: bool,
     pub pause_max: i64,
+    /// `--pause-thread NAME[,NAME...]` (Milestone 226): draw pauses of those threads of the
+    /// workload (`P=workload/<name>@<at>~<off>:<dur>`) instead of the whole workload.
+    pub pause_threads: Option<String>,
+    /// `--pause-min` and `--pause-lengths` (Milestone 226): the earliest start and the lengths
+    /// of a drawn pause.
+    pub pause_min: i64,
+    pub pause_lengths: Option<String>,
     pub freeze_call: bool,
     pub protocol_faults: bool,
     pub grpc_faults: bool,
@@ -172,6 +180,9 @@ impl Default for Args {
             cluster_faults: false,
             workload_pauses: false,
             pause_max: crate::gen::WP_MAX,
+            pause_threads: None,
+            pause_min: 0,
+            pause_lengths: None,
             freeze_call: false,
             protocol_faults: false,
             grpc_faults: false,
@@ -242,7 +253,7 @@ const FLAGS: [&str; 21] = [
     "state-stop",
 ];
 
-const VALUED: [&str; 57] = [
+const VALUED: [&str; 60] = [
     "seeds",
     "workers",
     "image",
@@ -270,6 +281,9 @@ const VALUED: [&str; 57] = [
     "fc-nmax",
     "cf-range",
     "pause-max",
+    "pause-thread",
+    "pause-min",
+    "pause-lengths",
     "pct-exits",
     "backend",
     "hvm-kernel",
@@ -389,6 +403,9 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "cluster-faults" => a.cluster_faults = true,
             "pause-workload" => a.workload_pauses = true,
             "pause-max" => a.pause_max = int("pause-max", v)?,
+            "pause-thread" => a.pause_threads = Some(val),
+            "pause-min" => a.pause_min = int("pause-min", v)?,
+            "pause-lengths" => a.pause_lengths = Some(val),
             "freeze-call" => a.freeze_call = true,
             "protocol-faults" => a.protocol_faults = true,
             "grpc-faults" => a.grpc_faults = true,

@@ -584,6 +584,20 @@ impl Fake {
                     (4, if bad { 1 } else { 0 }, String::new())
                 } else if let Some(x) = self.needs(&script) {
                     x
+                } else if r.argv.get(4).is_some_and(|a| a == "hydo-pause") {
+                    // a pause of threads (Milestone 226): the freeze names one thread of the
+                    // pattern's name, `none*` matches nothing, and the thaw prints nothing
+                    if script.contains("cgroup.freeze") && script.contains("HYDO_FROM") {
+                        let pat = r.argv.get(6).cloned().unwrap_or_default();
+                        if pat.starts_with("none") {
+                            (6, 0, "N 1 pkg.test\nN 3 worker\n".to_string())
+                        } else {
+                            let tid = 100 + self.h(&["tid", &pat]) % 100;
+                            (6, 0, format!("T {tid} /sys/fs/cgroup/hydo-pause {pat}\n"))
+                        }
+                    } else {
+                        (3, 0, String::new())
+                    }
                 } else if let Some(w) = script.split("HYDO_FAKE_PRIMARY=").nth(1) {
                     // a group's primary probe (M195): prints the service it names
                     let name = w.split_whitespace().next().unwrap_or("");

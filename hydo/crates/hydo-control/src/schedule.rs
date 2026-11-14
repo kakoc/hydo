@@ -40,7 +40,7 @@ use hydo_agent_proto::msg::{
     ClockSet, Command, Event, Mkdir, Mount, MountFlag, Probe, ProbeEnd, Read, Reply, Run, Sig,
     Signal, Spawn, Syncfs, Write,
 };
-use hydo_schedule::{GuestToken, Pause, Schedule, Target};
+use hydo_schedule::{GuestToken, Pause, Schedule, Target, ThreadSel};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -75,6 +75,8 @@ mod storage;
 mod targets;
 // work counters of a run, HYDO_COST (an experiment, docs/design/cost-tracking.md)
 mod cost;
+// Milestone 226: a timed pause of threads of the workload (P=workload/<name>[#<k>]@...)
+mod threads;
 
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
@@ -125,6 +127,8 @@ enum PauseCfg {
         at: i64,
         off: u64,
         dur: u64,
+        /// Threads of the workload (Milestone 226); None: the target's processes.
+        thread: Option<ThreadSel>,
     },
 }
 
@@ -238,6 +242,12 @@ enum Part {
         off: u64,
         dur: u64,
     },
+    /// P=workload/<thread>@...~ (Milestone 226): the threads of the workload it pauses.
+    ThreadPauseTimer {
+        sel: ThreadSel,
+        off: u64,
+        dur: u64,
+    },
     /// The stack's kill_timer (X=), see `explore_run`.
     KillTimer {
         svcs: Vec<String>,
@@ -263,7 +273,7 @@ fn label(p: &Part) -> String {
     match p {
         Part::Main => "main".into(),
         Part::Every(i, _) => format!("every:i{i}"),
-        Part::PauseTimer { .. } => "pause-timer".into(),
+        Part::PauseTimer { .. } | Part::ThreadPauseTimer { .. } => "pause-timer".into(),
         Part::KillTimer { .. } => "kill-timer".into(),
         Part::Compose(j) => composer::label(j),
         Part::Live(m) => liveness::label(m),
@@ -590,12 +600,14 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
                 at,
                 off_ms,
                 dur_ms,
+                thread,
             }) => {
                 c.p = Some(PauseCfg::Timer {
                     target: target.clone(),
                     at: *at as i64,
                     off: *off_ms,
                     dur: *dur_ms,
+                    thread: thread.clone(),
                 });
             }
             GuestToken::Cut(at) => c.c = Some(*at as i64),
@@ -804,6 +816,9 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
         },
         Part::Every(i, exports) => periodic_loop(fx, &ctx, *i, exports),
         Part::PauseTimer { svcs, off, dur } => pause_timer(fx, &ctx, svcs, *off, *dur),
+        Part::ThreadPauseTimer { sel, off, dur } => {
+            threads::pause_threads(fx, &ctx, sel, *off, *dur)
+        }
         Part::KillTimer { svcs, off } => kill_timer(fx, &ctx, svcs, *off),
         Part::Compose(j) => composer::job(fx, &ctx, j),
         Part::Live(m) => liveness::live_monitor(fx, &ctx, m),
@@ -2563,6 +2578,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let cat = cfg.c.unwrap_or(-1);
     let (mut ptarget, mut pat, mut pup, mut ptime) = (None::<Target>, -1i64, -1i64, None);
     let mut psvcs: Vec<String> = Vec::new();
+    let mut pthread: Option<ThreadSel> = None;
     let pt = match &cfg.p {
         Some(PauseCfg::Steps { target, at, up }) => {
             (pat, pup) = (*at, *up);
@@ -2573,9 +2589,11 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             at,
             off,
             dur,
+            thread,
         }) => {
             pat = *at;
             ptime = Some((*off, *dur));
+            pthread = thread.clone();
             Some(target)
         }
         None => None,
@@ -2775,7 +2793,23 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
         if let (true, Some(t)) = (p == pat, &ptarget) {
             psvcs = targets::resolve(fx, ctx, 'P', t)?;
-            if let Some((off, dur)) = ptime {
+            if let (Some((off, dur)), Some(sel)) = (ptime, &pthread) {
+                // Milestone 226: threads of the workload, frozen in a threaded cgroup; the
+                // timer thaws them itself, so no SIGCONT follows
+                psvcs.clear();
+                ptimer = Some(fx.start(Part::ThreadPauseTimer {
+                    sel: sel.clone(),
+                    off,
+                    dur,
+                })?);
+                log(
+                    fx,
+                    format!(
+                        "pause timer for workload/{sel} armed before step {p} (after {off}ms, \
+                         for {dur}ms)"
+                    ),
+                );
+            } else if let Some((off, dur)) = ptime {
                 let names = psvcs.join(",");
                 ptimer = Some(fx.start(Part::PauseTimer {
                     svcs: psvcs.clone(),

@@ -16,6 +16,12 @@ use std::path::Path;
 
 /// The name a timed pause gives the workload's own process tree (Milestone 216).
 pub const WORKLOAD: &str = "workload";
+
+/// Whether a pause target is the workload: its process tree (Milestone 216) or threads of it,
+/// `workload/<name>[#<k>]` (Milestone 226).
+pub fn is_workload(t: &str) -> bool {
+    t == WORKLOAD || t.strip_prefix(WORKLOAD).is_some_and(|r| r.starts_with('/'))
+}
 pub const FAULT_KINDS: [&str; 7] = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"];
 /// Guest tokens with a fixed meaning; a manifest knob may not reuse one.
 pub const RESERVED_TOKENS: [&str; 15] = [
@@ -423,7 +429,7 @@ impl Space {
         }
         // a pause of the workload's own tree (`--pause-workload`, Milestone 216) is no fault
         // kind of `faults:`: the option asks for it, as `--timing` asks for tick jitter
-        let wp = matches!(&s.p, Some(Pause::Timed(t, ..)) if t == WORKLOAD);
+        let wp = matches!(&s.p, Some(Pause::Timed(t, ..)) if is_workload(t));
         if !self.has_fault("pause") && !wp {
             s.p = None;
         }
@@ -554,7 +560,7 @@ impl Space {
                     *d = (*d).clamp(1, (n - *a).max(1));
                 }
                 // a pause of the workload (Milestone 216) in a step where the workload runs
-                Pause::Timed(t, a, _, _) if t == WORKLOAD => *a = a.rem_euclid(n),
+                Pause::Timed(t, a, _, _) if is_workload(t) => *a = a.rem_euclid(n),
                 Pause::Timed(_, a, _, _) => *a = at(*a),
             }
         }
@@ -588,6 +594,9 @@ impl Space {
     /// A K=, P= or X= target this project has (M195): a plain service is left to the other
     /// filters (as before); a list names only its services, a selector only its groups.
     fn target_ok(&self, t: &str) -> bool {
+        if is_workload(t) {
+            return true;
+        }
         if let Some((g, _)) = t.split_once('.') {
             return self.groups.iter().any(|x| x.name == g);
         }

@@ -121,6 +121,59 @@ fn a_timed_pause_stops_the_workload_tree() {
         .any(|n| n.contains("PAUSED workload (timer, mid_request=false)")));
 }
 
+/// A pause of threads of the workload (Milestone 226): no signal at all; the timer's guest
+/// commands freeze the threads in a threaded cgroup and thaw them.
+#[test]
+fn a_timed_pause_of_threads_freezes_them() {
+    let p = plan_of(TEST);
+    let items = run(&p, "disk=none | run P=workload/worker#2@0~120:45");
+    assert!(signals(&items, Sig::Stop).is_empty());
+    assert!(signals(&items, Sig::Cont).is_empty());
+    let r = runs(&items);
+    assert!(r.iter().any(|c| c.ends_with("sleep 0.120000")), "{r:#?}");
+    assert!(r.iter().any(|c| c.ends_with("sleep 0.045")), "{r:#?}");
+    assert!(
+        r.iter()
+            .any(|c| c.contains("echo 1 >$D/cgroup.freeze") && c.ends_with(" worker 2")),
+        "{r:#?}"
+    );
+    assert!(
+        r.iter()
+            .any(|c| c.contains("echo 0 >$1/cgroup.freeze")
+                && c.contains(" /sys/fs/cgroup/hydo-pause ")),
+        "{r:#?}"
+    );
+    let ns = notes(&items);
+    assert!(
+        ns.iter().any(|n| n.contains(
+            "pause timer for workload/worker#2 armed before step 0 (after 120ms, for 45ms)"
+        )),
+        "{ns:#?}"
+    );
+    assert!(
+        ns.iter()
+            .any(|n| n.contains("PAUSED workload/worker#2 (timer, threads ")
+                && n.ends_with(" worker)")),
+        "{ns:#?}"
+    );
+    assert!(ns
+        .iter()
+        .any(|n| n.contains("RESUMED workload/worker#2 (timer)")));
+    // no thread of that name: nothing is frozen, and the names the workload has are logged
+    let items = run(&p, "disk=none | run P=workload/nonesuch@0~10:20");
+    let ns = notes(&items);
+    assert!(
+        ns.iter().any(|n| n.contains(
+            "PAUSED nothing: no thread of the workload matches workload/nonesuch (timer; its \
+             threads: pkg.test, worker (3))"
+        )),
+        "{ns:#?}"
+    );
+    assert!(!runs(&items)
+        .iter()
+        .any(|c| c.contains("echo 0 >$1/cgroup.freeze")));
+}
+
 #[test]
 fn the_workload_and_services_together() {
     let p = plan_of(SERVICES);
