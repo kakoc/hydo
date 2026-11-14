@@ -55,6 +55,7 @@ hydo-control::fakes                      fast
 hydo-control::groups                     fast
 hydo-control::image_guest                fast
 hydo-control::features                   full
+hydo-control::lago_gaps                  fast
 hydo-control::m123                       full
 hydo-control::react                      fast
 hydo-control::restart                    fast
@@ -74,6 +75,7 @@ hydo-explore::cluster_faults             fast
 hydo-explore::corpus                     full
 hydo-explore::fake_engine                fast
 hydo-explore::identity                   fast
+hydo-explore::lago_gaps                  fast
 hydo-explore::liveness_deadline          fast
 hydo-explore::messages_results           fast
 hydo-explore::names                      fast
