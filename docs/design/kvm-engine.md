@@ -584,7 +584,12 @@ within one host, and between the cores of a hybrid CPU (measured below), fingerp
 across vendors or generations, compare verdicts (as `hydo repro` does across fingerprint epochs).
 Measured at 0.3.2 on GitHub's runners: on Intel the Redis quickstart's schedules gave one
 fingerprint per CPU model (a Xeon Platinum 8370C, a Xeon 6975P-C and the i7-13700HX each differ),
-while the AMD EPYC 7763, 9V45 and 9V74 agree with each other (AGENTS.md open item 102).
+while the AMD EPYC 7763, 9V45 and 9V74 agree with each other. The Intel models differed only in
+DR6 bits 11 (bus-lock detection) and 16 (RTM), status bits of features the guest's CPUID does not
+offer. KVM on Intel reads DR6 back from the hardware, and a CPU with the feature keeps the 0 the
+guest wrote. Since the fingerprint epoch 3 the fingerprint hashes DR6 with both bits set, as a
+CPU without the features reads them (`CpuState::without_host_dr6`, Milestone 252). An image built
+before keeps the host's bits. Between AMD and Intel the guest's RAM differs (below).
 Other host differences the guest can see and CPUID cannot hide: the MXCSR_MASK the guest's own
 FXSAVE writes into its RAM (the engine leaves it out of the vCPU part of the fingerprint, but not
 out of RAM), and how a KVM version batches string I/O and splits MMIO accesses (the number of

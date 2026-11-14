@@ -66,6 +66,18 @@ pub enum Reply {
     Msr { value: u64, fault: bool },
 }
 
+/// DR6 bit 11 (bus-lock detection) and bit 16 (RTM): status bits of two features the guest's
+/// CPUID never offers ([`crate::cpuid`]). Both are active low: on a CPU without the feature the
+/// bit always reads 1, which is how KVM models them for such a guest (`kvm_dr6_fixed`) and how
+/// an AMD host's DR6 reads. On an Intel host, once the guest touches a debug register KVM lets
+/// it use the hardware's DR6 and reads the hardware's value back, and a CPU that has the feature
+/// keeps the 0 the guest wrote (Linux clears DR6 at boot). So DR6 differs between Intel CPU
+/// models (open item 102, Milestone 252): `0xfffe07f0` on a Xeon 6975P-C (both features),
+/// `0xfffe0ff0` on a Xeon Platinum 8370C (RTM only), `0xffff0ff0` on the AMD EPYC models. The
+/// guest's RAM was the same on every Intel model; Linux reads DR6 only in its debug-exception
+/// handler, which ignores both bits without the features.
+pub const DR6_HOST_BITS: u64 = (1 << 11) | (1 << 16);
+
 /// A vCPU's whole state, in KVM's types.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CpuState {
@@ -115,6 +127,16 @@ impl CpuState {
             e.interrupt.soft = 0;
         }
         s
+    }
+
+    /// The state with DR6's host bits ([`DR6_HOST_BITS`], `bits` of them: what
+    /// [`Cpu::host_dr6_bits`] says) set, as they read on a CPU without the two features. Every
+    /// fingerprint of an image built at fingerprint epoch 3 or later hashes this form
+    /// ([`crate::vmm::Vmm::xfp`], Milestone 252); an image built before is fingerprinted with the
+    /// host's bits, as it was then.
+    pub fn without_host_dr6(mut self, bits: u64) -> CpuState {
+        self.debugregs.dr6 |= bits & DR6_HOST_BITS;
+        self
     }
 
     /// The fingerprint of the state: every architectural field, in a fixed order, no padding.
@@ -336,6 +358,12 @@ pub trait Cpu: Send {
     fn cpuid_now(&self) -> Vec<crate::abi::kvm_cpuid_entry2> {
         Vec::new()
     }
+    /// The bits of [`DR6_HOST_BITS`] whose value in [`Cpu::save`] can come from the host's CPU
+    /// rather than from the guest: all of them for KVM's vCPU, none for a vCPU whose DR6 is its
+    /// own (the scripted one, unless its test gives it a host's DR6).
+    fn host_dr6_bits(&self) -> u64 {
+        0
+    }
     /// The instruction pointer (diagnostics).
     fn rip(&self) -> u64;
     /// The general registers.
@@ -497,6 +525,40 @@ mod tests {
         assert!(!changed(&|b| b.xsave[AVX_WORDS.end] = 1));
         assert!(!changed(&|b| b.xsave[XSTATE_BV_WORD + 2] = 1));
         assert_eq!(AVX_WORDS, 144..208);
+    }
+
+    #[test]
+    fn the_hosts_dr6_bits_leave_the_hash() {
+        // the DR6 values the KVM engine read at the end of one Redis run (Milestone 252): AMD
+        // EPYC models, a Xeon 6975P-C, a Xeon Platinum 8370C, and a CPU with bus-lock detection
+        // but no RTM
+        let with = |dr6: u64| {
+            let mut s = with_xsave(0);
+            s.debugregs.dr6 = dr6;
+            s.debugregs.dr7 = 0x400;
+            s
+        };
+        let amd = with(0xffff_0ff0);
+        let values = [0xffff_0ff0u64, 0xfffe_07f0, 0xfffe_0ff0, 0xffff_07f0];
+        let raw: std::collections::HashSet<u64> =
+            values.iter().map(|&v| with(v).hash(OFFSET)).collect();
+        assert_eq!(raw.len(), 4, "the host's bits are in the raw hash");
+        for v in values {
+            assert_eq!(
+                with(v).without_host_dr6(DR6_HOST_BITS).hash(OFFSET),
+                amd.hash(OFFSET),
+                "{v:#x}"
+            );
+        }
+        // the AMD form is the architectural one: unchanged, so its hash stays
+        assert_eq!(amd.clone().without_host_dr6(DR6_HOST_BITS), amd);
+        // the guest's own bits stay: breakpoints hit (B0-B3), BD, BS, BT
+        for b in [0, 1, 2, 3, 13, 14, 15] {
+            let s = with(0xfffe_07f0 ^ (1 << b)).without_host_dr6(DR6_HOST_BITS);
+            assert_ne!(s.hash(OFFSET), amd.hash(OFFSET), "bit {b}");
+        }
+        // a vCPU without host bits keeps its DR6
+        assert_eq!(with(0xfffe_07f0).without_host_dr6(0), with(0xfffe_07f0));
     }
 
     /// `CpuState::default().hash(OFFSET)` (recorded: the hash of a v2 state did not change when

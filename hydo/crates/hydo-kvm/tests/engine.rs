@@ -84,6 +84,18 @@ impl Host {
         vcpus: usize,
         o: KvmOptions,
     ) -> (Host, std::path::PathBuf) {
+        Host::start_epoch(mode, hv, vcpus, o, None)
+    }
+
+    /// [`Host::start_machine`] for an image built at fingerprint epoch `epoch` (None: this
+    /// hydo's).
+    fn start_epoch(
+        mode: Mode,
+        hv: Script,
+        vcpus: usize,
+        o: KvmOptions,
+        epoch: Option<u64>,
+    ) -> (Host, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!(
             "hydo-kvm-engine-{}-{}",
             std::process::id(),
@@ -104,7 +116,7 @@ impl Host {
             disk: None,
             outdir: dir.join("out"),
             ram_mib: Some(256),
-            image_epoch: None,
+            image_epoch: epoch,
             vcpus,
         };
         let (htx, hrx) = channel();
@@ -1202,4 +1214,70 @@ fn two_vcpus_refuse_tick_jitter_and_one_vcpu_refuses_turns() {
         "{}",
         one[0].line
     );
+}
+
+/// One run of `s` from S1 on the scripted machine `m`, for an image of fingerprint epoch
+/// `epoch`, with `vcpus` vCPUs.
+fn run_on(m: Script, vcpus: usize, epoch: Option<u64>, s: &str) -> RunResult {
+    let (mut h, _) = Host::start_epoch(
+        Mode::Serve {
+            boot: Some(sched("rb=4 | run")),
+        },
+        m,
+        vcpus,
+        KvmOptions::default(),
+        epoch,
+    );
+    boot(&mut h);
+    h.recv();
+    h.tx.send(HostMsg::Request(Request::Ctl {
+        tag: "c".into(),
+        schedule: sched(s),
+    }))
+    .unwrap();
+    let r = to_the_end(&mut h);
+    h.quit();
+    r
+}
+
+/// Open item 102 (Milestone 252): on Intel hosts KVM reads DR6 back from the hardware, whose
+/// bits 11 and 16 depend on the CPU model. From fingerprint epoch 3 on they leave the
+/// fingerprint, so hosts that differ only there give one fingerprint; an image built before
+/// keeps them, and the AMD form (both bits set) gives its value at every epoch.
+#[test]
+fn the_hosts_dr6_bits_leave_the_fingerprint_from_epoch_3() {
+    let hosts = [0xffff_0ff0u64, 0xfffe_07f0, 0xfffe_0ff0, 0xffff_07f0];
+    for (vcpus, s) in [(1, "rb=4 | run"), (2, "rb=1 q=2 | run")] {
+        let fp = |dr6: u64, epoch: Option<u64>| {
+            let mut m = if vcpus == 1 {
+                Script::new(program(5))
+            } else {
+                two_vcpus()
+            };
+            m.host_dr6 = Some(dr6);
+            run_on(m, vcpus, epoch, s)
+        };
+        for epoch in [None, Some(3)] {
+            let r: Vec<RunResult> = hosts.iter().map(|&d| fp(d, epoch)).collect();
+            for (x, d) in r.iter().zip(hosts) {
+                assert_eq!(
+                    (&x.fp, &x.wfp, &x.verdict),
+                    (&r[0].fp, &r[0].wfp, &r[0].verdict),
+                    "{vcpus} vCPUs, epoch {epoch:?}, DR6 {d:#x}"
+                );
+            }
+        }
+        let old: Vec<RunResult> = hosts.iter().map(|&d| fp(d, Some(2))).collect();
+        let fps: std::collections::HashSet<&String> = old.iter().map(|x| &x.fp).collect();
+        assert_eq!(
+            fps.len(),
+            hosts.len(),
+            "{vcpus} vCPUs: epoch 2 keeps the host's bits"
+        );
+        assert_eq!(
+            old[0].fp,
+            fp(hosts[0], Some(3)).fp,
+            "{vcpus} vCPUs: the AMD form"
+        );
+    }
 }

@@ -3508,3 +3508,8 @@ ctl value moves; at epoch 2 none did on the Mac and KVM.
 
 **The pinned reproducers** stay the stack example's epoch-2 images in `~/hydo/build/m204`, with
 their values `a76d7fe857fdb37c` and `efbde7b57264be0f`: this hydo boots them as before.
+
+**DR6's host bits (M252).** KVM fingerprints of images built at epoch 3 or later hash DR6 with
+bits 11 and 16 set, so that Intel CPU models give one value (AGENTS.md open item 102). An image
+built before keeps the host's bits. Record the epoch-3 KVM values with a hydo that has
+Milestone 252.

@@ -108,6 +108,9 @@ pub struct VmOpts {
     /// The fingerprint keeps KVM's leftover event fields ([`CpuState::without_stale_events`]):
     /// only for an image built before fingerprint epoch 2 (Milestone 204).
     pub stale_events: bool,
+    /// The fingerprint keeps DR6's host bits ([`CpuState::without_host_dr6`]): only for an image
+    /// built before fingerprint epoch 3 (Milestone 252).
+    pub host_dr6: bool,
     pub cmdline: String,
     pub virtio: virtio::Config,
     /// the vCPUs (1: the machine of every recorded value; more: [`crate::smp`])
@@ -176,6 +179,8 @@ pub struct Vmm {
     spin_state: bool,
     /// [`VmOpts::stale_events`]
     stale_events: bool,
+    /// [`VmOpts::host_dr6`]
+    host_dr6: bool,
     /// full-state cycles proven and resolved (statistics)
     pub state_cycles: u64,
     /// full-state looks that proved nothing (statistics)
@@ -350,6 +355,7 @@ impl Vmm {
             echoed: 0,
             spin_state: o.spin_state,
             stale_events: o.stale_events,
+            host_dr6: o.host_dr6,
             state_cycles: 0,
             state_gave_up: 0,
             state_why: "",
@@ -2076,6 +2082,11 @@ impl Vmm {
             // (which turn the dirty-page log on at host-timed kicks) run, as at epoch 1
             s = s.without_stale_events();
         }
+        if !self.host_dr6 {
+            // DR6's bits of features the guest does not have read as the host's CPU left them
+            // (open item 102): left out since fingerprint epoch 3
+            s = s.without_host_dr6(self.cpus[0].host_dr6_bits());
+        }
         let mut h = fnv(b"hydo-kvm-v1", OFFSET);
         h = fnv_u64(self.m.console_len, h);
         h = fnv(&self.console[..self.m.console_len as usize], h);
@@ -2092,7 +2103,11 @@ impl Vmm {
             // one-vCPU fingerprint (none of it exists with one vCPU)
             h = fnv(b"smp", h);
             for c in &self.cpus[1..] {
-                h = c.save().without_stale_events().hash(h);
+                let mut s = c.save().without_stale_events();
+                if !self.host_dr6 {
+                    s = s.without_host_dr6(c.host_dr6_bits());
+                }
+                h = s.hash(h);
             }
             h = fnv(&sm.bytes(), h);
         }

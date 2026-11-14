@@ -295,9 +295,10 @@ the image's epoch), and `hydo explore --turns` and `--sweep turns` draw and sear
 those turns (M227). The vCPU is at the
 x86-64-v2 level, or at x86-64-v3 for `guest.cpu: v3` on a host whose KVM has AVX2 (M189;
 `hv/kvm/v3-check.sh`). It runs on Intel and on AMD (GitHub's ubuntu-24.04 runners, 2026-11-08).
-Its fingerprints are its own. They differ between CPU vendors and, on Intel, between CPU models.
-In 0.3.2's KVM run two Xeon models and the i7-13700HX each differ. The AMD EPYC 7763, 9V45, and
-9V74 agree (open item 102). The verdicts are the same. Details:
+Its fingerprints are its own. They differ between CPU vendors, because the guest's FXSAVE writes
+other bytes into its RAM on AMD. On Intel they differed between CPU models only in DR6's host
+bits, which leave the fingerprint of an image built at epoch 3 or later (M252). The AMD EPYC
+7763, 9V45, and 9V74 agree. The verdicts are the same. Details:
 `docs/design/kvm-engine.md`, Milestones 159, 161, 175 and 189, and open item 45 in
 `docs/HISTORY.md` Milestone 187. Some guest loops make no VM exits and store to memory, for
 example TigerBeetle's polling of io_uring. The full-state cycles prove such a loop by the whole
@@ -989,13 +990,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     ends with an error that the engine cannot start (a missing file); as root it reproduces. Found
     in 0.3.2's verification on hvx. The message should name the directory's owner (the 0.3.2
     release).
-102. On Intel, KVM fingerprints differ between CPU models with the same verdicts. The Redis
-    quickstart's schedules gave other values on a Xeon Platinum 8370C and on a Xeon 6975P-C than
-    on the i7-13700HX they were recorded on. Each one was deterministic (0.3.2's KVM run on
-    GitHub's runners). The AMD EPYC models measured agree with each other. Find the cause: a value that
-    depends on the CPU model and reaches guest memory or a fingerprinted field. Compare two Intel
-    models' `HYDO_KVM_DIAG` output and the parts of the fingerprint. The explorer's result cache
-    keys KVM runs by the CPU's vendor and model since 0.3.2.
+102. KVM fingerprints across CPU models (M252). On Intel the one differing part was DR6, whose
+    bits 11 and 16 KVM reads back from the host's hardware. They leave the fingerprint of an
+    image built at epoch 3 or later; an older image keeps its values. What is left:
+    - The proof run of the fix covered a Xeon Platinum 8370C, a Xeon 6975P-C and a Xeon
+      6973P-C. No run measured the i7-13700HX; its DR6 of `0xffff07f0` is inferred.
+    - AMD and Intel keep separate fingerprints: the guest's FXSAVE writes MXCSR_MASK and the x87
+      last-instruction pointer into its RAM differently. The guest sees both.
+    - The guest still reads the host's DR6 bits if it reads DR6 itself.
+    - The explorer's result cache still keys KVM runs by the CPU's vendor and model.
 103. The plain report page (M228). A fresh reader's review is fixed. Every error verdict but a
     failed restart gets the title `The run stopped early`. A service's own log is not in an
     exploration's files, so the page can only name the command that shows it.
@@ -1015,6 +1018,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       quickstart shows it as a lost write, so decide in the pass whether to accept the verdict or
       show another schedule there. The pinned reproducers' images in `~/hydo/build/m204` stay at
       epoch 2 and keep their values.
+    - M252: KVM fingerprints of epoch-3 images leave out DR6's host bits. Record the epoch-3 KVM
+      values with a hydo that has M252, so that they hold on every Intel model.
 106. The terminal in plain words (M230). A run directory's `hydo report` and the lines `hydo
     explore` prints before its runs (`fault space:` with JSON) are still technical. The real run
     used the Mac engine only.
@@ -1536,6 +1541,10 @@ build machine, before 2026-10-13.
   values. Qdrant's flaky test fails under a pause of its thread on the Mac and on KVM with one
   vCPU, and the fix passes. Every recorded value moves and waits for the next pass (open item
   105); on KVM with one vCPU the quickstart's `C=12 R=everysec` passes at epoch 3
+- M252 (tentative number): open item 102. KVM fingerprints differed between Intel CPU models
+  only in DR6's bits 11 and 16, which KVM reads back from the hardware. From the fingerprint
+  epoch 3 on they leave the fingerprint, so Intel models agree; older images keep their values.
+  `HYDO_KVM_DIAG` writes every part of the end state. Nothing recorded moved
 
 ## Where to look
 

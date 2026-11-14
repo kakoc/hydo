@@ -67,6 +67,10 @@ pub struct Script {
     /// loaded. The guest programs never read DR6, and the fingerprint hashes it. Off: a load
     /// keeps every part, as before.
     pub load_quirk: bool,
+    /// A host's DR6 (Milestone 252): Some(v) starts every vCPU with DR6 `v` and has it say that
+    /// DR6's host bits come from the host ([`Cpu::host_dr6_bits`]), as KVM's vCPU does. None:
+    /// DR6 0 and no host bits, as before.
+    pub host_dr6: Option<u64>,
 }
 
 impl Script {
@@ -76,15 +80,21 @@ impl Script {
             program: Arc::new(program),
             aps: Vec::new(),
             load_quirk: false,
+            host_dr6: None,
         }
     }
 }
 
-fn cpu_of(p: Arc<Program>, quirk: bool) -> Box<dyn Cpu> {
+fn cpu_of(p: Arc<Program>, quirk: bool, host_dr6: Option<u64>) -> Box<dyn Cpu> {
+    let mut s = CpuState::default();
+    if let Some(v) = host_dr6 {
+        s.debugregs.dr6 = v;
+    }
     Box::new(ScriptCpu {
         p,
         quirk,
-        s: CpuState::default(),
+        host_dr6: host_dr6.is_some(),
+        s,
         pending: None,
         window: false,
         print_at: 0,
@@ -102,29 +112,18 @@ impl Hypervisor for Script {
         _len: usize,
         n: usize,
     ) -> Result<Vec<Box<dyn Cpu>>, String> {
-        let mut v = vec![cpu_of(self.program.clone(), self.load_quirk)];
+        let mut v = vec![cpu_of(self.program.clone(), self.load_quirk, self.host_dr6)];
         for i in 1..n {
             let p = self.aps.get(i - 1).or(self.aps.last());
             let Some(p) = p else {
                 return Err(format!("hydo-kvm: the script has no program for vCPU {i}"));
             };
-            v.push(cpu_of(p.clone(), self.load_quirk));
+            v.push(cpu_of(p.clone(), self.load_quirk, self.host_dr6));
         }
         Ok(v)
     }
     unsafe fn fresh(&mut self, _ram: *mut u8, _len: usize) -> Result<Box<dyn Cpu>, String> {
-        Ok(Box::new(ScriptCpu {
-            p: self.program.clone(),
-            quirk: self.load_quirk,
-            s: CpuState::default(),
-            pending: None,
-            window: false,
-            print_at: 0,
-            wait: Wait::None,
-            stepping: None,
-            ready: false,
-            ifl: false,
-        }))
+        Ok(cpu_of(self.program.clone(), self.load_quirk, self.host_dr6))
     }
     fn describe(&self) -> String {
         "hydo-kvm: a scripted vCPU".into()
@@ -146,6 +145,8 @@ pub struct ScriptCpu {
     p: Arc<Program>,
     /// [`Script::load_quirk`]
     quirk: bool,
+    /// [`Script::host_dr6`] is set
+    host_dr6: bool,
     s: CpuState,
     pending: Option<u8>,
     window: bool,
@@ -449,6 +450,14 @@ impl Cpu for ScriptCpu {
         self.wait = Wait::None;
         if self.quirk {
             self.s.debugregs.dr6 = s.debugregs.dr6.wrapping_add(1);
+        }
+    }
+
+    fn host_dr6_bits(&self) -> u64 {
+        if self.host_dr6 {
+            crate::cpu::DR6_HOST_BITS
+        } else {
+            0
         }
     }
 

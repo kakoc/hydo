@@ -9669,3 +9669,93 @@ pause of threads. A pause of a service's thread and pauses that repeat in every 
 limit are not built; the `cpu` controller is now in every engine's kernel for images of epoch 3,
 so the etcd example's `limit` can run on the Mac and KVM engines too, which was not tried. The
 re-recording pass (open item 105).
+
+### Milestone 252 (tentative number) - DONE (open item 102: KVM fingerprints differed between Intel CPU models only in DR6, whose bits 11 and 16 KVM reads back from the host's hardware; from the fingerprint epoch 3 on they leave the fingerprint, and Intel models give one fingerprint per schedule; images built before keep their values; AMD and Intel still differ in what the guest's FXSAVE writes into its RAM; nothing recorded moved; 2026-11-14)
+
+**In short.** On GitHub's runners the Redis quickstart's schedules gave one KVM fingerprint on
+every AMD EPYC model and another one on each Intel model (open item 102). A run of the engine's
+diagnostics on eight runners, with every part of the end state on its own line and all of guest
+RAM page by page, named the part: DR6, the debug status register. Guest RAM, the console, the
+other registers, the segment registers, the FPU, the MSRs, the devices and the engine's machine
+state were the same on both Intel models measured. DR6 bit 11 (bus-lock detection) and bit 16
+(RTM) belong to two features the guest's CPUID does not offer. On a CPU without the feature such
+a bit always reads 1, and KVM on AMD keeps it so. On Intel, KVM reads DR6 back from the
+hardware, and a CPU that has the feature keeps the 0 the guest wrote. From the fingerprint epoch
+3 on, every KVM fingerprint hashes DR6 with both bits set. An image built at epoch 2 or before
+is fingerprinted as it was then, so its recorded values stay. Epoch 3 has no recorded values yet
+(open item 105).
+
+**How the part was found.** The one-off workflow `tmp-intel-fp-kvm` (run 43634134086) built the
+Redis example's image with the released hydo 0.3.3 (epoch 2, sha256 `668bf8ad…`, the image of
+`hydo/onboard/recorded.json`) and ran `disk=none | run` and `disk=none | run K=redis@5+2` twice
+on each runner with `HYDO_KVM_DIAG=1` and `HYDO_KVM_DIAG_RAM`. The diagnostics now write each
+part of the end state on its own line. Each segment register is written with its hidden parts,
+next to the descriptor tables, the control registers, the FPU fields, the first 576 bytes of the
+XSAVE image, the CPUID table KVM holds (`KVM_GET_CPUID2`), the machine state, the devices and the
+hash of all RAM. They also cover the S0 and S1 snapshots (`snap.diag`). A last job compared
+the parts and the RAM pages across the CPU models. The hosts:
+
+| Runners | CPU | `disk=none \| run` | `K=redis@5+2` | DR6 |
+|---|---|---|---|---|
+| 4 | Xeon 6975P-C (bus-lock detection) | `a81e8d79751b9ae5` | `332ff0c5e02404f8` | `0xfffe07f0` |
+| 1 | Xeon Platinum 8370C (RTM) | `d94a552ce7e7b469` | `f305907f98beea57` | `0xfffe0ff0` |
+| 3 | AMD EPYC 9V74, 9V45, 7763 | `2846084b7f0ab1e2` | `04d7e6b7317f3d46` | `0xffff0ff0` |
+
+Each runner gave one fingerprint per schedule in both runs, the released hydo gave the same
+values, and every verdict was the recorded one. The i7-13700HX's recorded value
+`b04d1932dfb20e09` differs from all three. Its CPU has no RTM, so DR6 bit 16 reads 1 there; with
+bus-lock detection its DR6 is `0xffff07f0`, the fourth combination. This is an inference: the
+build machine was not reachable, so no run measured it.
+
+**What differs between AMD and Intel.** The segment registers' hidden parts of unusable null
+segments (Intel: limit `0xffffffff`, D/B and G set; AMD: all 0), DR6, and 24 pages of guest RAM.
+In RAM, every FXSAVE area of the guest's tasks and the kernel's `mxcsr_feature_mask` hold
+MXCSR_MASK `0x2ffff` on AMD (the misaligned-SSE bit) and `0xffff` on Intel, and Intel's FXSAVE
+stores the x87 last-instruction pointer of a Redis task (`0x617fb2`) where AMD stores 0. The
+guest sees both, and no engine setting changes what the hardware's FXSAVE writes. So AMD and
+Intel keep separate fingerprints, and the explorer's result cache keeps keying KVM runs by the
+CPU's vendor and model.
+
+**The fix** (`hydo/crates/hydo-kvm`).
+
+- `cpu::DR6_HOST_BITS` is bits 11 and 16. `CpuState::without_host_dr6` sets them.
+- `Cpu::host_dr6_bits` says which bits can come from the host: both for KVM's vCPU, none for the
+  scripted vCPU, so the scripted engine's goldens stay.
+- `Vmm::xfp` hashes every vCPU's state with the bits set unless `VmOpts::host_dr6`, which the
+  engine sets for an image of epoch 1 or 2 (`--image-epoch`).
+- The guest still reads the host's bits if it reads DR6. Linux reads DR6 only in its
+  debug-exception handler, which ignores both bits without the features. Making DR6 itself the
+  same on every host needs a VM exit at every debug-register access, which KVM gives only to a
+  host debugger.
+
+**What moves.** No recorded value: images of epoch 2 and before (every recorded KVM value, the
+i7-13700HX's and the AMD runners') are fingerprinted as before, and epoch 3's values are not
+recorded yet. In the re-recording pass of open item 105, KVM values of epoch-3 images recorded on
+an Intel host whose DR6 lacks one of the bits are the AMD form's. On AMD the form is the one the
+host gives, so nothing changes there. The hvx and Mac engines do not change.
+
+**The proof run.** The workflow's second form (run 43637178801) built the Redis image at epoch
+3 with this tree's hydo and the pinned cgroups kernels (`bzImage-kvm-cg` `f0e2d441…`,
+`bzImage-kvm-smp-cg` `f24a52e3…`). It ran each schedule twice on each of eight runners, and
+`disk=none | run` also twice with two vCPUs:
+
+| Image | Schedule | Intel: Xeon 8370C, 6975P-C, 6973P-C | AMD: EPYC 9V45, 7763, 9V74 |
+|---|---|---|---|
+| epoch 3 | `disk=none \| run` | `2d059466fb87a253` | `fb237d7eebbf8b83` |
+| epoch 3 | `disk=none \| run K=redis@5+2` | `bde68df6e95be1a9` | `189fc8e4105d2634` |
+| epoch 3, 2 vCPUs | `disk=none \| run` | `9293835d0f626c08` | `6bc53c393ff9901d` |
+
+The three Intel models give one fingerprint per schedule, and so do the three AMD models. DR6 as
+read still differs (`0xfffe0ff0` on the 8370C, `0xfffe07f0` on the 6975P-C and the 6973P-C). The
+other parts that differ between Intel models are outside the fingerprint: the XSAVE image beyond
+the legacy area at v2, and the engine's statistics. The epoch-2 image gave 0.3.3's values under
+this hydo on every host (the first run's values above), and every verdict was the recorded one.
+
+**Tests.** `hydo-kvm`'s `cpu::tests::the_hosts_dr6_bits_leave_the_hash` (the four DR6 values give
+one hash; the guest's own bits B0-B3, BD, BS and BT still count) and
+`the_hosts_dr6_bits_leave_the_fingerprint_from_epoch_3` in `tests/engine.rs` (a scripted vCPU
+with each host's DR6, with one and two vCPUs: one fingerprint at epoch 3 and with this hydo's
+epoch, four at epoch 2, and the AMD form's value is the same at both epochs). On the bare-metal
+machine: `cargo fmt --all --check`, clippy `-D warnings` on `hydo-kvm`, every `hydo-kvm` test,
+`public_content::` and `docs::`. Vale has no findings. The one-off branch `tmp-intel-fp-kvm` held
+both workflows and is deleted.

@@ -790,6 +790,10 @@ impl Cpu for KvmCpu {
         }
     }
 
+    fn host_dr6_bits(&self) -> u64 {
+        crate::cpu::DR6_HOST_BITS
+    }
+
     fn cpuid_now(&self) -> Vec<kvm_cpuid_entry2> {
         let mut c = Box::<kvm_cpuid2>::default();
         c.h.nent = CPUID_MAX as u32;

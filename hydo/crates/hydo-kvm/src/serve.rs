@@ -92,9 +92,10 @@ pub struct Start {
     pub outdir: std::path::PathBuf,
     /// `--ram-mib` (None: 1024)
     pub ram_mib: Option<u64>,
-    /// `--image-epoch`: the fingerprint epoch the image was built at (None: this hydo's, 2). An
+    /// `--image-epoch`: the fingerprint epoch the image was built at (None: this hydo's). An
     /// image of epoch 1 runs as it did then (Milestone 204): no full-state cycles unless
     /// HYDO_KVM_SPIN_STATE asks for them, and a fingerprint that keeps KVM's leftover event fields.
+    /// An image of epoch 1 or 2 keeps DR6's host bits in its fingerprint (Milestone 252).
     pub image_epoch: Option<u64>,
     /// `--vcpus`: the vCPUs (1: the machine of every recorded value)
     pub vcpus: usize,
@@ -1314,6 +1315,7 @@ pub fn vm_opts(o: &KvmOptions, disk: Option<&std::path::Path>) -> VmOpts {
         trace_unknown: o.trace_unknown,
         spin_state: o.spin_state.unwrap_or(true),
         stale_events: false,
+        host_dr6: false,
         cmdline: CMDLINE.to_string(),
         virtio: virt,
         vcpus: 1,
@@ -1501,6 +1503,8 @@ fn engine_main(
     let before_2 = start.image_epoch.is_some_and(|e| e < 2);
     vo.spin_state = o.spin_state.unwrap_or(!before_2);
     vo.stale_events = before_2;
+    // Milestone 252: DR6's host bits leave the fingerprint from epoch 3 on
+    vo.host_dr6 = start.image_epoch.is_some_and(|e| e < 3);
     vo.ram_size = ram_mib << 20;
     vo.vcpus = start.vcpus.max(1);
     if vo.vcpus > 1 {
