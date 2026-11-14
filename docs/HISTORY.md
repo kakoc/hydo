@@ -8806,3 +8806,96 @@ help (`tests/golden/cli.jsonl`: the line for `hydo rules`), the agents' answers
 (`tests/golden/agents.jsonl`: the guide's topic list has `rules`, the skill is 2.1.0) and
 `INVENTORY.md` (`HYDO_SCRIPTED_RULES`). No recorded value of an example moved; no example
 changed.
+
+### Milestone 233 (tentative number) - DONE (River, a job queue for Go on PostgreSQL, onboarded with `hydo onboard` and hunted on hvx; after a crash of PostgreSQL two River clients act as leader for seconds and insert one run of a periodic job twice, because River's leader table is unlogged; reproduced without hydo, no upstream report found; four fixes of the messages check across clock steps and power cuts, and one of `hydo onboard`; nothing recorded moved; 2026-11-14)
+
+**In short.** River v0.51.2 runs in `hydo/onboard/examples/river` (RESULTS.md) as `riverq`, a
+small Go program with three worker processes on PostgreSQL 16.16. Each worker is a River
+client with leader election and a periodic job every 2 s. The producer inserts plain and
+scheduled jobs, orders with `InsertTx` inside a business transaction that is rolled back one time
+in three, unique jobs (`ByArgs`, `ByPeriod` of an hour), and slow jobs that it cancels. The
+folder was started as a new user would: a Compose file, then `hydo onboard`.
+
+The rules state River's documented promises: a `type: messages` check over the history of
+sends, runs and completions (no loss, one stored copy of a unique job, no run after a completion,
+one completion, no early scheduled job), and seven rules over the tables (no run from a
+rolled-back transaction, one unique job per key and hour, no overlapping runs, no rerun after
+`JobCompleteTx`, one periodic insert per run, no completion after a cancel that answered
+`cancelled`, and the generic rule over the producer's acknowledged operations).
+
+The Mac had too little free disk, so every run used hvx on the bare-metal machine, with this
+branch's `hydo` inside a copy of the 0.3.2 Linux release.
+
+**What was found.**
+
+- A River bug, new as far as the search found. River's migration creates `river_leader` as
+  `UNLOGGED`, and PostgreSQL empties it in crash recovery (a promoted standby has it empty too).
+  Another client's next election attempt then wins at once, while the old leader still trusts its
+  term for up to 14 s by its own clock and learns of the loss only at its next reelection. Both
+  run the maintenance services, and the periodic enqueuer, which checks no leadership when it
+  inserts, inserts the same run twice. On hvx `disk=none | run K=postgres@5+1` showed it first,
+  and the blind exploration found it again (`x3`, seed 14). With the leader table made `LOGGED`
+  (an experiment, `--set leader_table=logged`), 0 of 12 PostgreSQL kills broke the rule, against
+  1 of 12 with River's schema. Natively (`native/`, PostgreSQL in Docker, three workers on the
+  Mac) 5 of 30 SIGKILL restarts gave a run inserted by two clients and 0 of 30 clean restarts;
+  the leader row was gone after the crashes and never after a clean stop. The search of River's
+  issues, pull requests, discussions and CHANGELOG found no report of this cause; discussion
+  #343 names duplicates "if a leader change happens right around the time of a periodic job
+  being inserted", and open pull request #1600 closes another gap of the same rule (a leader whose
+  deadline passed keeps maintenance running while it resigns). Nothing was posted.
+- The crash gives two leaders only when another client's election attempt comes before the old
+  leader's reelection, so most kill points pass (0 of 18 plain kills on the final image). A
+  kill with another composition, `disk=none | run K=postgres@6+1 W=44c763a6,p3,q2,r400`, breaks
+  the rule on every run of the final image and holds with the table `LOGGED`; it is the saved
+  regression `two-leaders-after-postgres-crash`.
+- A second cause, a clock effect. The faults of seed 14's schedule were separated on the final
+  image: its double inserts need the forward step `T=17:30` and the packet loss,
+  not the kill, and they happen with the table `LOGGED` too. A forward step of 30 s alone broke
+  the rule at 2 of 7 steps (unlogged) and 2 of 3 steps (`LOGGED`): it expires the lease by
+  PostgreSQL's clock while the old leader trusts its term by its monotonic clock. Packet loss
+  alone, the lost answers of reelection, did not give two leaders.
+- Clock effects, by River's design. A forward clock step makes the leader insert every skipped
+  run of a periodic job at once (about 300 after a step of an hour). After a backward step a
+  scheduled job, or a job running at a power cut, waits for its time on the clock that went
+  back, and a dead leader's lease lasts longer by the step, so no scheduled job becomes
+  available until it ends.
+
+**hydo fixes, each with a test.**
+
+- `hydo-history` messages: a deduplication window is undecided across a `T=` step, as `hydo
+  guide messages` already said (`messages::duplicates`).
+- `hydo-history` messages: an undelivered message with a delay is undecided, not lost, when a
+  `T=` step lies between its send and the drain (`messages::no_loss_and_its_excuses`).
+- `hydo-history` messages: the `duplicates` claim is undecided ("no send acknowledgement or
+  delivery carries a system id") only for a history without any system id; resent messages whose
+  pairs cannot be compared are counted as undecided (`messages::duplicates`).
+- `hydo-history` messages: the `processing` claim leaves a message undecided that was delivered
+  only before a power cut, drained after it, and has no acknowledgement record; the record can
+  be lost with the cut while the completion committed (`messages::processing`).
+- `hydo onboard`: when `hydo-fetch-image` is not on `PATH`, the printed step names the release's
+  copy with `HYDO_FETCH_IMAGE` (`onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path`).
+
+**Runs.**
+
+| what | runs | result |
+|---|---|---|
+| `x1` to `x4`: `hydo explore --strategy process --new-faults --more-faults --cluster-faults` on hvx | 57 first runs (seeds 1-40) | finding 1 in seed 14; the rules' five mistakes; the clock effects; a `K=` restart that failed |
+| `K=postgres@N+1`, N = 3 to 14, River's unlogged table against `LOGGED` | 24 | 1 of 12 against 0 of 12 |
+| the earlier failures again on later images | 20 | each as classified in RESULTS.md |
+| `K=postgres@N+1` and `@N+2` on the final image | 18 | 0 broke the rule |
+| the separation of seed 14's faults, of the kill, and of forward steps alone, on the final image | 51 | as above; the saved schedule and its five variants twice each, each pair with one fingerprint |
+| the final image: `disk=none \| run`, twice | 2 | OK, `6a6b3984349980e0` both times |
+| the regression `two-leaders-after-postgres-crash`, three times, and `hydo repro --regressions` | 4 | VIOLATION `[periodic]`, `d89fba89c6a12363` each time; 1 of 1 as expected |
+| `native/measure.sh` and `measure-pause.sh` on the Mac | 53 crash and 53 clean restarts (10 of each with the leader stopped), and 10 stops alone | two clients inserted one run after 6 of 53 crashes and 0 of 53 clean restarts |
+
+**Goldens.** The explorer's identity goldens (quick and full) and corpus golden, and the core
+controller's corpus golden, are re-recorded for the new example. The full identity golden only
+grew. The explorer's corpus golden of before still passes with the example moved aside. The
+controller's golden gained two lines, the example's input and `not core: restart policies`.
+The quick identity golden samples every fifth group, so a new example moves which groups it
+holds.
+
+**Open.** Open item 111: one image per Compose service with one `build:`, links from a one-shot
+job's dependencies, a group's `primary:` that needs the killed database, no `hydo: VERDICT` line
+for a failing run, a `K=` restart that ignores the restart policy, and an imported `pg_isready`
+check that passes during PostgreSQL's init server. The Mac engine did not run the example.

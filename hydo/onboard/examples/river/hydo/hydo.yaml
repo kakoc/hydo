@@ -1,0 +1,139 @@
+# riverq, a small application on River v0.51.2 (a job queue for Go on PostgreSQL), with three
+# worker processes on one PostgreSQL 16, so that River's leader election moves between them.
+# Started with `hydo onboard` from ../docker-compose.yaml; RESULTS.md says what was hunted.
+#
+#   sh ../build.sh              # bin/riverq-<arch>: the program, static, for amd64 and arm64
+#   sh fetch-images.sh          # PostgreSQL by digest
+#   hydo build hydo.yaml --arch arm64 --set arch=arm64     # the Mac engine
+#   hydo build hydo.yaml                                    # x86_64: hvx, KVM
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-40 --strategy process --new-faults --cluster-faults
+#
+# Deviations from the Compose file: the workers and the migration run the static program
+# (root.files) instead of the Compose build's image, which holds only that program. The workers
+# name postgres in depends_on, so that the explorer has their links to PostgreSQL for network
+# faults. Every worker has a readiness check.
+format: 1
+name: river
+description: "River v0.51.2 (job queue for Go on PostgreSQL 16) with three workers: lost, duplicated, early, concurrent and periodic jobs under kills, pauses, network faults, power cuts and clock steps"
+hydo_version: "0.3"
+
+params:
+  arch: amd64        # amd64 | arm64: the program's architecture, the same as the image's
+  leader_table: unlogged   # unlogged: River's schema; logged: an experiment (RESULTS.md, finding 1)
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 1280
+  clock_start: 1794614400    # 2026-11-14 00:00 UTC, the day of the import
+  clock_after_cut: 60        # River compares times across a restart (leases, scheduled jobs)
+  outcomes_after_cut: true   # the generic rule reads $HYDO_OUTCOMES, also in the recovery boot
+
+data:
+  size_mib: 768   # PostgreSQL's data directory (the fault target)
+  dirs: [vol/pgdata]
+
+root:
+  files:
+    - {src: "../bin/riverq-{{arch}}", dst: /bin/riverq, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 postgres
+      10.89.0.12 migrate
+      10.89.0.13 worker-1
+      10.89.0.14 worker-2
+      10.89.0.15 worker-3
+
+services:
+  # Compose service postgres
+  # image postgres:16.16-alpine3.24 = docker.io/library/postgres@sha256:0adbf25a9e96d38823bb813f3ac0ed41fadb665c88f1df7fe6dbfb060cbdc106
+  #   linux/amd64: sha256:a2f7e20374cd8fd8ed4a588b79549e10589bea7b1686e77922f5ac741b80b8a1
+  #   linux/arm64/v8: sha256:40e58641410e030f5769096bca8372f68f243e1859c8ecdf11f227da390d514d
+  - name: postgres
+    image: {x86_64: images/postgres-16.16-alpine3.24-amd64.docker.tar, arm64: images/postgres-16.16-alpine3.24-arm64-oci}
+    image_ref: "postgres:16.16-alpine3.24"
+    env:
+      POSTGRES_PASSWORD: "river"
+      POSTGRES_DB: "river"
+    port: 5432
+    addr: 10.89.0.11
+    ready: "timeout 5 hydo-oci postgres pg_isready -U postgres"
+    ready_timeout: 120
+    restart: on-failure
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/pgdata, dst: /var/lib/postgresql/data, copy_up: true}
+  # Compose service migrate: a one-shot job (the workers wait for it with
+  # service_completed_successfully); it idles here, and its command runs in each worker's setup:
+  - name: migrate
+    cmd: "sleep 2147483647"
+    addr: 10.89.0.12
+    depends_on: [postgres]
+    ready: "true"
+    recovery: false
+    restart: "no"
+    job: true
+  # Compose services worker-1, worker-2, worker-3: `riverq worker wN`, restart: unless-stopped
+  - name: worker_1
+    cmd: "/bin/riverq worker w1"
+    addr: 10.89.0.13
+    depends_on: [postgres, migrate]
+    setup: "[ -f /tmp/hydo/job.migrate.done ] || { RIVERQ_LEADER_TABLE={{leader_table}} /bin/riverq migrate && : > /tmp/hydo/job.migrate.done; }"
+    ready: "/bin/riverq ready w1"
+    ready_timeout: 60
+    restart: "unless-stopped"
+  - name: worker_2
+    cmd: "/bin/riverq worker w2"
+    addr: 10.89.0.14
+    depends_on: [postgres, migrate]
+    setup: "[ -f /tmp/hydo/job.migrate.done ] || { RIVERQ_LEADER_TABLE={{leader_table}} /bin/riverq migrate && : > /tmp/hydo/job.migrate.done; }"
+    ready: "/bin/riverq ready w2"
+    ready_timeout: 60
+    restart: "unless-stopped"
+  - name: worker_3
+    cmd: "/bin/riverq worker w3"
+    addr: 10.89.0.15
+    depends_on: [postgres, migrate]
+    setup: "[ -f /tmp/hydo/job.migrate.done ] || { RIVERQ_LEADER_TABLE={{leader_table}} /bin/riverq migrate && : > /tmp/hydo/job.migrate.done; }"
+    ready: "/bin/riverq ready w3"
+    ready_timeout: 60
+    restart: "unless-stopped"
+
+# the workers as one group: K=, P= and X= can pick River's elected leader (workers.primary)
+groups:
+  - name: workers
+    services: [worker_1, worker_2, worker_3]
+    primary: /bin/riverq leader
+
+workload:
+  steps: 20
+  timeout: 600
+
+test:
+  parallel: 6
+  per_round: 3
+  round_ms: 400
+  command_timeout: 200      # the drain waits up to 150 s for rescued and retried jobs
+  drain_timeout: 30
+
+checks:
+  - id: jobs
+    type: messages
+    history: jobs
+    msg: every job whose insert committed is worked, a unique job is stored once, a scheduled job does not start early, a completed job is not run again
+    final: /bin/riverq drain
+    acknowledgement: explicit   # River's completion of a job is its acknowledgement
+    claims:
+      delivery: at-least-once   # no job lost after its insert committed
+      duplicates: {by: message, window_ms: 600000}   # a unique job (one message id per key) is stored once
+      after_ack: no-redelivery  # a completed job is not run again
+      processing: once          # River completes a job once
+      delay: per-message        # a scheduled job does not start before its time
+
+faults: [kill, pause, network, oneway, cut, clock]
+clock_points: ["@:00-1s", "@hour-2s"]

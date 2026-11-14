@@ -1,0 +1,58 @@
+# riverq on River and PostgreSQL: three worker processes that share one database, so River's
+# leader election moves between them. Build the program first: sh build.sh
+services:
+  postgres:
+    image: postgres:16.16-alpine3.24
+    environment:
+      POSTGRES_PASSWORD: river
+      POSTGRES_DB: river
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  migrate:
+    build: .
+    command: ["migrate"]
+    environment:
+      RIVERQ_DATABASE_URL: postgres://postgres:river@postgres:5432/river?sslmode=disable&connect_timeout=5
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  worker-1:
+    build: .
+    command: ["worker", "w1"]
+    environment:
+      RIVERQ_DATABASE_URL: postgres://postgres:river@postgres:5432/river?sslmode=disable&connect_timeout=5
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-2:
+    build: .
+    command: ["worker", "w2"]
+    environment:
+      RIVERQ_DATABASE_URL: postgres://postgres:river@postgres:5432/river?sslmode=disable&connect_timeout=5
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-3:
+    build: .
+    command: ["worker", "w3"]
+    environment:
+      RIVERQ_DATABASE_URL: postgres://postgres:river@postgres:5432/river?sslmode=disable&connect_timeout=5
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  pgdata:

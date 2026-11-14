@@ -282,6 +282,40 @@ fn no_loss_and_its_excuses() {
     let onr = r#"{"id":"c","type":"messages","history":"q","acknowledgement":"on-receive","claims":{"delivery":"at-least-once"}}"#;
     assert_eq!(st(&run(&h.text(), onr), "no-loss"), Status::Held);
     assert_eq!(st(&run(&h.text(), ALO), "no-loss"), Status::Violated);
+
+    // a delayed message waits for the system's clock: a clock step after its send leaves it
+    // undecided at the drain (a job scheduled 0.5 s ahead waits 5 minutes after a step back of 5
+    // minutes; the River onboarding, Milestone 233); judged with clock_steps: strict
+    let delayed = r#"{"id":"c","type":"messages","history":"q","claims":{"delivery":"at-least-once","delay":"per-message"}}"#;
+    let delayed_strict = r#"{"id":"c","type":"messages","history":"q","clock_steps":"strict","claims":{"delivery":"at-least-once","delay":"per-message"}}"#;
+    let step = "HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"fault.clock_back\",\"ok\":true,\"msg\":\"the realtime clock was stepped backwards\"}\n";
+    let with_step = |item: &str| {
+        let mut h = H::default();
+        sent(&mut h, 1, 0, item, "ok");
+        let mut text = h.text();
+        text.push_str(step);
+        let mut h2 = H::default();
+        h2.rec(9, "ok", 10, "drained", &["c", "-"]);
+        text.push_str(&h2.text());
+        text
+    };
+    let r = run(&with_step("m1;d=500"), delayed);
+    assert_eq!(st(&r, "no-loss"), Status::Held, "{r:?}");
+    assert!(r["no-loss"].1.contains("1 undecided"), "{r:?}");
+    assert_eq!(
+        st(&run(&with_step("m1;d=500"), delayed_strict), "no-loss"),
+        Status::Violated
+    );
+    // ... a message without a delay is lost all the same
+    assert_eq!(
+        st(&run(&with_step("m1"), delayed), "no-loss"),
+        Status::Violated
+    );
+    // ... and so is a delayed one without a step
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1;d=500", "ok");
+    h.rec(9, "ok", 10, "drained", &["c", "-"]);
+    assert_eq!(st(&run(&h.text(), delayed), "no-loss"), Status::Violated);
 }
 
 #[test]
@@ -392,6 +426,47 @@ fn duplicates() {
     h2.recs[3].ty = "ok";
     let r = run(&h2.text(), win);
     assert!(r["duplicates"].1.contains("were both delivered"), "{r:?}");
+
+    // a clock step between two sends: the system's window may count by the clock the step moved
+    // (a job unique by the hour, sent before and after a step back across the hour, is stored
+    // twice by design; the River onboarding, Milestone 233), so the pair is undecided, and
+    // judged with clock_steps: strict
+    let mut h = H::default();
+    h.rec(1, "invoke", 0, "send", &["c", "m1;x=d1"]);
+    h.rec(1, "ok", 1, "send", &["c", "m1;x=d1;o=1"]);
+    let mut text = h.text();
+    text.push_str("HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"fault.clock_back\",\"ok\":true,\"msg\":\"the realtime clock was stepped backwards\"}\n");
+    let mut h2 = H::default();
+    h2.rec(1, "invoke", 2, "send", &["c", "m2;x=d1"]);
+    h2.rec(1, "ok", 3, "send", &["c", "m2;x=d1;o=2"]);
+    text.push_str(&h2.text());
+    let r = run(&text, win);
+    assert_eq!(st(&r, "duplicates"), Status::Held, "{r:?}");
+    assert!(r["duplicates"].1.contains("1 undecided"), "{r:?}");
+    let win_strict = r#"{"id":"c","type":"messages","history":"q","clock_steps":"strict","claims":{"duplicates":{"by":"dedup-id","window_ms":1000}}}"#;
+    assert_eq!(st(&run(&text, win_strict), "duplicates"), Status::Violated);
+
+    // a client that records system ids, whose only resent message had one send with an unknown
+    // outcome: that pair cannot be compared, but the client is not one that records no ids, so
+    // the claim holds with the pair undecided (the River onboarding, Milestone 233)
+    let bymsg = r#"{"id":"c","type":"messages","history":"q","claims":{"duplicates":{"by":"message","window_ms":1000}}}"#;
+    let mut h = H::default();
+    h.rec(1, "invoke", 0, "send", &["c", "u1"]);
+    h.rec(1, "ok", 1, "send", &["c", "u1;o=1"]);
+    h.rec(2, "invoke", 2, "send", &["c", "u1"]);
+    h.rec(2, "info", 3, "send", &["c", "u1"]);
+    h.rec(3, "invoke", 4, "send", &["c", "p1"]);
+    h.rec(3, "ok", 5, "send", &["c", "p1;o=2"]);
+    let r = run(&h.text(), bymsg);
+    assert_eq!(st(&r, "duplicates"), Status::Held, "{r:?}");
+    assert!(r["duplicates"].1.contains("1 undecided"), "{r:?}");
+    // ... while a history without any system id is still undecided
+    let mut h = H::default();
+    h.rec(1, "invoke", 0, "send", &["c", "u1"]);
+    h.rec(1, "ok", 1, "send", &["c", "u1"]);
+    h.rec(2, "invoke", 2, "send", &["c", "u1"]);
+    h.rec(2, "info", 3, "send", &["c", "u1"]);
+    assert_eq!(st(&run(&h.text(), bymsg), "duplicates"), Status::Undecided);
 }
 
 #[test]
@@ -457,6 +532,17 @@ fn processing() {
     assert!(run(&h3.text(), d)["processing"]
         .1
         .contains("never acknowledged"));
+    // ... but delivered before a power cut and drained after it, the acknowledgement may have
+    // reached the system with its record lost in the cut: undecided (the River onboarding,
+    // Milestone 233)
+    let mut b0 = H::default();
+    sent(&mut b0, 1, 0, "m1", "ok");
+    recv(&mut b0, 2, 2, &["m1;h=a"]);
+    let mut b1 = H::default();
+    b1.rec(9, "ok", 10, "drained", &["c", "-"]);
+    let r = run_sources(&[("w", b0.text()), ("w.recovery", b1.text())], d);
+    assert_eq!(st(&r, "processing"), Status::Held, "{r:?}");
+    assert!(r["processing"].1.contains("1 undecided"), "{r:?}");
 }
 
 #[test]

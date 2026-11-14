@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: the periodic job is inserted once per period: one leader at a time
+exec /bin/riverq check periodic

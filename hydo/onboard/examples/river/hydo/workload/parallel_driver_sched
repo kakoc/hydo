@@ -1,0 +1,3 @@
+#!/bin/sh
+# insert a job scheduled 0.3 to 3.3 s ahead
+exec /bin/riverq op sched

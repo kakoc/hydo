@@ -411,6 +411,17 @@ wall-clock lag breaks `min-replicas-to-write` (native only). hydo also found the
 5354, a hash's expiry lost on AOF replay. The example is `hydo/onboard/examples/valkey`
 (RESULTS.md, `native/`).
 
+**River: a job queue's promises (M233).** River v0.51.2 runs in a small Go program with three
+workers on PostgreSQL 16 in `hydo/onboard/examples/river` (RESULTS.md), started with `hydo
+onboard` from its Compose file. A messages check and seven rules over the tables state River's
+promises. Examples are no lost job, no job from a rolled-back transaction, no rerun after
+`JobCompleteTx`, and one leader at a time. One rule broke by River's code. After a crash of
+PostgreSQL two clients act as leader for seconds and insert one periodic run twice, because
+`river_leader` is unlogged. The regression `K=postgres@6+1 W=44c763a6,p3,q2,r400` fails on
+every hvx run, and `native/` reproduces it with Docker. No upstream report names it, and nothing
+was posted. A forward clock step longer than River's 15 s lease gives two leaders too, with any
+table: a clock effect. The runs used hvx only.
+
 **What the Lago onboarding lacked (M225).** Six additions, each a format-1 or results addition
 that changes nothing for a manifest without it:
 
@@ -947,6 +958,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - `hydo rules scan` matches words, not syntax; Lago's scan gives 4,217 lines.
     - The listmonk inconsistency (a blocklisting by bounces keeps the subscriptions) is not
       reported upstream, and no exploration ran with the Blnk or Lago rules.
+111. What the River onboarding lacked (M233). `hydo onboard` built and saved one image per
+    Compose service that shares one `build:`, four identical images here. A service that waits
+    for a one-shot job does not get the job's own `depends_on`, so the workers had no link to
+    PostgreSQL (as open item 97). A group's `primary:` that asks the database fails while a
+    kill of the database at the same step holds. A failing `hydo run` on hvx prints no `hydo:
+    VERDICT` line. The restart of a `K=` fault ignores the service's restart policy: a worker
+    that exits during its readiness check ends the run with `restart failed`. The import copies
+    a Compose healthcheck `pg_isready` without `-h`, which passes during the PostgreSQL image's
+    temporary init server. The River example ran on hvx only: the Mac engine was not tried.
 
 ## Milestone index
 
@@ -1355,6 +1375,12 @@ build machine, before 2026-10-13.
   never-seen listmonk, 23 of 25 rules held on clean runs. On the examples' saved regressions they
   caught Blnk's overdraft bug, Blnk's lost commits, and all four Lago findings. Blnk's
   atomic-bulk bug was caught only by a rule written after the miss. Nothing recorded moved
+- M233 (tentative number): the River onboarding (a job queue for Go on PostgreSQL), started with
+  `hydo onboard` and run on hvx. A crash of PostgreSQL gives two River leaders for seconds, and
+  both insert one run of a periodic job, because River's leader table is unlogged. Reproduced
+  without hydo in 5 of 30 crashes and 0 of 30 clean restarts; no report found. Four fixes of the
+  messages check across clock steps and power cuts, and `hydo onboard` names the release's image
+  fetcher. Nothing recorded moved
 
 ## Where to look
 

@@ -182,6 +182,25 @@ pub fn fate(ix: &Ix<'_>, m: &Msg, g: &Gk) -> Fate {
         }
     }
     let first = ix.first_live(m).map(|s| ix.op(s.op).inv);
+    // A delayed message waits for a time of the system's clock. A `T=` step back after its send
+    // moves that time away, so at the drain it may still be waiting rather than lost: undecided,
+    // as the time-dependent claims are across a step (the River onboarding, Milestone 233).
+    if let (Some(s), Some(dr)) = (
+        ix.first_live(m),
+        ix.groups
+            .get(g)
+            .and_then(|x| x.drained)
+            .map(|i| &ix.h.drained[i]),
+    ) {
+        let dms = match ix.d.delay {
+            Delay::Ms(v) => v,
+            Delay::PerMessage => ix.send_item(s).d.unwrap_or(0),
+            Delay::None => 0,
+        };
+        if dms > 0 && ix.clock_between(ix.op(s.op).inv.pos, dr.at.pos) {
+            return Fate::Undecided;
+        }
+    }
     if ix.d.ack == Ack::OnReceive {
         if let (Some(gr), Some(f)) = (ix.groups.get(g), first) {
             if gr.info_recvs.iter().any(|&p| p > f.pos) {
@@ -442,6 +461,11 @@ pub fn duplicates(ix: &Ix<'_>) -> Claim {
                 let (ai, bi) = (ix.op(a.op), ix.op(b.op));
                 // b reached the system by its completion (or never: an unknown outcome)
                 let bret = bi.ret?;
+                // a `T=` step between them: the system's window may count by its own clock,
+                // which the step moved (undecided, as `hydo guide messages` says)
+                if ix.clock_between(ai.inv.pos, bret.pos) {
+                    return None;
+                }
                 span(&ai.inv, &bret).map(|dt| dt < window_ms as i128 * MS)
             };
             for (id, sends) in &by_id {
@@ -542,6 +566,14 @@ pub fn duplicates(ix: &Ix<'_>) -> Claim {
                 if !ids.is_empty() {
                     judged += 1;
                 }
+            }
+            // A client that records system ids, but whose only resent messages each had a send
+            // with an unknown outcome (no id to compare), leaves those pairs undecided; only a
+            // history without any system id says that the client does not record them (the
+            // River onboarding, Milestone 233: unique jobs sent while PostgreSQL was down).
+            let records_ids = ix.msgs.values().any(|m| !system_ids(ix, m).is_empty());
+            if judged == 0 && candidates > 0 && und == 0 && records_ids {
+                und = candidates;
             }
             if judged == 0 && candidates > 0 && und == 0 {
                 return undecided(
@@ -690,7 +722,21 @@ pub fn processing(ix: &Ix<'_>) -> Claim {
             if ds.is_empty() {
                 continue;
             }
-            if ix.groups[&g].drained.is_none() {
+            let Some(dr) = ix.groups[&g].drained else {
+                und += 1;
+                continue;
+            };
+            // Delivered only before a power cut and drained after it: the acknowledgement may
+            // have reached the system while its record was lost with the cut, and nothing
+            // delivered the message again (the River onboarding, Milestone 233: a completion
+            // committed just before the cut). Undecided.
+            let drained_boot = ix.h.drained[dr].at.boot;
+            if ds.iter().all(|&d| ix.dlv_ret(d).boot < drained_boot)
+                && !ix
+                    .acks_of(&msg.m, &g)
+                    .iter()
+                    .any(|a| a.kind == OpKind::Ack && a.out != Out::Fail)
+            {
                 und += 1;
                 continue;
             }

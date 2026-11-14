@@ -1,0 +1,7 @@
+# hydo (hydo init): the build cache, fetched images and run results
+.hydo/
+hydo/images/
+hydo-out/
+# the programs (sh build.sh) and the native reproduction's work folder
+bin/
+native/work/

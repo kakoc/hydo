@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: a job whose cancellation answered cancelled never completes
+exec /bin/riverq check cancelled

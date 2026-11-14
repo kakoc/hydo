@@ -1,0 +1,3 @@
+#!/bin/sh
+# create an order and its job with InsertTx in one transaction; one in three rolls back
+exec /bin/riverq op order

@@ -1,0 +1,3 @@
+#!/bin/sh
+# insert a job unique by its key (one of five) and the hour; a lost answer is retried
+exec /bin/riverq op uniq

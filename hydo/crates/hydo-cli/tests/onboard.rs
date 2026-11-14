@@ -128,6 +128,43 @@ fn a_compose_project_with_claude_code() {
     );
 }
 
+/// The step "copy the images in" works as printed: a hydo whose release directory is not on PATH
+/// (from `cargo install` or `hydo setup --get`) names its `hydo-fetch-image` for the generated
+/// script, which looks only on PATH (found in the River onboarding, Milestone 233).
+#[test]
+fn the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path() {
+    use std::os::unix::fs::PermissionsExt;
+    let compose = "services:\n  db:\n    image: example/db:1.0\n";
+    // the release directory of this version in the case's install cache
+    let c = Case::new("fetch");
+    c.put("docker-compose.yml", compose);
+    let tool = c
+        .top
+        .join("home/.hydo/versions")
+        .join(env!("CARGO_PKG_VERSION"))
+        .join("bin/hydo-fetch-image");
+    std::fs::create_dir_all(tool.parent().unwrap()).unwrap();
+    std::fs::write(&tool, "#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let (rc, out) = c.onboard(&["--no-resolve", "--no-skill"]);
+    assert_eq!(rc, 0, "{out}");
+    let want = format!(
+        "copy the images in once (needs network): HYDO_FETCH_IMAGE={} sh ",
+        tool.display()
+    );
+    assert!(out.contains(&want), "{out}");
+    // with hydo-fetch-image on PATH, the plain command
+    let c = Case::new("fetch-path");
+    c.put("docker-compose.yml", compose);
+    c.tool("hydo-fetch-image");
+    let (rc, out) = c.onboard(&["--no-resolve", "--no-skill"]);
+    assert_eq!(rc, 0, "{out}");
+    assert!(
+        out.contains("copy the images in once (needs network): sh "),
+        "{out}"
+    );
+}
+
 #[test]
 fn the_commit_advice_comes_only_in_a_git_repository() {
     let c = Case::new("nogit");

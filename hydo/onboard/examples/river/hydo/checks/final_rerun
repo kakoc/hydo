@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: a job that completed in its transaction is never run again
+exec /bin/riverq check rerun

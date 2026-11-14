@@ -1,0 +1,8 @@
+# finding 1 (RESULTS.md), a River bug: PostgreSQL is killed before step 6 and comes back before
+# step 7, with no other fault. Its crash recovery empties River's unlogged leader table, another
+# worker (w1) wins the election at once while the old leader (w3) still trusts its term, and both
+# insert the periodic job's run of 00:00:14. It failed on every run of the example's image and
+# held on every run with the leader table made LOGGED (--set leader_table=logged, an experiment).
+# verdict: HYDO-ORACLE: VIOLATION [periodic] 1 runs of the periodic job inserted more than once
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run K=postgres@6+1 W=44c763a6,p3,q2,r400

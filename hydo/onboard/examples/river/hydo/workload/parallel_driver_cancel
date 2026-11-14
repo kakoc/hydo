@@ -1,0 +1,3 @@
+#!/bin/sh
+# insert a slow job, then cancel it while it waits or runs
+exec /bin/riverq op cancel

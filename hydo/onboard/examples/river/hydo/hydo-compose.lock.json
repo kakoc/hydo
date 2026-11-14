@@ -1,0 +1,83 @@
+{
+ "generated_by": "hvx/onboard/hydo-compose",
+ "images": {
+  "postgres:16.16-alpine3.24": {
+   "index_digest": "sha256:0adbf25a9e96d38823bb813f3ac0ed41fadb665c88f1df7fe6dbfb060cbdc106",
+   "name": "postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GOSU_VERSION=1.19",
+       "LANG=en_US.utf8",
+       "PG_MAJOR=16",
+       "PG_VERSION=16.16",
+       "PG_SHA256=9d5cd8633043b75740d5d59749c6b7365e6aeb53c47098b1a5e80bb18f87881a",
+       "DOCKER_PG_LLVM_DEPS=llvm21-dev \t\tclang21",
+       "PGDATA=/var/lib/postgresql/data"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:a2f7e20374cd8fd8ed4a588b79549e10589bea7b1686e77922f5ac741b80b8a1",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GOSU_VERSION=1.19",
+       "LANG=en_US.utf8",
+       "PG_MAJOR=16",
+       "PG_VERSION=16.16",
+       "PG_SHA256=9d5cd8633043b75740d5d59749c6b7365e6aeb53c47098b1a5e80bb18f87881a",
+       "DOCKER_PG_LLVM_DEPS=llvm21-dev \t\tclang21",
+       "PGDATA=/var/lib/postgresql/data"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:40e58641410e030f5769096bca8372f68f243e1859c8ecdf11f227da390d514d",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "postgres:16.16-alpine3.24",
+   "registry": "docker.io",
+   "repo": "library/postgres",
+   "tag": "16.16-alpine3.24"
+  }
+ }
+}

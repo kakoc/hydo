@@ -236,6 +236,28 @@ fn look(top: &Path) -> Found {
     f
 }
 
+/// The command that runs the generated `hydo/fetch-images.sh` (at `path`). The script looks for
+/// `hydo-fetch-image` on PATH, and a hydo from `cargo install` or `hydo setup --get` keeps it in
+/// its release directory, which is not on PATH: then the command names it with
+/// `HYDO_FETCH_IMAGE`, so that the step works as printed.
+fn fetch_command(root: &Path, path: &str) -> String {
+    let script = format!("sh {path}");
+    let tool = root.join("bin/hydo-fetch-image");
+    if on_path("hydo-fetch-image") || !tool.is_file() {
+        return script;
+    }
+    let p = tool.display().to_string();
+    let plain = p
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "/._-+,:@=".contains(c));
+    let p = if plain {
+        p
+    } else {
+        format!("'{}'", p.replace('\'', "'\\''"))
+    };
+    format!("HYDO_FETCH_IMAGE={p} {script}")
+}
+
 /// Whether `cmd` is a program on PATH.
 fn on_path(cmd: &str) -> bool {
     std::env::var_os("PATH").is_some_and(|p| {
@@ -481,13 +503,14 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
     // one ordered list of next steps: hydo compose's own `next:` line above says the same in
     // other words (0.3.3, a reader found three next steps from three places)
     if fetch_first {
+        let script = if here == "here" {
+            "hydo/fetch-images.sh".to_string()
+        } else {
+            format!("{}/hydo/fetch-images.sh", shown.trim_end_matches('/'))
+        };
         println!(
-            "First: copy the images in once (needs network): sh {}",
-            if here == "here" {
-                "hydo/fetch-images.sh".to_string()
-            } else {
-                format!("{}/hydo/fetch-images.sh", shown.trim_end_matches('/'))
-            }
+            "First: copy the images in once (needs network): {}",
+            fetch_command(&ctx.root, &script)
         );
     }
     if let Some(k) = installed.first() {
