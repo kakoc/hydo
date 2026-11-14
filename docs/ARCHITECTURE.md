@@ -138,7 +138,7 @@ The design of the agent and the host controller is in
 | `hydo-results` | The results format: run and exploration documents and their JSON Schema. |
 | `hydo-schema-compat` | The check that a format only gains additions after its release. |
 | `hydo-config` | Every environment variable that hydo reads (`INVENTORY.md`). |
-| `hydo-compose` | Imports a `docker-compose.yaml` as a starting `hydo.yaml`. |
+| `hydo-compose` | Imports a `docker-compose.yaml` or Kubernetes manifests as a starting `hydo.yaml`, and writes fakes from OpenAPI descriptions (`hydo fake from-openapi`). |
 | `hydo-agents` | `hydo guide`, `hydo skill install`, and `hydo init` for AI coding tools (not the guest agent). |
 | `hydo-world` | The guest program that serves fake outside services and fault proxies. |
 | `hydo-read`, `hydo-sql` | Guest programs that read stores and run SQL workloads (own workspaces). |

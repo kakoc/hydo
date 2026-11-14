@@ -1,0 +1,12 @@
+The two OpenAPI descriptions of tests/openapi.rs, as they are published (the test checks each
+file's sha256, so they stay unchanged):
+
+petstore-expanded.yaml (OpenAPI 3.0.0)
+  https://raw.githubusercontent.com/OAI/OpenAPI-Specification/4f86429f134f7e48b6351563549b4502fc69de52/_archive_/schemas/v3.0/pass/petstore-expanded.yaml
+  sha256 b1633b6309c065c43d56be7c659b0f2c4be03be5a4013b7c3f74b32bd33f62eb
+  License: Apache-2.0 (the OpenAPI Initiative's OpenAPI-Specification repository)
+
+TransferService-v4.yaml (OpenAPI 3.1.0, Adyen's Transfers API v4)
+  https://raw.githubusercontent.com/Adyen/adyen-openapi/ee0cdd3511442c12c49394636e75be31e46cd915/yaml/TransferService-v4.yaml
+  sha256 ce85c66b08bcd5c9b9bcad924e1245374ce2fe1379d87680ed2329d0e2876a7f
+  License: MIT, Copyright (c) 2017 Adyen bv (LICENSE-adyen-openapi in this folder)

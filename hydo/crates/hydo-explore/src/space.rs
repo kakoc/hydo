@@ -48,6 +48,9 @@ pub struct PfTarget {
     pub req: Vec<String>,
     pub hook: Vec<String>,
     pub proto: String,
+    /// The error statuses a fake's route declares in `errors:` (Milestone 249), which a drawn
+    /// `status=` takes besides hydo's own four; empty for every other target.
+    pub statuses: Vec<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -963,6 +966,10 @@ fn pf_targets(m: &Value) -> Vec<PfTarget> {
                     Vec::new()
                 },
                 proto: proto.clone(),
+                statuses: match r.get("errors") {
+                    Some(Value::Object(o)) => o.keys().filter_map(|k| k.parse().ok()).collect(),
+                    _ => Vec::new(),
+                },
             });
         }
     }
@@ -978,6 +985,7 @@ fn pf_targets(m: &Value) -> Vec<PfTarget> {
                 req: svec(&PF_TCP_KINDS),
                 hook: Vec::new(),
                 proto: "tcp".into(),
+                statuses: Vec::new(),
             });
             continue;
         }
@@ -986,6 +994,7 @@ fn pf_targets(m: &Value) -> Vec<PfTarget> {
             req: svec(&PF_REQ_KINDS),
             hook: Vec::new(),
             proto: proto.clone(),
+            statuses: Vec::new(),
         });
         for r in arr(e.get("routes")) {
             out.push(PfTarget {
@@ -993,6 +1002,7 @@ fn pf_targets(m: &Value) -> Vec<PfTarget> {
                 req: svec(&PF_REQ_KINDS),
                 hook: Vec::new(),
                 proto: proto.clone(),
+                statuses: Vec::new(),
             });
         }
     }

@@ -523,6 +523,19 @@ changed the fingerprint. The example is `hydo/onboard/examples/contracts-ledger`
 the measurements are `docs/design/contracts.md`. A stop costs 4.8 µs on the Mac (open item
 113).
 
+**Fakes from OpenAPI descriptions (M249).** `hydo fake from-openapi <spec>` writes a `fakes:`
+entry from an OpenAPI 3.0 or 3.1 description (the module `openapi` of `hydo-compose`). It writes
+one route per operation, with the spec's example or a body made from the schema, and no random
+value. Templates (`{seq}`, the new `{uuid}`, `{path:x}`, `{json:x}`, `{form:x}`) stand where the
+schema allows. `--stateful` adds `save:`/`load:` to create-then-read pairs. The idempotency header
+gives `idempotent: true`, and the spec's error answers fill the route's `errors:`, a format-1
+addition that an `H=` rule `status=<code>` answers. The command prints, writes (`-o`) or adds
+(`--add-to`) the entry, and refuses unmappable operations with one line each. Goldens: the OAI
+Petstore and Adyen's Transfers API. On the Mac engine the example
+`hydo/onboard/examples/openapi-payouts` showed its planted retry bug, and every replay gave its
+fingerprint. The design is `docs/design/openapi-fakes.md`; the details are in `docs/HISTORY.md`
+Milestone 249.
+
 **From Kubernetes manifests (M243).** `hydo k8s <files | folder | chart | kustomize folder>`
 writes a starting `hydo.yaml` from Kubernetes manifests, a Helm chart (`helm template`) or a
 Kustomize folder (`kubectl kustomize`); `hydo onboard` runs it when there is no Compose file. It
@@ -1100,6 +1113,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     several implementations, a channel or a queue is not followed. Its schedules place the steps
     at fixed workload steps. Only the Valkey schedules ran; the Temporal and River schedules, and
     the audit inside a new onboarding, did not.
+118. Fakes from OpenAPI descriptions (M249). Response headers (`Location`), nested echoed fields
+    and OpenAPI 3.1 `webhooks:` are not generated, and the business reference is not inferred
+    (`--ref` names it). A `DELETE` does not remove the saved object, and a `PATCH` saves nothing.
+    The example ran on the Mac engine only. It did not run on hvx or on KVM. The changed
+    `hydo-world` (`errors:`, `{uuid}`) reaches a release at its next re-pin.
 
 ## Milestone index
 
@@ -1565,6 +1583,11 @@ build machine, before 2026-10-13.
   Valkey, Temporal and River rank in the top 5, and 122 of 130 sampled places are real.
   Its Valkey schedule reproduces valkey-io/valkey#5406 on the Mac engine. Skill 2.3.0. Nothing
   recorded moved
+- M249 (tentative number): `hydo fake from-openapi` writes a fake from an OpenAPI 3.0 or 3.1
+  description. It writes routes, bodies from examples or schemas with templates, `save:`/`load:`
+  pairs, the idempotency header, and the error answers in the new route key `errors:`. The
+  openapi-payouts example's retry bug showed on the Mac engine, and the fix passed. Skill 2.3.1.
+  Nothing recorded moved
 
 ## Where to look
 

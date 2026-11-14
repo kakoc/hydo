@@ -37,6 +37,7 @@ hydo-compose::equivalence                fast
 hydo-compose::fetch_arch                 fast
 hydo-compose::k8s                        fast
 hydo-compose::local_build                fast
+hydo-compose::openapi                    fast
 hydo-compose::pycheck                    fast
 hydo-compose::registry                   fast
 hydo-compose::start_and_clock            fast
@@ -91,6 +92,7 @@ hydo-explore::names                      fast
 hydo-explore::netns_links                fast
 hydo-explore::reactive                   fast
 hydo-explore::refusals                   fast
+hydo-explore::route_errors               fast
 hydo-explore::storage_faults             fast
 hydo-explore::upgrades                   fast
 hydo-explore::workload_pauses            fast
@@ -141,6 +143,7 @@ hydo-schema-compat::real_schemas         fast
 hydo-schema-compat::rules                fast
 hydo-tools                               fast
 hydo-world::bin/hydo-world               fast
+hydo-world::fake_errors                  fast
 hydo-world::objects_sign                 fast
 hydo-world::proxy_idempotent             fast
 hydo-world::xcheck                       full

@@ -194,6 +194,7 @@ pub fn world_config(m: &Value) -> String {
                     "idempotent",
                     "save",
                     "load",
+                    "errors",
                 ] {
                     if let Some(v) = r.get(k) {
                         d.insert(k.into(), v.clone());

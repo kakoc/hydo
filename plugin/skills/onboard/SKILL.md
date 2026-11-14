@@ -4,7 +4,7 @@ description: Set up deterministic fault testing with hydo for a software project
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "2.3.0"
+  version: "2.3.1"
   hydo-min: "0.1.0"
 ---
 
@@ -105,9 +105,10 @@ its data directory, its dependencies, and the file where you found each fact. Sh
    outlast every lease and the system's recovery after a power cut, inside `workload.timeout`.
 6. Outside services the system calls (payments, e-mail, object storage, webhooks): offer the
    user a ready-made emulator for each one the catalog has (Stripe, SMTP, S3: one
-   `emulators:` line each), and write a fake for the rest. Durability settings become knobs;
-   allow only the fault kinds that make sense for the project (`hydo guide outside-services`,
-   `hydo guide faults`).
+   `emulators:` line each), and write a fake for the rest. When the service has an OpenAPI
+   description, write its fake with `hydo fake from-openapi`, then read the routes it wrote.
+   Durability settings become knobs; allow only the fault kinds that make sense for the project
+   (`hydo guide outside-services`, `hydo guide faults`).
 7. Check the project for the pitfalls in [references/pitfalls.md](references/pitfalls.md).
 
 After **every** file you write, run `hydo build hydo/hydo.yaml --check` and fix what it reports.

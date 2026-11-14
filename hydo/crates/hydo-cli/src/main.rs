@@ -71,6 +71,9 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
                                                    start a hydo.yaml from a Compose file (MANIFEST.md)
     hydo k8s     <manifests | chart | kustomize dir> [--out hydo.yaml] [--helm CHART] [--values F]
                                                    start a hydo.yaml from Kubernetes manifests or a Helm chart
+    hydo fake    from-openapi <spec.yaml|json> [--name N] [--port P] [--ops OP,...] [--stateful]
+                 [--ref E] [--tls] [-o FILE | --add-to hydo.yaml]
+                                                   write a fake outside service from an OpenAPI description
     hydo build   [hydo.yaml] [--out DIR] [--set KEY=VALUE ...]
                                                    compile the manifest into a guest disk image
     hydo migrate [hydo.yaml] [--check] [--out FILE | --stdout]
@@ -131,6 +134,9 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
                                                    start a hydo.yaml from a Compose file (MANIFEST.md)
     hydo k8s     <manifests | chart | kustomize dir> [--out hydo.yaml] [--helm CHART] [--values F]
                                                    start a hydo.yaml from Kubernetes manifests or a Helm chart
+    hydo fake    from-openapi <spec.yaml|json> [--name N] [--port P] [--ops OP,...] [--stateful]
+                 [--ref E] [--tls] [-o FILE | --add-to hydo.yaml]
+                                                   write a fake outside service from an OpenAPI description
     hydo build   [hydo.yaml] [--out DIR] [--set KEY=VALUE ...]
                                                    compile the manifest into an arm64 guest image
     hydo migrate [hydo.yaml] [--check] [--out FILE | --stdout]
@@ -246,6 +252,8 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         "compose" => delegated::cmd_compose(ctx, rest),
         // M243: Kubernetes manifests, a Helm chart or a Kustomize folder (`hydo k8s --help`)
         "k8s" => hydo_compose::k8s::main(rest, ctx.config.cli.init_clock_start),
+        // Milestone 249: a fake outside service from an OpenAPI description (`hydo fake --help`)
+        "fake" => hydo_compose::openapi::main(rest),
         "build" => build::cmd_build(ctx, rest),
         "run" => runs::cmd_run(ctx, rest),
         "repro" => runs::cmd_repro(ctx, rest),

@@ -20,6 +20,7 @@ input	hydo/onboard/examples/miniflux/hydo.yaml	7f74f2fac53dbc117de6152c0e43fe15e
 input	hydo/onboard/examples/nats-flaky-8363/hydo.yaml	d8e8cbcf52ff01b080d3b7458f6dfffead9f027c6d1c201c03707d924a6c80f5
 input	hydo/onboard/examples/node-kv/hydo-mac.yaml	22748322f93529aeb34865f6ffc36729b4708ccfab359b31338336908a20ddd4
 input	hydo/onboard/examples/node-kv/hydo.yaml	bf84c318fec3878f26ffe5c40cec1bf03c4cdaea7c44820de651b9fc843a5fbb
+input	hydo/onboard/examples/openapi-payouts/hydo.yaml	c1621971b9ce3bbf93ac4c47c9e54c927754fe90628e3b12990a943a6722d367
 input	hydo/onboard/examples/perf-kv/hydo.yaml	dad61c9cb9e12ebf519a5da06cbe35e6857070809113c64537ad458ec6c4cbbb
 input	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	f5b1bb0d84df3db0115e938aa9e31c1088c75ff09ba5af7698347e618a75e84b
 input	hydo/onboard/examples/python-kv/hydo-mac.yaml	19ae1d6b5ec2705e9583e9d81d211586ef923b4efbef4ebafff6e4d4a7293d88
@@ -1283,6 +1284,61 @@ chunk	hydo/onboard/examples/node-kv/hydo.yaml	38	500	91f0571ed094e10d132f4b6b501
 chunk	hydo/onboard/examples/node-kv/hydo.yaml	39	500	9ea02f51ad8f7ede4e09dac5bd1c658fe01f8c1be5023b85085cd95caf3096c8
 chunk	hydo/onboard/examples/node-kv/hydo.yaml	40	500	3398d682d953f68aaaac9138bd67866df904bf6791871c5ea8456af71e0cc0f7
 chunk	hydo/onboard/examples/node-kv/hydo.yaml	41	147	90c5bdf6592caee00190e22e4cb86dfc86403ae22c8d2c642932ce5f3496b7f2
+manifest	hydo/onboard/examples/openapi-payouts/hydo.yaml	core
+boot	hydo/onboard/examples/openapi-payouts/hydo.yaml	hydo/onboard/examples/openapi-payouts/hydo.yaml#0	error	88a095340f58a463
+boot	hydo/onboard/examples/openapi-payouts/hydo.yaml	hydo/onboard/examples/openapi-payouts/hydo.yaml#1	snapshot	1420affd9a9a280c
+counts	hydo/onboard/examples/openapi-payouts/hydo.yaml	identity=131 recovery:error=5 recovery:ok=17 recovery:violation=12 refused=1 run:cut=34 run:error=26 run:ok=180 run:violation=62 token:C=34 token:H=258 token:K=80 token:P=89 token:Q=1 token:X=4 token:Z=1 written=171
+boot-transcript	hydo/onboard/examples/openapi-payouts/hydo.yaml	1420affd9a9a280c
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	0	500	029c3d471c5676f5e00d06593322a9c8f36fe70bda0930d65fa8ee0b18d30428
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	1	500	94a7715421261b32a2654b0918e44045cd7ca69bcad9d6e590fd7c7f3e97930a
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	2	500	4207ffd135d7b0272c3d65540f0613cde5add5464408e5149329fe73197798f4
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	3	500	130666f41bccda86c3fd8cd2e57e94bd7b317c857c2cfa6a1207ac0b955eb936
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	4	500	12c72ae9669d9d98e795d9e69241a01ece886620cc3f4563dd14a75b6336d0f6
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	5	500	20ba094fe8591ee469f5554407261eaf0ab0e33b7b793cf4487e2eaff194b315
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	6	500	5eff1e748bc4e448b34bfe1f9664f40fe66904befb4c412d962c453370af490d
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	7	500	276a5eb0df549f16ab01fc710feba6f7b696378ccbabf820bbaebe564b658345
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	8	500	b3a3a3cd306f6bfbac7e4389e4e09ec5fc29a81a576380130fd218623e19dbcd
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	9	500	a90f3cfeadef6c8beea204b13ea48eafcdcb90e42f210a6b6a35336a0197bd31
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	10	500	52ec87d1d812365ae851a44f32664406e13725fab69e776472023c1d7f00c78f
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	11	500	e38ccbe0afd349218257aaf68aef3b96d8e2d1c7b56ef125ac67b855753670ed
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	12	500	2d588d8bc373d22d47050a52d00b9a71f1610d1f00ce2c65d98d6efc1020e772
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	13	500	eb255898dc4a49907f9a8e7be454903f0064f5cba965ce52ec29128db6af6d0c
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	14	500	9d525558e9d64be42452ba801a213b6143710a061baeaffa1f03fa656e0c6661
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	15	500	558477b8f059718c6d183fd83cc89157aa92da6f5606711cc91bd7acd1b6eaa5
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	16	500	51e23804d7cc05aa013f45d358be717e7fc8d1b1e552c8a2a2adf54804516af4
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	17	500	7b084f0c6bb79d8c5acdcd9c7ba4b01db78e625e24af56493742ae4e3e5115dd
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	18	500	b22e90ca9544df289640806d466ca243655be9dbdc497344663728f503a373c4
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	19	500	b0b125bf5e74b1a0e15331cab47c5ddf51baf318512220ccd30cd9c9548cc1af
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	20	500	212860162d4b37a0a1501e9129f36815d68e455e96d6b73378c656ad819fe5db
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	21	500	a3c9c3a8a9ed2fe3a3d41855b7919e5b811ea07a9081140d696726ebedb08b4d
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	22	500	3a89cb867f7808ee3702f260ebb4a0ccebc2fd6a87d539c23ee3d1a41db3dfe6
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	23	500	511d1d996323d2e8df90d703abbfe3ce6c3d33e1f058883edf0bac7a5bf93b86
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	24	500	1792c94c324d8e4b84370d8e9e315e6f63bc573e66be4fe271765c7822346ee7
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	25	500	01acd4cfa937ab570db8d380961a4a17aeddcfc2d6bd56723f5c5414ed9fbae1
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	26	500	61cb8325580716e5e0d499008c4d952207536c99f5e17a4d859237994a3ba54a
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	27	500	f068560eb26f6dca86a689b41e8bd405eae703766378000b0793e31c4afa79fb
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	28	500	00f52bd0543482d7f599751c57f6453bf8d234ceaa542eaf258cdeaea632f37d
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	29	500	4b53c05147415dc94386bcd9ce03417c6ae361e7685b3dd3c592154c25973173
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	30	500	0e722fd2b0905dcfdbbd1e2ae974e746ba36dea9b1da746029bd0877b584a365
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	31	500	284097db8d4f2c97e19571dacf38d23ce07ef62a0fadac49dea46cae306443bc
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	32	500	f8be7cdad25a21bbb0c63f8936b7a269ee48418d0a37520d57c61d10430ba0db
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	33	500	9baab44750611b42b688708b9d59a054f852f2876f7eec21abda774ee726b472
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	34	500	b7845a33148d7a0041bbf1cb82d837f6b55f6539b44ff8a2780df2034ccb7db2
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	35	500	8b28669a26908678eda5aaf07a7f9aae7114313d76bd952b3cf6fe8ed4011f6b
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	36	500	434e1b8b7b2f339f99d606e954f7cab11abcfb17e0cccc82b2bda69171f1e253
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	37	500	c33cc6b1256df015ba918c12303d79d17e4b994f396def19e42d85769963a0fe
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	38	500	94261fcfcf32a0fcde4ea3535900f70b1211a8c5c75ae14c363f3e85a7fb2db4
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	39	500	4c857add42fa242e46fae426c6a45b31a9c48ad6a0cbbfa2271bb46a04cd819f
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	40	500	82d506626488e6349709123c4a473fd24ffa4fd66dbfa36f3a57f22c70189e1f
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	41	500	870e765e698fb9f66fd93b97794453782faa80a72ac05044f3fefb67cfb07a9c
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	42	500	bce2eb92405a4d0f7ed977b67b3b360564857611db3a42bc1e7d213af6237e9d
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	43	500	379fdc8baf449629193db3e45bc8d0e4b9e4e99785164f9d12be70873a10c872
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	44	500	bda4c3800ca667a80ed0e54f55dc98085175fcaa8f2522a33e5289ec893a2ae7
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	45	500	1b7b6d10a069ab1e5fb910152cfec40159b017b4ba111f624bbf6c141029917b
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	46	500	d94ec5cb07301c5826a8c2658b796dcaabecb18148975b045d219e3afaf6da51
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	47	500	009504efcd1c0001f50c22f646af2154aac8a0c490e0f78fa9280f92e9387ff0
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	48	500	d9877a0b6aa889f5199ae7db0967bad09f301e87fcd0b789a81b81582bef6f52
+chunk	hydo/onboard/examples/openapi-payouts/hydo.yaml	49	34	28bae5c53dc1f2ff948e3911faf7206d6d842a5de93b20e7066f51d78a590a65
 manifest	hydo/onboard/examples/perf-kv/hydo.yaml	core
 boot	hydo/onboard/examples/perf-kv/hydo.yaml	hydo/onboard/examples/perf-kv/hydo.yaml#0	snapshot	78bce04a51d87497
 counts	hydo/onboard/examples/perf-kv/hydo.yaml	identity=190 recovery:error=1 recovery:ok=40 recovery:violation=14 refused=1 run:cut=55 run:error=15 run:ok=117 run:violation=14 token:C=57 token:K=111 token:N=73 token:O=15 token:P=102 token:Q=1 token:T=86 token:X=4 token:Z=1 written=11
@@ -7998,4 +8054,4 @@ chunk	hydo/onboard/examples-mac/redis/hydo.yaml	53	500	f2bf8f98c9629fa6b8d45bcbd
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	54	500	5cf61ec38f3e010d9a42f26df58707533cae9b4627515e4e121648dbe6bbb663
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	55	500	2b8d95ff39036743ea03c9c1f547c7467526c0539b7dd35c08ebae98eccba1bb
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	56	491	2059fe37977a60502545de88616464b7109da8a5a2e579bf6b926a2ad0799a02
-refused	other=56
+refused	other=57

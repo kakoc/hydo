@@ -9,6 +9,7 @@ mod equivalence;
 mod fetch_arch;
 mod k8s;
 mod local_build;
+mod openapi;
 mod pycheck;
 mod registry;
 mod start_and_clock;

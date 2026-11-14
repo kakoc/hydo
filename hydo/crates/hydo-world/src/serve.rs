@@ -532,6 +532,20 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
                     obj = crate::objects::save(&mut st.objects, &e.name, r, fx, cur, &octx, &v);
                 }
             }
+        } else if let Some(r) = rt.filter(|r| fake && !apply && !r.errors.is_empty()) {
+            // an error answer of `errors:` may show the object the request names; the world did
+            // not act, so nothing is saved and a missing object changes nothing
+            let s = ans_seq.to_string();
+            let octx: [(&str, &[u8]); 5] = [
+                ("seq", s.as_bytes()),
+                ("ref", &r#ref),
+                ("idem", &idem),
+                ("fake", e.name.as_bytes()),
+                ("route", rname.as_bytes()),
+            ];
+            obj = crate::objects::lookup(&st.objects, &e.name, r, &octx, &v)
+                .ok()
+                .flatten();
         }
         if let Some(r) = &rule {
             out = format!("{out}+{}", r.outcome());
@@ -624,8 +638,19 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
                 );
             }
             a.status = r.status.clamp(0, 999) as u16;
-            a.body =
-                format!(r#"{{"error":"injected by hydo","status":{}}}"#, r.status).into_bytes();
+            // a fake route's own error answer for this status (Milestone 249: `errors:`)
+            a.body = match rt.filter(|_| fake).and_then(|x| x.error_body(r.status)) {
+                Some(t) => {
+                    let b = render(t, &ctx, Some(&v));
+                    match &obj {
+                        Some(o) => crate::objects::subst(b, o),
+                        None => b,
+                    }
+                }
+                None => {
+                    format!(r#"{{"error":"injected by hydo","status":{}}}"#, r.status).into_bytes()
+                }
+            };
             return Outcome::Answer(a);
         }
     }

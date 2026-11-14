@@ -2713,6 +2713,16 @@
             }
           ]
         },
+        "errors": {
+          "description": "The answer bodies of an `H=` rule `status=<code>` on this route (templates), by status\n(`'404'`), class (`'5XX'`) or `default`; without one, hydo's own error body.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
+        },
         "description": {
           "anyOf": [
             {

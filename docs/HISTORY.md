@@ -10017,3 +10017,106 @@ interface with several implementations, a channel or a queue is not followed. Th
 place the steps at fixed workload steps, so code that runs at another time needs them moved by
 hand. The Temporal schedule and the River schedules were not run, and the audit did not run
 inside an onboarding of a new project.
+
+### Milestone 249 (tentative number) - DONE (fakes from OpenAPI descriptions: `hydo fake from-openapi` writes a `fakes:` entry from an OpenAPI 3.0 or 3.1 description, with the spec's error answers in the new route key `errors:` and the new template `{uuid}`; the openapi-payouts example's retry bug found on the Mac engine and the fix passing; nothing recorded moved; 2026-11-14)
+
+**Why.** A fake's routes were written by hand. Milestone 242's emulators cover three providers;
+most outside services, a partner's API or a team's own internal service, have no emulator but do
+publish an OpenAPI description. The design is `docs/design/openapi-fakes.md`.
+
+**What changed.**
+
+1. `hydo fake from-openapi <spec> [--name N] [--port P] [--ops OP,...] [--stateful] [--ref E]
+   [--tls] [--base-path P] [-o FILE | --add-to hydo.yaml]` (the module `openapi` of
+   `hydo-compose`, wired into `hydo`). It reads YAML (1.2 core schema, anchors and merge keys)
+   or JSON and writes the entry with comment lines that name the command, the spec and its
+   sha256. Before it writes, it reads its own YAML back through hydo's YAML subset, the project
+   model and the validator, inside a minimal project. `--add-to` inserts the entry into the
+   manifest's `fakes:` block (or adds one) and checks that the manifest reads back with it.
+   The mapping:
+
+   | The spec | The fake |
+   |---|---|
+   | an operation | a route: name from `operationId` in snake case, method, the first server's path plus the operation's path; literal segments before parameters |
+   | the lowest 2xx answer (`2XX` is 200, a lone `default` 200) | `status` and `body`: the example, the first `examples:` entry, or a body made from the schema without random values |
+   | the answer's `id` | `{seq}`, `{uuid}` or `<prefix>{seq}` on a create; `{path:<param>}` on a route about one resource, also on an action that answers the resource's schema |
+   | answer fields named as required request fields, path or required query parameters | `{json:x}`, `{form:x}`, `{path:x}`, `{query:x}` |
+   | `--stateful`: a create with an `id` and the routes below it | `save:` on the create, `load:` and `{obj:x}` on the others, `save:` on a `PUT` |
+   | a header parameter named like `Idempotency-Key` | `idempotency:`, and `idempotent: true` on its routes |
+   | 4xx, 5xx, `4XX`, `5XX`, `default` answers | `errors:` |
+
+   It refuses, one line each: Swagger 2.0, `callbacks:`, a required `oneOf` without a
+   discriminator, binary bodies (octet-stream, `format: binary`, images, multipart), XML-only
+   answers, `$ref` to another file, and parameters inside a path segment.
+2. `errors:` on a fake's route (a format-1 addition; `hydo-manifest` validator and model, the
+   schema, `hydo-build`'s world.json, `hydo-world`'s `serve.rs`). An `H=` rule `status=<code>`
+   answers the exact status's body, else its class's (`5XX`), else `default`'s, rendered as an
+   answer. A route without it answers `{"error":"injected by hydo","status":N}` as before.
+3. `{uuid}` (`hydo-world`'s templates): `00000000-0000-4000-8000-` and `{seq}` as 12 hex digits.
+   No recorded manifest has the text `{uuid}`.
+4. The explorer's protocol faults draw a route's exact `errors:` statuses besides 500, 502, 503
+   and 429; a target without `errors:` draws as before, with the same number of draws.
+5. Documents: `hydo guide outside-services` ("Fakes from an OpenAPI description"), MANIFEST.md
+   (the section of the same name, `errors:` and `{uuid}`), the design page, and the skill's step
+   6, which now names the command. The skill is 2.3.1.
+
+**Goldens on two real public specs** (`hydo-compose` `openapi::`, fixtures pinned by sha256 in
+`tests/fixtures/openapi/SOURCE`): the OpenAPI Initiative's expanded Petstore (3.0, Apache-2.0)
+gives 4 routes with `save:`/`load:` on `addPet`/`findPetById`; Adyen's Transfers API v4 (3.1,
+MIT) gives 12 routes, the idempotency header, discriminators and the error answers. The same
+Petstore as JSON gives the same fake.
+
+**The proof** (this Mac, the Mac engine; `hydo/onboard/examples/openapi-payouts/RESULTS.md`).
+The example's `market` service pays sellers out through the generated fake and reads each payout
+back. Its planted bug sends the idempotency key on the first try only.
+
+| Image | Schedule or command | Result |
+|---|---|---|
+| fixed | `disk=none \| run` | OK `fp=daf9fd92d5ee0ddc` |
+| buggy | `disk=none \| run` | OK `fp=a8b14bd12c772942` |
+| buggy | `disk=none \| run H=payouts.create_payout@3-4:status=500,effect=yes` | VIOLATION `[payouts.paid_at_most_once] payouts.create_payout: ref o3 took effect 3 times (records 7,8,9)` `fp=73a17ac86c25da66` |
+| fixed | the same | OK `fp=1766042b23138823`; the retries are `fx=0 replay+status500` |
+| buggy | `hydo explore --seeds 1-120 --protocol-faults` | 15 failures, one signature, each reproduced; minimal `disk=none dseed=905c768ad49f146c \| run H=payouts.create_payout@1-2:delay=2500` (`d945627dfcb557fa` twice) |
+| fixed | the same | 120 schedules, no failure |
+
+`hydo repro` of each directed run gave the recorded fingerprint. The explorations drew the
+statuses 400, 404 and 409 from the routes' `errors:`.
+
+**Nothing recorded moved.** A manifest without `errors:` gets the same validated data, world.json
+and draws. The released `hydo-world` is pinned, so recorded images keep their bytes until the
+next release re-pins it.
+
+**Tests.**
+
+- New: `hydo-compose` `openapi::tests` (15 unit tests, one per mapping and per refusal, the
+  YAML loader, the YAML it writes, `--add-to`) and `openapi::` (the two goldens, the Petstore as
+  JSON, and the example's fake against the command); `hydo-world` `fake_errors::` (an `H=` status
+  answers the exact, class and `default` bodies with `{obj:x}`, hydo's own body without a match,
+  `{uuid}` keys found by `load:`); `hydo-build` `world_objects::errors_reach_world_json`;
+  `hydo-explore` `route_errors::` (a route's 409 is drawn, a route without `errors:` draws the
+  same 400 schedules as before).
+- With the example moved aside, `hydo-control` (93 tests, its corpora) and `hydo-explore`
+  (`identity::`, `corpus::` and the rest, 33 tests) passed in release mode on the bare-metal
+  machine as recorded, so no answer of an unchanged input moved. With the
+  example in place only the new input differed. The controller's `corpus-quick.txt` and the
+  explorer's `identity-quick.txt` and `corpus-full.txt` were re-recorded there (the explorer's
+  chunks before the new input kept their hashes).
+- Re-recorded on this Mac (`HYDO_BLESS=1`), where the recorded answers' missing-`/nix` warnings
+  are reproduced (open item 115): the equivalence goldens of `hydo-manifest` and `hydo-build`
+  (the unknown-field messages now list `errors`, 4 and 6 answers; the new tracked inputs, from
+  which the mutants are drawn), the schema `project-v1.json` (`errors` on a fake's route;
+  `hydo-schema-compat` passes), and the CLI and agents goldens (the main help, `hydo guide
+  manifest`, the skill 2.3.1).
+- fmt, clippy with `-D warnings` on the changed crates, `sh ci/consolidate-tests.sh --check`,
+  `sh ci/vale.sh` (and the new design page), and `cargo test` of `hydo`, `hydo-agents`
+  (`skill_check::`, `public_content::`), `hydo-build`, `hydo-compose`, `hydo-config`,
+  `hydo-manifest`, `hydo-release`, `hydo-schema-compat` and `hydo-world`. The new test files are in
+  the fast tier.
+- After the rebase onto `2a46534e` (Milestones 247, 248 and 252), `hydo-control` (93 tests) and
+  `hydo-explore`'s `it` (34 tests) passed again in release mode on the bare-metal machine. Its
+  `fake_engine` tests passed on this Mac (27 of 27): on the bare-metal machine they stopped before
+  any run, because the re-recording pass left about 115 MiB of free memory.
+
+**Open** (AGENTS.md open item 118). Response headers, nested echoed fields, OpenAPI 3.1
+`webhooks:` and the business reference are not generated. A `DELETE` keeps the saved object and a
+`PATCH` saves nothing. The example ran on the Mac engine only.

@@ -767,11 +767,17 @@ impl Ex {
             let b = if ln == 0 { n_ } else { n_.min(a + ln) };
             let mut rules: Vec<(String, RV)> = match kind.as_str() {
                 "status" => {
-                    let codes: [i64; 4] = if tg.proto == "grpc" {
-                        [14, 4, 8, 13]
+                    let mut codes: Vec<i64> = if tg.proto == "grpc" {
+                        vec![14, 4, 8, 13]
                     } else {
-                        [500, 502, 503, 429]
+                        vec![500, 502, 503, 429]
                     };
+                    // the route's own error answers (`errors:`, Milestone 249); none: as before
+                    for c in &tg.statuses {
+                        if !codes.contains(c) {
+                            codes.push(*c);
+                        }
+                    }
                     let code = codes[(st as usize) % codes.len()];
                     let mut r = vec![("status".to_string(), RV::Int(code))];
                     if let Some(ra) = ra.filter(|_| code == 429 || code == 503) {

@@ -1513,6 +1513,10 @@ pub struct FakeRoute {
     /// takes no effect. The answer reads its fields as `{obj:<field>}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub load: Option<Text>,
+    /// The answer bodies of an `H=` rule `status=<code>` on this route (templates), by status
+    /// (`'404'`), class (`'5XX'`) or `default`; without one, hydo's own error body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub errors: Option<IndexMap<String, Text>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

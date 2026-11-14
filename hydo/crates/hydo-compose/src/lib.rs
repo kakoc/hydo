@@ -21,6 +21,7 @@ pub mod interp;
 pub mod k8s;
 pub mod localbuild;
 pub mod ocilocal;
+pub mod openapi;
 pub mod pyval;
 pub mod registry;
 pub mod shlex;

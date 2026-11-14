@@ -1407,6 +1407,9 @@ fakes:
         path: /v1/charges/{id}
         load: '{path:id}'      # the object it is about: 404 and no effect when unknown
         body: '{"id":"{path:id}","amount":{obj:amount},"status":"{obj:status}"}'
+        errors:                # optional: the body an H= rule status=<code> answers (templates)
+          '404': '{"error":{"type":"not_found"}}'   # a status, a class ('5XX') or default
+          default: '{"error":{"type":"api_error"}}'
 proxies:
   - name: redisp               # a fault proxy in front of a real service
     port: 6380                 # the system talks to this port instead of the service's
@@ -1431,7 +1434,9 @@ body), `query:<name>`, `form:<name>` (a bracketed name too: Stripe and Rails sen
 (a hash of the body).
 
 **Templates** (answer bodies, header values, webhook url/body/headers): `{seq}` (the record number
-of the request; replays use the original's), `{ref}`, `{idem}`, `{fake}`, `{route}`; in answers
+of the request; replays use the original's), `{uuid}` (a UUID made from `{seq}`:
+`00000000-0000-4000-8000-` and `{seq}` as 12 hex digits, Milestone 249), `{ref}`, `{idem}`,
+`{fake}`, `{route}`; in answers
 also `{json:a.b}`, `{header:X}`, `{query:x}`, `{path:x}`, `{form:x}`, `{pb:n}` from the request.
 Single braces: `{{name}}` is a build parameter (`params:`). A webhook may use only the first five
 (it can be re-sent after a power cut, without its request).
@@ -1447,6 +1452,13 @@ object after the route's own save, or on a route with only `save:` the saved one
 what the first request stored); a field the object lacks is empty. Objects are carried across a
 power cut with the rest of the world (within its 3000 bytes).
 
+**Error answers** (`errors:` on a fake's route, Milestone 249): an `H=` rule `status=<code>` on
+the route answers with the body of the exact status (`'409'`), else of its class (`'4XX'`,
+`'5XX'`), else of `default`, rendered as an answer (`{obj:<field>}` reads the object the request
+names). Without a match the answer is hydo's own `{"error":"injected by hydo","status":<code>}`.
+`hydo explore --protocol-faults` also draws the exact statuses a route lists, besides 500, 502,
+503 and 429. `hydo fake from-openapi` writes `errors:` from a provider's documented error answers.
+
 **Signed webhooks** (`webhook.sign`): every delivery attempt carries the header `header:` with
 `value:`, where `{hmac}` is the HMAC-SHA256 of `payload:` under `secret:` (hex or base64);
 `{ts}` is the attempt's guest time in Unix seconds and `{body}` the webhook's body, so a
@@ -1456,6 +1468,31 @@ provider's signature check (a timestamp, the body, the endpoint secret) passes.
 (`/pkg.Service/Method`), its answer `message:` (hex protobuf bytes, default empty) and `code:`
 (gRPC status, default 0); an error rule answers trailers-only with `grpc-status`. Status codes in
 `H=` rules may be numbers or names (`status=UNAVAILABLE`).
+
+### Fakes from an OpenAPI description (`hydo fake from-openapi`)
+
+`hydo fake from-openapi <spec.yaml|spec.json>` writes a fake from an OpenAPI 3.0 or 3.1
+description (Milestone 249; design: docs/design/openapi-fakes.md). It prints the entry, writes it
+to a file (`-o FILE`), or adds it to a manifest's `fakes:` (`--add-to hydo.yaml`). The entry is
+an ordinary fake: edit it freely. Options: `--name`, `--port` (default 9001), `--ops` (operation
+ids or route names), `--stateful`, `--ref <extractor>`, `--tls`, `--base-path`.
+
+| The spec | The fake |
+|---|---|
+| an operation (a method of a path) | a route: `name` from `operationId` in snake case (else the method and path), `method`, `path` (the first server's path, then the operation's, `{param}` segments kept); literal segments come before parameters |
+| the lowest 2xx answer (`2XX` is 200; a lone `default` is 200) | `status`, and `body`: the media type's `example`, else its first `examples` entry, else a body made from the schema; `headers: {Content-Type: ...}` for a type other than `application/json` |
+| a schema without an example | `example`, `const`, the first `enum` value, `default`; strings by `format` (`date-time` is `2026-01-01T00:00:00Z`, `uuid` the zero UUID, ...), numbers at `minimum` or 0, `false`, one item per array; optional fields two levels deep, required ones always; `allOf` merged, `anyOf` and a nullable `oneOf` take the first alternative, a `oneOf` with a discriminator its first mapping |
+| the answer's `id` | `{seq}` (integer), `{uuid}` (`format: uuid`), `<prefix>{seq}` (an example `tr_123`) on a create; `{path:<param>}` on a route about one resource |
+| an answer field named as a required request field, a path or a required query parameter | `{json:x}` (JSON body), `{form:x}` (form body), `{path:x}`, `{query:x}` |
+| `--stateful`: `POST /things` with an `id`, and `/things/{id}` or `/things/{id}/...` | `save: {key: <the id>, fields: <the echoed fields>}` on the create; `load: '{path:id}'` and `{obj:x}` on the others; a `PUT` saves its echoed fields |
+| a header parameter whose name holds `idempotency` | the fake's `idempotency: header:<Name>`; `idempotent: true` on the routes that declare it |
+| answers 4xx, 5xx, `4XX`, `5XX`, `default` | `errors:` |
+
+It refuses, one line per operation on stderr: Swagger 2.0, `callbacks:`, a required `oneOf`
+without a discriminator, binary request or answer bodies (`application/octet-stream`,
+`format: binary`, images, `multipart/form-data`), answers in XML only, a `$ref` to another file,
+and a parameter inside a path segment (`/files/{name}.json`). An optional field it cannot make is
+left out. The command exits 1 when nothing is mapped or an operation of `--ops` is refused.
 
 ### Ready-made emulators (`emulators:`)
 

@@ -61,6 +61,10 @@ pub struct Route {
     pub save: Option<crate::objects::Save>,
     /// objects.rs: the key (template) of the object a request reads; {obj:<field>} in the answer
     pub load: String,
+    /// The answer bodies (templates) of an `H=` status rule, by status: `"404"`, a class such as
+    /// `"5XX"`, or `"default"` (Milestone 249: a provider's documented error answers). Empty: the
+    /// rule answers `{"error":"injected by hydo","status":N}` as before.
+    pub errors: Vec<(String, String)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -215,6 +219,16 @@ fn route(v: &Value) -> Result<Route, String> {
             _ if is(k, "webhook") => r.webhook = webhook(x)?,
             _ if is(k, "save") => r.save = crate::objects::Save::from_value(x)?,
             _ if is(k, "load") => set_str(&mut r.load, x, "load")?,
+            _ if is(k, "errors") => {
+                r.errors.clear();
+                if let Some(fs) = object(x, "map[string]string")? {
+                    for (k, b) in fs {
+                        let mut s = String::new();
+                        set_str(&mut s, b, "errors")?;
+                        r.errors.push((k.to_string(), s));
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -399,6 +413,23 @@ pub fn path_segs(path: &[u8]) -> Vec<&[u8]> {
 }
 
 impl Route {
+    /// The answer body of an `H=` rule `status=<status>` on this route: the exact status, else its
+    /// class (`4XX`, `5XX`), else `default`; None when the route declares none of them.
+    pub fn error_body(&self, status: i64) -> Option<&str> {
+        let exact = status.to_string();
+        let class = format!("{}XX", status / 100);
+        for want in [exact.as_str(), class.as_str(), "default"] {
+            if let Some((_, b)) = self
+                .errors
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(want))
+            {
+                return Some(b);
+            }
+        }
+        None
+    }
+
     /// A request on the route has a side effect in the outside world. Default: every method but
     /// GET/HEAD/OPTIONS (gRPC: every call).
     pub fn effectful(r: Option<&Route>, method: &str, proto: &str) -> bool {
@@ -579,13 +610,23 @@ fn uvarint(b: &[u8]) -> Option<(u64, usize)> {
     None
 }
 
-const TMPL_NAMES: [&str; 11] = [
-    "seq", "ref", "idem", "fake", "route", "json", "header", "query", "path", "form", "pb",
+const TMPL_NAMES: [&str; 12] = [
+    "seq", "ref", "idem", "fake", "route", "json", "header", "query", "path", "form", "pb", "uuid",
 ];
+
+/// `{uuid}`: a UUID made from the answer's `{seq}` (Milestone 249), the same in every run:
+/// `00000000-0000-4000-8000-` and the sequence number as twelve hex digits.
+pub fn seq_uuid(seq: &[u8]) -> Vec<u8> {
+    let n: u64 = std::str::from_utf8(seq)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    format!("00000000-0000-4000-8000-{:012x}", n & 0xffff_ffff_ffff).into_bytes()
+}
 
 pub type Ctx<'a> = [(&'a str, &'a [u8])];
 
-/// Render a template: {seq} {ref} {idem} {fake} {route} plus, with a request, {json:a.b}
+/// Render a template: {seq} {uuid} {ref} {idem} {fake} {route} plus, with a request, {json:a.b}
 /// {header:X} {query:x} {path:x} {form:x} {pb:n}. (Single braces: {{name}} is a build
 /// parameter.) The same matches as the regular expression
 /// `\{(seq|ref|idem|fake|route|json|header|query|path|form|pb)(?::([^{}"]*))?\}`.
@@ -597,6 +638,11 @@ pub fn render(t: &str, ctx: &Ctx, v: Option<&ReqView>) -> Vec<u8> {
         if b[i] == b'{' {
             if let Some((name, arg, end)) = tmpl_at(b, i) {
                 match arg {
+                    None if name == "uuid" => {
+                        if let Some((_, v)) = ctx.iter().find(|(k, _)| *k == "seq") {
+                            out.extend(seq_uuid(v));
+                        }
+                    }
                     None => {
                         if let Some((_, v)) = ctx.iter().find(|(k, _)| *k == name) {
                             out.extend_from_slice(v);

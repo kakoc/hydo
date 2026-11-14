@@ -1,0 +1,118 @@
+openapi: 3.1.0
+info:
+  title: Payouts API
+  version: 2026-11-01
+  description: >
+    A small payouts provider, written for hydo's example of fakes made from an OpenAPI
+    description (hydo/onboard/examples/openapi-payouts). A payout sends money to a seller for an
+    order. A create with an Idempotency-Key that was seen before answers the first payout again.
+servers:
+  - url: https://api.payouts.example/v1
+paths:
+  /payouts:
+    post:
+      operationId: createPayout
+      summary: Create a payout
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPayout'
+      responses:
+        '201':
+          description: The payout was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
+        '400':
+          $ref: '#/components/responses/Invalid'
+        '409':
+          description: The idempotency key was used with another request.
+          content:
+            application/json:
+              example: {error: {type: idempotency_error, message: Keys for idempotent requests can only be used with the same parameters they were first used with.}}
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        5XX:
+          $ref: '#/components/responses/ServerError'
+  /payouts/{id}:
+    get:
+      operationId: getPayout
+      summary: Read a payout
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: The payout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
+        '404':
+          description: No payout has this id.
+          content:
+            application/json:
+              example: {error: {type: invalid_request_error, message: No such payout.}}
+        5XX:
+          $ref: '#/components/responses/ServerError'
+  /balance:
+    get:
+      operationId: getBalance
+      summary: Read the platform's balance
+      responses:
+        '200':
+          description: The balance.
+          content:
+            application/json:
+              example: {available: [{amount: 250000, currency: eur}], pending: []}
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: The same key again answers the first payout and pays nothing more.
+      schema: {type: string, maxLength: 255}
+  schemas:
+    NewPayout:
+      type: object
+      required: [amount, currency, order]
+      properties:
+        amount: {type: integer, minimum: 1, description: in the currency's smallest unit}
+        currency: {type: string, example: eur}
+        order: {type: string, description: the order the payout is for}
+        description: {type: string}
+    Payout:
+      type: object
+      required: [id, amount, currency, order, status]
+      properties:
+        id: {type: string, example: po_1QxT}
+        object: {const: payout}
+        amount: {type: integer}
+        currency: {type: string}
+        order: {type: string}
+        status: {type: string, enum: [pending, in_transit, paid, failed, canceled]}
+        created: {type: integer, example: 1767225600}
+  responses:
+    Invalid:
+      description: The request is not valid.
+      content:
+        application/json:
+          example: {error: {type: invalid_request_error, message: amount must be a positive integer}}
+    RateLimited:
+      description: Too many requests.
+      content:
+        application/json:
+          example: {error: {type: rate_limit_error, message: Too many requests. Try again later.}}
+    ServerError:
+      description: Something went wrong at the provider.
+      content:
+        application/json:
+          example: {error: {type: api_error, message: An error occurred on our side.}}

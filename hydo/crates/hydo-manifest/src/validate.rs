@@ -218,6 +218,7 @@ pub(crate) const KNOWN_ROUTE: &[&str] = &[
     "webhook",
     "save",
     "load",
+    "errors",
     "description",
 ];
 pub(crate) const KNOWN_SAVE: &[&str] = &["key", "fields"];
@@ -1627,6 +1628,7 @@ fn validate_world(m: &Value) -> R<()> {
                     )));
                 }
                 validate_objects(r, &rw)?;
+                validate_route_errors(r, &rw)?;
                 let wh_ = obj_get(r, "webhook").cloned().unwrap_or(Value::Null);
                 if !wh_.is_null() {
                     let hw = format!("{rw}.webhook");
@@ -1728,6 +1730,35 @@ fn validate_objects(r: &Value, rw: &str) -> R<()> {
         if !matches!(l, Value::String(s) if !s.is_empty()) {
             return Err(err(format!(
                 "{rw}: load: the key of the object the request is about, a template (e.g. '{{path:id}}')"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// A fake route's `errors:` (Milestone 249): the answer body of an `H=` rule `status=<code>`,
+/// by status (`'404'`), class (`'5XX'`) or `default`; each a template, as `body:`.
+fn validate_route_errors(r: &Value, rw: &str) -> R<()> {
+    let Some(e) = obj_get(r, "errors") else {
+        return Ok(());
+    };
+    let ew = format!("{rw}.errors");
+    let Value::Object(o) = e else {
+        return Err(err(format!(
+            "{ew}: a mapping of status: body ('404', '5XX' or default, each an answer template)"
+        )));
+    };
+    for (k, b) in o {
+        if !pyre::fullmatch("[1-5][0-9][0-9]|[1-5]XX|default", k) {
+            return Err(err(format!(
+                "{}: {}: a status (such as '404'), a class ('4XX', '5XX') or default",
+                ew,
+                repr_str(k)
+            )));
+        }
+        if !b.is_string() {
+            return Err(err(format!(
+                "{ew}.{k}: the answer body, a string (a template)"
             )));
         }
     }

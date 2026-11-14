@@ -78,7 +78,7 @@ fakes:
 
 Extractors for `idempotency:` and `ref:`: `header:<Name>`, `json:<dotted.path>`,
 `query:<name>`, `form:<name>`, `path:<name>`, `pb:<field number>` (gRPC), `body`. Answer
-templates: `{seq}`, `{ref}`, `{idem}`, `{json:a.b}`, `{header:X}`, `{query:x}`, `{path:x}`.
+templates: `{seq}`, `{uuid}`, `{ref}`, `{idem}`, `{json:a.b}`, `{header:X}`, `{query:x}`, `{path:x}`.
 `protocol: grpc` makes a cleartext HTTP/2 gRPC fake (`path` is `/pkg.Service/Method`, the answer
 is `message:` in hex protobuf and `code:`).
 
@@ -93,6 +93,46 @@ capture. Then give the creating route
 Find the outside services in the project's configuration (base URLs, API keys, webhook
 endpoints) and point each base URL at its fake. Ask the user which answers each route gives, or
 take them from the provider's API documentation.
+
+## Fakes from an OpenAPI description
+
+A provider, or a team's own internal service, often publishes an OpenAPI description (a YAML or
+JSON file of its operations). When no ready-made emulator covers it, write its fake from that file
+instead of route by route:
+
+```sh
+hydo fake from-openapi api/payouts.yaml --name payouts --port 9001 --stateful --ref json:order \
+  --add-to hydo/hydo.yaml
+```
+
+- Each operation becomes a route. Its answer is the spec's example, or a body made from the
+  answer's schema with no random value.
+- Where the schema allows, top-level fields are templates. A new resource's `id` is `{seq}`,
+  `{uuid}` or `po_{seq}`, and the `id` of `/payouts/{id}` is `{path:id}`. A field that the request
+  sends is `{json:x}` or `{form:x}`.
+- `--stateful` adds `save:` to a create (`POST /payouts` that answers an `id`) and `load:` to the
+  routes about one resource (`/payouts/{id}`). A read then answers what the create stored, and an
+  unknown id gets 404.
+- A header parameter whose name holds `idempotency` becomes the fake's `idempotency:`. The routes
+  that declare it get `idempotent: true`.
+- The spec's error answers go into each route's `errors:`. An `H=` rule `status=<code>` then
+  answers the provider's own error body, for example
+  `H=payouts.create_payout@3-4:status=409`. `hydo explore --protocol-faults` also draws these
+  statuses.
+
+Without `-o FILE` or `--add-to` it prints the entry. `--ops createPayout,getPayout` keeps only
+those operations, `--tls` adds `tls:` for the first server's host, and `--ref` names the business
+reference that the checks group by. Each operation it cannot map is one line on stderr:
+
+```text
+hydo fake: not mapped: uploadReceipt (POST /receipts): the request body is binary (application/octet-stream)
+```
+
+It refuses Swagger 2.0, `callbacks:`, a `oneOf` without a discriminator, binary bodies, answers in
+XML only, a `$ref` to another file, and a parameter inside a path segment. The written entry is an
+ordinary fake: read it, then edit what the system needs, such as a status it checks.
+`hydo guide manifest`, section `Fakes from an OpenAPI description`, lists every rule. The example
+`hydo/onboard/examples/openapi-payouts` in hydo's repository uses it.
 
 ## HTTPS: a provider whose SDK cannot be pointed at plain HTTP
 
