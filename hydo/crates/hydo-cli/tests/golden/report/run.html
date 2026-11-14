@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="hydo report --html">
-<title>Redis failed your check after a power cut, with Redis appendfsync set to everysec (hydo report)</title>
+<title>Redis lost data it had confirmed, after a power cut, with Redis appendfsync set to everysec (hydo report)</title>
 <style>
 :root{--bg:#fbfbfa;--fg:#1d1d1f;--muted:#5f5f66;--card:#fff;--line:#e5e5e2;--code:#f3f3f1;
 --bad:#b3261e;--bad-bg:#fdecea;--warn:#8f5200;--warn-bg:#fff4e0;--ok:#1e7a3c;--ok-bg:#e8f6ec;
@@ -81,34 +81,34 @@ a{color:var(--note)}
 <main>
 <header>
 <p class="eyebrow">hydo report · project <b>redis</b> · one run</p>
-<h1>Redis failed your check after a power cut, with Redis appendfsync set to <code>everysec</code></h1>
-<p class="lead">Your workload ran, and Redis confirmed 12 steps. Then the power was cut after 12 steps. When the machine started again, your check found <code>key k:0 lost</code>.</p>
+<h1>Redis lost data it had confirmed, after a power cut, with Redis appendfsync set to <code>everysec</code></h1>
+<p class="lead">Your workload ran 12 steps and Redis confirmed all 12. Then the power was cut before the 13th step. When Redis started again, <code>key k:0</code> was gone.</p>
 </header>
 <div class="verdictline"><span class="pill bad">Your check failed</span><span class="muted"><code>redis.acked_writes_survive</code>: every SET the client saw acknowledged reads back with its value</span></div>
 <h2 id="when">When it happens</h2>
 <div class="card"><ol class="steps">
-<li>The disk keeps recent writes in a cache, as real disks do: a power cut loses the writes that the system had not yet flushed to disk (fsync).</li>
-<li>Redis appendfsync is set to <code>everysec</code> instead of <code>always</code>, its safe value.</li>
-<li>The power goes out after 12 steps of your workload, before the 13th step. Then the machine starts again.</li>
-<li>At the end, your check runs and fails.</li>
-</ol>
-<p class="small">A step is one numbered part of your workload (<code>workload.steps</code> in <code>hydo.yaml</code>), counted from 1.</p></div>
+<li>The disk keeps recent writes in a cache that a power cut loses, as real disks do.</li>
+<li>Redis appendfsync is set to <code>everysec</code>, not its safe value <code>always</code>.</li>
+<li>The power goes out after 12 steps, before the 13th step.</li>
+<li>After the restart, your check finds <code>key k:0 lost</code>.</li>
+</ol></div>
 <h2 id="bug">Is this a bug?</h2>
 <div class="card"><p><span class="pill warn">Expected for this setting</span></p>
-<p class="small">It follows from a setting that trades safety for speed. In CI, a new finding of this kind fails the check until you accept it or change the setting.</p>
 <p>Redis appendfsync is set to <code>everysec</code>, and its safe value is <code>always</code>. With that setting, a power cut can lose data that the system had already confirmed.</p>
 <p>A second run with Redis appendfsync at <code>always</code> instead of <code>everysec</code> passed every check.</p>
 <p><b>What to do:</b> If confirmed data must survive a power loss, keep Redis appendfsync at <code>always</code>. If losing it is fine for you, accept this finding.</p></div>
 <h2 id="saw">What hydo saw</h2>
 <div class="card evidence">
-<div><span class="mark m-note">↻</span>The machine started again, and Redis started from what was on its disk.</div>
-<div><span class="mark m-note">i</span>Your check stops at the first problem it finds, so it reports only <code>key k:0 lost</code>; later items can be missing too.</div>
+<div><span class="mark m-ok">✔</span>Redis confirmed <code>k:0</code> … <code>k:11</code> (12 steps)</div>
+<div><span class="mark m-warn">⚡</span>The power was cut before the 13th step</div>
+<div><span class="mark m-note">↻</span>The machine started again, and Redis started from what was on its disk</div>
+<div><span class="mark m-bad">✘</span><code>key k:0 lost</code> <span class="muted">(the check stops at the first one)</span></div>
 </div>
 <h2 id="again">See it again</h2>
-<p>Run this in your project's folder (<code>redis</code>), after <code>hydo build</code> has made the image there. The run repeats exactly, every time:</p>
+<p>In your project folder (<code>redis</code>), this failure repeats exactly, every time you run it:</p>
 <div class="cmdrow"><pre class="cmd">hydo run &quot;disk=cut | run C=12 R=everysec&quot;</pre><button type="button" class="copy" data-copy="hydo run &quot;disk=cut | run C=12 R=everysec&quot;" aria-label="Copy to the clipboard">Copy</button></div>
-<p class="small">In hydo's words: the text in quotes names the faults of the run. <code>|</code> separates the machine's settings, before it, from what happens in the run, after <code>run</code>. <code>disk=cut</code> = a power cut loses the writes not yet flushed to disk; <code>C=12</code> = cut the power after 12 steps; <code>R=everysec</code> = Redis appendfsync set to <code>everysec</code>.</p>
-<p class="small">To open the run's files, logs and processes at the moment it failed: <code>hydo inspect start hydo-out/run-cut --at end</code>. The run's folder is <code>hydo-out/run-cut</code> in your project's folder.</p>
+<p class="small">In hydo's words: <code>disk=cut</code> = a power cut loses unflushed writes, <code>C=12</code> = power cut before the 13th step, <code>R=everysec</code> = Redis appendfsync set to <code>everysec</code>.</p>
+<p class="small">To look inside the machine at the moment it failed: <code>hydo inspect start hydo-out/run-cut --at end</code></p>
 <details class="share" id="details"><summary>Details for a bug report</summary>
 <div class="card"><dl class="facts">
 <dt>Verdict</dt><dd><code>HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost</code></dd>

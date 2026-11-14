@@ -172,33 +172,31 @@ fn a_power_cut_run_against_its_passing_neighbour() {
     small(&html, 64);
     plain_words(&html);
     no_machine_paths_and_links_resolve(&html);
-    // the plain part: what broke, when, whether it is a bug, what hydo saw, the command
+    // the plain part, as the approved mockup: concrete facts of this run only
     for want in [
-        "<h1>Redis failed your check after a power cut, with Redis appendfsync set to <code>everysec</code></h1>",
-        "Your workload ran, and Redis confirmed 12 steps. Then the power was cut after 12 steps.",
-        "<li>The power goes out after 12 steps of your workload, before the 13th step. Then the machine starts again.</li>",
+        "<h1>Redis lost data it had confirmed, after a power cut, with Redis appendfsync set to <code>everysec</code></h1>",
+        "Your workload ran 12 steps and Redis confirmed all 12. Then the power was cut before the 13th step. When Redis started again, <code>key k:0</code> was gone.",
+        "<li>The power goes out after 12 steps, before the 13th step.</li>",
+        "<li>After the restart, your check finds <code>key k:0 lost</code>.</li>",
         "Expected for this setting",
-        "It follows from a setting that trades safety for speed.",
-        "Your check stops at the first problem it finds, so it reports only <code>key k:0 lost</code>",
         "A second run with Redis appendfsync at <code>always</code> instead of <code>everysec</code> passed every check.",
         "keep Redis appendfsync at <code>always</code>",
-        "Run this in your project's folder (<code>redis</code>), after <code>hydo build</code>",
-        "<code>|</code> separates the machine's settings",
+        // what hydo saw: the four lines of the mockup
+        "Redis confirmed <code>k:0</code> … <code>k:11</code> (12 steps)",
+        "The power was cut before the 13th step",
+        "The machine started again, and Redis started from what was on its disk",
+        "<code>key k:0 lost</code> <span class=\"muted\">(the check stops at the first one)</span>",
+        "In your project folder (<code>redis</code>), this failure repeats exactly, every time you run it:",
         "<pre class=\"cmd\">hydo run &quot;disk=cut | run C=12 R=everysec&quot;</pre>",
-        "<code>R=everysec</code> = Redis appendfsync set to <code>everysec</code>",
-        "To open the run's files, logs and processes at the moment it failed: <code>hydo inspect start hydo-out/run-cut --at end</code>",
+        "In hydo's words: <code>disk=cut</code> = a power cut loses unflushed writes, <code>C=12</code> = power cut before the 13th step, <code>R=everysec</code> = Redis appendfsync set to <code>everysec</code>.",
+        "<code>hydo inspect start hydo-out/run-cut --at end</code>",
         "Details for a bug report",
     ] {
         assert!(html.contains(want), "the page lacks {want:?}");
     }
-    // the rule's words once above the details, and "Is this a bug?" without the check
+    // the check's own words once above the details
     let plain = &html[..html.find("<details class=\"share\"").unwrap()];
     assert_eq!(plain.matches("every SET the client saw").count(), 1);
-    assert_eq!(
-        plain.matches("key k:0 lost").count(),
-        2,
-        "the lead and the note on the check"
-    );
     // the details keep what the page showed before
     let details = &html[html.find("<details class=\"share\"").unwrap()..];
     for want in [
@@ -229,12 +227,12 @@ fn a_scripted_exploration() {
         "4 runs failed, in 2 different ways.",
         "Start here",
         "The run stopped early after disk errors",
-        "A second run with a disk that keeps every write at once instead of a faulty disk that throws away writes it already confirmed passed every check.",
-        "hydo did not remove faults from this one",
-        "Both runs had disk errors and crashes",
-        "<a href=\"#f2\">The runs in detail</a>",
+        "The command also keeps this run&#39;s network faults.",
+        "<p><b>Is it a bug?</b> Nothing, unless your production disks",
+        "<a href=\"#f2\">Open this failure →</a>",
         "<a href=\"#p1\">problem 1</a>",
         "What held",
+        "With a working disk and your safe settings, none of the 7 runs failed",
         "hydo explore --image scripted-disk.img --seeds 13-112",
         "hydo ci accept f1:invariant:",
         // the details
@@ -243,12 +241,22 @@ fn a_scripted_exploration() {
         "Against its closest passing neighbour",
         "not shrunk",
         "New error lines",
+        "Your checks that held in every run",
     ] {
         assert!(html.contains(want), "the page lacks {want:?}");
     }
+    // the cards hold no general explanation: no label meaning, no glosses
+    let plain = &html[..html.find("<details class=\"share\"").unwrap()];
+    for gone in [
+        "In hydo&#39;s words",
+        "In CI, a new finding",
+        "The runs in detail",
+    ] {
+        assert!(!plain.contains(gone), "the cards still say {gone:?}");
+    }
     // the problems in order of attention: worth a look before expected
     let look = html.find("The run stopped early").unwrap();
-    let expected = html.find("when a faulty disk threw away writes").unwrap();
+    let expected = html.find("failed your check with a faulty disk").unwrap();
     assert!(look < expected);
     golden("exploration.html", &html);
 }
@@ -263,12 +271,9 @@ fn a_ci_run() {
     no_machine_paths_and_links_resolve(&html);
     for want in [
         "<h1>This change brings 1 new problem to Shop</h1>",
-        "lists it for removal if it ever passes",
-        "These runs never had a pause in the middle of a request",
         "New in this change",
         "The base commit passes the same run, so this change brought it.",
-        "hydo ci accept f1:invariant:d4f25624c2 --reason",
-        "after <code>hydo build</code>",
+        "If it is expected: <code>hydo ci accept f1:invariant:d4f25624c2 --reason &quot;…&quot;</code>",
         "Found on this commit; the base commit passes the same schedule.",
         "its minimal schedule passes on the base commit&#39;s image",
     ] {

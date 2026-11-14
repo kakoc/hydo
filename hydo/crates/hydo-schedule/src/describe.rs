@@ -594,10 +594,9 @@ pub fn host(t: &HostToken, s: &Schedule) -> Said {
         )
         .noun("a disk that keeps every write at once".into()),
         HostToken::Disk(Disk::Cut) => setup(
-            "The disk keeps recent writes in a cache, as real disks do: a power cut loses the \
-             writes that the system had not yet flushed to disk (fsync)."
+            "The disk keeps recent writes in a cache that a power cut loses, as real disks do."
                 .into(),
-            "a power cut loses the writes not yet flushed to disk",
+            "a power cut loses unflushed writes",
         )
         .noun("a disk whose cache a power cut loses".into()),
         HostToken::Disk(Disk::IoErr(p)) => setup(
@@ -617,10 +616,7 @@ pub fn host(t: &HostToken, s: &Schedule) -> Said {
             "a faulty disk throws away writes it already confirmed",
         )
         .noun("a faulty disk that throws away writes it already confirmed".into())
-        .fault(
-            "a faulty disk that throws away confirmed writes",
-            "when a faulty disk threw away writes it had already confirmed".into(),
-        ),
+        .fault("a faulty disk", "with a faulty disk".into()),
         HostToken::Dseed(_) => match s.disk() {
             Disk::IoErr(_) | Disk::Lying(_) => q(
                 "This number picks which disk requests the fault hits; the same number picks \
@@ -1009,12 +1005,9 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
         }
         GuestToken::Cut(at) => {
             let sentence = match at {
-                0 => "The power goes out before the first step of your workload. Then the machine \
-                      starts again."
-                    .to_string(),
+                0 => "The power goes out before the first step.".to_string(),
                 n => format!(
-                    "The power goes out after {} of your workload, before {}. Then the machine \
-                     starts again.",
+                    "The power goes out after {}, before {}.",
                     if *n == 1 {
                         "the first step".to_string()
                     } else {
@@ -1023,7 +1016,7 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
                     nth_step(*n)
                 ),
             };
-            fault(sentence, format!("cut the power {}", after(*at)))
+            fault(sentence, format!("power cut before {}", nth_step(*at)))
                 .at(*at)
                 .fault("power cuts", "after a power cut".into())
         }
@@ -1277,7 +1270,7 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
                 let usual = k.safe_value().filter(|d| *d != value);
                 let sentence = match usual {
                     Some(d) => format!(
-                        "{} is set to {} instead of {}, its safe value.",
+                        "{} is set to {}, not its safe value {}.",
                         cap(&name),
                         code(value),
                         code(d)

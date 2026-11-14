@@ -363,8 +363,8 @@ fn h3(id: &str, title: &str) -> String {
     format!("<h3 id=\"{id}\">{}</h3>\n", esc(title))
 }
 
-/// One problem: its number, title, labels, how many runs show it, why, what to do, and the
-/// command that shows it again (HTML).
+/// One problem as in the approved mockup: its number, title, labels, how many runs show it, what
+/// happens, "Is it a bug?", the command, and a link to its runs in the details (HTML).
 struct Card<'a> {
     n: usize,
     problem: &'a advice::Problem,
@@ -372,10 +372,16 @@ struct Card<'a> {
     state: Option<String>,
     /// Runs that show it, of all runs.
     runs: Option<(usize, u64)>,
-    /// More paragraphs after the explanation (HTML).
+    /// What happens, in one or two sentences (plain words with backquotes).
+    happens: String,
+    /// More HTML after it (a short list).
     more: String,
-    /// The command and its words (HTML).
+    /// The command.
     command: String,
+    /// A line after the command (HTML), such as the accept command of a CI finding.
+    after: String,
+    /// The id of its runs in the details.
+    link: Option<String>,
 }
 
 fn card(c: &Card) -> String {
@@ -404,14 +410,16 @@ fn card(c: &Card) -> String {
             p.attention.id()
         ));
     }
-    s.push_str(&story::attention_meaning(p.attention));
-    s.push_str(&format!(
-        "<p>{}</p>\n",
-        md(format!("{} {}", p.what, p.why).trim())
-    ));
+    s.push_str(&format!("<p>{}</p>\n", md(&c.happens)));
     s.push_str(&c.more);
-    s.push_str(&format!("<p><b>What to do:</b> {}</p>\n", md(&p.todo)));
-    s.push_str(&c.command);
+    s.push_str(&format!("<p><b>Is it a bug?</b> {}</p>\n", md(&p.todo)));
+    s.push_str(&copy_block(&c.command));
+    s.push_str(&c.after);
+    if let Some(l) = &c.link {
+        s.push_str(&format!(
+            "<p class=\"small\"><a href=\"#{l}\">Open this failure →</a></p>\n"
+        ));
+    }
     s.push_str("</div></div>\n");
     s
 }
@@ -442,120 +450,117 @@ fn key_of(run: &Run) -> Option<String> {
     crate::ci::key::of_verdict(&run.verdict.text, &run.findings).map(|(_, _, k)| k)
 }
 
-/// "What held": the passing runs, the user's checks that held, and what the runs did not try.
-fn held_html(
-    pr: &story::Project,
-    first: &[&Run],
-    total: u64,
-    props: Option<&PropertyTable>,
-) -> String {
-    let mut s = String::from("<div class=\"card\">\n");
+/// "What held": the passing runs and the runs with a working disk and safe settings, in one or
+/// two sentences.
+fn held_html(pr: &story::Project, first: &[&Run], total: u64) -> String {
+    let mut s = String::from("<div class=\"card\">");
+    if first.is_empty() {
+        s.push_str("<p>The runs that passed are not recorded.</p></div>\n");
+        return s;
+    }
     let passed: Vec<&&Run> = first.iter().filter(|r| r.verdict.kind == "ok").collect();
-    let n_pass = if first.is_empty() {
-        None
-    } else {
-        Some(passed.len() as u64)
-    };
-    if let Some(np) = n_pass {
-        let kinds = story::fault_kinds(passed.iter().map(|r| r.schedule.as_str()), pr);
+    let np = passed.len();
+    s.push_str(&format!(
+        "<p>{}{np} of {total} runs passed every check.",
+        pill(if np > 0 { "ok" } else { "bad" }, "Passed")
+    ));
+    let durable: Vec<&&Run> = first
+        .iter()
+        .filter(|r| {
+            matches!(
+                story::class_of(r, pr).as_str(),
+                "durable-defaults" | "test-failed"
+            )
+        })
+        .collect();
+    let bad = durable.iter().filter(|r| r.verdict.kind != "ok").count();
+    if !durable.is_empty() && bad == 0 && np < first.len() {
+        let kinds = story::fault_kinds(durable.iter().map(|r| r.schedule.as_str()), pr);
         s.push_str(&format!(
-            "<p>{}{np} of {total} runs passed every check{}.</p>\n",
-            pill(if np > 0 { "ok" } else { "bad" }, "Passed"),
+            " With a working disk and your safe settings, none of the {} runs failed{}.",
+            durable.len(),
             if kinds.is_empty() {
                 String::new()
             } else {
                 format!(
-                    ", with {}",
+                    ", {} included",
                     esc(&describe::and_list(
                         &kinds.iter().map(|k| k.to_string()).collect::<Vec<_>>()
                     ))
                 )
             }
         ));
-        // the runs with a working disk and every setting at its safe value
-        let durable: Vec<&&Run> = first
-            .iter()
-            .filter(|r| {
-                matches!(
-                    story::class_of(r, pr).as_str(),
-                    "durable-defaults" | "test-failed"
-                )
-            })
-            .collect();
-        let bad = durable.iter().filter(|r| r.verdict.kind != "ok").count();
-        let failures = first.iter().filter(|r| r.verdict.kind != "ok").count();
-        if !durable.is_empty() && bad == 0 && failures > 0 {
-            s.push_str(&format!(
-                "<p>None of the {} runs with a working disk and your settings at their safe \
-                 values failed. Every failure above needs a disk fault, a damaged file or a \
-                 setting that trades safety for speed.</p>\n",
-                durable.len()
-            ));
-        }
     }
-    if let Some(t) = props {
-        let words = |p: &hydo_results::Property| -> String {
-            if p.message.trim().is_empty() {
-                code(&p.id)
-            } else {
-                format!("{} ({})", esc(p.message.trim()), code(&p.id))
+    s.push_str("</p></div>\n");
+    s
+}
+
+/// The checks that held or were never reached, and the faults the runs never had (for the
+/// details).
+fn coverage_html(props: Option<&PropertyTable>) -> String {
+    let Some(t) = props else {
+        return String::new();
+    };
+    let mut s = String::new();
+    let words = |p: &hydo_results::Property| -> String {
+        if p.message.trim().is_empty() {
+            code(&p.id)
+        } else {
+            format!("{} ({})", esc(p.message.trim()), code(&p.id))
+        }
+    };
+    let own = |p: &&hydo_results::Property| !p.id.starts_with("fault.");
+    let held: Vec<String> = t
+        .properties
+        .iter()
+        .filter(own)
+        .filter(|p| p.status == "ok" && p.runs_failed == 0)
+        .map(words)
+        .collect();
+    if !held.is_empty() {
+        s.push_str(&format!(
+            "<p>Your checks that held in every run: {}.</p>\n",
+            held.join("; ")
+        ));
+    }
+    let never: Vec<String> = t
+        .properties
+        .iter()
+        .filter(own)
+        .filter(|p| p.status.starts_with("not-"))
+        .map(words)
+        .collect();
+    if !never.is_empty() {
+        s.push_str(&format!(
+            "<p>Your checks that these runs never reached: {}.</p>\n",
+            never.join("; ")
+        ));
+    }
+    let mut untried: Vec<&str> = Vec::new();
+    let mut options: Vec<&str> = Vec::new();
+    for p in t
+        .properties
+        .iter()
+        .filter(|p| p.id.starts_with("fault.") && p.status.starts_with("not-"))
+    {
+        if let Some((w, o)) = story::untried_words(&p.id) {
+            if !untried.contains(&w) {
+                untried.push(w);
             }
-        };
-        let own = |p: &&hydo_results::Property| !p.id.starts_with("fault.");
-        let held: Vec<String> = t
-            .properties
-            .iter()
-            .filter(own)
-            .filter(|p| p.status == "ok" && p.runs_failed == 0)
-            .map(words)
-            .collect();
-        if !held.is_empty() {
-            s.push_str(&format!(
-                "<p>Your checks that held in every run: {}.</p>\n",
-                held.join("; ")
-            ));
-        }
-        let never: Vec<String> = t
-            .properties
-            .iter()
-            .filter(own)
-            .filter(|p| p.status.starts_with("not-"))
-            .map(words)
-            .collect();
-        if !never.is_empty() {
-            s.push_str(&format!(
-                "<p>Your checks that these runs never reached, so they tell nothing yet: {}.</p>\n",
-                never.join("; ")
-            ));
-        }
-        let mut untried: Vec<&str> = Vec::new();
-        let mut options: Vec<&str> = Vec::new();
-        for p in t
-            .properties
-            .iter()
-            .filter(|p| p.id.starts_with("fault.") && p.status.starts_with("not-"))
-        {
-            if let Some((w, o)) = story::untried_words(&p.id) {
-                if !untried.contains(&w) {
-                    untried.push(w);
-                }
-                if !options.contains(&o) {
-                    options.push(o);
-                }
+            if !options.contains(&o) {
+                options.push(o);
             }
         }
-        if !untried.is_empty() {
-            s.push_str(&format!(
-                "<p class=\"small\">These runs never had {}. To try them too, add {} to \
-                 <code>hydo explore</code>.</p>\n",
-                esc(&describe::and_list(
-                    &untried.iter().map(|x| x.to_string()).collect::<Vec<_>>()
-                )),
-                describe::and_list(&options.iter().map(|o| code(o)).collect::<Vec<_>>())
-            ));
-        }
     }
-    s.push_str("</div>\n");
+    if !untried.is_empty() {
+        s.push_str(&format!(
+            "<p>These runs never had {}. To try them too, add {} to <code>hydo explore</code>.</p>\n",
+            esc(&describe::and_list(
+                &untried.iter().map(|x| x.to_string()).collect::<Vec<_>>()
+            )),
+            describe::and_list(&options.iter().map(|o| code(o)).collect::<Vec<_>>())
+        ));
+    }
     s
 }
 
@@ -1184,15 +1189,18 @@ fn run_page(
     body.push_str(&story::steps_html(
         &run.schedule,
         &pr,
-        Some(story::outcome_line(run, &what)),
+        Some(story::outcome_line(
+            run,
+            &what,
+            evs.iter().any(|e| e.conversation == "recovery"),
+        )),
     ));
     // is this a bug?
     if failed {
         body.push_str(&h2("bug", "Is this a bug?"));
         let mut s = format!(
-            "<div class=\"card\"><p>{}</p>\n{}<p>{}</p>\n",
+            "<div class=\"card\"><p>{}</p>\n<p>{}</p>\n",
             story::attention_pill(problem.attention),
-            story::attention_meaning(problem.attention),
             md(&problem.why)
         );
         if let Some(d) = &d {
@@ -1205,10 +1213,8 @@ fn run_page(
         body.push_str(&s);
     }
     // what hydo saw
-    if let Some(e) = story::evidence_html(run, &evs, &what, &pr) {
-        body.push_str(&h2("saw", "What hydo saw"));
-        body.push_str(&e);
-    }
+    body.push_str(&h2("saw", "What hydo saw"));
+    body.push_str(&story::evidence_html(run, &evs, &what, &pr));
     // see it again
     body.push_str(&h2("again", "See it again"));
     body.push_str(&story::see_again(
@@ -1220,15 +1226,8 @@ fn run_page(
     if failed {
         let folder = pr.results_rel.clone().unwrap_or_else(|| shown.clone());
         body.push_str(&format!(
-            "<p class=\"small\">To open the run's files, logs and processes at the moment it \
-             failed: {}. The run's folder is {}{}.</p>\n",
-            code(&format!("hydo inspect start {} --at end", quote(&folder))),
-            code(&folder),
-            if pr.results_rel.is_some() {
-                " in your project's folder"
-            } else {
-                ""
-            }
+            "<p class=\"small\">To look inside the machine at the moment it failed: {}</p>\n",
+            code(&format!("hydo inspect start {} --at end", quote(&folder)))
         ));
     }
     // details
@@ -1625,97 +1624,64 @@ fn exploration_page(
     for &i in &order {
         let x = &probs[i];
         n += 1;
-        let cmd = story::see_again(&pr, Some(&doc.image.path), Some(&doc.engine), &x.schedule);
-        let mut more = String::new();
-        // what the failing run showed, for a service that did not come back or an error
+        let cmd = story::replay_command(&pr, Some(&doc.image.path), Some(&doc.engine), &x.schedule);
+        // what happens: what the first failing run showed for a service that did not come back,
+        // else what failed; and why
         let first = x.failures[0];
-        if matches!(
-            story::what_of(&first.run, &pr),
-            What::NoRestart { .. } | What::Error { .. }
-        ) {
-            if let Some(tag) = &first.run.tag {
-                if let Some(run) = by_tag.get(tag) {
+        let what = story::what_of(&first.run, &pr);
+        let mut happens = match &what {
+            What::NoRestart { service: Some(svc) } => first
+                .run
+                .tag
+                .as_ref()
+                .and_then(|tag| {
+                    let run = by_tag.get(tag)?;
                     let evs = events_of(dir, run, &RunFiles::explorer(tag));
-                    if let Some(e) = story::run_evidence(&evs) {
-                        more.push_str(&format!(
-                            "<p>What hydo saw in the first of these runs:</p>\n{e}"
-                        ));
-                    }
-                }
+                    story::exit_story(&evs, svc, x.schedule.contains("disk=ioerr"))
+                })
+                .unwrap_or_else(|| x.problem.what.clone()),
+            What::Check { .. } => String::new(),
+            _ => x.problem.what.clone(),
+        };
+        // the service's own story says what the disk errors did
+        if happens.is_empty() || !matches!(what, What::NoRestart { .. }) {
+            if !happens.is_empty() {
+                happens.push(' ');
             }
-            if let What::NoRestart { service: Some(svc) } = story::what_of(&first.run, &pr) {
-                more.push_str(&format!(
-                    "<p class=\"small\">The service's own log is not in these files. Run the \
-                     command below, then {} shows it, with the run's folder that \
-                     <code>hydo run</code> prints.</p>\n",
-                    code(&format!("hydo inspect logs <run folder> {svc} --at end"))
-                ));
-            }
+            happens.push_str(&x.problem.why);
         }
-        // which faults matter
+        // a command hydo did not shrink keeps the run's other faults
         let shrunk = x.groups.iter().any(|&gi| {
             let ((c, sig), _) = &groups[gi];
             doc.shrinks
                 .iter()
                 .any(|s| &s.class == c && &s.signature == sig)
         });
-        if shrunk {
-            more.push_str(
-                "<p class=\"small\">hydo removed every fault it could while the run still \
-                 failed, so the command keeps only the faults the failure needs.</p>\n",
-            );
-        } else {
+        if !shrunk {
             let common =
                 story::common_kinds(x.failures.iter().map(|f| f.run.schedule.as_str()), &pr);
-            let all = story::fault_kinds(std::iter::once(x.schedule.as_str()), &pr);
-            let others: Vec<&str> = all
-                .iter()
+            let others: Vec<String> = story::fault_kinds(std::iter::once(x.schedule.as_str()), &pr)
+                .into_iter()
                 .filter(|k| !common.contains(k))
-                .copied()
+                .map(str::to_string)
                 .collect();
-            let mut note = String::from(
-                "hydo did not remove faults from this one: it does that for failed checks, not \
-                 for runs that stopped with an error. So the command keeps every fault of the \
-                 first run.",
-            );
-            if !common.is_empty() {
-                note.push_str(&format!(
-                    " {} had {}",
-                    match x.failures.len() {
-                        1 => "The run".to_string(),
-                        2 => "Both runs".to_string(),
-                        n => format!("All {n} runs"),
-                    },
-                    describe::and_list(&common.iter().map(|k| k.to_string()).collect::<Vec<_>>())
+            if !others.is_empty() {
+                happens.push_str(&format!(
+                    " The command also keeps this run's {}.",
+                    describe::and_list(&others)
                 ));
-                if others.is_empty() {
-                    note.push('.');
-                } else {
-                    note.push_str(&format!(
-                        "; the {} in the command differ from run to run.",
-                        describe::and_list(
-                            &others.iter().map(|k| k.to_string()).collect::<Vec<_>>()
-                        )
-                    ));
-                }
             }
-            more.push_str(&format!("<p class=\"small\">{}</p>\n", esc(&note)));
         }
-        if let Some(nb) = &x.neighbour {
-            more.push_str(nb);
-        }
-        more.push_str(&format!(
-            "<p class=\"small\"><a href=\"#f{}\">The runs in detail</a>, in the details for a bug \
-             report.</p>\n",
-            x.groups[0] + 1
-        ));
         body.push_str(&card(&Card {
             n,
             problem: &x.problem,
             state: None,
             runs: Some((x.failures.len(), total)),
-            more,
+            happens,
+            more: String::new(),
             command: cmd,
+            after: String::new(),
+            link: Some(format!("f{}", x.groups[0] + 1)),
         }));
     }
     if !new_kinds.is_empty() {
@@ -1775,17 +1741,20 @@ fn exploration_page(
             problem: &p,
             state: None,
             runs: (runs > 0).then_some((runs, total)),
+            happens: format!("{} {}", p.what, p.why).trim().to_string(),
             more,
-            command: copy_block(&format!("hydo errors {}", quote(&shown))),
+            command: format!("hydo errors {}", quote(&shown)),
+            after: String::new(),
+            link: Some("errors".into()),
         }));
     }
     // what held
     body.push_str(&h2("held", "What held"));
-    body.push_str(&held_html(&pr, &first, total, doc.properties.as_ref()));
+    body.push_str(&held_html(&pr, &first, total));
     // next
     body.push_str(&h2("next", "Next"));
     let mut s = format!(
-        "<div class=\"card\"><p>Look further with more runs: {}</p>\n",
+        "<div class=\"card\"><p>Run more runs to look further: {}</p>\n",
         code(&explore_more(
             &pr,
             &doc.image.path,
@@ -1799,9 +1768,8 @@ fn exploration_page(
         .or_else(|| order.first().map(|&i| &probs[i]));
     if let Some(k) = accept.and_then(|x| x.key.as_ref()) {
         s.push_str(&format!(
-            "<p>To accept a problem you consider expected, so that it no longer fails your CI, run \
-             {}</p>\n",
-            story::accept_html(k)
+            "<p>Accept a problem you consider expected, so that it no longer fails your CI: {}</p>\n",
+            code(&format!("hydo ci accept {k} --reason \"…\""))
         ));
     }
     s.push_str("</div>\n");
@@ -1950,6 +1918,7 @@ fn exploration_details(
         }
     }
     s.push_str(&h3("properties", "Properties over every schedule"));
+    s.push_str(&coverage_html(doc.properties.as_ref()));
     s.push_str(&match &doc.properties {
         Some(t) => properties_html(t, &format!("{} schedules", t.runs)),
         None => "<p>The guest wrote no property records (the image has no assertion SDK).</p>\n"
@@ -2553,26 +2522,15 @@ fn ci_page(dir: &Path, doc: &CiRun, extra: &Extra) -> String {
     let mut keys: Vec<String> = Vec::new();
     for (n, (i, p, f)) in cards.iter().enumerate() {
         let (sc, sw, ss) = state_plain(&f.state);
-        let mut more = String::new();
-        if !ss.is_empty() {
-            more.push_str(&format!("<p>{}</p>\n", esc(ss)));
-        }
+        let mut happens = format!("{} {}", ss, p.what);
         if let Some(a) = &f.accepted {
-            more.push_str(&format!(
-                "<p>Accepted in <code>hydo/known-findings.yaml</code>: {}</p>\n",
-                esc(&a.reason)
-            ));
+            happens.push_str(&format!(" Accepted: {}", a.reason));
         }
-        more.push_str(&format!(
-            "<p class=\"small\"><a href=\"#f{}\">The replays in detail</a>, in the details for \
-             a bug report.</p>\n",
-            i + 1
-        ));
-        let mut command = story::see_again(&pr, None, Some(&doc.engine), &f.minimal);
+        let mut after = String::new();
         if f.state != "fixed" && f.accepted.is_none() {
-            command.push_str(&format!(
-                "<p class=\"small\">If you decide that it is expected, run {}</p>\n",
-                story::accept_html(&f.key)
+            after.push_str(&format!(
+                "<p class=\"small\">If it is expected: {}</p>\n",
+                code(&format!("hydo ci accept {} --reason \"…\"", f.key))
             ));
             keys.push(f.key.clone());
         }
@@ -2581,8 +2539,11 @@ fn ci_page(dir: &Path, doc: &CiRun, extra: &Extra) -> String {
             problem: p,
             state: Some(pill(sc, sw)),
             runs: None,
-            more,
-            command,
+            happens: happens.trim().to_string(),
+            more: String::new(),
+            command: story::replay_command(&pr, None, Some(&doc.engine), &f.minimal),
+            after,
+            link: Some(format!("f{}", i + 1)),
         }));
     }
     // what held
@@ -2600,37 +2561,6 @@ fn ci_page(dir: &Path, doc: &CiRun, extra: &Extra) -> String {
         sm.runs.saturating_sub(sm.failures),
         sm.runs
     ));
-    if let Some(p) = &doc.coverage.properties {
-        let mut untried: Vec<&str> = Vec::new();
-        let mut own: Vec<String> = Vec::new();
-        for x in &p.not_exercised {
-            match story::untried_words(x) {
-                Some((w, _)) => {
-                    if !untried.contains(&w) {
-                        untried.push(w);
-                    }
-                }
-                None if !x.starts_with("fault.") => own.push(code(x)),
-                None => {}
-            }
-        }
-        if !own.is_empty() {
-            s.push_str(&format!(
-                "<p>Your checks that these runs never reached, so they tell nothing yet: {}.</p>\n",
-                own.join(", ")
-            ));
-        }
-        if !untried.is_empty() {
-            s.push_str(&format!(
-                "<p class=\"small\">These runs never had {}. To try them too, add {} to the \
-                 options of the CI mode in <code>hydo/ci.yaml</code>.</p>\n",
-                esc(&describe::and_list(
-                    &untried.iter().map(|x| x.to_string()).collect::<Vec<_>>()
-                )),
-                code("--new-faults")
-            ));
-        }
-    }
     s.push_str("</div>\n");
     body.push_str(&s);
     if !doc.regressions.is_empty() {
@@ -2646,9 +2576,8 @@ fn ci_page(dir: &Path, doc: &CiRun, extra: &Extra) -> String {
     let mut s = String::from("<div class=\"card\">\n");
     if let Some(k) = keys.first() {
         s.push_str(&format!(
-            "<p>To accept a problem you consider expected, so that it no longer fails your CI, run \
-             {}</p>\n",
-            story::accept_html(k)
+            "<p>Accept a problem you consider expected, so that it no longer fails your CI: {}</p>\n",
+            code(&format!("hydo ci accept {k} --reason \"…\""))
         ));
     }
     s.push_str(&format!(

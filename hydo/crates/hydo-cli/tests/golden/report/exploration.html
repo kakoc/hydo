@@ -82,41 +82,31 @@ a{color:var(--note)}
 <header>
 <p class="eyebrow">hydo report · exploration of 12 runs</p>
 <h1>hydo found 3 problems in your system</h1>
-<p class="lead">hydo ran your system 12 times, each time with different faults: disk errors, crashes, network faults, a faulty disk that throws away confirmed writes and power cuts. 4 runs failed, in 2 different ways. Each failing run failed again the same way when hydo replayed it. Your services also wrote error lines that your list of known errors does not have.</p>
+<p class="lead">hydo ran your system 12 times, each time with different faults: disk errors, crashes, network faults, a faulty disk and power cuts. 4 runs failed, in 2 different ways. Each failing run failed again the same way when hydo replayed it. Your services also wrote error lines that your list of known errors does not have.</p>
 </header>
 <h2 id="start">Start here</h2>
 <div class="card problem" id="p1"><div class="num">1</div><div>
 <h3>The run stopped early after disk errors</h3>
 <p><span class="pill bad">Worth a look</span><span class="muted">2 of 12 runs</span></p>
 <div class="bar look"><span style="width:17%"></span></div>
-<p class="small">This can be a bug in your system, and only you can decide. In CI, a new finding of this kind fails the check until you fix it or accept it.</p>
-<p>The run stopped before your checks could run, with the error <code>harness: guest did not finish (I/O error)</code>. hydo made the disk return read and write errors.</p>
-<p class="small">hydo did not remove faults from this one: it does that for failed checks, not for runs that stopped with an error. So the command keeps every fault of the first run. Both runs had disk errors and crashes; the network faults in the command differ from run to run.</p>
-<p class="small"><a href="#f2">The runs in detail</a>, in the details for a bug report.</p>
-<p><b>What to do:</b> Decide whether your system must survive a failing disk. If it must, look at the service&#39;s log in the run; if not, accept this finding.</p>
-<p>Run this where the image file <code>scripted-disk.img</code> is. The run repeats exactly, every time:</p>
+<p>The run stopped before your checks could run, with the error <code>harness: guest did not finish (I/O error)</code>. hydo made the disk return read and write errors. The command also keeps this run&#39;s network faults.</p>
+<p><b>Is it a bug?</b> Decide whether your system must survive a failing disk. If it must, look at the service&#39;s log in the run; if not, accept this finding.</p>
 <div class="cmdrow"><pre class="cmd">hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;" aria-label="Copy to the clipboard">Copy</button></div>
-<p class="small">In hydo's words: the text in quotes names the faults of the run. <code>|</code> separates the machine's settings, before it, from what happens in the run, after <code>run</code>. <code>disk=ioerr:2</code> = the disk returns errors; <code>dseed=9e5651b0ef953636</code> = which disk requests the fault hits; <code>K=kafka@13+3</code> = kill <code>kafka</code> after 13 steps; <code>N=redis@23-27:delay,79ms</code> = a network fault during steps 24 to 27.</p>
+<p class="small"><a href="#f2">Open this failure →</a></p>
 </div></div>
 <div class="card problem" id="p2"><div class="num">2</div><div>
-<h3>Your system failed your check when a faulty disk threw away writes it had already confirmed</h3>
+<h3>Your system failed your check with a faulty disk</h3>
 <p><span class="pill ok">Expected</span><span class="muted">2 of 12 runs</span></p>
 <div class="bar expected"><span style="width:17%"></span></div>
-<p class="small">No system survives this fault. In CI, a new finding of this kind fails the check until you accept it.</p>
-<p>One of your checks found <code>lost acknowledged write</code>. hydo made the disk faulty: it threw away writes that it had already confirmed, as a broken or misconfigured disk can. No system keeps data that its disk throws away.</p>
-<p class="small">hydo removed every fault it could while the run still failed, so the command keeps only the faults the failure needs.</p>
-<p>A second run with a disk that keeps every write at once instead of a faulty disk that throws away writes it already confirmed passed every check.</p>
-<p class="small"><a href="#f1">The runs in detail</a>, in the details for a bug report.</p>
-<p><b>What to do:</b> Nothing, unless your production disks can throw away confirmed writes. If you do not expect such disks, accept this finding.</p>
-<p>Run this where the image file <code>scripted-disk.img</code> is. The run repeats exactly, every time:</p>
+<p>hydo made the disk faulty: it threw away writes that it had already confirmed, as a broken or misconfigured disk can. No system keeps data that its disk throws away.</p>
+<p><b>Is it a bug?</b> Nothing, unless your production disks can throw away confirmed writes. If you do not expect such disks, accept this finding.</p>
 <div class="cmdrow"><pre class="cmd">hydo run --image scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;" aria-label="Copy to the clipboard">Copy</button></div>
-<p class="small">In hydo's words: the text in quotes names the faults of the run. <code>|</code> separates the machine's settings, before it, from what happens in the run, after <code>run</code>. <code>disk=lying:1</code> = a faulty disk throws away writes it already confirmed; <code>dseed=63cbe1e459320dd7</code> = which disk requests the fault hits; <code>C=11</code> = cut the power after 11 steps.</p>
+<p class="small"><a href="#f1">Open this failure →</a></p>
 </div></div>
 <div class="card problem" id="p3"><div class="num">3</div><div>
 <h3>Your services wrote 4 kinds of error line that your list of known errors does not have</h3>
 <p><span class="pill bad">Worth a look</span><span class="muted">12 of 12 runs</span></p>
 <div class="bar look"><span style="width:100%"></span></div>
-<p class="small">This can be a bug in your system, and only you can decide. In CI, a new finding of this kind fails the check until you fix it or accept it.</p>
 <p>Your project&#39;s list of known errors (<code>errors:</code> in <code>hydo.yaml</code>) does not have these lines.</p>
 <ul>
 <li><code>redis</code> <code>connection to redis lost &lt;n&gt;</code> <span class="muted">(1 run)</span></li>
@@ -124,18 +114,15 @@ a{color:var(--note)}
 <li><code>mysql</code> <code>connection to mysql lost &lt;n&gt;</code> <span class="muted">(6 runs)</span></li>
 <li><code>kafka</code> <code>connection to kafka lost &lt;n&gt;</code> <span class="muted">(2 runs)</span></li>
 </ul>
-<p><b>What to do:</b> If the line is harmless, add it to the list of known errors. If not, look at what led to it in the run.</p>
+<p><b>Is it a bug?</b> If the line is harmless, add it to the list of known errors. If not, look at what led to it in the run.</p>
 <div class="cmdrow"><pre class="cmd">hydo errors hydo-out/explore</pre><button type="button" class="copy" data-copy="hydo errors hydo-out/explore" aria-label="Copy to the clipboard">Copy</button></div>
+<p class="small"><a href="#errors">Open this failure →</a></p>
 </div></div>
 <h2 id="held">What held</h2>
-<div class="card">
-<p><span class="pill ok">Passed</span>8 of 12 runs passed every check, with disk errors, crashes, network faults and power cuts.</p>
-<p>None of the 7 runs with a working disk and your settings at their safe values failed. Every failure above needs a disk fault, a damaged file or a setting that trades safety for speed.</p>
-<p>Your checks that held in every run: <code>orders.drained</code>.</p>
-</div>
+<div class="card"><p><span class="pill ok">Passed</span>8 of 12 runs passed every check. With a working disk and your safe settings, none of the 7 runs failed, network faults, crashes and power cuts included.</p></div>
 <h2 id="next">Next</h2>
-<div class="card"><p>Look further with more runs: <code>hydo explore --image scripted-disk.img --seeds 13-112</code></p>
-<p>To accept a problem you consider expected, so that it no longer fails your CI, run <code>hydo ci accept f1:invariant:b85cf53e33 --reason &quot;…&quot;</code>. It writes the finding, under its name <code>f1:invariant:b85cf53e33</code>, to <code>hydo/known-findings.yaml</code> with your reason. CI then stops failing on it, and lists it for removal if it ever passes.</p>
+<div class="card"><p>Run more runs to look further: <code>hydo explore --image scripted-disk.img --seeds 13-112</code></p>
+<p>Accept a problem you consider expected, so that it no longer fails your CI: <code>hydo ci accept f1:invariant:b85cf53e33 --reason &quot;…&quot;</code></p>
 </div>
 <details class="share" id="details"><summary>Details for a bug report</summary>
 <div class="card"><dl class="facts">
@@ -264,6 +251,7 @@ a{color:var(--note)}
 </details>
 </div>
 <h3 id="properties">Properties over every schedule</h3>
+<p>Your checks that held in every run: <code>orders.drained</code>.</p>
 <p>2 properties over 12 schedules: 2 held, 0 failed, 0 never reached. A property that is never reached was not tested by these schedules: the fault or the state it needs did not happen.</p>
 <div class="scroll"><table>
 <thead><tr><th>Result</th><th>Property</th><th>Kind</th><th>Runs held / failed</th><th>What it says</th></tr></thead>

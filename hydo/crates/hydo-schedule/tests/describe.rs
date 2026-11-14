@@ -220,17 +220,15 @@ fn a_power_cut_with_a_relaxed_setting() {
         lines,
         vec![
             (
-                "The disk keeps recent writes in a cache, as real disks do: a power cut loses the \
-                 writes that the system had not yet flushed to disk (fsync).",
+                "The disk keeps recent writes in a cache that a power cut loses, as real disks do.",
                 Part::Setup
             ),
             (
-                "Redis appendfsync is set to `everysec` instead of `always`, its safe value.",
+                "Redis appendfsync is set to `everysec`, not its safe value `always`.",
                 Part::Setup
             ),
             (
-                "The power goes out after 12 steps of your workload, before the 13th step. Then \
-                 the machine starts again.",
+                "The power goes out after 12 steps, before the 13th step.",
                 Part::Fault
             ),
         ]
@@ -242,12 +240,9 @@ fn a_power_cut_with_a_relaxed_setting() {
     assert_eq!(
         glosses,
         vec![
-            (
-                "disk=cut",
-                "a power cut loses the writes not yet flushed to disk"
-            ),
+            ("disk=cut", "a power cut loses unflushed writes"),
             ("R=everysec", "Redis appendfsync set to `everysec`"),
-            ("C=12", "cut the power after 12 steps"),
+            ("C=12", "power cut before the 13th step"),
         ]
     );
     assert_eq!(all[2].context.as_deref(), Some("after a power cut"));
@@ -297,7 +292,7 @@ fn a_setting_without_its_manifest_entry_and_a_described_one() {
     let s = describe::describe_text("| run S=fast", &k).remove(0);
     assert_eq!(
         s.sentence,
-        "Sync mode is set to `fast` instead of `full`, its safe value. How often the WAL is synced."
+        "Sync mode is set to `fast`, not its safe value `full`. How often the WAL is synced."
     );
     let s = describe::describe_text("| run S=full", &k).remove(0);
     assert_eq!(

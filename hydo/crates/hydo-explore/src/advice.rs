@@ -331,7 +331,31 @@ pub fn problem(
     let ctx = s.map(|s| context(class, s, knobs)).unwrap_or_default();
     // the title: what broke, short
     let title = match what {
-        What::Check { .. } => with_context(format!("{system} failed your check"), &ctx),
+        What::Check {
+            id,
+            description,
+            found,
+        } => {
+            // a check that reports something lost or missing: say that it was lost
+            let lost = found
+                .as_deref()
+                .is_some_and(|f| f.ends_with(" lost") || f.ends_with(" missing"));
+            let confirmed = [id.as_deref(), description.as_deref()]
+                .iter()
+                .flatten()
+                .any(|x| {
+                    let x = x.to_lowercase();
+                    x.contains("ack") || x.contains("confirm")
+                });
+            match (lost, confirmed) {
+                (true, true) if !ctx.is_empty() => {
+                    format!("{system} lost data it had confirmed, {ctx}")
+                }
+                (true, true) => format!("{system} lost data it had confirmed"),
+                (true, false) => with_context(format!("{system} lost data"), &ctx),
+                _ => with_context(format!("{system} failed your check"), &ctx),
+            }
+        }
         What::NoRestart { service } => with_context(
             format!(
                 "{} did not start again",
@@ -703,7 +727,8 @@ mod tests {
         );
         assert_eq!(
             p.title,
-            "Redis failed your check after a power cut, with Redis appendfsync set to `everysec`"
+            "Redis lost data it had confirmed, after a power cut, with Redis appendfsync set to \
+             `everysec`"
         );
         assert_eq!(p.attention.words(), "Expected for this setting");
         assert_eq!(
@@ -737,7 +762,7 @@ mod tests {
         );
         assert_eq!(
             p.title,
-            "Redis failed your check after `redis` was killed and after a clock jump"
+            "Redis lost data it had confirmed, after `redis` was killed and after a clock jump"
         );
         assert!(p
             .why
@@ -768,8 +793,7 @@ mod tests {
                 &k
             )
             .title,
-            "Redis failed your check when a faulty disk threw away writes it had already \
-             confirmed"
+            "Redis lost data it had confirmed, with a faulty disk"
         );
         for a in [
             Attention::Look,

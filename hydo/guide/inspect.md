@@ -171,35 +171,31 @@ hydo report --html hydo-out/explore -o failures.html  # an exploration
 hydo report --html <hydo ci run output dir>           # a CI run, each finding against its base
 ```
 
-For one run, the page shows these parts, in this order:
+For one run, the page shows these parts, in this order. Every line is a fact of the run:
 
-1. A short title that says what broke, with the fault, for example "Redis failed your check after
-   a power cut, with Redis appendfsync set to `everysec`". A lead paragraph says what the
-   workload had confirmed, the faults, and what the check found. The line under it quotes the
-   check once.
+1. A short title that says what broke, with the fault, for example "Redis lost data it had
+   confirmed, after a power cut, with Redis appendfsync set to `everysec`". A lead paragraph says
+   what the workload had confirmed, the faults, and what the check found. The line under it
+   quotes the check once.
 2. "When it happens": each part of the schedule as a numbered sentence, with the names and
    values of the project's settings from `knobs:`. Steps are counted from 1: `C=12` is a power
-   cut after 12 steps.
-3. "Is this a bug?": a label, what the label means for you and for CI, and what to do. The label
-   comes from the failure's class:
+   cut before step 13, after 12 steps.
+3. "Is this a bug?": a label, why, and what to do. The label comes from the failure's class:
    - "Expected" for a faulty disk that throws away writes it already confirmed.
    - "Expected for this setting" for a setting that trades safety for speed.
    - "Worth a look" for disk errors, damaged files, a failed test program, a new error line, and
      a check you wrote. For a check you wrote, the page does not guess whether it must hold.
-4. "What hydo saw": only what the other parts do not say, such as the restart, a service that
-   ended, and a check that stops at the first problem it finds.
-5. "See it again": the `hydo run` command and what it needs first: the project's folder, after
-   `hydo build`. It also shows the meaning of each word of the schedule, and the `hydo inspect
-   start` command with the run's folder in the project.
+4. "What hydo saw": what the system confirmed (named as the check's output names the items,
+   such as `k:0 … k:11`), the faults as they happened, the restart, and what the check found.
+5. "See it again": the `hydo run` command for the project's folder, the words of its schedule
+   that change the run, and the `hydo inspect start` command.
 
 With a passing run (`--against`, or a `hydo diff` or `hydo explain` directory with `--diff`),
 "Is this a bug?" also says how that run differed and that it passed.
 
 For an exploration, the page groups the failures into problems, the ones worth a look first.
-Each problem shows how many runs show it, the label, the explanation, and the command. When
-hydo did not remove faults from a problem's command, the page says which faults all its runs
-share. For a service that did not start again, it shows what the first run saw. A section
-"What held" names the runs that passed, the checks that held, and the faults the runs never had.
+Each problem shows how many runs show it, the label, what happens, whether it is a bug, the
+command, and a link to its runs in the details. A section "What held" says how many runs passed.
 A section "Next" gives the command for more runs and the `hydo ci accept` command for a problem
 you accept. For a CI run, each problem also says whether it is new in the change, already on the
 base commit, or fixed.
@@ -215,7 +211,8 @@ problem opens it at that problem's runs:
 - where the failing run first differs from a passing run, as `hydo diff` finds it. For an
   exploration, the page compares each minimal schedule with the passing schedules the shrinker
   ran next to it;
-- the properties that held, failed, or were never reached, and the versions of `hydo versions`.
+- the properties that held, failed, or were never reached, the faults the runs never had, and
+  the versions of `hydo versions`.
 
 A timeline keeps at most 400 events, the main ones first, and a log at most 4,000 bytes. The page
 says what it left out and which command shows all of it.

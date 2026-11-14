@@ -254,48 +254,43 @@ pub fn steps_html(schedule: &str, pr: &Project, outcome: Option<String>) -> Stri
     for i in items {
         s.push_str(&format!("<li>{}</li>\n", md(&i)));
     }
-    s.push_str(
-        "</ol>\n<p class=\"small\">A step is one numbered part of your workload \
-         (<code>workload.steps</code> in <code>hydo.yaml</code>), counted from 1.</p></div>\n",
-    );
+    s.push_str("</ol></div>\n");
     s
 }
 
-/// "In hydo's words: `|` separates ..., `disk=cut` = ...": every word of the schedule with its
-/// gloss, in the order written.
+/// "In hydo's words: `disk=cut` = ..., `C=12` = ...": the words of the schedule that change
+/// something in this run, with their glosses, in the order written. A disk fault's choice of
+/// requests (`dseed=`) is there only with a disk fault, and hydo's own machinery (`rb=`) never.
 pub fn glossary(schedule: &str, pr: &Project) -> String {
-    let parsed = Schedule::parse(schedule).ok();
-    let mut parts: Vec<String> = Vec::new();
-    let mut add = |tok: String, gloss: String| {
-        parts.push(format!("{} = {}", code(&tok), md(&gloss)));
+    let Ok(s) = Schedule::parse(schedule) else {
+        return String::new();
     };
-    match &parsed {
-        Some(s) => {
-            for t in &s.host {
-                let d = describe::host(t, s);
-                add(d.token, d.gloss);
-            }
-            for t in &s.guest {
-                let d = describe::guest(t, &pr.knobs);
-                add(d.token, d.gloss);
-            }
+    let faulty = matches!(
+        s.disk(),
+        hydo_schedule::Disk::IoErr(_) | hydo_schedule::Disk::Lying(_)
+    );
+    let mut parts: Vec<String> = Vec::new();
+    for t in &s.host {
+        let d = describe::host(t, &s);
+        let keep = match t {
+            hydo_schedule::HostToken::Dseed(_) => faulty,
+            hydo_schedule::HostToken::Disk(hydo_schedule::Disk::None) => false,
+            _ => d.part != Part::Quiet,
+        };
+        if keep {
+            parts.push(format!("{} = {}", code(&d.token), md(&d.gloss)));
         }
-        None => {
-            for d in describe::describe_text(schedule, &pr.knobs) {
-                add(d.token, d.gloss);
-            }
-        }
+    }
+    for t in &s.guest {
+        let d = describe::guest(t, &pr.knobs);
+        parts.push(format!("{} = {}", code(&d.token), md(&d.gloss)));
     }
     if parts.is_empty() {
         return String::new();
     }
     format!(
-        "<p class=\"small\">In hydo's words: the text in quotes names the faults of the run. \
-         {} separates the machine's settings, before it, from what happens in the run, after \
-         {}. {}.</p>\n",
-        code("|"),
-        code("run"),
-        parts.join("; ")
+        "<p class=\"small\">In hydo's words: {}.</p>\n",
+        parts.join(", ")
     )
 }
 
@@ -345,28 +340,24 @@ pub fn replay_command(
     w.join(" ")
 }
 
-/// What a command needs first, in one line.
+/// The line before a replay command.
 pub fn needs_first(pr: &Project, image: Option<&str>) -> String {
     match (&pr.folder, image_arg(pr, image)) {
+        (Some(f), _) if pr.needs_build => format!(
+            "<p>In your project folder ({}), after <code>hydo build</code>, this failure repeats \
+             exactly, every time you run it:</p>\n",
+            code(f)
+        ),
         (Some(f), _) => format!(
-            "<p>Run this in your project's folder ({}), after <code>hydo build</code> has made \
-             the image there. The run repeats exactly, every time:</p>\n",
+            "<p>In your project folder ({}), this failure repeats exactly, every time you run \
+             it:</p>\n",
             code(f)
         ),
         (None, Some(i)) => format!(
-            "<p>Run this where the image file {} is{}. The run repeats exactly, every time:</p>\n",
-            code(&i),
-            if image.is_some_and(|x| Path::new(x).is_absolute()) {
-                " (its full path is in the details below)"
-            } else {
-                ""
-            }
+            "<p>Next to the image {}, this failure repeats exactly, every time you run it:</p>\n",
+            code(&i)
         ),
-        (None, None) => {
-            "<p>Run this in your project's folder, after <code>hydo build</code>. The run \
-             repeats exactly, every time:</p>\n"
-                .to_string()
-        }
+        (None, None) => "<p>This failure repeats exactly, every time you run it:</p>\n".to_string(),
     }
 }
 
@@ -382,17 +373,6 @@ pub fn see_again(
     s.push_str(&copy_block(&replay_command(pr, image, engine, schedule)));
     s.push_str(&glossary(schedule, pr));
     s
-}
-
-/// `hydo ci accept` with what it does.
-pub fn accept_html(key: &str) -> String {
-    format!(
-        "{}. It writes the finding, under its name {}, to <code>hydo/known-findings.yaml</code> \
-         with your reason. CI then stops failing on it, and lists it for removal if it ever \
-         passes.",
-        code(&format!("hydo ci accept {key} --reason \"…\"")),
-        code(key)
-    )
 }
 
 // ------------------------------------------------------------------ what hydo saw
@@ -420,31 +400,8 @@ pub fn acked(evs: &[TimelineEvent]) -> Option<(Vec<u64>, Vec<u64>)> {
         })
 }
 
-/// Step numbers (counted from 0) in words, counted from 1: `1 to 12`, `1, 3 and 6`.
-pub fn steps_words(v: &[u64]) -> String {
-    if v.is_empty() {
-        return "none".into();
-    }
-    let v: Vec<u64> = v.iter().map(|x| x + 1).collect();
-    let contiguous = v.windows(2).all(|w| w[1] == w[0] + 1);
-    if contiguous && v.len() > 2 {
-        return format!("{} to {}", v[0], v[v.len() - 1]);
-    }
-    if v.len() > 8 {
-        return format!(
-            "{}, … and {}",
-            v[..4]
-                .iter()
-                .map(u64::to_string)
-                .collect::<Vec<_>>()
-                .join(", "),
-            v[v.len() - 1]
-        );
-    }
-    describe::and_list(&v.iter().map(u64::to_string).collect::<Vec<_>>())
-}
-
-/// "before step 12" in a note of the run (counted from 0) as the page says it: "after 12 steps".
+/// "before step 12" in a note of the run (counted from 0) as the page says it: "before the 13th
+/// step".
 fn step_of(head: &str) -> String {
     let Some(i) = head.find("before step ") else {
         return String::new();
@@ -454,7 +411,7 @@ fn step_of(head: &str) -> String {
         .next()
         .and_then(|x| x.parse().ok());
     match n {
-        Some(n) => format!(" {}", describe::after(n)),
+        Some(n) => format!(" before {}", describe::nth_step(n)),
         None => String::new(),
     }
 }
@@ -549,28 +506,86 @@ fn check_command(run: &Run) -> Option<&str> {
         .and_then(|x| x.command.as_deref())
 }
 
-/// "What hydo saw" for one run: only what the other parts do not say. The steps without an
-/// answer, the restart after a power cut, the services that ended, and why the check names one
-/// item when it stops at the first one. None when there is nothing to add.
-pub fn evidence_html(
-    run: &Run,
-    evs: &[TimelineEvent],
-    what: &What,
-    pr: &Project,
-) -> Option<String> {
-    let mut s = String::new();
-    if let Some((_, f)) = acked(evs) {
+/// The items a check reports, named the way its output names them: when the output names an
+/// item whose number is one of the confirmed steps (`key k:0 lost`, step 0 confirmed), the
+/// confirmed steps by that name (`k:0 … k:11`).
+pub fn items_of(found: &str, acked: &[u64]) -> Option<String> {
+    let (first, last) = (*acked.first()?, *acked.last()?);
+    for w in found.split_whitespace() {
+        let digits = w.len() - w.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+        if digits == 0 || digits == w.len() {
+            continue;
+        }
+        let (prefix, num) = w.split_at(w.len() - digits);
+        if num.parse::<u64>().is_ok_and(|n| acked.contains(&n)) {
+            return Some(if first == last {
+                format!("`{prefix}{first}`")
+            } else {
+                format!("`{prefix}{first}` … `{prefix}{last}`")
+            });
+        }
+    }
+    None
+}
+
+/// What a check found, as a short phrase: `key k:0 lost` is "`key k:0` was gone".
+fn found_phrase(found: &str) -> String {
+    for suf in [" lost", " missing"] {
+        if let Some(x) = found.strip_suffix(suf) {
+            return format!("`{x}` was gone");
+        }
+    }
+    format!("your check found `{found}`")
+}
+
+/// "What hydo saw" for one run: what the workload had confirmed, the faults as they happened,
+/// the restart, the services that ended, and what the check found.
+pub fn evidence_html(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -> String {
+    let mut s = String::from("<div class=\"card evidence\">\n");
+    let acked = acked(evs);
+    let found = match what {
+        What::Check { found, .. } => found.clone(),
+        _ => None,
+    };
+    if let Some((a, f)) = &acked {
+        let n = a.len();
+        let items = found.as_deref().and_then(|x| items_of(x, a));
+        s.push_str(&line(
+            "✔",
+            "m-ok",
+            &md(&match (n, items) {
+                (0, _) => "No step of your workload was confirmed before the faults.".to_string(),
+                (n, Some(i)) => format!(
+                    "{} confirmed {i} ({n} step{})",
+                    pr.system,
+                    if n == 1 { "" } else { "s" }
+                ),
+                (n, None) => format!(
+                    "{} confirmed {n} step{} of your workload",
+                    pr.system,
+                    if n == 1 { "" } else { "s" }
+                ),
+            }),
+        ));
         if !f.is_empty() {
             s.push_str(&line(
                 "?",
                 "m-warn",
                 &esc(&format!(
-                    "Step{} {} got no answer, so the workload counts {} as unknown.",
-                    if f.len() == 1 { "" } else { "s" },
-                    steps_words(&f),
-                    if f.len() == 1 { "it" } else { "them" }
+                    "{} step{} got no answer",
+                    f.len(),
+                    if f.len() == 1 { "" } else { "s" }
                 )),
             ));
+        }
+    }
+    let mut n = 0;
+    for e in evs.iter().filter(|e| e.kind == "fault") {
+        if let Some(w) = fault_words(&e.text) {
+            n += 1;
+            if n <= 4 {
+                s.push_str(&line("⚡", "m-warn", &md(w.trim_end_matches('.'))));
+            }
         }
     }
     if evs.iter().any(|e| e.conversation == "recovery") {
@@ -578,86 +593,77 @@ pub fn evidence_html(
             "↻",
             "m-note",
             &esc(&format!(
-                "The machine started again, and {} started from what was on its disk.",
+                "The machine started again, and {} started from what was on its disk",
                 pr.system
             )),
         ));
     }
-    let mut ended = 0;
-    for e in evs.iter().filter(|e| e.kind == "exit") {
+    for e in evs.iter().filter(|e| e.kind == "exit").take(3) {
         let Some((who, st)) = e.text.split_once(" exited: status ") else {
             continue;
         };
         if who == "workload" || st.trim() == "0" {
             continue;
         }
-        ended += 1;
-        if ended <= 3 {
-            s.push_str(&line(
-                "✗",
-                "m-bad",
-                &md(&format!(
-                    "`{who}` ended with the exit status {}.",
-                    st.trim()
-                )),
-            ));
-        }
+        s.push_str(&line(
+            "✘",
+            "m-bad",
+            &md(&format!("`{who}` exited with status {}", st.trim())),
+        ));
     }
-    // a check that stops at its first problem names one item only
-    if let (What::Check { found: Some(f), .. }, Some(cmd)) = (what, check_command(run)) {
-        if cmd.contains("break") {
-            s.push_str(&line(
-                "i",
-                "m-note",
-                &md(&format!(
-                    "Your check stops at the first problem it finds, so it reports only `{f}`; \
-                     later items can be missing too."
-                )),
-            ));
-        }
-    }
-    (!s.is_empty()).then(|| format!("<div class=\"card evidence\">\n{s}</div>\n"))
-}
-
-/// The evidence of one failing run of an exploration: the notes of the run that a reader needs
-/// (the faults, the restart, a service that stopped again) and the exit statuses.
-pub fn run_evidence(evs: &[TimelineEvent]) -> Option<String> {
-    let mut s = String::new();
-    let mut n = 0;
-    for e in evs {
-        let w = match e.kind.as_str() {
-            "exit" => {
-                let Some((who, st)) = e.text.split_once(" exited: status ") else {
-                    continue;
-                };
-                if who == "workload" || st.trim() == "0" {
-                    continue;
+    if run.verdict.kind == "ok" {
+        s.push_str(&line("✔", "m-ok", "Every check held"));
+    } else {
+        let stops = matches!(what, What::Check { found: Some(_), .. })
+            && check_command(run).is_some_and(|c| c.contains("break"));
+        let last = match what {
+            What::Check { found: Some(f), .. } => format!(
+                "`{f}`{}",
+                if stops {
+                    " <span class=\"muted\">(the check stops at the first one)</span>"
+                } else {
+                    ""
                 }
-                format!("`{who}` ended with the exit status {}.", st.trim())
-            }
-            _ => match fault_words(&e.text) {
-                Some(w) => w,
-                None => continue,
-            },
+            ),
+            What::Check { .. } => "Your check failed".into(),
+            What::NoRestart { service: Some(x) } => format!("`{x}` did not start again"),
+            What::NoRestart { service: None } => "A service did not start again".into(),
+            What::Error { text } => format!("The run stopped with `{text}`"),
+            What::ErrorLine { service, line } => format!("`{service}` wrote `{line}`"),
         };
-        n += 1;
-        if n > 8 {
-            break;
-        }
-        s.push_str(&line("·", "m-note", &md(&w)));
+        // the muted note is HTML; the rest is plain words
+        let (words, note) = match last.split_once(" <span") {
+            Some((w, n)) => (w.to_string(), format!(" <span{n}")),
+            None => (last, String::new()),
+        };
+        s.push_str(&line("✘", "m-bad", &format!("{}{note}", md(&words))));
     }
-    (!s.is_empty()).then(|| format!("<div class=\"card evidence\">\n{s}</div>\n"))
+    s.push_str("</div>\n");
+    s
 }
 
 /// The lead paragraph of a run: what the workload had confirmed, the first faults, and what the
 /// check found.
 pub fn lead_of(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -> String {
     let mut parts: Vec<String> = Vec::new();
-    if let Some((a, _)) = acked(evs) {
-        parts.push(match a.len() {
-            0 => "Your workload ran, and no step of it was confirmed.".into(),
-            1 => format!("Your workload ran, and {} confirmed 1 step.", pr.system),
-            n => format!("Your workload ran, and {} confirmed {n} steps.", pr.system),
+    if let Some((a, f)) = acked(evs) {
+        let ran = a.len() + f.len();
+        parts.push(match (ran, a.len()) {
+            (0, _) => "Your workload had not confirmed anything yet.".into(),
+            (r, k) if r == k => format!(
+                "Your workload ran {r} step{} and {} confirmed {}.",
+                if r == 1 { "" } else { "s" },
+                pr.system,
+                if r == 1 {
+                    "it".to_string()
+                } else {
+                    format!("all {r}")
+                }
+            ),
+            (r, k) => format!(
+                "Your workload ran {r} steps and {} confirmed {k}.",
+                pr.system
+            ),
         });
     }
     let faults: Vec<String> = evs
@@ -675,15 +681,15 @@ pub fn lead_of(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -> S
     }
     let recovered = evs.iter().any(|e| e.conversation == "recovery");
     let after = if recovered {
-        "When the machine started again, "
+        format!("When {} started again, ", pr.system)
     } else {
-        "Then "
+        "Then ".to_string()
     };
     if run.verdict.kind == "ok" {
         parts.push(format!("{after}every check held."));
     } else {
         parts.push(match what {
-            What::Check { found: Some(f), .. } => format!("{after}your check found `{f}`."),
+            What::Check { found: Some(f), .. } => format!("{after}{}.", found_phrase(f)),
             What::Check { .. } => format!("{after}your check failed."),
             What::NoRestart { service: Some(x) } => format!("{after}`{x}` did not start again."),
             What::NoRestart { service: None } => format!("{after}a service did not start again."),
@@ -705,13 +711,19 @@ fn lower_first(s: &str) -> String {
     }
 }
 
-/// The outcome line at the end of "When it happens" (what it found is in the lead).
-pub fn outcome_line(run: &Run, what: &What) -> String {
+/// The outcome line at the end of "When it happens".
+pub fn outcome_line(run: &Run, what: &What, recovered: bool) -> String {
     if run.verdict.kind == "ok" {
-        return "At the end, your checks run, and every check holds.".into();
+        return "At the end, every check holds.".into();
     }
+    let when = if recovered {
+        "After the restart"
+    } else {
+        "At the end"
+    };
     match what {
-        What::Check { .. } => "At the end, your check runs and fails.".into(),
+        What::Check { found: Some(f), .. } => format!("{when}, your check finds `{f}`."),
+        What::Check { .. } => format!("{when}, your check fails."),
         What::NoRestart { service: Some(x) } => {
             format!("After the faults, `{x}` does not start again.")
         }
@@ -721,6 +733,38 @@ pub fn outcome_line(run: &Run, what: &What) -> String {
         What::Error { .. } => "The run stops with an error before your checks run.".into(),
         What::ErrorLine { service, .. } => format!("`{service}` writes an error line."),
     }
+}
+
+/// One sentence of what a service that did not start again did in a run: "`redis` exited with
+/// status 1 during the disk errors, and again after hydo restarted it."
+pub fn exit_story(evs: &[TimelineEvent], svc: &str, disk_errors: bool) -> Option<String> {
+    let restart = evs
+        .iter()
+        .position(|e| e.text.contains(&format!("restarting {svc}")));
+    let exits: Vec<(usize, String)> = evs
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| e.kind == "exit")
+        .filter_map(|(i, e)| {
+            let (who, st) = e.text.split_once(" exited: status ")?;
+            (who == svc && st.trim() != "0").then(|| (i, st.trim().to_string()))
+        })
+        .collect();
+    let (_, st) = exits.first()?;
+    let before = restart.is_some_and(|r| exits.iter().any(|(i, _)| *i < r));
+    let after = restart.is_some_and(|r| exits.iter().any(|(i, _)| *i > r));
+    let during = if disk_errors {
+        " during the disk errors"
+    } else {
+        ""
+    };
+    Some(match (before, after) {
+        (true, true) => {
+            format!("`{svc}` exited with status {st}{during}, and again after hydo restarted it.")
+        }
+        (false, true) => format!("`{svc}` exited with status {st} after hydo restarted it."),
+        _ => format!("`{svc}` exited with status {st}{during}."),
+    })
 }
 
 /// The fault kinds of a set of schedules, in words ("power cuts, crashes and clock jumps").
@@ -779,9 +823,4 @@ pub fn attention_pill(a: advice::Attention) -> String {
         advice::Attention::Expected => "ok",
     };
     super::page::pill(class, a.words())
-}
-
-/// The line under a label: what it means, and what it means for CI.
-pub fn attention_meaning(a: advice::Attention) -> String {
-    format!("<p class=\"small\">{}</p>\n", esc(a.meaning()))
 }

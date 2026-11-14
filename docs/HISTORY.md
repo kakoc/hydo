@@ -7876,6 +7876,31 @@ the code:
 The page tests check two more rules: no machine path above the details, and every link has a
 target on the page.
 
+**Back to the mockups' density.** The user compared the pages after the review with the approved
+mockups. The mockups were more concise and concrete, so every visible line now carries a fact of
+the run, and general explanations went into the details or were removed:
+
+- The title and the lead use the run's own data. A check that reports something lost (`key k:0
+  lost`) gives "Redis lost data it had confirmed", and the lead counts the workload's confirmed
+  steps: "Your workload ran 12 steps and Redis confirmed all 12. Then the power was cut before
+  the 13th step. When Redis started again, `key k:0` was gone."
+- "What hydo saw" has the mockup's four lines: "✔ Redis confirmed `k:0` … `k:11` (12 steps)",
+  "⚡ The power was cut before the 13th step", "↻ The machine started again", and "✘ `key k:0
+  lost` (the check stops at the first one)". The items are named as the check's output names
+  them when its number is a confirmed step.
+- Removed from the plain part: the label meanings, the note on steps, the explanation of `|` and
+  `run`, the gloss of a token that changes nothing in the run, and the run folder sentence.
+- Each exploration card has the mockup's parts only: what happens in one or two sentences, "Is it
+  a bug?", the command, and "Open this failure →". The card of a service that did not start
+  again says how it exited: "`redis` exited with status 1 during the disk errors, and again after
+  hydo restarted it." A command that hydo did not shrink adds one clause on the faults it keeps.
+  "What held" is two sentences; the checks that held and the faults the runs never had are in
+  the details.
+
+Above the details, the run mockup has 286 words, the run page after the review had 422, and the
+new one has 313. The exploration mockup has 318 words, the page after the review had 1,103, and
+the new one has 380 (three cards with their commands).
+
 ### Milestone 229 (tentative number) - DONE (`hydo onboard` starts onboarding with one command; the Claude Code plugin is `hydo` and its command `/hydo:onboard`; docs/ONBOARD.md with a worked messages example that runs on the Mac engine; nothing recorded moved; 2026-11-14)
 
 **In short.** A user who wanted to onboard a message broker found no clear start in the README,

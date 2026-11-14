@@ -88,24 +88,19 @@ a{color:var(--note)}
 <div class="card problem" id="p1"><div class="num">1</div><div>
 <h3>Shop failed your check while an outside service misbehaved</h3>
 <p><span class="pill bad">New in this change</span><span class="pill bad">Worth a look</span></p>
-<p class="small">This can be a bug in your system, and only you can decide. In CI, a new finding of this kind fails the check until you fix it or accept it.</p>
-<p>Your check <code>payments.charged_at_most_once</code> found <code>payments.charge: ref o7 took effect 2 times (records 23,26)</code>. This is your own rule, and the disk and your settings were not at fault. hydo does not know what your system promises, so only you can say whether the rule must hold here.</p>
-<p>The base commit passes the same run, so this change brought it.</p>
-<p class="small"><a href="#f1">The replays in detail</a>, in the details for a bug report.</p>
-<p><b>What to do:</b> Replay the run and look at the moment it failed. If the rule must hold, this is a bug; if not, change the check or accept this finding.</p>
-<p>Run this in your project's folder (<code>shop</code>), after <code>hydo build</code> has made the image there. The run repeats exactly, every time:</p>
+<p>The base commit passes the same run, so this change brought it. Your check <code>payments.charged_at_most_once</code> found <code>payments.charge: ref o7 took effect 2 times (records 23,26)</code>.</p>
+<p><b>Is it a bug?</b> Replay the run and look at the moment it failed. If the rule must hold, this is a bug; if not, change the check or accept this finding.</p>
 <div class="cmdrow"><pre class="cmd">hydo run &quot;disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50&quot;</pre><button type="button" class="copy" data-copy="hydo run &quot;disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50&quot;" aria-label="Copy to the clipboard">Copy</button></div>
-<p class="small">In hydo's words: the text in quotes names the faults of the run. <code>|</code> separates the machine's settings, before it, from what happens in the run, after <code>run</code>. <code>disk=none</code> = the disk keeps every write at once; <code>dseed=fbb60485ae17b0ba</code> = kept so that the run is exactly the same; <code>H=payments.charge@6-9:reset,p=50</code> = the outside service <code>payments</code>, on its route <code>charge</code>, resets the connection for 50% of the requests.</p>
-<p class="small">If you decide that it is expected, run <code>hydo ci accept f1:invariant:d4f25624c2 --reason &quot;…&quot;</code>. It writes the finding, under its name <code>f1:invariant:d4f25624c2</code>, to <code>hydo/known-findings.yaml</code> with your reason. CI then stops failing on it, and lists it for removal if it ever passes.</p>
+<p class="small">If it is expected: <code>hydo ci accept f1:invariant:d4f25624c2 --reason &quot;…&quot;</code></p>
+<p class="small"><a href="#f1">Open this failure →</a></p>
 </div></div>
 <h2 id="held">What held</h2>
 <div class="card">
 <p><span class="pill ok">Passed</span>73 of 74 runs passed every check.</p>
-<p class="small">These runs never had a pause in the middle of a request, faults on the requests only and faults on the answers only. To try them too, add <code>--new-faults</code> to the options of the CI mode in <code>hydo/ci.yaml</code>.</p>
 </div>
 <h2 id="next">Next</h2>
 <div class="card">
-<p>To accept a problem you consider expected, so that it no longer fails your CI, run <code>hydo ci accept f1:invariant:d4f25624c2 --reason &quot;…&quot;</code>. It writes the finding, under its name <code>f1:invariant:d4f25624c2</code>, to <code>hydo/known-findings.yaml</code> with your reason. CI then stops failing on it, and lists it for removal if it ever passes.</p>
+<p>Accept a problem you consider expected, so that it no longer fails your CI: <code>hydo ci accept f1:invariant:d4f25624c2 --reason &quot;…&quot;</code></p>
 <p>Compare two CI runs without running anything: <code>hydo ci compare BASE-DIR HEAD-DIR</code></p>
 </div>
 <details class="share" id="details"><summary>Details for a bug report</summary>
