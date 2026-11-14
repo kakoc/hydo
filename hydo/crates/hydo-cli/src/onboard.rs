@@ -1,4 +1,5 @@
-//! `hydo onboard [DIR] [--agent NAME ...] [--no-skill] [--no-resolve]` (Milestone 229): the one
+//! `hydo onboard [DIR] [--compose FILE] [--agent NAME ...] [--no-skill] [--no-resolve]` (Milestone
+//! 229; `--compose` and the list of other Compose files since Milestone 231): the one
 //! command that starts onboarding a repository. It says what it found (a Compose file and its
 //! services, Dockerfiles, the main language by files, an existing hydo/ folder), starts the
 //! folder (`hydo compose` when there is a Compose file, else `hydo init`; an existing hydo/ folder
@@ -18,11 +19,11 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 pub const HELP: &str =
-    "usage: hydo onboard [DIR] [--agent claude|codex|cursor|copilot|gemini|all ...] [--no-skill]
-                    [--no-resolve]
+    "usage: hydo onboard [DIR] [--compose FILE] [--agent claude|codex|cursor|copilot|gemini|all ...]
+                    [--no-skill] [--no-resolve]
   starts onboarding the repository at DIR (default: this directory) and prints the next step:
-  1. says what it found: a Compose file and its services, Dockerfiles, the main language by
-     files, and an existing hydo/ folder;
+  1. says what it found: a Compose file and its services (and the other Compose files of DIR),
+     Dockerfiles, the main language by files, and an existing hydo/ folder;
   2. starts hydo/: with a Compose file, `hydo compose <file> --out hydo/hydo.yaml --images-dir
      images` (the services, ready to fill in); without one, `hydo init`. An existing hydo/ folder
      is never changed;
@@ -32,6 +33,9 @@ pub const HELP: &str =
      .agents/skills/onboard;
   4. prints the next step: open the AI tool and run the skill, or, without one, the three parts
      to fill in.
+  --compose FILE: import this Compose file (relative to DIR), for example
+     docker-compose-postgres.yml, instead of the first of docker-compose.yaml, docker-compose.yml,
+     compose.yaml and compose.yml
   --agent NAME: install for these tools instead of the ones found (repeatable, or comma-separated)
   --no-skill: install no skill
   --no-resolve: pass --no-resolve to hydo compose (no registry lookups; the images stay tags)";
@@ -39,6 +43,7 @@ pub const HELP: &str =
 /// What `hydo onboard` was asked.
 struct Args {
     dir: PathBuf,
+    compose: Option<String>,
     agents: Option<Vec<String>>,
     skill: bool,
     no_resolve: bool,
@@ -46,6 +51,7 @@ struct Args {
 
 fn parse(argv: &[String]) -> Result<Args, String> {
     let mut dir: Option<PathBuf> = None;
+    let mut compose: Option<String> = None;
     let (mut agents, mut skill, mut no_resolve) = (None::<Vec<String>>, true, false);
     let mut i = 0;
     while i < argv.len() {
@@ -55,7 +61,15 @@ fn parse(argv: &[String]) -> Result<Args, String> {
                 .get_or_insert_with(Vec::new)
                 .extend(v.split(',').filter(|x| !x.is_empty()).map(str::to_string))
         };
-        if a == "--agent" {
+        if a == "--compose" {
+            let v = argv
+                .get(i + 1)
+                .ok_or("--compose needs a Compose file (hydo onboard --help)")?;
+            compose = Some(v.clone());
+            i += 1;
+        } else if let Some(v) = a.strip_prefix("--compose=") {
+            compose = Some(v.to_string());
+        } else if a == "--agent" {
             let v = argv.get(i + 1).ok_or(
                 "--agent needs a tool name (claude, codex, cursor, copilot, gemini or all)",
             )?;
@@ -99,8 +113,18 @@ fn parse(argv: &[String]) -> Result<Args, String> {
     if !dir.is_dir() {
         return Err(format!("no such directory: {}", dir.display()));
     }
+    if let Some(c) = &compose {
+        if !dir.join(c).is_file() {
+            return Err(format!(
+                "--compose {c}: no such file in {} (the other Compose files there: {})",
+                dir.display(),
+                list_or_none(&compose_files(&dir))
+            ));
+        }
+    }
     Ok(Args {
         dir,
+        compose,
         agents,
         skill,
         no_resolve,
@@ -113,6 +137,34 @@ const COMPOSE_FILES: [&str; 4] = [
     "compose.yaml",
     "compose.yml",
 ];
+
+/// The Compose files at the top of `dir`: the names `docker-compose*` and `compose*` that end in
+/// `.yml` or `.yaml`, sorted. A repository often has several (one per database or setup), and
+/// `hydo onboard` imports only one, so it names the others.
+pub fn compose_files(dir: &Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.filter_map(Result::ok)
+                .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|n| {
+                    (n.starts_with("docker-compose") || n.starts_with("compose"))
+                        && (n.ends_with(".yml") || n.ends_with(".yaml"))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort();
+    v
+}
+
+fn list_or_none(v: &[String]) -> String {
+    if v.is_empty() {
+        "none".to_string()
+    } else {
+        v.join(", ")
+    }
+}
 
 /// The names under the top-level `services:` key of a Compose file (its first indentation level).
 pub fn compose_services(text: &str) -> Vec<String> {
@@ -323,10 +375,20 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
     println!("hydo: looking at {shown}");
 
     // 1. what is there
-    let compose = COMPOSE_FILES.into_iter().find(|f| dir.join(f).is_file());
+    let compose: Option<String> = a.compose.clone().or_else(|| {
+        COMPOSE_FILES
+            .into_iter()
+            .find(|f| dir.join(f).is_file())
+            .map(str::to_string)
+    });
+    let compose = compose.as_deref();
     let services = compose
         .map(|c| compose_services(&std::fs::read_to_string(dir.join(c)).unwrap_or_default()))
         .unwrap_or_default();
+    let others: Vec<String> = compose_files(dir)
+        .into_iter()
+        .filter(|f| Some(f.as_str()) != compose)
+        .collect();
     match compose {
         Some(c) if services.is_empty() => println!("  Compose file: {c} (no services found in it)"),
         Some(c) => println!(
@@ -336,6 +398,17 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
             services.join(", ")
         ),
         None => println!("  Compose file: none"),
+    }
+    if !others.is_empty() {
+        println!(
+            "  other Compose files: {} ({})",
+            others.join(", "),
+            if compose.is_some() {
+                "`hydo onboard --compose <file>` imports one of them instead"
+            } else {
+                "`hydo onboard --compose <file>` imports one of them"
+            }
+        );
     }
     let found = look(dir);
     match found.dockerfiles.len() {

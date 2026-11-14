@@ -290,3 +290,70 @@ fn help_needs_nothing() {
     assert!(out.starts_with("usage: hydo onboard [DIR]"), "{out}");
     assert!(!c.has("hydo"), "--help changes nothing");
 }
+
+/// A repository with one Compose file per setup, as temporalio/docker-compose has (Milestone
+/// 231): `hydo onboard` names the others, and `--compose` imports the one the user wants.
+#[test]
+fn several_compose_files_are_named_and_compose_chooses_one() {
+    let c = Case::new("several");
+    c.put(
+        "docker-compose.yml",
+        "services:\n  search:\n    image: example/search:1.0\n  server:\n    image: example/server:1.0\n",
+    );
+    c.put(
+        "docker-compose-postgres.yml",
+        "services:\n  postgresql:\n    image: example/pg:16\n  server:\n    image: example/server:1.0\n",
+    );
+    c.put(
+        "docker-compose-mysql.yml",
+        "services:\n  mysql:\n    image: example/my:8\n",
+    );
+    c.put("compose-notes.txt", "not a Compose file\n");
+
+    // the default file is imported, and the others are named with the way to choose one
+    let (rc, out) = c.onboard(&["--no-resolve", "--no-skill"]);
+    assert_eq!(rc, 0, "{out}");
+    assert!(
+        out.contains("Compose file: docker-compose.yml, 2 services: search, server"),
+        "{out}"
+    );
+    assert!(
+        out.contains(
+            "other Compose files: docker-compose-mysql.yml, docker-compose-postgres.yml \
+             (`hydo onboard --compose <file>` imports one of them instead)"
+        ),
+        "{out}"
+    );
+    assert!(read(&c.repo.join("hydo/hydo.yaml")).contains("name: search"));
+
+    // --compose imports the named file
+    std::fs::remove_dir_all(c.repo.join("hydo")).unwrap();
+    let (rc, out) = c.onboard(&[
+        "--no-resolve",
+        "--no-skill",
+        "--compose",
+        "docker-compose-postgres.yml",
+    ]);
+    assert_eq!(rc, 0, "{out}");
+    assert!(
+        out.contains("Compose file: docker-compose-postgres.yml, 2 services: postgresql, server"),
+        "{out}"
+    );
+    assert!(
+        out.contains("other Compose files: docker-compose-mysql.yml, docker-compose.yml"),
+        "{out}"
+    );
+    let m = read(&c.repo.join("hydo/hydo.yaml"));
+    assert!(
+        m.contains("name: postgresql") && !m.contains("name: search"),
+        "{m}"
+    );
+
+    // a file that is not there is refused with the ones that are
+    std::fs::remove_dir_all(c.repo.join("hydo")).unwrap();
+    let (rc, out) = c.onboard(&["--compose=nope.yml"]);
+    assert_eq!(rc, 2, "{out}");
+    assert!(out.contains("--compose nope.yml: no such file"), "{out}");
+    assert!(out.contains("docker-compose-postgres.yml"), "{out}");
+    assert!(!c.has("hydo"));
+}

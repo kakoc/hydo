@@ -41,7 +41,10 @@ hydo onboard
 
 `hydo onboard` looks at the repository and says what it found: a Compose file and its services,
 the Dockerfiles, the main language, and an existing `hydo/` folder. Then it starts `hydo/`: with
-a Compose file it runs `hydo compose` (below), without one `hydo init`. It never changes an
+a Compose file it runs `hydo compose` (below), without one `hydo init`. A repository with several
+Compose files, for example one per database, gets the first of `docker-compose.yaml`,
+`docker-compose.yml`, `compose.yaml` and `compose.yml`, and a list of the others; `hydo onboard
+--compose docker-compose-postgres.yml` imports the one you name. It never changes an
 existing `hydo/` folder. It installs the onboarding skill for the AI tools it finds (`--agent`
 names them, `--no-skill` installs none) and prints the next step. `hydo onboard --help` lists its
 options.
