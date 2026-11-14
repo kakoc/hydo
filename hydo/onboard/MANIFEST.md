@@ -597,6 +597,25 @@ hydo runs it as `nc -z -w 2 <address> <port>` with the guest's busybox, the same
 `hydo build --check` refuses a port outside 1 to 65535. The key is a format-1 addition
 (Milestone 239): every other `ready:` value runs as written, so no existing image changes.
 
+### Values from a file (`services[].env_file`)
+
+A password or a token in `env:` goes into version control with `hydo.yaml`. `env_file:` names a
+file of `KEY=VALUE` lines, relative to `hydo.yaml`, instead. `hydo build` reads it and adds its
+values to the image service's environment. The image's own `Env` comes first, then the file, then
+`env:`, so `env:` wins.
+
+```yaml
+  - name: api
+    image: images/api-amd64.docker.tar
+    env_file: k8s-import/secrets/api.env   # DB_PASSWORD=..., one variable per line
+```
+
+The file takes `#` comments, empty lines, an `export ` prefix, and one pair of quotes around a
+value. A value cannot span several lines. `hydo build --check` stops when the file is missing.
+The values still go into the image, as every `env:` value does. `hydo k8s` writes such a file for
+each service whose environment comes from Kubernetes Secrets, in a folder with a `.gitignore` of
+`*`. The key is a format-1 addition (Milestone 243): a service without it builds as before.
+
 ### Variables every command sees
 
 | variable | meaning |
@@ -2373,6 +2392,27 @@ its own volume on `/data`, do not share one directory (`{src: /data/vol/n1-data,
 - Healthchecks run through `hydo-oci`, as root unless the service has a `user:`; the image's own
   user for a healthcheck (Docker runs it as the container's user) is not looked up.
 - No `build:`, no registry pulls at build time, no Swarm (`deploy:`), no GPUs or host devices.
+
+## From Kubernetes manifests
+
+A project without a Compose file often deploys with Kubernetes manifests, a Helm chart or a
+Kustomize folder. `hydo k8s` (Milestone 243) turns them into a starting `hydo.yaml`, as `hydo
+compose` does for a Compose file. Kubernetes does not run in the guest: each container of each
+pod becomes a hydo service.
+
+```sh
+hydo k8s k8s/ --out hydo/hydo.yaml --images-dir images            # a folder of manifests
+hydo k8s charts/app --values ci-values.yaml --out hydo/hydo.yaml  # a chart: helm template
+hydo k8s overlays/test --out hydo/hydo.yaml                       # kustomization.yaml: kubectl kustomize
+sh hydo/fetch-images.sh
+```
+
+The images are resolved and pinned as `hydo compose` pins them, in `hydo-k8s.lock.json`. A
+StatefulSet of N replicas becomes N services, `<name>-0` to `<name>-N-1`, and a group of them
+under `groups:`. The ConfigMaps a pod mounts are written to `k8s-import/configmap/`. The Secrets
+are written to `k8s-import/secrets/`, which has a `.gitignore` of `*`, and their environment
+values reach the services through `env_file:` ("Values from a file"). The mapping of every field,
+and what is refused with a warning, is in `docs/design/k8s-import.md`.
 
 ## SQL systems: ready-made workloads and checks (`hydo sql-gen`, `hydo-sql`)
 

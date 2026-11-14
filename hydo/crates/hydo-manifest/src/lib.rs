@@ -31,7 +31,7 @@ pub mod known_findings;
 pub mod messages;
 pub mod migrate;
 pub mod model;
-mod oci;
+pub mod oci;
 pub mod py;
 mod pyre;
 pub mod restart;

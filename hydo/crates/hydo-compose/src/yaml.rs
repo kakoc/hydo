@@ -460,10 +460,46 @@ pub fn safe_load(text: &str) -> Result<Y, String> {
     Ctor { nodes: &b.nodes }.build(root, 0, false)
 }
 
+/// `yaml.safe_load_all(text)`: every document of a stream (`---` between them), with the same
+/// semantics as [`safe_load`]. An empty document is `Y::Null`. Kubernetes manifests and the output
+/// of `helm template` are such streams (Milestone 243).
+pub fn safe_load_all(text: &str) -> Result<Vec<Y>, String> {
+    let mut out = Vec::new();
+    let mut b = Builder::default();
+    let mut input = text.as_bytes();
+    let mut p = Parser::new();
+    p.set_input_string(&mut input);
+    for ev in p {
+        let ev = ev.map_err(|e| e.to_string())?;
+        let end = matches!(ev.data, EventData::DocumentEnd { .. });
+        b.event(ev.data)?;
+        if end {
+            // anchors belong to their document, as in PyYAML
+            let d = match b.roots.first() {
+                Some(&root) => Ctor { nodes: &b.nodes }.build(root, 0, false)?,
+                None => Y::Null,
+            };
+            out.push(d);
+            b = Builder::default();
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::pyval::repr;
+
+    #[test]
+    fn streams_of_documents() {
+        let d = safe_load_all("a: 1\n---\n# only a comment\n---\nb: &x [1]\nc: *x\n").unwrap();
+        assert_eq!(d.len(), 3);
+        assert_eq!(repr(&d[0]), "{'a': 1}");
+        assert!(d[1].is_none());
+        assert_eq!(repr(&d[2]), "{'b': [1], 'c': [1]}");
+        assert!(safe_load_all("").unwrap().is_empty());
+    }
 
     fn r(t: &str) -> String {
         repr(&safe_load(t).unwrap())

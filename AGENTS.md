@@ -517,6 +517,17 @@ changed the fingerprint. The example is `hydo/onboard/examples/contracts-ledger`
 the measurements are `docs/design/contracts.md`. A stop costs 4.8 µs on the Mac (open item
 113).
 
+**From Kubernetes manifests (M243).** `hydo k8s <files | folder | chart | kustomize folder>`
+writes a starting `hydo.yaml` from Kubernetes manifests, a Helm chart (`helm template`) or a
+Kustomize folder (`kubectl kustomize`); `hydo onboard` runs it when there is no Compose file. It
+converts the objects into a Compose-shaped document with `x-hydo-*` keys and hands it to the
+Compose importer (the module `k8s` of `hydo-compose`, so no new crate). A StatefulSet gives one
+service per replica and a group; init containers, Jobs and Helm hooks become one-shot jobs;
+Services become names in `/etc/hosts`; probes become `ready:`. Secret values go to a git-ignored
+`k8s-import/secrets/` and reach the image through the format-1 addition `services[].env_file`.
+The mapping and the refusals are in `docs/design/k8s-import.md`; the proof is in
+`docs/HISTORY.md` Milestone 243.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -1021,6 +1032,22 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 113. Function contracts (M241). hvx and KVM have no breakpoints for contracts yet, and a
     position-independent program needs its load address there. A run judges at most 100,000
     calls, and the report does not say when it stopped recording.
+114. `hydo k8s` (M243). Its own call of `helm template` and `kubectl kustomize` ran in no test:
+    the proof rendered the chart on the Mac and imported the output on the bare-metal machine.
+    The imports ran on hvx only, not on the Mac engine, and not on KVM. These are not mapped:
+    - A Deployment gives one pod, whatever its replicas, and no load balancing.
+    - There is no proxy between a Service's port and its target port.
+    - The containers of a pod do not share `localhost`.
+    - There is no Kubernetes API (leases, operators, custom resources).
+    - The link-style `<NAME>_PORT` variables are not set.
+
+    `docs/design/k8s-import.md` has the whole list.
+115. `hydo-manifest`'s `equivalence::` fails on 134 answers since M239: its `--check` warning
+    for missing `root.files` sources was never recorded. The warning's text depends on the
+    machine, on which Nix paths exist. Before the answers are recorded again, the test must
+    hide the host's `/nix/store` or leave the warning out of the digest (M243). The `hydo`
+    test's recorded answer of `hydo build <stack example> --check` differs on the bare-metal machine
+    for the same reason.
 
 ## Milestone index
 
@@ -1455,6 +1482,10 @@ build machine, before 2026-10-13.
   breakpoints without changing the run (4 of 4 fingerprints equal). A planted double debit
   breaks `ensures` only under a pause or a lost answer (Rust and Go). uprobes on hvx cost
   6.9 µs per stop and change the fingerprint. Nothing recorded moved
+- M243 (tentative number): `hydo k8s` writes a starting hydo.yaml from Kubernetes manifests, a
+  Helm chart or a Kustomize folder, through the Compose importer; `hydo onboard` runs it. Secret
+  values stay out of hydo.yaml through the format-1 addition `services[].env_file`. Bitnami's
+  Redis chart and the voting app's manifests ran on hvx. Nothing recorded moved
 
 ## Where to look
 

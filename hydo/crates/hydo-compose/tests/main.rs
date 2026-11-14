@@ -7,6 +7,7 @@ mod common;
 
 mod equivalence;
 mod fetch_arch;
+mod k8s;
 mod local_build;
 mod pycheck;
 mod registry;

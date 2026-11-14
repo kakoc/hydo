@@ -68,6 +68,8 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
                                                    optional: give /dev/hvx to a group, so runs need no sudo
     hydo compose <docker-compose.yaml> [--out hydo.yaml] [hydo-compose options]
                                                    start a hydo.yaml from a Compose file (MANIFEST.md)
+    hydo k8s     <manifests | chart | kustomize dir> [--out hydo.yaml] [--helm CHART] [--values F]
+                                                   start a hydo.yaml from Kubernetes manifests or a Helm chart
     hydo build   [hydo.yaml] [--out DIR] [--set KEY=VALUE ...]
                                                    compile the manifest into a guest disk image
     hydo migrate [hydo.yaml] [--check] [--out FILE | --stdout]
@@ -126,6 +128,8 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
     hydo doctor                                    check this Mac and the installation
     hydo compose <docker-compose.yaml> [--out hydo.yaml] [hydo-compose options]
                                                    start a hydo.yaml from a Compose file (MANIFEST.md)
+    hydo k8s     <manifests | chart | kustomize dir> [--out hydo.yaml] [--helm CHART] [--values F]
+                                                   start a hydo.yaml from Kubernetes manifests or a Helm chart
     hydo build   [hydo.yaml] [--out DIR] [--set KEY=VALUE ...]
                                                    compile the manifest into an arm64 guest image
     hydo migrate [hydo.yaml] [--check] [--out FILE | --stdout]
@@ -239,6 +243,8 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         }
         "onboard" => onboard::cmd_onboard(ctx, rest),
         "compose" => delegated::cmd_compose(ctx, rest),
+        // M243: Kubernetes manifests, a Helm chart or a Kustomize folder (`hydo k8s --help`)
+        "k8s" => hydo_compose::k8s::main(rest, ctx.config.cli.init_clock_start),
         "build" => build::cmd_build(ctx, rest),
         "run" => runs::cmd_run(ctx, rest),
         "repro" => runs::cmd_repro(ctx, rest),

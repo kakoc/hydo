@@ -117,6 +117,7 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
   It builds the image of a service with build: with Docker and pins it in the lock file
   (--no-build leaves that to fetch-images.sh). `hydo guide services` describes the result."
             .to_string(),
+        "k8s" => hydo_compose::k8s::USAGE.to_string(),
         "module" if linux => "usage: hydo module build|install|uninstall|load|unload|status [--name NAME] [--dry-run] [--param KEY=VALUE ...]
        hydo module udev install|remove|status [--name NAME] [--group GROUP] [--mode 0660] [--no-adduser] [--dry-run]
   builds the hvx kernel module for the running kernel and loads it (install), or unloads and

@@ -15,6 +15,7 @@ const OCI_KEYS: &[&str] = &[
     "workdir",
     "user",
     "env",
+    "env_file",
     "mounts",
     "writable",
 ];
@@ -27,6 +28,54 @@ fn expanduser(p: &str) -> String {
         }
     }
     p.to_string()
+}
+
+/// `services[].env_file` as a path: relative to the manifest's folder, `~` expanded.
+pub fn env_file_path(f: &str, mdir: &str) -> String {
+    let f = expanduser(f);
+    if f.starts_with('/') {
+        f
+    } else {
+        format!("{}/{f}", mdir.trim_end_matches('/'))
+    }
+}
+
+/// The KEY=VALUE lines of an env file, in order: `#` comments and empty lines are skipped, an
+/// `export ` prefix is dropped, and one pair of matching quotes around a value is removed. A line
+/// without `=` or with a key that is not a variable name is an error.
+pub fn read_env_file(path: &str) -> Result<Vec<(String, String)>, String> {
+    let t = std::fs::read_to_string(path).map_err(|e| format!("env_file {path}: {e}"))?;
+    let mut out = Vec::new();
+    for (i, ln) in t.lines().enumerate() {
+        let l = ln.trim();
+        if l.is_empty() || l.starts_with('#') {
+            continue;
+        }
+        let l = l.strip_prefix("export ").unwrap_or(l).trim_start();
+        let Some((k, v)) = l.split_once('=') else {
+            return Err(format!("env_file {path}:{}: not KEY=VALUE", i + 1));
+        };
+        let k = k.trim();
+        let ok = k.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+            && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !ok {
+            return Err(format!(
+                "env_file {path}:{}: {k:?} is not a variable name",
+                i + 1
+            ));
+        }
+        let v = v.trim();
+        let v = if v.len() >= 2
+            && ((v.starts_with('"') && v.ends_with('"'))
+                || (v.starts_with('\'') && v.ends_with('\'')))
+        {
+            &v[1..v.len() - 1]
+        } else {
+            v
+        };
+        out.push((k.to_string(), v.to_string()));
+    }
+    Ok(out)
 }
 
 fn image_path(v: &Value, arch: &str, mdir: &str, wh: &str) -> R<String> {
@@ -115,6 +164,14 @@ pub fn prepare(m: &Value, manifest_path: &str, arch: &str) -> R<Vec<(String, Str
             continue;
         };
         let p = image_path(img, arch, &mdir, &wh)?;
+        if let Some(f) = o.get("env_file").and_then(Value::as_str) {
+            let fp = env_file_path(f, &mdir);
+            if !std::path::Path::new(&fp).is_file() {
+                return Err(err(format!(
+                    "{wh}: env_file {f} does not exist ({fp}); a file that `hydo k8s` writes for Secrets stays out of version control: run the import again"
+                )));
+            }
+        }
         out.push((str_of(o.get("name").unwrap_or(&Value::Null)), p));
         // hydo_oci reads the image here (its config), then checks this service's env:, workdir:,
         // user: and mounts: against it; not ported, so those checks of an image service are not

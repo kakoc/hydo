@@ -74,6 +74,7 @@ pub const KNOWN_SVC: &[&str] = &[
     "workdir",
     "user",
     "env",
+    "env_file",
     "mounts",
     "restart",
     "restart_may_fail",
@@ -648,6 +649,13 @@ pub fn validate(m: &mut Value) -> R<()> {
         if let Some(b) = obj_get(s, "writable") {
             if !b.is_boolean() {
                 return Err(err(format!("{wh}: writable: must be true or false")));
+            }
+        }
+        if let Some(f) = obj_get(s, "env_file") {
+            if f.as_str().is_none_or(|p| p.trim().is_empty()) {
+                return Err(err(format!(
+                    "{wh}: env_file: a path of a file of KEY=VALUE lines, relative to hydo.yaml"
+                )));
             }
         }
         if let Some(st) = obj_get(s, "storage") {

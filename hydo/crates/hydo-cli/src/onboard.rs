@@ -25,8 +25,10 @@ pub const HELP: &str =
   1. says what it found: a Compose file and its services (and the other Compose files of DIR),
      Dockerfiles, the main language by files, and an existing hydo/ folder;
   2. starts hydo/: with a Compose file, `hydo compose <file> --out hydo/hydo.yaml --images-dir
-     images` (the services, ready to fill in); without one, `hydo init`. An existing hydo/ folder
-     is never changed;
+     images` (the services, ready to fill in); else, with a Helm chart, a Kustomize folder or
+     Kubernetes manifests (chart/, charts/*, helm/, deploy/, k8s/, kubernetes/, manifests/, ...),
+     `hydo k8s <it> --out hydo/hydo.yaml --images-dir images`; else `hydo init`. An existing
+     hydo/ folder is never changed;
   3. installs the onboarding skill for the AI tools it finds (a .claude/, .codex/, .cursor/ or
      .gemini/ folder, or the claude, codex, cursor-agent, gemini or copilot command on PATH):
      Claude Code gets .claude/skills/hydo, whose command is /hydo:onboard, the other tools
@@ -163,6 +165,82 @@ fn list_or_none(v: &[String]) -> String {
         "none".to_string()
     } else {
         v.join(", ")
+    }
+}
+
+/// Where the Kubernetes deployment of a repository may live, in the order they are tried.
+const K8S_PLACES: [&str; 12] = [
+    "chart",
+    "charts",
+    "helm",
+    "deploy",
+    "deployment",
+    "deployments",
+    "k8s",
+    "kubernetes",
+    "manifests",
+    "kustomize",
+    "k8s-specifications",
+    ".",
+];
+
+/// A Helm chart, a Kustomize folder or a folder of Kubernetes manifests in the repository at
+/// `dir` (M243): the first of [`K8S_PLACES`] that is one, or one level below it (`charts/app`).
+pub fn find_k8s(dir: &Path) -> Option<(PathBuf, &'static str)> {
+    let what = |p: &Path| -> Option<&'static str> {
+        match hydo_compose::k8s::kind_of_folder(p) {
+            "helm" => Some("a Helm chart"),
+            "kustomize" => Some("a Kustomize folder"),
+            _ => hydo_compose::k8s::has_workloads(p).map(|_| "Kubernetes manifests"),
+        }
+    };
+    for place in K8S_PLACES {
+        let p = if place == "." {
+            dir.to_path_buf()
+        } else {
+            dir.join(place)
+        };
+        if !p.is_dir() {
+            continue;
+        }
+        // the repository's root counts only as a chart or a Kustomize folder
+        if place == "." {
+            return match hydo_compose::k8s::kind_of_folder(&p) {
+                "helm" => Some((p, "a Helm chart")),
+                "kustomize" => Some((p, "a Kustomize folder")),
+                _ => None,
+            };
+        }
+        if matches!(hydo_compose::k8s::kind_of_folder(&p), "helm" | "kustomize") {
+            return what(&p).map(|w| (p, w));
+        }
+        let mut subs: Vec<PathBuf> = std::fs::read_dir(&p)
+            .map(|r| {
+                r.filter_map(|e| e.ok().map(|e| e.path()))
+                    .filter(|x| x.is_dir())
+                    .collect()
+            })
+            .unwrap_or_default();
+        subs.sort();
+        if let Some(s) = subs
+            .iter()
+            .find(|s| matches!(hydo_compose::k8s::kind_of_folder(s), "helm" | "kustomize"))
+        {
+            return what(s).map(|w| (s.clone(), w));
+        }
+        if let Some(w) = what(&p) {
+            return Some((p, w));
+        }
+    }
+    None
+}
+
+/// `p` relative to the repository at `dir`, for the printed lines.
+fn rel_of(dir: &Path, p: &Path) -> String {
+    match p.strip_prefix(dir) {
+        Ok(r) if r.as_os_str().is_empty() => ".".into(),
+        Ok(r) => r.display().to_string(),
+        Err(_) => p.display().to_string(),
     }
 }
 
@@ -410,6 +488,11 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
             }
         );
     }
+    // Kubernetes manifests, a Helm chart or a Kustomize folder (M243): said when there is one
+    let k8s = find_k8s(dir);
+    if let Some((p, what)) = &k8s {
+        println!("  Kubernetes: {} ({what})", rel_of(dir, p));
+    }
     let found = look(dir);
     match found.dockerfiles.len() {
         0 => println!("  Dockerfile: none"),
@@ -494,6 +577,46 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
                 "hydo: hydo compose stopped (above). Fix what it says and run it again in {shown}:\n\
                  hydo:   hydo compose {c} --out hydo/hydo.yaml --images-dir images\n\
                  hydo: (--no-resolve skips the registry when there is no network)"
+            );
+        } else {
+            let mut so = std::io::stdout().lock();
+            let mut out = Out::new(&mut so);
+            if let Ok(lines) = hydo_agents::update_gitignore(
+                &dir.join(".gitignore"),
+                &[".hydo/", "hydo/images/", "hydo-out/"],
+            ) {
+                for l in lines {
+                    let _ = out.put(&format!("hydo: added {l} to .gitignore\n"));
+                }
+            }
+            if let Ok(b) = hydo_agents::agents_block() {
+                if let Ok(r) = hydo_agents::update_agents_md(&dir.join("AGENTS.md"), &b) {
+                    let _ = out.put(&format!("hydo: AGENTS.md: hydo section {r}\n"));
+                }
+            }
+            fetch_first = true;
+        }
+    } else if let Some((p, what)) = &k8s {
+        let shown_p = rel_of(dir, p);
+        let out = dir.join("hydo/hydo.yaml").display().to_string();
+        let mut args = vec![
+            p.display().to_string(),
+            "--out".into(),
+            out,
+            "--images-dir".into(),
+            "images".into(),
+        ];
+        if a.no_resolve {
+            args.push("--no-resolve".into());
+        }
+        println!("hydo: starting hydo/ from {shown_p} ({what}): hydo k8s {shown_p} --out hydo/hydo.yaml --images-dir images");
+        let r = hydo_compose::k8s::main(&args, clock);
+        if r != 0 {
+            rc = 1;
+            println!(
+                "hydo: hydo k8s stopped (above). Fix what it says and run it again in {shown}:\n\
+                 hydo:   hydo k8s {shown_p} --out hydo/hydo.yaml --images-dir images\n\
+                 hydo: (a chart takes --values FILE and --set KEY=VALUE; --no-resolve skips the registry)"
             );
         } else {
             let mut so = std::io::stdout().lock();
@@ -630,6 +753,33 @@ mod tests {
         let t = "version: '3'\nservices:\n  web:\n    image: nginx\n    ports: [\"80:80\"]\n  \"db\":\n    image: postgres\n  # a comment\n  worker:\n    build: .\nvolumes:\n  data:\n";
         assert_eq!(compose_services(t), ["web", "db", "worker"]);
         assert!(compose_services("x: 1\n").is_empty());
+    }
+
+    #[test]
+    fn kubernetes_deployments_are_found() {
+        let d = std::env::temp_dir().join(format!("hydo-onboard-k8s-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("docs")).unwrap();
+        assert!(find_k8s(&d).is_none());
+        // a folder of manifests
+        std::fs::create_dir_all(d.join("k8s")).unwrap();
+        std::fs::write(
+            d.join("k8s/web.yaml"),
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: web}\n",
+        )
+        .unwrap();
+        assert_eq!(
+            find_k8s(&d).map(|(p, w)| (rel_of(&d, &p), w)),
+            Some(("k8s".into(), "Kubernetes manifests"))
+        );
+        // a chart one level below charts/ comes first
+        std::fs::create_dir_all(d.join("charts/app")).unwrap();
+        std::fs::write(d.join("charts/app/Chart.yaml"), "name: app\n").unwrap();
+        assert_eq!(
+            find_k8s(&d).map(|(p, w)| (rel_of(&d, &p), w)),
+            Some(("charts/app".into(), "a Helm chart"))
+        );
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

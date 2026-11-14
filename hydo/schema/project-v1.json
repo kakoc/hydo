@@ -822,6 +822,17 @@
             ]
           }
         },
+        "env_file": {
+          "description": "A file of KEY=VALUE lines, relative to hydo.yaml, read when the image is built: its\nvalues are added to the image's Env before `env:`, which wins. It keeps values such as\npasswords out of hydo.yaml: `hydo k8s` writes one per service for its Secrets, in a\nfolder that version control ignores (MANIFEST.md \"Values from a file\").",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "mounts": {
           "description": "Bind, volume and tmpfs mounts of an image service.",
           "type": [

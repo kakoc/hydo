@@ -27,6 +27,7 @@ const OCI_KEYS: &[&str] = &[
     "workdir",
     "user",
     "env",
+    "env_file",
     "mounts",
     "writable",
 ];
@@ -1252,6 +1253,20 @@ pub fn prepare(
                 let (k, v) = t.split_once('=').unwrap_or((t, ""));
                 keys.insert(k.to_string(), env.len());
                 env.push((k.to_string(), v.to_string()));
+            }
+        }
+        // env_file: (a format-1 addition, M243): its values before env:, which wins
+        if let Some(f) = s.shift_remove("env_file") {
+            let fp = hydo_manifest::oci::env_file_path(&py::str_of(&f), &mdir);
+            for (k, v) in hydo_manifest::oci::read_env_file(&fp)
+                .map_err(|e| Fail::Manifest(format!("{wh}: {e}")))?
+            {
+                if let Some(&j) = keys.get(&k) {
+                    env[j].1 = v;
+                } else {
+                    keys.insert(k.clone(), env.len());
+                    env.push((k, v));
+                }
             }
         }
         let menv = s.shift_remove("env").filter(py::truthy);

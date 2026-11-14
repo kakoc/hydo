@@ -5,8 +5,9 @@
 
 use hydo_manifest::py;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum Y {
+    #[default]
     Null,
     Bool(bool),
     Int(i128),

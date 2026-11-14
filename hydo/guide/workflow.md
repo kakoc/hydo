@@ -41,10 +41,11 @@ hydo onboard
 
 `hydo onboard` looks at the repository and says what it found: a Compose file and its services,
 the Dockerfiles, the main language, and an existing `hydo/` folder. Then it starts `hydo/`: with
-a Compose file it runs `hydo compose` (below), without one `hydo init`. A repository with several
-Compose files, for example one per database, gets the first of `docker-compose.yaml`,
-`docker-compose.yml`, `compose.yaml` and `compose.yml`, and a list of the others; `hydo onboard
---compose docker-compose-postgres.yml` imports the one you name. It never changes an
+a Compose file it runs `hydo compose` (below), with Kubernetes manifests or a Helm chart `hydo
+k8s` (below), and with neither `hydo init`. A repository with several Compose files, for example
+one per database, gets the first of `docker-compose.yaml`, `docker-compose.yml`, `compose.yaml`
+and `compose.yml`, and a list of the others; `hydo onboard --compose docker-compose-postgres.yml`
+imports the one you name. It never changes an
 existing `hydo/` folder. It installs the onboarding skill for the AI tools it finds (`--agent`
 names them, `--no-skill` installs none) and prints the next step. `hydo onboard --help` lists its
 options.
@@ -96,6 +97,35 @@ image's healthcheck, ports and volumes from the file, and records the file's dig
 - Expect that stop on another machine: a Docker build rarely gives the same bytes twice. Docker
   28.4 writes a memory address into the history of an `EXPOSE` line, so each build differs.
 - `hydo compose --no-build` leaves every build to fetch-images.sh.
+
+**From Kubernetes manifests** (a folder of manifests, a Helm chart, or a Kustomize folder):
+
+```sh
+hydo k8s k8s/ --out hydo/hydo.yaml --images-dir images
+hydo k8s charts/app --values ci-values.yaml --set auth.password=test --out hydo/hydo.yaml --images-dir images
+sh hydo/fetch-images.sh
+```
+
+`hydo k8s` renders a chart with `helm template` and a Kustomize folder with `kubectl kustomize`;
+it never contacts a cluster. Each container of each pod becomes a service. A StatefulSet of three
+replicas becomes `<name>-0`, `<name>-1` and `<name>-2`, and a group `<name>` under `groups:`, so
+`K=<name>.majority@5+2` kills two of them. Init containers become one-shot jobs that run before
+the pod's services start, and Jobs run once in `provision:`. Each Service's name resolves to the
+pod it selects. The readiness probes become `ready:` checks, and the claims and `emptyDir`
+volumes become directories on the data disk.
+
+The ConfigMaps a pod mounts are written to `hydo/k8s-import/configmap/`; commit them. The Secrets
+go to `hydo/k8s-import/secrets/`, which holds a `.gitignore` of `*`, and their environment values
+reach the services through `env_file:`, never through `hydo.yaml`. Run the import again in a fresh
+checkout to write them back.
+
+`hydo onboard` runs `hydo k8s` when it finds no Compose file but a chart, a Kustomize folder or
+manifests in `chart/`, `charts/*`, `helm/`, `deploy/`, `k8s/`, `kubernetes/`, `manifests/` or a
+similar folder. Read every warning. A Deployment's replicas become one pod, a Service port that
+differs from its target port is reached on the target port, and the containers of a pod do not
+share `localhost`. An Ingress, a NetworkPolicy, an operator's custom resources and a service
+mesh's sidecars are not imported. The reference, with the mapping of every field, is
+`docs/design/k8s-import.md` in hydo's repository.
 
 ## Where each program comes from
 

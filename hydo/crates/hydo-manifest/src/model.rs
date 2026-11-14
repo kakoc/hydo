@@ -887,6 +887,12 @@ pub struct Service {
     /// Added to or overriding the image's Env.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub env: Option<IndexMap<String, Option<Scalar>>>,
+    /// A file of KEY=VALUE lines, relative to hydo.yaml, read when the image is built: its
+    /// values are added to the image's Env before `env:`, which wins. It keeps values such as
+    /// passwords out of hydo.yaml: `hydo k8s` writes one per service for its Secrets, in a
+    /// folder that version control ignores (MANIFEST.md "Values from a file").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env_file: Option<Text>,
     /// Bind, volume and tmpfs mounts of an image service.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mounts: Option<Vec<Mount>>,

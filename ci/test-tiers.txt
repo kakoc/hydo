@@ -35,6 +35,7 @@ hydo-build::world_objects                fast
 hydo-compose                             fast
 hydo-compose::equivalence                fast
 hydo-compose::fetch_arch                 fast
+hydo-compose::k8s                        fast
 hydo-compose::local_build                fast
 hydo-compose::pycheck                    fast
 hydo-compose::registry                   fast

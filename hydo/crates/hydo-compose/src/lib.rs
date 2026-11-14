@@ -18,6 +18,7 @@
 //!   both).
 
 pub mod interp;
+pub mod k8s;
 pub mod localbuild;
 pub mod ocilocal;
 pub mod pyval;
@@ -754,6 +755,14 @@ struct Svc {
     /// The Compose restart policy, in its words (`restart:` or `deploy.restart_policy`), M134.
     restart: Option<String>,
     mounts: Vec<Mount>,
+    /// `x-hydo-origin` (M243): the comment lines that say where the service came from.
+    origin: Vec<String>,
+    /// `x-hydo-env-file` (M243): `env_file:`.
+    env_file: Option<String>,
+    /// `x-hydo-setup` (M243): commands before the jobs' commands in `setup:`.
+    setup_pre: Option<String>,
+    /// `x-hydo-job` (M243): `init`, `provision` or `cron`.
+    job_kind: Option<String>,
     /// Built locally (`build:`, not a published image of the registry or the lock): the
     /// arguments of `docker build` after `-t <tag>`, relative to the output's folder, where
     /// fetch-images.sh runs (M214).
@@ -778,6 +787,34 @@ pub struct Opts {
     pub no_build: bool,
     /// `--docker CLI`: the Docker CLI to build with (else docker, else podman).
     pub docker: Option<String>,
+    /// Set by `hydo k8s` (M243): the document comes from Kubernetes manifests, not from a
+    /// Compose file, and its `x-hydo-*` keys carry what Compose cannot say.
+    pub origin: Option<Origin>,
+}
+
+/// Where a document that is not a Compose file came from (`hydo k8s`, M243). Its services may
+/// carry `x-hydo-*` keys, which only such an import reads (a Compose file's `x-` keys stay
+/// ignored): `x-hydo-origin` (comment lines in place of "Compose service <name>"),
+/// `x-hydo-comments`, `x-hydo-ready` (a `ready:` command; `{addr}` and `{svc}` are filled in),
+/// `x-hydo-ready-timeout`, `x-hydo-ready-from`, `x-hydo-setup` (commands before the jobs' in
+/// `setup:`), `x-hydo-env-file` (`env_file:`), `x-hydo-job` (`init`, `provision` or `cron`),
+/// `x-hydo-start-after: started`, and `x-hydo-copy-up: false` on a long-form volume. At the top:
+/// `x-hydo-groups` and `x-hydo-provision`.
+#[derive(Clone, Debug, Default)]
+pub struct Origin {
+    /// The document, shaped as a Compose file.
+    pub doc: Y,
+    /// The command that writes the file, for its header (`hydo k8s`).
+    pub tool: String,
+    /// What the services come from, for the header.
+    pub from: String,
+    /// The same in a few words, for `description:` and fetch-images.sh.
+    pub title: String,
+    /// Where every mapping is explained.
+    pub reference: String,
+    /// The conversion's warnings (key, text) and notes, before the importer's own.
+    pub warnings: Vec<(String, String)>,
+    pub notes: Vec<String>,
 }
 
 pub struct Importer<'a> {
@@ -909,6 +946,22 @@ impl<'a> Importer<'a> {
     // ------------------------------------------------------------ top
 
     fn load(&mut self) -> R<()> {
+        if let Some(o) = &self.o.origin {
+            // a converted document (hydo k8s): no file to read, no variables to interpolate
+            self.doc = o.doc.clone();
+            for (k, t) in o.warnings.clone() {
+                self.w.warn(&k, t);
+            }
+            self.notes.extend(o.notes.clone());
+            if !self
+                .doc
+                .get("services")
+                .is_some_and(|s| s.is_map() && s.truthy())
+            {
+                return err("no workload to import (no Deployment, StatefulSet, DaemonSet, Job, CronJob or Pod)");
+            }
+            return Ok(());
+        }
         let text = read_text(&self.cpath)?;
         let doc = if self.cpath.ends_with(".json") {
             let v: serde_json::Value = serde_json::from_str(&text)
@@ -1379,7 +1432,7 @@ impl<'a> Importer<'a> {
                 ));
             }
             self.names.push((ns.clone(), hn.clone()));
-            if hn != *ns {
+            if hn != *ns && self.o.origin.is_none() {
                 self.notes.push(format!(
                     "Compose service {} is hydo service {} (fault tokens use {hn}; the name {ns} still resolves through /etc/hosts)",
                     hydo_manifest::py::repr_str(ns),
@@ -1466,6 +1519,13 @@ impl<'a> Importer<'a> {
 
     fn find_jobs(&self, order: &[(Y, String)], raw: &Y) -> Vec<String> {
         let mut jobs = Vec::new();
+        if self.o.origin.is_some() {
+            for (_, ns) in order {
+                if raw.getn(ns).getn("x-hydo-job").truthy() {
+                    jobs.push(ns.clone());
+                }
+            }
+        }
         for (_, ns) in order {
             let dep = raw.getn(ns).getn("depends_on");
             for (d, c) in dep.map_items() {
@@ -1754,8 +1814,22 @@ impl<'a> Importer<'a> {
             recovery_false: false,
             restart: None,
             mounts: Vec::new(),
+            origin: Vec::new(),
+            env_file: None,
+            setup_pre: None,
+            job_kind: None,
             build: local_build.clone(),
         };
+        if self.o.origin.is_some() {
+            // the x-hydo-* keys of a converted document (M243)
+            let strs = |k: &str| as_list(s.get(k)).iter().map(pstr).collect::<Vec<_>>();
+            svc.origin = strs("x-hydo-origin");
+            svc.comments.extend(strs("x-hydo-comments"));
+            let one = |k: &str| s.get(k).filter(|v| v.truthy()).map(pstr);
+            svc.env_file = one("x-hydo-env-file");
+            svc.setup_pre = one("x-hydo-setup");
+            svc.job_kind = one("x-hydo-job");
+        }
         let is_job = jobs.iter().any(|j| j == n);
         if is_job {
             self.job(&mut svc, &cfg, ent.as_deref(), cmd.as_deref(), &wh);
@@ -2011,6 +2085,12 @@ impl<'a> Importer<'a> {
             }
         }
         svc.depends_on = deps2;
+        if self.o.origin.is_some() {
+            if let Some(w) = s.get("x-hydo-start-after").filter(|v| v.truthy()) {
+                svc.start_started = true;
+                svc.start_why = pstr(w);
+            }
+        }
         // healthcheck -> ready
         if is_job {
             svc.ready = "true".into();
@@ -2233,7 +2313,13 @@ impl<'a> Importer<'a> {
             "2147483647".into(),
         ]);
         svc.cmd = None;
-        svc.comments.push("a one-shot job (others depend on it with service_completed_successfully): it idles here, its command runs in the setup: of each service that waits for it, and job: true keeps the explorer's faults off it".into());
+        let text = match svc.job_kind.as_deref() {
+            None => "a one-shot job (others depend on it with service_completed_successfully): it idles here, its command runs in the setup: of each service that waits for it, and job: true keeps the explorer's faults off it",
+            Some("provision") => "a one-shot job: it idles here, its command runs once in provision: (after every service is ready, before the snapshot every schedule starts from), and job: true keeps the explorer's faults off it",
+            Some("cron") => "a one-shot job on a timetable: it idles here and hydo runs its command nowhere by itself; run it from the workload where the test needs it (`hydo-oci <service> <command>`). job: true keeps the explorer's faults off it",
+            Some(_) => "a one-shot job: it idles here, its command runs in the setup: of each service that waits for it (before the service's own command, once per boot), and job: true keeps the explorer's faults off it",
+        };
+        svc.comments.push(text.into());
     }
 
     /// The service's restart policy in Compose's words and where it came from: `deploy.
@@ -2284,8 +2370,31 @@ impl<'a> Importer<'a> {
     }
 
     fn readiness(&mut self, svc: &mut Svc, s: &Y, cfg: &Y, user: &str, wh: &str) -> R<()> {
+        if let Some(r) = s
+            .get("x-hydo-ready")
+            .filter(|v| v.truthy() && self.o.origin.is_some())
+        {
+            // a converted document's own check (M243): {addr} and {svc} are this service's
+            let addr = if svc.addr.is_empty() {
+                "127.0.0.1".to_string()
+            } else {
+                svc.addr.clone()
+            };
+            svc.ready = pstr(r).replace("{addr}", &addr).replace("{svc}", &svc.name);
+            svc.ready_timeout = s.get("x-hydo-ready-timeout").and_then(int_of);
+            if let Some(f) = s.get("x-hydo-ready-from").filter(|v| v.truthy()) {
+                svc.comments.push(format!("ready: {}", pstr(f)));
+            }
+            return Ok(());
+        }
         let mut hc = s.get("healthcheck").cloned();
-        let mut src = "Compose healthcheck";
+        let mut src = match s
+            .get("x-hydo-ready-from")
+            .filter(|_| self.o.origin.is_some())
+        {
+            Some(f) => pstr(f),
+            None => "Compose healthcheck".to_string(),
+        };
         let use_image = match &hc {
             None | Some(Y::Null) => true,
             Some(h) if h.is_map() => !h.has("test") && !h.getn("disable").truthy(),
@@ -2309,7 +2418,7 @@ impl<'a> Importer<'a> {
                     (Y::s("retries"), ih.getn("Retries").clone()),
                     (Y::s("start_period"), ns("StartPeriod")),
                 ]));
-                src = "the image's HEALTHCHECK";
+                src = "the image's HEALTHCHECK".to_string();
             }
         }
         let mut test: Option<Vec<String>> = None;
@@ -2565,12 +2674,18 @@ impl<'a> Importer<'a> {
         wh: &str,
     ) -> R<()> {
         let mut ro = false;
+        // a Docker named volume takes the image's content on first use; a Kubernetes volume
+        // starts empty (x-hydo-copy-up: false, M243)
+        let mut copy_up = true;
         let (typ, src, tgt): (String, Y, Y);
         if v.is_map() {
             typ = pstr(v.get("type").unwrap_or(&Y::s("volume")));
             src = v.getn("source").clone();
             tgt = v.getn("target").clone();
             ro = v.getn("read_only").truthy();
+            if self.o.origin.is_some() && v.get("x-hydo-copy-up") == Some(&Y::Bool(false)) {
+                copy_up = false;
+            }
             if typ == "tmpfs" {
                 let sz = v.getn("tmpfs").getn("size").clone();
                 let size = if sz.truthy() { Some(pstr(&sz)) } else { None };
@@ -2650,7 +2765,7 @@ impl<'a> Importer<'a> {
             self.add_mount(
                 mts,
                 seen,
-                Mount::src(&format!("/data/vol/{k}"), &tgt_s, true),
+                Mount::src(&format!("/data/vol/{k}"), &tgt_s, copy_up),
                 &what,
                 wh,
             );
@@ -2816,25 +2931,71 @@ impl<'a> Importer<'a> {
                     pre.push(format!("[ -f /tmp/hydo/job.{d}.done ] || {{ hydo-oci {d} {} && : > /tmp/hydo/job.{d}.done; }}", q.join(" ")));
                 }
             }
-            if !pre.is_empty() {
-                s.setup = Some(pre.join(" && "));
-            }
+            let jobs_text = (!pre.is_empty()).then(|| pre.join(" && "));
+            s.setup = match (&s.setup_pre, jobs_text) {
+                // a converted document's own commands first, then the jobs, each a group of its
+                // own, so that a failure of the first never runs the jobs (M243)
+                (Some(p), Some(j)) => Some(format!("{{ {p}; }} && {{ {j}; }}")),
+                (Some(p), None) => Some(p.clone()),
+                (None, Some(j)) => Some(j),
+                (None, None) => s.setup.take(),
+            };
         }
+        // jobs that run once in provision: (a converted document's x-hydo-job: provision)
+        let mut provision: Vec<String> = Vec::new();
+        for j in self
+            .svcs
+            .iter()
+            .filter(|j| j.job_kind.as_deref() == Some("provision"))
+        {
+            let jc = j.job.clone().unwrap_or_default();
+            let mut argv: Vec<String> = match j.user.as_deref() {
+                Some(u) if !u.is_empty() && !matches!(u, "root" | "0" | "0:0") => {
+                    vec![
+                        "/.hydo/busybox".into(),
+                        "chpst".into(),
+                        "-u".into(),
+                        u.into(),
+                    ]
+                }
+                _ => Vec::new(),
+            };
+            if jc.is_empty() {
+                argv.push("TODO-job-command".into());
+            } else {
+                argv.extend(jc);
+            }
+            let q: Vec<String> = argv.iter().map(|x| shlex::quote(x)).collect();
+            provision.push(format!("hydo-oci {} {}", j.name, q.join(" ")));
+        }
+        provision.extend(as_list(self.doc.get("x-hydo-provision")).iter().map(pstr));
         let mut l = String::new();
-        l.push_str(&comment(&format!(
+        if let Some(o) = &self.o.origin {
+            l.push_str(&comment(&format!(
+                "Generated by {} from {}.\nA STARTING POINT: the services, images, readiness checks and volumes come from the\nmanifests; the workload and the invariant below are placeholders (search for TODO).\n{} explains every mapping.\n\n1. sh {}           # fetch the images by digest (needs network, once)\n2. delete workload.run and the TODO invariant below (keep workload.steps and\n   workload.timeout), and write the test as commands in hydo/workload/ and hydo/checks/\n   (or a test: section): hydo guide workflow\n3. hydo build {}",
+                o.tool,
+                o.from,
+                o.reference,
+                self.out_dir_file("fetch-images.sh"),
+                self.out_dir_file(&hydo_manifest::py::basename(&self.out))
+            ), 0));
+        } else {
+            l.push_str(&comment(&format!(
             "Generated by hydo compose from {}.\nA STARTING POINT: the services, images, readiness checks and volumes come from the Compose\nfile; the workload and the invariant below are placeholders (search for TODO). `hydo guide\nservices` and MANIFEST.md, \"From Docker Compose\", explain every mapping.\n\n1. sh {}           # fetch the images by digest (needs network, once)\n2. delete workload.run and the TODO invariant below (keep workload.steps and\n   workload.timeout), and write the test as commands in hydo/workload/ and hydo/checks/\n   (or a test: section): hydo guide workflow\n3. hydo build {}",
             relpath(&self.cpath, &self.odir),
             self.out_dir_file("fetch-images.sh"),
             self.out_dir_file(&hydo_manifest::py::basename(&self.out))
         ), 0));
+        }
         if !self.w.list.is_empty() {
             let body: Vec<String> = self.w.list.iter().map(|(_, t)| format!("- {t}")).collect();
+            let tool = match &self.o.origin {
+                Some(o) => o.tool.clone(),
+                None => "hydo-compose".into(),
+            };
             l.push_str("#\n");
             l.push_str(&comment(
-                &format!(
-                    "WARNINGS (also printed by hydo-compose):\n{}",
-                    body.join("\n")
-                ),
+                &format!("WARNINGS (also printed by {tool}):\n{}", body.join("\n")),
                 0,
             ));
         }
@@ -2850,7 +3011,10 @@ impl<'a> Importer<'a> {
             "description: {}\n",
             q_str(&format!(
                 "imported from {} ({} services); TODO: what is tested",
-                hydo_manifest::py::basename(&self.cpath),
+                match &self.o.origin {
+                    Some(o) => o.title.clone(),
+                    None => hydo_manifest::py::basename(&self.cpath),
+                },
                 self.svcs.len()
             ))
         ));
@@ -2901,13 +3065,22 @@ impl<'a> Importer<'a> {
             "  text:\n    /etc/hosts: {}",
             block(&hosts, 6).replacen(
                 "|\n",
-                "|   # Compose service names -> each service's addr:\n",
+                if self.o.origin.is_some() {
+                    "|   # Kubernetes Service and pod names -> each service's addr:\n"
+                } else {
+                    "|   # Compose service names -> each service's addr:\n"
+                },
                 1
             )
         ));
         l.push_str("\nservices:\n");
         for s in &self.svcs {
-            l.push_str(&comment(&format!("Compose service {}", s.compose), 2));
+            if s.origin.is_empty() {
+                l.push_str(&comment(&format!("Compose service {}", s.compose), 2));
+            }
+            for c in &s.origin {
+                l.push_str(&comment(c, 2));
+            }
             for c in &s.comments {
                 l.push_str(&comment(c, 2));
             }
@@ -2932,6 +3105,12 @@ impl<'a> Importer<'a> {
                     l.push_str(&format!("      {k}: {}\n", dumps_str(v)));
                 }
             }
+            if let Some(f) = &s.env_file {
+                l.push_str(&format!(
+                    "    env_file: {}   # values kept out of this file (MANIFEST.md \"Values from a file\")\n",
+                    dumps_str(f)
+                ));
+            }
             if let Some(w) = &s.workdir {
                 l.push_str(&format!("    workdir: {}\n", dumps_str(w)));
             }
@@ -2947,7 +3126,9 @@ impl<'a> Importer<'a> {
             if !s.depends_on.is_empty() {
                 l.push_str(&format!("    depends_on: {}\n", flow_list(&s.depends_on)));
             }
-            if s.start_started {
+            if s.start_started && self.o.origin.is_some() {
+                l.push_str("    start_after: started   # no wait for the readiness of the services before it\n");
+            } else if s.start_started {
                 l.push_str("    start_after: started   # Compose's service_started: no wait for readiness\n");
             }
             if let Some(st) = s.setup.as_ref().filter(|x| !x.is_empty()) {
@@ -2985,6 +3166,38 @@ impl<'a> Importer<'a> {
                 l.push_str(&format!("      - {}\n", flow_map(&d)));
             }
         }
+        // x-hydo-groups (a converted document's replicas, M243): the members' hydo names
+        let groups = as_list(self.doc.get("x-hydo-groups"));
+        let mut gtext = String::new();
+        for g in &groups {
+            let members: Vec<String> = as_list(g.get("services"))
+                .iter()
+                .filter_map(|m| self.name_of(&pstr(m)).cloned())
+                .collect();
+            if members.len() < 2 {
+                continue;
+            }
+            if let Some(d) = g.get("description").filter(|d| d.truthy()) {
+                gtext.push_str(&comment(&pstr(d), 2));
+            }
+            gtext.push_str(&format!(
+                "  - name: {}\n    services: {}\n",
+                svc_name(&pstr(g.getn("name"))),
+                flow_list(&members)
+            ));
+        }
+        if !gtext.is_empty() {
+            l.push('\n');
+            l.push_str(&comment("Groups of services for the fault tokens: K=<group>.majority@5+2, P=<group>.one@3+1,\nN=<group>@halves... (MANIFEST.md \"Groups of services and partitions\")", 0));
+            l.push_str("groups:\n");
+            l.push_str(&gtext);
+        }
+        if !provision.is_empty() {
+            l.push('\n');
+            l.push_str(&comment("Once, after every service is ready and before the snapshot every schedule starts from:\nthe one-shot jobs (Kubernetes Jobs and Helm's post-install hooks)", 0));
+            l.push_str("provision: ");
+            l.push_str(&block(&provision.join("\n"), 2));
+        }
         let ex = self
             .svcs
             .iter()
@@ -2996,7 +3209,8 @@ impl<'a> Importer<'a> {
         };
         l.push('\n');
         l.push_str(&comment(&format!(
-            "TODO(workload): one step = one client operation against the system (an HTTP request, a\nquery), appended to $HYDO_ACKED only when the system acknowledged it. Faults are placed\nat step numbers. Each Compose service name resolves (e.g. {} -> {}); run tools inside\nan image with `hydo-oci <service> <command>`. Ask the onboard skill (/hydo:onboard) to write it.",
+            "TODO(workload): one step = one client operation against the system (an HTTP request, a\nquery), appended to $HYDO_ACKED only when the system acknowledged it. Faults are placed\nat step numbers. Each {} name resolves (e.g. {} -> {}); run tools inside\nan image with `hydo-oci <service> <command>`. Ask the onboard skill (/hydo:onboard) to write it.",
+            if self.o.origin.is_some() { "Kubernetes Service and pod" } else { "Compose service" },
             ex.compose, ex.addr
         ), 0));
         l.push_str("workload:\n  steps: 20\n  run: ");
@@ -3030,9 +3244,16 @@ impl<'a> Importer<'a> {
         let mut l: Vec<String> = vec![
             "#!/bin/sh".into(),
             format!(
-                "# Fetch the images of {} by digest into {}/ (generated by hydo compose; hydo-build",
-                hydo_manifest::py::basename(&self.cpath),
-                idir
+                "# Fetch the images of {} by digest into {}/ (generated by {}; hydo-build",
+                match &self.o.origin {
+                    Some(o) => o.title.clone(),
+                    None => hydo_manifest::py::basename(&self.cpath),
+                },
+                idir,
+                match &self.o.origin {
+                    Some(o) => o.tool.as_str(),
+                    None => "hydo compose",
+                }
             ),
             "# never pulls). Needs hydo-fetch-image (it comes with hydo) and network access, once.".into(),
             "# It fetches the images this machine builds: x86_64 on Linux, arm64 on a Mac. Name".into(),
@@ -3150,7 +3371,13 @@ impl<'a> Importer<'a> {
     /// The lock file's text (`json.dump(..., indent=1, sort_keys=True)` and a newline).
     pub fn lock_text(&self) -> String {
         let v = Y::Map(vec![
-            (Y::s("generated_by"), Y::s(GENERATED_BY)),
+            (
+                Y::s("generated_by"),
+                Y::s(match &self.o.origin {
+                    Some(o) => o.tool.as_str(),
+                    None => GENERATED_BY,
+                }),
+            ),
             (Y::s("images"), self.lock.clone()),
         ]);
         pyval::dumps_indent1_sorted(&v) + "\n"
@@ -3281,31 +3508,37 @@ pub fn main_with_clock(
             return 1;
         }
     };
+    write_outputs(&mut imp, &text, &out, "hydo-compose")
+}
+
+/// Check the generated manifest, write it, fetch-images.sh and the lock file, and print the start
+/// order, the warnings and the next step, each line led by `p` (`hydo-compose`, `hydo k8s`).
+pub(crate) fn write_outputs(imp: &mut Importer, text: &str, out: &str, p: &str) -> i32 {
     // the output must be what hydo-build reads
-    let check = hydo_manifest::yaml::parse_yaml(&text, "hydo.yaml").and_then(|mut m| {
+    let check = hydo_manifest::yaml::parse_yaml(text, "hydo.yaml").and_then(|mut m| {
         hydo_manifest::validate_data(&mut m)?;
         hydo_manifest::service_order(&m["services"])
     });
     let order = match check {
         Ok(o) => o,
         Err(e) => {
-            eprintln!("hydo-compose: internal error, the generated manifest is not valid: {e}");
+            eprintln!("{p}: internal error, the generated manifest is not valid: {e}");
             return 3;
         }
     };
-    let oabs = hydo_manifest::py::abspath(&out);
+    let oabs = hydo_manifest::py::abspath(out);
     let odir = hydo_manifest::py::dirname(&oabs);
     if let Err(e) = std::fs::create_dir_all(&odir) {
-        eprintln!("hydo-compose: {}", ComposeError::os(e, &odir));
+        eprintln!("{p}: {}", ComposeError::os(e, &odir));
         return 1;
     }
-    if let Err(e) = std::fs::write(&out, &text) {
-        eprintln!("hydo-compose: {}", ComposeError::os(e, &out));
+    if let Err(e) = std::fs::write(out, text) {
+        eprintln!("{p}: {}", ComposeError::os(e, out));
         return 1;
     }
     let fs = join(&odir, "fetch-images.sh");
     if let Err(e) = std::fs::write(&fs, imp.fetch_script()) {
-        eprintln!("hydo-compose: {}", ComposeError::os(e, &fs));
+        eprintln!("{p}: {}", ComposeError::os(e, &fs));
         return 1;
     }
     {
@@ -3314,18 +3547,18 @@ pub fn main_with_clock(
     }
     if imp.lock_dirty {
         if let Err(e) = std::fs::write(imp.lock_path(), imp.lock_text()) {
-            eprintln!("hydo-compose: {}", ComposeError::os(e, imp.lock_path()));
+            eprintln!("{p}: {}", ComposeError::os(e, imp.lock_path()));
             return 1;
         }
     }
     for l in imp.start_lines(&order) {
-        eprintln!("hydo-compose: {l}");
+        eprintln!("{p}: {l}");
     }
     for (_, t) in &imp.w.list {
-        eprintln!("hydo-compose: warning: {t}");
+        eprintln!("{p}: warning: {t}");
     }
     eprintln!(
-        "hydo-compose: wrote {out} ({} services, {} warnings), {fs}{}",
+        "{p}: wrote {out} ({} services, {} warnings), {fs}{}",
         imp.services(),
         imp.w.list.len(),
         if imp.lock_dirty {
@@ -3335,7 +3568,7 @@ pub fn main_with_clock(
         }
     );
     eprintln!(
-        "hydo-compose: next: sh {fs}; then delete workload.run and the TODO invariant in {out} \
+        "{p}: next: sh {fs}; then delete workload.run and the TODO invariant in {out} \
          (keep workload.steps and workload.timeout) and write the test as commands in \
          hydo/workload/ and hydo/checks/, or a test: section (hydo guide workflow)"
     );

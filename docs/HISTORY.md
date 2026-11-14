@@ -9278,3 +9278,116 @@ the measurement ran again with the final binaries (the values above).
   load address of a position-independent program (Rust's musl target makes them on x86_64).
 - More types (Rust `Option`, `Result`, `String`, `Vec`; Go strings, slices, interfaces, results
   after the first), the runtime adapters, and active property testing from snapshots.
+
+### Milestone 243 (tentative number) - DONE (`hydo k8s`: Kubernetes manifests, a Helm chart or a Kustomize folder become a starting hydo.yaml; `hydo onboard` runs it; the format-1 addition `services[].env_file` keeps Secret values out of hydo.yaml; nothing recorded moved; 2026-11-14)
+
+**Why.** Many teams have no Docker Compose file. They deploy with Kubernetes manifests or a Helm
+chart, and before this milestone they had to write `hydo.yaml` by hand. The onboarding (`hydo
+onboard`, the skill's `/hydo:onboard`) should start from what the project already has.
+
+**What was built.**
+
+1. `hydo k8s <files | folder | chart folder | kustomize folder> [--helm CHART] [--values F]
+   [--set K=V] [--release NAME] [--namespace NS] [--kustomize DIR]` and the options of `hydo
+   compose` (`--out`, `--name`, `--images-dir`, `--lock`, `--no-resolve`, `--network`,
+   `--no-addr`). A folder with `Chart.yaml` is rendered with `helm template`, a folder with
+   `kustomization.yaml` with `kubectl kustomize` (else `kustomize build`). No cluster is
+   contacted. The code is the module `k8s` of `hydo-compose` (`hydo/crates/hydo-compose/src/k8s.rs`),
+   so `cargo install hydo` gains no crate.
+2. The conversion makes one document in the shape of a Compose file, with `x-hydo-*` keys for
+   what Compose cannot say, and hands it to the Compose importer (`hydo_compose::Origin`). So the
+   images are pinned by digest (`hydo-k8s.lock.json`), `fetch-images.sh` is written, and the
+   volumes, restart policies and one-shot jobs are written as `hydo compose` writes them. The
+   importer reads the `x-hydo-*` keys only in this mode; every Compose golden is unchanged.
+3. The mapping, the refusals and the limits are in `docs/design/k8s-import.md`. In short: a
+   StatefulSet gives one service per replica and a group of them; init containers, Jobs, CronJobs
+   and Helm hooks become one-shot jobs; Services become names in `/etc/hosts`; probes become
+   `ready:`; claims and `emptyDir`s become data-disk directories that start empty, with
+   `fsGroup` applied in `setup:`; ConfigMaps and Secrets become files under `k8s-import/`. An
+   Ingress, a NetworkPolicy, custom resources, mesh sidecars and scheduling give one warning line
+   each.
+4. `services[].env_file` (a format-1 addition, `hydo/schema/project-v1.json`): a file of
+   `KEY=VALUE` lines that `hydo build` adds to an image service's environment before `env:`.
+   `hydo k8s` writes one per service whose environment comes from Secrets, into
+   `k8s-import/secrets/`, whose `.gitignore` is `*`. MANIFEST.md, "Values from a file".
+5. `hydo onboard` runs `hydo k8s` when a repository has no Compose file but a Helm chart, a
+   Kustomize folder or a folder of manifests in `chart/`, `charts/*`, `helm/`, `deploy/`, `k8s/`,
+   `kubernetes/`, `manifests/` or a similar folder. It prints the line `Kubernetes: <path>
+   (<what>)` only when it finds one, so the recorded answers of a repository without one are the
+   same.
+6. `hydo_compose::yaml::safe_load_all` reads a stream of YAML documents.
+7. Kubernetes gives every container `HOSTNAME` (the pod's name) and the `<NAME>_SERVICE_HOST`,
+   `_SERVICE_PORT` and `_SERVICE_PORT_<PORT NAME>` variables of its namespace's Services; the
+   import sets them too. The Redis chart below needs `HOSTNAME`: without it the replicas' start
+   script wrote `replica-announce-port` with an empty value and Redis refused its configuration.
+
+**Proof on hvx (the bare-metal machine, this tree's `hydo` in a copy of the 0.3.2 Linux
+release).** Two public projects were imported, checked with `hydo build --check`, built, and run.
+Each hand-written part is only the workload and the checks; everything else is the import as
+written.
+
+1. Bitnami's Redis chart (`oci://registry-1.docker.io/bitnamicharts/redis`, chart 28.3.12,
+   Redis 8.10.3, image `bitnami/redis:latest` pinned to
+   `sha256:526751730fc9…` for linux/amd64), rendered with `helm template r <chart> --set
+   auth.password=...` (the replication architecture: a master StatefulSet and a replicas
+   StatefulSet of 3). `hydo k8s` wrote 4 services, `r_redis_master_0` and `r_redis_replicas_0`
+   to `_2`, and the group `r_redis_replicas`. The replicas depend on the master because their
+   environment names `r-redis-master-0.r-redis-headless.default.svc.cluster.local`. The password
+   went to `k8s-import/secrets/`, the scripts and the configuration to `k8s-import/configmap/`
+   with mode 0755 kept. The workload writes 20 keys to the master; one check reads them back on
+   the master, an `eventually` check on every replica.
+   - `disk=none | run`: OK, `fp=48ad8902ebcd5a43`; `hydo repro` gave the same fingerprint.
+   - `disk=none | run K=r_redis_replicas.majority@5+3` (two replicas killed through the group):
+     OK, `fp=84c6e452de02e339`; the replicas caught up 3.42 s after the heal.
+   - `disk=none | run C=12` (a power cut at step 12): VIOLATION, `fp=67a21d711088c6f9`. After
+     the recovery boot, `r-redis-replicas-0` held 1 of the acknowledged keys. The chart sets
+     `appendonly yes` and leaves `appendfsync` at Redis's default, `everysec`, which acknowledges
+     a write before it is on disk; a cut loses the last second of writes on the master, and the
+     replicas follow the master. This is Redis's documented window, the one the Redis quickstart
+     example shows; the run was not taken further.
+2. Docker's example voting app (`dockersamples/example-voting-app`, `k8s-specifications/`: five
+   Deployments and four Services). `hydo k8s` wrote 5 services. The workload and the checks are
+   the `compose-voting` example's, unchanged.
+   - `disk=none | run`: OK, all 20 acknowledged votes counted, `fp=60df5517ec6436a6`.
+   - `disk=none | run K=worker@5+4 P=db@8+2`: OK, all 20 counted, `fp=79ca63d0ffb96a30`.
+
+**What a hand-written hydo.yaml would add, and what the importer could not map.** For both
+projects the workload and the checks were the only hand-written parts; the voting app's guest
+RAM guess (1,536 MiB) ran, where the Compose example's hand-written file raised it to 2,048. The
+warnings and notes of the two imports name what did not map:
+
+- Redis: the NetworkPolicy, `podAntiAffinity` (scheduling), the PodDisruptionBudgets and
+  ServiceAccounts (ignored), the `livenessProbe`s and CPU limits (comments), and the `emptyDir`
+  on `/tmp` (not mounted: an image's `/tmp` is the guest's). The headless Service and
+  `r-redis-replicas` resolve to their first pod only.
+- Voting app: the Services `vote` (8080 to 80) and `result` (8081 to 80) differ from their
+  target ports, so a client in the guest uses port 80; the NodePorts are notes; the worker has no
+  probe and no port, so its readiness is `true`.
+
+**Tests.**
+
+- `hydo-compose`: 10 unit tests of the mapping (`src/k8s/tests.rs`: a Deployment, a StatefulSet
+  with claims and a group, Parallel pods, ConfigMaps and Secrets, dependencies, Jobs and hooks,
+  the refusals, mesh sidecars, exec probes, helpers), `yaml::streams_of_documents`, and the golden
+  test `k8s::` (the voting app's manifests and a rendered chart written for the test, both
+  recorded in `tests/golden/k8s-*.yaml`). Every Compose golden is unchanged.
+- `hydo` `onboard::tests::kubernetes_deployments_are_found`.
+- `hydo-manifest`: `format::` with the schema re-generated (`services[].env_file`, an addition),
+  and `equivalence::`: the 134 answers that quote the validator's list of known service keys
+  (`unknown field(s) ... (known: ...)`) are re-recorded, and no other. The test still fails on
+  134 other answers, as it does on the base commit: Milestone 239's `--check` warning for missing
+  `root.files` sources was never recorded, and its text depends on the machine (the bare-metal
+  machine has one of the Nix paths, this Mac none), so a recording on one machine fails on the
+  other (open item 115).
+- `hydo` `equivalence::cli_matches_golden`: the main help of both platforms (the line of `hydo
+  k8s`) and `hydo guide manifest` (MANIFEST.md's two new sections) re-recorded; the answer of
+  `hydo build <stack example> --check` kept, for the same reason as above.
+- `cargo fmt`, `cargo clippy --all-targets -D warnings` of `hydo-compose`, `hydo-manifest`,
+  `hydo-build` and `hydo`, the tests of those crates, `hydo-release --test it`, `hydo-config
+  --test inventory`, `hydo-schema-compat`, `hydo-agents --test it` (with `skill_check::` and
+  `public_content::`), and `sh ci/consolidate-tests.sh --check` pass. The skill is unchanged.
+
+**Open.** `--helm` and a chart folder ran only through `helm template` on the Mac, whose output
+was imported on the bare-metal machine; the import's own call of `helm` and `kubectl kustomize`
+ran in no test. The Mac engine ran neither import (the Mac was not to run VMs that day). `hydo
+onboard` found a chart and manifests only in the unit test. Open item 114 lists the limits.
