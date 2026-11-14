@@ -104,12 +104,45 @@ is one of:
   checks run its tools with `hydo-oci <service> <command>`. Schema: "Services from a Docker/OCI
   image".
 - **a static binary** built from the project's source (Go: `CGO_ENABLED=0 go build`; Rust: a musl
-  target; C: a static musl compiler), listed under `root.files` with `src:` relative to
+  target, as below; C: a static musl compiler), listed under `root.files` with `src:` relative to
   `hydo.yaml`.
 - **a Nix store path** under `root.nix`, only on a machine with Nix (the whole closure is copied).
 
+**A static Rust binary on a Mac.** The guest is arm64 Linux on a Mac (x86_64 Linux on Linux), so
+the target is `aarch64-unknown-linux-musl` (or `x86_64-unknown-linux-musl`). Installing a target
+is a network install: `rustup target add aarch64-unknown-linux-musl`. A project with no C code
+links with Rust's own linker and needs no C toolchain. Add this `.cargo/config.toml` to the
+project:
+
+```toml
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "link-self-contained=yes", "-C", "target-feature=+crt-static"]
+
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"
+rustflags = ["-C", "linker-flavor=ld.lld", "-C", "link-self-contained=yes", "-C", "target-feature=+crt-static"]
+```
+
+Then `cargo build --release --target aarch64-unknown-linux-musl` writes a static binary to
+`target/aarch64-unknown-linux-musl/release/`. `file` on it prints `statically linked`. The
+recipe works only without C code. `cargo tree -i cc --target aarch64-unknown-linux-musl` lists
+the crates whose build scripts compile C, such as `ring`, `openssl-sys` or `zstd-sys`. Without C
+code it prints `did not match any packages` or `nothing to print`. A build script of the
+project itself that calls `cc::Build` also compiles C.
+
+A project with C code needs a C compiler for the target. Use one of these:
+
+- `zig cc -target aarch64-linux-musl` as the linker and the `CC` of the target (with
+  `cargo-zigbuild`);
+- a musl cross toolchain, such as `aarch64-linux-musl-gcc`;
+- a build in a Linux container: `docker run --rm -v "$PWD":/src -w /src rust:alpine cargo build
+  --release` on a Mac gives an arm64 musl binary.
+
 ## Services, workload, checks
 
+- The least a first folder needs, for a project with its own binaries and no Compose file, on one
+  page: `hydo guide minimum-path`.
 - Services: `hydo guide services`.
 - Commands in `hydo/workload/`: `hydo guide composer` (kinds, environment, exit codes, the
   `test:` section). gRPC systems: generated drivers, `hydo guide outside-services`. Tests written

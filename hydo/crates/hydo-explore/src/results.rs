@@ -795,6 +795,41 @@ fn lossy(b: &[u8]) -> String {
     String::from_utf8_lossy(b).into_owned()
 }
 
+/// What each property's last evaluation that held said, from one run's consoles: (id, its
+/// `details.out`, else its details as JSON), in the order the ids first held. A check file's
+/// `details.out` is its last output line, so a passing run's report can show what each check
+/// judged (Milestone 239).
+pub fn last_held(text: &str) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for l in text.lines() {
+        let Some(i) = l.find("HYDO-ASSERT {") else {
+            continue;
+        };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&l[i + 12..]) else {
+            continue;
+        };
+        if v.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+            continue;
+        }
+        let (Some(id), Some(d)) = (v.get("id").and_then(|x| x.as_str()), v.get("details")) else {
+            continue;
+        };
+        let said = match d.get("out").and_then(|x| x.as_str()) {
+            Some(s) => s.trim().to_string(),
+            None if d.is_null() => continue,
+            None => d.to_string(),
+        };
+        if said.is_empty() {
+            continue;
+        }
+        match out.iter_mut().find(|(k, _)| k == id) {
+            Some(x) => x.1 = said,
+            None => out.push((id.to_string(), said)),
+        }
+    }
+    out
+}
+
 /// The property table of runs (each text one run's merged consoles); None when no run carries a
 /// HYDO-ASSERT record.
 pub fn property_table(runs: &[String]) -> Option<PropertyTable> {
@@ -899,7 +934,13 @@ pub fn render_properties(t: &PropertyTable) -> String {
             pad(&p.verdict, 24),
             p.first_failure.as_deref().unwrap_or(&p.message),
             slow,
-            if p.declared { "" } else { "  [not in catalog]" }
+            // a property no SDK declared: a check or invariant the project wrote (before
+            // Milestone 239 `[not in catalog]`, which read like an error)
+            if p.declared {
+                ""
+            } else {
+                "  [the project's own check]"
+            }
         ));
     }
     if nl > 0 {
@@ -1078,6 +1119,24 @@ pub fn unseen_events(schedule: &str, consoles: &[(String, String)]) -> Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_passing_check_s_last_line_is_kept() {
+        let text = "boot\n\
+            HYDO-ASSERT {\"t\":\"always\",\"id\":\"db.acked\",\"ok\":true,\"details\":{\"out\":\"acked=3 all present\"}}\n\
+            x HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"fault.paused\",\"ok\":true}\n\
+            HYDO-ASSERT {\"t\":\"always\",\"id\":\"db.sum\",\"ok\":false,\"details\":{\"out\":\"sum 4 of 5\"}}\n\
+            agent: \"HYDO-ASSERT {\\\"t\\\":\\\"always\\\",\\\"id\\\":\\\"db.acked\\\",\\\"ok\\\":true}\"\n\
+            HYDO-ASSERT {\"t\":\"always\",\"id\":\"db.acked\",\"ok\":true,\"details\":{\"out\":\"acked=20 all present\"}}\n\
+            HYDO-ASSERT {\"t\":\"sometimes\",\"id\":\"sdk.x\",\"ok\":true,\"details\":{\"n\":2}}\n";
+        assert_eq!(
+            last_held(text),
+            [
+                ("db.acked".to_string(), "acked=20 all present".to_string()),
+                ("sdk.x".to_string(), "{\"n\":2}".to_string())
+            ]
+        );
+    }
 
     fn hist(ops: u64) -> Finding {
         let mut d = Map::new();

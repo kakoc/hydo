@@ -1012,7 +1012,8 @@ pub fn skill(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
             out.put(&format!("      read by {who}\n"))?;
         }
     }
-    if !w.user && w.to.is_none() {
+    // only a git repository has something to commit to (Milestone 239)
+    if !w.user && w.to.is_none() && repo_root(&cwd()?).join(".git").exists() {
         out.put("hydo: commit the copied folder so that everyone working in the repository gets the skill\n")?;
     }
     Ok(0)

@@ -283,6 +283,87 @@ pub fn service_order(services: &Value) -> Result<Vec<String>, ManifestError> {
     validate::service_order(services)
 }
 
+/// The `--check` warning for `root.files` sources that do not exist (relative to the manifest's
+/// folder, as the build resolves them), or None when every source is there.
+fn missing_sources(manifest_path: &str, m: &Value) -> Option<String> {
+    let files = m.get("root")?.get("files")?.as_array()?;
+    let mdir = py::dirname(&py::abspath(manifest_path));
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut missing = Vec::new();
+    let mut total = 0usize;
+    for f in files {
+        let Some(src) = f.get("src").and_then(Value::as_str) else {
+            continue;
+        };
+        total += 1;
+        let p = match src.strip_prefix("~/") {
+            Some(r) if !home.is_empty() => format!("{home}/{r}"),
+            _ if src.starts_with('/') => src.to_string(),
+            _ => format!("{}/{src}", mdir.trim_end_matches('/')),
+        };
+        if !Path::new(&p).exists() {
+            missing.push(src.to_string());
+        }
+    }
+    if missing.is_empty() {
+        return None;
+    }
+    let shown: Vec<String> = missing.iter().take(3).cloned().collect();
+    Some(format!(
+        "hydo-build: warning: {} of {total} source files of root.files are missing ({}{}); the \
+         full build will fail until they exist (--check checks the format only)",
+        missing.len(),
+        shown.join(", "),
+        if missing.len() > 3 { ", ..." } else { "" }
+    ))
+}
+
+/// A service's `ready:` as the shell command the guest runs. `tcp:<port>` and
+/// `tcp:<host>:<port>` (Milestone 239, a format-1 addition) are a connect to the port that must
+/// succeed, run with the guest busybox's `nc` exactly as `hydo compose` writes a readiness check
+/// without a healthcheck. The host defaults to the service's `addr:`, else 127.0.0.1. Every
+/// other value is returned as written, so no existing manifest's command changes.
+pub fn ready_command(ready: &str, addr: Option<&str>) -> String {
+    match tcp_ready(ready) {
+        Some(Ok((host, port))) => {
+            let host = host
+                .or(addr.filter(|a| !a.is_empty()))
+                .unwrap_or("127.0.0.1");
+            format!("nc -z -w 2 {host} {port}")
+        }
+        _ => ready.to_string(),
+    }
+}
+
+/// `tcp:[<host>:]<port>`: None for any other `ready:`; Err with the reason for a malformed one.
+pub fn tcp_ready(ready: &str) -> Option<Result<(Option<&str>, u16), String>> {
+    let rest = ready.trim().strip_prefix("tcp:")?;
+    let (host, port) = match rest.rsplit_once(':') {
+        Some((h, p)) => (Some(h), p),
+        None => (None, rest),
+    };
+    let bad = || {
+        format!(
+            "ready: {ready:?}: tcp:<port> or tcp:<host>:<port>, a port from 1 to 65535 and a \
+             host of letters, digits, '.', '-' and '_'"
+        )
+    };
+    let port: u16 = match port.parse() {
+        Ok(p) if p > 0 => p,
+        _ => return Some(Err(bad())),
+    };
+    if let Some(h) = host {
+        if h.is_empty()
+            || !h
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        {
+            return Some(Err(bad()));
+        }
+    }
+    Some(Ok((host, port)))
+}
+
 /// The `guest.clock_start` a new project gets (`hydo init`, `hydo compose`): `given`
 /// (`HYDO_INIT_CLOCK_START`), else today at 00:00 UTC. The format's default (2026-01-01) stays
 /// as it is, because changing it would move every recorded image; a new project names its own
@@ -468,6 +549,11 @@ pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
             }
         }
     }
+    // `--check` does not stage the files: name the sources the full build will not find (an
+    // onboarding of Milestone 239 wrote root.files before building the binaries)
+    if let Some(w) = missing_sources(path_as_given, m) {
+        out.push(w);
+    }
     // each messages check's resolved declaration (what the image will claim)
     for c in m
         .get("checks")
@@ -487,6 +573,76 @@ pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod ready_tests {
+    use super::{ready_command, tcp_ready};
+
+    #[test]
+    fn a_tcp_ready_is_the_connect_check_and_every_other_value_stays() {
+        assert_eq!(ready_command("tcp:7000", None), "nc -z -w 2 127.0.0.1 7000");
+        assert_eq!(
+            ready_command("tcp:7000", Some("10.89.0.11")),
+            "nc -z -w 2 10.89.0.11 7000"
+        );
+        assert_eq!(
+            ready_command("tcp:node2:9000", Some("10.89.0.11")),
+            "nc -z -w 2 node2 9000"
+        );
+        for r in ["redis-cli ping", "grep -qa started $HYDO_LOG", "", " tcp"] {
+            assert_eq!(ready_command(r, Some("10.89.0.2")), r);
+        }
+        for bad in [
+            "tcp:",
+            "tcp:0",
+            "tcp:70000",
+            "tcp:x",
+            "tcp::80",
+            "tcp:a b:80",
+        ] {
+            assert!(matches!(tcp_ready(bad), Some(Err(_))), "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_check_names_missing_sources_of_root_files() {
+        let d = std::env::temp_dir().join(format!("hydo-missing-src-{}", std::process::id()));
+        std::fs::create_dir_all(d.join("bin")).unwrap();
+        std::fs::write(d.join("bin/there"), b"x").unwrap();
+        let mp = d.join("hydo.yaml").display().to_string();
+        let m = serde_json::json!({"root": {"files": [
+            {"src": "bin/there", "dst": "/bin/there"},
+            {"src": "bin/a", "dst": "/bin/a"},
+            {"src": "bin/b", "dst": "/bin/b"}
+        ]}});
+        let w = super::missing_sources(&mp, &m).expect("two are missing");
+        assert!(
+            w.starts_with("hydo-build: warning: 2 of 3 source files of root.files are missing (bin/a, bin/b);"),
+            "{w}"
+        );
+        let all = serde_json::json!({"root": {"files": [{"src": "bin/there", "dst": "/x"}]}});
+        assert_eq!(super::missing_sources(&mp, &all), None);
+        assert_eq!(super::missing_sources(&mp, &serde_json::json!({})), None);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_malformed_tcp_ready_fails_the_check() {
+        let mut m: serde_json::Value = serde_json::json!({
+            "name": "x", "format": 1,
+            "services": [{"name": "a", "cmd": "/bin/a", "ready": "tcp:99999"}]
+        });
+        let e = super::validate_data(&mut m).expect_err("a port above 65535");
+        assert!(e.message.contains("tcp:<port>"), "{}", e.message);
+        let mut ok: serde_json::Value = serde_json::json!({
+            "name": "x", "format": 1,
+            "services": [{"name": "a", "cmd": "/bin/a", "ready": "tcp:7000"}],
+            "workload": {"steps": 1, "run": "true"},
+            "invariants": [{"id": "i", "cmd": "true"}]
+        });
+        super::validate_data(&mut ok).expect("tcp:7000 is valid");
+    }
 }
 
 #[cfg(test)]

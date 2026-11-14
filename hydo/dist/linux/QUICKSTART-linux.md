@@ -263,8 +263,8 @@ each failing run failed again when hydo replayed it. `hydo report` prints each p
 such as `lying-disk`) and signature (the verdict with keys and numbers blanked), whether it
 reproduced, the minimal schedules, and a table of properties. The table lists hydo's own `fault.*`
 properties (which fault the runs reached) and the invariants. A program that uses hydo's SDKs
-adds its own assertions there (`hydo guide sdks`). This example has none, so its invariant is
-marked `[not in catalog]`, as every invariant of a `hydo.yaml` is. `NOT EXERCISED` means no run
+adds its own assertions there (`hydo guide sdks`). This example has none. Its invariant is
+marked `[the project's own check]`, as every invariant and check of a `hydo.yaml` is. `NOT EXERCISED` means no run
 reached a property.
 
 For this example expect only these classes in `hydo report --details`:

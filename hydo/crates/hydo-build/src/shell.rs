@@ -537,7 +537,15 @@ pub fn compile_shell(
                 .map(s)
                 .unwrap_or_default())
         ));
-        l.push(format!("HYDO_SVC_{n}_ready={}", shqv(&sv["ready"])));
+        // `tcp:<port>` as the connect check it stands for; every other value as written
+        let ready = match sv["ready"].as_str() {
+            Some(r) => Value::from(hydo_manifest::ready_command(
+                r,
+                sv.get("addr").and_then(Value::as_str),
+            )),
+            None => sv["ready"].clone(),
+        };
+        l.push(format!("HYDO_SVC_{n}_ready={}", shqv(&ready)));
         l.push(format!(
             "HYDO_SVC_{n}_timeout={}",
             int(

@@ -450,7 +450,9 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
             }
             installed.push(k.clone());
         }
-        if !done.is_empty() {
+        // only a git repository has something to commit to (Milestone 239: the advice came in
+        // a plain folder too); `top` is the repository's top when there is one
+        if !done.is_empty() && top.join(".git").exists() {
             println!("hydo: commit the copied folder so that everyone working in the repository gets the skill");
         }
     }

@@ -32,4 +32,6 @@ test:                            # the test composer: hydo/workload/ holds the c
   per_round: 2                   # parallel drivers started per round
   round_ms: 200                  # a round every 200 ms of guest time
 
+# Every fault kind (hydo guide faults): kill, pause, network, oneway, cut, clock, disk, freeze,
+# protocol (needs fakes: or proxies:), corrupt and powerloss (both need services[].storage).
 faults: [kill, pause, network, oneway, cut, clock, disk]   # TODO keep the kinds that make sense

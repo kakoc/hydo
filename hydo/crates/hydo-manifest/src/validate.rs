@@ -512,6 +512,12 @@ pub fn validate(m: &mut Value) -> R<()> {
             need(s, "cmd", &wh, Typ::Str)?;
         }
         need(s, "ready", &wh, Typ::Str)?;
+        if let Some(Err(m)) = obj_get(s, "ready")
+            .and_then(Value::as_str)
+            .and_then(crate::tcp_ready)
+        {
+            return Err(err(format!("{wh}: {m}")));
+        }
         if let Some(p) = obj_get(s, "port") {
             if !is_int(p) {
                 return Err(err(format!("{wh}: port must be a number")));

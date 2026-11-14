@@ -1243,6 +1243,10 @@ pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
             platform_word(ctx.platform),
             cache.home.version(&version).display()
         );
+        // said before the link moves (Milestone 239)
+        if let Some(n) = cache.repoint_note(&version) {
+            println!("hydo setup: {n}");
+        }
         match cache.install(&version, &pins, &System, ctx.platform) {
             Err(lines) => {
                 for l in lines {

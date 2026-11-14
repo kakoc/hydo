@@ -126,6 +126,28 @@ An item is the message id with attributes, in this order: `m17;k=g2;x=d17;d=5000
 - `o`: the system id or offset. `n`: the attempt count. `h`: the handle an acknowledgement presents.
 - `v`: the lease in ms. `s`: the item's outcome in a batch. `r=0`: a reject on a nack.
 
+The rules for the values:
+
+- `s` is `ok` (the item took effect), `fail` (it certainly took no effect) or `info` (unknown).
+  A batch whose request got no answer is `info` for every item; write the operation's type as
+  `info` then.
+- `o` may be any text. Two sends with the same `o` are one stored copy. Some claims need whole
+  numbers: `order: log` and the gap in a lost message's explanation read `o` as an offset. A
+  system id that is not a number works for every other claim.
+- `d`, `n` and `v` are whole numbers.
+- A message id, `h`, `k`, `x` and `o` may hold any characters, encoded as in the other history
+  records. Encode these characters: `%`, `@`, a space, a control character, `,`, `[`, `]`, `:`,
+  `;` and `=`. Each becomes `%` and two hexadecimal digits per byte of UTF-8 (`a;b` is `a%3Bb`). Write an empty value as
+  `%`. The Rust SDK's recorder encodes the values itself.
+
+A send that the system answers with "this deduplication id already exists":
+
+- a retry of the same intent (the same message id): record `ok`, with the stored message's
+  system id in `o=` when the answer carries it. hydo then counts one stored copy, delivered
+  once. Do not record `fail`: the message is in the system.
+- another message with the same `x=`: the system stored nothing of its own for it, so record
+  `fail`. With `duplicates: {by: dedup-id}` that is the promise kept.
+
 The group `-` is the channel's one group, and it exists from the start. A named group must
 receive the messages sent after its first completed `sub` or `recv`, or all of them after
 `sub ... from=start`. A process has one operation in flight, so concurrent consumers use

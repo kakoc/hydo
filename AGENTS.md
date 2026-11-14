@@ -413,6 +413,30 @@ that changes nothing for a manifest without it:
 The references are four sections of MANIFEST.md (Liveness, Command kinds, One-shot jobs, and
 Clock steps to a time) and `hydo guide checks`, `composer` and `faults`.
 
+**What an onboarding of a project's own binaries lacked (M239).** An agent onboarded a user's
+own system, built from source, on a Mac with 0.3.1 and named its friction. The fixes, none of which moves a
+recorded value:
+
+- `ready: tcp:<port>` (or `tcp:<host>:<port>`), a format-1 addition: a connect check, run as
+  `nc -z -w 2 <addr> <port>` with the guest's busybox (`hydo_manifest::ready_command`).
+- A failed run's diagnosis replay writes the last 64 KiB of each service's log, without color
+  codes, to `<run>/logs/<service>.log`. The `hydo: diagnosis:` line quotes whole last lines and
+  names the file.
+- `hydo run --memory` prints each service's peak memory at the run's end, read by one more replay.
+- `hydo run`'s refusal for memory names the running `hydo inspect` sessions, and `hydo inspect
+  start` says that its session holds the guest's memory.
+- `hydo build --check` warns about missing `root.files` sources.
+- From the Valkey onboarding:
+  - `hydo report <run dir>` prints what each check said the last time it held;
+  - the property table tags a project's check `[the project's own check]`;
+  - the lock file names `hydo compose`;
+  - the commit advice comes only in a git repository;
+  - `hydo setup` says so before it moves `~/.hydo/bin/hydo` to another version.
+- The guide has the topic `minimum-path`, the static musl recipe for Rust on a Mac, and the
+  messages records' value rules. The skill (2.0.1) finds an installed hydo that is not on `PATH`.
+
+The details are in `docs/HISTORY.md` Milestone 239.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -850,6 +874,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 106. The terminal in plain words (M230). A run directory's `hydo report` and the lines `hydo
     explore` prints before its runs (`fault space:` with JSON) are still technical. The real run
     used the Mac engine only.
+107. The onboarding fixes of M239 ran on the Mac engine only. `hydo run --memory` counts only the
+    processes alive at the end, so a run with kills gives low peaks. `tcp:` probes ran with one
+    service, not with `network: bridge`.
 
 ## Milestone index
 
@@ -1228,6 +1255,11 @@ build machine, before 2026-10-13.
   full sync by its size. hydo found it blind, and it reproduced natively. The known issue 5354
   was found blind too.
   `hydo save` inside `hydo/` fixed. Nothing recorded moved
+- M239 (tentative number): what an onboarding of a project's own binaries lacked: `ready:
+  tcp:<port>`, service logs in `<run>/logs/`, and `hydo run --memory`. A memory refusal names
+  the inspect sessions. `--check` warns about missing sources. The guide gained `minimum-path`,
+  the static musl recipe and the messages value rules. The skill (2.0.1) finds an installed
+  hydo off `PATH`. Five frictions of the Valkey onboarding are fixed too. Nothing recorded moved
 
 ## Where to look
 

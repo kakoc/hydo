@@ -8156,3 +8156,140 @@ stay open, listed in RESULTS.md:
 
 **Open.** No Sentinel and no cluster mode, so failover after `WAIT` was not tested. The
 `min-replicas-to-write` effect ran natively only. Nothing ran on hvx or KVM.
+
+### Milestone 239 (tentative number) - DONE (what an onboarding of a project's own binaries lacked: `ready: tcp:<port>`, each service's log in the run directory with whole lines in the diagnosis, `hydo run --memory`, the inspect sessions named in a memory refusal, a `--check` warning for missing sources, the guide topic `minimum-path`, the static musl recipe for Rust on a Mac, the messages records' value rules, and the skill's search for an installed hydo; nothing recorded moved; 2026-11-14)
+
+**Why.** An AI agent onboarded a user's own system (several services built from
+source, no Compose file) into hydo 0.3.1 on this Mac. It reached a passing run with one
+fingerprint in about two hours, and about forty minutes of that were hydo's friction. Its
+feedback named nine places. Each was checked against `main` first; none was fixed already.
+
+**What changed, each with what a user sees before and after.**
+
+1. The skill's step 0 (`plugin/skills/onboard/SKILL.md`). Before, `hydo: command not found` led
+   to "ask the user whether to install hydo", although `install.sh --add-to-path` had installed
+   it in `~/.hydo/bin` and only the agent's shell did not read the startup file. Now the skill
+   looks in `~/.hydo/bin`, `~/.cargo/bin` and Homebrew's `bin` first. It says "hydo is installed
+   at X but not on this shell's PATH; I will call it by that path". It names `rustup target add`
+   among the network installs that need the user's yes. `references/install.md` gained the
+   `cargo install hydo --locked` and `hydo setup` steps; it still said cargo was planned.
+2. `hydo guide workflow`, "Where each program comes from". Before, Rust was "a musl target". Now
+   the page gives the `.cargo/config.toml` that links with `rust-lld` and no C toolchain, for
+   `aarch64-unknown-linux-musl` and `x86_64-unknown-linux-musl`. It also gives the check for C
+   code (`cargo tree -i cc --target ...`) and three ways for a project with C code (`zig cc`, a
+   musl cross toolchain, a Linux container). The recipe was run on this Mac with Rust 1.90.0 on a
+   program with a thread and a TCP listener: `file` printed `ELF 64-bit LSB executable, ARM
+   aarch64, ... statically linked` and `ELF 64-bit LSB pie executable, x86-64, ...
+   static-pie linked`.
+3. `ready: tcp:<port>` and `tcp:<host>:<port>`, a format-1 addition. The feedback said that the
+   guest's busybox has no `nc`. It has: the arm64 busybox lists `nc`, and its symbols
+   (`dolisten`, `readwrite`, `oprint`) are the full `nc` with `-z`. `hydo compose` already
+   writes `nc -z -w 2 <addr> <port>` for a service without a healthcheck. So the new form needs
+   no guest program and no agent change. `hydo_manifest::ready_command` turns it into exactly
+   that command, with the service's `addr:` or 127.0.0.1. The host controller's plan
+   (`hydo-control/src/plan.rs`) and the image's `manifest.sh` (`hydo-build/src/shell.rs`) use
+   it. Every other `ready:` value is returned as written, so every existing image keeps its
+   bytes. `hydo build --check` refuses a port outside 1 to 65535. The schema's description of
+   `ready` names it. `hydo guide services` and MANIFEST.md ("Readiness by a connect") describe it.
+4. Logs and the diagnosis. Before, the `hydo: diagnosis:` line quoted the first 300 characters
+   of the failing service's last three log lines joined. A long line was cut at its end, which
+   in the onboarding was one character before the error. The log itself was only in
+   `result.json`, with terminal color codes, or behind a `hydo inspect` session. Now the
+   diagnosis replay reads the last 64 KiB of each service's log and writes it, without color
+   codes, to `<run>/logs/<service>.log`. The line quotes whole last lines, at most five, while
+   they fit into 600 characters, and at least the last one. It ends with `(the whole log:
+   logs/<service>.log in the run directory)`. `result.json`'s `evidence` keeps the last 3,000
+   bytes, starting at a line. These reads are part of the replay after the run, so the run and
+   its fingerprint are unchanged. A refusal of `hydo run` for the host's memory now names the
+   running `hydo inspect` sessions and how to stop them, or says that none runs. `hydo inspect
+   start` adds the note "this session holds the guest's memory (guest.ram_mib) until `hydo
+   inspect stop <id>`, or until it is idle for 900 s".
+5. `hydo run --memory`. After the run, one more replay to the run's end reads `VmHWM` and
+   `VmRSS` of every process in the guest, and a service's processes are those whose standard
+   output is the service's log. It prints, for the Redis example, `hydo: memory: redis peak 12
+   MiB, now 12 MiB (1 process)` and the sum. `hydo guide services` says how to size
+   `guest.ram_mib` with it. The flag is opt-in because the replay costs a second boot. A process
+   that a fault killed took its peak with it, so the guide says to read a run without faults.
+6. `hydo guide messages`. It now gives the values of `s=` (`ok`, `fail`, `info`, as the parser
+   accepts them), that `o=` may be any text but `order: log` and the gap explanation need whole
+   numbers, which characters `h=`, `k=`, `x=`, `o=` and a message id must encode and how, and
+   what to record for "this deduplication id already exists". A retry of the same intent is
+   `ok` with the stored message's `o=`. Another message with the same `x=` is `fail`, because
+   the system stored nothing of its own for it.
+7. `hydo guide services`, the bridge bullet: a program that binds to its own address needs the
+   numeric `addr:`; names from `/etc/hosts` work for reaching peers.
+8. The guide topic `minimum-path` (`hydo/guide/minimum-path.md`): the binaries, the keys of a
+   service, the command kinds and exit codes, the check exit codes and the history record line,
+   and the first-run commands, on one page. The skill and `hydo guide workflow` point to it
+   first. Its YAML passed `hydo build --check` in a scratch project.
+9. Small ones. `hydo build --check` prints `hydo-build: warning: N of M source files of
+   root.files are missing (...); the full build will fail until they exist`. `hydo init`'s
+   skeleton names every fault kind above its `faults:` line, with `protocol`, `corrupt` and
+   `powerloss` and what they need. The skill's step 1 sends a message queue, a stream or a
+   pub/sub system to the bundles of `hydo guide messages`.
+
+The skill's version is 2.0.1 in SKILL.md, `plugin/.claude-plugin/plugin.json` and
+`.claude-plugin/marketplace.json`.
+
+**Five frictions of the Valkey onboarding (Milestone 232), added on request.**
+
+- `hydo report <run dir>` of a passing run named no check's last line. It now ends with "what
+  each check said the last time it held", one line per property: the `details.out` of its last
+  `HYDO-ASSERT` record that held, read from the run's consoles (`one.log`, `one.recovery.log`;
+  `hydo_explore::results::last_held`). For the Redis example it prints
+  `redis.acked_writes_survive  acked=20 all present`. `result.json` is unchanged.
+- The property table's tag `[not in catalog]` for a property no SDK declared now reads
+  `[the project's own check]`. Both quickstarts say so. The 20 report goldens of the explorer's
+  scripted-engine scenarios changed in that tag only, at the same line counts.
+- The Compose import's lock file says `"generated_by": "hydo compose"` instead of the deleted
+  `hvx/onboard/hydo-compose` (`hydo_compose::GENERATED_BY`). The lock file is never inside an
+  image: hydo-build copies only the folder's `workload/`, `checks/` and `regressions/`. The
+  compose-voting example's lock file has the new line, because a test compares a fresh import
+  with it. The older examples' lock files keep their text as records. The explorer's identity
+  golden pins only the manifests, and it passed.
+- `hydo onboard` and `hydo skill install --agent X` advise committing the copied skill folder
+  only when the folder is in a git repository.
+- `hydo setup` (and `--archive` or `--get`) says before an install that moves the cache's
+  `bin/hydo` link to another version: "this points <link> at hydo <new>; it pointed at hydo
+  <old>. Every shell of this user that finds hydo there runs <new> from now on; `hydo setup
+  --get <old>` points it back". A flag that keeps the old link was not added.
+
+Not done from that list: a record of the clock steps for checks (Milestone 232's first
+friction), which needs a change of the guest side.
+
+**Nothing recorded moved.** This branch's `hydo` (a debug build) ran inside the unpacked 0.3.2
+Mac release. `hydo build` of the release's Redis example gave the recorded image
+`fba2c11e6a371d8b…` and data disk `9ddfc929…`. The quickstart's three schedules gave their
+recorded values: `disk=none | run` `fp=d817d69781986987` OK (with `--memory`),
+`disk=cut | run C=12 R=everysec` `fp=a2b8d71c0c467d15` VIOLATION `key k:0 lost`, and
+`disk=cut | run C=12` `fp=7147e75676d15194` OK.
+
+**Real runs of the new parts, on the Mac engine.** The same example with `ready: tcp:6379`
+passed (`fp=73b4c1e33c9e86fd`, `acked=20 all present`). With `ready: tcp:6380` and
+`ready_timeout: 5`, it ended `ERROR service start (redis)`, and the diagnosis said
+"its readiness check `nc -z -w 2 127.0.0.1 6380` did not pass in 5 s (5 tries, last status 1)".
+The run directory then held `logs/redis.log` (1,247 bytes). With `appendfsync sometimes` in
+the Redis configuration, the diagnosis was:
+
+```text
+hydo: diagnosis: redis exited while it started, before its readiness check passed (exit status 1); its log ends: *** FATAL CONFIG FILE ERROR (Redis 7.2.4) *** | Reading the configuration file, at line 6 | >>> 'appendfsync sometimes' | argument(s) must be one of the following: everysec, always, no (the whole log: logs/redis.log in the run directory)
+```
+
+**Tests.**
+
+- `hydo-manifest` `ready_tests`: the `tcp:` forms and the unchanged values, the refusals, and
+  the warning for missing sources.
+- `hydo` `inspect::diagnose::tests`: the log file without color codes and without its cut first
+  line, the evidence cut to 3,000 bytes at a line start, the whole-line quote, and the memory
+  sums per service. `inspect::session::memory_tests`: the refusal's words.
+- `hydo-explore` `results::tests::a_passing_check_s_last_line_is_kept`; `hydo`
+  `cache::tests::moving_the_bin_link_to_another_version_is_said_first` and
+  `onboard::the_commit_advice_comes_only_in_a_git_repository`.
+- `hydo-manifest`'s equivalence golden is re-recorded for the same reason as hydo-build's below:
+  every changed answer differs only in its `--check` lines.
+- `hydo-build`'s equivalence golden (`tests/golden/answers.txt`) is re-recorded. All 288 changed
+  answers are `--check` runs whose only new output is the missing-sources warning, because the
+  mutants name files that are not in the test's folder.
+
+**Open.** The fixes ran on the Mac engine only. `--memory` counts only the processes alive at the
+end. `tcp:` ran with one service, not with `network: bridge` (open item 107).

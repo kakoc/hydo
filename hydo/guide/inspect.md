@@ -22,7 +22,14 @@ the verdict was given, it read the evidence (`evidence`):
 - the readiness check, run once;
 - the kernel's memory and crash messages, `free`, and `ps`.
 
-`hydo run --no-diagnose` skips that replay.
+The replay also writes the end of each service's log (its last 64 KiB, without terminal color
+codes) into the run directory as `logs/<service>.log`. When a service exited, the
+`hydo: diagnosis:` line quotes the last lines of its log whole and names that file. Read the
+file with any tool; it needs no inspection session. `hydo run --no-diagnose` skips that replay.
+
+A session of `hydo inspect start` keeps the guest's memory (`guest.ram_mib`) until
+`hydo inspect stop <id>`, or until it is idle for 15 minutes. `hydo inspect list` shows the
+sessions. When `hydo run` refuses for lack of memory, it names the sessions that are running.
 
 ```sh
 hydo inspect diagnose <run dir>              # the host-side part only, instantly

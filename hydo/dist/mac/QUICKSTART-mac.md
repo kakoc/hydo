@@ -226,8 +226,8 @@ With the default settings and an honest disk Redis loses nothing (the `disk=cut 
 of section 2). The exploration finds 11 failures. The table of properties in `hydo report
 --details` lists hydo's own `fault.*` properties (which fault the runs reached) and the
 invariants. A program that uses hydo's SDKs adds its own assertions there (`hydo guide sdks`);
-this example has none, so its invariant is marked `[not in catalog]`, as every invariant of a
-`hydo.yaml` is.
+this example has none. Its invariant is marked `[the project's own check]`, as every invariant
+and check of a `hydo.yaml` is.
 
 ## 4. Reproduce a failure
 

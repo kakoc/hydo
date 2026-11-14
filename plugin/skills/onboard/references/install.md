@@ -39,9 +39,13 @@ C compiler and `make`. The release's `README.md` (its quickstart) explains `--no
 without `sudo`, and what `hydo doctor` reports. If `hydo doctor` reports a failure, show it to the
 user; do not change the machine's kernel modules or groups without asking.
 
-## Later
+## With cargo (a Mac, or Linux with KVM)
 
-A `cargo install hydo` is planned; until it exists, use the steps above.
+```sh
+cargo install hydo --locked        # installs into ~/.cargo/bin
+hydo setup                         # downloads the guest kernel and tools
+hydo doctor
+```
 
 ## Upgrading
 

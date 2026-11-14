@@ -198,6 +198,8 @@ services:                      # may be empty ([] or left out): a project that i
     setup: '[ -d /data/db/x ] || /bin/mydb --init'   # run before EVERY start (incl. restarts
                                           #   after a kill and crash recovery); make it idempotent
     ready: /bin/mydb-cli ping             # required. exit 0 = ready; polled once per second
+                                          #   (tcp:<port>: a connect check, see "Readiness by a
+                                          #   connect")
     ready_timeout: 120                    # seconds (default 120)
     port: 5432                            # the port network faults (N=, O=) act on
     addr: 127.0.0.11                      # the service's own loopback address: enables link
@@ -564,6 +566,25 @@ process tests nothing. A hand schedule can still name it.
 Compose's `condition: service_completed_successfully` (Milestone 225). Before that, the explorer
 drew faults on the idle service: in 6 of 20 schedules of the Lago example. Without the key a
 service is a fault target as before.
+
+### Readiness by a connect (`ready: tcp:<port>`)
+
+Many storage systems speak no HTTP on their service port, and their own client may not be in
+the image. `ready: tcp:<port>` makes the readiness check a connection to that port: the service
+is ready when the connection succeeds. The address is the service's `addr:`, or 127.0.0.1
+without one; `tcp:<host>:<port>` names another address or a name from `/etc/hosts`.
+
+```yaml
+  - name: node1
+    cmd: /bin/node --bind 10.89.0.11:7000
+    addr: 10.89.0.11
+    ready: tcp:7000          # runs: nc -z -w 2 10.89.0.11 7000
+```
+
+hydo runs it as `nc -z -w 2 <address> <port>` with the guest's busybox, the same check that
+`hydo compose` writes for a service without a healthcheck, in the service's network namespace.
+`hydo build --check` refuses a port outside 1 to 65535. The key is a format-1 addition
+(Milestone 239): every other `ready:` value runs as written, so no existing image changes.
 
 ### Variables every command sees
 

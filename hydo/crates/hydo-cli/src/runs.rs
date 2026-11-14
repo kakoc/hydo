@@ -278,7 +278,12 @@ pub fn controlled_engine(
         .and_then(|w| w[1].parse().ok())
         .unwrap_or(1024);
     if let Err(e) = hydo_engine::guest_fits(ram) {
-        die(&e);
+        // a session of `hydo inspect` holds a guest until it is stopped (Milestone 239)
+        let running = crate::inspect::session::running(ctx);
+        match crate::inspect::session::memory_hint(&running) {
+            Some(h) => die(&format!("{e}. {h}")),
+            None => die(&format!("{e}. No hydo inspect session is running.")),
+        }
     }
     match ctx.platform {
         Platform::Linux if ctx.kvm => {
@@ -732,6 +737,40 @@ fn write_run_document(outdir: &Path, run: &hydo_results::Run) {
     let _ = hydo_results::write_document(&outdir.join(hydo_results::RUN_DOC), run);
 }
 
+/// `hydo run --memory` (Milestone 239): each service's peak memory at the run's end, read by a
+/// replay, for sizing `guest.ram_mib`.
+fn print_memory(ctx: &Ctx, outdir: &Path) {
+    match crate::inspect::diagnose::memory_peaks(ctx, outdir) {
+        Ok(v) => {
+            let mib = |k: u64| k.div_ceil(1024);
+            for m in &v {
+                if m.processes == 0 {
+                    println!(
+                        "hydo: memory: {:<16} no process at the run's end",
+                        m.service
+                    );
+                } else {
+                    println!(
+                        "hydo: memory: {:<16} peak {} MiB, now {} MiB ({} process{})",
+                        m.service,
+                        mib(m.peak_kib),
+                        mib(m.now_kib),
+                        m.processes,
+                        if m.processes == 1 { "" } else { "es" }
+                    );
+                }
+            }
+            let total: u64 = v.iter().map(|m| m.peak_kib).sum();
+            println!(
+                "hydo: memory: the services' peaks add up to {} MiB; give guest.ram_mib that plus \
+                 room for the workload, the page cache and the kernel (hydo guide services)",
+                mib(total)
+            );
+        }
+        Err(e) => println!("hydo: memory: not read: {e}"),
+    }
+}
+
 fn new_run_dir() -> PathBuf {
     let d = Path::new(OUT).join("runs").join(format!(
         "run-{}-{}",
@@ -746,7 +785,9 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     if argv.iter().any(|a| a == "-h" || a == "--help") {
         println!(
             "usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE] \
-             [--no-diagnose] [--vcpus N] [--turn-margin N]{}\n{RUN_OPTS_HELP}\n  runs one schedule from a fresh boot, e.g. hydo run \"disk=cut | run C=12 \
+             [--no-diagnose] [--memory] [--vcpus N] [--turn-margin N]{}\n{RUN_OPTS_HELP}\n  \
+             --memory         after the run, print each service's peak memory (one more replay\n                   \
+             to the run's end; the run itself is unchanged)\n  runs one schedule from a fresh boot, e.g. hydo run \"disk=cut | run C=12 \
              R=everysec\".\n  IMG defaults to the one image `hydo build` wrote in ./hydo-out (or ./.hydo). \
              The run's\n  directory (result.json, consoles) is printed; `hydo repro <run dir>` repeats it.\n  \
              The exit status is 0 whenever the run finished, whatever its verdict (OK, VIOLATION or\n  \
@@ -770,10 +811,17 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         }
         None => false,
     };
+    let memory = match args.iter().position(|a| a == "--memory") {
+        Some(i) => {
+            args.remove(i);
+            true
+        }
+        None => false,
+    };
     let opts = RunOpts::take(ctx, &mut args);
     let image = find_image(ctx, &mut args);
     if args.len() != 1 {
-        die("usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE] [--vcpus N] [--turn-margin N]   e.g. hydo run \"disk=cut | run C=12 R=everysec\"");
+        die("usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE] [--memory] [--vcpus N] [--turn-margin N]   e.g. hydo run \"disk=cut | run C=12 R=everysec\"");
     }
     let sched = args[0].clone();
     let outdir = outdir.map(PathBuf::from).unwrap_or_else(new_run_dir);
@@ -839,6 +887,9 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
             run.diagnosis = Some(d);
             write_run_document(&outdir, &run);
         }
+    }
+    if memory {
+        print_memory(ctx, &outdir);
     }
     println!(
         "hydo: run directory {}   (hydo repro {}  runs it again and compares fp=)",

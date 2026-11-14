@@ -34,6 +34,11 @@ use std::sync::OnceLock;
 
 pub const USAGE: &str = include_str!("usage.txt");
 
+/// The lock file's `generated_by` (Milestone 239; before, the path of the deleted Python
+/// importer, `hvx/onboard/hydo-compose`). The lock file stays outside the image: hydo-build
+/// copies only the folder's `workload/`, `checks/` and `regressions/`.
+pub const GENERATED_BY: &str = "hydo compose";
+
 const ADDR_BASE: usize = 11; // 127.0.0.11, .12, ... ; 10.89.0.11, .12, ... (network: bridge)
 const BRIDGE_GW: &str = "10.89.0.1"; // hydo-build's NET_GW: the bridge's own address
 const DEFAULT_SVC_RAM: i128 = 256;
@@ -3145,7 +3150,7 @@ impl<'a> Importer<'a> {
     /// The lock file's text (`json.dump(..., indent=1, sort_keys=True)` and a newline).
     pub fn lock_text(&self) -> String {
         let v = Y::Map(vec![
-            (Y::s("generated_by"), Y::s("hvx/onboard/hydo-compose")),
+            (Y::s("generated_by"), Y::s(GENERATED_BY)),
             (Y::s("images"), self.lock.clone()),
         ]);
         pyval::dumps_indent1_sorted(&v) + "\n"

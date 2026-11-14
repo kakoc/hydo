@@ -130,6 +130,29 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
 /// `hydo report [DIR]`: the report of an exploration (report.md, made from its exploration.json
 /// by the results reader) or of a run (its result.json); while an exploration still runs, how
 /// far its event stream has got.
+/// For a run directory's report: what each check said the last time it held, read from the
+/// run's consoles (Milestone 239: a passing run's report named no check's last line, so the
+/// user had to open the run directory to see what a check judged). Empty when nothing held
+/// with details.
+fn held_lines(dir: &Path) -> String {
+    let mut text = String::new();
+    for f in ["one.log", "one.recovery.log"] {
+        if let Ok(b) = std::fs::read(dir.join(f)) {
+            text.push_str(&String::from_utf8_lossy(&b));
+        }
+    }
+    let held = hydo_explore::results::last_held(&text);
+    if held.is_empty() {
+        return String::new();
+    }
+    let w = held.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
+    let mut o = String::from("\nwhat each check said the last time it held:\n");
+    for (k, v) in held {
+        o.push_str(&format!("  {k:<w$}  {v}\n"));
+    }
+    o
+}
+
 pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
     // `--html`: one web page instead (src/htmlreport.rs)
     if argv.iter().any(|a| a == "--html") {
@@ -161,7 +184,9 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
         },
     };
     let mut text = match r {
-        hydo_results::Results::Run { run, .. } => hydo_explore::md::run_report(&run),
+        hydo_results::Results::Run { run, .. } => {
+            hydo_explore::md::run_report(&run) + &held_lines(Path::new(&d))
+        }
         hydo_results::Results::Exploration { doc: Some(doc), .. } if details => {
             hydo_explore::md::report(&doc)
         }

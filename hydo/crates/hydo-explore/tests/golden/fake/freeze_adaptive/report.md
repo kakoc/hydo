@@ -38,8 +38,8 @@
 
 ```
 type                   id                                    ok    fail  verdict                  first failure / description
-eventually             orders.drained                         6       0  PASS                       [slowest in time: 3.20 s]  [not in catalog]
-sometimes              retry.taken                            0       6  NOT EXERCISED            -  [not in catalog]
+eventually             orders.drained                         6       0  PASS                       [slowest in time: 3.20 s]  [the project's own check]
+sometimes              retry.taken                            0       6  NOT EXERCISED            -  [the project's own check]
 liveness: 1 eventually properties, 0 missed a deadline
 runs=6 (setup-complete seen in 0); properties=2; violations=0
 ```

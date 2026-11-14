@@ -4,7 +4,7 @@ description: Set up deterministic fault testing with hydo for a software project
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "2.0.0"
+  version: "2.0.1"
   hydo-min: "0.1.0"
 ---
 
@@ -29,9 +29,17 @@ Run `hydo --version`.
 - It prints a usage text instead: this is hydo 0.1.0, the first release, which has no
   `--version` (`hydo setup --check` names the version in its first line). It works with this
   skill: see "Facts" below.
-- `hydo: command not found`: **ask the user** whether to install hydo, saying what will be
-  installed and where. Only after a yes, follow [references/install.md](references/install.md).
-  Without hydo, stop and say what is missing.
+- `hydo: command not found`: first look where the installers put it, because a
+  non-interactive shell often does not read the startup file that adds it to `PATH`. Run
+  `ls ~/.hydo/bin/hydo ~/.cargo/bin/hydo "$(brew --prefix 2>/dev/null)/bin/hydo" 2>/dev/null`.
+  If one exists, tell the user "hydo is installed at X but not on this shell's PATH; I will call
+  it by that path", and use that path for every `hydo` command.
+- None exists: **ask the user** whether to install hydo, saying what will be installed and
+  where. Only after a yes, follow [references/install.md](references/install.md). Without hydo,
+  stop and say what is missing.
+
+Every network install needs the user's yes first, with what it installs: hydo itself, a Rust
+target (`rustup target add aarch64-unknown-linux-musl`), a Go or C toolchain, and Docker images.
 
 Then run `hydo doctor`: it says whether this machine can build and run guests.
 
@@ -39,6 +47,9 @@ Then run `hydo doctor`: it says whether this machine can build and run guests.
 
 - `hydo guide workflow`: the folder, the commands of each step below, and the topic that holds
   each detail. Read it first.
+- `hydo guide minimum-path`: one page with the least a first folder needs, for a project with
+  its own binaries and no Compose file. Start writing from it, and read the full topics when a
+  check or a run fails. An older hydo answers "no guide topic": use the full topics then.
 - `hydo guide <topic>` for details (`hydo guide --list` lists the topics), `hydo guide schema` for
   the project format (authoritative: read the sections you use before you write them), and
   `hydo guide examples/...` for complete examples.
@@ -56,7 +67,9 @@ forever). Then name the project's domain (a shop, a bank, a booking system, a jo
 which of that domain's standard rules hold for it: read the list for the domain in `hydo guide
 workloads`, "Business rules: ask the owner" (for a shop: units sold never exceed units stocked,
 refunded never exceeds captured, one payment per order, no money held without an order), and ask
-the owner to confirm, reject or add to them. If you cannot ask, read the project's documentation
+the owner to confirm, reject or add to them. For a message queue, a stream or a pub/sub system,
+use the bundles of `hydo guide messages` as that list: each one names the promises of a common
+shape (ordering keys, leases, deduplication ids, groups). If you cannot ask, read the project's documentation
 and state your assumptions in the report. Do not invent guarantees the project does not make.
 
 ## 2. Inventory the project

@@ -387,6 +387,34 @@ pub fn start(ctx: &Ctx, rest: &[String]) -> Result<Value, Problem> {
     }
 }
 
+/// The ids of the inspection sessions that are running now (each holds a guest's memory).
+pub fn running(ctx: &Ctx) -> Vec<String> {
+    let mut ids: Vec<String> = std::fs::read_dir(home(ctx))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().to_str().map(str::to_string))
+        .filter(|n| n.starts_with("i-") && server_alive(ctx, n))
+        .collect();
+    ids.sort();
+    ids
+}
+
+/// The sentence `hydo run` adds when it refuses for the host's memory: the running inspection
+/// sessions that hold a guest, and how to stop them; None when none runs.
+pub fn memory_hint(ids: &[String]) -> Option<String> {
+    let first = ids.first()?;
+    Some(format!(
+        "{} hydo inspect session{} running and hold{} a guest's memory ({}): `hydo inspect list` \
+         shows {}, and `hydo inspect stop {first}` ends one",
+        ids.len(),
+        if ids.len() == 1 { " is" } else { "s are" },
+        if ids.len() == 1 { "s" } else { "" },
+        ids.join(", "),
+        if ids.len() == 1 { "it" } else { "them" },
+    ))
+}
+
 /// `hydo inspect list`.
 pub fn list(ctx: &Ctx) -> Result<Value, Problem> {
     let mut sessions = Vec::new();
@@ -639,8 +667,15 @@ pub fn serve(ctx: &Ctx, id: &str) -> i32 {
     );
     let started = Instant::now();
     let errlog = sd.join("engine").join("engine.err");
-    let ready = |d: &mut Daemon, stops: u64, notes: Vec<String>| {
+    let ready = |d: &mut Daemon, stops: u64, mut notes: Vec<String>| {
         d.status.status = "ready".into();
+        // an onboarding of Milestone 239 left a session running, and the next `hydo run` was
+        // refused for the memory it held
+        notes.push(format!(
+            "this session holds the guest's memory (guest.ram_mib) until `hydo inspect stop {}`, \
+             or until it is idle for {} s",
+            d.status.id, d.status.idle_timeout_s
+        ));
         let a = Inspect {
             op: "start".into(),
             session: Some(d.status.clone()),
@@ -922,5 +957,24 @@ impl Taker for FreezeSnap {
         }
         out.snapshot(SNAP);
         out.end(Ending::AtSnapshot(SNAP.into()));
+    }
+}
+
+#[cfg(test)]
+mod memory_tests {
+    #[test]
+    fn a_refusal_for_memory_names_the_running_sessions() {
+        assert_eq!(super::memory_hint(&[]), None);
+        assert_eq!(
+            super::memory_hint(&["i-1a2b3c4d".into()]).as_deref(),
+            Some(
+                "1 hydo inspect session is running and holds a guest's memory (i-1a2b3c4d): \
+                 `hydo inspect list` shows it, and `hydo inspect stop i-1a2b3c4d` ends one"
+            )
+        );
+        let two = super::memory_hint(&["i-1".into(), "i-2".into()]).unwrap();
+        assert!(two.starts_with(
+            "2 hydo inspect sessions are running and hold a guest's memory (i-1, i-2)"
+        ));
     }
 }

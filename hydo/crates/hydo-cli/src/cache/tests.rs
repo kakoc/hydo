@@ -761,3 +761,26 @@ fn an_http_base_url_off_the_loopback_is_refused() {
     assert!(e.contains("not https://"), "{e}");
     remove_tree(&cfg.home);
 }
+
+#[test]
+fn moving_the_bin_link_to_another_version_is_said_first() {
+    let cfg = hydo_config::run::Cache {
+        home: scratch(),
+        release_url: String::new(),
+        release_api: String::new(),
+        offline: true,
+    };
+    let c = Cache::new(&cfg, "linux", true, None);
+    // no link yet: nothing to say
+    assert_eq!(c.repoint_note("0.3.3"), None);
+    std::fs::create_dir_all(cfg.home.join("bin")).unwrap();
+    std::os::unix::fs::symlink("../versions/0.3.1/bin/hydo", cfg.home.join("bin/hydo")).unwrap();
+    assert_eq!(c.repoint_note("0.3.1"), None);
+    let n = c.repoint_note("0.3.3").expect("another version");
+    assert!(
+        n.contains("at hydo 0.3.3; it pointed at hydo 0.3.1")
+            && n.contains("`hydo setup --get 0.3.1` points it back"),
+        "{n}"
+    );
+    remove_tree(&cfg.home);
+}

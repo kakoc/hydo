@@ -129,6 +129,22 @@ fn a_compose_project_with_claude_code() {
 }
 
 #[test]
+fn the_commit_advice_comes_only_in_a_git_repository() {
+    let c = Case::new("nogit");
+    c.tool("codex");
+    let (rc, out) = c.onboard(&[]);
+    assert_eq!(rc, 0, "{out}");
+    assert!(c.has(".agents/skills/onboard/SKILL.md"), "{out}");
+    assert!(!out.contains("commit the copied folder"), "{out}");
+    let g = Case::new("git");
+    g.tool("codex");
+    std::fs::create_dir_all(g.repo.join(".git")).unwrap();
+    let (rc, out) = g.onboard(&[]);
+    assert_eq!(rc, 0, "{out}");
+    assert!(out.contains("commit the copied folder"), "{out}");
+}
+
+#[test]
 fn a_plain_project_with_codex() {
     let c = Case::new("plain");
     c.put("cmd/q/main.go", "package main\n");

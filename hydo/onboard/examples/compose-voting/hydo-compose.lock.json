@@ -1,5 +1,5 @@
 {
- "generated_by": "hvx/onboard/hydo-compose",
+ "generated_by": "hydo compose",
  "images": {
   "dockersamples/examplevotingapp_result": {
    "index_digest": "sha256:06c50992ab258e1d83406784040842bb920f6938eabac19261e7ec634f878935",

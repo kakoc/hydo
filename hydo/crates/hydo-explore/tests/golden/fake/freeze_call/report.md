@@ -48,8 +48,8 @@
 
 ```
 type                   id                                    ok    fail  verdict                  first failure / description
-eventually             orders.drained                        40       0  PASS                       [slowest in time: 3.49 s]  [not in catalog]
-sometimes              retry.taken                           19      21  PASS                     -  [not in catalog]
+eventually             orders.drained                        40       0  PASS                       [slowest in time: 3.49 s]  [the project's own check]
+sometimes              retry.taken                           19      21  PASS                     -  [the project's own check]
 liveness: 1 eventually properties, 0 missed a deadline
 runs=40 (setup-complete seen in 0); properties=2; violations=0
 ```

@@ -254,12 +254,7 @@ pub fn build_main(a: &[String]) -> i32 {
         .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
         .map(|v| from_json(&v))
         .filter(Y::is_map)
-        .unwrap_or_else(|| {
-            Y::Map(vec![(
-                Y::s("generated_by"),
-                Y::s("hvx/onboard/hydo-compose"),
-            )])
-        });
+        .unwrap_or_else(|| Y::Map(vec![(Y::s("generated_by"), Y::s(crate::GENERATED_BY))]));
     let mut images = doc
         .get("images")
         .filter(|v| v.is_map())

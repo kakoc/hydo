@@ -580,6 +580,16 @@ impl Taker for Batch {
 const TAIL: u64 = 3000;
 /// How many last lines of each file of a service's `logs:` the evidence reads.
 const LOG_FILE_LINES: u64 = 30;
+/// How much of the end of each service's log the evidence reads and writes into the run
+/// directory as `logs/<service>.log` (Milestone 239); `result.json` keeps the last [`TAIL`] bytes.
+const LOG_KEEP: u64 = 64 * 1024;
+/// The run directory's folder of service logs.
+pub const LOGS_DIR: &str = "logs";
+/// At most this many last lines of the failing service's log go into the summary, whole.
+const QUOTE_LINES: usize = 5;
+/// The summary quotes whole lines from the end while they fit into this many characters (at
+/// least one line, however long).
+const QUOTE_CHARS: usize = 600;
 
 /// The replayed agent events of a run (conversation, stop, the agent's line).
 pub type Replayed = Vec<(Conv, StopInfo, Value)>;
@@ -650,7 +660,10 @@ pub fn evidence(ctx: &Ctx, rec: &Recorded, d: &mut Diagnosis) -> Replayed {
                 target.point()
             ));
             for (what, source, w) in b.works {
-                if let Some(e) = to_evidence(&what, &source, &w) {
+                if let Some(mut e) = to_evidence(&what, &source, &w) {
+                    if let Some(svc) = what.strip_prefix("the log of ") {
+                        keep_log(&rec.dir, svc, &mut e);
+                    }
                     if what == "the kernel's messages" {
                         for l in e.text.lines().filter(|l| kernel_worth(l)) {
                             if !d.kernel.iter().any(|k| k == l) {
@@ -673,14 +686,15 @@ pub fn evidence(ctx: &Ctx, rec: &Recorded, d: &mut Diagnosis) -> Replayed {
 fn plan_works(plan: &Plan, d: &Diagnosis) -> Vec<(String, String, Work)> {
     let l = &plan.layout;
     let mut v: Vec<(String, String, Work)> = Vec::new();
-    let tail = |p: String| {
+    let tail_of = |p: String, n: u64| {
         Work::read(vec![FileReq {
             path: p,
-            offset: TAIL,
-            max: TAIL,
+            offset: n,
+            max: n,
             tail: true,
         }])
     };
+    let tail = |p: String| tail_of(p, TAIL);
     let mut names: Vec<String> = plan.services.iter().map(|s| s.name.clone()).collect();
     if let Some(s) = &d.service {
         names.retain(|n| n != s);
@@ -692,7 +706,7 @@ fn plan_works(plan: &Plan, d: &Diagnosis) -> Vec<(String, String, Work)> {
     };
     for s in &names {
         let p = l.log_of(s);
-        v.push((format!("the log of {s}"), p.clone(), tail(p)));
+        v.push((format!("the log of {s}"), p.clone(), tail_of(p, LOG_KEEP)));
         // the service's own log files (`logs:`, `errors.files`): databases write theirs into
         // their data directories, not to their output (Milestone 202)
         if let Some(sv) = plan.service(s).filter(|sv| !sv.logs.is_empty()) {
@@ -777,6 +791,193 @@ fn to_evidence(what: &str, source: &str, w: &Work) -> Option<Evidence> {
     })
 }
 
+/// One service's memory at the end of a run (`hydo run --memory`, Milestone 239).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryPeak {
+    pub service: String,
+    /// The sum of the peak resident sizes (VmHWM) of the service's processes, in KiB.
+    pub peak_kib: u64,
+    /// The sum of their resident sizes now (VmRSS), in KiB.
+    pub now_kib: u64,
+    pub processes: usize,
+}
+
+/// The guest's lines `<VmHWM kB> <VmRSS kB> <fd 1's target>` per process, read by
+/// [`memory_peaks`]: a service's processes write to its log, so their standard output names it.
+fn memory_script(bb: &str) -> String {
+    format!(
+        "for p in /proc/[0-9]*; do o=$({bb} readlink $p/fd/1 2>/dev/null) || continue; \
+         h=$({bb} sed -n 's/^VmHWM:[^0-9]*\\([0-9]*\\).*/\\1/p' $p/status 2>/dev/null); \
+         r=$({bb} sed -n 's/^VmRSS:[^0-9]*\\([0-9]*\\).*/\\1/p' $p/status 2>/dev/null); \
+         echo \"${{h:-0}} ${{r:-0}} $o\"; done"
+    )
+}
+
+/// The lines of [`memory_script`] summed per service, for (service, its log) in the plan's
+/// order; a process whose output goes elsewhere (the workload, the agent) is left out.
+fn memory_of(services: &[(String, String)], out: &str) -> Vec<MemoryPeak> {
+    let mut v: Vec<MemoryPeak> = services
+        .iter()
+        .map(|(s, _)| MemoryPeak {
+            service: s.clone(),
+            peak_kib: 0,
+            now_kib: 0,
+            processes: 0,
+        })
+        .collect();
+    for l in out.lines() {
+        let mut w = l.splitn(3, ' ');
+        let (Some(h), Some(r), Some(o)) = (w.next(), w.next(), w.next()) else {
+            continue;
+        };
+        let Some(i) = services.iter().position(|(_, log)| log == o.trim()) else {
+            continue;
+        };
+        let m = &mut v[i];
+        m.peak_kib += h.parse::<u64>().unwrap_or(0);
+        m.now_kib += r.parse::<u64>().unwrap_or(0);
+        m.processes += 1;
+    }
+    v
+}
+
+/// Each service's memory at the end of the recorded run in `dir`, read in the guest by one
+/// replay to the run's end (the recorded run is unchanged, so no fingerprint moves). Only the
+/// processes alive at the end count: a process that was killed or restarted took its peak with
+/// it.
+pub fn memory_peaks(ctx: &Ctx, dir: &Path) -> Result<Vec<MemoryPeak>, String> {
+    let rec = Recorded::load(dir).map_err(|p| p.message)?;
+    let target = rec.end().ok_or("the run has no recorded end")?;
+    let tmp = super::session::scratch(ctx, "memory");
+    let r = (|| -> Result<(Plan, Batch), Problem> {
+        let m = super::session::machine(ctx, &rec, &tmp)?;
+        let bb = m.plan.layout.busybox.clone();
+        let w = Work::exec(
+            &bb,
+            memory_script(&bb),
+            env(&m.plan),
+            None,
+            super::TIMEOUT_MS,
+            64 * 1024,
+        );
+        let mut b = Batch {
+            works: vec![("memory".into(), String::new(), w)],
+            i: 0,
+            stops: 0,
+        };
+        m.reach(&rec, target, &mut b, false, &tmp.join("engine.err"))?;
+        Ok((m.plan.clone(), b))
+    })();
+    let _ = std::fs::remove_dir_all(&tmp);
+    let (plan, b) = r.map_err(|p| p.message)?;
+    let w = &b.works[0].2;
+    if let Some(f) = &w.failed {
+        return Err(f.clone());
+    }
+    let out = w.got.first().map(|g| g.text()).unwrap_or_default();
+    let services: Vec<(String, String)> = plan
+        .services
+        .iter()
+        .map(|s| (s.name.clone(), plan.layout.log_of(&s.name)))
+        .collect();
+    Ok(memory_of(&services, &out))
+}
+
+/// A service log's text without terminal colour and cursor codes.
+pub fn strip_ansi(t: &str) -> String {
+    let mut out = String::with_capacity(t.len());
+    let mut it = t.chars().peekable();
+    while let Some(c) = it.next() {
+        if c != '\u{1b}' {
+            out.push(c);
+            continue;
+        }
+        match it.next() {
+            // CSI: parameters and intermediates up to a final byte @..~
+            Some('[') => {
+                for x in it.by_ref() {
+                    if ('@'..='~').contains(&x) {
+                        break;
+                    }
+                }
+            }
+            // OSC: up to BEL or ESC \
+            Some(']') => {
+                while let Some(x) = it.next() {
+                    if x == '\u{7}' {
+                        break;
+                    }
+                    if x == '\u{1b}' {
+                        it.next();
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// The log as read (its last [`LOG_KEEP`] bytes, colour codes removed) into
+/// `<run dir>/logs/<service>.log`, and the evidence cut to its last [`TAIL`] bytes at a line
+/// start, so that `result.json` keeps its size and every quoted line is whole.
+fn keep_log(dir: &Path, svc: &str, e: &mut Evidence) {
+    let clean = strip_ansi(&e.text);
+    let clean = if e.truncated {
+        // the first line of a tail read starts in the middle
+        match clean.split_once('\n') {
+            Some((_, rest)) if !rest.is_empty() => rest.to_string(),
+            _ => clean,
+        }
+    } else {
+        clean
+    };
+    let logs = dir.join(LOGS_DIR);
+    if std::fs::create_dir_all(&logs).is_ok() {
+        let _ = std::fs::write(logs.join(format!("{svc}.log")), &clean);
+    }
+    let keep = TAIL as usize;
+    if clean.len() > keep {
+        e.truncated = true;
+    }
+    e.text = if clean.len() > keep {
+        let mut at = clean.len() - keep;
+        while !clean.is_char_boundary(at) {
+            at += 1;
+        }
+        let t = &clean[at..];
+        match t.split_once('\n') {
+            Some((_, rest)) if !rest.is_empty() => rest.to_string(),
+            _ => t.to_string(),
+        }
+    } else {
+        clean
+    };
+}
+
+/// The last lines of a log for the summary: whole lines, the last [`QUOTE_LINES`] at most,
+/// while they fit into [`QUOTE_CHARS`] characters, and at least the last one.
+fn last_lines(text: &str) -> Vec<String> {
+    let lines: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    let mut out: Vec<String> = Vec::new();
+    let mut used = 0usize;
+    for l in lines.iter().rev().take(QUOTE_LINES) {
+        let n = l.chars().count();
+        if !out.is_empty() && used + n > QUOTE_CHARS {
+            break;
+        }
+        used += n;
+        out.push(l.split_whitespace().collect::<Vec<_>>().join(" "));
+    }
+    out.reverse();
+    out
+}
+
 /// Sharpen the summary with what the evidence showed.
 fn refine(d: &mut Diagnosis) {
     if let Some(l) = d.kernel.iter().find(|l| l.contains("Killed process")) {
@@ -795,17 +996,11 @@ fn refine(d: &mut Diagnosis) {
         if let Some(s) = &d.service {
             let want = format!("the log of {s}");
             if let Some(e) = d.evidence.iter().find(|e| e.what == want) {
-                let last: Vec<&str> = e
-                    .text
-                    .lines()
-                    .map(str::trim)
-                    .filter(|l| !l.is_empty())
-                    .collect();
-                let tail: Vec<&str> = last.iter().rev().take(3).rev().copied().collect();
+                let tail = last_lines(&e.text);
                 if !tail.is_empty() {
                     d.summary.push_str(&format!(
-                        "; its log ends: {}",
-                        super::timeline::diff_cut(&tail.join(" | "), 300)
+                        "; its log ends: {} (the whole log: {LOGS_DIR}/{s}.log in the run directory)",
+                        tail.join(" | ")
                     ));
                 }
             }
@@ -829,6 +1024,14 @@ fn refine(d: &mut Diagnosis) {
                     200
                 )
             ));
+        }
+        if let Some(s) = &d.service {
+            let want = format!("the log of {s}");
+            if d.evidence.iter().any(|e| e.what == want) {
+                d.summary.push_str(&format!(
+                    "; its log: {LOGS_DIR}/{s}.log in the run directory"
+                ));
+            }
         }
     }
 }
@@ -952,6 +1155,80 @@ mod tests {
         );
         assert_eq!(verdict_service("HYDO-ORACLE: ERROR provision failed"), None);
         assert_eq!(verdict_service("HYDO-ORACLE: VIOLATION [x] y"), None);
+    }
+
+    #[test]
+    fn memory_is_summed_per_service_by_the_log_its_processes_write() {
+        let svcs = vec![
+            ("db".to_string(), "/tmp/hydo/db.log".to_string()),
+            ("api".to_string(), "/tmp/hydo/api.log".to_string()),
+            ("idle".to_string(), "/tmp/hydo/idle.log".to_string()),
+        ];
+        let out = "2048 1024 /tmp/hydo/db.log\n\
+                   512 500 /tmp/hydo/db.log\n\
+                   4096 4000 /tmp/hydo/api.log\n\
+                   9999 9999 /dev/console\n\
+                   77 77 /tmp/hydo-inspect/out\n";
+        let m = memory_of(&svcs, out);
+        assert_eq!(
+            m.iter()
+                .map(|x| (x.service.as_str(), x.peak_kib, x.now_kib, x.processes))
+                .collect::<Vec<_>>(),
+            [
+                ("db", 2560, 1524, 2),
+                ("api", 4096, 4000, 1),
+                ("idle", 0, 0, 0)
+            ]
+        );
+        assert!(memory_script("/bin/busybox").contains("/bin/busybox readlink $p/fd/1"));
+    }
+
+    #[test]
+    fn a_service_log_goes_to_the_run_directory_and_the_summary_quotes_whole_lines() {
+        assert_eq!(
+            strip_ansi("\u{1b}[2m2026\u{1b}[0m \u{1b}[31mERROR\u{1b}[0m x\u{1b}]0;t\u{7}y"),
+            "2026 ERROR xy"
+        );
+        let dir = std::env::temp_dir().join(format!("hydo-keep-log-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // a tail read: the first line starts in the middle; the last line is long
+        let long = format!("\u{1b}[31mnode: store full: {}\u{1b}[0m", "x".repeat(510));
+        let mut body = String::from("ing the repl\n");
+        for i in 0..200 {
+            body.push_str(&format!("line {i} of the start\n"));
+        }
+        body.push_str("opening the replica\n");
+        body.push_str(&long);
+        body.push('\n');
+        let mut e = Evidence {
+            what: "the log of node0".into(),
+            source: "/tmp/hydo/node0.log".into(),
+            text: body.clone(),
+            bytes: 100_000,
+            truncated: true,
+            status: None,
+        };
+        keep_log(&dir, "node0", &mut e);
+        let file = std::fs::read_to_string(dir.join("logs/node0.log")).unwrap();
+        assert!(file.starts_with("line 0 of the start\n"), "{}", &file[..40]);
+        assert!(!file.contains('\u{1b}'));
+        assert!(file.ends_with(&format!("store full: {}\n", "x".repeat(510))));
+        assert!(e.truncated && e.text.len() <= TAIL as usize);
+        assert!(e.text.starts_with("line "), "{}", &e.text[..20]);
+        // whole lines from the end while they fit into 600 characters
+        let q = last_lines(&e.text);
+        assert_eq!(q.len(), 4, "{q:?}");
+        assert_eq!(q[0], "line 198 of the start");
+        assert_eq!(q[2], "opening the replica");
+        assert!(q[3].ends_with(&"x".repeat(510)));
+        // one line longer than that is quoted whole
+        let one = format!("a\n{}\n", "y".repeat(900));
+        assert_eq!(last_lines(&one), ["y".repeat(900)]);
+        // short lines: the last five
+        let q = last_lines("a\nb\n\nc\nd\ne\nf\ng\n");
+        assert_eq!(q, ["c", "d", "e", "f", "g"]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

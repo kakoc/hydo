@@ -606,7 +606,7 @@
           ]
         },
         "ready": {
-          "description": "Exit 0 = ready; polled once per second.",
+          "description": "Exit 0 = ready; polled once per second. `tcp:<port>` (or `tcp:<host>:<port>`): ready when\na connect to the port succeeds; the host defaults to `addr:`, else 127.0.0.1.",
           "$ref": "#/$defs/Text"
         },
         "ready_timeout": {

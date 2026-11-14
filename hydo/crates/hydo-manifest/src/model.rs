@@ -801,7 +801,8 @@ pub struct Service {
     /// Run before every start (also restarts and crash recovery).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub setup: Option<Text>,
-    /// Exit 0 = ready; polled once per second.
+    /// Exit 0 = ready; polled once per second. `tcp:<port>` (or `tcp:<host>:<port>`): ready when
+    /// a connect to the port succeeds; the host defaults to `addr:`, else 127.0.0.1.
     pub ready: Text,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = 120))]

@@ -11,13 +11,19 @@ rules that matter most:
   (also after a kill and in the recovery boot after a power cut).
 - `ready`: a cheap command that exits 0 when the service answers. Examples are a ping from the
   service's own client, `SELECT 1`, an HTTP health URL, or `grep -qa "<started line>" $HYDO_LOG`.
+  For a service that speaks no HTTP, write `ready: tcp:<port>`. The service is ready when a
+  connection to that port succeeds. The address is the service's `addr:`, or 127.0.0.1 without
+  one. `tcp:<host>:<port>` names another address. hydo runs it as
+  `nc -z -w 2 <address> <port>` with the guest's busybox.
 - `port`: the port that clients use (network faults act on it). For several services that call
   each other, prefer `network: bridge` with an `addr:` (10.89.0.x) per service. Each service then
   gets its own network namespace and private localhost. Faults on the link between two services
   act on their real traffic (`hydo guide manifest`, section `Service networks`). On a Mac this
   needs a release with the second guest kernel (`hydo guide capabilities`). Without it, `addr:` is a
   loopback address (127.x.y.z) that a link fault sees only if the program's outgoing connections
-  leave from it.
+  leave from it. A program that binds to its own address needs the numeric `addr:` in its
+  command line (`--bind 10.89.0.11:7000`), because many programs accept no name there. Names
+  work for reaching peers: each service's name resolves through the guest's `/etc/hosts`.
 - `depends_on`; `recovery: false` for a stateless tier that the final checks do not need after a
   power cut.
 - `start_after: started` for the members of a cluster whose `ready` needs its peers (a quorum, a
@@ -60,7 +66,14 @@ rules that matter most:
 
 Guest settings:
 
-- `guest.ram_mib` (default 1024, at most 8192) must hold every service.
+- `guest.ram_mib` (default 1024, at most 8192) must hold every service. To size it, run once
+  with a large value, for example 4096, and add `--memory`:
+  `hydo run "disk=none dseed=1 | run" --memory`. It prints each service's peak memory at the
+  end of the run, for example `hydo: memory: redis peak 12 MiB, now 12 MiB (1 process)`. Give
+  the guest the sum of the peaks, plus room for the workload, the page cache, and the kernel.
+  `--memory` replays the run once more to read the peaks, so the run's fingerprint does not
+  change. A process that a fault killed took its peak with it, so read the peaks of a run
+  without faults.
 - `guest.cpu: v3` when a binary needs AVX or AVX2 (x86_64 only).
 - `guest.cpu_cache` is on by default (x86_64). Keep it on with `guest.cpu: v3` when an image is
   built on Red Hat Enterprise Linux 8 or a rebuild of it (AlmaLinux 8, Rocky Linux 8, UBI 8).

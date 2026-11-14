@@ -526,6 +526,33 @@ impl Cache {
         }
     }
 
+    /// The line `hydo setup` prints before an install that moves this cache's `bin/hydo` link
+    /// from another version to `version` (Milestone 239: a checkout's build moved it silently,
+    /// and with it the `hydo` of every shell of the user). None when the link does not exist,
+    /// is not this cache's link, or already points at `version`.
+    pub fn repoint_note(&self, version: &str) -> Option<String> {
+        let link = self.home.bin().join("hydo");
+        let old = std::fs::read_link(&link).ok()?;
+        let parts: Vec<String> = old
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect();
+        let was = parts
+            .iter()
+            .position(|c| c == "versions")
+            .and_then(|i| parts.get(i + 1))?
+            .clone();
+        if was == version {
+            return None;
+        }
+        Some(format!(
+            "this points {} at hydo {version}; it pointed at hydo {was}. Every shell of this user \
+             that finds hydo there runs {version} from now on; `hydo setup --get {was}` points it \
+             back",
+            link.display()
+        ))
+    }
+
     /// Point `bin/hydo` at `versions/<version>/bin/hydo` (atomically). Ok(Err(line)): left
     /// alone, because `bin/hydo` is a program, not this cache's link (a release installed by
     /// its `install.sh` into the same directory, whose default prefix is `~/.hydo` too).

@@ -414,7 +414,11 @@ impl Plan {
                 name: n.clone(),
                 cmd,
                 setup: truthy_str(s, "setup"),
-                ready: get(s, "ready").map(py::str_of).unwrap_or_default(),
+                // `tcp:<port>` becomes the connect check it stands for (Milestone 239)
+                ready: hydo_manifest::ready_command(
+                    &get(s, "ready").map(py::str_of).unwrap_or_default(),
+                    get(s, "addr").map(py::str_of).as_deref(),
+                ),
                 timeout: int_or(s, "ready_timeout", 120, "ready_timeout")?,
                 port: get(s, "port").map(py::str_of).unwrap_or_default(),
                 recovery: get(s, "recovery").map(py::truthy).unwrap_or(true),
