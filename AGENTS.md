@@ -939,7 +939,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 110. Rule suggestion (M236). What is left:
     - Lago's `api` service exits during start on hvx (the x86_64 image: a `require` error in
       `bin/rails`, with and without `guest.cpu: v3`), so Lago's rules ran on the Mac engine only.
-    - Formance Ledger's six rules were proposed but not run: the ledger's Go link stalled twice
+    - Formance Ledger's six rules were proposed but not run: the ledger's Go link hung twice
       on the shared bare-metal machine.
     - The candidates file has no JSON schema, and `rules-check.json` is not in the results
       format. `messages` and `history` candidates are not run by `hydo rules check`.

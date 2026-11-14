@@ -1330,14 +1330,14 @@ pub fn scan(root: &Path, per_file: usize) -> (usize, Vec<Evidence>) {
             continue;
         };
         read += 1;
-        let cap = if matches!(kind, "docs" | "tests") {
+        let most = if matches!(kind, "docs" | "tests") {
             per_file
         } else {
             usize::MAX
         };
         let mut n = 0;
         for (i, line) in text.lines().enumerate() {
-            if n >= cap {
+            if n >= most {
                 break;
             }
             if let Some(k) = line_evidence(kind, line) {

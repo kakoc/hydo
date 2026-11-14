@@ -8647,7 +8647,7 @@ lists the evidence in five kinds: `schema`, `state`, `api`, `docs` and `tests`, 
 its file and line number. It reads `.sql` files, migrations, model and schema files, OpenAPI,
 `.proto` and GraphQL files, Markdown, reStructuredText and AsciiDoc files, and test files of
 common languages. A file of documentation or tests gives at most 40 lines. A schema dump gives
-all of its lines: with a cap of 40, Lago's `db/structure.sql` lost every partial unique index.
+all of its lines: with a limit of 40 lines, Lago's `db/structure.sql` lost every partial unique index.
 A query's `LIMIT` and `OFFSET` are no evidence; before that rule, listmonk's `queries.sql`
 listed its paging clauses.
 
@@ -8717,7 +8717,7 @@ A change that was not caught was `blind` (a change that hit rows the rule does n
 Lago, 2 in listmonk) or failed itself (an `INSERT` or `UPDATE` that the database refused: 2 in
 Blnk, 1 in Lago). Before the fallback of a run of its own, three Blnk rules and one listmonk rule
 were broken by an earlier rule's change; with it, the three Blnk rules were caught. Formance's
-six rules were proposed only: its ledger's Go link stalled twice on the shared machine, and no
+six rules were proposed only: its ledger's Go link hung twice on the shared machine, and no
 image was built.
 
 *Blnk.* The rule over the client's acknowledged operations failed without faults in all three
