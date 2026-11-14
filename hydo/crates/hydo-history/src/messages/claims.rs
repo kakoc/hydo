@@ -407,7 +407,15 @@ pub fn duplicates(ix: &Ix<'_>) -> Claim {
             for m in ix.msgs.values() {
                 let ids = system_ids(ix, m);
                 if ids.is_empty() {
-                    und += 1;
+                    // A message that the system never acknowledged and never delivered left no
+                    // copy the client knows of: nothing to judge, and nothing undecided either.
+                    // Before (Milestone 231), a run whose sends all failed or ended unknown was
+                    // an ERROR for want of system ids.
+                    let acked = m.sends.iter().any(|s| ix.send_out(*s) == Out::Ok);
+                    let delivered = ix.groups.keys().any(|g| !ix.deliveries(&m.m, g).is_empty());
+                    if acked || delivered {
+                        und += 1;
+                    }
                     continue;
                 }
                 judged += 1;

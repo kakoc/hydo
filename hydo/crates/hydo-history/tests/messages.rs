@@ -397,6 +397,16 @@ fn duplicates() {
     sent(&mut h, 1, 0, "m1", "ok");
     recv(&mut h, 2, 2, &["m1"]);
     assert_eq!(st(&run(&h.text(), forb), "duplicates"), Status::Undecided);
+    // sends that failed or ended unknown, and nothing delivered: no copy to judge, so the claim
+    // holds with nothing judged (before Milestone 231 it was undecided, and the run an ERROR)
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "fail");
+    sent(&mut h, 3, 0, "m2", "info");
+    let r = run(&h.text(), forb);
+    assert_eq!(st(&r, "duplicates"), Status::Held, "{r:?}");
+    // one acknowledged send without a system id among them is still undecided
+    sent(&mut h, 4, 5, "m3", "ok");
+    assert_eq!(st(&run(&h.text(), forb), "duplicates"), Status::Undecided);
 
     // a deduplication window by id: two sends within it stored twice
     let win = r#"{"id":"c","type":"messages","history":"q","claims":{"duplicates":{"by":"dedup-id","window_ms":1000}}}"#;
