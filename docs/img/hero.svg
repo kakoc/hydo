@@ -1,37 +1,68 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="920" height="310" viewBox="0 0 920 310" role="img" aria-labelledby="t d">
-  <title id="t">hydo cuts the power under Redis</title>
-  <desc id="d">Three commands of the Redis example, with output recorded on Linux with the kernel module. A clean run ends OK. A power cut before step 12 loses the acknowledged key k:1. hydo repro runs it again from a fresh boot and gets the same fingerprint.</desc>
-  <style>
-    .term { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px; }
-    .p { fill: #7d8590; }
-    .c { fill: #e6edf3; }
-    .m { fill: #7d8590; font-style: italic; }
-    .ok { fill: #3fb950; font-weight: 600; }
-    .bad { fill: #f85149; font-weight: 600; }
-    .fp { fill: #e3b341; }
-    .o { fill: #b1bac4; }
-  </style>
-  <rect x="0.5" y="0.5" width="919" height="309" rx="10" fill="#0d1117" stroke="#30363d"/>
-  <rect x="0.5" y="0.5" width="919" height="34" rx="10" fill="#161b22"/>
-  <rect x="0.5" y="24" width="919" height="11" fill="#161b22"/>
-  <line x1="0" y1="35" x2="920" y2="35" stroke="#30363d"/>
-  <circle cx="22" cy="17.5" r="6" fill="#ff5f57"/>
-  <circle cx="42" cy="17.5" r="6" fill="#febc2e"/>
-  <circle cx="62" cy="17.5" r="6" fill="#28c840"/>
-  <text x="460" y="22" text-anchor="middle" class="term p">~/hydo-redis</text>
-  <g class="term">
-    <text x="24" y="70"><tspan class="p">$ </tspan><tspan class="c">hydo run "disk=none | run"</tspan></text>
-    <text x="24" y="92" class="o">RESULT one <tspan class="fp">fp=5ec14b8b4bdcf367</tspan> … <tspan class="ok">OK</tspan> … (… acked=20 all present)</text>
-
-    <text x="24" y="134"><tspan class="p">$ </tspan><tspan class="c">hydo run "disk=cut | run C=12 R=everysec"</tspan></text>
-    <text x="520" y="134" class="m"># power cut before step 12</text>
-    <text x="24" y="156" class="o">RESULT one <tspan class="fp">fp=9f8f90a7d14566df</tspan> … <tspan class="bad">VIOLATION</tspan> [redis.acked_writes_survive] key k:1 lost</text>
-
-    <text x="24" y="198"><tspan class="p">$ </tspan><tspan class="c">hydo repro hydo-out/runs/run-…</tspan></text>
-    <text x="520" y="198" class="m"># again, from a fresh boot</text>
-    <text x="24" y="220" class="o"><tspan class="ok">REPRODUCED</tspan> run <tspan class="fp">fp=9f8f90a7d14566df</tspan> (recorded <tspan class="fp">9f8f90a7d14566df</tspan>)</text>
-    <text x="24" y="242" class="o">hydo: 1 of 1 reproduced with the recorded fingerprint</text>
-
-    <text x="24" y="284"><tspan class="p">$ </tspan><tspan class="c">▍</tspan></text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="476" viewBox="0 0 920 476" role="img" aria-labelledby="t d">
+<title id="t">hydo onboard, hydo explore and hydo report on a Compose project</title>
+<desc id="d">An animated terminal. In Blnk&#x27;s repository (a ledger on PostgreSQL and Redis), hydo onboard finds the Compose file with 8 services, starts the hydo folder and installs the Claude Code skill. In Claude Code, /hydo:onboard asks about the system and writes a client and rules. hydo explore runs 20 fault schedules: 9 fail, and all 9 fail again on a replay. hydo report gives each kind of failure one hydo run command: a Redis pause that makes an atomic bulk keep its first transfer, a Blnk bug, and a Redis kill that loses two operations the ledger had confirmed. Output shortened from real runs: hydo onboard on Blnk&#x27;s repository, and the Blnk example&#x27;s exploration on a Mac.</desc>
+<style>
+.term{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:13px}
+.p{fill:#7d8590}.c{fill:#e6edf3}.o{fill:#b1bac4}.m{fill:#7d8590;font-style:italic}
+.ok{fill:#3fb950;font-weight:600}.bad{fill:#f85149;font-weight:600}.hl{fill:#e3b341;font-weight:600}.ai{fill:#d2a8ff}
+.cv{opacity:0}
+@keyframes a1{0%,2.500%{opacity:0}2.667%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes c1{0%,2.333%{transform:translateX(0);opacity:0}2.500%{transform:translateX(0);opacity:1;animation-timing-function:steps(12,end)}4.750%{transform:translateX(93.6px);opacity:1}6.000%,100%{transform:translateX(93.6px);opacity:0}}
+@keyframes a2{0%,6.833%{opacity:0}7.000%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a3{0%,8.292%{opacity:0}8.458%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a4{0%,9.750%{opacity:0}9.917%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a5{0%,11.208%{opacity:0}11.375%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a6{0%,12.667%{opacity:0}12.833%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a7{0%,14.125%{opacity:0}14.292%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a8{0%,17.667%{opacity:0}17.833%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes c8{0%,17.500%{transform:translateX(0);opacity:0}17.667%{transform:translateX(0);opacity:1;animation-timing-function:steps(13,end)}20.104%{transform:translateX(101.4px);opacity:1}21.354%,100%{transform:translateX(101.4px);opacity:0}}
+@keyframes a9{0%,22.188%{opacity:0}22.354%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a10{0%,28.021%{opacity:0}28.188%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes c10{0%,27.854%{transform:translateX(0);opacity:0}28.021%{transform:translateX(0);opacity:1;animation-timing-function:steps(57,end)}38.708%{transform:translateX(444.6px);opacity:1}39.958%,100%{transform:translateX(444.6px);opacity:0}}
+@keyframes a11{0%,40.792%{opacity:0}40.958%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a12{0%,42.250%{opacity:0}42.417%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a13{0%,46.000%{opacity:0}46.167%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes c13{0%,45.833%{transform:translateX(0);opacity:0}46.000%{transform:translateX(0);opacity:1;animation-timing-function:steps(11,end)}48.062%{transform:translateX(85.8px);opacity:1}49.312%,100%{transform:translateX(85.8px);opacity:0}}
+@keyframes a14{0%,50.146%{opacity:0}50.312%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a15{0%,51.604%{opacity:0}51.771%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a16{0%,53.062%{opacity:0}53.229%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a17{0%,56.812%{opacity:0}56.979%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a18{0%,58.271%{opacity:0}58.438%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes a19{0%,62.021%{opacity:0}62.187%,97.083%{opacity:1}100%{opacity:0}}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes a_end{0%,62.021%{opacity:0}62.187%,97.083%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.term *{animation:none!important}}
+</style>
+<rect x="0.5" y="0.5" width="919" height="475" rx="10" fill="#0d1117" stroke="#30363d"/>
+<rect x="0.5" y="0.5" width="919" height="34" rx="10" fill="#161b22"/>
+<rect x="0.5" y="24" width="919" height="11" fill="#161b22"/>
+<line x1="0" y1="35" x2="920" y2="35" stroke="#30363d"/>
+<circle cx="22" cy="17.5" r="6" fill="#ff5f57"/><circle cx="42" cy="17.5" r="6" fill="#febc2e"/><circle cx="62" cy="17.5" r="6" fill="#28c840"/>
+<text x="460" y="22" text-anchor="middle" class="term p">~/blnk</text>
+<g class="term">
+<text x="24.0" y="66" style="animation:a1 24.0s linear infinite"><tspan class="p">~/blnk $ </tspan><tspan class="c">hydo onboard</tspan></text>
+<g class="cv" style="animation:c1 24.0s linear infinite"><rect x="94.2" y="52" width="133.6" height="19" fill="#0d1117"/><rect x="94.2" y="53" width="8" height="17" fill="#e6edf3"/></g>
+<text x="24.0" y="86" style="animation:a2 24.0s linear infinite"><tspan class="o">hydo: looking at …/blnk</tspan></text>
+<text x="39.6" y="106" style="animation:a3 24.0s linear infinite"><tspan class="o">Compose file: docker-compose.yaml, 8 services: init, server, worker, redis, postgres, …</tspan></text>
+<text x="39.6" y="126" style="animation:a4 24.0s linear infinite"><tspan class="o">main language: Go (281 files; then JavaScript 9, Python 3)</tspan></text>
+<text x="24.0" y="146" style="animation:a5 24.0s linear infinite"><tspan class="o">hydo: starting hydo/ from docker-compose.yaml: hydo compose …</tspan></text>
+<text x="24.0" y="166" style="animation:a6 24.0s linear infinite"><tspan class="o">hydo: installed …/.claude/skills/hydo (onboard 2.0.0)</tspan></text>
+<text x="24.0" y="186" style="animation:a7 24.0s linear infinite"><tspan class="o">Next: open Claude Code here and run </tspan><tspan class="hl">/hydo:onboard</tspan></text>
+<text x="24.0" y="216" style="animation:a8 24.0s linear infinite"><tspan class="ai">Claude Code › </tspan><tspan class="hl">/hydo:onboard</tspan></text>
+<g class="cv" style="animation:c8 24.0s linear infinite"><rect x="133.2" y="202" width="141.4" height="19" fill="#0d1117"/><rect x="133.2" y="203" width="8" height="17" fill="#e6edf3"/></g>
+<text x="39.6" y="236" style="animation:a9 24.0s linear infinite"><tspan class="m"># it asks about your system, then writes a client (hydo/workload/) and rules (hydo/checks/)</tspan></text>
+<text x="24.0" y="266" style="animation:a10 24.0s linear infinite"><tspan class="p">~/blnk $ </tspan><tspan class="c">hydo explore --seeds 1-20 --strategy process --new-faults</tspan></text>
+<g class="cv" style="animation:c10 24.0s linear infinite"><rect x="94.2" y="252" width="484.6" height="19" fill="#0d1117"/><rect x="94.2" y="253" width="8" height="17" fill="#e6edf3"/></g>
+<text x="24.0" y="286" style="animation:a11 24.0s linear infinite"><tspan class="o">{"schedules": 20, "strategy": "process", … </tspan><tspan class="bad">"failures": 9</tspan><tspan class="o">, </tspan><tspan class="ok">"reproduced": 9</tspan><tspan class="o">}</tspan></text>
+<text x="39.6" y="306" style="animation:a12 24.0s linear infinite"><tspan class="m"># 9 of 20 runs broke a rule, and each one failed again when hydo ran it a second time</tspan></text>
+<text x="24.0" y="326" style="animation:a13 24.0s linear infinite"><tspan class="p">~/blnk $ </tspan><tspan class="c">hydo report</tspan></text>
+<g class="cv" style="animation:c13 24.0s linear infinite"><rect x="94.2" y="312" width="125.8" height="19" fill="#0d1117"/><rect x="94.2" y="313" width="8" height="17" fill="#e6edf3"/></g>
+<text x="24.0" y="346" style="animation:a14 24.0s linear infinite"><tspan class="o">## Minimal reproducers</tspan></text>
+<text x="24.0" y="366" style="animation:a15 24.0s linear infinite"><tspan class="o">- by hand: </tspan><tspan class="c">hydo run --image … "disk=none … | run P=redis@9+4 W=…"</tspan></text>
+<text x="39.6" y="386" style="animation:a16 24.0s linear infinite"><tspan class="m"># Redis paused: an atomic bulk keeps its first transfer (a Blnk bug)</tspan></text>
+<text x="24.0" y="406" style="animation:a17 24.0s linear infinite"><tspan class="o">- by hand: </tspan><tspan class="c">hydo run --image … "disk=none … | run K=redis@21+1 N=… W=…"</tspan></text>
+<text x="39.6" y="426" style="animation:a18 24.0s linear infinite"><tspan class="m"># Redis killed: two operations the ledger had confirmed are lost (Redis kept no log on disk)</tspan></text>
+<text x="24.0" y="446" style="animation:a19 24.0s linear infinite"><tspan class="p">~/blnk $ </tspan></text>
+<g style="animation:a_end 24.0s linear infinite"><rect x="94.2" y="433" width="8" height="17" fill="#e6edf3" style="animation:blink 1s step-end infinite"/></g>
+</g>
 </svg>

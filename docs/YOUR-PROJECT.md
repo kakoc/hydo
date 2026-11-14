@@ -1,7 +1,8 @@
 # Testing your own project
 
-This page takes you from an empty repository to your first exploration. Read the
-[README](../README.md) first: its Redis example shows one run from start to end.
+This page takes you from an empty repository to your first exploration. Read the quickstart for
+your platform first ([Linux](../hydo/dist/linux/QUICKSTART-linux.md),
+[Mac](../hydo/dist/mac/QUICKSTART-mac.md)): its Redis example shows one run from start to end.
 
 ## The words hydo uses
 
