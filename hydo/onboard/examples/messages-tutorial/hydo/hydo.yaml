@@ -41,7 +41,7 @@ test:
 
 knobs:
   - token: S
-    name: tinyq syncs its log before it answers
+    name: tinyq's log sync
     default: always
     values: [always, never]
     set: echo $HYDO_VALUE > /tmp/tinyq-sync

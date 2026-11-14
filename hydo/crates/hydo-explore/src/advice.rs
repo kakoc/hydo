@@ -389,8 +389,9 @@ pub fn problem(
             "hydo made the disk faulty: it threw away writes that it had already confirmed, as \
              a broken or misconfigured disk can. No system keeps data that its disk throws away."
                 .to_string(),
-            "Nothing, unless your production disks can throw away confirmed writes. If you do \
-             not expect such disks, accept this finding."
+            "No, not in your system: it lost what the disk threw away. It matters only if your \
+             production disks can throw away confirmed writes. If you do not expect such disks, \
+             accept this finding."
                 .to_string(),
         ),
         ("unsafe-knob", _) => {

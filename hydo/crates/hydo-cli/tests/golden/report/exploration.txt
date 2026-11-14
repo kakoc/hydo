@@ -6,7 +6,9 @@ cuts. Each failing run failed again the same way when hydo replayed it.
    Worth a look, 2 of 12 runs.
    The run stopped before your checks could run, with the error harness: guest
    did not finish (I/O error). hydo made the disk return read and write errors.
-   The command also keeps this run's network faults.
+   hydo shrinks failed checks, not runs that stop with an error, so the command
+   repeats the whole failing run, with faults the problem may not need. It also
+   keeps this run's network faults.
    Is it a bug? Decide whether your system must survive a failing disk. If it
    must, look at the service's log in the run; if not, accept this finding.
    See it again: hydo run --image scripted-disk.img "disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms"
@@ -16,8 +18,9 @@ cuts. Each failing run failed again the same way when hydo replayed it.
    hydo made the disk faulty: it threw away writes that it had already
    confirmed, as a broken or misconfigured disk can. No system keeps data that
    its disk throws away.
-   Is it a bug? Nothing, unless your production disks can throw away confirmed
-   writes. If you do not expect such disks, accept this finding.
+   Is it a bug? No, not in your system: it lost what the disk threw away. It
+   matters only if your production disks can throw away confirmed writes. If you
+   do not expect such disks, accept this finding.
    See it again: hydo run --image scripted-disk.img "disk=lying:1 dseed=63cbe1e459320dd7 | run C=11"
 
 3. Your services wrote 4 kinds of error line that your list of known errors does

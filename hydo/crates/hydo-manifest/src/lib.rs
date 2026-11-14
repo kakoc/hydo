@@ -484,6 +484,10 @@ pub fn for_explorer(path: &Path) -> Result<(Value, Option<Value>), ManifestError
 /// (`hydo/guide/init/hydo/workload/parallel_driver_todo`, `checks/final_todo`).
 pub const INIT_PLACEHOLDERS: [&str; 2] = ["parallel_driver_todo", "final_todo"];
 
+/// The id of the placeholder invariant that `hydo compose` writes (hydo-compose's
+/// `invariants:` of a new import).
+pub const COMPOSE_PLACEHOLDER_INVARIANT: &str = "todo.acked_operations_survive";
+
 /// The lines `hydo-build <path> --check` prints for a loaded manifest.
 pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
     let m = &l.manifest.data;
@@ -547,6 +551,33 @@ pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
                     ));
                 }
             }
+        }
+    }
+    // the same for the placeholders `hydo compose` writes (0.3.3, a reader of docs/ONBOARD.md)
+    let run = m
+        .get("workload")
+        .and_then(|w| w.get("run"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if run.contains("hydo-compose: TODO write the workload") {
+        out.push(
+            "hydo-build: warning: workload.run is the placeholder `hydo compose` wrote; every run \
+             fails until you replace it (--check checks the format only)"
+                .to_string(),
+        );
+    }
+    for x in m
+        .get("invariants")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if x.get("id").and_then(Value::as_str) == Some(COMPOSE_PLACEHOLDER_INVARIANT) {
+            out.push(format!(
+                "hydo-build: warning: the invariant {COMPOSE_PLACEHOLDER_INVARIANT} is the \
+                 placeholder `hydo compose` wrote; it cannot pass until you replace it (--check \
+                 checks the format only)"
+            ));
         }
     }
     // `--check` does not stage the files: name the sources the full build will not find (an

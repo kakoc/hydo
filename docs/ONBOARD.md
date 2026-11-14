@@ -27,18 +27,26 @@ Run this in your repository:
 hydo onboard
 ```
 
-`hydo onboard` says what it found, starts `hydo/`, and prints the next step. It never changes a
-`hydo/` folder that already exists. Its help text lists its options. The next step
-depends on what your repository has.
+`hydo onboard` says what it found, starts `hydo/`, and prints the next steps in order. It never
+changes a `hydo/` folder that already exists. The next steps depend on what your repository has.
 
 **A Docker Compose file.** `hydo onboard` imports it with `hydo compose`. The import writes one
-service per Compose service, with its image, ports, volumes, readiness check, and restart policy.
-It also writes `hydo/fetch-images.sh`, which copies the images in once. The client and the rules
-are left for you or your AI tool.
+service per Compose service, with its image, ports, readiness check, and restart policy. Named
+volumes go on the data disk, which keeps its files across a restart. A volume on `/data` needs no
+mount, because `/data` is already the data disk; the import prints a warning that says so. The
+import also writes `hydo/fetch-images.sh`, which copies the images in once. The workload and the
+check it writes are placeholders that fail every run, and `hydo build hydo/hydo.yaml --check`
+warns about them. The client and the rules are left for you or your AI tool. The first next step
+is to copy the images in:
+
+```text
+First: copy the images in once (needs network): sh hydo/fetch-images.sh
+```
 
 **No Compose file.** `hydo onboard` runs `hydo init`, which writes a `hydo/hydo.yaml` with
 `TODO` marks and two placeholder files. The placeholders make every run fail until you replace
-them, so an empty test never passes by accident.
+them, so an empty test never passes by accident. Your programs run inside a Linux guest, so build
+them as static Linux binaries: arm64 on a Mac, x86_64 on Linux (`hydo guide minimum-path`).
 
 **An AI coding tool.** `hydo onboard` installs hydo's onboarding skill for each tool it finds: a
 `.claude/`, `.codex/`, `.cursor/` or `.gemini/` folder, or the tool's command on your `PATH`.
@@ -94,8 +102,9 @@ A good first result has two properties:
 
 When the first run fails, the cause is usually your own folder, not your system:
 
-- A client command that fails or records nothing. Read its log, `/tmp/hydo/compose/log.<entry>`,
-  with `hydo inspect` (`hydo guide inspect`).
+- A client command that fails or records nothing. Each command writes its output to a log in the
+  guest, `/tmp/hydo/compose/log.<entry>`, where `<entry>` is the command's filename. Read it with
+  `hydo inspect` (`hydo guide inspect`).
 - A check that is too strict, or that reads its data before the system wrote it.
 - A service that never becomes ready. The `hydo: diagnosis:` lines name it.
 
@@ -103,9 +112,10 @@ Fix the folder until the run without faults passes. Only then do faults mean som
 
 ## A worked example: a message queue
 
-The example is in [hydo/onboard/examples/messages-tutorial/](../hydo/onboard/examples/messages-tutorial/).
-It was run on the Mac engine. Building the queue needs Go 1.22 or later; `build.sh` builds it for
-an arm64 guest on a Mac and for an x86_64 guest on Linux.
+The example is in hydo's repository,
+[hydo/onboard/examples/messages-tutorial/](../hydo/onboard/examples/messages-tutorial/), not in
+the release. It was run on the Mac engine only, so the values below are the Mac engine's. Building the queue needs Go 1.22 or later; `build.sh`
+builds it for an arm64 guest on a Mac and for an x86_64 guest on Linux.
 
 ### The system
 
@@ -122,7 +132,8 @@ disk before it answers. The same program is also the client, so the example need
 Build it for your machine's guest first:
 
 ```sh
-cd hydo/onboard/examples/messages-tutorial
+git clone https://github.com/kakoc/hydo
+cd hydo/hydo/onboard/examples/messages-tutorial
 sh build.sh
 ```
 
@@ -203,7 +214,7 @@ hydo run "disk=none | run"
 hydo run "disk=none | run"
 ```
 
-On the Mac engine both runs printed `fp=be992f7e466b6db5` and the verdict `OK`. `hydo report`
+On the Mac engine both runs printed `fp=289a5741a82716d8` and the verdict `OK`. `hydo report`
 with the run directory shows each claim and how many cases it judged:
 
 ```text
@@ -220,8 +231,9 @@ messages check queue (history queue):
 
 ### The first exploration
 
-The example has a setting that a schedule can change, the token `S`: `S=never` makes tinyq answer
-before it syncs its log. The default, `S=always`, syncs first. Explore 20 seeds:
+The example has a setting that a schedule can change. Its manifest names it under `knobs:` with
+the letter `S`, and a schedule sets it with one word: `S=never` makes tinyq answer before it syncs
+its log. The default, `S=always`, syncs first. Explore 20 seeds:
 
 ```sh
 hydo explore --seeds 1-20 --workers 1
@@ -230,7 +242,9 @@ hydo report --details
 
 The exploration ran 20 schedules on the Mac engine and found one failure, which reproduced. It
 shrank the failure to one producer and a power cut, and named its class `unsafe-knob`.
-`hydo report` says the same in words; `--details` shows the minimal schedule and the verdict:
+`hydo report` says the same in words; `--details` shows the minimal schedule and the verdict.
+`dseed=` is the seed of the disk's faults. The schedule's last word, `W=...`, is written by hydo: it records which client commands ran and in
+which order, so that a replay runs the same ones. Copy it as it is.
 
 ```text
 - minimal schedule: `disk=cut dseed=362259904816818c | run C=10 S=never W=:p1,r50,cparallel_driver_produce,1.1.0.1802048978`
@@ -250,9 +264,13 @@ hydo run "disk=cut | run C=10"
 ```
 
 The first prints `VIOLATION [queue.no-loss]` with the message it lost; the second prints `OK`.
+Read the verdict on the line `hydo: VERDICT`: the run's `RESULT` line says `OK`, because the
+messages check runs on the host after the guest's own checks. `hydo run` prints the `VERDICT` line
+whenever the host's checks change the verdict.
 In your own system the same report points at a real bug: a claim names the rule that broke, and
-the minimal schedule replays it. `hydo save hydo-out/explore` keeps the schedule as a regression
-test in `hydo/regressions/`.
+the minimal schedule replays it. `hydo save hydo-out/explore` keeps the schedule in
+`hydo/regressions/` as a regression test: `hydo repro --regressions` runs it again after each
+change of your system and says whether the failure came back.
 
 ## Where to read more
 

@@ -89,7 +89,7 @@ a{color:var(--note)}
 <h3>The run stopped early after disk errors</h3>
 <p><span class="pill bad">Worth a look</span><span class="muted">2 of 12 runs</span></p>
 <div class="bar look"><span style="width:17%"></span></div>
-<p>The run stopped before your checks could run, with the error <code>harness: guest did not finish (I/O error)</code>. hydo made the disk return read and write errors. The command also keeps this run&#39;s network faults.</p>
+<p>The run stopped before your checks could run, with the error <code>harness: guest did not finish (I/O error)</code>. hydo made the disk return read and write errors. hydo shrinks failed checks, not runs that stop with an error, so the command repeats the whole failing run, with faults the problem may not need. It also keeps this run&#39;s network faults.</p>
 <p><b>Is it a bug?</b> Decide whether your system must survive a failing disk. If it must, look at the service&#39;s log in the run; if not, accept this finding.</p>
 <div class="cmdrow"><pre class="cmd">hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;" aria-label="Copy to the clipboard">Copy</button></div>
 <p class="small"><a href="#f2">Open this failure →</a></p>
@@ -99,7 +99,7 @@ a{color:var(--note)}
 <p><span class="pill ok">Expected</span><span class="muted">2 of 12 runs</span></p>
 <div class="bar expected"><span style="width:17%"></span></div>
 <p>hydo made the disk faulty: it threw away writes that it had already confirmed, as a broken or misconfigured disk can. No system keeps data that its disk throws away.</p>
-<p><b>Is it a bug?</b> Nothing, unless your production disks can throw away confirmed writes. If you do not expect such disks, accept this finding.</p>
+<p><b>Is it a bug?</b> No, not in your system: it lost what the disk threw away. It matters only if your production disks can throw away confirmed writes. If you do not expect such disks, accept this finding.</p>
 <div class="cmdrow"><pre class="cmd">hydo run --image scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;" aria-label="Copy to the clipboard">Copy</button></div>
 <p class="small"><a href="#f1">Open this failure →</a></p>
 </div></div>

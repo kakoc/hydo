@@ -104,7 +104,7 @@ const GUIDE_TOPICS: &[(&str, &str)] = &[
     ),
 ];
 pub const BEGIN: &str =
-    "<!-- hydo:begin (written by `hydo init`; edits between these markers are replaced) -->";
+    "<!-- hydo:begin (written by `hydo init` and `hydo onboard`; edits between these markers are replaced) -->";
 pub const END: &str = "<!-- hydo:end -->";
 const BEGIN_RE: &str = r"(?m)^<!-- hydo:begin\b.*-->[ \t]*$";
 const END_RE: &str = r"(?m)^<!-- hydo:end -->[ \t]*$";

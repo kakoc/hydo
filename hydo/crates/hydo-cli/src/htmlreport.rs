@@ -1722,9 +1722,17 @@ pub fn exploration_story<'a>(
                 .filter(|k| !common.contains(k))
                 .map(str::to_string)
                 .collect();
+            // the command is not minimal: say so, and why (0.3.3, a reader of the quickstart)
+            happens.push_str(if first.run.verdict.kind == "error" {
+                " hydo shrinks failed checks, not runs that stop with an error, so the command \
+                 repeats the whole failing run, with faults the problem may not need."
+            } else {
+                " hydo did not shrink this failure, so the command repeats the whole failing run, \
+                 with faults the problem may not need."
+            });
             if !others.is_empty() {
                 happens.push_str(&format!(
-                    " The command also keeps this run's {}.",
+                    " It also keeps this run's {}.",
                     describe::and_list(&others)
                 ));
             }

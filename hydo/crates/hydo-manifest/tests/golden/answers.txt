@@ -158,7 +158,7 @@ I	hydo/onboard/examples/medusa/docker-compose.yaml	35bfc9c940ab6b7019ccf8beb0930
 I	hydo/onboard/examples/medusa/hydo/hydo.yaml	90f7fc226d38faad7a6bcacd0f19bcc19a57a4191e568a9662f68ef29eec9cde
 I	hydo/onboard/examples/medusa/hydo/known-errors.yaml	aa0904c64ac6f38493dad25cff34806568f4d1be7af8fff334aa5944386b51e7
 I	hydo/onboard/examples/medusa/upstream/docker-compose.yaml	1491dd3b2a24748360c49a319362700a9d94104b08d7b4e31fd2e21267549ed5
-I	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml	6bea4a4a205485b3d22a37c9486f3f7c303a4e9d5145c3357f67e9d6bdd07d85
+I	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml	8d8151f5fadc314a10bb413ab8d03df6ffb4a8f85d1e05f055fb254bcd055066
 I	hydo/onboard/examples/miniflux/hydo-read.yaml	96baa7f3afccebb7dcbfb7ed78d64e79c6563096f2e84072ff62db752b34e26f
 I	hydo/onboard/examples/miniflux/hydo.yaml	7f74f2fac53dbc117de6152c0e43fe15e1bf1c4524e16f4226029de1b7ac003a
 I	hydo/onboard/examples/nats-flaky-8363/hydo.yaml	d8e8cbcf52ff01b080d3b7458f6dfffead9f027c6d1c201c03707d924a6c80f5
@@ -211,7 +211,7 @@ I	hydo/onboard/examples/yugabyte/bigtxn/hydo/hydo.yaml	1ee55745c9b0a1e49fb32a498
 I	hydo/onboard/examples/yugabyte/docker-compose.yaml	bff78dc0085f9c3cd9a420ae0e1a6bf823b14156b172821896c9665efc37089e
 I	hydo/onboard/examples/yugabyte/hydo/hydo-compose.lock.json	1e110be98e1441c646ccbeae82e3e640f2628d71f1fc52c4c288e546c0e7ff9d
 I	hydo/onboard/examples/yugabyte/hydo/hydo.yaml	2a7bd08e0f305646485929ca38f3550e53044b60b0977b0c7bb9e9fbdc661014
-I	hydo/onboard/recorded.json	09c75ee75bf27bf9af0b1e112ac74dc10b764f015a33e7fc3895e913a73e6c79
+I	hydo/onboard/recorded.json	e12c32eef2605e527a450c3b404cb75809faaab46dbc856ef6dde9c0179e766f
 I	hydo/stack/grpc-hints.yaml	14affe885365284f669ce608060c39376e7f7a6ee42df7ad4f1f46334ee465c9
 I	plugin/.claude-plugin/plugin.json	23e489b643f6659754bd6c435c5bd1a25d491456f7142dc88c9251885720636a
 I	sdk/cases/assert/always.json	60ca493f4722fd2400e8f95141732ee6eb470e1807e815733c103f41493d2de1
@@ -7406,8 +7406,8 @@ R	^	<root>/hydo/onboard/examples/medusa/hydo/known-errors.yaml --arch x86_64 []	
 R	^	<root>/hydo/onboard/examples/medusa/hydo/known-errors.yaml --arch arm64 []	err	"top level: unknown field(s) known, unknown (known: buggify, …#d5e153a3e28ebd05"
 R	^	<root>/hydo/onboard/examples/medusa/upstream/docker-compose.yaml --arch x86_64 []	err	"services: must be a list (it may be empty: a project that is only a workload)"
 R	^	<root>/hydo/onboard/examples/medusa/upstream/docker-compose.yaml --arch arm64 []	err	"services: must be a list (it may be empty: a project that is only a workload)"
-R	^	<root>/hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml --arch x86_64 []	ok	d:31b85f57 w:4f53cda1 c:cedc7c2b m:74234e98
-R	^	<root>/hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml --arch arm64 []	ok	d:31b85f57 w:4f53cda1 c:cedc7c2b m:74234e98
+R	^	<root>/hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml --arch x86_64 []	ok	d:2902a09b w:4f53cda1 c:cedc7c2b m:74234e98
+R	^	<root>/hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml --arch arm64 []	ok	d:2902a09b w:4f53cda1 c:cedc7c2b m:74234e98
 R	^	<root>/hydo/onboard/examples/miniflux/hydo-read.yaml --arch x86_64 []	ok	d:128a87fb w:4f53cda1 c:567d64eb m:74234e98
 R	^	<root>/hydo/onboard/examples/miniflux/hydo-read.yaml --arch arm64 []	ok	d:128a87fb w:4f53cda1 c:567d64eb m:74234e98
 R	^	<root>/hydo/onboard/examples/miniflux/hydo.yaml --arch x86_64 []	ok	d:37156dd2 w:4f53cda1 c:4539e951 m:74234e98
@@ -8695,7 +8695,7 @@ R	^	embedded <root>/hydo/onboard/examples/avx2/hydo.yaml None	ok	d:3455e274 w:74
 R	^	embedded <root>/hydo/onboard/examples/etcd-flaky-22796/hydo.yaml None	ok	d:5259ee8e w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/etcd/hydo-hist.yaml None	ok	d:71c843a1 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/etcd/hydo.yaml None	ok	d:088c6574 w:74234e98 c:74234e98 m:74234e98
-R	^	embedded <root>/hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml Some("<tmp>/embedded/7120.compose.json")	ok	d:c1855998 w:74234e98 c:74234e98 m:a95648a0
+R	^	embedded <root>/hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml Some("<tmp>/embedded/7120.compose.json")	ok	d:1be09ad0 w:74234e98 c:74234e98 m:a95648a0
 R	^	embedded <root>/hydo/onboard/examples/miniflux/hydo-read.yaml None	ok	d:128a87fb w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/miniflux/hydo.yaml None	ok	d:37156dd2 w:74234e98 c:74234e98 m:74234e98
 R	^	embedded <root>/hydo/onboard/examples/nats-flaky-8363/hydo.yaml None	ok	d:2a23d3de w:74234e98 c:74234e98 m:74234e98

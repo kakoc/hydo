@@ -18,7 +18,7 @@ Words this page uses:
   `<host part> | run <guest part>`. The host part sets up the machine, for example `disk=cut` (a
   disk that loses unflushed writes at a power cut) or `dseed=<hex>` (the seed of the disk's
   faults). The guest part places faults before steps of the workload, for example `C=12` (a power
-  cut before step 12). `hydo guide faults` lists the tokens.
+  cut before step 12). Each such word of a schedule is a token; `hydo guide faults` lists them.
 - Fingerprint: a hash of the guest's whole final state. The same schedule on the same image
   gives the same fingerprint.
 - Verdict: the run's outcome: `OK`, `VIOLATION` (an invariant, a property that must always hold,
@@ -116,11 +116,10 @@ hydo run "disk=cut | run C=12 R=everysec"
 
 `R=everysec` is a guest token that sets Redis's `appendfsync` to `everysec` for this run. A knob
 is such a setting of the system that a guest token changes; the example's `hydo.yaml` lists its
-knobs under `knobs:`. Each command first prints `hydo: an agent image: the host controller drives
-the run`. It means that hydo's guest agent, the first program in the guest, does what hydo's host
-side tells it.
-Then it prints a `RESULT` line. Its `verdict=` field is the outcome, and `HYDO-ORACLE:` marks the
-verdict of the invariants. `fp=` is the fingerprint; the other fields (`wfp=`, `stops=`, `typed=`,
+knobs under `knobs:`. Each command prints a `RESULT` line. Its `verdict=` field is the outcome,
+and `HYDO-ORACLE:` marks the verdict of the invariants. When checks that run on the host after the
+guest (history and messages checks, error logs) change the outcome, `hydo run` prints one more
+line, `hydo: VERDICT ...`, and that line is the run's verdict. `fp=` is the fingerprint; the other fields (`wfp=`, `stops=`, `typed=`,
 `inh=`, `ctl=`) are hydo's own counters, which `hydo diff` compares. The first ends `verdict=HYDO-ORACLE: OK` (fingerprint
 `d817d69781986987`). The second prints a violation: an acknowledged key is gone after the power
 cut (`key k:0 lost`, fingerprint `a2b8d71c0c467d15`; the check stops at the first lost key).
@@ -199,16 +198,20 @@ hydo explore --seeds 1-20 --strategy swarm
 hydo report
 ```
 
-hydo runs as many virtual machines at once as the Mac's cores and memory allow; add
-`--workers 2` to keep it to two. In a terminal, `hydo explore` ends with how many runs failed,
+hydo runs one virtual machine per free performance core at once, and fewer when the Mac is
+busy; its `pool:` line names the number. `--workers N` sets it. In a terminal, `hydo explore` ends with how many runs failed,
 in how many ways, and whether each failing run failed again when hydo replayed it.
 
 `hydo report` prints each problem it found:
 
-- the problem in one line, how often it happened, and a label (`Worth a look`, `Expected for
-  this setting` or `Expected`);
+- the problem in one line, how often it happened, and a label. `Worth a look` means that it may
+  be a bug in your system. `Expected for this setting` means that it comes from a setting you
+  chose, such as a relaxed sync. `Expected` means that it comes from a fault no system survives,
+  such as a disk that throws away writes;
 - what happens, and whether it is a bug;
-- the `hydo run` command that shows it again, with the fewest faults that still cause it.
+- the `hydo run` command that shows it again. For a failed check it is shrunk to the fewest
+  faults that still cause it. A run that stopped with an error is not shrunk, so its command
+  repeats the whole failing run, and the report says so.
 
 `hydo report --html` writes the same problems as one web page, with each failure's timeline.
 `hydo report --details` prints the technical report. It gives each failure's class (the cause),
@@ -224,10 +227,15 @@ In this example every problem comes from a fault that the example asks for:
 
 With the default settings and an honest disk Redis loses nothing (the `disk=cut | run C=12` run
 of section 2). The exploration finds 11 failures. The table of properties in `hydo report
---details` lists hydo's own `fault.*` properties (which fault the runs reached) and the
-invariants. A program that uses hydo's SDKs adds its own assertions there (`hydo guide sdks`);
-this example has none. Its invariant is marked `[the project's own check]`, as every invariant
-and check of a `hydo.yaml` is.
+--details` lists hydo's own `fault.*` properties and the invariants, each with how many runs
+passed and failed it. A program can also report properties of its own from inside, with hydo's
+assertion libraries for Rust, Go, Python and JavaScript (the SDKs, `hydo guide sdks`); this
+example has none. Its invariant is marked `[the project's own check]`, as every invariant
+and check of a `hydo.yaml` is. `fault.*` properties are hydo's own: one for each fault that the guest reports when it happens
+(a pause, a clock step, a one-way network fault). `NOT EXERCISED` means that no run reached it; in
+this exploration no run paused Redis or stepped its clock, so all six show it. The last line
+counts the runs (`runs=`), and in `setup-complete seen in` the runs whose program said through
+an SDK that its setup was done: 0 here, because the example uses no SDK.
 
 ## 4. Reproduce a failure
 
@@ -260,15 +268,17 @@ a complete example.
 
 The release includes the onboarding skill for AI coding tools of any vendor, as an Agent Skills
 folder: a folder of instructions in the open format of https://agentskills.io. The skill reads
-your repository and writes the project's `hydo/` folder. Start the folder, then give your tool
-one instruction:
+your repository and writes the project's `hydo/` folder. Start it with one command:
 
 ```sh
 cd your-project
-hydo init
+hydo onboard
 ```
 
-Then tell your AI tool to run `hydo guide skill` and follow it.
+`hydo onboard` imports a Docker Compose file if there is one, else runs `hydo init`. It installs
+the skill for the AI coding tools it finds and prints the next steps in order, for example
+`Next: open Claude Code here and run /hydo:onboard`. For a tool without skills, tell it to run
+`hydo guide skill` and follow it.
 
 `hydo init` writes `hydo/hydo.yaml`, `hydo/workload/parallel_driver_todo`,
 `hydo/checks/final_todo` and `hydo/regressions/README.md`. It adds three lines to `.gitignore`

@@ -294,6 +294,8 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
         }
     };
     let mut rc = 0;
+    // a Compose import's images are copied in before anything else (the first of the next steps)
+    let mut fetch_first = false;
     let dir = &a.dir;
     let shown = dir.display().to_string();
     println!("hydo: looking at {shown}");
@@ -364,9 +366,23 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
              `hydo build hydo/hydo.yaml --check` checks it"
         );
     } else if let Some(c) = compose {
-        let out = dir.join("hydo/hydo.yaml").display().to_string();
+        // from the folder itself, relative paths: the import's header then names its commands
+        // from the repository's root (`hydo build hydo/hydo.yaml`, `sh hydo/fetch-images.sh`),
+        // as every page does (0.3.3, a reader of docs/ONBOARD.md)
+        let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        let in_dir = std::env::current_dir()
+            .map(|d| canon(&d) == canon(dir))
+            .unwrap_or(false);
+        let (cfile, out) = if in_dir {
+            (c.to_string(), "hydo/hydo.yaml".to_string())
+        } else {
+            (
+                dir.join(c).display().to_string(),
+                dir.join("hydo/hydo.yaml").display().to_string(),
+            )
+        };
         let mut args = vec![
-            dir.join(c).display().to_string(),
+            cfile,
             "--out".into(),
             out,
             "--images-dir".into(),
@@ -400,9 +416,7 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
                     let _ = out.put(&format!("hydo: AGENTS.md: hydo section {r}\n"));
                 }
             }
-            println!(
-                "hydo: before the first build, copy the images in once (network): sh hydo/fetch-images.sh"
-            );
+            fetch_first = true;
         }
     } else {
         println!("hydo: starting hydo/ with hydo init");
@@ -464,6 +478,18 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
     } else {
         format!("in {shown}")
     };
+    // one ordered list of next steps: hydo compose's own `next:` line above says the same in
+    // other words (0.3.3, a reader found three next steps from three places)
+    if fetch_first {
+        println!(
+            "First: copy the images in once (needs network): sh {}",
+            if here == "here" {
+                "hydo/fetch-images.sh".to_string()
+            } else {
+                format!("{}/hydo/fetch-images.sh", shown.trim_end_matches('/'))
+            }
+        );
+    }
     if let Some(k) = installed.first() {
         if k == "claude" {
             println!("Next: open Claude Code {here} and run {CLAUDE_COMMAND}");

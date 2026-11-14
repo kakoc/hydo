@@ -345,3 +345,25 @@ fn the_check_names_the_placeholders_of_hydo_init() {
     let s = check_summary("hydo/hydo.yaml", &l);
     assert!(!s.iter().any(|x| x.contains("warning")), "{s:?}");
 }
+
+/// The same for the placeholders of a fresh `hydo compose` import: its `workload.run` and its
+/// TODO invariant (0.3.3: a reader of docs/ONBOARD.md got an OK for an import with both).
+#[test]
+fn the_check_names_the_placeholders_of_hydo_compose() {
+    use hydo_manifest::{check_summary, load_until_images};
+    let top = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let gen = top.join("hydo/onboard/examples/compose-voting/hydo.generated.yaml");
+    let l = load_until_images(&gen, &LoadOptions::default()).0.unwrap();
+    let s = check_summary("hydo/hydo.yaml", &l);
+    for p in ["workload.run is the placeholder", "todo.acked_operations_survive"] {
+        assert!(
+            s.iter()
+                .any(|x| x.starts_with("hydo-build: warning: ") && x.contains(p)),
+            "{p}: {s:?}"
+        );
+    }
+    let real = top.join("hydo/onboard/examples/compose-voting/hydo.yaml");
+    let l = load_until_images(&real, &LoadOptions::default()).0.unwrap();
+    let s = check_summary("hydo/hydo.yaml", &l);
+    assert!(!s.iter().any(|x| x.contains("placeholder")), "{s:?}");
+}

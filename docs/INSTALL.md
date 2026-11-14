@@ -34,7 +34,9 @@ threads run. Those three need the kernel module on your own Intel machine.
 
 - The KVM engine uses the KVM that comes with Linux. It runs on Intel and AMD CPUs, and on a cloud
   VM with nested virtualization (a VM that can run VMs itself). It has one virtual CPU, or 2 to 8
-  with `--vcpus N`, which take turns counted in VM exits.
+  with `--vcpus N`. Several vCPUs take turns. One runs until it has made a fixed number of VM
+  exits, then the next one runs. A VM exit is a moment when the guest stops and the engine
+  handles something for it.
 - The kernel module `hvx.ko` needs an Intel CPU with VT-x (Intel's hardware support for virtual
   machines) and sudo. It has the PMU branch clock:
   the CPU's performance-monitoring unit counts the guest's conditional branches, so a timer tick
@@ -50,7 +52,8 @@ tar xzf hydo-linux-0.3.3.tar.gz
 ```
 
 For the KVM engine, your user must be able to open `/dev/kvm`. Install, then let
-`hydo doctor --backend kvm` check it:
+`hydo doctor --backend kvm` check it (without `--backend kvm`, `hydo doctor` checks the kernel
+module's engine):
 
 ```sh
 ./hydo-linux-0.3.3/install.sh --no-module
@@ -91,8 +94,5 @@ platform into `~/.hydo/versions/0.3.3` (`HYDO_HOME` names another folder than `~
 checks every file by sha256. The examples are in `~/.hydo/versions/0.3.3/examples`.
 
 On Linux this gives the KVM engine, and your user must be able to open `/dev/kvm`, as for the
-tarball. On a GitHub ubuntu-24.04 runner (AMD EPYC 7763, 4 vCPUs), `cargo install` took 2
-minutes 10 seconds and `hydo setup` took 5 seconds. The Redis example built to the recorded
-image (sha256 `668bf8ad…`) and gave the verdicts of the Linux quickstart, section 6. The kernel
-module `hvx.ko` was not tried with a cargo install; use the tarball for it.
+tarball. For hydo's kernel module `hvx.ko`, use the tarball.
 
