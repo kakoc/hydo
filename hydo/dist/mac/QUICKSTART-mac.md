@@ -22,7 +22,8 @@ Words this page uses:
 - Fingerprint: a hash of the guest's whole final state. The same schedule on the same image
   gives the same fingerprint.
 - Verdict: the run's outcome: `OK`, `VIOLATION` (an invariant, a property that must always hold,
-  failed), or `ERROR` (the run could not finish its workload).
+  failed), or `ERROR` (the run could not finish its workload). A run can also end at a busy-wait
+  loop (`SPIN`); the section "A program that busy-waits" says what hydo does then.
 - VM exit: a moment when the guest stops and the engine (`hydo-hvm`) handles something for it.
   hydo's guest time on a Mac counts VM exits. A tick period is the time between two timer
   interrupts of the guest.
@@ -93,6 +94,11 @@ This writes into `hydo-out/`:
 - `explore-ob-redis-arm64.cpio.gz.json`, the build record: which hydo built the image and from
   which manifest.
 
+The other files there (`explore-ob-redis-arm64-data.img` and the folder
+`explore-ob-redis-arm64-root/`) are steps of the build. The data disk (`data.size_mib`, 64 MiB here) is on the Mac's disk
+twice, so the example's `hydo-out/` holds about 150 MB after the build. The 512 MiB data disk of
+the `hydo init` skeleton (section 5) takes about 1 GB.
+
 Building the same `hydo.yaml` again gives the same bytes:
 `shasum -a 256 hydo-out/explore-ob-redis-arm64.cpio.gz` prints `fba2c11e6a371d8b…` before and after
 a second `hydo build hydo.yaml`. `appendfsync` is the Redis setting that
@@ -108,13 +114,17 @@ hydo run "disk=none | run"
 hydo run "disk=cut | run C=12 R=everysec"
 ```
 
-`R=everysec` is a guest token that sets Redis's `appendfsync` to `everysec` for this run. Each
-command prints a `RESULT` line. Its `verdict=` field is the outcome, and `HYDO-ORACLE:` marks
-the verdict of the invariants. The first ends `verdict=HYDO-ORACLE: OK` (fingerprint
+`R=everysec` is a guest token that sets Redis's `appendfsync` to `everysec` for this run. A knob
+is such a setting of the system that a guest token changes; the example's `hydo.yaml` lists its
+knobs under `knobs:`. Each command first prints `hydo: an agent image: the host controller drives
+the run`. It means that hydo's guest agent, the first program in the guest, does what hydo's host
+side tells it.
+Then it prints a `RESULT` line. Its `verdict=` field is the outcome, and `HYDO-ORACLE:` marks the
+verdict of the invariants. `fp=` is the fingerprint; the other fields (`wfp=`, `stops=`, `typed=`,
+`inh=`, `ctl=`) are hydo's own counters, which `hydo diff` compares. The first ends `verdict=HYDO-ORACLE: OK` (fingerprint
 `d817d69781986987`). The second prints a violation: an acknowledged key is gone after the power
-cut (`key k:0 lost`, fingerprint `a2b8d71c0c467d15`). On Linux the same schedule loses from
-`k:1` on, because the guest's timing differs by engine. That is Redis's documented `everysec`
-window, and the run reproduces it every time. Run either command again and the fingerprint
+cut (`key k:0 lost`, fingerprint `a2b8d71c0c467d15`; the check stops at the first lost key).
+That is Redis's documented `everysec` window, and the run reproduces it every time. Run either command again and the fingerprint
 (`fp=`) is the same. With the default `appendfsync always`, the same cut loses nothing:
 `hydo run "disk=cut | run C=12"` ends `OK` with `acked=12 all present` (fingerprint
 `7147e75676d15194`).
@@ -171,7 +181,8 @@ The first ends `OK ... acked=30 each stored once`. Before its `RESULT` line, `hy
 that the first run ended at a counter loop. It then ran the schedule again in rewind mode, and
 the result is from that second run. Rewind mode is slower: it keeps checkpoints and replays to the loop, so that the loop's wait ends at a point hydo
 can compute. hydo switches to it on its own. The second pauses the example's web server, the service
-`front`, for two requests; the client's retry stores entry 10 twice, and the invariant catches it
+`front`, for two requests (`P=front@10+2`: a pause before step 10 that lasts two steps). The
+client's retry stores entry 10 twice, and the invariant catches it
 (`entry 10 stored 2 times`). This example's server is deliberately not idempotent. Each command
 gives the same fingerprint every time. A busy-wait run takes about eight seconds instead of two.
 
@@ -195,18 +206,17 @@ found by shrinking (removing faults while the failure stays), and the
 `hydo run --image <image> "<schedule>"` command that replays it. A run that ended `ERROR` gets no
 minimal schedule; `hydo repro hydo-out/explore` re-runs it.
 
-In this example the failures are all expected kinds: the disk that loses acknowledged writes
-(`lying-disk`), injected disk errors (`io-errors`), and the relaxed `appendfsync` settings
-(`unsafe-knob`). A knob is a setting of the system that a guest token changes, here `R=`. With
-the default settings and an honest disk Redis loses nothing (the `disk=cut | run C=12` run of
-section 2). The exploration finds 11 failures. The report's last table lists properties. They
-are the assertions of hydo's SDKs, hydo's own `fault.*` properties (which fault the runs reached),
-and the invariants. An assertion is a check that a program makes about itself while it runs
-(`hydo guide sdks`); this example has none. A program's catalog is the list of assertions it
-announces when it starts. `NOT EXERCISED` means no run reached a property, `[not in catalog]`
-that no program declared it, and `setup-complete seen in 0` that no program reported the end of
-its setup. In its last line, `violations=` counts the
-properties that failed, not the runs.
+In this example the failures are all expected kinds:
+
+- the disk that loses acknowledged writes (`lying-disk`);
+- injected disk errors (`io-errors`);
+- the relaxed `appendfsync` settings (`unsafe-knob`: a knob such as `R=` set to a relaxed value).
+
+With the default settings and an honest disk Redis loses nothing (the `disk=cut | run C=12` run
+of section 2). The exploration finds 11 failures. The report's last table lists properties:
+hydo's own `fault.*` properties (which fault the runs reached) and the invariants. A program that uses hydo's SDKs adds its own
+assertions there (`hydo guide sdks`); this example has none, so its invariant is marked
+`[not in catalog]`, as every invariant of a `hydo.yaml` is.
 
 ## 4. Reproduce a failure
 
@@ -217,8 +227,10 @@ report's command does. This one is the report's `lying-disk` schedule:
 hydo run "disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20"
 ```
 
-It ends with the same verdict and the same fingerprint every time. The console of the run is
-saved under `hydo-out/runs/`, so you can read what the software printed. To run every failure of
+`disk=lying:3` is a disk that drops some writes it acknowledged, at the rate 3 (larger drops
+more), with the seed `dseed=`. It ends with the same verdict and the same fingerprint every time.
+The run's folder under `hydo-out/runs/` keeps the console, `one.log`, so you can read what the
+software printed, and the engine's log, `engine.log`. To run every failure of
 the exploration again and compare each fingerprint with the recorded one:
 
 ```sh
@@ -235,17 +247,24 @@ are ready, the workload, the invariants that must always hold, and which faults 
 `~/.hydo/hydo/onboard/MANIFEST.md` describes every field, and `~/.hydo/examples/redis/hydo.yaml` is
 a complete example.
 
-The release includes an onboarding guide for AI coding tools of any vendor, as an Agent Skills
-folder: a folder of instructions in the open format of https://agentskills.io. The guide reads
+The release includes the onboarding skill for AI coding tools of any vendor, as an Agent Skills
+folder: a folder of instructions in the open format of https://agentskills.io. The skill reads
 your repository and writes the project's `hydo/` folder. Start the folder, then give your tool
 one instruction:
 
 ```sh
 cd your-project
-hydo init                    # hydo/ skeleton, .gitignore lines, a hydo section in AGENTS.md
-# then tell your AI tool: "run `hydo guide skill` and follow it"
+hydo init
 ```
 
+Then tell your AI tool to run `hydo guide skill` and follow it.
+
+`hydo init` writes `hydo/hydo.yaml`, `hydo/workload/parallel_driver_todo`,
+`hydo/checks/final_todo` and `hydo/regressions/README.md`. It adds three lines to `.gitignore`
+and a hydo section to `AGENTS.md`, which it creates when it is missing. The folder uses the test
+composer: each client operation is one command in `hydo/workload/`, and each check is one
+program in `hydo/checks/` (`hydo guide composer`). The Redis example is older: its `hydo.yaml`
+holds a numbered-steps workload and its invariants (`hydo guide numbered-steps`).
 `hydo guide workflow` says what goes into each file of the folder, if you write it yourself.
 
 `hydo skill install --agent claude|codex|cursor|copilot|gemini|all` also copies the skill into the
@@ -268,8 +287,9 @@ by the Mac build yet.
 
 Then the same three commands as in section 2: `hydo build hydo/hydo.yaml` (or `hydo build hydo.yaml`
 for a single file), `hydo run "disk=none | run"`, `hydo explore`. The image of a `hydo/` folder
-goes to `.hydo/` instead of `hydo-out/`. `hydo build hydo/hydo.yaml --check` checks the folder
-without building.
+goes to `.hydo/` instead of `hydo-out/`. `hydo build hydo/hydo.yaml --check` checks the folder's
+format without building. It warns while the two placeholder files of `hydo init` are still
+there; with them, every run fails.
 
 The release carries every guest file the arm64 build stages, so these work from it as well:
 - `network: bridge`, `addr:` and `faults: [freeze]`. With them each service runs in its own
@@ -280,7 +300,8 @@ The release carries every guest file the arm64 build stages, so these work from 
 - `fakes:` and `proxies:`: fake outside services, and protocol faults (wrong, late, or missing
   answers of those services);
 - the ready-made store readers for invariants and checks: `hydo-read` reads a database's
-  contents as sorted lines, and `hydo-check` compares two readings.
+  contents as JSON Lines, and `hydo-check` compares two readings (MANIFEST.md, section
+  "Reading the stores").
 
 ## What the Mac version does not do yet
 

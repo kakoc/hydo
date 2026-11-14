@@ -60,7 +60,7 @@ The schedule `disk=none dseed=8363 | run` ran with every turn length `q=` of a g
 
 ## Minimal reproducers
 
-## Property table over every schedule (hydo/ASSERTIONS.md)
+## Property table over every schedule (hydo guide sdks)
 
 The guest emitted no HYDO-ASSERT records (an image built without the assertion SDK).
 

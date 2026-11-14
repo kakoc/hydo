@@ -44,7 +44,7 @@
 - fingerprint, two runs: `813fb0487f0a4769` / `813fb0487f0a4769` (identical)
 - by hand: `hydo run --image <dir>/scripted-disk.img "disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no"`
 
-## Property table over every schedule (hydo/ASSERTIONS.md)
+## Property table over every schedule (hydo guide sdks)
 
 ```
 type                   id                                    ok    fail  verdict                  first failure / description
@@ -54,7 +54,7 @@ liveness: 1 eventually properties, 0 missed a deadline
 runs=40 (setup-complete seen in 0); properties=2; violations=0
 ```
 
-## Liveness (eventually properties, hydo/ASSERTIONS.md)
+## Liveness (eventually properties, hydo guide sdks)
 
 | property | held in time | missed deadline | slowest in time | deadline | slowest held late | first miss |
 |---|---|---|---|---|---|---|

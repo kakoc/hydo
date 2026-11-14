@@ -297,3 +297,51 @@ fn a_newer_format_is_refused_with_the_format_it_needs() {
     hydo_manifest::load(&p, &LoadOptions::default()).expect("no format: is format 1");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// `hydo build --check` of the folder `hydo init` writes passes the format check and names both
+/// placeholders, which fail every run (0.3.2: a reader of the quickstart took the OK for a
+/// finished project). A project with its own files gets no such warning.
+#[test]
+fn the_check_names_the_placeholders_of_hydo_init() {
+    use hydo_manifest::{check_summary, load_until_images};
+    let top = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    // the template with its name filled in, as `hydo init` writes it
+    let d = std::env::temp_dir().join(format!("hydo-init-check-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let src = top.join("hydo/guide/init/hydo");
+    for sub in ["", "workload", "checks", "regressions"] {
+        std::fs::create_dir_all(d.join(sub)).unwrap();
+        for e in std::fs::read_dir(src.join(sub)).unwrap() {
+            let e = e.unwrap();
+            if e.file_type().unwrap().is_file() {
+                let t = std::fs::read_to_string(e.path())
+                    .unwrap()
+                    .replace("@NAME@", "demo")
+                    .replace("@CLOCK_START@", "1767225600")
+                    .replace("@CLOCK_DATE@", "2026-01-01");
+                let to = d.join(sub).join(e.file_name());
+                std::fs::write(&to, t).unwrap();
+                let mode = std::fs::metadata(e.path()).unwrap().permissions();
+                std::fs::set_permissions(&to, mode).unwrap();
+            }
+        }
+    }
+    let init = d.join("hydo.yaml");
+    let l = load_until_images(&init, &LoadOptions::default()).0.unwrap();
+    let s = check_summary("hydo/hydo.yaml", &l);
+    for p in [
+        "hydo/workload/parallel_driver_todo",
+        "hydo/checks/final_todo",
+    ] {
+        assert!(
+            s.iter()
+                .any(|x| x.starts_with("hydo-build: warning: ") && x.contains(p)),
+            "{p}: {s:?}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&d);
+    let real = top.join("hydo/onboard/examples/lago/hydo/hydo.yaml");
+    let l = load_until_images(&real, &LoadOptions::default()).0.unwrap();
+    let s = check_summary("hydo/hydo.yaml", &l);
+    assert!(!s.iter().any(|x| x.contains("warning")), "{s:?}");
+}

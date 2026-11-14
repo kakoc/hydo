@@ -24,7 +24,7 @@
 
 ## Minimal reproducers
 
-## Property table over every schedule (hydo/ASSERTIONS.md)
+## Property table over every schedule (hydo guide sdks)
 
 ```
 type                   id                                    ok    fail  verdict                  first failure / description
@@ -34,7 +34,7 @@ liveness: 1 eventually properties, 0 missed a deadline
 runs=16 (setup-complete seen in 0); properties=2; violations=0
 ```
 
-## Liveness (eventually properties, hydo/ASSERTIONS.md)
+## Liveness (eventually properties, hydo guide sdks)
 
 | property | held in time | missed deadline | slowest in time | deadline | slowest held late | first miss |
 |---|---|---|---|---|---|---|

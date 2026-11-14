@@ -399,6 +399,10 @@ pub fn for_explorer(path: &Path) -> Result<(Value, Option<Value>), ManifestError
     Ok((m, meta))
 }
 
+/// The ids of the placeholder command and check that `hydo init` writes
+/// (`hydo/guide/init/hydo/workload/parallel_driver_todo`, `checks/final_todo`).
+pub const INIT_PLACEHOLDERS: [&str; 2] = ["parallel_driver_todo", "final_todo"];
+
 /// The lines `hydo-build <path> --check` prints for a loaded manifest.
 pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
     let m = &l.manifest.data;
@@ -446,6 +450,23 @@ pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
             n("checks"),
             n("regressions")
         ));
+        // `--check` checks the format only: name the placeholders `hydo init` wrote, which pass
+        // it and fail every run (0.3.2, a reader of the quickstart took the OK for a finished
+        // project)
+        for (k, dir) in [("commands", "workload"), ("checks", "checks")] {
+            for x in c.get(k).and_then(Value::as_array).into_iter().flatten() {
+                let mut id = py::str_of(&x["id"]);
+                if id.is_empty() || id == "None" {
+                    id = format!("{}_{}", py::str_of(&x["kind"]), py::str_of(&x["name"]));
+                }
+                if INIT_PLACEHOLDERS.contains(&id.as_str()) {
+                    out.push(format!(
+                        "hydo-build: warning: hydo/{dir}/{id} is the placeholder `hydo init` wrote; \
+                         every run fails until you replace it (--check checks the format only)"
+                    ));
+                }
+            }
+        }
     }
     // each messages check's resolved declaration (what the image will claim)
     for c in m
