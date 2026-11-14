@@ -630,6 +630,16 @@ cache by input key. The answer is `versions.json` (the results addition `Version
 `hydo report` prints it. Reference: `hydo guide workflow`, "Which versions have a finding";
 proof: `docs/HISTORY.md` Milestone 221.
 
+**Performance tests (M237).** With `perf:` in the manifest, each workload step is its own
+workload call, and `result.json` gets `perf`: the work of the workload and of each step. The
+unit on hvx is the guest's retired branches (the PMU branch clock). They are exact in every run.
+On KVM and the Mac the unit is VM exits, which do not count CPU work. The comparison `hydo perf
+compare A B` says each change in words. It exits 1 when the work grew by more than the threshold
+(default 0.5 %). In the example `hydo/onboard/examples/perf-kv`, 1 % more handler work gave
++0.871 % in every run. A changed source with the same work moved a step by at most 0.086 %.
+Guest time did not track the work. The reference is `hydo guide workflow`, "Performance tests";
+the details are in `docs/HISTORY.md` Milestone 237.
+
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
 release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
@@ -1422,6 +1432,11 @@ build machine, before 2026-10-13.
   without hydo in 5 of 30 crashes and 0 of 30 clean restarts; no report found. Four fixes of the
   messages check across clock steps and power cuts, and `hydo onboard` names the release's image
   fetcher. Nothing recorded moved
+- M237 (tentative number): performance tests from deterministic runs. `perf:` in the manifest
+  runs each step as its own call, `result.json` gets `perf` (hvx: retired branches per step,
+  from the engine's `HYDO_WORK_RECORD`), and `hydo perf compare` names each change in words. On
+  hvx 0.1 % more handler work showed as +0.088 % in every run, and an unchanged build as 0.000 %.
+  Nothing recorded moved
 
 ## Where to look
 

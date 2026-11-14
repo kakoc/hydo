@@ -9051,3 +9051,135 @@ did not draw the narrow orders of 3.5 and 3.3; they were written by hand.
 
 **Open.** 3.2 (open item 38). The divergence of seed 1 after a cut of every node was not
 investigated. The Mac engine did not run the new folder.
+
+### Milestone 237 (tentative number) - DONE (performance tests from deterministic runs: `perf:` in the manifest, `perf` in `result.json`, `hydo perf compare`; on hvx a slowdown of 0.1 % of a request handler's work shows in every comparison, and an unchanged build gives 0.000 % in every rerun; nothing recorded moved; 2026-11-14)
+
+**The question.** A run under hydo is deterministic, so a measure of the whole system in guest
+time or in the engine's counts is the same number in every run of one image. Can such a number
+show a slowdown of 1 % between two commits, which a benchmark on a shared machine cannot? And
+which number should hydo report? Milestone 198 (docs/design/cost-tracking.md) found the work
+counts exact, but saw a change of about 0.8 % in hvx's branch total from any program change.
+Its workload was small (3.5 million branches), so the work around it dominated.
+
+**The example.** `hydo/onboard/examples/perf-kv`: pkv, a key/value server over TCP on loopback.
+Each of 10 workload steps is one client process with 200 PUTs and 200 GETs over one connection,
+then one fdatasync. Each PUT costs the server 100,000 rounds of a mixing loop. A build with
+`PKV_EXTRA_PERMILLE=<n>` does n thousandths more of that work per PUT: a planted slowdown in
+the request handler. `PKV_TAG=<text>` changes the binary's bytes but not its work.
+`PKV_SYNC_EACH_PUT=1` adds an fdatasync after every PUT. Each build is its own image, as each
+commit of a project would be.
+
+**Measurements on hvx** (the bare-metal machine, the main module, the PMU branch clock; 3 fresh
+boots of each image, `disk=none | run`). Every image gave one fingerprint and one set of
+measures in its 3 runs. The change is against the base build:
+
+| Build | Whole workload, branches | Change | Steps: smallest and largest change | Guest time of the workload | p50 and p99 of a PUT (guest clock) |
+|---|---|---|---|---|---|
+| base | 228,327,750 | 0 | 0 | 4.751 s | 1.000 ms, 2.000 ms |
+| new tag (`PKV_TAG`) | 228,327,750 | 0.000 % | 0.000 % | +0.000 % | the same |
+| longer tag | 228,327,730 | -0.000009 % | -0.000 % | +0.000 % | the same |
+| changed source, same work | 228,320,963 | -0.003 % | -0.086 % to +0.043 % | -0.305 % | the same |
+| +0.1 % of the handler's work | 228,527,709 | +0.088 % | +0.011 % to +0.117 % | -0.004 % | the same |
+| +0.5 % | 229,305,985 | +0.428 % | +0.354 % to +0.474 % | -0.220 % | the same |
+| +1 % | 230,317,585 | +0.871 % | +0.798 % to +0.922 % | -0.001 % | the same |
+| +5 % | 238,320,358 | +4.376 % | +4.300 % to +4.402 % | +0.250 % | the same |
+| +20 % | 268,339,293 | +17.524 % | +17.472 % to +17.610 % | +1.809 % | the same |
+| an fdatasync per PUT (against the changed source) | 263,742,071 | +15.514 % | +14.934 % to +16.551 % | +589 % | 7.999 ms, 8.999 ms |
+
+- **The branch count tracks the work.** The change is proportional to the planted work: +0.871 %
+  for 1 %, +4.376 % for 5 % and +17.524 % for 20 %, so the handler's mixing is about 87.5 % of a
+  step's branches. 0.1 % more handler work gave +0.088 %, and every step moved by at least
+  +0.011 %.
+- **The noise level of a program change is about 0.1 % per step and 0.01 % for the workload.**
+  A new tag changed no count. The changed source (one more argument and one more test per PUT,
+  and a longer log line) moved the workload by -0.003 % and single steps by up to 0.086 %.
+  Milestone 198's 0.8 % came from a workload of 3.5 million branches; this one has 228 million,
+  and the work around the workload is the same in absolute terms. The default threshold of
+  `hydo perf compare` is therefore 0.5 %.
+- **Guest time does not track CPU work.** On the branch clock the guest's clock moves 2 ms per
+  2^20 branches, and it jumps over every idle wait to the next timer or disk completion. The
+  workload's guest time moved by -0.2 % to +0.25 % for the 0.5 % to 5 % builds, in either
+  direction.
+- **Latencies per request in guest time are useless here.** The guest clock moved in steps of
+  about 1 ms, so every PUT's p50 was 1.000 ms and its p99 2.000 ms in every CPU build. Only the
+  fdatasync per PUT moved them (8 and 9 ms: the engine's disk model, not a real disk).
+- **I/O shows in both counts, but as the guest's own work.** An fdatasync per PUT added 15.5 %
+  of branches (the kernel's work for 200 more flushes per step) and 589 % of guest time (the
+  engine's fixed disk latency per flush). Neither says how long a real disk takes.
+
+**Measurements on an exit clock.** KVM and the Mac engine count VM exits. Neither could run
+here (the build machine could not be reached, KVM must not run on the bare-metal machine, and
+this Mac was below its free-disk limit for a build). hvx without the PMU branch clock
+(`HVX_PMU_CLOCK=0`) counts exits too, so the same images ran there, 2 fresh boots each:
+
+| Build | Whole workload, exits | Each step, exits | Fingerprint |
+|---|---|---|---|
+| base | 69,319 | 7,282, 6,990, 7,008, 7,121, 7,085, 7,050, 6,999, 6,727, 6,663, 6,394 | `b8e89bc0f3d0b668` |
+| +1 % of the handler's work | 69,319 | the same | `c11f513eaedd1209` |
+| +5 % | 69,319 | the same | `96bc72b4bd6bc1d6` |
+| +20 % | 69,319 | the same | `c9cf8ab4d54ebc21` |
+
+An exit clock does not see CPU work at all: 20 % more work per request gave the same exits in
+every step, though the run itself differed (another fingerprint). This is what Milestone 198
+found on KVM and the Mac engine with 100,000 extra rounds per request. On these engines `perf`
+measures what makes exits: system calls that reach a device, disk requests, timer ticks.
+
+**Built** (opt-in; without `perf:` a run sends the same commands as before):
+
+- `perf:` in the manifest (a format-1 addition, `hydo_manifest::PerfSpec`): `steps` (default
+  true) and `threshold` (default 0.5, in percent). hydo's YAML reads `0.5` as the text "0.5",
+  which is taken as the number.
+- The host controller (`hydo-control/src/schedule/perf.rs`): with `perf:` it runs each step as
+  its own workload call, marks each call with `HYDO-PERF-MARK start|end` report lines at the
+  stops where it sends the call and sees its exit, gives each call `$HYDO_PERF`, and after the
+  verdict reports each line of that file as `HYDO-PERF <line>`. The end of one step and the start
+  of the next are at one stop, so the steps add up to the workload.
+- The hvx engine: `HYDO_WORK_RECORD=1` writes `<tag>.work.jsonl`, one line per stop with the
+  guest's retired branches, its virtual TSC, the instruction clock and the RDTSC count. The
+  counters are only read. `hydo run` sets the variable for an image with `perf:`.
+- `result.json` `perf` (a results addition, `hydo_results::Perf` and `PerfMeasure`): the
+  engine, the unit (`branches` on hvx with the branch clock, `exits` otherwise), the threshold,
+  and the measures `workload`, `step <i>` and the workload's own numbers.
+- `hydo perf compare <run A> <run B> [--threshold PCT] [--all]` and `hydo perf show <run>`
+  (`hydo-cli/src/perf.rs`). The comparison says each change in words, for example `step 3 did
+  4.80% more work (slower)`, and exits 1 when an engine measure grew by more than the threshold.
+  It refuses runs of two engines, and notes two fingerprint epochs and, on KVM, two CPU models.
+- `hydo guide workflow`, section "Performance tests"; MANIFEST.md, "Performance tests
+  (`perf:`)".
+
+**The proof** (the committed example, built 4 times from this tree: base, a new tag, +1 %, +5 %;
+hvx on the bare-metal machine; `disk=none | run` from a fresh boot):
+
+- Each image gave one fingerprint in all its runs: base `263047f1763696bf` (3 runs), new tag
+  `2c130e7a87601bf4` (2), +1 % `170c6c0b1ef4f187` (2), +5 % `182a31dac88b0fda` (2).
+- `hydo perf compare` of base run 1 with base runs 2 and 3: `no change: all 11 measures are
+  exactly the same (0.00%)` (228,035,550 branches for the workload), exit status 0.
+- base against the new tag: one branch more in step 0 (228,035,551 for the workload; the server
+  prints its tag once at its start), the other 9 steps the same, `no change`, exit status 0.
+- base against +1 % (twice, other run pairs): `the whole workload did 0.88% more work (slower):
+  228,035,550 -> 230,036,509 branches`, and every one of the 10 steps between +0.81 % and +0.92 %,
+  exit status 1.
+- base against +5 % (twice): the workload +4.39 % (238,035,515 branches), each step +4.28 % to
+  +4.45 %, exit status 1.
+- The measurements above ran a first version of the example that also read the guest clock
+  around each PUT; the committed example does that only with `PKV_LATENCIES=1`. So the base
+  counts differ (228,327,750 there, 228,035,550 here), and the changes agree (+0.871 % and
+  +0.877 %, +4.376 % and +4.385 %).
+- Runs of the base, +5 % and +20 % images 40 minutes after the first ones, in a later batch
+  of the same tree, gave the first runs' fingerprints again.
+
+**Limits.**
+
+- Only hvx with the PMU branch clock counts CPU work. KVM and the Mac engine count VM exits, and
+  a loop without exits adds none (Milestone 198 measured 100,000 extra rounds per request as no
+  change on both).
+- The count is the guest's branches, not its time: it does not see cache misses, vectorized
+  code, memory bandwidth, or a slower disk or network.
+- A workload whose steps mostly wait for I/O measures the guest kernel's work for that I/O, and
+  the engine's fixed device latencies, not the device.
+- The noise level of a program change was measured on one workload. A workload with more timer
+  work around it, such as Milestone 198's rkv, has a higher one.
+- Neither KVM nor the Mac engine ran this example: the build machine could not be reached, KVM
+  must not run on the bare-metal machine, and this Mac was below its free-disk limit for a build.
+- `hydo ci` and `hydo versions` do not call the comparison yet, and the explorer's runs carry no
+  `perf`.
