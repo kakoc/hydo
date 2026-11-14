@@ -214,17 +214,18 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.3.2 was published on 2026-11-14 from the release commit `fbee09d4`, in
+**Releases.** hydo 0.3.3 was published on 2026-11-14 from the release commit `dad45fc9`, in
 these places:
 
-- The GitHub release `v0.3.2`: both tarballs, their sources archives, and the Mac signatures.
+- The GitHub release `v0.3.3`: both tarballs, their sources archives, and the Mac signatures.
 - The Homebrew tap: `brew install kakoc/tap/hydo`.
 - crates.io: the 20 crates of `cargo install hydo`, and `hydo-assert`.
-- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.3.2`.
-- The skill release `skill-v1.2.0` (the skill did not change since 0.3.0).
+- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.3.3`.
+- The skill release `skill-v2.0.2` (the plugin `hydo`, command `/hydo:onboard`).
 
-The registries are published by `release.yml` on the tag. 0.3.2 adds Milestones 210–227 to
-0.3.1 (`docs/HISTORY.md` "The 0.3.2 release"); 0.3.1 (`b3f73087`) added Milestones 192–208.
+The registries are published by `release.yml` on the tag. 0.3.3 adds Milestones 228–230, 232, 239,
+and 240 to 0.3.2 (`docs/HISTORY.md` "The 0.3.3 release"); 0.3.2 (`fbee09d4`) added
+Milestones 210–227.
 Plans keep `hydo_version: "0.3"`. The release index `hydo/dist/releases.txt` pins every published archive.
 Since 0.2.0 the Linux release ships the KVM engine, and the Mac programs are signed and notarized.
 `cargo install hydo` followed by `hydo setup` works on the Mac and, since M210, on Linux with KVM.
@@ -882,7 +883,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     exploration's files, so the page can only name the command that shows it.
 104. `hydo onboard` and the plugin `hydo` (M229). The skill release `skill-v2.0.0` was published
     on 2026-11-14, and `hydo skill update` installs it. `hydo onboard` ran only on the Mac, and
-    the messages tutorial did not run on Linux. No published hydo has `hydo onboard` yet; it is planned for 0.3.3.
+    the messages tutorial did not run on Linux. 0.3.3 is the first published hydo with it.
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
     milestone and the values it moves; the pass removes the lines. None are waiting.
@@ -892,6 +893,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 107. The onboarding fixes of M239 ran on the Mac engine only. `hydo run --memory` counts only the
     processes alive at the end, so a run with kills gives low peaks. `tcp:` probes ran with one
     service, not with `network: bridge`.
+108. What the 0.3.3 docs review left (the release notes list it too). `hydo report` of a single
+    run's directory prints the technical summary; only its web page is in plain words (open item
+    106). An exploration's report does not show a failing service's last log lines for a run that
+    stopped with an error. Its timelines include hydo's own setup events (`HYDO-ASSERT-DECL`, the
+    netem module's `insmod` status 254). A problem there has no "When it happens" section. One problem can
+    appear under two signatures (`ERROR redis restart failed` and `ERROR restart after the faults
+    (redis)`). The disk-error page starts with the sentence `Then redis did not start again.` and
+    labels the failure `unknown ERROR`. `hydo ci accept` stands under "Next" instead of under its problem.
+    "no image given" with two images could list them. `hydo explore` prints `fault space:` as
+    JSON, and the kinds it lists include pauses and clock steps that run only with
+    `--new-faults`.
 
 ## Milestone index
 
@@ -1250,6 +1262,14 @@ build machine, before 2026-10-13.
   signed and notarized, and verified on hvx, the Mac and KVM (GitHub's runners). A first build
   was not published: its KVM run showed that on Intel a KVM fingerprint holds for one CPU model,
   and the pages were corrected. Published on 2026-11-14
+- The 0.3.3 release (no milestone number): the version raised, `hydo-world`, `hydo-world-tls` and
+  `hydo-grpc` re-pinned. Release step 6a ran on quick candidates with two readers who played new
+  developers. Its fixes are in: the `hydo: VERDICT` line and terms defined where first used.
+  `hydo onboard` comes first in both quickstarts and prints an ordered `First:`/`Next:`. `--check`
+  warns of `hydo compose`'s placeholders, and a report says why its command is not shrunk.
+  The released project schema is the current one, and the examples are re-recorded (epoch 2).
+  Both releases are built twice to the same bytes, the Mac one signed and notarized, and verified
+  on hvx, the Mac and KVM (GitHub's runners); published on 2026-11-14
 - M228 (tentative number): `hydo report --html` in plain words, from the user's approved mockups.
   It says what broke, when it happens, whether it is a bug, what hydo saw, and how to see it
   again. The specialists' details are folded at the bottom. Every schedule token has words
