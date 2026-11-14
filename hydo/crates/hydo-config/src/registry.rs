@@ -510,6 +510,9 @@ variables! {
     HYDO_FAKE_EXPLORER: Tests, Test, "command", "hydo-explore", "hydo-explore tests";
     /// Not empty: the scripted engine prints history records.
     HYDO_FAKE_HIST: Tests, Test, "flag: not empty", "", "hydo-explore tests";
+    /// `1`: the scripted engine answers turn tokens in KVM's unit, VM exits, with the shape of
+    /// nats-server's flaky test on 2 vCPUs (M227).
+    HYDO_FAKE_KVM_TURNS: Tests, Test, "flag", "", "hydo-explore tests";
     /// Not empty: the scripted engine prints a steered distance and fails only at distance 0 (M209).
     HYDO_FAKE_STEER: Tests, Test, "flag: not empty", "", "hydo-explore tests";
     /// The history checker's dump directory.
