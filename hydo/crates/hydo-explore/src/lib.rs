@@ -22,6 +22,7 @@
 //! shrinks, shrink rounds that stop at their first kept candidate, snapshots in memory when the
 //! machine has the room, and the pool sized from the machine.
 
+pub mod advice;
 pub mod args;
 pub mod compose;
 pub mod errlog;

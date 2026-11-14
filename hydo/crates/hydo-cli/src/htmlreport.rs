@@ -14,6 +14,7 @@
 //! [`MAX_LOG`] bytes, and the page says what it left out and which command shows it all.
 
 mod page;
+mod story;
 #[cfg(test)]
 mod tests;
 
@@ -22,11 +23,16 @@ use crate::diff;
 use crate::inspect::drive::{Recorded, RunFiles};
 use crate::inspect::timeline;
 use crate::inspect::work::quote;
+use hydo_explore::advice::{self, What};
 use hydo_results::{
     CiFinding, CiRun, Diff, DiffLine, Divergence, Engine, Exploration, Failure, Image,
     PropertyTable, Run, Shrink, Stream, TimelineEvent,
 };
-use page::{badge, code, copy_block, cut, cut_bytes, esc, facts, section, table, verdict_words};
+use hydo_schedule::describe;
+use hydo_schedule::Schedule;
+use page::{
+    badge, code, copy_block, cut, cut_bytes, esc, facts, md, pill, plain, table, verdict_words,
+};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -333,18 +339,223 @@ pub fn schedule_change(a: &str, b: &str) -> String {
     }
 }
 
-fn header(title: &str, lead: &str, toc: &[(&str, &str)]) -> String {
+/// The top of a page: a small line naming the report, the title, and the lead paragraph (HTML).
+fn top(eyebrow: &str, title: &str, lead: &str) -> String {
+    format!(
+        "<header>\n<p class=\"eyebrow\">{eyebrow}</p>\n<h1>{title}</h1>\n<p class=\"lead\">{lead}</p>\n</header>\n"
+    )
+}
+
+/// A heading of the plain part.
+fn h2(id: &str, title: &str) -> String {
+    format!("<h2 id=\"{id}\">{}</h2>\n", esc(title))
+}
+
+/// Everything for specialists, folded at the bottom of the page.
+fn share(inner: &str) -> String {
+    format!(
+        "<details class=\"share\" id=\"details\"><summary>Details for a bug report</summary>\n{inner}</details>\n"
+    )
+}
+
+/// A heading inside the details.
+fn h3(id: &str, title: &str) -> String {
+    format!("<h3 id=\"{id}\">{}</h3>\n", esc(title))
+}
+
+/// One problem: its number, title, labels, how many runs show it, why, what to do, and the
+/// command that shows it again (HTML).
+struct Card<'a> {
+    n: usize,
+    problem: &'a advice::Problem,
+    /// A label before the attention label (a CI finding's state against the base).
+    state: Option<String>,
+    /// Runs that show it, of all runs.
+    runs: Option<(usize, u64)>,
+    /// More paragraphs after the explanation (HTML).
+    more: String,
+    /// The command and its words (HTML).
+    command: String,
+}
+
+fn card(c: &Card) -> String {
+    let p = c.problem;
     let mut s = format!(
-        "<header>\n<p class=\"muted\">hydo report</p>\n<h1>{title}</h1>\n<p class=\"lead\">{lead}</p>\n"
+        "<div class=\"card problem\" id=\"p{}\"><div class=\"num\">{}</div><div>\n<h3>{}</h3>\n<p>",
+        c.n,
+        c.n,
+        md(&p.title)
     );
-    if !toc.is_empty() {
-        s.push_str("<nav class=\"toc\">");
-        for (id, name) in toc {
-            s.push_str(&format!("<a href=\"#{id}\">{}</a>", esc(name)));
-        }
-        s.push_str("</nav>\n");
+    if let Some(st) = &c.state {
+        s.push_str(st);
     }
-    s.push_str("</header>\n");
+    s.push_str(&story::attention_pill(p.attention));
+    if let Some((k, of)) = c.runs {
+        s.push_str(&format!(
+            "<span class=\"muted\">{k} of {of} run{}</span>",
+            if of == 1 { "" } else { "s" }
+        ));
+    }
+    s.push_str("</p>\n");
+    if let Some((k, of)) = c.runs.filter(|(_, of)| *of > 0) {
+        let pct = ((k as f64 / of as f64) * 100.0).round().clamp(1.0, 100.0);
+        s.push_str(&format!(
+            "<div class=\"bar {}\"><span style=\"width:{pct}%\"></span></div>\n",
+            p.attention.id()
+        ));
+    }
+    s.push_str(&story::attention_meaning(p.attention));
+    s.push_str(&format!(
+        "<p>{}</p>\n",
+        md(format!("{} {}", p.what, p.why).trim())
+    ));
+    s.push_str(&c.more);
+    s.push_str(&format!("<p><b>What to do:</b> {}</p>\n", md(&p.todo)));
+    s.push_str(&c.command);
+    s.push_str("</div></div>\n");
+    s
+}
+
+/// The seeds after an exploration's range (`1-30`: `31-130`).
+fn next_seeds(seeds: Option<&str>) -> String {
+    let last = seeds
+        .and_then(|s| s.rsplit(['-', ',']).next())
+        .and_then(|x| x.trim().parse::<u64>().ok());
+    match last {
+        Some(b) => format!("{}-{}", b + 1, b + 100),
+        None => "1-100".into(),
+    }
+}
+
+/// The `hydo explore` command for more runs, from the project's folder when it has one.
+fn explore_more(pr: &story::Project, image: &str, seeds: Option<&str>) -> String {
+    let mut w = vec!["hydo explore".to_string()];
+    if pr.folder.is_none() {
+        w.push(format!("--image {}", quote(image)));
+    }
+    w.push(format!("--seeds {}", next_seeds(seeds)));
+    w.join(" ")
+}
+
+/// The finding key `hydo ci accept` takes for a failing run.
+fn key_of(run: &Run) -> Option<String> {
+    crate::ci::key::of_verdict(&run.verdict.text, &run.findings).map(|(_, _, k)| k)
+}
+
+/// "What held": the passing runs, the user's checks that held, and what the runs did not try.
+fn held_html(
+    pr: &story::Project,
+    first: &[&Run],
+    total: u64,
+    props: Option<&PropertyTable>,
+) -> String {
+    let mut s = String::from("<div class=\"card\">\n");
+    let passed: Vec<&&Run> = first.iter().filter(|r| r.verdict.kind == "ok").collect();
+    let n_pass = if first.is_empty() {
+        None
+    } else {
+        Some(passed.len() as u64)
+    };
+    if let Some(np) = n_pass {
+        let kinds = story::fault_kinds(passed.iter().map(|r| r.schedule.as_str()), pr);
+        s.push_str(&format!(
+            "<p>{}{np} of {total} runs passed every check{}.</p>\n",
+            pill(if np > 0 { "ok" } else { "bad" }, "Passed"),
+            if kinds.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    ", with {}",
+                    esc(&describe::and_list(
+                        &kinds.iter().map(|k| k.to_string()).collect::<Vec<_>>()
+                    ))
+                )
+            }
+        ));
+        // the runs with a working disk and every setting at its safe value
+        let durable: Vec<&&Run> = first
+            .iter()
+            .filter(|r| {
+                matches!(
+                    story::class_of(r, pr).as_str(),
+                    "durable-defaults" | "test-failed"
+                )
+            })
+            .collect();
+        let bad = durable.iter().filter(|r| r.verdict.kind != "ok").count();
+        let failures = first.iter().filter(|r| r.verdict.kind != "ok").count();
+        if !durable.is_empty() && bad == 0 && failures > 0 {
+            s.push_str(&format!(
+                "<p>None of the {} runs with a working disk and your settings at their safe \
+                 values failed. Every failure above needs a disk fault, a damaged file or a \
+                 setting that trades safety for speed.</p>\n",
+                durable.len()
+            ));
+        }
+    }
+    if let Some(t) = props {
+        let words = |p: &hydo_results::Property| -> String {
+            if p.message.trim().is_empty() {
+                code(&p.id)
+            } else {
+                format!("{} ({})", esc(p.message.trim()), code(&p.id))
+            }
+        };
+        let own = |p: &&hydo_results::Property| !p.id.starts_with("fault.");
+        let held: Vec<String> = t
+            .properties
+            .iter()
+            .filter(own)
+            .filter(|p| p.status == "ok" && p.runs_failed == 0)
+            .map(words)
+            .collect();
+        if !held.is_empty() {
+            s.push_str(&format!(
+                "<p>Your checks that held in every run: {}.</p>\n",
+                held.join("; ")
+            ));
+        }
+        let never: Vec<String> = t
+            .properties
+            .iter()
+            .filter(own)
+            .filter(|p| p.status.starts_with("not-"))
+            .map(words)
+            .collect();
+        if !never.is_empty() {
+            s.push_str(&format!(
+                "<p>Your checks that these runs never reached, so they tell nothing yet: {}.</p>\n",
+                never.join("; ")
+            ));
+        }
+        let mut untried: Vec<&str> = Vec::new();
+        let mut options: Vec<&str> = Vec::new();
+        for p in t
+            .properties
+            .iter()
+            .filter(|p| p.id.starts_with("fault.") && p.status.starts_with("not-"))
+        {
+            if let Some((w, o)) = story::untried_words(&p.id) {
+                if !untried.contains(&w) {
+                    untried.push(w);
+                }
+                if !options.contains(&o) {
+                    options.push(o);
+                }
+            }
+        }
+        if !untried.is_empty() {
+            s.push_str(&format!(
+                "<p class=\"small\">These runs never had {}. To try them too, add {} to \
+                 <code>hydo explore</code>.</p>\n",
+                esc(&describe::and_list(
+                    &untried.iter().map(|x| x.to_string()).collect::<Vec<_>>()
+                )),
+                describe::and_list(&options.iter().map(|o| code(o)).collect::<Vec<_>>())
+            ));
+        }
+    }
+    s.push_str("</div>\n");
     s
 }
 
@@ -915,12 +1126,14 @@ fn run_page(
     } else {
         extra.shown_dir.clone()
     };
-    let system = run
-        .image
-        .as_ref()
-        .and_then(|i| system_of(&i.path))
-        .unwrap_or_else(|| "the system".into());
-    let (vc, vw, vs) = verdict_words(&run.verdict.kind);
+    let evs = events_of(dir, run, &RunFiles::default());
+    let notes: Vec<&str> = evs.iter().map(|e| e.text.as_str()).collect();
+    let image = run.image.as_ref().map(|i| i.path.as_str());
+    let pr = story::project(dir, image, &notes);
+    let what = story::what_of(run, &pr);
+    let class = story::class_of(run, &pr);
+    let sched = Schedule::parse(&run.schedule).ok();
+    let failed = run.verdict.kind != "ok";
     // the diff: --against, --diff, an explain directory, or none
     let mut how: Option<String> = None;
     let d: Option<Diff> = if let Some(b) = &extra.against {
@@ -933,40 +1146,107 @@ fn run_page(
     } else {
         explain.and_then(best_explained)
     };
-    let failed = run.verdict.kind != "ok";
-    let mut toc = vec![("summary", "Summary")];
-    if failed {
-        toc.push(("failure", "The failure"));
-    }
-    toc.push(("replay", "Run it again"));
-    toc.push(("timeline", "Timeline"));
-    if d.is_some() {
-        toc.push(("diff", "Against a passing run"));
-    }
-    toc.push(("checks", "Checks"));
-    let versions = versions_raw(dir, hydo_results::RUN_DOC);
-    if versions.is_some() {
-        toc.push(("versions", "Versions"));
-    }
-    let mut body = header(
-        &format!("{}: {}", esc(&system), esc(vs)),
+    let problem = advice::problem(&class, &what, &pr.system, sched.as_ref(), &pr.knobs);
+    let title = if failed {
+        problem.title.clone()
+    } else {
+        format!("{} passed every check in this run", pr.system)
+    };
+    let mut body = top(
         &format!(
-            "One run of the schedule {} ended with {}.",
-            code(&run.schedule),
-            code(&run.verdict.text)
+            "hydo report · {}one run",
+            if pr.named {
+                format!("project <b>{}</b> · ", esc(&pr.label))
+            } else {
+                String::new()
+            }
         ),
-        &toc,
+        &md(&title),
+        &story::lead_of(run, &evs, &what, &pr),
     );
-    // summary
+    // the verdict in one line
+    let (pc, pw) = story::verdict_pill(run, &what);
+    let detail = match &what {
+        What::Check {
+            id: Some(id),
+            description: Some(desc),
+            ..
+        } if failed => format!("{}: {}", code(id), esc(desc)),
+        What::Check { id: Some(id), .. } if failed => code(id),
+        _ => String::new(),
+    };
+    body.push_str(&format!(
+        "<div class=\"verdictline\">{}<span class=\"muted\">{detail}</span></div>\n",
+        pill(pc, pw)
+    ));
+    // when it happens
+    body.push_str(&h2("when", "When it happens"));
+    body.push_str(&story::steps_html(
+        &run.schedule,
+        &pr,
+        Some(story::outcome_line(run, &what)),
+    ));
+    // is this a bug?
+    if failed {
+        body.push_str(&h2("bug", "Is this a bug?"));
+        let mut s = format!(
+            "<div class=\"card\"><p>{}</p>\n{}<p>{}</p>\n",
+            story::attention_pill(problem.attention),
+            story::attention_meaning(problem.attention),
+            md(&problem.why)
+        );
+        if let Some(d) = &d {
+            s.push_str(&neighbour_words(&run.schedule, d, &pr));
+        }
+        s.push_str(&format!(
+            "<p><b>What to do:</b> {}</p></div>\n",
+            md(&problem.todo)
+        ));
+        body.push_str(&s);
+    }
+    // what hydo saw
+    if let Some(e) = story::evidence_html(run, &evs, &what, &pr) {
+        body.push_str(&h2("saw", "What hydo saw"));
+        body.push_str(&e);
+    }
+    // see it again
+    body.push_str(&h2("again", "See it again"));
+    body.push_str(&story::see_again(
+        &pr,
+        image,
+        run.engine.as_ref(),
+        &run.schedule,
+    ));
+    if failed {
+        let folder = pr.results_rel.clone().unwrap_or_else(|| shown.clone());
+        body.push_str(&format!(
+            "<p class=\"small\">To open the run's files, logs and processes at the moment it \
+             failed: {}. The run's folder is {}{}.</p>\n",
+            code(&format!("hydo inspect start {} --at end", quote(&folder))),
+            code(&folder),
+            if pr.results_rel.is_some() {
+                " in your project's folder"
+            } else {
+                ""
+            }
+        ));
+    }
+    // details
+    let mut s = String::new();
     let mut f: Vec<(String, String)> = vec![
-        (
-            "Result".into(),
-            format!("{} {}", badge(vc, vw), code(&run.verdict.text)),
-        ),
+        ("Verdict".into(), code(&run.verdict.text)),
         ("Schedule".into(), copy_block(&run.schedule)),
+        ("Finding class".into(), code(&class)),
+        (
+            "Fingerprint".into(),
+            format!(
+                "{} <span class=\"muted\">(a hash of the machine's whole final state: a replay gives the same one)</span>",
+                code(&run.fingerprints.fp)
+            ),
+        ),
     ];
     if let Some(i) = &run.image {
-        f.push(("System".into(), image_words(i)));
+        f.push(("Image".into(), image_words(i)));
     }
     if let Some(e) = &run.engine {
         f.push(("Engine".into(), engine_words(e)));
@@ -978,93 +1258,95 @@ fn run_page(
         "hydo".into(),
         hydo_words(run.hydo_version.as_deref(), run.epoch),
     ));
-    f.push((
-        "Fingerprint".into(),
-        format!(
-            "{} <span class=\"muted\">(a hash of the machine's whole final state: a replay gives the same one)</span>",
-            code(&run.fingerprints.fp)
-        ),
-    ));
-    if let Some(s) = run.secs {
-        f.push(("Wall time".into(), esc(&format!("{s} s"))));
+    if let Some(sec) = run.secs {
+        f.push(("Wall time".into(), esc(&format!("{sec} s"))));
     }
-    f.push(("Run directory".into(), code(&shown)));
-    body.push_str(&section("summary", "Summary", &facts(&f)));
-    // the failure
+    f.push(("Run folder".into(), code(&shown)));
+    f.push((
+        "Replay the recorded run".into(),
+        copy_block(&format!("hydo repro {}", quote(&shown))),
+    ));
+    if let Some(i) = &run.image {
+        f.push((
+            "Run its schedule with the image's path".into(),
+            copy_block(&run_command(&i.path, run.engine.as_ref(), &run.schedule)),
+        ));
+    }
+    s.push_str(&format!("<div class=\"card\">{}</div>\n", facts(&f)));
     if failed {
-        let mut s = String::new();
+        let mut x = String::new();
         let bad: Vec<&hydo_results::Finding> =
             run.findings.iter().filter(|x| x.status != "ok").collect();
-        if bad.is_empty() {
-            s.push_str(&format!("<p>{}</p>\n", code(&run.verdict.text)));
-        } else {
-            s.push_str("<ul>\n");
-            for x in &bad {
-                s.push_str(&format!(
+        if !bad.is_empty() {
+            x.push_str("<ul>\n");
+            for b in &bad {
+                x.push_str(&format!(
                     "<li>{} {} <span class=\"muted\">({})</span>: {}</li>\n",
-                    badge("bad", status_words(&x.status).1),
-                    code(&x.id),
-                    esc(&x.kind),
-                    esc(&cut(&x.message, EVENT_TEXT))
+                    badge("bad", status_words(&b.status).1),
+                    code(&b.id),
+                    esc(&b.kind),
+                    esc(&cut(&b.message, EVENT_TEXT))
                 ));
             }
-            s.push_str("</ul>\n");
+            x.push_str("</ul>\n");
         }
-        s.push_str(&diagnosis_html(run));
-        if let Some(w) = run.warnings.first() {
-            s.push_str(&format!("<p class=\"muted\">Warning: {}</p>\n", esc(w)));
+        x.push_str(&diagnosis_html(run));
+        for w in &run.warnings {
+            x.push_str(&format!("<p class=\"muted\">Warning: {}</p>\n", esc(w)));
         }
-        body.push_str(&section("failure", "The failure", &s));
+        s.push_str(&h3("failure", "The failure"));
+        s.push_str(&x);
     }
-    // replay
-    let mut s = String::from(
-        "<p>The first command runs the recorded run again from a fresh boot and checks that it \
-         gives the same fingerprint. The second runs the same schedule as a new run.</p>\n",
-    );
-    s.push_str(&copy_block(&format!("hydo repro {}", quote(&shown))));
-    if let Some(i) = &run.image {
-        s.push_str(&copy_block(&run_command(
-            &i.path,
-            run.engine.as_ref(),
-            &run.schedule,
-        )));
-    }
-    body.push_str(&section("replay", "Run it again", &s));
-    // timeline
-    let evs = events_of(dir, run, &RunFiles::default());
     let more = format!(
         "<code>hydo inspect events {}</code> lists every event with its details.",
         esc(&quote(&shown))
     );
-    body.push_str(&section(
-        "timeline",
-        "Timeline of the run",
-        &timeline_html("tl-run", &evs, &more),
-    ));
+    s.push_str(&h3("timeline", "Timeline of the run"));
+    s.push_str(&timeline_html("tl-run", &evs, &more));
     if let Some(d) = &d {
-        body.push_str(&section(
-            "diff",
-            "Against a passing run",
-            &diff_html(d, how.as_deref(), "the failing run", "the passing run"),
+        s.push_str(&h3("diff", "Against a passing run"));
+        s.push_str(&diff_html(
+            d,
+            how.as_deref(),
+            "the failing run",
+            "the passing run",
         ));
     }
-    // checks
-    let mut s = checks_html(run);
+    let mut c = checks_html(run);
     if let Some(t) = &run.properties {
-        s.push_str(&properties_html(t, "this run"));
+        c.push_str(&properties_html(t, "this run"));
     }
-    if s.is_empty() {
-        s = "<p>The run reported no checks.</p>\n".into();
+    if c.is_empty() {
+        c = "<p>The run reported no checks.</p>\n".into();
     }
-    body.push_str(&section("checks", "Checks and properties", &s));
-    if let Some(v) = &versions {
-        body.push_str(&section("versions", "Versions", &versions_html(v)));
+    s.push_str(&h3("checks", "Checks and properties"));
+    s.push_str(&c);
+    if let Some(v) = &versions_raw(dir, hydo_results::RUN_DOC) {
+        s.push_str(&h3("versions", "Versions"));
+        s.push_str(&versions_html(v));
     }
-    body.push_str(&footer(&pjoin(&shown, hydo_results::RUN_DOC)));
+    s.push_str(&footer(&pjoin(&shown, hydo_results::RUN_DOC)));
+    body.push_str(&share(&s));
     Ok(page::document(
-        &format!("hydo report: {system}, {vs}"),
+        &format!("{} (hydo report)", plain(&title)),
         &body,
     ))
+}
+
+/// What a passing neighbour shows, in words: "A second run with Redis appendfsync set to
+/// `always` instead of `everysec` passed every check."
+fn neighbour_words(a: &str, d: &Diff, pr: &story::Project) -> String {
+    let change = describe::change(a, &d.b.schedule, &pr.knobs);
+    let end = if d.b.verdict.kind == "ok" {
+        "passed every check".to_string()
+    } else {
+        format!("ended with {}", code(&d.b.verdict.text))
+    };
+    match change {
+        Some(c) if c.contains(',') => format!("<p>A second run {}, {end}.</p>\n", md(&c)),
+        Some(c) => format!("<p>A second run {} {end}.</p>\n", md(&c)),
+        None => String::new(),
+    }
 }
 
 // ---------------------------------------------------------------- an exploration
@@ -1137,7 +1419,7 @@ fn class_words(c: &str) -> Option<&'static str> {
         "lying-disk" => "The disk lost writes it had reported as written (disk=lying). A system is only as safe as its disk, so this class is often expected.",
         "io-errors" => "The disk returned errors (disk=ioerr).",
         "corrupted-files" => "A service's files were corrupted on purpose (G=): the system's own checks of its data are under test.",
-        "unsafe-knob" => "A setting that trades safety for speed (one of the project's knobs, such as R=everysec) met a power cut or lost writes.",
+        "unsafe-knob" => "A setting that trades safety for speed (a setting of the project's manifest, such as R=everysec) met a power cut or lost writes.",
         "test-failed" => "The test program failed, with no fault that explains it.",
         "durable-defaults" => "The system failed with its safe settings and a working disk: the most serious class.",
         "refused" => "The engine cannot run this schedule, so it is not a failure of the system.",
@@ -1149,6 +1431,19 @@ fn class_of(f: &Failure) -> String {
     f.run.class.clone().unwrap_or_default()
 }
 
+/// One problem of an exploration: the groups of failures (class and signature) that mean the
+/// same thing for a reader.
+struct Prob<'a> {
+    problem: advice::Problem,
+    groups: Vec<usize>,
+    failures: Vec<&'a Failure>,
+    /// The schedule that shows it: the minimal one, else the first failure's.
+    schedule: String,
+    /// What a passing neighbour of its minimal schedule shows (HTML).
+    neighbour: Option<String>,
+    key: Option<String>,
+}
+
 fn exploration_page(
     dir: &Path,
     doc: &Exploration,
@@ -1156,9 +1451,20 @@ fn exploration_page(
     extra: &Extra,
 ) -> String {
     let shown = extra.shown_dir.clone();
-    let system = system_of(&doc.image.path).unwrap_or_else(|| "the system".into());
     let by_tag = runs_by_tag(events);
     let s_ = &doc.summary;
+    let pr = story::project(dir, Some(&doc.image.path), &[]);
+    let first: Vec<&Run> = events
+        .map(|e| {
+            e.runs()
+                .filter(|r| {
+                    r.role
+                        .as_deref()
+                        .is_none_or(|x| x == hydo_results::role::FIRST)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     // failures grouped by class and signature, in the order of their first seed
     let mut groups: Vec<((String, String), Vec<&Failure>)> = Vec::new();
     for f in &doc.failures {
@@ -1174,54 +1480,365 @@ fn exploration_page(
             .iter()
             .any(|x| &x.class == c && &x.signature == sig)
     });
-    let title = if doc.failures.is_empty() {
-        format!(
-            "{}: no failures in {} schedules",
-            esc(&system),
-            s_.schedules
-        )
-    } else {
-        format!(
-            "{}: {} failing schedule{} of {}, in {} kind{}",
-            esc(&system),
-            s_.failures,
-            if s_.failures == 1 { "" } else { "s" },
-            s_.schedules,
-            groups.len(),
-            if groups.len() == 1 { "" } else { "s" }
-        )
-    };
-    let mut toc = vec![("summary", "Summary")];
-    if !groups.is_empty() {
-        toc.push(("failures", "Failures"));
+    // the groups as problems: groups that read the same for a reader are one problem
+    let mut probs: Vec<Prob> = Vec::new();
+    for (gi, ((c, sig), fs)) in groups.iter().enumerate() {
+        let sh = doc
+            .shrinks
+            .iter()
+            .find(|x| &x.class == c && &x.signature == sig);
+        let schedule = sh
+            .map(|x| x.minimal.clone())
+            .unwrap_or_else(|| fs[0].run.schedule.clone());
+        let class = if c.is_empty() {
+            story::class_of(&fs[0].run, &pr)
+        } else {
+            c.clone()
+        };
+        let what = story::what_of(&fs[0].run, &pr);
+        let p = advice::problem(
+            &class,
+            &what,
+            &pr.system,
+            Schedule::parse(&schedule).ok().as_ref(),
+            &pr.knobs,
+        );
+        let neighbour = sh.and_then(|sh| {
+            shrink_neighbour(dir, sh, events, &by_tag).and_then(|(d, ..)| {
+                let w = neighbour_words(&sh.minimal, &d, &pr);
+                (!w.is_empty()).then_some(w)
+            })
+        });
+        match probs
+            .iter_mut()
+            .find(|x| x.problem.title == p.title && x.problem.attention == p.attention)
+        {
+            Some(x) => {
+                x.groups.push(gi);
+                x.failures.extend(fs.iter().copied());
+                if x.neighbour.is_none() {
+                    x.neighbour = neighbour;
+                }
+            }
+            None => probs.push(Prob {
+                key: key_of(&fs[0].run),
+                problem: p,
+                groups: vec![gi],
+                failures: fs.clone(),
+                schedule,
+                neighbour,
+            }),
+        }
     }
-    toc.push(("properties", "Properties"));
+    // the most attention first, then the most runs
+    let mut order: Vec<usize> = (0..probs.len()).collect();
+    order.sort_by_key(|&i| {
+        (
+            probs[i].problem.attention,
+            std::cmp::Reverse(probs[i].failures.len()),
+            i,
+        )
+    });
     let new_kinds: Vec<&hydo_results::ErrorKind> = doc
         .error_kinds
         .as_ref()
         .map(|k| k.kinds.iter().filter(|x| x.new).collect())
         .unwrap_or_default();
+    let n_problems = probs.len() + usize::from(!new_kinds.is_empty());
+    let total = s_.schedules;
+    // the top
+    let setup = if pr.named {
+        format!("your {} setup", pr.system)
+    } else {
+        "your system".to_string()
+    };
+    let title = match n_problems {
+        0 => format!("hydo found no problem in {total} runs of {setup}"),
+        1 => format!("hydo found 1 problem in {setup}"),
+        n => format!("hydo found {n} problems in {setup}"),
+    };
+    let kinds = if first.is_empty() {
+        story::fault_kinds(doc.failures.iter().map(|f| f.run.schedule.as_str()), &pr)
+    } else {
+        story::fault_kinds(first.iter().map(|r| r.schedule.as_str()), &pr)
+    };
+    let mut lead = format!(
+        "hydo ran your system {total} time{}, each time with different faults{}.",
+        if total == 1 { "" } else { "s" },
+        if kinds.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ": {}",
+                describe::and_list(&kinds.iter().map(|k| k.to_string()).collect::<Vec<_>>())
+            )
+        }
+    );
+    if s_.failures == 0 {
+        lead.push_str(" Every run passed your checks.");
+    } else {
+        lead.push_str(&format!(
+            " {} run{} failed{}.",
+            s_.failures,
+            if s_.failures == 1 { "" } else { "s" },
+            match probs.len() {
+                1 if s_.failures > 1 => ", all in the same way".to_string(),
+                1 => String::new(),
+                n => format!(", in {n} different ways"),
+            }
+        ));
+        let rep = s_.reproduced.unwrap_or(0);
+        if rep == s_.failures {
+            lead.push_str(" Each failing run failed again the same way when hydo replayed it.");
+        } else {
+            lead.push_str(&format!(
+                " {} of the failing runs did not fail the same way when hydo replayed them; the \
+                 details at the bottom list them.",
+                s_.failures - rep
+            ));
+        }
+    }
     if !new_kinds.is_empty() {
-        toc.push(("errors", "New error lines"));
+        lead.push_str(
+            " Your services also wrote error lines that your list of known errors does not have.",
+        );
     }
-    let versions = versions_raw(dir, hydo_results::EXPLORATION_DOC);
-    if versions.is_some() {
-        toc.push(("versions", "Versions"));
+    let mut body = top(
+        &format!(
+            "hydo report · {}exploration of {} run{}",
+            if pr.named {
+                format!("project <b>{}</b> · ", esc(&pr.label))
+            } else {
+                String::new()
+            },
+            total,
+            if total == 1 { "" } else { "s" }
+        ),
+        &esc(&title),
+        &esc(&lead),
+    );
+    // the problems
+    if n_problems > 0 {
+        body.push_str(&h2("start", "Start here"));
     }
-    let lead = if doc.failures.is_empty() {
-        "hydo ran the system under schedules of faults drawn from seeds, and every run passed its checks.".to_string()
-    } else {
-        "hydo ran the system under schedules of faults drawn from seeds. Each failure below was run again to check that it reproduces, and shrunk to the smallest schedule that still fails.".to_string()
-    };
-    let mut body = header(&title, &esc(&lead), &toc);
-    // summary
-    let (rc, rw) = if doc.failures.is_empty() {
-        ("ok", "no failures".to_string())
-    } else {
-        ("bad", format!("{} failures", s_.failures))
-    };
-    let mut f: Vec<(String, String)> = vec![("Result".into(), badge(rc, &rw))];
-    f.push(("System".into(), image_words(&doc.image)));
+    let mut n = 0;
+    for &i in &order {
+        let x = &probs[i];
+        n += 1;
+        let cmd = story::see_again(&pr, Some(&doc.image.path), Some(&doc.engine), &x.schedule);
+        let mut more = String::new();
+        // what the failing run showed, for a service that did not come back or an error
+        let first = x.failures[0];
+        if matches!(
+            story::what_of(&first.run, &pr),
+            What::NoRestart { .. } | What::Error { .. }
+        ) {
+            if let Some(tag) = &first.run.tag {
+                if let Some(run) = by_tag.get(tag) {
+                    let evs = events_of(dir, run, &RunFiles::explorer(tag));
+                    if let Some(e) = story::run_evidence(&evs) {
+                        more.push_str(&format!(
+                            "<p>What hydo saw in the first of these runs:</p>\n{e}"
+                        ));
+                    }
+                }
+            }
+            if let What::NoRestart { service: Some(svc) } = story::what_of(&first.run, &pr) {
+                more.push_str(&format!(
+                    "<p class=\"small\">The service's own log is not in these files. Run the \
+                     command below, then {} shows it, with the run's folder that \
+                     <code>hydo run</code> prints.</p>\n",
+                    code(&format!("hydo inspect logs <run folder> {svc} --at end"))
+                ));
+            }
+        }
+        // which faults matter
+        let shrunk = x.groups.iter().any(|&gi| {
+            let ((c, sig), _) = &groups[gi];
+            doc.shrinks
+                .iter()
+                .any(|s| &s.class == c && &s.signature == sig)
+        });
+        if shrunk {
+            more.push_str(
+                "<p class=\"small\">hydo removed every fault it could while the run still \
+                 failed, so the command keeps only the faults the failure needs.</p>\n",
+            );
+        } else {
+            let common =
+                story::common_kinds(x.failures.iter().map(|f| f.run.schedule.as_str()), &pr);
+            let all = story::fault_kinds(std::iter::once(x.schedule.as_str()), &pr);
+            let others: Vec<&str> = all
+                .iter()
+                .filter(|k| !common.contains(k))
+                .copied()
+                .collect();
+            let mut note = String::from(
+                "hydo did not remove faults from this one: it does that for failed checks, not \
+                 for runs that stopped with an error. So the command keeps every fault of the \
+                 first run.",
+            );
+            if !common.is_empty() {
+                note.push_str(&format!(
+                    " {} had {}",
+                    match x.failures.len() {
+                        1 => "The run".to_string(),
+                        2 => "Both runs".to_string(),
+                        n => format!("All {n} runs"),
+                    },
+                    describe::and_list(&common.iter().map(|k| k.to_string()).collect::<Vec<_>>())
+                ));
+                if others.is_empty() {
+                    note.push('.');
+                } else {
+                    note.push_str(&format!(
+                        "; the {} in the command differ from run to run.",
+                        describe::and_list(
+                            &others.iter().map(|k| k.to_string()).collect::<Vec<_>>()
+                        )
+                    ));
+                }
+            }
+            more.push_str(&format!("<p class=\"small\">{}</p>\n", esc(&note)));
+        }
+        if let Some(nb) = &x.neighbour {
+            more.push_str(nb);
+        }
+        more.push_str(&format!(
+            "<p class=\"small\"><a href=\"#f{}\">The runs in detail</a>, in the details for a bug \
+             report.</p>\n",
+            x.groups[0] + 1
+        ));
+        body.push_str(&card(&Card {
+            n,
+            problem: &x.problem,
+            state: None,
+            runs: Some((x.failures.len(), total)),
+            more,
+            command: cmd,
+        }));
+    }
+    if !new_kinds.is_empty() {
+        n += 1;
+        let k0 = new_kinds[0];
+        let one = advice::problem(
+            "",
+            &What::ErrorLine {
+                service: k0.service.clone(),
+                line: k0.template.clone(),
+            },
+            &pr.system,
+            None,
+            &pr.knobs,
+        );
+        let p = advice::Problem {
+            title: if new_kinds.len() == 1 {
+                one.title.clone()
+            } else {
+                format!(
+                    "Your services wrote {} kinds of error line that your list of known errors \
+                     does not have",
+                    new_kinds.len()
+                )
+            },
+            why: if new_kinds.len() == 1 {
+                one.why.clone()
+            } else {
+                "Your project's list of known errors (`errors:` in `hydo.yaml`) does not have \
+                 these lines."
+                    .into()
+            },
+            what: if new_kinds.len() == 1 {
+                one.what.clone()
+            } else {
+                String::new()
+            },
+            ..one
+        };
+        let mut more = String::from("<ul>\n");
+        for k in new_kinds.iter().take(5) {
+            more.push_str(&format!(
+                "<li>{} {} <span class=\"muted\">({} run{})</span></li>\n",
+                code(&k.service),
+                code(&cut(&k.template, 160)),
+                k.new_runs,
+                if k.new_runs == 1 { "" } else { "s" }
+            ));
+        }
+        if new_kinds.len() > 5 {
+            more.push_str(&format!("<li>and {} more</li>\n", new_kinds.len() - 5));
+        }
+        more.push_str("</ul>\n");
+        let runs = s_.runs_with_new_error_kinds.unwrap_or(0) as usize;
+        body.push_str(&card(&Card {
+            n,
+            problem: &p,
+            state: None,
+            runs: (runs > 0).then_some((runs, total)),
+            more,
+            command: copy_block(&format!("hydo errors {}", quote(&shown))),
+        }));
+    }
+    // what held
+    body.push_str(&h2("held", "What held"));
+    body.push_str(&held_html(&pr, &first, total, doc.properties.as_ref()));
+    // next
+    body.push_str(&h2("next", "Next"));
+    let mut s = format!(
+        "<div class=\"card\"><p>Look further with more runs: {}</p>\n",
+        code(&explore_more(
+            &pr,
+            &doc.image.path,
+            doc.config.seeds.as_deref()
+        ))
+    );
+    let accept = order
+        .iter()
+        .map(|&i| &probs[i])
+        .find(|x| x.problem.attention != advice::Attention::Look)
+        .or_else(|| order.first().map(|&i| &probs[i]));
+    if let Some(k) = accept.and_then(|x| x.key.as_ref()) {
+        s.push_str(&format!(
+            "<p>To accept a problem you consider expected, so that it no longer fails your CI, run \
+             {}</p>\n",
+            story::accept_html(k)
+        ));
+    }
+    s.push_str("</div>\n");
+    body.push_str(&s);
+    // details: which problem each group of failures is
+    let mut problem_of: Vec<usize> = vec![0; groups.len()];
+    for (n, &i) in order.iter().enumerate() {
+        for &gi in &probs[i].groups {
+            problem_of[gi] = n + 1;
+        }
+    }
+    body.push_str(&share(&exploration_details(
+        dir,
+        doc,
+        events,
+        &by_tag,
+        &groups,
+        &problem_of,
+        &new_kinds,
+        &shown,
+    )));
+    page::document(&format!("{title} (hydo report)"), &body)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn exploration_details(
+    dir: &Path,
+    doc: &Exploration,
+    events: Option<&Stream>,
+    by_tag: &BTreeMap<String, &Run>,
+    groups: &[((String, String), Vec<&Failure>)],
+    problem_of: &[usize],
+    new_kinds: &[&hydo_results::ErrorKind],
+    shown: &str,
+) -> String {
+    let s_ = &doc.summary;
+    let mut f: Vec<(String, String)> = vec![("Image".into(), image_words(&doc.image))];
     f.push(("Engine".into(), engine_words(&doc.engine)));
     if let Some(h) = host_words(&doc.engine) {
         f.push(("Host CPU".into(), h));
@@ -1271,11 +1888,10 @@ fn exploration_page(
     if let Some(w) = s_.total_wall_s {
         f.push(("Wall time".into(), esc(&format!("{w} s"))));
     }
-    f.push(("Exploration directory".into(), code(&shown)));
-    body.push_str(&section("summary", "Summary", &facts(&f)));
-    // failures
+    f.push(("Exploration folder".into(), code(shown)));
+    let mut s = format!("<div class=\"card\">{}</div>\n", facts(&f));
     if !groups.is_empty() {
-        let mut s = String::new();
+        s.push_str(&h3("failures", "The failures by class and signature"));
         let mut rows: Vec<(String, Vec<String>)> = Vec::new();
         for (i, ((c, sig), fs)) in groups.iter().enumerate() {
             let minimal = doc
@@ -1288,6 +1904,7 @@ fn exploration_page(
                 String::new(),
                 vec![
                     format!("<a href=\"#f{}\">{}</a>", i + 1, i + 1),
+                    format!("<a href=\"#p{0}\">problem {0}</a>", problem_of[i]),
                     esc(c),
                     format!("<span class=\"t\">{}</span>", esc(sig)),
                     fs.len().to_string(),
@@ -1303,6 +1920,7 @@ fn exploration_page(
         s.push_str(&table(
             &[
                 "",
+                "Shown as",
                 "Class",
                 "Signature",
                 "Runs",
@@ -1326,19 +1944,17 @@ fn exploration_page(
                 fs,
                 sh,
                 events,
-                &by_tag,
-                &shown,
+                by_tag,
+                shown,
             ));
         }
-        body.push_str(&section("failures", "Failures", &s));
     }
-    // properties
-    let s = match &doc.properties {
+    s.push_str(&h3("properties", "Properties over every schedule"));
+    s.push_str(&match &doc.properties {
         Some(t) => properties_html(t, &format!("{} schedules", t.runs)),
         None => "<p>The guest wrote no property records (the image has no assertion SDK).</p>\n"
             .to_string(),
-    };
-    body.push_str(&section("properties", "Properties over every schedule", &s));
+    });
     if !new_kinds.is_empty() {
         let rows: Vec<(String, Vec<String>)> = new_kinds
             .iter()
@@ -1365,11 +1981,12 @@ fn exploration_page(
                 )
             })
             .collect();
-        let mut s = format!(
+        s.push_str(&h3("errors", "New error lines"));
+        s.push_str(&format!(
             "<p>{} kinds of error line that the project's list of known errors does not cover; \
              each with the smallest schedule that still writes it.</p>\n",
             new_kinds.len()
-        );
+        ));
         s.push_str(&table(
             &[
                 "Service",
@@ -1383,37 +2000,16 @@ fn exploration_page(
             s.push_str(&format!(
                 "<p class=\"muted\">The first 20 of {}; <code>hydo errors {}</code> lists them all.</p>\n",
                 new_kinds.len(),
-                esc(&quote(&shown))
+                esc(&quote(shown))
             ));
         }
-        body.push_str(&section("errors", "New error lines", &s));
     }
-    if let Some(v) = &versions {
-        body.push_str(&section("versions", "Versions", &versions_html(v)));
+    if let Some(v) = &versions_raw(dir, hydo_results::EXPLORATION_DOC) {
+        s.push_str(&h3("versions", "Versions"));
+        s.push_str(&versions_html(v));
     }
-    body.push_str(&footer(&pjoin(&shown, hydo_results::EXPLORATION_DOC)));
-    page::document(
-        &format!("hydo report: {system}, {}", strip_tags(&title)),
-        &body,
-    )
-}
-
-fn strip_tags(s: &str) -> String {
-    let mut o = String::new();
-    let mut inside = false;
-    for c in s.chars() {
-        match c {
-            '<' => inside = true,
-            '>' => inside = false,
-            c if !inside => o.push(c),
-            _ => {}
-        }
-    }
-    o.replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
+    s.push_str(&footer(&pjoin(shown, hydo_results::EXPLORATION_DOC)));
+    s
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1770,39 +2366,308 @@ fn ci_finding_card(n: usize, dir: &Path, f: &CiFinding) -> String {
     s
 }
 
+/// A CI finding's state against the base commit, in plain words: the label and one sentence.
+fn state_plain(s: &str) -> (&'static str, &'static str, &'static str) {
+    match s {
+        "new" => (
+            "bad",
+            "New in this change",
+            "The base commit passes the same run, so this change brought it.",
+        ),
+        "pre-existing" => (
+            "warn",
+            "Already on the base commit",
+            "The base commit fails the same way, so this change did not cause it.",
+        ),
+        "present" => (
+            "warn",
+            "Still there",
+            "The base commit had it, and it still fails here.",
+        ),
+        "changed" => (
+            "warn",
+            "Changed",
+            "The base commit had it, and the same run now fails in another way.",
+        ),
+        "fixed" => (
+            "ok",
+            "Fixed by this change",
+            "The base commit had it, and the same run passes here.",
+        ),
+        "reappeared" => (
+            "bad",
+            "Back again",
+            "It was fixed once, and this change brings it back.",
+        ),
+        "unverified" => (
+            "note",
+            "Not compared",
+            "hydo could not run it on the base commit to compare.",
+        ),
+        _ => ("note", "Not compared", ""),
+    }
+}
+
+/// The fault kinds a CI run drew, from its coverage counts.
+fn coverage_kinds(c: &BTreeMap<String, u64>) -> Vec<&'static str> {
+    let mut v: Vec<&'static str> = Vec::new();
+    for k in c.keys() {
+        let w = match k.as_str() {
+            "C" | "cf" => "power cuts",
+            "K" | "X" => "crashes",
+            "P" => "pauses",
+            "N" | "O" => "network faults",
+            "T" => "clock jumps",
+            "H" => "outside services that misbehave",
+            "F" => "freezes",
+            "G" => "damaged files",
+            "L" => "power losses of one service",
+            "disk" => "disk faults",
+            "tj" => "late timer interrupts",
+            "A" => "faults at reported events",
+            _ => continue,
+        };
+        if !v.contains(&w) {
+            v.push(w);
+        }
+    }
+    v
+}
+
 fn ci_page(dir: &Path, doc: &CiRun, extra: &Extra) -> String {
     let shown = extra.shown_dir.clone();
+    let o = &doc.outcome;
+    let mut pr = story::project(dir, doc.image.path.as_deref(), &[]);
+    if pr.label == "your system" {
+        pr.label = doc.project.name.clone();
+        pr.system = story::capitalize(&doc.project.name);
+        pr.named = true;
+    }
+    // the image is in the CI cache: the replay runs in the project after `hydo build`
+    pr.folder = Some(doc.project.name.clone());
+    pr.needs_build = true;
+    let sm = &doc.summary;
+    let new = doc.summary.states.get("new").copied().unwrap_or(0)
+        + doc.summary.states.get("reappeared").copied().unwrap_or(0);
+    let title = if o.exit > 1 {
+        "The CI run could not finish".to_string()
+    } else if new > 0 {
+        format!(
+            "This change brings {new} new problem{} to {}",
+            if new == 1 { "" } else { "s" },
+            pr.system
+        )
+    } else if sm.findings > 0 {
+        format!("This change brings no new problem to {}", pr.system)
+    } else {
+        format!("hydo found no problem in this change to {}", pr.system)
+    };
+    let kinds = coverage_kinds(&doc.coverage.faults);
+    let mut lead = format!(
+        "hydo ran {} {} time{} on this commit, each time with different faults{}.",
+        pr.system,
+        sm.runs,
+        if sm.runs == 1 { "" } else { "s" },
+        if kinds.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ": {}",
+                describe::and_list(&kinds.iter().map(|k| k.to_string()).collect::<Vec<_>>())
+            )
+        }
+    );
+    if sm.findings > 0 {
+        lead.push_str(&format!(
+            " It found {} problem{}{}.",
+            sm.findings,
+            if sm.findings == 1 { "" } else { "s" },
+            match &doc.base {
+                Some(_) => " and ran each one on the base commit too, to see whether this change brought it",
+                None => "",
+            }
+        ));
+    }
+    lead.push_str(match o.exit {
+        0 => " The CI check passes.",
+        1 => " The CI check fails.",
+        _ => " The CI check could not decide.",
+    });
+    let mut where_ = format!("project <b>{}</b> · CI run", esc(&doc.project.name));
+    if let Some(b) = &doc.branch {
+        where_.push_str(&format!(" on {}", code(b)));
+    }
+    if let Some(c) = &doc.commit {
+        where_.push_str(&format!(", commit {}", code(&cut(c, 13))));
+    }
+    let mut body = top(
+        &format!("hydo report · {where_}"),
+        &esc(&title),
+        &esc(&lead),
+    );
+    // the findings as problems, the new ones first
+    if !doc.findings.is_empty() {
+        body.push_str(&h2("start", "Start here"));
+    }
+    let rank = |s: &str| match s {
+        "new" | "reappeared" => 0,
+        "changed" => 1,
+        "pre-existing" | "present" | "unverified" => 2,
+        _ => 3,
+    };
+    let mut cards: Vec<(usize, advice::Problem, &CiFinding)> = doc
+        .findings
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            // the head replay's own result, for the check's words
+            let head = f
+                .replays
+                .iter()
+                .filter(|r| r.on == "head")
+                .find_map(|r| r.dir.as_ref())
+                .map(|d| dir.join(d).join(hydo_results::RUN_DOC))
+                .and_then(|p| hydo_results::reader::read_run(&p).ok());
+            let verdict = f
+                .replays
+                .iter()
+                .filter(|r| r.on == "head")
+                .find_map(|r| r.verdict.clone())
+                .unwrap_or_else(|| f.title.clone());
+            let what = match &head {
+                Some(r) => story::what_of(r, &pr),
+                None => advice::what_of(&verdict, &[]),
+            };
+            let class = f.classes.first().cloned().unwrap_or_default();
+            let p = advice::problem(
+                &class,
+                &what,
+                &pr.system,
+                Schedule::parse(&f.minimal).ok().as_ref(),
+                &pr.knobs,
+            );
+            (i, p, f)
+        })
+        .collect();
+    cards.sort_by_key(|(i, p, f)| (rank(&f.state), p.attention, *i));
+    let mut keys: Vec<String> = Vec::new();
+    for (n, (i, p, f)) in cards.iter().enumerate() {
+        let (sc, sw, ss) = state_plain(&f.state);
+        let mut more = String::new();
+        if !ss.is_empty() {
+            more.push_str(&format!("<p>{}</p>\n", esc(ss)));
+        }
+        if let Some(a) = &f.accepted {
+            more.push_str(&format!(
+                "<p>Accepted in <code>hydo/known-findings.yaml</code>: {}</p>\n",
+                esc(&a.reason)
+            ));
+        }
+        more.push_str(&format!(
+            "<p class=\"small\"><a href=\"#f{}\">The replays in detail</a>, in the details for \
+             a bug report.</p>\n",
+            i + 1
+        ));
+        let mut command = story::see_again(&pr, None, Some(&doc.engine), &f.minimal);
+        if f.state != "fixed" && f.accepted.is_none() {
+            command.push_str(&format!(
+                "<p class=\"small\">If you decide that it is expected, run {}</p>\n",
+                story::accept_html(&f.key)
+            ));
+            keys.push(f.key.clone());
+        }
+        body.push_str(&card(&Card {
+            n: n + 1,
+            problem: p,
+            state: Some(pill(sc, sw)),
+            runs: None,
+            more,
+            command,
+        }));
+    }
+    // what held
+    body.push_str(&h2("held", "What held"));
+    let expl = doc
+        .artifacts
+        .exploration
+        .as_ref()
+        .map(|e| dir.join(e).join(hydo_results::EXPLORATION_DOC))
+        .and_then(|p| hydo_results::reader::read_exploration(&p).ok());
+    let mut s = String::from("<div class=\"card\">\n");
+    s.push_str(&format!(
+        "<p>{}{} of {} runs passed every check.</p>\n",
+        pill(if sm.failures < sm.runs { "ok" } else { "bad" }, "Passed"),
+        sm.runs.saturating_sub(sm.failures),
+        sm.runs
+    ));
+    if let Some(p) = &doc.coverage.properties {
+        let mut untried: Vec<&str> = Vec::new();
+        let mut own: Vec<String> = Vec::new();
+        for x in &p.not_exercised {
+            match story::untried_words(x) {
+                Some((w, _)) => {
+                    if !untried.contains(&w) {
+                        untried.push(w);
+                    }
+                }
+                None if !x.starts_with("fault.") => own.push(code(x)),
+                None => {}
+            }
+        }
+        if !own.is_empty() {
+            s.push_str(&format!(
+                "<p>Your checks that these runs never reached, so they tell nothing yet: {}.</p>\n",
+                own.join(", ")
+            ));
+        }
+        if !untried.is_empty() {
+            s.push_str(&format!(
+                "<p class=\"small\">These runs never had {}. To try them too, add {} to the \
+                 options of the CI mode in <code>hydo/ci.yaml</code>.</p>\n",
+                esc(&describe::and_list(
+                    &untried.iter().map(|x| x.to_string()).collect::<Vec<_>>()
+                )),
+                code("--new-faults")
+            ));
+        }
+    }
+    s.push_str("</div>\n");
+    body.push_str(&s);
+    if !doc.regressions.is_empty() {
+        let bad = doc.regressions.iter().filter(|r| !r.as_expected).count();
+        body.push_str(&format!(
+            "<p>Your saved runs: {} of {} ended as expected.</p>\n",
+            doc.regressions.len() - bad,
+            doc.regressions.len()
+        ));
+    }
+    // next
+    body.push_str(&h2("next", "Next"));
+    let mut s = String::from("<div class=\"card\">\n");
+    if let Some(k) = keys.first() {
+        s.push_str(&format!(
+            "<p>To accept a problem you consider expected, so that it no longer fails your CI, run \
+             {}</p>\n",
+            story::accept_html(k)
+        ));
+    }
+    s.push_str(&format!(
+        "<p>Compare two CI runs without running anything: {}</p>\n",
+        code("hydo ci compare BASE-DIR HEAD-DIR")
+    ));
+    s.push_str("</div>\n");
+    body.push_str(&s);
+    body.push_str(&share(&ci_details(dir, doc, expl.as_ref(), &shown)));
+    page::document(&format!("{title} (hydo report)"), &body)
+}
+
+fn ci_details(dir: &Path, doc: &CiRun, expl: Option<&Exploration>, shown: &str) -> String {
     let o = &doc.outcome;
     let (oc, ow) = match o.exit {
         0 => ("ok", "passed"),
         1 => ("bad", "failed"),
         _ => ("warn", "could not be completed"),
     };
-    let new = doc.summary.states.get("new").copied().unwrap_or(0);
-    let title = format!(
-        "{}: the CI run {}{}",
-        esc(&doc.project.name),
-        esc(ow),
-        if new > 0 {
-            format!(", {new} new finding{}", if new == 1 { "" } else { "s" })
-        } else {
-            String::new()
-        }
-    );
-    let mut toc = vec![("summary", "Summary"), ("findings", "Findings")];
-    if !doc.regressions.is_empty() {
-        toc.push(("regressions", "Regressions"));
-    }
-    toc.push(("properties", "Properties"));
-    let versions = versions_raw(dir, "ci-run.json");
-    if versions.is_some() {
-        toc.push(("versions", "Versions"));
-    }
-    let mut body = header(
-        &title,
-        "hydo explored this commit with the budget below and compared every finding with the base commit by replaying its minimal schedule there.",
-        &toc,
-    );
     let mut f: Vec<(String, String)> = vec![(
         "Result".into(),
         format!(
@@ -1921,40 +2786,18 @@ fn ci_page(dir: &Path, doc: &CiRun, extra: &Extra) -> String {
             sm.wall_s
         )),
     ));
-    f.push(("Output directory".into(), code(&shown)));
-    body.push_str(&section("summary", "Summary", &facts(&f)));
-    // findings
-    let mut s = String::new();
+    f.push(("Output folder".into(), code(shown)));
+    let mut s = format!("<div class=\"card\">{}</div>\n", facts(&f));
+    s.push_str(&h3("findings", "Findings against the base commit"));
     if doc.findings.is_empty() {
         s.push_str("<p>No findings: every schedule passed its checks.</p>\n");
     } else {
-        let rows: Vec<(String, Vec<String>)> = doc
-            .findings
-            .iter()
-            .enumerate()
-            .map(|(i, x)| {
-                let (c, w, _) = state_words(&x.state);
-                (
-                    String::new(),
-                    vec![
-                        format!("<a href=\"#f{}\">{}</a>", i + 1, i + 1),
-                        badge(c, w),
-                        esc(&x.kind),
-                        format!(
-                            "<span class=\"t\">{}</span>",
-                            esc(&cut(&x.title, EVENT_TEXT))
-                        ),
-                    ],
-                )
-            })
-            .collect();
-        s.push_str(&table(&["", "Against the base", "Kind", "Finding"], &rows));
         for (i, x) in doc.findings.iter().enumerate() {
             s.push_str(&ci_finding_card(i + 1, dir, x));
         }
     }
     if !doc.nondeterminism.is_empty() {
-        s.push_str("<h3>Runs that did not reproduce</h3>\n<p>These failures gave another fingerprint when run again. That is a problem of hydo or of the host, never a finding of the project.</p>\n<ul>\n");
+        s.push_str("<h4>Runs that did not reproduce</h4>\n<p>These failures gave another fingerprint when run again. That is a problem of hydo or of the host, never a finding of the project.</p>\n<ul>\n");
         for x in &doc.nondeterminism {
             s.push_str(&format!(
                 "<li>{} {} then {}</li>\n",
@@ -1965,7 +2808,6 @@ fn ci_page(dir: &Path, doc: &CiRun, extra: &Extra) -> String {
         }
         s.push_str("</ul>\n");
     }
-    body.push_str(&section("findings", "Findings against the base commit", &s));
     if !doc.regressions.is_empty() {
         let rows: Vec<(String, Vec<String>)> = doc
             .regressions
@@ -1990,21 +2832,14 @@ fn ci_page(dir: &Path, doc: &CiRun, extra: &Extra) -> String {
                 )
             })
             .collect();
-        body.push_str(&section(
-            "regressions",
-            "Saved regressions",
-            &table(&["Result", "Name", "Schedule", "Expected", "Got"], &rows),
+        s.push_str(&h3("regressions", "Saved regressions"));
+        s.push_str(&table(
+            &["Result", "Name", "Schedule", "Expected", "Got"],
+            &rows,
         ));
     }
-    // properties: the exploration's table, else what the CI run recorded
-    let mut s = String::new();
-    let expl = doc
-        .artifacts
-        .exploration
-        .as_ref()
-        .map(|e| dir.join(e).join(hydo_results::EXPLORATION_DOC))
-        .and_then(|p| hydo_results::reader::read_exploration(&p).ok());
-    match expl.as_ref().and_then(|e| e.properties.as_ref()) {
+    s.push_str(&h3("properties", "Properties"));
+    match expl.and_then(|e| e.properties.as_ref()) {
         Some(t) => s.push_str(&properties_html(t, &format!("{} schedules", t.runs))),
         None => match &doc.coverage.properties {
             Some(p) => {
@@ -2038,13 +2873,10 @@ fn ci_page(dir: &Path, doc: &CiRun, extra: &Extra) -> String {
                 .join(", "))
         ));
     }
-    body.push_str(&section("properties", "Properties", &s));
-    if let Some(v) = &versions {
-        body.push_str(&section("versions", "Versions", &versions_html(v)));
+    if let Some(v) = &versions_raw(dir, "ci-run.json") {
+        s.push_str(&h3("versions", "Versions"));
+        s.push_str(&versions_html(v));
     }
-    body.push_str(&footer(&pjoin(&shown, "ci-run.json")));
-    page::document(
-        &format!("hydo report: {}, CI run {ow}", doc.project.name),
-        &body,
-    )
+    s.push_str(&footer(&pjoin(shown, "ci-run.json")));
+    s
 }

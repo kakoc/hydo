@@ -7761,3 +7761,118 @@ the dry run of `release.yml` passed on `main`:
   `sdk/go/v0.3.2` exists.
 
 The draft release `candidate-0.3.2` and the branch `tmp-rel-032-kvm` are deleted.
+
+### Milestone 228 (tentative number) - DONE (`hydo report --html` in plain words: the page says what broke in the user's system, when it happens, whether it is a bug, what hydo saw and how to see it again, and folds everything for specialists into one section at the bottom; nothing recorded moved; 2026-11-14)
+
+**In short.** The page of Milestone 220 showed the summary, the schedule, the timeline, and
+the diff first. The user read it as a developer who knows their own system and not hydo, and found
+it unreadable: every detail was noise. The user approved two mockups: one failing run and one
+exploration. This milestone builds the real page to their structure, order, and tone, from the
+recorded files only. Two new modules hold the words, so that other outputs can use them later:
+
+- `hydo/crates/hydo-schedule/src/describe.rs` puts every token of the schedule language in words.
+  Each token has a sentence and a gloss for the line that explains a command ("`C=12` = cut the
+  power before step 12"). It also has a noun phrase for comparing two runs and, for a fault, the
+  circumstance it gives a title ("after a power cut"). A manifest setting (`knobs:`) is named with its `name:` and
+  its safe value. A word that is not a token gets a neutral sentence that points to `hydo guide
+  faults`. `change(a, b)` says how one schedule differs from another ("with a working disk
+  instead of a disk with a write cache, and without a power cut before step 9").
+- `hydo/crates/hydo-explore/src/advice.rs` maps a failure's class and what failed to a label, a
+  title, an explanation, and what to do. The label is "Expected" for a lying disk and a refused
+  run. It is "Expected for this setting" for an unsafe setting. It is "Worth a look" for disk
+  errors, damaged files, a failed test program, a new error line, and a check the user wrote.
+  For a check the user wrote, the words quote the check and say that only the user can decide
+  whether it must hold. `class_of` gives a single run (`hydo run` records no class) the
+  explorer's class rule.
+
+**The page.** For one run, in this order:
+
+1. The title, from the failed check's description and the fault. An example is "Redis broke your
+   rule “every SET the client saw acknowledged reads back with its value” after a power cut, with
+   Redis appendfsync set to `everysec`". A lead paragraph says what the workload had confirmed, the
+   faults as they happened, and what the check found.
+2. "When it happens": the schedule as numbered sentences, and the outcome.
+3. "Is this a bug?": the label, the explanation, what a passing neighbour showed, and what to do.
+   An example of the neighbour's line is "A second run with Redis appendfsync at `always` instead
+   of `everysec` passed every check".
+4. "What hydo saw": the confirmed steps, the fault events of the run in words, the restart, the
+   services that ended, and what the check found.
+5. "See it again": `hydo run "<schedule>"`, the gloss of each word, and the `hydo inspect start`
+   command. The command runs in the project's folder when the image is the one `hydo build` wrote
+   there.
+6. "Details for sharing with hydo or upstream", folded. It holds the verdict, the schedule, the
+   class, the fingerprint, the image, the engine, the host CPU, the hydo version, and the epoch.
+   It also holds the run folder, `hydo repro`, the failure's findings and diagnosis, the full
+   timeline, the diff, the checks and properties, and the versions. Nothing of the earlier page is lost.
+
+An exploration groups its failures by class and signature as before. Then it merges the groups
+whose title and label are the same into one problem: Redis's two io-errors signatures (`ERROR redis restart
+failed` and `ERROR restart after the faults (redis)`) are one problem, "`redis` did not start
+again after disk errors". The problems are ordered by label (worth a look first), then by their
+number of runs, each with a bar. New error lines are one problem. "What held" names the passing
+runs, the user's checks that held, and the faults the runs did not try. "Next" gives `hydo explore
+--seeds <the next 100>`. It also gives `hydo ci accept <key> --reason "…"` with the key of the
+first expected problem. A CI run shows the same cards with the state against the base in plain words ("New in
+this change", "Already on the base commit", "Fixed by this change") and the accept command for
+each finding.
+
+The page finds the project's `hydo.yaml` inside the image when the image file is there, else next
+to the `hydo-out` folder that holds the results or the image. Without it the setting names come
+from the run's notes (`knob R=everysec (Redis appendfsync)`), and the safe values from the
+explorer's fallback rule for `R=` and `M=`.
+
+**Tests.** hydo-schedule's new test program `describe` (8 tests) gives an example of every host
+key and every guest letter that no sentence, gloss, noun phrase, or circumstance
+uses hydo's own words. It pins the sentences of the Redis power cut, the order of faults by step,
+groups, outside services, clock points, and `change`. The advice has four unit tests: what failed
+from a verdict, the class of one run, every class with every type of failure, and the titles. The
+page's tests check the three goldens (re-recorded), the size bounds, that the page loads nothing,
+and that its plain part has none of the words fingerprint, epoch, engine, schedule, token,
+invariant, oracle, signature, class, and seed outside commands. The Redis fixtures moved into a
+project folder with the example's manifest (`tests/fixtures/report/redis/`).
+
+**Real samples.** The Mac engine's Redis runs of Milestone 220 (`disk=cut | run C=12 R=everysec`
+against `R=always`, and the 30-run swarm exploration with 13 failures) rendered as a 34 KiB and an
+83 KiB page. The exploration's page shows 3 problems: Redis not starting after disk errors
+(worth a look, 5 runs, two signatures merged), the power cut with `appendfsync no` (expected for
+this setting, 2 runs), and the lying disk (expected, 6 runs). The voice linter finds no banned
+word in the generated sentences; in the details it flags only recorded data (the class name
+`unsafe-knob`, the run's notes and the check's shell `echo`). The narrow layout was checked at
+500 pixels, light and dark: headless Chrome lays a page out at least 500 pixels wide.
+
+**What is left.** `advice::what_of` knows the error verdicts of a restart that failed; every other error is "The
+run stopped early" with the error's text.
+
+**A fresh reader's review.** A fresh agent that played a regular developer read the two real
+samples. It found the pages good overall and named 15 places where it stopped. Each is fixed in
+the code:
+
+- The single-run page repeated the same facts five times. The title is now short ("Redis failed
+  your check after a power cut, with Redis appendfsync set to `everysec`"), and the check's words
+  appear once, under the title. "Is this a bug?" no longer repeats the check. "What hydo saw"
+  keeps only what the other parts do not say, and it is left out when nothing remains.
+- Steps are counted from 1 in every sentence ("after 12 steps, before the 13th step").
+- When the failing check's command stops at its first problem (`break`), the page says that it
+  reports only the first missing item.
+- The `hydo inspect start` line says what it opens and names the run's folder in the project
+  (`hydo-out/runA`).
+- The replay command says what it needs first, and no machine-specific path is above the details
+  (an absolute image path becomes its file name).
+- The glosses explain `|` and `run`, and a disk choice kept without a disk fault is "kept so that
+  the run is exactly the same".
+- Each label has a line that says what it means and what it means for CI.
+- The `hydo ci accept` line says what the command writes, where, and what CI then does.
+- The links to a problem's runs open the folded details at their target (a small script), and
+  the details are called "Details for a bug report".
+- A power cut ("a power cut loses the writes not yet flushed to disk") and a lying disk ("a
+  faulty disk throws away writes it already confirmed") have clearly different words, and a rate
+  change reads "with the disk throwing away fewer writes".
+- On the exploration page, the problem of a service that did not start again shows what the
+  first run saw. On Redis, `redis` exited with the status 1 during the disk errors, before the
+  kill. The page says that hydo did not remove faults from such a problem, and which faults all
+  its runs share. The faults the runs never had are in plain words, with `--new-faults`. The
+  details' table names the problem of each row.
+
+The page tests check two more rules: no machine path above the details, and every link has a
+target on the page.
+

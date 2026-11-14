@@ -52,6 +52,7 @@
 
 mod clock;
 mod compose;
+pub mod describe;
 mod guest;
 mod host;
 mod num;

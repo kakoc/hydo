@@ -4,39 +4,61 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="hydo report --html">
-<title>hydo report: the system, the system: 4 failing schedules of 12, in 2 kinds</title>
+<title>hydo found 3 problems in your system (hydo report)</title>
 <style>
-:root{--bg:#fbfbfa;--fg:#1d1f23;--muted:#5b616b;--line:#e1e3e7;--card:#fff;--code:#f2f3f5;
---bad:#a8261b;--bad-bg:#fdeceb;--ok:#17703a;--ok-bg:#e6f4ea;--warn:#8a5a00;--warn-bg:#fdf3d8;
---note:#2c5b9a;--note-bg:#e8f0fb;--add:#e6f4ea;--del:#fdeceb;color-scheme:light dark}
-@media (prefers-color-scheme:dark){:root{--bg:#131518;--fg:#e4e6e9;--muted:#9aa1ab;--line:#2c3037;
---card:#1b1e22;--code:#23272d;--bad:#ff8a80;--bad-bg:#3b1f1d;--ok:#6fd38b;--ok-bg:#17301f;
---warn:#e8bb4a;--warn-bg:#352a12;--note:#8ab8ff;--note-bg:#1a2a42;--add:#17301f;--del:#3b1f1d}}
+:root{--bg:#fbfbfa;--fg:#1d1d1f;--muted:#5f5f66;--card:#fff;--line:#e5e5e2;--code:#f3f3f1;
+--bad:#b3261e;--bad-bg:#fdecea;--warn:#8f5200;--warn-bg:#fff4e0;--ok:#1e7a3c;--ok-bg:#e8f6ec;
+--note:#2457c5;--note-bg:#e8f0fb;--add:#e8f6ec;--del:#fdecea;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141416;--fg:#ececee;--muted:#a0a0a8;
+--card:#1d1d20;--line:#2e2e33;--code:#26262a;--bad:#ff8a7a;--bad-bg:#3a1d1a;--warn:#ffb648;--warn-bg:#33270f;
+--ok:#5fd38a;--ok-bg:#13301e;--note:#8ab0ff;--note-bg:#1a2a42;--add:#13301e;--del:#3a1d1a}}
+:root[data-theme="dark"]{--bg:#141416;--fg:#ececee;--muted:#a0a0a8;--card:#1d1d20;--line:#2e2e33;--code:#26262a;
+--bad:#ff8a7a;--bad-bg:#3a1d1a;--warn:#ffb648;--warn-bg:#33270f;--ok:#5fd38a;--ok-bg:#13301e;--note:#8ab0ff;
+--note-bg:#1a2a42;--add:#13301e;--del:#3a1d1a}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
-main{max-width:1080px;margin:0 auto;padding:16px 16px 48px}
-h1{font-size:1.45rem;line-height:1.3;margin:.4rem 0 .6rem}
-h2{font-size:1.15rem;margin:2rem 0 .6rem;padding-bottom:.3rem;border-bottom:1px solid var(--line)}
-h3{font-size:1rem;margin:.2rem 0 .6rem}
-h4{font-size:.95rem;margin:1rem 0 .4rem}
-p{margin:.4rem 0}
-code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:13px}
-code{background:var(--code);padding:1px 4px;border-radius:4px;overflow-wrap:anywhere}
-code.fp{white-space:nowrap;overflow-wrap:normal}
-pre{background:var(--code);padding:8px 10px;border-radius:6px;margin:.3rem 0;white-space:pre-wrap;overflow-wrap:anywhere}
-.lead{font-size:1.02rem}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+main{max-width:760px;margin:0 auto;padding:32px 16px 72px}
+.eyebrow{color:var(--muted);font-size:14px;margin:0 0 6px}
+h1{font-size:28px;line-height:1.25;margin:0 0 10px;overflow-wrap:anywhere}
+h2{font-size:19px;margin:34px 0 10px}
+h3{font-size:17px;line-height:1.35;margin:0 0 6px;overflow-wrap:anywhere}
+h4{font-size:15px;margin:16px 0 6px}
+p{margin:8px 0}
+.lead{font-size:18px}
 .muted{color:var(--muted)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:14px 0}
-.badge{display:inline-block;padding:1px 10px;border-radius:999px;font-weight:600;font-size:.88rem;white-space:nowrap}
+.small{font-size:14px;color:var(--muted)}
+code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:14px}
+code{background:var(--code);padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}
+code.fp{white-space:nowrap;overflow-wrap:normal}
+pre{background:var(--code);padding:8px 10px;border-radius:8px;margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin:14px 0}
+.pill{display:inline-block;font-size:13px;font-weight:600;padding:2px 10px;border-radius:999px;margin-right:6px;white-space:nowrap}
+.badge{display:inline-block;padding:1px 9px;border-radius:999px;font-weight:600;font-size:13px;white-space:nowrap}
 .bad{color:var(--bad);background:var(--bad-bg)}.ok{color:var(--ok);background:var(--ok-bg)}
 .warn{color:var(--warn);background:var(--warn-bg)}.note{color:var(--note);background:var(--note-bg)}
-dl.facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 18px;margin:.4rem 0}
-dl.facts dt{color:var(--muted)}dl.facts dd{margin:0;overflow-wrap:anywhere}
-.cmd{display:flex;gap:8px;align-items:flex-start;margin:.3rem 0}.cmd pre{flex:1;min-width:0;margin:0}
-button.copy{font:inherit;font-size:.85rem;padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
+.verdictline{display:flex;gap:10px;align-items:center;margin:14px 0 4px;flex-wrap:wrap}
+ol.steps{margin:4px 0 0;padding-left:22px}ol.steps li{margin:6px 0}
+.evidence{border-left:3px solid var(--bad)}
+.evidence div{margin:5px 0;padding-left:22px;text-indent:-22px}
+.evidence .mark{display:inline-block;width:22px;text-indent:0;font-weight:700}
+.evidence .m-ok{color:var(--ok)}.evidence .m-bad{color:var(--bad)}.evidence .m-warn{color:var(--warn)}.evidence .m-note{color:var(--muted)}
+.cmdrow{display:flex;gap:8px;align-items:stretch;margin:8px 0}
+.cmd{flex:1;min-width:0;margin:0;background:var(--code);border-radius:8px;padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
+button.copy{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;padding:0 14px;cursor:pointer}
 button.copy:hover{border-color:var(--muted)}
-.scroll{overflow-x:auto;margin:.3rem 0}
+.problem{display:grid;grid-template-columns:30px minmax(0,1fr);gap:4px 12px}
+.num{font-size:22px;font-weight:700;color:var(--muted);line-height:1.2}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:6px 0 2px}.bar>span{display:block;height:100%}
+.bar.look>span{background:var(--bad)}.bar.setting>span{background:var(--warn)}.bar.expected>span{background:var(--ok)}
+dl.facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 16px;margin:8px 0}
+dl.facts dt{color:var(--muted)}dl.facts dd{margin:0;overflow-wrap:anywhere}
+details.share{margin-top:40px;border-top:1px solid var(--line);padding-top:14px}
+details.share>summary{cursor:pointer;color:var(--muted);font-weight:600}
+details.share .card,details.share table{font-size:14px}
+details.share h3{margin-top:22px}
+details{margin:8px 0}details>summary{cursor:pointer;font-weight:600}
+.scroll{overflow-x:auto;margin:6px 0}
 table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--muted);font-weight:600;white-space:nowrap}
@@ -45,45 +67,94 @@ td.n{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted)}
 tr.conv td{background:var(--code);font-weight:600;color:var(--fg)}
 tr.del td{background:var(--del)}tr.add td{background:var(--add)}
 tr.same td{color:var(--muted)}
-.kind{display:inline-block;font-size:.8rem;padding:0 6px;border-radius:4px;white-space:nowrap;background:var(--code)}
-.tl label{cursor:pointer;color:var(--muted);font-size:.9rem}
+.kind{display:inline-block;font-size:12px;padding:0 6px;border-radius:4px;white-space:nowrap;background:var(--code)}
+.tl label{cursor:pointer;color:var(--muted);font-size:14px}
 .tl input.all:not(:checked)~.scroll tr.minor{display:none}
-details{margin:.5rem 0}details>summary{cursor:pointer;font-weight:600}
-nav.toc{display:flex;flex-wrap:wrap;gap:2px 16px;font-size:.92rem;margin:.4rem 0 0}nav.toc a{color:var(--note);text-decoration:none;white-space:nowrap}
-footer{margin-top:2.5rem;font-size:.85rem;color:var(--muted)}
-@media (max-width:640px){dl.facts{grid-template-columns:minmax(0,1fr)}dl.facts dd{margin-bottom:8px}
-.c-clock{display:none}.cmd{flex-direction:column}.cmd pre{width:100%}.cmd button{align-self:flex-end}main{padding:12px 16px 40px}}
+footer{margin-top:28px;font-size:13px;color:var(--muted)}
+a{color:var(--note)}
+@media (max-width:640px){h1{font-size:24px}.lead{font-size:17px}dl.facts{grid-template-columns:minmax(0,1fr)}dl.facts dd{margin-bottom:8px}
+.c-clock{display:none}.cmdrow{flex-direction:column}.cmdrow button{align-self:flex-end;padding:6px 14px}
+.problem{grid-template-columns:minmax(0,1fr)}.num{font-size:17px}main{padding:20px 16px 48px}}
 </style>
 </head>
 <body>
 <main>
 <header>
-<p class="muted">hydo report</p>
-<h1>the system: 4 failing schedules of 12, in 2 kinds</h1>
-<p class="lead">hydo ran the system under schedules of faults drawn from seeds. Each failure below was run again to check that it reproduces, and shrunk to the smallest schedule that still fails.</p>
-<nav class="toc"><a href="#summary">Summary</a><a href="#failures">Failures</a><a href="#properties">Properties</a><a href="#errors">New error lines</a></nav>
+<p class="eyebrow">hydo report · exploration of 12 runs</p>
+<h1>hydo found 3 problems in your system</h1>
+<p class="lead">hydo ran your system 12 times, each time with different faults: disk errors, crashes, network faults, a faulty disk that throws away confirmed writes and power cuts. 4 runs failed, in 2 different ways. Each failing run failed again the same way when hydo replayed it. Your services also wrote error lines that your list of known errors does not have.</p>
 </header>
-<section id="summary">
-<h2>Summary</h2>
-<dl class="facts">
-<dt>Result</dt><dd><span class="badge bad">4 failures</span></dd>
-<dt>System</dt><dd>image <code>scripted-disk.img</code></dd>
+<h2 id="start">Start here</h2>
+<div class="card problem" id="p1"><div class="num">1</div><div>
+<h3>The run stopped early after disk errors</h3>
+<p><span class="pill bad">Worth a look</span><span class="muted">2 of 12 runs</span></p>
+<div class="bar look"><span style="width:17%"></span></div>
+<p class="small">This can be a bug in your system, and only you can decide. In CI, a new finding of this kind fails the check until you fix it or accept it.</p>
+<p>The run stopped before your checks could run, with the error <code>harness: guest did not finish (I/O error)</code>. hydo made the disk return read and write errors.</p>
+<p class="small">hydo did not remove faults from this one: it does that for failed checks, not for runs that stopped with an error. So the command keeps every fault of the first run. Both runs had disk errors and crashes; the network faults in the command differ from run to run.</p>
+<p class="small"><a href="#f2">The runs in detail</a>, in the details for a bug report.</p>
+<p><b>What to do:</b> Decide whether your system must survive a failing disk. If it must, look at the service&#39;s log in the run; if not, accept this finding.</p>
+<p>Run this where the image file <code>scripted-disk.img</code> is. The run repeats exactly, every time:</p>
+<div class="cmdrow"><pre class="cmd">hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;" aria-label="Copy to the clipboard">Copy</button></div>
+<p class="small">In hydo's words: the text in quotes names the faults of the run. <code>|</code> separates the machine's settings, before it, from what happens in the run, after <code>run</code>. <code>disk=ioerr:2</code> = the disk returns errors; <code>dseed=9e5651b0ef953636</code> = which disk requests the fault hits; <code>K=kafka@13+3</code> = kill <code>kafka</code> after 13 steps; <code>N=redis@23-27:delay,79ms</code> = a network fault during steps 24 to 27.</p>
+</div></div>
+<div class="card problem" id="p2"><div class="num">2</div><div>
+<h3>Your system failed your check when a faulty disk threw away writes it had already confirmed</h3>
+<p><span class="pill ok">Expected</span><span class="muted">2 of 12 runs</span></p>
+<div class="bar expected"><span style="width:17%"></span></div>
+<p class="small">No system survives this fault. In CI, a new finding of this kind fails the check until you accept it.</p>
+<p>One of your checks found <code>lost acknowledged write</code>. hydo made the disk faulty: it threw away writes that it had already confirmed, as a broken or misconfigured disk can. No system keeps data that its disk throws away.</p>
+<p class="small">hydo removed every fault it could while the run still failed, so the command keeps only the faults the failure needs.</p>
+<p>A second run with a disk that keeps every write at once instead of a faulty disk that throws away writes it already confirmed passed every check.</p>
+<p class="small"><a href="#f1">The runs in detail</a>, in the details for a bug report.</p>
+<p><b>What to do:</b> Nothing, unless your production disks can throw away confirmed writes. If you do not expect such disks, accept this finding.</p>
+<p>Run this where the image file <code>scripted-disk.img</code> is. The run repeats exactly, every time:</p>
+<div class="cmdrow"><pre class="cmd">hydo run --image scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;" aria-label="Copy to the clipboard">Copy</button></div>
+<p class="small">In hydo's words: the text in quotes names the faults of the run. <code>|</code> separates the machine's settings, before it, from what happens in the run, after <code>run</code>. <code>disk=lying:1</code> = a faulty disk throws away writes it already confirmed; <code>dseed=63cbe1e459320dd7</code> = which disk requests the fault hits; <code>C=11</code> = cut the power after 11 steps.</p>
+</div></div>
+<div class="card problem" id="p3"><div class="num">3</div><div>
+<h3>Your services wrote 4 kinds of error line that your list of known errors does not have</h3>
+<p><span class="pill bad">Worth a look</span><span class="muted">12 of 12 runs</span></p>
+<div class="bar look"><span style="width:100%"></span></div>
+<p class="small">This can be a bug in your system, and only you can decide. In CI, a new finding of this kind fails the check until you fix it or accept it.</p>
+<p>Your project&#39;s list of known errors (<code>errors:</code> in <code>hydo.yaml</code>) does not have these lines.</p>
+<ul>
+<li><code>redis</code> <code>connection to redis lost &lt;n&gt;</code> <span class="muted">(1 run)</span></li>
+<li><code>app</code> <code>config reloaded</code> <span class="muted">(12 runs)</span></li>
+<li><code>mysql</code> <code>connection to mysql lost &lt;n&gt;</code> <span class="muted">(6 runs)</span></li>
+<li><code>kafka</code> <code>connection to kafka lost &lt;n&gt;</code> <span class="muted">(2 runs)</span></li>
+</ul>
+<p><b>What to do:</b> If the line is harmless, add it to the list of known errors. If not, look at what led to it in the run.</p>
+<div class="cmdrow"><pre class="cmd">hydo errors hydo-out/explore</pre><button type="button" class="copy" data-copy="hydo errors hydo-out/explore" aria-label="Copy to the clipboard">Copy</button></div>
+</div></div>
+<h2 id="held">What held</h2>
+<div class="card">
+<p><span class="pill ok">Passed</span>8 of 12 runs passed every check, with disk errors, crashes, network faults and power cuts.</p>
+<p>None of the 7 runs with a working disk and your settings at their safe values failed. Every failure above needs a disk fault, a damaged file or a setting that trades safety for speed.</p>
+<p>Your checks that held in every run: <code>orders.drained</code>.</p>
+</div>
+<h2 id="next">Next</h2>
+<div class="card"><p>Look further with more runs: <code>hydo explore --image scripted-disk.img --seeds 13-112</code></p>
+<p>To accept a problem you consider expected, so that it no longer fails your CI, run <code>hydo ci accept f1:invariant:b85cf53e33 --reason &quot;…&quot;</code>. It writes the finding, under its name <code>f1:invariant:b85cf53e33</code>, to <code>hydo/known-findings.yaml</code> with your reason. CI then stops failing on it, and lists it for removal if it ever passes.</p>
+</div>
+<details class="share" id="details"><summary>Details for a bug report</summary>
+<div class="card"><dl class="facts">
+<dt>Image</dt><dd>image <code>scripted-disk.img</code></dd>
 <dt>Engine</dt><dd>the hvx engine (hydo&#39;s own kernel module), 1 vCPU, 1024 MiB of guest RAM, CPU level v2</dd>
 <dt>Host CPU</dt><dd>Apple M2 Pro (Apple)</dd>
 <dt>hydo</dt><dd>0.3.1 <span class="muted">(fingerprint epoch 2: fingerprints compare only between runs of one epoch)</span></dd>
 <dt>Explored</dt><dd>12 schedules from the seeds 1-12, strategy random</dd>
 <dt>Reproduced</dt><dd>4 of 4 failures gave the same fingerprint when run again</dd>
 <dt>Wall time</dt><dd>0.5 s</dd>
-<dt>Exploration directory</dt><dd><code>hydo-out/explore</code></dd>
+<dt>Exploration folder</dt><dd><code>hydo-out/explore</code></dd>
 </dl>
-</section>
-<section id="failures">
-<h2>Failures</h2>
+</div>
+<h3 id="failures">The failures by class and signature</h3>
 <div class="scroll"><table>
-<thead><tr><th></th><th>Class</th><th>Signature</th><th>Runs</th><th>Reproduced</th><th>Minimal schedule</th></tr></thead>
+<thead><tr><th></th><th>Shown as</th><th>Class</th><th>Signature</th><th>Runs</th><th>Reproduced</th><th>Minimal schedule</th></tr></thead>
 <tbody>
-<tr><td><a href="#f1">1</a></td><td>lying-disk</td><td><span class="t">VIOLATION lost acknowledged write</span></td><td>2</td><td>2/2</td><td><span class="t">disk=lying:1 dseed=63cbe1e459320dd7 | run C=11</span></td></tr>
-<tr><td><a href="#f2">2</a></td><td>io-errors</td><td><span class="t">ERROR harness: guest did not finish (I/O error)</span></td><td>2</td><td>2/2</td><td><span class="t">not shrunk</span></td></tr>
+<tr><td><a href="#f1">1</a></td><td><a href="#p2">problem 2</a></td><td>lying-disk</td><td><span class="t">VIOLATION lost acknowledged write</span></td><td>2</td><td>2/2</td><td><span class="t">disk=lying:1 dseed=63cbe1e459320dd7 | run C=11</span></td></tr>
+<tr><td><a href="#f2">2</a></td><td><a href="#p1">problem 1</a></td><td>io-errors</td><td><span class="t">ERROR harness: guest did not finish (I/O error)</span></td><td>2</td><td>2/2</td><td><span class="t">not shrunk</span></td></tr>
 </tbody></table></div>
 <p class="muted">The class names the kind of fault that led to it; the signature is the verdict with its numbers left out, so failures with the same cause fall together.</p>
 <div class="card" id="f1">
@@ -93,11 +164,11 @@ footer{margin-top:2.5rem;font-size:.85rem;color:var(--muted)}
 <dl class="facts">
 <dt>Found in</dt><dd>2 schedules (seeds 7, 12)</dd>
 <dt>Reproduced</dt><dd><span class="badge ok">yes</span> <span class="muted">every re-run gave the same fingerprint</span></dd>
-<dt>Minimal schedule</dt><dd><div class="cmd"><pre>disk=lying:1 dseed=63cbe1e459320dd7 | run C=11</pre><button type="button" class="copy" data-copy="disk=lying:1 dseed=63cbe1e459320dd7 | run C=11" aria-label="Copy to the clipboard">Copy</button></div>
+<dt>Minimal schedule</dt><dd><div class="cmdrow"><pre class="cmd">disk=lying:1 dseed=63cbe1e459320dd7 | run C=11</pre><button type="button" class="copy" data-copy="disk=lying:1 dseed=63cbe1e459320dd7 | run C=11" aria-label="Copy to the clipboard">Copy</button></div>
 </dd>
 <dt>Its verdict</dt><dd><code>HYDO-ORACLE: VIOLATION lost acknowledged write order=11</code></dd>
 <dt>Two runs of it</dt><dd><span class="badge ok">same fingerprint</span> <code>2bfd911ed331b44f</code></dd>
-<dt>Replay it</dt><dd><div class="cmd"><pre>hydo run --image /work/scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;</pre><button type="button" class="copy" data-copy="hydo run --image /work/scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;" aria-label="Copy to the clipboard">Copy</button></div>
+<dt>Replay it</dt><dd><div class="cmdrow"><pre class="cmd">hydo run --image /work/scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;</pre><button type="button" class="copy" data-copy="hydo run --image /work/scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;" aria-label="Copy to the clipboard">Copy</button></div>
 </dd>
 <dt>Shrinking</dt><dd>from seed 7, 19 shrink runs</dd>
 </dl>
@@ -160,10 +231,10 @@ footer{margin-top:2.5rem;font-size:.85rem;color:var(--muted)}
 <dl class="facts">
 <dt>Found in</dt><dd>2 schedules (seeds 8, 9)</dd>
 <dt>Reproduced</dt><dd><span class="badge ok">yes</span> <span class="muted">every re-run gave the same fingerprint</span></dd>
-<dt>Schedule</dt><dd><div class="cmd"><pre>disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms</pre><button type="button" class="copy" data-copy="disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms" aria-label="Copy to the clipboard">Copy</button></div>
+<dt>Schedule</dt><dd><div class="cmdrow"><pre class="cmd">disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms</pre><button type="button" class="copy" data-copy="disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms" aria-label="Copy to the clipboard">Copy</button></div>
 </dd>
 <dt>Verdict</dt><dd><code>ERROR harness: guest did not finish (I/O error)</code></dd>
-<dt>Replay it</dt><dd><div class="cmd"><pre>hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;" aria-label="Copy to the clipboard">Copy</button></div>
+<dt>Replay it</dt><dd><div class="cmdrow"><pre class="cmd">hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;" aria-label="Copy to the clipboard">Copy</button></div>
 </dd>
 <dt>Not shrunk</dt><dd>hydo shrinks failed checks, not runs that ended with an error</dd>
 </dl>
@@ -192,9 +263,7 @@ footer{margin-top:2.5rem;font-size:.85rem;color:var(--muted)}
 </div>
 </details>
 </div>
-</section>
-<section id="properties">
-<h2>Properties over every schedule</h2>
+<h3 id="properties">Properties over every schedule</h3>
 <p>2 properties over 12 schedules: 2 held, 0 failed, 0 never reached. A property that is never reached was not tested by these schedules: the fault or the state it needs did not happen.</p>
 <div class="scroll"><table>
 <thead><tr><th>Result</th><th>Property</th><th>Kind</th><th>Runs held / failed</th><th>What it says</th></tr></thead>
@@ -202,9 +271,7 @@ footer{margin-top:2.5rem;font-size:.85rem;color:var(--muted)}
 <tr><td><span class="badge ok">held</span></td><td><span class="t">orders.drained</span></td><td>eventually</td><td>12 / 0</td><td></td></tr>
 <tr><td><span class="badge ok">held</span></td><td><span class="t">retry.taken</span></td><td>sometimes</td><td>9 / 3</td><td><br><span class="muted">first failure:</span> <span class="t">-</span></td></tr>
 </tbody></table></div>
-</section>
-<section id="errors">
-<h2>New error lines</h2>
+<h3 id="errors">New error lines</h3>
 <p>4 kinds of error line that the project's list of known errors does not cover; each with the smallest schedule that still writes it.</p>
 <div class="scroll"><table>
 <thead><tr><th>Service</th><th>Line (numbers and ids left out)</th><th>Runs</th><th>Smallest schedule</th></tr></thead>
@@ -214,8 +281,8 @@ footer{margin-top:2.5rem;font-size:.85rem;color:var(--muted)}
 <tr><td>mysql</td><td><span class="t">connection to mysql lost &lt;n&gt;</span></td><td>6</td><td><span class="t">disk=none dseed=975835de1c9756ce | run K=mysql@9+1</span></td></tr>
 <tr><td>kafka</td><td><span class="t">connection to kafka lost &lt;n&gt;</span></td><td>2</td><td><span class="t">disk=none dseed=9e5651b0ef953636 | run K=kafka@13+1</span></td></tr>
 </tbody></table></div>
-</section>
 <footer>Made by <code>hydo report --html</code> from <code>hydo-out/explore/exploration.json</code>. The page is one file and loads nothing from the network. Every schedule on it replays bit for bit on the same image and hydo version.</footer>
+</details>
 </main>
 <script>
 document.addEventListener('click',function(e){
@@ -226,6 +293,12 @@ function old(){var a=document.createElement('textarea');a.value=t;a.setAttribute
 a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();
 try{document.execCommand('copy');done()}catch(x){}document.body.removeChild(a)}
 if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t).then(done,old)}else{old()}});
+function openTo(){var h=decodeURIComponent(location.hash.slice(1));if(!h)return;
+var el=document.getElementById(h);if(!el)return;
+for(var p=el;p;p=p.parentElement){if(p.tagName==='DETAILS')p.open=true}el.scrollIntoView()}
+document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href^="#"]');
+if(a)setTimeout(openTo,0)});
+window.addEventListener('hashchange',openTo);openTo();
 </script>
 </body>
 </html>

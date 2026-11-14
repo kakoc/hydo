@@ -499,7 +499,11 @@ summary, each failure with its minimal schedule and replay command, the failing 
 exploration the minimal schedule's passing shrink candidates. It also shows the property table,
 and for a CI run each finding's state against the base. The code is
 `hydo/crates/hydo-cli/src/htmlreport.rs`, and `hydo guide inspect` describes the page in its
-last section.
+last section. Since M228 the page is in plain words for a developer who does not know hydo. It
+says what broke and when it happens, as the schedule in sentences (`hydo_schedule::describe`).
+It says whether it is a bug, with a label from the failure's class (`hydo_explore::advice`), and
+it shows what hydo saw and the command to run in the project's folder. An exploration's failures are problems ranked by attention. Everything for
+specialists is in one folded section at the bottom.
 
 **Which versions have a finding (M221).** `hydo versions <run dir | explore dir | "<schedule>">`
 replays a finding's minimal schedule on versions of the system, oldest first. The versions are a
@@ -813,6 +817,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     depends on the CPU model and reaches guest memory or a fingerprinted field. Compare two Intel
     models' `HYDO_KVM_DIAG` output and the parts of the fingerprint. The explorer's result cache
     keys KVM runs by the CPU's vendor and model since 0.3.2.
+103. The plain report page (M228). A fresh reader's review is fixed. Every error verdict but a
+    failed restart gets the title `The run stopped early`. A service's own log is not in an
+    exploration's files, so the page can only name the command that shows it.
 
 ## Milestone index
 
@@ -1171,6 +1178,11 @@ build machine, before 2026-10-13.
   signed and notarized, and verified on hvx, the Mac and KVM (GitHub's runners). A first build
   was not published: its KVM run showed that on Intel a KVM fingerprint holds for one CPU model,
   and the pages were corrected. Published on 2026-11-14
+- M228 (tentative number): `hydo report --html` in plain words, from the user's approved mockups.
+  It says what broke, when it happens, whether it is a bug, what hydo saw, and how to see it
+  again. The specialists' details are folded at the bottom. Every schedule token has words
+  (`hydo_schedule::describe`) and every failure class a label and advice
+  (`hydo_explore::advice`). Nothing recorded moved
 
 ## Where to look
 

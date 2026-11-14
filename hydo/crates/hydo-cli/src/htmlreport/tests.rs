@@ -1,10 +1,13 @@
 //! The page against recorded answers (`tests/golden/report/*.html`; `HYDO_BLESS=1 cargo test -p
-//! hydo htmlreport` rewrites them, then review their diff like code), its size bound, and that
-//! it loads nothing from anywhere.
+//! hydo htmlreport` rewrites them, then review their diff like code), its size bound, that it
+//! loads nothing from anywhere, and that its plain part (everything above the folded details)
+//! uses none of hydo's own words.
 //!
 //! The inputs are `tests/fixtures/report/`: a real run of the Redis example on the Mac engine
 //! (`disk=cut | run C=12 R=everysec`, a power cut that loses an acknowledged write) and its
-//! passing neighbour (`R=always`), with the scratch paths replaced by `/work`; an exploration on
+//! passing neighbour (`R=always`), with the scratch paths replaced by `/work`, in a project
+//! folder with the example's `hydo.yaml` (`redis/hydo.yaml`, `redis/hydo-out/run-*`); an
+//! exploration on
 //! the explorer's scripted engine (hydo-explore's `tests/fake_engine.rs` engine, seeds 1-12, one
 //! worker), with the consoles the page reads; and the recorded CI run of
 //! `hydo/schema/examples/results/v1/mac-shop-ci-run/`. The page names directories as the
@@ -95,28 +98,121 @@ fn small(html: &str, kib: usize) {
     );
 }
 
+/// The words of hydo's own machinery that the plain part of a page never shows. Commands and
+/// schedules (`<code>`, `<pre>`) and the folded details are left out of the check.
+const JARGON: [&str; 10] = [
+    "fingerprint",
+    "epoch",
+    "engine",
+    "schedule",
+    "token",
+    "invariant",
+    "oracle",
+    "signature",
+    "class",
+    "seed",
+];
+
+fn plain_words(html: &str) {
+    let mut t = html.to_string();
+    if let Some(i) = t.find("<details class=\"share\"") {
+        t.truncate(i);
+    }
+    let cut_between = |t: &mut String, a: &str, b: &str| {
+        while let Some(i) = t.find(a) {
+            let j = t[i..].find(b).map(|j| i + j + b.len()).unwrap_or(t.len());
+            t.replace_range(i..j, " ");
+        }
+    };
+    cut_between(&mut t, "<head>", "</head>");
+    cut_between(&mut t, "<pre", "</pre>");
+    cut_between(&mut t, "<code>", "</code>");
+    cut_between(&mut t, "<", ">");
+    let low = t.to_lowercase();
+    for w in low.split(|c: char| !c.is_ascii_alphanumeric()) {
+        for j in JARGON {
+            assert!(
+                w != j && w != format!("{j}s") && w != format!("{j}es"),
+                "the plain part of the page uses {w:?}"
+            );
+        }
+    }
+    for banned in ["knob", "\u{2014}"] {
+        assert!(!low.contains(banned), "the plain part uses {banned:?}");
+    }
+}
+
+/// The part above the folded details, commands included, names no path of the machine that made
+/// the results, and every link of the page goes to an element the page has.
+fn no_machine_paths_and_links_resolve(html: &str) {
+    let plain = &html[..html.find("<details class=\"share\"").unwrap_or(html.len())];
+    for bad in ["/work/", "/Users/", "/home/", "/private/", "/tmp/"] {
+        assert!(!plain.contains(bad), "the plain part names {bad:?}");
+    }
+    let mut rest = html;
+    while let Some(i) = rest.find("href=\"#") {
+        let r = &rest[i + 7..];
+        let id = &r[..r.find('"').unwrap()];
+        assert!(
+            html.contains(&format!("id=\"{id}\"")),
+            "the link #{id} goes nowhere"
+        );
+        rest = r;
+    }
+}
+
 #[test]
 fn a_power_cut_run_against_its_passing_neighbour() {
     let html = page_of(
-        &fixture("mac-redis-cut"),
+        &fixture("redis/hydo-out/run-cut"),
         "hydo-out/run-cut",
-        Some(fixture("mac-redis-always")),
+        Some(fixture("redis/hydo-out/run-always")),
     );
     loads_nothing(&html);
     small(&html, 64);
-    // the failure, the commands that replay it, the timeline and the first difference
+    plain_words(&html);
+    no_machine_paths_and_links_resolve(&html);
+    // the plain part: what broke, when, whether it is a bug, what hydo saw, the command
     for want in [
-        "redis: a check did not hold",
+        "<h1>Redis failed your check after a power cut, with Redis appendfsync set to <code>everysec</code></h1>",
+        "Your workload ran, and Redis confirmed 12 steps. Then the power was cut after 12 steps.",
+        "<li>The power goes out after 12 steps of your workload, before the 13th step. Then the machine starts again.</li>",
+        "Expected for this setting",
+        "It follows from a setting that trades safety for speed.",
+        "Your check stops at the first problem it finds, so it reports only <code>key k:0 lost</code>",
+        "A second run with Redis appendfsync at <code>always</code> instead of <code>everysec</code> passed every check.",
+        "keep Redis appendfsync at <code>always</code>",
+        "Run this in your project's folder (<code>redis</code>), after <code>hydo build</code>",
+        "<code>|</code> separates the machine's settings",
+        "<pre class=\"cmd\">hydo run &quot;disk=cut | run C=12 R=everysec&quot;</pre>",
+        "<code>R=everysec</code> = Redis appendfsync set to <code>everysec</code>",
+        "To open the run's files, logs and processes at the moment it failed: <code>hydo inspect start hydo-out/run-cut --at end</code>",
+        "Details for a bug report",
+    ] {
+        assert!(html.contains(want), "the page lacks {want:?}");
+    }
+    // the rule's words once above the details, and "Is this a bug?" without the check
+    let plain = &html[..html.find("<details class=\"share\"").unwrap()];
+    assert_eq!(plain.matches("every SET the client saw").count(), 1);
+    assert_eq!(
+        plain.matches("key k:0 lost").count(),
+        2,
+        "the lead and the note on the check"
+    );
+    // the details keep what the page showed before
+    let details = &html[html.find("<details class=\"share\"").unwrap()..];
+    for want in [
         "disk=cut | run C=12 R=everysec",
         "hydo repro hydo-out/run-cut",
         "hydo run --image /work/redis/hydo-out/explore-ob-redis-arm64.cpio.gz &quot;disk=cut | run C=12 R=everysec&quot;",
         "POWER CUT before step 12",
         "with R=always instead of R=everysec",
+        "a2b8d71c0c467d15",
         "Apple M2 Pro",
         "fingerprint epoch 2",
         "never reached",
     ] {
-        assert!(html.contains(want), "the page lacks {want:?}");
+        assert!(details.contains(want), "the details lack {want:?}");
     }
     golden("run.html", &html);
 }
@@ -126,7 +222,22 @@ fn a_scripted_exploration() {
     let html = page_of(&fixture("scripted-explore"), "hydo-out/explore", None);
     loads_nothing(&html);
     small(&html, 96);
+    plain_words(&html);
+    no_machine_paths_and_links_resolve(&html);
     for want in [
+        "<h1>hydo found 3 problems in your system</h1>",
+        "4 runs failed, in 2 different ways.",
+        "Start here",
+        "The run stopped early after disk errors",
+        "A second run with a disk that keeps every write at once instead of a faulty disk that throws away writes it already confirmed passed every check.",
+        "hydo did not remove faults from this one",
+        "Both runs had disk errors and crashes",
+        "<a href=\"#f2\">The runs in detail</a>",
+        "<a href=\"#p1\">problem 1</a>",
+        "What held",
+        "hydo explore --image scripted-disk.img --seeds 13-112",
+        "hydo ci accept f1:invariant:",
+        // the details
         "disk=lying:1 dseed=63cbe1e459320dd7 | run C=11",
         "with disk=none instead of disk=lying:1",
         "Against its closest passing neighbour",
@@ -135,6 +246,10 @@ fn a_scripted_exploration() {
     ] {
         assert!(html.contains(want), "the page lacks {want:?}");
     }
+    // the problems in order of attention: worth a look before expected
+    let look = html.find("The run stopped early").unwrap();
+    let expected = html.find("when a faulty disk threw away writes").unwrap();
+    assert!(look < expected);
     golden("exploration.html", &html);
 }
 
@@ -144,8 +259,16 @@ fn a_ci_run() {
     let html = page_of(&dir, "hydo-out/ci", None);
     loads_nothing(&html);
     small(&html, 64);
+    plain_words(&html);
+    no_machine_paths_and_links_resolve(&html);
     for want in [
-        "shop: the CI run failed, 1 new finding",
+        "<h1>This change brings 1 new problem to Shop</h1>",
+        "lists it for removal if it ever passes",
+        "These runs never had a pause in the middle of a request",
+        "New in this change",
+        "The base commit passes the same run, so this change brought it.",
+        "hydo ci accept f1:invariant:d4f25624c2 --reason",
+        "after <code>hydo build</code>",
         "Found on this commit; the base commit passes the same schedule.",
         "its minimal schedule passes on the base commit&#39;s image",
     ] {
@@ -203,7 +326,8 @@ fn text_from_the_run_is_escaped() {
     assert!(!html.contains("<script>alert"));
     assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
     assert!(html.contains("&quot;&lt;b&gt;&quot; &amp; &#39;c&#39;"));
-    assert!(html.contains("shop: a check did not hold"));
+    assert!(html.contains("Shop failed your check"));
+    assert!(html.contains("found <code>&quot;&lt;b&gt;&quot; &amp; &#39;c&#39;</code>"));
     loads_nothing(&html);
 }
 

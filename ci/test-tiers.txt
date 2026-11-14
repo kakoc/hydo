@@ -125,6 +125,7 @@ hydo-release::third_party                fast
 hydo-results::examples                   fast
 hydo-results::reader                     fast
 hydo-results::schema                     fast
+hydo-schedule::describe                  fast
 hydo-schedule::language                  fast
 hydo-schema-compat::real_schemas         fast
 hydo-schema-compat::rules                fast
