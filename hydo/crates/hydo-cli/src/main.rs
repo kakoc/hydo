@@ -18,6 +18,7 @@
 mod build;
 mod cache;
 mod ci;
+mod clockscan;
 mod ctx;
 mod delegated;
 mod diff;

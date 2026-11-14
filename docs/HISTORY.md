@@ -9870,3 +9870,150 @@ input, not the engine:
 `Recorded::of` now takes the run conversation's schedule first (`inspect::drive` test
 `the_schedule_is_the_run_conversation_s`). Nothing else read an explorer's boot transcript, so no
 command changed its answer.
+
+### Milestone 248 (tentative number) - DONE (the clock audit: `hydo rules scan --kind clock` finds code that measures a lease, a timeout, a throttle, a lag or a delay with the wall clock, and proposes clock-step schedules aimed at each place, ranked so that the report shows the 5 most likely functions; it finds the known lines of Valkey 9.1.3, Temporal 1.32.2 and River v0.51.2, and its schedule for Valkey reproduces valkey-io/valkey#5406 on the Mac engine; skill 2.3.0; nothing recorded moved; 2026-11-14)
+
+**Why.** On 2026-11-14 four bugs that hydo found had one cause: code that measured a duration
+with the wall clock instead of a monotonic clock.
+
+- Valkey (valkey-io/valkey#5406): `server.unixtime` in `shouldStartChildReplication` and
+  `refreshGoodReplicasCount`.
+- Temporal (temporalio/temporal#13099): `time.Now().UTC()` behind the SQL handle's refresh
+  throttle.
+- River (the River example's finding 2): a lease that PostgreSQL's clock ends.
+- A user's private message queue: leases and visibility stamped from the realtime clock.
+
+A step of the clock back made a wait last longer by the size of the step, and a step forward
+ended a lease early. The audit finds such code before an exploration has to draw the right step
+at the right time.
+
+**What was built.** `hydo rules scan --kind clock [DIR] [--json] [--manifest FILE]`, in
+`hydo/crates/hydo-cli/src/clockscan.rs`, a sixth kind of evidence of `hydo rules scan`
+(`docs/design/rule-suggestion.md`, "The clock audit"). It reads Go, C and C++, Rust, Java and
+Kotlin, Python, JavaScript and TypeScript, Ruby, C#, and SQL as text, and skips tests,
+examples, benchmarks and vendored code. It follows a reading of the wall clock through small
+functions, variables, fields and parameters. It reports each place in one of three shapes:
+`elapsed`, `deadline` and `check`. Each place gets a confidence, the source of its reading, and
+its limit with the value when the code states one. Each function with a `high` place gets three
+schedules: a step back before the fault that makes the code run, a step back after it, and a
+step forward. The fault follows the words of the code (a replica, the database, the lease
+holder, lost answers), and the services come from `hydo/hydo.yaml`. The scan without `--kind`
+lists the places in a `clock` section. The guide topic is `hydo guide faults`, "Find the
+durations measured on the wall clock". The onboarding skill (2.3.0) runs the audit after the
+rules are validated and offers the schedules of the first three places.
+
+**Recall on the real cases.** The tagged sources, downloaded from GitHub:
+
+| project | source files | places | high | the known line |
+|---|---|---|---|---|
+| Valkey 9.1.3 | 255 | 159 | 144 | `src/replication.c:5502` (`shouldStartChildReplication`, limit `repl_diskless_sync_delay`, 5 seconds) and `:4962` (`refreshGoodReplicasCount`, `repl_min_replicas_max_lag`, 10 seconds), both high |
+| Temporal 1.32.2 | 1,515 | 191 | 109 | `common/persistence/sql/sqlplugin/db_handle.go:98` (`reconnect`, `sessionRefreshMinInternal`, 1 second), high |
+| River v0.51.2 | 595 | 50 | 25 | `riverdriver/riverpgxv5/internal/dbsqlc/river_leader.sql` lines 19, 27, 30, 36 and 49, high |
+
+Valkey's reading passes through five hops: `gettimeofday` in `ustime()`, the local `us`, the
+parameter `ustime` of `updateCachedTimeWithUs`, the fields `ustime`, `mstime` and `unixtime`.
+Temporal's passes through `RealTimeSource.Now()`, which returns `time.Now().UTC()`. The private
+queue's code was not available; a unit test holds its pattern (a visibility deadline stamped
+with `time.Now().UTC().Add(...)`).
+
+**Precision.** A hand review of a seeded sample (40 places of Valkey, 40 of Temporal, all 50 of
+River) counted a place as correct when it measures a duration or keeps a deadline with the wall
+clock. Valkey gave 38 of 40, and the 2 others were overflow guards (`LLONG_MAX - now`), which
+the audit now drops. Temporal gave 34 of 40. The 6 others were a fake test clock's `Now()`, a
+method named `Sub` that took readings from every caller of `time.Time.Sub` (now not followed),
+and calendar arithmetic of the scheduler. River gave 50 of 50. Five of the 130 places only fed
+a log line or a metric. The review tuned the audit in four steps:
+
+- A value is a reading only when its expression starts with one.
+- A hop from a variable to a variable needs a name about time on one side.
+- A name with a monotonic second implementation is not a reading (HikariCP's `elapsedMillis`).
+- A word of a name is matched whole, so `blacklist` is not `ack`, and `clock` is not `lock`.
+
+The sample was read before the last fixes: the overflow guards and the method named `Sub` are
+gone from the counts in the table, and the fake test clock and the calendar arithmetic remain.
+Six projects that keep their timeouts on a monotonic clock gave 8 places, each a deliberate use
+of the wall clock:
+
+| project | places | what they are |
+|---|---|---|
+| hashicorp/raft v1.7.1 | 0 | |
+| bb8 0.8.5 | 0 | |
+| urllib3 2.2.3 | 2 | a `Retry-After` date; the test server's throttle |
+| libuv v1.48.0 | 3 | the uptime from the boot time (three systems) |
+| HikariCP 5.1.0 | 2 | its millisecond clock source |
+| node-lru-cache v10.2.0 | 1 | a time stamp in its dump |
+
+**The ranking.** 144 high places on Valkey are too many for an onboarding. The report shows one
+place per function (96 on Valkey, 91 on Temporal, 15 on River), the 5 most likely first, and the
+line `and N more: hydo rules scan --kind clock --all`. `--json` keeps every place, each target
+with its `rank`. The rank adds points for:
+
+- a stated limit from 50 ms to one hour;
+- leases and replication, then database connections and request timeouts;
+- words of waiting or retrying;
+- a word of the function's or the file's name in the commands of hydo.yaml;
+- a measured time.
+
+It takes points away for a minor language of the repository and for code that logs, reports,
+caches or benchmarks. Duration names now match whole words (`PageSize` is no `age`,
+`maxAttempts` no limit), which dropped 9 Valkey places and the libuv `pthread_cond_timedwait`
+deadline. The ranks of the known places, with each example's hydo.yaml and without one:
+
+| project | known place | rank with hydo.yaml | rank without |
+|---|---|---|---|
+| Valkey | `refreshGoodReplicasCount` | 2 | 4 |
+| Valkey | `shouldStartChildReplication` | 4 | 6 |
+| Temporal | `reconnect` (`db_handle.go:98`) | 1 | 3 |
+| River | `riverpgxv5/.../river_leader.sql` | 2 | 2 |
+
+Without hydo.yaml, Valkey's cluster and failover code ranks first: nothing tells the audit that
+the services run neither cluster mode nor Sentinel. The onboarding skill runs the audit after
+hydo.yaml exists and offers only the first three places' schedules.
+
+The top 5 with each example's hydo.yaml:
+
+- Valkey: `clusterHandleReplicaMigration`, `refreshGoodReplicasCount`, `replicationCron`,
+  `shouldStartChildReplication`, `sentinelFailoverReconfNextReplica`.
+- Temporal: `reconnect` (`db_handle.go`), `startWorkflow` (the scheduler), `handleSyncShardStatus`,
+  `GetClusterMembers` (`cluster_metadata.go`), `CalculateQPS` (the replication migration).
+- River: `leaderDeleteExpired` (the JavaScript driver), `river_leader.sql` of the Go driver,
+  `makeRetryDecision` (the job rescuer), `NextRetryAt` (the retry policy), `leaderElect` (the
+  JavaScript driver).
+
+**The proof on the Mac.** The Valkey example's image, built by the 0.3.2 Mac release's `hydo`
+from this tree's example folder, had the recorded sha256 `2853f04f…`. With `--manifest` of the
+example, the audit names `valkey3`, the last service whose command holds `--replicaof`, and a
+step back of 300 seconds (ten times 5 seconds, at least 5 minutes) for `shouldStartChildReplication`.
+Its three schedules ran with the same `hydo`, one VM at a time:
+
+| schedule | verdict | fp |
+|---|---|---|
+| back-before `disk=none \| run T=1:-300 K=valkey3@2+3` | OK | `404f80cb0bd5f45d` |
+| back-after `disk=none \| run K=valkey3@2+3 T=10:-300` | VIOLATION `[eventually_settle] ... slave1:ip=valkey3,...,state=wait_bgsave,offset=0` | `d3c8c0fed4a3dbd8` |
+| forward-after `disk=none \| run K=valkey3@2+3 T=10:30` | OK | `046d1d92e2a7a6e8` |
+
+The back-after schedule is the example's saved regression `fullsync-delayed-by-clock-step`, and
+its fingerprint is the recorded one. The back-before schedule passes because the replica asks
+for its sync after the step, so its request carries the stepped clock. The forward step only
+shortens the 5-second wait. For Temporal the audit names `postgresql` and proposes `T=1:-300
+K=postgresql@2+3`; that schedule was not run. For River with its example's manifest it names
+`workers.primary` and a forward step `T=2:300`, the shape of the River example's finding 2.
+
+**Tests.** On this Mac (Rust 1.90.0; the bare-metal machine ran a re-recording pass):
+
+- `cargo fmt --all --check`, and `cargo clippy -p hydo --all-targets -- -D warnings`.
+- `cargo test -p hydo`: 9 unit tests in `clockscan`, one per language and one for each real
+  case's shape, and `rules::the_clock_audit_aims_clock_steps_at_durations_on_the_wall_clock`
+  (the rank, the top 5, the line for the rest, `--all`, and every place in `--json`).
+- `sh ci/consolidate-tests.sh --check`, `cargo test -p hydo-release --test it`, `cargo test -p
+  hydo-config --test inventory`, `docs::`, `skill_check::`, `public_content::`, and `sh
+  ci/vale.sh`.
+
+Re-recorded on purpose: the CLI's and the agents' goldens, whose answers carry the skill's
+version (2.3.0) and the sha256 of its `SKILL.md`. Each changed line differs only in those.
+
+**Left** (AGENTS.md open item 117). The audit reads text, so a reading that passes through an
+interface with several implementations, a channel or a queue is not followed. The schedules
+place the steps at fixed workload steps, so code that runs at another time needs them moved by
+hand. The Temporal schedule and the River schedules were not run, and the audit did not run
+inside an onboarding of a new project.

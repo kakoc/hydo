@@ -25,14 +25,21 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub const HELP: &str = "usage: hydo rules scan [DIR] [--kind K] [--json] [--max N]
+pub const HELP: &str = "usage: hydo rules scan [DIR] [--kind K] [--json] [--max N] [--manifest FILE] [--all]
        hydo rules check <candidates.yaml> [IMG] [--image IMG] [--runs N] [--schedule S]
                         [--mutate] [--keep-checks] [--timeout S] [--out DIR]
                         [--write-checks DIR] [--vcpus N]
   scan: lists what the project in DIR (default .) promises, with the file and the line: schema
   constraints and state columns, API contracts, promise words in its documentation, and test
-  assertions about refusals and limits. It writes no rule. --kind K shows one kind (schema,
-  state, api, docs, tests).
+  assertions about refusals and limits, and the code that measures a duration with the wall
+  clock. It writes no rule. --kind K shows one kind (schema, state, api, docs, tests, clock).
+  --kind clock is the clock audit: each place where a lease, a timeout, a throttle, a lag or a
+  delay is measured on the wall clock instead of a monotonic clock, with the limit when the code
+  states it, and three clock-step schedules aimed at it (a step back before and after the fault
+  that makes the code run, and a step forward). The schedules name the services of hydo.yaml
+  (--manifest FILE, default DIR/hydo/hydo.yaml or DIR/hydo.yaml) when they can. It shows one
+  place per function, the most likely 5 first (--all shows every place; --json has them all,
+  each with its rank).
   check: validates candidate rules (format: hydo guide rules). It runs the image's workload
   without faults, `disk=none | run W=<seed>` for the seeds 00000001..N (--runs, default 3; one run of
   `disk=none | run` for an image without composed commands, or --schedule S), with every
@@ -1278,7 +1285,7 @@ pub fn line_evidence(kind: &'static str, line: &str) -> Option<&'static str> {
     }
 }
 
-fn walk(dir: &Path, files: &mut Vec<PathBuf>) {
+pub(crate) fn walk(dir: &Path, files: &mut Vec<PathBuf>) {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
     };
@@ -1363,11 +1370,13 @@ fn cmd_scan(argv: &[String]) -> i32 {
         return 0;
     }
     let as_json = take_flag(&mut args, "--json");
+    let all = take_flag(&mut args, "--all");
     let only = take(&mut args, "--kind");
+    let manifest = take(&mut args, "--manifest");
     if let Some(k) = &only {
-        if !EVIDENCE_KINDS.iter().any(|(n, _)| n == k) {
+        if k != "clock" && !EVIDENCE_KINDS.iter().any(|(n, _)| n == k) {
             let names: Vec<&str> = EVIDENCE_KINDS.iter().map(|x| x.0).collect();
-            die(&format!("--kind {k}: one of {}", names.join(", ")));
+            die(&format!("--kind {k}: one of {}, clock", names.join(", ")));
         }
     }
     let max: usize = take(&mut args, "--max")
@@ -1384,6 +1393,22 @@ fn cmd_scan(argv: &[String]) -> i32 {
     if !root.is_dir() {
         die(&format!("{dir}: not a directory"));
     }
+    if only.as_deref() == Some("clock") {
+        let svcs = crate::clockscan::services_near(root, manifest.as_deref());
+        let (read, matches) = crate::clockscan::audit(root);
+        if as_json {
+            println!(
+                "{}",
+                crate::clockscan::json_report(&dir, read, &matches, &svcs)
+            );
+        } else {
+            print!(
+                "{}",
+                crate::clockscan::text_report(&dir, read, &matches, &svcs, max, all)
+            );
+        }
+        return 0;
+    }
     let (read, mut ev) = scan(root, 40);
     if let Some(k) = &only {
         ev.retain(|e| e.kind == k.as_str());
@@ -1393,13 +1418,12 @@ fn cmd_scan(argv: &[String]) -> i32 {
             .iter()
             .map(|e| json!({"kind": e.kind, "file": e.file, "line": e.line, "text": e.text}))
             .collect();
-        println!(
-            "{}",
-            serde_json::to_string_pretty(
-                &json!({"dir": dir, "files_read": read, "evidence": items})
-            )
-            .unwrap_or_default()
-        );
+        let mut doc = json!({"dir": dir, "files_read": read, "evidence": items});
+        if only.is_none() {
+            let (_, matches) = crate::clockscan::audit(root);
+            doc["clock"] = Value::Array(matches.iter().map(crate::clockscan::match_json).collect());
+        }
+        println!("{}", serde_json::to_string_pretty(&doc).unwrap_or_default());
         return 0;
     }
     println!(
@@ -1417,6 +1441,23 @@ fn cmd_scan(argv: &[String]) -> i32 {
         }
         if of.len() > max {
             println!("  ... {} more (--max N, or --json for all)", of.len() - max);
+        }
+    }
+    if only.is_none() {
+        // the clock audit's places, one line each; --kind clock gives the schedules
+        let (_, matches) = crate::clockscan::audit(root);
+        println!(
+            "\nclock ({}): durations measured with the wall clock (--kind clock proposes the schedules that test them)",
+            matches.len()
+        );
+        for m in matches.iter().take(max) {
+            println!("  {}:{}: [{}] {}", m.file, m.line, m.confidence, m.text);
+        }
+        if matches.len() > max {
+            println!(
+                "  ... {} more (--max N, or --json for all)",
+                matches.len() - max
+            );
         }
     }
     0

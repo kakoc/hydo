@@ -259,6 +259,63 @@ When an exploration finds such a failure:
   as accepted (`hydo guide ci`).
 - Keep `clock` in `faults:`. If you remove it, write the reason in a comment beside `faults:`.
 
+## Find the durations measured on the wall clock
+
+The clock audit reads the project's source code and lists each place that measures a lease, a
+timeout, a throttle, a lag or a delay with the wall clock. For each place it proposes clock
+steps aimed at that code. Run it in the repository:
+
+```sh
+hydo rules scan --kind clock                 # the 5 most likely places, with their schedules
+hydo rules scan --kind clock --all           # every place
+hydo rules scan --kind clock --json          # every place as JSON, each with its rank
+```
+
+The audit reads Go, C and C++, Rust, Java and Kotlin, Python, JavaScript and TypeScript, Ruby,
+C# and SQL. It skips tests, examples, and vendored code. A place is one of three shapes:
+
+| shape | what the code does | example |
+|---|---|---|
+| `elapsed` | subtracts an earlier wall-clock reading from a later one and compares the result with a limit | `if now.Sub(lastRefresh) < refreshMin` |
+| `deadline` | adds a duration to a wall-clock reading and keeps the result | `SET expires_at = now() + make_interval(secs => @ttl)` |
+| `check` | compares a wall-clock reading with a stored deadline | `WHERE expires_at < now()` |
+
+The audit follows a reading through small functions, variables, fields, and parameters. For
+example, Go's `time.Now().UTC()` drops the monotonic reading, so a `Now()` method that returns
+it is a wall-clock reading too. Each place says where its reading comes from, and the limit
+with its value when the code states it.
+
+A place is `high` when the code compares the duration with a limit or keeps a lease, and
+`medium` when only its names suggest a deadline. Only `high` places get schedules. A reading
+that is only logged or kept as a time stamp is not listed.
+
+The report shows one place per function, the most likely first. These come first:
+
+- a limit that the code states, between 50 ms and one hour;
+- replication and leases, then database connections and request timeouts;
+- code whose function name or filename shares a word with the commands of `hydo/hydo.yaml`, such
+  as `replication` for a Valkey started with `--dual-channel-replication-enabled`;
+- code in the repository's main languages.
+
+Code that logs, reports, caches, or benchmarks comes last. Each `high` place gets three
+schedules:
+
+- `back-before`: the clock goes back, then the fault that makes the code run.
+- `back-after`: the fault, then the clock goes back while the system recovers.
+- `forward-after`, or `forward` for a lease: the clock goes forward by more than the limit.
+
+The fault comes from the words of the code. A replica is killed for replication code, the
+database for a connection pool, the lease holder for a lease, and answers are lost for a
+request timeout. The schedules name the services of `hydo/hydo.yaml` (or `--manifest FILE`)
+when a service has that role, and a placeholder such as `<replica>` when none has. A step back
+is at least 5 minutes and ten times the limit. A step forward is longer than the limit.
+
+Try a schedule with `hydo explore --schedule "<schedule>"`, which runs it and shrinks a
+failure. Move the steps to where the code runs in your workload. In the Valkey example the
+audit ranks `shouldStartChildReplication` (`repl-diskless-sync-delay`, 5 seconds) fourth. Its
+`back-after` schedule `disk=none | run K=valkey3@2+3 T=10:-300` is the example's saved
+regression for valkey-io/valkey#5406, and it fails on the Mac engine.
+
 ## Clock after a power cut
 
 Every boot starts its clock at `guest.clock_start`. Without `guest.clock_after_cut`, the recovery

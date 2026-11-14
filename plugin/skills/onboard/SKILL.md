@@ -4,7 +4,7 @@ description: Set up deterministic fault testing with hydo for a software project
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "2.2.0"
+  version: "2.3.0"
   hydo-min: "0.1.0"
 ---
 
@@ -119,7 +119,11 @@ Use the "Build and run" commands of `hydo guide workflow`: build the image, run 
 without faults twice (it must pass, with the same fingerprint both times), validate the proposed
 rules (`hydo rules check hydo/rules.yaml --mutate`, step 3 of
 [references/proposing-rules.md](references/proposing-rules.md)), show the owner the rules that
-hold, and write the confirmed ones as checks. Then explore. A first
+hold, and write the confirmed ones as checks. Then run the clock audit, `hydo rules scan --kind
+clock` (`hydo guide faults`, "Find the durations measured on the wall clock"), when the
+installed hydo has it. Show the owner its first three places in plain words, and offer only
+their schedules: `hydo explore --schedule`, after you fill in the placeholders and move the
+steps to where that code runs. Mention the rest with the report's last line. Keep `clock` in `faults:`. Then explore. A first
 run that fails points at the folder or at a real bug. Before changing anything, read why: the
 `hydo: diagnosis:` lines `hydo run` prints and the `diagnosis` in the run directory's
 `result.json`; then, when your hydo has `hydo inspect` (`hydo inspect --help`), look inside the
@@ -131,7 +135,8 @@ image to find a cause: that changes the run's timing, and the failure can go awa
 Give the user: the folder you wrote; the inventory; **each check, for review** (the checks are
 the part that needs human judgment; say which ones you are unsure about and why); the proposed
 rules as `hydo rules check` reported them: the ones that hold, plain words first, with their
-evidence, and apart the ones that failed without faults, each a wrong rule or a bug; the knobs; the
+evidence, and apart the ones that failed without faults, each a wrong rule or a bug; the places
+of the clock audit, with the schedules you ran and their verdicts; the knobs; the
 pitfalls you found and what you did about them; what you could not determine (unknown readiness
 checks, unclear data directories, missing programs, ambiguous promises), each with what happens if
 it stays as it is; the hydo version you used; and the exact build and first-run commands.

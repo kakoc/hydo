@@ -108,6 +108,144 @@ Milestone 236; the candidates files are in `docs/design/rule-suggestion/`):
 - `cases` must count the rows that the rule's query judges. A Blnk bulk rule counted the bulks,
   looked at rows that Blnk never applies, and held on the failure it was meant to find.
 
+## The clock audit (Milestone 248, tentative number)
+
+On 2026-11-14 four bugs that hydo found had one cause: code that measured a duration with the
+wall clock instead of a monotonic clock. They were in Valkey (valkey-io/valkey#5406), Temporal
+(temporalio/temporal#13099), River (finding 2 of the River example), and a private queue. A step
+of the clock back made a wait last longer by the size of the step, and a step forward ended a
+lease early. `hydo rules scan --kind clock` finds such code and aims clock steps at it. It is
+evidence of a sixth kind: it proposes schedules, not rules.
+
+### How it reads the code
+
+The audit works on text, without a compiler. It reads Go, C and C++, Rust, Java and Kotlin,
+Python, JavaScript and TypeScript, Ruby, C#, and SQL. It skips tests, examples, benchmarks, and
+vendored code. It runs in four steps:
+
+1. It removes comments and the contents of strings from each line. SQL keeps its strings.
+2. It finds the calls that read the wall clock, for example `gettimeofday`, `time(NULL)`,
+   `SystemTime::now()`, `System.currentTimeMillis()`, `time.time()`, `Date.now()` and SQL's
+   `now()`. Go's `time.Now()` keeps a monotonic reading, so it counts only against a value that
+   lost it: `time.Now().UTC()`, `.Round(0)`, `.Unix()`, or a time read from storage.
+3. It follows a reading through the code until nothing changes:
+   - a function of at most 30 lines, with a name about time, that returns a reading;
+   - a variable, a field or a parameter that is set to a reading.
+4. It reports a line that uses a reading in one of three shapes:
+   - `elapsed`: a subtraction compared with a limit;
+   - `deadline`: a reading plus a duration;
+   - `check`: a reading compared with a stored deadline.
+
+Several guards keep the precision:
+
+- A value is a reading only when the expression starts with one, so `buf = format(buf, now)`
+  is not followed.
+- A hop from one variable to another needs a name about time on one side, so `x.BuildId =
+  y.Version` is not followed.
+- A name with a second implementation that reads a monotonic clock is not followed.
+- A line that only logs, prints or records a metric is dropped, and so is an overflow guard
+  such as `LLONG_MAX - now`.
+
+A place is `high` when it compares a duration with a limit or keeps a lease or a deadline, and
+`medium` when only its names suggest a deadline. The limit's value comes from the code when it
+is written as a constant, a `#define`, or a default in a table of settings. The unit of a bare
+number comes from the name of the reading (`mstime`, `unixtime`).
+
+### The ranking
+
+The report shows one place per function, the 5 most likely first, and one line for the rest
+(`--all` shows every place; `--json` has every place with its rank). The rank adds points:
+
+| what | points |
+|---|---|
+| a limit the code states, from 50 ms to one hour | 4 (another stated limit: 1) |
+| a lease or replication; a database connection or a request timeout | 5; 3 |
+| a word of waiting, throttling or retrying (`refresh`, `retry`, `lag`, `timeout`) | 1 |
+| a word of the function's or the file's name in the commands or environments of hydo.yaml | 3 |
+| a measured time (`elapsed`) | 1 |
+| a minor language of the repository (less than a fifth of its source files) | -5 |
+| code that logs, reports, caches, or benchmarks | -6 |
+
+The words of hydo.yaml leave out the project's name, the image's name and plain words such as
+`server` or `port`. For Valkey the services' commands hold `replication` and `repl`, so the
+functions of `replication.c` gain 3 and the cluster and Sentinel code does not. Equal ranks keep
+the path order.
+
+### The schedules
+
+Each function with a `high` place gets three schedules:
+
+- the clock goes back, then the fault that makes the code run;
+- the fault, then the clock goes back while the system recovers;
+- the clock goes forward by more than the limit.
+
+A step back is the first of 5 minutes, 1 hour, 1 day, and 30 days that is longer than ten times
+the limit. A step forward is the first of 30 seconds, 5 minutes, 1 hour, 1 day, and 30 days that
+is longer than 1.5 times the limit. Without a limit both steps are 5 minutes. The fault
+comes from the words of the function, the file and the line, in this order:
+
+| words | fault |
+|---|---|
+| lease, leader, election, lock, heartbeat | the lease holder is killed (a group's `primary`) |
+| replica, replication, follower, `repl`, `sync` | a replica is killed (a service whose command makes it a replica) |
+| database, persistence, connection, pool, session | the database is killed (the one database service) |
+| timeout, deadline, request, retry, `ack` | 30% of the answers of a service are lost |
+| none of these | a service is killed |
+
+The services come from `hydo/hydo.yaml`. When no service has the role, the schedule holds a
+placeholder such as `<replica>`.
+
+### What the proof runs measured
+
+The tagged sources of the three public cases, read by the audit:
+
+| project | source files | places | high | functions | the known line, and its rank with the example's hydo.yaml (without) |
+|---|---|---|---|---|---|
+| Valkey 9.1.3 | 255 | 159 | 144 | 96 | `replication.c:4962` (`refreshGoodReplicasCount`): 2 (4); `replication.c:5502` (`shouldStartChildReplication`): 4 (6) |
+| Temporal 1.32.2 | 1,515 | 191 | 109 | 91 | `common/persistence/sql/sqlplugin/db_handle.go:98`, limit 1 second: 1 (3) |
+| River v0.51.2 | 595 | 50 | 25 | 15 | `riverpgxv5/internal/dbsqlc/river_leader.sql` (lines 19, 27, 30, 36 and 49): 2 (2) |
+
+Without hydo.yaml, Valkey's cluster and failover code ranks before its replication code, because
+nothing tells the audit that the services run neither cluster mode nor Sentinel.
+
+A hand review read a seeded sample: 40 places of Valkey, 40 of Temporal, and all 50 of River. It
+counted a place as correct when the place measures a duration or keeps a deadline with the wall
+clock:
+
+- Valkey: 38 of 40 (2 were overflow guards, now excluded).
+- Temporal: 34 of 40 (a fake test clock's `Now()`, a method named `Sub`, and calendar
+  arithmetic of the scheduler).
+- River: 50 of 50.
+
+Five of the 130 places only fed a log line or a metric. The review used the audit before its last
+fixes. The overflow guards and the method named `Sub` are gone from the counts in the table; the
+fake test clock and the calendar arithmetic remain. Six projects that keep
+their timeouts on a monotonic clock gave 8 places in all:
+
+- hashicorp/raft v1.7.1 and bb8 0.8.5 gave none.
+- urllib3 2.2.3 gave 2: a `Retry-After` date, and a test server.
+- libuv v1.48.0 gave 3: the uptime from the boot time, on three systems.
+- HikariCP 5.1.0 gave 2: its millisecond clock source.
+- node-lru-cache v10.2.0 gave 1: a time stamp in its dump.
+
+Each of the 8 reads the wall clock on purpose. None is a monotonic timeout that the audit took
+for a wall-clock one.
+
+For the Valkey example, the audit names `valkey3`, the last replica of `hydo.yaml`. On the Mac
+engine its `back-after` schedule `disk=none | run K=valkey3@2+3 T=10:-300` failed with the
+example's recorded fingerprint `d3c8c0fed4a3dbd8`. The `back-before` schedule passed, because
+the replica's request is stamped after that step. The `forward-after` schedule passed too: a
+step forward only shortens the 5-second wait.
+
+### What the clock audit does not do
+
+- It reads text, so a reading passed through an interface with several implementations, or
+  through a channel or a queue, is not followed.
+- The schedules place the steps at fixed workload steps (the fault before step 2, the step
+  back before step 10 of a 20-step workload). Code that runs at another time needs the steps
+  moved by hand.
+- The private queue's code was not available, so its pattern is checked only by a unit test.
+
 ## What is not built
 
 - The candidates file has no JSON schema yet. A change of its format raises its `format:` number.

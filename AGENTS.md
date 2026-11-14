@@ -545,6 +545,17 @@ repeated key gets the first answer, recorded as a replay. On hvx the example
 every replay gave its fingerprint. The design is `docs/design/emulators.md`; the details are in
 `docs/HISTORY.md` Milestone 242.
 
+**The clock audit (M248).** `hydo rules scan --kind clock` lists the code that measures a
+duration with the wall clock: a lease, a timeout, a throttle, a lag, or a delay. The audit reads
+eight languages and SQL as text. A reading is followed through functions, variables, fields,
+and parameters. Each place gets three clock-step schedules. The report ranks one place per function
+and shows the 5 most likely; `--all` and `--json` show every place. The audit found the known lines of
+Valkey, Temporal, and River at their tagged versions. On the Mac engine its schedule for Valkey
+gave the fingerprint of the example's regression for valkey-io/valkey#5406. The skill (2.3.0)
+runs the audit during onboarding and offers the first three places. The guide is the section "Find the durations measured on the
+wall clock" of `hydo guide faults`. The design and the precision numbers are in the section
+"The clock audit" of `docs/design/rule-suggestion.md`.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -1085,6 +1096,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     vercel-labs/emulate (Stripe and Resend with state, and many other providers) needs an image
     with Node.js 24 that hydo would build and pin. The changed `hydo-world` reaches a release at
     its next re-pin.
+117. The clock audit (M248). It reads text, so a reading that passes through an interface with
+    several implementations, a channel or a queue is not followed. Its schedules place the steps
+    at fixed workload steps. Only the Valkey schedules ran; the Temporal and River schedules, and
+    the audit inside a new onboarding, did not.
 
 ## Milestone index
 
@@ -1544,6 +1559,12 @@ build machine, before 2026-10-13.
   service that did not start again is one problem. The disk-error page starts with the disk.
   `hydo explore` prints its fault kinds in words, with the JSON in `fault-space.json`. A replay
   takes the run conversation's schedule, not an explorer boot's. Nothing recorded moved
+- M248 (tentative number): the clock audit. `hydo rules scan --kind clock` finds code that
+  measures a duration with the wall clock, ranks one place per function, and proposes
+  clock-step schedules for the 5 most likely. With each example's hydo.yaml the known places of
+  Valkey, Temporal and River rank in the top 5, and 122 of 130 sampled places are real.
+  Its Valkey schedule reproduces valkey-io/valkey#5406 on the Mac engine. Skill 2.3.0. Nothing
+  recorded moved
 
 ## Where to look
 

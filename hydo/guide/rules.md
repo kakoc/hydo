@@ -27,6 +27,11 @@ at most 40 lines; a schema or API file gives all of them. `--kind K` shows one k
 prints every line of evidence, and the text output shows `--max N` lines of each kind (default
 200).
 
+A sixth section, `clock`, lists the code that measures a lease, a timeout, or a delay with the
+wall clock. Such code fails when the clock is stepped, so it needs clock-step schedules, not a
+rule. `hydo rules scan --kind clock` proposes those schedules (`hydo guide faults`, "Find the
+durations measured on the wall clock").
+
 ## Turn evidence into rules
 
 These kinds of evidence give rules that hold for any business system:

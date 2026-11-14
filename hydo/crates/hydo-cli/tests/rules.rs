@@ -255,3 +255,102 @@ fn the_scan_lists_evidence_by_kind() {
     assert_eq!(doc["evidence"].as_array().unwrap().len(), 1);
     assert_eq!(doc["evidence"][0]["kind"], "docs");
 }
+
+/// The clock audit (Milestone 248): a throttle measured on the wall clock (Temporal's shape),
+/// a lease stamped by the database's clock (River's), and a test file that is not read. The
+/// schedules name the database and the lease holder of hydo/hydo.yaml.
+#[test]
+fn the_clock_audit_aims_clock_steps_at_durations_on_the_wall_clock() {
+    let t = T::new("clock");
+    let w = |rel: &str, text: &str| {
+        let p = t.dir.join("proj").join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    };
+    w(
+        "clock/source.go",
+        "package clock\n\nfunc (ts RealTimeSource) Now() time.Time {\n\treturn time.Now().UTC()\n}\n",
+    );
+    w(
+        "store/handle.go",
+        "package store\n\nconst refreshMin = 1 * time.Second\n\nfunc (h *Handle) reconnect() {\n\tnow := h.clock.Now()\n\tif now.Sub(h.lastRefresh) < refreshMin {\n\t\treturn\n\t}\n\th.lastRefresh = now\n}\n",
+    );
+    w(
+        "db/leader.sql",
+        "UPDATE leader SET expires_at = now() + make_interval(secs => @ttl)\nWHERE expires_at >= now() AND leader_id = @leader_id;\n",
+    );
+    w(
+        "store/handle_test.go",
+        "package store\n\nfunc TestX(t *testing.T) {\n\tif time.Now().UTC().Sub(start) > timeout {\n\t}\n}\n",
+    );
+    // five places in code that only measures for statistics: ranked after the two above
+    let stats: String = (1..=5)
+        .map(|k| format!("func (s *S) f{k}() {{\n\tif time.Now().UTC().Sub(s.last{k}) > s.timeout{k} {{\n\t}}\n}}\n"))
+        .collect();
+    w("stats/stats.go", &format!("package stats\n\n{stats}"));
+    w(
+        "hydo/hydo.yaml",
+        "format: 1\nname: p\ngroups:\n  - name: workers\n    services: [w1, w2]\n    primary: \"cat /tmp/leader\"\nservices:\n  - name: postgres\n    image_ref: postgres:16\n  - name: w1\n  - name: w2\nworkload:\n  steps: 12\n",
+    );
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "clock"]);
+    assert_eq!(rc, 0, "{text}");
+    assert!(
+        text.starts_with("hydo rules scan --kind clock: 7 functions in 4 source files of proj"),
+        "{text}"
+    );
+    // the most likely places first, five of them, and one line for the rest
+    assert!(
+        text.contains("\n1. store/handle.go:7, in reconnect [high]"),
+        "{text}"
+    );
+    assert!(text.contains("\n2. db/leader.sql:1 [high]"), "{text}");
+    assert!(text.contains("\n5. stats/stats.go:"), "{text}");
+    assert!(!text.contains("\n6. "), "{text}");
+    assert!(
+        text.contains("\nand 2 more: hydo rules scan --kind clock --all\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("refreshMin, 1 second by default (store/handle.go:3)"),
+        "{text}"
+    );
+    assert!(
+        text.contains("disk=none | run T=1:-300 K=postgres@2+3"),
+        "{text}"
+    );
+    assert!(
+        text.contains("disk=none | run K=postgres@2+3 T=10:30"),
+        "{text}"
+    );
+    assert!(
+        text.contains("disk=none | run K=workers.primary@2+3 T=10:-300"),
+        "{text}"
+    );
+    assert!(!text.contains("handle_test.go"), "{text}");
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "clock", "--all"]);
+    assert_eq!(rc, 0, "{text}");
+    assert!(text.contains("\n7. stats/stats.go:"), "{text}");
+    assert!(!text.contains("--all\n"), "{text}");
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "clock", "--json"]);
+    assert_eq!(rc, 0, "{text}");
+    let doc: Value = serde_json::from_str(&text).unwrap();
+    let places = doc["clock"].as_array().unwrap();
+    assert_eq!(places.len(), 8, "{text}");
+    let ranked = places.iter().filter(|p| p["rank"].is_u64()).count();
+    assert_eq!(ranked, 7, "{text}");
+    let go = places
+        .iter()
+        .find(|p| p["file"] == "store/handle.go")
+        .unwrap();
+    assert_eq!(go["shape"], "elapsed");
+    assert_eq!(go["limit"]["seconds"], 1.0);
+    assert_eq!(go["rank"], 1);
+    assert_eq!(go["schedules"].as_array().unwrap().len(), 3);
+    // the scan without --kind lists the places in its own section
+    let (rc, text) = t.hydo(&["rules", "scan", "proj"]);
+    assert_eq!(rc, 0, "{text}");
+    assert!(
+        text.contains("\nclock (8): durations measured with the wall clock"),
+        "{text}"
+    );
+}
