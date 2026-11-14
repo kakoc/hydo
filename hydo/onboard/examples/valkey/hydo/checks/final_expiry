@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: no server returns a key or a hash field after its expiry, and the primary keeps the expiry the client set
+exec /bin/vkc check expiry

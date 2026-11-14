@@ -1,0 +1,116 @@
+# Valkey 9.1.3 (the newest release) with one primary and two replicas, as ../docker-compose.yaml
+# runs them: an append-only file synced before every reply (appendfsync always), no RDB
+# snapshots, dual-channel replication, and a small replication backlog, so that a replica that
+# falls behind needs a full synchronization. RESULTS.md says what was hunted and found.
+#
+#   sh ../build.sh            # bin/vkc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the Valkey image by digest
+#   hydo build hydo.yaml --arch arm64 --set arch=arm64     # on a Mac; on Linux: hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-40 --strategy process --new-faults --cluster-faults
+#
+# Started with `hydo onboard` on ../docker-compose.yaml. The services below are the importer's,
+# with the readiness check changed to the client's (PING must answer PONG, not LOADING).
+format: 1
+name: valkey
+description: "Valkey 9.1.3, a primary and two replicas: acknowledged writes, key and hash-field expiry, AOF rewrites and dual-channel full synchronization under kills, pauses, partitions, power cuts, clock steps and disk faults"
+hydo_version: "0.3"
+
+params:
+  arch: amd64         # amd64 | arm64: the client's architecture, the same as the image's
+  dual_channel: "yes" # yes | no: dual-channel replication (Valkey 8 and later)
+  backlog: 64kb       # the replication backlog: small, so that a lagging replica needs a full sync
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 1024
+  clock_start: 1794614400    # 2026-11-14 00:00 UTC, the day of the import
+  clock_after_cut: 60        # expiry times are wall-clock times: no real clock runs back across a power cut
+  outcomes_after_cut: true
+
+data:
+  size_mib: 512   # the three servers' data directories (the fault target)
+  dirs: [vol/v1, vol/v2, vol/v3]
+
+root:
+  files:
+    - {src: "../bin/vkc-{{arch}}", dst: /bin/vkc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 valkey1
+      10.89.0.12 valkey2
+      10.89.0.13 valkey3
+
+groups:
+  - name: nodes
+    services: [valkey1, valkey2, valkey3]
+
+services:
+  # Compose service valkey1, the primary
+  # image valkey/valkey:9.1.3-alpine = docker.io/valkey/valkey@sha256:bf09d58e96d6b4524a15396b65b242bbe18beebbcc15a04d8ee75ddac62fae0b
+  #   linux/amd64: sha256:de6fbe9626fea9f6f297b6867d2c8cf8f0394ee5ed171613166fc093cb49d0a6
+  #   linux/arm64: sha256:8ad17cd9f6481c2f453ed9c3c133978c960025ee6cd0db13a90712cb69b5b2a7
+  - name: valkey1
+    image: {x86_64: images/valkey-valkey-9.1.3-alpine-amd64.docker.tar, arm64: images/valkey-valkey-9.1.3-alpine-arm64-oci}
+    image_ref: "valkey/valkey:9.1.3-alpine"
+    cmd: [valkey-server, "--appendonly", "yes", "--appendfsync", always, "--save", "", "--dual-channel-replication-enabled", "{{dual_channel}}", "--repl-backlog-size", "{{backlog}}", "--replica-announce-ip", valkey1]
+    port: 6379
+    addr: 10.89.0.11
+    ready: "timeout 5 /bin/vkc ready 10.89.0.11:6379"
+    ready_timeout: 120
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/v1, dst: /data}
+  # Compose service valkey2, a replica of valkey1
+  - name: valkey2
+    image: {x86_64: images/valkey-valkey-9.1.3-alpine-amd64.docker.tar, arm64: images/valkey-valkey-9.1.3-alpine-arm64-oci}
+    image_ref: "valkey/valkey:9.1.3-alpine"
+    cmd: [valkey-server, "--appendonly", "yes", "--appendfsync", always, "--save", "", "--dual-channel-replication-enabled", "{{dual_channel}}", "--repl-backlog-size", "{{backlog}}", "--replicaof", valkey1, "6379", "--replica-announce-ip", valkey2]
+    port: 6379
+    addr: 10.89.0.12
+    depends_on: [valkey1]
+    start_after: started   # Compose's service_started: no wait for readiness
+    ready: "timeout 5 /bin/vkc ready 10.89.0.12:6379"
+    ready_timeout: 120
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/v2, dst: /data}
+  # Compose service valkey3, a replica of valkey1
+  - name: valkey3
+    image: {x86_64: images/valkey-valkey-9.1.3-alpine-amd64.docker.tar, arm64: images/valkey-valkey-9.1.3-alpine-arm64-oci}
+    image_ref: "valkey/valkey:9.1.3-alpine"
+    cmd: [valkey-server, "--appendonly", "yes", "--appendfsync", always, "--save", "", "--dual-channel-replication-enabled", "{{dual_channel}}", "--repl-backlog-size", "{{backlog}}", "--replicaof", valkey1, "6379", "--replica-announce-ip", valkey3]
+    port: 6379
+    addr: 10.89.0.13
+    depends_on: [valkey1]
+    start_after: started
+    ready: "timeout 5 /bin/vkc ready 10.89.0.13:6379"
+    ready_timeout: 120
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/v3, dst: /data}
+
+workload:
+  steps: 30
+  timeout: 600
+
+test:
+  parallel: 6
+  per_round: 3
+  round_ms: 300
+  command_timeout: 60
+  drain_timeout: 60
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

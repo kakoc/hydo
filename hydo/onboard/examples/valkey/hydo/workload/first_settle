@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=90
+# wait until both replicas are online and hold the whole stream before the test starts
+exec /bin/vkc settle 80

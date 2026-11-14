@@ -385,6 +385,15 @@ keeps its first transfer when a later one fails before it is queued. Only the ge
 acknowledged commits of holds lost with Redis's defaults. Both bugs have tested patches. The
 example is `hydo/onboard/examples/blnk` (RESULTS.md).
 
+**Valkey with replicas (M232).** Valkey 9.1.3, a primary and two replicas with `appendfsync
+always`, ran 237 explored schedules on the Mac engine. Acknowledged writes survived every
+fault but a disk that drops acknowledged writes. One new candidate is not reported upstream. The
+primary times the wait before a full sync with the wall clock. So a backward clock step delays
+the sync by the step's size. The same
+wall-clock lag breaks `min-replicas-to-write` (native only). hydo also found the known issue
+5354, a hash's expiry lost on AOF replay. The example is `hydo/onboard/examples/valkey`
+(RESULTS.md, `native/`).
+
 **What the Lago onboarding lacked (M225).** Six additions, each a format-1 or results addition
 that changes nothing for a manifest without it:
 
@@ -1214,6 +1223,11 @@ build machine, before 2026-10-13.
   terminal ends with how many runs failed and in how many ways; outside a terminal, or with
   `--json`, it ends with the summary line as before. The README's terminal shows a real run.
   Nothing recorded moved
+- M232 (tentative number): the onboarding of Valkey 9.1.3 with `hydo onboard` on the Mac engine, with
+  a primary and two replicas. The new candidate is a backward clock step that delays a replica's
+  full sync by its size. hydo found it blind, and it reproduced natively. The known issue 5354
+  was found blind too.
+  `hydo save` inside `hydo/` fixed. Nothing recorded moved
 
 ## Where to look
 

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=120
+# after the faults heal: both replicas online and caught up with the primary within 100 s
+exec /bin/vkc settle 100

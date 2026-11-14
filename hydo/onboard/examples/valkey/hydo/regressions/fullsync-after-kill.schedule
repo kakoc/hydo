@@ -1,0 +1,4 @@
+# The neighbour of fullsync-delayed-by-clock-step.schedule without the clock step: the killed
+# replica comes back, gets its full sync within seconds, and holds the primary's data.
+# expect: ok
+disk=none | run K=valkey3@2+3

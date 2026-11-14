@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# read acknowledged items from one server; exit 100 when one is readable after its expiry
+exec /bin/vkc op read

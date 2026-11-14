@@ -8088,3 +8088,71 @@ schedule. `hydo guide workflow` and `hydo guide faults` list `hydo report --deta
 **Open.** A run directory's `hydo report` is still the technical summary, and the lines that
 `hydo explore` prints on stderr before its runs are technical too (`fault space:` with JSON).
 `hydo ci run` keeps its own report. The real run used the Mac engine only.
+
+### Milestone 232 (tentative number) - DONE (Valkey 9.1.3 onboarded with `hydo onboard` on the Mac engine, a primary and two replicas; a new candidate, a backward clock step that delays a replica's full sync by its size, found blind and reproduced natively; the known Valkey issue 5354 found blind; `hydo save` inside the `hydo/` folder fixed; nothing recorded moved; 2026-11-14)
+
+**In short.** Valkey 9.1.3, the newest release, runs from its official image in
+`hydo/onboard/examples/valkey` (RESULTS.md), as one primary with two replicas. Each server runs
+with `appendfsync always`, dual-channel replication, and a replication backlog of 64 KB.
+Valkey's repository has no Compose file, so the example has its own, and `hydo onboard`
+started the `hydo/` folder from it. The test client `vkc` (Go, standard library only) writes
+strings, strings with expiries, and hash fields with expiries. It changes hash fields through
+seeded sequences of `HINCRBY`, `HPERSIST`, `HGETEX`, `HSETEX KEEPTTL` and other commands, and
+runs `BGREWRITEAOF`. Three final rules check durability on the primary, expiry on every server,
+and that each replica holds the primary's keys, values, and expiries. A liveness command waits
+for the replicas after the faults. The runs used the Mac engine with this tree's hydo.
+
+**What was found.**
+
+- A new candidate, not reported upstream. `shouldStartChildReplication` in
+  `src/replication.c` measures the wait before a full sync (`repl-diskless-sync-delay`, 5 s)
+  with the wall clock: `server.unixtime - replica->last_interaction`. A backward clock step of
+  D seconds while a replica waits makes the wait D + 5 seconds. hydo found it in 4 of 237
+  explored schedules. The regression is `disk=none | run K=valkey3@2+3 T=10:-300`, and the
+  kill alone passes. The native run used the official image with its default settings.
+  libfaketime moved only the primary's wall clock. The sync took 6 s without a step, 65 s after
+  a step of 60 seconds back, and 124 s after a step of 120 seconds back.
+  `refreshGoodReplicasCount` computes the lag of `min-replicas-max-lag` the same way.
+  Natively, after a step of 120 seconds back, a primary whose only replica was frozen acknowledged writes for 133 s instead of 11 s. Redis's
+  `unstable` has the same code. Searches of valkey-io/valkey and redis/redis issues and pull
+  requests with 38 phrasings, and of 40 Valkey release notes, found no report.
+- A known bug, found blind: `HSETEX KEEPTTL` over the last field of a hash, expired but not
+  reclaimed, is propagated as `HDEL` and `HSETEX`. The AOF replay after a power cut deletes the
+  key with its expiry and makes it again without one. It is valkey-io/valkey issue 5354 (open).
+  Direct probes in Docker of 48 commands on such a field found the same divergence only on the
+  `KEEPTTL` paths of that issue.
+
+Reports are drafted in RESULTS.md, not posted.
+
+**Runs.** 237 explored schedules on the Mac engine:
+
+| exploration | strategy | schedules | failures |
+|---|---|---|---|
+| ex1 | `process --new-faults --cluster-faults`, stopped after seed 17 | 17 | 10, from rules that were too strict; finding 1 in one of them |
+| ex2 | the same | 40 | 4: finding 1 twice, a lagging replica twice |
+| ex3 | the same | 120 | 2: findings 1 and 2 |
+| ex4 | `swarm --new-faults --cluster-faults` | 60 | 28, each with I/O errors or a lying disk: the environment |
+
+The final image gives `fp=d9c2a73b193da94c` twice for `disk=none | run`, and `hydo repro
+--regressions` gives 3 of 3 as expected.
+
+**Rules that were too strict.** Three, each fixed in the client:
+
+- An item whose expiry passed before a backward clock step is gone, although its expiry is in
+  the future again. The client writes clock marks `t~<ms>` to `$HYDO_ACKED`.
+- A lagging replica serves an older value.
+- `PERSIST` on an expired key.
+
+**hydo.** One fix: `hydo save` from inside the `hydo/` folder wrote into a nested
+`hydo/hydo/regressions`, which no build reads. It now writes into `regressions/` there
+(`default_regressions_dir`, a unit test in `hydo/crates/hydo-cli/src/runs.rs`). Five frictions
+stay open, listed in RESULTS.md:
+
+- checks get no record of the clock steps;
+- `hydo report` on a passing run omits each check's last line;
+- the property table marks the project's own checks `[not in catalog]`;
+- the import's lock file names a removed path in `generated_by`;
+- `hydo setup --archive` from a checkout points `~/.hydo/bin/hydo` at the new version.
+
+**Open.** No Sentinel and no cluster mode, so failover after `WAIT` was not tested. The
+`min-replicas-to-write` effect ran natively only. Nothing ran on hvx or KVM.

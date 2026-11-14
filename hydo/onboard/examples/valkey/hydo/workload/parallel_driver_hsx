@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# a field of a shared hash with an expiry (HSETEX PX, PXAT or FNX EX, or HSET and HPEXPIRE)
+exec /bin/vkc op hsx

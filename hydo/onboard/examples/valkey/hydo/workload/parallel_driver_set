@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# SET s:<id> to a value of 0 to 2,000 bytes on the primary, then WAIT 2 (../../client/main.go, opSet)
+exec /bin/vkc op set

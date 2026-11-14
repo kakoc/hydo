@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# a string key with an expiry (SET PX, PXAT or EX, PEXPIRE, GETEX, PERSIST); records the primary's view
+exec /bin/vkc op px

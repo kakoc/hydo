@@ -1,0 +1,40 @@
+# Valkey 9.1.3 with one primary and two replicas.
+services:
+  valkey1:
+    image: valkey/valkey:9.1.3-alpine
+    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "always",
+              "--save", "", "--dual-channel-replication-enabled", "yes",
+              "--repl-backlog-size", "64kb", "--replica-announce-ip", "valkey1"]
+    volumes: ["v1:/data"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+    restart: on-failure
+  valkey2:
+    image: valkey/valkey:9.1.3-alpine
+    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "always",
+              "--save", "", "--dual-channel-replication-enabled", "yes",
+              "--repl-backlog-size", "64kb", "--replicaof", "valkey1", "6379",
+              "--replica-announce-ip", "valkey2"]
+    volumes: ["v2:/data"]
+    depends_on: [valkey1]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+    restart: on-failure
+  valkey3:
+    image: valkey/valkey:9.1.3-alpine
+    command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "always",
+              "--save", "", "--dual-channel-replication-enabled", "yes",
+              "--repl-backlog-size", "64kb", "--replicaof", "valkey1", "6379",
+              "--replica-announce-ip", "valkey3"]
+    volumes: ["v3:/data"]
+    depends_on: [valkey1]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+    restart: on-failure
+volumes:
+  v1: {}
+  v2: {}
+  v3: {}

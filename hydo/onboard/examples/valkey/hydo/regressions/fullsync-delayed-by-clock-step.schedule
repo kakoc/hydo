@@ -1,0 +1,7 @@
+# Finding 1 (RESULTS.md): the replica valkey3 is killed before round 2 and back before round 5;
+# it needs a full sync, and the primary waits repl-diskless-sync-delay (5 s) before it starts
+# one. A clock step of 300 s back before round 10 makes that wait 305 s: eventually_settle gives
+# up after 100 s with valkey3 still in wait_bgsave, and final_converge finds it empty.
+# The same kill without the step passes (fullsync-after-kill.schedule).
+# expect: violation
+disk=none | run K=valkey3@2+3 T=10:-300

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# BGREWRITEAOF on the primary (two times in three) or on a replica
+exec /bin/vkc op rewrite

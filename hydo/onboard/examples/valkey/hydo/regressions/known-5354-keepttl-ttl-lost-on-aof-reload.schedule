@@ -1,0 +1,10 @@
+# Known upstream as valkey-io/valkey issue 5354 (RESULTS.md, finding 2): HSETEX KEEPTTL over the
+# last field of hp:<id>, expired but not reclaimed, propagates HDEL and HSETEX; the AOF replay after
+# the power cut empties the hash, deletes the key with its 10-minute expiry, and makes it again
+# without one. Found by `hydo explore` (seed 124 of exploration ex3).
+# verdict: HYDO-ORACLE: VIOLATION [expiry] 1 items readable after their expiry or with another expiry
+# composition: r1: serial_driver_rewrite | r3: parallel_driver_hmut | r4: serial_driver_rewrite | r6: serial_driver_rewrite | r8: parallel_driver_hmut | r10: serial_driver_rewrite | r14: serial_driver_rewrite | r15: serial_driver_rewrite | r20: parallel_driver_hmut | r24: parallel_driver_hmut | r25: parallel_driver_hmut | r26: parallel_driver_hmut | r27: parallel_driver_hmut | r29: serial_driver_rewrite
+# command-sha: parallel_driver_hmut d1bc21e74be71e09
+# command-sha: serial_driver_rewrite c7d49339f033ae10
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut dseed=cee0de43a5d4f9e3 | run C=30 W=:p5,r600,cserial_driver_rewrite+parallel_driver_hmut,1.1.0.218310260,4.3.1.2044044930,6.4.0.803742038,8.6.0.476292419,11.8.1.1160491055,13.10.0.664486314,20.14.0.1795338500,22.15.0.893040050,29.20.1.444475898,34.24.1.383022502,35.25.1.1704115924,37.26.1.942354970,38.27.1.1054066468,40.29.0.497407657

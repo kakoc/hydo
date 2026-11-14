@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# one field of a shared hash through a seeded sequence of hash commands, with pauses so that short expiries pass
+exec /bin/vkc op hmut
