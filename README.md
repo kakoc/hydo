@@ -79,7 +79,9 @@ Each example folder holds the project's hydo setup and the recorded runs.
   [the example](hydo/onboard/examples/blnk/)).
 - **Lago.** A subscription cancelled while Redis is down is never invoiced, a known bug
   ([lago-api#6901](https://github.com/getlago/lago-api/issues/6901)). hydo also found a
-  subscription invoiced twice for one month ([the example](hydo/onboard/examples/lago/)).
+  subscription invoiced twice for one month, a new bug
+  ([lago-api#7164](https://github.com/getlago/lago-api/issues/7164),
+  [the example](hydo/onboard/examples/lago/)).
 
 ## Your own project
 

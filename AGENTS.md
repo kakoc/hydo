@@ -804,7 +804,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     upstream issue describes it. It reproduces with Docker when the database's answers to the
     termination are held for 16 minutes across the billing run: 3 of 3 subscriptions got two
     invoices. Without such a delay it cannot happen, because the run comes 10 minutes after the
-    period ends. An issue is drafted, not posted; posting it is the user's decision. The saved
+    period ends. It is reported as lago-api issue 7164 (2026-11-14). The saved
     regression `cancel-before-billing-tick` depends on the image's bytes: on the image before it,
     the original schedule gave OK. A change to the example's files can turn it into OK, and then
     it needs a new schedule. The billing rule `final_one_invoice_per_period` still counts only
