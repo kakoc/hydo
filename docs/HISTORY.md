@@ -7564,3 +7564,199 @@ an Intel host yet.
   in the Linux release.
 
 **The proof run of the S1 fix.** Run 43535344097 on eight hosts (five Intel: Xeon 6975P-C and Xeon Platinum 8573C; three AMD: EPYC 9V74 and 7763): smp-check 13 of 13, turns-check 7 of 7 and kvm-check 15 of 15 on every host. The engine's read-back lines appear on Intel only and name one kind of field: the hidden attributes of unusable null segments (DS, FS), which Intel's VMX normalises when a state is loaded and the guest never reads. Since the snapshotting machine goes on in a VM loaded from the snapshot, a run from S1 and a fresh boot start from the same state on both vendors.
+
+### The 0.3.2 release — published (2026-11-14)
+
+The lead's task of 2026-11-14: release 0.3.2 with what `main` has since 0.3.1 (Milestones
+210–227), cut from `main` at `b9bd4bc1`. The user decided the version: 0.3.2, not 0.4.0, because
+plans pin `hydo_version: "0.3"`. Branch `worktree-agent-a2aca51c06d6b3b72`; the lead did every public step.
+
+**The version** (`ffde09ef`). As at 0.3.1: `hydo/VERSION`, the workspace version and every
+`hydo-*` entry of `[workspace.dependencies]` (not `hydo-agent-proto`), both release scripts'
+default, the four SDKs and the unpublished Rust test SDK, the examples' lock files of
+`hydo-assert`, README.md, docs/INSTALL.md, docs/LIMITS.md, hydo/PRODUCT.md, both quickstarts, the
+CI action's and the GitLab template's examples, the guide's `ci` and `capabilities` topics,
+MANIFEST.md and docs/PUBLISHING.md's commands. The guest programs that carry the version were
+re-pinned, built on this Mac: `hydo-world` x86_64 `f896bea4…`, arm64 `2b1b7bd0…`;
+`hydo-world-tls` `a9f4c277…`, `0ae4f3b7…`; `hydo-grpc` `21db8ce0…`, arm64 `83004951…`. The Linux
+release builds the x86_64 ones on the bare-metal machine, and they matched the pins.
+
+**The SMP guest kernel in the Linux release.** `guest/bzImage-kvm-smp` (`b40b2711…`, Milestone
+219's pin) is the 40th asset of `hydo/dist/linux/assets.sha256`, so `hydo run --backend kvm
+--vcpus N` runs from the release. Its file was copied from the bare-metal machine's store path
+`r23ms6f5…` into the assets directory `~/hydo-r032-assets` (hard links to `~/hydo-m172-assets`
+plus the kernel). `third-party.json` lists the file under the KVM kernel's component, and the
+sources archive carries `kernel-smp.nix`, `hydo-kvm-smp.patch` and `hydo-kvm-smp.config`; the
+upstream tarball is the one of `bzImage-kvm`. `hydo doctor --backend kvm` warns when the file is
+missing. An installed release finds it in `<root>/guest/` by sha256; `cargo install hydo` finds
+it in `~/.hydo/versions/0.3.2/guest/` after `hydo setup`, and the install cache needs the release
+index line `file 0.3.2 linux b40b2711… guest/bzImage-kvm-smp` (step 9).
+
+**The explorer's full identity golden** (`2169f5c7`), stale since Milestone 183, was re-recorded
+and compared per group and chunk with the old one: 93 of 145 groups unchanged; 38 groups, all
+of them hvx groups, moved with unchanged inputs, and every one gives the old chunks again with
+Milestone 208's halving of a drawn `tjmax=` switched off by hand, so that deliberate change is
+the whole move; of the 14 groups whose inputs changed, 8 give the old chunks with the halving
+off, and only medusa (3 groups) and tigerbeetle (3 groups) move with their own inputs; 33 groups
+are new (11 example manifests). hydo-build's full-tier answers were stale since Milestone 225 on
+`main` too (the known-field lists of `test:` and `services[]`, `after: commands`, and the blnk
+and lago manifests' mutants), which a re-record with the old version showed; the rest of the
+goldens changed with the version only.
+
+**Release step 6a on quick candidates.** One unsigned build of each platform from `ffde09ef`
+(Linux `6e1b48b8…`, Mac `26eb906a…`) went to two fresh readers; every recorded value they ran
+matched (Mac, and Linux with hvx; the Linux reader could not run KVM). The fixes are in
+`ec7bf711`: one install block per method in the README, the two Linux engines, what `hydo init`
+writes and the composer layout against the Redis example's numbered steps, the terms the program
+prints (the RESULT fields, SPIN, knobs, `P=`, `disk=lying:N`, the fingerprint epoch), the module
+lock per user, `hydo module build` before `hydo module status`, the build's leftovers and their
+deletion, MANIFEST.md's real section name, fewer claims that cannot be checked; `hydo build
+--check` warns about the two placeholders of `hydo init`; the explorer's report points to `hydo
+guide sdks` instead of `hydo/ASSERTIONS.md`. Deferred, with the reasons in the release notes:
+the Redis example's header comment (inside the image), the `hydo build` hint, and the Mac
+quickstart's service-network claims without an example in the release.
+
+**The released schemas.** `hydo/schema/released/` keeps the schema of each format as the last
+release shipped it, and the format tests check every later change as an addition to it. The
+format tests say a release replaces it, but docs/RELEASING.md had no such step, and 0.2.0 to
+0.3.1 skipped it. 0.3.2 copies the current `project-v1`, `results-v1` and `ci-v1` (the other
+three were already the current ones); the schema tests passed before the copy and pass after it.
+docs/RELEASING.md step 1 now names the copy.
+
+**Re-recording** (docs/REBASELINE.md section 22; the fingerprint epoch stays 2), with the quick
+candidates as `--release`: hvx 9 of 43 images and 30 of 141 runs moved (3,390 s), the Mac 9 of
+21 images and 36 of 76 runs (751 s, `--jobs 1`); the same images and runs as at 0.3.1, every
+verdict unchanged, every moved run the same twice. The first hvx pass took its inputs folder
+from an older work folder without the Qdrant example's test programs; they were copied from an
+earlier build whose six files have `build-test.sh`'s pins, and the two Qdrant images ran again
+as recorded.
+
+**The first release commit** was `4910b682`: the version, the SMP kernel, the readers' fixes,
+the released schemas and the re-recorded values. Its files were built, signed, verified and
+put on a draft release for the KVM run (below), which found that the pages' statement about
+KVM fingerprints was wrong for Intel. The files were not published.
+
+**The KVM run on GitHub's runners** (run 43556040187, six ubuntu-24.04 hosts, the Linux tarball
+taken from the draft release `candidate-0.3.2` and checked by sha256, installed into a clean
+prefix): on every host `hydo doctor --backend kvm` passed every check, including the SMP kernel's
+line, the Redis image was `668bf8ad…`, every schedule gave one fingerprint twice, `--vcpus 2`
+found `guest/bzImage-kvm-smp` by itself, and every verdict was right. The three AMD hosts (an
+EPYC 9V45 and three 9V74 runs) gave one set of values: `2846084b7f0ab1e2`, `bca22e72dbf0da18`, and
+on 2 vCPUs `851da6841d14cbad`. The two Intel hosts each gave values of their own, neither the
+quickstart's (`b04d1932dfb20e09`, `1b61c2c7501a6f25`, from an i7-13700HX): a Xeon Platinum 8370C
+`d94a552ce7e7b469`, `73fcc5ad33f1d656`, `ccb1aa39c2c5c004`, and a Xeon 6975P-C `a81e8d79751b9ae5`,
+`41907c1e65d5c458`, `d25d8c657ebe3746`. So "a KVM fingerprint holds for one CPU vendor" was wrong
+for Intel: there it holds for one CPU model (AGENTS.md open item 102). The workflow's check of
+the verdicts was wrong too (it looked for `verdict=OK` in lines that say `verdict=HYDO-ORACLE:
+OK`), so `hv/kvm/kvm-check.sh`, `hv/kvm/smp/smp-check.sh` and the KVM re-baseline did not run on
+any host; both checks are fixed.
+
+**The release commit** is `fbee09d41f1bf4e9c2e1fc3dc85b1991886abbe4`. It adds to `4910b682` the
+corrected statements (the Linux quickstart, docs/LIMITS.md, hydo/PRODUCT.md, the guide's `ci`
+topic, AGENTS.md, and the design notes `kvm-engine.md` and `ci.md`) and one code change: the
+explorer's result cache keys a KVM run by the CPU's vendor and model, not by the vendor alone, so
+that a cached result of another Intel model never stands for this one. The full step-2 set ran
+again on it.
+
+**Checks on both release commits**, on this Mac: `cargo fmt --check`, `cargo clippy --locked
+--workspace --all-targets -- -D warnings`, `cargo test --locked --release --workspace` (52 test
+programs, every test passed: the tiers, the inventory, `public_content`), `sh ci/vale.sh` with
+no findings; `git grep -i` of the competitor names finds only research notes.
+
+**The release files** of `fbee09d4`, each platform built twice from clean targets with the same
+bytes (the files of `4910b682` were built the same way: Linux `e631182c…`, the signed Mac
+`7c7f94d0…`, notarization `e124800c-…`; they are replaced):
+
+- Linux on the bare-metal machine (`~/hydo-r032g1`, `~/hydo-r032g2`, unpacked under umask 022,
+  `/var/tmp/hydo-QUIET` while building, assets `~/hydo-r032-assets`, sources
+  `~/hydo-m159-sources`; 532 s and 456 s).
+- Mac on this Mac (one fixed tree path; the sources cache filled from 0.3.1's Mac sources
+  archive, whose list did not change; 307 s and 245 s): unsigned `hydo-mac-0.3.2.tar.gz`
+  `20fd8ba5a0e27b53953235d24ff5c4b5666b5179b9209d610e61636f63af614c` (not published).
+  `sign-release.sh` on the first build: notarization `b0d265c5-6a20-45be-9e96-07ae2008f51e`
+  Accepted; `attach-signatures.sh` with the asset on the second build gave the signed tarball
+  byte for byte.
+
+  | File | Bytes | sha256 |
+  | --- | --- | --- |
+  | `hydo-linux-0.3.2.tar.gz` | 71,946,662 | `a6c1ef923843483b74be7f90e762be8e95499b4246f7b287ce4280847e160940` |
+  | `hydo-linux-0.3.2-sources.tar.gz` | 482,558,059 | `58dbf9944d1f20f370ad7ed2addbf923651843d3571a2982942b89fe2329e5f7` |
+  | `hydo-mac-0.3.2.tar.gz` (signed) | 34,633,492 | `2aec23c47241590d722e9de77e3a68c267045a0ed740c3450b757fe30505c03b` |
+  | `hydo-mac-0.3.2-sources.tar.gz` | 690,048,183 | `bd5abc9010f871f9166ec39bbed7957ab6f626d9d3c0be16176ada20c21671ec` |
+  | `hydo-mac-0.3.2-signatures.tar.gz` | 88,865 | `f1fa4a37d754d97edc7a1985eb7fa6cd92dd730c1dd50f6691ddaa85c1499527` |
+
+- All five and `SHA256SUMS` are in `hydo/dist/out/0.3.2/` of the main checkout; the release
+  notes, the Homebrew formula, the release-index patch and the notary answer and log are in
+  `prepared/`.
+- Against 0.3.1's tarballs (their own `SHA256SUMS`): Linux adds `guest/bzImage-kvm-smp` and
+  differs in the five programs, `libexec/hydo-grpc-gen`, `guest/hydo-world`,
+  `guest/hydo-world-tls`, `guest/hydo-grpc`, `README.md`, `THIRD-PARTY.md`, the two `VERSION`
+  files, `hydo/ASSERTIONS.md` and MANIFEST.md; the Mac differs in the four programs,
+  `guest/hydo-world`, `guest/hydo-world-tls`, `QUICKSTART-mac.md`, `THIRD-PARTY.md`, the two
+  `VERSION` files and MANIFEST.md. No file was removed, and no other guest kernel, pinned asset
+  or guest program changed.
+
+**Verified from clean prefixes.**
+- hvx (the bare-metal machine, a PATH whose Python, Go, Rust, Nix, compilers and make are traps;
+  none was called): `install.sh --no-module`; `hydo doctor` 0 failed, 1 warning (the module was
+  not built by this release); the Redis image `668bf8ad…` built three times the same;
+  `5ec14b8b4bdcf367` OK, `9f8f90a7d14566df` VIOLATION k:1 and `disk=cut | run C=12`
+  `f8af29d45e9502f8` OK, each twice as the user and twice as root (the engine in process);
+  `hydo repro` of a run reproduced; the exploration 9 failures, `hydo repro hydo-out/explore`
+  11 of 11; netem `8a402198…` `dc095cf7124dd3ac` twice; `hydo init` (`hydo_version: "0.3"`) and
+  `hydo build --check` with the two placeholder warnings; `hydo module build` from a second
+  prefix: srcversion `91D86B693F4D4035C368F9B`, "same source as this release" (built only).
+  Found: `hydo repro`, run by the user on a run directory that a root run made, ends "cannot
+  start the engine: No such file or directory"; as root it reproduces.
+- Mac (the signed tarball, the quarantine attribute on `bin/*`, stubs for Python, pip, Go, cargo,
+  rustc, rustup, Nix, the compilers, make, xcrun and Docker, none called): setup's record has no
+  `signed` line, `hydo setup --check` exits 0; `hydo doctor` all checks passed, naming the
+  Developer ID; the four programs `codesign --verify --strict` valid, `flags=0x10000(runtime)`,
+  timestamps, `spctl` "accepted, source=Notarized Developer ID"; the image `fba2c11e…` and every
+  Mac value twice (`d817d69781986987`, `a2b8d71c0c467d15`, `7147e75676d15194`, `05614d64b872327a`,
+  `d00e55f15592e438`, `82de2d5e4ea932ef`, ledger-spin `84ac90f4d4d3d0ad` and `8836949fb1366db3`);
+  the exploration 11 failures, 13 of 13 reproduced; `hydo init` and `hydo build --check`.
+  `hydo --version` prints `hydo 0.3.2 (fbee09d41f1bf4e9c2e1fc3dc85b1991886abbe4)`. The files of
+  `4910b682` were verified the same way on hvx and the Mac, with the same values.
+- KVM: the build machine cannot be reached. The one-off workflow on the branch
+  `tmp-rel-032-kvm` (the release commit plus `.github/workflows/tmp-rel-032-kvm.yml`) downloads the
+  Linux tarball from the draft release `candidate-0.3.2`, checks its sha256, installs it into a
+  clean prefix, and runs the quickstart's KVM schedules, `--vcpus 2` with the release's own SMP
+  kernel, `hv/kvm/kvm-check.sh`, `hv/kvm/smp/smp-check.sh` and the KVM re-baseline of the
+  release's Redis images. On the files of `fbee09d4` (run 43560640968, branch head `c5ee2444`
+  with `-p hydo-hvx` added to the re-baseline's build; the run before it, 43558567058, stopped
+  only because the stage needed `target/release/hydo-hvx`): six hosts, four Xeon 6975P-C, an EPYC
+  9V74 and an EPYC 7763. On every host the candidate came from the draft with sha256 `a6c1ef92…`,
+  `hydo doctor --backend kvm` passed, the quickstart's schedules gave one fingerprint each with the
+  right verdicts and, on AMD, the AMD values; `kvm-check.sh` passed 15 of 15 checks and
+  `smp-check.sh` 13 of 13; `hydo-bench rebaseline --platform kvm --check --thorough` exited 3:
+  every verdict unchanged, no failure, no image with new bytes, and 11 runs with other values,
+  because the recorded KVM values come from the i7-13700HX.
+
+**Re-baseline checks on the release commit** (`--check --thorough`, with the final release
+files of `4910b682`, whose programs differ from `fbee09d4`'s only in the commit hash and the
+explorer's cache key, which reach neither an image nor a re-baseline run; `recorded.json` is the
+same in both): the bare-metal machine, 43 images each built twice with the same bytes, 141
+schedules each run twice from fresh boots, every value as recorded (8,022 s; the module
+`91D86B693F4D4035C368F9B`); this Mac, 21 images and 76 schedules, the same (1,306 s, `--jobs 1`).
+KVM on GitHub's runners: above.
+
+**Content scans** (as 0.3.1's): the Linux tarball: the GitHub owner only in the project's public
+names, the hosting company's letters as accidental bytes of binary third-party files (glibc, the
+kernels and initramfs, the public suffix list), the time-zone name in libstdc++; no home path,
+no competitor name. The signed Mac tarball: the owner in the public names and the time-zone name
+in libstdc++. Both sources archives' own files: the owner in RELEASING.md's tap name only. The
+signatures asset: nothing.
+
+**Published** by the lead on 2026-11-14, after CI (ci, docs, packages) passed on `fbee09d4` and
+the dry run of `release.yml` passed on `main`:
+
+- the GitHub release `v0.3.2` on `fbee09d41f1bf4e9c2e1fc3dc85b1991886abbe4` with the five files
+  and `SHA256SUMS` (06:26 UTC);
+- the Homebrew tap, commit `411265d`: `brew install`, `hydo doctor` (all checks passed),
+  `brew test` and `brew audit --strict --online` passed;
+- the release index on `main` (`03e64844`), with the line for `guest/bzImage-kvm-smp`;
+- the registries through `release.yml` on the tag: it was running when this was written (the
+  check, PyPI and npm done, the crates building).
+
+The draft release `candidate-0.3.2` and the branch `tmp-rel-032-kvm` are deleted.

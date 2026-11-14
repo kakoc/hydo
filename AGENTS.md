@@ -208,40 +208,43 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.3.1 was published on 2026-11-09 and 2026-11-10 from the release commit
-`b3f73087`, in these places:
+**Releases.** hydo 0.3.2 was published on 2026-11-14 from the release commit `fbee09d4`, in
+these places:
 
-- The GitHub release `v0.3.1`: both tarballs, their sources archives, and the Mac signatures.
+- The GitHub release `v0.3.2`: both tarballs, their sources archives, and the Mac signatures.
 - The Homebrew tap: `brew install kakoc/tap/hydo`.
 - crates.io: the 20 crates of `cargo install hydo`, and `hydo-assert`.
-- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.3.1`.
+- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.3.2`.
 - The skill release `skill-v1.2.0` (the skill did not change since 0.3.0).
 
-0.3.1 adds Milestones 192–208 to 0.3.0 (`docs/HISTORY.md` "The 0.3.1 release"). Plans keep
-`hydo_version: "0.3"`. The release index `hydo/dist/releases.txt` pins every published archive.
+The registries are published by `release.yml` on the tag. 0.3.2 adds Milestones 210–227 to
+0.3.1 (`docs/HISTORY.md` "The 0.3.2 release"); 0.3.1 (`b3f73087`) added Milestones 192–208.
+Plans keep `hydo_version: "0.3"`. The release index `hydo/dist/releases.txt` pins every published archive.
 Since 0.2.0 the Linux release ships the KVM engine, and the Mac programs are signed and notarized.
 `cargo install hydo` followed by `hydo setup` works on the Mac and, since M210, on Linux with KVM.
 How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`.
 
-**hydo 0.3.2: prepared, not published** (`docs/HISTORY.md` "The 0.3.2 release"). It adds
-Milestones 210–227 to 0.3.1; plans keep `hydo_version: "0.3"`, and the fingerprint epoch stays 2.
+**What 0.3.2 changed in the release** (`docs/HISTORY.md` "The 0.3.2 release"). The fingerprint
+epoch stays 2.
 The Linux release ships the KVM engine's SMP guest kernel `guest/bzImage-kvm-smp`, so
 `--backend kvm --vcpus N` runs from it. Release step 6a ran on quick candidates and its fixes are
 in. The released schemas (`hydo/schema/released/`) are the current ones again, a step that
-0.2.0 to 0.3.1 skipped and docs/RELEASING.md step 1 now names. The release commit is `4910b682`.
-Its five files and `SHA256SUMS` are in `hydo/dist/out/0.3.2/` of the main checkout (git-ignored),
-each platform built twice to the same bytes:
+0.2.0 to 0.3.1 skipped and docs/RELEASING.md step 1 now names. The release commit is `fbee09d4`.
+Its five files and `SHA256SUMS` are also in `hydo/dist/out/0.3.2/` of the main checkout
+(git-ignored), each platform built twice to the same bytes:
 
-- `hydo-linux-0.3.2.tar.gz` `e631182c1a2da3b7ef512e7478d6fd555630d8b9ba1e332796b95017e625fa5a`;
+- `hydo-linux-0.3.2.tar.gz` `a6c1ef923843483b74be7f90e762be8e95499b4246f7b287ce4280847e160940`;
 - `hydo-linux-0.3.2-sources.tar.gz` `58dbf9944d1f20f370ad7ed2addbf923651843d3571a2982942b89fe2329e5f7`;
 - `hydo-mac-0.3.2.tar.gz`, signed and notarized,
-  `7c7f94d0f6ec014578e052355ba2efaf1cd1f40db6f2e741ddf7d006427eaa58`;
+  `2aec23c47241590d722e9de77e3a68c267045a0ed740c3450b757fe30505c03b`;
 - `hydo-mac-0.3.2-sources.tar.gz` `bd5abc9010f871f9166ec39bbed7957ab6f626d9d3c0be16176ada20c21671ec`;
-- `hydo-mac-0.3.2-signatures.tar.gz` `25d7f92da55514a79b6003f8b47db6adf8c9c0b264d564386ad1b9fa97cea624`.
+- `hydo-mac-0.3.2-signatures.tar.gz` `f1fa4a37d754d97edc7a1985eb7fa6cd92dd730c1dd50f6691ddaa85c1499527`.
 
 The prepared material (release notes, the Homebrew formula, the release-index lines) is in
-`hydo/dist/out/0.3.2/prepared/`. The KVM verification runs on GitHub's runners through the
-one-off branch `tmp-rel-032-kvm`, because the build machine cannot be reached.
+`hydo/dist/out/0.3.2/prepared/`. The KVM verification ran on GitHub's runners through a
+one-off branch, now deleted, because the build machine cannot be reached. It passed on two
+AMD EPYC models and on Intel Xeon 6975P-C hosts. On Intel a KVM fingerprint holds for one CPU
+model only (open item 102).
 
 **Registry publishing from GitHub Actions.** A tag `v<major>.<minor>.<patch>` starts
 `.github/workflows/release.yml`. It publishes the crates, the PyPI and npm packages, and the Go tag
@@ -1159,7 +1162,9 @@ build machine, before 2026-10-13.
   `hydo init` writes, and a `hydo build --check` warning for its placeholders. The released
   schemas are the current ones, the explorer's full identity golden is re-recorded, and the
   examples are re-recorded (epoch 2). Both releases are built twice to the same bytes, the Mac one
-  signed and notarized, and verified on hvx and the Mac; nothing is published
+  signed and notarized, and verified on hvx, the Mac and KVM (GitHub's runners). A first build
+  was not published: its KVM run showed that on Intel a KVM fingerprint holds for one CPU model,
+  and the pages were corrected. Published on 2026-11-14
 
 ## Where to look
 
