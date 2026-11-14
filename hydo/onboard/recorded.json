@@ -154,60 +154,60 @@
         "manifest": "hydo.yaml",
         "args": []
       },
-      "sha256": "b949c06d24de5aba2ba871d9f44812ed195ce1b51cdc3cb40ef928da2e737572",
+      "sha256": "eb9c0ec614738d00d0c392e4af7598e66834399c994d3204a95db1f16e969911",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "48920d98c1f9b2a6",
+          "fp": "d01d05e9de698a14",
           "ctl": "6a8e130bfbf9fef2"
         },
         {
           "schedule": "disk=none | run N=primary-replica@5-10:loss,100%",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "e5004273f5d9805a",
+          "fp": "3eb19e58050e955d",
           "ctl": "bb902d00160d7286"
         },
         {
           "schedule": "disk=none | run O=primary-replica@5-10:req:loss,100%",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "df5bbfdea86e722b",
+          "fp": "f4dc7f0fc71b4f7f",
           "ctl": "f2d609514474f032"
         },
         {
           "schedule": "disk=none | run O=primary@5-8:resp:delay,300ms",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "aad446fa08b33e97",
+          "fp": "15fa221f401054f2",
           "ctl": "ab4e21b1c8e8ce83"
         },
         {
           "schedule": "disk=none | run K=replica@5+3",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "0945958cabc6190c",
+          "fp": "42b76e2fc6c7c624",
           "ctl": "38e15c68d9963cda"
         },
         {
           "schedule": "disk=cut | run C=8",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary)",
-          "fp": "e425a214f75dd187",
+          "fp": "58e1b1892c8e19bc",
           "ctl": "1ac708d19e5718f8"
         },
         {
           "schedule": "disk=none | run F=replica<primary@5#3:2000",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "207d50a5a153e54e",
+          "fp": "8857e41e044270e0",
           "ctl": "db293b879f216430"
         },
         {
           "schedule": "disk=none | run F=primary<workload@5#2:1000",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "95a7a9660f176f1b",
+          "fp": "1b0291d134db8585",
           "ctl": "4ff9110839ed6dfd"
         },
         {
           "schedule": "disk=none | run H=redisp@3-6:drop",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary)",
-          "fp": "6385613a96a9ee19",
+          "fp": "62ed93b138dda583",
           "ctl": "a31807d7688f461c"
         }
       ]
@@ -338,30 +338,30 @@
         "manifest": "hydo-mac.yaml",
         "args": []
       },
-      "sha256": "458b05351c220ba4f6ef95632b469e7407979a937ab8f7e840fd721a3652d64d",
+      "sha256": "d90a6fee746208764dfec77a0dd07528ce5aa7c88f4b26da898eef64acbd0c9e",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (nkv.oracle: acked=20 all present)",
-          "fp": "37e5160237fae836",
+          "fp": "fb4e83e71b92b221",
           "ctl": "0141194b466e3bd9"
         },
         {
           "schedule": "disk=cut | run C=12 S=never",
           "verdict": "VIOLATION [nkv.oracle] key k:0 lost (got null)",
-          "fp": "f9e3b377c19b5033",
+          "fp": "2e60cdca3b6effc5",
           "ctl": "bfdec020a46f3dcf"
         },
         {
           "schedule": "disk=cut | run C=12",
           "verdict": "OK invariants=1 held (nkv.oracle: acked=12 all present)",
-          "fp": "2838dec1aaadae18",
+          "fp": "0bf9b365bef7b95a",
           "ctl": "202dcc1810826541"
         },
         {
           "schedule": "disk=none | run K=nkv@8+2 B=1234",
           "verdict": "OK invariants=1 held (nkv.oracle: acked=18 all present)",
-          "fp": "9081723e2f80c449",
+          "fp": "05374e89fc805026",
           "ctl": "0c5914e7cd7b1a58"
         }
       ]
@@ -376,30 +376,30 @@
         "manifest": "hydo-mac.yaml",
         "args": []
       },
-      "sha256": "8e09dae567607b06aac0db81998cfcf1668b0c040550a1ef8af17f31c36a66cc",
+      "sha256": "d5616169476837a6dffe31e597afd8e33cc62bbca21e421f14f5f0b9e82d0001",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (pykv.oracle: acked=20 all present)",
-          "fp": "fd86ce5f06b2b9de",
+          "fp": "0bb549ea5720e49f",
           "ctl": "99d3a6c9bcab4d75"
         },
         {
           "schedule": "disk=none | run K=pykv@8+2",
           "verdict": "OK invariants=1 held (pykv.oracle: acked=18 all present)",
-          "fp": "548baf2abda04ece",
+          "fp": "0f3926b22a33e464",
           "ctl": "9dac63ed9843b10c"
         },
         {
           "schedule": "disk=cut | run C=12 S=never",
           "verdict": "VIOLATION [pykv.oracle] key k:0 lost (got 'NONE')",
-          "fp": "d7f1398c998ca3bc",
+          "fp": "452d712b8012b304",
           "ctl": "3b8233343cb49963"
         },
         {
           "schedule": "disk=none | run B=1234",
           "verdict": "OK invariants=1 held (pykv.oracle: acked=18 all present)",
-          "fp": "2e77f6333c08c9cb",
+          "fp": "816c7952a6a83d80",
           "ctl": "ece160c3964f7f03"
         }
       ]
@@ -414,18 +414,18 @@
         "manifest": "hydo-mac-hist.yaml",
         "args": []
       },
-      "sha256": "77082a501415636950ee0db8b43e254a9fc2d256b4ce7add984bbe776d173f24",
+      "sha256": "277881febc52ccd215b8de19806f257a71c2c251b574668fd80ea3d46675dc04",
       "runs": [
         {
           "schedule": "disk=cut | run C=12",
           "verdict": "OK invariants=0 held (); history OK checks=1 held (kv.linearizable: 32 operations on 20 keys linearizable)",
-          "fp": "c55eb26154c8d818",
+          "fp": "5f0ec08a81b49954",
           "ctl": "133c9c994223dbe4"
         },
         {
           "schedule": "disk=cut | run C=12 S=never",
           "verdict": "OK invariants=0 held (); history VIOLATION [kv.linearizable] key k:0: an acknowledged write is lost or a read is stale: a read that began after the write of v0 completed returned nil: p0 write k:0=v0 (ok, t=0.06-0.06s); p9 read k:0 -> nil (ok, t=0.05-0.05s (recovery boot)) (12 keys not linearizable)",
-          "fp": "d49d51a3707d0b80",
+          "fp": "9be23959d782c474",
           "ctl": "4a799f3170dcb41b"
         }
       ]
@@ -440,54 +440,54 @@
         "manifest": "hydo.yaml",
         "args": []
       },
-      "sha256": "f04390ad15cffb2a6a76b938fb456a09c45fba37f4698df780b81ac7a4180ad2",
+      "sha256": "50918553ab42aaabcc4d25bb4d1fcddb450abf5db39a1e83b310513c15ce0884",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present)",
-          "fp": "9911c6800f7b765a",
+          "fp": "14cb3780eca89431",
           "ctl": "bc6fe53352fa8359"
         },
         {
           "schedule": "disk=cut | run C=12",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present)",
-          "fp": "c19a0e61d565c11c",
+          "fp": "c326d32a2557bcd7",
           "ctl": "ded68d8cdfcf34f0"
         },
         {
           "schedule": "disk=cut | run C=12 S=never",
           "verdict": "VIOLATION [rkv.oracle] rkv check: acked=12 lost=12",
-          "fp": "fe66a7ce58af0aad",
+          "fp": "417168d3dd5f019c",
           "ctl": "22168eb0b60f5ac1"
         },
         {
           "schedule": "disk=none | run K=rkv@8+2",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present)",
-          "fp": "09576c4412602387",
+          "fp": "9b9899ee647bde25",
           "ctl": "0ad74bffbfd87b1f"
         },
         {
           "schedule": "disk=none | run B=5abc,1000,500",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=2 all present)",
-          "fp": "393be2ff7964e602",
+          "fp": "127225faabd4c3e0",
           "ctl": "d20fa8483538cd42"
         },
         {
           "schedule": "disk=none | run B=1234",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present)",
-          "fp": "e0f16d5cb968087c",
+          "fp": "9348390551337f71",
           "ctl": "243f271a5911baf1"
         },
         {
           "schedule": "disk=none | run K=rkv@8+2 B=1234",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present)",
-          "fp": "af3b00371ef1b086",
+          "fp": "c168e7dc0dc7cae9",
           "ctl": "31ca45bf4f0d1dfe"
         },
         {
           "schedule": "disk=none | run P=rkv@5+3",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=17 all present)",
-          "fp": "cf5cd8168091ba3d",
+          "fp": "2a1c391eaf0173e1",
           "ctl": "53e69be30dff5ad1"
         }
       ]
@@ -505,30 +505,30 @@
           "variant=buggy"
         ]
       },
-      "sha256": "8b731bcaa6affd0603ae576b620c628ee75c5e40cc7018cd63d6308360c7b715",
+      "sha256": "bcaf1032e4faf4ba142344d1bd4a40b8b911df92430fd3d4791264c5f3fda5b9",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
-          "fp": "c075ea93ac73378a",
+          "fp": "570aa3f3eedf325a",
           "ctl": "826e4ec0225b2c54"
         },
         {
           "schedule": "disk=none dseed=efb4cfbc49052179 | run H=payments.charge@0-1:drop",
           "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3)",
-          "fp": "b77802b0dd5877d3",
+          "fp": "0eccc1d41d2af0ce",
           "ctl": "2de44e6a52c246bd"
         },
         {
           "schedule": "disk=cut dseed=1 | run H=payments.charge@0-1:drop C=6",
           "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3)",
-          "fp": "b3829fd6495926a9",
+          "fp": "eac1569d7b96f00c",
           "ctl": "f013583309d54686"
         },
         {
           "schedule": "disk=none | run H=payments.charge@6-9:reset,p=50",
           "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 23,26)",
-          "fp": "f09fa4b3582083a5",
+          "fp": "ffe186a4eae18ddb",
           "ctl": "f5397144a2781746"
         }
       ]
@@ -546,24 +546,24 @@
           "variant=fixed"
         ]
       },
-      "sha256": "9b8bd0d14e8683918c0f964e1575445d3950efb16848c97b9e5038831a1aa43c",
+      "sha256": "14799ca337894fc99a8fe6645a45369a2e906d84f92b40ffe8cfcc22b75b4cdf",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
-          "fp": "a39449bf2c2f1bdf",
+          "fp": "af70f9c7993b58b8",
           "ctl": "597c4a89c39ff4f7"
         },
         {
           "schedule": "disk=none dseed=efb4cfbc49052179 | run H=payments.charge@0-1:drop",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
-          "fp": "0e192c2987fcaf86",
+          "fp": "4f95e98b2a106a77",
           "ctl": "6888790ab5f58567"
         },
         {
           "schedule": "disk=cut dseed=1 | run H=payments.charge@0-1:drop C=6",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once)",
-          "fp": "9af358ddd542bf30",
+          "fp": "da9c699af9eba390",
           "ctl": "b1b2778075a06fef"
         }
       ]
@@ -581,12 +581,12 @@
           "mode=buggy"
         ]
       },
-      "sha256": "7d9a68a6de807a28ef4088df859862fd37558e8dc3014599885de06345a61849",
+      "sha256": "d81f1d0fc1099ed46ab6091c2b496a92f75afd651356bc6b29d9c4eb4437f687",
       "runs": [
         {
           "schedule": "disk=none dseed=d7071eb1f9d436b9 | run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3",
           "verdict": "VIOLATION [orders.consistent] VIOLATION request_id r1 created 5 orders: o11 o1 o2 o3 o4",
-          "fp": "182d66ec1bf4cf87",
+          "fp": "c7b1b39ebc3530cd",
           "ctl": "e6766eac8f5475fc"
         }
       ]
@@ -604,12 +604,12 @@
           "mode=fixed"
         ]
       },
-      "sha256": "ab1a313ab9d96ea9916ea16f7f5853c127764ceebdd9f62d14836d3601de0e7a",
+      "sha256": "36f239445d50aac1c0dad848f8fc2f1e592275fd106fd77cdd69ec5ac549e002",
       "runs": [
         {
           "schedule": "disk=none dseed=d7071eb1f9d436b9 | run P=redis@16+11 W=5764a73c,p1,q2,r200,n3,x0.2.6.13.26-27.34.46-47,o0.2-3",
           "verdict": "OK invariants=2 held (compose.commands: started=2 ok=1 failed=1 timeout=0 violation=0 killed=0 skipped=0)",
-          "fp": "96441273f0c7af7f",
+          "fp": "73553b48fe5eb75b",
           "ctl": "9fcb1c71aa47fc8b"
         }
       ]
