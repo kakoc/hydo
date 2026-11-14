@@ -104,8 +104,9 @@ hydo-sql check equal --left 'books=sql db "SELECT intent FROM payment WHERE capt
 
 ## Business rules: ask the owner
 
-hydo cannot guess a domain's rules; ask the project's owner which of these hold, then write each
-as a SQL check or a `hydo-sql check` line:
+Propose a project's rules from its own sources first (`hydo guide rules`). Then use these lists to
+ask the owner about the rules the sources did not give. Write each confirmed rule as a SQL check
+or a `hydo-sql check` line:
 
 - **Commerce:** units sold <= units stocked; units sold = units reserved; one payment per order;
   no order without a payment. No money is held (authorized) without an order; refunded <=

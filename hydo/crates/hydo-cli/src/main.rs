@@ -11,7 +11,9 @@
 //! (hydo-agents), migrate (hydo-manifest, src/migrate.rs), build (hydo-build, src/build.rs),
 //! explore (hydo-explore), diff and explain (src/diff.rs, src/explain.rs, M165: where two runs
 //! first differ), ci (src/ci/: hydo in continuous integration, docs/design/ci.md), versions
-//! (src/versions.rs, M221: which versions of the system have a finding). No command runs Python.
+//! (src/versions.rs, M221: which versions of the system have a finding), rules (src/rules.rs, M236:
+//! evidence of a project's promises, and candidate rules validated on clean runs). No command
+//! runs Python.
 
 mod build;
 mod cache;
@@ -31,6 +33,7 @@ mod module;
 mod onboard;
 mod preempt;
 mod pyjson;
+mod rules;
 mod runs;
 mod setup;
 mod skillupdate;
@@ -87,6 +90,9 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
     hydo errors  list [DIR] | accept SIG... --reason TEXT [--with F] [--during F] | check
                                                    error logs as findings: list new error kinds, accept
                                                    expected ones into hydo/known-errors.yaml (MANIFEST.md)
+    hydo rules   scan [DIR] | check <candidates.yaml> [IMG] [--runs N] [--mutate] [--write-checks DIR]
+                                                   list what a project promises; validate proposed rules
+                                                   on runs without faults (hydo guide rules)
     hydo run|repro|explore ... --backend kvm       run the guests on the KVM engine (stock /dev/kvm, no
                                                    module, no root; also HYDO_BACKEND=kvm)
 
@@ -142,6 +148,9 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
     hydo errors  list [DIR] | accept SIG... --reason TEXT [--with F] [--during F] | check
                                                    error logs as findings: list new error kinds, accept
                                                    expected ones into hydo/known-errors.yaml (MANIFEST.md)
+    hydo rules   scan [DIR] | check <candidates.yaml> [IMG] [--runs N] [--mutate] [--write-checks DIR]
+                                                   list what a project promises; validate proposed rules
+                                                   on runs without faults (hydo guide rules)
 
 IMG defaults to the one *-arm64.cpio.gz in ./hydo-out, or in ./.hydo for a project whose manifest
 is hydo/hydo.yaml (the agreed repository layout; `hydo build` with no manifest uses ./hydo/hydo.yaml).
@@ -161,7 +170,7 @@ fn main() {
     // the engine of the commands that run guests (Linux: hvx, or KVM with --backend kvm)
     if matches!(
         argv.get(1).map(String::as_str),
-        Some("run" | "repro" | "explore" | "doctor" | "inspect" | "versions")
+        Some("run" | "repro" | "explore" | "doctor" | "inspect" | "versions" | "rules")
     ) {
         ctx.take_backend(&mut argv);
         // without --backend or HYDO_BACKEND: the engine this machine has (KVM when there is no
@@ -245,6 +254,7 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         // M221: in which versions of the system a finding is present (`hydo versions --help`,
         // `hydo guide workflow`; the main help is a recorded answer)
         "versions" => versions::cmd_versions(ctx, rest),
+        "rules" => rules::cmd_rules(ctx, rest),
         // ready-made SQL workloads and checks for the hydo/ folder (`hydo sql-gen --help`; the
         // main help is a recorded answer)
         "sql-gen" => sqlgen::cmd_sql_gen(rest),

@@ -389,6 +389,47 @@ fn run_engine_try(
     quiet: bool,
     policy: &Policy,
 ) -> Result<(Option<RunResult>, String), String> {
+    run_engine_edited(ctx, image, sched, outdir, eargs, quiet, policy, None)
+}
+
+/// A change of the image's plan before the run (`hydo rules check`, Milestone 236: the candidate
+/// rules as final invariants). The image is not changed.
+pub type PlanEdit<'a> = &'a dyn Fn(&mut hydo_control::Plan);
+
+/// One quiet run of `sched` with the image's plan changed by `edit` (`hydo rules check`). The run
+/// is not recorded as a `hydo run` is: no result.json is written, only the consoles and
+/// engine.log. Err: the schedule was not run.
+pub fn run_with_plan(
+    ctx: &Ctx,
+    image: &Path,
+    sched: &str,
+    outdir: &Path,
+    eargs: &[String],
+    edit: PlanEdit<'_>,
+) -> Result<(Option<RunResult>, String), String> {
+    run_engine_edited(
+        ctx,
+        image,
+        sched,
+        outdir,
+        eargs,
+        true,
+        &Policy::Schedule,
+        Some(edit),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_engine_edited(
+    ctx: &Ctx,
+    image: &Path,
+    sched: &str,
+    outdir: &Path,
+    eargs: &[String],
+    quiet: bool,
+    policy: &Policy,
+    edit: Option<PlanEdit<'_>>,
+) -> Result<(Option<RunResult>, String), String> {
     let _ = std::fs::create_dir_all(outdir);
     let s = Schedule::parse(sched).map_err(|e| format!("bad schedule {sched:?}: {e}"))?;
     let (eng, spec) = controlled_engine(ctx, image, outdir, eargs, quiet);
@@ -397,7 +438,10 @@ fn run_engine_try(
     if let Some(why) = hydo_engine::refusal_on(eng.kind(), spec.vcpus, &s) {
         return Err(format!("the engine refuses the schedule: {why}"));
     }
-    let a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));
+    let mut a = AgentEngine::for_image(eng, image).unwrap_or_else(|e| die(&format!("hydo: {e}")));
+    if let Some(f) = edit {
+        f(&mut a.plan);
+    }
     if !quiet {
         println!("hydo: an agent image: the host controller drives the run (/etc/hydo/control)");
     }

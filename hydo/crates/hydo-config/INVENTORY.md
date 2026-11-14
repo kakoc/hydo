@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-54 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 36 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 6 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+54 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 36 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 7 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -293,6 +293,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_REBASE_RELEASE` | passed | path | - | set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh | The unpacked release whose guest files the staging script's prefix uses (M164). |
 | `HYDO_VERSION` | passed | text | - | set by hydo versions for its --build command | The version being built, for the `--build` command of `hydo versions` (M221). |
 | `HYDO_SCRIPTED_IMAGE` | passed | path | - | set by hydo versions for HYDO_SCRIPTED_ENGINE | The image of a replay, for the scripted engine program of `hydo versions`' tests (M221). |
+| `HYDO_SCRIPTED_RULES` | passed | path | - | set by hydo rules check for HYDO_SCRIPTED_ENGINE | The candidate rules of a run (a JSON list of `id` and `cmd`), for the scripted engine program of `hydo rules check`'s tests (M236). |
 
 ## Removed
 

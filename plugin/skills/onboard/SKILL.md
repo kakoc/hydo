@@ -4,7 +4,7 @@ description: Set up deterministic fault testing with hydo for a software project
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "2.0.2"
+  version: "2.1.0"
   hydo-min: "0.1.0"
 ---
 
@@ -63,14 +63,12 @@ Then run `hydo doctor`: it says whether this machine can build and run guests.
 
 Ask, in one short message: which services make up the system, which operations its clients
 perform, and what must never happen (lost acknowledged data, a double charge, an order stuck
-forever). Then name the project's domain (a shop, a bank, a booking system, a job queue) and ask
-which of that domain's standard rules hold for it: read the list for the domain in `hydo guide
-workloads`, "Business rules: ask the owner" (for a shop: units sold never exceed units stocked,
-refunded never exceeds captured, one payment per order, no money held without an order), and ask
-the owner to confirm, reject or add to them. For a message queue, a stream or a pub/sub system,
-use the bundles of `hydo guide messages` as that list: each one names the promises of a common
-shape (ordering keys, leases, deduplication ids, groups). If you cannot ask, read the project's documentation
-and state your assumptions in the report. Do not invent guarantees the project does not make.
+forever). Do not ask the owner to list the business rules: you propose them from the project's
+own sources in step 3 and show the owner the ones hydo validated. For a message queue, a stream
+or a pub/sub system, also read the bundles of `hydo guide messages`: each one names the promises
+of a common shape (ordering keys, leases, deduplication ids, groups). If you cannot ask, read the
+project's documentation and state your assumptions in the report. Do not invent guarantees the
+project does not make.
 
 ## 2. Inventory the project
 
@@ -93,7 +91,11 @@ its data directory, its dependencies, and the file where you found each fact. Sh
    not cover (the application's own API), and keep the generated ones beside them.
    An `eventually_` command runs once, so it must retry by itself until its own deadline; an
    `eventually_` check is polled by hydo until it holds (`hydo guide checks`).
-5. Checks: choose them with [references/choosing-checks.md](references/choosing-checks.md), write
+5. Checks: propose the business rules from the project's own sources (its schema, API,
+   documentation, tests and client library) with
+   [references/proposing-rules.md](references/proposing-rules.md), into `hydo/rules.yaml`; hydo
+   validates them in step 4. Choose the other checks with
+   [references/choosing-checks.md](references/choosing-checks.md), write
    them as `hydo guide checks` says, and prefer hydo's ready-made checkers to hand-written loops:
    a business rule over SQL tables is a `.sql` check (a query that must return no rows), and a
    rule that compares the books with what an outside service saw is one `hydo-sql check` line
@@ -112,7 +114,10 @@ It must print `OK` before you go on.
 ## 4. Build and run (when the user wants it)
 
 Use the "Build and run" commands of `hydo guide workflow`: build the image, run one schedule
-without faults twice (it must pass, with the same fingerprint both times), then explore. A first
+without faults twice (it must pass, with the same fingerprint both times), validate the proposed
+rules (`hydo rules check hydo/rules.yaml --mutate`, step 3 of
+[references/proposing-rules.md](references/proposing-rules.md)), show the owner the rules that
+hold, and write the confirmed ones as checks. Then explore. A first
 run that fails points at the folder or at a real bug. Before changing anything, read why: the
 `hydo: diagnosis:` lines `hydo run` prints and the `diagnosis` in the run directory's
 `result.json`; then, when your hydo has `hydo inspect` (`hydo inspect --help`), look inside the
@@ -122,7 +127,9 @@ image to find a cause: that changes the run's timing, and the failure can go awa
 ## 5. Report
 
 Give the user: the folder you wrote; the inventory; **each check, for review** (the checks are
-the part that needs human judgment; say which ones you are unsure about and why); the knobs; the
+the part that needs human judgment; say which ones you are unsure about and why); the proposed
+rules as `hydo rules check` reported them: the ones that hold, plain words first, with their
+evidence, and apart the ones that failed without faults, each a wrong rule or a bug; the knobs; the
 pitfalls you found and what you did about them; what you could not determine (unknown readiness
 checks, unclear data directories, missing programs, ambiguous promises), each with what happens if
 it stays as it is; the hydo version you used; and the exact build and first-run commands.

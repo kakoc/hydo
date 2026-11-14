@@ -147,8 +147,9 @@ A project with C code needs a C compiler for the target. Use one of these:
 - Commands in `hydo/workload/`: `hydo guide composer` (kinds, environment, exit codes, the
   `test:` section). gRPC systems: generated drivers, `hydo guide outside-services`. Tests written
   in a programming language: `hydo guide sdks`.
-- Checks in `hydo/checks/`: `hydo guide checks` and `hydo guide invariant-patterns`. Error logs as
-  findings: `hydo guide error-logs`.
+- Checks in `hydo/checks/`: `hydo guide checks` and `hydo guide invariant-patterns`. Business
+  rules from the project's own sources, validated on runs without faults: `hydo guide rules`.
+  Error logs as findings: `hydo guide error-logs`.
 - Outside services (fakes and proxies): `hydo guide outside-services`. Fault kinds, knobs and
   BUGGIFY: `hydo guide faults`. The guest environment and its limits: `hydo guide hazards`. What
   this machine's backend supports: `hydo guide capabilities` and `hydo doctor`.

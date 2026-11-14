@@ -9,4 +9,5 @@ mod equivalence;
 mod migrate;
 mod onboard;
 mod readme;
+mod rules;
 mod versions;

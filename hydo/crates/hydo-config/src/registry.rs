@@ -628,6 +628,9 @@ variables! {
     HYDO_VERSION: Passed, Passed, "text", "", "set by hydo versions for its --build command";
     /// The image of a replay, for the scripted engine program of `hydo versions`' tests (M221).
     HYDO_SCRIPTED_IMAGE: Passed, Passed, "path", "", "set by hydo versions for HYDO_SCRIPTED_ENGINE";
+    /// The candidate rules of a run (a JSON list of `id` and `cmd`), for the scripted engine
+    /// program of `hydo rules check`'s tests (M236).
+    HYDO_SCRIPTED_RULES: Passed, Passed, "path", "", "set by hydo rules check for HYDO_SCRIPTED_ENGINE";
 }
 
 /// The variables removed in M144 and later.
