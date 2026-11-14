@@ -258,6 +258,7 @@ pub fn run(
                             clock: None,
                             world: world.clone(),
                             outcomes: outcomes.clone(),
+                            versions: Vec::new(),
                         },
                     );
                     let mut ctl =

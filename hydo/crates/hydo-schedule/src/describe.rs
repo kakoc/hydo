@@ -871,6 +871,12 @@ fn guest_noun(t: &GuestToken, knobs: &[KnobInfo]) -> Option<String> {
         GuestToken::PowerLoss { svc, at, .. } => {
             format!("a power loss of {} {}", code(svc), after(*at))
         }
+        GuestToken::Upgrade(u) => format!(
+            "a switch of {} to version {} {}",
+            target_words(&u.target).0,
+            code(&u.version),
+            after(u.at)
+        ),
         GuestToken::Knob { letter, value } => match knob_named(*letter, knobs) {
             Some(k) => format!(
                 "{} at {}",
@@ -1277,6 +1283,40 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
                 "power losses of one service",
                 format!("after {s} lost power"),
             )
+        }
+        GuestToken::Upgrade(u) => {
+            let (who, pl) = target_words(&u.target);
+            let v = code(&u.version);
+            let how = if !pl {
+                String::new()
+            } else if u.gap > 0 {
+                format!(
+                    " One after another, {} steps apart: each waits until the one before it is \
+                     ready again.",
+                    u.gap
+                )
+            } else {
+                " One after another: each waits until the one before it is ready again.".into()
+            };
+            let back = match u.back {
+                Some(b) => format!(
+                    " {} steps after its switch, each goes back to the version it ran before.",
+                    b
+                ),
+                None => String::new(),
+            };
+            fault(
+                format!(
+                    "{}, hydo stops {who}, switches {} to version {v} and starts {} again on the \
+                     same data, as in a rolling upgrade.{how}{back}",
+                    cap(&after(u.at)),
+                    it_them(pl),
+                    it_them(pl)
+                ),
+                format!("switch {who} to version {v} {}", after(u.at)),
+            )
+            .at(u.at)
+            .fault("upgrades", format!("after {who} switched to version {v}"))
         }
         GuestToken::Knob { letter, value } => match knob_named(*letter, knobs) {
             Some(k) => {

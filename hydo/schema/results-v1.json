@@ -298,6 +298,13 @@
               "type": "null"
             }
           ]
+        },
+        "upgrades": {
+          "description": "Each switch of a service to another version of itself (`U=`; added in Milestone 238,\ndocs/design/upgrades.md), in the order of the run; absent without upgrades.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/UpgradeSwitch"
+          }
         }
       },
       "required": [
@@ -1759,6 +1766,45 @@
       },
       "required": [
         "origin"
+      ]
+    },
+    "UpgradeSwitch": {
+      "description": "One switch of a service to another version (`U=`; added in Milestone 238).",
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "string"
+        },
+        "step": {
+          "description": "The step before which it was switched (counted from 0).",
+          "type": "integer",
+          "format": "int64"
+        },
+        "from": {
+          "description": "The version it ran, and the version it was switched to.",
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "rollback": {
+          "description": "A rollback: back to the version it ran before its upgrade.",
+          "type": "boolean"
+        },
+        "started": {
+          "description": "Whether it started on the new version; absent when it was down at the switch (it then\nstarts on the new version at its restart).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "service",
+        "step",
+        "from",
+        "to",
+        "rollback"
       ]
     },
     "Exploration": {

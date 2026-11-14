@@ -60,6 +60,7 @@ is Rust programs only and needs no Python.
 |---|---|---|---|
 | guest tokens `K= P= X= N= O= C= T= F= H= A= W= B=` and knobs | yes | yes | yes |
 | storage faults of one service `G=`, `L=` (services with `storage:`; `L=` needs `size_mib:`) | yes | yes | yes |
+| upgrades and rollbacks `U=` (services with `versions:`), `--upgrades` | yes | yes (not run on kvm yet) | yes (not run on the Mac yet) |
 | disk faults `disk=cut`, `disk=ioerr:<p>`, `disk=lying:<p>` | yes | yes | yes |
 | a power cut at the k-th disk FLUSH (`cf=`), `--more-faults` (it draws `cf=`) | yes | no | no |
 | several vCPUs (`--vcpus N`, `--turns`, `--sweep turns`) | yes (turns of guest branches) | yes (turns of VM exits, the SMP guest kernel `bzImage-kvm-smp`) | no |

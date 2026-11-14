@@ -223,6 +223,9 @@ services:                      # may be empty ([] or left out): a project that i
                                           #   inspect logs` show their last lines too
     job: false                            # true: a one-shot job that its dependents run in their
                                           #   setup:; never a fault target (see "One-shot jobs")
+    version: "1.0"                        # with versions:: the name of the version cmd: runs
+    versions: [{name: "2.0", cmd: ...}]   # other versions U= can switch it to (see "Versions of
+                                          #   a service and upgrades")
 
   - name: cache                # a service whose files come from a Docker/OCI image (see below)
     image: images/redis.tar    # a `docker save` tar or an OCI layout directory, relative to
@@ -794,6 +797,60 @@ faults: [kill, cut, corrupt, powerloss]
 `storage:`, an `L=` in 40% on a service with its own file system) when the manifest's `faults:`
 lists `corrupt` / `powerloss`, or has no `faults:` list. A failure with `G=` has the class
 `corrupted-files`. The guest letters `G` and `L` are reserved: a knob may not use them.
+
+### Versions of a service and upgrades (`services[].versions`, `U=`)
+
+A service may run several versions of itself during one run, as in a rolling upgrade
+(Milestone 238; docs/design/upgrades.md has the design):
+
+```yaml
+params:
+  old: "3.5.5"
+  new: "3.6.0"
+root:
+  files:
+    - {src: "etcd-v{{old}}/etcd", dst: "/opt/etcd-{{old}}/etcd", mode: "0755"}
+    - {src: "etcd-v{{new}}/etcd", dst: "/opt/etcd-{{new}}/etcd", mode: "0755"}
+services:
+  - name: etcd1
+    version: "{{old}}"                 # the name of the version cmd:, setup: and ready: run
+    versions:                          # the other versions; each key but name: is optional
+      - name: "{{new}}"
+        # cmd: ...                     # default: the service's cmd:
+        # setup: ...                   # default: the service's setup:
+        # ready: ...                   # default: the service's ready:
+    cmd: /opt/etcd-$HYDO_VERSION/etcd --data-dir /data/etcd1
+    ready: wget -q -O /dev/null http://127.0.0.11:2380/version
+```
+
+- `version:` is needed with `versions:`, and only with it. A version's name is a letter or digit,
+  then letters, digits, `.`, `_` and `-`, at most 40 bytes; each name once per service.
+- The setup, the process and the readiness check of a service with `versions:` see the name of the
+  version they run as `$HYDO_VERSION`. Without `versions:` the variable is not set.
+- A service from an image (`image:`) cannot have `versions:` yet.
+
+**The token `U=<target>@<at>[/<gap>][+<back>]:<version>`.** Before step `at` the host stops each
+service of the target (SIGTERM to its process tree, SIGKILL 10 seconds of guest time later),
+switches it to `<version>` and starts it again on the same data, with its setup and its readiness
+check. The target is a service, a list (`etcd1,etcd2`) or a group selector (`etcd.all`); its
+services are switched one after another, each once the one before it is ready again. With
+`/<gap>` the k-th service (from 0) is switched before step `at + k*gap`. With `+<back>` each
+service goes back to the version it ran before, `back` steps after its own switch. A downgrade is
+also a `U=` with the older version's name, and a schedule may hold several `U=`.
+
+- A service that does not start on its new version ends the run with `HYDO-ORACLE: VIOLATION
+  [upgrade.started] <svc> did not start on version <v> before step <at> (it ran <old>)`.
+- A service that is down at its switch (killed by `K=` and not yet restarted) only gets the new
+  version; its restart starts it on that version.
+- After a power cut the recovery boot starts each service on the version it ran at the cut (the
+  report line `hydo-explore-versions: <svc>=<v> ...`).
+- Each switch is a `HYDO-UPGRADE {...}` note and an entry of `upgrades` in `result.json`, and
+  reaches the assertion `fault.upgraded`.
+
+`hydo explore --upgrades` draws a `U=` in 60% of the schedules for a manifest with `versions:`:
+half of them rolling upgrades of a group whose members all have versions (`<group>.all`, 0 to 3
+steps apart), a quarter with a rollback. A failure with `U=` has the class `upgrade`. The guest
+letter `U` is reserved: a knob may not use it. The example is `hydo/onboard/examples/etcd-upgrade`.
 
 ### Reactions (`A=`, `hydo explore --reactive`)
 

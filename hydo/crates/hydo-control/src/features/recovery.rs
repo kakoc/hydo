@@ -32,6 +32,18 @@ pub struct RecoveryInputs {
     /// `$HYDO_OUTCOMES`, as `<id> <outcome>` lines, which the recovery boot's `$HYDO_OUTCOMES`
     /// starts with (empty without the key: that file starts empty, as before it).
     pub outcomes: Vec<String>,
+    /// Milestone 238: the version each service a switch (`U=`) moved ran at the cut, as
+    /// (service, version); the recovery boot starts them on it (empty without `U=`).
+    pub versions: Vec<(String, String)>,
+}
+
+/// The words of a `hydo-explore-versions:` line (`svc=version ...`) as (service, version).
+pub fn versions_of_words(words: &str) -> Vec<(String, String)> {
+    words
+        .split_whitespace()
+        .filter_map(|w| w.split_once('='))
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect()
 }
 
 impl RecoveryInputs {
@@ -64,12 +76,26 @@ impl RecoveryInputs {
                     .next_back()
             })
             .and_then(|c| c.parse().ok());
+        // Milestone 238: the last versions line of the run (none without U=)
+        let versions = t
+            .records
+            .iter()
+            .filter_map(|r| match r {
+                crate::Record::Report { line, .. } => {
+                    line.strip_prefix(super::upgrade::VERSIONS_PREFIX)
+                }
+                _ => None,
+            })
+            .next_back()
+            .map(versions_of_words)
+            .unwrap_or_default();
         Some(RecoveryInputs {
             acked: acked.clone(),
             failed: failed.clone(),
             clock,
             world: world.clone(),
             outcomes: outcomes.clone(),
+            versions,
         })
     }
 }

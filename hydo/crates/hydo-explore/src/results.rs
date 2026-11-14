@@ -372,6 +372,17 @@ pub fn check_outputs(text: &str) -> BTreeMap<String, (Vec<Value>, u64)> {
     out
 }
 
+/// The host controller's `HYDO-UPGRADE {...}` notes in a run's consoles (Milestone 238): each
+/// switch of a service to another version, in order (`Run.upgrades`).
+pub fn upgrades_of(text: &str) -> Vec<hydo_results::UpgradeSwitch> {
+    text.split('\n')
+        .filter_map(|l| {
+            let i = l.find("HYDO-UPGRADE {")?;
+            serde_json::from_str(&l[i + "HYDO-UPGRADE ".len()..]).ok()
+        })
+        .collect()
+}
+
 /// The failing checks' output (results addition of Milestone 225): an invariant or assertion
 /// finding whose id has a `HYDO-CHECK-OUT` note gets `details.output` (the lines) and, when
 /// lines were left out, `details.output_omitted`.
@@ -431,6 +442,7 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
     Run {
         tag: Some(tag.to_string()),
         messages,
+        upgrades: upgrades_of(&texts.concat()),
         schedule: text.to_string(),
         warnings,
         verdict,

@@ -394,6 +394,15 @@ fn setup(a: Args, env: &Env) -> Cx {
         } else {
             cx.build.join(&a.image)
         };
+        // Milestone 238: the version names as the image was built (its parameter values)
+        let sp = if a.manifest.is_none() {
+            let params = hydo_engine::image::embedded_file(&img, "etc/hydo/params")
+                .map(|t| hydo_manifest::parse_params_file(&t))
+                .unwrap_or_default();
+            sp.with_params(&params)
+        } else {
+            sp
+        };
         if cx.env.config.pool.scripted_engine.is_none() {
             agent_space(&img, a.schedule.as_deref());
         }
@@ -543,6 +552,16 @@ fn setup(a: Args, env: &Env) -> Cx {
         die("hydo explore: --pause-max is 1 to 3600000 ms of guest time");
     }
     cx.ex.workload_pauses = a.workload_pauses;
+    // Milestone 238: upgrades of the services with versions:
+    let has_versions = m
+        .as_ref()
+        .and_then(|m| m.get("services"))
+        .and_then(Value::as_array)
+        .is_some_and(|s| s.iter().any(|x| x.get("versions").is_some()));
+    if a.upgrades && !has_versions {
+        die("hydo explore: --upgrades switches services to their other versions, and no service of this image's manifest has versions: (MANIFEST.md, \"Versions of a service and upgrades\")");
+    }
+    cx.ex.upgrades = a.upgrades;
     cx.ex.pause_max = a.pause_max;
     // Milestone 226: the earliest start and the lengths of a drawn pause
     if a.pause_min < 0 || a.pause_min > a.pause_max {

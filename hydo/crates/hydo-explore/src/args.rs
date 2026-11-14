@@ -9,7 +9,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
-       [--storage-faults] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
+       [--storage-faults] [--upgrades] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
        [--pause-lengths MS[,MS...]]
        [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
         [--steer-batch N] [--steer-corpus N] [--steer-stop]]
@@ -59,6 +59,8 @@ pub struct Args {
     pub storage_faults: bool,
     /// `--cluster-faults` (M195): draw kills, pauses and partitions of the manifest's `groups:`.
     pub cluster_faults: bool,
+    /// `--upgrades` (Milestone 238): draw upgrades (`U=`) of the services with `versions:`.
+    pub upgrades: bool,
     /// `--pause-workload` (Milestone 216): draw pauses of the workload's own process tree
     /// (`P=workload@<at>~<off>:<dur>`), at most `--pause-max` ms after the step's start.
     pub workload_pauses: bool,
@@ -181,6 +183,7 @@ impl Default for Args {
             storage_faults: false,
             cluster_faults: false,
             workload_pauses: false,
+            upgrades: false,
             pause_max: crate::gen::WP_MAX,
             pause_threads: None,
             pause_min: 0,
@@ -231,7 +234,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 21] = [
+const FLAGS: [&str; 22] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -242,6 +245,7 @@ const FLAGS: [&str; 21] = [
     "more-faults",
     "storage-faults",
     "cluster-faults",
+    "upgrades",
     "pause-workload",
     "freeze-call",
     "protocol-faults",
@@ -404,6 +408,7 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "storage-faults" => a.storage_faults = true,
             "cluster-faults" => a.cluster_faults = true,
             "pause-workload" => a.workload_pauses = true,
+            "upgrades" => a.upgrades = true,
             "pause-max" => a.pause_max = int("pause-max", v)?,
             "pause-thread" => a.pause_threads = Some(val),
             "pause-min" => a.pause_min = int("pause-min", v)?,

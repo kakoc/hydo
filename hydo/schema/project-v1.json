@@ -828,6 +828,27 @@
               "type": "null"
             }
           ]
+        },
+        "version": {
+          "description": "The name of the version that cmd:, setup: and ready: run (needed with versions:). An\nupgrade token (U=<name>@<at>:<version>) switches the service to another version and back\n(MANIFEST.md \"Versions of a service and upgrades\").",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "versions": {
+          "description": "The other versions of the service an upgrade token can switch it to, each with the\ncommands that differ from the service's own. Every command of the service sees the name\nof the version it runs as $HYDO_VERSION.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ServiceVersion"
+          }
         }
       },
       "additionalProperties": false,
@@ -1142,6 +1163,63 @@
       "additionalProperties": false,
       "required": [
         "dir"
+      ]
+    },
+    "ServiceVersion": {
+      "description": "Another version of a service (`services[].versions`, Milestone 238).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The version's name, as U= writes it: a letter or digit, then letters, digits, '.', '_'\nand '-' (3.6.0, 3.6.0-rc.2, v2).",
+          "$ref": "#/$defs/Text"
+        },
+        "cmd": {
+          "description": "The command this version runs (default: the service's cmd:).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "setup": {
+          "description": "Run before every start of this version (default: the service's setup:).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ready": {
+          "description": "This version's readiness check (default: the service's ready:).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
       ]
     },
     "Group": {

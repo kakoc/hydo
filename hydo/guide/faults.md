@@ -156,6 +156,35 @@ A partition needs `addr:` on its services. The run's log names the services each
 (`K: nodes.primary = n2`), and the schedule keeps the selector. `hydo explore --cluster-faults`
 draws these tokens for a manifest with `groups:` and shrinks a selector towards one member.
 
+## Upgrades and rollbacks
+
+An upgrade token switches a service to another version of itself in the middle of a run, on the
+same data. Old and new versions then run side by side, as in a rolling upgrade. List the versions
+in the manifest, and put every version's programs in the image:
+
+```yaml
+services:
+  - name: etcd1
+    version: "3.5.5"                   # the version cmd: runs
+    versions: [{name: "3.6.0"}]        # cmd:, setup: and ready: may differ per version
+    cmd: /opt/etcd-$HYDO_VERSION/etcd --data-dir /data/etcd1
+```
+
+| token | what it does |
+|---|---|
+| `U=etcd1@5:3.6.0` | stops `etcd1` (SIGTERM, SIGKILL after 10 s) before step 5 and starts it on 3.6.0 |
+| `U=etcd1@5+4:3.6.0` | the same, and rolls it back to its previous version before step 9 |
+| `U=etcd.all@5/3:3.6.0` | a rolling upgrade of the group `etcd`, one member every 3 steps |
+| `U=etcd1@5:3.6.0 U=etcd1@9:3.5.5` | an upgrade and a downgrade, as two tokens |
+
+Each command of the service sees its version as `$HYDO_VERSION`. The members of a list or a group
+are switched one after another, each once the one before it is ready again. A service that does
+not start on its new version ends the run with `VIOLATION [upgrade.started]`. A power cut keeps
+each service on the version it ran, also in the recovery boot. `hydo explore --upgrades` draws
+these tokens for the services with `versions:`; their failures are in the class `upgrade`. The
+manifest reference is the section "Versions of a service and upgrades" of `hydo guide
+manifest`, and the example is `hydo/onboard/examples/etcd-upgrade`.
+
 ## Knobs (durability settings the explorer may relax)
 
 ```yaml

@@ -24,8 +24,8 @@ pub fn is_workload(t: &str) -> bool {
 }
 pub const FAULT_KINDS: [&str; 7] = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"];
 /// Guest tokens with a fixed meaning; a manifest knob may not reuse one.
-pub const RESERVED_TOKENS: [&str; 15] = [
-    "K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W", "A", "G", "L",
+pub const RESERVED_TOKENS: [&str; 16] = [
+    "K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W", "A", "G", "L", "U",
 ];
 pub const PF_REQ_KINDS: [&str; 4] = ["status", "delay", "drop", "reset"];
 pub const PF_HOOK_KINDS: [&str; 4] = ["dup", "reorder", "late", "lost"];
@@ -81,6 +81,54 @@ pub struct Space {
     pub jobs: Vec<String>,
     /// `clock_points:` (Milestone 225): the times a clock fault may step the clock to.
     pub clock_points: Vec<String>,
+    /// `services[].versions` (Milestone 238): each service with versions, in the manifest's
+    /// order, as (service, its own version, its other versions).
+    pub versions: Vec<(String, String, Vec<String>)>,
+    /// The same as written, before `{{param}}` references are replaced.
+    pub versions_raw: Vec<(String, String, Vec<String>)>,
+}
+
+/// `{{name}}` in the version names replaced by the image's parameter values (`params`), else by
+/// the manifest's defaults (`params:`).
+fn resolve_versions(
+    raw: &[(String, String, Vec<String>)],
+    m: &Value,
+    params: &[(String, String)],
+) -> Vec<(String, String, Vec<String>)> {
+    let value = |k: &str| -> Option<String> {
+        params
+            .iter()
+            .rev()
+            .find(|(n, _)| n == k)
+            .map(|(_, v)| v.clone())
+            .or_else(|| m.get("params").and_then(|p| p.get(k)).map(str_of))
+    };
+    let sub = |t: &str| -> String {
+        let mut out = String::new();
+        let mut rest = t;
+        while let Some(i) = rest.find("{{") {
+            out.push_str(&rest[..i]);
+            match rest[i + 2..].find("}}") {
+                Some(j) => {
+                    let k = &rest[i + 2..i + 2 + j];
+                    match value(k) {
+                        Some(v) => out.push_str(&v),
+                        None => out.push_str(&rest[i..i + 4 + j]),
+                    }
+                    rest = &rest[i + 4 + j..];
+                }
+                None => {
+                    out.push_str(&rest[i..]);
+                    rest = "";
+                }
+            }
+        }
+        out.push_str(rest);
+        out
+    };
+    raw.iter()
+        .map(|(s, v, o)| (s.clone(), sub(v), o.iter().map(|x| sub(x)).collect()))
+        .collect()
 }
 
 fn arr(v: Option<&Value>) -> Vec<Value> {
@@ -217,7 +265,29 @@ impl Space {
             .filter(|(_, s)| s.size_mib.is_some())
             .map(|(n, _)| n.clone())
             .collect();
+        // Milestone 238: the services an upgrade (U=) can switch, never a one-shot job; a
+        // version's name may be a {{param}}, resolved with the defaults here and with the
+        // image's values by `with_params`
+        let versions_raw: Vec<(String, String, Vec<String>)> = services
+            .iter()
+            .filter_map(|s| {
+                let others: Vec<String> = arr(s.get("versions"))
+                    .iter()
+                    .map(|v| str_of(v.get("name").unwrap_or(&Value::Null)))
+                    .collect();
+                (!others.is_empty()).then(|| {
+                    (
+                        name_of(s),
+                        str_of(s.get("version").unwrap_or(&Value::Null)),
+                        others,
+                    )
+                })
+            })
+            .collect();
+        let versions = resolve_versions(&versions_raw, &m, &[]);
         Ok(Space {
+            versions,
+            versions_raw,
             jobs,
             clock_points,
             test,
@@ -250,6 +320,13 @@ impl Space {
         let (man, meta) =
             hydo_manifest::from_embedded_meta(text, compose.as_ref()).map_err(|e| e.message)?;
         Space::new(man.data, meta)
+    }
+
+    /// The version names with the image's parameter values (`/etc/hydo/params`, Milestone 238):
+    /// the image was built with them, so `U=` must name its versions as built.
+    pub fn with_params(mut self, params: &[(String, String)]) -> Space {
+        self.versions = resolve_versions(&self.versions_raw, &self.m, params);
+        self
     }
 
     pub fn has_fault(&self, k: &str) -> bool {

@@ -202,6 +202,8 @@ pub struct S {
     pub g: Option<Gz>,
     /// L=svc@at+down (a power loss of one service).
     pub l: Option<(String, i64, i64)>,
+    /// U= upgrades (Milestone 238), each the text after `U=`, in token order.
+    pub u: Vec<String>,
 }
 
 /// A G= token: (service, step, steps down or None for in place, the corruption's text).

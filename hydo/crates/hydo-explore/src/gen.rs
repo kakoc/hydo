@@ -68,6 +68,8 @@ pub const WP_SALT: u64 = 0x57A11C0FFEE57A11;
 pub const WP_DURS: [i64; 6] = [10, 20, 50, 100, 200, 500];
 /// The latest drawn pause start after its step's start, ms of guest time (`--pause-max`).
 pub const WP_MAX: i64 = 1000;
+/// The upgrades' own stream (`--upgrades`, Milestone 238).
+pub const UPGRADE_SALT: u64 = 0x0B6EADEC0FFEE0B6;
 /// The cluster faults' own stream (`--cluster-faults`, Milestone 195).
 pub const CLUSTER_SALT: u64 = 0xC1B57E5C0FFEEC1B;
 /// The selectors a cluster kill or pause draws (`primary` only for a group with a probe).
@@ -164,6 +166,9 @@ pub struct Ex {
     /// (`P=workload@<at>~<off>:<dur>`) from its own stream (WP_SALT), starting at most
     /// `pause_max` ms after its step's start.
     pub workload_pauses: bool,
+    /// `--upgrades` (Milestone 238): upgrades of the services with `versions:` (`U=`) from
+    /// their own stream (UPGRADE_SALT).
+    pub upgrades: bool,
     pub pause_max: i64,
     /// `--pause-thread` (Milestone 226): the targets a drawn pause names, `workload/<name>`
     /// (and `workload` with `--pause-workload`); empty: `workload` only.
@@ -238,6 +243,7 @@ impl Default for Ex {
             storage_faults: false,
             cluster_faults: false,
             workload_pauses: false,
+            upgrades: false,
             pause_max: WP_MAX,
             pause_targets: Vec::new(),
             pause_min: 0,
@@ -1166,6 +1172,82 @@ impl Ex {
         s
     }
 
+    /// `--upgrades` (Milestone 238): for a manifest with `services[].versions`, in 60% of the
+    /// schedules an upgrade, from its own stream (UPGRADE_SALT), so every other field of a
+    /// seed's schedule stays as it was; every draw is made whether it is used or not. Half of
+    /// the upgrades are rolling upgrades of a group whose members all have versions
+    /// (`U=<group>.all@<at>[/<gap>]:<version>`, the members 0 to 3 steps apart), the others an
+    /// upgrade of one service with versions; the version is one of the service's other
+    /// versions (for a group, one of the first member's that every member has), and a quarter of
+    /// the upgrades roll back 1 to 4 steps later (`+<back>`). Every switch falls on a step of the
+    /// workload. A drawn upgrade is added to the schedule's other faults.
+    pub fn add_upgrades(&self, mut s: S, seed: u64) -> S {
+        if !self.upgrades {
+            return s;
+        }
+        let Some(sp) = &self.space else {
+            return s;
+        };
+        if sp.versions.is_empty() {
+            return s;
+        }
+        let mut t = SplitMix::new(seed ^ UPGRADE_SALT);
+        let on = t.below(100) < 60;
+        let rolling = t.below(2) == 0;
+        let which = t.next();
+        let pick_v = t.next();
+        let gap = t.rng(0, 3);
+        let back = if t.below(4) == 0 { t.rng(1, 4) } else { 0 };
+        let at_r = t.next();
+        let with = |n: &str| sp.versions.iter().find(|v| v.0 == n);
+        // groups whose members all have versions, with the versions every member has
+        let groups: Vec<(String, usize, Vec<String>)> = sp
+            .groups
+            .iter()
+            .filter_map(|g| {
+                let first = with(g.members.first()?)?;
+                let common: Vec<String> = first
+                    .2
+                    .iter()
+                    .filter(|v| {
+                        g.members
+                            .iter()
+                            .all(|m| with(m).is_some_and(|x| x.1 == **v || x.2.contains(v)))
+                    })
+                    .cloned()
+                    .collect();
+                (!common.is_empty()).then(|| (g.name.clone(), g.members.len(), common))
+            })
+            .collect();
+        let (target, n, versions) = if rolling && !groups.is_empty() {
+            let g = &groups[(which % groups.len() as u64) as usize];
+            (format!("{}.all", g.0), g.1, g.2.clone())
+        } else {
+            let v = &sp.versions[(which % sp.versions.len() as u64) as usize];
+            (v.0.clone(), 1, v.2.clone())
+        };
+        let version = &versions[(pick_v % versions.len() as u64) as usize];
+        let gap = if n > 1 { gap } else { 0 };
+        let span = (n as i64 - 1) * gap + back;
+        let last = (self.norders - 1).max(0);
+        if span > last {
+            return s;
+        }
+        let at = (at_r % (last - span + 1) as u64) as i64;
+        let mut u = format!("{target}@{at}");
+        if gap > 0 {
+            u.push_str(&format!("/{gap}"));
+        }
+        if back > 0 {
+            u.push_str(&format!("+{back}"));
+        }
+        u.push_str(&format!(":{version}"));
+        if on {
+            s.u.push(u);
+        }
+        s
+    }
+
     /// `--cluster-faults` (M195): for a manifest with `groups:`, from their own stream
     /// (CLUSTER_SALT), so every other field of a seed's schedule stays as it was, and every draw
     /// is made whether it is used or not: a kill of a group's members (50% of the schedules; the
@@ -1325,6 +1407,7 @@ impl Ex {
         s = self.add_freeze_call(s, seed);
         s = self.add_protocol_faults(s, seed);
         s = self.add_grpc_faults(s, seed);
+        s = self.add_upgrades(s, seed);
         self.add_point_streams(s, seed)
     }
 
@@ -1471,6 +1554,9 @@ impl Ex {
         }
         if let Some((svc, at, down)) = &s.l {
             g.push(format!("L={svc}@{at}+{down}"));
+        }
+        for u in &s.u {
+            g.push(format!("U={u}"));
         }
         format!(
             "disk={} dseed={:x}{}{}{} | {}",
@@ -1676,6 +1762,7 @@ impl Ex {
                     let (at, down) = split2(rest, '+')?;
                     s.l = Some((svc.into(), pint(at)?, pint(down)?));
                 }
+                "U" => s.u.push(v.to_string()),
                 k if self.knob_tokens.iter().any(|t| t == k) => {
                     s.set_knob(k, KV::Str(v.to_string()))
                 }
@@ -1718,6 +1805,10 @@ impl Ex {
         // a service's files corrupted on purpose (G=): the system's own checks are under test
         if s.g.is_some() {
             return "corrupted-files";
+        }
+        // Milestone 238: a service switched to another version of itself during the run
+        if !s.u.is_empty() {
+            return "upgrade";
         }
         let relaxed = match &self.space {
             Some(sp) => sp.unsafe_knob(s),
@@ -1890,6 +1981,31 @@ impl Ex {
             var(&|t| t.cf = None);
             if cf > 1 {
                 var(&|t| t.cf = Some(fdiv(cf, 2)));
+            }
+        }
+        // Milestone 238: an upgrade shrinks by going, by not rolling back, and (a rolling
+        // upgrade) by switching its members before one step
+        for (i, u) in s.u.iter().enumerate() {
+            var(&|t| {
+                t.u.remove(i);
+            });
+            if let Ok(hydo_schedule::GuestToken::Upgrade(x)) =
+                hydo_schedule::GuestToken::parse(&format!("U={u}"))
+            {
+                if x.back.is_some() {
+                    let y = hydo_schedule::Upgrade {
+                        back: None,
+                        ..x.clone()
+                    };
+                    var(&|t| t.u[i] = y.to_string());
+                }
+                if x.gap > 0 {
+                    let y = hydo_schedule::Upgrade {
+                        gap: 0,
+                        ..x.clone()
+                    };
+                    var(&|t| t.u[i] = y.to_string());
+                }
             }
         }
         // M139: a reaction is anchored to its event, so dropping another fault keeps its

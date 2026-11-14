@@ -608,6 +608,91 @@ fn storage_faults() {
     refused("disk=none | run L=n1", "<svc>@<at>+<n>");
 }
 
+/// Upgrades (Milestone 238, docs/design/upgrades.md): `U=<target>@<at>[/<gap>][+<back>]:<version>`
+/// switches services to another version of themselves; several services one after another, the
+/// k-th `gap` steps after the one before it, and back to the version they ran before with `+`.
+#[test]
+fn upgrades() {
+    for s in [
+        "disk=none dseed=0 | run U=etcd1@10:3.6.0",
+        "disk=none dseed=0 | run U=etcd1@10+5:3.6.0-rc.2",
+        "disk=none dseed=0 | run U=etcd1,etcd2,etcd3@4:v2",
+        "disk=none dseed=0 | run U=nodes.all@4/6:3.6.0",
+        "disk=none dseed=0 | run U=nodes.all@4/6+2:3.6.0",
+        "disk=none dseed=0 | run U=nodes.one.2@0:new_1",
+        "disk=none dseed=0 | run U=etcd1@10:3.6.0 U=etcd1@20:3.5.5",
+        "disk=cut dseed=0 | run U=n1@3:b K=n2@5+2 C=20",
+    ] {
+        round_trip(s);
+    }
+    let s = Schedule::parse("disk=none | run U=nodes.all@4/6+2:3.6.0").unwrap();
+    let GuestToken::Upgrade(u) = &s.guest[0] else {
+        panic!("not an upgrade: {:?}", s.guest[0])
+    };
+    assert_eq!(s.guest[0].letter(), 'U');
+    assert!(RESERVED.contains('U'));
+    assert_eq!(
+        *u,
+        Upgrade {
+            target: Target::Group {
+                group: "nodes".into(),
+                sel: Selector::All
+            },
+            at: 4,
+            gap: 6,
+            back: Some(2),
+            version: "3.6.0".into(),
+        }
+    );
+    // a rolling upgrade with rollbacks: each service's rollback 2 steps after its own switch
+    let names: Vec<String> = ["a", "b", "c"].iter().map(|x| x.to_string()).collect();
+    let sw = u.switches(&names);
+    let w: Vec<(u64, &str, Option<&str>)> = sw
+        .iter()
+        .map(|w| (w.step, w.service.as_str(), w.version.as_deref()))
+        .collect();
+    let want = vec![
+        (4, "a", Some("3.6.0")),
+        (6, "a", None),
+        (10, "b", Some("3.6.0")),
+        (12, "b", None),
+        (16, "c", Some("3.6.0")),
+        (18, "c", None),
+    ];
+    assert_eq!(w, want);
+    assert_eq!(u.last_step(3), 18);
+    // without a gap, every service before the same step, in the target's order
+    let s0 = Schedule::parse("| run U=a,b@3+1:v2").unwrap();
+    let GuestToken::Upgrade(u0) = &s0.guest[0] else {
+        panic!("not an upgrade")
+    };
+    let steps: Vec<(u64, String)> = u0
+        .switches(&names[..2])
+        .into_iter()
+        .map(|w| (w.step, w.service))
+        .collect();
+    assert_eq!(
+        steps,
+        vec![
+            (3, "a".to_string()),
+            (3, "b".to_string()),
+            (4, "a".to_string()),
+            (4, "b".to_string())
+        ]
+    );
+    assert!(version_name_ok("3.6.0-rc.2") && version_name_ok("v2") && version_name_ok("new_1"));
+    assert!(!version_name_ok("-x") && !version_name_ok("") && !version_name_ok("a:b"));
+    refused("disk=none | run U=etcd1@10", "U=<service");
+    refused("disk=none | run U=etcd1:3.6", "U=<service");
+    refused("disk=none | run U=etcd1@10:", "not a version name");
+    refused("disk=none | run U=etcd1@10:3,6", "not a version name");
+    refused("disk=none | run U=etcd1@10+0:3.6", "at least one step");
+    refused("disk=none | run U=nodes.all@10/0:3.6", "write no /0");
+    refused("disk=none | run U=etcd1@10/2:3.6", "one service takes none");
+    refused("disk=none | run U=etcd1@010:3.6", "leading zero");
+    refused("disk=none | run U=Etcd1@10:3.6", "not a service name");
+}
+
 /// A corruption's file and places are a pure function of the token and the directory's files.
 #[test]
 fn corruption_plans() {

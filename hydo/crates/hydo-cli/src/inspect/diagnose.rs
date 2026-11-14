@@ -22,7 +22,9 @@ use std::path::Path;
 /// `ERROR restart after the faults (S)`, and the violations of a service that did not start
 /// again: `VIOLATION service cannot recover (committed data unrecoverable) (S)` (the recovery
 /// boot after a power cut) and `VIOLATION service cannot recover after the faults (S)`, and a
-/// service that stopped on its own: `VIOLATION service stopped in a run without faults (S)`.
+/// service that stopped on its own: `VIOLATION service stopped in a run without faults (S)`, and a
+/// service that did not start on its new version (`U=`, Milestone 238): `VIOLATION
+/// [upgrade.started] S did not start on version V before step N (it ran W)`.
 pub fn verdict_service(v: &str) -> Option<String> {
     let v = v.trim_start_matches("HYDO-ORACLE: ");
     if v.starts_with("VIOLATION service cannot recover")
@@ -34,6 +36,12 @@ pub fn verdict_service(v: &str) -> Option<String> {
     }
     if let Some(r) = v.strip_prefix("ERROR service start (") {
         return r.split(')').next().map(str::to_string);
+    }
+    // Milestone 238: `VIOLATION [upgrade.started] S did not start on version V before step N`
+    if let Some(r) = v.strip_prefix("VIOLATION [upgrade.started] ") {
+        return r
+            .split_once(" did not start on version ")
+            .map(|(s, _)| s.to_string());
     }
     if let Some(r) = v.strip_prefix("ERROR restart after the faults (") {
         return r.split(')').next().map(str::to_string);
@@ -1139,6 +1147,14 @@ mod tests {
             verdict_service("HYDO-ORACLE: VIOLATION service cannot recover after the faults (db)")
                 .as_deref(),
             Some("db")
+        );
+        assert_eq!(
+            verdict_service(
+                "HYDO-ORACLE: VIOLATION [upgrade.started] etcd1 did not start on version 3.6.0 \
+                 before step 5 (it ran 3.5.5)"
+            )
+            .as_deref(),
+            Some("etcd1")
         );
         assert_eq!(
             verdict_service(

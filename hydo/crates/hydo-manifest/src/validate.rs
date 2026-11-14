@@ -80,7 +80,11 @@ pub const KNOWN_SVC: &[&str] = &[
     "storage",
     "start_after",
     "logs",
+    "version",
+    "versions",
 ];
+/// The keys of a `services[].versions` entry (Milestone 238).
+pub const KNOWN_VERSION: &[&str] = &["name", "cmd", "setup", "ready", "description"];
 pub const KNOWN_INV: &[&str] = &[
     "id",
     "type",
@@ -430,6 +434,80 @@ fn validate_addr(s: &Value, svcs: &[Value], wh: &str, bridge: bool) -> R<()> {
     Ok(())
 }
 
+/// `services[].version` and `services[].versions` (Milestone 238): the version names are
+/// U='s, each once; a service of an image keeps its image (a version gives commands only).
+fn validate_versions(s: &Value, wh: &str) -> R<()> {
+    let vs = obj_get(s, "versions");
+    let base = obj_get(s, "version");
+    let ok_name = |v: &Value, at: &str| -> R<String> {
+        let n = v.as_str().map(str::to_string).unwrap_or_default();
+        // a {{param}} is replaced before the image is built: its value is checked there
+        if n.contains("{{") || hydo_schedule::version_name_ok(&n) {
+            return Ok(n);
+        }
+        Err(err(format!(
+            "{wh}: {at} {} is not a version name (a letter or digit, then letters, digits, '.', \
+             '_' and '-', at most {} bytes; U=<service>@<step>:<version> names it)",
+            repr(v),
+            hydo_schedule::VERSION_NAME_MAX
+        )))
+    };
+    let Some(vs) = vs else {
+        if base.is_some() {
+            return Err(err(format!(
+                "{wh}: version: names the version of cmd: among versions:; without versions: \
+                 leave it out"
+            )));
+        }
+        return Ok(());
+    };
+    let Value::Array(list) = vs else {
+        return Err(err(format!(
+            "{wh}: versions: a list of {{name:, cmd:, setup:, ready:}} entries"
+        )));
+    };
+    let Some(base) = base else {
+        return Err(err(format!(
+            "{wh}: versions: needs version:, the name of the version cmd: runs (an upgrade's \
+             rollback goes back to it)"
+        )));
+    };
+    let mut names = vec![ok_name(base, "version:")?];
+    if obj_get(s, "image").is_some() {
+        return Err(err(format!(
+            "{wh}: versions: of an image service are not supported yet; put both versions' \
+             programs in root: and name their commands in versions:"
+        )));
+    }
+    if list.is_empty() {
+        return Err(err(format!("{wh}: versions: at least one other version")));
+    }
+    for (j, v) in list.iter().enumerate() {
+        let vw = format!("{wh}.versions[{j}]");
+        if !v.is_object() {
+            return Err(err(format!("{vw}: must be a mapping")));
+        }
+        unknown(v, KNOWN_VERSION, &vw)?;
+        let n = need_str(v, "name", &vw)?;
+        let n = ok_name(&Value::String(n), "name")?;
+        if names.contains(&n) {
+            return Err(err(format!(
+                "{vw}: the version {} is named twice",
+                repr_str(&n)
+            )));
+        }
+        names.push(n);
+        for k in ["cmd", "setup", "ready"] {
+            if let Some(x) = obj_get(v, k) {
+                if !x.is_string() {
+                    return Err(err(format!("{vw}: {k}: a shell command (a string)")));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn int_in(v: &Value, lo: i128, hi: i128) -> bool {
     is_plain_int(v) && py::int_of(v).is_some_and(|i| lo <= i && i <= hi)
 }
@@ -573,6 +651,7 @@ pub fn validate(m: &mut Value) -> R<()> {
         if let Some(st) = obj_get(s, "storage") {
             crate::storage::Storage::of(st).map_err(|m| err(format!("{wh}: storage: {m}")))?;
         }
+        validate_versions(s, &wh)?;
         for dep in or_iter(obj_get(s, "depends_on"))? {
             let mut names = Vec::new();
             for x in &svcs {

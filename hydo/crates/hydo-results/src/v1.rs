@@ -486,6 +486,27 @@ pub struct Run {
     /// the run reported and where its schedule came from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub steer: Option<SteerRun>,
+    /// Each switch of a service to another version of itself (`U=`; added in Milestone 238,
+    /// docs/design/upgrades.md), in the order of the run; absent without upgrades.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upgrades: Vec<UpgradeSwitch>,
+}
+
+/// One switch of a service to another version (`U=`; added in Milestone 238).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct UpgradeSwitch {
+    pub service: String,
+    /// The step before which it was switched (counted from 0).
+    pub step: i64,
+    /// The version it ran, and the version it was switched to.
+    pub from: String,
+    pub to: String,
+    /// A rollback: back to the version it ran before its upgrade.
+    pub rollback: bool,
+    /// Whether it started on the new version; absent when it was down at the switch (it then
+    /// starts on the new version at its restart).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started: Option<bool>,
 }
 
 // ------------------------------------------------------------------ steered search

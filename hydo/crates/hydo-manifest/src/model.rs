@@ -888,6 +888,36 @@ pub struct Service {
     /// data disk (L=, a power loss of this service alone).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub storage: Option<Storage>,
+    /// The name of the version that cmd:, setup: and ready: run (needed with versions:). An
+    /// upgrade token (U=<name>@<at>:<version>) switches the service to another version and back
+    /// (MANIFEST.md "Versions of a service and upgrades").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<Text>,
+    /// The other versions of the service an upgrade token can switch it to, each with the
+    /// commands that differ from the service's own. Every command of the service sees the name
+    /// of the version it runs as $HYDO_VERSION.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub versions: Option<Vec<ServiceVersion>>,
+}
+
+/// Another version of a service (`services[].versions`, Milestone 238).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct ServiceVersion {
+    /// The version's name, as U= writes it: a letter or digit, then letters, digits, '.', '_'
+    /// and '-' (3.6.0, 3.6.0-rc.2, v2).
+    pub name: Text,
+    /// The command this version runs (default: the service's cmd:).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cmd: Option<Text>,
+    /// Run before every start of this version (default: the service's setup:).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setup: Option<Text>,
+    /// This version's readiness check (default: the service's ready:).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ready: Option<Text>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
 }
 
 /// A service's storage: the directory under /data, or the directory with its own file system.

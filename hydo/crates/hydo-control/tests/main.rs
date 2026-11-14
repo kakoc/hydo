@@ -23,4 +23,5 @@ mod search;
 mod silent;
 mod start_after;
 mod storage;
+mod upgrade;
 mod workload_pause;

@@ -188,6 +188,10 @@ pub fn class_of(s: &Schedule, knobs: &[KnobInfo], test: bool) -> &'static str {
     {
         return "corrupted-files";
     }
+    // Milestone 238: a service switched to another version of itself during the run
+    if s.guest.iter().any(|t| matches!(t, GuestToken::Upgrade(_))) {
+        return "upgrade";
+    }
     let cut = s.disk() == Disk::Cut
         || s.guest
             .iter()
@@ -234,6 +238,7 @@ pub fn context(class: &str, s: &Schedule, knobs: &[KnobInfo]) -> String {
         "lying-disk" => of(&|t| t.starts_with("disk=lying")).unwrap_or_default(),
         "io-errors" => of(&|t| t.starts_with("disk=ioerr")).unwrap_or_default(),
         "corrupted-files" => of(&|t| t.starts_with("G=")).unwrap_or_default(),
+        "upgrade" => of(&|t| t.starts_with("U=")).unwrap_or_default(),
         "unsafe-knob" => {
             let setting = match relaxed(s, knobs) {
                 Some((l, v)) => {
@@ -459,6 +464,18 @@ pub fn problem(
                 .to_string(),
             "Decide whether your system must detect damaged files, for example with checksums. \
              If it need not, accept this finding."
+                .to_string(),
+        ),
+        ("upgrade", _) => (
+            Attention::Look,
+            "hydo switched a service to another version of itself during the run, as a rolling \
+             upgrade or a rollback does, and the system failed while versions were mixed or \
+             after the switch."
+                .to_string(),
+            "Run the minimal schedule below again and compare it with the same schedule without \
+             its U= token. If only the upgrade fails, the versions cannot run side by side or the \
+             new one cannot read what the old one wrote; check the project's upgrade notes for a \
+             required order or an intermediate version."
                 .to_string(),
         ),
         ("test-failed", _) => (

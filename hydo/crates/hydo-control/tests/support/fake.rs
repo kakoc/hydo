@@ -68,6 +68,8 @@ struct Proc {
     dying: bool,
     stopped: bool,
     starts: u64,
+    /// Milestone 238: `HYDO_FAKE_IGNORE_TERM` in its command: SIGTERM does not end it.
+    ignore_term: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -723,6 +725,7 @@ impl Fake {
                         dying: false,
                         stopped: false,
                         starts,
+                        ignore_term: s.argv.join(" ").contains("HYDO_FAKE_IGNORE_TERM"),
                     },
                 );
                 self.emit(at, Msg::Reply(id, Reply::Spawn(SpawnOk {})));
@@ -800,6 +803,11 @@ impl Fake {
                 }
                 match sg.sig {
                     Sig::Kill => self.finish(&sg.h, p.spawn, t + 2, 137, Some(9)),
+                    // Milestone 238: a process ends at SIGTERM (an upgrade's stop), unless its
+                    // command says HYDO_FAKE_IGNORE_TERM (then the grace period's SIGKILL ends it)
+                    Sig::Term if !p.ignore_term => {
+                        self.finish(&sg.h, p.spawn, t + 5, 143, Some(15))
+                    }
                     Sig::Stop => self.world.procs.get_mut(&sg.h).unwrap().stopped = true,
                     Sig::Cont => self.world.procs.get_mut(&sg.h).unwrap().stopped = false,
                     _ => {}

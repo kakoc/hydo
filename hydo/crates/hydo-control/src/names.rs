@@ -298,6 +298,41 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
                 )
             ))
         }
+        // Milestone 238: the services of an upgrade have versions:, and the version is one of
+        // each service's (a group's selector picks among its members when the run starts)
+        GuestToken::Upgrade(u) => {
+            target(plan, t, &u.target)?;
+            let svcs: Vec<String> = match &u.target {
+                Target::Group { group, .. } => plan
+                    .group(group)
+                    .map(|g| g.services.clone())
+                    .unwrap_or_default(),
+                x => x.named().iter().map(|s| s.to_string()).collect(),
+            };
+            for s in &svcs {
+                let Some(sv) = plan.service(s) else { continue };
+                if !sv.has_versions() {
+                    return Err(format!(
+                        "{t} switches {s} to another version, and {s} has no versions: in the \
+                         manifest (services with versions:: {})",
+                        list(
+                            plan.services
+                                .iter()
+                                .filter(|x| x.has_versions())
+                                .map(|x| x.name.clone())
+                        )
+                    ));
+                }
+                if !sv.version_names().contains(&u.version.as_str()) {
+                    return Err(format!(
+                        "{t} names the version {}, which {s} does not have (its versions: {})",
+                        u.version,
+                        sv.version_names().join(", ")
+                    ));
+                }
+            }
+            Ok(())
+        }
         GuestToken::Freeze(f) => {
             if !plan.freeze {
                 return Err(format!(

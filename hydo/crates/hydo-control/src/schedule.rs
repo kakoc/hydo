@@ -77,6 +77,8 @@ mod targets;
 mod cost;
 // Milestone 226: a timed pause of threads of the workload (P=workload/<name>[#<k>]@...)
 mod threads;
+// Milestone 238: upgrades, U=<target>@<at>[/<gap>][+<back>]:<version>
+pub mod upgrade;
 
 /// What the host knows about the guest at a snapshot, carried into the conversations that resume
 /// from it (the design: host state at a snapshot is the schedule, the seeds and the events so far).
@@ -159,6 +161,8 @@ struct RunCfg {
     z: Option<(String, i64, Option<i64>, hydo_schedule::Corruption)>,
     /// L=: (svc, at, up).
     l: Option<(String, i64, i64)>,
+    /// U= (Milestone 238): the upgrades, in token order (schedule/upgrade.rs).
+    u: Vec<hydo_schedule::Upgrade>,
     /// The host token `cf=`: the engine may turn the workload's end into a power cut.
     cf: bool,
     /// The schedule has no fault: no disk fault, no `cf=`, and only knobs and `Q=` in its guest
@@ -226,6 +230,10 @@ struct Host {
     /// `after: commands` (Milestone 225): the `eventually` commands' results, by invariant
     /// index, when they ran before the eventually checks that count from them.
     early: BTreeMap<usize, (u32, String)>,
+    /// Milestone 238: the version each switched service runs now (a service not in it runs its
+    /// own `version:`), and the version it ran before its last upgrade (for a rollback).
+    versions: BTreeMap<String, String>,
+    prev: BTreeMap<String, String>,
 }
 
 /// One thread of the controller.
@@ -267,6 +275,12 @@ enum Part {
     Restart(String),
     /// A reaction (A=, M139): the index of its token.
     React(usize),
+    /// An upgrade's grace period after SIGTERM (U=, Milestone 238): the service and the spawn
+    /// of the process it stopped.
+    UpgradeGrace {
+        svc: String,
+        spawn: u64,
+    },
 }
 
 fn label(p: &Part) -> String {
@@ -280,6 +294,7 @@ fn label(p: &Part) -> String {
         Part::FreezeWatch { .. } => "freeze".into(),
         Part::Restart(s) => restart::label(s),
         Part::React(i) => format!("react:a{i}"),
+        Part::UpgradeGrace { svc, .. } => upgrade::label(svc),
     }
 }
 
@@ -394,6 +409,8 @@ impl ScheduleController {
             restart: Default::default(),
             react: Default::default(),
             early: BTreeMap::new(),
+            versions: BTreeMap::new(),
+            prev: BTreeMap::new(),
         };
         Ok(ScheduleController {
             flow: Flow::new(host, Part::Main),
@@ -485,6 +502,8 @@ impl ScheduleController {
             clock: inputs.clock,
             outcomes: inputs.outcomes.clone(),
         };
+        // Milestone 238: the services a switch moved start on the version they ran at the cut
+        c.flow.shared.versions = inputs.versions.iter().cloned().collect();
         Ok(c.with_world(&inputs.world))
     }
 
@@ -668,6 +687,8 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             GuestToken::PowerLoss { svc, at, down } => {
                 c.l = Some((svc.clone(), *at as i64, (*at + *down) as i64))
             }
+            // Milestone 238: upgrades (schedule/upgrade.rs); several U= are allowed
+            GuestToken::Upgrade(u) => c.u.push(u.clone()),
             // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
             // branch with `buggify: true`, else an unknown knob), and H=, W=, Q= (core plans have
             // no fakes or composer; Q= is the stack's) are knobs the manifest does not have, so
@@ -825,6 +846,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
         Part::FreezeWatch { id, dur } => freeze::watch(fx, *id, *dur),
         Part::Restart(s) => restart::watch(fx, &ctx, s),
         Part::React(i) => react::watch(fx, &ctx, *i),
+        Part::UpgradeGrace { svc, spawn } => upgrade::grace(fx, &ctx, svc, *spawn),
     }
 }
 
@@ -1497,6 +1519,9 @@ fn launch_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<Option<Vec<String>>> {
     // SEAM(NetNamespaces): with network: bridge, setup, the command and the readiness check run
     // in the service's namespace (hydo-init-netns.sh's start_svc puts nsenter into $BB)
     let ns = netns::of(ctx, s);
+    // Milestone 238: the commands of the version the service runs now (its own without versions:)
+    let version = upgrade::current(fx, ctx, s);
+    let (cmd, setup, _) = sv.commands(version.as_deref().unwrap_or(""));
     let again = fx.effect_bool(|h, _| !h.started.insert(s.to_string()));
     if again {
         // `[ -f $L ] && cat $L >> $H/$s.log.old && : > $L` (the spawn below truncates $L)
@@ -1515,12 +1540,15 @@ fn launch_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<Option<Vec<String>>> {
         h.env.insert("HYDO_LOG".into(), lf);
         Memo::Unit
     });
-    if !sv.setup.is_empty() {
-        let e = env(fx, ctx, &[]);
+    // Milestone 238: the commands of a service with versions: see the version they run (its
+    // setup, its process and its readiness check; nothing else, and nothing without versions:)
+    let vars: Vec<(&str, String)> = version.map(|v| ("HYDO_VERSION", v)).into_iter().collect();
+    if !setup.is_empty() {
+        let e = env(fx, ctx, &vars);
         let st = spawn_wait_in(
             fx,
             &format!("setup:{s}"),
-            run_argv(ctx, &sv.setup),
+            run_argv(ctx, setup),
             e,
             &format!("{}/{s}.setup.log", l.dir),
             true,
@@ -1535,11 +1563,11 @@ fn launch_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<Option<Vec<String>>> {
     // AMBIGUOUS: the shell starts the new process at once; the agent refuses a handle whose
     // process has not exited, so the controller waits for the exit of a killed service first.
     fx.until(|h, f| !running(h, f, s))?;
-    let e = env(fx, ctx, &[]);
+    let e = env(fx, ctx, &vars);
     let id = fx.send(netns::put(
         spawn_cmd(
             s,
-            sh(ctx, format!(". {}; exec {}", l.prelude, sv.cmd)),
+            sh(ctx, format!(". {}; exec {}", l.prelude, cmd)),
             e.clone(),
             &log_file,
             false,
@@ -1679,11 +1707,13 @@ fn probe_ready(
 ) -> Step<(Probed, u64)> {
     let sv = ctx.plan.service(s).expect("a service of the plan");
     let ns = netns::of(ctx, s);
+    let version = upgrade::current(fx, ctx, s);
+    let (_, _, ready) = sv.commands(version.as_deref().unwrap_or(""));
     // the readiness loop: `ready` once a second, at most `timeout` times, while the service
     // lives (AMBIGUOUS: the shell starts poll k one second after poll k-1 ENDED; the agent at k
     // seconds after the start, or when poll k-1 ended if later)
     let pid = fx.send(Command::Probe(Probe {
-        argv: run_argv(ctx, &sv.ready),
+        argv: run_argv(ctx, ready),
         env: Some(e),
         cwd: None,
         uid: None,
@@ -2554,6 +2584,10 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         let (t, id, msg) = storage::POWER_LOSS_DECL;
         fx.report(decl(t, id, msg));
     }
+    if !cfg.u.is_empty() {
+        let (t, id, msg) = upgrade::UPGRADE_DECL;
+        fx.report(decl(t, id, msg));
+    }
     // M139: the reactions (A=), armed before their step
     let reactions = react::armed(fx, ctx);
     if !cfg.a.is_empty() {
@@ -2645,6 +2679,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         .chain([zat, zup, lat, lup])
         .chain(net.points())
         .chain(reactions.iter().map(|(_, r)| r.at as i64))
+        .chain(cfg.u.iter().flat_map(|u| upgrade::steps(ctx, u)))
         .filter(|p| *p >= 0 && *p <= steps)
         .collect();
     pts.sort();
@@ -2668,6 +2703,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     // M139: the reactions' threads, and whether a reaction's power cut ended the steps
     let mut rthreads: Vec<(usize, usize)> = Vec::new();
     let mut rcut = false;
+    // Milestone 238: the upgrades' switches, resolved at each token's first step
+    let mut upgrades: upgrade::Pending = Vec::new();
     for &p in &pts {
         if let Some(a) = prev {
             if a < p {
@@ -2703,6 +2740,11 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
                     );
                 }
             }
+        }
+        // Milestone 238: the upgrades due before this step, after the restarts of K=
+        if !cfg.u.is_empty() {
+            upgrade::resolve_at(fx, ctx, p, &mut upgrades)?;
+            upgrade::apply_at(fx, ctx, p, &mut upgrades)?;
         }
         if p == xat {
             if let Some(t) = &xtarget {
@@ -2908,6 +2950,14 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         if ctx.plan.outcomes_after_cut {
             fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
         }
+        // Milestone 238: the switched services' versions, for the recovery boot
+        let versions = if cfg.u.is_empty() {
+            String::new()
+        } else {
+            let v = upgrade::carried(fx, ctx);
+            fx.report(format!("{} {v}", upgrade::VERSIONS_PREFIX));
+            v
+        };
         // SEAM(RecoveryInputs): what the recovery conversation is given
         let ending = fakes::power_cut(ctx, &acked, &failed, outcomes);
         let Ending::PowerCut {
@@ -2925,6 +2975,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             clock: at_cut.flatten(),
             world: w.clone(),
             outcomes: o.clone(),
+            versions: recovery::versions_of_words(&versions),
         };
         fx.effect(|h, _| {
             h.cut = Some(inputs);
@@ -2999,6 +3050,11 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     // guest.outcomes_after_cut: a cf= power cut at the workload's end hands these over
     if ctx.plan.outcomes_after_cut {
         fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
+    }
+    // Milestone 238: so does the line of the switched services' versions
+    if ctx.run.cf && !cfg.u.is_empty() {
+        let v = upgrade::carried(fx, ctx);
+        fx.report(format!("{} {v}", upgrade::VERSIONS_PREFIX));
     }
     cost::probe(fx, ctx, "end", true)?; // HYDO_COST=full: after the workload
     fx.report("hydo-explore-workload-done");

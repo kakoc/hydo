@@ -7,6 +7,7 @@ input	hydo/onboard/examples/compose-voting/hydo-mac.yaml	f31a88f96297c1b4a0de709
 input	hydo/onboard/examples/compose-voting/hydo.generated.yaml	82bc84ea9cd401d4ada50b08d587d5133b96be5459d945a67715cba0d54361e4
 input	hydo/onboard/examples/compose-voting/hydo.yaml	90b3e80fb1e04d4cc5d9a1def209a4a98e81414f2d959acfa5c3a5fe0b257654
 input	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	b81ec8dccb68aee7cab782a49e3bc119e9bd9ef2aea98f8771b1473799a8bdc8
+input	hydo/onboard/examples/etcd-upgrade/hydo.yaml	0dd3e22c9d885900450dbe52dd5a934d3008bb04eb7d549eba3066d250b235b6
 input	hydo/onboard/examples/etcd/hydo-hist.yaml	3ba821683b206d5ec9bf8a83f7879198bb3fb99ec2163700ceeb4ed8b7e027b2
 input	hydo/onboard/examples/etcd/hydo.yaml	ec0ae3f206de4167150fb4c94a0ab2e0a1ef9d983cd49005c5a9fdf18fe20c3c
 input	hydo/onboard/examples/glibc-cache/hydo-nocache.yaml	be53f51ea2b3b915a93d8c9cdcf0be568aca3b717a2e59c5a9feaa83ecac6a2d
@@ -170,7 +171,7 @@ input	hydo/onboard/examples/medusa/hydo/workload/helper_client.mjs	21aaafc2ea3be
 input	hydo/onboard/examples/medusa/hydo/workload/helper_sql.sh	3aafbfa1c678e8bff255fbe2e7d232ffac7b505b0002b6f955d558e43ef9fb7f
 input	hydo/onboard/examples/medusa/hydo/workload/parallel_driver_capture_refund	d89e7c8787331322273737224b0ba3b07aa7f88feb68ac37b6e102d22d42baa4
 input	hydo/onboard/examples/medusa/hydo/workload/parallel_driver_checkout	da67717b8a4e78fca8248b27dea0855239ff60b37c26dd833959dff8fd8ad554
-input	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml	c40772e70a1813d16d9e805016320bfe6b12c7ab02d9cdfa8f01b7ce22955bda
+input	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml	4d23b2bfe574b53cb772f9e876efc61b8b3fd0541d58686872ae67ce5148b92f
 input	hydo/onboard/examples/messages-tutorial/hydo/workload/parallel_driver_produce	22d3314bd26779277d410c4fcbd7c9a2d56869957f9d426684fd4f403c514ef0
 input	hydo/onboard/examples/messages-tutorial/hydo/workload/serial_driver_consume	df4b06bc19a54334c2ae33ba3f2958e1676e01acb777db85dc3bd42730a7e6a5
 input	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	a7e19bf3c01be56d464b7a6e443792caee1ad45e29fa7ea8be9801cf05965719
@@ -546,6 +547,39 @@ chunk	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml/hvm/FalseFalse	5	256	f859
 chunk	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml/hvm/FalseFalse	6	256	f839574816da0604563143e12bafa749aba4d672e5f1e29e588612df8a9d49ff
 chunk	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml/hvm/FalseFalse	7	256	fe5529cddba87c98b606a32a4b64610d12c3764fc27b3d1a03486c977043b0b7
 chunk	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml/hvm/FalseFalse	8	4	830a7c3d26c6a0e7655c62e178707992d1d66468b73e393aae7a329cb815dc9b
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvx	0	256	d4433a2afdd2d41357092b3507332579fc6666495892ca55a0b5662751c9169f
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvx	1	256	a825789a4bbe39407ce6f9e6f15a327835fa89f710da4215ab8f6b41b44b2733
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvx	2	256	3a34ae11631c9dfc7f62dbf14bc6aaf37c6ef8cf6a79335c520a9fc91388673c
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvx	3	256	7a23aeb23e9f5099c72649e44f1dde766a971348d686628d439cec27b20d7fd5
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvx	4	256	9f084ceb95ffac5a370f94d41a65e28d4dc4551ccfbfedea8d87e5af7176a566
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvx	5	256	8aec380a0f33206189ba7d3d838126f8bc036e7ef0f5a05f4aa54766349f8520
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvx	6	256	c04e1017b3c00b3617189cd06b708f9c10f4ba58343b335047d5fae5e465e52f
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvx	7	256	a2e3cade62dd674686a669c7cc962173470cc7042ceaa218fd8a6b519324a34b
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvx	8	256	d1b2c1d2531e266fff8f2a131b9c13bae3de7ffd5c9c8c5367f507de6d660e7a
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvx	9	256	a3a24263e50671d00130ad89c0b1286a61c8f37abe243e788b7d0394f62b0a8a
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvx	10	169	7a0a64e2b3a1f86b2dddbb5a4469428649f987b481c96e57cab63bc3eb2ea330
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/TrueTrue	0	256	7258b162b48f55e9224df12a6082ac4c9b1cc9ffd7423a757dcbc28f0979c8dc
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/TrueTrue	1	256	7762f9479535b8b7f46fb196346d4192351bfe2b534014af251aad08585d1ffa
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/TrueTrue	2	256	525f9a1db94b8475e671faf94f49ede6223e502bfe162dd3fee12fc6fd1f63f8
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/TrueTrue	3	256	dda770f766a5ec8d0912b4b747d93c78375d764d8438d7bf0ba08c4deddd5e93
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/TrueTrue	4	256	6bdca3347ae348b426f8d4fda5e10b6416b1003a2e64efb923cbc20153a35ece
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/TrueTrue	5	256	33ce70de948803f82a3ad340b0b45ff03a7274a167e9003e111060146ea4bf7d
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/TrueTrue	6	256	6d094f762a8c245c24fe24f0c00f14150d57dd5b61179ee1625dad87848eaa19
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/TrueTrue	7	256	7f941c444e6e3d1e1e53ba66fed69e1177d4a2409151d2e2e1f1aa7fedc8a4c3
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/TrueTrue	8	256	322fbee6fe6e92d75521a3cd42b8d1277bc77f3a442768579a5086c44a5c76eb
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/TrueTrue	9	256	14a73837a67eecafa440a08dcfe521dae7efc751a577c7bf3f0c54044eb08ef3
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/TrueTrue	10	157	d0e8d2d32a64d77490521e49cb8df4349aeec14cc10abd5c5b7af6d9589a62ae
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/FalseFalse	0	256	a965d7e7e3adad30774fe3d994a25264f39a452e2b418429f15655773124b87a
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/FalseFalse	1	256	b42490a0a9fccbdbaecf54b5070254b22fc77a239a8d88f2a7e072f844c60a08
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/FalseFalse	2	256	1189f7ed5c2247eea4878e8a8d11498c1bf38937a0fd29ae281c88df46ea057e
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/FalseFalse	3	256	327c739408609c1e51330840b70dd7bbc643c3f58538ee1bd9770d4b5704fe2c
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/FalseFalse	4	256	456af8b1c0bd234af5522c8c36e9386037b5bd766c6d4ebdcb12d6cf5ea9029b
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/FalseFalse	5	256	2d67b02657fdb26f633085ba01f72ffb4a4d06322693775d482edb73bc0f10cd
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/FalseFalse	6	256	b2f344ba1ddd58f0bdf94e1414e4cb578765e3ce96a1c786266cc05450d95a22
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/FalseFalse	7	256	8b2ff90cade68f7c3255416f2e5bc783c8e5dbb95ef295dfd8895acb55d3b54c
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/FalseFalse	8	256	9f13a1532ba03feb4e55c03fee2e9b6a53beff37d8029941fa0d5cb3468325d5
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/FalseFalse	9	256	88744e72e1a446ce3e175d351f1becf84cf36c8ff864c707ff4b0b8e53438191
+chunk	hydo/onboard/examples/etcd-upgrade/hydo.yaml/hvm/FalseFalse	10	162	19353d383c17821cfd97ab6cfd00839f5ec1891ffdd8d9ed01f2ea468f94b988
 chunk	hydo/onboard/examples/etcd/hydo-hist.yaml/hvx	0	256	c61e797faa7befdd6ea440915cdff02fa8387e6e3812ed0ad2a935f97051ffa9
 chunk	hydo/onboard/examples/etcd/hydo-hist.yaml/hvx	1	256	40ac8c2c8babe4bf872b9ebe1ebb9ece5c2f275f495f79aa8bca0028067106d2
 chunk	hydo/onboard/examples/etcd/hydo-hist.yaml/hvx	2	256	c7503e7e55377842c1f87078e8193f93d2250888368cdaa6ca48c47afb590e0a

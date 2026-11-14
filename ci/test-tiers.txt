@@ -64,6 +64,7 @@ hydo-control::search                     fast
 hydo-control::storage                    fast
 hydo-control::silent                     fast
 hydo-control::start_after                fast
+hydo-control::upgrade                    fast
 hydo-control::workload_pause             fast
 hydo-engine                              fast
 hydo-engine-proto                        fast
@@ -83,6 +84,7 @@ hydo-explore::netns_links                fast
 hydo-explore::reactive                   fast
 hydo-explore::refusals                   fast
 hydo-explore::storage_faults             fast
+hydo-explore::upgrades                   fast
 hydo-explore::workload_pauses            fast
 hydo-grpc                                fast
 hydo-grpc-gen                            fast

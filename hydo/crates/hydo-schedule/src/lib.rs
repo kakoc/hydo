@@ -58,6 +58,7 @@ mod host;
 mod num;
 mod storage;
 mod target;
+mod upgrade;
 
 pub use clock::{civil_from_days, days_from_civil, ClockPoint, Every};
 pub use compose::{Compose, Omit, RangeItem, RangeList, ResolvedField, SeedField, WORKLOAD_KINDS};
@@ -69,6 +70,7 @@ pub use guest::{
 pub use host::{Disk, HostToken, BRANCH_KEYS, MAX_EXPLICIT};
 pub use storage::{mix, CorruptKind, Corruption, Edit, MAX_FLIPS, MAX_LEN};
 pub use target::{binomial, component_links, subset, Selector, Shape, Target};
+pub use upgrade::{version_name_ok, Switch, Upgrade, VERSION_NAME_MAX};
 
 use num::err;
 use std::fmt;

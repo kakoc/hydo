@@ -1387,6 +1387,7 @@ fn class_words(c: &str) -> Option<&'static str> {
         "lying-disk" => "The disk lost writes it had reported as written (disk=lying). A system is only as safe as its disk, so this class is often expected.",
         "io-errors" => "The disk returned errors (disk=ioerr).",
         "corrupted-files" => "A service's files were corrupted on purpose (G=): the system's own checks of its data are under test.",
+        "upgrade" => "A service was switched to another version of itself during the run (U=), as in a rolling upgrade or a rollback.",
         "unsafe-knob" => "A setting that trades safety for speed (a setting of the project's manifest, such as R=everysec) met a power cut or lost writes.",
         "test-failed" => "The test program failed, with no fault that explains it.",
         "durable-defaults" => "The system failed with its safe settings and a working disk: the most serious class.",

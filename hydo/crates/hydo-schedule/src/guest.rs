@@ -12,6 +12,7 @@ use crate::compose::Compose;
 use crate::num::{dec, err, hex, name, sdec};
 use crate::storage::Corruption;
 use crate::target::{component_links, parse_components, parse_shape, Shape, Target};
+use crate::upgrade::Upgrade;
 use crate::ParseError;
 use std::fmt;
 
@@ -799,6 +800,9 @@ pub enum GuestToken {
     /// `L=<svc>@<at>+<down>`: a power loss of one service (its own file system shut down,
     /// unwritten data lost) before step at; it starts again before step at+down.
     PowerLoss { svc: String, at: u64, down: u64 },
+    /// `U=<target>@<at>[/<gap>][+<back>]:<version>`: services switched to another version of
+    /// themselves (Milestone 238, `upgrade.rs`).
+    Upgrade(Upgrade),
     /// Any other single upper-case letter: a manifest knob (`M=`, `R=`, `S=`, ...), whose value
     /// the guest passes to the knob's `set:` command.
     Knob { letter: char, value: String },
@@ -806,7 +810,7 @@ pub enum GuestToken {
 
 /// The letters with a fixed meaning (manifest_space.RESERVED_TOKENS plus the stack's M/R knobs,
 /// which stay knobs).
-pub const RESERVED: &str = "KPNOCTQXBFHWAGL";
+pub const RESERVED: &str = "KPNOCTQXBFHWAGLU";
 
 fn at_plus(v: &str, what: &str) -> Result<(String, u64, u64), ParseError> {
     let (svc, r) = v
@@ -857,6 +861,7 @@ impl GuestToken {
             GuestToken::React(_) => 'A',
             GuestToken::Corrupt { .. } => 'G',
             GuestToken::PowerLoss { .. } => 'L',
+            GuestToken::Upgrade(_) => 'U',
             GuestToken::Knob { letter, .. } => *letter,
         }
     }
@@ -1030,6 +1035,7 @@ impl GuestToken {
             'F' => GuestToken::Freeze(Freeze::parse(v)?),
             'W' => GuestToken::Compose(Compose::parse(v)?),
             'A' => GuestToken::React(React::parse(v)?),
+            'U' => GuestToken::Upgrade(Upgrade::parse(v, what)?),
             'L' => {
                 let (svc, at, down) = at_plus(v, what)?;
                 GuestToken::PowerLoss { svc, at, down }
@@ -1143,6 +1149,7 @@ impl fmt::Display for GuestToken {
                 write!(f, ":{how}")
             }
             GuestToken::PowerLoss { svc, at, down } => write!(f, "L={svc}@{at}+{down}"),
+            GuestToken::Upgrade(u) => write!(f, "U={u}"),
             GuestToken::Knob { letter, value } => write!(f, "{letter}={value}"),
         }
     }

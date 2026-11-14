@@ -119,6 +119,47 @@ pub struct PlanService {
     /// The service's own log files besides its output (`logs:`, then `errors.files`), absolute
     /// paths or shell patterns: the diagnosis and `hydo inspect logs` read their tails.
     pub logs: Vec<String>,
+    /// `version:` (Milestone 238): the name of the version `cmd`, `setup` and `ready` run ("" =
+    /// the service has no other versions).
+    pub version: String,
+    /// `versions:`: the other versions an upgrade (`U=`) can switch the service to, each with its
+    /// commands (a missing one is the service's own).
+    pub versions: Vec<PlanVersion>,
+}
+
+/// Another version of a service (`services[].versions`, Milestone 238), its commands resolved.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanVersion {
+    pub name: String,
+    pub cmd: String,
+    pub setup: String,
+    pub ready: String,
+}
+
+impl PlanService {
+    /// Whether the service has versions an upgrade can switch it to.
+    pub fn has_versions(&self) -> bool {
+        !self.versions.is_empty()
+    }
+
+    /// The names of every version of the service, its own first ("" = none).
+    pub fn version_names(&self) -> Vec<&str> {
+        if !self.has_versions() {
+            return Vec::new();
+        }
+        std::iter::once(self.version.as_str())
+            .chain(self.versions.iter().map(|v| v.name.as_str()))
+            .collect()
+    }
+
+    /// The commands (cmd, setup, ready) of the version `name` (the service's own for its own
+    /// version, for "", and for a name it does not have).
+    pub fn commands(&self, name: &str) -> (&str, &str, &str) {
+        match self.versions.iter().find(|v| v.name == name) {
+            Some(v) => (&v.cmd, &v.setup, &v.ready),
+            None => (&self.cmd, &self.setup, &self.ready),
+        }
+    }
 }
 
 /// One invariant (manifest.sh's `HYDO_INV_<k>_*`).
@@ -412,7 +453,7 @@ impl Plan {
             };
             services.push(PlanService {
                 name: n.clone(),
-                cmd,
+                cmd: cmd.clone(),
                 setup: truthy_str(s, "setup"),
                 // `tcp:<port>` becomes the connect check it stands for (Milestone 239)
                 ready: hydo_manifest::ready_command(
@@ -450,6 +491,26 @@ impl Plan {
                     }
                     v
                 },
+                version: get(s, "version").map(py::str_of).unwrap_or_default(),
+                versions: get(s, "versions")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .map(|v| {
+                        let or = |k: &str, own: &str| {
+                            get(v, k).map(py::str_of).unwrap_or_else(|| own.to_string())
+                        };
+                        PlanVersion {
+                            name: py::str_of(&v["name"]),
+                            cmd: or("cmd", &cmd),
+                            setup: or("setup", &truthy_str(s, "setup")),
+                            ready: or(
+                                "ready",
+                                &get(s, "ready").map(py::str_of).unwrap_or_default(),
+                            ),
+                        }
+                    })
+                    .collect(),
             });
         }
         let wl = &d["workload"];
