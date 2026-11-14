@@ -205,12 +205,31 @@ clock_points: ["@:10-2s", "@month+10m"]
 Without `clock_points:` the explorer draws only steps by fixed amounts (30 s, 5 minutes, 1 hour,
 1 day, 30 days and a year, forward or back).
 
+## Clock steps and durations on the wall clock
+
+The number in `T=<step>:<seconds>` is in seconds. The shrinker halves a step while it looks for
+the smallest failing one, so a minimal schedule can hold an uneven number: `T=7:-10125` steps
+the clock back by 10,125 seconds. The report says it in words, with the hours and minutes:
+`the system clock jumps back by 10125 seconds (2 h 48 min 45 s)`.
+
+A system that measures leases, timeouts or visibility on the wall clock fails under such a step.
+A step back by D seconds makes a lease last D seconds longer, and a step forward ends it early.
+Messages stay invisible, a replica waits, or a lock expires too soon. NTP and operators step a
+real machine's clock too. So such a failure is a bug of the system, not of the test: hydo found
+it in Valkey (valkey-io/valkey#5406). The fix in the system is a monotonic clock for durations.
+
+When an exploration finds such a failure:
+
+- Keep it as a finding. While a fix is pending, `hydo ci accept <key> --reason ...` marks it
+  as accepted (`hydo guide ci`).
+- Keep `clock` in `faults:`. If you remove it, write the reason in a comment beside `faults:`.
+
 ## Clock after a power cut
 
 Every boot starts its clock at `guest.clock_start`. Without `guest.clock_after_cut`, the recovery
 boot after a power cut starts its clock at `clock_start` again, so time runs backwards across the
 cut. No real machine does that. Set `guest.clock_after_cut: 60`, so the recovery boot continues
-the first boot's clock plus 60 seconds, in two cases:
+the first boot's clock plus 60 seconds, in three cases:
 
 - A check compares a time written before a power cut with one written after it. Without the
   key, the check can report a false violation.
@@ -218,6 +237,10 @@ the first boot's clock plus 60 seconds, in two cases:
   (YugabyteDB, CockroachDB), leases, certificates. Without the key, a service refuses to start
   in the recovery boot ("clock skew"), and the run ends with `VIOLATION service cannot recover`.
   That is a false finding.
+- The system records leases or deadlines and serves again only after they run out: a takeover
+  lease, a visibility timeout, a lock. Without the key, the recovery boot's clock starts before
+  the recorded leases, so the system waits longer than a real machine would. A drain or an
+  `eventually_` command can then give up, and the run reports a false finding.
 
 The key covers both kinds of power cut: `C=` and a cut at the k-th disk flush (`cf=`).
 

@@ -8293,3 +8293,79 @@ hydo: diagnosis: redis exited while it started, before its readiness check passe
 
 **Open.** The fixes ran on the Mac engine only. `--memory` counts only the processes alive at the
 end. `tcp:` ran with one service, not with `network: bridge` (open item 107).
+
+### Milestone 240 (tentative number) - DONE (what a user's first explorations of a message queue taught: a drain that outlasts leases and recovery inside its time limit, with a skeleton in `hydo guide messages`; who retries an `eventually_` command and an `eventually_` check; clock steps against durations kept on the wall clock; `guest.clock_after_cut` for leases; a long clock step also in hours and minutes; nothing recorded moved; 2026-11-14)
+
+**Why.** After Milestone 239 the same user explored their own message queue four times, 20
+schedules each, about 23 minutes per exploration on one worker. Three of the four explorations
+failed because of the plan, not the system, and the minimal schedules showed each cause:
+
+- The `eventually_` command asked the system once. Right after a power cut the system still moved
+  its queues between nodes, so the one answer was a redirect. The user had read the command
+  table and still wrote the command as if hydo polled it, as it polls an `eventually_` check.
+- The drain, the `final:` command of the `messages` check, gave up after some errors in the
+  recovery boot. The system serves again only after its old takeover lease runs out. The drain
+  also stopped after a quiet window shorter than that.
+- The drain was killed by its time limit while it waited.
+
+The fourth failure was real. A clock step back of 10,125 seconds made every message invisible
+for that long, because the system stamps leases and visibility with the wall clock. The user
+first read the step as 10 seconds, because the report said only "10125 seconds". hydo found the
+same class of bug in Valkey on the same day (Milestone 232, valkey-io/valkey#5406).
+
+**What changed, each with what a user sees before and after.**
+
+1. `hydo guide messages`, "Write the drain". Before, the section said only that the drain
+   receives until each group is empty and then writes `drained`. Now it gives three rules: the
+   quiet window outlasts every lease and visibility timeout; the drain asks again through the
+   system's recovery after a power cut and counts the quiet window from each error; and the
+   drain's deadline fits inside its time limit. It names that limit and how to raise it. It adds
+   a shell drain of about 30 lines (receive, acknowledge, a quiet window, a retry on errors until
+   a deadline on `/proc/uptime`, then `drained`).
+2. The time limit of the drain. The user reported that `test.command_timeout` killed the drain.
+   The controller runs every `final:` read-back under `workload.timeout`
+   (`hydo_control::schedule::history::finals` calls `timeout_argv`, which takes
+   `plan.workload_timeout`, default 300 s). The guide says that, and that
+   `test.command_timeout` limits the composer's commands and the check files instead. The
+   user's exit status 137 was not reproduced here; their runs' outputs still on disk show only
+   drains that ended themselves (status 1).
+3. `hydo guide composer`, `hydo guide checks` and the skill's step 3: an `eventually_` command
+   runs once and must retry by itself until its own deadline; hydo polls an `eventually_` check.
+   Before, the difference was only implied by the two tables.
+4. `hydo guide faults` has the new section "Clock steps and durations on the wall clock", and
+   `hydo guide messages` a section of the same name. The number in `T=<step>:<seconds>` is
+   seconds, and the shrinker halves it, so a minimal schedule can hold `T=7:-10125`. A system
+   that measures leases, timeouts or visibility on the wall clock fails under a step, which is a
+   bug of the system. Keep the finding (`hydo ci accept` while a fix is pending) and keep `clock`
+   in `faults:`, or say in a comment why it is gone. The messages guide adds that
+   `clock_steps:` only decides pairs that a lease, a delay or a window judges, and never excuses a
+   message the drain did not receive. The user had expected `clock_steps: strict` to be the
+   switch for such systems.
+5. `hydo guide faults`, "Clock after a power cut", has a third case: a system that records leases
+   or deadlines and serves again only after they run out. Without `guest.clock_after_cut` its
+   recovery boot's clock starts before the recorded leases, and it waits longer than a real
+   machine would. The skill's pitfalls name both clock items.
+6. `hydo_schedule::describe::duration` adds the parts of a length that is not a whole number of
+   its largest unit. Before: "the system clock jumps back by 10125 seconds". Now: "the system
+   clock jumps back by 10125 seconds (2 h 48 min 45 s)". The function serves the schedule's
+   description in `hydo report`, the explorer's advice, and the web page of `hydo report --html`.
+   Machine outputs (`--details`, `result.json`, the schedule text) are unchanged. No recorded
+   golden held such a length, so none moved.
+7. The skill is 2.0.2 (SKILL.md, `plugin/.claude-plugin/plugin.json`,
+   `.claude-plugin/marketplace.json`).
+
+**Tests.**
+
+- `hydo-schedule` `durations_and_clock_points`: 59 s, 90 s, 5,400 s, 93,600 s and 10,125 s, and
+  the sentence of `T=7:-10125`.
+- `hydo` `equivalence::` and `agents_equivalence::` goldens re-recorded with `HYDO_BLESS=1`. The
+  changed answers are `hydo guide composer` (the new paragraph) and `hydo skill install` (the
+  version 2.0.2 and the new SKILL.md and pitfalls bytes).
+- `cargo test -p hydo --test it` (35 tests), `cargo test -p hydo-agents --test it skill_check::
+  public_content::`, `cargo test -p hydo-release --test it`, `sh ci/consolidate-tests.sh
+  --check` and `sh ci/vale.sh` pass. No VM ran: the change is text and one description.
+
+**Open.** The shell drain of the guide did not run in a VM. The messages tutorial's own drain
+(`hydo/onboard/examples/messages-tutorial/tinyq`) still calls the queue empty at its first empty
+receive, with no quiet window. The tutorial's queue has no leases, so that is enough there, and
+its bytes are inside a recorded image, so it stays.

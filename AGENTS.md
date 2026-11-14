@@ -437,6 +437,21 @@ recorded value:
 
 The details are in `docs/HISTORY.md` Milestone 239.
 
+**What a user's first explorations of a message queue taught (M240).** Three of four failed
+explorations came from the plan, and the guides now say how to avoid each:
+
+- `hydo guide messages`, "Write the drain": the drain outlasts every lease and the system's
+  recovery after a power cut, retries on errors, and fits inside `workload.timeout`, which
+  bounds every `final:` read-back. The guide has a shell drain to copy.
+- An `eventually_` command runs once and retries by itself; hydo polls an `eventually_` check
+  (`hydo guide composer`, `checks`, and the skill's step 3).
+- A system that measures leases or timeouts on the wall clock fails under a backward clock step.
+  That is a bug of the system: keep the finding and keep `clock` in `faults:` (`hydo guide
+  faults` and `messages`). `guest.clock_after_cut` is for systems that record leases too.
+
+The report shows a long clock step also in hours and minutes. The skill is 2.0.2. Nothing
+recorded moved. The details are in `docs/HISTORY.md` Milestone 240.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -1260,6 +1275,11 @@ build machine, before 2026-10-13.
   the inspect sessions. `--check` warns about missing sources. The guide gained `minimum-path`,
   the static musl recipe and the messages value rules. The skill (2.0.1) finds an installed
   hydo off `PATH`. Five frictions of the Valkey onboarding are fixed too. Nothing recorded moved
+- M240 (tentative number): what a user's first explorations of a message queue taught. The
+  drain outlasts leases and recovery inside `workload.timeout`, with a shell drain in `hydo guide
+  messages`. An `eventually_` command retries by itself. A clock step against durations on the
+  wall clock is a real finding. A long step reads in hours and minutes. Skill 2.0.2. Nothing
+  recorded moved
 
 ## Where to look
 

@@ -54,6 +54,12 @@ so a typo does not silently do nothing.
 
   A `first_` command that fails makes provisioning fail. An `eventually_` or `finally_` command is an
   invariant: 0 holds, anything else is a violation.
+- An `eventually_` command runs once. hydo does not call it again, so it must retry by itself.
+  Right after the faults, and in the recovery boot after a power cut, the system can still be
+  electing a leader or moving work between its nodes. Write the command as a loop that asks
+  again on an error until its own deadline, below its `timeout=`. An `eventually_` check in
+  `hydo/checks/` is different: hydo calls it again and again until it holds or its `within=`
+  deadline passes (`hydo guide checks`).
 - Output goes to `/tmp/hydo/compose/log.<entry>`; `HYDO-ASSERT` lines it prints reach the
   run's report when the command's log is collected. A reaction (`A=`) sees only records written to
   the console, as the SDKs write them: `printf 'HYDO-ASSERT {...}\n' > /dev/console`.

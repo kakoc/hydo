@@ -36,6 +36,12 @@ To choose `within=`, look at two outputs. `hydo run` prints how many seconds of 
 the slowest run that held in time, the deadline, and the slowest run that held only after it,
 with the deadline that run needed.
 
+An `eventually_` check and an `eventually_` command differ in who retries. hydo polls an
+`eventually_` check: it runs the check every `poll=` seconds until it holds or `within=`
+passes, so the check asks once and exits. An `eventually_` command in `hydo/workload/` runs
+once, and one failure is a violation. So the command must retry by itself until its own
+deadline (`hydo guide composer`).
+
 An `eventually_` check that waits for something an `eventually_` command makes happen takes
 `after=commands`. The `eventually_` commands then run first, and the check's deadline counts from
 their end. With the default `after=heal` the check is polled from the end of the faults, before

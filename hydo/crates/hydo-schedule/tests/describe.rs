@@ -372,6 +372,18 @@ fn durations_and_clock_points() {
     assert_eq!(describe::duration(86_400), "1 day");
     assert_eq!(describe::duration(2_592_000), "30 days");
     assert_eq!(describe::duration(1), "1 second");
+    assert_eq!(describe::duration(59), "59 seconds");
+    assert_eq!(describe::duration(90), "90 seconds (1 min 30 s)");
+    assert_eq!(describe::duration(5_400), "90 minutes (1 h 30 min)");
+    assert_eq!(describe::duration(93_600), "26 hours (1 d 2 h)");
+    assert_eq!(
+        describe::duration(10_125),
+        "10125 seconds (2 h 48 min 45 s)"
+    );
+    assert_eq!(
+        one("| run T=7:-10125").sentence,
+        "After 7 steps, the system clock jumps back by 10125 seconds (2 h 48 min 45 s)."
+    );
     assert_eq!(
         one("| run T=0:@:10-2s").sentence,
         "Before the first step, the system clock jumps forward to 2 seconds before the next \

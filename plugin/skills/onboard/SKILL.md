@@ -4,7 +4,7 @@ description: Set up deterministic fault testing with hydo for a software project
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "2.0.1"
+  version: "2.0.2"
   hydo-min: "0.1.0"
 ---
 
@@ -91,12 +91,16 @@ its data directory, its dependencies, and the file where you found each fact. Sh
    guide workloads`): it writes ready-made workloads with their checks and the outcome rules, and
    claims what the endpoints' roles allow. Write your own commands only for the operations it does
    not cover (the application's own API), and keep the generated ones beside them.
+   An `eventually_` command runs once, so it must retry by itself until its own deadline; an
+   `eventually_` check is polled by hydo until it holds (`hydo guide checks`).
 5. Checks: choose them with [references/choosing-checks.md](references/choosing-checks.md), write
    them as `hydo guide checks` says, and prefer hydo's ready-made checkers to hand-written loops:
    a business rule over SQL tables is a `.sql` check (a query that must return no rows), and a
    rule that compares the books with what an outside service saw is one `hydo-sql check` line
    over a `sql` and a `world` source (`hydo guide workloads`).
-   Turn on error logs as findings (`hydo guide error-logs`).
+   Turn on error logs as findings (`hydo guide error-logs`). For a queue, log or stream, write
+   the drain of the `messages` check as `hydo guide messages` says ("Write the drain"): it must
+   outlast every lease and the system's recovery after a power cut, inside `workload.timeout`.
 6. Outside services the system calls (payments, e-mail, webhooks) become fakes; durability
    settings become knobs; allow only the fault kinds that make sense for the project
    (`hydo guide outside-services`, `hydo guide faults`).

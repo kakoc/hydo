@@ -277,10 +277,12 @@ pub fn and_list(xs: &[String]) -> String {
     }
 }
 
-/// A length of time in seconds, in words (`30 seconds`, `5 minutes`, `1 day`).
+/// A length of time in seconds, in words (`30 seconds`, `5 minutes`, `1 day`). A length that
+/// is not a whole number of its largest unit also gets its parts, so that a long step reads at a
+/// glance: `10125 seconds (2 h 48 min 45 s)`, `90 minutes (1 h 30 min)`.
 pub fn duration(secs: u64) -> String {
     let unit = |n: u64, w: &str| format!("{n} {w}{}", if n == 1 { "" } else { "s" });
-    if secs > 0 && secs.is_multiple_of(86_400) {
+    let words = if secs > 0 && secs.is_multiple_of(86_400) {
         unit(secs / 86_400, "day")
     } else if secs > 0 && secs.is_multiple_of(3_600) {
         unit(secs / 3_600, "hour")
@@ -288,6 +290,21 @@ pub fn duration(secs: u64) -> String {
         unit(secs / 60, "minute")
     } else {
         unit(secs, "second")
+    };
+    let parts: Vec<String> = [
+        (secs / 86_400, "d"),
+        (secs % 86_400 / 3_600, "h"),
+        (secs % 3_600 / 60, "min"),
+        (secs % 60, "s"),
+    ]
+    .iter()
+    .filter(|(n, _)| *n > 0)
+    .map(|(n, u)| format!("{n} {u}"))
+    .collect();
+    if parts.len() > 1 {
+        format!("{words} ({})", parts.join(" "))
+    } else {
+        words
     }
 }
 

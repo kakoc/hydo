@@ -175,6 +175,90 @@ after a power cut. It receives from every group until the group is empty and ack
 receives. Then it writes `drained <channel> <group>`. A claim that reads the end of the history
 without a drained group is undecided, and the run's verdict is an ERROR.
 
+A drain that stops too early reports acknowledged messages as lost, or writes no `drained`
+record. Write it to these three rules:
+
+1. Outlast every lease and visibility timeout. A message that a consumer received and did not
+   acknowledge before a fault comes back only when its lease or visibility timeout runs out.
+   The quiet window is the time of empty receives after which the drain calls a group empty.
+   Make it longer than the longest lease and visibility timeout of the system.
+2. Outlast the system's recovery after a power cut. In the recovery boot the system can refuse
+   or redirect requests until a takeover lease runs out or a leader is elected. Treat an error,
+   a refusal and a redirect as "not yet": wait a second and ask again until the deadline. Count
+   the quiet window again from each error, so that recovery time does not count as quiet.
+3. Fit inside the drain's time limit. hydo runs the drain under `workload.timeout` (default 300
+   seconds) and kills it after that; the verdict is then an ERROR that says its `final:` read-back
+   exited with a non-zero status. Set the drain's own deadline below `workload.timeout`, and raise
+   `workload.timeout` in `hydo.yaml` when the deadline needs more time.
+
+`test.command_timeout` limits the composer's commands and the check files in `checks/`, not the
+drain. `test.drain_timeout` is the composer's wait for running commands after the last round,
+also not this drain. Measure the drain's own deadline and quiet window on a clock that a clock
+fault does not move: `/proc/uptime` in a shell, `std::time::Instant` in Rust. A `T=` step moves
+`date`.
+
+Here is a drain in shell for one channel and its group. `myq` stands for the system's own client:
+`myq receive` prints `<message id> <handle>` or nothing, and exits non-zero on an error. The
+message id is the one the sending command recorded, carried in the message body.
+
+```sh
+#!/bin/sh
+# drain <channel> <group>: the final: command of a messages check with history: jobs
+. /etc/hydo/prelude.sh                        # hydo_hist
+ch=$1 grp=$2 p=100000                         # p: a process number no other command uses
+deadline=240                                  # seconds: below workload.timeout (300 by default)
+quiet=40                                      # seconds: above the longest lease and recovery
+now() { read -r up rest < /proc/uptime; printf '%s\n' "${up%.*}"; }   # T= does not move it
+end=$(( $(now) + deadline )); last=$(now)
+while [ "$(now)" -lt "$end" ]; do
+  hydo_hist jobs $p invoke recv "$ch" "$grp"
+  if ! out=$(myq receive "$ch" "$grp"); then  # an error, a refusal or a redirect: not yet
+    hydo_hist jobs $p info recv "$ch" "$grp"  # unknown: the system can have handed one out
+    last=$(now); sleep 1; continue
+  fi
+  if [ -z "$out" ]; then                      # an empty receive
+    hydo_hist jobs $p ok recv "$ch" "$grp"
+    if [ $(( $(now) - last )) -ge "$quiet" ]; then
+      hydo_hist jobs $p ok drained "$ch" "$grp"
+      exit 0
+    fi
+    sleep 1; continue
+  fi
+  set -- $out                                 # $1: the message id, $2: the handle
+  hydo_hist jobs $p ok recv "$ch" "$grp" "$1;h=$2"
+  hydo_hist jobs $p invoke ack "$ch" "$grp" "$1;h=$2"
+  if myq ack "$ch" "$grp" "$2"; then hydo_hist jobs $p ok ack "$ch" "$grp" "$1;h=$2"
+  else hydo_hist jobs $p info ack "$ch" "$grp" "$1;h=$2"; fi
+  last=$(now)
+done
+printf 'no quiet window of %s s on %s %s within %s s\n' "$quiet" "$ch" "$grp" "$deadline"
+exit 1
+```
+
+The sketch writes values as they are. Encode a message id or a handle with other characters as
+the section "Record the history" says. A Rust drain writes the same records with `q.recv`, `q.ack` and
+`q.drained`, as in the Rust example of that section.
+
+## Clock steps and durations on the wall clock
+
+Some systems stamp leases, visibility timeouts or delays with the wall clock, the clock that
+`date` shows. A `T=` clock step back by an hour then hides every received message for an hour.
+The drain finds none of them, and the check reports them lost (`no-loss`). A step forward ends
+leases early, and messages come back before their time. NTP and operators step a real
+machine's clock too, so such a failure is a bug of the system, not of the test. hydo found it
+in Valkey's wait before a replica's full sync (valkey-io/valkey#5406). The fix in the system is
+to measure durations on a monotonic clock.
+
+`clock_steps:` decides only the pairs of records that a lease, a delay, or a window judges. With
+`undecided` (the default) hydo counts such a pair across a step as undecided; with `strict` it
+judges the pair. It never excuses a message that the drain did not receive: a loss after a step
+is a violation with either value. When an exploration finds such a failure:
+
+- Keep it as a finding. While a fix is pending, `hydo ci accept <key> --reason ...` marks it as
+  accepted, so CI runs pass and the finding stays listed (`hydo guide ci`).
+- Keep `clock` in `faults:`. If you remove it, write the reason in a comment beside `faults:`,
+  so that a reader knows the plan no longer tests clock steps.
+
 ## What the run reports
 
 Each claim is a property of its own, `<check id>.<claim>`. A violated claim names a small witness:

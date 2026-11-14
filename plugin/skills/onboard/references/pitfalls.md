@@ -23,6 +23,14 @@ are in `hydo guide hazards`; read it once.
 - **Wall-clock values in data**: timestamps in payloads or keys make runs differ when the clock is
   stepped; derive values from hydo's seed and command id. Expiry and lease logic is a target for
   clock faults, not a hazard.
+- **Durations measured on the wall clock**: a system that times leases, timeouts or visibility
+  with the wall clock fails under a backward clock step. That is a real bug, not a test artifact:
+  keep `clock` in `faults:` and keep the finding (`hydo guide faults`, "Clock steps and durations
+  on the wall clock"). If you remove `clock`, say why in a comment beside `faults:`.
+- **Leases and deadlines across a power cut**: when the system records leases, deadlines or time
+  stamps and checks them after a restart, set `guest.clock_after_cut: 60`. Without it the
+  recovery boot's clock starts before the recorded times (`hydo guide faults`, "Clock after a
+  power cut").
 - **Short background timers**: very frequent timers cost guest time; lower them where allowed.
 - **Services that refuse to run as root**: everything in the guest runs as root; such a service
   needs a user and a start command that keeps its process id.
