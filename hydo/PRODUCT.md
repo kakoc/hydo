@@ -8,7 +8,7 @@ every feature is in `docs/HISTORY.md`, by milestone.
 
 ## What a release contains
 
-hydo 0.3.1, published on 2026-11-10, contains every feature on this page unless the page says
+hydo 0.3.2 contains every feature on this page unless the page says
 otherwise. The releases are:
 
 - the Linux release, with the hvx engine and the KVM engine;

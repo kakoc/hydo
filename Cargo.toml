@@ -39,7 +39,7 @@ members = [
 exclude = ["sdk", "hydo/onboard/examples"]
 
 [workspace.package]
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.90"
@@ -51,27 +51,27 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 sha2 = "0.10"
-hydo-config = { version = "0.3.1", path = "hydo/crates/hydo-config" }
-hydo-schedule = { version = "0.3.1", path = "hydo/crates/hydo-schedule" }
-hydo-manifest = { version = "0.3.1", path = "hydo/crates/hydo-manifest" }
-hydo-engine = { version = "0.3.1", path = "hydo/crates/hydo-engine" }
-hydo-engine-proto = { version = "0.3.1", path = "hydo/crates/hydo-engine-proto" }
-hydo-explore = { version = "0.3.1", path = "hydo/crates/hydo-explore" }
-hydo-composer = { version = "0.3.1", path = "hydo/crates/hydo-composer" }
-hydo-errors = { version = "0.3.1", path = "hydo/crates/hydo-errors" }
-hydo-agents = { version = "0.3.1", path = "hydo/crates/hydo-agents" }
-hydo-compose = { version = "0.3.1", path = "hydo/crates/hydo-compose" }
-hydo-history = { version = "0.3.1", path = "hydo/crates/hydo-history" }
-hydo-build = { version = "0.3.1", path = "hydo/crates/hydo-build" }
-hydo-grpc = { version = "0.3.1", path = "hydo/crates/hydo-grpc" }
-hydo-grpc-gen = { version = "0.3.1", path = "hydo/crates/hydo-grpc-gen" }
-hydo-results = { version = "0.3.1", path = "hydo/crates/hydo-results" }
-hydo-image = { version = "0.3.1", path = "hydo/crates/hydo-image" }
+hydo-config = { version = "0.3.2", path = "hydo/crates/hydo-config" }
+hydo-schedule = { version = "0.3.2", path = "hydo/crates/hydo-schedule" }
+hydo-manifest = { version = "0.3.2", path = "hydo/crates/hydo-manifest" }
+hydo-engine = { version = "0.3.2", path = "hydo/crates/hydo-engine" }
+hydo-engine-proto = { version = "0.3.2", path = "hydo/crates/hydo-engine-proto" }
+hydo-explore = { version = "0.3.2", path = "hydo/crates/hydo-explore" }
+hydo-composer = { version = "0.3.2", path = "hydo/crates/hydo-composer" }
+hydo-errors = { version = "0.3.2", path = "hydo/crates/hydo-errors" }
+hydo-agents = { version = "0.3.2", path = "hydo/crates/hydo-agents" }
+hydo-compose = { version = "0.3.2", path = "hydo/crates/hydo-compose" }
+hydo-history = { version = "0.3.2", path = "hydo/crates/hydo-history" }
+hydo-build = { version = "0.3.2", path = "hydo/crates/hydo-build" }
+hydo-grpc = { version = "0.3.2", path = "hydo/crates/hydo-grpc" }
+hydo-grpc-gen = { version = "0.3.2", path = "hydo/crates/hydo-grpc-gen" }
+hydo-results = { version = "0.3.2", path = "hydo/crates/hydo-results" }
+hydo-image = { version = "0.3.2", path = "hydo/crates/hydo-image" }
 hydo-agent-proto = { version = "0.1.0", path = "hydo/crates/hydo-agent-proto" }
-hydo-control = { version = "0.3.1", path = "hydo/crates/hydo-control" }
-hydo-hvx = { version = "0.3.1", path = "hydo/crates/hydo-hvx" }
-hydo-hvm = { version = "0.3.1", path = "hydo/crates/hydo-hvm" }
-hydo-kvm = { version = "0.3.1", path = "hydo/crates/hydo-kvm" }
+hydo-control = { version = "0.3.2", path = "hydo/crates/hydo-control" }
+hydo-hvx = { version = "0.3.2", path = "hydo/crates/hydo-hvx" }
+hydo-hvm = { version = "0.3.2", path = "hydo/crates/hydo-hvm" }
+hydo-kvm = { version = "0.3.2", path = "hydo/crates/hydo-kvm" }
 
 [profile.release]
 opt-level = 3

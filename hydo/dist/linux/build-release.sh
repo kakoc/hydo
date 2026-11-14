@@ -16,6 +16,9 @@
 #                                                  that machine, built there by hv/kvm/linux/build-kernel.sh
 #                                                  with OUT=~/hydo/build: pin it with a sandboxed Nix,
 #                                                  docs/BUILD-PINS.md "The KVM engine's guest kernel")
+#   guest/bzImage-kvm-smp                          its build for several vCPUs (0.3.2; the same place,
+#                                                  SMP=1 sh hv/kvm/linux/build-kernel.sh; docs/BUILD-PINS.md
+#                                                  "The build for several virtual CPUs")
 #   guest/busybox                                  static busybox 1.37.0 (every image's /bin)
 #   guest/hvx_seedrng, guest/hydo_fc               static helpers, compiled there with the pinned
 #                                                  musl gcc from hv/hvx/images/hvx_seedrng.c, hydo/onboard/hydo_fc.c
@@ -38,7 +41,7 @@ set -e
 umask 022
 D=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$D/../../.." && pwd)
-VERSION=${HYDO_VERSION:-0.3.1}
+VERSION=${HYDO_VERSION:-0.3.2}
 OUTDIR=${1:-$D/out}
 A=$D/assets
 GB=$TOP/target/dist-linux     # the guest programs built from this tree (not assets: they are not pinned here)
@@ -71,7 +74,7 @@ if [ ! -f "$A/.complete" ]; then
     W=\$(mktemp -d /dev/shm/hydo-linux-release.XXXXXX); trap 'chmod -R u+w \$W; rm -rf \$W' EXIT
     cd \$W && tar xf - >&2
     mkdir -p out/guest/modules out/tools/bin out/tools/lib out/redis
-    cp ~/hydo/build/bzImage ~/hydo/build/bzImage-kvm ~/hydo/build/initramfs-kafka.cpio.gz out/guest/
+    cp ~/hydo/build/bzImage ~/hydo/build/bzImage-kvm ~/hydo/build/bzImage-kvm-smp ~/hydo/build/initramfs-kafka.cpio.gz out/guest/
     cp $BUSYBOX out/guest/busybox
     $GCC_MUSL -static -O2 -Wall -B $MUSL_ROOT/lib hv/hvx/images/hvx_seedrng.c -o out/guest/hvx_seedrng >&2
     $GCC_MUSL -static -O2 -Wall -B $MUSL_ROOT/lib hydo/onboard/hydo_fc.c -o out/guest/hydo_fc >&2
@@ -89,7 +92,7 @@ if [ ! -f "$A/.complete" ]; then
       ldd \$b | sed -n 's#.*=> \(/nix/store/[^ ]*\) .*#\1#p; s#^\s*\(/nix/store/[^ ]*ld-linux-x86-64.so.2\) .*#\1#p'
     done | sort -u | while read l; do cp -L \$l out/tools/lib/\$(basename \$l); done
     cp $REDIS/bin/redis-server $REDIS/bin/redis-cli out/redis/
-    chmod -R u+w out/tools out/redis out/guest/bzImage out/guest/bzImage-kvm out/guest/initramfs-kafka.cpio.gz out/guest/busybox
+    chmod -R u+w out/tools out/redis out/guest/bzImage out/guest/bzImage-kvm out/guest/bzImage-kvm-smp out/guest/initramfs-kafka.cpio.gz out/guest/busybox
     cd out && tar cf - .
   " | ( cd "$A" && tar xpf - )
   touch "$A/.complete"
@@ -117,7 +120,8 @@ mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" \
 # libexec/hvx-run with sudo when the user cannot open the device; M137: it replaces hvx_explore,
 # so nothing is compiled for it on the user's machine), bin/hydo-kvm (the KVM engine as a program,
 # hydo/crates/hydo-kvm, which hydo starts with HYDO_KVM=process; by default it runs inside hydo too;
-# M172: in the release since 0.2.0, with guest/bzImage-kvm), bin/hydo-build (the image builder with its own
+# M172: in the release since 0.2.0, with guest/bzImage-kvm, and since 0.3.2 guest/bzImage-kvm-smp
+# for --vcpus N), bin/hydo-build (the image builder with its own
 # command line, for scripts; `hydo build` is the same builder with the release's tools) and
 # bin/hydo-fetch-image (what fetch-images.sh of `hydo compose` calls), and the gRPC driver
 # generator (libexec/hydo-grpc-gen, started by the wrapper bin/hydo-grpc-gen, which points its

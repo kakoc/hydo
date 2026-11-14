@@ -45,9 +45,9 @@ brew install kakoc/tap/hydo
 On Linux without cargo, use the release tarball:
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.1/hydo-linux-0.3.1.tar.gz
-tar xzf hydo-linux-0.3.1.tar.gz
-./hydo-linux-0.3.1/install.sh --no-module
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.2/hydo-linux-0.3.2.tar.gz
+tar xzf hydo-linux-0.3.2.tar.gz
+./hydo-linux-0.3.2/install.sh --no-module
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -62,7 +62,7 @@ that every write Redis acknowledged must survive.
 
 ```sh
 cp -R "$(brew --prefix hydo)/libexec/examples/redis" ~/hydo-redis
-# cargo: ~/.hydo/versions/0.3.1/examples/redis   Linux tarball: ~/.hydo/examples/redis
+# cargo: ~/.hydo/versions/0.3.2/examples/redis   Linux tarball: ~/.hydo/examples/redis
 cd ~/hydo-redis
 hydo build hydo.yaml
 hydo run "disk=cut | run C=12 R=everysec"
@@ -114,7 +114,7 @@ Compose file. An AI coding tool can write the folder for you: in Claude Code, ru
 - [What hydo does not do](docs/LIMITS.md).
 - [How hydo is built](docs/ARCHITECTURE.md) and [how to contribute](CONTRIBUTING.md).
 
-The current release is hydo 0.3.1. It is experimental: formats and commands can change between
+The current release is hydo 0.3.2. It is experimental: formats and commands can change between
 versions.
 
 ## License

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hydo-assert"
-version = "0.3.1"
+version = "0.3.2"
 description = "Assertion SDK for programs tested under hydo, a deterministic hypervisor (always/sometimes properties, BUGGIFY fault points, bounded liveness, operation histories)"
 readme = "README.md"
 requires-python = ">=3.8"

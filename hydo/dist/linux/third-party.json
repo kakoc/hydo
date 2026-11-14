@@ -356,7 +356,8 @@
       "version": "6.6.35",
       "license": "GPL-2.0-only WITH Linux-syscall-note",
       "files": [
-        "guest/bzImage-kvm"
+        "guest/bzImage-kvm",
+        "guest/bzImage-kvm-smp"
       ],
       "texts": [
         "hydo/dist/licenses/linux-6.6.35/COPYING",
@@ -376,9 +377,12 @@
         "hv/kvm/linux/hydo-kvm-guest.patch",
         "hv/kvm/linux/hydo-kvm.config",
         "hv/kvm/linux/kernel.nix",
-        "hv/kvm/linux/build-kernel.sh"
+        "hv/kvm/linux/build-kernel.sh",
+        "hv/kvm/linux/hydo-kvm-smp.patch",
+        "hv/kvm/linux/hydo-kvm-smp.config",
+        "hv/kvm/linux/kernel-smp.nix"
       ],
-      "note": "guest/bzImage-kvm is the guest kernel of the KVM engine (bin/hydo-kvm, docs/design/kvm-engine.md): kernel.org's Linux 6.6.35 (upstream/linux-6.6.35.tar.xz) with hydo's patch hv/kvm/linux/hydo-kvm-guest.patch (all its time from the engine's exit clock, never the TSC), configured with allnoconfig plus hv/kvm/linux/hydo-kvm.config, and built by hv/kvm/linux/kernel.nix (run by build-kernel.sh) with the pinned nixpkgs tree (upstream/nixpkgs-89c49874fb15.tar.gz: its gcc 13.2.0, binutils, bc, bison, flex, perl, python3 and elfutils) in Nix's sandbox; `nix-build --check` rebuilds it to the same bytes (docs/BUILD-PINS.md \"The KVM engine's guest kernel\"). Every driver it needs is built in; it loads no modules."
+      "note": "guest/bzImage-kvm is the guest kernel of the KVM engine (bin/hydo-kvm, docs/design/kvm-engine.md): kernel.org's Linux 6.6.35 (upstream/linux-6.6.35.tar.xz) with hydo's patch hv/kvm/linux/hydo-kvm-guest.patch (all its time from the engine's exit clock, never the TSC), configured with allnoconfig plus hv/kvm/linux/hydo-kvm.config, and built by hv/kvm/linux/kernel.nix (run by build-kernel.sh) with the pinned nixpkgs tree (upstream/nixpkgs-89c49874fb15.tar.gz: its gcc 13.2.0, binutils, bc, bison, flex, perl, python3 and elfutils) in Nix's sandbox; `nix-build --check` rebuilds it to the same bytes (docs/BUILD-PINS.md \"The KVM engine's guest kernel\"). Every driver it needs is built in; it loads no modules. guest/bzImage-kvm-smp (since 0.3.2) is the same kernel for several vCPUs (`--vcpus N`, docs/design/kvm-vcpus.md): hv/kvm/linux/kernel-smp.nix (run by `SMP=1 sh build-kernel.sh`) adds hv/kvm/linux/hydo-kvm-smp.patch after hydo-kvm-guest.patch and hv/kvm/linux/hydo-kvm-smp.config on top of hydo-kvm.config, from the same upstream tarball and nixpkgs tree, in Nix's sandbox (docs/BUILD-PINS.md \"The build for several virtual CPUs\")."
     },
     {
       "id": "busybox-1.37.0",

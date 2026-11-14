@@ -1,6 +1,6 @@
 [package]
 name = "hydo-test"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.70"
@@ -22,6 +22,6 @@ publish = false
 members = ["macros", "cargo-hydo"]
 
 [dependencies]
-hydo-test-macros = { path = "macros", version = "0.3.1" }
-hydo-assert = { path = "../rust", version = "0.3.1" }   # the assertion SDK (sdk/rust), re-exported
+hydo-test-macros = { path = "macros", version = "0.3.2" }
+hydo-assert = { path = "../rust", version = "0.3.2" }   # the assertion SDK (sdk/rust), re-exported
 inventory = "0.3"

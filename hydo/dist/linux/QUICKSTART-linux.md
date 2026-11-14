@@ -63,8 +63,8 @@ For the kernel module:
 ## 1. Install
 
 ```sh
-tar xzf hydo-linux-0.3.1.tar.gz
-./hydo-linux-0.3.1/install.sh                 # or: --prefix DIR (default ~/.hydo), --add-to-path
+tar xzf hydo-linux-0.3.2.tar.gz
+./hydo-linux-0.3.2/install.sh                 # or: --prefix DIR (default ~/.hydo), --add-to-path
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -86,7 +86,7 @@ The run engine needs no compiling: it runs inside `hydo` itself when you can ope
 `/dev/hvx` (as root, or after `hydo module udev install`), or as the program `bin/hydo-hvx` under
 `sudo` when you cannot. The installer writes nothing outside `~/.hydo` except your shell startup
 file (only with `--add-to-path`) and the udev rule (only with `--udev`). If the module is already
-loaded (a machine where someone else manages it), `./hydo-linux-0.3.1/install.sh --no-module`
+loaded (a machine where someone else manages it), `./hydo-linux-0.3.2/install.sh --no-module`
 skips `hydo module install`; `hydo doctor` then warns that `hvx.ko` was not built by this
 release. On a machine without `/dev/hvx` where your user can open `/dev/kvm`, the installer runs
 `hydo doctor --backend kvm` instead (section 6), which ends `doctor: all checks passed`. If the module could not be installed (for example without kernel headers or a C
@@ -326,7 +326,7 @@ machines). It needs x86_64 Linux 5.10 or later with `/dev/kvm` usable by your us
 and AMD CPUs; its fingerprints differ between the two vendors, and its verdicts do not.
 
 ```sh
-./hydo-linux-0.3.1/install.sh --no-module     # nothing to build or load
+./hydo-linux-0.3.2/install.sh --no-module     # nothing to build or load
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor --backend kvm
 cp -R ~/.hydo/examples/redis ~/hydo-redis && cd ~/hydo-redis
@@ -349,9 +349,11 @@ the same verdicts as with hvx, but they are counted differently:
 
 - Guest time advances with the virtual machine's exits to the engine; there is no PMU branch
   clock.
-- Every guest has one virtual CPU. It runs at the x86-64-v2 level (the x86_64 instruction set
-  with SSE4.2 and POPCNT, no AVX), or with `guest.cpu: v3` at x86-64-v3 (AVX2) on a host that
-  has it. An image with several CPUs is refused.
+- A guest has one virtual CPU, or 2 to 8 with `--vcpus N` (`hydo run --backend kvm --vcpus 2
+  …`). Several vCPUs take turns of VM exits and boot the kernel's build for several CPUs,
+  `guest/bzImage-kvm-smp` (`hydo guide flaky-tests`). The vCPUs run at the x86-64-v2 level (the
+  x86_64 instruction set with SSE4.2 and POPCNT, no AVX), or with `guest.cpu: v3` at x86-64-v3
+  (AVX2) on a host that has it.
 - The fingerprints are this engine's own. `hydo repro` of an hvx run with `--backend kvm` (or the
   other way round) compares verdicts, not fingerprints, and says so.
 
@@ -398,7 +400,7 @@ this third-party software:
 `THIRD-PARTY.md` lists each one with its version, its license, the files it is in, and where its
 source is. `licenses/` holds the full text of every license.
 
-The archive `hydo-linux-0.3.1-sources.tar.gz` accompanies this release; it is published next to
+The archive `hydo-linux-0.3.2-sources.tar.gz` accompanies this release; it is published next to
 the tarball, with the same `SHA256SUMS`. It contains the corresponding source:
 
 - the exact upstream source archives of every third-party component, including every GPL- and

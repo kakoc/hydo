@@ -75,7 +75,8 @@ The engines differ in what they give up:
 - hvx has the PMU branch clock: the CPU's performance-monitoring unit counts the guest's retired
   conditional branches, so a tick lands at an exact instruction. With it, hvx can also run
   several virtual CPUs in exact turns.
-- hvm and the KVM engine count VM exits only, and give the guest one virtual CPU. Code
+- hvm and the KVM engine count VM exits only. hvm gives the guest one virtual CPU; the KVM engine
+  gives it one, or 2 to 8 with `--vcpus N` that take turns of counted exits. Code
   that runs without a VM exit takes no guest time. A loop that waits on memory without exits is
   found by a spin observer and resolved at a point taken from the loop's own state.
 

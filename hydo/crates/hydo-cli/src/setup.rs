@@ -1476,7 +1476,7 @@ mod tests {
     #[test]
     fn the_built_in_lists_parse_and_map_into_the_release() {
         for (p, assets, guest, n_assets, n_guest) in [
-            (Platform::Linux, LINUX_ASSETS, LINUX_GUEST, 39, 6),
+            (Platform::Linux, LINUX_ASSETS, LINUX_GUEST, 40, 6),
             (Platform::Mac, MAC_ASSETS, MAC_GUEST, 62, 5),
         ] {
             let a = parse_sums(assets).unwrap();

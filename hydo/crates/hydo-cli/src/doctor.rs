@@ -168,6 +168,39 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
         ),
         false,
     );
+    // the build for several vCPUs (`--vcpus N`, docs/design/kvm-vcpus.md; in the Linux release
+    // since 0.3.2): a warning, because a run on one vCPU never needs it
+    if ctx.config.kvm.kernel.is_none() {
+        let s = hydo_kvm::kernel::KERNEL_SMP;
+        let want = hydo_image::FileRef {
+            file: s.file.into(),
+            sha256: s.sha256.into(),
+        };
+        let found =
+            hydo_image::kernels::locate_here(&want, hydo_image::kernels::Role::Kernel, &dirs);
+        c.check_found(
+            found.is_some(),
+            &format!(
+                "the KVM guest kernel for several vCPUs {} (sha256 {}){}",
+                s.file,
+                &s.sha256[..16],
+                found
+                    .as_ref()
+                    .map(|p| format!(": {}", rel(ctx, p)))
+                    .unwrap_or_default()
+            ),
+            &format!(
+                "the KVM guest kernel for several vCPUs {} (sha256 {}) is not on this machine, so `--vcpus 2` and more cannot run",
+                s.file,
+                &s.sha256[..16]
+            ),
+            &format!(
+                "{} (the Linux release ships it since 0.3.2), or build it with SMP=1 sh hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) and put it in guest/",
+                get_command()
+            ),
+            true,
+        );
+    }
     c.check_found(
         ctx.guest().join("initramfs-kafka.cpio.gz").is_file()
             || ctx.p("build/initramfs-kafka.cpio.gz").is_file(),

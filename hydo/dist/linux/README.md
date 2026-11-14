@@ -15,7 +15,7 @@ user guide; it is shipped as the release's `README.md`. The Mac counterpart is
 ## The `hydo` command
 
 `bin/hydo` is the Rust CLI (`hydo/crates/hydo-cli`), a static `x86_64-unknown-linux-musl`
-binary; `bin/hydo-hvx` (the run engine as a program), `bin/hydo-kvm` (the KVM engine as a program, since Milestone 172 with its guest kernel `guest/bzImage-kvm`: `--backend kvm` runs the same images on `/dev/kvm` with no kernel module, QUICKSTART section 6; it runs inside `hydo` unless `HYDO_KVM=process`), `bin/hydo-build` (the image builder with
+binary; `bin/hydo-hvx` (the run engine as a program), `bin/hydo-kvm` (the KVM engine as a program, since Milestone 172 with its guest kernel `guest/bzImage-kvm`, and since 0.3.2 with `guest/bzImage-kvm-smp` for `--vcpus N`: `--backend kvm` runs the same images on `/dev/kvm` with no kernel module, QUICKSTART section 6; it runs inside `hydo` unless `HYDO_KVM=process`), `bin/hydo-build` (the image builder with
 its own command line, for scripts), `bin/hydo-fetch-image` (what the `fetch-images.sh` of `hydo
 compose` calls) and `bin/hydo-grpc-gen` (a shell wrapper that runs `libexec/hydo-grpc-gen`, the
 gRPC driver generator, with `--client` defaulting to `guest/`, where the static client
@@ -26,7 +26,7 @@ this tree: `guest/hydo-agent` (`hydo/crates/hydo-agent/build.sh`, checked agains
 `hydo-build`), `guest/hydo-world`, `guest/hydo-world-tls` (since 0.3.0), `guest/hydo-read`
 (`hydo/crates/hydo-read/build.sh`; its bytes depend on the kind of host that builds it,
 docs/BUILD-PINS.md), `guest/hydo-sql` (since 0.3.0; the same holds for it) and `guest/hydo-grpc`
-(`hydo/grpcgen/build-client.sh`, pinned `42af6521…` since 0.3.1). Since Milestone 107 the release contains no Python and
+(`hydo/grpcgen/build-client.sh`, pinned `21db8ce0…` since 0.3.2). Since Milestone 107 the release contains no Python and
 needs none; the Python CLI (`hydo/dist/linux/hydo`) and every Python module behind it are
 deleted (commit `2a58c4b` has them). The Mac release's `hydo` is the same program and behaves
 the same (Milestone 107); only `hydo module` is Linux-only.
