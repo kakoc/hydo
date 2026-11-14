@@ -10120,3 +10120,109 @@ next release re-pins it.
 **Open** (AGENTS.md open item 118). Response headers, nested echoed fields, OpenAPI 3.1
 `webhooks:` and the business reference are not generated. A `DELETE` keeps the saved object and a
 `PATCH` saves nothing. The example ran on the Mac engine only.
+### Milestone 246 (tentative number) - EXPERIMENT (Kubernetes in the guest: k3s v1.37.2+k3s1 runs as one hydo service on hvx, with no change to hydo, the module or the guest kernel; the node is Ready 8 s after k3s starts, a guest of 768 MiB is enough, and every repeated schedule gave one fingerprint; a StatefulSet whose pods elect a leader on a Lease keeps one leader through a crashing leader and a stopped control plane, a forward clock step gives two leaders at once, and the explorer found that a step back of more than an hour, before the cluster's certificates, leaves no leader; the Mac and KVM kernels lack the options, and an opt-in kernel variant is designed, not built; nothing recorded moved; 2026-11-14)
+
+**Why.** Some software is about Kubernetes itself: operators, controllers, and programs that rely
+on a pod started again or on a leader elected through a Lease. `hydo k8s` (Milestone 243) runs no
+Kubernetes, so such a program could not be tested. The questions were what k3s needs from the
+guest kernel, whether it starts in the guest and at what cost, whether it is deterministic, and
+whether hydo can check a rule of a program on it.
+
+**The kernel.** `docs/design/k3s-in-guest.md` has the table. hvx's `bzImage` is nixpkgs'
+`linux_6_6` and has every option k3s needs; the networking options are modules. The image
+carries the 57 modules k3s needs, with their dependencies, decompressed (4.4 MB), taken from the
+same nixpkgs output `rp8637p7…-linux-6.6.35` that holds `bzImage` (Milestone 158). So hvx needs
+no new kernel, the kernel bytes do not change, and no epoch change follows. The KVM and Mac
+kernels with cgroups (Milestone 234) lack the container namespaces, seccomp, the memory and pids
+controllers, overlayfs, connection tracking and NAT, and they have no module support. An opt-in
+variant chosen by the manifest (`guest.kernel:`, a format-1 addition, named in the image record)
+would move no recorded value. It is designed in the note and not built: it needs four kernels
+built twice and pinned, as Milestone 234 did.
+
+**What runs.** `hydo/onboard/examples/k3s-lease`. `fetch-k3s.sh` fetches k3s by sha256, unpacks
+its 270 MB of programs once, fetches the pause image and busybox by digest with
+`hydo-fetch-image`, and resolves the modules with `modules.dep`. The service's `k3s-setup.sh`
+loads the modules, mounts cgroup v2, bind-mounts k3s's state directories from the data disk,
+mounts an overlay over the read-only copy of k3s's programs (its iptables wrapper writes links
+there), and adds a dummy interface with a default route. k3s runs with flannel's host-gw backend
+and kube-proxy, without Traefik, the service load balancer, the metrics server, local storage,
+CoreDNS, the network policy controller and the Helm controller. k3s applies
+`manifests/elect.yaml`: a StatefulSet of 3 busybox pods, each running `elect.sh`, a leader
+election on a Lease written as client-go's `leaderelection` does it (lease duration 10 s, renew
+deadline 5 s on the monotonic clock, retry 2 s), with kubectl mounted from the node. The knob
+`Z=<step>` kills the leader's process before that step and the next three.
+
+**Measurements** (hvx, one vCPU, `hydo run` of the 0.3.3 Linux release with images built from
+this folder):
+
+- The first boots failed for three reasons, each read from the run's diagnosis: an unquoted `<`
+  in a kubelet argument, containerd's `mkdir /var/run` on the read-only root, and k3s's iptables
+  wrapper writing links into its read-only programs.
+- The node is Ready at 15.3 s of guest uptime (the setup starts at 6.6 s), and the 3 pods are
+  ready with a leader at 37.6 s, all in provisioning before S1.
+- Guests of 2,048, 1,024 and 768 MiB passed; 1,474 MB, 504 MB and 236 MB were available with the
+  pods ready. `hydo run --memory` gave the k3s process a peak of 485 MiB.
+- A run of 16 steps took 76 s to 90 s of wall time on the bare-metal machine, which other
+  sessions loaded at the same time. The image has a 512 MiB root and a 2,048 MiB data disk.
+
+**Determinism.** Seven schedules ran twice from a fresh boot and gave one fingerprint each:
+`fabb5d08aa7856f8` (a first probe without workload), `3db57cd50966fd39` and `e53cc6661c845f08`
+(earlier workloads), `061b6585631ea0d8` (`Z=4` on the earlier workload), and on the final image
+`a23e6b290c893367` (no faults) and `06c012f535a1a661` (`T=2:30`); and with 1,024 MiB
+`81bc334dc1a6e343` (`K=k3s@3+2 T=8:-86400`). The pods' addresses, the Lease's
+holder and every timestamp were the same. hvx fixes what could vary: one vCPU with interrupts at
+counted events, RDTSC from the same count, the CRNG seeded by `hvx_seedrng`, and the realtime
+clock from `guest.clock_start`. Nothing in k3s needed a change.
+
+**The proof.** On the final image (`73f447de6647f0a1…`):
+
+| schedule | fingerprint | verdict |
+|---|---|---|
+| `disk=none \| run` (twice) | `a23e6b290c893367` | OK, one leader |
+| `disk=none \| run Z=4` | `b2b47087593e0619` | OK: the leader resumes its own Lease after its first crash; after its second, the kubelet's back-off keeps it down, and another pod takes the Lease 10 s later; the StatefulSet heals |
+| `disk=none \| run T=2:30` (twice) | `06c012f535a1a661` | VIOLATION `elect.one_leader`: `elect-1 led from 40.82 s to 58.39 s and elect-2 from 33.39 s to 41.49 s` |
+| `disk=none \| run K=k3s@4+2` | `2b1b1dccbf4f8cce` | OK |
+| `disk=none \| run P=k3s@4+5` | `53745f636138dba9` | OK: the leader steps down at its renew deadline and takes the Lease again |
+
+The violation is the documented limit of leader election on Leases: a candidate judges the Lease
+by the wall clock, and the holder judges its own term by the monotonic clock. A forward step
+breaks the rule only when a candidate reads the Lease before the holder renews it. With steps of
+1.3 s, the step before step 2 did and the steps before steps 1, 3, 4, 5 and 6 did not. With steps
+of 2 s, which meet the 2 s renewal at one phase only, no step of 30 s broke the rule.
+
+**Explorations** (one worker, `--ram-mib 1024`; a first try with two workers of 2,048 MiB was
+ended by the host's out-of-memory killer while other sessions shared the machine). `--seeds 1-16`
+and `--seeds 1-24 --strategy swarm` drew only kills of k3s and the knob `Z`, and passed all 40
+schedules, at a mean of 23 s and 26 s per run from the snapshot at S1. `--seeds 1-24 --new-faults`
+also draws pauses and clock steps. It was stopped after 8 runs, before it shrank its one failure,
+because each run took minutes on the loaded machine. The failure, `K=k3s@3+2 T=8:-86400`, breaks
+`elect.leader_again`: no pod leads again within 60 s. By hand `T=8:-86400` alone breaks it too
+(`0dc6e6d7e72a35ab`), and so does `T=8:-7200` (`795494b0d2c21d40`); `K=k3s@3+2 T=8:-86400` gave
+`81bc334dc1a6e343` twice, and `T=7:-3600` passed in the exploration. Every client call then fails with `x509: certificate has expired or
+is not yet valid: current time 2025-12-31T00:00:50Z is before 2025-12-31T23:00:02Z`: k3s makes
+its certificates valid from one hour before their creation, and the cluster was made at
+`guest.clock_start`. A step back of more than an hour puts the clock before them. This is k3s's
+behaviour on any node whose clock goes back past its certificates' start; hydo meets it on every
+such step because the cluster is one minute old.
+
+**Tests.** On the bare-metal machine, in a copy of this tree (Rust 1.90.0): every test of
+`hydo-control` and `hydo-explore`, `docs::` and `public_content::` pass. The new example is a new
+input of four goldens, re-recorded with `HYDO_BLESS=1` and reviewed:
+
+- the control corpus `corpus-quick.txt`: only the example's lines, and the count of refused
+  schedules from 57 to 58;
+- the explorer's `identity-full.txt`: the example's 34 lines, and the 28 lines of
+  `openapi-payouts` (Milestone 249), which the full golden lacked;
+- the explorer's `identity-quick.txt`: its sample, the first four manifest groups and every fifth
+  after them, shifts by the new group;
+- the explorer's `corpus-full.txt`: one stream in chunks of 4,096 bytes, so every chunk after the
+  example's place (from chunk 31 of 177) moves.
+
+The goldens were recorded again after the rebase onto `9841eedd`, from main's goldens.
+`hydo-build`'s `equivalence::` fails, the same way on the base commit `d845eed5`: two pinned
+inputs (`hydo/dist/*/third-party.json`) changed and 41 mutants differ. No Rust code changed, so
+fmt and clippy have nothing new to check.
+
+**Left** (AGENTS.md open item 119). The kernel variant for the Mac and KVM engines, with its pins.
+A `guest.modules:` key, so that a project names modules and the release supplies them. Faults on
+one pod by name. More than one node, and operators from images.

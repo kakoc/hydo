@@ -1,0 +1,3 @@
+# fetch-k3s.sh's output (the k3s binary and its files, images, kernel modules) and hydo build's
+k3s/
+hydo-out/

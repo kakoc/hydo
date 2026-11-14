@@ -547,6 +547,16 @@ Services become names in `/etc/hosts`; probes become `ready:`. Secret values go 
 The mapping and the refusals are in `docs/design/k8s-import.md`; the proof is in
 `docs/HISTORY.md` Milestone 243.
 
+**Kubernetes in the guest (M246, an experiment on hvx).** k3s v1.37.2+k3s1 runs as one hydo
+service on hvx, with no change to hydo, the module, or the guest kernel. The image carries the 57
+kernel modules that k3s needs, from the same nixpkgs build as hvx's `bzImage`. The node is Ready
+about 8 s of guest time after k3s starts, and a StatefulSet of 3 pods is ready about 22 s later.
+Two fresh boots of a schedule give one fingerprint. In `hydo/onboard/examples/k3s-lease` the
+pods elect a leader on a Lease. A forward clock step gives two leaders at once, and a leader that
+crashes in a loop hands over. The explorer found that a step back of more than an hour leaves no
+leader, because the clock goes before the cluster's certificates. The Mac and KVM guest kernels lack the options; an opt-in kernel
+variant would move no recorded value (`docs/design/k3s-in-guest.md`, open item 119).
+
 **Ready-made emulators of outside services (M242).** One `emulators:` line gives a project Stripe
 (stripe-mock), SMTP (Mailpit) or S3 (`rclone serve s3`). The validator expands each entry into a
 service `<name>_emulator` from the emulator's image and a fault proxy `<name>` in front of it, so
@@ -1118,6 +1128,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     (`--ref` names it). A `DELETE` does not remove the saved object, and a `PATCH` saves nothing.
     The example ran on the Mac engine only. It did not run on hvx or on KVM. The changed
     `hydo-world` (`errors:`, `{uuid}`) reaches a release at its next re-pin.
+119. Kubernetes in the guest (M246). k3s runs on hvx only. What is left:
+    - The Mac and KVM engines need an opt-in kernel variant with the options of
+      `docs/design/k3s-in-guest.md`, chosen by the manifest. Each of the four kernels must be
+      built twice and pinned. No recorded value moves.
+    - hydo has no `guest.modules:`: the example stages the modules with `root.files:` from the
+      nixpkgs store path, and the Linux release ships 14 of the 57.
+    - hydo's faults name services, and k3s is the only service. A kill of one pod is the
+      example's knob `Z=`, not a hydo fault. One node only; operators from images were not tried.
+    - The explorations of the example ran 48 schedules; the one with `--new-faults` was stopped
+      after 8 runs, before it shrank its failure, on a loaded machine. Each cluster is one minute
+      old, so every step back of more than an hour meets k3s's certificates.
 
 ## Milestone index
 
@@ -1588,6 +1609,10 @@ build machine, before 2026-10-13.
   pairs, the idempotency header, and the error answers in the new route key `errors:`. The
   openapi-payouts example's retry bug showed on the Mac engine, and the fix passed. Skill 2.3.1.
   Nothing recorded moved
+- M246 (tentative number): k3s in the guest on hvx, an experiment. The image carries the guest
+  kernel's own modules, so no kernel changes. Two boots give one fingerprint; a StatefulSet's
+  pods elect a leader on a Lease, and a forward clock step gives two leaders at once. The Mac and
+  KVM kernels lack the options; an opt-in variant is designed, not built. Nothing recorded moved
 
 ## Where to look
 

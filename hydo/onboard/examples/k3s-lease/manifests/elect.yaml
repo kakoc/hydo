@@ -1,0 +1,82 @@
+# Three pods that elect a leader on the Lease `elect` (elect.sh). k3s applies this file at its
+# start (server/manifests). The pods run busybox with kubectl mounted from the node's k3s files,
+# and log to the data disk.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: elect
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: elect
+  namespace: default
+rules:
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: elect
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: elect
+subjects:
+  - kind: ServiceAccount
+    name: elect
+    namespace: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elect
+  namespace: default
+spec:
+  clusterIP: None
+  selector:
+    app: elect
+  ports:
+    - port: 80
+      name: none
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: elect
+  namespace: default
+spec:
+  serviceName: elect
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: elect
+  template:
+    metadata:
+      labels:
+        app: elect
+    spec:
+      serviceAccountName: elect
+      terminationGracePeriodSeconds: 1
+      enableServiceLinks: false
+      containers:
+        - name: elect
+          image: docker.io/rancher/mirrored-library-busybox:1.37.0
+          imagePullPolicy: Never
+          command: [sh, /app/elect.sh]
+          volumeMounts:
+            - {name: app, mountPath: /app, readOnly: true}
+            - {name: k3s, mountPath: /k3s, readOnly: true}
+            - {name: log, mountPath: /log}
+      volumes:
+        - name: app
+          hostPath: {path: /opt/k3s/app, type: Directory}
+        - name: k3s
+          hostPath: {path: /opt/k3s/data/342d21a06834327c49d125902586b5c58038e4decca01ba829aa819ce4d1b586/bin, type: Directory}
+        - name: log
+          hostPath: {path: /data/elect, type: DirectoryOrCreate}

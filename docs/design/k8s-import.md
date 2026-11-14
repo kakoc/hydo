@@ -194,7 +194,8 @@ A folder with `kustomization.yaml` is rendered with `kubectl kustomize <folder>`
   `localhost:<port>` needs its name instead, or an import with `--network loopback`.
 - A Service whose `port` differs from its `targetPort` is reached on the target port only.
 - No Kubernetes API: a program that reads the API (leader election through leases, an operator, a
-  controller) does not work.
+  controller) does not work. Such a program needs Kubernetes itself in the guest, which
+  `docs/design/k3s-in-guest.md` runs with k3s on hvx (Milestone 246).
 - Of the Service variables, the older link-style ones (`<NAME>_PORT=tcp://...` and
   `<NAME>_PORT_<port>_TCP_*`) are not set.
 - Probes are read for readiness only.

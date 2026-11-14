@@ -15,6 +15,7 @@ input	hydo/onboard/examples/etcd/hydo-hist.yaml	3ba821683b206d5ec9bf8a83f7879198
 input	hydo/onboard/examples/etcd/hydo.yaml	ec0ae3f206de4167150fb4c94a0ab2e0a1ef9d983cd49005c5a9fdf18fe20c3c
 input	hydo/onboard/examples/glibc-cache/hydo-nocache.yaml	be53f51ea2b3b915a93d8c9cdcf0be568aca3b717a2e59c5a9feaa83ecac6a2d
 input	hydo/onboard/examples/glibc-cache/hydo.yaml	3792407d2f5087d38119939c54ebf86dd3afdb80dc6905e580bf4c4ab4652732
+input	hydo/onboard/examples/k3s-lease/hydo.yaml	c00691d9a98e523e167032c5b9d71355b8d451b2643e7eda3ced7f6963a6d113
 input	hydo/onboard/examples/miniflux/hydo-read.yaml	96baa7f3afccebb7dcbfb7ed78d64e79c6563096f2e84072ff62db752b34e26f
 input	hydo/onboard/examples/miniflux/hydo.yaml	7f74f2fac53dbc117de6152c0e43fe15e1bf1c4524e16f4226029de1b7ac003a
 input	hydo/onboard/examples/nats-flaky-8363/hydo.yaml	d8e8cbcf52ff01b080d3b7458f6dfffead9f027c6d1c201c03707d924a6c80f5
@@ -997,6 +998,73 @@ chunk	hydo/onboard/examples/glibc-cache/hydo.yaml	1	500	085d75fbfd771c5830e44c7f
 chunk	hydo/onboard/examples/glibc-cache/hydo.yaml	2	500	f6240987e30adf6bbd793c2a3397f54e1329710153f29b3023a4edbd1443ca81
 chunk	hydo/onboard/examples/glibc-cache/hydo.yaml	3	500	73c472848b3f5a1d4e54a75fab2cc3869fbe128df926a5f8a9c938c8d5955608
 chunk	hydo/onboard/examples/glibc-cache/hydo.yaml	4	64	e8a8099067ec95d2d0f46625462b7f98cd999898d9972e1c75f5cb0e88f19430
+manifest	hydo/onboard/examples/k3s-lease/hydo.yaml	core
+boot	hydo/onboard/examples/k3s-lease/hydo.yaml	hydo/onboard/examples/k3s-lease/hydo.yaml#0	snapshot	d586570b96bf051d
+counts	hydo/onboard/examples/k3s-lease/hydo.yaml	identity=163 recovery:ok=1 recovery:violation=4 refused=1 run:cut=5 run:error=21 run:ok=55 run:violation=95 token:C=5 token:K=102 token:P=97 token:Q=1 token:T=85 token:X=4 token:Z=38 written=13
+boot-transcript	hydo/onboard/examples/k3s-lease/hydo.yaml	d586570b96bf051d
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	0	500	77e82c05ba3d6218a9cc56f8c33b69f6f1c947db1f70d92b32f4ffb3ab40649a
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	1	500	e83a4e090506fe9771eea4caff47d040f2ea008b8fd6caaef696a6b7314dee28
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	2	500	a1cabf1b82973507791a8d545ba37bf848a1ae5e67fbcd6af5033f5f476f28c1
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	3	500	7c5801d272f8316b510527eb9a61856cad83f7c92468f2583dbe549e1bb875ed
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	4	500	5aa59a03d68e941889501f010880bef391617bf8a0f4a481431dfc940a5c4c38
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	5	500	8cc6f82c71b9c12243c3617145ab547baa9f9e83c2084feca523d092a2b5f13f
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	6	500	3d18f8ef0a98804afae8362ac7dc5d8b8aedfce26794f2d918fce6842d5879b2
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	7	500	101a84543cf4297202227798009566c50aabe1f355f0e0f2953583c8c4e43fb3
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	8	500	59a306681860248e136938a1f0f6d7da1d20aab767a87645cd2a096f935b3024
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	9	500	d014b5aefccd07ce0ff353d005fe1c78e2bd12fda9245030c2a80986af78d08b
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	10	500	461bff492d2f26341611f785c79875c2a201c637d42ea59457d00c9b461d0870
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	11	500	12d32881d40f9ea3ed6c0e34c247078006d436a9ccf4fa4b46134e782b55babf
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	12	500	af23c8cb0f3412b2a984f417c178fde1f26c41270b01739f714e0787aef1cace
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	13	500	6e0672bc98e0866eb8c894d61eebc26b73d0e62f02b4e4af00db1e65acf3d2c8
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	14	500	ff9aac334ea3fa69cf44cbb56a4f06673a732f3f93f2d52c0ab66fad3d92c074
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	15	500	c6e6f961b81809cd178d08e3f71306a747dbd49df6955d4a0a0a635aa9ba7c6b
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	16	500	30f8ce637cf145a9476e81ea4983353d59e2897ff7b06eebd5b3c3bacd20b6fb
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	17	500	16b921121b4c210611fe922e87cccd0d529cf98341340ab843c35eac30174a0d
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	18	500	5ec8070d097aab91f2fca736180f3710e29b0f50963ebfdf2f3310b6d59ed9e2
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	19	500	181c30b51a248181d7239ff5038016aef35e96080bb297ce2e1f8c692e46f528
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	20	500	6a73ef3046965d91dc0d15ecdec8375445aabab73fd93c5c530e1372e1711938
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	21	500	326ea5f82555b2fb6c19fec160203f3860ac3427385df1b37271ea80e60d0114
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	22	500	ec9ca0942f4d86be60e113a3dee17d397bbd4cd3d18d399d0d4e732dff334837
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	23	500	3b6698fa6307ba7a24f96f0ca98e3c70b6b06d86967c3d2a512aa4981f886fce
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	24	500	c0bda4ac7c401c18d39584359f1da24922b10630a404ae7a59fe1abac9a5f295
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	25	500	ca490117cd2acbb39777c1fe7f65063554de3646ef15c2f0ee0e8dd9caa1b1b5
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	26	500	0ba0aac6875a529628abf3f86668472c45cccfe0702d3280c7d64f56f22a3787
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	27	500	60e7f2781ef45bd37d8045de97901b69cef702dd94b609c2e3de90e69db7dce9
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	28	500	7b9b5d67c4964eff6a1fea49ffc82410b39c3937fc4c02e32dff2c9d6334770b
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	29	500	6a9283e276af26ddfae077bcd4d755a615ad38c9b1460bf5a4b14fafcb5b101f
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	30	500	40fca0706a5bbafef05a1995dfe7bccaa2bd8d61ee3babed4b37005ecce09ba1
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	31	500	15b3d8f80874e1c7b6a822271abc512ca1301c663ae8af4d2f8ee854a8eeeec2
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	32	500	ffbbd389bd3b154f27d4b13d96ae7f2563272e3330edd4fb469f30c7a0431c64
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	33	500	a02e13706b979163e1b26efa925cc7ec925433f534f16af1d3d8d5828d4d7772
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	34	500	be01f3935523b75397af7558a24b0c9566c8eaf19d31942ef81dc1dc924fe802
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	35	500	ceba15cbecaa608d8e480a4c0dd5fd0bb4a001010e4982addad6c05ac862273a
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	36	500	48309381da361bdba86f7055f19ea8e3f71d844346f7a26f718a9c9453de36a2
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	37	500	903528bd452cdcee450b65315328d27724954f21a445c4e9af8100ca1d538031
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	38	500	4d89700068f29386a82ec8e919a41dc17ca2e81ca315d987de95f80f6601e536
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	39	500	1f4c996c84f5d050c4cbf2e4a94ac6b449500743afba20e04ce8a3497ac84568
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	40	500	1d129fe209bf703b2d068f0b2a7f58d204f9e9250e17bef11029b3574a2146c9
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	41	500	ab9510429a6ca3125a543dd07fbc970cad46ad84cd10f6890b7393e0a668dbfc
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	42	500	db42e8e404fac75b9063bcb59a877a3e3534cf241a6f4871e1153cbc9c0d0268
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	43	500	13b46ef6b18d063e6c26d573801dbc14eb29922878b4ab1f6a2686ebf4a3a216
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	44	500	7ada45adf240c1d4d3f998da9aec554b2309a5e8bb439691a68083f788c095fd
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	45	500	4b1fc5348eb359cbddbe10156971d25b183000c4aa64ea59bfb5ca12c6258b12
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	46	500	30296ab62a2e7a98a519769bbea6113929eb1f8949520f9ad4a20eff046eb4d6
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	47	500	16377cc77313d9f0ca47c95fd9d1b74dcdfe8378e85bea1b642c123d0f3c17a9
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	48	500	4de1c37dbc1d8b88866d9507c20ef74df30550412268c5cf5c121ec8bf720691
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	49	500	9d27bac5659a97b6fb5f1eb64b5ad0059178678f8b697308c7a4fe5a30a6d555
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	50	500	1aefffb506572ffa9072a2259286ecfc4180f6be0410c866f237c55f0d5abdeb
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	51	500	1cf3c5c2646fab1fdd3d93b43fd95b95a6160fad85a8202e1893d061612be30a
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	52	500	a5b1de6bbb3bbf331f80b0b1d2d618cc1ecca9c3a3855a21367b0960120c12d9
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	53	500	8d36cd00ca52f5965267960cd82222783cc963e2c2251ca710538081c1966524
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	54	500	b78a44905f8d3653862bfd0b18c7112f128069f4fb45ffc53dbcc139c51009ec
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	55	500	4913a587597cc5655dd9a862ed7c83e08349c3c4ac4c76ac35d29883a1e280c8
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	56	500	3a5df99a5e88426848f13dcd8825430bd7759af45be8679d03cbc6495df8ebe8
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	57	500	0784e95791fcc78d766f19156ecc999f3a43919f2b519a1c43199b3b9d845784
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	58	500	461d283c47235213dfcaa51b8d1d5dab6a5ce99ff02bc0bcdfe631c1151dbb88
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	59	500	eb5ee0160bd34b3ca50c294c785d77f6943a2f26fd49476570e975f80b1069cc
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	60	500	6d272a9ff968a08f1d8be490d1146486833835e67b6fd51de1bc2c33fe1c4786
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	61	500	07b1d8a27073d43163c5be5a5fc3bcbe2ce85ef3c548f04d49b45cc94d07868a
+chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	62	56	5e25f9182e4c06736000b4f811ecffc713e09a1b9ed5599a319e47c5d817b7be
 manifest	hydo/onboard/examples/miniflux/hydo-read.yaml	core
 boot	hydo/onboard/examples/miniflux/hydo-read.yaml	hydo/onboard/examples/miniflux/hydo-read.yaml#0	error	cccaafbf624f82a7
 boot	hydo/onboard/examples/miniflux/hydo-read.yaml	hydo/onboard/examples/miniflux/hydo-read.yaml#1	snapshot	108b760bc0dfd72b
@@ -8054,4 +8122,4 @@ chunk	hydo/onboard/examples-mac/redis/hydo.yaml	53	500	f2bf8f98c9629fa6b8d45bcbd
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	54	500	5cf61ec38f3e010d9a42f26df58707533cae9b4627515e4e121648dbe6bbb663
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	55	500	2b8d95ff39036743ea03c9c1f547c7467526c0539b7dd35c08ebae98eccba1bb
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	56	491	2059fe37977a60502545de88616464b7109da8a5a2e579bf6b926a2ad0799a02
-refused	other=57
+refused	other=58
