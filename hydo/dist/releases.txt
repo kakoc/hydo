@@ -37,3 +37,11 @@ file    0.3.1 linux d074d764c76ce11932d5ff445cd468de38fdca8dd0db02f85fde3817ff99
 archive 0.3.1 mac   2ed5dccc966f357354ea9069e2e9769841a290c45d85bcd4b5b322b876eab7db hydo-mac-0.3.1.tar.gz
 file    0.3.1 mac   f80c565589f1fecf9ccd49d33cb0717c7a15d5cddf3bb3bec7f2dd2b335b51ac hv/hvm/explore/out/Image-explore
 file    0.3.1 mac   806807e7be5f55dae342f796ccc6e20c35514b3684a8c0d4633901a8ac0aa609 hv/hvm/explore/out/Image-explore-netns
+archive 0.3.2 linux a6c1ef923843483b74be7f90e762be8e95499b4246f7b287ce4280847e160940 hydo-linux-0.3.2.tar.gz
+file    0.3.2 linux 0a9ede352483e1718a8583e35afa3e82791c8223e40c0a888d39b0530158e9d3 guest/bzImage
+file    0.3.2 linux d50fbc67261a2544404d7a5f3e7a79cabe3b0a2e1f455158ccc5369d878d6207 guest/bzImage-kvm
+file    0.3.2 linux b40b2711a845dcf8622bf5230e0cb4d775b27ad2c297b16b0e5a8d631e23aac3 guest/bzImage-kvm-smp
+file    0.3.2 linux d074d764c76ce11932d5ff445cd468de38fdca8dd0db02f85fde3817ff997230 guest/initramfs-kafka.cpio.gz
+archive 0.3.2 mac   2aec23c47241590d722e9de77e3a68c267045a0ed740c3450b757fe30505c03b hydo-mac-0.3.2.tar.gz
+file    0.3.2 mac   f80c565589f1fecf9ccd49d33cb0717c7a15d5cddf3bb3bec7f2dd2b335b51ac hv/hvm/explore/out/Image-explore
+file    0.3.2 mac   806807e7be5f55dae342f796ccc6e20c35514b3684a8c0d4633901a8ac0aa609 hv/hvm/explore/out/Image-explore-netns
