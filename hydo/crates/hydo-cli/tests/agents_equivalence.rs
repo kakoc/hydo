@@ -8,7 +8,7 @@
 //!
 //! Each case runs in a freshly made directory with its own HOME. Paths are written as `<CWD>` (its name `<CWDNAME>`),
 //! `<ROOT>` (the release-like root with bin/hydo) and `<REPO>`; an output or a file whose bytes
-//! are exactly one file of the skill folder (`skills/hydo-onboard/`, or `hydo/onboard/MANIFEST.md`)
+//! are exactly one file of the plugin folder (`plugin/`, or `hydo/onboard/MANIFEST.md`)
 //! is recorded as `{"skill": <path>}`, so most of the golden does not depend on the skill's text;
 //! other texts up to 2,000 bytes verbatim, longer ones by SHA-256. The golden pins the skill
 //! folder's hash: if a row differs and the skill changed since the recording, the failure says so.
@@ -115,7 +115,7 @@ fn skill() -> Skill {
     }
     let r = repo();
     let mut files = Vec::new();
-    walk(&r.join("skills/hydo-onboard"), &r, &mut files);
+    walk(&r.join("plugin"), &r, &mut files);
     walk(&r.join("hydo/guide"), &r, &mut files);
     let man = "hydo/onboard/MANIFEST.md".to_string();
     files.push((man.clone(), std::fs::read(r.join(&man)).unwrap()));
@@ -200,7 +200,7 @@ fn run_seq(
     res
 }
 
-/// A release-like root for the binary: bin/hydo and, when `with_skill`, skill/hydo-onboard and
+/// A release-like root for the binary: bin/hydo and, when `with_skill`, plugin/ and
 /// hydo/onboard/MANIFEST.md (else the built-in copies are used).
 ///
 /// The recorded modes are those of umask 022 and of a checkout made with it (M167): every
@@ -220,11 +220,7 @@ fn release(with_skill: bool) -> PathBuf {
         std::fs::copy(env!("CARGO_BIN_EXE_hydo"), r.join("bin/hydo")).unwrap();
     }
     if with_skill {
-        std::fs::create_dir_all(r.join("skill")).unwrap();
-        copy_as_checked_out(
-            &repo().join("skills/hydo-onboard"),
-            &r.join("skill/hydo-onboard"),
-        );
+        copy_as_checked_out(&repo().join("plugin"), &r.join("plugin"));
         std::os::unix::fs::symlink(repo().join("hydo"), r.join("hydo")).unwrap();
     }
     r
@@ -283,14 +279,10 @@ fn markers_both(d: &Path) {
 }
 
 fn foreign_skill(d: &Path) {
-    std::fs::create_dir_all(d.join("out/hydo-onboard")).unwrap();
-    std::fs::write(
-        d.join("out/hydo-onboard/SKILL.md"),
-        "---\nname: other\n---\n",
-    )
-    .unwrap();
+    std::fs::create_dir_all(d.join("out/onboard")).unwrap();
+    std::fs::write(d.join("out/onboard/SKILL.md"), "---\nname: other\n---\n").unwrap();
     std::fs::create_dir_all(d.join(".claude/skills")).unwrap();
-    std::os::unix::fs::symlink("/nonexistent", d.join(".claude/skills/hydo-onboard")).unwrap();
+    std::os::unix::fs::symlink("/nonexistent", d.join(".claude/skills/hydo")).unwrap();
 }
 
 type Case = (&'static str, fn(&Path), Vec<Vec<String>>);

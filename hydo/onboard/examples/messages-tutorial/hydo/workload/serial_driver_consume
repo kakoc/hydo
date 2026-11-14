@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=10
+# The consumer: take the oldest message and acknowledge it. It runs alone (a serial driver), so
+# one consumer holds a message at a time. tinyq records the receive and the acknowledgement in
+# the history `queue`.
+exec /bin/tinyq take "$HYDO_CMD_ID"

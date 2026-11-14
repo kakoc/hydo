@@ -138,5 +138,6 @@ hydo::bin/hydo                           fast
 hydo::docs                               fast
 hydo::equivalence                        fast
 hydo::migrate                            fast
+hydo::onboard                            fast
 hydo::readme                             fast
 hydo::versions                           fast

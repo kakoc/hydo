@@ -1,6 +1,8 @@
-//! The repository check of the skills in `skills/` (it replaced skills/check.py in M108): the
-//! Agent Skills specification (https://agentskills.io/specification), the skill's version and its
-//! Claude Code plugin entry, and the guide (hydo/guide/) the skill relies on (Milestone 170).
+//! The repository check of the skills (it replaced skills/check.py in M108): the published skill
+//! `onboard` in the Claude Code plugin folder `plugin/` (`plugin/skills/onboard/`, Milestone 228)
+//! and the contributor skills in `skills/`. It checks the Agent Skills specification
+//! (https://agentskills.io/specification), the skill's version and its plugin, and the guide
+//! (hydo/guide/) the skill relies on (Milestone 170).
 //!
 //! 1. skills-ref (https://github.com/agentskills/agentskills/tree/main/skills-ref), when
 //!    `$HYDO_SKILLS_REF` names it or `skills-ref` is on PATH: `skills-ref validate <skill>` must
@@ -10,18 +12,19 @@
 //!    1-1024 chars; compatibility 1-500 chars; metadata a map of strings; only the allowed
 //!    frontmatter keys; SKILL.md under 500 lines; every relative file it links exists and is one
 //!    level deep (references/x.md, assets/x, scripts/x).
-//! 3. The skill's own release: `metadata.version` and `metadata.hydo-min` are versions, the
-//!    marketplace `.claude-plugin/marketplace.json` lists `./skills/<name>` as a plugin of the same
-//!    version, and the folder holds nothing Claude Code would load as another plugin component.
-//!    A contributor skill (`metadata.audience: contributors`, for example skills/hydo-docs, the
-//!    repository's writing standard) is not published: it has no plugin entry and is not checked
-//!    for one.
+//! 3. The skill's own release: `metadata.version` and `metadata.hydo-min` are versions,
+//!    `plugin/.claude-plugin/plugin.json` names the plugin `hydo` with the same version, the
+//!    marketplace `.claude-plugin/marketplace.json` lists `./plugin` as `hydo` of the same
+//!    version, and the plugin folder holds nothing Claude Code would load as another component.
+//!    A contributor skill in `skills/` (`metadata.audience: contributors`, for example
+//!    skills/hydo-docs, the repository's writing standard) is not published.
 //! 4. Every `hydo guide <topic>` that the skill or the guide names is a topic of hydo/guide/ (or
 //!    manifest, schema, skill, examples/..., init/...), so the process never points at a fact the
 //!    guide lacks.
 //! 5. Copies stay in sync: hydo/guide/examples/example-redis-composed/hydo/ equals
 //!    hydo/onboard/examples/redis-composed/hydo/ (bytes and executable bits), and the tool
-//!    directories .claude/skills/<name> and .agents/skills/<name> are symlinks to skills/<name>.
+//!    directories are symlinks: .claude/skills/hydo to plugin/, .agents/skills/onboard to
+//!    plugin/skills/onboard, and both tools' <name> to skills/<name> for a contributor skill.
 //!
 //! It is a test, not a `hydo` command: a release carries the skill inside the `hydo` binary
 //! (hydo-agents' build.rs), so there is no skill folder or repository copy for a user to check;
@@ -34,6 +37,9 @@ use regex::Regex;
 use std::collections::BTreeMap;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+
+/// The Claude Code plugin folder, which holds the published skill in `skills/<name>/`.
+const PLUGIN_DIR: &str = "plugin";
 
 const ALLOWED: [&str; 6] = [
     "name",
@@ -313,9 +319,25 @@ fn contributor_skill(d: &Path) -> bool {
     matches!(get(&fm, "metadata"), Some(V::M(m)) if m.get("audience").map(String::as_str) == Some("contributors"))
 }
 
-/// The skill's version and the oldest hydo it supports (`metadata.version`, `metadata.hydo-min`)
-/// are dotted numbers, and the Claude Code marketplace lists the skill folder as a plugin of the
-/// same version, with nothing in the folder that Claude Code would load as another component.
+/// The JSON file `p`, or a problem.
+fn json(p: &Path, shown: &str, r: &mut Report) -> Option<serde_json::Value> {
+    match std::fs::read(p)
+        .map_err(|e| e.to_string())
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).map_err(|e| e.to_string()))
+    {
+        Ok(v) => Some(v),
+        Err(_) => {
+            r.bad.push(format!("{shown} is missing or not JSON"));
+            None
+        }
+    }
+}
+
+/// The published skill's version and the oldest hydo it supports (`metadata.version`,
+/// `metadata.hydo-min`) are dotted numbers; the plugin folder `plugin/` is the Claude Code plugin
+/// `hydo` (`.claude-plugin/plugin.json`) of the same version, holding nothing but its manifest and
+/// `skills/`; and the marketplace `.claude-plugin/marketplace.json` lists it as `hydo` from
+/// `./plugin`, of the same version.
 fn check_plugin(root: &Path, d: &Path, r: &mut Report) {
     let name = d.file_name().unwrap().to_string_lossy().into_owned();
     let text = std::fs::read_to_string(d.join("SKILL.md")).unwrap_or_default();
@@ -333,33 +355,43 @@ fn check_plugin(root: &Path, d: &Path, r: &mut Report) {
             )),
         }
     }
-    for c in [
-        "skills",
-        "commands",
-        "agents",
-        "hooks",
-        "bin",
-        ".claude-plugin",
-        ".mcp.json",
-    ] {
-        if d.join(c).exists() {
+    let version = meta.get("version").map(String::as_str);
+    let plugin = root.join(PLUGIN_DIR);
+    for (n, _) in names(&plugin) {
+        if n != ".claude-plugin" && n != "skills" {
             r.bad.push(format!(
-                "{name}: {c} in the skill folder would be loaded by Claude Code as a plugin component"
+                "{PLUGIN_DIR}/{n}: the plugin folder holds only .claude-plugin/ and skills/ (Claude Code would load {n} as a plugin component)"
+            ));
+        }
+    }
+    if let Some(m) = json(
+        &plugin.join(".claude-plugin/plugin.json"),
+        &format!("{PLUGIN_DIR}/.claude-plugin/plugin.json"),
+        r,
+    ) {
+        if m["name"].as_str() != Some("hydo") {
+            r.bad.push(format!(
+                "{PLUGIN_DIR}/.claude-plugin/plugin.json names the plugin {}, not \"hydo\"",
+                m["name"]
+            ));
+        }
+        if m["version"].as_str() != version {
+            r.bad.push(format!(
+                "{PLUGIN_DIR}/.claude-plugin/plugin.json gives version {}, {name}'s SKILL.md {version:?}",
+                m["version"]
             ));
         }
     }
     // The marketplace is `.claude-plugin/marketplace.json` (live since hydo 0.2.0; docs/RELEASING.md,
     // "Releasing the onboarding skill").
-    let mp = root.join(".claude-plugin/marketplace.json");
-    let Ok(m) = std::fs::read(&mp)
-        .map_err(|e| e.to_string())
-        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).map_err(|e| e.to_string()))
-    else {
-        r.bad
-            .push(".claude-plugin/marketplace.json is missing or not JSON".into());
+    let Some(m) = json(
+        &root.join(".claude-plugin/marketplace.json"),
+        ".claude-plugin/marketplace.json",
+        r,
+    ) else {
         return;
     };
-    let src = format!("./skills/{name}");
+    let src = format!("./{PLUGIN_DIR}");
     let entry = m["plugins"].as_array().and_then(|a| {
         a.iter()
             .find(|p| p["source"].as_str() == Some(src.as_str()))
@@ -369,31 +401,56 @@ fn check_plugin(root: &Path, d: &Path, r: &mut Report) {
             ".claude-plugin/marketplace.json has no plugin with source {src}"
         )),
         Some(e) => {
-            if e["version"].as_str() != meta.get("version").map(String::as_str) {
+            if e["version"].as_str() != version {
                 r.bad.push(format!(
-                    ".claude-plugin/marketplace.json gives {name} version {}, its SKILL.md {:?}",
-                    e["version"],
-                    meta.get("version")
+                    ".claude-plugin/marketplace.json gives the plugin version {}, {name}'s SKILL.md {version:?}",
+                    e["version"]
+                ));
+            }
+            if e["name"].as_str() != Some("hydo") || m["name"].as_str() != Some("hydo") {
+                r.bad.push(format!(
+                    ".claude-plugin/marketplace.json: the plugin {}@{} is not hydo@hydo",
+                    e["name"], m["name"]
                 ));
             }
             r.info.push(format!(
-                "plugin: {}@{} from {src}, version {}",
+                "plugin: {}@{} from {src}, version {}; the command is /{}:{name}",
                 e["name"].as_str().unwrap_or("?"),
                 m["name"].as_str().unwrap_or("?"),
-                e["version"]
+                e["version"],
+                e["name"].as_str().unwrap_or("?"),
             ));
         }
     }
 }
 
+/// `link` is a symbolic link to `to`.
+fn linked(root: &Path, link: &str, to: &Path, r: &mut Report) {
+    let p = root.join(link);
+    let ok = std::fs::symlink_metadata(&p).is_ok_and(|m| m.file_type().is_symlink());
+    if !(ok && p.canonicalize().ok() == to.canonicalize().ok()) {
+        r.bad.push(format!(
+            "{link} is not a symlink to {}",
+            to.strip_prefix(root).unwrap_or(to).display()
+        ));
+    }
+}
+
 fn check(root: &Path, exe: Option<&Path>) -> Report {
     let mut r = Report::default();
-    let here = root.join("skills");
-    let skills: Vec<PathBuf> = names(&here)
+    // the published skill(s) inside the plugin folder, then the contributor skills in skills/
+    let mut skills: Vec<(PathBuf, bool)> = names(&root.join(PLUGIN_DIR).join("skills"))
         .into_values()
         .filter(|p| p.join("SKILL.md").is_file())
+        .map(|p| (p, true))
         .collect();
-    for d in &skills {
+    skills.extend(
+        names(&root.join("skills"))
+            .into_values()
+            .filter(|p| p.join("SKILL.md").is_file())
+            .map(|p| (p, false)),
+    );
+    for (d, published) in &skills {
         match exe {
             Some(x) => skills_ref(d, x, &mut r),
             None => r.info.push(
@@ -401,22 +458,26 @@ fn check(root: &Path, exe: Option<&Path>) -> Report {
             ),
         }
         check_skill(d, &mut r);
-        if contributor_skill(d) {
-            r.info.push(format!(
-                "plugin: {} is a contributor skill (metadata.audience: contributors), not published",
-                d.file_name().unwrap().to_string_lossy()
-            ));
-        } else {
-            check_plugin(root, d, &mut r);
-        }
         let n = d.file_name().unwrap().to_string_lossy().into_owned();
-        guide_mentions(root, d, &format!("skills/{n}"), &mut r);
-        for tool in [".claude/skills", ".agents/skills"] {
-            let p = root.join(tool).join(&n);
-            let link = std::fs::symlink_metadata(&p).is_ok_and(|m| m.file_type().is_symlink());
-            if !(link && p.canonicalize().ok() == d.canonicalize().ok()) {
-                r.bad
-                    .push(format!("{tool}/{n} is not a symlink to skills/{n}"));
+        if *published {
+            check_plugin(root, d, &mut r);
+            guide_mentions(root, d, &format!("{PLUGIN_DIR}/skills/{n}"), &mut r);
+            // Claude Code takes the whole plugin folder, the other tools the skill folder
+            linked(root, ".claude/skills/hydo", &root.join(PLUGIN_DIR), &mut r);
+            linked(root, &format!(".agents/skills/{n}"), d, &mut r);
+        } else {
+            if contributor_skill(d) {
+                r.info.push(format!(
+                    "plugin: {n} is a contributor skill (metadata.audience: contributors), not published"
+                ));
+            } else {
+                r.bad.push(format!(
+                    "skills/{n} is not marked for contributors (metadata.audience: contributors); a published skill belongs in {PLUGIN_DIR}/skills/"
+                ));
+            }
+            guide_mentions(root, d, &format!("skills/{n}"), &mut r);
+            for tool in [".claude/skills", ".agents/skills"] {
+                linked(root, &format!("{tool}/{n}"), d, &mut r);
             }
         }
     }
@@ -474,6 +535,7 @@ fn copy_tree() -> PathBuf {
     std::fs::create_dir_all(d.join("hydo/onboard/examples/redis-composed")).unwrap();
     for (from, to) in [
         ("skills", "."),
+        (PLUGIN_DIR, "."),
         ("hydo/guide", "hydo"),
         (
             "hydo/onboard/examples/redis-composed/hydo",
@@ -500,6 +562,12 @@ fn copy_tree() -> PathBuf {
             std::os::unix::fs::symlink(format!("../../skills/{n}"), d.join(tool).join(&n)).unwrap();
         }
     }
+    std::os::unix::fs::symlink("../../plugin", d.join(".claude/skills/hydo")).unwrap();
+    std::os::unix::fs::symlink(
+        "../../plugin/skills/onboard",
+        d.join(".agents/skills/onboard"),
+    )
+    .unwrap();
     d
 }
 
@@ -513,7 +581,7 @@ fn bad_after(change: impl FnOnce(&Path)) -> Vec<String> {
 }
 
 fn edit_skill(d: &Path, f: impl FnOnce(String) -> String) {
-    let p = d.join("skills/hydo-onboard/SKILL.md");
+    let p = d.join("plugin/skills/onboard/SKILL.md");
     let t = std::fs::read_to_string(&p).unwrap();
     std::fs::write(&p, f(t)).unwrap();
 }
@@ -525,20 +593,21 @@ fn a_broken_link_fails() {
     let bad = bad_after(|d| edit_skill(d, |t| t + "\nSee [gone](references/no-such-file.md).\n"));
     assert_eq!(
         bad,
-        ["hydo-onboard: SKILL.md links references/no-such-file.md, which does not exist"]
+        ["onboard: SKILL.md links references/no-such-file.md, which does not exist"]
     );
 }
 
 #[test]
 fn a_link_two_levels_deep_fails() {
     let bad = bad_after(|d| {
-        std::fs::create_dir_all(d.join("skills/hydo-onboard/references/deep")).unwrap();
-        std::fs::write(d.join("skills/hydo-onboard/references/deep/x.md"), "x\n").unwrap();
+        let r = d.join("plugin/skills/onboard/references");
+        std::fs::create_dir_all(r.join("deep")).unwrap();
+        std::fs::write(r.join("deep/x.md"), "x\n").unwrap();
         edit_skill(d, |t| t + "\nSee [deep](references/deep/x.md).\n")
     });
     assert_eq!(
         bad,
-        ["hydo-onboard: SKILL.md links references/deep/x.md, deeper than one level"]
+        ["onboard: SKILL.md links references/deep/x.md, deeper than one level"]
     );
 }
 
@@ -588,49 +657,66 @@ fn a_frontmatter_key_outside_the_specification_fails() {
     let bad = bad_after(|d| edit_skill(d, |t| t.replacen("---\n", "---\nversion: 2\n", 1)));
     assert_eq!(
         bad,
-        ["hydo-onboard: frontmatter key 'version' not in the specification"]
+        ["onboard: frontmatter key 'version' not in the specification"]
     );
 }
 
 #[test]
 fn a_wrong_name_and_a_missing_symlink_fail() {
     let bad = bad_after(|d| {
-        edit_skill(d, |t| {
-            t.replacen("name: hydo-onboard", "name: Hydo_Onboard", 1)
-        });
-        std::fs::remove_file(d.join(".agents/skills/hydo-onboard")).unwrap();
+        edit_skill(d, |t| t.replacen("name: onboard", "name: On_Board", 1));
+        std::fs::remove_file(d.join(".agents/skills/onboard")).unwrap();
+        std::fs::remove_file(d.join(".claude/skills/hydo")).unwrap();
     });
     assert_eq!(
         bad,
         [
-            "hydo-onboard: name 'Hydo_Onboard' breaks the naming rules",
-            "hydo-onboard: name 'Hydo_Onboard' is not the directory name",
-            ".agents/skills/hydo-onboard is not a symlink to skills/hydo-onboard",
+            "onboard: name 'On_Board' breaks the naming rules",
+            "onboard: name 'On_Board' is not the directory name",
+            ".claude/skills/hydo is not a symlink to plugin",
+            ".agents/skills/onboard is not a symlink to plugin/skills/onboard",
         ]
     );
 }
 
 #[test]
 fn a_skill_version_the_plugin_does_not_have_fails() {
+    let v = {
+        let t = std::fs::read_to_string(top().join("plugin/skills/onboard/SKILL.md")).unwrap();
+        let m = Regex::new(r#"(?m)^  version: "([0-9.]+)""#)
+            .unwrap()
+            .captures(&t)
+            .unwrap()[1]
+            .to_string();
+        m
+    };
     let bad = bad_after(|d| {
         edit_skill(d, |t| {
-            t.replacen("  version: \"1.2.0\"", "  version: \"1.2.1\"", 1)
+            t.replacen(&format!("  version: \"{v}\""), "  version: \"9.9.9\"", 1)
         })
     });
-    assert_eq!(bad.len(), 1, "{bad:?}");
+    assert_eq!(bad.len(), 2, "{bad:?}");
     assert!(
-        bad[0].starts_with(".claude-plugin/marketplace.json gives hydo-onboard version \"1.2.0\""),
+        bad[0].starts_with(&format!(
+            "plugin/.claude-plugin/plugin.json gives version \"{v}\", onboard's SKILL.md Some(\"9.9.9\")"
+        )),
+        "{bad:?}"
+    );
+    assert!(
+        bad[1].starts_with(&format!(
+            ".claude-plugin/marketplace.json gives the plugin version \"{v}\""
+        )),
         "{bad:?}"
     );
     let bad = bad_after(|d| edit_skill(d, |t| t.replacen("  hydo-min: \"0.1.0\"\n", "", 1)));
     assert_eq!(
         bad,
-        ["hydo-onboard: metadata.hydo-min must be a version like 1.0.0 (got None)"]
+        ["onboard: metadata.hydo-min must be a version like 1.0.0 (got None)"]
     );
 }
 
 #[test]
-fn a_skill_that_is_not_marked_for_contributors_needs_a_plugin_entry() {
+fn a_skill_in_skills_must_be_for_contributors() {
     let bad = bad_after(|d| {
         let p = d.join("skills/hydo-docs/SKILL.md");
         let t = std::fs::read_to_string(&p).unwrap();
@@ -638,21 +724,18 @@ fn a_skill_that_is_not_marked_for_contributors_needs_a_plugin_entry() {
     });
     assert_eq!(
         bad,
-        [
-            "hydo-docs: metadata.hydo-min must be a version like 1.0.0 (got None)",
-            ".claude-plugin/marketplace.json has no plugin with source ./skills/hydo-docs",
-        ]
+        ["skills/hydo-docs is not marked for contributors (metadata.audience: contributors); a published skill belongs in plugin/skills/"]
     );
 }
 
 #[test]
-fn a_plugin_component_in_the_skill_folder_fails() {
+fn a_plugin_component_in_the_plugin_folder_fails() {
     let bad = bad_after(|d| {
-        std::fs::create_dir_all(d.join("skills/hydo-onboard/hooks")).unwrap();
+        std::fs::create_dir_all(d.join("plugin/hooks")).unwrap();
     });
     assert_eq!(
         bad,
-        ["hydo-onboard: hooks in the skill folder would be loaded by Claude Code as a plugin component"]
+        ["plugin/hooks: the plugin folder holds only .claude-plugin/ and skills/ (Claude Code would load hooks as a plugin component)"]
     );
 }
 
@@ -661,7 +744,7 @@ fn a_guide_topic_that_does_not_exist_fails() {
     let bad = bad_after(|d| edit_skill(d, |t| t + "\nRead `hydo guide no-such-topic`.\n"));
     assert_eq!(
         bad,
-        ["skills/hydo-onboard/SKILL.md: `hydo guide no-such-topic` is not a topic of hydo/guide/"]
+        ["plugin/skills/onboard/SKILL.md: `hydo guide no-such-topic` is not a topic of hydo/guide/"]
     );
     let bad = bad_after(|d| std::fs::remove_file(d.join("hydo/guide/services.md")).unwrap());
     assert!(

@@ -73,10 +73,12 @@ your platform first ([Linux](../hydo/dist/linux/QUICKSTART-linux.md),
    hydo report
    ```
 
-An AI coding tool can write the folder for you with the onboarding skill. In Claude Code, run
-`/plugin marketplace add kakoc/hydo`, then `/plugin install hydo-onboard@hydo`. For Codex, Cursor,
-GitHub Copilot, or Gemini, run `hydo skill install --agent codex` (or `cursor`, `copilot`,
-`gemini`). Any other tool can read the skill from `hydo guide skill`.
+An AI coding tool can write the folder for you with the onboarding skill. `hydo onboard` installs
+it for the tool it finds and says what to run next. In Claude Code you can also add it by hand:
+run `/plugin marketplace add kakoc/hydo` and `/plugin install hydo@hydo`, then `/hydo:onboard`.
+For Codex, Cursor, GitHub Copilot, or Gemini, run `hydo skill install --agent codex` (or
+`cursor`, `copilot`, `gemini`). Any other tool can read the skill from `hydo guide skill`.
+[ONBOARD.md](ONBOARD.md) shows the three paths and a worked example.
 
 
 ## Where to read more

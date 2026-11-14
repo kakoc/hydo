@@ -1,11 +1,11 @@
-//! Embed the onboarding skill (skills/hydo-onboard/, the process), the guide (hydo/guide/, this
+//! Embed the Claude Code plugin hydo with the onboarding skill (plugin/, the process), the guide (hydo/guide/, this
 //! hydo's facts: the topics of `hydo guide`, the examples and `hydo init`'s template) and
 //! MANIFEST.md into the binary, so that `hydo guide`, `hydo skill install` and `hydo init` work
-//! from the `hydo` binary alone. A release that ships the skill folder (skill/hydo-onboard/) still
+//! from the `hydo` binary alone. A release that ships the plugin folder (plugin/) still
 //! reads the skill from disk first (src/lib.rs); the guide is always the built-in one.
 //!
-//! All three are read through the links in this crate's embed/ folder (embed/hydo-onboard ->
-//! skills/hydo-onboard, embed/guide -> hydo/guide, embed/MANIFEST.md -> hydo/onboard/MANIFEST.md),
+//! All three are read through the links in this crate's embed/ folder (embed/plugin ->
+//! plugin, embed/guide -> hydo/guide, embed/MANIFEST.md -> hydo/onboard/MANIFEST.md),
 //! never from outside the crate: the crate published to crates.io carries the linked files'
 //! contents there (docs/PUBLISHING.md), and the tree reads the repository's files through the same
 //! links.
@@ -53,7 +53,7 @@ fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf, u32)>, dirs: &mut
 
 fn main() {
     let here = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let skill = here.join("embed/hydo-onboard");
+    let skill = here.join("embed/plugin");
     let guide = here.join("embed/guide");
     let manifest = here.join("embed/MANIFEST.md").canonicalize().unwrap();
     let mut files = Vec::new();

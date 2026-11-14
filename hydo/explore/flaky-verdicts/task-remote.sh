@@ -100,7 +100,7 @@ s=$(now)
 # twice the image) live in a tmpfs, so the shared home file system only holds the Docker image
 # and the environment tar, never the hydo image.
 B=/dev/shm/hydo-flaky-$ID
-(cd "$W" && timeout 3600 flock -w 3000 ~/hydo-onboard-build.lock timeout 2400 "$H" build hydo.yaml --build-dir "$B") > "$O/build.log" 2>&1
+(cd "$W" && timeout 3600 flock -w 3000 ~/hydo-flaky-build.lock timeout 2400 "$H" build hydo.yaml --build-dir "$B") > "$O/build.log" 2>&1
 echo "build rc=$? wall=$(el "$s" "$(now)")" >> "$O/info"
 for f in "$B"/*; do
   case "$f" in */explore-ob-fv-disk.img|*/explore-ob-fv-disk.img.json) ;; *) chmod -R u+w "$f" 2>/dev/null; rm -rf "$f" ;; esac

@@ -47,6 +47,6 @@ What it does, per Compose service (the table in MANIFEST.md lists every key):
     images: a service whose process ends by itself is started again); restart: "no" also gives
     recovery: false (not started again after a power cut).
 It cannot know the workload or the invariants: it writes a TODO skeleton for both, which the
-hydo-onboard skill (`hydo guide`; skills/hydo-onboard in hydo's repository) fills in. Unsupported keys are reported as warnings
+onboarding skill (/hydo:onboard in Claude Code, `hydo onboard` installs it) fills in. Unsupported keys are reported as warnings
 with what to do. Stdlib only; PyYAML is used when installed (anchors, merge keys), otherwise the
 hydo-build YAML subset parser (or give a .json file, e.g. `docker compose config --format json`).

@@ -1,0 +1,3 @@
+# hydo: the build cache and run results (what hydo init adds)
+.hydo/
+hydo-out/

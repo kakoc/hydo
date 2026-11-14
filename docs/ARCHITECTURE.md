@@ -169,7 +169,8 @@ hashes from a package's path and lock file, so making them members would change 
 | [hydo/stack/](../hydo/stack/) | The example order service (Go) of the stack example and the benchmark. |
 | [hydo/dist/](../hydo/dist/) | Release packaging for Linux and the Mac, and the release index `releases.txt`. |
 | [sdk/](../sdk/) | The assertion SDKs: Rust (the reference), Go, Python, and JavaScript. |
-| [skills/](../skills/) | `hydo-onboard` (for users) and `hydo-docs` (for contributors). |
+| [plugin/](../plugin/) | The Claude Code plugin `hydo` with the onboarding skill `onboard` (`/hydo:onboard`; `plugin/skills/onboard/` for every AI tool). |
+| [skills/](../skills/) | `hydo-docs`, the writing standard for contributors. |
 | [docs/](.) | `HISTORY.md` (every milestone with its evidence), `REBASELINE.md` (recorded fingerprints), `BUILD-PINS.md`, `CI.md`, the release documents, `STYLE.md`, and `design/`. |
 | [ci/](../ci/) | The scripts that CI runs. |
 

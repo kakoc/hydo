@@ -18,7 +18,9 @@ pub const FAKE_TS: &str = "2020-09-13 16:26:40";
 /// for UTC+4, set on every faketime'd call, so a build in any zone gets the same bytes.
 pub const FAKE_TZ: &str = "UTC-4";
 
-/// `uuid_from(name, salt)`.
+/// `uuid_from(name, salt)`. The prefix `hydo-onboard:` is a fixed salt of the hash, not the
+/// skill's name (the skill is `onboard` since Milestone 228): the UUIDs are inside every image,
+/// so changing it would move every recorded fingerprint.
 pub fn uuid_from(name: &str, salt: &str) -> String {
     let h = fsx::hex(&Sha256::digest(
         format!("hydo-onboard:{name}:{salt}").as_bytes(),

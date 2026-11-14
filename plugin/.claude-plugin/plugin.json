@@ -1,0 +1,12 @@
+{
+  "name": "hydo",
+  "version": "2.0.0",
+  "description": "/hydo:onboard writes a project's hydo/ folder (services, workload commands, checked properties) so hydo can run the whole system under seeded faults and replay every failure. The process only: every hydo fact comes from the installed hydo (hydo guide).",
+  "author": {
+    "name": "hydo"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/kakoc/hydo",
+  "repository": "https://github.com/kakoc/hydo",
+  "keywords": ["hydo", "testing", "fault-injection", "deterministic-simulation"]
+}

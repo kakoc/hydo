@@ -170,6 +170,9 @@ input	hydo/onboard/examples/medusa/hydo/workload/helper_client.mjs	21aaafc2ea3be
 input	hydo/onboard/examples/medusa/hydo/workload/helper_sql.sh	3aafbfa1c678e8bff255fbe2e7d232ffac7b505b0002b6f955d558e43ef9fb7f
 input	hydo/onboard/examples/medusa/hydo/workload/parallel_driver_capture_refund	d89e7c8787331322273737224b0ba3b07aa7f88feb68ac37b6e102d22d42baa4
 input	hydo/onboard/examples/medusa/hydo/workload/parallel_driver_checkout	da67717b8a4e78fca8248b27dea0855239ff60b37c26dd833959dff8fd8ad554
+input	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml	c40772e70a1813d16d9e805016320bfe6b12c7ab02d9cdfa8f01b7ce22955bda
+input	hydo/onboard/examples/messages-tutorial/hydo/workload/parallel_driver_produce	22d3314bd26779277d410c4fcbd7c9a2d56869957f9d426684fd4f403c514ef0
+input	hydo/onboard/examples/messages-tutorial/hydo/workload/serial_driver_consume	df4b06bc19a54334c2ae33ba3f2958e1676e01acb777db85dc3bd42730a7e6a5
 input	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	a7e19bf3c01be56d464b7a6e443792caee1ad45e29fa7ea8be9801cf05965719
 input	hydo/onboard/examples/nats-jetstream/hydo/checks/final_acked_readable	900e87df6b54fa36af827d5c7d246375af4da61bd20b61838640fb1508b546a9
 input	hydo/onboard/examples/nats-jetstream/hydo/fetch-images.sh	b8360f6b9d20162d723336510712e6eba9c919e0899b29b67673f0a433ff20ae
@@ -1658,6 +1661,42 @@ chunk	hydo/onboard/examples/medusa/hydo/hydo.yaml/hvm/FalseFalse	5	256	6828de6dd
 chunk	hydo/onboard/examples/medusa/hydo/hydo.yaml/hvm/FalseFalse	6	256	b8c35be07f4f6079bf498af269cdeae506d8c525aac3708685934b622b904443
 chunk	hydo/onboard/examples/medusa/hydo/hydo.yaml/hvm/FalseFalse	7	256	e7efccc02328245ec5a2d4e0f25468761dcc0e347ac89b54ceca34db76a67272
 chunk	hydo/onboard/examples/medusa/hydo/hydo.yaml/hvm/FalseFalse	8	95	13714975c2bcaf3841cb7b9bb05aaf73bfc874486a0eeddad2041c718245fe63
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	0	256	bbeddc280109e09ad519d216c73c80fd7459574f1508f3103669357eb1030bd1
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	1	256	b51c25c90408d57396bd6066f6679f8ecfa85d1d6b35936ef3a4ebcdff2b24bc
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	2	256	0ff2400837f083bfd3ceac50c854444a122dc79bb275dc998fe07afd0f74b19c
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	3	256	165d19ea6770645340509433f18ab39f0489f4e5c7b9c9c1b7146fb7b4fa535b
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	4	256	d6d5fbd6232e617592505e140aafdc249ef9a648c80d2ec7d0cd36b45a1f2068
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	5	256	044f83f46db78a53930695f1b8ecb7f2e66d9efa71fb7111a3d6cefd3165c619
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	6	256	18f42aa138f58302e78d4dde96b6159c330d7b808e3fef0bb2d977de9d019d5d
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	7	256	18d7ac5d8090e50c7dabd5c5b114a8fd2bb7aaa0f251a6a99debdab05d6ebcf4
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	8	256	6fa7c00baad23daa9dc241d564ba9508da7b4410cc0be1e13fd1f34fcb10bc20
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	9	256	9f0e91cb552fe41a959da2471c345ff872e7476f43383f735e9fa201264a6f2c
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	10	256	8c75f3a14217b941c95a1ef7111fb6f3fabe85dc3bc0713bd96626ee78741696
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvx	11	29	532981341846c714450865188190f8ef0ed0f241c21ed59e4704b56968937e31
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	0	256	f3bc5e62317654d8c7aa3bc4cb1c3f5cfd1c75ece525ba493f3838159abe9502
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	1	256	16238b39e29465e76a4d295c9390fe3f395fe5e0d0faa7c2caba9a7799a6e276
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	2	256	1bebb51f400261c8caa2daa3f7ce804d789320007b0d73ddb481f20132496f48
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	3	256	0609418546faf5e83fac8043b5f479ce9d517276e0281e7ff4cad43c76ccbc1c
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	4	256	30c705c973f8a8cc1b8ec42faa2f24aa963ac5be9aa1099cd35fba1028a69a65
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	5	256	eed77af31b12991989f889bc9e6231c0b61c243f56f60ea281febeef8f8161c7
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	6	256	f859e27d839aaccc65a5028e06ff687be1dc4c4fced3bdf366da047676d85713
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	7	256	45c5fffe88bc853fc5607a0633f746f559d5c47550a694550f62ec9144632254
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	8	256	eb47d0418934c7338ee5483092d534bf850523f6bd3a79143e007d137842b634
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	9	256	2307933e488c831d4d1df093f8f0ca0127628344c64f9fa21c8c2804565a23ae
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	10	256	fac11103ea8f828047edba0f8071ee1cf6e9ada2ca87751df2201a30534bbe7d
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/TrueTrue	11	36	9f20066915f2d76859be646ae0ec122b2c53e11365a70974c09792a51e934ee2
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	0	256	2daa3f25e945837e7ff806ed2616aecd5f554f96e8f93e8e2b61aad178baa9f1
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	1	256	ca181ea932856fef95d78671626d3e1399de532b173547c7e4de9b9627a52968
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	2	256	431f09148832308103d5577c197ff5df70527e68ec5b515bd3bdffe8ddfab773
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	3	256	24ab9f633e1482df7571e88f565188fbb5c623fa14f4ab7807565b368dfb68a2
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	4	256	b71bfde7e7efd200fd4b66d1262c2a6a76005e52ac80c8d705d3704ae1c3f56a
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	5	256	655835b5c9ca3645ae7098c6e550fc671566b204537d021f7b059b02b5038040
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	6	256	56fa122cef718e7fac9ca487e8e7be33fb355c79aa9edc541acdc5b0906f373e
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	7	256	4028763b32284019943ac1b4e928cec8b62d9cfc88a106b0d10fb230dd90e75f
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	8	256	00ce20878461097ffa800370bd60236381d1eb0058e7c088b5d098f6068b96d5
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	9	256	305a6a75c6a3d6db9afde6ddcffbbb6ed61f2cfcf0377c40bf26719f77a291a5
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	10	256	4b1c3e66323f3f7a16fc02a948965a536e3543adfd539b828d0e2b830f05f86a
+chunk	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml/hvm/FalseFalse	11	25	4cd223450c8f6349d7217f67108229ca7af852a7a1274c91eeca353593070248
 chunk	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml/hvx	0	256	59f13beafc368769c0028986e903d57d29f1be86f7e614ea48baef36fa08517e
 chunk	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml/hvx	1	256	863d48e16f4b32689707e1cdd955fe913b80ca111b7b435881ea54cbed18c61a
 chunk	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml/hvx	2	256	5628c5f90927340105040f68ef3e155e7009cc6d95a4189a0761bed3484d43c2

@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::fetch::sha256_bytes;
+use hydo_agents::SKILL_IN_PLUGIN;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
@@ -108,22 +109,40 @@ fn scratch() -> PathBuf {
     d.canonicalize().unwrap()
 }
 
-/// A skill folder of `version` in `dir/hydo-onboard` (a SKILL.md and one reference).
-fn skill(dir: &Path, version: &str) -> PathBuf {
-    let s = dir.join(SKILL);
+/// A skill folder of `version` at `s` (a SKILL.md and one reference).
+fn skill_at(s: &Path, version: &str) {
     std::fs::create_dir_all(s.join("references")).unwrap();
     std::fs::write(
         s.join("SKILL.md"),
-        format!("---\nname: {SKILL}\ndescription: d\nmetadata:\n  version: \"{version}\"\n---\n# v{version}\n"),
+        format!("---\nname: {SKILL}\ndescription: d\nmetadata:\n  version: \"{version}\"\n  hydo-min: \"0.1.0\"\n---\n# v{version}\n"),
     )
     .unwrap();
     std::fs::write(s.join("references/x.md"), format!("x {version}\n")).unwrap();
+}
+
+/// A skill folder of `version` in `dir/onboard`.
+fn skill(dir: &Path, version: &str) -> PathBuf {
+    let s = dir.join(SKILL);
+    skill_at(&s, version);
     s
+}
+
+/// A plugin folder of `version` in `dir/hydo` (its manifest and the skill folder).
+fn plugin(dir: &Path, version: &str) -> PathBuf {
+    let p = dir.join(PLUGIN);
+    skill_at(&p.join(SKILL_IN_PLUGIN), version);
+    std::fs::create_dir_all(p.join(".claude-plugin")).unwrap();
+    std::fs::write(
+        p.join(".claude-plugin/plugin.json"),
+        "{\"name\": \"hydo\"}\n",
+    )
+    .unwrap();
+    p
 }
 
 /// Publish skill `version` on the server (archive and SHA256SUMS), and list it among `tags`.
 fn publish(srv: &Server, d: &Path, version: &str, tags: &[(&str, bool, bool)]) -> Vec<u8> {
-    let src = skill(&d.join(format!("src-{version}")), version);
+    let src = plugin(&d.join(format!("src-{version}")), version);
     let (a, v) = hydo_agents::release::pack(&src).unwrap();
     assert_eq!(v, version);
     let name = archive_name(version);
@@ -223,7 +242,7 @@ fn an_older_copy_is_updated_and_nothing_else_is_touched() {
         "the folder is the release's, not a merge"
     );
     // the parent holds what it held, and no temporary folder is left anywhere
-    assert_eq!(names(&skills), vec![SKILL, "notes.txt", "other-skill"]);
+    assert_eq!(names(&skills), vec!["notes.txt", SKILL, "other-skill"]);
     assert_eq!(
         std::fs::read_to_string(skills.join("notes.txt")).unwrap(),
         "mine\n"
@@ -238,7 +257,7 @@ fn an_older_copy_is_updated_and_nothing_else_is_touched() {
     let before = srv.log().len();
     let (rc, out, _) = run(&["--to", &to], Some(&src), &tmp);
     assert_eq!(rc, 0);
-    assert!(out.contains("already at hydo-onboard 1.1.0"), "{out}");
+    assert!(out.contains("already at onboard 1.1.0"), "{out}");
     assert_eq!(
         srv.log()[before..],
         ["/api/releases?per_page=100".to_string()]
@@ -362,7 +381,7 @@ fn foreign_folders_links_and_plain_http_are_refused() {
     .unwrap();
     let (rc, _, err) = run(&["--to", &other.display().to_string()], Some(&src), &d);
     assert_eq!(rc, 1);
-    assert!(err.contains("not the hydo-onboard skill"), "{err}");
+    assert!(err.contains("not hydo's onboard skill"), "{err}");
     // a symbolic link
     let link = d.join("b");
     std::fs::create_dir_all(&link).unwrap();
@@ -390,7 +409,7 @@ fn each_agent_gets_its_folder() {
         t,
         vec![
             top.join(".agents/skills").join(SKILL),
-            top.join(".claude/skills").join(SKILL)
+            top.join(".claude/skills").join(PLUGIN)
         ]
     );
     for (a, dir) in [
@@ -401,7 +420,11 @@ fn each_agent_gets_its_folder() {
         ("gemini", ".agents/skills"),
     ] {
         let w = Where::parse(&["--agent".into(), a.into()], "x").unwrap();
-        assert_eq!(w.targets().unwrap(), vec![top.join(dir).join(SKILL)], "{a}");
+        assert_eq!(
+            w.targets().unwrap(),
+            vec![top.join(dir).join(hydo_agents::folder_for(dir))],
+            "{a}"
+        );
     }
     assert!(Where::parse(&["--agent".into(), "vim".into()], "x").is_err());
     assert!(Where::parse(&["--to".into(), "x".into(), "--user".into()], "x").is_err());
@@ -409,4 +432,32 @@ fn each_agent_gets_its_folder() {
     let (rc, _, err) = run(&["--agent", "claude"], None, &std::env::temp_dir());
     assert_eq!(rc, 1);
     assert!(err.contains("symbolic link"), "{err}");
+}
+
+#[test]
+fn a_claude_code_copy_gets_the_plugin_folder_and_others_the_skill() {
+    let d = scratch();
+    let src = plugin(&d.join("src"), "1.1.0");
+    // an older plugin copy in .claude/skills/hydo, an older skill copy in .agents/skills/onboard
+    let claude = plugin(&d.join("proj/.claude/skills"), "1.0.0");
+    let agents = skill(&d.join("proj/.agents/skills"), "1.0.0");
+    assert_eq!(
+        hydo_agents::replace_dir(&src, &claude, false).unwrap(),
+        "updated"
+    );
+    assert_eq!(
+        hydo_agents::replace_dir(&src, &agents, false).unwrap(),
+        "updated"
+    );
+    assert_eq!(version_at(&claude).as_deref(), Some("1.1.0"));
+    assert_eq!(version_at(&agents).as_deref(), Some("1.1.0"));
+    assert!(claude.join(".claude-plugin/plugin.json").is_file());
+    assert!(claude.join(SKILL_IN_PLUGIN).join("SKILL.md").is_file());
+    assert!(agents.join("SKILL.md").is_file() && !agents.join(".claude-plugin").exists());
+    // a folder named hydo that is not the plugin is kept
+    let other = d.join("other/hydo");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(other.join("README"), "mine\n").unwrap();
+    assert!(hydo_agents::replace_dir(&src, &other, false).is_err());
+    let _ = std::fs::remove_dir_all(&d);
 }

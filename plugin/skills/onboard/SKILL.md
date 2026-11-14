@@ -1,10 +1,10 @@
 ---
-name: hydo-onboard
+name: onboard
 description: Set up deterministic fault testing with hydo for a software project. Writes the repository's hydo/ folder (the system's services, workload commands and checked properties), starting from a docker-compose file when there is one, so that hydo can run the whole system under process kills, pauses, network faults, power cuts, clock jumps and disk faults and replay every failure bit for bit. Use when asked to onboard, add or test a project, repository, service or Docker Compose stack with hydo, to write or fix a hydo.yaml or hydo/ folder, or to add hydo workload commands or checks.
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "1.2.0"
+  version: "2.0.0"
   hydo-min: "0.1.0"
 ---
 

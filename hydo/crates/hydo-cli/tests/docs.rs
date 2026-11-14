@@ -250,6 +250,7 @@ fn anchors_follow_github() {
 const USER_PAGES: &[&str] = &[
     "README.md",
     "docs/INSTALL.md",
+    "docs/ONBOARD.md",
     "hydo/dist/linux/QUICKSTART-linux.md",
     "hydo/dist/mac/QUICKSTART-mac.md",
 ];
@@ -273,6 +274,16 @@ const CITED_ELSEWHERE: &[(&str, &str)] = &[
     (
         "a98cc29af3d645f4",
         "ctl of the Redis power cut; docs/HISTORY.md, Milestone 204",
+    ),
+    (
+        "be992f7e466b6db5",
+        "fp of the messages tutorial's clean run on the Mac engine, twice (docs/ONBOARD.md; \
+         docs/HISTORY.md, the milestone of `hydo onboard`)",
+    ),
+    (
+        "362259904816818c",
+        "dseed of the messages tutorial exploration's minimal schedule (seed 20 of 1-20 on the \
+         Mac engine; the same milestone)",
     ),
 ];
 
@@ -415,7 +426,11 @@ fn the_user_pages_name_this_version() {
     let mut problems = Vec::new();
     for page in USER_PAGES {
         let named = named_versions(&read(page));
-        assert!(!named.is_empty(), "{page} names no version");
+        // docs/ONBOARD.md is a how-to page that names no version; the others must name one
+        assert!(
+            !named.is_empty() || *page == "docs/ONBOARD.md",
+            "{page} names no version"
+        );
         for v in named {
             let p = format!("{page} names {v} as the current version; the workspace is {want}");
             if v != want && !problems.contains(&p) {

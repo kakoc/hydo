@@ -1,5 +1,6 @@
-//! hydo-skill-pack SKILL_DIR OUT_DIR: the onboarding skill's release assets (Milestone 170),
-//! `OUT_DIR/hydo-skill-<version>.tar.gz` (hydo_agents::release::pack: sorted entries, every time
+//! hydo-skill-pack PLUGIN_DIR OUT_DIR: the onboarding skill's release assets (Milestone 170; the
+//! plugin folder plugin/ since Milestone 228), `OUT_DIR/hydo-skill-<version>.tar.gz`
+//! (hydo_agents::release::pack: sorted entries, every time
 //! 0, owner 0:0, modes 0644 or 0755, gzip without a name or time, so the same folder gives the same
 //! bytes on any machine) and `OUT_DIR/SHA256SUMS`, which `hydo skill update` checks the archive
 //! against. Prints the version and the sha256. hydo/dist/skill/build-skill-release.sh runs it.
@@ -9,7 +10,7 @@ use sha2::{Digest, Sha256};
 fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
     if a.len() != 2 {
-        hydo_tools::die("usage: hydo-skill-pack SKILL_DIR OUT_DIR");
+        hydo_tools::die("usage: hydo-skill-pack PLUGIN_DIR OUT_DIR");
     }
     let (dir, out) = (std::path::Path::new(&a[0]), std::path::Path::new(&a[1]));
     let (archive, version) =

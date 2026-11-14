@@ -370,9 +370,9 @@ repository. What did not, and how each is fixed:
 
 - **Files read at compile time from outside the crate.** `hydo-cli`'s `setup.rs` compiled in
   `hydo/dist/<platform>/assets.sha256` and `guest-programs.sha256`, `hydo-image`'s `releases.rs` the
-  release index `hydo/dist/releases.txt` (Milestone 162), and `hydo-agents`' build script embedded `skills/hydo-onboard/` and `hydo/onboard/MANIFEST.md`. Each crate now reads
+  release index `hydo/dist/releases.txt` (Milestone 162), and `hydo-agents`' build script embedded the skill folder (since Milestone 228 the plugin folder `plugin/`) and `hydo/onboard/MANIFEST.md`. Each crate now reads
   them through links inside its directory (`hydo-cli/pins/<platform>/*.sha256`, `hydo-image/pins/releases.txt`,
-  `hydo-agents/embed/hydo-onboard` and `embed/MANIFEST.md`); git keeps the links, the tree
+  `hydo-agents/embed/plugin` and `embed/MANIFEST.md`); git keeps the links, the tree
   builds the same bytes through them, and `cargo package` copies the linked files' contents
   into the package. Each published crate also has a link `LICENSE -> ../../../LICENSE`.
 - **The commit lookup.** `hydo-image`'s build script recorded `git rev-parse HEAD` (or the
@@ -531,17 +531,19 @@ skill"); publishing it is the user's decision, like everything else here.
 | Channel | What | Updated by |
 |---|---|---|
 | GitHub release `skill-v<version>` | `hydo-skill-<version>.tar.gz` and `SHA256SUMS`, read by `hydo skill update` | docs/RELEASING.md, "Releasing the onboarding skill", step 5 |
-| Claude Code marketplace `.claude-plugin/marketplace.json` on `main` (since 0.2.0) (`/plugin marketplace add kakoc/hydo`, `/plugin install hydo-onboard@hydo`) | the folder `skills/hydo-onboard/` as the plugin `hydo-onboard`, at the version its entry names | the same section, step 3 |
+| Claude Code marketplace `.claude-plugin/marketplace.json` on `main` (since 0.2.0) (`/plugin marketplace add kakoc/hydo`, `/plugin install hydo@hydo`) | the folder `plugin/` as the plugin `hydo`, whose skill `onboard` is the command `/hydo:onboard`, at the version its entry names | the same section, step 3 |
 
 The skill is published separately from hydo (Milestone 170), so its process can improve between
 hydo releases while the facts always come from the user's own hydo (`hydo guide`):
 
-- One folder in the Agent Skills format (https://agentskills.io/specification), the same files
-  for every tool. Claude Code takes it as a plugin: the marketplace entry's `source` is the folder
-  itself (`./skills/hydo-onboard`), and with no `plugin.json` in it the entry is the plugin's
-  manifest and the folder's `SKILL.md` its one skill, so nothing is copied or linked. Codex,
-  Cursor, GitHub Copilot and Gemini CLI read the copy that `hydo skill install --agent <tool>`
-  writes into `.agents/skills/` (Claude Code without the plugin: `.claude/skills/`).
+- One plugin folder, `plugin/`, in Claude Code's standard plugin layout
+  (`.claude-plugin/plugin.json` and `skills/onboard/`, Milestone 228). The skill folder
+  `plugin/skills/onboard/` is in the Agent Skills format (https://agentskills.io/specification),
+  the same files for every tool. Claude Code takes the plugin from the marketplace entry, whose
+  `source` is `./plugin`, so nothing is copied or linked; `hydo skill install --agent claude`
+  copies the plugin folder to `.claude/skills/hydo`, which Claude Code loads as the same plugin.
+  Codex, Cursor, GitHub Copilot and Gemini CLI read the skill folder that `hydo skill install
+  --agent <tool>` writes into `.agents/skills/onboard`.
 - A user of another tool gets a new skill version with `hydo skill update`, which runs only when
   the user runs it, takes the newest `skill-v<version>` release from the GitHub API, and accepts
   the archive only with the sha256 that the release's `SHA256SUMS` (fetched over TLS) names. The

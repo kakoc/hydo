@@ -7,5 +7,6 @@ mod agents_equivalence;
 mod docs;
 mod equivalence;
 mod migrate;
+mod onboard;
 mod readme;
 mod versions;

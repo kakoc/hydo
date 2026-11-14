@@ -2991,7 +2991,7 @@ impl<'a> Importer<'a> {
         };
         l.push('\n');
         l.push_str(&comment(&format!(
-            "TODO(workload): one step = one client operation against the system (an HTTP request, a\nquery), appended to $HYDO_ACKED only when the system acknowledged it. Faults are placed\nat step numbers. Each Compose service name resolves (e.g. {} -> {}); run tools inside\nan image with `hydo-oci <service> <command>`. Ask the hydo-onboard skill to write it.",
+            "TODO(workload): one step = one client operation against the system (an HTTP request, a\nquery), appended to $HYDO_ACKED only when the system acknowledged it. Faults are placed\nat step numbers. Each Compose service name resolves (e.g. {} -> {}); run tools inside\nan image with `hydo-oci <service> <command>`. Ask the onboard skill (/hydo:onboard) to write it.",
             ex.compose, ex.addr
         ), 0));
         l.push_str("workload:\n  steps: 20\n  run: ");

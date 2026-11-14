@@ -28,6 +28,7 @@ mod hvxenv;
 mod inspect;
 mod migrate;
 mod module;
+mod onboard;
 mod preempt;
 mod pyjson;
 mod runs;
@@ -40,6 +41,8 @@ use ctx::{Ctx, Platform};
 
 const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Linux machine with VT-x (the hvx backend).
 
+    hydo onboard [DIR] [--agent NAME] [--no-skill] start onboarding a repository: find its parts, start
+                                                   hydo/, install the skill for its AI tool, say what is next
     hydo init    [--dir DIR] [--name NAME]         start a repository's hydo/ folder and its AGENTS.md section
     hydo --version | -V                            print this hydo's version (and commit)
     hydo guide   [TOPIC | --list]                  this hydo's facts for onboarding, and how to get the skill
@@ -98,6 +101,8 @@ yourself (see `hydo module udev`; HYDO_SUDO=1 forces sudo). One static program; 
 
 const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silicon Mac (the hvm backend).
 
+    hydo onboard [DIR] [--agent NAME] [--no-skill] start onboarding a repository: find its parts, start
+                                                   hydo/, install the skill for its AI tool, say what is next
     hydo init    [--dir DIR] [--name NAME]         start a repository's hydo/ folder and its AGENTS.md section
     hydo --version | -V                            print this hydo's version (and commit)
     hydo guide   [TOPIC | --list]                  this hydo's facts for onboarding, and how to get the skill
@@ -222,6 +227,7 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
             }
             0
         }
+        "onboard" => onboard::cmd_onboard(ctx, rest),
         "compose" => delegated::cmd_compose(ctx, rest),
         "build" => build::cmd_build(ctx, rest),
         "run" => runs::cmd_run(ctx, rest),

@@ -339,7 +339,7 @@ Each rung needs less domain knowledge than the next, and every rung is useful on
    - recovery after a single failure;
    - caches never disagree with the source of truth.
 
-   These are the `hydo-onboard` skill's `invariant-patterns.md` and already found every real
+   These are the onboarding skill's `invariant-patterns.md` and already found every real
    bug in our stack.
 2. **Rules mined from the schema and code:** uniqueness, foreign keys, NOT NULL, check
    constraints, state-machine enums ("an order goes created → paid → shipped, never back").

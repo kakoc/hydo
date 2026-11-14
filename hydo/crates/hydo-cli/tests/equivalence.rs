@@ -11,7 +11,7 @@
 //! from the Rust output; review its diff like code.
 //!
 //! Each case runs from one release-like root (bin/hydo, a symlinked hydo/, hv/ and
-//! skill/hydo-onboard) in a fresh working directory with HOME inside it. Paths in the output are
+//! plugin/) in a fresh working directory with HOME inside it. Paths in the output are
 //! written as <ROOT>, <CWD> and <REPO>. Outputs longer than 4 KiB and files longer than 256 bytes are kept as
 //! the first 16 hex digits of their SHA-256 and their length. The
 //! Linux behaviour is exercised on any host with HYDO_CLI_PLATFORM=linux. Runs that boot a guest
@@ -75,8 +75,8 @@ fn scratch(tag: &str) -> PathBuf {
     d.canonicalize().unwrap()
 }
 
-/// A release-like root: bin/hydo, hydo -> repo/hydo, hv -> repo/hv, skill/hydo-onboard ->
-/// repo/skills/hydo-onboard, guest/ with the closure listings the build patches read.
+/// A release-like root: bin/hydo, hydo -> repo/hydo, hv -> repo/hv, plugin ->
+/// repo/plugin, guest/ with the closure listings the build patches read.
 fn release() -> PathBuf {
     let r = scratch("rel");
     let repo = repo();
@@ -94,12 +94,7 @@ fn release() -> PathBuf {
     }
     std::os::unix::fs::symlink(repo.join("hydo"), r.join("hydo")).unwrap();
     std::os::unix::fs::symlink(repo.join("hv"), r.join("hv")).unwrap();
-    std::fs::create_dir_all(r.join("skill")).unwrap();
-    std::os::unix::fs::symlink(
-        repo.join("skills/hydo-onboard"),
-        r.join("skill/hydo-onboard"),
-    )
-    .unwrap();
+    std::os::unix::fs::symlink(repo.join("plugin"), r.join("plugin")).unwrap();
     std::fs::create_dir_all(r.join("guest")).unwrap();
     std::fs::write(r.join("guest/store-closures.txt"), "").unwrap();
     std::fs::write(r.join("guest/tc-closure.txt"), "").unwrap();

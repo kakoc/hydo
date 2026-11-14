@@ -36,10 +36,23 @@ faults between and inside them, and runs the checks. The older "numbered steps" 
 ## Start the folder
 
 ```sh
+hydo onboard
+```
+
+`hydo onboard` looks at the repository and says what it found: a Compose file and its services,
+the Dockerfiles, the main language, and an existing `hydo/` folder. Then it starts `hydo/`: with
+a Compose file it runs `hydo compose` (below), without one `hydo init`. It never changes an
+existing `hydo/` folder. It installs the onboarding skill for the AI tools it finds (`--agent`
+names them, `--no-skill` installs none) and prints the next step. `hydo onboard --help` lists its
+options.
+
+The two commands it runs also work alone:
+
+```sh
 hydo init
 ```
 
-It creates `hydo/hydo.yaml` (a skeleton with `TODO` markers), `hydo/workload/`, `hydo/checks/` and
+`hydo init` creates `hydo/hydo.yaml` (a skeleton with `TODO` markers), `hydo/workload/`, `hydo/checks/` and
 `hydo/regressions/`, adds `.hydo/`, `hydo/images/` and `hydo-out/` to `.gitignore`, and adds a short hydo
 section to `AGENTS.md` between marker comments. It never overwrites a file, so it is safe to run
 again. The skeleton's two placeholder files (`workload/parallel_driver_todo`, `checks/final_todo`)

@@ -15,24 +15,26 @@
 //! (`hydo skill update`, which needs the network, is in hydo-cli's src/skillupdate.rs; it uses
 //! [`Where`], [`replace_dir`] and [`release`] from here.)
 //!
-//! Since Milestone 170 the process and the facts are apart. The onboarding skill is an Agent
-//! Skills folder (<https://agentskills.io/specification>) at skills/hydo-onboard/ in hydo's
-//! repository and at skill/hydo-onboard/ in a release: the process only, with its own version
-//! (`metadata.version`) and its own releases (`skill-v<version>`, [`release`]). The facts of this
-//! hydo (the project format's keys, commands, options, fault kinds, limits, examples, `hydo
-//! init`'s template) are the guide, hydo/guide/ in the repository, built into the binary and
-//! printed by `hydo guide <topic>`; so they always match the hydo that prints them. `hydo guide`
-//! alone prints this hydo's version, how to get the skill and the topics; `hydo guide skill`
-//! prints the skill's SKILL.md (for a tool without skills). The skill's old file paths
-//! (`references/<topic>.md`, `assets/...`) still answer.
+//! Since Milestone 170 the process and the facts are apart. The onboarding skill `onboard` is an
+//! Agent Skills folder (<https://agentskills.io/specification>) inside the Claude Code plugin
+//! `hydo`: plugin/ in hydo's repository and in a release holds `.claude-plugin/plugin.json` and
+//! `skills/onboard/` (Milestone 228). In Claude Code its command is `/hydo:onboard`. The skill is
+//! the process only, with its own version (`metadata.version`) and its own releases
+//! (`skill-v<version>`, [`release`]). The facts of this hydo (the project format's keys, commands,
+//! options, fault kinds, limits, examples, `hydo init`'s template) are the guide, hydo/guide/ in
+//! the repository, built into the binary and printed by `hydo guide <topic>`; so they always match
+//! the hydo that prints them. `hydo guide` alone prints this hydo's version, how to get the skill
+//! and the topics; `hydo guide skill` prints the skill's SKILL.md (for a tool without skills). The
+//! skill's old file paths (`references/<topic>.md`, `assets/...`) still answer.
 //!
-//! How the skill is found: the folder on disk under the release root (skill/hydo-onboard, then
-//! skills/hydo-onboard), exactly as the Python did; when neither exists, the copy built into this
-//! binary at compile time (build.rs embeds skills/hydo-onboard/, hydo/guide/ and
-//! hydo/onboard/MANIFEST.md), so a lone `hydo` binary still has the whole skill. The guide is always
-//! the built-in one. The supported tools are Claude Code (.claude/skills/, or the plugin of the
-//! marketplace .claude-plugin/marketplace.json) and Codex (.agents/skills/); the other `--agent`
-//! values are kept as they were.
+//! How the skill is found: the plugin folder on disk under the release root (plugin/); when there
+//! is none, the copy built into this binary at compile time (build.rs embeds plugin/, hydo/guide/
+//! and hydo/onboard/MANIFEST.md), so a lone `hydo` binary still has the whole skill. The guide is
+//! always the built-in one.
+//!
+//! Where a copy goes: Claude Code gets the whole plugin folder as `.claude/skills/hydo/`, which it
+//! loads as the plugin `hydo` (a "skills-directory plugin"), so the command is `/hydo:onboard`
+//! there too. The other tools get the Agent Skills folder alone as `.agents/skills/onboard/`.
 
 use std::fmt;
 use std::io::Write;
@@ -47,7 +49,14 @@ mod embedded {
     include!(concat!(env!("OUT_DIR"), "/embedded.rs"));
 }
 
-pub const SKILL: &str = "hydo-onboard";
+/// The skill's name: its folder and SKILL.md's `name:`.
+pub const SKILL: &str = "onboard";
+/// The Claude Code plugin's name, and the folder name of its copy in `.claude/skills/`.
+pub const PLUGIN: &str = "hydo";
+/// Where the skill folder is inside the plugin folder.
+pub const SKILL_IN_PLUGIN: &str = "skills/onboard";
+/// What Claude Code calls the skill.
+pub const CLAUDE_COMMAND: &str = "/hydo:onboard";
 
 // Where each tool reads Agent Skills, from the tools' own documentation (read 2026-10-26):
 //   Claude Code  .claude/skills/<name>, ~/.claude/skills/<name>   https://code.claude.com/docs/en/skills
@@ -73,7 +82,7 @@ pub const AGENTS: &[(&str, &str, &str)] = &[
 const READERS: &[(&str, &str)] = &[
     (
         ".claude/skills",
-        "Claude Code (Cursor and GitHub Copilot read it too)",
+        "Claude Code, as the plugin hydo (the command /hydo:onboard)",
     ),
     (
         ".agents/skills",
@@ -152,44 +161,79 @@ fn io_fail(e: std::io::Error, p: &Path) -> Fail {
 
 // ---------------------------------------------------------------- where the skill is
 
-/// The onboarding skill: the folder on disk, or the copy built into this binary.
+/// The onboarding skill: the plugin folder on disk, or the copy built into this binary.
 #[derive(Clone, Debug)]
 pub enum Skill {
+    /// The plugin folder (it holds `.claude-plugin/plugin.json` and `skills/onboard/`).
     Disk(PathBuf),
     Embedded,
 }
 
+/// The form of a copy: the whole plugin folder (Claude Code) or the skill folder alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Form {
+    Plugin,
+    Skill,
+}
+
+/// The form a copy at `t` has, by its folder name: `hydo` is the plugin, anything else the skill.
+pub fn form_of(t: &Path) -> Form {
+    if t.file_name().is_some_and(|n| n == PLUGIN) {
+        Form::Plugin
+    } else {
+        Form::Skill
+    }
+}
+
+/// The folder name of a copy in a tool's skill directory: the plugin's for Claude Code's
+/// `.claude/skills`, the skill's for every other one.
+pub fn folder_for(tool_dir: &str) -> &'static str {
+    if tool_dir == ".claude/skills" {
+        PLUGIN
+    } else {
+        SKILL
+    }
+}
+
+/// The SKILL.md of a copy of either form.
+fn skill_md_of(d: &Path) -> PathBuf {
+    match form_of(d) {
+        Form::Plugin => d.join(SKILL_IN_PLUGIN).join("SKILL.md"),
+        Form::Skill => d.join("SKILL.md"),
+    }
+}
+
 impl Skill {
-    /// The skill folder: `<root>/skill/hydo-onboard` (a release) or `<root>/skills/hydo-onboard`
-    /// (hydo's repository); else the built-in copy.
+    /// The plugin folder `<root>/plugin` (a release, or hydo's repository); else the built-in
+    /// copy.
     pub fn find(root: &Path) -> Skill {
-        for d in [
-            root.join("skill").join(SKILL),
-            root.join("skills").join(SKILL),
-        ] {
-            if d.join("SKILL.md").is_file() {
-                return Skill::Disk(d);
-            }
+        let d = root.join("plugin");
+        if d.join(SKILL_IN_PLUGIN).join("SKILL.md").is_file() {
+            return Skill::Disk(d);
         }
         Skill::Embedded
     }
 
-    /// What `--path` prints and messages name.
+    /// What `--path` prints and messages name: the skill folder.
     fn shown(&self) -> String {
         match self {
-            Skill::Disk(d) => d.display().to_string(),
+            Skill::Disk(d) => d.join(SKILL_IN_PLUGIN).display().to_string(),
             Skill::Embedded => "built into this hydo binary".into(),
         }
     }
 
+    /// A file of the skill folder.
     fn read(&self, rel: &str) -> R<String> {
         match self {
-            Skill::Disk(d) => read(&d.join(rel)),
-            Skill::Embedded => embedded::FILES
-                .iter()
-                .find(|(p, _, _)| *p == rel)
-                .map(|(_, _, b)| text_of(b))
-                .ok_or_else(|| Fail(format!("{rel}: missing from the built-in skill"))),
+            Skill::Disk(d) => read(&d.join(SKILL_IN_PLUGIN).join(rel)),
+            Skill::Embedded => {
+                let p = format!("{SKILL_IN_PLUGIN}/{rel}");
+                embedded::FILES
+                    .iter()
+                    .find(|(x, _, _)| *x == p)
+                    .map(|(_, _, b)| text_of(b))
+                    .ok_or_else(|| Fail(format!("{rel}: missing from the built-in skill")))
+            }
         }
     }
 
@@ -202,6 +246,7 @@ impl Skill {
     fn file(&self, a: &str) -> R<Option<String>> {
         match self {
             Skill::Disk(d) => {
+                let d = d.join(SKILL_IN_PLUGIN);
                 let Ok(p) = d.join(a).canonicalize() else {
                     return Ok(None);
                 };
@@ -219,6 +264,7 @@ impl Skill {
                 if n == "." || n == ".." || n.starts_with("../") {
                     return Ok(None);
                 }
+                let n = format!("{SKILL_IN_PLUGIN}/{n}");
                 Ok(embedded::FILES
                     .iter()
                     .find(|(p, _, _)| *p == n)
@@ -227,25 +273,38 @@ impl Skill {
         }
     }
 
-    /// Whether `dst` is this very folder.
+    /// Whether `dst` is this very folder (the plugin folder or the skill folder in it).
     fn is_at(&self, dst: &Path) -> bool {
         match self {
-            Skill::Disk(d) => match (dst.canonicalize(), d.canonicalize()) {
-                (Ok(a), Ok(b)) => a == b,
+            Skill::Disk(d) => match dst.canonicalize() {
+                Ok(a) => [d.clone(), d.join(SKILL_IN_PLUGIN)]
+                    .iter()
+                    .any(|x| x.canonicalize().is_ok_and(|b| a == b)),
                 _ => false,
             },
             Skill::Embedded => false,
         }
     }
 
-    /// `shutil.copytree(src, dst, ignore=skipped)`.
-    fn copy_to(&self, dst: &Path) -> R<()> {
+    /// `shutil.copytree(src, dst, ignore=skipped)` of the plugin folder or of the skill folder.
+    fn copy_to(&self, dst: &Path, form: Form) -> R<()> {
         match self {
-            Skill::Disk(d) => copytree(d, dst),
+            Skill::Disk(d) => match form {
+                Form::Plugin => copytree(d, dst),
+                Form::Skill => copytree(&d.join(SKILL_IN_PLUGIN), dst),
+            },
             Skill::Embedded => {
                 std::fs::create_dir_all(dst).map_err(|e| io_fail(e, dst))?;
+                let pre = format!("{SKILL_IN_PLUGIN}/");
                 for (p, mode, b) in embedded::FILES {
-                    let t = dst.join(p);
+                    let rel = match form {
+                        Form::Plugin => *p,
+                        Form::Skill => match p.strip_prefix(&pre) {
+                            Some(r) => r,
+                            None => continue,
+                        },
+                    };
+                    let t = dst.join(rel);
                     if let Some(parent) = t.parent() {
                         std::fs::create_dir_all(parent).map_err(|e| io_fail(e, parent))?;
                     }
@@ -385,7 +444,7 @@ pub struct Out<'a> {
 }
 
 impl Out<'_> {
-    fn put(&mut self, s: &str) -> R<()> {
+    pub fn put(&mut self, s: &str) -> R<()> {
         self.w.write_all(s.as_bytes())?;
         Ok(())
     }
@@ -573,7 +632,7 @@ fn embedded_path() -> Fail {
 // ---------------------------------------------------------------- hydo skill
 
 /// The repository's top directory (`git rev-parse --show-toplevel`), else `start` itself.
-fn repo_root(start: &Path) -> PathBuf {
+pub fn repo_root(start: &Path) -> PathBuf {
     if let Ok(o) = std::process::Command::new("git")
         .arg("-C")
         .arg(start)
@@ -589,17 +648,31 @@ fn repo_root(start: &Path) -> PathBuf {
     PathBuf::from(py::abspath(&start.display().to_string()))
 }
 
+/// Whether `d` is a copy of hydo's skill in its form: a skill folder whose SKILL.md is named
+/// `onboard` and says which hydo it needs (`hydo-min:`, which only hydo's skill has), or a plugin
+/// folder named `hydo` that holds such a skill folder and a `.claude-plugin/plugin.json`.
 fn is_hydo_skill(d: &Path) -> bool {
-    let Ok(b) = std::fs::read(d.join("SKILL.md")) else {
+    if form_of(d) == Form::Plugin && !d.join(".claude-plugin/plugin.json").is_file() {
+        return false;
+    }
+    let Ok(b) = std::fs::read(skill_md_of(d)) else {
         return false;
     };
     let head: String = text_of(&b).chars().take(2048).collect();
-    regex::Regex::new(&format!(r"(?m)^name:\s*{SKILL}\s*$"))
-        .map(|r| r.is_match(&head))
-        .unwrap_or(false)
+    is_hydo_skill_md(&head)
 }
 
-fn copy_skill(sk: &Skill, dst: &Path, force: bool, out: &mut Out) -> R<()> {
+/// Whether a SKILL.md's text is hydo's skill: `name: onboard` and a `hydo-min:` line.
+pub fn is_hydo_skill_md(text: &str) -> bool {
+    regex::Regex::new(&format!(r"(?m)^name:\s*{SKILL}\s*$"))
+        .map(|r| r.is_match(text))
+        .unwrap_or(false)
+        && regex::Regex::new(r"(?m)^\s+hydo-min:")
+            .map(|r| r.is_match(text))
+            .unwrap_or(false)
+}
+
+pub fn copy_skill(sk: &Skill, dst: &Path, force: bool, out: &mut Out) -> R<()> {
     if dst.is_symlink() {
         let to = std::fs::read_link(dst).unwrap_or_default();
         return Err(Fail(format!(
@@ -614,7 +687,7 @@ fn copy_skill(sk: &Skill, dst: &Path, force: bool, out: &mut Out) -> R<()> {
         }
         if !is_hydo_skill(dst) && !force {
             return Err(Fail(format!(
-                "{} exists and is not the {SKILL} skill; not replacing it (use --force)",
+                "{} exists and is not hydo's {SKILL} skill; not replacing it (use --force)",
                 dst.display()
             )));
         }
@@ -633,7 +706,7 @@ fn copy_skill(sk: &Skill, dst: &Path, force: bool, out: &mut Out) -> R<()> {
     if let Some(p) = dst.parent() {
         std::fs::create_dir_all(p).map_err(|e| io_fail(e, p))?;
     }
-    sk.copy_to(dst)?;
+    sk.copy_to(dst, form_of(dst))?;
     let v = sk.version().unwrap_or_else(|| "unknown".into());
     out.put(&format!("hydo: {verb} {} ({SKILL} {v})\n", dst.display()))
 }
@@ -668,7 +741,7 @@ pub struct Where {
     pub to: Option<String>,
     /// `--user`: the tools' directories in the home directory instead of the repository's.
     pub user: bool,
-    /// `--force`: replace a folder of the same name that is not the hydo-onboard skill.
+    /// `--force`: replace a folder of the same name that is not hydo's skill.
     pub force: bool,
 }
 
@@ -749,20 +822,20 @@ impl Where {
         dirs.sort();
         dirs.dedup();
         for d in dirs {
-            targets.push(base.join(d).join(SKILL));
+            targets.push(base.join(d).join(folder_for(d)));
         }
         Ok(targets)
     }
 }
 
 /// The copies of the skill in the usual places: this repository's and the home directory's
-/// `.claude/skills/hydo-onboard` and `.agents/skills/hydo-onboard`, where a folder of the
-/// hydo-onboard skill is (not a symbolic link: hydo's own repository links them to its source).
+/// `.claude/skills/hydo` (the plugin) and `.agents/skills/onboard` (the skill), where a copy of
+/// hydo's skill is (not a symbolic link: hydo's own repository links them to its source).
 pub fn installed_copies() -> R<Vec<PathBuf>> {
     let mut v = Vec::new();
     for base in [repo_root(&cwd()?), PathBuf::from(expanduser("~"))] {
         for (d, _) in READERS {
-            let p = base.join(d).join(SKILL);
+            let p = base.join(d).join(folder_for(d));
             if !p.is_symlink() && p.is_dir() && is_hydo_skill(&p) && !v.contains(&p) {
                 v.push(p);
             }
@@ -776,19 +849,19 @@ pub fn readers_of(t: &Path) -> Option<&'static str> {
     let ts = t.display().to_string();
     READERS
         .iter()
-        .find(|(k, _)| ts.ends_with(&format!("{k}/{SKILL}")))
+        .find(|(k, _)| ts.ends_with(&format!("{k}/{}", folder_for(k))))
         .map(|(_, who)| *who)
 }
 
-/// The version of the skill folder at `d`, if it is one.
+/// The version of the copy at `d` (a plugin folder `hydo` or a skill folder), if it is one.
 pub fn version_at(d: &Path) -> Option<String> {
-    std::fs::read(d.join("SKILL.md"))
+    std::fs::read(skill_md_of(d))
         .ok()
         .and_then(|b| skill_version(&text_of(&b)))
 }
 
-/// Whether `dst` may be replaced by the skill: it does not exist, or it is a folder of the
-/// hydo-onboard skill, or `force`. A symbolic link is never replaced.
+/// Whether `dst` may be replaced by the skill: it does not exist, or it is a copy of hydo's
+/// skill, or `force`. A symbolic link is never replaced.
 pub fn replaceable(dst: &Path, force: bool) -> R<()> {
     if dst.is_symlink() {
         let to = std::fs::read_link(dst).unwrap_or_default();
@@ -806,26 +879,36 @@ pub fn replaceable(dst: &Path, force: bool) -> R<()> {
     }
     if dst.exists() && !is_hydo_skill(dst) && !force {
         return Err(Fail(format!(
-            "{} exists and is not the {SKILL} skill; not replacing it (use --force)",
+            "{} exists and is not hydo's {SKILL} skill; not replacing it (use --force)",
             dst.display()
         )));
     }
     Ok(())
 }
 
-/// Put the skill folder `src` (complete, already checked) at `dst`, replacing an earlier copy
-/// in one step: the new folder is written next to it as `.hydo-onboard.new-<pid>`, the old one
-/// is moved aside as `.hydo-onboard.old-<pid>` and deleted after the swap. Nothing else in
-/// `dst`'s parent is touched. "installed" or "updated".
-pub fn replace_dir(src: &Path, dst: &Path, force: bool) -> R<&'static str> {
+/// Put the plugin folder `plugin` (complete, already checked) at `dst` in `dst`'s form (the whole
+/// plugin for a folder named `hydo`, else its skill folder), replacing an earlier copy in one
+/// step: the new folder is written next to it as `.<name>.new-<pid>`, the old one is moved aside
+/// as `.<name>.old-<pid>` and deleted after the swap. Nothing else in `dst`'s parent is touched.
+/// "installed" or "updated".
+pub fn replace_dir(plugin: &Path, dst: &Path, force: bool) -> R<&'static str> {
     replaceable(dst, force)?;
+    let src = match form_of(dst) {
+        Form::Plugin => plugin.to_path_buf(),
+        Form::Skill => plugin.join(SKILL_IN_PLUGIN),
+    };
+    let src = src.as_path();
     let parent = dst
         .parent()
         .ok_or_else(|| Fail(format!("{}: no parent directory", dst.display())))?;
     std::fs::create_dir_all(parent).map_err(|e| io_fail(e, parent))?;
     let pid = std::process::id();
-    let new = parent.join(format!(".{SKILL}.new-{pid}"));
-    let old = parent.join(format!(".{SKILL}.old-{pid}"));
+    let name = dst
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| SKILL.into());
+    let new = parent.join(format!(".{name}.new-{pid}"));
+    let old = parent.join(format!(".{name}.old-{pid}"));
     for t in [&new, &old] {
         if t.exists() {
             std::fs::remove_dir_all(t).map_err(|e| io_fail(e, t))?;
@@ -864,11 +947,13 @@ const SKILL_USAGE: &str = "usage: hydo skill install [--agent NAME ...] [--to DI
            .agents/skills is updated. --check only reports (exit status 0: up to date, 3: newer
            available); --version installs that release. It uses the network only when you run it.
   --agent claude|codex|cursor|copilot|gemini|all (repeatable, or comma-separated): that tool's
-          skill directory of this repository (--user: of your home directory)
-  --to DIR: DIR/hydo-onboard instead (any other tool, or a custom location)
+          skill directory of this repository (--user: of your home directory). Claude Code gets
+          the plugin folder .claude/skills/hydo, whose command is /hydo:onboard; the other tools
+          get the skill folder .agents/skills/onboard
+  --to DIR: DIR/onboard instead (any other tool, or a custom location)
   An earlier copy of the skill is replaced; another folder of the same name is kept unless --force.
-  Claude Code can also take the skill as a plugin: /plugin marketplace add kakoc/hydo, then
-  /plugin install hydo-onboard@hydo (updates come as plugin updates).
+  Claude Code can also take the skill from hydo's plugin marketplace: /plugin marketplace add
+  kakoc/hydo, then /plugin install hydo@hydo (updates come as plugin updates).
 ";
 
 pub fn skill(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
@@ -899,7 +984,7 @@ pub fn skill(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
     if cmd == "agents" {
         out.put("agent     project directory          user directory\n")?;
         for (k, d, who) in AGENTS {
-            let p = format!("{d}/{SKILL}");
+            let p = format!("{d}/{}", folder_for(d));
             out.put(&format!(
                 "{} {} ~/{} {}\n",
                 ljust(k, 9),
@@ -909,7 +994,7 @@ pub fn skill(argv: &[String], root: &Path, out: &mut Out) -> R<i32> {
             ))?;
         }
         out.put("all       both directories above\n")?;
-        out.put("(Cursor and GitHub Copilot also read .claude/skills; with both installed they may list the skill twice.)\n")?;
+        out.put("(Claude Code loads .claude/skills/hydo as the plugin hydo; its command is /hydo:onboard.)\n")?;
         return Ok(0);
     }
     if cmd != "install" {
@@ -965,7 +1050,7 @@ pub fn project_name(d: &Path) -> String {
     }
 }
 
-fn agents_block() -> R<String> {
+pub fn agents_block() -> R<String> {
     let text = guide_bytes("init/agents-section.md")
         .map(text_of)
         .ok_or_else(|| Fail("init/agents-section.md: missing from the built-in guide".into()))?;
@@ -1110,7 +1195,13 @@ fn relpath(p: &str, start: &str) -> String {
     }
 }
 
-pub fn init(argv: &[String], _root: &Path, out: &mut Out, clock_start: Option<i64>) -> R<i32> {
+pub fn init(
+    argv: &[String],
+    _root: &Path,
+    out: &mut Out,
+    clock_start: Option<i64>,
+    quiet: bool,
+) -> R<i32> {
     let clock_start = hydo_manifest::new_clock_start(clock_start);
     let mut a: Vec<String> = argv.to_vec();
     let mut d = cwd()?.display().to_string();
@@ -1220,6 +1311,10 @@ pub fn init(argv: &[String], _root: &Path, out: &mut Out, clock_start: Option<i6
     ]
     .into_iter()
     .find(|f| dp.join(f).is_file());
+    if quiet {
+        // `hydo onboard` prints the next step itself
+        return Ok(0);
+    }
     out.put(
         "hydo: next: give your AI tool this instruction: \"run `hydo guide skill` and follow it\"\n",
     )?;
@@ -1261,7 +1356,8 @@ fn run_to_with(
     let r = match cmd {
         "guide" => guide(argv, root, out),
         "skill" => skill(argv, root, out),
-        "init" => init(argv, root, out, clock_start),
+        "init" => init(argv, root, out, clock_start, false),
+        "init-quiet" => init(argv, root, out, clock_start, true),
         _ => Err(Fail(format!("unknown command {cmd}"))),
     };
     let _ = out.w.flush();
@@ -1295,7 +1391,12 @@ mod tests {
 
     #[test]
     fn embedded_has_the_skill() {
-        assert!(embedded::FILES.iter().any(|(p, _, _)| *p == "SKILL.md"));
+        assert!(embedded::FILES
+            .iter()
+            .any(|(p, _, _)| *p == "skills/onboard/SKILL.md"));
+        assert!(embedded::FILES
+            .iter()
+            .any(|(p, _, _)| *p == ".claude-plugin/plugin.json"));
         assert!(embedded::GUIDE
             .iter()
             .any(|(p, m, _)| *p == "init/hydo/workload/parallel_driver_todo" && m & 0o111 != 0));

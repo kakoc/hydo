@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build the onboarding skill's release assets (Milestone 170):
 #     sh hydo/dist/skill/build-skill-release.sh [OUT_DIR]
-# writes OUT_DIR/hydo-skill-<version>.tar.gz (the folder skills/hydo-onboard/ as hydo-onboard/)
+# writes OUT_DIR/hydo-skill-<version>.tar.gz (the plugin folder plugin/ as hydo/, with the skill in hydo/skills/onboard/)
 # and OUT_DIR/SHA256SUMS (default OUT_DIR: hydo/dist/out/skill, git-ignored). The archive is made
 # by hydo-skill-pack (hydo_agents::release::pack): sorted entries, every time 0, owner 0:0, modes
 # 0644 or 0755, gzip without a name or time, so the same folder gives the same bytes on a Mac and
@@ -12,11 +12,11 @@ set -eu
 
 TOP=$(cd "$(dirname "$0")/../../.." && pwd)
 OUT=${1:-$TOP/hydo/dist/out/skill}
-SKILL=$TOP/skills/hydo-onboard
+SKILL=$TOP/plugin
 
 cd "$TOP"
-if [ -n "$(git status --porcelain -- skills/hydo-onboard .claude-plugin 2>/dev/null)" ]; then
-  echo "build-skill-release: skills/hydo-onboard or .claude-plugin has uncommitted changes; commit them first" >&2
+if [ -n "$(git status --porcelain -- plugin .claude-plugin 2>/dev/null)" ]; then
+  echo "build-skill-release: plugin or .claude-plugin has uncommitted changes; commit them first" >&2
   exit 1
 fi
 cargo build --release -q -p hydo-tools --no-default-features --bin hydo-skill-pack

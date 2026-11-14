@@ -1,0 +1,64 @@
+# The tutorial of docs/ONBOARD.md: a small message queue (tinyq, ../tinyq/main.go), producers
+# and a consumer as workload commands, and a `type: messages` check that states what the queue
+# promises. Build tinyq first (sh ../build.sh writes bin/tinyq for this machine's guest), then:
+#   hydo build hydo/hydo.yaml
+#   hydo run "disk=none | run"                    twice: the same fingerprint, every claim holds
+#   hydo run "disk=cut | run C=10 S=never"        the queue no longer syncs: messages it accepted are lost
+#   hydo explore --seeds 1-10 --workers 1
+name: messages-tutorial
+description: tinyq, a small message queue; every message it accepted is delivered, in order per key, once acknowledged never again.
+format: 1
+hydo_version: "0.3"
+
+guest:
+  ram_mib: 256
+  clock_start: 1767225600         # 2026-01-01 00:00 UTC
+
+root:
+  files:
+    - {src: bin/tinyq, dst: /bin/tinyq, mode: "0755"}
+
+data:
+  size_mib: 64
+  dirs: [tinyq]
+
+services:
+  - name: tinyq
+    cmd: /bin/tinyq serve /data/tinyq 7700
+    ready: /bin/tinyq ping 7700
+    port: 7700
+
+workload:
+  steps: 20                       # rounds of the composition; faults are placed at round numbers
+  timeout: 120
+
+test:
+  parallel: 3                     # at most 3 commands at once
+  per_round: 2                    # producers started per round
+  round_ms: 100                   # a round every 100 ms of guest time
+  command_timeout: 20
+  drain_timeout: 30
+
+knobs:
+  - token: S
+    name: tinyq syncs its log before it answers
+    default: always
+    values: [always, never]
+    set: echo $HYDO_VALUE > /tmp/tinyq-sync
+
+checks:
+  - id: queue
+    type: messages
+    history: queue                # the history tinyq's client records (HYDO-HIST queue ...)
+    msg: what tinyq promises its producers and consumers
+    final: /bin/tinyq drain 100000
+    acknowledgement: explicit     # a consumer acknowledges each message it took
+    claims:
+      delivery: at-least-once     # every message the queue accepted is delivered (no-loss)
+      duplicates: {by: message, window_ms: 600000}   # a resent message is stored once (10 minutes)
+      order: {kind: fifo, scope: key}                 # messages of one key arrive in send order
+      after_ack: no-redelivery    # an acknowledged message never comes back
+
+# process kills, pauses, power cuts and clock steps; not `disk` (I/O errors): tinyq refuses to
+# work on a failing disk, and that is not what this tutorial checks
+faults: [kill, pause, cut, clock]

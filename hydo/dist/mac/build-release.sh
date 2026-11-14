@@ -125,7 +125,7 @@ REL=$OUTDIR/hydo-mac-$VERSION
 rm -rf "$REL"
 # the release tree mirrors the repository: hydo/ (the product) and hv/hvm/ (the Mac engine)
 mkdir -p "$REL/bin" "$REL/hydo/onboard" "$REL/hv/hvm/explore/out" "$REL/guest" \
-         "$REL/examples" "$REL/skill"
+         "$REL/examples" "$REL/plugin"
 # the programs, all Rust (no Python anywhere in the release since M107): bin/hydo (the one CLI,
 # hydo/crates/hydo-cli), bin/hydo-build (the image builder with its own command line, for
 # scripts; `hydo build` is the same builder with the release's tools), bin/hydo-fetch-image
@@ -231,9 +231,9 @@ mkdir -p "$REL/examples/ledger-spin/bin" && cp "$A/ledger-spin/spin_load" "$A/le
 chmod 755 "$REL/examples/ledger-spin/bin/"*
 sed 's#^\#   hvx/onboard/hydo-build .*#\#   hydo build hydo.yaml#' "$REL/examples/ledger-spin/hydo.yaml" > "$REL/examples/ledger-spin/hydo.yaml.new"
 mv "$REL/examples/ledger-spin/hydo.yaml.new" "$REL/examples/ledger-spin/hydo.yaml"
-# the onboarding skill (an Agent Skills folder, agentskills.io): `hydo guide`, `hydo skill install`
-# and `hydo init` read it from skill/hydo-onboard (bin/hydo also carries a built-in copy)
-cp -R "$TOP/skills/hydo-onboard" "$REL/skill/"
+# the Claude Code plugin hydo with the onboarding skill onboard (plugin/skills/onboard, an Agent Skills
+# folder, agentskills.io): `hydo guide`, `hydo skill install` and `hydo onboard` read it (bin/hydo also carries a built-in copy)
+cp -R "$TOP/plugin/." "$REL/plugin/"
 cp "$D/install.sh" "$REL/install.sh"; chmod 755 "$REL/install.sh"
 cp "$D/QUICKSTART-mac.md" "$REL/QUICKSTART-mac.md"
 echo "$VERSION" > "$REL/VERSION"

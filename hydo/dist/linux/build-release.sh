@@ -113,7 +113,7 @@ REL=$OUTDIR/hydo-linux-$VERSION
 [ -d "$REL" ] && chmod -R u+w "$REL" && rm -rf "$REL"
 # the release tree mirrors the repository: hydo/ (the product) and module/ (the kernel module)
 mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" \
-         "$REL/module" "$REL/examples/redis/files" "$REL/skill"
+         "$REL/module" "$REL/examples/redis/files" "$REL/plugin"
 # the programs, all Rust (M107: no Python anywhere in the release): bin/hydo (the one CLI,
 # hydo/crates/hydo-cli; the run engine runs inside it when the user can open /dev/hvx, M137),
 # bin/hydo-hvx (the same run engine as a program, hydo/crates/hydo-hvx, which hydo starts under
@@ -225,9 +225,9 @@ for y in hydo.yaml hydo-netem.yaml; do
       -e "s#^\\#   HYDO_SEEDRNG=.*#\\#   hydo build $y#" \
       "$TOP/hydo/onboard/examples/redis/$y" > "$REL/examples/redis/$y"
 done
-# the onboarding skill (an Agent Skills folder, agentskills.io): `hydo guide`, `hydo skill install`
-# and `hydo init` read it from skill/hydo-onboard (bin/hydo also carries a built-in copy)
-cp -R "$TOP/skills/hydo-onboard" "$REL/skill/"
+# the Claude Code plugin hydo with the onboarding skill onboard (plugin/skills/onboard, an Agent Skills
+# folder, agentskills.io): `hydo guide`, `hydo skill install` and `hydo onboard` read it (bin/hydo also carries a built-in copy)
+cp -R "$TOP/plugin/." "$REL/plugin/"
 cp "$D/install.sh" "$REL/install.sh"; chmod 755 "$REL/install.sh"
 cp "$D/QUICKSTART-linux.md" "$REL/README.md"
 echo "$VERSION" > "$REL/VERSION"

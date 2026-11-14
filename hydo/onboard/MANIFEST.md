@@ -10,7 +10,7 @@ built then still run.)
 
 This file explains the project format to people and to tools that generate manifests; the
 authority is the schema generated from the format's types and the permanent example documents
-("The project format" below). The onboarding skill (`skills/hydo-onboard/`, an Agent Skills
+("The project format" below). The onboarding skill (`plugin/skills/onboard/`, an Agent Skills
 folder that any AI tool can follow; `hydo guide skill` prints it) reads a repository and writes
 its `hydo/` folder, taking every fact from the installed hydo: `hydo guide` (the topics in
 `hydo/guide/`), `hydo guide manifest` (this file) and `hydo guide schema` (the schema). Complete
@@ -2169,7 +2169,7 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | `profiles:` | services in a profile are left out unless `--profile <p>` (as `docker compose up`) |
 | `mem_limit:`, `deploy.resources.limits.memory` | counted in the `guest.ram_mib` guess |
 | (images) | `guest.ram_mib`: 256 MiB + a per-image guess (PostgreSQL 384, MySQL/MongoDB 640, Redis 96, JVM services 1024, others 256), at least 1024, at most 8192. `guest.cpu: v3` when an image's linux/amd64 manifest has variant v3/v4 or the image is known to need AVX2 (restatedev/restate); otherwise a commented line to uncomment if a service stops with "invalid opcode". `data.size_mib` from the volumes. |
-| (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The hydo-onboard skill (`hydo guide skill`, `skills/hydo-onboard`) writes the real ones. |
+| (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The onboarding skill (`hydo guide skill`, `plugin/skills/onboard`) writes the real ones. |
 | `faults:` | all kinds except `freeze` |
 | `build:` (a service built locally) | Never pulled by its tag. A tag that its registry has is pinned by digest as any image. Otherwise the image takes Docker Compose's name (`image:`, else `<project>-<service>`). When a Docker command answers (`docker`, else `podman`, or `--docker <cli>`), `hydo compose` builds the image of this machine's guest: linux/arm64 on a Mac, linux/amd64 elsewhere. It passes Compose's `context`, `dockerfile`, `args`, `target`, `labels`, `network`, `extra_hosts`, `shm_size`, `no_cache` and `pull`. `<cli> save` writes `images/<name>-<tag>-amd64.docker.tar` or `images/<name>-<tag>-arm64-oci`. The image's settings come from that file. The lock entry (`local_build: true`) pins each file's digest, the config digest of a `docker save` archive. A file whose digest differs from the pin is pinned again, with a warning. fetch-images.sh builds each missing file with `hydo-fetch-image build`. When the digest equals the pin or no pin exists yet, the file goes in place and the pin is recorded. Another digest keeps the build as `<file>.rebuilt` and stops; `HYDO_ACCEPT_REBUILD=1` takes it and records the new pin. Without Docker the script prints what to install and the two commands that make the file by hand. It still fetches the other images, then exits 1. With `--no-build`, `hydo compose` builds nothing. |
 

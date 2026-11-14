@@ -5,7 +5,8 @@ seeded faults and replays every failure exactly. The test lives in `hydo/`: `hyd
 (the services and allowed faults), `hydo/workload/` (one command per client operation),
 `hydo/checks/` (the properties) and `hydo/regressions/` (saved failing schedules).
 
-Before you change anything in `hydo/`, follow the hydo-onboard skill (`hydo guide` says how to
-get it; `hydo guide skill` prints it). Read hydo's facts from the installed hydo: `hydo guide
-workflow`, `hydo guide manifest` and `hydo guide schema`. After a change, run
-`hydo build hydo/hydo.yaml --check`; `hydo migrate` rewrites an old file in the current format.
+Before you change anything in `hydo/`, follow hydo's onboarding skill `onboard` (in Claude Code
+the command `/hydo:onboard`; `hydo guide` says how to get it, `hydo guide skill` prints it). Read
+hydo's facts from the installed hydo: `hydo guide workflow`, `hydo guide manifest` and `hydo guide
+schema`. After a change, run `hydo build hydo/hydo.yaml --check`; `hydo migrate` rewrites an old
+file in the current format.

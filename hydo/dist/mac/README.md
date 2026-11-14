@@ -34,7 +34,7 @@ step 8).
 | `hydo/onboard/MANIFEST.md`, `hydo/history/hydo_hist.sh`, `hydo/VERSION` | the manifest format (`hydo guide manifest`), the history recorder `hydo build` stages for a manifest with `checks:`, and the version a plan's `hydo_version:` is checked against |
 | `examples/redis/` | the Redis example, with its arm64 binaries under `files/` (works offline) |
 | `examples/ledger-spin/` | the busy-wait example (`hydo/onboard/examples-mac/ledger-spin`), with `bin/spin_load` and `bin/spin_count` (static arm64, `hv/hvm/spin/spinvar.c`; `$HYDO_SPIN_BIN` when filling `assets/`) |
-| `skill/hydo-onboard/` | the onboarding skill (Agent Skills format, any AI tool) that writes a project's `hydo/` folder; `hydo guide`, `hydo skill install` and `hydo init` read it (`bin/hydo` also carries a built-in copy) |
+| `plugin/` | the Claude Code plugin `hydo` with the onboarding skill `onboard` (`plugin/skills/onboard/`, Agent Skills format, any AI tool) that writes a project's `hydo/` folder; `hydo guide`, `hydo skill install` and `hydo onboard` read it (`bin/hydo` also carries a built-in copy) |
 | `install.sh`, `QUICKSTART-mac.md`, `VERSION`, `SHA256SUMS` | `install.sh` copies the release into the prefix and runs `hydo setup` and `hydo doctor` there (Milestone 154); `hydo setup` checks every file of `SHA256SUMS` and the pins built into `hydo` (`assets.sha256` mapped to the release paths, and `guest-programs.sha256`), removes the quarantine attribute, signs `bin/hydo-hvm` and records the signed bytes in `.hydo-setup` |
 
 The shell init and its extensions (`hydo-init.sh`, `hydo-init-*.sh`, the guest composer) are not

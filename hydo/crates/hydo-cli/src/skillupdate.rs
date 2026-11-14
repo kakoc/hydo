@@ -7,16 +7,17 @@
 //! from `<HYDO_RELEASE_URL>/skill-v<version>/`: `SHA256SUMS`, trusted through TLS as the install
 //! cache trusts a release's own sums (Milestone 162), and `hydo-skill-<version>.tar.gz`, accepted
 //! only with the sha256 that file names. The archive is unpacked by `hydo_agents::release::unpack`
-//! (plain files and directories below `hydo-onboard/` only) into a temporary directory, and each
-//! target folder is replaced in one step by `hydo_agents::replace_dir`; nothing outside the skill
-//! folders is written, except two short-lived siblings `.hydo-onboard.new-<pid>` and
-//! `.hydo-onboard.old-<pid>` that are deleted again. The command uses the network only when the
-//! user runs it; nothing it fetches is executed.
+//! (plain files and directories below `hydo/`, the plugin folder, only) into a temporary
+//! directory, and each target folder is replaced in one step by `hydo_agents::replace_dir`: a
+//! Claude Code copy (`.claude/skills/hydo`) by the plugin folder, any other (`onboard`) by the
+//! skill folder in it. Nothing outside the target folders is written, except two short-lived
+//! siblings `.<name>.new-<pid>` and `.<name>.old-<pid>` that are deleted again. The command uses
+//! the network only when the user runs it; nothing it fetches is executed.
 
 use crate::ctx::Ctx;
 use crate::fetch::{Fetcher, Options};
 use hydo_agents::release::{archive_name, unpack, TAG_PREFIX};
-use hydo_agents::{readers_of, replace_dir, version_at, version_lt, Where, SKILL};
+use hydo_agents::{readers_of, replace_dir, version_at, version_lt, Where, PLUGIN, SKILL};
 use std::path::{Path, PathBuf};
 
 const USAGE: &str = "usage: hydo skill update [--agent NAME ...] [--to DIR] [--user] [--force] [--version V] [--check] [--offline]
@@ -138,7 +139,7 @@ impl Source {
         })
     }
 
-    /// Download release `version`, check it by sha256 and unpack it into `dir/hydo-onboard`.
+    /// Download release `version`, check it by sha256 and unpack its plugin folder into `dir/hydo`.
     pub fn get(&self, version: &str, dir: &Path) -> Result<PathBuf, String> {
         let name = archive_name(version);
         let sums_url = self.url(version, crate::cache::SUMS_ASSET);
@@ -158,7 +159,7 @@ impl Source {
             &format!("the onboarding skill {version}"),
         )?;
         let bytes = std::fs::read(&part).map_err(|e| format!("{}: {e}", part.display()))?;
-        let out = dir.join(SKILL);
+        let out = dir.join(PLUGIN);
         let got = unpack(&bytes, &out).map_err(|e| format!("{name}: {}", e.0))?;
         if got != version {
             return Err(format!(
@@ -208,8 +209,8 @@ fn update(
         return Err(format!(
             "no copy of the {SKILL} skill in this repository's or your home's .claude/skills or \
              .agents/skills; install one with `hydo skill install --agent <tool>` (or name one \
-             with --agent or --to). In Claude Code, the hydo plugin is updated by Claude Code's \
-             plugin updates instead"
+             with --agent or --to). A plugin installed from hydo's marketplace in Claude Code is \
+             updated by Claude Code's plugin updates instead"
         ));
     }
     for t in &targets {

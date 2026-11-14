@@ -64,7 +64,7 @@ on_bare_metal "mkdir -p $TREE/hv/hvx"
 # M170; every crate's LICENSE; hydo-cli/pins: the four pin files since M154; hydo-image/pins: the
 # release index since M162)
 (cd "$HERE/../.." && rsync -azR --exclude target Cargo.toml Cargo.lock rust-toolchain.toml .cargo hydo/crates \
-    LICENSE hydo/guide hydo/onboard/MANIFEST.md skills/hydo-onboard hydo/dist/releases.txt \
+    LICENSE hydo/guide hydo/onboard/MANIFEST.md plugin hydo/dist/releases.txt \
     hydo/dist/linux/assets.sha256 hydo/dist/linux/guest-programs.sha256 \
     hydo/dist/mac/assets.sha256 hydo/dist/mac/guest-programs.sha256 "$BOX:$TREE/")
 

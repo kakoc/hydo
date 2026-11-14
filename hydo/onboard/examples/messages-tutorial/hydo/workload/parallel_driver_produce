@@ -1,0 +1,16 @@
+#!/bin/sh
+# hydo: timeout=10
+# A producer: send one message. Its id is the command's entry number, so every send is a new
+# message; its key (g0, g1 or g2) is the group whose order the check follows. One producer in four
+# sends its message a second time, as a client does that retries after a lost answer: the queue
+# must store it once. tinyq records each request and the queue's answer in the history `queue`; a
+# failed send is not a violation.
+id=$HYDO_CMD_ID
+key=g$((id % 3))
+if /bin/tinyq send "$id" "$id" "$key"; then
+  echo "$id ack" >> "$HYDO_OUTCOMES"
+  [ $((HYDO_SEED % 4)) = 0 ] && /bin/tinyq send "$id" "$id" "$key"
+  exit 0
+fi
+echo "$id unknown" >> "$HYDO_OUTCOMES"
+exit 1
