@@ -600,10 +600,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 44. [user decision] License compliance: the sources archives must stay available; three SPDX
     expressions are approximations; a lawyer's review is open (M158).
 45. The KVM engine with several vCPUs (M213, M219, M227). The fixed SMP kernel `b40b2711…` gave
-    one fingerprint per schedule on Intel Xeon 6975P-C and five AMD hosts (M227). On that Intel
+    one fingerprint per schedule on one Intel host, a Xeon 6975P-C, and on five AMD hosts (M227). On that Intel
     host a run from an explorer worker's S1 on 2 vCPUs ended with another fingerprint than the
-    fresh boot. Its verdict and transcript were the same. The fix (the snapshotting machine goes on in
-    a fresh VM with the loaded states) passed on Intel and AMD (run 43535344097: on eight hosts (five Intel: Xeon 6975P-C and Xeon Platinum 8573C; three AMD: EPYC 9V74 and 7763) smp-check passed 13 of 13, turns-check 7 of 7 and kvm-check 15 of 15; the engine's read-back lines name the field on Intel only: the hidden attributes of unusable null segments (DS, FS), which Intel's VMX normalises in a load). `hydo repro` of a run's folder
+    fresh boot. Its verdict and transcript were the same. In the fix, the snapshotting machine goes on
+    in a fresh VM with the loaded states. The fix passed run 43535344097 on eight hosts. Five were Intel (Xeon 6975P-C and Xeon
+    Platinum 8573C) and three AMD (EPYC 9V74 and 7763). Each passed smp-check 13 of 13, turns-check
+    7 of 7 and kvm-check 15 of 15. The engine's read-back lines appear on Intel only. They name the
+    hidden attributes of unusable null segments (DS, FS), which Intel's VMX normalises in a load.
+    `hydo repro` of a run's folder
     and `hydo explain` were not run on KVM with several vCPUs. `bzImage-kvm-smp` is in no
     release. On AMD, RDRAND, RDSEED and TSX cannot be made to
     fault, so a guest program that uses them without checking CPUID sees the host (M159, M161). A loop that

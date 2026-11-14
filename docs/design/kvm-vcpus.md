@@ -339,7 +339,7 @@ next to `guest/bzImage-kvm`.
 model, and the scheduler state. The scheduler state is the current vCPU, the exits left in its turn,
 the turn count, and each vCPU's run state. A restore creates a fresh VM with N vCPUs and loads each
 of them. Since Milestone 227 the machine that takes a snapshot goes on in a fresh VM with the
-snapshot's states loaded, too, so a fresh boot and a run from S1 start from the same KVM state
+snapshot's states loaded, too. So a fresh boot and a run from S1 start from the same KVM state
 (section "Stage 4: the explorer and Intel").
 
 **The full-state cycles** (Milestone 194) save and compare the running vCPU's whole state and the
@@ -618,7 +618,10 @@ states loaded. On Intel, with several vCPUs, a load did not give back all of the
 fingerprint hashes. Since Milestone 227 the machine that takes a snapshot with several vCPUs goes
 on in a fresh VM with the snapshot's states loaded, as a run from it does. The engine also prints
 each part of a vCPU's state that reads back changed after a load. With one vCPU nothing changed.
-The fix passed on Intel and AMD: run 43535344097: on eight hosts (five Intel: Xeon 6975P-C and Xeon Platinum 8573C; three AMD: EPYC 9V74 and 7763) smp-check passed 13 of 13, turns-check 7 of 7 and kvm-check 15 of 15; the engine's read-back lines name the field on Intel only: the hidden attributes of unusable null segments (DS, FS), which Intel's VMX normalises in a load.
+The fix passed run 43535344097 on eight hosts. Five were Intel (Xeon 6975P-C and Xeon
+Platinum 8573C) and three AMD (EPYC 9V74 and 7763). Each passed smp-check 13 of 13, turns-check
+7 of 7 and kvm-check 15 of 15. The engine's read-back lines appear on Intel only. They name the
+hidden attributes of unusable null segments (DS, FS), which Intel's VMX normalises in a load.
 
 ## The plan in stages
 
