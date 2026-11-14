@@ -124,7 +124,7 @@
         "libexec/bin/debugfs",
         "libexec/hydo-grpc-gen",
         "hydo/**",
-        "skill/**",
+        "plugin/**",
         "examples/redis/hydo.yaml",
         "examples/redis/hydo-netem.yaml",
         "guest/hydo-agent",
