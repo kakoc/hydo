@@ -31,6 +31,7 @@ mod inspect;
 mod migrate;
 mod module;
 mod onboard;
+mod perf;
 mod preempt;
 mod pyjson;
 mod rules;
@@ -255,6 +256,9 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         // `hydo guide workflow`; the main help is a recorded answer)
         "versions" => versions::cmd_versions(ctx, rest),
         "rules" => rules::cmd_rules(ctx, rest),
+        // Milestone 237: performance tests from deterministic runs (`hydo perf --help`, `hydo
+        // guide perf`; the main help is a recorded answer)
+        "perf" => perf::cmd_perf(ctx, rest),
         // ready-made SQL workloads and checks for the hydo/ folder (`hydo sql-gen --help`; the
         // main help is a recorded answer)
         "sql-gen" => sqlgen::cmd_sql_gen(rest),

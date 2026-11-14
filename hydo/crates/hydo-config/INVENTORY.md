@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-54 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 36 test switches are read by test code; 24 names are the guest interface, 4 are variables of an image's manifest.sh and 7 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+55 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 36 test switches are read by test code; 25 names are the guest interface, 4 are variables of an image's manifest.sh and 7 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -21,6 +21,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 |---|---|---|---|---|---|
 | `HYDO_HVX_HOSTCALL` | user | flag: not `0` | on | hydo-hvx | `0` turns the host-call port off (M138; on by default since M140). |
 | `HYDO_HVX_REUSE` | user | flag: set and not `0` | off | hydo-hvx | `1` (not `0`): keep a used VM and reset it in place for the next run (M138). |
+| `HYDO_WORK_RECORD` | user | flag: set and not `0` | off | hydo-hvx, hydo-cli | Set and not `0`: write `<tag>.work.jsonl` into the run's directory, one record per stop with the guest's retired conditional branches (the PMU counter), its virtual TSC and the instruction clock there; `hydo run` sets it for an image with `perf:` (Milestone 237). Counters are only read: no fingerprint moves. |
 | `HYDO_HVX_CHECK_RESET` | developer | flag: set and not `0` | off | hydo-hvx | Not `0`: after every in-place reset, compare RAM and disk with a fresh VM's. |
 | `HYDO_HVX_CHECK_ZERO` | developer | flag: set and not `0` | off | hydo-hvx | Not `0`: check that a fresh VM's RAM and disk are zero before a restore. |
 | `HYDO_HVX_PREPARE` | developer | flag: not `0` | on | hydo-hvx | `0`: make every fresh VM when it is needed (default: the next one on a helper thread). |
@@ -257,6 +258,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_LOG` | guest | path | - | set by hydo-control | The service's log file. |
 | `HYDO_FROM` | guest | integer | - | set by hydo-control | The first step of a workload range. |
 | `HYDO_TO` | guest | integer | - | set by hydo-control | The last step of a workload range. |
+| `HYDO_PERF` | guest | path | - | set by hydo-control with perf:; read by the workload | With `perf:` (Milestone 237): the file a workload call appends its own numbers to, one `<name> <value> [<unit>]` line each; `hydo run` puts them into `result.json` `perf`. |
 | `HYDO_VALUE` | guest | text | - | set by hydo-control | A knob's value. |
 | `HYDO_CMD` | guest | id | - | set by hydo-control (the composer) | A composed command's id. |
 | `HYDO_CMD_ID` | guest | id | - | set by hydo-control (the composer) | A composed command's entry. |

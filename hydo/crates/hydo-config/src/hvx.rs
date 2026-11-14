@@ -101,6 +101,9 @@ pub struct Options {
     /// `HYDO_HVX_CHECK_RESET=1`: after every in-place restore, compare all of RAM and the disk
     /// with what a fresh VM would hold, and end the run with an error on a difference.
     pub check_reset: bool,
+    /// `HYDO_WORK_RECORD`, set and not `0` (Milestone 237): a record of the work counters at
+    /// every stop (`<tag>.work.jsonl`).
+    pub work_record: bool,
 }
 
 /// C's `atof` on the number prefix (as `hydo_hvx::cstr::atof`).
@@ -170,6 +173,7 @@ impl Options {
             hostcall: e.not_0(HYDO_HVX_HOSTCALL),
             reuse: e.set_not_0(HYDO_HVX_REUSE),
             check_reset: e.set_not_0(HYDO_HVX_CHECK_RESET),
+            work_record: e.set_not_0(HYDO_WORK_RECORD),
         }
     }
 }

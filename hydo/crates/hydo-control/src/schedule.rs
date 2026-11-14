@@ -75,6 +75,8 @@ mod storage;
 mod targets;
 // work counters of a run, HYDO_COST (an experiment, docs/design/cost-tracking.md)
 mod cost;
+// perf: in the manifest (Milestone 237): the workload measured per step
+pub mod perf;
 // Milestone 226: a timed pause of threads of the workload (P=workload/<name>[#<k>]@...)
 mod threads;
 // Milestone 238: upgrades, U=<target>@<at>[/<gap>][+<back>]:<version>
@@ -2119,6 +2121,8 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     liveness::before_finish(fx, ctx)?;
     let v = errlog::final_verdict(fx, ctx)?; // SEAM(ErrorLogs): wraps final_verdict
     fx.report(v.clone());
+    // perf: (Milestone 237): the workload's own numbers ($HYDO_PERF), once the verdict is decided
+    perf::report(fx, ctx)?;
     // HYDO_COST: the counters once the verdict is decided, so the probe changes no verdict and
     // nothing before it (the workload's fingerprint stays the run's without the probe)
     cost::probe(fx, ctx, "final", false)?;
@@ -2167,6 +2171,8 @@ fn step_range_run(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
             Some(st) => st,
             None => return Ok(()),
         }
+    } else if let Some(p) = &ctx.plan.perf {
+        perf::steps(fx, ctx, p, a, b)? // perf: (Milestone 237): one marked call per step
     } else {
         let e = env(
             fx,

@@ -51,6 +51,7 @@ pub const KNOWN_TOP: &[&str] = &[
     "groups",
     "steer",
     "clock_points",
+    "perf",
 ];
 /// The keys of a `groups:` entry (Milestone 195).
 pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "description"];
@@ -902,6 +903,7 @@ pub fn validate(m: &mut Value) -> R<()> {
     validate_network(m)?;
     validate_groups(m)?;
     validate_steer(m)?;
+    validate_perf(m)?;
     validate_clock_points(m)?;
     validate_checks(m, &ids)?;
     validate_world(m)?;
@@ -952,6 +954,47 @@ fn validate_clock_points(m: &Value) -> R<()> {
             .map_err(|e| err(e.message))?;
     }
     Ok(())
+}
+
+/// The keys of `perf:` (Milestone 237).
+pub const KNOWN_PERF: &[&str] = &["steps", "threshold", "description"];
+
+/// `perf:` (Milestone 237): measure the workload's work, per step and as a whole, for `hydo
+/// perf compare`.
+fn validate_perf(m: &Value) -> R<()> {
+    let Some(p) = obj_get(m, "perf") else {
+        return Ok(());
+    };
+    if !p.is_object() {
+        return Err(err(
+            "perf: a mapping, such as {steps: true, threshold: 0.5} ({} for the defaults)",
+        ));
+    }
+    unknown(p, KNOWN_PERF, "perf")?;
+    if let Some(s) = obj_get(p, "steps") {
+        if !s.is_boolean() {
+            return Err(err(format!("perf.steps: true or false (got {})", repr(s))));
+        }
+    }
+    if let Some(t) = obj_get(p, "threshold") {
+        let ok = perf_threshold(t).is_some_and(|x| (0.0..=100.0).contains(&x));
+        if !ok {
+            return Err(err(format!(
+                "perf.threshold: a percentage from 0 to 100, such as 0.5 (got {})",
+                repr(t)
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// `perf.threshold` as a number: a number, or its text (hydo's YAML reads 0.5 as "0.5").
+pub fn perf_threshold(t: &Value) -> Option<f64> {
+    match t {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => s.trim().parse::<f64>().ok().filter(|x| x.is_finite()),
+        _ => None,
+    }
 }
 
 /// The keys of a `steer:` entry (Milestone 209).

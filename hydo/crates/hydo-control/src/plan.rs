@@ -260,6 +260,30 @@ pub struct Plan {
     /// at the workload's start and end and in a recovery boot before its checks. Not a manifest
     /// key: the host's choice, off by default, so nothing changes without it.
     pub cost: u8,
+    /// `perf:` (Milestone 237): the run measures its workload for `hydo perf compare`.
+    pub perf: Option<PlanPerf>,
+}
+
+/// `perf:` (Milestone 237, schedule/perf.rs).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanPerf {
+    /// `perf.steps` (default true): one workload call per step, each measured.
+    pub steps: bool,
+    /// `perf.threshold` in hundredths of a percent (default 50, 0.5 %).
+    pub threshold_bp: u64,
+}
+
+impl PlanPerf {
+    fn of(d: &Value) -> Option<PlanPerf> {
+        let p = get(d, "perf")?;
+        Some(PlanPerf {
+            steps: get(p, "steps").and_then(Value::as_bool).unwrap_or(true),
+            threshold_bp: get(p, "threshold")
+                .and_then(hydo_manifest::perf_threshold)
+                .map(|t| (t * 100.0).round().max(0.0) as u64)
+                .unwrap_or(50),
+        })
+    }
 }
 
 /// One group of services (`groups:`): its members in the manifest's order and the command that
@@ -650,6 +674,7 @@ impl Plan {
             },
             outcomes_after_cut: get(guest, "outcomes_after_cut").is_some_and(py::truthy),
             cost: 0,
+            perf: PlanPerf::of(d),
             invariants,
             knobs,
             buggify: m.buggify,

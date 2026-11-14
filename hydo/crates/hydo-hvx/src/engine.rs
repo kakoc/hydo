@@ -1562,6 +1562,30 @@ impl Core {
         }
     }
 
+    /// `HYDO_WORK_RECORD` (Milestone 237): one line of `<tag>.work.jsonl` for this stop, with the
+    /// guest's retired conditional branches (the PMU branch clock's counter; 0 without that
+    /// clock), its virtual TSC, the instruction clock (`at`) and the emulated RDTSCs.
+    /// `hydo run` joins it with the control transcript by the stop's number (`perf:` in the
+    /// manifest). The counters are only read, so the run is the same with and without it.
+    fn work_record(&mut self, b: &Boot, why: &str) {
+        if !self.o.work_record {
+            return;
+        }
+        let c = self.ph_read(b);
+        let line = format!(
+            "{{\"at\":{},\"br\":{},\"n\":{},\"phase\":\"{}\",\"rdtsc\":{},\"tsc\":{},\"why\":\"{}\"}}\n",
+            self.c.at, c.branches, self.c.k.nstop, self.c.phase, c.rdtsc, c.vtsc, why
+        );
+        let path = self.outdir.join(format!("{}.work.jsonl", self.c.tag));
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = f.write_all(line.as_bytes());
+        }
+    }
+
     /// `ctl_stop`: report, then serve the host's commands until CONT (false) or END or a closed
     /// link (true).
     fn ctl_stop(&mut self, b: &Boot, why: &str) -> bool {
@@ -1610,6 +1634,7 @@ impl Core {
         self.c.k.pevfrom = p2;
         self.ctl_deliver(b, true);
         self.c.k.nstop = self.c.k.nstop.wrapping_add(1);
+        self.work_record(b, why);
         let stop = match (Phase::parse(self.c.phase), StopWhy::parse(why)) {
             (Some(phase), Some(why)) => EngineMsg::Stop {
                 tag: self.c.tag.clone(),

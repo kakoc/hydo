@@ -310,6 +310,10 @@ steer:                         # numbers in the console that say how close a run
   - id: queue_len              #   for hydo explore --steer queue_len (see "Values that steer the
     match: 'length: (\d+)'     #   explorer" below); the first capture group is the number
     goal: min                  # min (default): smaller is closer to failing | max
+
+perf:                          # a performance test (see "Performance tests (`perf:`)" below):
+  steps: true                  #   each step its own workload call and measure (default true)
+  threshold: 0.5               #   hydo perf compare: a smaller change in percent is no change
 # and per service, under services[]:
 #   errors:
 #     format: auto             # auto (default: ERROR/FATAL/level=error/panic: ...) | redis | none
@@ -1179,6 +1183,30 @@ reports the number with `hydo_assert::minimize` or `maximize` instead, and needs
 (hydo/ASSERTIONS.md, "Steered values"). `--steer-match REGEX` gives a pattern for an image
 whose manifest has no entry. The key changes nothing in the guest: an image of a manifest
 without it has the same bytes as before.
+
+### Performance tests (`perf:`)
+
+`perf:` makes each run measure the work of its workload, for `hydo perf compare` (`hydo guide
+workflow`, "Performance tests"). With `steps: true`, the default, the host controller runs each
+workload step as its own workload call, with `HYDO_FROM` and `HYDO_TO` one step apart. It marks
+each call's start and end in the control transcript. `hydo run` writes `perf` into
+`result.json`:
+
+- `workload` and `step <i>`: the engine's count between the marks. On hvx it is the guest's
+  retired conditional branches (`branches`) and the guest clock's nanoseconds (`guest_ns`). On
+  KVM and the Mac engine it is the VM exits (`exits`), which do not count CPU work.
+- The workload's own numbers: each `<name> <value> [<unit>]` line it writes to `$HYDO_PERF`. The
+  controller reads that file after the verdict.
+
+```yaml
+perf:
+  steps: true        # false: the workload runs in one call, measured as `workload`
+  threshold: 0.5     # percent; hydo perf compare reports a smaller change as no change
+```
+
+The key changes nothing in the guest's files. A run of an image with it sends other commands
+than a run without it, so its fingerprints are its own. The example is
+`hydo/onboard/examples/perf-kv`.
 
 ### Service networks (`network: bridge`)
 

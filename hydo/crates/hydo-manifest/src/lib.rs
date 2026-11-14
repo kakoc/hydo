@@ -51,7 +51,7 @@ pub use types::{
     CheckCmd, Command, Expect, Guest, HistoryCheck, Invariant, InvariantType, Knob, Manifest,
     Regression, Route, Run, Service, TestPlan, Workload, World,
 };
-pub use validate::RAM_MIB_MAX;
+pub use validate::{perf_threshold, RAM_MIB_MAX};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ManifestError {

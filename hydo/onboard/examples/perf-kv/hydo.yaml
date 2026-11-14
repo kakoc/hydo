@@ -1,0 +1,43 @@
+# A performance test under hydo (`perf:`, hydo guide workflow): pkv, a small key/value server over
+# TCP on loopback. Each workload step sends 200 PUTs and 200 GETs over one connection and ends
+# with one fdatasync. Each PUT costs the server a fixed amount of CPU work.
+# Build: ./build-pkv.sh puts the static x86_64 pkv in bin/pkv (./build-pkv.sh aarch64: the arm64
+# one, for the Mac engine); PKV_EXTRA_PERMILLE=10 ./build-pkv.sh plants a slowdown of 1 % of the
+# server's work per PUT. Then: hydo build hydo.yaml --out <dir>.
+# Try:  hydo run <image> "disk=none | run"     -> OK; result.json has perf: each step's work
+#       hydo perf compare <run A> <run B>      -> what changed between two builds, in words
+name: perf-kv
+description: pkv (Rust); a performance test of each workload step's work, and every acknowledged step reads back.
+
+root:
+  files:
+    - {src: bin/pkv, dst: /bin/pkv, mode: "0755"}   # build-pkv.sh [aarch64]
+
+data:
+  size_mib: 64
+  dirs: [pkv]
+
+services:
+  - name: pkv
+    cmd: /bin/pkv serve /data/pkv 7070
+    ready: /bin/pkv ping 7070
+    port: 7070
+
+workload:
+  steps: 10                         # step i = 200 PUTs and 200 GETs, then COMMIT (fdatasync)
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if /bin/pkv bench 7070 $i 200 > /dev/null; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+
+perf:
+  steps: true                       # each step is its own workload call and its own measure
+  threshold: 0.5                    # hydo perf compare: a smaller change in percent is no change
+
+invariants:
+  - id: pkv.oracle
+    msg: every key of every acknowledged step reads back with its value (pkv check)
+    cmd: /bin/pkv check 7070 $HYDO_ACKED 200

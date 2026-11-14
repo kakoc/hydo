@@ -57,6 +57,7 @@ hydo-control::image_guest                fast
 hydo-control::features                   full
 hydo-control::lago_gaps                  fast
 hydo-control::m123                       full
+hydo-control::perf                       fast
 hydo-control::react                      fast
 hydo-control::restart                    fast
 hydo-control::restart_may_fail           fast

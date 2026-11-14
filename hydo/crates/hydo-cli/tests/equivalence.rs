@@ -593,6 +593,8 @@ fn every_command_prints_its_help_without_an_image() {
         &["inspect", "events"],
         &["ci"],
         &["ci", "compare"],
+        &["perf"],
+        &["perf", "compare"],
         &["sql-gen"],
         &["guide"],
         &["skill"],

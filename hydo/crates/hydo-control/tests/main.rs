@@ -16,6 +16,7 @@ mod groups;
 mod image_guest;
 mod lago_gaps;
 mod m123;
+mod perf;
 mod react;
 mod restart;
 mod restart_may_fail;

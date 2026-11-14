@@ -213,3 +213,63 @@ exact too, but another engine, vCPU count or turn length can give another verdic
 - An image cache keeps each version's image by its inputs, so a second search builds nothing new.
 - The answer is `versions.json` next to the replays, and `hydo report <dir>` prints it with the
   report of the run or exploration.
+
+## Performance tests
+
+A run under hydo is deterministic, so the work that a workload does is the same number in every
+run of one image. A performance test compares that number between two builds of the system. A
+change of 1 % then shows in every comparison. It needs no repeats, and the host adds no noise.
+
+Add `perf:` to the manifest:
+
+```yaml
+perf:
+  steps: true        # each workload step is its own workload call and its own measure
+  threshold: 0.5     # hydo perf compare: a smaller change in percent reads as no change
+```
+
+Each run's `result.json` then has `perf`, with these measures:
+
+- `workload` and `step <i>`: the work of the whole workload and of each step, counted by the
+  engine. On hvx the unit is `branches`, the guest's retired conditional branches. The CPU counts
+  them exactly. hvx also gives `guest_ns`, the guest clock's time.
+- On KVM and the Mac engine the unit is `exits`, the VM exits. An exit count does not include CPU
+  work between two exits, so these engines do not show a slower request handler.
+- The workload's own numbers: each line `<name> <value> [<unit>]` that it writes to the file
+  `$HYDO_PERF`.
+
+Build the image of each commit, run the same schedule on each, and compare the two runs:
+
+```sh
+hydo run base-disk.img "disk=none | run" --out runs/base
+hydo run head-disk.img "disk=none | run" --out runs/head
+hydo perf compare runs/base runs/head
+```
+
+On hvx, with a planted slowdown of 1 % of the server's work per request
+(`hydo/onboard/examples/perf-kv`), the comparison printed this (steps 2 to 9 left out):
+
+```text
+hydo perf: run B against run A on hvx, counted in the guest's retired branches, counted exactly by the CPU; a change under 0.5% reads as no change
+  the whole workload did 0.88% more work (slower): 228,035,550 -> 230,036,509 branches
+  step 0 did 0.88% more work (slower): 22,857,114 -> 23,058,986 branches
+  step 1 did 0.82% more work (slower): 22,819,331 -> 23,006,695 branches
+  no change in 0 of 11 measures (within 0.5%)
+  (11 measures of guest time are not shown: guest time does not follow the work; --all shows them)
+```
+
+Two runs of one image give the same measures, so their comparison prints `no change: all 11
+measures are exactly the same (0.00%)`.
+
+The exit status is 1 when a measure of the engine grew by more than the threshold, so a CI job
+fails on it. The comparison leaves out hvx's guest time; `--all` shows it, and every measure
+that did not change. `hydo perf show <run>` prints one run's measures. Measure only what hydo
+counts exactly:
+
+- Use the engine's count of a step, not its guest time. On hvx the guest clock includes the time
+  the guest waits for a timer or the disk. A 5 % slowdown of the server's work moved the guest
+  time by 0.25 %.
+- Do not report latencies per request in guest time. The guest clock moves in steps of about
+  1 ms on hvx, so the percentiles of the example's requests are the same in every build.
+- Keep the work of a step on the CPU. A slower disk or network does not change the count.
+- Compare runs of one engine and one schedule. On KVM, also compare runs of one host CPU model.

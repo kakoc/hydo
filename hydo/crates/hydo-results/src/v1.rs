@@ -490,6 +490,11 @@ pub struct Run {
     /// docs/design/upgrades.md), in the order of the run; absent without upgrades.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub upgrades: Vec<UpgradeSwitch>,
+    /// The run's performance measures, for an image with `perf:` in its manifest (added in
+    /// Milestone 237): the work of the whole workload and of each step, counted by the engine,
+    /// and the workload's own numbers. `hydo perf compare` compares two runs' measures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub perf: Option<Perf>,
 }
 
 /// One switch of a service to another version (`U=`; added in Milestone 238).
@@ -507,6 +512,39 @@ pub struct UpgradeSwitch {
     /// starts on the new version at its restart).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started: Option<bool>,
+}
+
+// ------------------------------------------------------------------ performance measures
+
+/// A run's performance measures (`Run.perf`; added in Milestone 237).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Perf {
+    /// The engine that counted (`hvx`, `kvm`, `hvm`).
+    pub engine: String,
+    /// The unit that counts the guest's CPU work on this engine: `branches` (hvx's count of
+    /// the guest's retired conditional branches), or `exits` (VM exits, the clock of KVM and
+    /// the Mac engine, which does not count CPU work between two exits).
+    pub unit: String,
+    /// The change in percent `hydo perf compare` reports as a change (`perf.threshold`).
+    pub threshold: f64,
+    /// Each measure, the whole workload first, then each step in order, then the workload's own
+    /// numbers in the order it wrote them.
+    #[serde(default)]
+    pub measures: Vec<PerfMeasure>,
+}
+
+/// One performance measure of a run.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PerfMeasure {
+    /// `workload`, `step <i>` (`steps <a>-<b>` for a call of several steps), or the name the
+    /// workload wrote.
+    pub name: String,
+    /// `engine`: counted by the engine between two stops; `workload`: a number the workload
+    /// wrote to `$HYDO_PERF`.
+    pub source: String,
+    /// The unit: `branches`, `exits`, `guest_ns` (the guest's clock), or the workload's.
+    pub unit: String,
+    pub value: f64,
 }
 
 // ------------------------------------------------------------------ steered search

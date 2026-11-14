@@ -143,6 +143,11 @@ variables! {
     HYDO_HVX_HOSTCALL: HvxEngine, User, "flag: not `0`", "on", "hydo-hvx";
     /// `1` (not `0`): keep a used VM and reset it in place for the next run (M138).
     HYDO_HVX_REUSE: HvxEngine, User, "flag: set and not `0`", "off", "hydo-hvx";
+    /// Set and not `0`: write `<tag>.work.jsonl` into the run's directory, one record per stop
+    /// with the guest's retired conditional branches (the PMU counter), its virtual TSC and the
+    /// instruction clock there; `hydo run` sets it for an image with `perf:` (Milestone 237).
+    /// Counters are only read: no fingerprint moves.
+    HYDO_WORK_RECORD: HvxEngine, User, "flag: set and not `0`", "off", "hydo-hvx, hydo-cli";
     /// Not `0`: after every in-place reset, compare RAM and disk with a fresh VM's.
     HYDO_HVX_CHECK_RESET: HvxEngine, Developer, "flag: set and not `0`", "off", "hydo-hvx";
     /// Not `0`: check that a fresh VM's RAM and disk are zero before a restore.
@@ -571,6 +576,9 @@ variables! {
     HYDO_FROM: Guest, Guest, "integer", "", "set by hydo-control";
     /// The last step of a workload range.
     HYDO_TO: Guest, Guest, "integer", "", "set by hydo-control";
+    /// With `perf:` (Milestone 237): the file a workload call appends its own numbers to, one
+    /// `<name> <value> [<unit>]` line each; `hydo run` puts them into `result.json` `perf`.
+    HYDO_PERF: Guest, Guest, "path", "", "set by hydo-control with perf:; read by the workload";
     /// A knob's value.
     HYDO_VALUE: Guest, Guest, "text", "", "set by hydo-control";
     /// A composed command's id.

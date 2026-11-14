@@ -305,6 +305,17 @@
           "items": {
             "$ref": "#/$defs/UpgradeSwitch"
           }
+        },
+        "perf": {
+          "description": "The run's performance measures, for an image with `perf:` in its manifest (added in\nMilestone 237): the work of the whole workload and of each step, counted by the engine,\nand the workload's own numbers. `hydo perf compare` compares two runs' measures.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Perf"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -1805,6 +1816,66 @@
         "from",
         "to",
         "rollback"
+      ]
+    },
+    "Perf": {
+      "description": "A run's performance measures (`Run.perf`; added in Milestone 237).",
+      "type": "object",
+      "properties": {
+        "engine": {
+          "description": "The engine that counted (`hvx`, `kvm`, `hvm`).",
+          "type": "string"
+        },
+        "unit": {
+          "description": "The unit that counts the guest's CPU work on this engine: `branches` (hvx's count of\nthe guest's retired conditional branches), or `exits` (VM exits, the clock of KVM and\nthe Mac engine, which does not count CPU work between two exits).",
+          "type": "string"
+        },
+        "threshold": {
+          "description": "The change in percent `hydo perf compare` reports as a change (`perf.threshold`).",
+          "type": "number",
+          "format": "double"
+        },
+        "measures": {
+          "description": "Each measure, the whole workload first, then each step in order, then the workload's own\nnumbers in the order it wrote them.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PerfMeasure"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "engine",
+        "unit",
+        "threshold"
+      ]
+    },
+    "PerfMeasure": {
+      "description": "One performance measure of a run.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "`workload`, `step <i>` (`steps <a>-<b>` for a call of several steps), or the name the\nworkload wrote.",
+          "type": "string"
+        },
+        "source": {
+          "description": "`engine`: counted by the engine between two stops; `workload`: a number the workload\nwrote to `$HYDO_PERF`.",
+          "type": "string"
+        },
+        "unit": {
+          "description": "The unit: `branches`, `exits`, `guest_ns` (the guest's clock), or the workload's.",
+          "type": "string"
+        },
+        "value": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "name",
+        "source",
+        "unit",
+        "value"
       ]
     },
     "Exploration": {

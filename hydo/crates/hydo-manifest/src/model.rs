@@ -687,6 +687,12 @@ pub struct Project {
     /// (MANIFEST.md "Clock steps to a time").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clock_points: Option<Vec<Text>>,
+    /// Measure the workload's work for performance tests (Milestone 237): each run's
+    /// `result.json` gets `perf`, and `hydo perf compare` compares two runs. On hvx the count is
+    /// the guest's retired branches, exact and the same in every run of one image; on KVM and the
+    /// Mac it is VM exits, which do not count CPU work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub perf: Option<PerfSpec>,
     /// The test composer's plan (the hydo/ folder fills it too).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub test: Option<Test>,
@@ -1314,6 +1320,32 @@ pub struct FreezeSplit {
     pub replies: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requests: Option<Vec<String>>,
+}
+
+/// What a performance test measures (Milestone 237, `perf:`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct PerfSpec {
+    /// Run each workload step as its own workload call and measure it (`step 3`), besides the
+    /// whole workload. Without it the workload runs in one call, as without `perf:`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
+    pub steps: Option<bool>,
+    /// The change in percent that `hydo perf compare` reports as a change; a smaller one reads
+    /// as no change (hydo's YAML reads 0.5 as the text "0.5", which is taken as the number).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 0.5))]
+    pub threshold: Option<PerfThreshold>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
+}
+
+/// A percentage from 0 to 100, or its text.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged, expecting = "a percentage from 0 to 100")]
+pub enum PerfThreshold {
+    Number(f64),
+    Text(String),
 }
 
 /// A number in the guest's console lines that says how close a run came to failing (Milestone

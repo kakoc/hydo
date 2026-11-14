@@ -285,6 +285,17 @@
         "$ref": "#/$defs/Text"
       }
     },
+    "perf": {
+      "description": "Measure the workload's work for performance tests (Milestone 237): each run's\n`result.json` gets `perf`, and `hydo perf compare` compares two runs. On hvx the count is\nthe guest's retired branches, exact and the same in every run of one image; on KVM and the\nMac it is VM exits, which do not count CPU work.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PerfSpec"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "test": {
       "description": "The test composer's plan (the hydo/ folder fills it too).",
       "anyOf": [
@@ -3178,6 +3189,55 @@
       "enum": [
         "min",
         "max"
+      ]
+    },
+    "PerfSpec": {
+      "description": "What a performance test measures (Milestone 237, `perf:`).",
+      "type": "object",
+      "properties": {
+        "steps": {
+          "description": "Run each workload step as its own workload call and measure it (`step 3`), besides the\nwhole workload. Without it the workload runs in one call, as without `perf:`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "threshold": {
+          "description": "The change in percent that `hydo perf compare` reports as a change; a smaller one reads\nas no change (hydo's YAML reads 0.5 as the text \"0.5\", which is taken as the number).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PerfThreshold"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.5
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "PerfThreshold": {
+      "description": "A percentage from 0 to 100, or its text.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
       ]
     },
     "Test": {

@@ -20,7 +20,8 @@ pub fn asked(args: &[String]) -> bool {
 /// `hydo inspect logs --help`, `hydo ci compare --help`, `hydo skill install --help` and
 /// `hydo check-history DIR --help` print it. (`hydo skill update --help` and `hydo ci run
 /// --help` are answered by their own code.)
-pub const WITH_SUBCOMMANDS: &[&str] = &["errors", "inspect", "ci", "skill", "check-history"];
+pub const WITH_SUBCOMMANDS: &[&str] =
+    &["errors", "inspect", "ci", "skill", "check-history", "perf"];
 
 /// The help of `cmd`, for the commands this module answers; None for the others.
 pub fn of(cmd: &str, linux: bool) -> Option<String> {
@@ -65,6 +66,7 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
         ),
         "onboard" => crate::onboard::HELP.to_string(),
         "rules" => crate::rules::HELP.to_string(),
+        "perf" => crate::perf::HELP.to_string(),
         "save" => "usage: hydo save <explore dir> [--to hydo/regressions]
   saves the minimal schedules of an exploration as regressions, one file each in the --to
   directory (default hydo/regressions, or regressions inside the hydo/ folder). `hydo build`

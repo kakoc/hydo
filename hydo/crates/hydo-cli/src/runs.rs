@@ -313,10 +313,15 @@ pub fn controlled_engine(
             ctx.require_hvx();
             // M205: `--turn-margin N` (an engine argument of `hydo run`) is the engine's
             // HVX_TURN_MARGIN, as the explorer passes it
-            let extra_env = RunOpts::of_eargs(eargs)
+            let mut extra_env = RunOpts::of_eargs(eargs)
                 .turn_margin
                 .map(|m| vec![format!("{}={m}", hydo_config::registry::HVX_TURN_MARGIN)])
                 .unwrap_or_default();
+            // Milestone 237: an image with `perf:` gets the engine's work record (the guest's
+            // retired branches at every stop), which `hydo run` turns into result.json `perf`
+            if hydo_control::agent::plan_of_image(image).is_ok_and(|p| p.perf.is_some()) {
+                extra_env.push(format!("{}=1", hydo_config::registry::HYDO_WORK_RECORD));
+            }
             let hvx = Hvx {
                 engine: hvxenv::engine(ctx),
                 hvx_run: Some(ctx.libexec().join("hvx-run")),
@@ -692,6 +697,8 @@ fn run_document(
     run.result_line = res.get("line").and_then(Value::as_str).map(str::to_string);
     // an agent image's run: the control transcripts of its conversations (M126)
     run.control = hydo_control::agent::controls_in(outdir, "", "");
+    // Milestone 237: the performance measures of an image with `perf:`
+    run.perf = crate::perf::of_run_dir(outdir, image, backend);
     run.artifacts
         .get_or_insert_with(Default::default)
         .engine_log = Some("engine.log".into());
