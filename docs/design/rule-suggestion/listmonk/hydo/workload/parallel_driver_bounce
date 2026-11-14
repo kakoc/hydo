@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=60
+# one client operation (../../client/main.go): a hard bounce of a base subscriber
+exec /bin/lmc op bounce

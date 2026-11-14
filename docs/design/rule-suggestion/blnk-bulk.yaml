@@ -1,0 +1,23 @@
+format: 1
+project: Blnk main 67d88333 (the example hydo/onboard/examples/blnk)
+sources: the atomic flag of a bulk (model/transaction.go:76) and the workload's bulks of two transfers; a second proposal after the first bulk rule missed finding 2
+store: db
+rules:
+  - id: atomic_bulk_all_or_none
+    says: An atomic bulk of two transfers ends with both transfers applied or neither (a transfer that a rollback refunded counts as not applied).
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: model/transaction.go, line: 76, quote: "Atomic bool `json:\"atomic\"`"}
+      - {file: transaction_bulk.go, line: 78, quote: "rollbackBatchTransactions performs a rollback of transactions in a batch"}
+      - the workload's bulks have two transfers, with the references <bulk>.1 and <bulk>.2
+      - {file: transaction_queue.go, line: 424, quote: "queueTxn.Reference = fmt.Sprintf(\"%s_q\", originalRef): the applied copy of a queued transfer (second version; the first counted the queued rows, judged nothing, and held on finding 2)"}
+    query: |
+      SELECT split_part(t.reference, '.', 1) AS bulk, count(*) AS applied
+        FROM blnk.transactions t
+       WHERE t.reference ~ '^k[0-9]+\.[0-9]+_q$' AND t.status = 'APPLIED'
+         AND NOT EXISTS (SELECT 1 FROM blnk.transactions r
+                          WHERE r.parent_transaction = t.transaction_id AND r.status = 'APPLIED'
+                            AND r.source = t.destination AND r.destination = t.source)
+       GROUP BY 1 HAVING count(*) NOT IN (0, 2)
+    cases: SELECT count(*) FROM blnk.transactions WHERE reference ~ '^k[0-9]+\.[0-9]+_q$' AND status = 'APPLIED'

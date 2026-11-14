@@ -1,0 +1,103 @@
+format: 1
+project: Formance Ledger v2.4.18 (the example hydo/onboard/examples/formance-ledger)
+sources: formancehq/ledger v2.4.18 (internal/storage/bucket/migrations, docs/api/README.md, openapi.yaml, README.md), `hydo rules scan`; the example's workload
+store: db
+rules:
+  - id: volumes_in_equal_out
+    says: Money only moves between accounts - per asset, all accounts' inputs sum to all accounts' outputs.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: internal/storage/bucket/migrations/11-make-stateless/up.sql, quote: "ASSERT (select coalesce(sum(input), 0) from accounts_volumes) = (select coalesce(sum(output), 0) from accounts_volumes)"}
+      - {file: README.md, line: 7, quote: "an atomic multi-postings transactions system"}
+    query: |
+      SELECT asset, sum(input)::text, sum(output)::text FROM _default.accounts_volumes
+       GROUP BY asset HAVING sum(input) <> sum(output)
+    cases: SELECT count(*) FROM _default.accounts_volumes
+    mutate: UPDATE _default.accounts_volumes SET input = input + 1 WHERE accounts_address = (SELECT min(accounts_address) FROM _default.accounts_volumes)
+
+  - id: volumes_are_sum_of_moves
+    says: Each account's input and output volumes of an asset are the sums of its moves into and out of it.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: internal/storage/bucket/migrations/0-init-schema/up.sql, line: 127, quote: "create table moves (... account_address, asset, amount, is_source, post_commit_volumes)"}
+      - {file: internal/storage/bucket/migrations/11-make-stateless/up.sql, quote: "create table accounts_volumes (... input, output)"}
+    query: |
+      SELECT v.accounts_address, v.asset, v.input::text, coalesce(m.i, 0)::text, v.output::text, coalesce(m.o, 0)::text
+        FROM _default.accounts_volumes v
+        LEFT JOIN (SELECT ledger, account_address, asset,
+                          sum(CASE WHEN is_source THEN 0 ELSE amount END) AS i,
+                          sum(CASE WHEN is_source THEN amount ELSE 0 END) AS o
+                     FROM _default.moves GROUP BY ledger, account_address, asset) m
+          ON m.ledger = v.ledger AND m.account_address = v.accounts_address AND m.asset = v.asset
+       WHERE v.input <> coalesce(m.i, 0) OR v.output <> coalesce(m.o, 0)
+    cases: SELECT count(*) FROM _default.moves
+    mutate: DELETE FROM _default.moves WHERE seq = (SELECT max(seq) FROM _default.moves)
+
+  - id: transaction_balanced
+    says: Every transaction moves as much of each asset out of its sources as into its destinations.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: README.md, line: 7, quote: "an atomic multi-postings transactions system"}
+      - {file: internal/storage/bucket/migrations/0-init-schema/up.sql, line: 127, quote: "moves (transactions_seq, is_source, amount)"}
+    query: |
+      SELECT transactions_seq, asset FROM _default.moves GROUP BY transactions_seq, asset
+      HAVING sum(CASE WHEN is_source THEN amount ELSE -amount END) <> 0
+    cases: SELECT count(DISTINCT transactions_seq) FROM _default.moves
+    mutate: UPDATE _default.moves SET amount = amount + 1 WHERE seq = (SELECT max(seq) FROM _default.moves WHERE is_source)
+
+  - id: reverted_at_most_once
+    says: A transaction is reverted at most once, and a transaction marked reverted has its revert.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: internal/storage/bucket/migrations/29-fix-invalid-metadata-on-reverts/up.sql, quote: "com.formance.spec/state/reverts"}
+      - {file: docs/api/README.md, quote: "Revert a ledger transaction by its ID"}
+    query: |
+      SELECT metadata->>'com.formance.spec/state/reverts' AS original, count(*)::text FROM _default.transactions
+       WHERE metadata ? 'com.formance.spec/state/reverts' GROUP BY 1 HAVING count(*) > 1
+      UNION ALL
+      SELECT t.id::text, 'reverted_at without a revert' FROM _default.transactions t
+       WHERE t.reverted_at IS NOT NULL AND NOT EXISTS (
+             SELECT 1 FROM _default.transactions r WHERE r.ledger = t.ledger
+                AND r.metadata->>'com.formance.spec/state/reverts' = t.id::text)
+    cases: SELECT count(*) FROM _default.transactions WHERE reverted_at IS NOT NULL
+    mutate: UPDATE _default.transactions SET reverted_at = now() WHERE id = (SELECT min(id) FROM _default.transactions WHERE reverted_at IS NULL)
+
+  - id: log_one_entry_per_transaction
+    says: The log holds one new-transaction entry for each transaction, and no transaction without one.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: internal/storage/bucket/migrations/0-init-schema/up.sql, line: 161, quote: "create table logs (... type log_type: NEW_TRANSACTION, REVERTED_TRANSACTION ...)"}
+      - {file: internal/storage/bucket/migrations/23-logs-fill-memento/up.sql, quote: "logs.memento"}
+    query: |
+      SELECT t.id::text, count(l.seq)::text FROM _default.transactions t
+        LEFT JOIN _default.logs l ON l.ledger = t.ledger
+             AND l.type IN ('NEW_TRANSACTION', 'REVERTED_TRANSACTION')
+             AND (l.data->'transaction'->>'id' = t.id::text OR l.data->'revertTransaction'->>'id' = t.id::text)
+       GROUP BY t.ledger, t.id HAVING count(l.seq) <> 1
+    cases: SELECT count(*) FROM _default.logs
+    mutate: DELETE FROM _default.logs WHERE seq = (SELECT max(seq) FROM _default.logs WHERE type = 'NEW_TRANSACTION')
+
+  - id: acked_operations_once
+    says: Every operation the client saw acknowledged is in the ledger once (each transaction of a bulk once), and every acknowledged revert reverted its transaction.
+    kind: command
+    confidence: high
+    evidence:
+      - the client's records ($HYDO_ACKED; a token is <op>~<postings>, a bulk's transactions separated by |, a revert <op>~R<original op>; each transaction carries the metadata hydo_op)
+      - {file: docs/api/README.md, line: 444, quote: "Idempotency-Hit: the request was processed using an idempotency key that was already used"}
+    run: |
+      hydo-sql read hydo acked > /tmp/rule-acked.j && hydo-sql read sql db "SELECT (metadata->>'hydo_op') || '|' || coalesce(metadata->>'hydo_part', '') || '|' || (reverted_at IS NOT NULL)::text AS r FROM _default.transactions WHERE metadata ? 'hydo_op'" > /tmp/rule-tx.j || exit 2
+      awk -F'"' 'NR == FNR { tok[++n] = $4; next }
+        { split($4, f, "|"); c[f[1]]++; if (f[3] == "true") rev[f[1]] = 1 }
+        END { bad = 0
+          for (i = 1; i <= n; i++) { t = tok[i]; split(t, p, "~"); op = p[1]; d = p[2]
+            if (substr(d, 1, 1) == "R") { o = substr(d, 2); if (!(o in rev)) { bad++; if (bad <= 5) print "not reverted: " t } ; continue }
+            want = split(d, parts, "|")
+            if (c[op] != want) { bad++; if (bad <= 5) print op ": " c[op] + 0 " transactions, expected " want } }
+          print bad " of " n " acknowledged operations are not in the ledger once"; exit (bad > 0) }' /tmp/rule-acked.j /tmp/rule-tx.j
+    cases: hydo-sql read sql db "SELECT count(*) FROM _default.transactions WHERE metadata ? 'hydo_op'"
+    mutate: hydo-sql read sql db "UPDATE _default.transactions SET metadata = metadata - 'hydo_op' WHERE id = (SELECT max(id) FROM _default.transactions WHERE metadata ? 'hydo_op')"

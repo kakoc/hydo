@@ -8619,3 +8619,190 @@ hydo-schema-compat passes.
 **Open (open item 109).** Versions of image services; the explorer draws one `U=` per schedule and
 only the selector `all` for a group; the state search does not move `U=`; the Mac and KVM engines
 ran `U=` only on the scripted agent; the grace period is fixed at 10 s.
+
+### Milestone 236 (tentative number) - DONE (rule suggestion, first version: `hydo rules scan` lists what a project promises, `hydo rules check` validates candidate rules on runs without faults, and the onboarding skill proposes rules from the project's own sources and shows the owner only the validated ones; proven on Blnk and Lago and on listmonk, which hydo had never seen; Formance Ledger's rules were proposed but not run; nothing recorded moved; 2026-11-14)
+
+The question came from the user's own onboarding of a message broker: did the skill's rule
+proposals help? They helped only as far as the lists per domain and the questions to the owner
+went. The goal of this milestone is bugs that nobody wrote a test for, found by rules that
+nobody wrote, with a method that knows no domain. The design is `docs/design/rule-suggestion.md`.
+
+**The method.** The skill proposes rules from five sources: the database schema (constraints,
+unique keys, foreign keys, CHECKs, state columns), the API, the documentation's promise words,
+the project's tests, and the client library. Each rule has a plain statement, its evidence (file
+and line), a kind (`sql`, `command`, `messages`, `history`) and a confidence. hydo validates every
+rule on runs without faults before the owner sees it, and the skill shows the owner only the
+rules that hold, with the ones that failed without faults apart. Four kinds of evidence give
+rules that a database cannot enforce by itself, and they are the ones the method prefers:
+
+- a constraint that only the application checks (a model validation, a check in a service);
+- a partial unique index, taken to all the rows that mean the same thing;
+- a total across tables, instead of a constraint that the database already enforces;
+- a state that the documentation says leads to an action (an eventually rule).
+
+The rule over the client's acknowledged operations is proposed for every project.
+
+**`hydo rules scan [DIR] [--kind K] [--json] [--max N]`** (`hydo/crates/hydo-cli/src/rules.rs`)
+lists the evidence in five kinds: `schema`, `state`, `api`, `docs` and `tests`, each line with
+its file and line number. It reads `.sql` files, migrations, model and schema files, OpenAPI,
+`.proto` and GraphQL files, Markdown, reStructuredText and AsciiDoc files, and test files of
+common languages. A file of documentation or tests gives at most 40 lines. A schema dump gives
+all of its lines: with a cap of 40, Lago's `db/structure.sql` lost every partial unique index.
+A query's `LIMIT` and `OFFSET` are no evidence; before that rule, listmonk's `queries.sql`
+listed its paging clauses.
+
+**`hydo rules check <candidates.yaml> [IMG] [--runs N] [--schedule S] [--mutate] [--keep-checks]
+[--timeout S] [--out DIR] [--write-checks DIR]`** runs the image's workload without faults on
+the schedules `disk=none | run W=00000001` to `W=0000000N` (default 3; `W=` takes 8 hex digits
+in its seed form). An image without composed commands gets one run of `disk=none | run`. The
+image is not rebuilt. The command changes the image's plan in the host controller
+(`runs::run_with_plan`, a `PlanEdit` hook on the run path): the project's own checks
+(`compose.sh check N`) leave, the composed commands' invariants (`compose.sh verdict`, the
+`eventually` and `finally` commands) stay, and each candidate becomes a final invariant
+`rule.<id>`. Each candidate runs in a shell wrapper:
+
+- `sql`: `hydo-sql none <store> '<query>'`, its `cases` through `hydo-sql read sql`;
+- `command`: the command as written;
+- `within: N`: the rule is tried every 2 s of guest time until it holds or N s pass;
+- the wrapper's last line is `hydo-rule exit=S mutate=M cases=C :: LAST`, and it fails only when
+  the rule failed, so one rule that cannot be evaluated does not make the run an error.
+
+The command reads each rule's result from the `HYDO-ASSERT` records and a failing rule's rows
+from the `HYDO-CHECK-OUT` notes of Milestone 225. The statuses are `holds`, `vacuous` (it held but
+its `cases` count was 0 in every run), `fails-clean`, `unevaluated` and `not-run`. `--mutate`
+makes one more run of the first schedule: each rule that holds and has a `mutate` runs, its
+change is made, and it runs again. It must fail then (`caught`); else it is `blind`. A rule that
+already fails before its own change (an earlier rule's change broke it) gets a run of its own.
+`--schedule S` runs another schedule instead, for example a saved regression's. The results are `rules-check.json`, and
+`--write-checks DIR` writes each rule that holds as `final_<id>.sql`, an executable `final_<id>`,
+or an `eventually_` check with `within=N after=commands`.
+
+**The guide and the skill.** `hydo guide rules` holds the facts: the scan, the kinds of evidence
+that give strong rules, the candidates file's format, the statuses, and the commands.
+`hydo guide workloads` ("Business rules: ask the owner") and `hydo guide workflow` point at it.
+The skill (2.1.0; SKILL.md, `plugin/.claude-plugin/plugin.json` and
+`.claude-plugin/marketplace.json`) no longer asks the owner to confirm a domain's list in step 1.
+Step 3 proposes the rules with the new reference `references/proposing-rules.md` into
+`hydo/rules.yaml`, step 4 validates them with `hydo rules check --mutate` and shows the owner the
+ones that hold, and step 5 reports them, plain words first. The domain lists are a last check for
+rules the sources did not give.
+
+**Tests.** The unit tests of `rules.rs` (12): the candidates file and its errors, the commands of
+a `sql` rule, the wrapper in a real shell (the summary line, its exit status, `within` and the
+planted change), the reading of the records, every status and mutation verdict, the plan edit
+(the project's checks leave, the commands stay), the check files, the store of
+`helper_sql.conf`, and the scan's kinds by file and by line. `hydo/crates/hydo-cli/tests/rules.rs`
+(`hydo::rules`, fast) runs `hydo rules check` on the scripted engine end to end: six rules give
+each status, the four runs, the failing rows, both mutation verdicts and the check files; a bad
+file runs nothing; and the scan by kind and as JSON.
+
+**The proof runs.** Blnk and listmonk ran on the bare-metal machine with hvx, through
+`~/bin/hvx-run`, with this branch's `hydo` in a copy of the unpacked 0.3.2 Linux release; their
+images were built there from the manifests (Blnk's programs from `build.sh`, its six pins
+checked). Lago ran on this Mac's engine with this branch's `hydo` and an image built from the
+example's manifest: on hvx its `api` service exits during start (open item 110). The rules were
+proposed from each project's sources (`hydo rules scan` and the files it names) and the
+example's workload, without reading the example's checks. The author knew which rules had found
+the known bugs (the task named them), so the proposal is not blind; each rule's evidence is in
+its candidates file. The files are in `docs/design/rule-suggestion/`.
+
+| project | scan (the final `hydo rules scan`): lines of evidence in files | proposed | hold | vacuous | fail without faults | changes caught |
+|---|---|---|---|---|---|---|
+| Blnk `67d88333` (hvx) | 586 in 228 | 9 | 8 | 0 | 1 (a wrong rule) | 5 of 7 tried |
+| Lago v1.57.0 (Mac) | 4,217 in 1,325 | 11 | 11 | 0 | 0 | 8 of 10 tried |
+| listmonk v2.5.1, never seen before (hvx) | 204 in 58 | 5 | 4 | 0 | 1 | 1 of 4 tried |
+| Formance Ledger v2.4.18 | 760 in 793 | 6 | not run | | | |
+
+A change that was not caught was `blind` (a change that hit rows the rule does not judge: 1 in
+Lago, 2 in listmonk) or failed itself (an `INSERT` or `UPDATE` that the database refused: 2 in
+Blnk, 1 in Lago). Before the fallback of a run of its own, three Blnk rules and one listmonk rule
+were broken by an earlier rule's change; with it, the three Blnk rules were caught. Formance's
+six rules were proposed only: its ledger's Go link stalled twice on the shared machine, and no
+image was built.
+
+*Blnk.* The rule over the client's acknowledged operations failed without faults in all three
+runs: 14 of 76 operations had no transaction, every one a commit or void of a hold. The rule was
+wrong, not Blnk. Blnk gives a hold's commit the reference `<leg>_commit_<reference>`
+(`transaction_inflight.go:637`, `inflightActionReference`). The second version looked for that
+name in `transaction_id` and failed the same way. The third looks in `reference`, holds in the
+three runs (173, 170 and 146 cases), and catches its planted change. This is the loop of the
+skill for a rule that fails without faults: read the rows, fix the rule, validate again.
+
+Then the saved regressions of Blnk's three findings (Milestone 224) ran with `--schedule`
+against the proposed rules:
+
+| finding | its schedule | the proposed rule that failed |
+|---|---|---|
+| 1. a draw ignores its overdraft limit (Blnk bug) | `disk=none dseed=62b1aba8e728944c \| run W=e48d5d25,p3,q1,r200,o...`, no fault | `no_balance_below_its_floor` |
+| 2. an atomic bulk keeps its first transfer (Blnk bug) | `... \| run P=redis@9+4 W=3e71cf9e,p5,q3,r800` | none of the nine (below) |
+| 3. acknowledged commits of holds lost with Redis's defaults | `... \| run K=redis@21+1 N=worker-*@14-20:delay,100ms W=a36fcf62,...` | `acked_operations_recorded` (1 of 39) |
+
+The overdraft rule held on the seeds 1 to 3 and failed on finding 1's composition. The bug needs
+concurrent draws that Blnk's worker coalesces, and the three default compositions had none. So
+a rule that holds on clean runs is ready for exploring; it has not been checked yet.
+
+Finding 2 was missed. The proposed `atomic_bulk_whole_or_refunded` looked for a rejected
+transfer next to an applied one, but in finding 2 the second transfer is never saved. Two later
+proposals, written after the miss, show what the method lacked:
+
+- `failed_operations_not_applied`, the generic rule's second half, held on finding 2: the
+  client did not learn the bulk's outcome (a timeout), so the operation was `unknown`, not
+  failed. It also matched references without Blnk's `_q` suffix (below), so it judged less than
+  it says.
+- `atomic_bulk_all_or_none` (`blnk-bulk.yaml`; an atomic bulk ends with both transfers applied
+  or neither) first held on finding 2 too. It counted the queued rows, whose references are
+  `k5.1`. Blnk applies a queued transfer as a copy with the reference `<reference>_q`
+  (`transaction_queue.go:424`). Its `cases` counted the bulks, not the rows it judged, so the
+  check did not show that it judged nothing. The second version counts the `_q` copies, holds
+  on the seeds 1 to 3 (17, 6 and 8 applied transfers judged), and fails on finding 2 with
+  `db: 2 rows where none may be`, as the example's own rule did.
+
+The lesson for the skill and the guide: a rule's `cases` must count the rows that the rule's
+query judges, not the operations the rule is about.
+
+*Lago*, on the Mac engine (a clean run takes about 17 s of guest time). All 11 rules held, none
+was vacuous, and 8 of the 10 planted changes were caught. The planted change of
+`closed_period_usage_invoiced` deleted a row of a subscription without usage in a closed month
+(`blind`), and that of `one_invoice_per_period_any_reason`, an `INSERT`, failed. Then the
+example's four saved regressions ran with `--schedule` against the 11 rules:
+
+| finding (Lago's RESULTS.md) | its schedule | the proposed rules that failed |
+|---|---|---|
+| 8. a subscription cancelled before the billing tick is invoiced twice | `disk=none \| run T=3:@:10-2s O=db-api@1-3:resp:loss,74% W=740c6cfa,...` | `one_invoice_per_period_any_reason` (1 row) |
+| 1. lago-api 6901: cancelled while Redis is down, never invoiced | `disk=none \| run K=redis@1+4` | `terminated_subscription_invoiced`, `closed_period_usage_invoiced`, `in_advance_fee_once_per_event` |
+| 2. Lago issue 354: a clock step over the billing day | `disk=none \| run T=0:86400` | `closed_period_usage_invoiced` (2 rows) |
+| 1 (fees). a power cut loses queued in-advance fees | `disk=cut dseed=629bfb2777cb6c08 \| run C=10 P=api_worker@5+5 T=0:300 W=340bcd65,...` | `in_advance_fee_once_per_event` (4 rows: the 4 transfers never charged) |
+
+The double invoice came from generalizing two partial unique indexes
+(`index_uniq_invoice_subscriptions_on_charges_from_to_datetime` covers only periodic invoices,
+`index_unique_terminating_invoice_subscription` only termination invoices) to overlapping charge
+periods of any reason. Each found failure ran on one schedule; no exploration ran with these
+rules.
+
+*listmonk* had never been onboarded. Its onboarding for this milestone is in
+`docs/design/rule-suggestion/listmonk/`: the release's static program, PostgreSQL 16, a client
+`lmc` in Go, and four commands (subscribe, hard bounce, unsubscribe, blocklist). A clean run takes
+about 5 s. One rule failed without faults, in two of three runs:
+`blocklisted_has_no_live_subscription`. listmonk's own blocklisting (`queries.sql`,
+`blocklist-subscribers`, and the comment of `unsubscribe-by-campaign`) unsubscribes the
+subscriber from every list. A blocklisting by hard bounces (`record-bounce`, `block1`) changes
+only the subscriber's status, so two base subscribers stayed `confirmed` on the double opt-in
+list. listmonk's campaign query leaves blocklisted subscribers out, so no mail goes out. Whether
+this is a wrong rule or a bug is the owner's decision; `record-bounce` on listmonk's `master`
+of 2026-11-14 is the same. The planted changes of two rules picked a row that the rule does not
+judge (the first blocklisted subscriber, who had no bounces), and `blind` showed it. With the four
+rules that held written as checks (`--write-checks`), `hydo explore --seeds 1-150 --strategy
+process --new-faults` ran 150 schedules in 410 s with the manifest's fault kinds (kills, pauses,
+network faults, power cuts and clock steps) and found no failure.
+
+**Checks.** On the bare-metal machine, in a synced copy of the tree: `cargo fmt --check`,
+`cargo clippy -D warnings` (`hydo`, `hydo-config`), `cargo test -p hydo --test it` (37 passed,
+with `docs::` and `rules::`), `cargo test -p hydo --bin hydo` (123 passed; the one failure,
+`skillupdate::tests::each_agent_gets_its_folder`, needs the repository's git and passes in a
+checkout), `cargo test -p hydo-agents` (with `skill_check::` and `public_content::`),
+`cargo test -p hydo-config` (with the inventory), and `hydo-release`'s `test_tiers::`. On this
+Mac: `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`. Re-recorded goldens: the CLI's
+help (`tests/golden/cli.jsonl`: the line for `hydo rules`), the agents' answers
+(`tests/golden/agents.jsonl`: the guide's topic list has `rules`, the skill is 2.1.0) and
+`INVENTORY.md` (`HYDO_SCRIPTED_RULES`). No recorded value of an example moved; no example
+changed.

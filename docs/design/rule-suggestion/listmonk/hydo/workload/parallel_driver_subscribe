@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=60
+# one client operation (../../client/main.go): a new subscriber on both lists
+exec /bin/lmc op subscribe

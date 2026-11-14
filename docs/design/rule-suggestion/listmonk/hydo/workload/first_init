@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=180
+# two lists, bounce webhooks on, six base subscribers on both lists
+exec /bin/lmc init

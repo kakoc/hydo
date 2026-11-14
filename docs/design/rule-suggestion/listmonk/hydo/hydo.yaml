@@ -1,0 +1,102 @@
+# listmonk v2.5.1 (newsletters and mailing lists, Go) on PostgreSQL 16: the business app that hydo
+# had never seen, onboarded for Milestone 236's rule suggestion. The app is the release's static
+# program; the client ../client (lmc) sends every operation through listmonk's API.
+#   ../bin/listmonk   from listmonk_2.5.1_linux_amd64.tar.gz of listmonk's GitHub release
+#                     (sha256 e0f63cf1e2a4f2795a77dcd93e5b8c022f6b04b1ceee73bfeb9212645a3228f6)
+#   ../bin/lmc        cd ../client && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../bin/lmc .
+#   images/           the PostgreSQL image of hydo/onboard/examples/blnk/hydo/fetch-images.sh
+#   hydo build hydo.yaml && hydo rules check ../../listmonk.yaml --mutate
+format: 1
+name: listmonk
+description: "listmonk v2.5.1 on PostgreSQL 16: subscribers, lists, unsubscriptions, blocklisting and hard bounces under faults"
+hydo_version: "0.3"
+
+network: bridge
+
+guest:
+  ram_mib: 1536
+  clock_after_cut: 60
+
+data:
+  size_mib: 512
+  dirs: [vol/postgres]
+
+root:
+  files:
+    - {src: "../bin/listmonk", dst: /bin/listmonk, mode: "0755"}
+    - {src: "../bin/lmc", dst: /bin/lmc, mode: "0755"}
+  text:
+    /etc/hosts: |
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 postgres
+      10.89.0.12 app
+    /etc/listmonk/config.toml: |
+      [app]
+      address = "0.0.0.0:9000"
+      admin_username = "listmonk"
+      admin_password = "listmonk"
+
+      [db]
+      host = "10.89.0.11"
+      port = 5432
+      user = "listmonk"
+      password = "listmonk"
+      database = "listmonk"
+      ssl_mode = "disable"
+      max_open = 25
+      max_idle = 25
+      max_lifetime = "300s"
+      params = ""
+
+env:
+  LM_URL: "http://10.89.0.12:9000"
+
+services:
+  # listmonk's docker-compose.yml's db: postgres (13 there; 16.16 here), its user, password and
+  # database
+  - name: postgres
+    image: {x86_64: images/postgres-16-alpine-amd64.docker.tar}
+    image_ref: "postgres:16.16-alpine3.24"
+    cmd: [docker-entrypoint.sh, postgres]
+    env:
+      TZ: "Etc/UTC"
+      POSTGRES_USER: "listmonk"
+      POSTGRES_PASSWORD: "listmonk"
+      POSTGRES_DB: "listmonk"
+      PGDATA: /data/postgres
+    addr: 10.89.0.11
+    port: 5432
+    ready: "timeout 10 hydo-oci postgres pg_isready -q -U listmonk -h 127.0.0.1"
+    ready_timeout: 120
+    restart: on-failure
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/postgres, dst: /data/postgres, copy_up: true}
+  # the compose file's demo-app command: "./listmonk --install" (here idempotent), then listmonk
+  - name: app
+    setup: "cd /etc/listmonk && /bin/listmonk --install --idempotent --yes --config config.toml"
+    cmd: "sh -c 'cd /etc/listmonk && exec /bin/listmonk --config config.toml'"
+    addr: 10.89.0.12
+    port: 9000
+    depends_on: [postgres]
+    ready: "timeout 5 /bin/lmc ready"
+    ready_timeout: 120
+    restart: on-failure
+
+workload:
+  steps: 24
+  timeout: 600
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 300
+  command_timeout: 60
+  drain_timeout: 60
+
+errors: false
+
+faults: [kill, pause, network, cut, clock]

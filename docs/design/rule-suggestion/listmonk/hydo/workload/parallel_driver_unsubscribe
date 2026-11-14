@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=60
+# one client operation (../../client/main.go): a base subscriber leaves the news list
+exec /bin/lmc op unsubscribe

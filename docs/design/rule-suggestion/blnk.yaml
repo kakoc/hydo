@@ -1,0 +1,159 @@
+format: 1
+project: Blnk main 67d88333 (the example hydo/onboard/examples/blnk)
+sources: blnk (sql/*.sql migrations, model/, the Go services and their tests, README.md), `hydo rules scan`; the example's workload
+store: db
+rules:
+  # --- what Blnk does after the workload (run first: the queue settles) ---
+  - id: queued_reaches_final_state
+    says: Every transaction Blnk saved as queued gets a final outcome (applied, rejected, inflight or void).
+    kind: sql
+    confidence: high
+    within: 120
+    evidence:
+      - {file: transaction_queue.go, line: 423, quote: "queueTxn.ParentTransaction = persistedTxn.TransactionID"}
+      - {file: queue_recovery.go, line: 203, quote: "Stuck transaction ... exceeded max recovery attempts, rejecting"}
+    query: |
+      SELECT q.transaction_id, q.reference FROM blnk.transactions q
+       WHERE q.status = 'QUEUED'
+         AND NOT EXISTS (SELECT 1 FROM blnk.transactions c
+                          WHERE c.parent_transaction = q.transaction_id AND c.status <> 'QUEUED')
+    cases: SELECT count(*) FROM blnk.transactions WHERE status = 'QUEUED'
+    mutate: |
+      INSERT INTO blnk.transactions (transaction_id, source, destination, reference, amount, precise_amount, precision, currency, status)
+      SELECT 'txn_planted', source, destination, 'planted', amount, precise_amount, precision, currency, 'QUEUED'
+        FROM blnk.transactions WHERE status = 'APPLIED' LIMIT 1
+
+  # --- the client's acknowledged operations (the generic rule) ---
+  - id: acked_operations_recorded
+    says: Every operation the client saw acknowledged (a transfer, a draw, a hold, a commit or void of a hold, a bulk) is recorded by Blnk under its reference.
+    kind: command
+    confidence: high
+    evidence:
+      - the client's records ($HYDO_ACKED; a token is <reference>~<parts>, a bulk's transfers are <reference>.1 and .2)
+      - {file: transaction_coalescing.go, line: 557, quote: "reference %s has already been used"}
+      - {file: transaction_inflight.go, line: 637, quote: "inflightActionReference derives the deterministic reference for a committed or voided leg: <leg>_commit_<action id> (third version: the first two failed without faults on 14 of 76 operations, all commits and voids of holds)"}
+    run: |
+      hydo-sql read hydo acked > /tmp/rule-acked.j && hydo-sql read sql db "SELECT DISTINCT regexp_replace(reference, '^.*_(commit|void)_', '') AS r FROM blnk.transactions" > /tmp/rule-refs.j || exit 2
+      awk -F'"' 'NR == FNR { split($4, p, "~"); want[p[1]] = 1; next }
+        { r = $4; have[r] = 1; i = index(r, "."); if (i > 0) have[substr(r, 1, i - 1)] = 1 }
+        END { n = 0; c = 0; for (w in want) { c++; if (!(w in have)) { n++; if (n <= 5) print "missing: " w } }
+              print n " of " c " acknowledged operations have no transaction"; exit (n > 0) }' /tmp/rule-acked.j /tmp/rule-refs.j
+    cases: hydo-sql read sql db 'SELECT count(DISTINCT reference) FROM blnk.transactions'
+    mutate: hydo-sql read sql db "DELETE FROM blnk.transactions WHERE reference = (SELECT min(reference) FROM blnk.transactions WHERE reference LIKE 't%')"
+
+  # --- rules about the stored state ---
+  - id: no_balance_below_its_floor
+    says: No balance goes below what it may: users, shops, the merchant and the empty account stay at zero or above counting held money, and a credit line stays within its overdraft limit of 50.00.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: model/model.go, line: 153, quote: "It returns an error if the balance is insufficient and overdraft is not allowed"}
+      - {file: model/model.go, line: 183, quote: "Insufficient funds, check if within overdraft limit ... transaction exceeds overdraft limit"}
+      - {file: transaction_rejection.go, line: 131, quote: "overdraft limit"}
+      - the workload's draws use overdraft_limit 50.00 on the credit lines @c1 and @c2
+    query: |
+      SELECT indicator, balance::text, inflight_debit_balance::text FROM blnk.balances
+       WHERE indicator IS NOT NULL AND indicator <> '@world'
+         AND ((indicator LIKE '@c%' AND balance < -5000)
+           OR (indicator NOT LIKE '@c%' AND balance - inflight_debit_balance < 0))
+    cases: SELECT count(*) FROM blnk.transactions WHERE status = 'APPLIED'
+    mutate: UPDATE blnk.balances SET balance = -5001 WHERE indicator = '@c1'
+
+  - id: ledger_sums_to_zero
+    says: Money only moves between balances: per currency, all balances sum to zero, and all held amounts too.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: README.md, line: 16, quote: "Blnk is an open-source, double-entry ledger"}
+      - {file: README.md, line: 43, quote: "Build on double-entry accounting principles from day one."}
+    query: |
+      SELECT currency, sum(balance)::text, sum(credit_balance - debit_balance)::text,
+             sum(inflight_credit_balance - inflight_debit_balance)::text
+        FROM blnk.balances GROUP BY currency
+      HAVING sum(balance) <> 0 OR sum(credit_balance - debit_balance) <> 0
+          OR sum(inflight_credit_balance - inflight_debit_balance) <> 0
+    cases: SELECT count(*) FROM blnk.transactions WHERE status = 'APPLIED'
+    mutate: UPDATE blnk.balances SET balance = balance + 1, credit_balance = credit_balance + 1 WHERE indicator = '@u1'
+
+  - id: balance_is_credits_minus_debits
+    says: Each balance equals its credits minus its debits.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: sql/1708676327.sql, line: 54, quote: "blnk.balances (balance, credit_balance, debit_balance)"}
+    query: |
+      SELECT indicator, balance::text, credit_balance::text, debit_balance::text FROM blnk.balances
+       WHERE balance <> credit_balance - debit_balance
+          OR inflight_balance <> inflight_credit_balance - inflight_debit_balance
+    cases: SELECT count(*) FROM blnk.balances
+    mutate: UPDATE blnk.balances SET debit_balance = debit_balance + 1 WHERE indicator = '@u1'
+
+  - id: balance_is_sum_of_applied
+    says: Each balance's credits and debits are the sums of the applied transactions into and out of it.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: README.md, line: 71, quote: "managing balances and recording transaction workflows"}
+      - {file: sql/1708676327.sql, line: 102, quote: "blnk.transactions (source, destination, amount, status)"}
+    query: |
+      SELECT b.indicator, b.credit_balance::text, coalesce(cr.s, 0)::text AS applied_in,
+             b.debit_balance::text, coalesce(db.s, 0)::text AS applied_out
+        FROM blnk.balances b
+        LEFT JOIN (SELECT destination, sum(precise_amount) s FROM blnk.transactions
+                    WHERE status = 'APPLIED' GROUP BY destination) cr ON cr.destination = b.balance_id
+        LEFT JOIN (SELECT source, sum(precise_amount) s FROM blnk.transactions
+                    WHERE status = 'APPLIED' GROUP BY source) db ON db.source = b.balance_id
+       WHERE b.credit_balance <> coalesce(cr.s, 0) OR b.debit_balance <> coalesce(db.s, 0)
+    cases: SELECT count(*) FROM blnk.transactions WHERE status = 'APPLIED'
+    mutate: UPDATE blnk.transactions SET precise_amount = precise_amount + 1 WHERE id = (SELECT min(id) FROM blnk.transactions WHERE status = 'APPLIED')
+
+  - id: reference_used_once
+    says: A reference names one operation: no two transactions with the same reference reach the same final state.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: sql/1708676327.sql, line: 133, quote: "DROP INDEX IF EXISTS blnk.idx_transactions_reference (no unique index: only the application checks it)"}
+      - {file: transaction_coalescing.go, line: 557, quote: "reference %s has already been used"}
+      - {file: transaction_inflight.go, line: 710, quote: "reference %s has already been used"}
+    query: |
+      SELECT reference, status, count(*) FROM blnk.transactions
+       WHERE status <> 'QUEUED' AND reference IS NOT NULL AND reference <> ''
+       GROUP BY reference, status HAVING count(*) > 1
+    cases: SELECT count(DISTINCT reference) FROM blnk.transactions
+    mutate: |
+      INSERT INTO blnk.transactions (transaction_id, source, destination, reference, amount, precise_amount, precision, currency, status)
+      SELECT 'txn_planted_dup', source, destination, reference, amount, precise_amount, precision, currency, status
+        FROM blnk.transactions WHERE status = 'APPLIED' LIMIT 1
+
+  - id: atomic_bulk_whole_or_refunded
+    says: An atomic bulk applies whole or not at all; each transfer of a failed atomic bulk that was applied is refunded.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: model/transaction.go, line: 76, quote: "Atomic bool `json:\"atomic\"`"}
+      - {file: transaction_bulk.go, line: 78, quote: "rollbackBatchTransactions performs a rollback of transactions in a batch"}
+      - {file: transaction_bulk.go, line: 56, quote: "txn.ParentTransaction = batchID"}
+    query: |
+      SELECT t.parent_transaction AS batch, t.reference FROM blnk.transactions t
+       WHERE t.parent_transaction LIKE 'bulk_%' AND t.status = 'APPLIED'
+         AND EXISTS (SELECT 1 FROM blnk.transactions o
+                      WHERE o.parent_transaction = t.parent_transaction AND o.status = 'REJECTED')
+         AND NOT EXISTS (SELECT 1 FROM blnk.transactions r
+                          WHERE r.parent_transaction = t.transaction_id AND r.status = 'APPLIED'
+                            AND r.source = t.destination AND r.destination = t.source)
+    cases: SELECT count(DISTINCT parent_transaction) FROM blnk.transactions WHERE parent_transaction LIKE 'bulk_%'
+
+  - id: void_or_commit_never_exceeds_hold
+    says: The commits of a hold never move more than the hold, and a voided hold moves nothing more.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: model/model.go, line: 207, quote: "checkSufficientInflightDebit returns an error when the inflight debit balance cannot cover amount"}
+      - {file: transaction_inflight.go, line: 334, quote: "An error if the requested amount exceeds allowed limits"}
+    query: |
+      SELECT h.reference, h.precise_amount::text, sum(c.precise_amount)::text FROM blnk.transactions h
+        JOIN blnk.transactions c ON c.parent_transaction = h.transaction_id AND c.status = 'APPLIED'
+       WHERE h.status = 'INFLIGHT'
+       GROUP BY h.transaction_id, h.reference, h.precise_amount
+      HAVING sum(c.precise_amount) > h.precise_amount
+    cases: SELECT count(*) FROM blnk.transactions WHERE status = 'INFLIGHT'

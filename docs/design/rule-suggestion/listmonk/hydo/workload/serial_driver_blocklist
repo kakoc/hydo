@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=60
+# the admin blocklists a base subscriber
+exec /bin/lmc op blocklist

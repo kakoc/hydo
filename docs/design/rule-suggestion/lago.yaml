@@ -1,0 +1,190 @@
+format: 1
+project: Lago v1.57.0 (the example hydo/onboard/examples/lago)
+sources: lago-api v1.57.0 (db/structure.sql, app/models), `hydo rules scan`; the example's workload
+store: db
+rules:
+  # --- rules about what Lago does after the workload (run first: they wait for the biller) ---
+  - id: closed_period_usage_invoiced
+    says: Every stored usage event of a month that has ended is on a finalized invoice of its subscription, whatever the invoice's reason.
+    kind: sql
+    confidence: medium
+    within: 240
+    evidence:
+      - {file: db/structure.sql, line: 12174, quote: "UNIQUE (subscription_id, charges_from_datetime, charges_to_datetime) WHERE recurring: a billing period is invoiced"}
+      - {file: db/structure.sql, line: 12272, quote: "index_unique_terminating_invoice_subscription: a terminated subscription gets its terminating invoice"}
+      - {file: app/models/invoice.rb, line: 114, quote: "GENERATED_INVOICE_STATUSES = %w[finalized closed]"}
+    query: |
+      SELECT e.transaction_id, e.external_subscription_id
+        FROM events e JOIN subscriptions s ON s.external_id = e.external_subscription_id
+       WHERE e.deleted_at IS NULL
+         AND e."timestamp" < date_trunc('month', now() AT TIME ZONE 'UTC')
+         AND NOT EXISTS (
+           SELECT 1 FROM invoice_subscriptions x JOIN invoices i ON i.id = x.invoice_id
+            WHERE x.subscription_id = s.id AND i.status IN (1, 6)
+              AND x.charges_from_datetime <= e."timestamp" AND e."timestamp" <= x.charges_to_datetime)
+    cases: |
+      SELECT count(*) FROM events e
+       WHERE e.deleted_at IS NULL AND e."timestamp" < date_trunc('month', now() AT TIME ZONE 'UTC')
+    mutate: DELETE FROM invoice_subscriptions WHERE id = (SELECT id FROM invoice_subscriptions ORDER BY id LIMIT 1)
+
+  - id: terminated_subscription_invoiced
+    says: A subscription that was terminated, and whose plan says to generate a termination invoice, gets that invoice.
+    kind: sql
+    confidence: high
+    within: 120
+    evidence:
+      - {file: db/structure.sql, line: 4119, quote: "on_termination_invoice ... DEFAULT 'generate' NOT NULL"}
+      - {file: db/structure.sql, line: 12272, quote: "UNIQUE (subscription_id, invoicing_reason) WHERE invoicing_reason = 'subscription_terminating'"}
+      - {file: app/models/subscription.rb, line: 74, quote: "ON_TERMINATION_INVOICES = {generate: ..., skip: ...}"}
+    query: |
+      SELECT s.external_id FROM subscriptions s
+       WHERE s.status = 2 AND s.on_termination_invoice = 'generate'
+         AND NOT EXISTS (SELECT 1 FROM invoice_subscriptions x
+                          WHERE x.subscription_id = s.id
+                            AND x.invoicing_reason = 'subscription_terminating')
+    cases: SELECT count(*) FROM subscriptions WHERE status = 2 AND on_termination_invoice = 'generate'
+    mutate: DELETE FROM invoice_subscriptions WHERE invoicing_reason = 'subscription_terminating'
+
+  - id: in_advance_fee_once_per_event
+    says: Each stored usage event of a pay-in-advance charge has exactly one fee for that charge.
+    kind: sql
+    confidence: high
+    within: 120
+    evidence:
+      - {file: db/structure.sql, line: 8201, quote: "idx_pay_in_advance_duplication_guard_charge: UNIQUE (pay_in_advance_event_transaction_id, charge_id) WHERE ... (partial)"}
+    query: |
+      SELECT e.transaction_id, count(f.id) AS fees
+        FROM events e
+        JOIN billable_metrics m ON m.code = e.code AND m.deleted_at IS NULL
+        JOIN charges c ON c.billable_metric_id = m.id AND c.pay_in_advance AND c.deleted_at IS NULL
+        LEFT JOIN fees f ON f.pay_in_advance_event_transaction_id = e.transaction_id
+                        AND f.charge_id = c.id AND f.deleted_at IS NULL
+       WHERE e.deleted_at IS NULL
+       GROUP BY e.transaction_id HAVING count(f.id) <> 1
+    cases: |
+      SELECT count(*) FROM events e JOIN billable_metrics m ON m.code = e.code
+        JOIN charges c ON c.billable_metric_id = m.id AND c.pay_in_advance
+       WHERE e.deleted_at IS NULL
+    mutate: UPDATE fees SET deleted_at = now() WHERE id = (SELECT id FROM fees WHERE pay_in_advance ORDER BY id LIMIT 1)
+
+  # --- the client's acknowledged operations (the generic rule) ---
+  - id: acked_usage_stored_once
+    says: Every usage event the client saw acknowledged is stored exactly once, with its units.
+    kind: command
+    confidence: high
+    evidence:
+      - {file: db/structure.sql, line: 12279, quote: "index_unique_transaction_id: UNIQUE (organization_id, external_subscription_id, transaction_id)"}
+      - the client's records ($HYDO_ACKED; a token is <transaction id>,units:<subscription>:<metric>,<units>)
+    run: |
+      hydo-sql check exactly-once --left 'acked=hydo acked' --right 'stored=sql db "SELECT transaction_id || $$,units:$$ || external_subscription_id || $$:$$ || code || $$,$$ || (properties->>$$units$$) FROM events WHERE deleted_at IS NULL"'
+    cases: hydo-sql read sql db 'SELECT count(*) FROM events WHERE deleted_at IS NULL'
+    mutate: hydo-sql read sql db 'DELETE FROM events WHERE id = (SELECT id FROM events ORDER BY transaction_id LIMIT 1)'
+
+  - id: failed_usage_not_stored
+    says: A usage event the client was told failed, and never saw acknowledged, is not stored.
+    kind: command
+    confidence: medium
+    evidence:
+      - the client's records ($HYDO_FAILED)
+    run: |
+      hydo-sql check disjoint --left 'failed=hydo told-failed' --right 'stored=sql db "SELECT transaction_id || $$,units:$$ || external_subscription_id || $$:$$ || code || $$,$$ || (properties->>$$units$$) FROM events WHERE deleted_at IS NULL"'
+
+  # --- rules about the stored state ---
+  - id: one_invoice_per_period_any_reason
+    says: A subscription is charged at most once for any moment of its billing periods, whatever the invoice's reason (periodic or termination).
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: db/structure.sql, line: 12174, quote: "UNIQUE (subscription_id, charges_from_datetime, charges_to_datetime) WHERE recurring IS TRUE (only the periodic invoices)"}
+      - {file: db/structure.sql, line: 12272, quote: "UNIQUE (subscription_id, invoicing_reason) WHERE invoicing_reason = 'subscription_terminating'"}
+    query: |
+      SELECT a.subscription_id, a.invoicing_reason, b.invoicing_reason
+        FROM invoice_subscriptions a
+        JOIN invoice_subscriptions b
+          ON a.subscription_id = b.subscription_id AND a.id < b.id
+         AND a.charges_from_datetime < b.charges_to_datetime
+         AND b.charges_from_datetime < a.charges_to_datetime
+        JOIN invoices ia ON ia.id = a.invoice_id
+        JOIN invoices ib ON ib.id = b.invoice_id
+       WHERE a.invoicing_reason IN ('subscription_periodic', 'subscription_terminating')
+         AND b.invoicing_reason IN ('subscription_periodic', 'subscription_terminating')
+         AND a.regenerated_invoice_id IS NULL AND b.regenerated_invoice_id IS NULL
+         AND ia.status NOT IN (2, 4, 8) AND ib.status NOT IN (2, 4, 8)
+    cases: |
+      SELECT count(*) FROM invoice_subscriptions
+       WHERE invoicing_reason IN ('subscription_periodic', 'subscription_terminating')
+    mutate: |
+      INSERT INTO invoice_subscriptions (id, invoice_id, subscription_id, created_at, updated_at, recurring,
+             from_datetime, to_datetime, charges_from_datetime, charges_to_datetime, invoicing_reason, organization_id)
+      SELECT gen_random_uuid(), i.id, x.subscription_id, now(), now(), false, x.from_datetime, x.to_datetime,
+             x.charges_from_datetime, x.charges_to_datetime, 'subscription_terminating', x.organization_id
+        FROM invoice_subscriptions x JOIN invoices i ON i.id <> x.invoice_id AND i.status = 1
+       WHERE x.invoicing_reason = 'subscription_periodic' LIMIT 1
+
+  - id: invoice_fees_add_up
+    says: A finalized invoice's fee amount is the sum of the amounts of its fees.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: db/structure.sql, line: 4030, quote: "invoices.fees_amount_cents bigint"}
+      - {file: db/structure.sql, quote: "fees.invoice_id, fees.amount_cents"}
+    query: |
+      SELECT i.id, i.fees_amount_cents, coalesce(sum(f.amount_cents), 0) AS fees
+        FROM invoices i LEFT JOIN fees f ON f.invoice_id = i.id AND f.deleted_at IS NULL
+       WHERE i.status = 1
+       GROUP BY i.id, i.fees_amount_cents
+      HAVING i.fees_amount_cents <> coalesce(sum(f.amount_cents), 0)
+    cases: SELECT count(*) FROM invoices WHERE status = 1
+    mutate: UPDATE invoices SET fees_amount_cents = fees_amount_cents + 1 WHERE id = (SELECT id FROM invoices WHERE status = 1 ORDER BY id LIMIT 1)
+
+  - id: finalized_invoice_numbered
+    says: A finalized invoice has a number, an issuing date and the time it was finalized.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: app/models/invoice.rb, line: 20, quote: "before_save :ensure_number"}
+      - {file: app/models/invoice.rb, line: 152, quote: "scope :with_generated_number, -> { where(status: %w[finalized voided]) }"}
+      - {file: db/structure.sql, line: 4052, quote: "finalized_at timestamp"}
+    query: |
+      SELECT id FROM invoices
+       WHERE status = 1 AND (number = '' OR issuing_date IS NULL OR finalized_at IS NULL)
+    cases: SELECT count(*) FROM invoices WHERE status = 1
+    mutate: UPDATE invoices SET number = '' WHERE id = (SELECT id FROM invoices WHERE status = 1 ORDER BY id LIMIT 1)
+
+  - id: fee_counts_not_negative
+    says: No fee has negative units, a negative event count or a negative amount.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: app/models/fee.rb, line: 66, quote: "validates :units, numericality: {greater_than_or_equal_to: 0} (only the application checks it)"}
+      - {file: app/models/fee.rb, line: 67, quote: "validates :events_count, numericality: {greater_than_or_equal_to: 0}"}
+    query: SELECT id FROM fees WHERE deleted_at IS NULL AND (units < 0 OR events_count < 0 OR amount_cents < 0)
+    cases: SELECT count(*) FROM fees WHERE deleted_at IS NULL
+    mutate: UPDATE fees SET units = -1 WHERE id = (SELECT id FROM fees ORDER BY id LIMIT 1)
+
+  - id: terminated_has_termination_time
+    says: A subscription in the terminated state has the time it was terminated, and an active one has none.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: app/models/subscription.rb, line: 58, quote: "STATUSES = [:pending, :active, :terminated, :canceled, :incomplete]"}
+      - {file: db/structure.sql, line: 5827, quote: "CHECK ((status = 'approved') = (approved_at IS NOT NULL)): the same rule for quotes"}
+    query: |
+      SELECT external_id, status FROM subscriptions
+       WHERE (status = 2 AND terminated_at IS NULL) OR (status = 1 AND terminated_at IS NOT NULL)
+    cases: SELECT count(*) FROM subscriptions WHERE status IN (1, 2)
+    mutate: UPDATE subscriptions SET terminated_at = NULL WHERE status = 2
+
+  - id: status_values_known
+    says: Every invoice and subscription status is one of the values the application defines.
+    kind: sql
+    confidence: low
+    evidence:
+      - {file: app/models/invoice.rb, line: 113, quote: "STATUS = VISIBLE_STATUS.merge(INVISIBLE_STATUS) (0 to 8; an integer column without a CHECK)"}
+      - {file: app/models/subscription.rb, line: 58, quote: "STATUSES (0 to 4)"}
+    query: |
+      SELECT 'invoice', id::text, status FROM invoices WHERE status NOT BETWEEN 0 AND 8
+      UNION ALL
+      SELECT 'subscription', external_id, status FROM subscriptions WHERE status NOT BETWEEN 0 AND 4
+    cases: SELECT (SELECT count(*) FROM invoices) + (SELECT count(*) FROM subscriptions)
+    mutate: UPDATE subscriptions SET status = 9 WHERE id = (SELECT id FROM subscriptions ORDER BY id LIMIT 1)

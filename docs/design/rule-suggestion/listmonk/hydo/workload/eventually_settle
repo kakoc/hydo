@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=90
+# after the faults: wait until the API answers again
+i=0
+until /bin/lmc ready; do i=$((i+1)); [ $i -lt 60 ] || exit 1; sleep 1; done

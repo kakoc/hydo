@@ -1,0 +1,92 @@
+format: 1
+project: listmonk v2.5.1 (newsletters and mailing lists), never onboarded before
+sources: listmonk v2.5.1 (schema.sql, queries.sql, docs/docs/content, docs/swagger), `hydo rules scan`; the onboarding's workload
+store: db
+rules:
+  - id: blocklisted_has_no_live_subscription
+    says: A blocklisted subscriber is unsubscribed from every list.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: queries.sql, line: 197, quote: "blocklist-subscribers: UPDATE subscribers SET status='blocklisted' ... UPDATE subscriber_lists SET status='unsubscribed'"}
+      - {file: queries.sql, line: 236, quote: "If $3 is TRUE, then all subscriptions of the subscriber is blocklisted and all existing subscriptions, irrespective of lists, unsubscribed."}
+      - {file: queries.sql, line: 93, quote: "CASE WHEN $4='blocklisted' THEN 'unsubscribed'"}
+    query: |
+      SELECT s.email, l.name, sl.status FROM subscribers s
+        JOIN subscriber_lists sl ON sl.subscriber_id = s.id JOIN lists l ON l.id = sl.list_id
+       WHERE s.status = 'blocklisted' AND sl.status <> 'unsubscribed'
+    cases: SELECT count(*) FROM subscribers WHERE status = 'blocklisted'
+    mutate: |
+      UPDATE subscriber_lists SET status = 'confirmed'
+       WHERE subscriber_id = (SELECT min(id) FROM subscribers WHERE status = 'blocklisted')
+
+  - id: hard_bounces_blocklist
+    says: A subscriber with as many hard bounces as the bounce setting's count (2) is blocklisted.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: schema.sql, line: 254, quote: "bounce.actions: \"hard\": {\"count\": 2, \"action\": \"blocklist\"}"}
+      - {file: queries.sql, line: 1028, quote: "block1 and block2 will run when $8 = 'blocklist' and the number of bounces exceed $8"}
+      - {file: docs/docs/content/concepts.md, line: 72, quote: "subscribers returning bounced e-mails can either be blocklisted or deleted automatically"}
+    query: |
+      SELECT s.email, s.status, count(*) FROM subscribers s JOIN bounces b ON b.subscriber_id = s.id
+       WHERE b.type = 'hard' GROUP BY s.id, s.email, s.status
+      HAVING count(*) >= 2 AND s.status <> 'blocklisted'
+    cases: SELECT count(DISTINCT subscriber_id) FROM bounces WHERE type = 'hard'
+    mutate: |
+      UPDATE subscribers SET status = 'enabled'
+       WHERE id = (SELECT min(id) FROM subscribers WHERE status = 'blocklisted')
+
+  - id: no_bounce_recorded_past_the_count
+    says: No subscriber has more hard bounces recorded than the setting's count (2); later bounces of a blocklisted subscriber are not recorded.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: queries.sql, line: 1034, quote: "Record the bounce if the subscriber is not already blocklisted; ... WHERE NOT EXISTS (... status = 'blocklisted' OR num > $8)"}
+    query: |
+      SELECT s.email, count(*) FROM subscribers s JOIN bounces b ON b.subscriber_id = s.id
+       WHERE b.type = 'hard' GROUP BY s.id, s.email HAVING count(*) > 2
+    cases: SELECT count(*) FROM bounces WHERE type = 'hard'
+    mutate: |
+      INSERT INTO bounces (subscriber_id, type, source, meta)
+      SELECT subscriber_id, type, source, meta FROM bounces WHERE type = 'hard'
+       AND subscriber_id = (SELECT subscriber_id FROM bounces WHERE type = 'hard' GROUP BY subscriber_id ORDER BY count(*) DESC LIMIT 1)
+
+  - id: double_optin_not_confirmed_without_consent
+    says: A subscription to a double opt-in list that the subscriber never confirmed is not confirmed (the workload never confirms; only the base subscribers were preconfirmed).
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: docs/docs/content/concepts.md, line: 42, quote: "Subscribers added to double optin lists have to explicitly accept the subscription ... Until then, they do not receive campaign messages."}
+      - {file: queries.sql, line: 214, quote: "confirm-subscription-optin: UPDATE subscriber_lists SET status='confirmed'"}
+    query: |
+      SELECT s.email FROM subscribers s JOIN subscriber_lists sl ON sl.subscriber_id = s.id
+        JOIN lists l ON l.id = sl.list_id
+       WHERE l.optin = 'double' AND sl.status = 'confirmed' AND s.email LIKE 'n%'
+    cases: |
+      SELECT count(*) FROM subscribers s JOIN subscriber_lists sl ON sl.subscriber_id = s.id
+        JOIN lists l ON l.id = sl.list_id WHERE l.optin = 'double' AND s.email LIKE 'n%'
+    mutate: |
+      UPDATE subscriber_lists SET status = 'confirmed' WHERE (subscriber_id, list_id) IN
+        (SELECT sl.subscriber_id, sl.list_id FROM subscriber_lists sl JOIN lists l ON l.id = sl.list_id
+          JOIN subscribers s ON s.id = sl.subscriber_id WHERE l.optin = 'double' AND s.email LIKE 'n%' LIMIT 1)
+
+  - id: acked_operations_have_effect
+    says: Every operation the client saw acknowledged took effect - a new subscriber exists, an unsubscription left the list unsubscribed, a blocklisting left the subscriber blocklisted.
+    kind: command
+    confidence: high
+    evidence:
+      - the client's records ($HYDO_ACKED; tokens n<id>~<email>, u<id>~<email>,<list>, k<id>~<email>, b<id>~<email>,hard)
+      - {file: docs/docs/content/apis/subscribers.md, line: 360, quote: "PUT /api/subscribers/lists: Modify subscribers' list memberships"}
+    run: |
+      hydo-sql read hydo acked > /tmp/rule-acked.j && hydo-sql read sql db "SELECT s.email || '|' || s.status || '|' || coalesce(l.name, '') || '|' || coalesce(sl.status::text, '') AS r FROM subscribers s LEFT JOIN subscriber_lists sl ON sl.subscriber_id = s.id LEFT JOIN lists l ON l.id = sl.list_id" > /tmp/rule-state.j || exit 2
+      awk -F'"' 'NR == FNR { tok[++n] = $4; next }
+        { split($4, f, "|"); exists[f[1]] = 1; st[f[1]] = f[2]; sub_[f[1] "," f[3]] = f[4] }
+        END { bad = 0
+          for (i = 1; i <= n; i++) { t = tok[i]; split(t, p, "~"); k = substr(p[1], 1, 1); d = p[2]
+            if (k == "n" && !(d in exists)) { bad++; if (bad <= 5) print "missing subscriber: " t }
+            if (k == "u" && sub_[d] != "unsubscribed") { bad++; if (bad <= 5) print "still subscribed: " t " (" sub_[d] ")" }
+            if (k == "k" && st[d] != "blocklisted") { bad++; if (bad <= 5) print "not blocklisted: " t " (" st[d] ")" } }
+          print bad " of " n " acknowledged operations have no effect"; exit (bad > 0) }' /tmp/rule-acked.j /tmp/rule-state.j
+    cases: hydo-sql read sql db "SELECT count(*) FROM subscribers"
+    mutate: hydo-sql read sql db "DELETE FROM subscribers WHERE id = (SELECT max(id) FROM subscribers WHERE email LIKE 'n%')"

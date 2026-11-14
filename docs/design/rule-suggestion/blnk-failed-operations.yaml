@@ -1,0 +1,18 @@
+format: 1
+project: Blnk main 67d88333 (the example hydo/onboard/examples/blnk)
+sources: the generic rule's second half (hydo guide rules), added after the first proposal left it out
+store: db
+rules:
+  - id: failed_operations_not_applied
+    says: An operation the client was told failed, and never saw acknowledged, moved no money - none of its transactions (a bulk's transfers included) was applied.
+    kind: command
+    confidence: high
+    evidence:
+      - the client's records ($HYDO_FAILED and $HYDO_ACKED; a token is <reference>~<parts>, a bulk's transfers are <reference>.1 and .2)
+      - {file: transaction_bulk.go, line: 78, quote: "rollbackBatchTransactions performs a rollback of transactions in a batch"}
+    run: |
+      hydo-sql read hydo told-failed > /tmp/rule-failed.j && hydo-sql read sql db "SELECT DISTINCT regexp_replace(reference, '^.*_(commit|void)_', '') AS r FROM blnk.transactions WHERE status = 'APPLIED' AND NOT EXISTS (SELECT 1 FROM blnk.transactions x WHERE x.parent_transaction = blnk.transactions.transaction_id AND x.status = 'APPLIED' AND x.source = blnk.transactions.destination)" > /tmp/rule-applied.j || exit 2
+      awk -F'"' 'NR == FNR { split($4, p, "~"); bad[p[1]] = 1; n++; next }
+        { r = $4; i = index(r, "."); b = (i > 0) ? substr(r, 1, i - 1) : r; if (b in bad) { k++; if (k <= 5) print "applied although told failed: " r } }
+        END { print k + 0 " transactions of " n + 0 " operations told failed were applied"; exit (k > 0) }' /tmp/rule-failed.j /tmp/rule-applied.j
+    cases: hydo-sql read sql db "SELECT count(*) FROM blnk.transactions WHERE status = 'REJECTED'"

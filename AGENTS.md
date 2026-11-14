@@ -350,6 +350,22 @@ maintainers: the shared cases, and the Go module with its frozen copy in `hydo/s
 test in its language (M188). The examples are in `hydo/onboard/examples/`;
 `hydo/onboard/MANIFEST.md` is the project format's reference.
 
+**Rules nobody wrote (M236, first version).** The skill proposes a project's business rules from
+its own sources instead of a list per domain, and hydo validates them before the owner sees
+them. `hydo rules scan [DIR]` lists the evidence with file and line. `hydo rules check
+<candidates.yaml>` adds every candidate to the image's plan as a final check, without a rebuild.
+It runs the workload without faults on three composition seeds and reports each rule as
+`holds`, `vacuous`, `fails-clean`, `unevaluated` or `not-run`. `--mutate` shows whether a rule
+catches a planted change, and `--write-checks DIR` writes the rules that hold as checks. The
+reference is `hydo guide rules`, the design `docs/design/rule-suggestion.md`, the skill's step
+`references/proposing-rules.md`. On Blnk, Lago, and listmonk (which hydo had never seen), 23 of
+25 proposed rules held on clean runs. Two failed without faults: a wrong Blnk rule, fixed in two
+steps, and a listmonk inconsistency (a blocklisting by hard bounces leaves the subscriptions
+active). On the examples' saved regressions the proposed rules caught six findings. Two are
+Blnk's (the overdraft bug, the lost commits) and four are Lago's (lago-api 6901, the double
+invoice, the skipped billing day, the lost in-advance fees). Blnk's atomic-bulk bug was caught
+only by a rule written after the miss. The proof files are in `docs/design/rule-suggestion/`.
+
 **Compose services built locally (M214).** For a service with `build:`, `hydo compose` builds
 the image with Docker (`docker`, else `podman`, or `--docker CLI`) for this machine's guest, with
 Compose's build settings. It reads the image's settings from the saved file and pins the file's
@@ -920,6 +936,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `U=` per schedule and only the selector `all` for a group, and the state search does not move
     `U=`. The Mac and KVM engines ran `U=` only on the scripted agent. The grace period after
     SIGTERM is fixed at 10 s. The example is not in `hydo/onboard/recorded.json`.
+110. Rule suggestion (M236). What is left:
+    - Lago's `api` service exits during start on hvx (the x86_64 image: a `require` error in
+      `bin/rails`, with and without `guest.cpu: v3`), so Lago's rules ran on the Mac engine only.
+    - Formance Ledger's six rules were proposed but not run: the ledger's Go link stalled twice
+      on the shared bare-metal machine.
+    - The candidates file has no JSON schema, and `rules-check.json` is not in the results
+      format. `messages` and `history` candidates are not run by `hydo rules check`.
+    - A planted change is a change of the stored state; a change of the workload is not built.
+    - `hydo rules scan` matches words, not syntax; Lago's scan gives 4,217 lines.
+    - The listmonk inconsistency (a blocklisting by bounces keeps the subscriptions) is not
+      reported upstream, and no exploration ran with the Blnk or Lago rules.
 
 ## Milestone index
 
@@ -1321,6 +1348,13 @@ build machine, before 2026-10-13.
   them. An etcd cluster grown with learners reaches etcd issue 19557 ("too many learner
   members in cluster") on 3.6.0-rc.2 and 3.6.0 with one token. The documented path through
   3.5.26 passes. Nothing recorded moved
+- M236 (tentative number): rule suggestion, first version. `hydo rules scan` lists what a
+  project promises: its schema, state columns, API, documentation, and tests. `hydo rules check`
+  validates candidate rules on runs without faults, with planted changes. The skill (2.1.0)
+  proposes rules from the project's own sources and shows the owner only the validated ones. On Blnk, Lago, and the
+  never-seen listmonk, 23 of 25 rules held on clean runs. On the examples' saved regressions they
+  caught Blnk's overdraft bug, Blnk's lost commits, and all four Lago findings. Blnk's
+  atomic-bulk bug was caught only by a rule written after the miss. Nothing recorded moved
 
 ## Where to look
 
