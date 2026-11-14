@@ -137,6 +137,16 @@
         "$ref": "#/$defs/Service"
       }
     },
+    "groups": {
+      "description": "Named sets of services (the nodes of a cluster) that fault tokens aim at as a whole:\nK=<group>.majority@..., P=<group>.primary@..., N=<group>.halves@... (MANIFEST.md\n\"Groups of services\").",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Group"
+      }
+    },
     "provision": {
       "description": "Run once after every service is ready, before the snapshot every schedule starts from.",
       "anyOf": [
@@ -255,6 +265,26 @@
         "null"
       ]
     },
+    "steer": {
+      "description": "Numbers the system's output reports that say how close a run came to failing: `hydo\nexplore --steer <id>` keeps the schedules that came closest and changes them a little\n(docs/design/steered-search.md).",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/SteerValue"
+      }
+    },
+    "clock_points": {
+      "description": "Times a clock fault may step the guest's clock to, in the schedule language's form\n(`@HH:MM[:SS]`, `@:MM[:SS]`, `@hour`, `@day`, `@month`, `@year`, each with an optional\noffset such as `+10m` or `-2s`; UTC): `hydo explore` draws `T=<at>:<point>` among its\nclock steps, so a time of day or a calendar boundary that the system acts on is reached\n(MANIFEST.md \"Clock steps to a time\").",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Text"
+      }
+    },
     "test": {
       "description": "The test composer's plan (the hydo/ folder fills it too).",
       "anyOf": [
@@ -291,7 +321,7 @@
       "type": "object",
       "properties": {
         "ram_mib": {
-          "description": "Guest RAM in MiB: 256..3072 on x86_64, 256..4096 on arm64.",
+          "description": "Guest RAM in MiB: 256..8192 (every engine; the host needs that much free per running guest).",
           "type": [
             "integer",
             "null"
@@ -316,6 +346,14 @@
           ],
           "format": "int64"
         },
+        "outcomes_after_cut": {
+          "description": "After a power cut the recovery boot's $HYDO_OUTCOMES starts with the first boot's last\noutcome of every id (without it the file starts empty there).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
         "cpu": {
           "anyOf": [
             {
@@ -333,6 +371,14 @@
             }
           ],
           "default": "v2"
+        },
+        "cpu_cache": {
+          "description": "x86_64: the guest's CPUID describes a fixed cache hierarchy (32 KiB L1 data and\ninstruction caches, a 256 KiB L2, an 8 MiB L3), the same on every host and engine. On by\ndefault for images built at fingerprint epoch 2 and later; an image built earlier keeps it\noff. false: the cache leaves are empty, and at cpu v3 the glibc 2.28 of Red Hat Enterprise\nLinux 8 and its rebuilds (AlmaLinux 8, Rocky Linux 8, UBI 8) crashes in memcpy.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
         },
         "description": {
           "anyOf": [
@@ -418,6 +464,22 @@
           "items": {
             "$ref": "#/$defs/Text"
           }
+        },
+        "share_images": {
+          "description": "Image services with the same image (by config digest) share one unpacked tree; each still\nhas its own mount of it, with its own /tmp, /data, volumes and tmpfs mounts. Off by\ndefault (it changes the image's bytes).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
+        "fix_pyc": {
+          "description": "Timestamp-checked Python bytecode caches (__pycache__/*.pyc) get the image's fixed file\ntime and their source's size in their header, so Python uses them instead of compiling\nthe sources again in every run. On by default (images built at fingerprint epoch 2 and\nlater); false leaves the caches as the image has them.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
         },
         "description": {
           "anyOf": [
@@ -611,6 +673,43 @@
           ],
           "default": false
         },
+        "job": {
+          "description": "true: a one-shot job, such as a database migration, that other services run in their\nsetup: before they start (`hydo compose` writes it for Docker Compose's\nservice_completed_successfully). Its own process only idles, so hydo explore never draws\na fault on it (MANIFEST.md \"One-shot jobs\").",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
+        "start_after": {
+          "description": "When hydo starts this service: ready (the default) waits until every service before it in\nthe start order passed its readiness check; started waits only until each of them was\nstarted, so a cluster whose readiness check needs its peers can start (Docker Compose's\ndepends_on condition service_started). Every service is ready before provisioning and the\nworkload either way (MANIFEST.md \"Starting services together\").",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StartAfter"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "ready"
+        },
+        "logs": {
+          "description": "More log files the service writes besides its output (absolute paths; shell patterns such\nas /data/db/log/*.log are allowed). The diagnosis of a failed run and `hydo inspect logs`\nshow their last lines too.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
         "description": {
           "anyOf": [
             {
@@ -711,6 +810,24 @@
           "items": {
             "$ref": "#/$defs/Mount"
           }
+        },
+        "writable": {
+          "description": "true: the image service's root is writable, as a container's: a copy of the image on the\ndata disk (its layer), kept when the service is killed and restarted, and after a power\ncut as far as it was flushed (MANIFEST.md \"A writable root for image services\").",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "storage": {
+          "description": "Where the service keeps its data, for the faults that hit one service's storage\n(MANIFEST.md \"Storage faults of one service\"): a directory under /data (G= corrupts files\nthere), or {dir:, size_mib:} to make that directory the service's own file system on the\ndata disk (L=, a power loss of this service alone).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Storage"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -746,6 +863,14 @@
         {
           "$ref": "#/$defs/ParamRef"
         }
+      ]
+    },
+    "StartAfter": {
+      "description": "When a service starts: once every service before it is ready, or once each has started.",
+      "type": "string",
+      "enum": [
+        "ready",
+        "started"
       ]
     },
     "ServiceErrors": {
@@ -977,9 +1102,113 @@
         "dst"
       ]
     },
+    "Storage": {
+      "description": "A service's storage: the directory under /data, or the directory with its own file system.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/StorageSpec"
+        }
+      ]
+    },
+    "StorageSpec": {
+      "type": "object",
+      "properties": {
+        "dir": {
+          "description": "The directory, relative to /data (or starting with /data/).",
+          "type": "string"
+        },
+        "size_mib": {
+          "description": "The size of the service's own file system (a partition of the data disk, ext4 with a\njournal, mounted on the directory), 16 to 3072 MiB. Without it the directory stays on the\nshared data file system.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "dir"
+      ]
+    },
+    "Group": {
+      "description": "A group of services that fault tokens select from.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "[a-z][a-z0-9_]*: the name fault tokens use (K=<name>.majority@...).",
+          "type": "string"
+        },
+        "services": {
+          "description": "The members, services of this manifest, each once. Selectors count them in this order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "primary": {
+          "description": "A command that prints the service name of the group's current primary (leader) on its\nfirst line and exits 0; run in the guest when a fault aims at <name>.primary.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "services"
+      ]
+    },
     "Workload": {
       "type": "object",
       "properties": {
+        "kind": {
+          "description": "`system` (the default): the workload drives a system through numbered steps, and faults\nare placed at steps. `test` (added in M205): the workload runs a test program (a unit or\nintegration test, often once, in step 0); the explorer then takes one step, draws no\nservice faults unless `faults:` lists them, and classes a failure as `test-failed`.",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WorkloadKind"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "system"
+        },
         "steps": {
           "description": "Faults are placed at step numbers (1..1000; with test commands: rounds, default 20).",
           "type": [
@@ -1042,6 +1271,14 @@
         }
       },
       "additionalProperties": false
+    },
+    "WorkloadKind": {
+      "description": "What a workload is: a system under a stream of requests, or a test program (M205).",
+      "type": "string",
+      "enum": [
+        "system",
+        "test"
+      ]
     },
     "Knob": {
       "type": "object",
@@ -1226,7 +1463,8 @@
       "type": "string",
       "enum": [
         "heal",
-        "start"
+        "start",
+        "commands"
       ]
     },
     "HistoryCheck": {
@@ -1315,7 +1553,7 @@
           ]
         },
         "final": {
-          "description": "A shell command that reads the final state back into the history.",
+          "description": "A shell command that reads the final state back into the history (type: messages: the\ndrain, which reads every message at the end and records `drained <channel> <group>`).",
           "type": [
             "string",
             "null"
@@ -1325,6 +1563,84 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "include": {
+          "description": "type: messages: bundles of declarations (YAML files of the project, relative to the\nmanifest), merged in order, then this entry's own keys; hydo build resolves them.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "acknowledgement": {
+          "description": "type: messages: how consumers acknowledge deliveries.",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgAcknowledgement"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "explicit"
+        },
+        "retention_ms": {
+          "description": "type: messages: a message may legitimately disappear this many milliseconds after it was\nsent (an excuse for a missing message, not a claim).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "clock_steps": {
+          "description": "type: messages: whether time-dependent claims judge pairs across a T= clock step.",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgClockSteps"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "undecided"
+        },
+        "claims": {
+          "description": "type: messages: what the system promises; every default claims nothing.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MessageClaims"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "measures": {
+          "description": "type: messages: what the measures cover.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MessageMeasures"
             },
             {
               "type": "null"
@@ -1344,7 +1660,8 @@
       "type": "string",
       "enum": [
         "linearizable",
-        "list-append"
+        "list-append",
+        "messages"
       ]
     },
     "HistoryModel": {
@@ -1375,6 +1692,617 @@
         "snapshot-isolation"
       ]
     },
+    "MsgAcknowledgement": {
+      "description": "type: messages: how consumers acknowledge deliveries.",
+      "type": "string",
+      "enum": [
+        "explicit",
+        "on-receive",
+        "none"
+      ]
+    },
+    "MsgClockSteps": {
+      "description": "type: messages: whether time-dependent claims judge pairs whose interval contains a T=\nclock step (undecided: they are counted, never judged).",
+      "type": "string",
+      "enum": [
+        "undecided",
+        "strict"
+      ]
+    },
+    "MessageClaims": {
+      "description": "type: messages: the claims (docs/design/messaging.md). Each claim is checked and reported on\nits own, as `<check id>.<claim>`.",
+      "type": "object",
+      "properties": {
+        "delivery": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgDelivery"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "none"
+        },
+        "duplicates": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDuplicatesClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after_ack": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgAfterAck"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "allowed"
+        },
+        "processing": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgProcessing"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "any"
+        },
+        "lease": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgLeaseClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "order": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgOrderClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dead_letter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDeadLetterClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delay": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDelayClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fan_out": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgFanOut"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "none"
+        },
+        "members": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgMembers"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "any"
+        },
+        "linearizable": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgLinearizable"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "none"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MsgDelivery": {
+      "description": "type: messages: what delivery the system claims.",
+      "type": "string",
+      "enum": [
+        "none",
+        "at-most-once",
+        "at-least-once",
+        "exactly-once"
+      ]
+    },
+    "MsgDuplicatesClaim": {
+      "description": "allowed, forbidden, or a deduplication window.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDuplicates"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgDedupWindow"
+        }
+      ]
+    },
+    "MsgDuplicates": {
+      "description": "type: messages: whether a message may be stored twice.",
+      "type": "string",
+      "enum": [
+        "allowed",
+        "forbidden"
+      ]
+    },
+    "MsgDedupWindow": {
+      "description": "Sends with one id within the window are stored once (window_ms: 0 means always).",
+      "type": "object",
+      "properties": {
+        "by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDedupBy"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        "window_ms": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "by",
+        "window_ms"
+      ]
+    },
+    "MsgDedupBy": {
+      "description": "type: messages: what a deduplication window compares.",
+      "type": "string",
+      "enum": [
+        "dedup-id",
+        "message"
+      ]
+    },
+    "MsgAfterAck": {
+      "description": "type: messages: whether an acknowledged message may come again.",
+      "type": "string",
+      "enum": [
+        "allowed",
+        "no-redelivery"
+      ]
+    },
+    "MsgProcessing": {
+      "description": "type: messages: whether a message may be processed (acknowledged and accepted) twice.",
+      "type": "string",
+      "enum": [
+        "any",
+        "once"
+      ]
+    },
+    "MsgLeaseClaim": {
+      "description": "none, or the lease's length.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgNone"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgLease"
+        }
+      ]
+    },
+    "MsgNone": {
+      "description": "type: messages: no claim.",
+      "type": "string",
+      "enum": [
+        "none"
+      ]
+    },
+    "MsgLease": {
+      "type": "object",
+      "properties": {
+        "ms": {
+          "description": "Milliseconds, or per-delivery (each delivery records its lease as v=).",
+          "$ref": "#/$defs/MsgLeaseLength"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ms"
+      ]
+    },
+    "MsgLeaseLength": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "int64"
+        },
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgPerDelivery"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        }
+      ]
+    },
+    "MsgPerDelivery": {
+      "description": "type: messages: the lease each delivery records (v=).",
+      "type": "string",
+      "enum": [
+        "per-delivery"
+      ]
+    },
+    "MsgOrderClaim": {
+      "description": "An order kind, or a mapping with kind:, scope: and batch:.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgOrderKind"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgOrder"
+        }
+      ]
+    },
+    "MsgOrderKind": {
+      "description": "type: messages: the order the system claims.",
+      "type": "string",
+      "enum": [
+        "none",
+        "fifo",
+        "fifo-blocking",
+        "log",
+        "causal"
+      ]
+    },
+    "MsgOrder": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgOrderKind"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgOrderScope"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "key"
+        },
+        "batch": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgBatch"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "unordered"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ]
+    },
+    "MsgOrderScope": {
+      "description": "type: messages: the scope of an order claim.",
+      "type": "string",
+      "enum": [
+        "key",
+        "channel"
+      ]
+    },
+    "MsgBatch": {
+      "description": "type: messages: whether the items of one send are in order.",
+      "type": "string",
+      "enum": [
+        "ordered",
+        "unordered"
+      ]
+    },
+    "MsgDeadLetterClaim": {
+      "description": "none, or after how many deliveries without an acknowledgement a message stops (and where it\ngoes).",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgNone"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgDeadLetter"
+        }
+      ]
+    },
+    "MsgDeadLetter": {
+      "type": "object",
+      "properties": {
+        "after": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "to": {
+          "description": "The dead-letter channel.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "after"
+      ]
+    },
+    "MsgDelayClaim": {
+      "description": "none, per-message (each send records its delay as d=), or one delay for every message.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgDelay"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgDelayMs"
+        }
+      ]
+    },
+    "MsgDelay": {
+      "description": "type: messages: when a message may be delivered.",
+      "type": "string",
+      "enum": [
+        "none",
+        "per-message"
+      ]
+    },
+    "MsgDelayMs": {
+      "type": "object",
+      "properties": {
+        "ms": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ms"
+      ]
+    },
+    "MsgFanOut": {
+      "description": "type: messages: whether every group that must receive a message receives it.",
+      "type": "string",
+      "enum": [
+        "none",
+        "every-group"
+      ]
+    },
+    "MsgMembers": {
+      "description": "type: messages: whether two members of a group may hold one message at once.",
+      "type": "string",
+      "enum": [
+        "any",
+        "exclusive"
+      ]
+    },
+    "MsgLinearizable": {
+      "description": "type: messages: the queue the sends and receives are linearizable as.",
+      "type": "string",
+      "enum": [
+        "none",
+        "fifo",
+        "unordered"
+      ]
+    },
+    "MessageMeasures": {
+      "description": "type: messages: what the measures cover.",
+      "type": "object",
+      "properties": {
+        "windows": {
+          "description": "Also per window of the run.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "quantiles": {
+          "description": "The quantiles of every distribution, from 0 to 1 (hydo's YAML reads 0.5 as the text\n\"0.5\", which is taken as the number).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/MsgQuantile"
+          }
+        },
+        "channels": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgChannels"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "MsgQuantile": {
+      "description": "A quantile: a number from 0 to 1, or its text.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "MsgChannels": {
+      "description": "all, or a list of channels.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgAllChannels"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        }
+      ]
+    },
+    "MsgAllChannels": {
+      "description": "type: messages: every channel.",
+      "type": "string",
+      "enum": [
+        "all"
+      ]
+    },
     "FaultKind": {
       "description": "A fault kind the explorer may use.",
       "type": "string",
@@ -1387,7 +2315,9 @@
         "clock",
         "disk",
         "freeze",
-        "protocol"
+        "protocol",
+        "corrupt",
+        "powerloss"
       ]
     },
     "FreezeMatch": {
@@ -1497,6 +2427,17 @@
           "items": {
             "$ref": "#/$defs/FakeRoute"
           }
+        },
+        "tls": {
+          "description": "HTTPS: the fake also answers TLS for these host names, with a certificate of the image's\nown test CA, which the guest and every image service trust.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tls"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "description": {
           "anyOf": [
@@ -1630,6 +2571,28 @@
             }
           ]
         },
+        "save": {
+          "description": "Store fields of the object a request creates or changes, when it takes effect; later\nanswers read them as `{obj:<field>}`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FakeSave"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "load": {
+          "description": "The key (a template) of the object a request is about; a missing one is answered 404 and\ntakes no effect. The answer reads its fields as `{obj:<field>}`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -1696,6 +2659,16 @@
           ],
           "format": "int64"
         },
+        "sign": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WebhookSign"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -1710,6 +2683,125 @@
       "additionalProperties": false,
       "required": [
         "url"
+      ]
+    },
+    "WebhookSign": {
+      "description": "`sign:` of a webhook: an HMAC-SHA256 signature header on every delivery attempt.",
+      "type": "object",
+      "properties": {
+        "header": {
+          "description": "The header that carries the signature.",
+          "$ref": "#/$defs/Text"
+        },
+        "secret": {
+          "description": "The endpoint secret; its bytes are the HMAC key.",
+          "$ref": "#/$defs/Text"
+        },
+        "payload": {
+          "description": "What is signed: `{ts}` (the attempt's Unix seconds), `{body}` and the webhook's values.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "{ts}.{body}"
+        },
+        "value": {
+          "description": "The header's value; `{hmac}` is the signature.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "t={ts},v1={hmac}"
+        },
+        "encoding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignEncoding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "hex"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "header",
+        "secret"
+      ]
+    },
+    "SignEncoding": {
+      "type": "string",
+      "enum": [
+        "hex",
+        "base64"
+      ]
+    },
+    "FakeSave": {
+      "description": "`save:` of a fake's route: the object's key and the fields to store (templates).",
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/Text"
+        },
+        "fields": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key"
+      ]
+    },
+    "Tls": {
+      "description": "HTTPS for a fake or a proxy (MANIFEST.md \"HTTPS for fakes and proxies\").",
+      "type": "object",
+      "properties": {
+        "hosts": {
+          "description": "The host names the system calls (e.g. api.stripe.com); /etc/hosts sends them here.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "port": {
+          "description": "The TLS port on the endpoint's address.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 443
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "hosts"
       ]
     },
     "Proxy": {
@@ -1796,6 +2888,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tls": {
+          "description": "HTTPS: the proxy also answers TLS for these host names (and forwards in plain text).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tls"
             },
             {
               "type": "null"
@@ -1950,6 +3053,55 @@
       },
       "additionalProperties": false
     },
+    "SteerValue": {
+      "description": "A number in the guest's console lines that says how close a run came to failing (Milestone\n209): the steered search's value.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "[a-z][a-z0-9_.-]*: the name `hydo explore --steer` takes.",
+          "type": "string"
+        },
+        "match": {
+          "description": "A regular expression (Rust's regex syntax) over each console line; its first capture\ngroup (the whole match without a group) is the number. A run's value is the best match\nof all its lines.",
+          "type": "string"
+        },
+        "goal": {
+          "description": "min: a smaller number is closer to failing; max: a larger one.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SteerGoal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "min"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "match"
+      ]
+    },
+    "SteerGoal": {
+      "description": "Which way a steered value is closer to failing.",
+      "type": "string",
+      "enum": [
+        "min",
+        "max"
+      ]
+    },
     "Test": {
       "description": "The test composer's plan: small commands composed into seeded rounds (the schedule token W=),\nproperties, and saved regressions. The hydo/ folder fills commands, checks and regressions.",
       "type": "object",
@@ -2034,6 +3186,14 @@
           ],
           "format": "int64",
           "default": 0
+        },
+        "first_records": {
+          "description": "true: what the first commands write to $HYDO_ACKED and $HYDO_OUTCOMES during\nprovisioning stays in those files for the run, so operations made in the seed are among\nthe client's records (default false: the run's files start empty).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
         },
         "commands": {
           "type": [

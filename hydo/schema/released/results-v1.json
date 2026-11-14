@@ -17,6 +17,37 @@
     },
     {
       "$ref": "#/$defs/End"
+    },
+    {
+      "$ref": "#/$defs/Diff"
+    },
+    {
+      "description": "Added in M178.",
+      "$ref": "#/$defs/DiagnosisDoc"
+    },
+    {
+      "$ref": "#/$defs/Timeline"
+    },
+    {
+      "$ref": "#/$defs/Inspect"
+    },
+    {
+      "$ref": "#/$defs/InspectError"
+    },
+    {
+      "description": "Added after 0.2.0 (`hydo ci run`).",
+      "$ref": "#/$defs/CiRun"
+    },
+    {
+      "description": "Added in Milestone 221 (`hydo versions`).",
+      "$ref": "#/$defs/VersionsDoc"
+    },
+    {
+      "description": "The history store's ledger (`hydo ci record`; added in stage 2).",
+      "$ref": "#/$defs/CiFindingEvent"
+    },
+    {
+      "$ref": "#/$defs/CiLedger"
     }
   ],
   "$defs": {
@@ -37,6 +68,15 @@
             "string",
             "null"
           ]
+        },
+        "epoch": {
+          "description": "The fingerprint epoch of that hydo (documents only; added in M155): fingerprints of one\nepoch are comparable, across epochs only verdicts are. Absent: before M155, epoch 1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         },
         "tag": {
           "description": "The explorer's name for the run (`seed-3`, `repro-3`, `shrink-1-0`, `min-a`, ...).",
@@ -222,6 +262,42 @@
           "items": {
             "$ref": "#/$defs/Control"
           }
+        },
+        "warnings": {
+          "description": "Why a passing run may have checked nothing (added after 0.1.0): the workload acknowledged\nnothing, or a history check judged an empty history. One sentence each; absent when\nthere is none. A run with warnings still passed: the verdict is unchanged.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "diagnosis": {
+          "description": "Why the run failed, when it did not pass (added in M178): what the run's own files say\nand, when collected, what a replay of the run read in the guest at the stop where the\nverdict was given. `hydo run` writes it; the fingerprints never depend on it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Diagnosis"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "messages": {
+          "description": "Each `type: messages` check of the run (added after 0.2.0, docs/design/messaging.md):\nits declaration, each claim's status and the measures of the history. Each claim is also\na `history-check` finding, under the id `<check>.<claim>`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MessagesCheck"
+          }
+        },
+        "steer": {
+          "description": "A steered search's first run (added in M209, docs/design/steered-search.md): the value\nthe run reported and where its schedule came from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SteerRun"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -260,10 +336,100 @@
             "string",
             "null"
           ]
+        },
+        "epoch": {
+          "description": "The fingerprint epoch of the hydo that built the image (its `/etc/hydo/image.json`, added\nin M155; absent for an image built before).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kernel": {
+          "description": "The guest kernel the image names (its record), as `<file> (Linux <version>, sha256 <hex>)`\n(added in M155).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "built_by": {
+          "description": "The hydo that built the image, from the build record next to it (`<image>.json`, M155).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BuiltBy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "manifest_sha256": {
+          "description": "SHA-256 of the manifest the image was built from (the build record, M155).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "services": {
+          "description": "The Docker/OCI images of its services with their digests (the build record, M155).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ServiceImage"
+          }
         }
       },
       "required": [
         "path"
+      ]
+    },
+    "BuiltBy": {
+      "description": "The hydo that built an image (added in M155).",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "version"
+      ]
+    },
+    "ServiceImage": {
+      "description": "A service built from a Docker/OCI image (added in M155).",
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "string"
+        },
+        "image": {
+          "description": "The image as the manifest gives it.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "The image manifest's digest (`sha256:...`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "config_digest": {
+          "description": "The image configuration's digest.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "service",
+        "image"
       ]
     },
     "Engine": {
@@ -271,7 +437,7 @@
       "type": "object",
       "properties": {
         "backend": {
-          "description": "`hvx` (the Linux kernel module) or `hvm` (Hypervisor.framework on the Mac).",
+          "description": "`hvx` (the Linux kernel module), `hvm` (Hypervisor.framework on the Mac) or `kvm` (stock Linux KVM).",
           "type": [
             "string",
             "null"
@@ -332,8 +498,37 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "host_cpu": {
+          "description": "The host's CPU (added after 0.2.0): KVM fingerprints depend on its vendor, so a run\ncompares fingerprints only with runs of the same engine and vendor, and verdicts otherwise.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HostCpu"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
+    },
+    "HostCpu": {
+      "description": "The CPU of the machine that ran the engine (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "vendor": {
+          "description": "`GenuineIntel`, `AuthenticAMD` or `Apple` (as the host names it).",
+          "type": "string"
+        },
+        "model": {
+          "description": "The model name (`AMD EPYC 9V74 80-Core Processor`, `Apple M2 Pro`); empty when unknown.",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "vendor"
+      ]
     },
     "Verdict": {
       "description": "A run's verdict.",
@@ -526,6 +721,14 @@
         },
         "slowest_ok_s": {
           "description": "Eventually properties: the slowest episode that held, in seconds.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "within_s": {
+          "description": "Eventually properties: the deadline in seconds after the anchor (the records' `within_s`,\nthe largest seen; added after M176).",
           "type": [
             "number",
             "null"
@@ -808,6 +1011,756 @@
         "stops"
       ]
     },
+    "Diagnosis": {
+      "description": "Why a run failed (added in M178; `result.json`'s `diagnosis`, `hydo inspect diagnose`).\n\n`failure` names what failed (an open set): `service-exited` (a service's process ended\nwhile it started), `service-not-ready` (its readiness check did not pass in time),\n`service-setup`, `provision`, `restart` (a service did not come back after the faults),\n`mount`, `timeout` (a phase ran out of time), `vm` (the guest or the engine stopped),\n`control`, `violation` (a check failed; no process failed) or `other`.",
+      "type": "object",
+      "properties": {
+        "summary": {
+          "description": "One or two sentences for a reader who sees nothing else.",
+          "type": "string"
+        },
+        "failure": {
+          "type": "string"
+        },
+        "service": {
+          "description": "The service it concerns.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict_at": {
+          "description": "The stop where the verdict was given (`hydo inspect start <run dir> --at end` looks there).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "process": {
+          "description": "The process whose end caused the failure.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessEnd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "probe": {
+          "description": "The readiness check that failed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProbeEnd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exits": {
+          "description": "Every process the host started that ended before the verdict with a status other than 0.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProcessEnd"
+          },
+          "default": []
+        },
+        "likely": {
+          "description": "Conclusions drawn from the facts, each with its reason.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "kernel": {
+          "description": "The kernel's lines about crashes and memory (out of memory, segfault, panic), from the\nconsole and, when collected, from `dmesg`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "evidence_status": {
+          "description": "`collected` (a replay read `evidence` in the guest), `not-collected` (with the reason in\n`evidence_note`) or `failed`.",
+          "type": "string"
+        },
+        "evidence_note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "default": []
+        },
+        "next": {
+          "description": "Commands that look further, exactly as they can be run.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "summary",
+        "failure",
+        "evidence_status"
+      ]
+    },
+    "RunPoint": {
+      "description": "Where in a run something is (added in M178): its conversation (`boot`, `run`, `recovery`),\nthe number of the stop (the control transcript's `n`) and the engine's virtual clock there\n(hvx's instruction clock, hvm's and kvm's exit count). `point` is the two in the form\n`hydo inspect start --at` takes (`boot:172`).",
+      "type": "object",
+      "properties": {
+        "point": {
+          "type": "string"
+        },
+        "conversation": {
+          "type": "string"
+        },
+        "stop": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "point",
+        "conversation",
+        "stop"
+      ]
+    },
+    "ProcessEnd": {
+      "description": "How a process the host started ended (added in M178): the agent's `exit` (a service, the\nprovisioning) or `done` (a command) event.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "description": "The service's or the command's name as the host started it (`redis`, `provision`,\n`setup:redis`, `workload`).",
+          "type": "string"
+        },
+        "command": {
+          "description": "The command, as text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "The exit status as a shell reports it (the code, or 128 + the signal).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "signal": {
+          "description": "The signal that ended it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "signal_name": {
+          "description": "The signal's name (`KILL`, `SEGV`, ...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timed_out": {
+          "description": "Its time limit ended it.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "signal_by_hydo": {
+          "description": "The host sent that signal itself (a kill of the schedule, the end of a check). False: a\nsignal hydo did not send (for SIGKILL usually the kernel's out-of-memory killer).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "output": {
+          "description": "What the agent kept of its output (commands only).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "at": {
+          "description": "Where it ended (the first recorded stop by which the host had seen the event).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "handle",
+        "status"
+      ]
+    },
+    "ProbeEnd": {
+      "description": "A readiness check's end (added in M178).",
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "why": {
+          "description": "`ok`, `deadline` (it did not pass in time) or `died` (the service's process ended first).",
+          "type": "string"
+        },
+        "tries": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "last_status": {
+          "description": "The last attempt's exit status.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "deadline_s": {
+          "description": "The time limit, in seconds of guest time.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "service",
+        "command",
+        "why",
+        "tries"
+      ]
+    },
+    "Evidence": {
+      "description": "Text read in the guest (added in M178): a log's tail, a command's output.",
+      "type": "object",
+      "properties": {
+        "what": {
+          "description": "What it is, in words (`the log of redis`, `the kernel's messages`).",
+          "type": "string"
+        },
+        "source": {
+          "description": "The file read, or the command run.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The text (invalid UTF-8 replaced by U+FFFD).",
+          "type": "string"
+        },
+        "bytes": {
+          "description": "The whole size in bytes (of the file, or of the command's output).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "truncated": {
+          "description": "Only the end (a log) or the start (a command's output) of it is in `text`.",
+          "type": "boolean"
+        },
+        "status": {
+          "description": "A command's exit status.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "what",
+        "source",
+        "text",
+        "bytes",
+        "truncated"
+      ]
+    },
+    "MessagesCheck": {
+      "description": "One `type: messages` check of a run: what the project declared its system promises, what\nheld, and what was measured.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The check's id.",
+          "type": "string"
+        },
+        "history": {
+          "description": "The history its client records.",
+          "type": "string"
+        },
+        "declaration": {
+          "description": "The declaration with every default filled in (the claims, `acknowledgement`,\n`retention_ms`, `clock_steps`, the measures' options).",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "claims": {
+          "description": "Each claim the declaration makes, in the order reported (`no-phantom` first).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MessageClaim"
+          },
+          "default": []
+        },
+        "measures": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MessageMeasures"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ops": {
+          "description": "The history's operations and drained records.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "warnings": {
+          "description": "Records the checker could not read, claims that judged nothing.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "error": {
+          "description": "Why the declaration could not be checked (a key this hydo does not know); then there are\nno claims and no measures.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "history"
+      ]
+    },
+    "MessageClaim": {
+      "description": "One claim's status.",
+      "type": "object",
+      "properties": {
+        "claim": {
+          "description": "The claim (`no-loss`, `lease`, `order`, ...).",
+          "type": "string"
+        },
+        "id": {
+          "description": "The property id, `<check>.<claim>` (the finding's id).",
+          "type": "string"
+        },
+        "status": {
+          "description": "`held`, `violated` or `undecided`.",
+          "type": "string"
+        },
+        "judged": {
+          "description": "Candidates judged (messages, pairs or deliveries, by claim).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "undecided": {
+          "description": "Candidates the history could not decide (a clock step inside, two boots, no time).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "summary": {
+          "description": "One sentence; a violation's names its witness.",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "claim",
+        "id",
+        "status"
+      ]
+    },
+    "MessageMeasures": {
+      "description": "The measures of a messages history (every one optional: a measure added later is an\naddition). Durations are guest milliseconds between records of one boot.",
+      "type": "object",
+      "properties": {
+        "sends": {
+          "description": "Send items invoked, and their outcomes; `recovered`: messages whose sends were all\nunknown and that were delivered.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "lost": {
+          "description": "Acknowledged messages never delivered to a drained group that had to receive them.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/MessageLoss"
+          }
+        },
+        "excused": {
+          "description": "Missing messages excused, by reason (`expired`, `dead-lettered`, `possibly-consumed`,\n`rejected`) and those `undecided` (across a power cut).",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "unexpected": {
+          "description": "Deliveries of messages nobody sent.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "aborted": {
+          "description": "Deliveries of messages whose every send failed.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "deliveries": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MessageDeliveries"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "redeliveries": {
+          "description": "Extra deliveries by cause: `after-ack`, `after-nack`, `after-lease`, `during-lease`,\n`undecided`.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "stored_copies": {
+          "description": "Messages with more than one system id.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "processing": {
+          "description": "Messages with accepted acknowledgements of two deliveries in one group.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "group_overlap": {
+          "description": "Messages two members of a group surely held at once.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reorders": {
+          "description": "Per group with any: first deliveries against the order of the sends.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/MessageReorders"
+          }
+        },
+        "latency": {
+          "description": "`first_delivery` and `final_ack`: from the send's completion.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        },
+        "held": {
+          "description": "From a receive's completion to its delivery's acknowledgement's completion.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "invisible": {
+          "description": "Deliveries not acknowledged that came back: the time until (`ms`) and its ratio to the\ndeclared lease (`lease_ratio`).",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        },
+        "unseen": {
+          "description": "Acknowledged messages never delivered to some group that had to receive them.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "availability": {
+          "description": "Per operation: `ok`, `fail` and `info` counts.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          }
+        },
+        "across_boots": {
+          "description": "Durations left out because their records are in two boots.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      }
+    },
+    "MessageLoss": {
+      "description": "Lost messages of one group.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "first": {
+          "description": "The first 20 message ids.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "channel",
+        "group",
+        "count"
+      ]
+    },
+    "MessageDeliveries": {
+      "description": "Deliveries per message and group.",
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "messages": {
+          "description": "(message, group) pairs delivered at least once.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "duplicate_rate": {
+          "description": "(total - messages) / messages.",
+          "type": "number",
+          "format": "double"
+        },
+        "max_per_message": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "histogram": {
+          "description": "Pairs delivered 1, 2, 3, `4+` times.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "total",
+        "messages",
+        "duplicate_rate",
+        "max_per_message"
+      ]
+    },
+    "MessageReorders": {
+      "description": "Reorders of one group.",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "inverted_pairs": {
+          "description": "Pairs whose sends were ordered and whose first deliveries were not.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_distance": {
+          "description": "The most messages that followed one message and were first delivered before it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "channel",
+        "group",
+        "inverted_pairs",
+        "max_distance"
+      ]
+    },
+    "SteerRun": {
+      "description": "One first run of a steered search (`hydo explore --steer`; added in M209).",
+      "type": "object",
+      "properties": {
+        "value": {
+          "description": "The best value the run's consoles reported (the smallest for the goal `min`, the largest\nfor `max`); absent when they reported none.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "origin": {
+          "description": "`random` (a schedule drawn from its own seed, as the plain exploration draws it) or\n`mutant` (one change to a schedule of the corpus).",
+          "type": "string"
+        },
+        "drawn_seed": {
+          "description": "A random schedule's seed.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "parent": {
+          "description": "A mutant's parent: the tag of the corpus entry it was made from.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change": {
+          "description": "A mutant's change, in words (`pctn=39 -> pctn=40`, `added T=12:300`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "best": {
+          "description": "The run's value was better than every earlier run's.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "origin"
+      ]
+    },
     "Exploration": {
       "description": "`exploration.json`: an exploration's result.",
       "type": "object",
@@ -824,6 +1777,15 @@
             "string",
             "null"
           ]
+        },
+        "epoch": {
+          "description": "The fingerprint epoch of that hydo (added in M155; absent: before M155, epoch 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         },
         "mode": {
           "description": "`seeds`, `sweep`, `branch` or `schedule`.",
@@ -848,6 +1810,28 @@
             "null"
           ],
           "additionalProperties": true
+        },
+        "turn_sweep": {
+          "description": "`--sweep turns` (added in M205): the vCPU turn lengths tried and the boundaries between\nverdicts found.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TurnSweep"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "steer": {
+          "description": "`--steer` (added in M209): the steered search's options, its best value, its progress\nand its final corpus.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SteerSearch"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "failures": {
           "description": "Every failing first run, in seed order.",
@@ -1124,11 +2108,422 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "vacuous_passes": {
+          "description": "First runs that passed with a warning that they may have checked nothing (their run\nrecords' `warnings`; added after 0.1.0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "refused": {
+          "description": "First runs the engine refused before running them (a combination of host tokens it\ncannot arm, a host token it cannot apply): their run records have the class `refused`,\nand they are not failures (added in Milestone 208).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "time_limit": {
+          "description": "`--time-limit` stopped drawing first runs (added in stage 2 of docs/design/ci.md): how\nfar the seed range got. Absent when the option was not given.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "schedules",
         "failures"
+      ]
+    },
+    "TimeLimit": {
+      "description": "How far an exploration with `--time-limit` got (added in stage 2 of docs/design/ci.md). The\ncut is at a seed boundary in seed order: the explored seeds are always the first `explored`\nof the range, so `--seeds <explored_seeds>` gives the same schedules again on any machine.",
+      "type": "object",
+      "properties": {
+        "limit_s": {
+          "description": "The limit, in seconds from the explorer's start.",
+          "type": "number",
+          "format": "double"
+        },
+        "planned": {
+          "description": "The seeds of the range, and the first ones explored.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "explored": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "explored_seeds": {
+          "description": "The explored seeds as a range (`1-37`); absent when none was explored.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cut": {
+          "description": "The limit stopped the exploration before the end of the range.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "limit_s",
+        "planned",
+        "explored",
+        "cut"
+      ]
+    },
+    "TurnSweep": {
+      "description": "A search over the vCPU turn length `q=` of one schedule (added in M205; `hydo explore\n--sweep turns`): a coarse grid of turn lengths, then a bisection of every pair of\nneighbouring lengths with different verdict kinds.",
+      "type": "object",
+      "properties": {
+        "base": {
+          "description": "The schedule every point ran with its own `q=` (`--sweep-with`).",
+          "type": "string"
+        },
+        "lo": {
+          "description": "The smallest and the largest turn length searched (`--turn-range`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "hi": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "grid": {
+          "description": "The number of lengths in the coarse grid (`--turn-points`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "resolution": {
+          "description": "A boundary is narrowed until its two lengths are at most this far apart\n(`--turn-resolution`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "points": {
+          "description": "Every turn length run, in increasing order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TurnPoint"
+          },
+          "default": []
+        },
+        "boundaries": {
+          "description": "Every pair of neighbouring lengths whose verdict kinds differ, in increasing order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TurnBoundary"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "base",
+        "lo",
+        "hi",
+        "grid",
+        "resolution"
+      ]
+    },
+    "TurnPoint": {
+      "description": "One turn length of a turn sweep (added in M205).",
+      "type": "object",
+      "properties": {
+        "q": {
+          "description": "The turn length `q=`: guest branches on hvx, counted VM exits on KVM.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "schedule": {
+          "description": "The schedule that ran.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`ok`, `violation` or `error`.",
+          "type": "string"
+        },
+        "verdict": {
+          "description": "The verdict line; absent when the run gave no result.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tag": {
+          "description": "The run's tag in `events.jsonl` and `consoles/`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "q",
+        "schedule",
+        "kind",
+        "tag"
+      ]
+    },
+    "TurnBoundary": {
+      "description": "Two neighbouring turn lengths with different verdict kinds (added in M205).",
+      "type": "object",
+      "properties": {
+        "below": {
+          "description": "The shorter turn length.",
+          "$ref": "#/$defs/TurnPoint"
+        },
+        "above": {
+          "description": "The longer one.",
+          "$ref": "#/$defs/TurnPoint"
+        },
+        "reproduced": {
+          "description": "Both were run a second time and gave their fingerprints again.",
+          "type": "boolean"
+        },
+        "reproductions": {
+          "description": "The second runs (below, then above).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Reproduction"
+          },
+          "default": []
+        },
+        "below_command": {
+          "description": "The `hydo run` command lines of the two schedules.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "above_command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "below",
+        "above",
+        "reproduced"
+      ]
+    },
+    "Reproduction": {
+      "description": "A run of a schedule again, to confirm it.",
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fp": {
+          "description": "Absent: the run gave no result.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "present": {
+          "description": "Error kinds: the kind was present in this run.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "SteerSearch": {
+      "description": "A steered search's record in `exploration.json` (added in M209).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The value's name: an SDK id (`HYDO-STEER` records), a manifest `steer:` entry's id, or\n`match` for `--steer-match`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "`sdk` (the SDK's `HYDO-STEER` records) or `pattern` (a regular expression over the\nconsoles' lines).",
+          "type": "string"
+        },
+        "pattern": {
+          "description": "The pattern, for the source `pattern`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "goal": {
+          "description": "`min` or `max`: which way is closer to failing.",
+          "type": "string"
+        },
+        "mix_permille": {
+          "description": "Mutants per thousand schedules once the corpus has an entry (`--steer-mix`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "batch": {
+          "description": "Schedules per round: the corpus changes only between rounds (`--steer-batch`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "corpus_max": {
+          "description": "The most schedules the corpus keeps (`--steer-corpus`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stream_seed": {
+          "description": "The seed of the search's own stream (the mutations, and the choice between a mutant and\na random schedule).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "runs": {
+          "description": "First runs made, random schedules and mutants.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "random": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "mutants": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "with_value": {
+          "description": "First runs whose consoles reported a value.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "best": {
+          "description": "The best value of the search and the first run that reported it.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "best_tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first_failure": {
+          "description": "The first failing first run: its run number (1 is the first schedule), its tag and its\nvalue.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "first_failure_tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first_failure_value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "stopped": {
+          "description": "The search stopped after the round of its first failure (`--steer-stop`).",
+          "type": "boolean"
+        },
+        "progress": {
+          "description": "Every run whose value was better than every earlier run's, in run order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SteerPoint"
+          },
+          "default": []
+        },
+        "corpus": {
+          "description": "The corpus at the end, best first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SteerPoint"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "goal",
+        "mix_permille",
+        "batch",
+        "corpus_max",
+        "stream_seed",
+        "runs",
+        "random",
+        "mutants",
+        "with_value"
+      ]
+    },
+    "SteerPoint": {
+      "description": "One run of a steered search's progress or corpus (added in M209).",
+      "type": "object",
+      "properties": {
+        "run": {
+          "description": "The run number (1 is the first schedule).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tag": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number",
+          "format": "double"
+        },
+        "schedule": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "run",
+        "tag",
+        "value",
+        "schedule"
       ]
     },
     "Failure": {
@@ -1167,38 +2562,6 @@
         "reproduced",
         "run"
       ]
-    },
-    "Reproduction": {
-      "description": "A run of a schedule again, to confirm it.",
-      "type": "object",
-      "properties": {
-        "tag": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "fp": {
-          "description": "Absent: the run gave no result.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "verdict": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "present": {
-          "description": "Error kinds: the kind was present in this run.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        }
-      }
     },
     "Shrink": {
       "description": "A failure shrunk to a minimal schedule (one per class and signature).",
@@ -1311,6 +2674,13 @@
         },
         "stable_note": {
           "description": "Test composer: why the minimal schedule keeps the seed form.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fault_kinds": {
+          "description": "`hydo explore --shrink-causes N` (added in M225): the fault kinds of the failure this\nshrink started from (`C T- disk=cut`), which tell the shrinks of one signature apart.",
           "type": [
             "string",
             "null"
@@ -1565,7 +2935,29 @@
             "null"
           ]
         },
-        "first_miss": true
+        "first_miss": true,
+        "within_s": {
+          "description": "The property's deadline in seconds after its anchor (the records' `within_s`; the largest\nwhen runs differ), so that `slowest_s` can be read against it (added after M176).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "slowest_late_s": {
+          "description": "The slowest episode that held only after its deadline (the host's `satisfied only <t>s\nafter ...`): the guest time the property needed in that run, and the run (added after\nM176). A deadline of at least this would have held there.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "slowest_late_run": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
       "required": [
         "id",
@@ -1616,6 +3008,15 @@
             "string",
             "null"
           ]
+        },
+        "epoch": {
+          "description": "The fingerprint epoch of that hydo (added in M155; absent: before M155, epoch 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         },
         "mode": {
           "description": "`seeds`, `sweep`, `branch` or `schedule`.",
@@ -1673,6 +3074,2568 @@
       "type": "string",
       "enum": [
         "end"
+      ]
+    },
+    "Diff": {
+      "description": "`diff.json`: where two runs first differ (`hydo diff`, `hydo explain`; added in M165). The\nruns are aligned event by event, per conversation (the control transcripts' commands, notes\nand reports, and the guest's console lines); `first` is the first event that differs,\n`timing` the first shared event the two runs reach at another stop or guest time, and\n`first_outcome` the first difference in what the checks judge (acknowledged lists,\nassertions, history records, verdicts) among records both runs write.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/DiffType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "a": {
+          "$ref": "#/$defs/DiffSide"
+        },
+        "b": {
+          "$ref": "#/$defs/DiffSide"
+        },
+        "neighbour": {
+          "description": "`hydo explain`: how run B's schedule was made from run A's (`without K=redis@11+1`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "levels": {
+          "description": "The sources compared (`control`, `console`, `result`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "identical": {
+          "description": "No difference at the levels compared.",
+          "type": "boolean"
+        },
+        "first": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Divergence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Divergence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "first_outcome": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Divergence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "one_sided": {
+          "description": "Records of a kind the other run never writes (an assertion id it never reports), each at\nits first occurrence: often code only one of two images has.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DiffLine"
+          },
+          "default": []
+        },
+        "counts": {
+          "description": "Every difference, counted by conversation and level.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DiffCount"
+          },
+          "default": []
+        },
+        "hunks": {
+          "description": "The number of separate places where the runs differ.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "first_preempt": {
+          "description": "The first forced preemption point where the runs' records differ (level `preempt`: a\npoint only one run has, or one both have at the same exit with other guest state), when\neither run recorded its points (`HYDO_PREEMPT_RECORD`; added in Milestone 208). `a` and\n`b` are the stops that follow the point, `details` say how many points both share\nbefore it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Divergence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "a",
+        "b",
+        "identical"
+      ]
+    },
+    "DiffType": {
+      "description": "The `type` of this record: always `\"diff\"`.",
+      "type": "string",
+      "enum": [
+        "diff"
+      ]
+    },
+    "DiffSide": {
+      "description": "One of the two runs of a diff (added in M165).",
+      "type": "object",
+      "properties": {
+        "dir": {
+          "description": "The run directory.",
+          "type": "string"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "image_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "fingerprints": {
+          "$ref": "#/$defs/Fingerprints"
+        }
+      },
+      "required": [
+        "dir",
+        "schedule",
+        "verdict",
+        "fingerprints"
+      ]
+    },
+    "Divergence": {
+      "description": "A place where two runs part (added in M165).",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "description": "The conversation it is in.",
+          "type": "string"
+        },
+        "level": {
+          "description": "The level of its first differing event (`timing` for a guest-time divergence).",
+          "type": "string"
+        },
+        "a": {
+          "description": "Where it is in run A and in run B (the first differing event, or, on the side that has\nnone, the next shared event).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiffPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "b": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiffPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "context": {
+          "description": "The events both runs share right before it, oldest first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DiffLine"
+          },
+          "default": []
+        },
+        "lines": {
+          "description": "The differing events: those only A has (`a` set) and those only B has (`b` set).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DiffLine"
+          },
+          "default": []
+        },
+        "details": {
+          "description": "What differs inside two events of the same kind (`only in B: 11`, `env: only in A: ...`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "conversation",
+        "level"
+      ]
+    },
+    "DiffPoint": {
+      "description": "Where an event of one run is in that run (added in M165): its conversation, the number of the\nstop that saw it (the control transcript's `n`) and the engine's virtual clock at it (hvx's\ninstruction clock, hvm's exit count).",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "description": "`boot`, `run` or `recovery`.",
+          "type": "string"
+        },
+        "stop": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "conversation"
+      ]
+    },
+    "DiffLine": {
+      "description": "One event of a diff (added in M165): its level, its text, and where it is in each run (absent\non the side that does not have it).",
+      "type": "object",
+      "properties": {
+        "level": {
+          "description": "`control` (a command the host typed, an engine action), `controller` (the host\ncontroller's notes and reports), `guest` (a line the guest printed), `assertion`,\n`assertion-decl`, `history`, `fake-world`, `error-log`, `composer`, `outcome` (the\nacknowledged and failed lists, the end of a conversation) or `verdict`.",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "a": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiffPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "b": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiffPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after": {
+          "description": "The host controller's last note before it in the run that has it (`hydo-ob: KILLED redis\nbefore step 11`): where in the workload it happened.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "level",
+        "text"
+      ]
+    },
+    "DiffCount": {
+      "description": "How many events of one level one run has and the other does not (added in M165).",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string"
+        },
+        "only_a": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "only_b": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "conversation",
+        "level",
+        "only_a",
+        "only_b"
+      ]
+    },
+    "DiagnosisDoc": {
+      "description": "`hydo inspect diagnose <run dir>`: a run's [`Diagnosis`] as a document (added in M178).",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/DiagnosisType"
+        },
+        "run_dir": {
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "diagnosis": {
+          "$ref": "#/$defs/Diagnosis"
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "run_dir",
+        "verdict",
+        "diagnosis"
+      ]
+    },
+    "DiagnosisType": {
+      "description": "The `type` of this record: always `\"diagnosis\"`.",
+      "type": "string",
+      "enum": [
+        "diagnosis"
+      ]
+    },
+    "Timeline": {
+      "description": "`hydo inspect events <run dir>`: a run's events with their stops, filtered and paged (added in\nM178).",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/TimelineType"
+        },
+        "run_dir": {
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "conversations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimelineConversation"
+          },
+          "default": []
+        },
+        "total": {
+          "description": "Events matching the filters (before paging).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "offset": {
+          "description": "The index of the first event shown among them.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimelineEvent"
+          },
+          "default": []
+        },
+        "truncated": {
+          "description": "More events match than are shown.",
+          "type": "boolean"
+        },
+        "next": {
+          "description": "The command that shows the next page.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "preempt": {
+          "description": "The run's forced preemption points, when it recorded them (`HYDO_PREEMPT_RECORD`;\nadded in Milestone 208). Each point is also an event of the kind `preempt`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreemptSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "run_dir",
+        "verdict",
+        "total",
+        "offset",
+        "truncated"
+      ]
+    },
+    "TimelineType": {
+      "description": "The `type` of this record: always `\"timeline\"`.",
+      "type": "string",
+      "enum": [
+        "timeline"
+      ]
+    },
+    "TimelineConversation": {
+      "description": "One conversation of a run in its timeline (added in M178).",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "type": "string"
+        },
+        "first_stop": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "last_stop": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "end": {
+          "description": "How it ended (`end at snapshot S1`, `end: HYDO-ORACLE: OK ...`, `power cut`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "snapshots": {
+          "description": "Whether `hydo inspect` can keep a snapshot at its stops (boot and the workload; not after\nthe workload's end, not in a recovery boot, not under timing schedules) or works on one\nlive branch there.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "conversation",
+        "first_stop",
+        "last_stop"
+      ]
+    },
+    "TimelineEvent": {
+      "description": "One event of a run's timeline (added in M178).",
+      "type": "object",
+      "properties": {
+        "point": {
+          "description": "`<conversation>:<stop>`, the form `hydo inspect start --at` takes; absent for the run's\nresult.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "conversation": {
+          "type": "string"
+        },
+        "stop": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "description": "The engine's virtual clock at the stop.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "An open set: `command` (the host typed an agent command), `exit` (a process the host\nstarted ended), `probe` (a readiness check ended), `done` (a command ended), `fault` (a\nfault applied or healed), `note` (the host controller's note), `report` (a line of the\nrun's report), `assertion`, `guest` (a line the guest printed), `snapshot`, `engine`,\n`end` (the end of a conversation), `verdict`, `preempt` (a forced preemption point,\nplaced at the stop that follows it, `at` its exit count; added in Milestone 208).",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "service": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "details": {
+          "description": "The record behind it (an agent event, a command)."
+        }
+      },
+      "required": [
+        "conversation",
+        "kind",
+        "text"
+      ]
+    },
+    "PreemptSummary": {
+      "description": "What a run's forced preemption points did (`<tag>.preempt.jsonl`, written by the KVM and Mac\nengines with `HYDO_PREEMPT_RECORD=1`; added in Milestone 208).",
+      "type": "object",
+      "properties": {
+        "file": {
+          "description": "The records file, relative to the run directory.",
+          "type": "string"
+        },
+        "points": {
+          "description": "Points recorded.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "moved": {
+          "description": "Points that moved the guest's clock to its timer's deadline (the running thread is\npreempted at once).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "due": {
+          "description": "Points that found the timer already due.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "missed": {
+          "description": "Points that found no timer armed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "passed": {
+          "description": "Points whose exit had passed when the points were set.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "threads": {
+          "description": "Distinct user thread pointers at the points that moved the clock: how many threads\nwere preempted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "file",
+        "points",
+        "moved",
+        "due",
+        "missed",
+        "passed",
+        "threads"
+      ]
+    },
+    "Inspect": {
+      "description": "One answer of `hydo inspect` (added in M178): `op` says which; the members of that op are set.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/InspectType"
+        },
+        "op": {
+          "description": "`start`, `status`, `list`, `stop`, `exec`, `read`, `ls`, `logs`, `ps`, `sockets`,\n`advance`.",
+          "type": "string"
+        },
+        "session": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectSession"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sessions": {
+          "description": "`list`: every session of this user.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InspectSession"
+          }
+        },
+        "at": {
+          "description": "The state the call saw: the session's stop (`snapshot`), or the branch after the earlier\ncalls (`live`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exec": {
+          "description": "`exec`, `logs`, `ps`, `sockets`: the command and its output.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectExec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "description": "`read`: the file's bytes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entries": {
+          "description": "`ls`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InspectEntry"
+          }
+        },
+        "processes": {
+          "description": "`ps`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InspectProcess"
+          }
+        },
+        "sockets": {
+          "description": "`sockets`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InspectSocket"
+          }
+        },
+        "truncated": {
+          "description": "Lists shown in part (`--limit`).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "cost": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectCost"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "branch": {
+          "description": "`exec --branch`: the branch the call ran on (added for agent environments).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectBranch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state_fp": {
+          "description": "The engine's fingerprint of the guest's whole state when the call ended (registers,\ndevices, the disk, all of RAM, the console), as in a run's RESULT line: two calls whose\nvalues are equal left the guest in the same state (added for agent environments).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "description": "Remarks for the caller (what the state is, what to try next).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "op"
+      ]
+    },
+    "InspectType": {
+      "description": "The `type` of this record: always `\"inspect\"`.",
+      "type": "string",
+      "enum": [
+        "inspect"
+      ]
+    },
+    "InspectSession": {
+      "description": "An inspection session (added in M178).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "run_dir": {
+          "type": "string"
+        },
+        "at": {
+          "description": "The stop the session looks at, and how: `snapshot` (every call starts from the stop's\nsnapshot, so each sees the same state) or `live` (calls run one after another on one\nbranch from the stop; each sees what the earlier ones left).",
+          "$ref": "#/$defs/RunPoint"
+        },
+        "state": {
+          "type": "string"
+        },
+        "status": {
+          "description": "`starting`, `ready` or `ended`.",
+          "type": "string"
+        },
+        "idle_timeout_s": {
+          "description": "It ends by itself after this many seconds without a call.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "frozen": {
+          "description": "Every process was stopped (SIGSTOP) at the stop (`--freeze`).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "engine": {
+          "description": "The engine (`hvx`, `hvm`, `kvm`).",
+          "type": "string"
+        },
+        "calls": {
+          "description": "Calls served so far.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "run_dir",
+        "at",
+        "state",
+        "status",
+        "idle_timeout_s",
+        "engine",
+        "calls"
+      ]
+    },
+    "InspectExec": {
+      "description": "A command run in the guest by `hydo inspect` (added in M178).",
+      "type": "object",
+      "properties": {
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "service": {
+          "description": "The service whose network namespace it ran in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "The exit status (the code, or 128 + the signal).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "signal": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "timed_out": {
+          "description": "Its time limit (`--timeout`, guest time) ended it.",
+          "type": "boolean"
+        },
+        "stdout": {
+          "$ref": "#/$defs/InspectText"
+        },
+        "stderr": {
+          "$ref": "#/$defs/InspectText"
+        }
+      },
+      "required": [
+        "argv",
+        "status",
+        "timed_out",
+        "stdout",
+        "stderr"
+      ]
+    },
+    "InspectText": {
+      "description": "Text read from the guest by `hydo inspect` (added in M178).",
+      "type": "object",
+      "properties": {
+        "text": {
+          "description": "The text (invalid UTF-8 replaced by U+FFFD), absent when `hex` is given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hex": {
+          "description": "The bytes in lower-case hex, when they are not UTF-8 text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bytes": {
+          "description": "The whole size in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "offset": {
+          "description": "The bytes shown start here.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "truncated": {
+          "description": "Fewer bytes are shown than there are (`--max-bytes`).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bytes",
+        "truncated"
+      ]
+    },
+    "InspectEntry": {
+      "description": "A file or directory entry (added in M178).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "`file`, `dir`, `link`, `socket`, `fifo`, `device` or `other`.",
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "mode": {
+          "description": "The permission bits in octal.",
+          "type": "string"
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mtime": {
+          "description": "Seconds since 1970 (the guest's clock).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "bytes",
+        "mode"
+      ]
+    },
+    "InspectProcess": {
+      "description": "A process in the guest (added in M178).",
+      "type": "object",
+      "properties": {
+        "pid": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "ppid": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "state": {
+          "description": "The kernel's state letter (`R`, `S`, `D`, `T` stopped, `Z` zombie).",
+          "type": "string"
+        },
+        "rss_kib": {
+          "description": "Resident memory in KiB.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "threads": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "command": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pid",
+        "ppid",
+        "state",
+        "rss_kib",
+        "threads",
+        "command"
+      ]
+    },
+    "InspectSocket": {
+      "description": "A socket in the guest (added in M178).",
+      "type": "object",
+      "properties": {
+        "proto": {
+          "description": "`tcp`, `tcp6`, `udp`, `udp6` or `unix`.",
+          "type": "string"
+        },
+        "local": {
+          "type": "string"
+        },
+        "remote": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "TCP's state (`LISTEN`, `ESTABLISHED`, ...).",
+          "type": "string"
+        },
+        "send_queue": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "recv_queue": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "proto",
+        "local",
+        "state",
+        "send_queue",
+        "recv_queue"
+      ]
+    },
+    "InspectCost": {
+      "description": "What a call cost (added in M178).",
+      "type": "object",
+      "properties": {
+        "wall_ms": {
+          "description": "Wall time of the call.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stops": {
+          "description": "Engine stops the call took (a replay to the stop counts every stop of it).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "wall_ms",
+        "stops"
+      ]
+    },
+    "InspectBranch": {
+      "description": "The named branch an `exec` ran on (added for agent environments,\ndocs/design/agent-environments.md).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "from": {
+          "description": "The branch this one was made from, when the call made it (`None`: the session's stop).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created": {
+          "description": "The call made the branch (it did not exist before).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "created"
+      ]
+    },
+    "InspectError": {
+      "description": "A call of `hydo inspect` that failed (added in M178): what was wrong and what would work.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/InspectErrorType"
+        },
+        "op": {
+          "type": "string"
+        },
+        "code": {
+          "description": "An open set: `usage`, `no-run`, `no-session`, `bad-point`, `engine`, `agent`,\n`timeout`, `refused`.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "try": {
+          "description": "Commands that would work, exactly as they can be run.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "op",
+        "code",
+        "message"
+      ]
+    },
+    "InspectErrorType": {
+      "description": "The `type` of this record: always `\"inspect-error\"`.",
+      "type": "string",
+      "enum": [
+        "inspect-error"
+      ]
+    },
+    "CiRun": {
+      "description": "`ci-run.json`: one CI run of one project at one commit (`hydo ci run`; added after 0.2.0;\ndocs/design/ci.md section 4.1). Small values only; the bulky outputs are named in `artifacts`.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/CiRunType"
+        },
+        "id": {
+          "description": "`<system>:<run id>` (`github:11873625`), or `local:<time>`.",
+          "type": "string"
+        },
+        "ci": {
+          "$ref": "#/$defs/CiSystem"
+        },
+        "project": {
+          "$ref": "#/$defs/CiProject"
+        },
+        "trigger": {
+          "description": "`pull_request`, `push`, `schedule` or `manual`.",
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change": {
+          "description": "The pull or merge request.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiBase"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hydo": {
+          "$ref": "#/$defs/CiHydo"
+        },
+        "engine": {
+          "$ref": "#/$defs/Engine"
+        },
+        "image": {
+          "$ref": "#/$defs/CiImage"
+        },
+        "budget": {
+          "$ref": "#/$defs/CiBudget"
+        },
+        "summary": {
+          "$ref": "#/$defs/CiSummary"
+        },
+        "coverage": {
+          "$ref": "#/$defs/CiCoverage",
+          "default": {
+            "faults": {},
+            "services": {}
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiFinding"
+          },
+          "default": []
+        },
+        "regressions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiRegression"
+          },
+          "default": []
+        },
+        "nondeterminism": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiNondeterminism"
+          },
+          "default": []
+        },
+        "outcome": {
+          "$ref": "#/$defs/CiOutcome"
+        },
+        "artifacts": {
+          "$ref": "#/$defs/CiArtifacts"
+        },
+        "stale_accepted": {
+          "description": "Entries of `hydo/known-findings.yaml` whose finding this run did not find (added in stage\n2).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiStaleAcceptance"
+          }
+        },
+        "shards": {
+          "description": "The shards a merged run was made from (`hydo ci merge`; added in stage 2).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiShardRun"
+          }
+        },
+        "history": {
+          "description": "What the run took from the history store (added in stage 2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiHistory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "id",
+        "ci",
+        "project",
+        "trigger",
+        "hydo",
+        "engine",
+        "image",
+        "budget",
+        "summary",
+        "outcome",
+        "artifacts"
+      ]
+    },
+    "CiRunType": {
+      "description": "The `type` of this record: always `\"ci-run\"`.",
+      "type": "string",
+      "enum": [
+        "ci-run"
+      ]
+    },
+    "CiSystem": {
+      "description": "Where a CI run ran (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "`github`, `gitlab`, `circleci`, `jenkins`, `buildkite`, `azure`, or `local`.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The CI system's own id of the job or pipeline.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_url": {
+          "description": "A link to the job.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "CiProject": {
+      "description": "The project a CI run tested (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The manifest's `name`.",
+          "type": "string"
+        },
+        "dir": {
+          "description": "The project's directory in the repository (`.` for the root).",
+          "type": "string"
+        },
+        "manifest": {
+          "description": "The manifest, relative to the project's directory.",
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "dir",
+        "manifest"
+      ]
+    },
+    "CiBase": {
+      "description": "The commit a CI run compares with (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ci_run": {
+          "description": "The base's own CI run whose findings were taken (`--base-run`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "findings_from": {
+          "description": "How the base's findings were known: `base-run` (its ci-run.json), `explored` (explored here\nwith the same budget) or `none`.",
+          "type": "string",
+          "default": ""
+        },
+        "image": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiImage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "missing": {
+          "description": "Why there is no base comparison, when there is none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "CiImage": {
+      "description": "An image a CI run used (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "input_key": {
+          "description": "`ik1-<hex>`: a hash of everything the image is built from (docs/design/ci.md section 7.2);\nabsent for an image given ready-made.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reused": {
+          "description": "Taken from the image cache instead of built.",
+          "type": "boolean",
+          "default": false
+        },
+        "given": {
+          "description": "Given on the command line (`--image`, `--base-image`).",
+          "type": "boolean",
+          "default": false
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "CiHydo": {
+      "description": "The hydo that ran a CI run (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "description": "The fingerprint epoch.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "version",
+        "epoch"
+      ]
+    },
+    "CiBudget": {
+      "description": "What a CI run explored (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "`pr`, `push` or `nightly`.",
+          "type": "string"
+        },
+        "seeds": {
+          "description": "The seed range this run was given (with `--shard`, the shard's part of `range`).",
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "time_limit_s": {
+          "description": "The wall-time budget of the whole CI run, in seconds (`budget:` of the mode in\n`hydo/ci.yaml`, or `--budget`; added in stage 2).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "completed_seeds": {
+          "description": "The seeds explored, as ranges (`1-37`, or `1-37,101-140` for merged shards); absent when\nthe run had no budget and no shards (added in stage 2).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "planned": {
+          "description": "The seeds planned and the seeds explored (added in stage 2).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "completed": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "partial": {
+          "description": "The budget stopped the exploration before the end of its seeds, or a shard is missing\nfrom a merged run. A partial run never calls a finding `fixed` (added in stage 2).",
+          "type": "boolean",
+          "default": false
+        },
+        "shard": {
+          "description": "`--shard I/N`: this run explored the I-th of N parts of `range` (added in stage 2).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "range": {
+          "description": "The whole seed range a shard is a part of (added in stage 2).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "mode",
+        "seeds",
+        "strategy"
+      ]
+    },
+    "CiSummary": {
+      "description": "The numbers of a CI run (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "runs": {
+          "description": "Runs of the exploration, and its failing first runs.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "failures": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "findings": {
+          "description": "Findings (distinct finding keys), and how many are in each state.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "states": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "replays": {
+          "description": "Single runs made to compare with the base (replays of minimal schedules).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "vacuous_passes": {
+          "description": "Passing first runs that may have checked nothing (the workload acknowledged nothing, or\na history was empty): the exploration's `vacuous_passes`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "regressions": {
+          "$ref": "#/$defs/CiRegressionCounts",
+          "default": {
+            "replayed": 0,
+            "as_expected": 0
+          }
+        },
+        "wall_s": {
+          "description": "Wall time of the whole CI run, in seconds.",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        }
+      },
+      "required": [
+        "runs",
+        "failures",
+        "findings"
+      ]
+    },
+    "CiRegressionCounts": {
+      "description": "The saved regressions a CI run replayed (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "replayed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "as_expected": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "replayed",
+        "as_expected"
+      ]
+    },
+    "CiCoverage": {
+      "description": "What a CI run's schedules drew (added after 0.2.0): counts, never percentages (docs/design/ci.md\nsection 10).",
+      "type": "object",
+      "properties": {
+        "faults": {
+          "description": "Schedule tokens of the exploration's first runs, by kind (`K`, `P`, `C`, `disk`, ...).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "services": {
+          "description": "Fault tokens by the service they target.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiProperties"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "CiProperties": {
+      "description": "What a property table says was reached (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "declared": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reached": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "not_exercised": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "declared",
+        "reached"
+      ]
+    },
+    "CiFinding": {
+      "description": "One finding of a CI run: one finding key (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "`f1:<kind>:<10 hex>`: stable across commits (docs/design/ci.md section 4.2).",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`invariant`, `assertion`, `history-check`, `error-log` or `run-error`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "The normalized statement (numbers as `#`).",
+          "type": "string"
+        },
+        "state": {
+          "description": "See [`ci_state`].",
+          "type": "string"
+        },
+        "proof": {
+          "description": "What decided the state: `base-replay-ok`, `base-replay-fails`, `base-replay-other`,\n`base-refused`, `base-run`, `head-replay-ok`, `head-replay-fails`, `head-replay-other`,\n`no-base`, `no-replay`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "minimal": {
+          "description": "The minimal schedule (the first one seen under this key).",
+          "type": "string"
+        },
+        "schedules": {
+          "description": "Every minimal schedule seen under this key.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "fp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "classes": {
+          "description": "The fault classes that led to it (attributes, not part of the key).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "repro": {
+          "description": "The command that runs the minimal schedule.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replays": {
+          "description": "The replays that decided the state.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiReplay"
+          },
+          "default": []
+        },
+        "diff": {
+          "description": "Where the base and this commit first differ on the minimal schedule (`hydo diff`'s first\njudged difference), when both ran it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "renamed_from": {
+          "description": "A finding of the other state with the same minimal schedule (a reworded check: \"probably\nthe same finding, renamed\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "Where the finding came from (added in stage 2): `explored` (this commit's exploration),\n`base` (a finding of the base replayed here), `history` (an open finding of the history\nstore replayed here) or `accepted` (an entry of `hydo/known-findings.yaml` replayed here).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "accepted": {
+          "description": "The entry of `hydo/known-findings.yaml` that accepts it (added in stage 2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiAccepted"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixed_at": {
+          "description": "The commit where the history store last recorded it fixed (a `reappeared` finding; added\nin stage 2).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "title",
+        "state",
+        "minimal"
+      ]
+    },
+    "CiReplay": {
+      "description": "One run of a minimal schedule on another image, to decide a finding's state (added after\n0.2.0).",
+      "type": "object",
+      "properties": {
+        "on": {
+          "description": "`base` (on the base commit's image) or `head`.",
+          "type": "string"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "verdict": {
+          "description": "The verdict, absent when the schedule was refused or gave no result.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "The finding key of a failing verdict.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refused": {
+          "description": "Why the schedule did not run (hydo refused it before any VM: the image lacks what it\nnames).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir": {
+          "description": "The run directory, relative to the CI output directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "on",
+        "schedule"
+      ]
+    },
+    "CiAccepted": {
+      "description": "An accepted finding's entry (`hydo/known-findings.yaml`; added in stage 2).",
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "who": {
+          "description": "Who accepted it, as the entry names them (empty when it names nobody).",
+          "type": "string"
+        },
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "The state the finding has without the acceptance (`new`, `present`, ...).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "state"
+      ]
+    },
+    "CiRegression": {
+      "description": "One saved regression a CI run replayed (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "expect": {
+          "description": "`ok`, `violation` or `fp=<hex>`.",
+          "type": "string"
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "as_expected": {
+          "type": "boolean"
+        },
+        "error": {
+          "description": "Why it did not run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "schedule",
+        "expect",
+        "as_expected"
+      ]
+    },
+    "CiNondeterminism": {
+      "description": "A failure whose re-run gave another fingerprint: a hydo or environment problem, never a finding\nof the project (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "type": "string"
+        },
+        "fp": {
+          "type": "string"
+        },
+        "rerun_fps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "schedule",
+        "fp"
+      ]
+    },
+    "CiOutcome": {
+      "description": "How a CI run ended (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "exit": {
+          "description": "0: passed by the policy, 1: failed by the policy, 2: the run could not be completed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fail_on": {
+          "description": "The policy (`fail_on`): the finding states, and `regression`, that fail the run.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "failed_by": {
+          "description": "What failed it, one line each.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "exit"
+      ]
+    },
+    "CiArtifacts": {
+      "description": "The files of a CI run, relative to its output directory (added after 0.2.0).",
+      "type": "object",
+      "properties": {
+        "exploration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base_exploration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "report": {
+          "type": "string"
+        },
+        "junit": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "report",
+        "junit"
+      ]
+    },
+    "CiStaleAcceptance": {
+      "description": "An entry of `hydo/known-findings.yaml` whose finding this run did not find (added in stage\n2): when its saved schedule passed here, the entry can be removed from the file.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "default": ""
+        },
+        "reason": {
+          "type": "string"
+        },
+        "why": {
+          "description": "`replay-ok` (its saved schedule passed here) or `not-replayed` (the entry has no\nschedule, or the replay was refused or gave no result: only absence speaks for it).",
+          "type": "string"
+        },
+        "replay": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CiReplay"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "reason",
+        "why"
+      ]
+    },
+    "CiShardRun": {
+      "description": "One shard of a merged CI run (`hydo ci merge`; added in stage 2).",
+      "type": "object",
+      "properties": {
+        "shard": {
+          "description": "`I/N`.",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "seeds": {
+          "type": "string"
+        },
+        "completed_seeds": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "failures": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "replays": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "wall_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "exit": {
+          "description": "The shard's own exit status by the policy.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "shard",
+        "id",
+        "seeds",
+        "runs",
+        "failures",
+        "replays",
+        "wall_s",
+        "exit"
+      ]
+    },
+    "CiHistory": {
+      "description": "What a CI run took from the history store (`--history`; added in stage 2).",
+      "type": "object",
+      "properties": {
+        "store": {
+          "description": "The store's directory, as given.",
+          "type": "string"
+        },
+        "branch": {
+          "description": "The branch whose record was read.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "open": {
+          "description": "The record's open findings, and its fixed ones.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fixed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "store",
+        "open",
+        "fixed"
+      ]
+    },
+    "VersionsDoc": {
+      "description": "`versions.json`: findings replayed on versions of the system (`hydo versions`; added in\nMilestone 221). `hydo report` prints each finding's summary with the report of the run or\nexploration it came from.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/VersionsType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "engine": {
+          "description": "The engine every replay ran on.",
+          "$ref": "#/$defs/Engine"
+        },
+        "from": {
+          "description": "What was given: a run directory, an exploration directory, or a schedule.",
+          "type": "string"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Versions"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "engine",
+        "from"
+      ]
+    },
+    "VersionsType": {
+      "description": "The `type` of this record: always `\"versions\"`.",
+      "type": "string",
+      "enum": [
+        "versions"
+      ]
+    },
+    "Versions": {
+      "description": "One finding's minimal schedule replayed on several versions of the system, oldest first\n(`hydo versions`; added in Milestone 221). The search assumes one change point: the versions\nbefore it pass and the versions from it on reproduce, or the other way round for a fix.",
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "description": "The minimal schedule replayed.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The finding key the replays are compared with.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "The finding's normalized statement (numbers as `#`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "found_on": {
+          "description": "Where the finding came from: a run directory, an exploration directory, a reference\nimage, a version, or the first failing end of the versions.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "How the versions were made: `param <KEY>` (`hydo build --set <KEY>=<version>`), `git` (a\ncheckout of each revision, its build command, then `hydo build`) or `images` (given\nimages).",
+          "type": "string"
+        },
+        "versions": {
+          "description": "Every version, oldest first; the ones the search did not need are `not-replayed`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionOutcome"
+          },
+          "default": []
+        },
+        "first_bad": {
+          "description": "The oldest version that reproduced.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_good": {
+          "description": "The version that passed right before `first_bad`. Absent: `first_bad` is the oldest\nversion decided, so the finding is at least that old.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_bad": {
+          "description": "The newest version that reproduced.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fixed_in": {
+          "description": "The first version that passed after `last_bad`: where the finding was fixed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "still_present_in_newest": {
+          "description": "Whether the newest version reproduced. Absent: the newest version was not decided.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "contradiction": {
+          "description": "Set when the replays contradict a single change point (reproduced, passes, reproduced):\nthe decided versions in order with their outcomes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replays": {
+          "description": "Replays run. A version answered by the finding's own record is not counted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "summary": {
+          "description": "The answer in one sentence.",
+          "type": "string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "schedule",
+        "source",
+        "replays",
+        "summary"
+      ]
+    },
+    "VersionOutcome": {
+      "description": "What one version of the system did with a finding's minimal schedule (`hydo versions`; added\nin Milestone 221).",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The version as given: a manifest parameter's value (`3.5.5`), a git revision, or an\nimage's name.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "See [`version_outcome`].",
+          "type": "string"
+        },
+        "fingerprint": {
+          "description": "The replay's fingerprint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "The finding key of a failing verdict (`f1:<kind>:<10 hex>`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "why": {
+          "description": "Why the version could not run, or the other findings of a run that passed (new error\nkinds).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commit": {
+          "description": "A git revision's commit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_sha256": {
+          "description": "SHA-256 of the version's image.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_reused": {
+          "description": "The image came from the image cache by its input key, not from a build.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "recorded": {
+          "description": "The outcome is the finding's own recorded run on the same image, not a new replay.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "replay": {
+          "description": "The replay's number in the search (1: the first replay).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "dir": {
+          "description": "The replay's run directory, relative to the directory of `versions.json`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "outcome"
+      ]
+    },
+    "CiFindingEvent": {
+      "description": "One change of a finding's state on a branch, appended to the history store's\n`v1/<project>/findings.jsonl` by `hydo ci record` (docs/design/ci.md section 4.4; added in\nstage 2). The ledger's state is the fold of these events.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/CiFindingEventType"
+        },
+        "key": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "event": {
+          "description": "`new` (first seen on the branch), `reappeared` (seen again after `fixed`), `fixed`,\n`accepted` (a person accepted it), `unaccepted` (its entry was removed).",
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ci_run": {
+          "description": "The CI run that recorded it (its `id`).",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "minimal": {
+          "type": "string",
+          "default": ""
+        },
+        "proof": {
+          "description": "What decided it (the finding's `proof` in that run).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "engine": {
+          "description": "`<backend>/<host CPU vendor>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hydo": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_input_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "key",
+        "project",
+        "branch",
+        "event",
+        "ci_run",
+        "title"
+      ]
+    },
+    "CiFindingEventType": {
+      "description": "The `type` of this record: always `\"finding-event\"`.",
+      "type": "string",
+      "enum": [
+        "finding-event"
+      ]
+    },
+    "CiLedger": {
+      "description": "`v1/<project>/state.json` of the history store: the fold of `findings.jsonl`, rewritten by\nevery `hydo ci record` and read by `hydo ci run --history` (added in stage 2).",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/CiLedgerType"
+        },
+        "project": {
+          "type": "string"
+        },
+        "branches": {
+          "description": "By branch name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/CiLedgerBranch"
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "project"
+      ]
+    },
+    "CiLedgerType": {
+      "description": "The `type` of this record: always `\"ci-ledger\"`.",
+      "type": "string",
+      "enum": [
+        "ci-ledger"
+      ]
+    },
+    "CiLedgerBranch": {
+      "description": "One branch of the ledger (added in stage 2).",
+      "type": "object",
+      "properties": {
+        "findings": {
+          "description": "By finding key.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/CiLedgerFinding"
+          },
+          "default": {}
+        },
+        "last_run": {
+          "description": "The last recorded CI run and its commit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runs": {
+          "description": "Recorded runs.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        }
+      }
+    },
+    "CiLedgerFinding": {
+      "description": "One finding of a branch in the ledger (added in stage 2).",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "state": {
+          "description": "`open` or `fixed`.",
+          "type": "string"
+        },
+        "accepted": {
+          "description": "Accepted in `hydo/known-findings.yaml` when it was last seen.",
+          "type": "boolean",
+          "default": false
+        },
+        "minimal": {
+          "type": "string"
+        },
+        "schedules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "first_seen": {
+          "description": "The commit and the CI run where it was first seen, last seen failing, and recorded fixed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_seen": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fixed_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seen": {
+          "description": "Recorded runs that saw it failing.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "title",
+        "state",
+        "minimal"
       ]
     }
   }

@@ -3436,3 +3436,29 @@ as `/etc/hydo/hydo.yaml` with the checkout's mode, 0664 instead of git's 0644 (A
 item 58 (h)). The pass was stopped, the tree's modes were set to git's, and the values above come
 from the second pass. Unpack a tree for `hydo-bench rebaseline` or a release build under umask
 022, or set its modes to git's.
+
+## 22. hydo 0.3.2 (2026-11-14)
+
+Made with `hydo-bench rebaseline --write` on the bare-metal machine and on a Mac, with the quick
+0.3.2 candidates as `--release` (docs/HISTORY.md "The 0.3.2 release"); the values are in
+`hydo/onboard/recorded.json`, and this section records only the decisions.
+
+**The fingerprint epoch stays 2.** As at 0.3.1, only the version moved image bytes: it is in
+Cargo's `-C metadata` of `guest/hydo-world`, `guest/hydo-world-tls` and `guest/hydo-grpc`, which
+have new pins (docs/BUILD-PINS.md), and the SDK versions are in rust-kv's program, node-kv's
+`package.json` and python-kv's `__init__.py`. No engine, controller, agent or kernel that a
+recorded run uses changed; the SMP guest kernel of the KVM engine is new in the release and no
+recorded run uses it.
+
+**What moved.** hvx (the bare-metal machine, a tree unpacked under umask 022): 9 of 43 images have
+new bytes and 30 of 141 runs new values (redis-proxy, redis-bridge, rust-kv, the shop's two images,
+the three gRPC stack images and the generated-driver stack). The Mac (`hvm`): 9 of 21 images and
+36 of 76 runs (redis-bridge, node-kv, python-kv, python-kv-hist, rust-kv, the shop's two images,
+the gRPC demo's two images). These are the images and runs that moved at 0.3.1, for the same
+reason. Every verdict is unchanged, and every moved run gave the same values twice. KVM's images
+carry none of these programs, so no KVM value moves.
+
+**The Qdrant test programs.** The first hvx pass took its inputs folder from an older work folder
+that predates the Qdrant example, so the stage `qdrant-flaky` stopped. Its two test programs and
+their C library were then taken from an earlier build on the bare-metal machine whose files have
+the sha256 pins of `build-test.sh`, and the two images ran again with `--only`.
