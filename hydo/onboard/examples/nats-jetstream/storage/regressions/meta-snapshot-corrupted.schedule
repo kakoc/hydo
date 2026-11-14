@@ -1,0 +1,9 @@
+# Jepsen's NATS 2.12.1 analysis, section 3.3 (nats-server issue 7556): one node's corrupted
+# metadata snapshot deletes the stream. n2 is killed before step 150, 4 KiB of its newest
+# metadata snapshot are zeroed, and it starts again before step 152. NATS finds the bad checksum,
+# drops the snapshot and replays only the log entries after it, so n2 no longer knows the
+# stream and deletes its replica as an orphan. n1 is paused and n3 is killed before step 154,
+# so n2 can become the metadata leader; then the cluster answers that the stream does not
+# exist, while n1 and n3 keep its files. Values: RESULTS.md, "One node's storage faults".
+# expect: violation
+disk=none | run G=n2@150+2:zero,len=4096,file=_meta_/snapshots P=n1@154+6 K=n3@154+120

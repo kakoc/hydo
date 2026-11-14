@@ -8976,3 +8976,78 @@ The other frictions are in open item 112 and in the section "What hydo lacked" o
 
 **Open.** The server ran as one process; the history, matching and frontend services were not
 split. Schedules and Nexus were not used. The candidate's report is not drafted.
+
+### Milestone 235 (tentative number) - DONE (one VM reaches Jepsen's NATS 2.12.1 findings 3.3 and 3.5 with the storage faults of one service on hvx; 3.2 is not reached, and what it lacks needs no second VM; nothing recorded moved; 2026-11-14)
+
+**In short.** The user asked whether hydo needs several virtual machines to reach the NATS
+JetStream findings of Jepsen's analysis of 2.12.1 that need faults of one node: corrupted files
+on one node (3.2 and 3.3) and the power loss of one node while the others run on (3.5). The user's
+words: "if we have one virtual machine, we can have several disks there and several networks;
+check it before we overcomplicate things". One VM is enough for all three. With `L=` and `G=`
+(Milestone 183), hvx reaches 3.5 and 3.3 on the bare-metal machine. 3.2 is not reached, and the
+two parts it lacks are a list form of `G=` and a larger workload, both inside one VM.
+
+**The example.** `hydo/onboard/examples/nats-jetstream/storage/` (a new folder; the Milestone 141
+folder `hydo/` is unchanged):
+
+- `hydo.yaml`: the three nodes of `hydo/hydo.yaml`, each with its store on a 128 MiB ext4 file
+  system of its own (`storage: {dir: vol/nX-data, size_mib: 128}`), NATS 2.12.1 by default,
+  `groups:` as in `hydo-groups.yaml`, 300 rounds of 500 ms, and `faults:` with `corrupt` and
+  `powerloss`. `--set conf=` picks `nats-server.conf` (the default `sync_interval` of two
+  minutes), the new `nats-server-sync-10s.conf` (Jepsen's setting for 3.5) or
+  `nats-server-sync-always.conf`.
+- `workload/parallel_driver_read`: reads the whole stream while the faults run, as Jepsen's
+  readers do. Its consumers add entries to the metadata log after each metadata snapshot, which
+  3.3 needs.
+- `checks/final_replicas_agree`: each node's replica state from its monitoring port
+  (`/jsz?accounts=true&streams=true`); a violation when the nodes still disagree 60 s after the
+  heal (Jepsen's split brain).
+- `regressions/one-node-power-loss.schedule` and `regressions/meta-snapshot-corrupted.schedule`.
+
+The new manifest is not in the explorer's identity and corpus goldens: they read the manifests
+`hydo*.yaml` at an example's top level and `hydo/hydo.yaml`, so no golden changed.
+`cargo test -p hydo-explore --test it -- identity:: corpus::` passed (3 tests) and
+`cargo test -p hydo-agents --test it public_content::` passed (2 tests), on the bare-metal
+machine.
+
+**Runs.** hvx on the bare-metal machine, with the `hydo` of the 0.3.2 Linux release in a prefix of
+this milestone's own, every VM through `~/bin/hvx-run`. The images were built there from the
+amd64 NATS images and the amd64 client (Go 1.27.3, `21b477ab…` as recorded in Milestone 141):
+default `aaf38a3b…`, 10 s `d3a83762…`, `always` `fb88948c…`. Each value below ran twice from a
+fresh boot with one fingerprint and one `ctl` value.
+
+| finding | schedule | image | verdict | fp |
+|---|---|---|---|---|
+| (none) | `disk=none \| run` | default | OK, 457 commands | `448731c9f6526288` |
+| 3.5 | `disk=none \| run P=n1@2+10 L=n2@10+2 K=n3@12+6` | default | VIOLATION, lost 4 of 207 acknowledged messages | `de74a8ee1b353f37` |
+| 3.5 | the same | 10 s | the same | `46628f4bd1bd5cc3` |
+| 3.5 | the same | `always` | OK | `77f862048f5bda9f` |
+| 3.3 | `disk=none \| run G=n2@150+2:zero,len=4096,file=_meta_/snapshots` | default | VIOLATION, the replicas diverge: n2 deleted its replica as an orphan | `47abbcc9f408cb54` |
+| 3.3 | the same and `P=n1@154+6 K=n3@154+120` | default | VIOLATION, stream lost: the cluster says the stream does not exist | `5032361f7b335d66` |
+| 3.3 | the same | `always` | the same | `0d5837bd34a54d16` |
+
+The ablations of 3.5 (each fault alone, and a kill of n2 in place of its power loss) pass; the
+pause and the kill of 3.3 without the corruption pass. 3.2 was tried with zeroed, flipped and cut
+`.blk` files of one node, on the stream leader and on followers, before and after the stream
+group's first snapshot (a copy with 600 rounds), and with the corrupted node as the only one to
+vote for. NATS repaired every case. The example's RESULTS.md, section "One node's storage
+faults", has every table, the conditions of 3.3 and the logs.
+
+**One VM or several.** None of 3.2, 3.3 and 3.5 needs a second VM. Two parts are missing for
+3.2, and both fit in one VM. The first is `G=` with a list of services: a second `G=` is refused,
+and Jepsen corrupted two of five nodes. The second is a stream larger than one 8 MB block, which
+is a matter of the workload. Two parts of a real
+power loss are milder in `L=` (open item 61): the writes Linux had written back but the disk had
+not flushed survive, and the peers see the node's connections closed at once instead of a silent
+node. Both can be closed inside one VM. Separate VMs are needed only for a separate kernel or
+clock per node, which none of the three findings uses.
+
+**The explorer.** `hydo explore --seeds 1-16 --strategy process --storage-faults
+--cluster-faults --workers 2 --no-shrink` on an earlier build of the default image found 4 failures, all reproduced.
+Each ends with the whole guest's power cut `C=300`, and the three that ran again without it
+passed: they are 3.4 again. One of them (seed 1) is new for this example: after a power cut of
+every node, n1 keeps three unacknowledged messages that n2 and n3 lack, for good. The explorer
+did not draw the narrow orders of 3.5 and 3.3; they were written by hand.
+
+**Open.** 3.2 (open item 38). The divergence of seed 1 after a cut of every node was not
+investigated. The Mac engine did not run the new folder.

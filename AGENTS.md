@@ -501,6 +501,12 @@ reaches etcd issue 19557 on hvx with `U=etcd1@5:3.6.0`, and etcd's documented pa
 3.5.26 passes. Design: `docs/design/upgrades.md`; guide: `hydo guide faults`, "Upgrades and
 rollbacks"; details: `docs/HISTORY.md` Milestone 238.
 
+**One node's storage faults on NATS (M235).** `hydo/onboard/examples/nats-jetstream/storage/`
+puts each node's store on a file system of its own. On hvx it reaches two of Jepsen's NATS 2.12.1
+findings in one VM. `P=n1@2+10 L=n2@10+2 K=n3@12+6` loses acknowledged messages (3.5), and one
+node's zeroed metadata snapshot deletes the stream (3.3). The section "One node's storage faults"
+of its RESULTS.md has the values, and what 3.2 still needs inside one VM.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -727,7 +733,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 36. [user decision] Copy-on-write VMs, a shared read-only root, and the host-call port on the Mac
     engine are not built (M138, M140).
 37. The M48 Mac boot fingerprint was never taken with the Rust engine (M147).
-38. NATS JetStream: Jepsen 3.2, 3.3 and 3.5 are not hunted; no x86_64 run (M141).
+38. NATS JetStream (M141, M235). On hvx, one VM reaches Jepsen's 3.3 and 3.5 with `G=` and
+    `L=` (`examples/nats-jetstream/storage/`); the Mac runs of 3.1 and 3.4 have no x86_64 run.
+    3.2 is not reached: NATS 2.12.1 repaired every corrupted `.blk` of one node. Two parts are
+    missing, and neither needs a second VM:
+    - A schedule corrupts one node only: a second `G=` is refused. `G=` with a list of services,
+      as `K=` takes, would corrupt two nodes in one run.
+    - The stream fits in its first 8 MB block, so a gap in the middle of the stream cannot form.
+      A workload that publishes about 80,000 messages per run would make one.
 39. [user decision] `~/hydo/build/explore-binlog-ret-xr-nq-disk.img` and old benchmark image sets
     on the bare-metal machine wait for deletion (M145, M146).
 41. [user decision] Public content: freeze-sweep results without the system they were measured on
@@ -767,7 +780,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     yet (M179, M192).
 58. `tls:` and `writable:` were not run on hvx or arm64 (M180).
 60. Ready-made SQL workloads: the MySQL dialect and arm64 ran only in unit tests (M182).
-61. Storage faults: `L=` keeps writes the disk had not flushed (M183).
+61. Storage faults: `L=` keeps writes the disk had not flushed (M183), also what Linux wrote back
+    after its default 30 s without an fsync. The peers see the node's connections closed at once,
+    not a silent node (M235).
 62. [user decision] `guest.outcomes_after_cut` stays opt-in until an epoch change (M184). The
     epoch 2 (M204) did not take it in: it was not among the defaults the user named.
 63. [user decision] Trusted publishing works since 0.3.0. The npm entry expires after two days
@@ -1374,6 +1389,11 @@ build machine, before 2026-10-13.
   full sync by its size. hydo found it blind, and it reproduced natively. The known issue 5354
   was found blind too.
   `hydo save` inside `hydo/` fixed. Nothing recorded moved
+- M235 (tentative number): one VM reaches Jepsen's NATS 2.12.1 findings 3.3 and 3.5 with the
+  storage faults of one service on hvx. A node's power loss (`L=`) loses acknowledged messages,
+  and a node's corrupted metadata snapshot (`G=`) deletes the stream. 3.2 is not reached; it
+  needs two corrupted nodes in one run and a larger stream, not a second VM. Nothing recorded
+  moved
 - M239 (tentative number): what an onboarding of a project's own binaries lacked: `ready:
   tcp:<port>`, service logs in `<run>/logs/`, and `hydo run --memory`. A memory refusal names
   the inspect sessions. `--check` warns about missing sources. The guide gained `minimum-path`,

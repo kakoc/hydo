@@ -1,0 +1,8 @@
+# Jepsen's NATS 2.12.1 analysis, section 3.5 (nats-server issue 7567): the power loss of one node
+# loses acknowledged messages. n1 is paused for steps 2 to 11, so n2 and n3 acknowledge each
+# message without it. n2 loses its power before step 10: what it had not synced is gone. n3 is
+# killed before step 12, and n1 and n2 elect a leader that lacks those messages.
+# Each fault alone, and a kill of n2 in place of its power loss, passes. Values: RESULTS.md,
+# "One node's storage faults".
+# expect: violation      (passes with --set conf=nats-server-sync-always.conf)
+disk=none | run P=n1@2+10 L=n2@10+2 K=n3@12+6

@@ -1,0 +1,26 @@
+#!/bin/sh
+# hydo-msg: every acknowledged message can be read back from the stream after the faults
+# The property of Jepsen's NATS analysis: a message that JetStream acknowledged is never lost.
+# The stream itself disappearing (the cluster answers "stream not found") is a violation;
+# a cluster that does not answer at all is "cannot evaluate now" (2).
+. /hydo/workload/helper_lib.sh
+read_out=/tmp/natsjs-read.$$
+timeout 90 $NJ read > "$read_out" 2> "$read_out.err"; rc=$?
+state=$(grep '^stream msgs=' "$read_out.err" | tail -1 | sed 's/^stream //')
+acked=$(sort -u "$HYDO_ACKED" 2>/dev/null | grep -c .)
+case $rc in
+  0) ;;
+  4) echo "stream lost: the cluster says stream jepsen does not exist (acked=$acked)"; exit 1 ;;
+  *) echo "cannot read the stream: $(tail -1 "$read_out")"; exit 2 ;;
+esac
+read_n=$(grep -c . "$read_out")
+# acknowledged values that were not read (awk, not grep -f: an empty pattern file matches every line)
+missing=$(awk 'FILENAME == ARGV[1] { seen[$0] = 1; next } $0 != "" && !($0 in seen) { print }' "$read_out" "$HYDO_ACKED" 2>/dev/null | sort -un)
+if [ -n "$missing" ]; then
+  n=$(echo "$missing" | grep -c .)
+  # the ids first; the last line (the explanation, and the explorer's signature) only counts
+  echo "lost: $(echo $missing | cut -c1-200)"
+  echo "lost $n of $acked acknowledged messages (read $read_n; $state)"
+  exit 1
+fi
+echo "acked=$acked all present (read $read_n; $state)"

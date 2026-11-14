@@ -1,0 +1,134 @@
+# The three-node NATS JetStream cluster of ../hydo/hydo.yaml, with each node's store on a file
+# system of its own (services[].storage), so that one node's files can be corrupted (G=) and one
+# node can lose its power (L=) while the others run on. RESULTS.md, "One node's storage faults".
+#
+#   sh ../hydo/fetch-images.sh                          # the images by digest (network, once)
+#   sh ../client/build.sh amd64; sh ../client/build.sh arm64
+#   hydo build hydo.yaml                                # NATS 2.12.1, default fsync (2 minutes)
+#   hydo build hydo.yaml --set conf=nats-server-sync-10s.conf      # fsync every 10 s
+#   hydo build hydo.yaml --set conf=nats-server-sync-always.conf   # fsync before every ack
+format: 1
+name: nats-jetstream-storage
+description: "NATS JetStream, three nodes, each store on its own file system: one node's corrupted files and one node's power loss"
+
+params:
+  nats: "2.12.1"               # the NATS release (../hydo/images/nats-<version>-alpine-*)
+  conf: "nats-server.conf"     # the server configuration: default fsync, -sync-10s or -sync-always
+
+network: bridge   # each service in its own network namespace at its addr:
+
+guest:
+  ram_mib: 1024
+
+data:
+  size_mib: 256   # the shared data disk: the error-log scan's files; the stores are on their own file systems
+  dirs: [vol/n1-data, vol/n2-data, vol/n3-data]
+
+root:
+  files:
+    - {src: "../{{conf}}", dst: /etc/hydo/compose/bind/0-nats-server.conf}
+    - {src: ../bin/natsjs-arm64, dst: /bin/natsjs-aarch64, mode: "0755"}
+    - {src: ../bin/natsjs-amd64, dst: /bin/natsjs-x86_64, mode: "0755"}
+  text:
+    /etc/hosts: |
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 n1
+      10.89.0.12 n2
+      10.89.0.13 n3
+
+errors: true   # NATS marks errors [ERR] and [FTL]
+
+services:
+  - name: n1
+    image: {x86_64: "../hydo/images/nats-{{nats}}-alpine-amd64.docker.tar", arm64: "../hydo/images/nats-{{nats}}-alpine-arm64-oci"}
+    image_ref: "nats:{{nats}}-alpine"
+    cmd: [nats-server, "--config", /etc/nats/nats-server.conf]
+    env:
+      NATS_NAME: "n1"
+    port: 4222
+    addr: 10.89.0.11
+    ready: "timeout 2 hydo-oci n1 wget -q -O /dev/null 'http://localhost:8222/healthz?js-enabled-only=true'"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors:
+      format: none
+      match: '\[(ERR|FTL)\]'
+    storage: {dir: vol/n1-data, size_mib: 128}   # n1's JetStream store, a file system of its own
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-nats-server.conf, dst: /etc/nats/nats-server.conf}
+      - {src: /data/vol/n1-data, dst: /data}
+  - name: n2
+    image: {x86_64: "../hydo/images/nats-{{nats}}-alpine-amd64.docker.tar", arm64: "../hydo/images/nats-{{nats}}-alpine-arm64-oci"}
+    image_ref: "nats:{{nats}}-alpine"
+    cmd: [nats-server, "--config", /etc/nats/nats-server.conf]
+    env:
+      NATS_NAME: "n2"
+    port: 4222
+    addr: 10.89.0.12
+    ready: "timeout 2 hydo-oci n2 wget -q -O /dev/null 'http://localhost:8222/healthz?js-enabled-only=true'"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors:
+      format: none
+      match: '\[(ERR|FTL)\]'
+    storage: {dir: vol/n2-data, size_mib: 128}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-nats-server.conf, dst: /etc/nats/nats-server.conf}
+      - {src: /data/vol/n2-data, dst: /data}
+  - name: n3
+    image: {x86_64: "../hydo/images/nats-{{nats}}-alpine-amd64.docker.tar", arm64: "../hydo/images/nats-{{nats}}-alpine-arm64-oci"}
+    image_ref: "nats:{{nats}}-alpine"
+    cmd: [nats-server, "--config", /etc/nats/nats-server.conf]
+    env:
+      NATS_NAME: "n3"
+    port: 4222
+    addr: 10.89.0.13
+    ready: "timeout 2 hydo-oci n3 wget -q -O /dev/null 'http://localhost:8222/healthz?js-enabled-only=true'"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors:
+      format: none
+      match: '\[(ERR|FTL)\]'
+    storage: {dir: vol/n3-data, size_mib: 128}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-nats-server.conf, dst: /etc/nats/nats-server.conf}
+      - {src: /data/vol/n3-data, dst: /data}
+
+# The nodes as a group (../hydo/hydo-groups.yaml): K=nodes.primary aims at the JetStream meta leader.
+groups:
+  - name: nodes
+    services: [n1, n2, n3]
+    primary: |
+      for n in n1 n2 n3; do
+        l=$(timeout 3 wget -q -T 2 -O - "http://$n:8222/jsz" 2>/dev/null | sed -n 's/.*"leader": *"\([a-z0-9_]*\)".*/\1/p' | head -n 1)
+        if [ -n "$l" ]; then echo "$l"; exit 0; fi
+      done
+      exit 1
+
+# the stream exists before the window under test (Jepsen's test creates it at setup)
+provision: /bin/natsjs-$(uname -m) create
+
+# 300 rounds of 500 ms: 150 s of guest time. The metadata layer takes a snapshot every minute,
+# and a node that restarts checks for orphaned streams 30 s later (section 3.3 needs both).
+workload:
+  steps: 300
+  timeout: 750
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 500
+  command_timeout: 120   # also the checks' timeout: after a node's power loss the cluster elects leaders again
+  drain_timeout: 30
+
+faults: [kill, pause, network, oneway, cut, clock, disk, corrupt, powerloss]

@@ -1,0 +1,12 @@
+#!/bin/sh
+# hydo: timeout=30
+# Read the whole stream once while the faults run, as Jepsen's readers do. Each read creates and
+# removes an ordered consumer, so the cluster's metadata log keeps growing after its snapshots
+# (the corrupted metadata snapshot of section 3.3 needs entries after it). The read's result is
+# not judged here: the checks judge the stream after the faults.
+. /hydo/workload/helper_lib.sh
+timeout 20 $NJ read > /dev/null 2> /tmp/natsjs-read-during.$$
+rc=$?
+echo "read rc=$rc $(grep '^stream msgs=' /tmp/natsjs-read-during.$$ | tail -1)"
+rm -f /tmp/natsjs-read-during.$$
+exit 0

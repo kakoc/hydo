@@ -26,8 +26,9 @@ the harness reads the stream; a value that was acknowledged and never read is lo
 
 Hunted here: 3.1 with its version pair (2.10.22 against 2.10.23), and 3.4 as a configuration
 finding (the default `sync_interval` against `sync_interval: always`, on 2.12.1 and 2.10.23). Not
-hunted: 3.2 and 3.3 (hydo has no file-corruption fault), 3.5 (hydo's power cut is the whole
-guest's: one data disk, every node at once; there is no power cut of one service).
+hunted in Milestone 141: 3.2 and 3.3 (hydo had no file-corruption fault), 3.5 (hydo's power cut was
+the whole guest's: one data disk, every node at once). Milestone 183 added both faults, and the
+section "One node's storage faults (Milestone 235)" below hunts 3.2, 3.3 and 3.5 with them.
 
 ## The project
 
@@ -260,7 +261,8 @@ has every value.
   crash-only failures shared the power cut's signature and were shrunk by hand.
   `hydo explore --schedule` runs a schedule once without shrinking it.
 - **Fault kinds for 3.2, 3.3 and 3.5.** No file-corruption fault (bit flips, truncation of one
-  node's files) and no power cut of one service (one data disk for the whole guest).
+  node's files) and no power cut of one service (one data disk for the whole guest). Milestone
+  183 added both (`G=` and `L=`); Milestone 235 used them (the last section).
 
 ## Friction log: what an outside user needed and where they looked
 
@@ -329,3 +331,184 @@ changed in hydo in this milestone (its own commit, with a test).
 17. **Shrinking a chosen run.** Two crash-only failures shared the power cut's signature, so the
    explorer did not shrink them, and `hydo explore --schedule` only runs a schedule; they were
    shrunk by hand.
+
+## One node's storage faults (Milestone 235)
+
+The question: can hydo reach Jepsen's findings 3.2, 3.3 and 3.5 in one virtual machine, with the
+two faults of Milestone 183? `G=` changes bytes of one service's files, and `L=` is the power loss
+of one service while the others run on. If it can, these findings need no second virtual machine.
+
+### The setup
+
+`storage/hydo.yaml` is the cluster of `hydo/hydo.yaml` with these changes:
+
+- Each node keeps its store on a 128 MiB ext4 file system of its own (`storage: {dir:
+  vol/n1-data, size_mib: 128}`). `L=` then takes away only that node's unwritten pages.
+- The default release is 2.12.1, the release Jepsen tested. `--set conf=` picks the
+  configuration: the default `sync_interval` (two minutes), `nats-server-sync-10s.conf` (10 s,
+  the setting of Jepsen's 3.5) or `nats-server-sync-always.conf`.
+- A second command, `workload/parallel_driver_read`, reads the whole stream while the faults run,
+  as Jepsen's readers do.
+- A second check, `checks/final_replicas_agree`, asks each node's monitoring port for its own
+  replica's state (`/jsz`). It fails when the nodes still disagree 60 s after the heal: Jepsen's
+  split brain.
+- The workload has 300 rounds of 500 ms (150 s of guest time) in place of 30 rounds.
+
+Every run used hvx on the bare-metal machine, with the `hydo` of the 0.3.2 Linux release and the
+x86_64 images built there: the first x86_64 run of this example. The images (`hydo build
+hydo.yaml`, with `--set conf=`) are `aaf38a3b…` (the default), `d3a83762…` (10 s) and
+`fb88948c…` (`always`). The schedules marked "twice" ran twice from a fresh boot and gave one
+fingerprint and one `ctl` value both times. Without faults, `disk=none | run` passes on all
+three images: 457 commands, every acknowledged message read back, and the replicas agree
+(default `448731c9f6526288` twice, 10 s `dba919e07b472b82`, `always` `eac7bd60c4dbbae9`). The
+previous build (`871f182b…`), whose only difference was the text of a regression file's
+comment, gave every schedule in these tables the same verdict and `ctl` value, and other
+fingerprints.
+
+### 3.5, reached: one node's power loss loses acknowledged messages
+
+The schedule `disk=none | run P=n1@2+10 L=n2@10+2 K=n3@12+6`
+(`regressions/one-node-power-loss.schedule`) does three things:
+
+1. n1 is paused before step 2 for 10 steps. n2, the stream leader at the start, and n3
+   acknowledge each message without n1.
+2. Before step 10, n2 loses its power. Its own file system drops the pages that Linux had not
+   written back, and NATS had synced none of them.
+3. Before step 12, n3 is killed. n1 and n2 elect a leader, and neither has the messages
+   acknowledged while n1 was paused. n3 starts again at step 18 and follows that leader.
+
+| configuration | verdict | fp | ctl |
+|---|---|---|---|
+| default `sync_interval` (2 min) | VIOLATION [acked_readable] lost 4 of 207 acknowledged messages (ids 7, 9, 10, 12), twice | `de74a8ee1b353f37` | `7d823eb14365a818` |
+| `sync_interval: 10s` | the same, twice | `46628f4bd1bd5cc3` | `5ab9496a14cd87ad` |
+| `sync_interval: always` | OK, twice | `77f862048f5bda9f` | `49e3f997eeb05da3` |
+
+After the loss the three replicas agree: the messages are gone from every node, so the check
+`replicas_agree` passes. Jepsen's run also left the nodes divergent; that part was not reproduced
+here. Each fault alone, and a kill of n2 in place of its power loss, passes (default image, one run
+each):
+
+| schedule | verdict | fp |
+|---|---|---|
+| `P=n1@2+10 K=n3@12+6` (no power loss) | OK | `37248ce30d277726` |
+| `P=n1@2+10 L=n2@10+2` (n3 keeps the messages and votes) | OK | `196a22df5d76f317` |
+| `L=n2@10+2 K=n3@12+6` (n1 votes and has the messages) | OK | `db94fd69ec478fa5` |
+| `P=n1@2+10 K=n2@10+2 X=n3@12~0` (n2 killed: its page cache stays) | OK | `b33f8b12e5df6aa4` |
+| `P=n1@2+10 L=n2@10+2 X=n3@12~0` (the same with the power loss) | VIOLATION, lost 4 of 200 | `1da471f74c1323be` |
+
+So the loss needs one node's power loss, not a kill. This is NATS's documented trade-off of
+`sync_interval` (issue 7567), as for 3.4, but here only one of the three nodes lost its power.
+
+### 3.3, reached: one node's corrupted metadata snapshot deletes the stream
+
+The schedule `disk=none | run G=n2@150+2:zero,len=4096,file=_meta_/snapshots P=n1@154+6
+K=n3@154+120` (`regressions/meta-snapshot-corrupted.schedule`):
+
+1. Before step 150, n2 is killed, 4 KiB of its newest metadata snapshot are zeroed at a seeded
+   offset, and n2 starts again before step 152. Its log: `RAFT [44jzkV9D - _meta_] Snapshot
+   corrupt, checksums did not match`. NATS deletes the snapshot and replays only the log entries after
+   it, so n2 no longer knows the stream.
+2. 30 s after its start, n2 checks for orphans and deletes its own replica: `Detected orphaned
+   stream '$G > jepsen', will cleanup`.
+3. n1 is paused and n3 is killed before step 154, so n2 becomes the metadata leader. It then
+   answers that the stream does not exist, while n1 and n3 keep the stream's files. n1 logs a
+   warning that the stream has no quorum, as Jepsen's n4 did.
+
+The quoted lines come from `hydo inspect logs` of runs on a build from before the regression
+files were written.
+
+| schedule | image | verdict | fp | ctl |
+|---|---|---|---|---|
+| `G=n2@150+2:zero,len=4096,file=_meta_/snapshots` | default | VIOLATION [replicas_agree] replicas diverge (n2: no stream; n1 and n3: every message), twice | `47abbcc9f408cb54` | `228280111090a841` |
+| the regression | default | VIOLATION [acked_readable] stream lost: the cluster says stream jepsen does not exist (acked=109), twice | `5032361f7b335d66` | `714d727a52247ef5` |
+| the regression | `always` | the same, twice | `0d5837bd34a54d16` | `9defedee0cd86a99` |
+| `P=n1@154+6 K=n3@154+120` (no corruption) | default | OK | `4eadb2c2984fd50e` | `dc3acbd00d216b96` |
+
+Three conditions are needed, and each was checked on copies of the manifest:
+
+- **A metadata snapshot that holds the stream.** At step 10 the newest snapshot is `snap.2.4`
+  (log index 4, taken while the cluster formed), and corrupting it, with zeros, a flip or a cut,
+  passed. The metadata layer takes a snapshot every minute; at step 150 (75 s) the newest one is
+  `snap.2.166`.
+- **Metadata entries after the snapshot.** Without the readers, nothing adds entries after the
+  stream is created, and the node gets the whole state from the leader again. The same schedule
+  on a copy without `parallel_driver_read` passed.
+- **The corrupted node as the metadata leader**, for the loss of the whole stream. Without it,
+  the cluster keeps the stream on two nodes and only the replicas diverge. Six variants of the
+  pause and the kill ran on a build of this manifest from before its regression files were
+  written. They started at step 154, 156 or 158 and paused n1 for 3 or 6 steps. Five lost the
+  stream, and one diverged. The image's bytes move NATS's elections, so such a variant can change its verdict
+  between builds; the divergence of the first row does not depend on the election.
+
+On that build, `flip` and `trunc` of the snapshot lost the stream too. The fsync setting does not
+matter: the `always` image loses it the same way.
+
+### The explorer with these faults
+
+`hydo explore --seeds 1-16 --strategy process --storage-faults --cluster-faults --workers 2
+--no-shrink --errors-shrink 0` ran on the previous build of the default image (`871f182b…`)
+and took 584 s. Of its 16 schedules, 10 had a `G=`, 7 an `L=` (12 at least one of them) and 5 the whole guest's power cut. It found 4 failures,
+each reproduced:
+
+| seeds | class | verdict |
+|---|---|---|
+| 5, 6 | `corrupted-files` | lost 1 of 171 and lost 6 of 214 acknowledged messages |
+| 12 | `durable-defaults` | lost 8 of 149 acknowledged messages (ids 284 to 299) |
+| 1 | `durable-defaults` | the replicas diverge: n1 holds 224 messages, n2 and n3 hold 221; every acknowledged message is there |
+
+All four schedules end with the whole guest's power cut `C=300`, the last step. Seeds 1, 5, and 6
+ran again without `C=300`, and each passed, and so did seed 1 without its `L=` too. So the losses
+are 3.4: the default `sync_interval` and a power cut of every node. Seed 1 is new for this
+example: after a power cut of every node, one node keeps three unacknowledged messages that the
+others lack, for good. Its schedule is `disk=cut dseed=4127cc1347fae6ba | run K=n2@52+20
+N=n2-*@294-299:loss,72% C=300 P=n1@145+4 T=191:30 W=3e71cf9e,p1,q2,r1000 L=n1@76+3`, and it
+was not investigated further. The exploration did not draw the schedules of 3.5 or 3.3; both need
+faults in a narrow order on chosen nodes, written by hand in the preceding sections. The explorer was run without
+shrinking, because each run is 150 s of guest time.
+
+### 3.2, not reached: corrupted `.blk` files of one node
+
+NATS 2.12.1 repaired every corruption of one node's `.blk` files that was tried. These runs used
+copies of the manifest from before the readers were added. The copies had 30 or 600 rounds. The 600 rounds
+(300 s) matter because a stream group takes its first snapshot two to three minutes after it
+starts. Only then does it drop the older entries of its log, the copy a node could repair its
+store from. At step 560 that snapshot existed (`S-R3F-upVsQPWE/snapshots/snap.1.506`). Every run
+passed both checks, with all acknowledged messages present on every node:
+
+| fault (all on the stream's `msgs/1.blk`) | and then |
+|---|---|
+| `G=n1@10+2:flip`, `zero,len=4096`, `trunc`, `flip,n=32` (30 rounds, before any stream snapshot) | `K=n3@14+4` (the stream leader) |
+| `G=n3@10+2:zero,len=4096` (the stream leader itself) | nothing |
+| `G=n1@10+2:zero,len=4096,file=upVsQPWE/msgs` (the stream group's own log) | `K=n3@14+4` |
+| `G=n1@560+2:zero,len=4096`, `flip,n=4`, `trunc` (after the stream snapshot) | `K=n3@563+4` |
+| `G=n2@560+2:zero,len=4096`, `flip,n=4` | `K=n3@563+4` |
+| `G=n1@560+2:zero,len=4096`, `flip,n=4`; `G=n1@560+1:trunc` | `P=n2@562+4 K=n3@562+4` (n1 the only node to vote for) |
+
+The corrupted node's log shows the repair (`Stream state outdated, last block has additional
+entries, will rebuild`), and after the heal its replica agrees with the others. Two differences
+from Jepsen's runs explain why the loss did not happen here:
+
+- **Two corrupted nodes.** Jepsen's runs corrupted one or two of five nodes, and the split brain
+  of 3.2 had corruption on n1 and n3. A hydo schedule corrupts one node: a second `G=` is refused
+  (`G= appears more than once in the schedule; one G= token per schedule`).
+- **Many blocks.** Jepsen's stream held about 1.4 million messages. NATS cuts a block at its first
+  bad message, and a gap in the middle of the stream is not filled from the peers (a maintainer's
+  comment on issue 7549). This stream holds about 900 messages, all in its first block, so a
+  corrupted block is always the last one, and the normal catch-up refills it.
+
+### One virtual machine or several
+
+| what the finding needs | in one VM today | the change inside one VM |
+|---|---|---|
+| one node loses what it had not synced, the others run on (3.5) | yes: `L=` on the node's own file system | none |
+| one node's files corrupted (3.2, 3.3) | yes: `G=` | none |
+| two nodes' files corrupted in one run (3.2, and 3.3 on five nodes) | no: one `G=` per schedule | `G=` takes a list of services, as `K=` does (`G=n1,n3@...`): the token in `hydo-schedule`, one corruption per service in the controller, the explorer's draw. No engine, module or agent change, and no recorded value moves, because the list form is new |
+| more than one block of stream data per node (3.2's gap in the middle) | the workload's size | a command that publishes in batches, about 80,000 messages of 100 bytes (more than an 8 MB block); no hydo change |
+| five nodes (most of Jepsen's runs) | a manifest with five services | guest RAM: the three nodes ran in 1 GiB |
+| writes the kernel had handed to the disk but not flushed are lost at the power loss (open item 61) | no: `L=` keeps them. Jepsen's LazyFS drops every write that was not fsynced, also one that Linux wrote back after its default 30 s | the engines drop the unflushed writes of the node's partition (option 2 of docs/design/storage-faults.md), or the manifest's `provision` turns off the kernel's periodic writeback (`vm.dirty_writeback_centisecs=0`) |
+| the peers see the node go silent | no: the guest's kernel closes the dead node's connections, so the peers see them closed at once | `L=` cuts the node's link (a network fault) for the time it is down |
+
+Separate virtual machines are needed only for a separate kernel or a separate clock per node:
+one node's kernel crash, one node's memory pressure, or clocks that drift apart. Linux keeps one
+realtime clock per kernel; its time namespaces move only the monotonic and boot clocks. None of
+3.2, 3.3 and 3.5 needs them.
