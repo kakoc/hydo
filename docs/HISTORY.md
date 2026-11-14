@@ -7756,7 +7756,8 @@ the dry run of `release.yml` passed on `main`:
 - the Homebrew tap, commit `411265d`: `brew install`, `hydo doctor` (all checks passed),
   `brew test` and `brew audit --strict --online` passed;
 - the release index on `main` (`03e64844`), with the line for `guest/bzImage-kvm-smp`;
-- the registries through `release.yml` on the tag: it was running when this was written (the
-  check, PyPI and npm done, the crates building).
+- the registries through `release.yml` on the tag (run 43566359759, every job passed): crates.io
+  has `hydo` and `hydo-assert` 0.3.2, PyPI and npm have `hydo-assert` 0.3.2, and the Go tag
+  `sdk/go/v0.3.2` exists.
 
 The draft release `candidate-0.3.2` and the branch `tmp-rel-032-kvm` are deleted.
