@@ -917,6 +917,11 @@ fn make_pool(cx: &Cx) -> Pool {
         onboard: cx.env.root.join("hydo").join("onboard"),
         known: cx.known.clone(),
         pool: cx.env.config.pool.clone(),
+        contracts: match hydo_contracts::plan::plan_of_image(&spec.image) {
+            Some(Ok(p)) => Some(Arc::new(p)),
+            Some(Err(e)) => die(&format!("hydo: {e}")),
+            None => None,
+        },
     };
     let (cache_image, cache_engine) = if cx.env.config.pool.cache.is_some() {
         cache_identity(cx)

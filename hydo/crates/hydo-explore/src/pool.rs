@@ -57,6 +57,8 @@ pub struct Host {
     pub known: Option<Known>,
     /// The quiet window and the result cache (`hydo_config::run::Pool`).
     pub pool: hydo_config::run::Pool,
+    /// The image's function contracts (`<image>.contracts.json`, Milestone 241).
+    pub contracts: Option<std::sync::Arc<hydo_contracts::plan::Plan>>,
 }
 
 pub struct Pool {
@@ -245,6 +247,19 @@ pub fn host_errlog(h: &Host, tag: &str, text: &str, res: &mut Res) {
     if let Some(an) = errlog::analyse(&prefix, text, known) {
         res.insert(crate::results::ERRLOG.into(), an.to_json());
         hydo_errors::apply(res, Some(&an), known);
+    }
+}
+
+/// The function contracts of a run (Milestone 241): the engine's records judged with the
+/// image's plan; a broken clause is a finding and turns an OK verdict into a VIOLATION.
+pub fn host_contracts(h: &Host, tag: &str, res: &mut Res) {
+    let Some(plan) = &h.contracts else { return };
+    let p = h
+        .outdir
+        .join("consoles")
+        .join(format!("{tag}{}", hydo_contracts::plan::RECORDS_SUFFIX));
+    if let Err(e) = crate::contracts::fold(plan, &p, res) {
+        eprintln!("hydo-explore: contracts of {tag}: {e}");
     }
 }
 
@@ -742,6 +757,7 @@ fn worker_main(
         }
         if !py_str(&res["verdict"]).starts_with("ERROR worker") {
             host_checks(&h, &job.tag, &mut res);
+            host_contracts(&h, &job.tag, &mut res);
             host_errlog(&h, &job.tag, &job.text, &mut res);
         }
         let _ = job.reply.send((job.tag, job.text, res));

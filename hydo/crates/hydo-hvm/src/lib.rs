@@ -45,6 +45,9 @@ pub mod layout;
 pub mod machine;
 pub mod virtio;
 
+/// Function contracts: breakpoints and reads (Milestone 241).
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod contracts;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod hv;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

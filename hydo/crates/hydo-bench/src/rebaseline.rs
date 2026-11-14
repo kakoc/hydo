@@ -758,6 +758,7 @@ fn pool_for(o: &Opts, image: &Path, workers: usize, outdir: &Path) -> Result<Poo
         onboard: o.root.join("hydo").join("onboard"),
         known: None,
         pool: cfg.pool.clone(),
+        contracts: None,
     };
     Ok(Pool::new(
         engine,

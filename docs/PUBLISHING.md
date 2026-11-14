@@ -22,7 +22,7 @@ version is `hydo/VERSION`'s. A run by hand without `dry_run` must be on the tag.
 |---|---|---|
 | `check` | the tag's version equals `hydo/VERSION`, the workspace's, every `hydo-*` entry of `[workspace.dependencies]` (not `hydo-agent-proto`, which keeps its own) and every SDK's (`hydo/dist/registries.sh versions`); the GitHub release of the tag is published with the four tarballs and `SHA256SUMS`, and `SHA256SUMS` names every tarball (`registries.sh release`; for a pushed tag it waits up to 45 minutes; a dry run only warns); it prints what each registry already has and what the run would publish | `contents: read` |
 | `packages` | `.github/workflows/packages.yml` (below): every package packed and checked, and `cargo install hydo` rehearsed, on Linux and macOS; it builds the Python sdist and wheel that the `pypi` job uploads | `contents: read` |
-| `crates` | the 20 crates of `cargo install hydo` in this document's order (the `cargo publish --registry crates-io -p` lines below), then `hydo-assert` (`sdk/rust`), with `cargo publish --locked --no-verify` (the `packages` job built every package); a token from `rust-lang/crates-io-auth-action` (a trusted-publishing token lives 30 minutes: the job stops starting crates after 20 minutes and takes a second token for the rest) | `contents: read`, `id-token: write`; environment `release` |
+| `crates` | the 21 crates of `cargo install hydo` in this document's order (the `cargo publish --registry crates-io -p` lines below), then `hydo-assert` (`sdk/rust`), with `cargo publish --locked --no-verify` (the `packages` job built every package); a token from `rust-lang/crates-io-auth-action` (a trusted-publishing token lives 30 minutes: the job stops starting crates after 20 minutes and takes a second token for the rest) | `contents: read`, `id-token: write`; environment `release` |
 | `pypi` | the sdist and wheel from the `packages` job, with `pypa/gh-action-pypi-publish` (trusted publishing, attestations on) | `id-token: write`; environment `release` |
 | `npm` | `npm publish --provenance --access public --registry https://registry.npmjs.org/` in `sdk/js`, with npm 11.21.0 on Node 22 (npm's trusted publishing needs npm 11.5.1 or later and Node 22.14.0 or later) | `contents: read`, `id-token: write`; environment `release` |
 | `go` | the annotated tag `sdk/go/v<version>` on the tagged commit (through the GitHub API, with the workflow's own token), then one fetch of the version through `proxy.golang.org` | `contents: write`; environment `release` |
@@ -282,7 +282,8 @@ assertion SDKs have their own publishing steps.
 
 The package `hydo` (its directory is `hydo/crates/hydo-cli`, whose package was named
 `hydo-cli` before Milestone 169) and the 19 workspace crates it depends on, each under its own
-name. All 20 names were free on crates.io on 2026-11-07:
+name. All 20 names were free on crates.io on 2026-11-07, and `hydo-contracts` (Milestone 241)
+joined them later:
 
 | crate | what it is |
 |---|---|
@@ -294,6 +295,7 @@ name. All 20 names were free on crates.io on 2026-11-07:
 | `hydo-image` | the image records and how a run finds its guest kernel |
 | `hydo-results` | the results format |
 | `hydo-history` | the history checkers |
+| `hydo-contracts` | function contracts: the `// hydo:` comments, the plan, the judgement |
 | `hydo-engine-proto` | the calls between hydo and its engines |
 | `hydo-hvx` | the hvx engine (Linux, `/dev/hvx`) |
 | `hydo-hvm` | the Mac engine (Hypervisor.framework) |
@@ -473,6 +475,7 @@ cargo publish --registry crates-io -p hydo-manifest
 cargo publish --registry crates-io -p hydo-image
 cargo publish --registry crates-io -p hydo-results
 cargo publish --registry crates-io -p hydo-history
+cargo publish --registry crates-io -p hydo-contracts
 cargo publish --registry crates-io -p hydo-engine-proto
 cargo publish --registry crates-io -p hydo-hvx
 cargo publish --registry crates-io -p hydo-hvm
@@ -491,8 +494,8 @@ cargo publish --registry crates-io -p hydo
 If a command stops (a network error, the rate limit), run it again: an already published crate
 is refused with "already exists", which is safe to skip. `cargo publish --dry-run` of a single
 crate works only for a crate whose dependencies are already on crates.io (`hydo-config`,
-`hydo-schedule`, `hydo-agent-proto`, `hydo-manifest`, `hydo-image`, `hydo-results` and
-`hydo-history` have none); the rehearsal is the dry run of the others.
+`hydo-schedule`, `hydo-agent-proto`, `hydo-manifest`, `hydo-image`, `hydo-results`,
+`hydo-history` and `hydo-contracts` have none); the rehearsal is the dry run of the others.
 
 Publish the crates after the version's GitHub release exists (docs/RELEASING.md): a
 `cargo install hydo` of a version whose release archive is not there yet installs a `hydo`

@@ -231,6 +231,8 @@ pub struct Vmm {
     wd: Option<std::thread::JoinHandle<()>>,
     pub diag: Diag,
     vm_live: bool,
+    /// Function contracts (`HYDO_CONTRACTS`, Milestone 241): in no snapshot and no fingerprint.
+    pub ct: Option<Box<crate::contracts::Ct>>,
 }
 
 /// The guest RAM view the devices use.
@@ -317,6 +319,7 @@ impl Vmm {
             wd,
             diag,
             vm_live: false,
+            ct: None,
         };
         if VM_HELD.swap(true, Ordering::SeqCst) {
             fatal(
@@ -1037,19 +1040,24 @@ impl Vmm {
         }
         self.m.stepping = 1;
         self.m.n_step_runs += 1;
-        self.m.mdscr_saved = self.v().sys(sr::MDSCR_EL1, self.m.mdscr_saved);
+        // without the contracts' breakpoint bit (M241): the saved value is in the fingerprint
+        self.m.mdscr_saved = self.v().sys(sr::MDSCR_EL1, self.m.mdscr_saved) & !self.ct_mde();
     }
     fn stop_stepping(&mut self) {
         self.m.stepping = 0;
         self.v().set_sys(
             "hv_vcpu_set_sys_reg(vcpu, HV_SYS_REG_MDSCR_EL1, M.mdscr_saved)",
             sr::MDSCR_EL1,
-            self.m.mdscr_saved,
+            self.m.mdscr_saved | self.ct_mde(),
         );
         self.wr(HV_REG_CPSR, self.rd(HV_REG_CPSR) & !(1u64 << 21));
     }
     pub fn apply_stepping(&mut self) {
-        let want = self.m.stepping != 0 || self.sp.ob_on || self.sp.ob_stepover || self.sp.rp_on;
+        let want = self.m.stepping != 0
+            || self.sp.ob_on
+            || self.sp.ob_stepover
+            || self.sp.rp_on
+            || self.ct.as_ref().is_some_and(|c| c.armed());
         let w = want as i32;
         if self.sp.trap_dbg_applied != w {
             self.v().trap_debug_exceptions(want);
@@ -1059,7 +1067,7 @@ impl Vmm {
             self.v().set_sys(
                 "hv_vcpu_set_sys_reg(vcpu, HV_SYS_REG_MDSCR_EL1, M.mdscr_saved | 1 | (1 << 13))",
                 sr::MDSCR_EL1,
-                self.m.mdscr_saved | 1 | (1 << 13),
+                self.m.mdscr_saved | 1 | (1 << 13) | self.ct_mde(),
             );
             self.wr(HV_REG_CPSR, self.rd(HV_REG_CPSR) | (1u64 << 21));
         }
@@ -1154,6 +1162,18 @@ impl Vmm {
         marker: Option<&[u8]>,
         hook: &mut dyn FnMut(&mut Vmm) -> bool,
     ) -> i32 {
+        // the contracts' breakpoints are in the vCPU only while the guest runs (M241)
+        self.ct_arm();
+        let r = self.run_until_inner(marker, hook);
+        self.ct_disarm();
+        r
+    }
+
+    fn run_until_inner(
+        &mut self,
+        marker: Option<&[u8]>,
+        hook: &mut dyn FnMut(&mut Vmm) -> bool,
+    ) -> i32 {
         let mlen = marker.map(|m| m.len()).unwrap_or(0);
         let mut scan_from = 0usize;
         let mut resume = false;
@@ -1203,7 +1223,15 @@ impl Vmm {
                 self.sp.kicks += 1;
                 resume = true;
                 let obs = self.watch.observe;
-                if obs && (self.m.stepping != 0 || self.sp.ob_stepover || self.sp.rp_on) {
+                // a contract's step in progress, or the guest at a contract's breakpoint: the
+                // observer would put its own breakpoint there (M241)
+                let pc_now = self.rd(HV_REG_PC);
+                if obs
+                    && (self.m.stepping != 0
+                        || self.sp.ob_stepover
+                        || self.sp.rp_on
+                        || self.ct_busy(pc_now))
+                {
                     continue;
                 }
                 if obs
@@ -1230,6 +1258,11 @@ impl Vmm {
             }
             let e2 = (e.syndrome >> 26) & 0x3f;
             let in_ram = e.pa >= RAM_BASE && e.pa < RAM_BASE + self.ram_size;
+            if e.reason == hv::HV_EXIT_REASON_EXCEPTION && self.ct_exit(e2) {
+                // a contract's breakpoint or its step: not the guest's exit, no time passes
+                resume = true;
+                continue;
+            }
             if e.reason == hv::HV_EXIT_REASON_EXCEPTION
                 && self.sp.rw_on
                 && self.sp.ck_valid
@@ -1435,6 +1468,12 @@ impl Vmm {
             s.dbg[i] = val;
             s.dok[i] = (rc == 0) as u8;
         }
+        // the guest's own debug state, not the contracts' breakpoints (M241)
+        let k = SR
+            .iter()
+            .position(|&r| r == sr::MDSCR_EL1)
+            .expect("MDSCR_EL1 in SR");
+        (s.sr[k], s.cpsr) = self.ct_mask(s.sr[k], s.cpsr);
         s
     }
     pub fn vput(&self, s: &VSnap) {

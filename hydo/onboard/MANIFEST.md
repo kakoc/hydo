@@ -314,6 +314,10 @@ steer:                         # numbers in the console that say how close a run
 perf:                          # a performance test (see "Performance tests (`perf:`)" below):
   steps: true                  #   each step its own workload call and measure (default true)
   threshold: 0.5               #   hydo perf compare: a smaller change in percent is no change
+
+contracts:                     # function contracts: `// hydo:` comments in a program's sources
+  - program: /bin/ledger       #   (see "Function contracts" below); a dst of root.files
+    sources: [rust/src]        #   folders (or files) of its sources, relative to the manifest
 # and per service, under services[]:
 #   errors:
 #     format: auto             # auto (default: ERROR/FATAL/level=error/panic: ...) | redis | none
@@ -1207,6 +1211,42 @@ perf:
 The key changes nothing in the guest's files. A run of an image with it sends other commands
 than a run without it, so its fingerprints are its own. The example is
 `hydo/onboard/examples/perf-kv`.
+
+### Function contracts (`contracts:`)
+
+`contracts:` names programs whose sources carry `// hydo:` comments next to functions. `hydo
+build` reads each program's debug information and writes the plan `<image>.contracts.json` next
+to the image. The Mac engine then stops at every call of each contracted function. It reads
+the arguments at entry and the fields and the result at return, and changes nothing in the guest
+(docs/design/contracts.md).
+
+```yaml
+root:
+  files:
+    - {src: bin/ledger-rs, dst: /bin/ledger, mode: "0755"}
+contracts:
+  - program: /bin/ledger       # a dst of root.files; its src is read for the debug information
+    sources: [rust/src]        # every .rs, .go, .c, .h, .cc and .cpp file in them is read
+```
+
+The comments, right before a function declaration:
+
+```rust
+// hydo: requires amount > 0
+// hydo: ensures req_id > old(l.last_req) || l.balance == old(l.balance)
+// hydo: ensures result == l.balance
+// hydo: input amount in 1..=10_000
+#[inline(never)]
+fn apply(l: &mut Ledger, c: &mut Conn, req_id: u64, amount: u64) -> u64
+```
+
+A broken clause makes the run's verdict `VIOLATION [contract <function>] <clause> (<file>:<line>)`
+and adds a finding of kind `contract` to `result.json`. Build the program with its debug
+information (Rust: `debug = true` in the release profile; Go keeps it unless linked with
+`-ldflags=-w`). The first version stops only at a function of its own: a function that the
+compiler copied into its callers is listed by `hydo build` as not checked. It reads integers,
+booleans, pointers and fields through pointers, has no calls in expressions, and runs on the
+Mac engine only. The example is `hydo/onboard/examples/contracts-ledger`.
 
 ### Service networks (`network: bridge`)
 

@@ -452,7 +452,7 @@ impl Vmm {
     }
     pub fn ob_arm(&mut self, pc: u64) {
         if !self.sp.ob_on {
-            self.sp.ob_mdscr = self.v().sys(sr::MDSCR_EL1, self.sp.ob_mdscr);
+            self.sp.ob_mdscr = self.v().sys(sr::MDSCR_EL1, self.sp.ob_mdscr) & !self.ct_mde();
             self.sp.ob_bvr = self.v().sys(sr::DBGBVR0_EL1, self.sp.ob_bvr);
             self.sp.ob_bcr = self.v().sys(sr::DBGBCR0_EL1, self.sp.ob_bcr);
             self.sp_protect(true);
@@ -496,7 +496,7 @@ impl Vmm {
         self.set_sr(
             "hv_vcpu_set_sys_reg(MDSCR_EL1)",
             sr::MDSCR_EL1,
-            self.sp.ob_mdscr,
+            self.sp.ob_mdscr | self.ct_mde(),
         );
         self.wr(HV_REG_CPSR, self.rd(HV_REG_CPSR) & !(1u64 << 21));
         self.sp.dirty.clear();
@@ -740,7 +740,7 @@ impl Vmm {
                 self.ck_rewind();
                 self.sp.rp_pc = pstar;
                 self.sp.rp_on = true;
-                self.sp.ob_mdscr = self.v().sys(sr::MDSCR_EL1, self.sp.ob_mdscr);
+                self.sp.ob_mdscr = self.v().sys(sr::MDSCR_EL1, self.sp.ob_mdscr) & !self.ct_mde();
                 self.sp.ob_bvr = self.v().sys(sr::DBGBVR0_EL1, self.sp.ob_bvr);
                 self.sp.ob_bcr = self.v().sys(sr::DBGBCR0_EL1, self.sp.ob_bcr);
                 self.v().trap_debug_reg_accesses(true);
@@ -813,7 +813,7 @@ impl Vmm {
         self.set_sr(
             "hv_vcpu_set_sys_reg(MDSCR_EL1)",
             sr::MDSCR_EL1,
-            self.sp.ob_mdscr,
+            self.sp.ob_mdscr | self.ct_mde(),
         );
         self.wr(HV_REG_CPSR, self.rd(HV_REG_CPSR) & !(1u64 << 21));
         self.v().trap_debug_reg_accesses(false);

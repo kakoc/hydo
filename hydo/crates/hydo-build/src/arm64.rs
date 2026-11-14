@@ -491,6 +491,7 @@ pub fn build(
         &p.oci,
         io,
     )?;
+    crate::contracts::write_plan(&m, manifest_path, &cpio, io)?;
     if netns_k {
         let mut why = Vec::new();
         if netns {

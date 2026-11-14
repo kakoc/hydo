@@ -1,0 +1,42 @@
+# Function contracts (docs/design/contracts.md): the Rust account server of rust/src/main.rs,
+# whose function `apply` carries `// hydo: requires` and `// hydo: ensures` comments. hydo checks
+# them at every call while the system runs under faults; the program's code and build stay as
+# they are, with the debug information kept (Cargo.toml: `debug = true`).
+# Build: ./build.sh (arm64, the Mac engine; ./build.sh x86_64 for hvx and KVM), then
+#   hydo build hydo.yaml
+# Try:  disk=none | run                -> OK: every call keeps the contract
+#       disk=none | run P=ledger@5+2   -> VIOLATION [contract ledger::apply] ensures ...: the
+#         server is paused, the client's answer is late, its retry on a new connection debits
+#         the same request again. The end-to-end check (the server answers) passes.
+# hydo-go.yaml is the same example with the Go server of go/main.go.
+name: contracts-ledger
+description: an account server whose debit function carries a contract; a retry after a late answer debits twice.
+
+root:
+  files:
+    - {src: bin/ledger-rs, dst: /bin/ledger, mode: "0755"}   # ./build.sh
+
+contracts:
+  - program: /bin/ledger
+    sources: [rust/src]
+
+services:
+  - name: ledger
+    cmd: /bin/ledger serve 7070
+    ready: /bin/ledger balance 7070
+    port: 7070
+
+workload:
+  steps: 12                         # step i = debit request i of 10
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if /bin/ledger debit 7070 $((i + 1)) 10 > /dev/null; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: ledger.answers
+    msg: the server answers with a balance after the run
+    cmd: /bin/ledger balance 7070

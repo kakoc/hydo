@@ -84,6 +84,8 @@ pub mod kind {
     pub const HISTORY_CHECK: &str = "history-check";
     /// An error kind in a service's log (`errors:` in the manifest).
     pub const ERROR_LOG: &str = "error-log";
+    /// A function contract's clause broken at a call (`// hydo:` comments, Milestone 241).
+    pub const CONTRACT: &str = "contract";
 }
 
 /// The values of [`Finding::status`] hydo writes.

@@ -137,6 +137,11 @@ variables! {
     /// pointer there); `hydo inspect events` and `hydo diff` read it (Milestone 208; the KVM and
     /// Mac engines). Only registers are read: no fingerprint moves.
     HYDO_PREEMPT_RECORD: Engine, User, "flag: set and not `0`", "off", "hydo-kvm, hydo-hvm";
+    /// The function contracts' plan (`<image>.contracts.json`, Milestone 241): the engine stops
+    /// at each contracted function's entry and return, makes the plan's reads there, and writes
+    /// `<tag>.contracts.jsonl`, one record per call. hydo sets it for an image with a plan; the
+    /// guest sees nothing, so no fingerprint moves.
+    HYDO_CONTRACTS: Engine, User, "path", "", "hydo-engine, hydo-hvm";
 
     // ------------------------------------------------------------------ HvxEngine
     /// `0` turns the host-call port off (M138; on by default since M140).

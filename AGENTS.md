@@ -507,6 +507,16 @@ findings in one VM. `P=n1@2+10 L=n2@10+2 K=n3@12+6` loses acknowledged messages 
 node's zeroed metadata snapshot deletes the stream (3.3). The section "One node's storage faults"
 of its RESULTS.md has the values, and what 3.2 still needs inside one VM.
 
+**Function contracts (M241, a prototype on the Mac engine).** `// hydo: requires` and `ensures`
+comments next to a function, with `old()` and `result`, are checked at every call. The
+manifest's `contracts:` names the program and its sources. `hydo build` compiles the plan
+`<image>.contracts.json` from the program's DWARF (crate `hydo-contracts`). The Mac engine stops
+at hardware breakpoints and only reads. A run with the plan has the fingerprint of the run
+without it, and a broken clause is a `contract` finding and a `VIOLATION`. On hvx, uprobes
+changed the fingerprint. The example is `hydo/onboard/examples/contracts-ledger`; the design and
+the measurements are `docs/design/contracts.md`. A stop costs 4.8 µs on the Mac (open item
+113).
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -1008,6 +1018,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     a container; Temporal's entrypoint needed `TEMPORAL_BROADCAST_ADDRESS`. A check cannot tell
     whether its run had a clock step; the example's client records the clock it saw. The
     history, matching and frontend services ran in one process, not apart.
+113. Function contracts (M241). hvx and KVM have no breakpoints for contracts yet, and a
+    position-independent program needs its load address there. A run judges at most 100,000
+    calls, and the report does not say when it stopped recording.
 
 ## Milestone index
 
@@ -1437,6 +1450,11 @@ build machine, before 2026-10-13.
   from the engine's `HYDO_WORK_RECORD`), and `hydo perf compare` names each change in words. On
   hvx 0.1 % more handler work showed as +0.088 % in every run, and an unchanged build as 0.000 %.
   Nothing recorded moved
+- M241 (tentative number): function contracts, a prototype. `// hydo: requires` and `ensures`
+  comments, compiled with DWARF into a plan; the Mac engine checks every call at hardware
+  breakpoints without changing the run (4 of 4 fingerprints equal). A planted double debit
+  breaks `ensures` only under a pause or a lost answer (Rust and Go). uprobes on hvx cost
+  6.9 µs per stop and change the fingerprint. Nothing recorded moved
 
 ## Where to look
 

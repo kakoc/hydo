@@ -25,6 +25,8 @@ hydo-engine-proto = { workspace = true }
 hydo-schedule = { workspace = true }
 # the engine's options, read once by the program's main (M144)
 hydo-config = { workspace = true }
+# function contracts: the plan it follows and the records it writes (M241)
+hydo-contracts = { workspace = true }
 
 [[bin]]
 name = "hydo-hvm"

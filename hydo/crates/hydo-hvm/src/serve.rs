@@ -1132,6 +1132,9 @@ impl Engine {
         self.h.spin_hit = false;
         let base = self.vm.sp.rw_on;
         self.vm.sp.rw_on = self.h.snaps[i].rw;
+        if let Some(ct) = self.vm.ct.as_mut() {
+            ct.begin();
+        }
         self.run_rest(rs);
         self.vm.sp.rw_on = base;
         if self.h.c.on {
@@ -1192,6 +1195,9 @@ impl Engine {
             self.vm.pct = Pct::set(pct_seed, pct_n, x, x.wrapping_add(pct_k));
         }
         self.vm.pct_log = (pct_n != 0 && self.h.o.preempt_record).then(Vec::new);
+        if let Some(ct) = self.vm.ct.as_mut() {
+            ct.begin();
+        }
         self.run_rest(rs);
     }
 
@@ -1282,6 +1288,9 @@ impl Engine {
                 fatal(3, "hvmx: a power cut without the host's S0 snapshot");
             };
             xsnap_restore(&mut self.vm, &self.h.snaps[s0].x, check);
+            if let Some(ct) = self.vm.ct.as_mut() {
+                ct.cut();
+            }
             if let (Some(d), Some(du)) = (&mut self.vm.vio.disk, durable) {
                 *d = du;
             }
@@ -1320,6 +1329,9 @@ impl Engine {
                 k.nstop, k.ntyped, k.inh
             ));
             cap(&mut tjinfo);
+        }
+        if let Some(ct) = self.vm.ct.as_mut() {
+            ct.finish(std::path::Path::new(&self.h.outdir), &tag);
         }
         self.result(
             &tag,
@@ -1557,6 +1569,7 @@ fn engine_main(
     let outdir = start.outdir.display().to_string();
     let _ = std::fs::create_dir(&outdir);
     let mut vo = opts_from(o, true);
+    let o_contracts = o.contracts.clone();
     vo.ram_size = ram_mib << 20;
     if ram_mib != 1024 {
         say(&diag, &format!("hvmx: guest RAM {ram_mib} MiB"));
@@ -1584,7 +1597,15 @@ fn engine_main(
         no_mlock: o.no_mlock,
         preempt_record: o.preempt_record,
     };
-    let vm = Vmm::new(&vo, &kernel, &initrd, diag.clone(), echo, !o.no_mlock);
+    let mut vm = Vmm::new(&vo, &kernel, &initrd, diag.clone(), echo, !o.no_mlock);
+    // M241: the function contracts' plan, when the image has one
+    if let Some(p) = &o_contracts {
+        let plan = hydo_contracts::plan::read_plan(std::path::Path::new(p))
+            .unwrap_or_else(|e| fatal(1, &format!("hvmx: contracts: {e}")));
+        let ct = crate::contracts::Ct::from_plan(&plan)
+            .unwrap_or_else(|e| fatal(1, &format!("hvmx: contracts: {e}")));
+        vm.ct = Some(Box::new(ct));
+    }
     drop(kernel);
     drop(initrd);
     let t0 = now_s();

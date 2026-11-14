@@ -25,6 +25,7 @@
 
 pub mod agent;
 pub mod arm64;
+pub mod contracts;
 pub mod cpio;
 pub mod elfdeps;
 pub mod fsx;

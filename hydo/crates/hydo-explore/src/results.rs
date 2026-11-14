@@ -67,6 +67,10 @@ pub const CHECK_RECORDS: &str = "_check_records";
 pub const ERRLOG: &str = "_errlog";
 /// The messages checks' reports (hydo_history::Checks::messages, as JSON values).
 pub const MESSAGES: &str = "_messages";
+/// The function contracts' findings (kind `contract`, Milestone 241).
+pub const CONTRACTS: &str = "_contracts";
+/// How many calls the function contracts judged ({calls, without_return}).
+pub const CONTRACT_CALLS: &str = "_contract_calls";
 
 /// A result without the host-only keys (what a tool that prints a result map shows).
 pub fn public(r: &Res) -> Res {
@@ -415,6 +419,12 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
     findings.extend(assertion_findings(&merged_text(&texts, r)));
     attach_check_outputs(&mut findings, &texts.concat());
     if let Some(Value::Array(fs)) = r.get(CHECKS) {
+        findings.extend(
+            fs.iter()
+                .filter_map(|f| serde_json::from_value::<Finding>(f.clone()).ok()),
+        );
+    }
+    if let Some(Value::Array(fs)) = r.get(CONTRACTS) {
         findings.extend(
             fs.iter()
                 .filter_map(|f| serde_json::from_value::<Finding>(f.clone()).ok()),

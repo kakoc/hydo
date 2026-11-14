@@ -82,6 +82,9 @@ impl Hvm {
         if let Some(d) = disk_for(&spec.image) {
             c.env(hydo_config::registry::HVM_DISK, d);
         }
+        if let Some(p) = contracts_for(&spec.image) {
+            c.env(hydo_config::registry::HYDO_CONTRACTS, p);
+        }
         c
     }
 
@@ -185,6 +188,13 @@ pub fn ensure_signed(prog: &Path) -> std::io::Result<()> {
 }
 
 /// The data disk built next to an arm64 initramfs (`X-arm64.cpio.gz` -> `X-arm64-disk.img`), if it exists.
+/// The function contracts' plan next to an image (`<image>.contracts.json`, Milestone 241),
+/// when `hydo build` wrote one: the engine then stops at the contracted functions.
+pub fn contracts_for(image: &Path) -> Option<PathBuf> {
+    let p = hydo_contracts::plan::plan_path(image);
+    p.exists().then_some(p)
+}
+
 pub fn disk_for(image: &Path) -> Option<PathBuf> {
     let s = image.to_str()?;
     let d = PathBuf::from(format!("{}-disk.img", s.strip_suffix(".cpio.gz")?));

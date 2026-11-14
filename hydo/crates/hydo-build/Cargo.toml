@@ -30,6 +30,8 @@ hydo-config = { workspace = true }
 hydo-manifest = { workspace = true }
 hydo-agent-proto = { workspace = true }
 hydo-image = { workspace = true }
+# the function contracts' plan next to an image (M241)
+hydo-contracts = { workspace = true, features = ["compile"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 flate2 = { workspace = true }

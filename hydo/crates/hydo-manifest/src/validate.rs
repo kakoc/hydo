@@ -52,6 +52,7 @@ pub const KNOWN_TOP: &[&str] = &[
     "steer",
     "clock_points",
     "perf",
+    "contracts",
 ];
 /// The keys of a `groups:` entry (Milestone 195).
 pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "description"];
@@ -904,6 +905,7 @@ pub fn validate(m: &mut Value) -> R<()> {
     validate_groups(m)?;
     validate_steer(m)?;
     validate_perf(m)?;
+    validate_contracts(m)?;
     validate_clock_points(m)?;
     validate_checks(m, &ids)?;
     validate_world(m)?;
@@ -983,6 +985,51 @@ fn validate_perf(m: &Value) -> R<()> {
                 "perf.threshold: a percentage from 0 to 100, such as 0.5 (got {})",
                 repr(t)
             )));
+        }
+    }
+    Ok(())
+}
+
+/// The keys of a `contracts:` entry (Milestone 241).
+pub const KNOWN_CONTRACTS: &[&str] = &["program", "sources", "description"];
+
+/// `contracts:` (Milestone 241): programs of `root.files` with `// hydo:` comments in their
+/// sources.
+fn validate_contracts(m: &Value) -> R<()> {
+    let Some(vs) = obj_get(m, "contracts") else {
+        return Ok(());
+    };
+    let Value::Array(vs) = vs else {
+        return Err(err(
+            "contracts: a list of {program: <path in the guest>, sources: [<folder>, ...]} entries",
+        ));
+    };
+    let mut seen: Vec<String> = Vec::new();
+    for (i, v) in vs.iter().enumerate() {
+        let wh = format!("contracts[{i}]");
+        if !v.is_object() {
+            return Err(err(format!("{wh}: must be a mapping")));
+        }
+        unknown(v, KNOWN_CONTRACTS, &wh)?;
+        let program = need_str(v, "program", &wh)?;
+        if !program.starts_with('/') {
+            return Err(err(format!(
+                "{wh}: program: the program's absolute path in the guest (got {})",
+                repr_str(&program)
+            )));
+        }
+        if seen.contains(&program) {
+            return Err(err(format!("{wh}: program {program} is listed twice")));
+        }
+        seen.push(program.clone());
+        match obj_get(v, "sources") {
+            Some(Value::Array(a)) if !a.is_empty() && a.iter().all(Value::is_string) => {}
+            _ => {
+                return Err(err(format!(
+                    "{wh} ({program}): sources: a list of folders (or files) of the program's \
+                     sources, relative to the manifest"
+                )))
+            }
         }
     }
     Ok(())

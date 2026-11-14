@@ -25,6 +25,7 @@
 pub mod advice;
 pub mod args;
 pub mod compose;
+pub mod contracts;
 pub mod errlog;
 pub mod fc;
 pub mod gen;

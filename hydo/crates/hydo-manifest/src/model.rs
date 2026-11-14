@@ -693,6 +693,13 @@ pub struct Project {
     /// Mac it is VM exits, which do not count CPU work.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub perf: Option<PerfSpec>,
+    /// Function contracts (Milestone 241): programs of `root.files` whose sources carry
+    /// `// hydo: requires ...` and `// hydo: ensures ...` comments next to functions. `hydo
+    /// build` compiles them with each program's debug information into `<image>.contracts.json`,
+    /// and the engine checks them at every call (docs/design/contracts.md; MANIFEST.md
+    /// "Function contracts").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contracts: Option<Vec<ContractProgram>>,
     /// The test composer's plan (the hydo/ folder fills it too).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub test: Option<Test>,
@@ -1336,6 +1343,20 @@ pub struct PerfSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = 0.5))]
     pub threshold: Option<PerfThreshold>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
+}
+
+/// One program with function contracts (Milestone 241).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct ContractProgram {
+    /// The program's path in the guest: a `dst` of `root.files`, whose `src` is the program
+    /// with its debug information.
+    pub program: String,
+    /// The folders (or files) of the program's sources, relative to the manifest: every `.rs`,
+    /// `.go`, `.c`, `.h`, `.cc` and `.cpp` file in them is read for `// hydo:` comments.
+    pub sources: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

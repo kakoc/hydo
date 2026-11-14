@@ -594,6 +594,42 @@ fn verdict_of(res: &Map<String, Value>) -> String {
         .to_string()
 }
 
+/// The function contracts of one run (Milestone 241): the engine's records
+/// (`<tag>.contracts.jsonl`) judged with the image's plan; prints each broken clause and the
+/// number of calls checked, keeps the findings in res and folds the verdict.
+pub fn contracts_one(
+    image: &Path,
+    outdir: &Path,
+    tag: &str,
+    mut res: Map<String, Value>,
+    quiet: bool,
+) -> Map<String, Value> {
+    let plan = match hydo_contracts::plan::plan_of_image(image) {
+        None => return res,
+        Some(Ok(p)) => p,
+        Some(Err(e)) => die(&e),
+    };
+    let records = outdir.join(format!("{tag}{}", hydo_contracts::plan::RECORDS_SUFFIX));
+    match hydo_explore::contracts::fold(&plan, &records, &mut res) {
+        Ok(rep) => {
+            if !quiet {
+                let clauses = rep.outcomes.len();
+                println!(
+                    "hydo: function contracts: {} calls checked against {clauses} clauses, {} \
+                     broken",
+                    rep.calls,
+                    rep.violated().count()
+                );
+                for l in hydo_explore::contracts::lines(&rep) {
+                    println!("{l}");
+                }
+            }
+        }
+        Err(e) => println!("hydo: warning: function contracts: {e}"),
+    }
+    res
+}
+
 /// The run's final verdict, when the host's checks (history checks, error logs) changed the one
 /// the `RESULT` line printed: the guest's checks only. A script that reads the `RESULT` line
 /// would otherwise report a lost write that a history check found as OK (the libSQL
@@ -892,6 +928,7 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     let res = run_one(ctx, &image, &sched, &outdir, &eargs, false);
     let printed = verdict_of(&res);
     let res = host_checks(&outdir, res, false);
+    let res = contracts_one(&image, &outdir, "one", res, false);
     let res = errors_one(&outdir, &sched, res, known.as_deref());
     if let Some(line) = final_verdict_line(&printed, &verdict_of(&res)) {
         println!("{line}");
@@ -1159,6 +1196,7 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
             let dir = base.join(format!("{k:03}"));
             let res = run_one(ctx, &it.image, &it.sched, &dir, &it.eargs, true);
             let res = host_checks(&dir, res, false);
+            let res = contracts_one(&it.image, &dir, "one", res, true);
             let res = errors_one(&dir, &it.sched, res, None);
             let run = run_document(
                 &dir,

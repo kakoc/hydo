@@ -97,6 +97,7 @@ impl Engines {
             onboard: self.root.join("hydo").join("onboard"),
             known: None,
             pool: self.config.pool.clone(),
+            contracts: None,
         };
         let engine = agent_engine(Arc::new(engine), &spec.image, &self.config.control);
         Pool::new(

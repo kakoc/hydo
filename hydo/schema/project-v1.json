@@ -296,6 +296,16 @@
         }
       ]
     },
+    "contracts": {
+      "description": "Function contracts (Milestone 241): programs of `root.files` whose sources carry\n`// hydo: requires ...` and `// hydo: ensures ...` comments next to functions. `hydo\nbuild` compiles them with each program's debug information into `<image>.contracts.json`,\nand the engine checks them at every call (docs/design/contracts.md; MANIFEST.md\n\"Function contracts\").",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/ContractProgram"
+      }
+    },
     "test": {
       "description": "The test composer's plan (the hydo/ folder fills it too).",
       "anyOf": [
@@ -3238,6 +3248,38 @@
         {
           "type": "string"
         }
+      ]
+    },
+    "ContractProgram": {
+      "description": "One program with function contracts (Milestone 241).",
+      "type": "object",
+      "properties": {
+        "program": {
+          "description": "The program's path in the guest: a `dst` of `root.files`, whose `src` is the program\nwith its debug information.",
+          "type": "string"
+        },
+        "sources": {
+          "description": "The folders (or files) of the program's sources, relative to the manifest: every `.rs`,\n`.go`, `.c`, `.h`, `.cc` and `.cpp` file in them is read for `// hydo:` comments.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "program",
+        "sources"
       ]
     },
     "Test": {

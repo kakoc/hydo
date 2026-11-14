@@ -134,6 +134,7 @@ The design of the agent and the host controller is in
 | `hydo-composer` | The test composer, which composes workload commands into seeded rounds. |
 | `hydo-history` | Linearizability and list-append checks of recorded histories. |
 | `hydo-errors` | Error log lines as findings, with a reviewed list of known errors. |
+| `hydo-contracts` | Function contracts: the `// hydo:` comments, the plan read from a program's debug information, and the judgement of a run's calls ([docs/design/contracts.md](design/contracts.md)). |
 | `hydo-results` | The results format: run and exploration documents and their JSON Schema. |
 | `hydo-schema-compat` | The check that a format only gains additions after its release. |
 | `hydo-config` | Every environment variable that hydo reads (`INVENTORY.md`). |

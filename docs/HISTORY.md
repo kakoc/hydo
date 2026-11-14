@@ -9183,3 +9183,98 @@ hvx on the bare-metal machine; `disk=none | run` from a fresh boot):
   must not run on the bare-metal machine, and this Mac was below its free-disk limit for a build.
 - `hydo ci` and `hydo versions` do not call the comparison yet, and the explorer's runs carry no
   `perf`.
+
+### Milestone 241 (tentative number) - PROTOTYPE (function contracts: `// hydo: requires` and `ensures` comments next to functions, checked at every call with hardware breakpoints on the Mac engine, without a change to the guest; the uprobe alternative measured on hvx; nothing recorded moved; 2026-11-14)
+
+**The idea (user, 2026-11-14).** A developer writes comments next to a function, for example
+`// hydo: requires amount > 0` and `// hydo: ensures result.is_err() || ...`. hydo checks them
+while the whole system runs deterministically under faults. The program's code and build stay as
+they are, apart from keeping the debug information. A broken clause is a finding with a one-line
+replay. Compiled languages come first; Python, Node and the JVM come later through runtime
+adapters. Input domains (`// hydo: input amount in 1..10_000`) prepare active property testing.
+The design is `docs/design/contracts.md`.
+
+**What was built.**
+
+- The crate `hydo-contracts`: the comment language (`lang`), the plan's compiler from ELF and
+  DWARF with `gimli` (`compile`, feature `compile`), the plan and the records (`plan`), and the
+  judgement of a run's records (`eval`).
+- The project format addition `contracts:` (`program`, `sources`). `hydo build` writes
+  `<image>.contracts.json` next to the image, and removes a stale one when the key is gone.
+- The Mac engine (`hydo-hvm/src/contracts.rs`): breakpoints at each function's entry and at the
+  return address of each call in progress (DBGBVR1 to DBGBVR5, at EL0 only). At each hit the
+  engine makes the plan's reads, steps over the instruction, and resumes. Neither the hit nor
+  the step counts as an exit. MDSCR_EL1.MDE is set only while the guest runs, and the engine's
+  own saves of MDSCR_EL1 (the interrupt stepping, the spin observer) leave the bit out. The
+  engine writes `<tag>.contracts.jsonl`. `HYDO_CONTRACTS` names the plan; `hydo-engine` sets it
+  when the image has one.
+- The host: `hydo run` and `hydo explore` judge the records. A broken clause is a finding of
+  kind `contract` and makes an `OK` verdict `VIOLATION [contract <function>] <clause>
+  (<file>:<line>)`.
+- The example `hydo/onboard/examples/contracts-ledger`: a Rust and a Go account server whose
+  `apply` carries a contract. The planted bug: the server remembers applied request ids per
+  connection, and a client's retry on a new connection debits the same request again.
+
+**Proof (the Mac engine).** Each schedule ran with the plan and without it:
+
+| Program, schedule | fp without | fp with | Calls, broken |
+|---|---|---|---|
+| Rust, `disk=none \| run` | `2471cc244ce21feb` | `2471cc244ce21feb` | 12, none |
+| Rust, `disk=none \| run P=ledger@5+2` | `2efb8d7751609270` | `2efb8d7751609270` | 14, `ensures` broken at 2 |
+| Go, `disk=none \| run` | `6bd3c24d764ceb27` | `6bd3c24d764ceb27` | 12, none |
+| Go, `disk=none \| run P=ledger@5+2` | `7fc63116e0286dde` | `7fc63116e0286dde` | 14, `ensures` broken at 2 |
+
+The first broken call of the Rust pause run: `amount = 10, req_id = 6, old(l.last_req) = 6,
+old(l.balance) = 999940, l.balance = 999930, result = 999930`. The server's own check passed
+(balance 999,860 instead of 999,880). `hydo repro` of that run printed `REPRODUCED` with
+`2efb8d7751609270` and the contract's `VIOLATION`. A blind `hydo explore --seeds 1-120` (stopped after 72 runs, below) found the
+broken clause in seeds 23 and 53, both with about 50% network loss
+(`N=ledger@2-9:loss,50%`): a lost answer made the client retry. The exploration ran on the
+example's first build, before `ledger local` (the measurement mode) was added.
+
+**Nothing changes without contracts.** The Redis quickstart of the 0.3.2 Mac release, built
+with this tree, has the release's bytes (`fba2c11e6a371d8b…`) and no plan. With this tree's Mac
+engine its three schedules gave the quickstart's recorded fingerprints: `disk=none | run`
+`d817d69781986987`, `disk=cut | run C=12 R=everysec` `a2b8d71c0c467d15` (`key k:0 lost`), and
+`disk=cut | run C=12` `7147e75676d15194`.
+
+**The two ways to stop, measured.**
+
+- (a) Engine breakpoints on the Mac engine: the same fingerprint with and without the plan on 4
+  of 4 schedules. `ledger local 200000` made 300,000 stops (each a hit and a single step; a run
+  records 100,000 calls, and the rest get no return breakpoint). Two runs with the plan took
+  1.8 s and 1.7 s, two without it 0.3 s each, all with `1063af2ded364da9`: 4.8 µs of wall time
+  per stop on an idle Mac, and no guest time.
+- (b) uprobes on hvx, with the release 0.1.0 on the bare-metal machine and the x86_64 build of
+  the Rust ledger (a static position-independent program). The guest kernel (nixpkgs 6.6.35) has
+  `UPROBE_EVENTS`; the Mac and KVM guest kernels (`allnoconfig`) do not. An entry probe with four
+  reads and a return probe on `apply`: the run gave `bec43bea9a132a65` twice, and
+  `8f868c6ddb7032d1` without probes, so uprobes change the fingerprint. 400,000 calls (800,000
+  stops) took 11.2 s against 5.7 s: 6.9 µs per stop. Without a reader, 610,788 of the 800,000
+  events were lost from the 8 MiB trace buffer.
+
+The measurement favours (a): it leaves the run as it was, so a contract's finding replays without
+contracts.
+
+**Found on the way.** The spin observer's own saves of MDSCR_EL1 took the contracts' MDE bit
+into the machine state, and the first run with the plan had another fingerprint
+(`ac845e9299b46fbf` against `aabe24b0c947936a`). The saves now leave the bit out. Under a
+swapping host, a kick of the spin observer came in the middle of a contract's step, and the
+observer armed its own breakpoint at the contract's address: `hvm: unhandled EC 0x30` at 10,631
+exits. The fix (the observer leaves the guest alone while a contract steps or stands at a
+contract's breakpoint, `Vmm::ct_busy`). With it, the 200,000-call run that had stopped the engine
+ran through twice.
+
+**Machines.** While the Mac swapped (18 GB, 9 GB of free disk) the coordinator limited this session
+to one VM at a time and cargo builds to the bare-metal machine; the 120-seed exploration was
+stopped after 72 runs for that. Once the Mac was idle, the Mac engine with `ct_busy` was built,
+`cargo clippy -p hydo-hvm -- -D warnings` and its tests passed, and the 4 proof schedules and
+the measurement ran again with the final binaries (the values above).
+
+**Open.**
+
+- Calls past the first 100,000 of a run are not judged, and the report does not say so yet.
+- hvx (a side module: DR0 to DR3 and the `#DB` exit) and KVM (`KVM_SET_GUEST_DEBUG`). Both need the
+  load address of a position-independent program (Rust's musl target makes them on x86_64).
+- More types (Rust `Option`, `Result`, `String`, `Vec`; Go strings, slices, interfaces, results
+  after the first), the runtime adapters, and active property testing from snapshots.

@@ -905,5 +905,6 @@ pub fn build(
         ),
     );
     image::print_shas(io, &[&ext4, &data, &disk])?;
-    crate::record::write_sidecar(&disk, None, "x86_64", false, manifest_path, &p.oci, io)
+    crate::record::write_sidecar(&disk, None, "x86_64", false, manifest_path, &p.oci, io)?;
+    crate::contracts::write_plan(&m, manifest_path, &disk, io)
 }

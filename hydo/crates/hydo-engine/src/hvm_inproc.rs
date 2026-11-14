@@ -25,6 +25,12 @@ use std::path::Path;
 /// The engine's options: the configuration, the [`Hvm::env`] pairs, then `HVM_DISK`.
 fn options(h: &Hvm, spec: &BootSpec) -> hydo_config::hvm::Options {
     let mut e = h.engine_env();
+    if let Some(p) = crate::hvm::contracts_for(&spec.image) {
+        e = e.with([(
+            hydo_config::registry::HYDO_CONTRACTS,
+            p.display().to_string(),
+        )]);
+    }
     if let Some(d) = disk_for(&spec.image) {
         e = e.with([(hydo_config::registry::HVM_DISK, d.display().to_string())]);
     }

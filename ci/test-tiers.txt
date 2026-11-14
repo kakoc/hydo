@@ -70,6 +70,10 @@ hydo-control::workload_pause             fast
 hydo-engine                              fast
 hydo-engine-proto                        fast
 hydo-engine::lockstep                    fast
+hydo-contracts                           fast
+hydo-contracts::compile                  fast
+hydo-contracts::eval                     fast
+hydo-contracts::lang                     fast
 hydo-errors                              fast
 hydo-errors::equivalence                 fast
 hydo-explore                             fast

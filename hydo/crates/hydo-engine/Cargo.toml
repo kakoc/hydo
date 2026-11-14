@@ -24,6 +24,8 @@ hydo-image = { workspace = true }
 hydo-hvx = { workspace = true }
 hydo-hvm = { workspace = true }
 hydo-kvm = { workspace = true }
+# the function contracts' plan next to an image (M241)
+hydo-contracts = { workspace = true }
 libc = "0.2"
 flate2 = { workspace = true }
 sha2 = { workspace = true }

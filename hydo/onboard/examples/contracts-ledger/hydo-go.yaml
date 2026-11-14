@@ -1,0 +1,38 @@
+# The contracts-ledger example (hydo.yaml) with the Go account server of go/main.go: the same
+# protocol, the same planted bug, and the same contract on its function `apply`, written with
+# Go's names. Go keeps its debug information unless it is linked with -ldflags=-w.
+# Build: ./build.sh (arm64, the Mac engine), then
+#   hydo build hydo-go.yaml
+# Try:  disk=none | run                -> OK
+#       disk=none | run P=ledger@5+2   -> VIOLATION [contract main.apply] ensures ...
+name: contracts-ledger-go
+description: an account server whose debit function carries a contract; a retry after a late answer debits twice.
+
+root:
+  files:
+    - {src: bin/ledger-go, dst: /bin/ledger, mode: "0755"}   # ./build.sh
+
+contracts:
+  - program: /bin/ledger
+    sources: [go]
+
+services:
+  - name: ledger
+    cmd: /bin/ledger serve 7070
+    ready: /bin/ledger balance 7070
+    port: 7070
+
+workload:
+  steps: 12                         # step i = debit request i of 10
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if /bin/ledger debit 7070 $((i + 1)) 10 > /dev/null; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: ledger.answers
+    msg: the server answers with a balance after the run
+    cmd: /bin/ledger balance 7070

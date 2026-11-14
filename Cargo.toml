@@ -35,6 +35,7 @@ members = [
     "hydo/crates/hydo-hvm",
     "hydo/crates/hydo-release",
     "hydo/crates/hydo-kvm",
+    "hydo/crates/hydo-contracts",
 ]
 exclude = ["sdk", "hydo/onboard/examples"]
 
@@ -72,6 +73,7 @@ hydo-control = { version = "0.3.3", path = "hydo/crates/hydo-control" }
 hydo-hvx = { version = "0.3.3", path = "hydo/crates/hydo-hvx" }
 hydo-hvm = { version = "0.3.3", path = "hydo/crates/hydo-hvm" }
 hydo-kvm = { version = "0.3.3", path = "hydo/crates/hydo-kvm" }
+hydo-contracts = { version = "0.3.3", path = "hydo/crates/hydo-contracts", default-features = false }
 
 [profile.release]
 opt-level = 3

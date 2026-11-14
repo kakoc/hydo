@@ -1,0 +1,38 @@
+[package]
+name = "hydo-contracts"
+# every tests/<name>.rs is a module of the one test program `it` (tests/main.rs,
+# ci/consolidate-tests.sh)
+autotests = false
+description = "hydo's function contracts: `// hydo:` comments next to functions (requires, ensures with old(), input domains), compiled with the program's debug information into breakpoints and reads that an engine makes, and judged after the run (docs/design/contracts.md)"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# What is published to crates.io (docs/PUBLISHING.md): the sources only; the tests and their
+# recorded answers stay in the repository.
+include = ["/src/**", "/Cargo.toml", "/LICENSE", "/README.md"]
+
+[lib]
+# no documentation example to test (hydo-release tests/test_tiers.rs checks it stays so)
+doctest = false
+
+[features]
+# Reading a program's debug information (the plan's compiler). The engines read only the plan,
+# so they build without it.
+default = ["compile"]
+compile = ["dep:gimli", "dep:flate2", "dep:sha2"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+gimli = { version = "0.32", default-features = false, features = ["read", "std"], optional = true }
+flate2 = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+
+# the integration tests, one program (ci/consolidate-tests.sh)
+[[test]]
+name = "it"
+path = "tests/main.rs"
