@@ -371,7 +371,8 @@ CPU; TigerBeetle stays an hvx example (docs/design/kvm-engine.md, "x86-64-v3").
 
 TigerBeetle's issue 3960 (opened 2026-11-10) reports a replica that stops on
 `assert(expires_at <= timestamp_event)` in `src/state_machine.zig`. It shows the stop with a
-unit test of the state machine. The questions here: does hydo find it with an ordinary workload
+unit test of the state machine; [`native/README.md`](native/README.md) runs that test without
+hydo. The questions here: does hydo find it with an ordinary workload
 of holds, can hydo replay it, and what does it do to a replica.
 
 ### Holds and expiry

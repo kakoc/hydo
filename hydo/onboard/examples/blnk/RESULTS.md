@@ -225,7 +225,8 @@ The cause, in three steps:
 3. `canProcessTransaction` (`model/model.go`) skips every balance check when `AllowOverdraft`
    is true and `OverdraftLimit` is 0, which is the documented unlimited overdraft.
 
-**Native, without hydo.** PostgreSQL 16 and Redis 7.2.4 in Docker, and Blnk built from
+**Native, without hydo.** The scripts of the native runs of findings 1 and 2, with their steps,
+are in [`native/README.md`](native/README.md). PostgreSQL 16 and Redis 7.2.4 in Docker, and Blnk built from
 `67d88333` on the Mac. Each burst sends 5 draws of 30.00 at once with `curl`, to a new balance,
 with `allow_overdraft` and `overdraft_limit` 50. At most one may apply.
 

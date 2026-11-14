@@ -82,6 +82,8 @@ passed 10 of 10 times. One `runtime.Gosched()` before the baseline makes the bug
 5 times with one P. That confirms the order: with one P, the ticker goroutine waits in the local
 run queue behind the next test goroutine, which samples the goroutine count first.
 
+The script of these native runs, with its steps, is in [`native/README.md`](native/README.md).
+
 ## The hydo project
 
 `hydo.yaml` has no services. Its workload runs `/bin/ats.test` once, as one process with

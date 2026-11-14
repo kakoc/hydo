@@ -76,6 +76,7 @@ On Linux the test data was on tmpfs (`TMPDIR=/dev/shm`, as in Qdrant's Linux CI)
 used the aarch64 build of the same commit (`cargo test -p collection --lib --no-run`, Rust 1.99.0).
 No run failed in 2,604 runs. No setting of one knob made the test fail: the worker thread count
 (`TOKIO_WORKER_THREADS`), one CPU, and CPU load only lowered the length that the test read.
+The script of these runs, with its steps, is in [`native/README.md`](native/README.md).
 
 ## Why the test fails
 

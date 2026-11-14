@@ -1,0 +1,18 @@
+# Added to compose.yaml for the double-invoice reproduction (double-invoice.sh): the API reaches
+# PostgreSQL through hold-proxy.rb, a TCP proxy that can hold the database's answers to one
+# subscription termination. The proxy runs in Lago's own image, which has Ruby; compose builds
+# it as <project>-dbproxy, and `down --rmi local` removes it.
+services:
+  dbproxy:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM getlago/api:v1.57.0
+        COPY hold-proxy.rb /repro/hold-proxy.rb
+    entrypoint: ["ruby", "/repro/hold-proxy.rb"]
+    environment:
+      HOLD: "${HOLD:-960}"
+
+  api:
+    environment:
+      DATABASE_URL: postgresql://lago:changeme@dbproxy:5432/lago?search_path=public&sslmode=disable

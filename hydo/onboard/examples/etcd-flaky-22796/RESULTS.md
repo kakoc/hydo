@@ -93,7 +93,8 @@ Every native run is one process with
 Without a CPU limit, no run failed in 8,000 runs. CPU load and one CPU did not hold the whole
 process off long enough. With a CPU limit that a busy neighbour uses up, the test failed in 190
 of 200 runs, every time with the report's line. The CPU limit is the condition, and it needs
-no hydo.
+no hydo. The scripts of these runs and of the 60 ms sleep probe, with their steps, are in
+[`native/README.md`](native/README.md).
 
 ## Under hydo
 

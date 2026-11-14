@@ -218,7 +218,8 @@ The same five requests reproduce it with Docker and without hydo, on Lago's own
 of 12 units. `sub2` is terminated with Redis up: 200, and a finalized termination invoice. Then
 `docker compose stop redis`, and `DELETE /api/v1/subscriptions/sub1` answers 500 after 6 s.
 After `docker compose start redis`, the retry answers 404, `sub1` is `terminated`, and
-`GET /api/v1/invoices?external_customer_id=cust1` stays `[]`, also 60 s later.
+`GET /api/v1/invoices?external_customer_id=cust1` stays `[]`, also 60 s later. The script of
+these requests, with its steps, is in [`native/README.md`](native/README.md).
 
 **Decision: a Lago bug.** Lago's documented default (`on_termination_invoice: generate`) is that
 a terminated subscription gets its final invoice. Lago-api issue 6901 (opened 2026-10-26, on

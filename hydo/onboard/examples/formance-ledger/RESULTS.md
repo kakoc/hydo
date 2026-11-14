@@ -172,6 +172,8 @@ tag. 200 pairs of deposits from `world`, each pair to a new account, one in `USD
 | v2.4.18, both deposits in `USD/2` | 0 | 200 |
 | v2.3.24 | 0 | 200 |
 
+The scripts of these runs, with their steps, are in [`native/README.md`](native/README.md).
+
 **The fix, tested natively.** `fix-new-account-race.patch` adds `ON CONFLICT (ledger, address) DO
 UPDATE` to the insert of `UpsertAccounts`. The clause waits for the other transaction's insert and
 then changes the row as the CTE's `updated_rows` changes an existing account:
