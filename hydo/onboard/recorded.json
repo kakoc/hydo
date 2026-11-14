@@ -872,25 +872,25 @@
         "manifest": "hydo-proxy.yaml",
         "args": []
       },
-      "sha256": "e9d46ad8b4507d290ec01fc16086d058f24237a09e4bf8fb80e6040cf332b260",
+      "sha256": "b2902bb72977e0185653d03f2a485cd7ec5b3b0e5e4db2e56977badb9bfbbcf2",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
-          "fp": "e8e9bc9256359b31",
-          "ctl": "c61af233aeb666f4"
+          "fp": "ea83c68b6836ce5a",
+          "ctl": "cfc4e898392b7cdd"
         },
         {
           "schedule": "disk=none | run H=redisp@2-5:drop",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=17 all present)",
-          "fp": "abade627f3247f0d",
-          "ctl": "92656f7e81dd229c"
+          "fp": "296aca6c3710a2a5",
+          "ctl": "f688f8c4d110f71b"
         },
         {
           "schedule": "disk=none | run H=redisp@1-3:reset K=redis@4+2",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=16 all present)",
-          "fp": "0061957b083f6662",
-          "ctl": "3b7d29a8e113473b"
+          "fp": "1cb120fbbc52f207",
+          "ctl": "d95900809379f32b"
         }
       ]
     },
@@ -1034,43 +1034,43 @@
         "manifest": "hydo.yaml",
         "args": []
       },
-      "sha256": "00062d4fdbdc79e3f4e85b213dcd3f7e6f5799e60caf8ac19b4bc59c299a3e06",
+      "sha256": "2a33d428bc5f0489877597b3d4722684f5ec7d734ebbf288d34d591e47672b4e",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "a1fa2eeca4e6d13c",
-          "ctl": "7f711a0883f99fae"
+          "fp": "4a871fd7dade79a5",
+          "ctl": "011e2815b1e72c4c"
         },
         {
           "schedule": "disk=none | run N=primary-replica@5-10:loss,100%",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "910b81ebedd620da",
-          "ctl": "4e5a7f0b9dc89e54"
+          "fp": "904bcde301457225",
+          "ctl": "60a53c5764454418"
         },
         {
           "schedule": "disk=none | run K=replica@5+3",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "7983747e36338ef8",
-          "ctl": "6727fdc8bcae4a0e"
+          "fp": "9bb6aababa4097c1",
+          "ctl": "18a26b577e3cf21b"
         },
         {
           "schedule": "disk=cut dseed=1 | run C=8",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=8 all on the primary)",
-          "fp": "0e7a8a84fbe5f33a",
-          "ctl": "64e040bceea43862"
+          "fp": "be7da1e09271e8a1",
+          "ctl": "4f908d94a2b4fbcd"
         },
         {
           "schedule": "disk=none | run F=replica<primary@5#3:2000",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=16 all on the primary)",
-          "fp": "c7b576f6aab91aca",
-          "ctl": "5bfba152ed5b8e1b"
+          "fp": "7ebe4003867a1520",
+          "ctl": "2a35f78a246a30c9"
         },
         {
           "schedule": "disk=none | run H=redisp@3-6:drop",
           "verdict": "OK invariants=1 held (primary.acked_writes_survive: acked=13 all on the primary)",
-          "fp": "b3603d7a854586de",
-          "ctl": "ccfdda781ddfe9bf"
+          "fp": "c653079a206aee7d",
+          "ctl": "d883cc330b7f3b88"
         }
       ]
     },
@@ -1085,30 +1085,30 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "296a362d82ef65307ec49c57b1441f363450c86345d0d471270c899fce2b47c7",
+      "sha256": "d4403916c7d1b4170d3b142c4f8dd958772432231bd11d0e9fdcb4d7bf9d7330",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=20 all present)",
-          "fp": "0373a3171015478d",
+          "fp": "9d89fd58b6dbe368",
           "ctl": "0ff0834008885565"
         },
         {
           "schedule": "disk=cut | run C=12",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=12 all present)",
-          "fp": "47aa2ba82439b850",
+          "fp": "7068ed39d234926f",
           "ctl": "be356f5fe2497169"
         },
         {
           "schedule": "disk=cut | run C=12 S=never",
           "verdict": "VIOLATION [rkv.oracle] rkv check: acked=12 lost=12",
-          "fp": "e97765c09b868205",
+          "fp": "0da422c802b69d36",
           "ctl": "fa6748b8551faf1f"
         },
         {
           "schedule": "disk=none | run K=rkv@8+2 B=1234",
           "verdict": "OK invariants=1 held (rkv.oracle: rkv check: acked=18 all present)",
-          "fp": "d68419a29ee30b48",
+          "fp": "4116a19256f9cc28",
           "ctl": "fe0d2826dcd5e80e"
         }
       ]
@@ -1335,30 +1335,30 @@
         ],
         "owners": "keep"
       },
-      "sha256": "fb4dde8a0ba63a8d454de5cc891df917c8122db34dffa77e3b1738ed695e89a3",
+      "sha256": "4162d9c2812114a45b3187fc858ff729ed1cc9dec99806dc9cc87d334f93e534",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
-          "fp": "e05823bdf642a57f",
+          "fp": "96a83caf506cb355",
           "ctl": "f897b8be57381b07"
         },
         {
           "schedule": "disk=none dseed=efb4cfbc49052179 | run H=payments.charge@0-1:drop",
           "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3)",
-          "fp": "9e144071b38737e9",
+          "fp": "9604f219d94f35c7",
           "ctl": "88e6b200fc0bc89e"
         },
         {
           "schedule": "disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50",
           "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o7 took effect 2 times (records 25,26)",
-          "fp": "1604098807c1cedb",
+          "fp": "e1be88a3d920f185",
           "ctl": "a18a0ea5f414bcd5"
         },
         {
           "schedule": "disk=cut dseed=1 | run H=payments.charge@0-1:drop C=6",
           "verdict": "VIOLATION [payments.charged_at_most_once] payments.charge: ref o0 took effect 3 times (records 1,2,3)",
-          "fp": "92d589e8e4daab78",
+          "fp": "d9cfd318d2154c36",
           "ctl": "70394a54c782a939"
         }
       ]
@@ -1380,30 +1380,30 @@
         ],
         "owners": "keep"
       },
-      "sha256": "b94ee90589a92226242c403b7158ccaa66d8f29c0d8d958c79e2d7c00e1ef221",
+      "sha256": "0a5f2012e1e3a8f6d460ae7fda403a814c8e5baaa7accfcf0eecba178aeaff2a",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
-          "fp": "5026dcf9de7ecd35",
+          "fp": "7521f582d2c68c72",
           "ctl": "63c6f7832a7707ce"
         },
         {
           "schedule": "disk=none dseed=efb4cfbc49052179 | run H=payments.charge@0-1:drop",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
-          "fp": "7114fabe9958781c",
+          "fp": "8a0981abbd9b6f40",
           "ctl": "b34f7110f42d0d5c"
         },
         {
           "schedule": "disk=none dseed=fbb60485ae17b0ba | run H=payments.charge@6-9:reset,p=50",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 12 effects, every ref at most once)",
-          "fp": "6894cb66383740d0",
+          "fp": "aaac8ecf9c27b63c",
           "ctl": "b4b02f9be8377b3b"
         },
         {
           "schedule": "disk=cut dseed=1 | run H=payments.charge@0-1:drop C=6",
           "verdict": "OK invariants=5 held (payments.charged_at_most_once: payments.charge: 6 effects, every ref at most once)",
-          "fp": "35225d7fc9560a51",
+          "fp": "52985cf8c1893b7b",
           "ctl": "604ec7533818950b"
         }
       ]
@@ -2031,19 +2031,19 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "f35724baea91d7125a4027e2c794d600ef14f57c16dec5b838b37d03532633ad",
+      "sha256": "3a2c265dfeec7a63bf6674fdfb08e20ab90fd413b620bb420db1559055d4027b",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "51c1dc68bf55fe68",
-          "ctl": "82ca9d1c3ef8cce4"
+          "fp": "97e14c6c7309cfd9",
+          "ctl": "f7f854b0365e4a98"
         },
         {
           "schedule": "disk=none dseed=1 | run H=orders.place@10-13:drop",
           "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "26dc4d8f64ea2438",
-          "ctl": "91f0642b79fba5d8"
+          "fp": "579bd75635f422ad",
+          "ctl": "5ef2de96b1ce0673"
         }
       ],
       "big": true
@@ -2059,19 +2059,19 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "74fab6fa9bb253f506011354a249b13e7cd9157810d85b0ab73331a6f074e53c",
+      "sha256": "e871b5f7f641e713a8e7ed0a44cee18e35e6bee4cf61d87f6a8357d76fd8fb38",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "779be7a729a4db80",
-          "ctl": "534bb58ce5d00057"
+          "fp": "9a81fea918e57f6f",
+          "ctl": "281f9d2db1646fdf"
         },
         {
           "schedule": "disk=none dseed=1 | run H=orders.place@10-13:drop",
           "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "a49634695ea97855",
-          "ctl": "574408a68e1a7285"
+          "fp": "27ef1b6bdee3cc19",
+          "ctl": "b2b86dd3729ae4d5"
         }
       ],
       "big": true
@@ -2087,19 +2087,19 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "0f069a33bda8f002930df6b4dba4859e419986d18f74affddf80c091f20626c8",
+      "sha256": "f6791e2e6e10f1047213a863eb277d416ff7aaeb48de39ed123434ab4615e8c2",
       "runs": [
         {
           "schedule": "disk=none dseed=1 | run",
           "verdict": "OK invariants=4 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "c82fe263dc02728f",
-          "ctl": "82ca9d1c3ef8cce4"
+          "fp": "14b2eb3787d7b639",
+          "ctl": "f7f854b0365e4a98"
         },
         {
           "schedule": "disk=none dseed=1 | run H=orders.place@10-13:drop",
           "verdict": "VIOLATION [stack.exactly_once] kafka order=10 present 2 times (must be exactly once)",
-          "fp": "f3d4b1a18d435272",
-          "ctl": "16535f305130a00f"
+          "fp": "dd8432ec0b4a47a1",
+          "ctl": "11adc8c26d6b072f"
         }
       ],
       "big": true
@@ -2115,24 +2115,24 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "53b65b5483d8321213e4b935917e4eb6d97f592a682a2f2054c864c5b393338c",
+      "sha256": "d9b6d87d6777af759264760711584da52f41fde7dd6ca2e7bd533b863effc577",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "9ef97f0c5ac5b053",
+          "fp": "80e9a946da619079",
           "ctl": "c17dbf4c229e2264"
         },
         {
           "schedule": "disk=none | run K=front@10+2",
           "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "81d3b0498138e74c",
+          "fp": "197fa71cdc11c4d6",
           "ctl": "753ddf6f4bd6a89b"
         },
         {
           "schedule": "disk=cut | run C=15",
           "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "58c718bc3ed1d8d7",
+          "fp": "7588de232b69abce",
           "ctl": "deb80e6655ff86db"
         }
       ],

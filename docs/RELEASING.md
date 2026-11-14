@@ -19,7 +19,7 @@ docs/PUBLISHING.md lists every place hydo is published.
    differs from its released copy into `hydo/schema/released/`. The schema tests
    (`hydo-schema-compat`) check every later change as an addition to the released copy, so a
    skipped copy lets a later change remove what this release shipped. 0.2.0 to 0.3.1 skipped it;
-   0.3.2 copied `project-v1`, `results-v1` and `ci-v1`.
+   0.3.2 copied `project-v1`, `results-v1` and `ci-v1`; 0.3.3 copied `project-v1`.
 2. On the final commit: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`
    and `cargo test --locked --release --workspace` pass: the full test tier, every test of the
    workspace and not only the per-push tier's (docs/CI.md "Test tiers"); the `ci-full` workflow

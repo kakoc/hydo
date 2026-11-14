@@ -3462,3 +3462,24 @@ carry none of these programs, so no KVM value moves.
 that predates the Qdrant example, so the stage `qdrant-flaky` stopped. Its two test programs and
 their C library were then taken from an earlier build on the bare-metal machine whose files have
 the sha256 pins of `build-test.sh`, and the two images ran again with `--only`.
+
+## 23. hydo 0.3.3 (2026-11-14)
+
+Made with `hydo-bench rebaseline --write` on the bare-metal machine and on a Mac, with the quick
+0.3.3 candidates as `--release` (docs/HISTORY.md "The 0.3.3 release"); the values are in
+`hydo/onboard/recorded.json`, and this section records only the decisions.
+
+**The fingerprint epoch stays 2.** As at 0.3.1 and 0.3.2, only the version moved image bytes:
+`guest/hydo-world`, `guest/hydo-world-tls` and `guest/hydo-grpc` have new pins
+(docs/BUILD-PINS.md), and the SDK versions are in rust-kv's program, node-kv's `package.json` and
+python-kv's `__init__.py`. No engine, controller, agent or kernel that a recorded run uses
+changed in a way that moves a value.
+
+**What moved.** hvx (the bare-metal machine, a tree unpacked under umask 022, 5,348 s): 9 of 43
+images have new bytes and 30 of 141 runs new values (redis-proxy, redis-bridge, rust-kv, the
+shop's two images, the three gRPC stack images and the generated-driver stack). The Mac (`hvm`,
+826 s, `--jobs 1`): 9 of 21 images and 36 of 76 runs (redis-bridge, node-kv, python-kv,
+python-kv-hist, rust-kv, the shop's two images, the gRPC demo's two images). These are the
+images and runs that moved at 0.3.1 and 0.3.2. Every verdict is unchanged, every moved run gave
+the same values twice, and every worker-pool run gave its fresh boot's values. KVM's images carry
+none of these programs, so no KVM value moves.
