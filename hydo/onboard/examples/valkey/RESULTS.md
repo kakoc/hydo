@@ -8,7 +8,7 @@ already show.
 ## The short answers
 
 - **What was found?**
-  1. **A new candidate, not reported upstream.** A backward step of the primary's wall clock
+  1. **A new bug, reported upstream as [valkey-io/valkey#5406](https://github.com/valkey-io/valkey/issues/5406) (2026-11-14).** A backward step of the primary's wall clock
      delays a replica's full synchronization by the size of the step. The primary waits
      `repl-diskless-sync-delay` (5 seconds by default) before it starts the transfer, and it
      measures that wait with the wall clock. After a step of an hour back, the replica waits

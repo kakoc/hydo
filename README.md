@@ -68,6 +68,10 @@ Each example folder holds the project's hydo setup and the recorded runs.
   nanosecond ([tigerbeetle#3960](https://github.com/tigerbeetle/tigerbeetle/issues/3960)). hydo
   makes it happen on every run, on the releases 0.16.29 to 0.17.9
   ([the example](hydo/onboard/examples/tigerbeetle/)).
+- **Valkey 9.1.3.** A step of the primary's clock back delays a replica's full sync by the size
+  of the step, and lets `min-replicas-to-write` accept writes that no replica has. A new bug,
+  reported as [valkey#5406](https://github.com/valkey-io/valkey/issues/5406)
+  ([the example](hydo/onboard/examples/valkey/)).
 - **Formance Ledger v2.4.** Two transactions that use a new account at the same moment, in two
   currencies, race, and one fails with `500`. A new bug, reported as
   [ledger#2542](https://github.com/formancehq/ledger/issues/2542)
