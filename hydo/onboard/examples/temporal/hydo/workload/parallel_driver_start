@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# Start one order workflow: a new workflow ID, or (one in four) an ID already used, which
+# Temporal must refuse (REJECT_DUPLICATE, conflict policy FAIL). Exit 100 if it was accepted.
+exec /bin/tw start

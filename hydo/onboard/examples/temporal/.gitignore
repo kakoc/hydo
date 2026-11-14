@@ -1,0 +1,9 @@
+# hydo: the build cache and run results, the images fetch-images.sh copies in, and tw's build
+.hydo/
+hydo-out/
+hydo/bin/
+hydo/images/
+hydo/.hydo/
+hydo/hydo-out/
+native/work/
+.hydo-noclock/

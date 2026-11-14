@@ -1,0 +1,60 @@
+# Temporal 1.32.2 (the latest release on 2026-11-14) on PostgreSQL 16, with the example's worker.
+# From temporalio/docker-compose's docker-compose-postgres.yml (cd6d3b19, 2026-01-05): the same
+# PostgreSQL service and server settings, the version raised from 1.29.1, and the auto-setup
+# image (not published after 1.29) replaced by a one-shot job of the admin-tools image that
+# creates the schemas. The UI and the admin-tools shell are left out; the worker is added.
+services:
+  postgresql:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: temporal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -h localhost -p 5432"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  temporal-setup:
+    image: temporalio/admin-tools:1.32.2
+    environment:
+      - POSTGRES_SEEDS=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+    command: ["/setup/setup-schema.sh"]
+    volumes:
+      - ./setup:/setup
+    depends_on:
+      postgresql:
+        condition: service_healthy
+  temporal:
+    image: temporalio/server:1.32.2
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      - BIND_ON_IP=0.0.0.0
+    volumes:
+      - ./dynamicconfig:/etc/temporal/config/dynamicconfig
+    ports:
+      - 7233:7233
+    depends_on:
+      temporal-setup:
+        condition: service_completed_successfully
+  worker:
+    image: alpine:3.22
+    command: ["/tw/tw", "worker"]
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    volumes:
+      - ./hydo/bin:/tw
+    restart: unless-stopped
+    depends_on:
+      - temporal
+volumes:
+  pgdata:

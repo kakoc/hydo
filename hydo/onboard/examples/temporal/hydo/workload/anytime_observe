@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# Read one order's state; when it is completed, record its run and the hash of its result, so
+# that the final rule can check that it stays completed with the same result.
+exec /bin/tw observe

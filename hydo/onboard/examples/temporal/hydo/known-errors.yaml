@@ -1,0 +1,14 @@
+# Known error kinds: lines a service writes to its log that are expected (hydo/onboard/MANIFEST.md,
+# "Error logs as findings"). Each entry needs a reason; `hydo errors accept` appends them.
+#   sig:    the kind's signature (or match: a regular expression on its template)
+#   with:   only in runs whose schedule has one of these faults (K=mysql, C, disk, R=everysec)
+#   during: only for lines written while one of these faults was on
+format: 1
+unknown: report       # report: a new kind is a finding; fail: it also fails the run
+known:
+  - sig: afa9802d9fb4
+    service: postgresql
+    tpl: "<time> UTC [#] ERROR: database 'temporal' already exists"
+    example: "2026-11-14 00:00:04.501 UTC [297] ERROR:  database 'temporal' already exists"
+    reason: "the postgres image creates the database temporal itself (POSTGRES_DB defaults to POSTGRES_USER), so the schema job finds it"
+    date: "2026-11-14"

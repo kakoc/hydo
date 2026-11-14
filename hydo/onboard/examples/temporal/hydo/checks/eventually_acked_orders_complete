@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=60 poll=3
+# hydo-msg: every acknowledged order completes, and its result keeps every acknowledged update with its answer, each signal once, the charge in its history, and the result the client saw
+exec /bin/tw check acked

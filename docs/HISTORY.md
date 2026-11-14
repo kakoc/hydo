@@ -8899,3 +8899,80 @@ holds.
 job's dependencies, a group's `primary:` that needs the killed database, no `hydo: VERDICT` line
 for a failing run, a `K=` restart that ignores the restart policy, and an imported `pg_isready`
 check that passes during PostgreSQL's init server. The Mac engine did not run the example.
+
+### Milestone 231 (tentative number) - DONE (Temporal 1.32.2 onboarded with business rules on the Mac engine and hvx; a new candidate, a backward clock step after which one crash of PostgreSQL takes the server down for the step's length, found blind and reproduced natively; a backward step's delay of every timer is by design; `hydo onboard --compose` and a messages fix; nothing recorded moved; 2026-11-14)
+
+**In short.** The example `hydo/onboard/examples/temporal` (RESULTS.md) runs Temporal
+1.32.2, the newest release, on PostgreSQL 16.
+
+The schema job uses the `admin-tools` image, because temporalio/docker-compose's `auto-setup`
+image stops at 1.29 and has no later versions. The worker, the client, and the checks are one
+Go program, `tw`, built on the Go SDK that `tw/go.mod` pins. Its order workflow runs an activity
+and waits on a timer of 2 to 15 s. Meanwhile it collects signals and answers updates. Then it
+runs a second activity. The client does these operations:
+
+- it starts orders, and reuses a workflow ID one start in four;
+- it sends signals and updates, and reuses an answered update ID one update in three;
+- it records each completion it sees.
+
+The rules:
+
+- one run per workflow ID;
+- each acknowledged signal delivered exactly once (`type: messages`; the drain reads every
+  history);
+- an update ID answered once, with the same answer when it comes again;
+- at most one outcome per activity, timer and update in a history;
+- no timer fires before its time;
+- event IDs 1 to N without gaps;
+- every acknowledged order completes with what the client was told;
+- visibility agrees with the histories;
+- the server serves again within 30 s of the heal.
+
+**What was found.**
+
+- A new candidate, not reported upstream. `common/persistence/sql/sqlplugin/db_handle.go`
+  allows one reconnect of a store's connection pool per second, and measures the second with
+  `clock.RealTimeSource.Now()`, which is `time.Now().UTC()` without Go's monotonic reading. After
+  a clock step back of D seconds, the first connection error drops the pool, and every
+  reconnect is refused for D seconds. The frontend then answers `Namespace default is not
+  found.` History tasks, task queues, and the membership heartbeat fail too. The regression is
+  `disk=none | run K=postgresql@9+1 T=1:-300 W=6311ab23,p4,q2,r1000` (`# expect: violation`). The
+  same schedule passes without `T=` and with `T=1:-20`. The native run used Docker in a Colima
+  VM. The clock went one hour back, and PostgreSQL's server got one `kill -9`. Then 0 of 8
+  orders started in 160 s, and the log had 8,119 throttle lines. The control without the step completed 6 of 6. `main`
+  (`170fb83d`) has the same code. Searches of issues and pull requests with 17 phrasings found
+  no report of the wall-clock throttle. Issue 11691 and pull request 11730 (both open) describe
+  the pool that a throttled refresh leaves closed; they name no clock.
+- By design: a backward clock step delays every new timer and timeout by its size. The history
+  service gives a scheduled task a fire time no earlier than its timer queue's read watermark. The check `eventually_acked_orders_complete` excuses orders while the clock is
+  behind the latest time the server or the client saw.
+
+**Runs.** On hvx, the first exploration ran 5 seeds and was stopped; the machine was loaded and
+two workers held 14 GB. On the Mac engine:
+
+| exploration | strategy | schedules | failures |
+|---|---|---|---|
+| mac-1 | `process --new-faults`, stopped while it shrank | 18 | 5: findings 1 and 2, and the `duplicates` error fixed below |
+| mac-2 | the same, stopped | 10 | 2, both finding 2 |
+| no-clock | `process --new-faults` without `clock` | 20 | 1 `ERROR workload: exit budget exhausted`; its replay passed |
+| swarm | `swarm --new-faults`, one worker, stopped | 9 | 3, each with a lying disk or I/O errors (the environment) |
+
+Without clock steps, 57 acknowledged starts, 33 signals, 42 updates (5 repeated update IDs), 16
+refused duplicate starts and 11 completions seen were judged, and every rule held. The final
+image gives `fp=6f64c437f639b8ed` twice for `disk=none | run`, and `hydo repro --regressions`
+gives 1 of 1 as expected.
+
+**hydo.** Two fixes, each with a test:
+
+- `hydo onboard --compose FILE`. temporalio/docker-compose has eight Compose files, and
+  `hydo onboard` imported `docker-compose.yml` without a word about the others. It now lists them
+  and imports the one named (`tests/onboard.rs`,
+  `several_compose_files_are_named_and_compose_chooses_one`).
+- A messages check with `duplicates: forbidden` counted a message that was never acknowledged
+  and never delivered as undecided, so a run whose every signal failed ended in ERROR. Such a
+  message is now skipped (`hydo-history` `tests/messages.rs`, `duplicates`).
+
+The other frictions are in open item 112 and in the section "What hydo lacked" of RESULTS.md.
+
+**Open.** The server ran as one process; the history, matching and frontend services were not
+split. Schedules and Nexus were not used. The candidate's report is not drafted.

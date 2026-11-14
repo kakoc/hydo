@@ -1,0 +1,9 @@
+# Finding 2 of RESULTS.md: the clock steps 300 s back before step 1, and PostgreSQL is killed
+# before step 9 and restarted one step later. The server's database handles then refuse to
+# reconnect until the clock is back where it was ("did not refresh database connection pool
+# because the last refresh was too close"), and the frontend answers "Namespace default is not
+# found." to every list and start: server_answers fails 30 s after the heal. Without T= the
+# same schedule passes; with a step of 20 s it passes too.
+# commands: anytime_observe first_clock parallel_driver_signal parallel_driver_start parallel_driver_update
+# expect: violation
+disk=none | run K=postgresql@9+1 T=1:-300 W=6311ab23,p4,q2,r1000

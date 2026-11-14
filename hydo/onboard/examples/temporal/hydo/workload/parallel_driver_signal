@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# Send one signal "item" with a new message ID to one of the last orders started. The send is
+# recorded in the history "sig" for the messages check.
+exec /bin/tw signal

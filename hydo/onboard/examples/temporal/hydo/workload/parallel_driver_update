@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=30
+# Send one update "reserve" to one of the last orders started and wait for its answer: a new
+# update ID, or (one in three) an update ID that was answered before, which must get the same
+# answer again. Exit 100 if the answer differs.
+exec /bin/tw update

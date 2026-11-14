@@ -1,0 +1,5 @@
+#!/bin/sh
+# Record the wall clock before any fault (test.first_records keeps the line in every run), so
+# that eventually_acked_orders_complete can tell a backward clock step that came before the
+# first command (RESULTS.md, finding 1).
+exec /bin/tw clock

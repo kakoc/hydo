@@ -422,6 +422,15 @@ every hvx run, and `native/` reproduces it with Docker. No upstream report names
 was posted. A forward clock step longer than River's 15 s lease gives two leaders too, with any
 table: a clock effect. The runs used hvx only.
 
+**Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
+and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
+Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
+limits its reconnects to one per second by the wall clock. After a backward clock step, one
+crash of PostgreSQL leaves the server without its database for the step's length. Every start
+then answers `Namespace default is not found.` It reproduces natively in a Colima VM. A
+backward step also delays every new timer by its size, which the history service does on
+purpose. The example is `hydo/onboard/examples/temporal` (RESULTS.md, `native/`).
+
 **What the Lago onboarding lacked (M225).** Six additions, each a format-1 or results addition
 that changes nothing for a manifest without it:
 
@@ -967,6 +976,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     that exits during its readiness check ends the run with `restart failed`. The import copies
     a Compose healthcheck `pg_isready` without `-h`, which passes during the PostgreSQL image's
     temporary init server. The River example ran on hvx only: the Mac engine was not tried.
+112. The Temporal example (M231). Runs whose `eventually_` checks wait their whole deadline
+    while the server logs thousands of errors end `ERROR ... exit budget exhausted` on the Mac
+    engine, which hides the check's violation (`HVM_RUN_EXITS` is a developer variable). The
+    importer's `/etc/hosts` has no line for the guest's own hostname, which Docker always gives
+    a container; Temporal's entrypoint needed `TEMPORAL_BROADCAST_ADDRESS`. A check cannot tell
+    whether its run had a clock step; the example's client records the clock it saw. The
+    history, matching and frontend services ran in one process, not apart.
 
 ## Milestone index
 
@@ -1348,6 +1364,11 @@ build machine, before 2026-10-13.
   terminal ends with how many runs failed and in how many ways; outside a terminal, or with
   `--json`, it ends with the summary line as before. The README's terminal shows a real run.
   Nothing recorded moved
+- M231 (tentative number): the onboarding of Temporal 1.32.2 with business rules on the Mac
+  engine and hvx. The new candidate is a server down for the length of a backward clock step after one
+  crash of PostgreSQL, because the SQL handle's reconnect throttle reads the wall clock.
+  It reproduced natively. `hydo onboard --compose FILE`, and a messages check's `duplicates`
+  with nothing acknowledged no longer ends a run in ERROR. Nothing recorded moved
 - M232 (tentative number): the onboarding of Valkey 9.1.3 with `hydo onboard` on the Mac engine, with
   a primary and two replicas. The new candidate is a backward clock step that delays a replica's
   full sync by its size. hydo found it blind, and it reproduced natively. The known issue 5354

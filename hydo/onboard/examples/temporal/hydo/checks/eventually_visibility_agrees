@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=60 poll=3
+# hydo-msg: the list of executions (visibility) shows one execution per acknowledged order ID, with the run and the status of its history
+exec /bin/tw check visibility

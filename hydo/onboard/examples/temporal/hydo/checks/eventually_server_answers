@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=30 poll=3
+# hydo-msg: once the faults are healed, the server lists the namespace's workflows again within 30 s
+exec /bin/tw ready

@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: every acknowledged run's history is well formed: event IDs 1..N without gaps, one close event last, at most one outcome per activity, timer and update, no timer fired before its time, one run per order ID
+exec /bin/tw check history

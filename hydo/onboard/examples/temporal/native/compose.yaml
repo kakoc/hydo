@@ -1,0 +1,61 @@
+# Temporal 1.32.2 on PostgreSQL 16 with the example's worker, as ../docker-compose.yaml starts them,
+# with an idle admin-tools container for the `temporal` command line.
+services:
+  postgresql:
+    image: postgres:16-alpine
+    # PostgreSQL in a loop, so that a kill of the server leaves the container and its address in
+    # place: the server's connections then end with "connection refused", as after a crash
+    # (a stopped container's name does not resolve at all, which Temporal treats differently)
+    entrypoint: ["/bin/sh", "-c", "while :; do docker-entrypoint.sh postgres; echo 'postgres ended; starting it again in 5 s'; sleep 5; done"]
+    environment:
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: temporal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal -h localhost -p 5432"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  temporal-setup:
+    image: temporalio/admin-tools:1.32.2
+    environment:
+      - POSTGRES_SEEDS=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+    command: ["/setup/setup-schema.sh"]
+    volumes:
+      - ../setup:/setup
+    depends_on:
+      postgresql:
+        condition: service_healthy
+  temporal:
+    image: temporalio/server:1.32.2
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      - BIND_ON_IP=0.0.0.0
+    volumes:
+      - ../dynamicconfig:/etc/temporal/config/dynamicconfig
+    depends_on:
+      temporal-setup:
+        condition: service_completed_successfully
+  worker:
+    image: alpine:3.22
+    command: ["/tw/tw", "worker"]
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    volumes:
+      - ../hydo/bin:/tw
+    restart: unless-stopped
+    depends_on:
+      - temporal
+  admin:
+    image: temporalio/admin-tools:1.32.2
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    depends_on:
+      - temporal
