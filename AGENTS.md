@@ -444,6 +444,15 @@ measures both times, so such a pause means the same on every engine. `hydo explo
 section "Pause the workload"; the example is `hydo/onboard/examples/etcd-flaky-22796`. Details:
 `docs/HISTORY.md` Milestone 216.
 
+**Pauses of threads (M226).** `P=workload/<thread>[#<k>]@<at>~<off>:<dur>` stops only the
+workload's threads of that name (`/proc/<pid>/task/<tid>/comm`), or the k-th of them, and the
+other threads run on. The guest kernel's cgroup v2 freezer stops them; the agent and the images
+are unchanged. It runs on hvx only: the Mac and KVM engines refuse it, because their guest
+kernels have no cgroups. `hydo explore --pause-thread <name>` draws it, with `--pause-min` and
+`--pause-lengths`. On hvx `P=workload/tests::wal_reco@0~4433:500` fails Qdrant's flaky test on
+every run. The guide's section is "Pause threads of the workload" in `hydo guide faults`, and
+the details are in `docs/HISTORY.md` Milestone 226.
+
 **State search (M212, experimental and opt-in).** It did not help on the targets it was
 measured on, so treat it as an experiment. `hydo explore --search state` takes snapshots at
 stops whose console shows something rare. Half of the later schedules are branches: they start
@@ -686,11 +695,18 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - No run showed a benefit. On Qdrant the failure sits next to passing schedules of any
       length, and on hvx the length does not move. The option stays experimental until a system
       whose value falls step by step towards its failure is found.
-80. CPU-limit pauses (M211, M216). `P=workload@<at>~<off>:<dur>` stops the whole workload's
-    process tree. Two kinds are not built: a pause of one thread, which Qdrant's race needs (its
-    RESULTS.md, item 4), and pauses that repeat in every period of a CPU limit. KVM did not run such
-    a pause yet: the one-off workflow on the branch `tmp-workload-pause-kvm` runs the etcd example
-    on a GitHub runner. The etcd example is not in `hydo/onboard/recorded.json` yet.
+80. CPU-limit pauses (M211, M216, M226). `P=workload@<at>~<off>:<dur>` stops the whole
+    workload's process tree, and `P=workload/<thread>@...` (M226) only named threads, on hvx.
+    What is left:
+    - A pause of threads on the Mac and KVM engines needs guest kernels with cgroups (an epoch
+      change) or a ptrace command in the agent (new bytes in every image).
+    - A pause of a service's thread, and pauses that repeat in every period of a CPU limit, are
+      not built.
+    - The blind exploration does not find Qdrant's 1 ms windows: 0 of 300 schedules with starts
+      from 0 to 5,000 ms. The search needs `--pause-min` and `--pause-max` around the moment.
+    - KVM did not run a pause of the workload yet: the one-off workflow on the branch
+      `tmp-workload-pause-kvm` runs the etcd example on a GitHub runner. The etcd and Qdrant
+      examples are not in `hydo/onboard/recorded.json` yet.
 81. Compose builds (M214). A Docker build rarely gives the same bytes twice. Docker 28.4 writes a
     pointer into the history of an `EXPOSE` step, so each rebuild of such an image stops
     fetch-images.sh until `HYDO_ACCEPT_REBUILD=1`. The real build ran on a Mac with Docker only;
@@ -1089,6 +1105,11 @@ build machine, before 2026-10-13.
   a time (`T=<at>:@<point>`, `clock_points:`). The Lago example without its workarounds still
   finds lago-api 6901, and a step to the billing tick found a subscription invoiced twice.
   Nothing recorded moved
+- M226 (tentative number): a pause of threads of the workload,
+  `P=workload/<thread>[#<k>]@<at>~<off>:<dur>`, with the guest kernel's cgroup v2 freezer, and
+  `hydo explore --pause-thread`. On hvx a pause of Qdrant's test thread fails its flaky test on
+  every run, its neighbours pass, and the fixed test passes. The Mac and KVM engines refuse it
+  (no cgroups in their guest kernels). Nothing recorded moved
 
 ## Where to look
 

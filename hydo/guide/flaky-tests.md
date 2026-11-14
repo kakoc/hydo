@@ -246,8 +246,8 @@ empties, and fails at 0. On hvx with one vCPU, without a pause, it reads 35 on e
 | `disk=none \| run P=workload@0~4433:500` | passes: the whole process stops, `length: 35` | `fe44e7e86b9ea884` (2 runs) |
 | the failing schedule on the fixed test | passes | `50b14ca4fb2e871d` (2 runs) |
 
-The pause fails the test only when it starts while the test's thread waits for a blocking task,
-in windows of about 1 ms that come back every 2 to 4 ms. Find the moment from the test's own
+The pause fails the test only when it starts while the test's thread waits for a blocking task.
+Such windows are about 1 ms wide and come back every 2 to 4 ms. Find the moment from the test's own
 output first: a run whose output lines carry the guest's uptime shows when the test reloads the
 data. Then let the explorer draw starts around it:
 

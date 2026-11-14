@@ -7332,3 +7332,140 @@ kills PostgreSQL instead of Redis.
 Lago example's new candidate (not checked outside hydo, no regression saved), and its billing
 rule that counts only recurring invoices. Everything ran on the Mac engine and in the scripted
 tests; no run used hvx or KVM.
+
+### Milestone 226 (tentative number) - DONE (a pause of threads of the workload: `P=workload/<thread>[#<k>]@<at>~<off>:<dur>` freezes named threads with the guest kernel's cgroup v2 freezer while the other threads run on, and `hydo explore --pause-thread` draws it; Qdrant's flaky test fails on every run of one such pause on hvx, its neighbours pass, and the fix passes; the Mac and KVM engines refuse it, their guest kernels have no cgroups; nothing recorded moved; 2026-11-14)
+
+**In short.** Open item 80 asked for a pause of one thread. Milestone 216's pause of the workload
+stops the whole test process, so it did not reach Qdrant's race, which needs the test's thread
+held off while the update worker of the same process runs. The timed pause can now name threads:
+`P=workload/tests::wal_reco@0~4433:500` stops the thread named `tests::wal_reco` 4,433 ms of
+guest time after step 0 starts, for 500 ms. On hvx it fails Qdrant's
+`test_wal_replay_loads_pending_to_queue` on every run with the report's line
+`length: 0, op_num: Some(500)`; 1 ms earlier or later it passes; the fixed test passes. No agent
+change and no image rebuild.
+
+**How a schedule names a thread.** By its name as Linux keeps it (`/proc/<pid>/task/<tid>/comm`,
+at most 15 bytes), with an optional `#<k>` for the k-th thread of that name in the order of the
+thread ids. The name is chosen at the moment the pause starts, among the threads of every process
+of the workload. Why a name and not a thread id or a creation number:
+
+- A thread id depends on everything the guest started before, the image's services and the
+  controller's commands too. It is the same for one schedule on one image, but it moves with any
+  change before the test, and nobody can write it down in advance.
+- The n-th thread created counts every helper thread of the runtime, whose number depends on the
+  guest's CPUs (tokio starts one worker per CPU).
+- A name is what the program gives its thread (Rust's test harness names a test's thread after
+  the test, tokio names its threads), so it is the same on every engine and every vCPU count.
+  `#<k>` counts only threads of that one name, in the order of their thread ids, which is the
+  order of their creation. A name that matches several threads, or `*` and `?`, stops all of
+  them.
+
+The schedule language checks the form (`hydo-schedule` `ThreadSel`): letters, digits and
+`_ . : + -`, `*` and `?`, at most 15 bytes (a longer name is refused with its first 15 bytes), and
+`#<k>` from 1.
+
+**How one thread is stopped.** A signal cannot do it: SIGSTOP, also sent with tgkill to one
+thread, stops the whole thread group. The candidates were these:
+
+- ptrace (`PTRACE_SEIZE` and `PTRACE_INTERRUPT` stop exactly one thread). It needs a program in
+  the guest that calls ptrace. busybox has none, so the agent would have to change, and the
+  agent's bytes are in every image: every image built after the change would get new bytes and
+  new fingerprints.
+- `SCHED_IDLE` and a busy competitor. A thread at `SCHED_IDLE` still runs a little, and on the
+  Mac and KVM a busy loop makes no VM exits, so it uses no guest time (the reason Milestone 216
+  left the CPU-limit model).
+- The cgroup v2 freezer in threaded mode. In a cgroup whose `cgroup.type` is `threaded`, the
+  threads of one process may sit in different cgroups, and `cgroup.freeze` stops exactly the
+  threads of its cgroup, at their next return to user space or their next interruptible sleep.
+  It needs nothing but busybox's shell, so no image changes. It was taken.
+
+The controller's pause timer (`hydo-control` `schedule/threads.rs`) runs four guest commands:
+`busybox sleep <off>`; a shell script that finds the workload's first process (the process whose
+parent is the agent, that leads its own session, and whose environment has `HYDO_FROM`), lists
+the threads of its session, picks the named ones, moves each into the threaded cgroup
+`hydo-pause` under its own cgroup and writes `1` to `cgroup.freeze`; `busybox sleep <dur>`; and a
+script that writes `0` and moves the threads back. The standard output of the workload's first
+process does not identify it: busybox ash redirects a command's output in the shell itself. The
+control transcript logs the threads stopped (`PAUSED workload/tests::wal_reco (timer, threads 85
+tests::wal_reco)`), or, when no thread matches, the names the workload has (`PAUSED nothing: no
+thread of the workload matches workload/nosuch (timer; its threads: busybox, collection.test,
+tests::wal_reco, tokio-rt-worker (4))`). A kernel without cgroup v2 ends the run with an error
+that says so. Every decision is the guest's own, so a schedule replays bit for bit.
+
+The guest kernels of the Mac engine (`Image-explore`, `Image-explore-netns`) and of the KVM
+engine (`bzImage-kvm`) are built from `allnoconfig` and a list without `CONFIG_CGROUPS`. Those
+engines refuse a pause of threads before any VM (`hydo_engine::refusal`), and `hydo explore
+--pause-thread` refuses those backends. Only hvx boots the x86_64 kernel with cgroups. A kernel
+with cgroups for those engines moves their fingerprints, an epoch change.
+
+**What changed.**
+
+- `hydo-schedule`: `Pause::Timer` has `thread: Option<ThreadSel>`. The language test
+  `thread_pauses` holds the examples and the refusals.
+- `hydo-control`: the module `schedule/threads.rs` and the part `ThreadPauseTimer`. A pause
+  without a thread takes Milestone 216's path exactly. The scripted agent answers the two
+  scripts, and `workload_pause::a_timed_pause_of_threads_freezes_them` checks the commands, the
+  log lines and the replay.
+- `hydo-engine`: the refusal on the Mac and KVM engines (`thread_pause_tests`).
+- `hydo-explore`: `--pause-thread <name>[,<name>...]` draws `P=workload/<name>@...` with
+  `--pause-workload`'s draws, the target drawn last, so `--pause-workload` alone keeps its
+  schedules. `--pause-min <ms>` sets the earliest start (default 0, which keeps Milestone 216's
+  draws) and `--pause-lengths <ms>,...` the lengths (default 10 to 500 ms). The shrinker treats a
+  thread pause as a pause of the workload: half the length, and the start 0. The test is
+  `workload_pauses::thread_pauses_draw_the_named_threads`.
+- `hydo guide faults` has the section "Pause threads of the workload", `hydo guide flaky-tests`
+  the section "A test that fails when one thread stops", MANIFEST.md the token, and
+  `hydo guide capabilities` the row.
+
+**The proof on hvx.** The bare-metal machine, this tree's `hydo` and `hydo-hvx` over the 0.3.1
+Linux release, the main module loaded since 2026-11-08, one vCPU. The images were rebuilt to the
+recorded bytes (`9aa2213aea1a5295…`, fixed `4fbac285d9940f02…`). A run whose test output carried
+the guest's uptime put the shard's reload at 4.39 s after the workload's start. Pauses of the
+test's thread from 0 to 4,250 ms passed, and so did pauses of every `tokio-rt-worker`. Of the
+starts 4,420 to 4,440 ms with 500 ms, 4,422, 4,426, 4,429, 4,431, 4,433 and 4,436 ms failed: the
+test's thread is then waiting for the blocking task that counts deferred points, and the worker
+applies all 35 queued operations before it reads the length.
+
+| image | schedule | verdict | fingerprint |
+|---|---|---|---|
+| buggy | `disk=none \| run P=workload/tests::wal_reco@0~4433:500` | VIOLATION, `length: 0, op_num: Some(500)` | `4ae6099ea6e753a6` (3 runs) |
+| buggy | `disk=none \| run P=workload/tests::wal_reco@0~4432:500` | OK, `length: 35` | `ab031f4dc2b53472` (3 runs) |
+| buggy | `disk=none \| run P=workload/tests::wal_reco@0~4434:500` | OK, `length: 35` | `3f2ae9a4cced6ab7` (2 runs) |
+| buggy | `disk=none \| run P=workload/tests::wal_reco@0~4433:200` | OK, `length: 3` | `f929e23e369aa175` (2 runs) |
+| buggy | `disk=none \| run P=workload@0~4433:500` | OK, `length: 35` | `fe44e7e86b9ea884` (2 runs) |
+| buggy | `disk=none \| run` | OK, `length: 35` | `240f9805a28e2544` (2 runs, the recorded value) |
+| fixed | `disk=none \| run P=workload/tests::wal_reco@0~4433:500` | OK, `length: 0, op_num: Some(500)` | `50b14ca4fb2e871d` (2 runs) |
+
+An earlier build of the script failed at 4,430 ms (`fdb9000eaeaae4ec` with 1,000 ms, two runs).
+At that start the length the test read fell with the pause's length: 34, 31, 24, 19, 5 and 0 for
+10, 20, 50, 100, 200 and 500 ms.
+
+`hydo explore --pause-thread tests::wal_reco --pause-min 4400 --pause-max 4500 --pause-lengths
+500,1000 --seeds 1-100 --workers 2` found 6 failures, all reproduced. The shrinker took seed 25's
+to `disk=none dseed=a208c12cf0c7b709 | run P=workload/tests::wal_reco@0~4433:250`
+(`0707cd8c6a773944`, two runs). With the starts from 0 to 5,000 ms (`--pause-max 5000`) it found
+none in 300 schedules: the failing windows are about 1 ms wide. So the explorer finds this race
+only after the test's own output has placed the reload.
+
+**The Mac.** The Mac engine refuses the pause (`hydo run` printed `not run (no VM was started):
+the engine refuses the schedule: ...`). An arm64 build of the test, cross-compiled on this Mac
+(Rust 1.99.0, Apple clang with an Ubuntu 24.04 arm64 sysroot, rust-lld), and an arm64 copy of the
+manifest with its library paths changed, passed on the Mac engine without a pause (`length: 13`,
+`386301457ee75af7`). The build and the copy are not in the tree.
+
+**Nothing recorded moved.** A schedule without a thread pause takes the controller's old path;
+the explorer draws nothing new without `--pause-thread`, and `--pause-min 0` with the default
+lengths gives Milestone 216's draws.
+
+- On hvx, the pinned reproducers with this tree's `hydo` gave `a76d7fe857fdb37c` (VIOLATION,
+  order 11) and `efbde7b57264be0f` (OK). Neither the hvx engine nor the module changed, so
+  `deploy-metal.sh` was not run.
+- Qdrant's plain schedule gave its recorded `240f9805a28e2544`.
+- The explorer's `identity::` tests, the controller's corpora and the fast tiers of
+  `hydo-schedule`, `hydo-control`, `hydo-explore` and `hydo-engine` passed without a re-record.
+
+**Left** (open item 80): a pause of threads on the Mac and KVM engines needs guest kernels with
+cgroups (an epoch change) or a ptrace command in the agent (new image bytes). A thread of a
+service (`P=<svc>/<thread>`) is not built. Pauses that repeat in every period of a CPU limit are
+not built. The blind exploration does not find a window of 1 ms; a draw of starts near the
+moments when the named thread blocks would need the engine to report them.
