@@ -588,6 +588,20 @@ runs the audit during onboarding and offers the first three places. The guide is
 wall clock" of `hydo guide faults`. The design and the precision numbers are in the section
 "The clock audit" of `docs/design/rule-suggestion.md`.
 
+**Web apps through their Playwright tests (M253).** `browser:` (a format-1 addition) runs a team's
+Playwright tests unchanged as the workload, in Microsoft's Playwright image 1.65.1, which `hydo
+build` fetches by digest into `browser/`. Each workload step runs one shard. A watcher loaded with
+`NODE_OPTIONS=--require` watches every page the tests open. Five invariants judge what it saw: a
+failing test, an uncaught error or `console.error`, a spinner that stays, a failed request the page
+never shows, and texts such as `NaN`. The API can be the real backend or a fake with `H=` faults.
+The example `hydo/onboard/examples/web-shop` (React, a fake API) ran on hvx with one fingerprint per
+schedule. Its flaky test fails on every run of `H=api.add_item@1-2:delay=1000` and passes on every
+run without it. `hydo explore --protocol-faults` found its stuck spinner and unhandled rejection
+blind (seed 7 of 40). It needs `network: bridge` and runs on x86_64 only. hydo-build now leaves out
+layer entries whose names have a backslash or a quote instead of refusing the image. The design is
+`docs/design/web-apps.md`, the how-to `hydo guide web-apps`, and the details are in
+`docs/HISTORY.md` Milestone 253.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -865,7 +879,23 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 48. [user decision] The Rust test SDK is unpublished until the user decides about code-first
     tests (M160, M163).
 49. `hydo diff` and `hydo explain`: deeper levels need engine additions (M165).
-51. The GUI experiment is not a general feature yet (M166).
+51. Web apps (M166, M253). Since M253 `browser:` runs a team's Playwright tests as the workload
+    and watches the pages; M166's hand-written driver stays an example. Left:
+    - It ran on hvx only. The Mac engine keeps the root in guest RAM, and the Playwright image is
+      about 3 GB unpacked; KVM did not run it.
+    - One pinned Playwright version (1.65.1). A team on another version needs its pin added to
+      `hydo_manifest::browser::CATALOG`. Firefox and WebKit were not tried.
+    - Screenshots are taken but not compared with a reference, and they stay in the guest.
+    - The hydo-native list of steps (open, click, read) for teams without Playwright tests is not
+      built. Cypress suites do not run.
+    - The watcher hooks the instrumentation that Playwright's own runner uses for traces, an
+      internal interface that a new Playwright version may change.
+    - An exploration of `T=` clock steps and of `P=workload` pauses against a frontend was not
+      run, and neither was a frontend with its real backend through `browser:`.
+    - `hydo build`'s fetch of a missing Playwright image did not run (the image was fetched with
+      `hydo-fetch-image` by the same digest). A passing test acknowledges nothing, so the
+      explorer counts passes as vacuous. The double order was not found blind in 40 schedules;
+      `--sweep protocol` reaches it but was stopped for time.
 52. The skill: `hydo skill update` never ran against the real GitHub API (M170).
 53. The benchmark images and the browser example are not in `recorded.json` (M164, M177).
 55. [user decision] The label `full-ci` does not exist on GitHub yet (M171).
@@ -1641,6 +1671,12 @@ build machine, before 2026-10-13.
   example's `blocks/` reaches Jepsen's finding 3.2 with them. Corrupted middle blocks on two of
   three nodes leave the replicas different, and lose 2,456 acknowledged messages when the intact
   node is killed. Nothing recorded moved
+- M253 (tentative number): web apps through their own Playwright tests. `browser:` runs a team's
+  Playwright tests unchanged in a pinned Playwright image and watches every page for uncaught
+  errors, spinners that stay, failed requests the page never shows, and broken texts. On hvx the
+  React example `web-shop` gave one fingerprint per schedule; its flaky test fails on every run of
+  one `H=` delay and passes without it; its stuck spinner was found blind. hydo-build leaves out
+  layer entries with a backslash in the name. Nothing recorded moved
 
 ## Where to look
 

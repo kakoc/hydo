@@ -25,6 +25,7 @@
 //! Where hydo-build itself stops with a Python exception (a traceback, not a ManifestError), the
 //! input is refused here too, with a message that starts with [`py::CRASH_PREFIX`].
 
+pub mod browser;
 pub mod ci;
 pub mod composer;
 pub mod emulators;
@@ -194,6 +195,8 @@ pub fn validator_keys() -> Vec<(&'static str, Vec<&'static str>)> {
         ("FakeRoute", v::KNOWN_ROUTE.to_vec()),
         ("ProxyRoute", v::KNOWN_PROXY_ROUTE.to_vec()),
         ("Emulator", emulators::KNOWN.to_vec()),
+        ("Browser", browser::KNOWN.to_vec()),
+        ("BrowserWatch", browser::KNOWN_WATCH.to_vec()),
         ("Webhook", v::KNOWN_HOOK.to_vec()),
         ("Tls", v::KNOWN_TLS.to_vec()),
         ("HistoryCheck", v::known_check_all()),

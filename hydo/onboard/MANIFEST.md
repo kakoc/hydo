@@ -1550,6 +1550,57 @@ emulators:
   draws no kill, pause, freeze or network fault on an emulator's service; `H=` on the proxy is its
   fault. A schedule written by hand may still name the service.
 
+### Web applications through their Playwright tests (`browser:`)
+
+`browser:` runs a team's Playwright tests unchanged as the workload, in Microsoft's Playwright
+image, and watches every page they open (Milestone 253; design: docs/design/web-apps.md; how-to:
+`hydo guide web-apps`). The validator expands it after `emulators:`, so the rest of this
+reference applies to what it becomes.
+
+```yaml
+network: bridge                # required: the browser has its own network namespace
+browser:
+  tests: e2e                   # required: the Playwright project's folder, with node_modules
+  playwright: 1.65.1           # the tests' @playwright/test version (default and only pin: 1.65.1)
+  name: browser                # the service's name and the invariants' prefix (default browser)
+  addr: 10.89.0.250            # the service's bridge address (default 10.89.0.250)
+  shards: 2                    # workload.steps (default 1): step i runs --shard=i+1/2
+  args: [--project=chromium]   # more arguments for playwright test (no single quotes)
+  env: {API_URL: http://10.89.0.1:9001}   # for the tests and the config's webServer
+  must_pass: true              # the invariant <name>.tests_pass (default true)
+  timeout: 600                 # workload.timeout (default 600)
+  watch:
+    errors: true               # <name>.no_page_errors (default true)
+    console: true              # console.error counts as an error (default true)
+    busy: ["[aria-busy=true]", "[role=progressbar]"]   # <name>.busy_ends; [] turns it off
+    busy_max_ms: 10000
+    alerts: ["[role=alert]", "[role=alertdialog]"]     # <name>.failures_shown; [] turns it off
+    failures_within_ms: 5000
+    requests: /api/            # judge only fetch and XHR requests under this path (default all)
+    text: [NaN, undefined, "[object Object]", Invalid Date]   # <name>.no_bad_text; [] turns it off
+```
+
+- The service `<name>` has `image:` (`browser/playwright-v<version>-noble-<amd64|arm64>.docker.tar`
+  beside the manifest; `hydo build` fetches a missing one by the digest this hydo pins),
+  `entrypoint: [/bin/sleep, infinity]`, `depends_on:` every other service, the mounts
+  `/opt/hydo/web` and a 256 MB `/dev/shm`, and `env:` with `CI=1`, `TZ=UTC`, `HOME`, and the
+  watcher's settings.
+- `root.files` gains `{src: <tests>, dst: /opt/hydo/web/tests}`, and `root.text` gains hydo's
+  `hook.cjs`, `reporter.cjs` and `check.mjs` under `/opt/hydo/web/hydo/`. Put the files the tests
+  need (a built app) under `/opt/hydo/web/` with `root.files`.
+- `workload:` is written, with `kind: test` (a test program: fewer than 4 steps, only the fault
+  kinds that `faults:` lists, the class `test-failed`); a manifest with both is refused. Step i
+  runs `node node_modules/@playwright/test/cli.js test --shard=<i+1>/<shards>
+  --pass-with-no-tests --retries=0 --workers=1` in `/opt/hydo/web/tests` with the watcher loaded
+  (`NODE_OPTIONS=--require`), and copies its `hydo-web:` lines to the console. With more than one
+  shard it adds `--fully-parallel`, so that Playwright splits the tests one by one, not whole
+  files (one worker still runs them in order).
+- `guest.ram_mib` defaults to 4096.
+- `hydo build` refuses a project whose `<tests>/node_modules/@playwright/test` is missing or of
+  another version.
+- The validated data keeps `_browser`. The explorer draws no fault on the browser's service: the
+  tests' faults are `H=` on the API, clock steps and pauses of the workload.
+
 ### HTTPS for fakes and proxies (`tls:`)
 
 Real providers speak HTTPS only, and their SDKs usually call one fixed host name and check its

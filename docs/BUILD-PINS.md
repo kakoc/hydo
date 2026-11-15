@@ -696,3 +696,26 @@ fetches them and checks each against its sha256.
   The recorded x86_64 image carries the first. An earlier revision of the source built to
   `eb28a7232b1aaa04…` (565,200 bytes) on the Mac and `deef7a2cc6adf6bc…` (565,192 bytes) on the
   bare-metal machine.
+
+## Playwright for `browser:` (Milestone 253)
+
+`browser:` (docs/design/web-apps.md) runs a project's Playwright tests in Microsoft's Playwright
+image. hydo pins one version, in `hydo_manifest::browser::CATALOG`, and `hydo build` fetches it
+by manifest digest into `browser/` beside the manifest:
+
+- **The image:** `mcr.microsoft.com/playwright:v1.65.1-noble` (Ubuntu 24.04, Node.js, and the
+  browsers of Playwright 1.65.1), pinned when 1.65.1 was the newest release on npm:
+  - index `sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579`;
+  - linux/amd64 `sha256:766137e2d9caad4744187e53cdc89320ba6f2eb57cff097374020944b44dd0a9`
+    (config `sha256:12708c20bc00…`, 7 gzip layers, 1,012,665,207 bytes; the docker-save archive
+    is 1,012,681,216 bytes);
+  - linux/arm64 `sha256:56be08aca06bf736a928da2e3235a3b63ef71ee97313beb18c6019fea791aba4`
+    (not run).
+- Two entries of the amd64 image have a backslash in their names
+  (`usr/lib/systemd/system/system-systemd\x2dcryptsetup.slice` and one more). hydo-build leaves
+  such entries out since this milestone and lists them in the image record (`skipped_names`);
+  before, it refused the image.
+- **The tests' packages:** `@playwright/test` must be the image's version. The example
+  `hydo/onboard/examples/web-shop` pins it in `e2e/package-lock.json`, and its app's packages
+  (React 19.3.1, Vite 8.3.8) in `app/package-lock.json`. `build.sh` installs both from
+  `https://registry.npmjs.org/`.

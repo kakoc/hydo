@@ -654,6 +654,10 @@ struct Tree {
     root: PathBuf,
     meta: HashMap<String, MetaEntry>,
     skipped: u64,
+    /// Entries whose name (or link target) has a character the root's tools cannot carry (`"`,
+    /// a backslash, a newline), left out (Milestone 253; before, such an image was refused).
+    /// Ubuntu's systemd units have such names (`system-systemd\x2dcryptsetup.slice`).
+    odd_names: Vec<String>,
 }
 
 fn rjoin(parts: &[String]) -> String {
@@ -669,6 +673,7 @@ impl Tree {
             root,
             meta,
             skipped: 0,
+            odd_names: Vec::new(),
         })
     }
 
@@ -759,7 +764,15 @@ impl Tree {
         Ok(())
     }
 
+    /// Does a layer path have a character the root cannot carry?
+    fn odd(name: &str) -> bool {
+        name.contains('"') || name.contains('\n') || name.contains('\\')
+    }
+
     fn whiteout(&mut self, name: &str) -> R<()> {
+        if Tree::odd(name) {
+            return Ok(());
+        }
         let p = Tree::parts(name)?;
         let Some(base) = p.last().cloned() else {
             return Ok(());
@@ -789,6 +802,10 @@ impl Tree {
     }
 
     fn add(&mut self, tarf: &mut File, mi: &Member) -> R<()> {
+        if Tree::odd(&mi.name) || ((mi.islnk() || mi.issym()) && Tree::odd(&mi.linkname)) {
+            self.odd_names.push(mi.name.clone());
+            return Ok(());
+        }
         let p = Tree::parts(&mi.name)?;
         if p.is_empty() {
             self.meta
@@ -1987,6 +2004,13 @@ pub fn stage_with(
         rec.insert("image_config".into(), Value::Object(ic));
         rec.insert("effective".into(), Value::Object(eff));
         rec.insert("skipped_special_files".into(), Value::from(t.skipped));
+        if !t.odd_names.is_empty() {
+            // only when there are any: the record of every image built before stays the same
+            rec.insert(
+                "skipped_names".into(),
+                Value::Array(t.odd_names.iter().cloned().map(Value::String).collect()),
+            );
+        }
         if shared.is_some() {
             rec.insert("shares_tree_of".into(), Value::String(owner.clone()));
         }
@@ -2020,11 +2044,18 @@ pub fn stage_with(
             );
             continue;
         }
-        let skipped = if t.skipped > 0 {
+        let mut skipped = if t.skipped > 0 {
             format!(", {} device/FIFO entries skipped", t.skipped)
         } else {
             String::new()
         };
+        if !t.odd_names.is_empty() {
+            skipped.push_str(&format!(
+                ", {} entries with a quote, backslash or newline in the name skipped ({})",
+                t.odd_names.len(),
+                t.odd_names[0]
+            ));
+        }
         outln(
             io,
             &format!(
@@ -2321,6 +2352,37 @@ mod tests {
 
     /// The refusals of hydo_oci._mounts that test_hydo_compose.py's test_validation checked
     /// (deleted with the Python in M107): its eight cases with hydo_oci's messages.
+    #[test]
+    fn layer_entries_with_a_backslash_or_quote_are_left_out() {
+        let root = std::env::temp_dir().join(format!("hydo-oddnames-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let mut t = Tree::new(root.join("tree")).unwrap();
+        let tarp = root.join("empty.tar");
+        fs::write(&tarp, b"").unwrap();
+        let mut tarf = File::open(&tarp).unwrap();
+        let m = |name: &str, kind: u8, link: &str| Member {
+            name: name.into(),
+            kind,
+            mode: 0o644,
+            uid: 0,
+            gid: 0,
+            size: 0,
+            linkname: link.into(),
+            offset_data: 0,
+        };
+        // Ubuntu's systemd unit names escape a dash as \x2d
+        t.add(&mut tarf, &m("etc/sys\\x2dslice", b'0', "")).unwrap();
+        t.add(&mut tarf, &m("etc/a\"b", b'0', "")).unwrap();
+        t.add(&mut tarf, &m("etc/link", b'2', "sys\\x2dslice"))
+            .unwrap();
+        t.add(&mut tarf, &m("etc/ok", b'0', "")).unwrap();
+        t.whiteout("etc/.wh.sys\\x2dslice").unwrap();
+        assert_eq!(t.odd_names, ["etc/sys\\x2dslice", "etc/a\"b", "etc/link"]);
+        assert!(t.meta.contains_key("etc/ok"));
+        assert!(!root.join("tree/etc/link").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn mounts_refusals() {
         assert!(mounts_of(None, "s").unwrap().is_empty());

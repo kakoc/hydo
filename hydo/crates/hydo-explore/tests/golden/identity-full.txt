@@ -44,6 +44,7 @@ input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8
 input	hydo/onboard/examples/stack/hydo-grpcgen.yaml	72b3a42760bb79db3be04fe34d4e7a55645ed133e86008b059f0935cd3f247cf
 input	hydo/onboard/examples/stack/hydo-read.yaml	d3899b9ac926be02576d0f8e9b950bcc174682dc727791d4f1309294b3a1fb68
 input	hydo/onboard/examples/stack/hydo.yaml	369ed2074d0024dcbb5bf2218731bee7526fa006ff0e900aef339cc6cf69fb24
+input	hydo/onboard/examples/web-shop/hydo.yaml	4a3415ea3e19ece051aa5a30490ce0d313842f8c4a165269bd954c4e212bd816
 input	hydo/onboard/examples/blnk/hydo/hydo.yaml	7e97e5e2f1ff496ca70bf59e69bf32a213acbfe5b793f72d56bb293771353a9c
 input	hydo/onboard/examples/blnk/hydo/checks/always_no_overdraft.sql	aae40beaa23b954be0523b5919c746e7c5760e66d1b100900847410e09027507
 input	hydo/onboard/examples/blnk/hydo/checks/final_balance_is_sum.sql	e47a7b847a6a46f02b088f6e4c69f8e6382e0da7210bde525846e4e0faf5218b
@@ -1721,6 +1722,33 @@ chunk	hydo/onboard/examples/stack/hydo.yaml/hvm/FalseFalse	7	256	d1855c39587cbad
 chunk	hydo/onboard/examples/stack/hydo.yaml/hvm/FalseFalse	8	256	36009952c1e8bc310ba67207a038b96cbef87f0b26325850e21b3d4a4e0b2154
 chunk	hydo/onboard/examples/stack/hydo.yaml/hvm/FalseFalse	9	256	046bab182c7e3f6aeab22351149946076330a231e19f39d914401b0605d74701
 chunk	hydo/onboard/examples/stack/hydo.yaml/hvm/FalseFalse	10	166	5c685180f3d2cfd0ecd517bd8974b1aa5a849543823a3a0953acb92eb21465c5
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvx	0	256	0e66b2e0e9fe14474875b3cf54b29cb40b52f60b3fbd940c94446f5a8a519b5c
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvx	1	256	0fc1d48b34c8a83d00cdb56cd7155950487d03e84c590669a917cf5ce9b33610
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvx	2	256	cdd65c7bd1465b00b2ed80f205b3b1dbf2b26322c78efe53ede4d47d727ba996
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvx	3	256	f05cfe56746945f7dfd650d56b5a95d3f8d619f10d185802f734d48692b03d3b
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvx	4	256	bd0075fe5fc343142ac22603abc6f74bfc2815fdf313bb91679fca8a1e90d62b
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvx	5	256	e4486c5c8881cc9b2ba8ae2f7fa059e0a36196e9e22c5da0439482e41b1926dd
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvx	6	256	fc2096bf1a8830f97889f54b6261feca7264d8dd11b8100f220cee42ab481b69
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvx	7	256	ef06db7caccee617605819ec2547bffc3de7dbfc772f615f56ffe4f550547e6c
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvx	8	5	c8657185dd209dd0b55b3bb9d481feb503d9b14947a50d3b2ff317efeb3d07bc
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/TrueTrue	0	256	e8eb8a5faf646806a04d94f9d9098f35c579a57d896f6feedc1740154ce9447d
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/TrueTrue	1	256	83028eb0726dab5656cb01ff0706c180510db0a58930896762baf11c1c7791dc
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/TrueTrue	2	256	60cfc7688b5c4e3ea09cadf13e65ea4d6e9bb043af9d18539eda2e65190bdcbd
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/TrueTrue	3	256	5238efe0f24ea57ff18687cb7ae05700d40fd619663eb454cde057fcf941ed0d
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/TrueTrue	4	256	a338cf9edba7dd0282fdb21252423c6aa036c9b1e50dad4148d4abdfb78a3c8b
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/TrueTrue	5	256	d5b2ece2ff41a26da500686524d0c3c769d7596421d82aaebbe323ca83ea6881
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/TrueTrue	6	256	7d4e2cad3267f5f0af809ae6b094cfd10cd5309d2536dbbdbc7ccdd0904a785e
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/TrueTrue	7	256	b0546c0ec1cf36f8884eeb0a7759da563bbe3a34293ff7e0e815b9e193618409
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/TrueTrue	8	3	4871a5454c06736f5090ee4321223ea5c44558aeceacf137dc7e4108f83e19ab
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/FalseFalse	0	256	1c3f4114ccd46aac6f37cedd037b3198d7ba15850bb7cfd200a8b7eda6ddf116
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/FalseFalse	1	256	61a7f32e3b77416eebc52817f1f3d716d3dcc1f4bd1e1f94c9e469a9228a2339
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/FalseFalse	2	256	8087c5d659bb1c2696c8423d98fdd556c1a1e7489e8ba2638ae889bea5d074aa
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/FalseFalse	3	256	7528649aded152ce6f5ed71d209bfe8b5bea89dce0277b4fecd400acf6bb0aa2
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/FalseFalse	4	256	fef39648d53ceac4aeb17d3578c37f00a62a93a98a7573b30f915f0b4e1e2112
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/FalseFalse	5	256	e0599f044baaef030927fde941957aeb4132ed8ef9552abe70b53afee13ac080
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/FalseFalse	6	256	781999fe681bf8723afb4efcb14d62b72f9be9f4415afba4c95435ee9d1e3f63
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/FalseFalse	7	256	22b71e48b081f6e5ebd7dbaef8f0b3e9a089443d43eafac62e2215c98c26de49
+chunk	hydo/onboard/examples/web-shop/hydo.yaml/hvm/FalseFalse	8	6	60e8715331acca700b53420a32d84818e721701ec34ef9fd92d1e9fa687c2491
 chunk	hydo/onboard/examples/blnk/hydo/hydo.yaml/hvx	0	256	fb4ec3bf7423c75d2e05909f7b8af842a956f741cc8eea2eef60b0039d3c71c1
 chunk	hydo/onboard/examples/blnk/hydo/hydo.yaml/hvx	1	256	58426c5d4b6cb868f9edb0a2a9e335ef601aa8119647fbca4238d1a7f5f07fee
 chunk	hydo/onboard/examples/blnk/hydo/hydo.yaml/hvx	2	256	f591510c4da594343f955c4aef544757097c70263d99c06695376c26094b54a7

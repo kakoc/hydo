@@ -1,0 +1,81 @@
+# A web application tested with its own Playwright tests (Milestone 253, `hydo guide web-apps`).
+#
+# web-shop is a small React shop (app/): a product list, a cart, a checkout and an order page.
+# Its API is a fake (fakes: below), so this is the "frontend only" setup: no backend is needed,
+# and H= faults act between the page and the API. The team's Playwright tests (e2e/) run
+# unchanged inside the guest, in Microsoft's Playwright image, which `hydo build` fetches by
+# digest into browser/. hydo watches every page the tests open.
+#
+# Inputs: sh build.sh (npm ci in app/ and e2e/, and both builds of the app). The variant buggy
+# has two planted bugs: an order retried without an idempotency key, and an order page that
+# leaves its spinner and an unhandled rejection when the order cannot be read.
+#   disk=none | run                                          -> OK
+#   disk=none | run H=api.add_item@1-2:delay=1000            -> VIOLATION browser.tests_pass: the
+#                     test "adds two products to the cart" reads the cart count after a fixed wait
+#   disk=none | run H=api.get_order@0-1:status=500           -> buggy: VIOLATION browser.busy_ends,
+#                     browser.failures_shown, browser.no_page_errors; fixed: only the test fails
+#   disk=none | run H=api.place_order@0-1:drop               -> buggy: VIOLATION
+#                     api.order_placed_once (one cart, two orders); fixed: OK
+# (RESULTS.md has every run with its fingerprint)
+name: web-shop
+description: a React shop tested with its own Playwright tests; its API is a fake
+
+params:
+  variant: fixed                # fixed | buggy: which build of the app goes into the image
+
+network: bridge                 # the browser runs in its own network namespace
+
+root:
+  files:
+    - {src: "app/dist-{{variant}}", dst: /opt/hydo/web/app/dist}
+    - {src: app/serve.mjs, dst: /opt/hydo/web/app/serve.mjs}
+
+browser:
+  tests: e2e                    # playwright.config.ts, tests/, node_modules
+  shards: 2                     # step 0: "places an order" and "lists the products";
+                                # step 1: "adds two products to the cart"
+  env:
+    APP_DIST: /opt/hydo/web/app/dist
+    API_URL: http://10.89.0.1:9001
+  watch:
+    busy: [.spinner]
+    alerts: ["[role=alert]"]
+    requests: /api/
+
+fakes:
+  - name: api                   # the shop's API: its four routes and their usual answers
+    port: 9001
+    addr: 10.89.0.1
+    idempotency: header:Idempotency-Key
+    ref: json:cart
+    routes:
+      - name: products
+        method: GET
+        path: /api/products
+        headers: {Content-Type: application/json}
+        body: '[{"id":"p1","name":"Coffee mug","price":1200},{"id":"p2","name":"Tea pot","price":3000},{"id":"p3","name":"Notebook","price":550}]'
+      - name: add_item
+        method: POST
+        path: /api/cart/items
+        headers: {Content-Type: application/json}
+        body: '{"ok":true,"product":"{json:product}"}'
+      - name: place_order
+        method: POST
+        path: /api/orders
+        idempotent: true
+        save: {key: 'o{seq}', fields: {total: '{json:total}'}}
+        headers: {Content-Type: application/json}
+        body: '{"id":"o{seq}"}'
+      - name: get_order
+        method: GET
+        path: /api/orders/{id}
+        load: '{path:id}'
+        headers: {Content-Type: application/json}
+        body: '{"id":"{path:id}","total":{obj:total}}'
+
+invariants:
+  - id: api.order_placed_once
+    msg: the API took each cart's order at most once
+    cmd: hydo-world check at-most-once api.place_order
+
+faults: [protocol, clock, pause]

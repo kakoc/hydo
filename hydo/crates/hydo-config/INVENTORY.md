@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-56 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 36 test switches are read by test code; 25 names are the guest interface, 4 are variables of an image's manifest.sh and 7 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+56 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 36 test switches are read by test code; 27 names are the guest interface, 4 are variables of an image's manifest.sh and 7 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -260,6 +260,8 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_FROM` | guest | integer | - | set by hydo-control | The first step of a workload range. |
 | `HYDO_TO` | guest | integer | - | set by hydo-control | The last step of a workload range. |
 | `HYDO_PERF` | guest | path | - | set by hydo-control with perf:; read by the workload | With `perf:` (Milestone 237): the file a workload call appends its own numbers to, one `<name> <value> [<unit>]` line each; `hydo run` puts them into `result.json` `perf`. |
+| `HYDO_WEB_DIR` | guest | path | /tmp/hydo/web | set by browser:'s service; read by its hook.cjs, reporter.cjs and check.mjs | With `browser:` (Milestone 253): where the watcher of the Playwright tests writes what the pages did, and where its checks read it. |
+| `HYDO_WEB_WATCH` | guest | JSON | - | set by browser:'s service; read by its hook.cjs | With `browser:` (Milestone 253): what the watcher looks for in the pages (JSON: busy and alert selectors, texts, console, the request prefix). |
 | `HYDO_VALUE` | guest | text | - | set by hydo-control | A knob's value. |
 | `HYDO_CMD` | guest | id | - | set by hydo-control (the composer) | A composed command's id. |
 | `HYDO_CMD_ID` | guest | id | - | set by hydo-control (the composer) | A composed command's entry. |

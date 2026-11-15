@@ -584,6 +584,12 @@ variables! {
     /// With `perf:` (Milestone 237): the file a workload call appends its own numbers to, one
     /// `<name> <value> [<unit>]` line each; `hydo run` puts them into `result.json` `perf`.
     HYDO_PERF: Guest, Guest, "path", "", "set by hydo-control with perf:; read by the workload";
+    /// With `browser:` (Milestone 253): where the watcher of the Playwright tests writes what the
+    /// pages did, and where its checks read it.
+    HYDO_WEB_DIR: Guest, Guest, "path", "/tmp/hydo/web", "set by browser:'s service; read by its hook.cjs, reporter.cjs and check.mjs";
+    /// With `browser:` (Milestone 253): what the watcher looks for in the pages (JSON: busy and
+    /// alert selectors, texts, console, the request prefix).
+    HYDO_WEB_WATCH: Guest, Guest, "JSON", "", "set by browser:'s service; read by its hook.cjs";
     /// A knob's value.
     HYDO_VALUE: Guest, Guest, "text", "", "set by hydo-control";
     /// A composed command's id.

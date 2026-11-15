@@ -10332,3 +10332,129 @@ Re-recorded on purpose: the CLI's golden answer for `hydo guide manifest` (MANIF
 node can still send its end after the port is up; the explorer does not draw `:strict`. Seed 2's
 loss of 4 acknowledged messages was not investigated, and neither were the 46
 `HVX_HC_PUT: No space left on device` lines per explorer worker on the `blocks/` image.
+
+### Milestone 253 (tentative number) - DONE (web apps through their own Playwright tests: `browser:` runs a team's Playwright tests unchanged in a pinned Playwright image and watches every page for uncaught errors, spinners that stay, failed requests the page never shows, and broken texts; a flaky test fails on every run of one schedule and passes on every run of another; a React shop's stuck spinner and unhandled rejection found blind by `hydo explore` on hvx; nothing recorded moved; 2026-11-14)
+
+The user asked for a way into frontend testing: frontend developers mock APIs, look for
+exceptions in the console, for error chips and toasts, and for printed values. The research, the
+design and the reasons are in `docs/design/web-apps.md`; the how-to is `hydo guide web-apps`.
+Milestone 166 had shown that headless Chromium runs deterministically in an hvx guest, driven by a
+hand-written driver.
+
+**What is built.**
+
+- `browser:` (a format-1 addition, `hydo_manifest::browser`). The validator expands it after
+  `emulators:` into a service from Microsoft's Playwright image 1.65.1 (pinned by digest,
+  `docs/BUILD-PINS.md`), the tests' folder at `/opt/hydo/web/tests`, three helper files, a
+  workload of kind `test` whose step i runs shard i+1 of `playwright test` unchanged (no retries,
+  one worker), and up to five invariants: `tests_pass`, `no_page_errors`, `busy_ends`,
+  `failures_shown` and `no_bad_text`. It needs `network: bridge` and refuses a `workload:` of its
+  own. The validated data keeps `_browser`; the explorer draws no fault on the browser's service.
+- The watcher `hook.cjs`, loaded into the test runner with `NODE_OPTIONS=--require`. It adds one
+  listener to the instrumentation that Playwright's runner uses for its traces
+  (`runAfterCreateBrowserContext`, `runBeforeCloseBrowserContext`). Every context gets an init
+  script (errors, unhandled rejections, `console.error`, watched elements through a
+  `MutationObserver`, watched texts), a binding, and request listeners. At the close of a page
+  that still shows a busy or error element it takes a screenshot. `reporter.cjs` adds one line
+  per test, and `check.mjs` judges `/tmp/hydo/web/events.jsonl` and prints one plain sentence.
+- `hydo build` fetches the Playwright image into `browser/` and refuses tests whose
+  `@playwright/test` is missing or of another version.
+- hydo-build leaves out layer entries whose names have a backslash, a quote or a newline, and
+  names them in the image record (`skipped_names`) and on its output line. Before, it refused the
+  whole image; Ubuntu's systemd units (`system-systemd\x2dcryptsetup.slice`) made the Playwright
+  image fail. An image without such entries is built as before.
+
+**Research and design** (`docs/design/web-apps.md`). Frontend teams test with unit tests (Jest,
+Vitest), component tests, end-to-end tests (Playwright, Cypress, Puppeteer) and API mocks (MSW,
+`page.route`, `cy.intercept`). What hurts most is flaky end-to-end tests (45% of 235 flaky UI tests
+in one study were an asynchronous wait) and tests that never see a slow or failing API. hydo runs
+the browser and the backend in one deterministic machine, so a flaky test fails on every run of
+its schedule, and `H=` faults act between the page and its API. The design runs the team's own
+Playwright tests unchanged; a hydo-native list of steps was the fallback and was not needed.
+
+**The example** `hydo/onboard/examples/web-shop`: a React 19 shop (Vite), three Playwright tests in
+two files, a fake API with four routes, and the variant `buggy` with two planted bugs (an order
+retried without an idempotency key; an order page without error handling). `build.sh` builds the
+app twice and installs the tests' packages; `RESULTS.md` has every run.
+
+**Runs** (hvx on the bare-metal machine, this branch's `hydo` over the 0.3.3 release, epoch 3; the
+buggy image `c03111de5b8d1c64…`, 4,094,689,280 bytes):
+
+| schedule | verdict | fingerprint | runs |
+|---|---|---|---|
+| `disk=none \| run` | OK, 3 tests passed | `ce47cfb323d48c69` | 2 |
+| `disk=none \| run H=api.add_item@1-2:delay=300` | VIOLATION `browser.tests_pass` (count "1") | `6101da44b9f69c95` | 1 |
+| `disk=none \| run H=api.add_item@1-2:delay=500` | VIOLATION `browser.tests_pass` (count "1") | `4149e334f7cda032` | 1 |
+| `disk=none \| run H=api.add_item@1-2:delay=1000` | VIOLATION `browser.tests_pass` (count "0") | `139a04e83258d442` | 2 |
+| `disk=none \| run H=api.get_order@0-1:status=500` | VIOLATION `browser.no_page_errors`; also `busy_ends`, `failures_shown`, `tests_pass` | `3f71aaf23542d434` | 2 |
+| `disk=none \| run H=api.place_order@0-1:drop` | VIOLATION `api.order_placed_once` (one cart, two orders) | `1fadce7a74395c4a` | 2 |
+
+- Proof 1, a flaky test made exact: "adds two products to the cart" waits 250 ms and reads the
+  count once. On the Mac it failed 1 of 20 native runs against a stand-in API with 0 to 300 ms of
+  latency, and passed 10 of 10 without latency. Under hydo it passes on every run of the clean
+  schedule and fails on every run of the 1000 ms schedule.
+- Proof 2, what only an API fault shows: see the exploration below and the two buggy schedules
+  above. The finding reads "The page /orders/o3 showed the busy element .spinner ("Loading your
+  order…") for 5.1 s, until the test ended, after GET /api/orders/o3 answered 500 …; it showed no
+  error. Console: HttpError: HTTP 500 for /api/orders/o3".
+
+**Exploration** (buggy image, `hydo explore --seeds 1-20 --protocol-faults --workers 2`, 46
+minutes on the shared machine): 4 of 20 schedules failed, each reproduced and shrunk. Seed 7 is
+the planted bug, found blind: `disk=none dseed=63cbe1e459320dd7 | run H=api.get_order@0-1:reset`,
+VIOLATION `browser.no_page_errors` ("The page /orders/o3 left a promise rejection unhandled …
+HttpError: HTTP 502"), with `busy_ends` and `failures_shown` in the same run; `e405de9b8e7299de` on
+the explorer's two runs and on a `hydo run` by hand. Seeds 9, 11 and 20 were the tests' own
+assertions under API faults (the flaky test under `H=api.add_item@1-2:drop`, and two toasts
+instead of content). The explorer warned of 16 vacuous passes: the workload acknowledges nothing.
+A second exploration (`--seeds 21-40`, 52 minutes) gave 9 failures, all the tests' own assertions
+or their 30 s timeout under API faults, each reproduced. The double order was not found blind in
+the 40 schedules: it needs a fault on `place_order` in step 0, and the drawn ones fell into step
+1. `--sweep protocol` would reach it; it was stopped after 12 schedules to free the shared machine.
+
+**The fixed image** (`e11f4729c5dc0bac…`): clean `d4cba4c0812505be` twice; under the 500, the
+lost answer, the reset and the 1000 ms delay only `browser.tests_pass` fails (`86f32d0f9b6e5254`,
+`55b6755b7802c9d7`, `7725678008c965ea`, `3d57f8b7988570e5`).
+
+**What changed after the first runs.** Playwright shards whole files into the shard of their first
+test, so with two files of one and two tests step 1 ran nothing: `--fully-parallel` is added with
+more than one shard. The explorer needs 4 steps unless the workload is a test program: the
+workload is `kind: test`. A retry after a timeout counts as handling a failed request. The
+invariant `tests_pass` comes last, so that a page's own failure names the verdict. The example's
+cart id is digits, which the failure signature folds (a UUID made every run's signature
+different).
+
+**Tests** (on the bare-metal machine, in a copy of this tree, Rust 1.90.0). `cargo fmt --all
+--check`; `cargo clippy -D warnings --all-targets` on `hydo-manifest`, `hydo-build`, `hydo`,
+`hydo-explore` and `hydo-config`. New tests: five in `hydo_manifest::browser` (the expansion, the
+refusals, empty watch lists, the quoting of arguments) and `hydo-build`'s
+`layer_entries_with_a_backslash_or_quote_are_left_out`. After the rebase onto `main` at
+`17d9c555`, the goldens were taken from `main` and re-recorded:
+
+- On the bare-metal machine: the schema (`browser:`, an addition), `hydo-config`'s
+  `INVENTORY.md` (`HYDO_WEB_DIR`, `HYDO_WEB_WATCH`), the explorer's quick and full identity and
+  corpus goldens, and the core controller's corpus golden. They moved for the new example and for
+  refusals whose message lists the known top-level keys, which now include `browser`. The
+  explorer's quick identity test passes on `main`'s tree there (checked before the rebase), so
+  the moved chunks of other examples come from that message.
+- On this Mac, where the `--check` answers' warning about missing files matches the recorded
+  host (open item 115): the CLI's goldens for `hydo guide` (a new topic, MANIFEST.md changed)
+  and the `equivalence::` answers of `hydo-manifest` and `hydo-build`. Every changed answer that
+  is not a seeded mutant lists the known keys or is the new example's, except the inputs that
+  `main` had added without recording them (`k3s-lease`, `nats-jetstream/blocks`, the plugin
+  metadata). They are recorded too, because the seeded mutants depend on the whole input set.
+
+Passing after that: on the Mac, `cargo test -p hydo --test it` and both `equivalence::` tests;
+on the bare-metal machine, `cargo fmt --all --check`, `cargo clippy -D warnings --all-targets` on
+`hydo-manifest`, `hydo-build`, `hydo`, `hydo-explore` and `hydo-config`, the unit tests of
+`hydo-manifest` and `hydo-build`, `format::`, every test of `hydo-explore` (also with
+`HYDO_IDENT_FULL=1`), `hydo-control`'s corpus, `hydo-config`'s inventory, `hydo-agents`,
+`hydo-release`, and `sh ci/consolidate-tests.sh --check`; Vale on every changed page it covers.
+
+**Left** (AGENTS.md open item 51). The Mac and KVM engines; other Playwright versions, Firefox
+and WebKit; screenshot comparison and taking screenshots out of the guest; a hydo-native step
+list and Cypress suites; acknowledging each passing test so that a pass is not vacuous; an
+exploration of clock steps and pauses against a frontend; a frontend with its real backend
+through `browser:`; `hydo build`'s fetch of a missing Playwright image (the image of these runs was
+fetched with `hydo-fetch-image` by the same digest). The watcher uses the instrumentation
+interface of Playwright's own runner,
+which a new Playwright version may change.

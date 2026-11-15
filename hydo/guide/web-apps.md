@@ -1,0 +1,138 @@
+# Web apps: run your Playwright tests under hydo
+
+This page shows how to test a web app's frontend with hydo. Your Playwright tests run
+unchanged inside the guest, with Playwright's own Chromium and no network. hydo watches every
+page the tests open and turns what it sees into properties:
+
+- an uncaught exception, an unhandled promise rejection or a `console.error` call;
+- a spinner that stays on the screen;
+- a failed request that the page never shows to the user;
+- a text such as `NaN` or `undefined` printed on the page;
+- a test that fails.
+
+Because the whole machine is deterministic, a flaky test fails on every run of the schedule that
+makes it fail. Faults between the page and its API (`H=` tokens) show how the frontend behaves
+when the API is slow, fails, or loses an answer. The worked example is
+`hydo/onboard/examples/web-shop` in hydo's repository: a React shop whose API is a fake. This is
+x86_64 only (the hvx and KVM engines); the Mac engine does not run it yet.
+
+## The project: `browser:`
+
+```yaml
+name: my-shop
+network: bridge                 # required: the browser runs in its own network namespace
+
+root:
+  files:                        # files the tests need, under /opt/hydo/web
+    - {src: app/dist, dst: /opt/hydo/web/app/dist}
+    - {src: app/serve.mjs, dst: /opt/hydo/web/app/serve.mjs}
+
+browser:
+  tests: e2e                    # the Playwright project: playwright.config.ts, tests, node_modules
+  shards: 2                     # workload steps: step i runs shard i+1 of the tests (default 1)
+  env:                          # variables for the tests and the web server their config starts
+    APP_DIST: /opt/hydo/web/app/dist
+    API_URL: http://10.89.0.1:9001
+  watch:
+    busy: [.spinner]            # spinners (default [aria-busy=true] and [role=progressbar])
+    alerts: ["[role=alert]"]    # error toasts, chips, banners (default [role=alert], [role=alertdialog])
+    requests: /api/             # judge only the pages' requests under this path
+
+fakes:                          # the API, served in the guest (hydo guide outside-services)
+  - name: api
+    port: 9001
+    addr: 10.89.0.1
+    routes: [...]
+
+faults: [protocol, clock, pause]
+```
+
+Before `hydo build`, run `npm ci` in the tests' folder: the guest has no network, so the
+tests' `node_modules` go into the image. The tests' `@playwright/test` must be 1.65.1, the
+version whose Playwright image this hydo pins. `hydo build` fetches that image
+(`mcr.microsoft.com/playwright:v1.65.1-noble`, by its digest) into `browser/` next to the
+manifest. Keep that folder out of git: the image is about 1 GB.
+
+`browser:` writes the workload, as a test program (`workload.kind: test`, `hydo guide
+flaky-tests`): do not write `workload:`. The explorer draws only the fault kinds that `faults:`
+lists. Each step runs, inside the browser's service:
+
+```sh
+cd /opt/hydo/web/tests && playwright test --shard=<i+1>/<shards> --retries=0 --workers=1
+```
+
+With more than one shard, hydo adds `--fully-parallel`. Playwright then splits the tests one by
+one instead of by file, and the one worker still runs them in the files' order. Step 0 of the
+`web-shop` example runs its first two tests, and step 1 the third.
+
+The tests' own `playwright.config` applies, including its `webServer`. The environment has
+`CI=1`. Retries are off: under hydo a test that fails, fails on every run of its schedule, so a
+retry would only hide it.
+
+## Two ways to give the frontend an API
+
+- **The real backend.** Add the backend's services, for example from `hydo compose`, and point
+  the frontend at their addresses. Every fault of the services applies: kills, pauses, network
+  faults, power cuts. The example `hydo/onboard/examples/compose-voting-browser` (Milestone
+  166) checks that the screen agrees with the database.
+- **The frontend alone.** Serve the API with a fake (`fakes:`), an emulator (`emulators:`), or a
+  fake made from an OpenAPI description. `H=` tokens then act between the page and the API: an
+  error status, a slow answer, a lost answer after the effect. This is the setup of the
+  `web-shop` example.
+
+## The properties
+
+Each one is an invariant named `<browser>.<property>`; an empty list in `watch:` turns it off.
+
+| invariant | fails when |
+|---|---|
+| `browser.tests_pass` | a test fails (turn it off with `must_pass: false` when faults make the tests' own assertions fail by design) |
+| `browser.no_page_errors` | a page throws an uncaught exception, leaves a promise rejection unhandled, or calls `console.error` (`watch.console: false` leaves `console.error` out) |
+| `browser.busy_ends` | a busy element stays for `busy_max_ms` (default 10000), or is still on the screen when its test ends after a failed request that the page did not send again |
+| `browser.failures_shown` | a request fails (an answer of 500 or more, or no answer) and within `failures_within_ms` (default 5000) the page shows no error element and does not send the request again |
+| `browser.no_bad_text` | a page prints a watched text (default `NaN`, `undefined`, `[object Object]`, `Invalid Date`) |
+
+A finding reads like this:
+
+```text
+The page /orders/o5 showed the busy element .spinner ("Loading your order…") for 5.1 s, until the
+test ended, after GET /api/orders/o5 answered 500 during the test "checkout.spec.ts › places an
+order"; it showed no error. Console: HttpError: HTTP 500 for /api/orders/o5
+```
+
+The check that the API acted once per order is the fake's own record: `hydo-world check
+at-most-once api.place_order` (`hydo guide checks`, "Side effects at fake outside services").
+
+## Faults for a frontend
+
+| fault | token | what the page meets |
+|---|---|---|
+| an API error | `H=api.get_order@0-1:status=500` | an error answer to every matching request in step 0 |
+| a slow API | `H=api.add_item@1-2:delay=300` | the answers come 300 ms late |
+| a lost answer | `H=api.place_order@0-1:drop` | the API acts, and the answer never comes |
+| a clock step | `T=...` (`hydo guide faults`) | the page's `Date.now()` and its timers jump, for example past a token's expiry |
+| a stalled browser | `P=workload@0~4:500` | every process of the tests, the browser too, stops for 500 ms |
+
+`hydo explore --protocol-faults` draws `H=` tokens on every route of the fakes.
+
+## How it works
+
+- The browser's service runs Microsoft's Playwright image, idle. The workload runs the tests in
+  it with `hydo-oci`.
+- `NODE_OPTIONS=--require /opt/hydo/web/hydo/hook.cjs` loads hydo's watcher into the test
+  runner. The watcher adds a script and a binding to every browser context the tests create. The
+  tests stay unchanged.
+- What the pages did goes to `/tmp/hydo/web/events.jsonl` in the guest. Each invariant runs
+  `node /opt/hydo/web/hydo/check.mjs <property>` over it. The lines `hydo-web: test ...` on the
+  console show each test's result.
+- When a page ends its test with a spinner or an error on the screen, the watcher takes a
+  screenshot into `/tmp/hydo/web/shots/`.
+
+## Limits
+
+- x86_64 only. The Playwright image is about 3 GB unpacked, and the Mac engine keeps the root in
+  guest RAM.
+- One pinned Playwright version (1.65.1) and its Chromium. Firefox and WebKit are in the image
+  but were not tried.
+- Tests that call outside sites (a CDN, a login provider) need a fake under that name.
+- Screenshot comparison against a recorded reference is not built.

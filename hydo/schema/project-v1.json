@@ -257,6 +257,17 @@
         "$ref": "#/$defs/Emulator"
       }
     },
+    "browser": {
+      "description": "A web application tested through its own Playwright tests (Milestone 253,\ndocs/design/web-apps.md): the tests run unchanged in a pinned Playwright image (fetched by\n`hydo build`) as the workload, and hydo watches the pages for uncaught errors, spinners\nthat stay, failed requests that the page never shows, and texts such as NaN. Needs\n`network: bridge`; it writes the workload.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Browser"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "errors": {
       "description": "Error logs as findings: true, or a mapping.",
       "anyOf": [
@@ -3213,6 +3224,202 @@
         "smtp",
         "s3"
       ]
+    },
+    "Browser": {
+      "description": "The `browser:` section (Milestone 253): a team's Playwright project, run unchanged as the\nworkload, and what hydo watches in its pages.",
+      "type": "object",
+      "properties": {
+        "tests": {
+          "description": "The folder of the Playwright project, relative to the manifest: its playwright.config,\nits tests and its node_modules (run `npm ci` there first: the guest has no network). It is\ncopied to /opt/hydo/web/tests.",
+          "$ref": "#/$defs/Text"
+        },
+        "playwright": {
+          "description": "The version of @playwright/test in the tests' node_modules; hydo pins the Playwright\nimage of that version (default and only pinned version: 1.65.1).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "description": "The browser's service name (default browser); the invariants are <name>.<property>.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "addr": {
+          "description": "The browser's address on the bridge (default 10.89.0.250).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shards": {
+          "description": "Workload steps (default 1): step i runs shard i+1 of `playwright test --shard`, so that\nfaults can be placed between test files.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 1
+        },
+        "args": {
+          "description": "More arguments for `playwright test`, such as --project=chromium or --grep.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "env": {
+          "description": "Variables for the tests and the web server their config starts (the base URL of the API,\nthe folder of the built app).",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Scalar"
+          }
+        },
+        "must_pass": {
+          "description": "Every test must pass (default true). Under faults the tests' own assertions often fail by\ndesign; false keeps only the watched properties.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "timeout": {
+          "description": "Seconds per workload call (default 600).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 600
+        },
+        "watch": {
+          "description": "What hydo watches in every page.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BrowserWatch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tests"
+      ]
+    },
+    "BrowserWatch": {
+      "description": "What hydo watches in the pages of `browser:` (Milestone 253). An empty list turns its\ninvariant off.",
+      "type": "object",
+      "properties": {
+        "errors": {
+          "description": "Uncaught exceptions and unhandled promise rejections are findings (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "console": {
+          "description": "console.error calls count as errors too (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "busy": {
+          "description": "CSS selectors of busy elements: spinners, progress bars (default [aria-busy=true] and\n[role=progressbar]).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "busy_max_ms": {
+          "description": "How long a busy element may stay, in milliseconds (default 10000).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 10000
+        },
+        "alerts": {
+          "description": "CSS selectors of error elements: toasts, chips, banners (default [role=alert] and\n[role=alertdialog]).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "failures_within_ms": {
+          "description": "How soon after a failed request an error element must show, unless the page sends the\nrequest again, in milliseconds (default 5000).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 5000
+        },
+        "requests": {
+          "description": "Only the pages' fetch and XHR requests under this path prefix are judged (default all).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "description": "Texts no page may print (default NaN, undefined, [object Object], Invalid Date).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        }
+      },
+      "additionalProperties": false
     },
     "ErrorsSetting": {
       "description": "Error logs as findings: true (every default), false (off), or a mapping.",

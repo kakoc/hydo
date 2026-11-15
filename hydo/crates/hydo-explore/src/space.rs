@@ -170,7 +170,10 @@ impl Space {
             .collect();
         // an emulator's service (`emulators:`, Milestone 242) stands for the outside world: its
         // faults are H= tokens on its proxy, so no other fault is drawn on it either
-        let emulators = hydo_manifest::emulators::services(&m);
+        // and so does the browser of `browser:` (Milestone 253): it only idles; the tests run in
+        // it from the workload
+        let mut emulators = hydo_manifest::emulators::services(&m);
+        emulators.extend(hydo_manifest::browser::services(&m));
         let services: Vec<Value> = all_services
             .into_iter()
             .filter(|s| !is_job(s) && !emulators.contains(&name_of(s)))

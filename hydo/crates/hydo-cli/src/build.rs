@@ -201,7 +201,40 @@ fn fetch_emulators(ctx: &Ctx, manifest: &str, arch: &str, rest: &[String]) -> Re
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_default();
-    for img in hydo_manifest::emulators::images(&loaded.manifest.data, arch) {
+    let data = &loaded.manifest.data;
+    let mut imgs = hydo_manifest::emulators::images(data, arch);
+    // `browser:` (Milestone 253): the Playwright image of the tests' version; the tests' own
+    // @playwright/test must be that version, or Playwright finds no browser in the image
+    for (img, version, tests) in hydo_manifest::browser::images(data, arch) {
+        let pkg = dir
+            .join(&tests)
+            .join("node_modules/@playwright/test/package.json");
+        let have = std::fs::read_to_string(&pkg)
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .and_then(|v| {
+                v.get("version")
+                    .and_then(|x| x.as_str())
+                    .map(str::to_string)
+            });
+        match have {
+            None => {
+                return Err(format!(
+                    "browser.tests: {} is missing: run `npm ci` in {} first (the guest has no network, so the tests' node_modules go into the image)",
+                    pkg.display(),
+                    dir.join(&tests).display()
+                ))
+            }
+            Some(h) if h != version => {
+                return Err(format!(
+                    "browser: the tests have @playwright/test {h}, and this hydo pins the Playwright image of {version}; install @playwright/test@{version} or set browser.playwright"
+                ))
+            }
+            Some(_) => {}
+        }
+        imgs.push(img);
+    }
+    for img in imgs {
         let out = dir.join(&img.path);
         if out.exists() {
             continue;

@@ -54,6 +54,7 @@ pub const KNOWN_TOP: &[&str] = &[
     "perf",
     "contracts",
     "emulators",
+    "browser",
 ];
 /// The keys of a `groups:` entry (Milestone 195).
 pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "description"];
@@ -535,10 +536,19 @@ pub fn validate(m: &mut Value) -> R<()> {
     let emu = m
         .as_object_mut()
         .and_then(|o| o.remove(crate::emulators::META));
+    // browser: becomes a service, files, the workload and invariants (Milestone 253); what it
+    // became stays in _browser
+    let web = m
+        .as_object_mut()
+        .and_then(|o| o.remove(crate::browser::META));
     unknown(m, KNOWN_TOP, "top level")?;
     crate::emulators::expand(m)?;
     if let Some(e) = emu {
         m[crate::emulators::META] = e;
+    }
+    crate::browser::expand(m)?;
+    if let Some(w) = web {
+        m[crate::browser::META] = w;
     }
     if let Some(b) = obj_get(m, "buggify") {
         if !b.is_boolean() {

@@ -1,0 +1,6 @@
+node_modules/
+app/dist-fixed/
+app/dist-buggy/
+browser/
+test-results/
+playwright-report/

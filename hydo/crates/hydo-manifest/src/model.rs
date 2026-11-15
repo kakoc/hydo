@@ -679,6 +679,13 @@ pub struct Project {
     /// work as for a fake. Its service keeps the explorer's other faults off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub emulators: Option<Vec<Emulator>>,
+    /// A web application tested through its own Playwright tests (Milestone 253,
+    /// docs/design/web-apps.md): the tests run unchanged in a pinned Playwright image (fetched by
+    /// `hydo build`) as the workload, and hydo watches the pages for uncaught errors, spinners
+    /// that stay, failed requests that the page never shows, and texts such as NaN. Needs
+    /// `network: bridge`; it writes the workload.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<Browser>,
     /// Error logs as findings: true, or a mapping.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub errors: Option<ErrorsSetting>,
@@ -1660,6 +1667,91 @@ pub struct Emulator {
     pub buckets: Option<Vec<Text>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
+}
+
+/// The `browser:` section (Milestone 253): a team's Playwright project, run unchanged as the
+/// workload, and what hydo watches in its pages.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct Browser {
+    /// The folder of the Playwright project, relative to the manifest: its playwright.config,
+    /// its tests and its node_modules (run `npm ci` there first: the guest has no network). It is
+    /// copied to /opt/hydo/web/tests.
+    pub tests: Text,
+    /// The version of @playwright/test in the tests' node_modules; hydo pins the Playwright
+    /// image of that version (default and only pinned version: 1.65.1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playwright: Option<Text>,
+    /// The browser's service name (default browser); the invariants are <name>.<property>.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<Text>,
+    /// The browser's address on the bridge (default 10.89.0.250).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub addr: Option<Text>,
+    /// Workload steps (default 1): step i runs shard i+1 of `playwright test --shard`, so that
+    /// faults can be placed between test files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 1))]
+    pub shards: Option<i64>,
+    /// More arguments for `playwright test`, such as --project=chromium or --grep.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Vec<Text>>,
+    /// Variables for the tests and the web server their config starts (the base URL of the API,
+    /// the folder of the built app).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<IndexMap<String, Scalar>>,
+    /// Every test must pass (default true). Under faults the tests' own assertions often fail by
+    /// design; false keeps only the watched properties.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
+    pub must_pass: Option<bool>,
+    /// Seconds per workload call (default 600).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 600))]
+    pub timeout: Option<i64>,
+    /// What hydo watches in every page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watch: Option<BrowserWatch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
+}
+
+/// What hydo watches in the pages of `browser:` (Milestone 253). An empty list turns its
+/// invariant off.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct BrowserWatch {
+    /// Uncaught exceptions and unhandled promise rejections are findings (default true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
+    pub errors: Option<bool>,
+    /// console.error calls count as errors too (default true).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
+    pub console: Option<bool>,
+    /// CSS selectors of busy elements: spinners, progress bars (default [aria-busy=true] and
+    /// [role=progressbar]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub busy: Option<Vec<Text>>,
+    /// How long a busy element may stay, in milliseconds (default 10000).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 10000))]
+    pub busy_max_ms: Option<i64>,
+    /// CSS selectors of error elements: toasts, chips, banners (default [role=alert] and
+    /// [role=alertdialog]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alerts: Option<Vec<Text>>,
+    /// How soon after a failed request an error element must show, unless the page sends the
+    /// request again, in milliseconds (default 5000).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 5000))]
+    pub failures_within_ms: Option<i64>,
+    /// Only the pages' fetch and XHR requests under this path prefix are judged (default all).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requests: Option<Text>,
+    /// Texts no page may print (default NaN, undefined, [object Object], Invalid Date).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<Vec<Text>>,
 }
 
 /// Error logs as findings: true (every default), false (off), or a mapping.
