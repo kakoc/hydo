@@ -38,7 +38,7 @@ set -e
 umask 022
 D=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$D/../../.." && pwd)
-VERSION=${HYDO_VERSION:-0.3.3}
+VERSION=${HYDO_VERSION:-0.3.4}
 OUTDIR=${1:-$D/out}
 mkdir -p "$OUTDIR"
 OUTDIR=$(cd "$OUTDIR" && pwd)

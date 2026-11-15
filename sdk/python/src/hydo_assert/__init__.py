@@ -45,7 +45,7 @@ from ._eventually import Liveness, Watch, eventually
 #: The details type: any mapping (a plain dict). The Go SDK calls it D.
 D = dict
 
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 
 __all__ = [
     "Assertion",

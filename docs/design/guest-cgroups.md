@@ -2,7 +2,7 @@
 
 Status: built in Milestone 234 (2026-11-14). The user chose option A below on 2026-11-14: images
 built before keep the kernels they were recorded with. The change raises the fingerprint epoch
-(`hydo_image::EPOCH`) from 2 to 3 and is meant for the release after 0.3.3. The proofs and the
+(`hydo_image::EPOCH`) from 2 to 3 and ships in hydo 0.3.4. The proofs and the
 pins are in `docs/HISTORY.md` Milestone 234 and `docs/BUILD-PINS.md`. A pause of threads fails
 Qdrant's flaky test on the Mac engine and on KVM with one vCPU.
 
