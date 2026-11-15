@@ -390,6 +390,12 @@ choice!(
     WorkloadKind { System = "system", Test = "test" }
 );
 choice!(
+    /// Which pages of `browser:` get a screenshot (Milestone 254): those that end their test with
+    /// a busy or error element, every page at the end of its test, or every page compared with
+    /// its reference.
+    BrowserScreens { Failures = "failures", All = "all", Compare = "compare" }
+);
+choice!(
     /// The guest CPU level (x86_64 only).
     CpuLevel { V2 = "v2", V3 = "v3" }
 );
@@ -1712,6 +1718,18 @@ pub struct Browser {
     /// What hydo watches in every page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub watch: Option<BrowserWatch>,
+    /// Which pages get a screenshot (default failures: a page that ends its test with a busy or
+    /// error element; all: every page at the end of its test; compare: all, and each compared
+    /// with the file of the same name in `screens_ref`, pixel for pixel, as the invariant
+    /// <name>.screens_match). The screenshots go to the run directory's screens/.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "failures"))]
+    pub screens: Option<Param<BrowserScreens>>,
+    /// The folder of the reference screenshots for `screens: compare`, relative to the manifest
+    /// (default hydo-screens): a passing run's screens/*.png. It is copied to
+    /// /opt/hydo/web/screens-ref.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screens_ref: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

@@ -77,6 +77,8 @@ mod targets;
 mod cost;
 // perf: in the manifest (Milestone 237): the workload measured per step
 pub mod perf;
+// Milestone 254: the screenshots of `browser:` copied out of the guest after the verdict
+pub mod screens;
 // Milestone 226: a timed pause of threads of the workload (P=workload/<name>[#<k>]@...)
 mod threads;
 // Milestone 238: upgrades, U=<target>@<at>[/<gap>][+<back>]:<version>
@@ -2132,6 +2134,8 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     fx.report(v.clone());
     // perf: (Milestone 237): the workload's own numbers ($HYDO_PERF), once the verdict is decided
     perf::report(fx, ctx)?;
+    // browser: (Milestone 254): the pages' screenshots, once the verdict is decided
+    screens::collect(fx, ctx)?;
     // HYDO_COST: the counters once the verdict is decided, so the probe changes no verdict and
     // nothing before it (the workload's fingerprint stays the run's without the probe)
     cost::probe(fx, ctx, "final", false)?;
@@ -3143,6 +3147,7 @@ fn stopped_without_faults(fx: &mut F<'_>, ctx: &Ctx, svc: &str) -> Step<()> {
     log(fx, format!("the checks with {svc} stopped: {checks}"));
     let v = format!("{STOPPED_WITHOUT_FAULTS} ({svc})");
     fx.report(v.clone());
+    screens::collect(fx, ctx)?;
     cost::probe(fx, ctx, "final", false)?;
     fx.settle()?;
     fx.end(Ending::Verdict(v))

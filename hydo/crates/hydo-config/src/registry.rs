@@ -588,7 +588,8 @@ variables! {
     /// pages did, and where its checks read it.
     HYDO_WEB_DIR: Guest, Guest, "path", "/tmp/hydo/web", "set by browser:'s service; read by its hook.cjs, reporter.cjs and check.mjs";
     /// With `browser:` (Milestone 253): what the watcher looks for in the pages (JSON: busy and
-    /// alert selectors, texts, console, the request prefix).
+    /// alert selectors, texts, console, the request prefix, and `screens`, which pages get a
+    /// screenshot, since Milestone 254).
     HYDO_WEB_WATCH: Guest, Guest, "JSON", "", "set by browser:'s service; read by its hook.cjs";
     /// A knob's value.
     HYDO_VALUE: Guest, Guest, "text", "", "set by hydo-control";

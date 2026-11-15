@@ -234,6 +234,16 @@ fn fetch_emulators(ctx: &Ctx, manifest: &str, arch: &str, rest: &[String]) -> Re
         }
         imgs.push(img);
     }
+    // `browser.screens: compare` (Milestone 254): the references go into the image
+    if let Some(r) = hydo_manifest::browser::screens_ref(data) {
+        if !dir.join(&r).is_dir() {
+            return Err(format!(
+                "browser.screens_ref: {} is missing. Record the references first: build with `screens: all`, run a schedule that shows the pages as they should be (for example `disk=none | run`), and copy the run directory's screens/*.png into {}",
+                dir.join(&r).display(),
+                r
+            ));
+        }
+    }
     for img in imgs {
         let out = dir.join(&img.path);
         if out.exists() {

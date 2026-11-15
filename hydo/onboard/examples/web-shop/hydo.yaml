@@ -16,12 +16,17 @@
 #                     browser.failures_shown, browser.no_page_errors; fixed: only the test fails
 #   disk=none | run H=api.place_order@0-1:drop               -> buggy: VIOLATION
 #                     api.order_placed_once (one cart, two orders); fixed: OK
+# With --set screens=all every page gets a screenshot at the end of its test; copy a clean run's
+# screens/*.png into hydo-screens/ and build with --set screens=compare to check each page's
+# pixels against them (browser.screens_match).
 # (RESULTS.md has every run with its fingerprint)
 name: web-shop
 description: a React shop tested with its own Playwright tests; its API is a fake
 
 params:
   variant: fixed                # fixed | buggy: which build of the app goes into the image
+  screens: failures             # failures | all | compare: which pages get a screenshot
+                                # (compare: each against hydo-screens/, Milestone 254)
 
 network: bridge                 # the browser runs in its own network namespace
 
@@ -37,6 +42,7 @@ browser:
   env:
     APP_DIST: /opt/hydo/web/app/dist
     API_URL: http://10.89.0.1:9001
+  screens: "{{screens}}"        # the screenshots go to the run directory's screens/
   watch:
     busy: [.spinner]
     alerts: ["[role=alert]"]

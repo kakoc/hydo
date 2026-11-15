@@ -46,6 +46,35 @@ pub(super) fn read_bytes(fx: &mut F<'_>, path: &str) -> Step<Vec<u8>> {
     }
 }
 
+/// A whole file as lower-case hex, in chunks of [`HEX_CHUNK`] bytes, at most `max` bytes of it
+/// (a binary file such as a screenshot, Milestone 254). A missing or unreadable file reads as
+/// empty; a file longer than `max` as empty too, so that no file arrives cut.
+pub(super) fn read_hex(fx: &mut F<'_>, path: &str, max: usize) -> Step<String> {
+    let mut out = String::new();
+    loop {
+        let offset = (!out.is_empty()).then_some((out.len() / 2) as u64);
+        let r = fx.send(Command::Read(Read {
+            path: path.into(),
+            offset,
+            max: HEX_CHUNK,
+            hex: Some(true),
+        }))?;
+        match fx.reply(r)? {
+            Ok(Reply::Read(r)) => {
+                if r.size as usize > max {
+                    return Ok(String::new());
+                }
+                let done = r.eof || r.data.is_empty();
+                out.push_str(&r.data);
+                if done {
+                    return Ok(out);
+                }
+            }
+            _ => return Ok(String::new()),
+        }
+    }
+}
+
 fn unhex(s: &str) -> Vec<u8> {
     let b = s.as_bytes();
     let v = |c: u8| match c {

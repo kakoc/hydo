@@ -20,6 +20,7 @@ mod perf;
 mod react;
 mod restart;
 mod restart_may_fail;
+mod screens;
 mod search;
 mod silent;
 mod start_after;

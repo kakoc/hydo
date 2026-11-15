@@ -1578,6 +1578,8 @@ browser:
     failures_within_ms: 5000
     requests: /api/            # judge only fetch and XHR requests under this path (default all)
     text: [NaN, undefined, "[object Object]", Invalid Date]   # <name>.no_bad_text; [] turns it off
+  screens: failures            # failures (default) | all | compare: which pages get a screenshot
+  screens_ref: hydo-screens    # compare only: the reference screenshots (default hydo-screens)
 ```
 
 - The service `<name>` has `image:` (`browser/playwright-v<version>-noble-<amd64|arm64>.docker.tar`
@@ -1600,6 +1602,19 @@ browser:
   another version.
 - The validated data keeps `_browser`. The explorer draws no fault on the browser's service: the
   tests' faults are `H=` on the API, clock steps and pauses of the workload.
+- Screenshots (Milestone 254). With `screens: failures` the watcher takes a screenshot of a page
+  that ends its test with a busy or error element; with `all` or `compare`, of every page at the
+  end of its test. A file is named after the test's title path and the page's number in the test,
+  for example `checkout-spec-ts-places-an-order-1.png`. After the verdict the controller copies
+  each one into the run directory's `screens/`, with `screens/index.jsonl` (the test, the page's
+  path and why it was taken). The run's fingerprint and its control transcript's hash do not
+  cover them.
+- `screens: compare` adds `{src: <screens_ref>, dst: /opt/hydo/web/screens-ref}` to `root.files`
+  and the invariant `<name>.screens_match` before `<name>.tests_pass`. It fails when a screenshot
+  has no reference, when a reference has no screenshot, or when one pixel differs. Its sentence
+  gives the number of changed pixels and the box around them, and `<file>.diff.png` shows them in
+  red. `hydo build` refuses `compare` when the folder is missing. To record the references, copy a
+  passing run's `screens/*.png` into the folder.
 
 ### HTTPS for fakes and proxies (`tls:`)
 

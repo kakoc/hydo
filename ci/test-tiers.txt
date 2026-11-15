@@ -63,6 +63,7 @@ hydo-control::perf                       fast
 hydo-control::react                      fast
 hydo-control::restart                    fast
 hydo-control::restart_may_fail           fast
+hydo-control::screens                    fast
 hydo-control::search                     fast
 hydo-control::storage                    fast
 hydo-control::silent                     fast

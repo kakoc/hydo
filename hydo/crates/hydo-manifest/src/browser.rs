@@ -16,7 +16,11 @@
 //! - the workload: step i runs shard i+1 of `shards:` of `playwright test`, unchanged, with no
 //!   retries and one worker;
 //! - one invariant per watched property (`watch:`), and one that every test passes
-//!   (`must_pass:`).
+//!   (`must_pass:`);
+//! - with `screens: compare` (Milestone 254), the reference folder at
+//!   `/opt/hydo/web/screens-ref` and one invariant that every page's screenshot at the end of its
+//!   test is the reference's, pixel for pixel. The controller copies every screenshot out of the
+//!   guest into the run directory (`screens/`) after the verdict.
 //!
 //! The expansion consumes `browser:` and leaves `_browser` (the service's name and the image
 //! pins) in the validated data: the explorer draws no fault on that service (the tests' faults
@@ -39,6 +43,8 @@ pub const KNOWN: &[&str] = &[
     "must_pass",
     "timeout",
     "watch",
+    "screens",
+    "screens_ref",
     "description",
 ];
 
@@ -62,6 +68,19 @@ pub const WEB_DIR: &str = "/opt/hydo/web";
 
 /// Where the pages' record is (the guest's /tmp, which every image root shares).
 pub const RECORD_DIR: &str = "/tmp/hydo/web";
+
+/// Where the watcher saves the screenshots, with their `index.jsonl` (the controller copies them
+/// out into the run directory's `screens/`).
+pub const SHOTS_DIR: &str = "/tmp/hydo/web/shots";
+
+/// Where `screens: compare` finds the reference screenshots in the guest.
+pub const REF_DIR: &str = "/opt/hydo/web/screens-ref";
+
+/// The values of `browser.screens`: which pages get a screenshot, and whether it is compared.
+pub const SCREENS: &[&str] = &["failures", "all", "compare"];
+
+/// The default reference folder of `screens: compare`, relative to the manifest.
+pub const SCREENS_REF: &str = "hydo-screens";
 
 /// hydo's helpers, staged by the expansion as `root.text`.
 pub const HOOK: &str = include_str!("browser/hook.cjs");
@@ -297,6 +316,36 @@ pub fn expand(m: &mut Value) -> R<()> {
         "browser.watch.failures_within_ms",
         5_000,
     )?;
+    let screens = match get(&b, "screens") {
+        None => "failures".to_string(),
+        Some(Value::String(s)) if SCREENS.contains(&s.as_str()) => s.clone(),
+        // a {{param}} is replaced before the image is built (and checked then); a reading of the
+        // manifest without its parameters expands the default
+        Some(Value::String(s)) if s.contains("{{") => "failures".to_string(),
+        Some(v) => {
+            return Err(err(format!(
+                "browser.screens {}: failures (a screenshot of a page that ends its test with a busy or error element, the default), all (every page at the end of its test), or compare (all, each compared with its reference in screens_ref)",
+                py::repr(v)
+            )))
+        }
+    };
+    let screens_ref = match get(&b, "screens_ref") {
+        None => SCREENS_REF.to_string(),
+        Some(Value::String(s)) if !s.is_empty() && !s.starts_with('/') => s.clone(),
+        Some(_) => {
+            return Err(err(
+                "browser.screens_ref: the folder of the reference screenshots, relative to the manifest",
+            ))
+        }
+    };
+    let unresolved = get(&b, "screens")
+        .and_then(Value::as_str)
+        .is_some_and(|s| s.contains("{{"));
+    if get(&b, "screens_ref").is_some() && screens != "compare" && !unresolved {
+        return Err(err(
+            "browser.screens_ref: only with screens: compare (the references are compared only then)",
+        ));
+    }
     let requests = match get(&w, "requests") {
         None => String::new(),
         Some(Value::String(s)) if s.starts_with('/') => s.clone(),
@@ -308,13 +357,16 @@ pub fn expand(m: &mut Value) -> R<()> {
     };
 
     // the service: the Playwright image, idle; the workload and the checks run in it
-    let watch = json!({
+    let mut watch = json!({
         "busy": busy,
         "alert": alerts,
         "text": text,
         "console": console,
         "requests": requests,
     });
+    if screens != "failures" {
+        watch["screens"] = json!(screens);
+    }
     let mut senv = json!({
         "HOME": format!("{RECORD_DIR}/home"),
         "TZ": "UTC",
@@ -433,6 +485,13 @@ pub fn expand(m: &mut Value) -> R<()> {
             "cmd": check("text"),
         }));
     }
+    if screens == "compare" {
+        invs.push(json!({
+            "id": format!("{name}.screens_match"),
+            "msg": "every page's screenshot at the end of its test is its reference, pixel for pixel",
+            "cmd": check(&format!("screens {REF_DIR}")),
+        }));
+    }
     // last: the verdict names the first property that fails, and a page's own failure says
     // more than the test that it made fail
     if must_pass {
@@ -473,6 +532,9 @@ pub fn expand(m: &mut Value) -> R<()> {
         _ => Vec::new(),
     };
     files.push(json!({"src": tests, "dst": format!("{WEB_DIR}/tests")}));
+    if screens == "compare" {
+        files.push(json!({"src": screens_ref, "dst": REF_DIR}));
+    }
     r.insert("files".into(), Value::Array(files));
     let text_files = r.entry("text").or_insert_with(|| json!({}));
     if text_files.is_null() {
@@ -505,9 +567,24 @@ pub fn expand(m: &mut Value) -> R<()> {
             "tag": image.tag,
             "images": Value::Object(pins),
             "tests": tests,
+            "screens": screens,
+            "screens_ref": (screens == "compare").then_some(screens_ref),
         }),
     );
     Ok(())
+}
+
+/// The guest folder of the screenshots that the controller copies out (none without `browser:`).
+pub fn screens_dir(m: &Value) -> Option<String> {
+    m.get(META).map(|_| SHOTS_DIR.to_string())
+}
+
+/// The reference folder of `screens: compare`, relative to the manifest (none otherwise).
+pub fn screens_ref(m: &Value) -> Option<String> {
+    m.get(META)
+        .and_then(|x| x.get("screens_ref"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
 }
 
 /// The browser's service of a validated manifest (none without `browser:`).
@@ -661,6 +738,60 @@ mod tests {
                                 "watch": {"busy": [], "alerts": [], "text": [], "errors": false}}));
         expand(&mut m).unwrap();
         assert!(m.get("invariants").unwrap().as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn screens_compare_adds_the_references_and_a_check() {
+        let mut m = base(json!({"tests": "e2e", "screens": "compare", "screens_ref": "refs"}));
+        expand(&mut m).unwrap();
+        let ids: Vec<&str> = m["invariants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            ids[ids.len() - 2..],
+            ["browser.screens_match", "browser.tests_pass"]
+        );
+        assert_eq!(
+            m["root"]["files"][1],
+            json!({"src": "refs", "dst": "/opt/hydo/web/screens-ref"})
+        );
+        let env = &m["services"][0]["env"]["HYDO_WEB_WATCH"];
+        let watch: Value = serde_json::from_str(env.as_str().unwrap()).unwrap();
+        assert_eq!(watch["screens"], "compare");
+        assert_eq!(screens_ref(&m).as_deref(), Some("refs"));
+        assert_eq!(screens_dir(&m).as_deref(), Some(SHOTS_DIR));
+        // the default keeps the watcher's settings of Milestone 253
+        let mut d = base(json!({"tests": "e2e"}));
+        expand(&mut d).unwrap();
+        let env = &d["services"][0]["env"]["HYDO_WEB_WATCH"];
+        let watch: Value = serde_json::from_str(env.as_str().unwrap()).unwrap();
+        assert!(watch.get("screens").is_none());
+        assert_eq!(screens_ref(&d), None);
+        // a {{param}} not yet replaced expands the default
+        let mut u = base(json!({"tests": "e2e", "screens": "{{screens}}"}));
+        expand(&mut u).unwrap();
+        assert_eq!(u[META]["screens"], "failures");
+        for (b, want) in [
+            (
+                json!({"tests": "e2e", "screens": "some"}),
+                "browser.screens",
+            ),
+            (
+                json!({"tests": "e2e", "screens_ref": "r"}),
+                "only with screens: compare",
+            ),
+            (
+                json!({"tests": "e2e", "screens": "compare", "screens_ref": "/r"}),
+                "relative",
+            ),
+        ] {
+            let mut m = base(b);
+            let e = expand(&mut m).unwrap_err().message;
+            assert!(e.contains(want), "{e}");
+        }
     }
 
     #[test]

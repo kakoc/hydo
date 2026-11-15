@@ -352,6 +352,67 @@ fn text_from_the_run_is_escaped() {
 }
 
 #[test]
+fn a_browser_run_shows_its_screenshots_next_to_the_finding() {
+    let mut run = Run::new(
+        "disk=none | run H=api.get_order@0-1:status=500",
+        hydo_results::Verdict {
+            kind: "violation".into(),
+            text: "HYDO-ORACLE: VIOLATION [browser.busy_ends] The page /orders/o3 showed the busy element".into(),
+            ..Default::default()
+        },
+        "0123456789abcdef",
+    );
+    run.findings.push(hydo_results::Finding {
+        id: "browser.busy_ends".into(),
+        status: "violated".into(),
+        message: "The page /orders/o3 showed the busy element .spinner for 5.1 s. Screenshot: \
+                  screens/checkout-spec-ts-places-an-order-1.png in the run directory."
+            .into(),
+        ..Default::default()
+    });
+    let d = std::env::temp_dir().join(format!("hydo-htmlreport-shots-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("screens")).unwrap();
+    hydo_results::write_document(&d.join(hydo_results::RUN_DOC), &run).unwrap();
+    let png = [0x89u8, b'P', b'N', b'G', 13, 10, 26, 10];
+    for f in [
+        "shop-spec-ts-lists-the-products-1.png",
+        "checkout-spec-ts-places-an-order-1.png",
+        "checkout-spec-ts-places-an-order-1.diff.png",
+    ] {
+        std::fs::write(d.join("screens").join(f), png).unwrap();
+    }
+    std::fs::write(
+        d.join("screens/index.jsonl"),
+        "{\"file\":\"shop-spec-ts-lists-the-products-1.png\",\"test\":\"shop.spec.ts › lists the products\",\"url\":\"/\",\"why\":\"end of test\"}\n\
+         {\"file\":\"checkout-spec-ts-places-an-order-1.png\",\"test\":\"checkout.spec.ts › places an order\",\"url\":\"/orders/o3\",\"why\":\"busy or error element\"}\n\
+         {\"file\":\"checkout-spec-ts-places-an-order-1.diff.png\",\"test\":\"checkout.spec.ts › places an order\",\"url\":\"/orders/o3\",\"why\":\"the changed pixels\"}\n",
+    )
+    .unwrap();
+    let html = page_of(&d, "d", None);
+    let _ = std::fs::remove_dir_all(&d);
+    let at = html
+        .find("What the pages showed")
+        .expect("the screenshots' section");
+    let s = &html[at..];
+    // the screenshot that the finding names comes first, under the finding's id, with its diff
+    let order = s.find("places an order").unwrap();
+    assert!(order < s.find("lists the products").unwrap());
+    assert!(s[..s.find("lists the products").unwrap()].contains("browser.busy_ends"));
+    assert!(s.contains("The pixels that differ from the reference are red here"));
+    assert_eq!(s.matches("<img ").count(), 3);
+    // each image is carried by the page itself: nothing is fetched
+    assert_eq!(
+        html.matches("src=").count(),
+        html.matches("src=\"data:image/png;base64,iVBORw0KGgo=\"")
+            .count()
+    );
+    assert!(!html.contains("http://") && !html.contains("https://"));
+    assert_eq!(base64(b"ab"), "YWI=");
+    assert_eq!(base64(b"a"), "YQ==");
+}
+
+#[test]
 fn how_a_neighbour_was_made() {
     let a = "disk=cut | run C=12 R=everysec";
     assert_eq!(

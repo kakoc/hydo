@@ -167,23 +167,39 @@ async function attach(context) {
 const requests = new WeakMap();
 let requestCount = 0;
 
-let shot = 0;
+// A screenshot's file name: the test's title path and the page's number in the test, so that a
+// run and its reference name the same page alike (Milestone 254).
+const shotsOfTest = new Map();
+function shotName(test) {
+  const n = (shotsOfTest.get(test) || 0) + 1;
+  shotsOfTest.set(test, n);
+  const slug = (test || 'no-test').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120);
+  return `${slug || 'test'}-${n}.png`;
+}
+
+// At a context's close: a screenshot of each page that still shows a busy or error element, or of
+// every page with `screens: all` or `compare`. Each goes to shots/ with a line in shots/index.jsonl,
+// which the host controller reads after the verdict to copy them into the run directory.
 async function finish(context) {
+  const every = watch.screens === 'all' || watch.screens === 'compare';
   for (const page of context.pages()) {
-    let png;
+    let file;
+    const at = fromPage(page);
     try {
       const open = await page.evaluate((w) => {
         const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
         return [...(w.busy || []), ...(w.alert || [])].some((s) => Array.from(document.querySelectorAll(s)).some(visible));
       }, watch);
-      if (open) {
-        png = path.join(dir, 'shots', `${++shot}.png`);
-        await page.screenshot({ path: png });
+      if (open || every) {
+        file = shotName(at.test);
+        await page.screenshot({ path: path.join(dir, 'shots', file) });
+        const line = { file, test: at.test, url: at.url, why: open ? 'busy or error element' : 'end of test' };
+        fs.appendFileSync(path.join(dir, 'shots', 'index.jsonl'), JSON.stringify(line) + '\n');
       }
     } catch {
-      png = undefined;
+      file = undefined;
     }
-    record({ ...fromPage(page), kind: 'close', shot: png });
+    record({ ...at, kind: 'close', shot: file });
   }
 }
 

@@ -1105,6 +1105,132 @@ fn versions_html(doc: &hydo_results::VersionsDoc) -> String {
 
 // ---------------------------------------------------------------- a run
 
+/// The most screenshots a page shows, and the largest one it embeds.
+const MAX_SCREENS: usize = 12;
+const MAX_SCREEN_BYTES: u64 = 2 * 1024 * 1024;
+
+fn base64(b: &[u8]) -> String {
+    const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(b.len().div_ceil(3) * 4);
+    for c in b.chunks(3) {
+        let n = (c[0] as u32) << 16
+            | (*c.get(1).unwrap_or(&0) as u32) << 8
+            | *c.get(2).unwrap_or(&0) as u32;
+        for (k, shift) in [18, 12, 6, 0].into_iter().enumerate() {
+            out.push(if k <= c.len() {
+                B64[(n >> shift) as usize & 63] as char
+            } else {
+                '='
+            });
+        }
+    }
+    out
+}
+
+/// A screenshot of the run directory as an `<img>` the page carries itself (None: missing or too
+/// large).
+fn screen_img(path: &Path, alt: &str) -> Option<String> {
+    let len = std::fs::metadata(path).ok()?.len();
+    if len > MAX_SCREEN_BYTES {
+        return None;
+    }
+    let b = std::fs::read(path).ok()?;
+    Some(format!(
+        "<img alt=\"{}\" src=\"data:image/png;base64,{}\" style=\"display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:6px;margin:6px 0\">\n",
+        esc(alt),
+        base64(&b)
+    ))
+}
+
+/// The pages' screenshots of a `browser:` run (Milestone 254): `screens/` of the run directory,
+/// with its `index.jsonl`. A screenshot that a failing check names comes first, under that check;
+/// a screenshot that differs from its reference has the changed pixels in red beside it.
+fn screens_html(dir: &Path, run: &Run) -> String {
+    let sd = dir.join("screens");
+    let Ok(index) = std::fs::read_to_string(sd.join("index.jsonl")) else {
+        return String::new();
+    };
+    let entries: Vec<Value> = index
+        .lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .collect();
+    let field = |e: &Value, k: &str| e.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+    let mut shown: Vec<(Vec<String>, Value)> = entries
+        .iter()
+        .filter(|e| {
+            let f = field(e, "file");
+            !f.is_empty() && !f.ends_with(".diff.png")
+        })
+        .map(|e| {
+            let f = field(e, "file");
+            let named: Vec<String> = run
+                .findings
+                .iter()
+                .filter(|x| x.status != "ok" && x.message.contains(&f))
+                .map(|x| x.id.clone())
+                .collect();
+            (named, e.clone())
+        })
+        .collect();
+    if shown.is_empty() {
+        return String::new();
+    }
+    // the screenshots a finding names first, in the run's order otherwise
+    shown.sort_by_key(|(named, _)| named.is_empty());
+    let total = shown.len();
+    let mut s = format!(
+        "<p>hydo took {} of the pages in the guest; they are in {} of the run folder.</p>\n",
+        plural(total as u64, "screenshot"),
+        code("screens/")
+    );
+    for (named, e) in shown.into_iter().take(MAX_SCREENS) {
+        let f = field(&e, "file");
+        let test = field(&e, "test");
+        let mut head = format!("<p><b>{}</b>", esc(&test));
+        if !field(&e, "url").is_empty() {
+            head.push_str(&format!(", the page {}", code(&field(&e, "url"))));
+        }
+        head.push_str(&format!(
+            " <span class=\"muted\">({}; {})</span>",
+            esc(&field(&e, "why")),
+            code(&format!("screens/{f}"))
+        ));
+        if !named.is_empty() {
+            let ids: Vec<String> = named.iter().map(|i| code(i)).collect();
+            head.push_str(&format!(
+                "<br>{} {}",
+                badge("bad", "named by"),
+                ids.join(", ")
+            ));
+        }
+        head.push_str("</p>\n");
+        let mut card = head;
+        match screen_img(
+            &sd.join(&f),
+            &format!("{test}: the page at the end of the test"),
+        ) {
+            Some(img) => card.push_str(&img),
+            None => card.push_str("<p class=\"muted\">Too large to show here.</p>\n"),
+        }
+        let d = f.trim_end_matches(".png").to_string() + ".diff.png";
+        if let Some(img) = screen_img(&sd.join(&d), &format!("{test}: the changed pixels")) {
+            card.push_str(&format!(
+                "<p>The pixels that differ from the reference are red here ({}):</p>\n{img}",
+                code(&format!("screens/{d}"))
+            ));
+        }
+        s.push_str(&format!("<div class=\"card\">{card}</div>\n"));
+    }
+    if total > MAX_SCREENS {
+        s.push_str(&format!(
+            "<p class=\"muted\">{} more in {}.</p>\n",
+            total - MAX_SCREENS,
+            code("screens/")
+        ));
+    }
+    s
+}
+
 fn diagnosis_html(run: &Run) -> String {
     let Some(d) = &run.diagnosis else {
         return String::new();
@@ -1238,6 +1364,12 @@ fn run_page(
     // what hydo saw
     body.push_str(&h2("saw", "What hydo saw"));
     body.push_str(&story::evidence_html(run, &evs, &what, &pr));
+    // browser: (Milestone 254): what the pages showed, next to the finding that names them
+    let shots = screens_html(dir, run);
+    if !shots.is_empty() {
+        body.push_str(&h2("screens", "What the pages showed"));
+        body.push_str(&shots);
+    }
     // see it again
     body.push_str(&h2("again", "See it again"));
     body.push_str(&story::see_again(

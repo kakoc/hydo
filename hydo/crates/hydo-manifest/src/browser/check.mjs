@@ -14,11 +14,16 @@
 //   failures <ms>    every failed request was followed, within <ms>, by an error element on the
 //                    page or by the page sending the request again
 //   text             no page printed a watched text, such as NaN or undefined
+//   screens <ref> [tests]  every screenshot that hook.cjs took at the end of a test is the file of the
+//                    same name in the folder <ref>, pixel for pixel, and every reference has its
+//                    screenshot (Milestone 254, `screens: compare`). A screenshot that differs
+//                    gets <name>.diff.png beside it: the reference in grey, the changed pixels red
 //
 // A request fails when it is answered 500 or more, or gets no answer (the network failed, or the
 // page gave up waiting). A request cut off by the end of its test, or by the page going to
 // another document, is not judged.
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 const dir = process.env.HYDO_WEB_DIR || '/tmp/hydo/web';
@@ -87,7 +92,7 @@ function finish(found, okText) {
 function extras(list, before) {
   const err = list.filter((e) => e.kind === 'error' && e.t <= before).pop();
   const c = list.find((e) => e.kind === 'close' && e.shot);
-  return `${err ? ` Console: ${err.message}` : ''}${c ? ` Screenshot: ${c.shot}` : ''}`;
+  return `${err ? ` Console: ${err.message}` : ''}${c ? ` Screenshot: screens/${c.shot} in the run directory.` : ''}`;
 }
 
 if (rule === 'tests') {
@@ -159,7 +164,98 @@ if (rule === 'tests') {
 } else if (rule === 'text') {
   const found = pageEvents.filter((e) => e.kind === 'text').map((e) => `The page ${e.url} printed "${e.value}"${during(e)}: "${e.line}"`);
   finish(found, 'no page printed a watched text');
+} else if (rule === 'screens') {
+  finish(...compareScreens(msArg));
 } else {
   console.log(`check.mjs: unknown rule ${rule}`);
   process.exit(2);
+}
+
+// The screenshots of the run against the references in `ref` (rule `screens`). Deterministic runs
+// give the same pixels, so the comparison is exact: any changed pixel is a difference.
+function compareScreens(ref) {
+  const shots = path.join(dir, 'shots');
+  const tests = process.argv[4] || '/opt/hydo/web/tests'; // the Playwright project in the guest
+  // pngjs, as Playwright's own screenshot comparison uses it, from the tests' node_modules
+  const { PNG } = createRequire(path.join(tests, 'package.json'))('playwright-core/lib/utilsBundle');
+  const index = [];
+  try {
+    for (const l of fs.readFileSync(path.join(shots, 'index.jsonl'), 'utf8').split('\n')) {
+      if (l) index.push(JSON.parse(l));
+    }
+  } catch {
+    /* no screenshot */
+  }
+  const taken = index.filter((e) => !e.file.endsWith('.diff.png'));
+  const names = new Set(taken.map((e) => e.file));
+  let refs = [];
+  try {
+    refs = fs.readdirSync(ref).filter((f) => f.endsWith('.png') && !f.endsWith('.diff.png'));
+  } catch {
+    refs = [];
+  }
+  const n = (x) => String(x).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const found = [];
+  for (const e of taken) {
+    const of = `The screenshot screens/${e.file} of the page ${e.url} at the end of the test "${e.test}"`;
+    const rp = path.join(ref, e.file);
+    if (!fs.existsSync(rp)) {
+      found.push(
+        `${of} has no reference: if the page looks right, copy screens/${e.file} from this run's directory into the reference folder.`,
+      );
+      continue;
+    }
+    const a = fs.readFileSync(path.join(shots, e.file));
+    const b = fs.readFileSync(rp);
+    if (a.equals(b)) continue;
+    const pa = PNG.sync.read(a);
+    const pb = PNG.sync.read(b);
+    if (pa.width !== pb.width || pa.height !== pb.height) {
+      found.push(`${of} is ${pa.width}×${pa.height} pixels and its reference is ${pb.width}×${pb.height}.`);
+      continue;
+    }
+    const diff = new PNG({ width: pa.width, height: pa.height });
+    let changed = 0;
+    let [x0, y0, x1, y1] = [pa.width, pa.height, -1, -1];
+    for (let y = 0; y < pa.height; y++) {
+      for (let x = 0; x < pa.width; x++) {
+        const i = (y * pa.width + x) * 4;
+        const same =
+          pa.data[i] === pb.data[i] &&
+          pa.data[i + 1] === pb.data[i + 1] &&
+          pa.data[i + 2] === pb.data[i + 2] &&
+          pa.data[i + 3] === pb.data[i + 3];
+        if (same) {
+          const g = 255 - Math.round((255 - (pb.data[i] * 0.3 + pb.data[i + 1] * 0.59 + pb.data[i + 2] * 0.11)) * 0.3);
+          diff.data.set([g, g, g, 255], i);
+        } else {
+          changed++;
+          diff.data.set([230, 0, 0, 255], i);
+          x0 = Math.min(x0, x);
+          y0 = Math.min(y0, y);
+          x1 = Math.max(x1, x);
+          y1 = Math.max(y1, y);
+        }
+      }
+    }
+    if (changed === 0) continue; // other bytes, the same pixels
+    const dname = e.file.replace(/\.png$/, '.diff.png');
+    fs.writeFileSync(path.join(shots, dname), PNG.sync.write(diff));
+    if (!index.some((x) => x.file === dname)) {
+      const line = { file: dname, test: e.test, url: e.url, why: `the changed pixels of ${e.file}` };
+      fs.appendFileSync(path.join(shots, 'index.jsonl'), JSON.stringify(line) + '\n');
+    }
+    const total = pa.width * pa.height;
+    const pct = ((100 * changed) / total).toFixed(changed * 10000 < total ? 3 : 2);
+    found.push(
+      `${of} differs from its reference in ${n(changed)} of ${n(total)} pixels (${pct} %), inside the box from x=${x0}, y=${y0} to x=${x1}, y=${y1}. ` +
+        `The changed pixels are red in screens/${dname}.`,
+    );
+  }
+  for (const f of refs) {
+    if (!names.has(f)) {
+      found.push(`The reference ${f} has no screenshot in this run: no test ended on that page (a test that stopped early, or a renamed test).`);
+    }
+  }
+  return [found, `all ${taken.length} screenshots are their references, pixel for pixel`];
 }

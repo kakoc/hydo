@@ -387,12 +387,15 @@ pub fn write_run_files(dir: &Path, tag: &str, prefix: &str, ran: &Ran, boot: Opt
             let _ = std::fs::rename(&raw, dir.join(format!("{tag}{suffix}.agent.log")));
         }
     }
+    // `browser:` (Milestone 254): the screenshots go to `<prefix>screens/`, and their notes stay
+    // in the console and the transcript file without the bytes
+    let run_t = take_screens(&ran.run.transcript, &dir.join(format!("{prefix}screens")));
     let _ = std::fs::write(
         dir.join(format!("{tag}.log")),
-        console_text(&ran.run.transcript, &ran.run.console),
+        console_text(&run_t, &ran.run.console),
     );
     let [b, r, rc] = transcript_files(prefix);
-    let _ = std::fs::write(dir.join(&r.1), ran.run.transcript.to_jsonl());
+    let _ = std::fs::write(dir.join(&r.1), run_t.to_jsonl());
     if let Some(rec) = &ran.recovery {
         let _ = std::fs::write(
             dir.join(format!("{tag}.recovery.log")),
@@ -403,6 +406,31 @@ pub fn write_run_files(dir: &Path, tag: &str, prefix: &str, ran: &Ran, boot: Opt
     if let Some(bt) = boot {
         let _ = std::fs::write(dir.join(&b.1), bt.transcript.to_jsonl());
     }
+}
+
+/// The screenshot notes of a transcript (`HYDO-SCREEN`, schedule/screens.rs) written as files
+/// into `out`, with `index.jsonl` (one line per file, without its bytes); the transcript comes
+/// back with each such note cut to its short line. A transcript without such notes comes back
+/// as it is, and `out` is not made.
+pub fn take_screens(t: &Transcript, out: &Path) -> Transcript {
+    use crate::transcript::Record;
+    let mut t = t.clone();
+    let mut index = String::new();
+    for r in t.records.iter_mut() {
+        if let Record::Note { line, .. } = r {
+            if let Some((file, bytes, short)) = crate::schedule::screens::of_note(line) {
+                let _ = std::fs::create_dir_all(out);
+                let _ = std::fs::write(out.join(&file), bytes);
+                index.push_str(&short.to_string());
+                index.push('\n');
+                *line = format!("{} {short}", crate::schedule::screens::NOTE);
+            }
+        }
+    }
+    if !index.is_empty() {
+        let _ = std::fs::write(out.join("index.jsonl"), index);
+    }
+    t
 }
 
 /// A RESULT for a run that did not happen (no VM ran).

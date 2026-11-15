@@ -262,6 +262,9 @@ pub struct Plan {
     pub cost: u8,
     /// `perf:` (Milestone 237): the run measures its workload for `hydo perf compare`.
     pub perf: Option<PlanPerf>,
+    /// `browser:` (Milestone 254): the guest folder whose screenshots the controller copies out
+    /// after the verdict (schedule/screens.rs); None without `browser:`.
+    pub screens: Option<String>,
 }
 
 /// `perf:` (Milestone 237, schedule/perf.rs).
@@ -675,6 +678,7 @@ impl Plan {
             outcomes_after_cut: get(guest, "outcomes_after_cut").is_some_and(py::truthy),
             cost: 0,
             perf: PlanPerf::of(d),
+            screens: hydo_manifest::browser::screens_dir(d),
             invariants,
             knobs,
             buggify: m.buggify,

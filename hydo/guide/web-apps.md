@@ -125,8 +125,54 @@ at-most-once api.place_order` (`hydo guide checks`, "Side effects at fake outsid
 - What the pages did goes to `/tmp/hydo/web/events.jsonl` in the guest. Each invariant runs
   `node /opt/hydo/web/hydo/check.mjs <property>` over it. The lines `hydo-web: test ...` on the
   console show each test's result.
-- When a page ends its test with a spinner or an error on the screen, the watcher takes a
-  screenshot into `/tmp/hydo/web/shots/`.
+- A passing test counts as work the workload did, so a clean run is not reported as a pass that
+  checked nothing.
+
+## Screenshots
+
+When a page ends its test with a spinner or an error on the screen, the watcher takes a
+screenshot. After the verdict hydo copies each screenshot into the run directory, under
+`screens/`, and a finding names its file:
+
+```text
+... it showed no error. Console: HttpError: HTTP 500 for /api/orders/o3 Screenshot:
+screens/checkout-spec-ts-places-an-order-1.png in the run directory.
+```
+
+`hydo report --html <run dir>` shows each screenshot under the finding that names it. The page
+carries the images itself, so it still opens without the run directory.
+
+`browser.screens` chooses which pages get a screenshot:
+
+| value | screenshots |
+|---|---|
+| `failures` (default) | a page that ends its test with a busy or error element |
+| `all` | every page at the end of its test |
+| `compare` | as `all`, and each one is compared with its reference |
+
+A file is named after the test and the page's number in the test, so the same page has the same
+name in every run. A deterministic run draws the same pixels every time, so `compare` checks
+for exact equality. To use it:
+
+1. Build with `screens: all` and run a schedule that shows the pages as they should look, for
+   example `disk=none | run`.
+2. Copy the run directory's `screens/*.png` into `hydo-screens/` next to the manifest
+   (`browser.screens_ref` names another folder).
+3. Build with `screens: compare`. The references go into the image.
+
+The invariant `browser.screens_match` then fails when one pixel of a page differs. Its finding
+gives the number of changed pixels and the box around them, and `screens/<file>.diff.png` shows
+the reference in grey with the changed pixels in red:
+
+```text
+The screenshot screens/checkout-spec-ts-places-an-order-1.png of the page /orders/o1 at the
+end of the test "checkout.spec.ts › places an order" differs from its reference in 5,296 of
+921,600 pixels (0.57 %), inside the box from x=15, y=56 to x=311, y=138. The changed pixels are
+red in screens/checkout-spec-ts-places-an-order-1.diff.png.
+```
+
+It also fails when a screenshot has no reference, and when a reference has no screenshot.
+Record the references on the engine that runs the comparison.
 
 ## Limits
 
@@ -135,4 +181,5 @@ at-most-once api.place_order` (`hydo guide checks`, "Side effects at fake outsid
 - One pinned Playwright version (1.65.1) and its Chromium. Firefox and WebKit are in the image
   but were not tried.
 - Tests that call outside sites (a CDN, a login provider) need a fake under that name.
-- Screenshot comparison against a recorded reference is not built.
+- A screenshot is taken when a test's browser context closes. A page that a test leaves earlier
+  has no screenshot.

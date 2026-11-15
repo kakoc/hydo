@@ -182,6 +182,31 @@ What did not work at first, and what changed because of it:
 - The cart's id was a random UUID, which made each run's failure signature different; the
   example now uses digits, which the signature folds.
 
+## Screenshots and acknowledged work (Milestone 254)
+
+- **A passing test is acknowledged work.** The explorer warns of a pass whose workload
+  acknowledged nothing, because a broken client passes the same way. A `browser:` workload writes
+  nothing to `$HYDO_ACKED`, so every clean run got the warning. A console line `hydo-web: test
+  "<title>" passed` now counts as acknowledged work. The check reads the console on the host, so
+  the guest and the fingerprint do not change.
+- **Screenshots leave the guest after the verdict.** The watcher saves each screenshot in the
+  guest's `/tmp/hydo/web/shots/` with a line in `index.jsonl`. After the verdict the host
+  controller reads the index and each file through the agent, in hex, and sends each file as one
+  `HYDO-SCREEN` note. The host writes the files into the run directory's `screens/` and keeps a
+  short line without the bytes in the console and the transcript. A note is covered by no
+  fingerprint and no control-transcript hash, and the reads come after the verdict, so they
+  decide nothing. A manifest without `browser:` sends the same commands as before.
+- **The comparison is exact and runs in the guest.** `screens: compare` puts the reference folder
+  into the image, and the invariant `<name>.screens_match` compares each screenshot with the file
+  of the same name. A deterministic run draws the same pixels on every run, so the rule needs no
+  tolerance: one changed pixel is a difference. The check decodes the PNG files with the PNG
+  library that Playwright bundles, and writes `<file>.diff.png` with the changed pixels in red.
+  As an invariant, the comparison takes part in the verdict, the exploration and the shrinking
+  like every other property.
+- **The file name is the test's title path and the page's number in the test.** A run and its
+  reference then name the same page alike. Before, the files were numbered in the order they were
+  taken, and each shard restarted the count.
+
 ## Sources
 
 1. State of JavaScript 2024, testing libraries: https://2024.stateofjs.com/en-US/libraries/testing/

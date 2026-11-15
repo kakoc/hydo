@@ -261,7 +261,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_TO` | guest | integer | - | set by hydo-control | The last step of a workload range. |
 | `HYDO_PERF` | guest | path | - | set by hydo-control with perf:; read by the workload | With `perf:` (Milestone 237): the file a workload call appends its own numbers to, one `<name> <value> [<unit>]` line each; `hydo run` puts them into `result.json` `perf`. |
 | `HYDO_WEB_DIR` | guest | path | /tmp/hydo/web | set by browser:'s service; read by its hook.cjs, reporter.cjs and check.mjs | With `browser:` (Milestone 253): where the watcher of the Playwright tests writes what the pages did, and where its checks read it. |
-| `HYDO_WEB_WATCH` | guest | JSON | - | set by browser:'s service; read by its hook.cjs | With `browser:` (Milestone 253): what the watcher looks for in the pages (JSON: busy and alert selectors, texts, console, the request prefix). |
+| `HYDO_WEB_WATCH` | guest | JSON | - | set by browser:'s service; read by its hook.cjs | With `browser:` (Milestone 253): what the watcher looks for in the pages (JSON: busy and alert selectors, texts, console, the request prefix, and `screens`, which pages get a screenshot, since Milestone 254). |
 | `HYDO_VALUE` | guest | text | - | set by hydo-control | A knob's value. |
 | `HYDO_CMD` | guest | id | - | set by hydo-control (the composer) | A composed command's id. |
 | `HYDO_CMD_ID` | guest | id | - | set by hydo-control (the composer) | A composed command's entry. |

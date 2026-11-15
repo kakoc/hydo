@@ -763,6 +763,24 @@ impl Fake {
                     if h == "workload" {
                         self.sdk_records(t, &got);
                     }
+                    // a `browser:` workload's screenshots (Milestone 254): one per step
+                    if s.argv.join(" ").contains("HYDO_FAKE_SHOTS") {
+                        let dir = "/tmp/hydo/web/shots";
+                        for i in f..t2 {
+                            let file = format!("step-{i}-1.png");
+                            self.world.files.insert(
+                                format!("{dir}/{file}"),
+                                format!("\u{89}PNG step {i} {}", "x".repeat(2000 * i as usize)),
+                            );
+                            self.world
+                                .files
+                                .entry(format!("{dir}/index.jsonl"))
+                                .or_default()
+                                .push_str(&format!(
+                                    "{{\"file\":\"{file}\",\"test\":\"step {i}\",\"url\":\"/\",\"why\":\"end of test\"}}\n"
+                                ));
+                        }
+                    }
                     let dur = 10 + 30 * t2.saturating_sub(f);
                     self.emit(
                         t + dur,

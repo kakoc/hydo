@@ -3323,6 +3323,36 @@
             }
           ]
         },
+        "screens": {
+          "description": "Which pages get a screenshot (default failures: a page that ends its test with a busy or\nerror element; all: every page at the end of its test; compare: all, and each compared\nwith the file of the same name in `screens_ref`, pixel for pixel, as the invariant\n<name>.screens_match). The screenshots go to the run directory's screens/.",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BrowserScreens"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "failures"
+        },
+        "screens_ref": {
+          "description": "The folder of the reference screenshots for `screens: compare`, relative to the manifest\n(default hydo-screens): a passing run's screens/*.png. It is copied to\n/opt/hydo/web/screens-ref.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -3420,6 +3450,15 @@
         }
       },
       "additionalProperties": false
+    },
+    "BrowserScreens": {
+      "description": "Which pages of `browser:` get a screenshot (Milestone 254): those that end their test with\na busy or error element, every page at the end of its test, or every page compared with\nits reference.",
+      "type": "string",
+      "enum": [
+        "failures",
+        "all",
+        "compare"
+      ]
     },
     "ErrorsSetting": {
       "description": "Error logs as findings: true (every default), false (off), or a mapping.",

@@ -481,9 +481,10 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
 /// service that never started) passes the same way. One sentence per reason.
 ///
 /// - The workload acknowledged nothing: the first boot's last `hydo-explore-acked:` report has
-///   no id, no composer command exited 0 (`compose.<id>.succeeded`), and no history check saw
-///   an operation. A run without that report (it ended before the workload's end) is not
-///   judged.
+///   no id, no composer command exited 0 (`compose.<id>.succeeded`), no Playwright test of
+///   `browser:` passed (its `hydo-web: test "..." passed` line, Milestone 254), and no history
+///   check saw an operation. A run without that report (it ended before the workload's end) is
+///   not judged.
 /// - A history check that passed with no operation (`ops` 0 in its details).
 pub fn vacuous(consoles: &[(String, String)], findings: &[Finding]) -> Vec<String> {
     let mut out = Vec::new();
@@ -519,8 +520,12 @@ pub fn vacuous(consoles: &[(String, String)], findings: &[Finding]) -> Vec<Strin
                 && l.contains("\"ok\":true")
         })
     });
+    // `browser:` (Milestone 254): a passing Playwright test is the workload's acknowledged work
+    let tested = consoles
+        .iter()
+        .any(|(_, t)| t.lines().any(browser_test_passed));
     let hist_ops = hist.iter().any(|f| ops(f).is_some_and(|n| n > 0));
-    if acked == Some(0) && !composed && !hist_ops {
+    if acked == Some(0) && !composed && !tested && !hist_ops {
         out.push(
             "the workload acknowledged nothing: no id in $HYDO_ACKED, no test command exited 0, \
              no history operation; this pass checked nothing the workload did (a client that \
@@ -548,6 +553,14 @@ pub fn vacuous(consoles: &[(String, String)], findings: &[Finding]) -> Vec<Strin
         }
     }
     out
+}
+
+/// Whether a console line is the `browser:` reporter's line of a passing test:
+/// `hydo-web: test "<title>" passed in <s> s` (hydo-manifest's `browser/reporter.cjs`).
+pub fn browser_test_passed(l: &str) -> bool {
+    l.strip_prefix("hydo-web: test \"")
+        .and_then(|r| r.rsplit_once("\" "))
+        .is_some_and(|(_, st)| st.starts_with("passed in "))
 }
 
 /// An explorer run's consoles (`consoles/<tag>.log`, `consoles/<tag>.recovery.log`).
@@ -1194,6 +1207,14 @@ mod tests {
                   \"id\":\"compose.parallel_driver_set.succeeded\",\"ok\":true}\n";
         assert!(vacuous(&con(ok), &[]).is_empty());
         assert!(vacuous(&con("hydo-explore-acked: \n"), &[hist(4)]).is_empty());
+        // a Playwright test that passed (browser:, Milestone 254) is acknowledged work; a
+        // failed or skipped one is not
+        let web = |st: &str| {
+            format!("hydo-web: test \"shop.spec.ts › lists the products\" {st} in 0.4 s\nhydo-explore-acked: \n")
+        };
+        assert!(vacuous(&con(&web("passed")), &[]).is_empty());
+        assert_eq!(vacuous(&con(&web("failed")), &[]).len(), 1);
+        assert_eq!(vacuous(&con(&web("skipped")), &[]).len(), 1);
         // a history check over an empty history
         let w = vacuous(&con("hydo-explore-acked: 1\n"), &[hist(0)]);
         assert_eq!(
