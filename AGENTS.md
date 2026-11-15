@@ -465,6 +465,22 @@ Two known bugs reproduced natively: overlapping refunds refund more than a payme
 (saleor/saleor#19645), and a single-use code is spent by a completion that made no order
 (#19919). The runs used hvx only.
 
+**Software updates of embedded devices (M259).** RAUC 1.15.2 and SWUpdate 2026.05.1 update one
+device model in `hydo/onboard/examples/rauc` and `swupdate` (RESULTS.md each). The device has two
+root file system slots (loop devices on the data disk), U-Boot's redundant environment through
+libubootenv 0.3.8, and the update tool's partition. Its boot is a script: U-Boot's boot script
+and a verified boot that hashes the whole slot. A power cut's recovery boot and the agent's
+reboots run it. Power cuts at every point of an install and a reboot found no RAUC bug. They
+found one SWUpdate candidate, not reported upstream and not posted:
+- SWUpdate's raw handler never flushes a written image, and SWUpdate then switches U-Boot's
+  `boot_slot`. A power cut between a successful install and the reboot boots the slot's old
+  contents: `disk=cut | run C=4` boots the factory's v1 instead of v3, older than the running v2.
+- It needs slots whose cache the environment's flush does not reach, as with the environment on
+  SPI NOR. With one eMMC for both (`--set dio=1`) the schedule passes. RAUC passes it.
+
+The section "What hydo lacked" of the RAUC example lists what devices need from hydo (open item
+125).
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -1324,7 +1340,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     the process table and the kernel log for a failed check too. The web page's property table can
     list one check twice. Without the udev rule, each hvx run leaves root-owned agent logs in
     `hydo-out/`.
-
 124. Walks through the pages (M258). What is left:
     - The walks ran on hvx only. KVM and the Mac engine did not run them (the Mac engine does not
       run `browser:`, open item 51).
@@ -1351,6 +1366,29 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       the first boot up to the cut are not judged.
     - The walk follows no links into other origins and no file uploads, and it sees no canvas,
       no iframe, and no shadow DOM that the accessibility tree does not show.
+125. What devices need from hydo (M259; the section "What hydo lacked" of
+    `hydo/onboard/examples/rauc/RESULTS.md` has the details).
+    - A reboot of the guest. The examples reboot with a script in the running guest, so the
+      page cache and the kernel survive it, and a service restart waits longer after each one.
+    - A second disk with a write cache of its own (slots and environment on different storage),
+      and the device's kernel command line, where RAUC reads the booted slot.
+    - A power cut inside a step on the Mac. `cf=` runs on hvx only, so the examples cut with
+      their own console records and reactions (`A=...:cut`).
+    - squashfs and the device mapper in the Mac's guest kernel. RAUC needs a patch there, and
+      no engine ran `verity` bundles.
+    - A way to keep `G=` off a file of a service's storage, rules for system software in
+      `hydo rules scan`, and disk faults and the strict `L=` in the explorer's draws.
+126. The device examples (M259). What is left:
+    - SWUpdate's candidate is not reported upstream.
+    - The Mac engine ran neither SWUpdate nor RAUC's final client; this Mac's swap and disk were
+      over the session's limits.
+    - libubootenv 0.3.8, which both tools use, ignores its `fsync` result. It is fixed on its
+      `master` (`ed3fce96`) and in no release; no run showed it.
+    - Two hydo errors, not investigated. On hvx `disk=cut dseed=ea6b44d03ce268f0 | run
+      K=device@4+3 T=1:-30 A=ota.install_started+5000:cut` (the SWUpdate image) ends with `ERROR
+      agent protocol: the agent refused a line it could not read`, on each run. A `cf=` cut makes
+      the rest of a run hang, with an `L=` or a `G=` after it too (`cf=83 | run T=12:-300
+      L=device@6+2`), until the explorer's 900 s limit (`TIMEOUT workload`).
 
 ## Milestone index
 
@@ -1898,6 +1936,11 @@ build machine, before 2026-10-13.
   tests had both planted bugs found blind in 20 schedules. Memos 26.11.0 onboarded: no saved memo
   lost in 40 walks with faults. Two new candidates: a share link's copy button over plain HTTP,
   and a reaction lost without a message. Nothing recorded moved
+- M259 (tentative number): software updates of embedded devices. RAUC 1.15.2 and SWUpdate
+  2026.05.1 update one device with two slots and U-Boot's environment, under power cuts at every
+  point of an install and a reboot. RAUC held. SWUpdate never flushes a written image before it
+  switches the slot, so a cut before the reboot boots the slot's older contents. What hydo lacked
+  for devices. Nothing recorded moved
 
 ## Where to look
 

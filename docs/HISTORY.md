@@ -11719,3 +11719,82 @@ RESULTS.md has every run and the duplicate searches.
   saved memos lost: the disk's loss, which `--durable-only` leaves out.
 - Both candidates are plain in the code, so no reproduction without hydo was made. Nothing was
   posted upstream.
+
+### Milestone 259 (tentative number) - DONE (software updates of embedded Linux devices, a test of a new audience: RAUC 1.15.2 and SWUpdate 2026.05.1 on one device model, two root file system slots with U-Boot's redundant environment, under power cuts at every point of an install and a reboot; RAUC held everywhere; one SWUpdate candidate, new as far as the search found: its raw handler never flushes a written image, so a power cut between a successful install and the reboot into it boots the slot's old contents, an older version that the device then accepts; what hydo lacked for devices; nothing recorded moved; 2026-11-15)
+
+**In short.** Two examples, `hydo/onboard/examples/rauc` and `hydo/onboard/examples/swupdate`
+(RESULTS.md each), run one device: slots A and B as loop devices over files on the data disk,
+U-Boot's redundant environment in a file read and written with libubootenv 0.3.8, the update
+tool's partition as a file system of its own (`services[].storage`, RAUC only), and the
+application's synced records. The device's boot is a script: the factory, U-Boot's boot script
+(RAUC's `BOOT_ORDER` and attempt counters; for SWUpdate `boot_slot` with U-Boot's boot counter
+and `altbootcmd`), and a verified boot that hashes the whole slot. A power cut's recovery boot,
+and a reboot that the update agent asks for, run that boot. The client runs 8 updates (v2, v3,
+v4, a broken release, and v5, twice) and reboots into each update at the start of the next one,
+as a device installs in the background and reboots later. The checks: the device boots a
+complete slot, the booted version is one the updates allow (a model over the client's outcomes),
+the bootloader's first slot is complete, RAUC's status file matches the slots, and the synced
+records survive. The tools are static programs built with Docker for arm64 and x86_64
+(`build/Dockerfile`, sources pinned by sha256). RAUC needs one patch on the Mac engine, whose
+guest kernel has no squashfs: it unpacks a bundle with `unsquashfs` instead of mounting it.
+
+**What was found.**
+
+- RAUC: nothing. RAUC flushes the slot before it switches the bootloader, keeps a `pending`
+  status for the slot it writes, and writes its status file atomically.
+- SWUpdate, new as far as the search found: `install_raw_image` (`handlers/raw_handler.c`)
+  closes the device without `fsync` (it flushes only an eMMC boot partition whose write
+  protection it switched off), and `install_images` then writes the bootloader's environment,
+  which libubootenv flushes. `disk=cut | run C=4` cuts after `swupdate` installed v3 into slot A
+  and exited 0, before the reboot: the environment says `boot_slot=A`, slot A holds the factory's
+  v1, and the device boots v1, older than the v2 it ran, and confirms it. After the broken v4
+  (`C=6`) it boots slot B's old v2 instead of rolling back to v3. RAUC passes both schedules. The
+  example's default model gives the slots a cache that the environment's flush does not reach
+  (an environment on SPI NOR, the slots on an eMMC); with `--set dio=1` (the slots' loop devices
+  with direct I/O, one eMMC for both) the schedules pass. No report on GitHub (issues are off,
+  pull requests searched), the mailing list or patchwork; nothing posted.
+- libubootenv 0.3.8 ignores the result of its `fsync`; fixed on `master` (`ed3fce96`,
+  2026-11-13), in no release. No run drew disk errors, so no run showed it.
+
+**The runs.** Every hvx run used the 0.3.4 Linux release in `~/hydo-ota` on the bare-metal
+machine, one VM at a time; the Mac runs used the 0.3.4 Mac release. Fault-free runs gave one
+fingerprint on two runs each: RAUC `da3f619faa6eb4c4` on hvx (15 boots), SWUpdate
+`9a6b98defa5b7a98` on hvx. SWUpdate's `C=4` gave `46e6fc00490daefe` twice. Explorations, all with
+`--strategy process --reactive fault` and the agent's three console records as events:
+
+- RAUC on the Mac, 80 schedules with `--storage-faults --new-faults`, and the first client
+  (a reboot right after each install): one failure, `G=` flipping bits inside a checksum of
+  RAUC's status file, which is corrupted storage and not a RAUC bug. 524 runs per hour.
+- SWUpdate on hvx, 60 schedules with `--more-faults`: 8 failures, all reproduced. Seven are the
+  candidate (minimal `disk=cut dseed=4127cc1347fae6ba | run C=16`, and four more with a cut and
+  a kill). One is hydo's: `K=device@4+3 T=1:-30 A=ota.install_started+5000:cut` ends with
+  `ERROR agent protocol: the agent refused a line it could not read: bad-json text after the
+  value at byte 6`, in its rerun too; not investigated (AGENTS.md open item 126). With the
+  first client, 25 schedules found nothing: the window between the switch and the reboot's
+  `sync` was milliseconds.
+- RAUC on hvx with `--more-faults --storage-faults`, the final client: 58 schedules (stopped at
+  seed 59 of 80 for time), no RAUC failure. Two runs ended `TIMEOUT workload`, both hydo's: a
+  `cf=83` cut followed by `L=device@6+2` (seed 37) or by `G=` (seed 58) hangs the rest of the run.
+- Directed runs on hvx: RAUC passes `C=4`, `C=6`, `disk=none | run C=4`, and three strict power
+  losses of its partition (`L=device@4+1:strict`, `L=device@6+2:strict`, `L=device@9+1:strict
+  C=12`). Disk faults break the device model itself: `disk=lying:3` makes the data partition
+  unmountable, and under `disk=ioerr:2` the verified boot cannot read the running slot.
+
+A `cf=` cut leaves the guest's I/O hanging until `workload.timeout`; at 300 s one RAUC run hit
+the explorer's limit of 900 s per run (`TIMEOUT workload`), so the examples use 60 s.
+
+**Not done.** The Mac engine did not run SWUpdate, nor RAUC with the final client: from about
+15:00 on 2026-11-15 this Mac's swap stayed above 12.5 GB (up to 17.3 GB) and its free disk below
+20 GB, the limits the session had for VM runs.
+
+**Goldens.** The new manifests are in the explorer's identity and corpus goldens and the control
+corpus (`identity-quick.txt`, `identity-full.txt`, `corpus-full.txt`, `corpus-quick.txt`),
+re-recorded with `HYDO_BLESS=1`. The control corpus records both as refused (a restart policy).
+
+**What hydo lacked for devices** (AGENTS.md open item 125; RAUC's RESULTS.md, "What hydo
+lacked"): a reboot of the guest (the example's reboot is a script in the running guest, and a service restart slows
+exponentially), a second disk with a cache of its own, the device's kernel command line, a power
+cut inside a step on the Mac (`cf=` is hvx only; the examples cut with their own console records
+and reactions), squashfs and the device mapper in the Mac's guest kernel, a way to keep `G=` off
+one file of a service's storage, rules for system software in `hydo rules scan`, and disk faults
+and the strict power loss in the explorer's draws.

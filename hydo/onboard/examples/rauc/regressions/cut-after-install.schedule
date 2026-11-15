@@ -1,0 +1,6 @@
+# The SWUpdate example's finding 1 on RAUC (RESULTS.md, "What was found"): rauc installs v3 into
+# slot A and exits 0, and the power is cut before the reboot into it. RAUC flushed the slot
+# before it switched the bootloader, so the device boots v3.
+# verdict: HYDO-ORACLE: OK invariants=6 held (device.boots: booted slot A v3 after 1 boot(s))
+# expect: ok
+disk=cut | run C=4

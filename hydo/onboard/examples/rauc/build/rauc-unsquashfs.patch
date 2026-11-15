@@ -1,0 +1,55 @@
+--- a/src/mount.c	2026-03-27 11:37:14
++++ b/src/mount.c	2026-11-15 14:25:04
+@@ -26,6 +26,26 @@
+ 	if (mount(source, mountpoint, "squashfs", flags, NULL)) {
+ 		const gchar *errmsg;
+ 		int err = errno;
++		/* hydo example: a guest kernel without squashfs (the Mac engine's) unpacks the bundle
++		 * into the mount point instead, only when RAUC_UNSQUASHFS_FALLBACK is set */
++		if (err == ENODEV && g_getenv("RAUC_UNSQUASHFS_FALLBACK")) {
++			g_autoptr(GPtrArray) args = g_ptr_array_new_full(8, g_free);
++			GError *ierror = NULL;
++			g_ptr_array_add(args, g_strdup("unsquashfs"));
++			g_ptr_array_add(args, g_strdup("-n"));
++			g_ptr_array_add(args, g_strdup("-q"));
++			g_ptr_array_add(args, g_strdup("-f"));
++			g_ptr_array_add(args, g_strdup("-d"));
++			g_ptr_array_add(args, g_strdup(mountpoint));
++			g_ptr_array_add(args, g_strdup(source));
++			g_ptr_array_add(args, NULL);
++			if (!r_subprocess_runv(args, G_SUBPROCESS_FLAGS_STDOUT_SILENCE, &ierror)) {
++				g_propagate_prefixed_error(error, ierror, "unsquashfs fallback failed: ");
++				return FALSE;
++			}
++			g_message("Unpacked bundle %s to %s (no squashfs in the kernel)", source, mountpoint);
++			return TRUE;
++		}
+ 		if (err == ENODEV) {
+ 			errmsg = "squashfs support not enabled in kernel";
+ 		} else {
+@@ -50,6 +70,25 @@
+ 
+ 	if (umount2(mountpoint, flags)) {
+ 		int err = errno;
++		/* the unsquashfs fallback of r_mount_bundle: empty the directory again */
++		if (err == EINVAL && g_getenv("RAUC_UNSQUASHFS_FALLBACK")) {
++			g_autoptr(GPtrArray) args = g_ptr_array_new_full(4, g_free);
++			GError *ierror = NULL;
++			g_ptr_array_add(args, g_strdup("rm"));
++			g_ptr_array_add(args, g_strdup("-rf"));
++			g_ptr_array_add(args, g_strdup(mountpoint));
++			g_ptr_array_add(args, NULL);
++			if (!r_subprocess_runv(args, G_SUBPROCESS_FLAGS_NONE, &ierror)) {
++				g_propagate_error(error, ierror);
++				return FALSE;
++			}
++			if (g_mkdir(mountpoint, 0755) != 0) {
++				g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(errno),
++						"failed to create %s again", mountpoint);
++				return FALSE;
++			}
++			return TRUE;
++		}
+ 		g_set_error(error,
+ 				G_FILE_ERROR,
+ 				g_file_error_from_errno(err),

@@ -1,0 +1,111 @@
+# An embedded Linux device updated by RAUC 1.15.2: two root file system slots (A/B), U-Boot's
+# redundant environment as the bootloader's state, and a data partition. RESULTS.md has the
+# scenario, the checks and the findings.
+#
+#   sh build.sh                 # the static tools and the bundles, with Docker (once)
+#   sh fetch-modules.sh         # on Linux, for hvx: the guest kernel's loop and squashfs modules
+#   hydo build hydo.yaml
+#   hydo run "disk=cut | run"                   # 8 updates, each with a reboot: OK
+#   hydo run "disk=cut | run C=5"               # a power cut during the third install
+#   hydo run "disk=cut cf=40 | run"             # hvx: a power cut at the 40th disk flush
+format: 1
+name: rauc-ota
+description: "A device with A/B root slots updated by RAUC 1.15.2 through U-Boot's environment: power cuts, kills and storage faults during installs"
+
+params:
+  install_same: "true"   # RAUC's slot option install-same: false skips a slot whose status says it holds the image
+
+guest:
+  ram_mib: 1024
+  clock_start: 1794700800        # 2026-11-15
+  clock_after_cut: 30            # the device's clock runs on across a power cut
+  outcomes_after_cut: true       # the checks after a power cut read the client's last outcomes
+
+data:
+  size_mib: 256
+  dirs: [flash, app]
+
+root:
+  files:
+    - {src: out/bin-aarch64, dst: /opt/ota/bin-aarch64}
+    - {src: out/bin-x86_64, dst: /opt/ota/bin-x86_64}
+    - {src: out/images/v1.ext4, dst: /opt/ota/images/v1.ext4}
+    - {src: out/images/known, dst: /opt/ota/images/known}
+    - {src: out/images/uboot-default.env, dst: /opt/ota/images/uboot-default.env}
+    - {src: out/bundles, dst: /opt/ota/bundles}
+    - {src: out/pki/ca.cert.pem, dst: /opt/ota/pki/ca.cert.pem}
+    - {src: out/modules, dst: /opt/ota/modules}
+    - {src: device, dst: /opt/ota/device}
+  dirs: [/run]
+  text:
+    /etc/fw_env.config: |
+      # U-Boot's redundant environment: two 16 KiB copies, as on a raw eMMC area
+      /data/flash/uboot.env 0x0000 0x4000
+      /data/flash/uboot.env 0x4000 0x4000
+    /etc/rauc/system.conf: |
+      [system]
+      compatible=hydo-ota-device
+      bootloader=uboot
+      data-directory=/data/part/rauc
+      mountprefix=/tmp/rauc-mnt
+
+      [keyring]
+      path=/opt/ota/pki/ca.cert.pem
+
+      [slot.rootfs.0]
+      device=/dev/loop0
+      type=ext4
+      bootname=A
+      install-same={{install_same}}
+
+      [slot.rootfs.1]
+      device=/dev/loop1
+      type=ext4
+      bootname=B
+      install-same={{install_same}}
+
+env:
+  RAUC_UNSQUASHFS_FALLBACK: "1"   # build/rauc-unsquashfs.patch: only on a kernel without squashfs
+
+shell: |
+  export PATH=/opt/ota/bin-$(uname -m):$PATH
+
+services:
+  - name: device
+    setup: sh /opt/ota/device/boot.sh      # a cold boot when /tmp says the device has not booted
+    cmd: sh /opt/ota/device/agent.sh       # mark-good after a boot, then the update agent
+    ready: test -f /tmp/ota/ready
+    ready_timeout: 300
+    restart: always                        # the agent ends to reboot the device
+    storage: {dir: part, size_mib: 64}     # the data partition: RAUC's data-directory, the records
+    logs: [/tmp/ota/boots]
+
+workload:
+  steps: 16                                # 8 updates: v2, v3, v4 (broken), v5, v2, ...
+  run: sh /opt/ota/device/client.sh $HYDO_FROM $HYDO_TO
+  retry: sh /opt/ota/device/client.sh reboot
+  timeout: 60                              # a power cut at a disk flush (cf=) leaves the rest hanging until it
+
+invariants:
+  - id: device.boots
+    msg: after any power cut the device boots a complete, verified slot
+    cmd: sh /opt/ota/device/check.sh boots
+  - id: device.version
+    msg: an acknowledged install survives, and an install that did not complete never boots
+    cmd: sh /opt/ota/device/check.sh version
+  - id: device.primary_complete
+    msg: the slot U-Boot boots first holds a complete image
+    cmd: sh /opt/ota/device/check.sh primary
+  - id: rauc.status_matches_slots
+    msg: a slot that RAUC's status file calls ok holds the image with the checksum it records
+    cmd: sh /opt/ota/device/check.sh status
+  - id: data.records_survive
+    msg: every record the application synced to the data partition is there
+    cmd: sh /opt/ota/device/check.sh records
+  - id: device.reboots_boot_allowed
+    msg: every reboot during the workload booted a version the installs allow
+    cmd: sh /opt/ota/device/check.sh violations
+    every: 2
+    final: true
+
+faults: [kill, cut, clock, disk, corrupt, powerloss]

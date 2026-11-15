@@ -1,0 +1,8 @@
+# finding 1 (RESULTS.md), an SWUpdate candidate: swupdate installs v3 into slot A and exits 0,
+# and the power is cut before the reboot into it. SWUpdate's switch to boot_slot=A reached the
+# disk, v3's data did not (the raw handler never flushes the image): the device boots the v1 that
+# slot A held before, older than the v2 it ran, and confirms it. In the default storage model
+# (build parameter dio=0); with dio=1 the schedule passes.
+# verdict: HYDO-ORACLE: VIOLATION [device.version] booted v1, but the updates allow only v3
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run C=4
