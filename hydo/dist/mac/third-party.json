@@ -269,7 +269,7 @@
         "hv/hvm/explore/build-guest-netns.sh",
         "hv/hvm/explore/build-guest-cg.sh"
       ],
-      "note": "Both kernels are kernel.org's Linux 6.6.35 with hydo's two changes (hv/hvm/linux/apply-cntpct.py, the arch timer reading CNTPCT, and hv/hvm/explore/apply-hvcidle.py, idle by HVC) and configured with allnoconfig plus the listed configuration fragments; Image-explore by hv/hvm/explore/build-guest.sh (nixpkgs's aarch64 cross gcc), Image-explore-netns by build-guest-netns.sh (the Arm GNU Toolchain 13.3.Rel1) with hvm-netns.config added; Image-explore-cg and Image-explore-netns-cg (for images built at the fingerprint epoch 3 and later) by build-guest-cg.sh with the same toolchain, the lists of the first two and hvm-cgroups.config added (docs/BUILD-PINS.md)."
+      "note": "All four kernels are kernel.org's Linux 6.6.35 with hydo's two changes (hv/hvm/linux/apply-cntpct.py, the arch timer reading CNTPCT, and hv/hvm/explore/apply-hvcidle.py, idle by HVC) and configured with allnoconfig plus the listed configuration fragments; Image-explore by hv/hvm/explore/build-guest.sh (nixpkgs's aarch64 cross gcc), Image-explore-netns by build-guest-netns.sh (the Arm GNU Toolchain 13.3.Rel1) with hvm-netns.config added; Image-explore-cg and Image-explore-netns-cg (for images built at the fingerprint epoch 3 and later) by build-guest-cg.sh with the same toolchain, the lists of the first two and hvm-cgroups.config added (docs/BUILD-PINS.md)."
     },
     {
       "id": "busybox-1.36.1",

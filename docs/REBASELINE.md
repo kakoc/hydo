@@ -3542,3 +3542,24 @@ The KVM exploration of the Redis example now gives two minimal schedules, and bo
 list: `disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20` and `disk=cut dseed=1f16055b6d41c6d9 |
 run C=9 R=no`. The pinned reproducers' epoch-3 images (`b498b9c8…` and `c8fc9b42…`, in
 `~/hydo/build/m244`) give the epoch-2 values `a76d7fe857fdb37c` and `efbde7b57264be0f` on hvx.
+
+## 25. hydo 0.3.4 (2026-11-15)
+
+Made with `hydo-bench rebaseline --write` on the bare-metal machine and on a Mac, with the quick
+0.3.4 candidates as `--release` (docs/HISTORY.md "The 0.3.4 release"); the values are in
+`hydo/onboard/recorded.json`, and this section records only the decisions.
+
+**The fingerprint epoch stays 3.** As at 0.3.1 to 0.3.3, only hydo's own guest programs moved
+image bytes: `guest/hydo-world`, `guest/hydo-world-tls` and `guest/hydo-grpc` have new pins
+(docs/BUILD-PINS.md; hydo-world also changed its source in Milestones 242 and 249), and the SDK
+versions are in rust-kv's program, node-kv's `package.json` and python-kv's `__init__.py`. No
+engine, controller, agent or kernel that a recorded run uses changed in a way that moves a value.
+
+**What moved.** hvx (the bare-metal machine, a tree unpacked under umask 022, 3,520 s): 9 of 43
+images have new bytes and 30 of 141 runs new values (redis-proxy, redis-bridge, rust-kv, the
+shop's two images, the three gRPC stack images and the generated-driver stack). The Mac (`hvm`,
+1,842 s, `--jobs 1`): 9 of 21 images and 36 of 76 runs (redis-bridge, node-kv, python-kv,
+python-kv-hist, rust-kv, the shop's two images, the gRPC demo's two images). These are the
+images and runs that moved at 0.3.1, 0.3.2 and 0.3.3. Every verdict is unchanged, every moved run
+gave the same values twice, and every worker-pool run gave its fresh boot's values. KVM's images
+carry none of these programs, so no KVM value moves.

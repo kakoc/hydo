@@ -247,6 +247,27 @@
         "$ref": "#/$defs/Proxy"
       }
     },
+    "emulators": {
+      "description": "Ready-made emulators of outside services (Milestone 242, docs/design/emulators.md): one\nentry runs a pinned emulator (a Docker/OCI image, fetched by `hydo build`) as a service,\nwith a fault proxy of the same name in front of it, so that `H=` faults and the record\nwork as for a fake. Its service keeps the explorer's other faults off.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Emulator"
+      }
+    },
+    "browser": {
+      "description": "A web application tested through its own Playwright tests (Milestone 253,\ndocs/design/web-apps.md): the tests run unchanged in a pinned Playwright image (fetched by\n`hydo build`) as the workload, and hydo watches the pages for uncaught errors, spinners\nthat stay, failed requests that the page never shows, and texts such as NaN. Needs\n`network: bridge`; it writes the workload.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Browser"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "errors": {
       "description": "Error logs as findings: true, or a mapping.",
       "anyOf": [
@@ -283,6 +304,27 @@
       ],
       "items": {
         "$ref": "#/$defs/Text"
+      }
+    },
+    "perf": {
+      "description": "Measure the workload's work for performance tests (Milestone 237): each run's\n`result.json` gets `perf`, and `hydo perf compare` compares two runs. On hvx the count is\nthe guest's retired branches, exact and the same in every run of one image; on KVM and the\nMac it is VM exits, which do not count CPU work.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PerfSpec"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "contracts": {
+      "description": "Function contracts (Milestone 241): programs of `root.files` whose sources carry\n`// hydo: requires ...` and `// hydo: ensures ...` comments next to functions. `hydo\nbuild` compiles them with each program's debug information into `<image>.contracts.json`,\nand the engine checks them at every call (docs/design/contracts.md; MANIFEST.md\n\"Function contracts\").",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/ContractProgram"
       }
     },
     "test": {
@@ -801,6 +843,17 @@
             ]
           }
         },
+        "env_file": {
+          "description": "A file of KEY=VALUE lines, relative to hydo.yaml, read when the image is built: its\nvalues are added to the image's Env before `env:`, which wins. It keeps values such as\npasswords out of hydo.yaml: `hydo k8s` writes one per service for its Secrets, in a\nfolder that version control ignores (MANIFEST.md \"Values from a file\").",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "mounts": {
           "description": "Bind, volume and tmpfs mounts of an image service.",
           "type": [
@@ -828,6 +881,27 @@
               "type": "null"
             }
           ]
+        },
+        "version": {
+          "description": "The name of the version that cmd:, setup: and ready: run (needed with versions:). An\nupgrade token (U=<name>@<at>:<version>) switches the service to another version and back\n(MANIFEST.md \"Versions of a service and upgrades\").",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "versions": {
+          "description": "The other versions of the service an upgrade token can switch it to, each with the\ncommands that differ from the service's own. Every command of the service sees the name\nof the version it runs as $HYDO_VERSION.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ServiceVersion"
+          }
         }
       },
       "additionalProperties": false,
@@ -1142,6 +1216,63 @@
       "additionalProperties": false,
       "required": [
         "dir"
+      ]
+    },
+    "ServiceVersion": {
+      "description": "Another version of a service (`services[].versions`, Milestone 238).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The version's name, as U= writes it: a letter or digit, then letters, digits, '.', '_'\nand '-' (3.6.0, 3.6.0-rc.2, v2).",
+          "$ref": "#/$defs/Text"
+        },
+        "cmd": {
+          "description": "The command this version runs (default: the service's cmd:).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "setup": {
+          "description": "Run before every start of this version (default: the service's setup:).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ready": {
+          "description": "This version's readiness check (default: the service's ready:).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
       ]
     },
     "Group": {
@@ -2593,6 +2724,16 @@
             }
           ]
         },
+        "errors": {
+          "description": "The answer bodies of an `H=` rule `status=<code>` on this route (templates), by status\n(`'404'`), class (`'5XX'`) or `default`; without one, hydo's own error body.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
+        },
         "description": {
           "anyOf": [
             {
@@ -2973,6 +3114,13 @@
             "null"
           ]
         },
+        "idempotent": {
+          "description": "http proxies (Milestone 242): a repeat of an idempotency key that took effect gets the\nservice's first answer and does not reach the service, as a provider that keeps\nidempotency keys answers; needs the proxy's idempotency:.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -2988,6 +3136,290 @@
       "required": [
         "name"
       ]
+    },
+    "Emulator": {
+      "description": "A ready-made emulator of an outside service (Milestone 242): `use:` names the catalog entry.",
+      "type": "object",
+      "properties": {
+        "use": {
+          "description": "The catalog entry: stripe (stripe-mock behind HTTPS for api.stripe.com), smtp (Mailpit),\ns3 (rclone's S3 server).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EmulatorKind"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        "name": {
+          "description": "[a-z][a-z0-9_]*: the proxy's name, which H= tokens and the record's checks use (default:\nthe use: value). The emulator's service is <name>_emulator.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "port": {
+          "description": "The port the system calls (the proxy's plain listener; default: stripe 12111, smtp 1025,\ns3 9000).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "ref": {
+          "description": "Where a request's business reference is (an extractor such as form:metadata[order]),\nfor the record and its checks.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tls": {
+          "description": "stripe: HTTPS for api.stripe.com with the image's test CA (default true); false leaves\nonly the plain port.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "buckets": {
+          "description": "s3: buckets that exist from the start.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "use"
+      ]
+    },
+    "EmulatorKind": {
+      "description": "The catalog entry of an emulator.",
+      "type": "string",
+      "enum": [
+        "stripe",
+        "smtp",
+        "s3"
+      ]
+    },
+    "Browser": {
+      "description": "The `browser:` section (Milestone 253): a team's Playwright project, run unchanged as the\nworkload, and what hydo watches in its pages.",
+      "type": "object",
+      "properties": {
+        "tests": {
+          "description": "The folder of the Playwright project, relative to the manifest: its playwright.config,\nits tests and its node_modules (run `npm ci` there first: the guest has no network). It is\ncopied to /opt/hydo/web/tests.",
+          "$ref": "#/$defs/Text"
+        },
+        "playwright": {
+          "description": "The version of @playwright/test in the tests' node_modules; hydo pins the Playwright\nimage of that version (default and only pinned version: 1.65.1).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "description": "The browser's service name (default browser); the invariants are <name>.<property>.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "addr": {
+          "description": "The browser's address on the bridge (default 10.89.0.250).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shards": {
+          "description": "Workload steps (default 1): step i runs shard i+1 of `playwright test --shard`, so that\nfaults can be placed between test files.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 1
+        },
+        "args": {
+          "description": "More arguments for `playwright test`, such as --project=chromium or --grep.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "env": {
+          "description": "Variables for the tests and the web server their config starts (the base URL of the API,\nthe folder of the built app).",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Scalar"
+          }
+        },
+        "must_pass": {
+          "description": "Every test must pass (default true). Under faults the tests' own assertions often fail by\ndesign; false keeps only the watched properties.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "timeout": {
+          "description": "Seconds per workload call (default 600).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 600
+        },
+        "watch": {
+          "description": "What hydo watches in every page.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BrowserWatch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tests"
+      ]
+    },
+    "BrowserWatch": {
+      "description": "What hydo watches in the pages of `browser:` (Milestone 253). An empty list turns its\ninvariant off.",
+      "type": "object",
+      "properties": {
+        "errors": {
+          "description": "Uncaught exceptions and unhandled promise rejections are findings (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "console": {
+          "description": "console.error calls count as errors too (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "busy": {
+          "description": "CSS selectors of busy elements: spinners, progress bars (default [aria-busy=true] and\n[role=progressbar]).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "busy_max_ms": {
+          "description": "How long a busy element may stay, in milliseconds (default 10000).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 10000
+        },
+        "alerts": {
+          "description": "CSS selectors of error elements: toasts, chips, banners (default [role=alert] and\n[role=alertdialog]).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "failures_within_ms": {
+          "description": "How soon after a failed request an error element must show, unless the page sends the\nrequest again, in milliseconds (default 5000).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 5000
+        },
+        "requests": {
+          "description": "Only the pages' fetch and XHR requests under this path prefix are judged (default all).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "description": "Texts no page may print (default NaN, undefined, [object Object], Invalid Date).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        }
+      },
+      "additionalProperties": false
     },
     "ErrorsSetting": {
       "description": "Error logs as findings: true (every default), false (off), or a mapping.",
@@ -3100,6 +3532,87 @@
       "enum": [
         "min",
         "max"
+      ]
+    },
+    "PerfSpec": {
+      "description": "What a performance test measures (Milestone 237, `perf:`).",
+      "type": "object",
+      "properties": {
+        "steps": {
+          "description": "Run each workload step as its own workload call and measure it (`step 3`), besides the\nwhole workload. Without it the workload runs in one call, as without `perf:`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
+        "threshold": {
+          "description": "The change in percent that `hydo perf compare` reports as a change; a smaller one reads\nas no change (hydo's YAML reads 0.5 as the text \"0.5\", which is taken as the number).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PerfThreshold"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.5
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "PerfThreshold": {
+      "description": "A percentage from 0 to 100, or its text.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "ContractProgram": {
+      "description": "One program with function contracts (Milestone 241).",
+      "type": "object",
+      "properties": {
+        "program": {
+          "description": "The program's path in the guest: a `dst` of `root.files`, whose `src` is the program\nwith its debug information.",
+          "type": "string"
+        },
+        "sources": {
+          "description": "The folders (or files) of the program's sources, relative to the manifest: every `.rs`,\n`.go`, `.c`, `.h`, `.cc` and `.cpp` file in them is read for `// hydo:` comments.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "program",
+        "sources"
       ]
     },
     "Test": {
