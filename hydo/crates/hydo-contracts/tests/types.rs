@@ -232,6 +232,54 @@ fn rust_types_on_arm64_and_x86_64() {
     }
 }
 
+/// A named Go slice type (`type words []uint`, and `math/big.nat` inside a `*big.Int`) is read
+/// as a slice: `len()` and elements (Milestone 260, from Blnk's balances).
+#[test]
+fn go_named_slices_on_arm64_and_x86_64() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/go-named-slice");
+    for (goarch, plan_arch) in [("arm64", "arm64"), ("amd64", "x86_64")] {
+        let b = out_dir().join(format!("named-slice-{goarch}"));
+        let ok = Command::new("go")
+            .args(["build", "-trimpath", "-buildvcs=false", "-o"])
+            .arg(&b)
+            .arg(".")
+            .env("CGO_ENABLED", "0")
+            .env("GOOS", "linux")
+            .env("GOARCH", goarch)
+            .current_dir(&dir)
+            .status()
+            .is_ok_and(|s| s.success());
+        if !ok {
+            eprintln!("NOT CHECKED: go did not build the named-slice program for {goarch}");
+            continue;
+        }
+        let p = compile(&[Source {
+            program: "/bin/named".into(),
+            binary: b,
+            sources: vec![dir.clone()],
+        }])
+        .unwrap();
+        std::fs::write(
+            out_dir().join(format!("named-slice-{plan_arch}.contracts.json")),
+            plan_text(&p),
+        )
+        .unwrap();
+        let prog = &p.programs[0];
+        assert_eq!(prog.arch, plan_arch);
+        assert!(prog.unchecked.is_empty(), "{:#?}", prog.unchecked);
+        assert_eq!(prog.functions.len(), 2, "{:?}", prog.functions);
+        // a slice parameter's elements are borrowed: read at return through the entry's pointer
+        let f = func(prog, "main.first");
+        has(&f.at_entry, &["len(w)"], plan_arch);
+        has(&f.at_return, &["w[0]"], plan_arch);
+        has(
+            &func(prog, "main.floor").at_return,
+            &["b.neg", "len(b.abs)", "b.abs[0]"],
+            plan_arch,
+        );
+    }
+}
+
 #[test]
 fn go_types_on_arm64_and_x86_64() {
     for (goarch, plan_arch) in [("arm64", "arm64"), ("amd64", "x86_64")] {

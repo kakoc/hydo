@@ -496,7 +496,14 @@ impl<'a> Dwarf<'a> {
                 borrowed: true,
             });
         }
-        if n.starts_with("[]") {
+        // a named slice type (`type nat []Word`, the words of `math/big.Int`) keeps its own
+        // name in Go's debug information, with the members of every slice
+        let go_slice = s.members.len() == 3
+            && s.members
+                .iter()
+                .map(|m| m.name.as_str())
+                .eq(["array", "len", "cap"]);
+        if n.starts_with("[]") || go_slice {
             let (p, l) = (s.member("array")?, s.member("len")?);
             return Some(Seq {
                 ptr_off: p.off,

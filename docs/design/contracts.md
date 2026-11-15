@@ -1,4 +1,4 @@
-# Function contracts (Milestones 241 and 255)
+# Function contracts (Milestones 241, 255 and 260)
 
 Status: a prototype on the Mac engine (Milestone 241) and the KVM engine (Milestone 255),
 opt-in. On hvx it is designed, not built ([The hvx design](#the-hvx-design)). An image without
@@ -270,7 +270,10 @@ DWARF sections are inflated. It handles these:
   a structure in registers piece by piece (a Rust `&str` is a pointer and a length in two
   registers). Go's types are in other compilation units than its functions; the compiler
   follows those references.
-- Since Milestone 255: strings, vectors and slices by their pointer and length. Rust's `Vec`
+- Since Milestone 255: strings, vectors and slices by their pointer and length. Since Milestone
+  260 also a Go slice of a named type, such as `math/big.nat`, the words of a `*big.Int`. Go's
+  debug information names it by its type, not as `[]T`, with the members `array`, `len` and
+  `cap`. Rust's `Vec`
   keeps an untyped buffer pointer, so the element type is the `Vec`'s generic parameter `T`.
   Rust's `Option` and `Result` are DWARF variant parts: a discriminant, and per variant either
   its value or none (the variant that a niche keeps, such as `None` in a null pointer).
@@ -463,6 +466,31 @@ two AMD EPYC 7763, and every check passed on each (42 of 42):
   calls not judged, and no undecided check in the Rust one.
 - The Redis example gave main's fingerprints under this hydo.
 
+## Contracts on a real system (Milestone 260)
+
+Milestone 260 put contracts on three functions of Blnk, a ledger in Go, beside the business rules
+of its example (`hydo/onboard/examples/blnk`, RESULTS.md, "Contracts against rules"). The
+question was whether a contract finds more than the rules, or explains a finding better, because
+it sees the call where a wrong value appears. In 24 blind schedules on the Mac engine and the
+example's saved regressions:
+
+- A contract on `model.UpdateBalances` ("an applied transfer leaves no credit line below -50.00")
+  broke in exactly the runs where the overdraft rule failed. In two of three such runs the
+  balance was back over the limit at the end. A rule over the end state alone missed those two;
+  the rule that runs every 2 s did not. The report named the call, the draw's amount and the
+  balance before and after it.
+- The cause, an overdraft limit lost on the way through the queue, could not be stated: the
+  limit is a `float64`, and it travels in a Go map.
+- An atomic bulk that keeps half of its transfers is a property of rows in PostgreSQL and tasks
+  in Redis. The closest contract over memory broke in the runs with the bug and also on the
+  build with the fix.
+- No contract broke in a run where every rule held, and each run gave one fingerprint with the
+  plan and without it.
+
+The lessons for the language: a service keeps its business state in floating-point values, maps,
+and interface values. A report also needs to show values that no clause compares, such as a
+transaction's reference.
+
 ## Next steps
 
 - hvx: build the side module of [The hvx design](#the-hvx-design).
@@ -471,7 +499,10 @@ two AMD EPYC 7763, and every check passed on each (42 of 42):
 - Calls past the first 100,000 of a run: write the records as the run goes, so a run judges
   every call.
 - More types: floating-point values, Go interfaces' values (not only nil or not), maps, and an
-  element chosen by a computed index past the eighth.
+  element chosen by a computed index past the eighth. Blnk's overdraft limit is a `float64` in a
+  map (Milestone 260).
+- The report: values that the clause does not compare (a `// hydo: show` line), a string cut at
+  its own length, and `old()` in the name of a value read at entry.
 - Runtime adapters for Python, Node and the JVM: a stop in the interpreter's call path, and the
   interpreter's own structures as the reads.
 - Active property testing: from a snapshot at a function's entry, call the function with

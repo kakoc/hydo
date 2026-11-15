@@ -571,7 +571,11 @@ fingerprint of the run without it, and a broken clause is a `contract` finding a
 `VIOLATION`. A run judges its first 100,000 calls and reports the rest. On hvx, uprobes changed
 the fingerprint, and engine breakpoints are designed only. The example is
 `hydo/onboard/examples/contracts-ledger`; the design and the measurements are
-`docs/design/contracts.md` (open item 113).
+`docs/design/contracts.md` (open item 113). On Blnk (M260, the Mac engine, 24 blind schedules)
+contracts on three functions found nothing that the business rules did not. The overdraft
+contract broke in the same runs as the rule and named the call and its values. It could not
+state the cause, a `float64` limit lost in a map, and no contract over memory states the atomic
+bulk (the Blnk example's RESULTS.md, "Contracts against rules").
 
 **Fakes from OpenAPI descriptions (M249).** `hydo fake from-openapi <spec>` writes a `fakes:`
 entry from an OpenAPI 3.0 or 3.1 description (the module `openapi` of `hydo-compose`). It writes
@@ -1201,6 +1205,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       (three otherwise), one less in a position-independent program. The engine stops in the
       process of the latest system call and in processes with recorded calls.
     - A run judges at most 100,000 calls; the report says how many it did not judge.
+    - From Blnk (M260): contracts read no floating-point value, map, or interface value, and a
+      report shows only the values a clause compares. A string is shown to the literal's
+      length, past its own end, and a value read inside `old()` lacks `old()` in its name.
+      The Blnk comparison ran 24 blind schedules on the buggy build and none on the fixed build;
+      30 and 20 more were planned and stopped for disk space.
 114. `hydo k8s` (M243). Its own call of `helm template` and `kubectl kustomize` ran in no test:
     the proof rendered the chart on the Mac and imported the output on the bare-metal machine.
     The imports ran on hvx only, not on the Mac engine, and not on KVM. These are not mapped:
@@ -1825,6 +1834,12 @@ build machine, before 2026-10-13.
   position-independent program's load address. The hvx side module is designed. On the Mac every
   proof gave one fingerprint with and without the plan, and the one-off KVM workflow passed on
   two Intel and two AMD models. Nothing recorded moved
+- M260 (tentative number): function contracts against business rules on Blnk, on the Mac engine.
+  Contracts on three functions where money moves found nothing new in 24 blind schedules. The
+  overdraft contract broke in the same runs as the rule and named the call and the draw's values;
+  in two of three runs the end state hid the overdraft. The cause, a `float64` limit in a map,
+  cannot be stated, nor the atomic bulk. Go named slices (`math/big.nat`) are read now. Nothing
+  recorded moved
 
 ## Where to look
 

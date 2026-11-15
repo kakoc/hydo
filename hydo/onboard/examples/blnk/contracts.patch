@@ -1,0 +1,42 @@
+diff --git a/model/model.go b/model/model.go
+index 85fbc1b..36454f5 100644
+--- a/model/model.go
++++ b/model/model.go
+@@ -228,6 +228,9 @@ func (balance *Balance) checkSufficientInflightCredit(amount *big.Int) error {
+ 
+ // CommitInflightDebit commits a debit from the inflight balance and adds it to the
+ // debit balance, returning an error if the inflight hold cannot cover the amount.
++//
++// hydo: ensures result != nil || !balance.InflightDebitBalance.neg
++// hydo: ensures result != nil || balance.DebitBalance.abs[0] == old(balance.DebitBalance.abs[0]) + transaction.PreciseAmount.abs[0]
+ func (balance *Balance) CommitInflightDebit(transaction *Transaction) error {
+ 	balance.InitializeBalanceFields()
+ 	transactionAmount := ApplyPrecision(transaction)
+@@ -488,6 +491,14 @@ func (transaction *Transaction) validate() error {
+ 
+ // UpdateBalances updates the balances for both the source and destination based on the transaction details.
+ // It ensures precision is applied and checks for overdraft before updating.
++//
++// Function contracts for hydo (hydo/onboard/examples/blnk, RESULTS.md "Contracts against
++// rules"). A *big.Int is read by its sign (neg) and its words (abs); every amount here fits
++// in one word. 5000 is the example's overdraft limit of 50.00 at precision 100.
++// hydo: ensures result != nil || transaction.Inflight || source.Indicator == "@world" || !source.Balance.neg || len(source.Balance.abs) == 0 || source.Balance.abs[0] <= 5000
++// hydo: ensures result != nil || transaction.AllowOverdraft || transaction.Inflight || !source.Balance.neg
++// hydo: ensures result != nil || transaction.Inflight || source.DebitBalance.abs[0] == old(source.DebitBalance.abs[0]) + transaction.PreciseAmount.abs[0]
++// hydo: ensures result != nil || transaction.Inflight || destination.CreditBalance.abs[0] == old(destination.CreditBalance.abs[0]) + transaction.PreciseAmount.abs[0]
+ func UpdateBalances(transaction *Transaction, source, destination *Balance) error {
+ 	// Apply precision to get precise amount
+ 	transaction.PreciseAmount = ApplyPrecision(transaction)
+diff --git a/transaction_bulk.go b/transaction_bulk.go
+index 4108817..fe338e8 100644
+--- a/transaction_bulk.go
++++ b/transaction_bulk.go
+@@ -502,6 +502,8 @@ func (l *Blnk) rollBackQueuedAtomicBatch(ctx context.Context, batchID string, is
+ // If atomic is true: Any failure will cause all transactions to be rolled back (or voided if inflight).
+ // If atomic is false: Failures will stop processing but previous transactions remain unaffected.
+ // If run_async is true: Processing happens in background with webhook notifications.
++//
++// hydo: ensures result.1 == nil || !req.Atomic || req.SkipQueue || req.RunAsync || len(req.Transactions) < 2 || req.Transactions[1].Status != "QUEUED"
+ func (l *Blnk) CreateBulkTransactions(ctx context.Context, req *model.BulkTransactionRequest) (*model.BulkTransactionResult, error) {
+ 	ctx, span := tracer.Start(ctx, "Blnk.CreateBulkTransactions")
+ 	defer span.End()

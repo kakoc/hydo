@@ -11488,3 +11488,89 @@ re-recording.
   in processes with recorded calls; a process that another preempts without a system call is
   not stopped in.
 - A run judges only its first 100,000 calls (now counted and reported).
+
+### Milestone 260 (tentative number) - DONE (function contracts against business rules on Blnk, a real Go ledger: contracts on three of its functions where money moves, beside the example's rules, on the Mac engine; in 24 blind schedules and the saved regressions they found nothing that the rules did not; the overdraft contract broke in exactly the runs of the overdraft rule and named the call and the draw's values, and in two of three runs the end-state rule alone missed the overdraft; the cause, a `float64` limit lost in a map, could not be stated, and no contract over memory can state the atomic bulk; Go named slice types such as `math/big.nat` are read now; nothing recorded moved; 2026-11-15)
+
+**What was asked.** Test the user's theory that on a real system a contract finds more, or
+explains a finding better, than a rule over the end state. A contract fails at the call where a
+wrong value appears; a rule sees the state after later steps. The project was the Blnk example of
+Milestone 224 with its two known bugs: draws that the worker coalesces or the queue recovery
+applies lose their `overdraft_limit` (finding 1), and an atomic bulk keeps its first transfer
+when a later one fails before it is queued (finding 2).
+
+**What was built.**
+
+- `hydo/onboard/examples/blnk/contracts.patch` adds only `// hydo:` comments to three functions
+  of Blnk `67d88333`: `model.UpdateBalances` (a transfer applied to two balances in memory: no
+  source below -50.00 after it, no source without an overdraft below zero, the debits and
+  credits grow by the amount), `(*Balance).CommitInflightDebit` (a commit never leaves a negative
+  held amount, and moves the amount into the debits) and `(*Blnk).CreateBulkTransactions` (a
+  failed synchronous atomic bulk has not queued its first transfer). A Blnk amount is a
+  `*big.Int`, read as its sign `neg` and its first word `abs[0]`.
+- `build.sh` builds `bin/blnk-contracts-<arch>` and `bin/blnk-fixed-contracts-<arch>` with the
+  patch and without `-ldflags "-s -w"`, so they keep their debug information, and copies their
+  sources to `work/`. Four more sha256 pins; the arm64 program is 59 MB against 45 MB stripped.
+- `hydo/hydo-contracts.yaml`: `hydo.yaml` with that program and a `contracts:` entry.
+- `hydo-contracts`: Go's debug information names a named slice type by its own name
+  (`math/big.nat`), not `[]T`. The compiler took only `[]` names as slices, so no balance of
+  Blnk could be read. It now also takes a structure whose members are exactly `array`, `len` and
+  `cap`. The test `types::go_named_slices_on_arm64_and_x86_64` builds a small Go program
+  (`tests/go-named-slice`) and compiles a named slice and a `*big.Int` in contracts.
+
+**Proof on the Mac engine** (an M2 Pro, this tree's hydo over the 0.3.4 Mac release, one VM at a
+time; the image `explore-ob-blnk-contracts-arm64.cpio.gz`, sha256 `22f77a57…`). Each schedule
+gave one fingerprint with the plan and without it:
+
+| schedule | fp | rules | contracts |
+|---|---|---|---|
+| `disk=none \| run` | `3dfb801bc3c1aa98` | OK | 89 calls, none broken |
+| `overdraft-limit-concurrent-draws` | `b38494f27bbadd47` | `no_overdraft` | `UpdateBalances` at 1 of 24 calls |
+| `bulk-partial-after-redis-pause` | `f717f4cfecda99c2` | `bulk_atomic` | `CreateBulkTransactions` at 2 of 5 calls |
+
+`commit-lost-with-redis` passed on this image (`4ec6ee18ed10178b`, with the plan): the
+program's other bytes move its timing. On the build with both fixes the overdraft and bulk
+regressions passed every rule; the overdraft contract held, and the bulk contract broke at 2 of 7
+calls.
+
+The blind exploration (`hydo explore --strategy process --new-faults --no-shrink`, one worker,
+with the plan) ran seeds 1 to 20, then 21 to 24 before the Mac's disk fell below the agreed 15 GB
+and it was stopped. 24 schedules is a small sample; the rules' explorations of Milestone 224 ran
+85. In those 24:
+
+- Finding 2 failed `bulk_atomic` in seeds 1, 7, 15, 17 and 18. The bulk contract broke in the
+  same five runs, at as many calls as the rule had rows.
+- Finding 1 failed the overdraft rule in seeds 18, 20 and 21, its first blind finding on the Mac
+  engine. The `UpdateBalances` contract broke in the same three runs and in no other. In seeds 18
+  and 21 the credit line was back over the limit at the end, so the end-state rule
+  (`no_overdraft_after`) held; the rule that runs every 2 s and the contract saw it.
+- Finding 3 (seeds 10 and 20) broke no contract: a commit lost in Redis is a call that never
+  happens.
+- No contract broke in a run where every rule held.
+
+In seed 18 the contract's report named the call and its values: a draw of 16.55 took `@c1` from
+-46.33 to -62.88 with `allow_overdraft`, and Blnk's check returned no error. The rule's row at
+its next check said `@c1 balance=-5276`. Neither named the cause: the limit is a `float64`, which
+contracts do not read, and it is lost in the transaction's `MetaData` map.
+
+**Verdict on the theory.** On Blnk, contracts found nothing new and found each bug in the same
+schedules as the rules. The time-of-the-call view helped once: a dip below the limit that the
+end state hid. A rule that runs during the workload saw the same dips. Contracts explained
+finding 1 better by naming the call and the values, but not its cause. They could not state
+finding 2 at all, because atomicity across the API, Redis and the worker is not in one process's
+memory.
+
+**What contracts lacked**, in the order in which it cost time: floating-point values, maps,
+interface values (`context.Context`, `error`), state outside the process, return breakpoints for
+nested calls (`canProcessTransaction` inside `UpdateBalances`), and three report gaps: values no
+clause compares, strings cut at the literal's length (`"@c1USD"`), and `old()` missing from the
+name of a value read at entry. KVM was not run: its three debug registers hold two of the three
+functions, so it would have checked less on the same program. The 100,000-call limit and
+goroutines did not matter: a run made fewer than 100 calls, and every return was matched.
+
+**Tests.** `hydo-contracts` (18 tests, with the new one), `cargo fmt` and clippy on it. The
+explorer's identity (quick and full) and full corpus gained the new manifest; the control
+corpus passed unchanged. The documents: the example's RESULTS.md section "Contracts against rules",
+`docs/design/contracts.md` section "Contracts on a real system", and Vale.
+
+**Open** (AGENTS.md open item 113): the 30 more blind schedules on the buggy build and 20 on the
+fixed build that the disk did not allow; floats, maps and a `show` line in the language.

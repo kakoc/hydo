@@ -47,7 +47,12 @@ Error logs as findings (`errors: true`) ran beside both kinds, without a rule.
     never arrives is a valid, open hold.
 - **What did the error logs find?** No bug alone. They showed finding 2's failed rollback, and
   they named Blnk's reactions to every fault.
-- **What did hydo lack?** Four things, listed in the last section but one.
+- **Did function contracts help?** A little, on one bug. They found nothing new in 24 blind
+  schedules. A contract on `UpdateBalances` broke in the same runs as the overdraft rule and
+  named the call and the draw's values, but it could not read the limit, a `float64`. No
+  contract could state the atomic bulk. The runs are in the section
+  "Contracts against rules" (Milestone 260).
+- **What did hydo lack?** Four things, which the section "What hydo lacked" lists.
 
 ## The version
 
@@ -62,9 +67,11 @@ source.
 
 | file | what it is |
 |---|---|
-| `build.sh` | builds `bin/blnk-<arch>` from `67d88333`, `bin/blnk-fixed-<arch>` with the two patches, and `bin/blnkc-<arch>` from `client/`: static Linux programs for amd64 and arm64, checked against six sha256 pins (on a Mac) |
+| `build.sh` | builds `bin/blnk-<arch>` from `67d88333`, `bin/blnk-fixed-<arch>` with the two patches, and `bin/blnkc-<arch>` from `client/`: static Linux programs for amd64 and arm64. It also builds both Blnk programs with `contracts.patch` and their debug information (`bin/blnk-contracts-<arch>`, `bin/blnk-fixed-contracts-<arch>`). Ten sha256 pins check them (on a Mac) |
+| `contracts.patch` | function contracts on three of Blnk's functions, as `// hydo:` comments only ("Contracts against rules") |
 | `client/main.go` | `blnkc`, the test client: every workload operation, the wait for the queue, and the generic rule (standard library only) |
 | `fix-overdraft-limit.patch`, `fix-atomic-bulk.patch` | the tested fixes of findings 1 and 2, against `67d88333` |
+| `hydo/hydo-contracts.yaml` | `hydo.yaml` with the contracts program and a `contracts:` entry |
 | `hydo/hydo.yaml` | PostgreSQL 16 and Redis 7.2.4 as Blnk's `docker-compose.yaml` runs them, `blnk start` after `blnk migrate up`, and `blnk workers`, each in its own network namespace |
 | `hydo/workload/` | `first_init` funds the accounts; eight `parallel_driver_` commands, one per operation (below); `eventually_1_settle` and `eventually_2_settle` wait for the queue (`helper_settle.sh`) |
 | `hydo/checks/` | the rules (below): 9 SQL files over PostgreSQL and 1 program |
@@ -73,7 +80,7 @@ source.
 | `hydo/fetch-images.sh` | PostgreSQL 16.16 and Redis 7.2.4 by digest for both architectures |
 
 ```sh
-sh build.sh                     # needs Go 1.27.3 and network once; prints "ok" for the six pins
+sh build.sh                     # needs Go 1.27.3 and network once; prints "ok" for the ten pins
 cd hydo && sh fetch-images.sh
 hydo build hydo.yaml --arch arm64 --set arch=arm64     # on a Mac; on Linux: hydo build hydo.yaml
 hydo run "disk=none | run"
@@ -454,6 +461,174 @@ run again on the final image where the table says so. The directed runs came on 
 
 No run lost an acknowledged transfer to PostgreSQL with the honest disk. The disk faults that
 broke PostgreSQL itself (I/O errors, a lying disk) are faults a team would turn off or accept.
+
+## Contracts against rules
+
+Milestone 260 asked whether function contracts find more on Blnk than the rules, or explain a
+finding better. A function contract is a set of `// hydo:` comments next to a function that
+hydo checks at every call (`docs/design/contracts.md`). The rules of this page see Blnk's tables: every
+2 s while the workload runs (`always_`) and once at the end (`final_`). A contract sees one call:
+its arguments at the entry and the changed values at the return.
+
+The short answer comes from 24 blind schedules and the saved regressions. On this system the
+contracts found nothing that the rules did not, and they explained only one of the two bugs
+better.
+
+- Finding 1, the lost overdraft limit: the contract caught it in the same runs as the rules. It
+  named the call, the draw's amount and the balance before and after. In one run the end-state
+  rule passed, and only the rules that run during the workload, and the contract, saw it.
+- Finding 2, the atomic bulk: no contract over the process's memory can state it. The closest
+  contract fires in exactly the runs where the rules found the bug, and also on the build with
+  the fix, where nothing is wrong.
+- Findings 3 and 4 are calls that never happen (a commit lost in Redis) or waits; no contract
+  can see them.
+
+### The program and its contracts
+
+`build.sh` also builds `bin/blnk-contracts-<arch>` from `67d88333` with `contracts.patch`, without
+`-ldflags "-s -w"`, so the program keeps its debug information. The patch adds only comment
+lines, so the machine code is Blnk's own. The program is 59 MB on arm64, against 45 MB
+stripped. `hydo/hydo-contracts.yaml` is `hydo.yaml` with this program and a `contracts:`
+entry. `--set blnk=blnk-fixed` builds it with the two fixes too.
+
+The contracts are on three functions, the Mac engine's limit with two breakpoints left for
+returns:
+
+| function | clause | what it says |
+|---|---|---|
+| `model.UpdateBalances`, which applies a transfer to two balances in memory | `ensures result != nil \|\| transaction.Inflight \|\| source.Indicator == "@world" \|\| !source.Balance.neg \|\| len(source.Balance.abs) == 0 \|\| source.Balance.abs[0] <= 5000` | an applied transfer leaves no source below -50.00 (rule 1.6 at the moment of the transfer) |
+| | `ensures result != nil \|\| transaction.AllowOverdraft \|\| transaction.Inflight \|\| !source.Balance.neg` | a source without an overdraft never goes below zero |
+| | `ensures result != nil \|\| transaction.Inflight \|\| source.DebitBalance.abs[0] == old(source.DebitBalance.abs[0]) + transaction.PreciseAmount.abs[0]` | the source's debits grow by the amount |
+| | the same for `destination.CreditBalance` | the destination's credits grow by the amount |
+| `(*Balance).CommitInflightDebit`, the commit of a hold on its source | `ensures result != nil \|\| !balance.InflightDebitBalance.neg` | a commit never holds less than nothing (rule 1.4) |
+| | `ensures result != nil \|\| balance.DebitBalance.abs[0] == old(balance.DebitBalance.abs[0]) + transaction.PreciseAmount.abs[0]` | the commit moves the amount into the debits |
+| `(*Blnk).CreateBulkTransactions`, the API's bulk request | `ensures result.1 == nil \|\| !req.Atomic \|\| req.SkipQueue \|\| req.RunAsync \|\| len(req.Transactions) < 2 \|\| req.Transactions[1].Status != "QUEUED"` | a synchronous atomic bulk that fails has not queued its first transfer (below) |
+
+A Blnk amount is a `*big.Int`: a sign `neg` and a slice of machine words `abs`. Every amount here
+fits in one word, so `abs[0]` is the amount. 5000 is the example's limit of 50.00 at precision
+100, the same number that rule 1.6 names.
+
+These were wanted and could not be written:
+
+- **The overdraft limit itself.** `Transaction.OverdraftLimit` is a `float64`, and contracts
+  read no floating-point value. The clause "a transaction that allows an overdraft carries its
+  limit" on `canProcessTransaction`, and "the restored transaction keeps its limit" on
+  `restoreTransactionFlagsFromMetadata`, would have named finding 1's cause. Both need it.
+- **The metadata.** `setTransactionMetadata` writes `allow_overdraft` into `MetaData` and not the
+  limit; that is the bug. `MetaData` is a Go map, which contracts do not read.
+- **The coalescing and the recovery.** `buildQueuedCoalescingBatchForScope` and
+  `processStuckTransaction` lose the limit in the same way: the same float, read through a map.
+- **The atomic bulk.** "A failed atomic bulk leaves none of its transfers to apply" depends on
+  rows in PostgreSQL and tasks in Redis, not on memory. The request's memory only shows that
+  the second transfer was tried, which means that the first was queued. That is the clause in
+  the table: it marks the situation in which the bug happens, not the bug.
+- **Contexts and errors.** The bulk's rollback runs on a request context that the client
+  cancelled. A `context.Context` and an `error` are Go interfaces, of which contracts read only
+  whether they are nil.
+- **A fourth function.** `canProcessTransaction`, the overdraft decision, runs inside
+  `UpdateBalances`. Two calls in progress need two return breakpoints, and with four functions
+  the Mac engine keeps only one.
+
+hydo itself lacked one thing, fixed in this milestone. Go's debug information names a named slice
+type by its own name (`math/big.nat`), not `[]Word`. The plan compiler read only slices whose
+name starts with `[]`. Without the fix no balance of Blnk could be read.
+
+### The measurements
+
+All runs used the Mac engine with this tree's hydo, one VM at a time, on the image
+`explore-ob-blnk-contracts-arm64.cpio.gz` (sha256 `22f77a57…`). The contracts do not change a
+run: each schedule gave one fingerprint with the plan and without it.
+
+| schedule | fp (with the plan and without it) | the rules | the contracts |
+|---|---|---|---|
+| `disk=none \| run` | `3dfb801bc3c1aa98` | OK | 89 calls, none broken |
+| `overdraft-limit-concurrent-draws` | `b38494f27bbadd47` | `VIOLATION [no_overdraft]` | `UpdateBalances` broken at 1 of 24 calls |
+| `bulk-partial-after-redis-pause` | `f717f4cfecda99c2` | `VIOLATION [bulk_atomic]` | `CreateBulkTransactions` broken at 2 of 5 calls |
+| `commit-lost-with-redis` | `4ec6ee18ed10178b` (with the plan) | OK | 44 calls, none broken |
+
+The third regression passes on this image: the program's other bytes move its timing, and the
+lost commit needs a kill of Redis at the right moment. The fixed build
+(`--set blnk=blnk-fixed`) passes both other regressions by every rule. There the overdraft
+contract held at its 29 calls, and the bulk contract broke at 2 of 7 calls, as it does on the
+buggy build.
+
+The blind exploration was `hydo explore --strategy process --new-faults --no-shrink` with the
+plan. It ran seeds 1 to 20 and then 21 to 24. It stopped there because the Mac's disk ran short. So
+the comparison rests on 24 blind schedules and the regressions; the rules' own explorations on
+this page ran 85. Every rule and every contract ran in every schedule:
+
+| seed | the rules that failed | the contracts that broke |
+|---|---|---|
+| 1, 7, 15, 17 | `bulk_atomic`, `business_result` | `CreateBulkTransactions`, at as many calls as the rule had rows (2, 2, 1, 3) |
+| 10 | `business_result`: two acknowledged commits of holds are not in Blnk (finding 3) | none |
+| 18 | `no_overdraft` (every 2 s), `bulk_atomic`, `business_result`; the end-state `no_overdraft_after` held | `UpdateBalances` at 1 of 62 calls, `CreateBulkTransactions` at 1 of 14 |
+| 20 | `no_overdraft`, `no_overdraft_after`, `business_result` (finding 3) | `UpdateBalances` at 3 of 57 calls |
+| 21 | `no_overdraft` (every 2 s), `business_result`; the end-state rule held | `UpdateBalances` at 1 of 59 calls |
+
+No contract broke in a schedule where every rule held. A run made 44 to 89 calls of the three
+functions; the stops cost less than the runs' own spread of a few seconds.
+
+### Finding 1: the same runs, a clearer cause
+
+The contract on `UpdateBalances` broke in every run where rule 1.6 failed, and in no other. Both
+found it first at seed 18. These Mac explorations reached finding 1 for the first time; `e2` and
+`e4` never did. In seed 18 the report was:
+
+```text
+hydo: contract broken: github.com/blnkfinance/blnk/model.UpdateBalances ensures result != nil || transaction.Inflight || source.Indicator == "@world" || !source.Balance.neg || len(source.Balance.abs) == 0 || source.Balance.abs[0] <= 5000 (model/model.go:498) at 1 of 62 calls
+hydo:   first at call 5 (guest clock 354420): len(source.DebitBalance.abs) = 1, source.DebitBalance.abs[0] = 4633, ..., source.Indicator[0..6] = "@c1USD", source.Balance.neg = true, len(source.Balance.abs) = 1, source.Balance.abs[0] = 6288, transaction.AllowOverdraft = true, source.DebitBalance.abs[0] = 6288, len(transaction.PreciseAmount.abs) = 1, transaction.PreciseAmount.abs[0] = 1655, ...
+```
+
+It says that the worker applied a draw of 16.55 from `@c1`. The draw took the credit line from
+-46.33 to -62.88. Blnk's own check returned no error for this transaction with
+`allow_overdraft`. The rule's lines in the same run were `db: indicator=@c1 balance=-5276
+held=0`, from its periodic check at guest clock 408576, after the balance had risen again. At
+the end the credit line was over -50.00 again, so the end-state rule held. In seed 21 the end-state rule held
+too.
+Of the three blind runs with finding 1, a rule over the end state alone saw one (seed 20). The
+contract and the periodic rule saw all three.
+
+The contract did not name the cause. The limit is a `float64`, so the report cannot show that
+the draw arrived with an `OverdraftLimit` of 0. From the report, a reader learns that Blnk's
+check let an over-limit draw through with `allow_overdraft` set. That points at the branch of
+`canProcessTransaction` that skips every check when the limit is 0. Without contracts, the
+overdraft rule's row and a `hydo inspect` session with `psql` led to the same branch. That took
+reading the worker's log and the transactions' metadata by hand.
+
+### Finding 2: no contract can state it
+
+The bulk contract broke in every run where rule 1.7 failed, at as many calls as the rule had
+rows. It broke on the fixed build too, where every rule held. The bug is in what happens after
+the call: the worker later applies a transfer that the API has already given up. The API
+process's memory holds nothing that says whether the worker later applies or rejects it. The
+rule's lines named the bulk and its applied transfer (`db: bulk=k15 saved=1 effects=k15.1 193 of
+193`). The contract's lines named the API call that answered with an error after queuing the
+first transfer. Both point at the same code. Only the rule tells the bug from the fixed
+behaviour.
+
+### What contracts lacked on a real Go service
+
+In the order in which they cost time:
+
+1. **Floating-point values.** Blnk keeps the overdraft limit, the amount and the precision as
+   `float64`. The clause that names finding 1's cause could not be written.
+2. **Maps.** The transaction's flags travel through `MetaData`, a `map[string]interface{}`.
+3. **Interfaces.** A `context.Context` and an `error` show only whether they are nil.
+4. **State outside the process.** Atomicity across the API, Redis and the worker is a property of
+   rows and tasks, not of one call's memory.
+5. **Breakpoints.** Three functions with results fit on the Mac engine with two breakpoints for
+   returns. Nested calls, such as `canProcessTransaction` inside `UpdateBalances`, need one return
+   breakpoint each. The KVM engine has room for two of the three functions, which is why no KVM
+   run was made: it would have checked less on the same program.
+6. **The report.** A value is shown only when a clause reads it, so the transaction's reference is
+   not in the report. A string shows the literal's length in bytes even past the string's end
+   (`"@c1USD"`). A value read inside `old()` has the same name as the value at return.
+7. **The build.** The program must keep its debug information (59 MB instead of the stripped
+   program), and its sources with the comments must sit next to the manifest.
+
+The 100,000-call limit did not matter: a run made fewer than 100 calls. Goroutines did not
+matter either: every call's return was matched. The undecided checks (9 to 12 per run) were
+reads of a word past the end of an empty `abs`: a balance whose debits or credits were still 0.
 
 ## What hydo lacked
 

@@ -5,10 +5,15 @@
 #   bin/blnk-fixed-<arch>  the same with fix-overdraft-limit.patch and fix-atomic-bulk.patch
 #                          (`hydo build --set blnk=blnk-fixed`)
 #   bin/blnkc-<arch>       the test client in client/ (the workload's commands and the checks)
+#   bin/blnk-contracts-<arch>, bin/blnk-fixed-contracts-<arch>
+#                          the first two with contracts.patch, which adds only `// hydo:` comments
+#                          (function contracts), built with their debug information, which the
+#                          contracts read (hydo-contracts.yaml); their sources, which `hydo build`
+#                          reads, are copied to work/blnk-contracts and work/blnk-fixed-contracts
 # for <arch> amd64 (hvx and KVM) and arm64 (the Mac engine).
 # Needs git, network once, and Go 1.27.3 (GOTOOLCHAIN fetches it). Works on a Mac and on Linux;
 # the bytes are checked against the pins below.
-#   sh build.sh                    # all six
+#   sh build.sh                    # all ten
 #   BLNK_SRC=<dir> sh build.sh     # reuse a clone (its work tree is reset to BLNK_COMMIT)
 set -eu
 cd "$(dirname "$0")"
@@ -40,6 +45,22 @@ for arch in amd64 arm64; do
   (cd client && GOTOOLCHAIN=$GO_TOOLCHAIN CGO_ENABLED=0 GOOS=linux GOARCH=$arch \
      go build -trimpath -buildvcs=false -ldflags "-s -w" -o "$HERE/bin/blnkc-$arch" .)
 done
+# the programs with function contracts: without -ldflags "-s -w", so they keep their debug
+# information, and with their sources next to them for the plan (`sources:` of hydo-contracts.yaml)
+build_contracts() {   # output name
+  for arch in amd64 arm64; do
+    (cd "$SRC" && GOTOOLCHAIN=$GO_TOOLCHAIN CGO_ENABLED=0 GOOS=linux GOARCH=$arch \
+       go build -trimpath -buildvcs=false -o "$HERE/bin/$1-$arch" ./cmd)
+  done
+  rm -rf "$HERE/work/$1"
+  mkdir -p "$HERE/work/$1"
+  (cd "$SRC" && tar cf - --exclude .git .) | (cd "$HERE/work/$1" && tar xf -)
+}
+git -C "$SRC" apply "$HERE/contracts.patch"
+build_contracts blnk-contracts
+git -C "$SRC" apply "$HERE/fix-overdraft-limit.patch" "$HERE/fix-atomic-bulk.patch"
+build_contracts blnk-fixed-contracts
+git -C "$SRC" checkout -q -f "$BLNK_COMMIT"
 check() {   # file sha256
   got=$( (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d' ' -f1)
   if [ "$got" = "$2" ]; then echo "$1 ok"; else echo "$1: sha256 $got, expected $2" >&2; exit 1; fi
@@ -50,3 +71,7 @@ check bin/blnk-fixed-amd64 fc2523dd8058205e6a69ecebb97ece7165ecf3a26d65d48a67976
 check bin/blnk-fixed-arm64 f1785b46a60c30ea3262a2d5341eb3286ab571c0f32a8312f1be1c8b2e762d8d
 check bin/blnkc-amd64 6c45211eda7cc90283e3539aa0fd5142a09a2283eeb5694cfcca10117d73dc6d
 check bin/blnkc-arm64 0eba5b43e9df583df63c650b959df539a9d4df6d2aa6cc04b998bbdc305135f8
+check bin/blnk-contracts-amd64 85cfe1e4f9f8a041ac46e39953aa39a9ec1d5ef8f839b27c75b81f84953451f0
+check bin/blnk-contracts-arm64 d4ac8334015206837d13c81632f8cfa37c9c6334f7480ac0e6f5f9fe28d0d924
+check bin/blnk-fixed-contracts-amd64 3f6032ed662bdebbddf3ef0152d01e3ce2540e82f70732b5d1be124f68ebbb44
+check bin/blnk-fixed-contracts-arm64 85759e20413c5a6d47b0a96fd7df9e1245ab70727129ef4c61c385e4a9eb2c93
