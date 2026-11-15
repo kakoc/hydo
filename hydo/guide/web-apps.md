@@ -162,17 +162,19 @@ for exact equality. To use it:
 
 The invariant `browser.screens_match` then fails when one pixel of a page differs. Its finding
 gives the number of changed pixels and the box around them, and `screens/<file>.diff.png` shows
-the reference in grey with the changed pixels in red:
+the reference in grey with the changed pixels in red. In the `web-shop` example on KVM, the order
+page under `H=api.get_order@0-1:status=500` gave:
 
 ```text
-The screenshot screens/checkout-spec-ts-places-an-order-1.png of the page /orders/o1 at the
-end of the test "checkout.spec.ts › places an order" differs from its reference in 5,296 of
-921,600 pixels (0.57 %), inside the box from x=15, y=56 to x=311, y=138. The changed pixels are
+The screenshot screens/checkout-spec-ts-places-an-order-1.png of the page /orders/o3 at the
+end of the test "checkout.spec.ts › places an order" differs from its reference in 5,505 of
+921,600 pixels (0.60 %), inside the box from x=15, y=56 to x=311, y=138. The changed pixels are
 red in screens/checkout-spec-ts-places-an-order-1.diff.png.
 ```
 
-It also fails when a screenshot has no reference, and when a reference has no screenshot.
-Record the references on the engine that runs the comparison.
+It also fails when a screenshot has no reference, and when a reference has no screenshot. In
+the example, the screenshots had the same bytes on Intel and AMD hosts. Other guest CPUs or
+kernels can draw differently, so record the references on the engine that runs the comparison.
 
 ## Limits
 

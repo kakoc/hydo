@@ -2134,11 +2134,12 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     fx.report(v.clone());
     // perf: (Milestone 237): the workload's own numbers ($HYDO_PERF), once the verdict is decided
     perf::report(fx, ctx)?;
-    // browser: (Milestone 254): the pages' screenshots, once the verdict is decided
-    screens::collect(fx, ctx)?;
     // HYDO_COST: the counters once the verdict is decided, so the probe changes no verdict and
     // nothing before it (the workload's fingerprint stays the run's without the probe)
     cost::probe(fx, ctx, "final", false)?;
+    // browser: (Milestone 254): the pages' screenshots, last, so that their reads change
+    // neither the verdict nor the counters
+    screens::collect(fx, ctx)?;
     fx.settle()?;
     fx.end(Ending::Verdict(v))
 }
@@ -3147,8 +3148,8 @@ fn stopped_without_faults(fx: &mut F<'_>, ctx: &Ctx, svc: &str) -> Step<()> {
     log(fx, format!("the checks with {svc} stopped: {checks}"));
     let v = format!("{STOPPED_WITHOUT_FAULTS} ({svc})");
     fx.report(v.clone());
-    screens::collect(fx, ctx)?;
     cost::probe(fx, ctx, "final", false)?;
+    screens::collect(fx, ctx)?;
     fx.settle()?;
     fx.end(Ending::Verdict(v))
 }

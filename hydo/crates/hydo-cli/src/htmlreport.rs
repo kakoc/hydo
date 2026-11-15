@@ -1166,7 +1166,14 @@ fn screens_html(dir: &Path, run: &Run) -> String {
             let named: Vec<String> = run
                 .findings
                 .iter()
-                .filter(|x| x.status != "ok" && x.message.contains(&f))
+                // the check's sentence is in its details (`details.out`), or in the message
+                .filter(|x| {
+                    x.status != "ok"
+                        && (x.message.contains(&f)
+                            || serde_json::to_string(&x.details)
+                                .unwrap_or_default()
+                                .contains(&f))
+                })
                 .map(|x| x.id.clone())
                 .collect();
             (named, e.clone())

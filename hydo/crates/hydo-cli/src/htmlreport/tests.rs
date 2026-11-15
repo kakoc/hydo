@@ -362,13 +362,17 @@ fn a_browser_run_shows_its_screenshots_next_to_the_finding() {
         },
         "0123456789abcdef",
     );
+    // as `hydo run` records an invariant: its description as the message, its sentence in the
+    // details
+    let out = "The page /orders/o3 showed the busy element .spinner for 5.1 s. Screenshot: \
+               screens/checkout-spec-ts-places-an-order-1.png in the run directory.";
+    let details = serde_json::json!({"assertion": "always", "details": {"out": out}});
     run.findings.push(hydo_results::Finding {
+        kind: "assertion".into(),
         id: "browser.busy_ends".into(),
-        status: "violated".into(),
-        message: "The page /orders/o3 showed the busy element .spinner for 5.1 s. Screenshot: \
-                  screens/checkout-spec-ts-places-an-order-1.png in the run directory."
-            .into(),
-        ..Default::default()
+        status: "violation".into(),
+        message: "no busy element stays for 10 s".into(),
+        details: details.as_object().unwrap().clone(),
     });
     let d = std::env::temp_dir().join(format!("hydo-htmlreport-shots-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);

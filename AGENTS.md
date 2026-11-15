@@ -637,7 +637,10 @@ run without it. `hydo explore --protocol-faults` found its stuck spinner and unh
 blind (seed 7 of 40). It needs `network: bridge` and runs on x86_64 only. hydo-build now leaves out
 layer entries whose names have a backslash or a quote instead of refusing the image. The design is
 `docs/design/web-apps.md`, the how-to `hydo guide web-apps`, and the details are in
-`docs/HISTORY.md` Milestone 253.
+`docs/HISTORY.md` Milestone 253. Since M254 a passing test counts as acknowledged work, and the
+pages' screenshots go to the run directory's `screens/` after the verdict, where `hydo report
+--html` shows them under the finding that names them. `browser.screens: compare` compares each
+page's screenshot with a recorded reference, pixel for pixel (`<name>.screens_match`).
 
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
@@ -916,13 +919,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 48. [user decision] The Rust test SDK is unpublished until the user decides about code-first
     tests (M160, M163).
 49. `hydo diff` and `hydo explain`: deeper levels need engine additions (M165).
-51. Web apps (M166, M253). Since M253 `browser:` runs a team's Playwright tests as the workload
-    and watches the pages; M166's hand-written driver stays an example. Left:
-    - It ran on hvx only. The Mac engine keeps the root in guest RAM, and the Playwright image is
-      about 3 GB unpacked; KVM did not run it.
+51. Web apps (M166, M253, M254). Since M253 `browser:` runs a team's Playwright tests as the
+    workload and watches the pages; M166's hand-written driver stays an example. Since M254 the
+    screenshots leave the guest and `screens: compare` checks them against references. Left:
+    - The Mac engine does not run it: it keeps the root in guest RAM, and the Playwright image is
+      about 3 GB unpacked. KVM_ITEM
+    - hvx did not run M254's code, so no hvx run has screenshots in its run directory yet.
+    - An exploration's report page does not show the screenshots, which the explorer writes to
+      `<tag>.screens/` beside the run's transcripts.
     - One pinned Playwright version (1.65.1). A team on another version needs its pin added to
       `hydo_manifest::browser::CATALOG`. Firefox and WebKit were not tried.
-    - Screenshots are taken but not compared with a reference, and they stay in the guest.
     - The hydo-native list of steps (open, click, read) for teams without Playwright tests is not
       built. Cypress suites do not run.
     - The watcher hooks the instrumentation that Playwright's own runner uses for traces, an

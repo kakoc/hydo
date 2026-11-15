@@ -35,8 +35,9 @@ no added latency it passed 10 of 10.
 - Inputs: the app's two builds and the tests' packages, made on the Mac with Node.js 24.16.0 from
   the two lock files (as `build.sh` makes them). The Playwright image was fetched with
   `hydo-fetch-image` by the digest that `hydo build` pins (`docs/BUILD-PINS.md`, "Playwright for
-  `browser:`"); `hydo build`'s own fetch of a missing image did not run, because the file was
-  already there.
+  `browser:`"). `hydo build`'s own fetch of a missing image did not run here, because the file
+  was already there; it ran in Milestone 254 (the section "The image fetch of
+  `hydo build`").
 - Images: `hydo build hydo.yaml --set variant=buggy` gave `explore-ob-web-shop-disk.img`, sha256
   `c03111de5b8d1c64…`, 4,094,689,280 bytes (a root of 3,392 MiB and a data disk of 512 MiB). The
   Playwright image's tree is 35,790 entries; hydo-build left out two systemd unit names with a
@@ -191,3 +192,22 @@ step. Its probe run showed that step 0 calls the four routes and step 1 calls `p
 The other 19 failures were the tests' own assertions or timeouts under API faults. The same 24
 seeds on the fixed image failed only by `browser.tests_pass`: no double order, and every watched
 property of the page held.
+
+## The image fetch of `hydo build`
+
+In Milestone 254, on a GitHub runner (ubuntu-24.04, run 43690697894 of the workflow `tmp-web-kvm`),
+`browser/` did not exist, and `hydo build hydo.yaml --set variant=buggy --set screens=all`
+fetched the image itself:
+
+```text
+hydo: fetching the image of browser (mcr.microsoft.com/playwright@sha256:766137e2d9caad4744187e53cdc89320ba6f2eb57cff097374020944b44dd0a9, x86_64) into /mnt/w/web-shop/browser/playwright-v1.65.1-noble-amd64.docker.tar
+fetch_image: layer 1/7 sha256:26538842dfbf
+...
+fetch_image: mcr.microsoft.com/playwright@sha256:766137e2d9ca -> /mnt/w/web-shop/browser/playwright-v1.65.1-noble-amd64.docker.tar.part (7 layers, config sha256:12708c20bc00)
+hydo-build: service browser from image /mnt/w/web-shop/browser/playwright-v1.65.1-noble-amd64.docker.tar (mcr.microsoft.com/playwright:v1.65.1-noble, config sha256:12708c20bc00)
+```
+
+The config digest is the one in `docs/BUILD-PINS.md`. The file that `hydo-fetch-image` fetched
+for the hvx runs on this page is 1,012,681,216 bytes with sha256 `6c535d9b038b3d8d…`. That build then
+stopped at `HYDO_IPROUTE2 not found`, because the workflow had not run `hydo setup` for the
+unpacked release (AGENTS.md open item 98).
