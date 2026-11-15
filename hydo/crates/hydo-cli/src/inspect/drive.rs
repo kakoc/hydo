@@ -516,6 +516,9 @@ impl Link for InspectLink<'_, '_> {
     fn engine_cut(&self) -> bool {
         self.inner.engine_cut()
     }
+    fn disk_dark(&self) -> bool {
+        self.inner.disk_dark()
+    }
     fn cont(&mut self) -> Result<(), LinkError> {
         self.inner.cont()
     }

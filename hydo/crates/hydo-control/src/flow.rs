@@ -311,6 +311,23 @@ impl<S, K: Clone> Flow<S, K> {
         self.ended = true;
     }
 
+    /// Cancel every live thread and start a thread of `kind`, outside the threads (before a
+    /// pump): what a controller does when the run must end at once, wherever its threads wait
+    /// (Milestone 261: the disk of a `cf=` schedule lost power). A thread cancelled here does
+    /// not run again, also not at this stop; the new one runs at the next pump.
+    pub fn preempt(&mut self, kind: K) {
+        for t in &mut self.threads {
+            if t.state == State::Live {
+                t.state = State::Cancelled;
+            }
+        }
+        self.threads.push(Thread {
+            kind,
+            memo: Vec::new(),
+            state: State::Live,
+        });
+    }
+
     /// A command typed outside the threads (the runner's resynchronisation `sync`) that an
     /// ending must also wait for: the agent has read every byte the host typed (M123: a run can
     /// now end before the controller sent anything).

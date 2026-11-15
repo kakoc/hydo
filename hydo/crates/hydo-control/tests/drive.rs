@@ -59,6 +59,9 @@ impl Link for Machine {
     fn engine_cut(&self) -> bool {
         self.cut
     }
+    fn disk_dark(&self) -> bool {
+        self.cur.disk_dark()
+    }
     fn cont(&mut self) -> Result<(), LinkError> {
         self.cur.cont()
     }
@@ -233,4 +236,130 @@ fn a_fresh_boots_run_starts_at_s1s_own_stop() {
         assert_eq!(runs[0].ctl(), runs[1].ctl(), "{text}: two fresh boots");
         assert_eq!(runs[0].recovery.is_some(), s.has_power_cut(), "{text}");
     }
+}
+
+/// Milestone 261 (open item 126, from the device examples of M259): a `cf=` run whose disk lost
+/// power while its workload ran. Every process that touches the dark disk waits forever then (the
+/// workload's client, the agent's own mount of an `L=`), and the fake ends no process after that
+/// point. Before M261 the run waited for the workload's end, where the engine cut the power, and
+/// ended at the engine's limit (`TIMEOUT workload`; here the fake's stop limit). Now the power cut
+/// comes at the first stop that says the disk is dark: the workload and the services frozen, the
+/// ids read and reported, and the recovery boot gives the verdict.
+#[test]
+fn a_cf_run_whose_disk_lost_power_is_cut_at_once() {
+    let plan = plan_of("hydo/onboard/examples/redis/hydo.yaml").unwrap();
+    let (sb, db) = booted(&plan, "drive dark");
+    for (text, after) in [
+        ("disk=cut cf=3 | run", 30),
+        ("disk=cut cf=1 | run K=redis@4+2 R=everysec", 120),
+    ] {
+        let s: Schedule = text.parse().unwrap();
+        let cad = support::cadence(Some(&s));
+        let mut cur = Fake::resume(&sb.s1.0, text, cad);
+        cur.dark_at = Some(cur.t + after);
+        let mut m = Machine {
+            cur,
+            s0: Some(sb.s0.0.clone()),
+            salt: text.into(),
+            cad,
+            cf: true,
+            cut: false,
+        };
+        let got = drive::run(&mut m, &db, &s, RunFrom::Restored, &Policy::Schedule)
+            .unwrap_or_else(|e| panic!("{text}: {e}"));
+        let t = &got.run.transcript;
+        let lines = t.report_lines();
+        let notes: Vec<&str> = t
+            .records
+            .iter()
+            .filter_map(|r| match r {
+                Record::Note { line, .. } => Some(line.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            notes.contains(&"hydo-ob: POWER CUT at the disk flush of cf= (the workload and all services frozen)"),
+            "{text}: {notes:#?}"
+        );
+        // the workload never ended: no step range has an exit status, and no retry ran
+        assert!(
+            !notes.iter().any(|l| l.contains(" rc=")),
+            "{text}: {notes:#?}"
+        );
+        let ids = |p: &str| -> Vec<String> {
+            lines
+                .iter()
+                .rev()
+                .find_map(|l| l.strip_prefix(p))
+                .unwrap()
+                .split_whitespace()
+                .map(str::to_string)
+                .collect()
+        };
+        assert_eq!(
+            got.run.ending,
+            Some(Ending::PowerCut {
+                acked: ids("hydo-explore-acked:"),
+                failed: ids("hydo-explore-failed:"),
+                world: Vec::new(),
+                outcomes: Vec::new(),
+            }),
+            "{text}"
+        );
+        let n = t.records.len();
+        assert!(matches!(
+            t.records[n - 2],
+            Record::Engine {
+                action: EngineAction::DiskFaultsOff,
+                ..
+            }
+        ));
+        let rec = got.recovery.as_ref().expect("a recovery boot");
+        assert!(matches!(rec.ending, Some(Ending::Verdict(_))), "{text}");
+    }
+}
+
+/// Milestone 261: the disk of a `cf=` run lost power while the agent itself waited on it (its
+/// own mount of an `L=` was under way at the flush, as in the RAUC example's `cf=83 | run
+/// T=12:-300 L=device@6+2`), so the power cut's reads get no answer. The run ends with an ERROR
+/// that says so, DARK_STOPS stops after the dark point, instead of at the engine's limit.
+#[test]
+fn a_cf_run_whose_agent_waits_on_the_dark_disk_ends_in_error() {
+    let plan = plan_of("hydo/onboard/examples/redis/hydo.yaml").unwrap();
+    let (sb, db) = booted(&plan, "drive dark agent");
+    let text = "disk=cut cf=3 | run";
+    let s: Schedule = text.parse().unwrap();
+    let cad = support::cadence(Some(&s));
+    let mut cur = Fake::resume(&sb.s1.0, text, cad);
+    cur.dark_at = Some(cur.t + 30);
+    cur.dark_agent = true;
+    let mut m = Machine {
+        cur,
+        s0: Some(sb.s0.0.clone()),
+        salt: text.into(),
+        cad,
+        cf: true,
+        cut: false,
+    };
+    let got = drive::run(&mut m, &db, &s, RunFrom::Restored, &Policy::Schedule)
+        .unwrap_or_else(|e| panic!("{text}: {e}"));
+    assert_eq!(
+        got.run.ending,
+        Some(Ending::Verdict(hydo_control::DARK_AGENT_VERDICT.into()))
+    );
+    assert!(got.recovery.is_none());
+    let Some(Record::End { n, .. }) = got.run.transcript.records.last() else {
+        panic!("no end")
+    };
+    let dark = got
+        .run
+        .transcript
+        .records
+        .iter()
+        .find_map(|r| match r {
+            Record::Note { n, line, .. } if line.contains("the disk lost power") => Some(*n),
+            _ => None,
+        })
+        .expect("the dark point's note");
+    assert_eq!(*n, dark + hydo_control::DARK_STOPS);
 }

@@ -222,6 +222,9 @@ impl Link for RecLink<'_> {
     fn engine_cut(&self) -> bool {
         self.inner.engine_cut()
     }
+    fn disk_dark(&self) -> bool {
+        self.inner.disk_dark()
+    }
     fn timing(&mut self, tokens: &str) -> Result<(), LinkError> {
         self.inner.timing(tokens)?;
         self.call(Call::Timing(tokens.to_string()));
@@ -415,6 +418,12 @@ impl Link for BranchLink<'_> {
             _ => false,
         }
     }
+    fn disk_dark(&self) -> bool {
+        match (&self.live, self.is_live) {
+            (Some(l), true) => l.disk_dark(),
+            _ => false,
+        }
+    }
     fn timing(&mut self, tokens: &str) -> Result<(), LinkError> {
         if self.is_live {
             return self.live().timing(tokens);
@@ -553,6 +562,9 @@ impl Link for SwitchLink<'_> {
     }
     fn engine_cut(&self) -> bool {
         self.inner.engine_cut()
+    }
+    fn disk_dark(&self) -> bool {
+        self.inner.disk_dark()
     }
     fn timing(&mut self, tokens: &str) -> Result<(), LinkError> {
         self.inner.timing(tokens)

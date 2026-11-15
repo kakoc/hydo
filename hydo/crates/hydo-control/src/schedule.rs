@@ -288,6 +288,9 @@ enum Part {
         svc: String,
         spawn: u64,
     },
+    /// Milestone 261: the power cut of a `cf=` schedule, at the first stop after its disk lost
+    /// power (`disk_cut`); every other thread is cancelled then.
+    DiskCut,
 }
 
 fn label(p: &Part) -> String {
@@ -302,6 +305,7 @@ fn label(p: &Part) -> String {
         Part::Restart(s) => restart::label(s),
         Part::React(i) => format!("react:a{i}"),
         Part::UpgradeGrace { svc, .. } => upgrade::label(svc),
+        Part::DiskCut => "cut".into(),
     }
 }
 
@@ -319,7 +323,20 @@ pub struct ScheduleController {
     fresh: bool,
     /// The guest's assertion records are facts (a run with reactions, M139).
     watch: bool,
+    /// Milestone 261: the stop at which a `cf=` schedule's disk lost power ([`Seen::DiskDark`]).
+    dark_stop: Option<u64>,
 }
+
+/// Milestone 261: how many stops after a `cf=` schedule's disk lost power the power cut's reads
+/// may take. A whole run of the device examples takes about 32,000 stops; the cut's reads take a
+/// few hundred. More means that the agent itself waits on the dark disk (its own mount of an
+/// `L=` or read of a `G=` was under way at the flush), so nothing in the guest can answer.
+pub const DARK_STOPS: u64 = 200_000;
+
+/// Milestone 261: the verdict when the agent itself waits on a disk that lost power at `cf=`.
+pub const DARK_AGENT_VERDICT: &str = "HYDO-ORACLE: ERROR the disk lost power at its flush of cf= \
+    while the agent itself waited on it (an L= or G= under way), so the ids for the recovery boot \
+    cannot be read";
 
 /// The fault assertions explore_run declares, in its order (type, id, message).
 pub const FAULT_DECLS: [(&str, &str, &str); 6] = [
@@ -427,6 +444,7 @@ impl ScheduleController {
             started: false,
             fresh,
             watch,
+            dark_stop: None,
         })
     }
 
@@ -774,8 +792,17 @@ impl Controller for ScheduleController {
         "schedule"
     }
 
-    fn step(&mut self, _stop: &StopInfo, seen: &[Seen], out: &mut Out) {
+    fn step(&mut self, stop: &StopInfo, seen: &[Seen], out: &mut Out) {
         if self.flow.ended() {
+            return;
+        }
+        if self
+            .dark_stop
+            .is_some_and(|n| stop.n.saturating_sub(n) >= DARK_STOPS)
+        {
+            out.report("main", DARK_AGENT_VERDICT.to_string());
+            out.end(Ending::Verdict(DARK_AGENT_VERDICT.to_string()));
+            self.flow.end_now();
             return;
         }
         let mut new = false;
@@ -820,6 +847,20 @@ impl Controller for ScheduleController {
                     }
                 }
                 Seen::UnknownEvent(_) | Seen::Console(_) => {}
+                // Milestone 261: a cf= schedule's disk lost power. Before, the run went on to
+                // the workload's end, where the engine cut the power; but every process that
+                // touched the dark disk (the workload's client, a check, the agent's own mount
+                // of an L= or read of a G=) waited forever, and such a run ended at the
+                // engine's wall limit (TIMEOUT workload). The power cut is now, whatever the
+                // threads wait for.
+                Seen::DiskDark => {
+                    let ctx = self.flow.shared.ctx.clone();
+                    if matches!(ctx.conv, Conversation::Run) && ctx.run.cf {
+                        self.flow.preempt(Part::DiskCut);
+                        self.dark_stop = Some(stop.n);
+                        new = true;
+                    }
+                }
                 Seen::Broken(why) => {
                     let line = format!("HYDO-ORACLE: ERROR agent protocol: {why}");
                     out.report("main", line.clone());
@@ -867,6 +908,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
         Part::Restart(s) => restart::watch(fx, &ctx, s),
         Part::React(i) => react::watch(fx, &ctx, *i),
         Part::UpgradeGrace { svc, spawn } => upgrade::grace(fx, &ctx, svc, *spawn),
+        Part::DiskCut => disk_cut(fx, &ctx),
     }
 }
 
@@ -3143,6 +3185,58 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         return stopped_without_faults(fx, ctx, s); // only a run without faults gets here
     }
     finish(fx, ctx)
+}
+
+/// Milestone 261: the power cut of a `cf=` schedule, as soon as its disk lost power (the k-th
+/// flush came; [`Seen::DiskDark`]): the workload's client and every service frozen at once, the
+/// ids, the outcomes and the clock read (from the layout's directory, which is not on the
+/// disk), the reports the recovery boot reads, and the workload's end, which the engine turns
+/// into the power cut (`DISKOFF` answers `cut=1`). As a reaction's power cut and `C=` do, and
+/// what the end of [`explore_run`] did for `cf=` when the run got there.
+fn disk_cut(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
+    let l = &ctx.plan.layout;
+    log(
+        fx,
+        "the disk lost power at its flush of cf=: the power cut is now",
+    );
+    svc_sig(fx, "workload", Sig::Stop)?;
+    for s in &ctx.plan.services {
+        svc_sig(fx, &s.name, Sig::Stop)?;
+    }
+    restart::stop(fx); // no service is started after the cut (M134)
+    freeze::kill(fx)?;
+    stop_periodic(fx);
+    let (failed, outcomes) = failed_ids_outcomes(fx, ctx)?;
+    // SEAM(Clock): the first boot's clock at the cut (guest.clock_after_cut)
+    let at_cut = clock::at_cut(fx, ctx)?;
+    // SEAM(Fakes): the world frozen and dumped, carried in the acknowledged line
+    let world = fakes::failed_ids_at_cut(fx, ctx)?;
+    errlog::at_cut(fx, ctx)?;
+    let acked = read_all(fx, &l.acked())?;
+    fx.report(format!(
+        "hydo-explore-acked: {}",
+        format!("{acked}{}{world}", clock::acked_token(at_cut)).replace('\n', " ")
+    ));
+    fx.report(format!(
+        "hydo-explore-failed: {}",
+        failed.replace('\n', " ")
+    ));
+    if ctx.plan.outcomes_after_cut {
+        fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
+    }
+    if !ctx.run.u.is_empty() {
+        let v = upgrade::carried(fx, ctx);
+        fx.report(format!("{} {v}", upgrade::VERSIONS_PREFIX));
+    }
+    log(
+        fx,
+        "POWER CUT at the disk flush of cf= (the workload and all services frozen)",
+    );
+    cost::probe(fx, ctx, "end", true)?; // HYDO_COST=full: services frozen, before the cut
+    fx.report("hydo-explore-workload-done");
+    fx.engine(EngineAction::DiskFaultsOff);
+    log(fx, "command: go");
+    Ok(())
 }
 
 /// The end of a run without faults in which service `svc` stopped and did not start again

@@ -187,6 +187,14 @@ pub struct Fake {
     /// The engine turns the workload's end (DiskFaultsOff) into a power cut, as a `cf=` run
     /// whose k-th flush came does (only the tests that ask for it; Milestone 202).
     pub cut_at_go: bool,
+    /// Milestone 261: the data disk loses power at this time, as at a `cf=` run's k-th flush:
+    /// from then on the stops say so ([`Link::disk_dark`]) and no process ends (no exit, no
+    /// done), as every process that touches a dark disk waits forever. Replies still come.
+    pub dark_at: Option<u64>,
+    /// With `dark_at`: the agent itself waits on the dark disk (its own mount was under way at
+    /// the flush), so nothing at all comes after the dark point.
+    pub dark_agent: bool,
+    dark: bool,
 }
 
 impl Fake {
@@ -211,6 +219,9 @@ impl Fake {
             bad_lines: Vec::new(),
             max_stops: 400_000,
             cut_at_go: false,
+            dark_at: None,
+            dark_agent: false,
+            dark: false,
         };
         f.emit(
             1,
@@ -255,6 +266,9 @@ impl Fake {
             bad_lines: Vec::new(),
             max_stops: 400_000,
             cut_at_go: false,
+            dark_at: None,
+            dark_agent: false,
+            dark: false,
         }
     }
 
@@ -1016,7 +1030,12 @@ impl Link for Fake {
         }
         self.pending.sort_by_key(|p| (p.at, p.ord));
         let k = self.pending.iter().take_while(|p| p.at <= self.t).count();
-        let due: Vec<Pending> = self.pending.drain(..k).collect();
+        let mut due: Vec<Pending> = self.pending.drain(..k).collect();
+        self.dark = self.dark_at.is_some_and(|d| self.t >= d);
+        if self.dark {
+            let agent = self.dark_agent;
+            due.retain(|p| !agent && !matches!(p.msg, Msg::Event(Event::Exit(_) | Event::Done(_))));
+        }
         let mut lines = Vec::new();
         for p in due {
             self.reap(&p.msg);
@@ -1091,6 +1110,10 @@ impl Link for Fake {
     fn end(&mut self, e: &Ending) -> Result<String, LinkError> {
         self.ended = Some(e.clone());
         Ok(format!("RESULT fake at={} stops={}", self.t, self.n))
+    }
+
+    fn disk_dark(&self) -> bool {
+        self.dark
     }
 
     fn engine_cut(&self) -> bool {

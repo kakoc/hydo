@@ -11964,3 +11964,115 @@ counters' fields, the threshold, what a line shows), and
 counter decides its branch ends `ERROR workload: SPIN` between 0.5 s and the wall limit, with
 `HYDO_KVM_SPIN_SECS=0.5`). Both rounds ran on the temporary branch `tmp-spin-kvm`, which is not
 merged. Nothing recorded moved.
+
+### Milestone 261 (tentative number) - DONE (the two hydo errors of the device examples, open item 126: a line the host put while the agent was inside its read of the line before lost its first bytes on hvx's host-call port, so the agent refused it; the hvx engine pads the staged bytes to the agent's 4-byte reads; and a `cf=` power cut left the rest of a run waiting forever on the dead disk; the engine now says at every stop that the disk lost power, and the host controller cuts the power at the first such stop; a run whose own agent waits on the dead disk ends in an ERROR that says so after 200,000 stops; the device examples no longer need `workload.timeout: 60`; nothing in `hydo/onboard/recorded.json` moved; every hvx run with `cf=` whose flush comes before the workload's end gives other values; 2026-11-15)
+
+**What was asked.** Find and fix the two hydo errors that Milestone 259 left in open item 126,
+each with a test that fails before the fix, and keep every recorded value.
+
+**1. A line that lost its first bytes.** On hvx, `disk=cut dseed=ea6b44d03ce268f0 | run
+K=device@4+3 T=1:-30 A=ota.install_started+5000:cut` on the SWUpdate image ended with `ERROR
+agent protocol: the agent refused a line it could not read`, on every run.
+
+- The cause. The agent reads the host's lines from the host-call port (M138): it reads the
+  count of staged bytes, then that many bytes with 4-byte `IN`s, and the module's 4-byte `IN`
+  pops up to 4 bytes. When the count is not a multiple of 4, the last `IN` pops 1 to 3 bytes
+  past it. Before, nothing was there, unless the host put a line while the agent was inside that
+  read. A stop can come at any exit of the read, and a reaction's command was due at such a
+  stop. A build of the engine that logged each put showed it: the workload's `spawn` (482 bytes)
+  was staged, the agent had read 40 bytes of it, and the reaction's `run` (258 bytes) was put
+  with 442 bytes unread. 442 is 2 more than a multiple of 4, so the agent's last `IN` took the
+  new line's `{"`. The agent refused the rest: `not a JSON value at byte 0`. The explorer's
+  run from its worker's snapshot lost only the `{`: `text after the value at byte 6`.
+- The fix (`hydo/crates/hydo-hvx/src/hc.rs`, `engine.rs`). Before a put, the engine reads the
+  unread count (`HVX_HC_GET_STATE`). The agent is inside its read when it took some of the bytes
+  since the engine's last put, or when it took none but a vCPU stands right after its read of the
+  count (DX holds the count's port and EAX the count). Then, when the unread count is not a
+  multiple of 4, the engine stages 1 to 3 newlines before the line, which the agent's last `IN`
+  takes. An agent that had not started its read sees them as empty lines, which it skips. The
+  count after the last put travels with the engine's snapshots, so a run from a snapshot pads as
+  a fresh boot does. A run whose puts never fell inside the agent's read stages the bytes it
+  staged before.
+- The tests. `hc::tests::a_line_put_inside_the_agents_read_reaches_it_whole` models the module's
+  port and the agent's read loop and puts a second line at every point of the read of a first
+  line of 8 to 40 bytes. Without the padding it fails at the first such point (a first line of
+  9 bytes, the second put after the count's `IN`). `without_the_padding_the_agents_last_read_takes_the_next_lines_first_bytes`
+  keeps the example's numbers and shows the lost `{"`.
+- On hvx the schedule now gives `OK invariants=5 held` with `9afe8a1ccd688fb9` on two runs (the
+  image of Milestone 259), and `cacaaf979daca400` on two runs on the image without the
+  workaround below.
+
+**2. A `cf=` cut that left the rest of the run waiting.** A `cf=<k>` cut makes the data disk
+swallow every request of its power domain from the k-th flush on, reads too. The engine cut the
+power only at the workload's end. Until then every process that touched the dead disk waited
+forever in the kernel, and `timeout` could not end it.
+
+- What hung. In RAUC's `disk=cut dseed=72b4b958fb4479ee cf=34 | run T=12:-30` with a timeout of
+  300 s, the workload's first range never ended: the run sent 6,300 periodic checks and stopped
+  at the engine's limit of 900 s. In `disk=cut dseed=b867e156d88e8c87 cf=83 | run T=12:-300
+  L=device@6+2`, the agent's own `mount` of the `L=` never answered, and the run made 27 million
+  stops in 900 s. In `cf=83 | run G=device@13:zero,...` the `G=` read the file on the dead disk.
+- The fix. The hvx engine reads the module's flush cut (`HVX_GET_FLUSHCUT`) at each stop of a
+  `cf=` schedule's workload until the disk has lost power, and from then on its `STOP` lines end
+  with ` dark=1` (`hydo_engine_proto::Stop::dark`; a run without `cf=` reads nothing, and its
+  lines are the lines they were). The runner tells the controller once (`Seen::DiskDark`,
+  `Link::disk_dark`). The schedule controller cancels every thread and starts the power cut's
+  thread (`Flow::preempt`, `disk_cut`). It freezes the workload and every service, reads the ids,
+  the outcomes and the clock from the layout's directory, reports them, and ends the workload
+  with `DISKOFF`, which the engine answers with the cut. So the run is cut at the first stop
+  after the flush, as `C=` and a reaction's cut are, instead of at the workload's end.
+- What it cannot do. When the flush is the agent's own (the `mount` of an `L=` in the second
+  schedule of "What hung"), the agent waits on the dead disk and answers nothing. The run then ends
+  200,000 stops after the dark stop (`DARK_STOPS`; a whole run of the device examples takes about
+  32,000) with `HYDO-ORACLE: ERROR the disk lost power at its flush of cf= while the agent
+  itself waited on it`, in 8.3 s on hvx, instead of `TIMEOUT workload` after 900 s. Open
+  item 127 has what would reach the recovery boot there.
+- The tests (`hydo-control`, `tests/drive.rs`, on the scripted engine, whose disk can now lose
+  power at a given time and then end no process).
+  `a_cf_run_whose_disk_lost_power_is_cut_at_once` fails before the fix with `the fake stopped
+  400001 times: a hang`; now both schedules end with the power cut and the reported ids, and the
+  recovery gives a verdict. `a_cf_run_whose_agent_waits_on_the_dark_disk_ends_in_error` checks
+  the ERROR and its stop.
+
+**On hvx** (`~/hydo-m261` on the bare-metal machine, one VM at a time, `hydo` and `hydo-hvx`
+built from this branch over the 0.3.4 Linux release):
+
+| run | before | after |
+|---|---|---|
+| RAUC `disk=cut dseed=72b4b958fb4479ee cf=34 \| run T=12:-30` | `TIMEOUT workload` at 300 s | OK in 3.0 s, `88efb2c07865ffab` twice |
+| RAUC `disk=cut dseed=9f14bde427152010 cf=83 \| run G=device@13:zero,len=512,seed=3a12608b` | `TIMEOUT workload` | OK in 4.8 s, `6db779f596d5296e` |
+| RAUC `disk=cut dseed=b867e156d88e8c87 cf=83 \| run T=12:-300 L=device@6+2` | `TIMEOUT workload` | that ERROR, `ddcbb64deeca0929` twice |
+| SWUpdate `disk=cut dseed=8a06efbe04aca436 cf=64 \| run` | OK after the 300 s timeout | OK in 5.4 s |
+| RAUC, the explorer, seeds 30-60, `--more-faults --storage-faults --reactive fault` | 2 of these seeds `TIMEOUT workload` | 31 schedules in 181 s; the one failure is seed 37's ERROR |
+
+The pinned reproducers give their values: `a76d7fe857fdb37c` (VIOLATION) and `efbde7b57264be0f`
+(OK) on the images in `~/hydo/build/m204`.
+
+**The examples' workaround.** Without the cut's hang the examples no longer need `workload.timeout:
+60`, and the line is gone from both manifests. Their images built again on hvx, and the saved
+regressions give their recorded verdicts: RAUC's `disk=cut | run C=4` boots v3
+(`f87883f5a12c011f`), and SWUpdate's gives `VIOLATION [device.version] booted v1, but the updates
+allow only v3` (`24da8c23993cc677` on two runs). RAUC without faults holds every invariant after
+15 boots (`bafed17412f8b5a9`). Each RESULTS.md says that its other fingerprints are of the image
+with the line.
+
+**What moved.** Nothing in `hydo/onboard/recorded.json`: it has no `cf=` run, and the pinned
+reproducers give their values. The cut now comes at the flush, so every hvx run with `cf=` whose
+flush comes before the workload's end gives another fingerprint and control transcript. Such a
+run also no longer has the acknowledgements its client got after the disk died. Two `cf=`
+schedules outside the list wait for a check (open item 105): the bug benchmark's trigger of d11
+(`disk=cut dseed=0 cf=270 | run`, `hydo-bench`'s `defects.rs`) and the Saleor regression
+`gift-card-charged-without-record` (expect: violation). No run used their images here. The STOP
+line's ` dark=1` and the padding are inert elsewhere, and the Mac and KVM engines never send it.
+The documents that described the old cut (MANIFEST.md's `restart_may_fail` and
+`guest.clock_after_cut`, `hydo guide faults` and `services`) say what it does now.
+
+**Goldens.** The explorer's `identity-quick.txt`, `identity-full.txt` and `corpus-full.txt` and
+the control corpus `corpus-quick.txt` record the two manifests' hashes; only those lines changed
+(`HYDO_BLESS=1`). The explorer's `corpus-quick.txt` was already out of date with other inputs
+and is unchanged.
+
+**Checks.** `cargo test` of `hydo-control`, `hydo-engine`, `hydo-engine-proto` and `hydo-hvx` on
+this Mac, `cargo test -p hydo-hvx --lib` on the bare-metal machine, `cargo clippy --all-targets
+-- -D warnings` of the changed crates on both, `sh ci/consolidate-tests.sh --check` and `sh
+ci/vale.sh`.

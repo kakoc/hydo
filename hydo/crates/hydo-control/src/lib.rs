@@ -46,6 +46,8 @@ pub use replay::ReplayController;
 pub use runner::{
     run, run_with, AgentPoint, Finished, Link, LinkError, LinkNext, RunError, RunOpts, Start,
 };
-pub use schedule::{Conversation, GuestState, RecoveryInputs, ScheduleController};
+pub use schedule::{
+    Conversation, GuestState, RecoveryInputs, ScheduleController, DARK_AGENT_VERDICT, DARK_STOPS,
+};
 pub use seams::{Seam, Unsupported};
 pub use transcript::{Header, Record, Transcript};

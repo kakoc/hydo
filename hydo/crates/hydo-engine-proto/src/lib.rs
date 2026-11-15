@@ -28,7 +28,7 @@
 //! engine -> host, per stop:   EVENT <tag> at=<icount> n=<k> <escaped line>
 //!                             SENT <tag> id=<id> at=<icount>[ retype=1]
 //!                             DROP <tag> id=<id>
-//!                             STOP <tag> at=<icount> n=<k> phase=<p> why=<w>
+//!                             STOP <tag> at=<icount> n=<k> phase=<p> why=<w>[ dark=1]
 //! host -> engine, at a stop:  SEND at=<icount> <escaped bytes>   -> OK send id=<id> sent=|queued=<n>
 //!                             ACK <id>                           -> OK ack <id>
 //!                             SNAP <name> [retype]               -> OK snap <name> at=<n> retype=<ids>|-
@@ -197,6 +197,11 @@ pub struct Stop {
     pub n: u64,
     pub phase: Phase,
     pub why: StopWhy,
+    /// Milestone 261: the data disk lost power at a `cf=` schedule's k-th flush, at or before
+    /// this stop (` dark=1` on the line; only the workload's stops carry it). From then on the
+    /// disk completes no request of its power domain, so the host ends the first boot with the
+    /// power cut at once instead of waiting for a guest that may never finish.
+    pub dark: bool,
 }
 
 /// One complete console line the guest wrote since the previous stop (without its `\n` and a
@@ -708,11 +713,12 @@ impl EngineMsg {
             ),
             EngineMsg::Drop { tag, id } => format!("DROP {tag} id={id}"),
             EngineMsg::Stop { tag, stop } => format!(
-                "STOP {tag} at={} n={} phase={} why={}",
+                "STOP {tag} at={} n={} phase={} why={}{}",
                 stop.at,
                 stop.n,
                 stop.phase.name(),
-                stop.why.name()
+                stop.why.name(),
+                if stop.dark { " dark=1" } else { "" }
             ),
             EngineMsg::Answer(a) => a.line(),
             EngineMsg::Result(r) => r.line.clone(),
@@ -777,6 +783,7 @@ impl EngineMsg {
                     n: num("n")?,
                     phase: Phase::parse(get("phase")?)?,
                     why: StopWhy::parse(get("why")?)?,
+                    dark: get("dark") == Some("1"),
                 },
             }),
             _ => None,

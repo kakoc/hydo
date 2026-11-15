@@ -147,6 +147,11 @@ gave the same verdict with the first client (a reboot right after each install),
 (`e2badaf98f96dfc1`). An earlier build of that client gave one fingerprint on two Mac runs
 (`bba27579504084b7`).
 
+The hvx fingerprints in this file are of the image built with `workload.timeout: 60`. Milestone
+261 removed that line, so the image's bytes and its fingerprints changed. On hvx the image
+without it gives that verdict with `bafed17412f8b5a9`, and the regression `disk=cut | run
+C=4` boots v3 with `f87883f5a12c011f`.
+
 ## What was found
 
 No RAUC bug. What the faults showed:
@@ -212,11 +217,15 @@ loses until hydo has it.
    `/proc/cmdline`; the example binds a file over it.
 4. **A power cut inside a step on the Mac.** `cf=` (a cut at the k-th flush) runs on hvx only.
    On the Mac the example needed its own console records and reactions (`A=...:cut`) to cut
-   inside an install. A `cf=` cut also leaves the rest of the run's I/O hanging until
-   `workload.timeout`. On hvx such a run took up to 15 minutes, and at a timeout of 300 s one
-   hit the explorer's limit of 900 s per run (`TIMEOUT workload`). The examples use 60 s. A
-   `cf=` cut before a `L=` hung that run too: `disk=cut dseed=b867e156d88e8c87 cf=83 | run
-   T=12:-300 L=device@6+2` printed no line after step 5 and ended with `TIMEOUT workload`.
+   inside an install. Until Milestone 261 a `cf=` cut also left the rest of the run hanging.
+   A process that touched the dead disk waited forever, such as the workload's client or the
+   agent's own mount of an `L=`. Such a run ended at the explorer's limit of 900 s
+   (`TIMEOUT workload`). The examples used `workload.timeout: 60`. Since Milestone 261 the run
+   is cut at the first stop after the flush. `disk=cut dseed=b867e156d88e8c87 cf=83 | run
+   T=12:-300 L=device@6+2` still cannot reach its recovery boot: the flush is the agent's own
+   mount of the `L=`, so the agent waits on the dead disk. It ends in 8 s with `ERROR the disk
+   lost power at its flush of cf= while the agent itself waited on it` (AGENTS.md, open item
+   127).
 5. **Kernel features of devices.** The Mac's guest kernel has no squashfs and no device mapper,
    so RAUC needed a patch there and no engine ran `verity` bundles. The hvx guest kernel has
    them as modules, which the example loads from the kernel's build (`fetch-modules.sh`).

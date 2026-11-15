@@ -16,6 +16,8 @@ pub struct LockstepLink<'a, 'b> {
     pub phase: Option<Phase>,
     /// The last DISKOFF answered `cut=1`.
     cut: bool,
+    /// Milestone 261: the last stop said that a `cf=` schedule's disk has lost power.
+    dark: bool,
     /// The run's RESULT line, once the engine printed it.
     pub result: Option<hydo_engine::RunResult>,
 }
@@ -26,6 +28,7 @@ impl<'a, 'b> LockstepLink<'a, 'b> {
             ls,
             phase: None,
             cut: false,
+            dark: false,
             result: None,
         }
     }
@@ -67,6 +70,7 @@ impl Link for LockstepLink<'_, '_> {
                     )));
                 }
                 self.phase = Some(rep.stop.phase);
+                self.dark = rep.stop.dark;
                 Ok(LinkNext::Stop {
                     stop: StopInfo {
                         n: rep.stop.n,
@@ -115,6 +119,10 @@ impl Link for LockstepLink<'_, '_> {
 
     fn engine_cut(&self) -> bool {
         self.cut
+    }
+
+    fn disk_dark(&self) -> bool {
+        self.dark
     }
 
     fn timing(&mut self, tokens: &str) -> Result<(), LinkError> {

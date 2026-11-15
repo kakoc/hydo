@@ -39,6 +39,7 @@ pub mod boot;
 pub mod cstr;
 pub mod ctl;
 pub mod fnv;
+pub mod hc;
 pub mod pages;
 pub mod port;
 pub mod pt;

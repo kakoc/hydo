@@ -46,9 +46,9 @@ rules that matter most:
   `on-failure[:max]`). Give a service the policy it has in production (the Compose import copies
   `restart:`). The reference is `hydo guide manifest`, section `Restart policies`.
 - `restart_may_fail: true` only for a service whose restart after the faults can fail for a
-  reason outside the test. An example is an API whose database sessions hang on a disk that lost
-  power at a `cf=` cut. The run then goes on without `workload.retry`, and a power cut's recovery
-  boot still gives the verdict. Without a cut the verdict is ERROR, naming the service. The
+  reason outside the test. The run then goes on without `workload.retry`, and with `cf=` in the
+  schedule a power cut's recovery boot still gives the verdict. Without a cut the verdict is
+  ERROR, naming the service. The
   reference is `hydo guide manifest`, section `A restart after the faults that may fail`.
 - `job: true` for a one-shot job, such as a database migration, whose command the services that
   wait for it run in their `setup:`. Its own service only idles, so the explorer never draws a

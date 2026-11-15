@@ -14,7 +14,7 @@
 //! engine -> host, before every stop:  EVENT <tag> at=<icount> n=<k> <escaped line>
 //!                                     SENT <tag> id=<id> at=<icount>[ retype=1]
 //!                                     DROP <tag> id=<id>
-//!                                     STOP <tag> at=<icount> n=<k> phase=<p> why=<w>
+//!                                     STOP <tag> at=<icount> n=<k> phase=<p> why=<w>[ dark=1]
 //! host -> engine, at a stop:          SEND at=<icount> <escaped bytes>   -> OK send id=<id> sent=|queued=<n>
 //!                                     ACK <id>                           -> OK ack <id> | ERR ack ...
 //!                                     SNAP <name> [retype]               -> OK snap ... | ERR snap ...

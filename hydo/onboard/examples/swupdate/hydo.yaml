@@ -59,7 +59,6 @@ workload:
   steps: 16                                # 8 updates: v2, v3, v4 (broken), v5, v2, ...
   run: sh /opt/ota/device/client.sh $HYDO_FROM $HYDO_TO
   retry: sh /opt/ota/device/client.sh reboot
-  timeout: 60                              # a power cut at a disk flush (cf=) leaves the rest hanging until it
 
 invariants:
   - id: device.boots

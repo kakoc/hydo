@@ -78,6 +78,10 @@ the data in the same way.
 `HYDO-ORACLE: OK invariants=5 held (device.boots: booted slot A v5 after 15 boot(s))` with the
 fingerprint `9a6b98defa5b7a98` on two runs.
 
+The fingerprints in this file are of the image built with `workload.timeout: 60`. Milestone 261
+removed that line, so the image's bytes and its fingerprints changed. On hvx the regression
+`disk=cut | run C=4` gives the same verdict with `24da8c23993cc677` on two runs.
+
 ## What was found
 
 ### 1. After a power cut before the reboot into an installed update, the device boots the slot's old contents (an SWUpdate candidate, new as far as the search found)
@@ -158,8 +162,9 @@ adds the flush. `hydo rules scan` listed these sentences as the documentation's 
 
 ## The explorations
 
-Both explorations ran on hvx with one worker, on images with `workload.timeout: 300`; the final
-image has 60 s (`../rauc/RESULTS.md`, "What hydo lacked", item 4), so its fingerprints differ:
+Both explorations ran on hvx with one worker, on images with `workload.timeout: 300`. A later
+image had 60 s (`../rauc/RESULTS.md`, "What hydo lacked", item 4). The current one has the
+default 300 s again (Milestone 261). The fingerprints of other images differ:
 
 ```sh
 hydo explore --seeds 1-60 --strategy process --more-faults --reactive fault \
@@ -176,7 +181,10 @@ hydo explore --seeds 1-60 --strategy process --more-faults --reactive fault \
 - The eighth failure is hydo's, not SWUpdate's: `disk=cut dseed=ea6b44d03ce268f0 | run
   K=device@4+3 T=1:-30 A=ota.install_started+5000:cut` (seed 41) ends with `ERROR agent
   protocol: the agent refused a line it could not read: bad-json text after the value at byte
-  6`, also in its rerun. It was not investigated (AGENTS.md, open item 126).
+  6`, also in its rerun. The host put a line while the agent was inside its read of the line
+  before, and the agent's last 4-byte read took the new line's `{`. Milestone 261 fixed it in
+  the hvx engine: on the image without `workload.timeout: 60` the schedule gives `OK
+  invariants=5 held` with `cacaaf979daca400` on two runs.
 - **A first client**, which rebooted right after each install: 25 schedules, no failure. Its
   window between the switch and the reboot's `sync` was a few milliseconds, and no drawn power
   cut fell into it. A device that installs in the background and reboots later has a window as

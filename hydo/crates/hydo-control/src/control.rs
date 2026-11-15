@@ -87,6 +87,10 @@ pub enum Seen {
     UnknownEvent(String),
     /// A console line that is not the agent's (kernel or service text).
     Console(String),
+    /// Milestone 261: the data disk lost power at a `cf=` schedule's k-th flush (seen once, at
+    /// the first stop after it). The disk completes no request of its power domain from then
+    /// on, and a process that touches it, the agent's own mount or read too, waits forever.
+    DiskDark,
     /// A corrupt, lost or unpaired agent line, or an agent this host cannot speak to: the run
     /// is an ERROR (it is the same in every replay, so it is wrong, never flaky).
     Broken(String),

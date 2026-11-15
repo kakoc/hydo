@@ -282,7 +282,8 @@ rebaseline` checks or re-records them (`docs/REBASELINE.md` "How to re-baseline"
 **The hvx engine.** The module (`hv/hvx/hvx.c`, ABI `hvx_abi.h`) boots Linux 6.6.35
 deterministically, with guest RAM up to 8 GiB. Its clock counts VM exits, or the guest's retired
 conditional branches with the PMU branch clock. Every module feature is opt-in; the engine turns on the
-host-call port by default (M140), also with several vCPUs since M205. The run engine is the Rust
+host-call port by default (M140), also with several vCPUs since M205. Since M261 a `cf=` power
+cut comes at the first stop after the k-th flush, not at the workload's end. The run engine is the Rust
 crate `hydo-hvx`, which runs inside `hydo` when the process can open `/dev/hvx`. Details:
 `docs/HISTORY.md` Milestones 33, 66–69, 132, 137, 138, 156 and 179; the module's safety net is
 `hv/hvx/SAFETY.md`.
@@ -1194,7 +1195,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
     milestone and the values it moves; the pass removes the lines.
-    None are waiting. Milestone 244 re-recorded the whole list at the fingerprint epoch 3.
+    No value of the list waits. Milestone 244 re-recorded the whole list at the fingerprint
+    epoch 3. Milestone 261 moves every hvx run with `cf=` whose flush comes before the workload's
+    end. The list has none, but two such schedules outside it need a check: the bug benchmark's
+    d11 trigger `disk=cut dseed=0 cf=270 | run` (`hydo-bench`'s `defects.rs`), and the Saleor
+    regression `gift-card-charged-without-record` (expect: violation).
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -1384,11 +1389,22 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       over the session's limits.
     - libubootenv 0.3.8, which both tools use, ignores its `fsync` result. It is fixed on its
       `master` (`ed3fce96`) and in no release; no run showed it.
-    - Two hydo errors, not investigated. On hvx `disk=cut dseed=ea6b44d03ce268f0 | run
-      K=device@4+3 T=1:-30 A=ota.install_started+5000:cut` (the SWUpdate image) ends with `ERROR
-      agent protocol: the agent refused a line it could not read`, on each run. A `cf=` cut makes
-      the rest of a run hang, with an `L=` or a `G=` after it too (`cf=83 | run T=12:-300
-      L=device@6+2`), until the explorer's 900 s limit (`TIMEOUT workload`).
+
+    Its two hydo errors are fixed in M261: the agent's refused line and the hang after a `cf=`
+    cut. What is left of the second is open item 127.
+127. A `cf=` cut inside the agent's own disk operation (M261). Since M261 a `cf=` run is cut at
+    the first stop after its disk lost power. When the flush is the agent's own, as the `mount`
+    of an `L=`, the agent waits on the dead disk and cannot read the ids. The run then ends in an
+    ERROR that says so, without its recovery boot. One such run is seed 37 of RAUC's
+    exploration, `cf=83 | run T=12:-300 L=device@6+2`. Two ways would reach the recovery boot.
+    - A module flag that fails the power domain's requests with an I/O error after the cut,
+      instead of keeping them pending. It is a module change, and the reload is the user's.
+    - The storage faults' mounts and reads in a child process instead of the agent. It moves the
+      transcripts of every `L=` and `G=` run.
+
+    Also left: the agent reads its last 1 to 3 staged bytes with a 4-byte `IN`, and the hvx
+    engine pads around it (M261). An agent that read them with 1-byte `IN`s needs no padding, but
+    a new agent moves the agent pin.
 
 ## Milestone index
 
@@ -1952,6 +1968,11 @@ build machine, before 2026-10-13.
   `HYDO_KVM_GAPS` shows where a long stretch's time went. On six hosts every boot with the fix
   gave its fingerprint with no early stop. A 4 GiB boot fell from 25 s to 5 s, and a loop without
   exits still ended `SPIN`. Nothing recorded moved
+- M261 (tentative number): the device examples' two hydo errors. The hvx engine pads the
+  host-call port's staged bytes, so a line put during the agent's read keeps its first bytes. A
+  `cf=` run is cut at the first stop after its disk lost power, instead of waiting at the
+  workload's end on the dead disk. If the agent itself waits on it, the run ends in ERROR. The
+  examples drop `workload.timeout: 60`. Nothing in `recorded.json` moved; hvx runs with `cf=` did
 
 ## Where to look
 

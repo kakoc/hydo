@@ -597,6 +597,7 @@ impl Host {
                 n: self.c.k.nstop,
                 phase: self.c.phase,
                 why,
+                dark: false, // cf= runs on hvx only
             },
         };
         self.emit(m);

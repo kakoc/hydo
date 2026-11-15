@@ -502,19 +502,21 @@ come back then (its command exits, or its `ready:` check does not pass within `r
 ends the run at once: `HYDO-ORACLE: ERROR restart after the faults (<service>)`.
 
 `restart_may_fail: true` (Milestone 136; default false) says that such a failed restart is a
-possible outcome of the faults, not a broken test. For example, after a power cut at the k-th
-disk flush (`cf=`) the disk is dead, a service whose sessions hang on it cannot come back, and
-the interesting question is what the recovery boot finds. Then, when that service does not come
-back:
+possible outcome of the faults, not a broken test. Then, when that service does not come back:
 
 1. the run goes on (a line says so: `hydo-ob: <service> did not come back after the faults
    (restart_may_fail): ...`);
 2. `workload.retry` is not run (requests that were not acknowledged stay not acknowledged, which
    is no guarantee broken);
-3. the workload ends normally, so a `cf=` power cut takes the run into its recovery boot, whose
-   invariants give the verdict;
-4. without such a cut the verdict is `HYDO-ORACLE: ERROR restart after the faults (<service>)`,
-   as without the key, and the final invariants do not run.
+3. the workload ends normally, so a schedule with `cf=` (a power cut at the k-th disk flush) goes
+   on to its recovery boot, whose invariants give the verdict;
+4. without `cf=` the verdict is `HYDO-ORACLE: ERROR restart after the faults (<service>)`, as
+   without the key, and the final invariants do not run.
+
+The key was made for runs with `cf=`. Until Milestone 261 such a run went on with a dead disk
+until the workload's end, and a service whose sessions hung on the disk could not come back.
+Since Milestone 261 the run ends with the power cut as soon as the disk loses power (`hydo guide
+faults`), so a dead disk no longer comes before the heal.
 
 A `K=` kill whose restart point is the workload's end (for example `K=front@29+1` with 30 steps)
 restarts the service after the last step, which is a restart after the faults too: with the key a
@@ -1045,9 +1047,8 @@ of project need the key:
 instead: at the cut the host controller reads the first boot's clock, writes `clock=<epoch>` into
 its `hydo-explore-acked:` line and hands it to the recovery boot, which starts its clock at that
 epoch plus `<seconds>` (the time the machine was off), as a real clock keeps running across a
-power loss. A power cut at the k-th disk flush (`cf=`) is cut by the engine at the workload's
-end; since Milestone 202 the controller reads the clock there too, when the schedule has `cf=`
-(before, such a recovery boot started at `clock_start` plus `<seconds>`). Opt-in: only for a
+power loss. At a power cut at the k-th disk flush (`cf=`) the controller reads the clock too,
+since Milestone 202 (before, such a recovery boot started at `clock_start` plus `<seconds>`). Opt-in: only for a
 manifest that sets it, because the default would move every recorded power-cut value.
 
 ### Outcomes after a power cut (`guest.outcomes_after_cut`)

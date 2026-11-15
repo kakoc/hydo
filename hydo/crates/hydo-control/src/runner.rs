@@ -67,6 +67,12 @@ pub trait Link {
     fn engine_cut(&self) -> bool {
         false
     }
+    /// Milestone 261: whether the engine said at the last stop that a `cf=` schedule's disk has
+    /// lost power (its k-th flush came). The runner tells the controller once
+    /// ([`Seen::DiskDark`]); a link without `cf=` never says so.
+    fn disk_dark(&self) -> bool {
+        false
+    }
     /// Called at every stop after the runner acknowledged the agent's replies (and typed the
     /// resynchronisation after a restore), before the controller decides: where the state search
     /// takes its snapshots and where a branch goes live (docs/design/state-search.md). A link
@@ -256,6 +262,7 @@ pub fn run_with(
     let mut send_of: BTreeMap<u64, u64> = BTreeMap::new();
     let mut snapshots = Vec::new();
     let mut console: Vec<(u64, String)> = Vec::new();
+    let mut dark = false;
     loop {
         let next = match here.take() {
             Some(stop) => LinkNext::Stop {
@@ -319,6 +326,12 @@ pub fn run_with(
                 console.push((stop.n, t.trim_end_matches(['\r', '\n']).to_string()));
             }
             seen.push(item);
+        }
+        // Milestone 261: the disk lost power at a cf= schedule's k-th flush, after the lines
+        // the guest wrote before this stop
+        if !dark && link.disk_dark() {
+            dark = true;
+            seen.push(Seen::DiskDark);
         }
         let seen_n = session.as_ref().map(|s| s.position().1).unwrap_or(0);
         let stop = StopInfo {

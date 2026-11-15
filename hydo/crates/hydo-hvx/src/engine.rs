@@ -18,6 +18,7 @@ use crate::boot;
 use crate::cstr::{find, strtoull, strtoull0, Scan};
 use crate::ctl::{self, Book, Send, SendState};
 use crate::fnv::{fnv, fnv_sched_state, fnv_snapshot, fnv_zskip, BASIS};
+use crate::hc::{hc_count_just_read, hc_pad};
 use crate::pages::Pages;
 use crate::port::{Cmd, Port, Req};
 use crate::sched::Sched;
@@ -68,6 +69,9 @@ struct Boot {
     /// M138: the agent sends its lines through the port (its hello came that way), so the
     /// host's lines go there too.
     hc_active: bool,
+    /// M261: how many staged bytes the guest had not read right after the engine's last put on
+    /// the port (`hc_pad`'s `staged`); a Cell, because the sends are typed through `&Boot`.
+    hc_staged: std::cell::Cell<u32>,
     /// M138, HYDO_HVX_REUSE: what the VM's RAM and disk were last restored to (None: not
     /// reusable, as a booted VM or one whose restore failed).
     tgt: Option<Tgt>,
@@ -98,6 +102,7 @@ impl Boot {
             p2_len: 0,
             pbuf: Vec::new(),
             hc_active: false,
+            hc_staged: std::cell::Cell::new(0),
             tgt: None,
             reused: false,
             console_full: false,
@@ -138,6 +143,8 @@ struct Snap {
     pcon: Vec<u8>,
     hc_active: bool,
     hc: Option<(hvx_hc_state, Vec<u8>)>,
+    /// M261: the Boot's `hc_staged`, so that a restored run pads as the fresh one does.
+    hc_staged: u32,
     /// M138: a number of its own, so a reused VM knows whether its RAM already holds this
     /// snapshot's pages outside the ones the last run wrote.
     id: u64,
@@ -165,6 +172,9 @@ struct Ctl {
     boot_s1: bool,
     wdone: u8,
     cut: bool,
+    /// Milestone 261: a `cf=` schedule's disk lost power at its k-th flush (HVX_GET_FLUSHCUT
+    /// `off`); every later stop of the workload says so (`Stop::dark`).
+    dark: bool,
     tag: String,
     phase: &'static str,
     at: u64,
@@ -186,6 +196,7 @@ impl Ctl {
             boot_s1: false,
             wdone: 0,
             cut: false,
+            dark: false,
             tag: String::new(),
             phase: "",
             at: 0,
@@ -1189,6 +1200,7 @@ impl Core {
             pcon: b.pbuf.clone(),
             hc_active: b.hc_active,
             hc,
+            hc_staged: b.hc_staged.get(),
             id: next_snap_id(),
         })
     }
@@ -1268,6 +1280,7 @@ impl Core {
         b.pbuf.clear();
         b.pbuf.extend_from_slice(&sn.pcon);
         b.hc_active = sn.hc_active;
+        b.hc_staged.set(sn.hc_staged);
         if b.vm().hc {
             let (st, bytes) = match &sn.hc {
                 Some((st, bytes)) => (*st, bytes.as_slice()),
@@ -1371,8 +1384,15 @@ impl Core {
             // M138: the bytes go to the port, and one byte on the serial input wakes the agent;
             // a retype after a restore only rings again (the snapshot kept the staged bytes)
             if !retype {
-                if let Err(e) = b.vm().hc_put(&buf) {
-                    diag!(self, "HVX_HC_PUT: {e}");
+                // M261: never a line cut by the agent's last 4-byte read (`hc_pad`)
+                let pad = self.hc_pad_now(b);
+                let mut put = vec![b'\n'; pad];
+                put.extend_from_slice(&buf);
+                match b.vm().hc_put(&put) {
+                    Ok(()) => b
+                        .hc_staged
+                        .set(b.hc_staged.get().wrapping_add(put.len() as u32)),
+                    Err(e) => diag!(self, "HVX_HC_PUT: {e}"),
                 }
             }
             let _ = self.put_bytes(b, &[HC_DOORBELL]);
@@ -1402,6 +1422,42 @@ impl Core {
             };
             self.emit(m);
         }
+    }
+
+    /// M261: `hc_pad` for a put at this stop: the unread staged bytes (HVX_HC_GET_STATE) and,
+    /// when the guest has read none of them since the last put, whether a vCPU has just read
+    /// their count. Leaves `b.hc_staged` at the unread bytes; the put adds its own.
+    fn hc_pad_now(&mut self, b: &Boot) -> usize {
+        let unread = match b.vm().hc_state() {
+            Ok((st, _)) => st.in_len,
+            Err(e) => {
+                diag!(self, "HVX_HC_GET_STATE: {e}");
+                b.hc_staged.set(0);
+                return 0;
+            }
+        };
+        let staged = b.hc_staged.replace(unread);
+        let count_read = unread == staged && hc_pad(unread, staged, true) > 0 && {
+            let vm = b.vm();
+            let mut seen = false;
+            for i in 0..self.o.vcpus.max(1) {
+                let mut r = hvx_regs::default();
+                if (self.o.vcpus > 1 && vm.set_vcpu(i).is_err())
+                    || vm.io(HVX_GET_REGS, &mut r).is_err()
+                {
+                    break;
+                }
+                if hc_count_just_read(&r, unread) {
+                    seen = true;
+                    break;
+                }
+            }
+            if self.o.vcpus > 1 {
+                let _ = vm.set_vcpu(0);
+            }
+            seen
+        };
+        hc_pad(unread, staged, count_read)
     }
 
     fn ctl_deliver(&mut self, b: &Boot, print: bool) -> usize {
@@ -1586,6 +1642,22 @@ impl Core {
         }
     }
 
+    /// Milestone 261: whether a `cf=` schedule's disk has lost power (its k-th flush came), read
+    /// from the module at each stop of the workload until it has. A run without `cf=` reads
+    /// nothing, so its stops are the stops they were.
+    fn ctl_dark(&mut self, b: &Boot) -> bool {
+        if self.c.phase != "workload" {
+            return false;
+        }
+        if !self.c.dark && self.c.sc.cf_on && self.c.sc.cf != 0 {
+            let mut fc = hvx_flushcut::default();
+            if b.vm().io(HVX_GET_FLUSHCUT, &mut fc).is_ok() && fc.off != 0 {
+                self.c.dark = true;
+            }
+        }
+        self.c.dark
+    }
+
     /// `ctl_stop`: report, then serve the host's commands until CONT (false) or END or a closed
     /// link (true).
     fn ctl_stop(&mut self, b: &Boot, why: &str) -> bool {
@@ -1635,6 +1707,7 @@ impl Core {
         self.ctl_deliver(b, true);
         self.c.k.nstop = self.c.k.nstop.wrapping_add(1);
         self.work_record(b, why);
+        let dark = self.ctl_dark(b);
         let stop = match (Phase::parse(self.c.phase), StopWhy::parse(why)) {
             (Some(phase), Some(why)) => EngineMsg::Stop {
                 tag: self.c.tag.clone(),
@@ -1643,6 +1716,7 @@ impl Core {
                     n: self.c.k.nstop,
                     phase,
                     why,
+                    dark,
                 },
             },
             _ => EngineMsg::Other(format!(
@@ -2781,6 +2855,7 @@ fn check_restored(
 pub const HC_TOKEN: &str = "hydo.hc=1";
 /// M138: the byte typed on the serial input to wake an agent that reads its lines from the port.
 const HC_DOORBELL: u8 = 0x07;
+
 /// M205: the most exits one run call may retire with several vCPUs and the host-call port: at
 /// most 32 KiB of records (one 4-byte OUT per exit), half the module's buffer (HVX_HC_SZ).
 const HC_SMP_CAP: u64 = 8192;
@@ -3154,6 +3229,7 @@ fn empty_snap() -> Snap {
         pcon: Vec::new(),
         hc_active: false,
         hc: None,
+        hc_staged: 0,
         id: next_snap_id(),
     }
 }
