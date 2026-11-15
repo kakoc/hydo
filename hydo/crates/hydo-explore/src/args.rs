@@ -5,7 +5,7 @@
 pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|swarm|swarm-pos|process] [--workers N]
        --image IMG --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm|kvm]
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
-       [--freeze-call] [--protocol-faults] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
+       [--freeze-call] [--protocol-faults] [--protocol-cover] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
@@ -77,6 +77,10 @@ pub struct Args {
     pub pause_lengths: Option<String>,
     pub freeze_call: bool,
     pub protocol_faults: bool,
+    /// `--protocol-cover` (Milestone 257): one `H=` token per schedule from a walk over every
+    /// (route, step, rule kind) of the fakes and proxies, the routes a probe run saw called
+    /// in a step first ([`crate::cover`]).
+    pub protocol_cover: bool,
     pub grpc_faults: bool,
     pub fc_nmax: i64,
     pub cf_range: String,
@@ -194,6 +198,7 @@ impl Default for Args {
             pause_lengths: None,
             freeze_call: false,
             protocol_faults: false,
+            protocol_cover: false,
             grpc_faults: false,
             fc_nmax: 64,
             cf_range: "auto".into(),
@@ -238,7 +243,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 23] = [
+const FLAGS: [&str; 24] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -254,6 +259,7 @@ const FLAGS: [&str; 23] = [
     "pause-workload",
     "freeze-call",
     "protocol-faults",
+    "protocol-cover",
     "grpc-faults",
     "preempt",
     "buggify",
@@ -421,6 +427,7 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "pause-lengths" => a.pause_lengths = Some(val),
             "freeze-call" => a.freeze_call = true,
             "protocol-faults" => a.protocol_faults = true,
+            "protocol-cover" => a.protocol_cover = true,
             "grpc-faults" => a.grpc_faults = true,
             "preempt" => a.preempt = true,
             "buggify" => a.buggify = true,

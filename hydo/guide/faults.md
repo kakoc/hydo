@@ -369,6 +369,8 @@ Useful options of `hydo explore`:
 - `--concurrency`: concurrent clients, through a manifest knob `Q`.
 - `--durable-only`: only durable settings and an honest disk.
 - `--protocol-faults`, `--grpc-faults`, `--buggify`.
+- `--protocol-cover`: one `H=` token per schedule, chosen so that the schedules reach every
+  route of every fake and proxy in every step (section "Reach every route in every step").
 - `--storage-faults`: `G=` and `L=` for services with `storage:`. Add `--corrupt-several` to
   make half of the `G=` tokens hit several services: a group's selector, or a list of two.
 - `--cluster-faults`: kills, pauses, and partitions of the services of `groups:`.
@@ -426,3 +428,31 @@ from a group (section "Faults on a cluster"). To act at the moment the system re
 use reactions: write `A=<event>:kill-<svc>`. `<event>` is the id of an assertion record that the
 system writes to the console (`hydo guide manifest`, section `Reactions`).
 `hydo explore --reactive fault --react-events <id>` draws them.
+
+## Reach every route in every step
+
+A retry bug at an outside service often needs one route faulted in one step. For example, a
+lost answer to the order route in the step that places the order. `--protocol-faults` draws
+each `H=` token's route and step at random, so it can miss that pair for many schedules.
+`--protocol-cover` walks the pairs instead:
+
+```sh
+hydo explore --seeds 1-24 --protocol-cover
+```
+
+1. Before the first schedule, `hydo explore` runs a probe: a delay of `step + 1` ms on every
+   fake and proxy in every step, for example `H=api@0-1:delay=1 H=api@1-2:delay=2`. The fake's
+   record of that run says which routes each step called.
+2. A cell is a route, a step, and a rule kind (`status`, `delay`, `drop`, `reset`, and for a
+   route with a webhook `dup`, `reorder`, `late`, `lost`). The cells of the pairs that the probe
+   saw called come first, in step order; the other cells follow.
+3. Seed `s` takes cell `(s - 1) mod C`, where `C` is the number of cells. Its token acts on
+   every matching request of that one step. The first round of seeds faults each called pair
+   once, and `C` consecutive seeds reach every cell.
+
+`protocol-cover.txt` in the exploration's folder lists the probe and each cell with its seeds.
+The rule's values, such as the status code, come from the option's own random stream, so a
+seed's other faults stay as they were. With `--protocol-faults` too, the cover's token is the
+schedule's first `H=` token, and the drawn ones follow it. A probe that needs more than 4
+schedules (each guest part holds at most 500 characters) is not run; then every pair counts as
+called.

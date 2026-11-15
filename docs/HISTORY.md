@@ -10753,3 +10753,98 @@ of values, which was checked on this Mac by searching the changed files for each
 port and RAM for a worker, a read-only image root that stopped Celery's beat quietly, a failing
 `first_` command's output, an engine that the out-of-memory killer ended reported as "the engine
 exited", and the `hydo-world check` rule without a result. The example ran on hvx only.
+### Milestone 257 (tentative number) - DONE (`hydo explore --protocol-cover`: a walk over every route, step and rule kind of a project's fakes and proxies, the pairs that a probe run saw called first; on hvx the web-shop example's double order comes at seed 3 and its stuck spinner at seed 4, where 40 schedules of `--protocol-faults` reached neither the order nor its step, and the openapi-payouts retry bug at seed 3 instead of seed 28; the fixed images pass every watched property; nothing recorded moved; 2026-11-15)
+
+**Why.** `--protocol-faults` draws each `H=` token's target and step at random. A retry bug at an
+outside service often needs one route faulted in one step. The web-shop example's double order
+(Milestone 253) needs `H=api.place_order@0-1:drop`: an order whose answer is lost is sent again
+without a key. The 40 schedules of that milestone put their `place_order` tokens into step 1,
+which places no order. Under the same draws the first schedule that loses every answer to
+`place_order` in step 0 is seed 120; seeds 97 and 117 hold such a token with `p=25` and `p=50`.
+The checkout example (Milestone 242) and the openapi-payouts example (Milestone 249) showed the
+same need.
+
+**What changed.**
+
+1. `hydo explore --protocol-cover` (the module `cover` of hydo-explore). It works only with a
+   seeded exploration (`--seeds`).
+2. **The probe.** Before the first schedule the explorer runs a delay of `step + 1` ms on every
+   fake and proxy in every step, for example `disk=none dseed=0 | run H=api@0-1:delay=1
+   H=api@1-2:delay=2`. A fake-level target acts on every route of the fake. The world's record
+   at the end of the run (`hydo-world: <seq> <fake>.<route> ... ok+delay<d>`) says which routes
+   step `d - 1` called. A guest part holds at most 500 characters, so the tokens are packed into
+   up to 4 schedules (`cover-probe-<n>`, role `probe` in `events.jsonl`). A project that needs
+   more is walked without a probe, and every pair counts as called.
+3. **The walk.** A cell is a target (a fake's route, a proxy, a proxy's route), a step, and a
+   rule kind. The cells of the pairs that the probe saw called come first, step by step; the
+   others follow. Round `r` gives pair `j` the kind `(r + j) mod K`, where `K` is the number of
+   the target's kinds. The first round faults every called pair once, with the kinds spread over
+   the pairs. `protocol-cover.txt` in the exploration's folder lists the probe and every cell.
+4. **The draw.** Seed `s` takes cell `(s - 1) mod C`, where `C` is the number of cells. The
+   token's window is that one step, it has no `p=`, and its values (the status code with the
+   route's `errors:`, `effect=yes`, the delay) come from the stream `COVER_SALT`. It is the
+   schedule's first `H=` token, so a drawn token on the same route never hides it. The status,
+   delay and webhook values are made by one function that `--protocol-faults` uses too.
+5. Documents: `hydo guide faults`, the option list and the section "Reach every route in every
+   step".
+
+**Nothing moved.** Without the option the explorer holds no cover, and `add_protocol_cover`
+returns the schedule unchanged. The identity goldens (quick, and full with `HYDO_IDENT_FULL=1`),
+the corpus golden and the 27 earlier scenarios of `tests/fake_engine.rs` give their recorded
+outputs. A new test checks, for three examples, three strategies and 200 seeds, that a cover
+changes only the schedule's first `H=` token.
+
+**The proof on hvx.** The bare-metal machine ran this tree's `hydo` inside the 0.3.3 Linux
+release, the main module, one worker, one VM at a time. The web-shop images are Milestone 253's
+(buggy `c03111de…`, fixed `e11f4729…`).
+
+- The web-shop probe gave one OK run (`7ee2f59d7a34476c`). Step 0 called the four routes and
+  step 1 called `products` and `add_item`, so 6 of the 8 pairs were called: 24 cells first, 32
+  in all.
+- `hydo explore --seeds 1-24 --protocol-cover` on the buggy image took 1,263 s. 23 of 24
+  schedules failed, and each failure reproduced.
+  - Seed 3, `H=api.place_order@0-1:drop`: `[api.order_placed_once] ... took effect 2 times`, the
+    double order. Seed 21, `delay=10000` on the same route and step, found it too. Minimal
+    schedule `disk=none dseed=1d0b14e4db018fed | run H=api.place_order@0-1:drop`, fingerprint
+    `dfad6f0d632c239a` twice.
+  - Seed 4, `H=api.get_order@0-1:reset`: `browser.no_page_errors`, `browser.busy_ends` and
+    `browser.failures_shown`, the stuck spinner. Seed 10, `status=500` on the same pair, found
+    it too. Minimal schedule `disk=none dseed=6e73e372e2338aca | run H=api.get_order@0-1:reset`,
+    `992e7e0eadfa53f1` twice.
+  - The other 19 failures are the tests' own assertions or timeouts under API faults
+    (`browser.tests_pass`), as in Milestone 253. Seed 6, `H=api.add_item@1-2:delay=3000`, is the
+    flaky test; it shrank to `delay=375`.
+- The same 24 seeds on the fixed image took 1,313 s. 23 failed, each only by
+  `browser.tests_pass` (46 findings): no double order and no failed watched property of a page.
+- openapi-payouts was built with this tree's `hydo` for amd64 (buggy `3fa53f8b…`, fixed
+  `79c0df1e…`). Its probe saw 16 of 24 pairs called: the service never reads the balance, so
+  `get_balance` was not called in any step. That gives 64 cells first and 96 in all.
+  - With `--protocol-cover`, seeds 1-32 gave 9 failures, the first at seed 3
+    (`H=payouts.create_payout@1-2:drop`, `[payouts.paid_at_most_once]`). Minimal schedule
+    `disk=none dseed=1d0b14e4db018fed | run H=payouts.create_payout@1-2:drop`, `89ff910701e3268b`
+    twice.
+  - With `--protocol-faults`, seeds 1-40 gave 4 failures, the first at seed 28. Its minimal
+    schedule is Milestone 249's, `H=payouts.create_payout@1-2:delay=2500`, `5d01b00b2959a13d`
+    twice.
+  - With `--protocol-cover`, the fixed image passed all 32 schedules.
+
+The scripted engine (`tests/fake_engine.rs`, the scenario `protocol_cover`) runs the shop
+example's walk end to end. Its probe sees the refund route in steps 3, 7 and 11 only, so 27 of 36
+pairs are called.
+
+**Limits.**
+
+- The walk does not adapt to results. A cell whose token never acted is not dropped from later
+  rounds, and a route called only after a fault is not seen by the probe.
+- The probe reads the record of a run with 1 ms delays. Timing that moves a call across a step
+  boundary changes only the order of the walk.
+- The probe needs a fake or a proxy that takes `delay=`. The record holds at most 150 lines; when
+  it is cut, the steps after the last one seen count as called.
+- With many routes, steps and kinds the walk is long: the shop example has 192 cells.
+
+**Checks.** `cargo fmt`, `cargo clippy -p hydo-explore --all-targets -- -D warnings`, `cargo
+test -p hydo-explore` (unit tests, `tests/it` with the new `protocol_cover::`, and the scripted
+engine's 28 scenarios), `HYDO_IDENT_FULL=1 cargo test -p hydo-explore --test it --
+identity::explorer_identity`, `sh ci/consolidate-tests.sh --check`, `cargo test -p hydo-release
+--test it test_tiers::`, `cargo test -p hydo-config`, `cargo test -p hydo --test it docs::`,
+`cargo test -p hydo-agents --test it public_content::`, and `sh ci/vale.sh`.

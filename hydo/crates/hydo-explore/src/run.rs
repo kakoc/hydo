@@ -17,6 +17,7 @@
 
 use crate::args::{self, Args};
 use crate::compose;
+use crate::cover;
 use crate::errlog::{self, Known};
 use crate::fc;
 use crate::gen::{Backend, Ex};
@@ -667,6 +668,12 @@ fn setup(a: Args, env: &Env) -> Cx {
     if a.protocol_faults && cx.ex.pf_targets.is_empty() {
         die("hydo explore: --protocol-faults needs an image whose manifest has fakes: or proxies: (and allows `protocol` in faults:, or has no faults: list)");
     }
+    if a.protocol_cover && cx.ex.pf_targets.is_empty() {
+        die("hydo explore: --protocol-cover needs an image whose manifest has fakes: or proxies: (and allows `protocol` in faults:, or has no faults: list)");
+    }
+    if a.protocol_cover && a.sweep.is_some() {
+        die("hydo explore: --protocol-cover goes with a seeded exploration (--seeds); --sweep protocol tries every rule kind on every target in every step without it");
+    }
     cx.ex.grpc_on = a.grpc_faults;
     cx.ex.grpc_targets = if a.grpc_faults {
         grpc_targets(m.as_ref())
@@ -1268,6 +1275,9 @@ fn run(mut cx: Cx) -> i32 {
                         die("hydo explore: --cf-range auto: no FLUSH count from the cfn probe (see worker-*.err)");
                     }
                 }
+            }
+            if cx.a.protocol_cover {
+                cx.ex.pf_cover = Some(protocol_cover(&cx, &pool));
             }
             if cx.steer.is_some() {
                 let (seeds, items, pre, info) = steer_search(&cx, &pool, &seeds);
@@ -1935,6 +1945,63 @@ fn turn_sweep(cx: &Cx, pool: &Pool, t0: Instant, image_sha: ShaThread) -> i32 {
 }
 
 /// explore.py `measure_cf_range` (the probe run goes into the stream).
+/// `--protocol-cover` (Milestone 257, [`crate::cover`]): one probe run with a token on every
+/// target in every step, then the walk over the cells, the routes the probe saw called in a step
+/// first. The walk's order is in `protocol-cover.txt` of the exploration's folder.
+fn protocol_cover(cx: &Cx, pool: &Pool) -> cover::Cover {
+    let steps = cx.ex.cover_steps();
+    let targets = &cx.ex.pf_targets;
+    // a token per fake or proxy names no route, so the schedules are written here: the space's
+    // restriction keeps only the targets the explorer draws
+    let items: Vec<(String, String)> = cover::probe_runs(targets, steps)
+        .iter()
+        .enumerate()
+        .map(|(i, hs)| {
+            let g: Vec<String> = hs.iter().map(crate::sched::render_h).collect();
+            (
+                format!("{}-{}", cover::PROBE_TAG, i + 1),
+                format!("disk=none dseed=0 | run {}", g.join(" ")),
+            )
+        })
+        .collect();
+    let called = if items.is_empty() {
+        None
+    } else {
+        let res = pool.run_all(&items, true);
+        let mut consoles = Vec::new();
+        for (tag, text) in &items {
+            if let Some((_, r)) = res.get(tag) {
+                cx.ev.write(&cx.run_record(tag, text, r, role::PROBE));
+            }
+            consoles.extend(results::explorer_consoles(&cx.out, tag));
+        }
+        let texts: Vec<&str> = consoles.iter().map(|(_, t)| t.as_str()).collect();
+        cover::called(&texts, targets, steps)
+    };
+    let c = cover::plan(targets, steps, called.as_ref());
+    let line = cover::describe(&c, targets);
+    eprintln!("{line}");
+    let mut out = format!("{line}\n");
+    for (tag, text) in &items {
+        out.push_str(&format!("{tag}: {text}\n"));
+    }
+    for (i, cell) in c.cells.iter().enumerate() {
+        let called = i < c.called_cells;
+        out.push_str(&format!(
+            "cell {i} (seeds {} + k*{}): {}@{}-{} {}{}\n",
+            i + 1,
+            c.cells.len(),
+            targets[cell.target].name,
+            cell.step,
+            cell.step + 1,
+            cell.kind,
+            if called { "" } else { " (not seen called)" }
+        ));
+    }
+    let _ = std::fs::write(cx.out.join("protocol-cover.txt"), out);
+    c
+}
+
 fn measure_cf_range(cx: &Cx, pool: &Pool) -> Option<(i64, i64)> {
     let tag = "cfn-probe";
     let text = "disk=cut dseed=0 cfn | run";

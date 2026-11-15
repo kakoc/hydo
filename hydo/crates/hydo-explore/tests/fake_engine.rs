@@ -212,8 +212,14 @@ fn norm(text: &str) -> String {
     re4.replace_all(&t, "").into_owned()
 }
 
-/// What an exploration writes (M115: the results format and report.md, its view for people).
-const FILES: [&str; 3] = ["events.jsonl", "exploration.json", "report.md"];
+/// What an exploration writes (M115: the results format and report.md, its view for people;
+/// with `--protocol-cover` also the walk's order, Milestone 257).
+const FILES: [&str; 4] = [
+    "events.jsonl",
+    "exploration.json",
+    "report.md",
+    "protocol-cover.txt",
+];
 
 /// Above this a golden file is kept as its digest (`digest`).
 const VERBATIM_MAX: usize = 4 * 1024;
@@ -594,6 +600,16 @@ const SCENARIOS: &[(&str, &[&str])] = &[
             "--protocol-faults",
             "--strategy",
             "process",
+        ],
+    ),
+    (
+        "protocol_cover",
+        &[
+            "--seeds",
+            "1-30",
+            "--manifest",
+            "hydo/onboard/examples/shop/hydo.yaml",
+            "--protocol-cover",
         ],
     ),
     (
@@ -1068,6 +1084,36 @@ mod engine {
             "HYDO-ASSERT {{\"t\":\"sometimes\",\"id\":\"retry.taken\",\"ok\":{}}}",
             if kk.is_some() { "true" } else { "false" }
         ));
+        // the world's record of a `--protocol-cover` probe (Milestone 257): each request that an
+        // H= token with a delay under 100 ms held, on the routes the shop example calls in each
+        // of its 12 steps (a charge and an email every step, a refund at steps 3, 7 and 11)
+        let mut wseq = 0;
+        for step in 0..12i64 {
+            for route in ["payments.charge", "payments.refund", "email.send"] {
+                if route == "payments.refund" && step % 4 != 3 {
+                    continue;
+                }
+                let d = hs.iter().find_map(|x| {
+                    let (tgt, rest) = x.split_once('@')?;
+                    let (win, rule) = rest.split_once(':')?;
+                    let (a, b) = win.split_once('-')?;
+                    let (a, b): (i64, i64) = (a.parse().ok()?, b.parse().ok()?);
+                    let d: i64 = rule.strip_prefix("delay=")?.parse().ok()?;
+                    let on =
+                        tgt == route || route.strip_prefix(tgt).is_some_and(|r| r.starts_with('.'));
+                    (on && a <= step && step < b && d < 100).then_some(d)
+                });
+                if let Some(d) = d {
+                    wseq += 1;
+                    lines.push(format!(
+                        "hydo-world: {wseq} {route} ref=o{step} idem=k fx=1 ok+delay{d}"
+                    ));
+                }
+            }
+        }
+        if wseq > 0 {
+            lines.push("hydo-world: END".into());
+        }
         // error logs: a kind in runs with a kill (new unless the list knows it), one before the workload
         let mut el_recs = Vec::new();
         if let Some(kv) = kk {

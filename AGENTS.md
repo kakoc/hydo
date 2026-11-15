@@ -1741,6 +1741,12 @@ build machine, before 2026-10-13.
   project hydo had never seen. Two new candidates, found blind and reproduced natively, not
   posted: a refund request lost with its Celery task, and a gift card charged without a record.
   Two known bugs reproduced, and the scan misses Django's `models.py`. Nothing recorded moved
+- M257 (tentative number): `hydo explore --protocol-cover` gives each schedule one `H=` token
+  from a walk over the cells of the fakes and proxies. A cell is a route, a step, and a rule
+  type; the pairs that a probe run saw called come first. On hvx the web-shop double order came
+  at seed 3 and its stuck spinner at seed 4. The random draws first lose the order's answer in
+  its step at seed 120. openapi-payouts' retry bug came at seed 3 instead of 28. The fixed images
+  pass. Nothing recorded moved
 
 ## Where to look
 

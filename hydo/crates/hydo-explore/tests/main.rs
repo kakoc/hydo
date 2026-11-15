@@ -15,6 +15,7 @@ mod liveness_deadline;
 mod messages_results;
 mod names;
 mod netns_links;
+mod protocol_cover;
 mod reactive;
 mod refusals;
 mod route_errors;

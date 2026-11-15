@@ -1,0 +1,1 @@
+{"schedules": 30, "strategy": "random", "image": "scripted-disk.img", "workers": N, "sweep_wall_s": N, "runs_per_hour": N, "mean_run_s": 5.9, "worker_boot_s": 2.5, "total_wall_s": N, "failures": 14, "reproduced": 14, "error_kinds_new": 2, "runs_with_new_error_kinds": 30}

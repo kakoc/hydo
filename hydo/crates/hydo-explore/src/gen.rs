@@ -7,6 +7,7 @@
 //! manifest's after [`crate::space::Space::apply`]), the options and the engine's capabilities.
 
 use crate::compose;
+use crate::cover::{self, Cover};
 use crate::py::{fdiv, isdigit, py_hex, py_int};
 use crate::rng::{mix64, SplitMix, GOLDEN};
 use crate::sched::{netem_args, render_fc, render_h, render_preempt, render_tj, render_turns};
@@ -199,6 +200,9 @@ pub struct Ex {
     pub fc_match: Vec<(String, Option<char>)>,
     pub protocol_faults: bool,
     pub pf_targets: Vec<PfTarget>,
+    /// `--protocol-cover` (Milestone 257): the walk over every (target, step, kind) cell, set
+    /// after the probe run ([`crate::cover`]); `None` draws exactly as before.
+    pub pf_cover: Option<Cover>,
     pub grpc_on: bool,
     pub grpc_targets: Vec<(String, Vec<String>)>,
     pub compose: bool,
@@ -267,6 +271,7 @@ impl Default for Ex {
             fc_match: Vec::new(),
             protocol_faults: false,
             pf_targets: Vec::new(),
+            pf_cover: None,
             grpc_on: false,
             grpc_targets: Vec::new(),
             clock_points: Vec::new(),
@@ -301,6 +306,47 @@ fn kinds_draw(r: &mut SplitMix) -> Kinds {
 
 fn one(k: &str, v: i64) -> Kinds {
     vec![(k.to_string(), v)]
+}
+
+/// The rules of one `H=` token of `kind` on `tg` with its drawn values: a status code (index
+/// `st` into hydo's own four and the route's `errors:`), a `retry-after=` for a 429 or 503, an
+/// `effect=yes`, a delay, a webhook's lateness. `--protocol-faults` and `--protocol-cover` share it.
+fn pf_rules(
+    tg: &PfTarget,
+    kind: &str,
+    st: i64,
+    ra: Option<i64>,
+    eff: bool,
+    dl: i64,
+    late: i64,
+) -> Vec<(String, RV)> {
+    match kind {
+        "status" => {
+            let mut codes: Vec<i64> = if tg.proto == "grpc" {
+                vec![14, 4, 8, 13]
+            } else {
+                vec![500, 502, 503, 429]
+            };
+            // the route's own error answers (`errors:`, Milestone 249); none: as before
+            for c in &tg.statuses {
+                if !codes.contains(c) {
+                    codes.push(*c);
+                }
+            }
+            let code = codes[(st as usize) % codes.len()];
+            let mut r = vec![("status".to_string(), RV::Int(code))];
+            if let Some(ra) = ra.filter(|_| code == 429 || code == 503) {
+                r.push(("retry-after".into(), RV::Int(ra)));
+            }
+            if eff {
+                r.push(("effect".into(), RV::Str("yes".into())));
+            }
+            r
+        }
+        "delay" => vec![("delay".into(), RV::Int(dl))],
+        "late" => vec![("late".into(), RV::Int(late))],
+        k => vec![(k.to_string(), RV::None)],
+    }
 }
 
 fn re(cell: &'static OnceLock<Regex>, pat: &str) -> &'static Regex {
@@ -771,33 +817,7 @@ impl Ex {
             kinds.extend(tg.hook.iter().cloned());
             let kind = kinds[(kix as usize) % kinds.len()].clone();
             let b = if ln == 0 { n_ } else { n_.min(a + ln) };
-            let mut rules: Vec<(String, RV)> = match kind.as_str() {
-                "status" => {
-                    let mut codes: Vec<i64> = if tg.proto == "grpc" {
-                        vec![14, 4, 8, 13]
-                    } else {
-                        vec![500, 502, 503, 429]
-                    };
-                    // the route's own error answers (`errors:`, Milestone 249); none: as before
-                    for c in &tg.statuses {
-                        if !codes.contains(c) {
-                            codes.push(*c);
-                        }
-                    }
-                    let code = codes[(st as usize) % codes.len()];
-                    let mut r = vec![("status".to_string(), RV::Int(code))];
-                    if let Some(ra) = ra.filter(|_| code == 429 || code == 503) {
-                        r.push(("retry-after".into(), RV::Int(ra)));
-                    }
-                    if eff {
-                        r.push(("effect".into(), RV::Str("yes".into())));
-                    }
-                    r
-                }
-                "delay" => vec![("delay".into(), RV::Int(dl))],
-                "late" => vec![("late".into(), RV::Int(late))],
-                k => vec![(k.to_string(), RV::None)],
-            };
+            let mut rules = pf_rules(&tg, &kind, st, ra, eff, dl, late);
             if p < 100 {
                 rules.push(("p".into(), RV::Int(p)));
             }
@@ -811,6 +831,43 @@ impl Ex {
         if !hs.is_empty() {
             s.h = hs;
         }
+        s
+    }
+
+    /// The steps a cover's pairs take: the workload's own (a test workload's too, which the
+    /// generators draw as for 4), else the explorer's.
+    pub fn cover_steps(&self) -> i64 {
+        match &self.space {
+            Some(sp) => sp.steps.max(1),
+            None => self.norders,
+        }
+    }
+
+    /// `--protocol-cover` (Milestone 257, [`crate::cover`]): the token of seed `seed`'s cell, as
+    /// the schedule's first `H=` token, its values from the cover's own stream
+    /// ([`cover::COVER_SALT`]). Without a cover (the default) the schedule is returned as it is.
+    pub fn add_protocol_cover(&self, mut s: S, seed: u64) -> S {
+        let Some(cell) = self.pf_cover.as_ref().and_then(|c| cover::cell_of(c, seed)) else {
+            return s;
+        };
+        let Some(tg) = self.pf_targets.get(cell.target) else {
+            return s;
+        };
+        let mut t = SplitMix::new(seed ^ cover::COVER_SALT);
+        let st = t.below(1 << 30);
+        let ra = t.pick(&[None, Some(1), Some(2)]);
+        let dl = t.pick(&PF_DELAYS);
+        let late = t.pick(&PF_LATES);
+        let eff = t.below(100) < 30;
+        s.h.insert(
+            0,
+            H {
+                target: tg.name.clone(),
+                a: cell.step,
+                b: cell.step + 1,
+                rules: pf_rules(tg, &cell.kind, st, ra, eff, dl, late),
+            },
+        );
         s
     }
 
@@ -1468,6 +1525,7 @@ impl Ex {
         s = self.add_workload_pauses(s, seed);
         s = self.add_freeze_call(s, seed);
         s = self.add_protocol_faults(s, seed);
+        s = self.add_protocol_cover(s, seed);
         s = self.add_grpc_faults(s, seed);
         s = self.add_upgrades(s, seed);
         self.add_point_streams(s, seed)

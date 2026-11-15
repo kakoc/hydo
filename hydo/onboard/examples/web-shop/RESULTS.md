@@ -174,3 +174,20 @@ The double order was not found blind in these 40 schedules. It needs a lost or l
 order. `hydo explore --sweep protocol` tries every rule kind on every route in every step and
 reaches it, but it was stopped after 12 of its schedules to leave the shared machine to the
 tests; the directed run earlier on this page shows the bug.
+
+## The exploration with `--protocol-cover` (Milestone 257)
+
+`hydo explore --seeds 1-24 --protocol-cover --workers 1` walks every route of the fake in every
+step. Its probe run showed that step 0 calls the four routes and step 1 calls `products` and
+`add_item`. On the buggy image it took 1,263 s, and 23 of 24 schedules failed, each reproduced:
+
+| seed | token | finding |
+|---|---|---|
+| 3 | `H=api.place_order@0-1:drop` | the double order, `[api.order_placed_once] ... took effect 2 times`; minimal schedule `disk=none dseed=1d0b14e4db018fed \| run H=api.place_order@0-1:drop`, `dfad6f0d632c239a` twice |
+| 4 | `H=api.get_order@0-1:reset` | the stuck spinner: `browser.no_page_errors`, `browser.busy_ends`, `browser.failures_shown`; `992e7e0eadfa53f1` twice |
+| 10 | `H=api.get_order@0-1:status=500` | the stuck spinner again |
+| 21 | `H=api.place_order@0-1:delay=10000` | the double order again |
+
+The other 19 failures were the tests' own assertions or timeouts under API faults. The same 24
+seeds on the fixed image failed only by `browser.tests_pass`: no double order, and every watched
+property of the page held.
