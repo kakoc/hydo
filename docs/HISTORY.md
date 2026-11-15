@@ -11859,3 +11859,108 @@ No fingerprint, image or recorded value of `hydo/onboard/recorded.json` moved: t
 before any image is built, and every plan that built before builds the same bytes now. The
 example plans that still pin `"0.1"` or `"0.2"` (postgres-sql, TigerBeetle's single-storage
 plan, Ghost, YugabyteDB) build again without `HYDO_VERSION_CHECK=warn`.
+
+### Milestone 265 (tentative number) - DONE (why KVM boots on GitHub's runners stopped as `SPIN` in the guest kernel's early boot: the host never stalled; the KVM engine's spin observer took 2 s looks at the guest's memory setup from the first kick on, and in a look the guest moves only from one breakpoint to the next, so a stretch of about 1 s of running took more than 10 s; the SPIN limit now counts only the guest's own running, and a look gets at most that much time; the diagnostic `HYDO_KVM_GAPS` shows where a long stretch's host time went; nothing recorded moved; 2026-11-15)
+
+**The problem.** In Milestone 254, 13 of 85 KVM runs of the web-shop example (a 4 GiB guest) on
+GitHub's runners first ended `ERROR boot: SPIN`. The console ended at `printk: bootconsole
+[earlyser0] enabled`, and the guest's instruction pointer differed between the stops. The KVM
+engine calls a run a SPIN when it sees no VM exit for `HYDO_KVM_SPIN_SECS` (10 s) of host time.
+The guess then was a delay on the host while the guest first touches its memory.
+
+**The diagnostic.** `HYDO_KVM_GAPS=<seconds>` (a developer variable of hydo-config) logs every
+stretch without exits at least that long, with where its host time went:
+
+- the guest's free running, and the spin observer's looks: its single steps (`obs`) and its
+  full-state looks (`state`), with their number;
+- the engine thread's time on a CPU, the time it waited for one, its guest, kernel and user time,
+  and its page faults (`/proc/thread-self`);
+- the steal time of the runner's own hypervisor (`/proc/stat`);
+- KVM's counters of the vCPU and the VM (`KVM_GET_STATS_FD`): the exits KVM handled itself, the
+  page faults, and the pages that map guest RAM.
+
+Nothing of it reaches the guest, a snapshot or a fingerprint.
+
+**Round 1** (run 43758197669, the one-off workflow `tmp-spin-kvm` on a temporary branch). Six
+hosts: two Intel Xeon 6975P-C, two AMD EPYC 7763, an AMD EPYC 9V74 and an AMD EPYC 9V45. On
+each, the Redis example of the 0.3.3 release with 1, 2 and 4 GiB of guest RAM, built with this
+tree's hydo and the pinned `bzImage-kvm-cg`. Ten rounds of seven variants of `disk=none | run`,
+with `HVM_SPIN_REWIND=0` so that a SPIN was not run again:
+
+| variant | runs | SPIN | first stretch in s (median) | run in s (median) |
+|---|---|---|---|---|
+| 4 GiB | 60 | 7 | 4.0 to 4.8 | 24 to 30 |
+| 1 GiB | 60 | 0 | 3.9 to 5.0 | 10 to 16 |
+| 2 GiB | 60 | 0 | 3.8 to 4.9 | 15 to 18 |
+| 4 GiB, no look before 30 s (`HYDO_KVM_SPIN_MS=30000`) | 60 | 0 | 0.9 to 1.2 | 3.2 to 4.0 |
+| 4 GiB, no full-state looks (`HYDO_KVM_SPIN_STATE=0`) | 60 | 0 | 0.9 to 1.2 | 3.0 to 3.8 |
+| 4 GiB, transparent huge pages for guest RAM | 60 | 0 | 2.5 to 4.0 | 8 to 15 |
+| 4 GiB, guest RAM populated before the first entry | 60 | 11 | 3.5 to 6.0 | 26 to 35 |
+
+The ranges are the six hosts' medians. Every run of one RAM size that ended gave one fingerprint
+on all its variants: `7e2a744025bff228` at 4 GiB on Intel, `ca5fec9f05de1860` on AMD (1 GiB
+`a6c21772aa5e7a9a` and `1b7377062937c12b`, 2 GiB `008122d2dac0ce7f` and `d9fc92e3c32c90fd`).
+
+**The cause.** A gap line of a run that stopped (AMD EPYC 7763):
+
+```text
+hydo-kvm: gap 8.127 s at exit 1297 (an exit) rip 0xffffffff813d3e01: run 0.125 s, obs 0.000 s in 4 looks,
+state 8.002 s in 4 looks, kicks 4; from the first kick (8.121 s): oncpu 8.119 s, waitcpu 0.000 s,
+guest 3.67 s, sys 3.14 s, user 1.31 s, minflt 15767, majflt 0, steal 0.00 s, exits +351276, ...
+```
+
+- The engine thread was on a CPU for the whole stretch, with no wait and no steal. The host did not
+  stall.
+- The full-state looks took 8.0 of the 8.1 s. A look (Milestone 194) puts a hardware breakpoint at
+  the instruction where the kick found the guest and compares the vCPU's state at each arrival.
+  Its budget was a quarter of `HYDO_KVM_SPIN_SECS`, 2 s, from the first kick on, 5 ms into the
+  stretch.
+- The guest was in its memory setup: `memset_orig`, `memmap_init_range`, `reserve_bootmem_region`
+  and `__free_pages_core` (the kernel's symbols at the stops). These loops pass the breakpoint at
+  every iteration, and each arrival is an exit to the engine, so in a look the guest crawls. The
+  stretch runs about 1 s by itself; with a 2 s look at each kick it took 4 to 8 s, and a slower
+  stretch passed 10 s.
+- Every boot paid for the looks, not only the ones that stopped: a 1 GiB boot took 10 to 16 s with
+  them and about 3.5 s without.
+- Populating guest RAM first made boots slower. Transparent huge pages made them faster, but the
+  looks still dominated.
+
+**The fix** (`hydo/crates/hydo-kvm/src/vmm.rs`):
+
+- The SPIN limit counts the guest's own running in the stretch: its host time less the observer's
+  looks (`Vmm::free_secs`). Three times `HYDO_KVM_SPIN_SECS` of host time (`SPIN_WALL`) ends the run
+  too, so a run cannot go on forever. The SPIN line names both times.
+- A full-state look gets at most the time the guest has run freely in the stretch (and at most
+  2 s, as before). A loop whose proof needs a long look is proven at a later look. The proof ends
+  at the cycle's canonical state, which the cycle alone fixes, so the run is the same whenever the
+  proof comes.
+
+Neither change alters what the guest executes: kicks, looks and the SPIN limit only decide when the
+engine looks and when it gives up. Round 1 already showed this: the runs without full-state looks
+gave the fingerprints of the runs with them.
+
+**Round 2** (run 43761257800). The same six-host shape with the fix, ten rounds each of 4, 1 and
+2 GiB, 4 GiB without full-state looks, and a workload of shell builtins that loops without exits
+(`while :; do x=$((x + 1)); done`), with and without the rewind mode's second run. Every job passed:
+
+| Variant (60 runs each) | SPIN | Fingerprint | Whole boot, one host |
+|---|---|---|---|
+| 4 GiB | 0 | round 1's: `7e2a744025bff228` (Intel), `ca5fec9f05de1860` (AMD) | 5 s (was 24 to 30 s) |
+| 1 GiB | 0 | `a6c21772aa5e7a9a` (Intel), `1b7377062937c12b` (AMD) | 2 s |
+| 2 GiB | 0 | `008122d2dac0ce7f` (Intel), `d9fc92e3c32c90fd` (AMD) | 3 s |
+| 4 GiB, no full-state looks | 0 | as 4 GiB | 4 s |
+| the loop without exits | 60 | none (SPIN) | 12 s |
+| the loop, with the rewind mode | 60 | none (SPIN) | 23 to 31 s |
+
+So every boot gave round 1's fingerprint for its vendor, none stopped in early boot, and the
+loop without exits still ended `SPIN` in every run, about 10.4 s of its own running after it
+began. The first stretch without exits of a 4 GiB boot fell from about 4 s to 0.3 s.
+
+**Checks.** On this Mac: `cargo fmt --check`, `cargo clippy -D warnings --all-targets` on
+hydo-kvm (also for `x86_64-unknown-linux-musl`) and hydo-config, every test of hydo-kvm and
+hydo-config (`INVENTORY.md` regenerated for `HYDO_KVM_GAPS`). New tests: three of `gaps` (the
+counters' fields, the threshold, what a line shows), and
+`engine::a_loop_the_observer_cannot_prove_still_ends_as_a_spin_in_time` (a scripted loop whose
+counter decides its branch ends `ERROR workload: SPIN` between 0.5 s and the wall limit, with
+`HYDO_KVM_SPIN_SECS=0.5`). Both rounds ran on the temporary branch `tmp-spin-kvm`, which is not
+merged. Nothing recorded moved.

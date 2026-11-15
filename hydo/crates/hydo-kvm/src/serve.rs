@@ -1325,6 +1325,7 @@ pub fn vm_opts(o: &KvmOptions, disk: Option<&std::path::Path>) -> VmOpts {
             .unwrap_or(0.005),
         trace: o.trace.clone(),
         trace_unknown: o.trace_unknown,
+        gaps: o.gaps.as_deref().map(cstr::atof).filter(|v| *v >= 0.0),
         spin_state: o.spin_state.unwrap_or(true),
         stale_events: false,
         host_dr6: false,

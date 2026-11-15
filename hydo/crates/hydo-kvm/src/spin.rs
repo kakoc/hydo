@@ -24,7 +24,8 @@
 //! idle HLT, and the interrupt is delivered at the next entry. Anything else (an instruction
 //! outside the set, a real exit while stepping, no repeat within the budget) leaves the guest as
 //! free running would have (running to the end of an instruction is executing it) and it runs
-//! on; a guest that stays without exits for `HYDO_KVM_SPIN_SECS` ends the run as a SPIN.
+//! on; a guest that stays without exits for `HYDO_KVM_SPIN_SECS` of its own running (the looks
+//! do not count) ends the run as a SPIN.
 //!
 //! # Counter loops (the rewind mode, Milestone 161)
 //!

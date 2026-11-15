@@ -445,6 +445,8 @@ pub const KVM_SET_USER_MEMORY_REGION: u64 =
 pub const KVM_SET_TSS_ADDR: u64 = io(0x47);
 pub const KVM_SET_IDENTITY_MAP_ADDR: u64 = iow(0x48, 8);
 pub const KVM_RUN: u64 = io(0x80);
+/// A file of the VM's or a vCPU's statistics (Linux 5.14; `HYDO_KVM_GAPS`).
+pub const KVM_GET_STATS_FD: u64 = io(0xce);
 pub const KVM_GET_REGS: u64 = ior(0x81, std::mem::size_of::<kvm_regs>());
 pub const KVM_SET_REGS: u64 = iow(0x82, std::mem::size_of::<kvm_regs>());
 pub const KVM_GET_SREGS: u64 = ior(0x83, std::mem::size_of::<kvm_sregs>());

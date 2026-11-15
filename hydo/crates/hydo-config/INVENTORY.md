@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-56 user-facing and 91 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 36 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 7 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+56 user-facing and 92 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 36 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 7 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -142,6 +142,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_KVM_DIAG` | developer | flag: set | - | hydo-kvm | Set: per-component hashes of a run's end state into `<outdir>/<tag>.diag`. |
 | `HYDO_KVM_DIAG_RAM` | developer | number | 0 | hydo-kvm | With HYDO_KVM_DIAG: the first this many MiB of guest RAM are written next to each fingerprint (`<outdir>/<tag>.<phase>.ram`). |
 | `HYDO_KVM_TRACE_UNKNOWN` | developer | flag: set | - | hydo-kvm | Set: log every MSR access and I/O port the engine's model does not know. |
+| `HYDO_KVM_GAPS` | developer | number | off | hydo-kvm | Log every exit-free stretch at least this many seconds long, with where its host time went: the guest's free running, the spin observer's looks, the engine thread's CPU time, page faults and steal, and KVM's counters (Milestone 265). |
 | `HYDO_KVM_SPIN_STATE` | developer | flag: exactly `0` turns it off | on (epoch 2 images) | hydo-kvm | `0` turns off, and any other value turns on, the spin observer's full-state cycles: it also proves loops that store to memory and use the vector registers, when the whole machine state repeats (every store rewrites the bytes that are there), and resolves them like an exact cycle. Unset: on for images built at fingerprint epoch 2 and later, off for older images (Milestone 204). |
 | `HYDO_KVM_NO_FP` | developer | flag: set | - | hydo-kvm | Set: the engine computes no fingerprint (`fp=0000000000000000`), which on a large image is most of the cost of a short conversation (docs/design/agent-environments.md); for measuring that cost only. |
 | `HYDO_BACKEND` | user | word: hvx \| kvm | hvx | hydo-cli | `kvm`: the `hydo` command runs x86_64 images on the KVM engine instead of hvx (Linux; `--backend kvm` does the same for one command). |

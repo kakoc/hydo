@@ -367,6 +367,10 @@ variables! {
     HYDO_KVM_DIAG_RAM: Kvm, Developer, "number", "0", "hydo-kvm";
     /// Set: log every MSR access and I/O port the engine's model does not know.
     HYDO_KVM_TRACE_UNKNOWN: Kvm, Developer, "flag: set", "", "hydo-kvm";
+    /// Log every exit-free stretch at least this many seconds long, with where its host time
+    /// went: the guest's free running, the spin observer's looks, the engine thread's CPU time,
+    /// page faults and steal, and KVM's counters (Milestone 265).
+    HYDO_KVM_GAPS: Kvm, Developer, "number", "off", "hydo-kvm";
     /// `0` turns off, and any other value turns on, the spin observer's full-state cycles: it
     /// also proves loops that store to memory and use the vector registers, when the whole
     /// machine state repeats (every store rewrites the bytes that are there), and resolves them

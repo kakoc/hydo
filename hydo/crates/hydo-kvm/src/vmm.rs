@@ -41,7 +41,11 @@
 //! time without an exit, and the spin observer ([`crate::spin`], [`Vmm::observe`]) single-steps
 //! it: a proven exact cycle (a spin on a flag another task must set) is treated as an idle HLT at
 //! the cycle's canonical state. Kicks and steps are not exits. A guest still without an exit after
-//! HYDO_KVM_SPIN_SECS ends the run as a SPIN (invalid).
+//! HYDO_KVM_SPIN_SECS of its own running ends the run as a SPIN (invalid); the observer's looks do
+//! not count, and [`SPIN_WALL`] times that in host time ends it too. A full-state look gets at
+//! most the time the guest has run freely in the stretch (Milestone 265: before, its 2 s looks
+//! made a 4 GiB guest's memory setup, about 1 s of running, last more than 10 s on GitHub's
+//! runners).
 //!
 //! # The rewind mode (counter loops, Milestone 161)
 //!
@@ -103,6 +107,9 @@ pub struct VmOpts {
     pub spin_look: f64,
     pub trace: Option<String>,
     pub trace_unknown: bool,
+    /// HYDO_KVM_GAPS: log exit-free stretches at least this many host seconds long
+    /// ([`crate::gaps`]; None: off)
+    pub gaps: Option<f64>,
     /// HYDO_KVM_SPIN_STATE: the spin observer's full-state cycles ([`Vmm::observe_state`])
     pub spin_state: bool,
     /// The fingerprint keeps KVM's leftover event fields ([`CpuState::without_stale_events`]):
@@ -159,6 +166,9 @@ pub struct Vmm {
     spin_secs: f64,
     spin_look: f64,
     last_exit: Instant,
+    /// host seconds the spin observer's looks took since `last_exit`: the rest of that time the
+    /// guest ran freely ([`Vmm::free_secs`])
+    look_secs: f64,
     pub kicks: u64,
     /// HYDO_KVM_TRACE_UNKNOWN: where the vCPU was at the kicks of an exit-free stretch
     spin_rips: Vec<u64>,
@@ -189,6 +199,8 @@ pub struct Vmm {
     state_why: &'static str,
     /// Function contracts (`HYDO_CONTRACTS`, Milestone 255): in no snapshot and no fingerprint.
     pub ct: Option<Box<crate::contracts::Ct>>,
+    /// `HYDO_KVM_GAPS`: where the host time of long exit-free stretches went ([`crate::gaps`])
+    gaps: crate::gaps::Gaps,
 }
 
 /// A snapshot of the machine (the vCPU, the engine's state, RAM, the devices, the console). RAM
@@ -217,6 +229,10 @@ pub struct XSnap {
 
 /// Exits between two checkpoints of the rewind mode when no stop comes sooner.
 pub const CK_EVERY: u64 = 1024;
+
+/// A stretch without exits ends the run as a SPIN after `spin_secs` of the guest's own running
+/// ([`Vmm::free_secs`]), or after this many times `spin_secs` of host time, whichever comes first.
+pub const SPIN_WALL: f64 = 3.0;
 
 /// A checkpoint of the rewind mode (RAM is the mode's copy, [`Rewind::shadow`]).
 struct Ck {
@@ -347,6 +363,7 @@ impl Vmm {
             spin_secs: o.spin_secs,
             spin_look: o.spin_look,
             last_exit: Instant::now(),
+            look_secs: 0.0,
             kicks: 0,
             spin_rips: Vec::new(),
             watch,
@@ -364,6 +381,7 @@ impl Vmm {
             state_gave_up: 0,
             state_why: "",
             ct: None,
+            gaps: crate::gaps::Gaps::new(o.gaps),
         };
         let mut cmdline = cmdline(&o.cmdline, vm.vio.ndev());
         if ncpu > 1 {
@@ -1088,6 +1106,7 @@ impl Vmm {
                 }
             }
             self.watch.armed.store(true, Ordering::Relaxed);
+            let t_run = self.gaps.on().then(Instant::now);
             let e = if self.ct.is_none() {
                 self.cpu_mut().run()
             } else {
@@ -1095,6 +1114,9 @@ impl Vmm {
                 // the guest; the engine reads and the guest goes on
                 self.run_ct()
             };
+            if let Some(t) = t_run {
+                self.gaps.t_run += t.elapsed().as_secs_f64();
+            }
             self.watch.armed.store(false, Ordering::Relaxed);
             if self.rw.armed {
                 match e {
@@ -1136,34 +1158,54 @@ impl Vmm {
                 // not an exit of the guest: nothing changed in it
                 self.kicks += 1;
                 resume = true;
+                if self.gaps.on() {
+                    self.gaps.kicks += 1;
+                    if self.gaps.s0.is_none() {
+                        let k = self.cpu().kvm_stats();
+                        self.gaps.s0 = Some((Instant::now(), crate::gaps::Sample::take(k)));
+                    }
+                }
                 if self.trace_unknown && self.spin_rips.len() < 16 {
                     let rip = self.cpu().rip();
                     self.spin_rips.push(rip);
                 }
-                if self.last_exit.elapsed().as_secs_f64() > self.spin_secs {
-                    let rip = self.cpu().rip();
+                let wall = self.last_exit.elapsed().as_secs_f64();
+                if self.free_secs() > self.spin_secs || wall > SPIN_WALL * self.spin_secs {
+                    let (rip, free) = (self.cpu().rip(), self.free_secs());
                     self.say(&format!(
-                        "hydo-kvm: SPIN: no VM exit for {:.0} s of host time at exit {}, rip {rip:#x} -- \
+                        "hydo-kvm: SPIN: no VM exit for {free:.0} s of the guest's own running ({wall:.0} s of host time) at exit {}, rip {rip:#x} -- \
                          the guest loops without exits; this run is not deterministic from here and is invalid",
-                        self.spin_secs, self.m.exits
+                        self.m.exits
                     ));
                     if self.trace_unknown {
                         let d = self.spin_report();
                         self.say(&d);
                     }
+                    self.gap_end("SPIN");
                     return STOP_SPIN;
                 }
                 // the spin observer (crate::spin): is this a provable cycle?
+                let t_obs = Instant::now();
                 let mut seen = self.observe();
+                let dt = t_obs.elapsed().as_secs_f64();
+                self.look_secs += dt;
+                self.gaps.t_obs += dt;
+                self.gaps.looks += 1;
                 if seen == crate::spin::Outcome::GaveUp && self.spin_state {
                     // HYDO_KVM_SPIN_STATE: a loop that stores, when the whole machine repeats
+                    let t_state = Instant::now();
                     seen = self.observe_state();
+                    let dt = t_state.elapsed().as_secs_f64();
+                    self.look_secs += dt;
+                    self.gaps.t_state += dt;
+                    self.gaps.states += 1;
                 }
                 match seen {
                     crate::spin::Outcome::Resolved => {
                         self.m.n_spin += 1;
                         self.set_wait(self.spin_look);
-                        self.last_exit = Instant::now();
+                        self.gap_end("a cycle resolved");
+                        self.new_stretch();
                         if self.smp.is_some() && self.others_runnable() {
                             // the loop waits for another vCPU: the turn ends at its canonical
                             // state, which the guest alone fixes
@@ -1226,7 +1268,8 @@ impl Vmm {
                     }
                     crate::spin::Outcome::Exit(e) => {
                         self.set_wait(self.spin_look);
-                        self.last_exit = Instant::now();
+                        self.gap_end("an exit while observing");
+                        self.new_stretch();
                         self.spin_rips.clear();
                         if let Some(s) = self.exit(e) {
                             return s;
@@ -1239,7 +1282,10 @@ impl Vmm {
             if self.wait() != self.spin_look {
                 self.set_wait(self.spin_look);
             }
-            self.last_exit = Instant::now();
+            if self.gaps.on() {
+                self.gap_end("an exit");
+            }
+            self.new_stretch();
             self.spin_rips.clear();
             if let Some(s) = self.exit(e) {
                 return s;
@@ -1386,7 +1432,7 @@ impl Vmm {
         self.rw.target = Some(canon);
         self.rw.armed = false;
         self.set_wait(self.spin_look);
-        self.last_exit = Instant::now();
+        self.new_stretch();
         if self.trace.is_some() {
             let from = self.m.exits;
             if let Some(t) = &mut self.trace {
@@ -1417,7 +1463,7 @@ impl Vmm {
         self.rw.due = true;
         self.m.n_spin += 1;
         self.set_wait(self.spin_look);
-        self.last_exit = Instant::now();
+        self.new_stretch();
         let next = self.next_event();
         if next > self.m.vtime {
             self.m.vtime = next;
@@ -1518,6 +1564,40 @@ impl Vmm {
 
     fn wait(&self) -> f64 {
         f64::from_bits(self.watch.wait.load(Ordering::Relaxed))
+    }
+
+    /// A new exit-free stretch starts (at an exit, or where a proven loop was resolved).
+    fn new_stretch(&mut self) {
+        self.last_exit = Instant::now();
+        self.look_secs = 0.0;
+    }
+
+    /// Host seconds of the current stretch in which the guest ran freely: its whole host time
+    /// less the spin observer's looks, in which the guest goes on only from one breakpoint or
+    /// step to the next (Milestone 265: in a 4 GiB guest's memory setup the full-state looks took
+    /// 8 of 8.1 s).
+    fn free_secs(&self) -> f64 {
+        (self.last_exit.elapsed().as_secs_f64() - self.look_secs).max(0.0)
+    }
+
+    /// The end of an exit-free stretch: its line when `HYDO_KVM_GAPS` is on and it was long.
+    fn gap_end(&mut self, why: &str) {
+        if !self.gaps.on() {
+            return;
+        }
+        let wall = self.last_exit.elapsed().as_secs_f64();
+        if wall >= self.gaps.min.unwrap_or(f64::MAX) {
+            let now = self
+                .gaps
+                .s0
+                .is_some()
+                .then(|| crate::gaps::Sample::take(self.cpu().kvm_stats()));
+            let (ex, rip) = (self.m.exits, self.cpu().rip());
+            if let Some(l) = self.gaps.line(wall, ex, rip, why, now) {
+                self.say(&l);
+            }
+        }
+        self.gaps.reset();
     }
     fn set_wait(&self, w: f64) {
         self.watch.wait.store(w.to_bits(), Ordering::Relaxed);
@@ -1629,7 +1709,12 @@ impl Vmm {
             return Outcome::GaveUp;
         }
         let t0 = Instant::now();
-        let budget = (self.spin_secs / 4.0).clamp(0.05, 2.0);
+        // at most as long as the guest has run freely in this stretch (Milestone 265): a loop the
+        // proof needs long for is proven at a later look, from the same state whenever it comes,
+        // and a stretch that ends by itself is not slowed by more than a factor of about two
+        let budget = (self.spin_secs / 4.0)
+            .clamp(0.05, 2.0)
+            .min(self.free_secs().max(self.spin_look));
         self.state_why = "";
         // the rewind mode's log when it is on (its checkpoint then gets the pages too)
         let shared = self.rw.on && self.rw.valid;

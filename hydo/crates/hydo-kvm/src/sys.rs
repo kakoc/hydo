@@ -1131,6 +1131,12 @@ impl Cpu for KvmCpu {
         }
     }
 
+    fn kvm_stats(&self) -> Vec<(String, u64)> {
+        let mut v = stats_of(self.fd(), "");
+        v.extend(stats_of(self._vm.as_raw_fd(), "vm."));
+        v
+    }
+
     fn kicker(&self) -> Box<dyn Fn() + Send + Sync> {
         let t = self.thread.clone();
         Box::new(move || {
@@ -1144,6 +1150,44 @@ impl Cpu for KvmCpu {
             }
         })
     }
+}
+
+/// KVM's statistics of a VM or vCPU file (`KVM_GET_STATS_FD`): each counter's name (after
+/// `prefix`) and its first value. Empty when the kernel has no statistics files (before 5.14).
+fn stats_of(fd: RawFd, prefix: &str) -> Vec<(String, u64)> {
+    use std::os::unix::fs::FileExt;
+    // SAFETY: KVM_GET_STATS_FD takes no argument and returns a new file descriptor
+    let r = unsafe { ioctl(fd, KVM_GET_STATS_FD, 0) };
+    if r < 0 {
+        return Vec::new();
+    }
+    let f = new_fd(r);
+    let mut h = [0u8; 24];
+    if f.read_exact_at(&mut h, 0).is_err() {
+        return Vec::new();
+    }
+    let w = |b: &[u8], i: usize| u32::from_le_bytes(b[i..i + 4].try_into().unwrap()) as u64;
+    let (name_size, n, desc_off, data_off) = (w(&h, 4), w(&h, 8), w(&h, 16), w(&h, 20));
+    let stride = 16 + name_size;
+    let mut d = vec![0u8; (stride * n) as usize];
+    if f.read_exact_at(&mut d, desc_off).is_err() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for k in 0..n as usize {
+        let e = &d[k * stride as usize..(k + 1) * stride as usize];
+        let off = w(e, 8);
+        let name: String = e[16..]
+            .iter()
+            .take_while(|&&c| c != 0)
+            .map(|&c| c as char)
+            .collect();
+        let mut x = [0u8; 8];
+        if f.read_exact_at(&mut x, data_off + off).is_ok() {
+            out.push((format!("{prefix}{name}"), u64::from_le_bytes(x)));
+        }
+    }
+    out
 }
 
 impl Drop for KvmCpu {

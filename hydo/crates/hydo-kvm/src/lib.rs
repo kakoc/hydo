@@ -44,6 +44,7 @@ pub mod boot;
 pub mod contracts;
 pub mod cpu;
 pub mod cpuid;
+pub mod gaps;
 pub mod hybrid;
 pub mod kernel;
 pub mod layout;

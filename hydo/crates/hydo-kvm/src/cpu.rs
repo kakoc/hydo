@@ -456,6 +456,11 @@ pub trait Cpu: Send {
     /// Append the pages the guest wrote since the last call (or since the log started), and
     /// start the log afresh.
     fn take_dirty(&mut self, _out: &mut Vec<u64>) {}
+    /// KVM's statistics of the vCPU and of its VM (`vm.` names), for `HYDO_KVM_GAPS`: empty
+    /// where there are none.
+    fn kvm_stats(&self) -> Vec<(String, u64)> {
+        Vec::new()
+    }
     /// A function another thread calls to make a running [`Cpu::run`] return [`Exit::Kick`]
     /// (the watchdog).
     fn kicker(&self) -> Box<dyn Fn() + Send + Sync>;

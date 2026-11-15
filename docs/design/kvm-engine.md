@@ -376,7 +376,10 @@ interrupt is delivered at the next entry. Every iteration is the same state, so 
 does not depend on when the kick came. Anything else (an instruction outside the set, a real exit
 while stepping, which is then handled as any exit, no repeat within 4096 steps) leaves the guest
 where free running would have taken it; a guest that stays without exits for
-`HYDO_KVM_SPIN_SECS` (default 10) ends the run as a SPIN (invalid). A proven cycle that no
+`HYDO_KVM_SPIN_SECS` (default 10) of its own running ends the run as a SPIN (invalid). The
+observer's looks do not count toward that limit, because in a look the guest moves only from one
+step or breakpoint to the next. Three times the limit in host time ends the run too (Milestone
+265). A proven cycle that no
 interrupt can end (nothing armed, or the due event's line masked) ends the run at once as a
 deadlock (Milestone 159; before, a due but masked event kept the engine resolving the same cycle
 forever). Counter loops (`while (!flag) n++`), whose state never repeats, are the next section's.
@@ -480,7 +483,11 @@ cycle.
    SYSRET, SYSENTER), and it runs over a SYSCALL to a breakpoint at the next instruction
    (`spin::syscall_len`), so the trap flag never reaches the guest's memory or registers.
 4. Limits: a pass may write at most 1024 pages; the proof has a quarter of `HYDO_KVM_SPIN_SECS`
-   (at most 2 s) and 200,000 arrivals; a loop that keeps a counter in memory is not a cycle (the
+   (at most 2 s), and never more than the guest has run freely in the stretch so far, and 200,000
+   arrivals. The second limit is Milestone 265's: in a guest's memory setup each arrival is an
+   exit to the engine, so 2 s looks from the first kick on made a 4 GiB guest's 1 s stretch last
+   more than 10 s on GitHub's runners. A loop that needs a long proof is proven at a later look,
+   from the same canonical state. A loop that keeps a counter in memory is not a cycle (the
    counter proof covers registers only). Anything it cannot prove is left where free running would
    have taken it, and the run ends as SPIN as before.
 

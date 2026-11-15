@@ -102,6 +102,8 @@ pub struct Options {
     pub diag_ram: Option<String>,
     /// `HYDO_KVM_TRACE_UNKNOWN`, set: log MSRs and ports the engine's model does not know.
     pub trace_unknown: bool,
+    /// `HYDO_KVM_GAPS`: log exit-free stretches at least this many seconds long.
+    pub gaps: Option<String>,
     /// `HYDO_KVM_SPIN_STATE`: the spin observer's full-state cycles; None (unset): the image's
     /// epoch decides (on from epoch 2, M204), `0` off, any other value on.
     pub spin_state: Option<bool>,
@@ -127,6 +129,7 @@ impl Options {
             diag: e.is_set(HYDO_KVM_DIAG),
             diag_ram: t(HYDO_KVM_DIAG_RAM),
             trace_unknown: e.is_set(HYDO_KVM_TRACE_UNKNOWN),
+            gaps: t(HYDO_KVM_GAPS),
             spin_state: e.text(HYDO_KVM_SPIN_STATE).map(|v| v != "0"),
             no_fp: e.is_set(HYDO_KVM_NO_FP),
             preempt_record: e.set_not_0(HYDO_PREEMPT_RECORD),

@@ -985,10 +985,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The Mac engine does not run it: it keeps the root in guest RAM, and the Playwright image is
       about 3 GB unpacked. KVM ran it in M254 on seven hosts of GitHub's runners (Intel and
       AMD), with hvx's verdicts and one fingerprint per schedule and vendor.
-    - On those runners 13 of 85 KVM runs first stopped in the guest kernel's early boot with
-      `SPIN` (no VM exit for 10 s of host time). The rewind mode's second run ended 10 of them
-      normally. The cause is not found; the guess is a delay on the host while the 4 GiB guest first
-      touches its memory (`docs/HISTORY.md` Milestone 254).
+    - M265 explains and fixes the KVM runs that first stopped in early boot with `SPIN`. The
+      spin observer's own looks slowed the 4 GiB guest's memory setup past the 10 s limit.
+      The web-shop example did not run again on KVM after the fix.
     - hvx did not run M254's code, so no hvx run has screenshots in its run directory yet.
     - An exploration's report page does not show the screenshots, which the explorer writes to
       `<tag>.screens/` beside the run's transcripts.
@@ -1946,6 +1945,13 @@ build machine, before 2026-10-13.
   a release raises the middle number without breaking projects. An older hydo refuses and names
   the release it needs; a plan of a newer patch only warns; `>=` and `HYDO_VERSION_CHECK=warn` are
   unchanged. Only the old refusal's golden answers moved. Nothing recorded moved
+- M265 (tentative number): why KVM boots on GitHub's runners stopped as `SPIN` in early boot. The
+  host never stalled. The KVM engine's spin observer looked at the guest's memory setup for 2 s
+  at each kick. In a look the guest moves only from one breakpoint to the next. The SPIN
+  limit now counts only the guest's own running, and a look gets at most that much time.
+  `HYDO_KVM_GAPS` shows where a long stretch's time went. On six hosts every boot with the fix
+  gave its fingerprint with no early stop. A 4 GiB boot fell from 25 s to 5 s, and a loop without
+  exits still ended `SPIN`. Nothing recorded moved
 
 ## Where to look
 

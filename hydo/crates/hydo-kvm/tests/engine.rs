@@ -742,6 +742,46 @@ fn runs_of_with(prog: &Program, schedules: &[&str], cont: bool) -> Vec<RunResult
 }
 
 #[test]
+fn a_loop_the_observer_cannot_prove_still_ends_as_a_spin_in_time() {
+    // Milestone 265: the SPIN limit counts the guest's own running, not the observer's looks;
+    // a loop whose counter decides its branch is neither a cycle nor a counter loop
+    let mut p = counter_program();
+    p.ops[16] = Op::JmpIfCountBelow(u64::MAX, 15);
+    let o = KvmOptions {
+        spin_secs: Some("0.5".into()),
+        ..KvmOptions::default()
+    };
+    let (mut h, _) = Host::start_with(
+        Mode::Serve {
+            boot: Some(sched("rb=4 | run")),
+        },
+        p,
+        o,
+    );
+    boot(&mut h);
+    h.recv();
+    let t0 = std::time::Instant::now();
+    h.tx.send(HostMsg::Request(Request::Ctl {
+        tag: "c".into(),
+        schedule: sched("rb=4 | run"),
+    }))
+    .unwrap();
+    let r = h.drive(|_, _, _, _| false);
+    let took = t0.elapsed().as_secs_f64();
+    h.quit();
+    assert!(
+        r.verdict
+            .starts_with("ERROR workload: SPIN (guest loops without exits"),
+        "{}",
+        r.verdict
+    );
+    assert!(
+        (0.5..hydo_kvm::vmm::SPIN_WALL * 0.5 + 5.0).contains(&took),
+        "the SPIN came after {took:.2} s"
+    );
+}
+
+#[test]
 fn a_counter_loop_is_a_spin_without_the_rewind_mode_and_resolved_with_it() {
     let p = counter_program();
     let spin = runs_of_with(&p, &["rb=4 | run"], true);
