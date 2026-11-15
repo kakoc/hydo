@@ -11002,3 +11002,19 @@ twice with the same bytes, `3f6251db865bdb3dc08b4caccf3d296884102b0cfa239f6b6424
 **New crate.** `hydo-contracts` (Milestone 241) is new to `cargo install hydo`'s closure; its
 first version is published by hand before `release.yml` can publish it with trusted publishing
 (AGENTS.md open item 63).
+
+**Published** by the lead on 2026-11-15, after CI (ci, docs, packages) passed on `main` at
+`8bb0e323`:
+
+- `hydo-contracts` 0.3.4 by hand on crates.io (`cargo publish --registry crates-io -p
+  hydo-contracts --locked`, from a clean checkout of `dee7da68`), before the tag; the user then
+  added its trusted publisher;
+- the GitHub release `v0.3.4` on `dee7da6800ad9f48242fd8e65f135cede95aedbf` with the five files
+  and `SHA256SUMS`, each checked against `SHA256SUMS` before the upload;
+- the registries through `release.yml` on the tag (run 43717780673, every job passed): crates.io,
+  PyPI and npm (`hydo-assert` 0.3.4), and the Go tag `sdk/go/v0.3.4`;
+- the Homebrew tap, commit `b43df2d`: `update-homebrew.sh` checked the published Mac tarball
+  against `SHA256SUMS`, and `brew style` passed. `brew install`, `brew test` and `brew audit` did
+  not run, because the tap was not tapped on the Mac;
+- the release index on `main`, with its twelve lines;
+- the skill release `skill-v2.3.1` on the release commit, not marked as the latest release.

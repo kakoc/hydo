@@ -214,41 +214,27 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.3.3 was published on 2026-11-14 from the release commit `dad45fc9`, in
+**Releases.** hydo 0.3.4 was published on 2026-11-15 from the release commit `dee7da68`, in
 these places:
 
-- The GitHub release `v0.3.3`: both tarballs, their sources archives, and the Mac signatures.
+- The GitHub release `v0.3.4`: both tarballs, their sources archives, and the Mac signatures.
 - The Homebrew tap: `brew install kakoc/tap/hydo`.
-- crates.io: the 20 crates of `cargo install hydo`, and `hydo-assert`.
-- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.3.3`.
-- The skill release `skill-v2.0.2` (the plugin `hydo`, command `/hydo:onboard`).
+- crates.io: the 21 crates of `cargo install hydo` (`hydo-contracts` is new, its first version
+  published by hand, open item 63), and `hydo-assert`.
+- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.3.4`.
+- The skill release `skill-v2.3.1` (the plugin `hydo`, command `/hydo:onboard`).
 
-The registries are published by `release.yml` on the tag. 0.3.3 adds Milestones 228–230, 232, 239,
-and 240 to 0.3.2 (`docs/HISTORY.md` "The 0.3.3 release"); 0.3.2 (`fbee09d4`) added
-Milestones 210–227.
+The registries are published by `release.yml` on the tag. 0.3.4 adds Milestones 231, 233–253
+and 257 to 0.3.3, as `docs/HISTORY.md` "The 0.3.4 release" says. The fingerprint epoch is 3. Both
+releases ship M234's guest kernels with cgroups next to the old ones. 0.3.3 (`dad45fc9`) added
+Milestones 228–230, 232, 239, and 240. The next release raises the middle number (0.4.0): a release
+with features raises it, and the last number is for small fixes only (user, 2026-11-15).
 Plans keep `hydo_version: "0.3"`. The release index `hydo/dist/releases.txt` pins every published archive.
 Since 0.2.0 the Linux release ships the KVM engine, and the Mac programs are signed and notarized.
 `cargo install hydo` followed by `hydo setup` works on the Mac and, since M210, on Linux with KVM.
-How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`.
-
-**hydo 0.3.4: prepared, not published** (`docs/HISTORY.md` "The 0.3.4 release"). It adds
-Milestones 231, 233–253 and 257 to 0.3.3; plans keep `hydo_version: "0.3"`, and the fingerprint
-epoch is 3. Both releases ship M234's guest kernels with cgroups next to the old ones. Release
-step 6a ran on quick candidates and its fixes are in. The release commit is `dee7da68`. Its five
-files and `SHA256SUMS` are in `hydo/dist/out/0.3.4/` of the main checkout, each platform built
-twice to the same bytes:
-
-- `hydo-linux-0.3.4.tar.gz` `04ccae1f2cf4c003a674b07917d0a15e149875d978157235424df909a0bbf29f`;
-- `hydo-linux-0.3.4-sources.tar.gz` `90a1812ab331377cdba7426753dd1faf8f88d902982acdd12440a6c5b239a81b`;
-- `hydo-mac-0.3.4.tar.gz`, signed and notarized,
-  `1e401fdeba37aba813d9b8050c2b372086089c9aac324028e51ac0637081ffa1`;
-- `hydo-mac-0.3.4-sources.tar.gz` `df0b38f0a4fe15df6510b4897017a1b1077d074545dee4f63d62a3e81b619c50`;
-- `hydo-mac-0.3.4-signatures.tar.gz` `67116e0e326659bd7eff9b8306e6de56d95969642de6023168eb242b3de09bb3`.
-
-The prepared material (release notes, the Homebrew formula, the release-index lines) is in
-`hydo/dist/out/0.3.4/prepared/`, and the skill archive 2.3.1 in `hydo/dist/out/skill/2.3.1/`.
-The crate `hydo-contracts` is new to `cargo install hydo`: its first version is published by hand
-before the tag (open item 63).
+How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`. The files of 0.3.4 and its prepared
+material are in `hydo/dist/out/0.3.4/` of the main checkout. Their sha256 values are in the
+section "The 0.3.4 release" of `docs/HISTORY.md`.
 
 **What 0.3.2 changed in the release** (`docs/HISTORY.md` "The 0.3.2 release"). The fingerprint
 epoch stays 2.
@@ -1783,7 +1769,7 @@ build machine, before 2026-10-13.
   module build --dry-run` builds nothing. The released
   project and results schemas are the current ones, and the examples are re-recorded (epoch 3).
   Both releases are built twice to the same bytes, the Mac one signed and notarized, and verified
-  on hvx, KVM and the Mac; nothing is published
+  on hvx, KVM and the Mac; published on 2026-11-15
 
 ## Where to look
 
