@@ -447,18 +447,18 @@ Celery worker with beat, PostgreSQL and Redis, runs in `hydo/onboard/examples/sa
 Saleor calls synchronously) and with Saleor's own gift card gateway; staff refund orders. The
 rule suggestion read none of Saleor's 25 `models.py` files, so 14 of the 17 rules came from
 reading the code; 16 held on a clean run. The blind exploration found two new candidates, and
-`native/` reproduces both with Docker; no upstream report names either:
+`native/` reproduces both with Docker. Both are reported upstream (2026-11-15):
 - A refund request that `transactionRequestAction` acknowledged is lost with its Celery task
   when the worker dies or the broker loses it. Saleor never sends it again or marks it failed.
   The regression `H=payments.refund@1-12:delay=6000 K=worker@6+1` breaks `refund_requests_end`
-  on every hvx run.
+  on every hvx run. Reported as saleor/saleor#20022.
 - A gift card charge that stops between its balance commit and its `CHARGE_SUCCESS` event leaves
   the card short and the order unpaid, and nothing can charge it again. The regression is a
-  power cut at a disk flush (`cf=270`) after a clock step.
+  power cut at a disk flush (`cf=270`) after a clock step. Reported as saleor/saleor#20023.
 
 Two known bugs reproduced natively: overlapping refunds refund more than a payment charged
 (saleor/saleor#19645), and a single-use code is spent by a completion that made no order
-(#19919). Nothing was posted. The runs used hvx only.
+(#19919). The runs used hvx only.
 
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
@@ -1738,8 +1738,8 @@ build machine, before 2026-10-13.
   Two KVM verdicts changed: the quickstart's lost write is `C=11 R=everysec` on KVM now, and
   Qdrant's KVM failure is a pause of the test's thread. Open item 105 is empty
 - M251 (tentative number): the Saleor onboarding on hvx, with rules from the rule suggestion on a
-  project hydo had never seen. Two new candidates, found blind and reproduced natively, not
-  posted: a refund request lost with its Celery task, and a gift card charged without a record.
+  project hydo had never seen. Two new candidates, found blind and reproduced natively, and
+  reported as saleor#20022 and #20023: a refund request lost with its Celery task, and a gift card charged without a record.
   Two known bugs reproduced, and the scan misses Django's `models.py`. Nothing recorded moved
 - M257 (tentative number): `hydo explore --protocol-cover` gives each schedule one `H=` token
   from a walk over the cells of the fakes and proxies. A cell is a route, a step, and a rule

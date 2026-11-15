@@ -9,8 +9,9 @@ for a business bug that nobody reported. It is also the first run of the rule su
 ## The short answers
 
 - **What was found?** Two Saleor bugs that no report names, and two known Saleor bugs. The blind
-  exploration found both new ones, and Saleor's own images in Docker reproduce both. Nothing was
-  posted.
+  exploration found both new ones, and Saleor's own images in Docker reproduce both. Both
+  are reported upstream: [saleor#20022](https://github.com/saleor/saleor/issues/20022) (the refund
+  request) and [saleor#20023](https://github.com/saleor/saleor/issues/20023) (the gift card).
   1. **New: a refund request is lost with its Celery task.** A refund that staff request is lost
      when the Celery worker that sends it to the payment app dies, or when the broker loses the
      task. `transactionRequestAction` acknowledged it, and Saleor never sends it again or marks

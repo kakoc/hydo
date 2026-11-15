@@ -98,6 +98,11 @@ Each example folder holds the project's hydo setup and the recorded runs.
   just read, so runs it acknowledged never run. A new bug, reported as
   [hatchet#5527](https://github.com/hatchet-dev/hatchet/issues/5527)
   ([the example](hydo/onboard/examples/hatchet/)).
+- **Saleor 3.23.49.** A refund request is lost with its Celery task when the worker dies. A crash
+  in a gift card charge leaves the card charged and the order unpaid. Two new bugs,
+  reported as [saleor#20022](https://github.com/saleor/saleor/issues/20022) and
+  [saleor#20023](https://github.com/saleor/saleor/issues/20023)
+  ([the example](hydo/onboard/examples/saleor/)).
 
 ## Your own project
 
