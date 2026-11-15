@@ -269,7 +269,7 @@ I	hydo/onboard/examples/web-shop/app/package-lock.json	9cf2e4dd43bfd6da00dfd6dbd
 I	hydo/onboard/examples/web-shop/app/package.json	fabac0ae1c35cb1313afeaaecaf93582ed8714230099aed89b8864eaff64cd4b
 I	hydo/onboard/examples/web-shop/e2e/package-lock.json	1bd677fb86c5282ed7783b24460ff5c05031c71ed0dfc00b4f240354acf391c3
 I	hydo/onboard/examples/web-shop/e2e/package.json	e68c669db70f8df0c96334cac70dac3de23b81a7f9e51186407c6780c1f52c4d
-I	hydo/onboard/examples/web-shop/hydo.yaml	4a3415ea3e19ece051aa5a30490ce0d313842f8c4a165269bd954c4e212bd816
+I	hydo/onboard/examples/web-shop/hydo.yaml	15a3d43c3de0e43da32d581a5bb199ed139ccde4349e777dbd868170183fc52f
 I	hydo/onboard/examples/yugabyte/bigtxn/hydo/hydo.yaml	1ee55745c9b0a1e49fb32a4988b9c18bd87a5f1bff6b08fcb8040d3b49e5c6b0
 I	hydo/onboard/examples/yugabyte/docker-compose.yaml	bff78dc0085f9c3cd9a420ae0e1a6bf823b14156b172821896c9665efc37089e
 I	hydo/onboard/examples/yugabyte/hydo/hydo-compose.lock.json	1e110be98e1441c646ccbeae82e3e640f2628d71f1fc52c4c288e546c0e7ff9d
@@ -866,7 +866,7 @@ R	^	<root>/hydo/onboard/examples/web-shop/e2e/package-lock.json --set version=zz
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/web-shop/e2e/package.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
-R	^	<root>/hydo/onboard/examples/web-shop/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#414f2157f873b0f1"
+R	^	<root>/hydo/onboard/examples/web-shop/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#9f72e424b5b005c1"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/yugabyte/bigtxn/hydo/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#61e0c4ccb15e4143"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
