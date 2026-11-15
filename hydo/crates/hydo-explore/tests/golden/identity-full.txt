@@ -8,6 +8,9 @@ input	hydo/onboard/examples/compose-voting/hydo-mac.yaml	f31a88f96297c1b4a0de709
 input	hydo/onboard/examples/compose-voting/hydo.generated.yaml	82bc84ea9cd401d4ada50b08d587d5133b96be5459d945a67715cba0d54361e4
 input	hydo/onboard/examples/compose-voting/hydo.yaml	90b3e80fb1e04d4cc5d9a1def209a4a98e81414f2d959acfa5c3a5fe0b257654
 input	hydo/onboard/examples/contracts-ledger/hydo-go.yaml	a72f22e2317ed068c04c26917cc8c2c76abad0b0f627db58b28095d157ab96c1
+input	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	aaa170b3aac2a5ab0a0adc1b096d93f7eb557d26ad874b5a6889c06974eca1cc
+input	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	5cac08a1fbf2e6705c78423ca0c72ba2a1f95a6722da93afab6c2868cfa1ed5a
+input	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	3f5f174e7b2b7fbda41c85ea2466bc189fc2c8b5b0efbd5ae0c7dbcf68649c9d
 input	hydo/onboard/examples/contracts-ledger/hydo.yaml	5aec315b481af00ea65b7c6c5ffa7afefd73495cfd4a0614c0946dc21e3c6998
 input	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	b81ec8dccb68aee7cab782a49e3bc119e9bd9ef2aea98f8771b1473799a8bdc8
 input	hydo/onboard/examples/etcd-upgrade/hydo.yaml	0dd3e22c9d885900450dbe52dd5a934d3008bb04eb7d549eba3066d250b235b6
@@ -44,7 +47,7 @@ input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8
 input	hydo/onboard/examples/stack/hydo-grpcgen.yaml	72b3a42760bb79db3be04fe34d4e7a55645ed133e86008b059f0935cd3f247cf
 input	hydo/onboard/examples/stack/hydo-read.yaml	d3899b9ac926be02576d0f8e9b950bcc174682dc727791d4f1309294b3a1fb68
 input	hydo/onboard/examples/stack/hydo.yaml	369ed2074d0024dcbb5bf2218731bee7526fa006ff0e900aef339cc6cf69fb24
-input	hydo/onboard/examples/web-shop/hydo.yaml	4a3415ea3e19ece051aa5a30490ce0d313842f8c4a165269bd954c4e212bd816
+input	hydo/onboard/examples/web-shop/hydo.yaml	15a3d43c3de0e43da32d581a5bb199ed139ccde4349e777dbd868170183fc52f
 input	hydo/onboard/examples/blnk/hydo/hydo.yaml	7e97e5e2f1ff496ca70bf59e69bf32a213acbfe5b793f72d56bb293771353a9c
 input	hydo/onboard/examples/blnk/hydo/checks/always_no_overdraft.sql	aae40beaa23b954be0523b5919c746e7c5760e66d1b100900847410e09027507
 input	hydo/onboard/examples/blnk/hydo/checks/final_balance_is_sum.sql	e47a7b847a6a46f02b088f6e4c69f8e6382e0da7210bde525846e4e0faf5218b
@@ -664,6 +667,81 @@ chunk	hydo/onboard/examples/contracts-ledger/hydo-go.yaml/hvm/FalseFalse	4	256	6
 chunk	hydo/onboard/examples/contracts-ledger/hydo-go.yaml/hvm/FalseFalse	5	256	c0ad5bdae7092d8b795efa9aa569c6d26b9223371a26cf66eec64a63ed3e66d1
 chunk	hydo/onboard/examples/contracts-ledger/hydo-go.yaml/hvm/FalseFalse	6	256	a380c08453d014d7908ba8c4b476a99bb0fc774483e2fc50333f3308a8f9540a
 chunk	hydo/onboard/examples/contracts-ledger/hydo-go.yaml/hvm/FalseFalse	7	256	6a41da1df0c25d576a7db8d14e40ba63903b08b08a3f03f27e53b2a7cba8684f
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvx	0	256	968bae47126363e4d0d00260a27bde9439c3afd7b3c113bfdca3c7f7bfd17995
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvx	1	256	24843c545ebf9676d05ce749630509f189ebfc5cfb061d600b4a2b0ecb8fa685
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvx	2	256	9d20cd9cdb66475109ca1386cbd1c763bd2d21b9f473a3b13c53f8141f09c874
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvx	3	256	2341a61b0e4e4642c7eb658b05cf024d68239aab4b238784aa187211d3e10a34
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvx	4	256	48e1560cbbf03a9a6630b2deff9c9e4f2da5d0db3cf89a0a3bd7f2dfc4023cf6
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvx	5	256	8dc4bc08c8b25a40c7134389501d9ff35900cc3b42ef1fb025d536112aa58e11
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvx	6	256	ca7740de2e539afd6768aeff9fd54e5378bc29ee9e824b86ccf448133f765b6d
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvx	7	251	d3546c21a2785bff501f201261aec0fed4207a6328390fb14d4ff4505db3b273
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/TrueTrue	0	256	d3824b4b9d3ee5c0ecb33591f0f391b1784861fbad597792ab386bc1a1e26b25
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/TrueTrue	1	256	b391689b56a3e708b15de85690a629977ad6bef1af6be3a26c6d9cd31dccdc06
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/TrueTrue	2	256	fe4db472e070c3a7f4ae37b631bea6c925be806b12c34fb7bf97a0d1736d2954
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/TrueTrue	3	256	1514cdef7755465e3c042389d7454f9d198f69b4f0dd5295ebd8b570be98a78c
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/TrueTrue	4	256	4e56da3518cfb8e1e19b3ee8c03d12e4a853aa43046dbe092702abb69379f71c
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/TrueTrue	5	256	d5223632a88e4060733cc46d86831d6db35d8ef3cc40dd5e51784fc0c4226d5e
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/TrueTrue	6	256	3a56e59af11df960843248b34d278ddaabac862e7b4877bfa01e32bf0e617693
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/TrueTrue	7	254	b2bee1dd14f236c0a9fcd8155f64e62c29639f8dc1341ca0f2d7db4d3d27f274
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/FalseFalse	0	256	280d6c64fd348b26fa2037e07b278ab13ffb14af320b3f9bb9e4f067dc15e106
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/FalseFalse	1	256	30566ccb6a42bd6cadd5ef45c69f2203f18b357df5be7dde7e9b7704894a3b1d
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/FalseFalse	2	256	38d607bda4e39f94e3ef0fc43a8de0aca36ac5e4886c020792791aef3980feeb
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/FalseFalse	3	256	ec4e483b8f38f74ea476d3895dfa6f2be2469e0f57736e73fb6f6f3678e00b23
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/FalseFalse	4	256	b7a3baa2b2eedba3662c36c5e3e0d35ec4b318481a54f1dcacf4e12084da2e1f
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/FalseFalse	5	256	3c57550023be43aea0ce1f9005a61c1c0463ec028b530f562f43678357263520
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/FalseFalse	6	256	35562cf51beb52f08b913559d4b496fb05d44c7cdd5dc4c20304717a7e0cf5f2
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml/hvm/FalseFalse	7	256	90310316049e769b463c4ed44a702a3030aec7cb6a218426e44e44d0b1fba961
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvx	0	256	22188c0a8782d6c88343c876cdb2ec9a8203420c985baf5209db3252bfe0d323
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvx	1	256	695eecc51109c9523f5082ad9ad5ba6be4e58a47b2fd62f6bf60d8315164722d
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvx	2	256	6dc4758120f5a5524cac8c77231eab9cf5d5f61ca85fff5910641b8fe2c14a9d
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvx	3	256	63db54f58134852fcdb4cf48df82fffb40f68c32a244a9b1c2167bba4c974a81
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvx	4	256	839b2bbe597828776317e77e83425210a49ff422e4813240a08d0810929ff025
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvx	5	256	7a93f9b9e8ff8cc0c617ad7824711369e40bd6437b373717e6af1b07ce2d3718
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvx	6	256	134928511684d8585a38721ef27e06adeff3e070dcd7a3f6353b8e47a40c9db5
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvx	7	256	74e8a6ec143c40222cb8e14f4167912e43143fe8f2dcc1e8822bfdbf8207dfd4
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvx	8	1	42e634092467cbca4dd3a6a66a7600c1da22f5d438b30768ae586ab4cf3ac593
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/TrueTrue	0	256	395acc4c10f22926ac60e0243033984b7dabdf07be5296ba7a92252316758c87
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/TrueTrue	1	256	3a6d2ba6fe489d7a27d161a97ab9112ac4e13c6b59f58f9ccb9fc5d16d0088a4
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/TrueTrue	2	256	4383549d13d680babe0f2fcd496a49c4c91c3d1948bf5da4f9a549bf9f26642a
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/TrueTrue	3	256	824757af0f2a99425d6f6f1a28c479b6ec971b261442cd3ebc16691a3fb9bfb8
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/TrueTrue	4	256	0018a77be5d1fe002644a131bdad9e82f2adaf8894059e8b69ea0c285cb8de4a
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/TrueTrue	5	256	56a5f8e4f081b31c82374d46ef1fabe44a746a64a526fa599b88a2fc93a52b8c
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/TrueTrue	6	256	fb9358a943a5a3974f9fd282e4072800578e5d77be6ca6c8519fe95a1793abbb
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/TrueTrue	7	253	b4b8240ded3277623dba992f075c4c5f11aa93c9c69a12b489cc1ecc8f58a500
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/FalseFalse	0	256	d15ddd06104e3166fdebb46cdbd5e3e9b6f4f41ad52d460520964cec4d25023e
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/FalseFalse	1	256	39e6045755a0ee3dfe86abe43480b094a5c5616dea380b4f27a1c625db06ffdb
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/FalseFalse	2	256	2798762a69e7d96ef0f16b1e9ebe71023f000a50215e2cf17d9b77c7576f4301
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/FalseFalse	3	256	47c9bcec06af83bb09e3fdb6636a4f2dc64eb9bbf0c1594979dc15763a8742b7
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/FalseFalse	4	256	9aae31581f15a793f587d98b3e9bf577b8ea71e9668b763a22266eeed3191c56
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/FalseFalse	5	256	58f7b5500847c6fd8d1368fe838a1fdb6c2620bf13ff68a7af7e2e5a5bcef2fc
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/FalseFalse	6	256	abe871f901a4241be3026de3ce8a793fe57c27697125a0088e268e63da556dcd
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/FalseFalse	7	256	f2bd43a4074047c5025a9de0d2834f0eb6ca7dc640929cd65164ce2bfa1f26a8
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml/hvm/FalseFalse	8	5	e9c3dea7dcc27dec066d4e57d89839cc34d6ada64a2ddcb9f69260b88fbf6cca
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvx	0	256	0b6a690305003280a1f32c0362ae189861cdf89682575640bd8ade0ddcf01ad1
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvx	1	256	2d3777da03d56044271a619ccbc8b05818f28677d3537870cc9897287bdc5a35
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvx	2	256	7e88b9e16d78738feed686d2420df8a9bed9ab2aeca11c4802978d46aca57115
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvx	3	256	ccb7e5e770df2ff71998b808bf8fd687f5f42d87cec0ac0ca48961f0cc9aa957
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvx	4	256	b42dc6da73ff878af0931887c694856612cc00eeaf2c09a6cef88f8e4585c139
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvx	5	256	10271ffd3ff490a049d864a73852f004cca9650946803122e6cd38a33451894a
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvx	6	256	73a15f58234ba0d913fdb4a05a151de08b1f84f42ea07973f5df5bbed2a91516
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvx	7	255	6bc0251652e60e23c5554af7a301d7ee5a735b8cfae67256af9a61769a6195db
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/TrueTrue	0	256	b9fe3b24089ebe3e56f3ab5bcf7bf089c4623134415f17e160b89050f2cd112f
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/TrueTrue	1	256	e0e287413867e3ee126c33af70fa60a78c294e74717f6f1bf992c9bcd40d2e63
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/TrueTrue	2	256	341999820301273dce21b218eb5321df1952a180d888a244d0c3fa77bf3a0f7c
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/TrueTrue	3	256	16e6b7e6bce02c90706f8d59670c9a13a9d1d0cdaabe889686ca3066e146fb36
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/TrueTrue	4	256	ac9dd76a0cfd6b3c70541264bb9c219681ded338678c6de5ee92e5c587e6b0d9
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/TrueTrue	5	256	7ad6e5c7c69dae13948956fbc16674101bee0766ce56c868404a7880b4fefbdc
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/TrueTrue	6	256	e367cfd6f2e0c5a88787c0e1168805f3f45f6582704c17fb817cf47d275788d8
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/TrueTrue	7	256	f3d65fc7fa60d4d415153bb146b1da8b1dcb9612144e67440218f341e627db19
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/TrueTrue	8	6	8fb8b374d31aa010506c9129f558093cfdfb2ca66b2bb4cbcde955c2c15e6664
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/FalseFalse	0	256	ee84c9c2b560b19755566f66e9243cdbe412d40ef9904f54cdff84c6233b3044
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/FalseFalse	1	256	41c2c5dd407c3bc216d6b066edd183f53687659267342f4efbc825cc33dfd3f9
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/FalseFalse	2	256	b8a4d844a2703afe279f9ee922a0537315961b560aefc1e69e24b7e37e13ee14
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/FalseFalse	3	256	d405e1c2498f86791360c7a2c07406dd48f6eb6a523a82d50e85e4c3d5a4cbcf
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/FalseFalse	4	256	42a19608ad2f50224c7e88fefa5a87d93645cf7e1561224eebee3116f64c5c33
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/FalseFalse	5	256	eddfb360c33c4ada47988f9b1e0df76a9756ee4fec919b37a384422b96b19d66
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/FalseFalse	6	256	09e7e15be7b655c783eda82f45d08b05209dd10eea0b0902f923eaeae1848cee
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml/hvm/FalseFalse	7	256	57a53ffeb8bb99e09b9041fe505b4b671599c3baa9fae50dc606d4c10179f98a
 chunk	hydo/onboard/examples/contracts-ledger/hydo.yaml/hvx	0	256	48d19112dc6bb0b89ba81a10b59d3922de143da996eba82a37c7c9af2d539ff5
 chunk	hydo/onboard/examples/contracts-ledger/hydo.yaml/hvx	1	256	5f7fc0b8e7f09672d173da0ab149bd89ad2ad74e99539f51a30f0139d33d06c8
 chunk	hydo/onboard/examples/contracts-ledger/hydo.yaml/hvx	2	256	0abeb046deec591ba61ac559c912a7de99cd8551d561fe763bd4091d247daa3c

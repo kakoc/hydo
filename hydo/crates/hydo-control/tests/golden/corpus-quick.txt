@@ -8,6 +8,9 @@ input	hydo/onboard/examples/compose-voting/hydo-mac.yaml	f31a88f96297c1b4a0de709
 input	hydo/onboard/examples/compose-voting/hydo.generated.yaml	82bc84ea9cd401d4ada50b08d587d5133b96be5459d945a67715cba0d54361e4
 input	hydo/onboard/examples/compose-voting/hydo.yaml	90b3e80fb1e04d4cc5d9a1def209a4a98e81414f2d959acfa5c3a5fe0b257654
 input	hydo/onboard/examples/contracts-ledger/hydo-go.yaml	a72f22e2317ed068c04c26917cc8c2c76abad0b0f627db58b28095d157ab96c1
+input	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	aaa170b3aac2a5ab0a0adc1b096d93f7eb557d26ad874b5a6889c06974eca1cc
+input	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	5cac08a1fbf2e6705c78423ca0c72ba2a1f95a6722da93afab6c2868cfa1ed5a
+input	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	3f5f174e7b2b7fbda41c85ea2466bc189fc2c8b5b0efbd5ae0c7dbcf68649c9d
 input	hydo/onboard/examples/contracts-ledger/hydo.yaml	5aec315b481af00ea65b7c6c5ffa7afefd73495cfd4a0614c0946dc21e3c6998
 input	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	b81ec8dccb68aee7cab782a49e3bc119e9bd9ef2aea98f8771b1473799a8bdc8
 input	hydo/onboard/examples/etcd-upgrade/hydo.yaml	0dd3e22c9d885900450dbe52dd5a934d3008bb04eb7d549eba3066d250b235b6
@@ -760,6 +763,36 @@ chunk	hydo/onboard/examples/contracts-ledger/hydo-go.yaml	31	500	76576ba9045363f
 chunk	hydo/onboard/examples/contracts-ledger/hydo-go.yaml	32	500	70d329a3348b7c6dc6586d5a6b82fbb99698b54c68ce4e0f5e73bcffd511b412
 chunk	hydo/onboard/examples/contracts-ledger/hydo-go.yaml	33	500	8a372db8aeb7839a5e43f2c169c44a21ea9f4c0ed69717c9bd6269643864af7c
 chunk	hydo/onboard/examples/contracts-ledger/hydo-go.yaml	34	409	eed55153f8ae004edd56340426cf6915220e888adc6e6c206cb578388c1ab6be
+manifest	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	core
+boot	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	hydo/onboard/examples/contracts-ledger/hydo-local.yaml#0	snapshot	acb8dda6b3e7c2ee
+counts	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	identity=49 recovery:ok=19 recovery:violation=2 refused=1 run:cut=21 run:error=8 run:ok=27 run:violation=3 token:C=22 token:K=3 token:P=4 token:Q=1 token:T=44 token:X=4 token:Z=1 written=10
+boot-transcript	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	acb8dda6b3e7c2ee
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	0	500	f33c2ec824dc48fb09770a1003511349d6776f4fb301dd12e553a36b53fb86be
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	1	500	85baa28695dd00ccc9ced6bbed5077c671a21b90ca3015cda281f50da07ff6c8
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	2	500	2b06650e321687eebdbed2b501b9362373654e3d5e9a2b82031f5e1a3dadce08
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	3	500	e0615186bb3a62d33b7213a155895dbaf3a7b97df5476034a8daa981b6447921
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	4	500	d847382f77bf134f9e43a5ebf55ffde2fd5bf73d0f1e1c8482cc0f3e62fa852f
+chunk	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	5	264	288aa972d76c091cf68a9e62ab77511c4cfcf94e0fee656a329458bdaad8ed41
+manifest	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	core
+boot	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml#0	snapshot	3f6dd2cd3d97d73f
+counts	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	identity=52 recovery:ok=19 recovery:violation=4 refused=1 run:cut=23 run:error=3 run:ok=31 run:violation=5 token:C=25 token:K=3 token:P=4 token:Q=1 token:T=47 token:X=4 token:Z=1 written=10
+boot-transcript	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	3f6dd2cd3d97d73f
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	0	500	d95d2e6075287ca0617611f53ad49765081175ad25577492183e2f65ea1a63ab
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	1	500	f654304e0ec44d7785a6bc448944f5da6dfdd8775302992e0734bb83ff15a142
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	2	500	553c640c3c198c75bf15c1a0e6c07ea2c50fdb7e627105c58340235b1a000944
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	3	500	9919feba51c43d68a66340f69e58d64b3610dc0743c420c31e580e5392d43c24
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	4	500	fa63022c04d9908b0d0b4431bde4855f6147e512dd6ccfb80e1c059705df1319
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	5	488	4d49b5ac21582f265159bec3b2eecdc5eb300d73f9c2f4e0a55068c1d81f394b
+manifest	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	core
+boot	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	hydo/onboard/examples/contracts-ledger/hydo-types.yaml#0	snapshot	3f6dd2cd3d97d73f
+counts	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	identity=49 recovery:ok=19 recovery:violation=1 refused=1 run:cut=20 run:error=12 run:ok=23 run:violation=4 token:C=21 token:K=3 token:P=4 token:Q=1 token:T=44 token:X=4 token:Z=1 written=10
+boot-transcript	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	3f6dd2cd3d97d73f
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	0	500	cf3a3dea4be7e1fa11cd89897c53c70f0053f700ffd807f58f2370daea7ea502
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	1	500	f60eed26e349b73ffba6d8cc5615b7e0584e8bdf5e907acc259ab0f147be4aae
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	2	500	c9285a3a8867f490cc3b125fabfe59ce09429ef535e0683f30e9595d31c51f59
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	3	500	b290b5560702bcaeef7961787bb8856dcfbba330e4415907dba9dd9be776a4e7
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	4	500	2c24fe7a4276a5acc596899df13c476dd05d8c39e8cf5b367327364d70f4cbf6
+chunk	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	5	200	5fbfa6130f09eeeff604b14ebf7535f8fc66dc02ec9c3c9d894bf8417e042b9e
 manifest	hydo/onboard/examples/contracts-ledger/hydo.yaml	core
 boot	hydo/onboard/examples/contracts-ledger/hydo.yaml	hydo/onboard/examples/contracts-ledger/hydo.yaml#0	snapshot	7cea664ea4283a49
 counts	hydo/onboard/examples/contracts-ledger/hydo.yaml	identity=199 recovery:error=5 recovery:ok=49 recovery:violation=6 refused=1 run:cut=60 run:error=23 run:ok=102 run:violation=25 token:C=64 token:K=113 token:N=73 token:O=18 token:P=105 token:Q=1 token:T=92 token:X=4 token:Z=1 written=11
@@ -8164,4 +8197,4 @@ chunk	hydo/onboard/examples-mac/redis/hydo.yaml	53	500	f2bf8f98c9629fa6b8d45bcbd
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	54	500	5cf61ec38f3e010d9a42f26df58707533cae9b4627515e4e121648dbe6bbb663
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	55	500	2b8d95ff39036743ea03c9c1f547c7467526c0539b7dd35c08ebae98eccba1bb
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	56	491	2059fe37977a60502545de88616464b7109da8a5a2e579bf6b926a2ad0799a02
-refused	other=59
+refused	other=62
