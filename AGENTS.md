@@ -231,6 +231,25 @@ Since 0.2.0 the Linux release ships the KVM engine, and the Mac programs are sig
 `cargo install hydo` followed by `hydo setup` works on the Mac and, since M210, on Linux with KVM.
 How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`.
 
+**hydo 0.3.4: prepared, not published** (`docs/HISTORY.md` "The 0.3.4 release"). It adds
+Milestones 231, 233–253 and 257 to 0.3.3; plans keep `hydo_version: "0.3"`, and the fingerprint
+epoch is 3. Both releases ship M234's guest kernels with cgroups next to the old ones. Release
+step 6a ran on quick candidates and its fixes are in. The release commit is `dee7da68`. Its five
+files and `SHA256SUMS` are in `hydo/dist/out/0.3.4/` of the main checkout, each platform built
+twice to the same bytes:
+
+- `hydo-linux-0.3.4.tar.gz` `04ccae1f2cf4c003a674b07917d0a15e149875d978157235424df909a0bbf29f`;
+- `hydo-linux-0.3.4-sources.tar.gz` `90a1812ab331377cdba7426753dd1faf8f88d902982acdd12440a6c5b239a81b`;
+- `hydo-mac-0.3.4.tar.gz`, signed and notarized,
+  `1e401fdeba37aba813d9b8050c2b372086089c9aac324028e51ac0637081ffa1`;
+- `hydo-mac-0.3.4-sources.tar.gz` `df0b38f0a4fe15df6510b4897017a1b1077d074545dee4f63d62a3e81b619c50`;
+- `hydo-mac-0.3.4-signatures.tar.gz` `67116e0e326659bd7eff9b8306e6de56d95969642de6023168eb242b3de09bb3`.
+
+The prepared material (release notes, the Homebrew formula, the release-index lines) is in
+`hydo/dist/out/0.3.4/prepared/`, and the skill archive 2.3.1 in `hydo/dist/out/skill/2.3.1/`.
+The crate `hydo-contracts` is new to `cargo install hydo`: its first version is published by hand
+before the tag (open item 63).
+
 **What 0.3.2 changed in the release** (`docs/HISTORY.md` "The 0.3.2 release"). The fingerprint
 epoch stays 2.
 The Linux release ships the KVM engine's SMP guest kernel `guest/bzImage-kvm-smp`, so
@@ -1241,6 +1260,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - `hydo rules check` gives no result for a command rule that is a `hydo-world check` line,
       although the check runs and holds; the cause was not found.
     - Saleor's example ran on hvx only. It did not run on the Mac engine or on KVM.
+123. What 0.3.4's docs review left (the 0.3.4 release). A `hydo ci accept` key names the failing
+    check, not the cause, so two problems that fail one check share a key. The report says so.
+    A key per cause would change the key format of `hydo ci` and of every
+    `hydo/known-findings.yaml`. A problem whose runs failed in two ways can show one run's
+    schedule in its summary and the other's in its web page. The run page's "Why it failed" shows
+    the process table and the kernel log for a failed check too. The web page's property table can
+    list one check twice. Without the udev rule, each hvx run leaves root-owned agent logs in
+    `hydo-out/`.
 
 ## Milestone index
 
@@ -1748,6 +1775,15 @@ build machine, before 2026-10-13.
   at seed 3 and its stuck spinner at seed 4. The random draws first lose the order's answer in
   its step at seed 120. openapi-payouts' retry bug came at seed 3 instead of 28. The fixed images
   pass. Nothing recorded moved
+- The 0.3.4 release (no milestone number): the version raised, `hydo-world`, `hydo-world-tls` and
+  `hydo-grpc` re-pinned, and the four guest kernels with cgroups in both releases. Release step 6a
+  ran on quick candidates with two fresh readers, and its fixes are in. The pages name the epoch
+  and the engines' vCPUs right. A power cut reads as after N steps, `--check` names
+  fetch-images.sh, `hydo onboard` prints one list, the accept lines are explained, and `hydo
+  module build --dry-run` builds nothing. The released
+  project and results schemas are the current ones, and the examples are re-recorded (epoch 3).
+  Both releases are built twice to the same bytes, the Mac one signed and notarized, and verified
+  on hvx, KVM and the Mac; nothing is published
 
 ## Where to look
 
