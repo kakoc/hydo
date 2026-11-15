@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: a task run that finished ok is not started again
+exec /bin/hq check rerun

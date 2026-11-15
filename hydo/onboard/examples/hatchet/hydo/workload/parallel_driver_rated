@@ -1,0 +1,3 @@
+#!/bin/sh
+# trigger a run of rated, which a static rate limit of 2 per second admits
+exec /bin/hq op rated

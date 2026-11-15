@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: a cron or scheduled run does not start before its time
+exec /bin/hq check early

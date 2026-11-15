@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: every acknowledged trigger ran to completion, and no failed one ran (the generic rule)
+exec /bin/hq check acked

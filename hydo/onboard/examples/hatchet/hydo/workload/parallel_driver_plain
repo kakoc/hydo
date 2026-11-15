@@ -1,0 +1,3 @@
+#!/bin/sh
+# trigger a run of the task plain (10 to 310 ms of work); the client does not retry a lost answer
+exec /bin/hq op plain

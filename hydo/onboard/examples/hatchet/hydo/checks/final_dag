@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: a DAG step starts only after its parent completed
+exec /bin/hq check dag

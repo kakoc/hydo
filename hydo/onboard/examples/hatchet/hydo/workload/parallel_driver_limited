@@ -1,0 +1,3 @@
+#!/bin/sh
+# trigger a run of limited, whose concurrency key (one of three) allows one run at a time
+exec /bin/hq op limited

@@ -1,0 +1,6 @@
+# finding 1 (RESULTS.md), a Hatchet bug: one engine is killed and comes back 3 steps later, with
+# no other fault. It had read a batch of Hatchet's PostgreSQL queue and set the messages to
+# ASSIGNED; nothing gives them back. An acknowledged run never runs (RESULTS.md names it).
+# It failed with one fingerprint on every run of the example's image.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run K=hatchet_engine_1@6+3

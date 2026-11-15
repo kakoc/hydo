@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: a scheduled run is triggered once
+exec /bin/hq check scheduled

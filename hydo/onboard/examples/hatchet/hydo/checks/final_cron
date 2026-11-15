@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: one run per cron tick (each run carries the tick it was scheduled for)
+exec /bin/hq check cron

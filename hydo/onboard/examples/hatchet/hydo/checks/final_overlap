@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: one task run is not executed twice at the same time
+exec /bin/hq check overlap

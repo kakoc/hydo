@@ -1,0 +1,292 @@
+# hq, a small application on Hatchet v0.120.5 (a task queue and workflow engine in Go on
+# PostgreSQL), with two engines, the API and three worker processes on one PostgreSQL 16, and
+# PostgreSQL as Hatchet's message queue. Started with `hydo onboard` from ../docker-compose.yaml
+# (the raw import is hydo.generated.yaml); hand changes are marked `hand:`. RESULTS.md (next to
+# this folder) says what was hunted and found.
+#
+#   sh ../build.sh                 # bin/hq-<arch>: the program, static, for amd64 and arm64
+#   sh fetch-images.sh             # PostgreSQL and Hatchet's four images by digest
+#   hydo build hydo.yaml           # x86_64: hvx, KVM
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-40 --strategy process --new-faults --more-faults --cluster-faults
+format: 1
+name: hatchet
+description: "Hatchet v0.120.5 (task queue and workflows on PostgreSQL) with two engines and three workers: lost, duplicated, early, overlapping, cancelled, cron and DAG runs under kills, pauses, network faults, power cuts and clock steps"
+hydo_version: "0.3"
+
+params:
+  arch: amd64   # amd64 | arm64: the program's architecture, the same as the image's
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 3072   # the importer's guess; two engines, the API, PostgreSQL and three workers
+  clock_start: 1794614400   # 2026-11-14 00:00 UTC, the day of the import
+  clock_after_cut: 60       # hand: leases, schedules and cron ticks compare times across a power cut
+  outcomes_after_cut: true  # hand: the generic rule reads $HYDO_OUTCOMES, also in the recovery boot
+
+data:
+  size_mib: 1024   # hand: the importer gave 2304; a run's PostgreSQL data stays far below
+  dirs: [vol/pgdata, vol/hatchet_config]
+
+root:
+  files:
+    - {src: "../bin/hq-{{arch}}", dst: /bin/hq, mode: "0755"}   # hand: the workers, the client and the rules
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 postgres
+      10.89.0.12 migration
+      10.89.0.13 setup-config
+      10.89.0.14 hatchet-engine-1
+      10.89.0.15 hatchet-engine-2
+      10.89.0.16 hatchet-api
+      10.89.0.18 worker-1
+      10.89.0.19 worker-2
+      10.89.0.20 worker-3
+
+# hand: what every workload command and check sees
+env:
+  HQ_DATABASE_URL: "postgres://hatchet:hatchet@postgres:5432/app?sslmode=disable&connect_timeout=5"
+  HQ_TOKEN_FILE: "/data/vol/hatchet_config/token"
+  HATCHET_CLIENT_SERVER_URL: "http://hatchet-api:8080"
+  HATCHET_CLIENT_TLS_STRATEGY: "none"
+
+services:
+  # Compose service postgres
+  # image postgres:16.16-alpine3.24 = docker.io/library/postgres@sha256:0adbf25a9e96d38823bb813f3ac0ed41fadb665c88f1df7fe6dbfb060cbdc106
+  #   linux/amd64: sha256:a2f7e20374cd8fd8ed4a588b79549e10589bea7b1686e77922f5ac741b80b8a1
+  #   linux/arm64/v8: sha256:40e58641410e030f5769096bca8372f68f243e1859c8ecdf11f227da390d514d
+  - name: postgres
+    image: {x86_64: images/postgres-16.16-alpine3.24-amd64.docker.tar, arm64: images/postgres-16.16-alpine3.24-arm64-oci}
+    image_ref: "postgres:16.16-alpine3.24"
+    cmd: [postgres, "-c", max_connections=400]
+    env:
+      POSTGRES_USER: "hatchet"
+      POSTGRES_PASSWORD: "hatchet"
+      POSTGRES_DB: "hatchet"
+    port: 5432
+    addr: 10.89.0.11
+    ready: "timeout 5 hydo-oci postgres /bin/sh -c 'pg_isready -h 127.0.0.1 -U hatchet -d hatchet'"
+    ready_timeout: 120
+    restart: "always"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/pgdata, dst: /var/lib/postgresql/data, copy_up: true}
+  # Compose service migration: a one-shot job; its command runs in setup_config's command, in the
+  # setup: of hatchet_engine_1
+  # image ghcr.io/hatchet-dev/hatchet/hatchet-migrate:v0.120.5 = ghcr.io/hatchet-dev/hatchet/hatchet-migrate@sha256:1821e30531c1d9ddf490d7a87579e0225a444c0ca8a9488f9ea50a25a8afca76
+  #   linux/amd64: sha256:fe2164ca4173d719a106157977c23d8c5bcd9ca73b1e476754164b14d1f12021
+  #   linux/arm64: sha256:8d1113ce13d80be3238aef5d5aea6c3720ea97a4785e63420249ad364e4f8f87
+  - name: migration
+    image: {x86_64: images/ghcr.io-hatchet-dev-hatchet-hatchet-migrate-v0.120.5-amd64.docker.tar, arm64: images/ghcr.io-hatchet-dev-hatchet-hatchet-migrate-v0.120.5-arm64-oci}
+    image_ref: "ghcr.io/hatchet-dev/hatchet/hatchet-migrate:v0.120.5"
+    entrypoint: [/.hydo/busybox, sleep, "2147483647"]
+    env:
+      DATABASE_URL: "postgres://hatchet:hatchet@postgres:5432/hatchet?sslmode=disable"
+    addr: 10.89.0.12
+    depends_on: [postgres]
+    ready: "true"
+    job: true   # a one-shot job: never a fault target (MANIFEST.md "One-shot jobs")
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+  # Compose service setup-config: a one-shot job (keys, the default tenant, and the API token)
+  # image ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.120.5 = ghcr.io/hatchet-dev/hatchet/hatchet-admin@sha256:67c143b6dc4801d44004ba18c301cc9d9b13bbfd6781758030ae089fd7598bf7
+  #   linux/amd64: sha256:5e36a86a44860774ba419a985fea25bccc0b1b964abfa0a3acbdcabb892175ab
+  #   linux/arm64: sha256:5e164c9be196098e807b313bec0ba10cefc4752ec4633b43502da953706d038e
+  - name: setup_config
+    image: {x86_64: images/ghcr.io-hatchet-dev-hatchet-hatchet-admin-v0.120.5-amd64.docker.tar, arm64: images/ghcr.io-hatchet-dev-hatchet-hatchet-admin-v0.120.5-arm64-oci}
+    image_ref: "ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.120.5"
+    entrypoint: [/.hydo/busybox, sleep, "2147483647"]
+    env:
+      DATABASE_URL: "postgres://hatchet:hatchet@postgres:5432/hatchet?sslmode=disable"
+      SERVER_URL: "http://hatchet-api:8080"
+      SERVER_PORT: "8080"
+      SERVER_AUTH_COOKIE_DOMAIN: "localhost"
+      SERVER_AUTH_COOKIE_INSECURE: "t"
+      SERVER_GRPC_BIND_ADDRESS: "0.0.0.0"
+      SERVER_GRPC_INSECURE: "t"
+      SERVER_GRPC_BROADCAST_ADDRESS: "hatchet-engine-1:7070"
+      SERVER_INTERNAL_CLIENT_INTERNAL_GRPC_BROADCAST_ADDRESS: "hatchet-engine-1:7070"
+      SERVER_MSGQUEUE_KIND: "postgres"
+      SERVER_SECURITY_CHECK_ENABLED: "false"
+      SERVER_LOGGER_LEVEL: "warn"
+      DATABASE_LOGGER_LEVEL: "warn"
+    addr: 10.89.0.13
+    depends_on: [migration]
+    setup: "[ -f /tmp/hydo/job.migration.done ] || { hydo-oci migration /hatchet/hatchet-migrate && : > /tmp/hydo/job.migration.done; }"
+    ready: "true"
+    job: true   # a one-shot job: never a fault target (MANIFEST.md "One-shot jobs")
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/hatchet_config, dst: /hatchet/config, copy_up: true}
+  # Compose services hatchet-engine-1 and hatchet-engine-2
+  # image ghcr.io/hatchet-dev/hatchet/hatchet-engine:v0.120.5 = ghcr.io/hatchet-dev/hatchet/hatchet-engine@sha256:5601cb41b6cfa16ec1dc25b893c7f843109aec4c161ca10dceec199924be6eb7
+  #   linux/amd64: sha256:1c5e6e5bd18aba462af3f31ccf589946111abfbe7a4240afc8e13892637668e1
+  #   linux/arm64: sha256:1c7e3696dbc93a5e76915fdf9b0b30b2fd7f1a5254a75a5dc43db5c66b7b26e5
+  - name: hatchet_engine_1
+    image: {x86_64: images/ghcr.io-hatchet-dev-hatchet-hatchet-engine-v0.120.5-amd64.docker.tar, arm64: images/ghcr.io-hatchet-dev-hatchet-hatchet-engine-v0.120.5-arm64-oci}
+    image_ref: "ghcr.io/hatchet-dev/hatchet/hatchet-engine:v0.120.5"
+    cmd: [/hatchet/hatchet-engine, "--config", /hatchet/config]
+    env:
+      DATABASE_URL: "postgres://hatchet:hatchet@postgres:5432/hatchet?sslmode=disable"
+      SERVER_URL: "http://hatchet-api:8080"
+      SERVER_PORT: "8080"
+      SERVER_AUTH_COOKIE_DOMAIN: "localhost"
+      SERVER_AUTH_COOKIE_INSECURE: "t"
+      SERVER_GRPC_BIND_ADDRESS: "0.0.0.0"
+      SERVER_GRPC_INSECURE: "t"
+      SERVER_GRPC_BROADCAST_ADDRESS: "hatchet-engine-1:7070"
+      SERVER_INTERNAL_CLIENT_INTERNAL_GRPC_BROADCAST_ADDRESS: "hatchet-engine-1:7070"
+      SERVER_MSGQUEUE_KIND: "postgres"
+      SERVER_SECURITY_CHECK_ENABLED: "false"
+      SERVER_LOGGER_LEVEL: "warn"
+      DATABASE_LOGGER_LEVEL: "warn"
+    port: 7070        # hand: the gRPC port the workers use (the import took the image's EXPOSE 8080)
+    addr: 10.89.0.14
+    depends_on: [setup_config, postgres]   # hand: also postgres, for network faults on the link
+    setup: "[ -f /tmp/hydo/job.setup_config.done ] || { hydo-oci setup_config /bin/sh -c '/hatchet/hatchet-admin quickstart --skip certs --generated-config-dir /hatchet/config --overwrite=false && { [ -s /hatchet/config/token ] || { /hatchet/hatchet-admin token create --config /hatchet/config | tail -1 > /hatchet/config/token.new && mv /hatchet/config/token.new /hatchet/config/token; }; }' && : > /tmp/hydo/job.setup_config.done; }"
+    ready: "nc -z -w 2 10.89.0.14 7070"
+    ready_timeout: 120
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/hatchet_config, dst: /hatchet/config, copy_up: true}
+  - name: hatchet_engine_2
+    image: {x86_64: images/ghcr.io-hatchet-dev-hatchet-hatchet-engine-v0.120.5-amd64.docker.tar, arm64: images/ghcr.io-hatchet-dev-hatchet-hatchet-engine-v0.120.5-arm64-oci}
+    image_ref: "ghcr.io/hatchet-dev/hatchet/hatchet-engine:v0.120.5"
+    cmd: [/hatchet/hatchet-engine, "--config", /hatchet/config]
+    env:
+      DATABASE_URL: "postgres://hatchet:hatchet@postgres:5432/hatchet?sslmode=disable"
+      SERVER_URL: "http://hatchet-api:8080"
+      SERVER_PORT: "8080"
+      SERVER_AUTH_COOKIE_DOMAIN: "localhost"
+      SERVER_AUTH_COOKIE_INSECURE: "t"
+      SERVER_GRPC_BIND_ADDRESS: "0.0.0.0"
+      SERVER_GRPC_INSECURE: "t"
+      SERVER_GRPC_BROADCAST_ADDRESS: "hatchet-engine-1:7070"
+      SERVER_INTERNAL_CLIENT_INTERNAL_GRPC_BROADCAST_ADDRESS: "hatchet-engine-1:7070"
+      SERVER_MSGQUEUE_KIND: "postgres"
+      SERVER_SECURITY_CHECK_ENABLED: "false"
+      SERVER_LOGGER_LEVEL: "warn"
+      DATABASE_LOGGER_LEVEL: "warn"
+    port: 7070
+    addr: 10.89.0.15
+    # hand: after hatchet_engine_1, whose setup: runs the one-shot jobs once (the import ran them
+    # in the setup: of each of the three services, which can run at the same time)
+    depends_on: [hatchet_engine_1, postgres]
+    ready: "nc -z -w 2 10.89.0.15 7070"
+    ready_timeout: 120
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/hatchet_config, dst: /hatchet/config, copy_up: true}
+  # Compose service hatchet-api
+  # image ghcr.io/hatchet-dev/hatchet/hatchet-api:v0.120.5 = ghcr.io/hatchet-dev/hatchet/hatchet-api@sha256:27939294f57c41caa16fcb0a6be6436e731509724b1db2820667d4c717d94b52
+  #   linux/amd64: sha256:8d7b7b2534d208a83c9f519303e7d52597c47dd1aa5a69114565b31bfbe17326
+  #   linux/arm64: sha256:a19fffe0fb016d08290762bf1d00a8321d6a295936dc15bea0232ef086489f11
+  - name: hatchet_api
+    image: {x86_64: images/ghcr.io-hatchet-dev-hatchet-hatchet-api-v0.120.5-amd64.docker.tar, arm64: images/ghcr.io-hatchet-dev-hatchet-hatchet-api-v0.120.5-arm64-oci}
+    image_ref: "ghcr.io/hatchet-dev/hatchet/hatchet-api:v0.120.5"
+    cmd: [/hatchet/hatchet-api, "--config", /hatchet/config]
+    env:
+      DATABASE_URL: "postgres://hatchet:hatchet@postgres:5432/hatchet?sslmode=disable"
+      SERVER_URL: "http://hatchet-api:8080"
+      SERVER_PORT: "8080"
+      SERVER_AUTH_COOKIE_DOMAIN: "localhost"
+      SERVER_AUTH_COOKIE_INSECURE: "t"
+      SERVER_GRPC_BIND_ADDRESS: "0.0.0.0"
+      SERVER_GRPC_INSECURE: "t"
+      SERVER_GRPC_BROADCAST_ADDRESS: "hatchet-engine-1:7070"
+      SERVER_INTERNAL_CLIENT_INTERNAL_GRPC_BROADCAST_ADDRESS: "hatchet-engine-1:7070"
+      SERVER_MSGQUEUE_KIND: "postgres"
+      SERVER_SECURITY_CHECK_ENABLED: "false"
+      SERVER_LOGGER_LEVEL: "warn"
+      DATABASE_LOGGER_LEVEL: "warn"
+    port: 8080
+    addr: 10.89.0.16
+    depends_on: [hatchet_engine_1, postgres]   # hand: see hatchet_engine_2
+    ready: "nc -z -w 2 10.89.0.16 8080"
+    ready_timeout: 120
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/hatchet_config, dst: /hatchet/config, copy_up: true}
+  # Compose services app-migrate and worker-1, -2, -3: `hq worker wN`, restart: unless-stopped.
+  # hand: the workers run the static program from root.files (hq picks engine 1 for w1 and
+  # w3 and engine 2 for w2, as the Compose file sets it) (the Compose build's image holds only
+  # that program), and the one-shot job app-migrate runs in their setup:. Each names postgres,
+  # its engine and the API in depends_on, so that the explorer has their links for network faults.
+  - name: worker_1
+    cmd: "/bin/hq worker w1"
+    addr: 10.89.0.18
+    depends_on: [postgres, hatchet_engine_1, hatchet_api]
+    setup: "[ -f /tmp/hydo/job.app_migrate.done ] || { /bin/hq migrate && : > /tmp/hydo/job.app_migrate.done; }"
+    ready: "/bin/hq ready w1"
+    ready_timeout: 120
+    restart: "unless-stopped"
+  - name: worker_2
+    cmd: "/bin/hq worker w2"
+    addr: 10.89.0.19
+    depends_on: [postgres, hatchet_engine_2, hatchet_api]
+    setup: "[ -f /tmp/hydo/job.app_migrate.done ] || { /bin/hq migrate && : > /tmp/hydo/job.app_migrate.done; }"
+    ready: "/bin/hq ready w2"
+    ready_timeout: 120
+    restart: "unless-stopped"
+  - name: worker_3
+    cmd: "/bin/hq worker w3"
+    addr: 10.89.0.20
+    depends_on: [postgres, hatchet_engine_1, hatchet_api]
+    setup: "[ -f /tmp/hydo/job.app_migrate.done ] || { /bin/hq migrate && : > /tmp/hydo/job.app_migrate.done; }"
+    ready: "/bin/hq ready w3"
+    ready_timeout: 120
+    restart: "unless-stopped"
+
+# hand: K=, P=, X= and N= can aim at the engines or the workers as groups
+groups:
+  - name: engines
+    services: [hatchet_engine_1, hatchet_engine_2]
+  - name: workers
+    services: [worker_1, worker_2, worker_3]
+
+# hand: the import's numbered-steps workload and TODO invariant are replaced by the commands in
+# workload/ and the checks in checks/ (RESULTS.md, "The workload" and "The rules")
+workload:
+  steps: 20
+  timeout: 600
+
+test:
+  parallel: 6
+  per_round: 3
+  round_ms: 400
+  command_timeout: 200      # the checks wait for PostgreSQL and the API after a fault
+  drain_timeout: 30
+
+checks:
+  - id: tasks
+    type: messages
+    history: tasks
+    msg: every run whose trigger the engine acknowledged starts, and a scheduled run does not start before its time
+    final: /bin/hq drain
+    acknowledgement: none     # hand: a worker's completion is not a record the client sees
+    claims:
+      delivery: at-least-once   # Hatchet is at least once: "tasks are not silently dropped"
+      delay: per-message        # a scheduled run does not start before its time
+
+errors: false   # hand: Hatchet's engines log transient database errors at error level during every fault
+
+faults: [kill, pause, network, oneway, cut, clock]   # hand: no disk faults (the import listed disk)
+clock_points: ["@:00-1s", "@hour-2s"]

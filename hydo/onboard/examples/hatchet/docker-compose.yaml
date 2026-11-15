@@ -1,0 +1,159 @@
+# hq on Hatchet v0.120.5: PostgreSQL as the store and the message queue (SERVER_MSGQUEUE_KIND:
+# postgres, as in Hatchet's docker-compose.release.yml), two engines, the API, and three worker
+# processes of hq (the example's program on Hatchet's Go SDK). The two engines share the cron and
+# scheduled-run tickers, the controller and scheduler partitions, and the workers.
+# Build the program first: sh build.sh
+x-hatchet-env: &hatchet-env
+  DATABASE_URL: "postgres://hatchet:hatchet@postgres:5432/hatchet?sslmode=disable"
+  SERVER_URL: "http://hatchet-api:8080"
+  SERVER_PORT: "8080"
+  SERVER_AUTH_COOKIE_DOMAIN: "localhost"
+  SERVER_AUTH_COOKIE_INSECURE: "t"
+  SERVER_GRPC_BIND_ADDRESS: "0.0.0.0"
+  SERVER_GRPC_INSECURE: "t"
+  SERVER_GRPC_BROADCAST_ADDRESS: "hatchet-engine-1:7070"
+  SERVER_INTERNAL_CLIENT_INTERNAL_GRPC_BROADCAST_ADDRESS: "hatchet-engine-1:7070"
+  SERVER_MSGQUEUE_KIND: "postgres"
+  SERVER_SECURITY_CHECK_ENABLED: "false"
+  SERVER_LOGGER_LEVEL: "warn"
+  DATABASE_LOGGER_LEVEL: "warn"
+
+x-worker-env: &worker-env
+  HQ_DATABASE_URL: "postgres://hatchet:hatchet@postgres:5432/app?sslmode=disable&connect_timeout=5"
+  HQ_TOKEN_FILE: "/hatchet/config/token"
+  HATCHET_CLIENT_SERVER_URL: "http://hatchet-api:8080"
+  HATCHET_CLIENT_TLS_STRATEGY: "none"
+
+services:
+  postgres:
+    image: postgres:16.16-alpine3.24
+    command: ["postgres", "-c", "max_connections=400"]
+    environment:
+      POSTGRES_USER: hatchet
+      POSTGRES_PASSWORD: hatchet
+      POSTGRES_DB: hatchet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U hatchet -d hatchet"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+  migration:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-migrate:v0.120.5
+    command: ["/hatchet/hatchet-migrate"]
+    environment:
+      DATABASE_URL: "postgres://hatchet:hatchet@postgres:5432/hatchet?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  setup-config:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.120.5
+    command:
+      - /bin/sh
+      - -c
+      - >-
+        /hatchet/hatchet-admin quickstart --skip certs --generated-config-dir /hatchet/config --overwrite=false &&
+        { [ -s /hatchet/config/token ] ||
+          { /hatchet/hatchet-admin token create --config /hatchet/config | tail -1 > /hatchet/config/token.new &&
+            mv /hatchet/config/token.new /hatchet/config/token; }; }
+    environment: *hatchet-env
+    volumes:
+      - hatchet_config:/hatchet/config
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+
+  hatchet-engine-1:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-engine:v0.120.5
+    command: ["/hatchet/hatchet-engine", "--config", "/hatchet/config"]
+    environment: *hatchet-env
+    volumes:
+      - hatchet_config:/hatchet/config
+    depends_on:
+      setup-config:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  hatchet-engine-2:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-engine:v0.120.5
+    command: ["/hatchet/hatchet-engine", "--config", "/hatchet/config"]
+    environment: *hatchet-env
+    volumes:
+      - hatchet_config:/hatchet/config
+    depends_on:
+      setup-config:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  hatchet-api:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-api:v0.120.5
+    command: ["/hatchet/hatchet-api", "--config", "/hatchet/config"]
+    environment: *hatchet-env
+    volumes:
+      - hatchet_config:/hatchet/config
+    depends_on:
+      setup-config:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  app-migrate:
+    build: .
+    command: ["migrate"]
+    environment: *worker-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  worker-1:
+    build: .
+    command: ["worker", "w1"]
+    environment:
+      <<: *worker-env
+      HATCHET_CLIENT_HOST_PORT: "hatchet-engine-1:7070"
+    volumes:
+      - hatchet_config:/hatchet/config:ro
+    depends_on:
+      app-migrate:
+        condition: service_completed_successfully
+      hatchet-engine-1:
+        condition: service_started
+    restart: unless-stopped
+
+  worker-2:
+    build: .
+    command: ["worker", "w2"]
+    environment:
+      <<: *worker-env
+      HATCHET_CLIENT_HOST_PORT: "hatchet-engine-2:7070"
+    volumes:
+      - hatchet_config:/hatchet/config:ro
+    depends_on:
+      app-migrate:
+        condition: service_completed_successfully
+      hatchet-engine-2:
+        condition: service_started
+    restart: unless-stopped
+
+  worker-3:
+    build: .
+    command: ["worker", "w3"]
+    environment:
+      <<: *worker-env
+      HATCHET_CLIENT_HOST_PORT: "hatchet-engine-1:7070"
+    volumes:
+      - hatchet_config:/hatchet/config:ro
+    depends_on:
+      app-migrate:
+        condition: service_completed_successfully
+      hatchet-engine-1:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  hatchet_config:

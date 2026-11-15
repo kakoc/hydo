@@ -1,0 +1,3 @@
+#!/bin/sh
+# schedule a run of sched 0.5 to 4.5 s ahead through the API
+exec /bin/hq op sched

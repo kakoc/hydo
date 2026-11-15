@@ -1,0 +1,3 @@
+#!/bin/sh
+# trigger the DAG order: a, then b, then c
+exec /bin/hq op dag

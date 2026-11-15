@@ -1,0 +1,4 @@
+FROM scratch
+ARG TARGETARCH
+COPY bin/hq-${TARGETARCH} /hq
+ENTRYPOINT ["/hq"]

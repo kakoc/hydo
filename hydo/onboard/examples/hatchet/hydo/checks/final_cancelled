@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: a run whose cancellation the API confirmed does not complete afterwards
+exec /bin/hq check cancelled

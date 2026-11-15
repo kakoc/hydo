@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: the rate-limited task starts at most 2 times per second
+exec /bin/hq check rate

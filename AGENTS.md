@@ -428,6 +428,17 @@ every hvx run, and `native/` reproduces it with Docker. No upstream report names
 was posted. A forward clock step longer than River's 15 s lease gives two leaders too, with any
 table: a clock effect. The runs used hvx only.
 
+**The promises of Hatchet, a task queue (M250).** Hatchet v0.120.5 runs with two engines, the API
+and three workers of a small Go program on PostgreSQL 16, which is also Hatchet's message queue,
+in `hydo/onboard/examples/hatchet` (RESULTS.md). It was started with `hydo onboard` from its
+Compose file. A messages check and ten rules state Hatchet's promises. Examples are no lost
+acknowledged run, one run per cron tick and per scheduled run, concurrency and rate limits, DAG
+order, and cancellations that hold. One new candidate breaks the first rule. Hatchet's PostgreSQL
+queue sets a message `ASSIGNED` when an engine reads it and never gives it back. After a crash of
+that engine, acknowledged scheduled runs and triggers never run, and finished runs run again. The
+regression `K=hatchet_engine_1@6+3` fails on every hvx run, and `native/` reproduces the loss with
+Docker. No upstream report names it, and nothing was posted. The runs used hvx only.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -1192,6 +1203,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     image each of the two workers logged `HVX_HC_PUT: No space left on device` 46 times, and the
     runs still finished. `hydo run` of the same image logged none. Not investigated.
 
+121. What the Hatchet onboarding lacked (M250). A service without `image:` cannot have its own
+    `env:`. YAML anchors in `hydo.yaml` stop `hydo build` with `unexpected indentation`. The import
+    took a gRPC server's port and readiness check from the image's `EXPOSE`. It ran one-shot jobs
+    in the `setup:` of several services that start together. Links through one-shot jobs are lost
+    (as items 97 and 111). `fetch-images.sh` stops on a machine without Docker for `build:`
+    services. `hydo onboard` writes `AGENTS.md` and `.gitignore` into the project. A run's verdict
+    names one broken rule. The example ran on hvx only: the Mac engine and KVM were not tried.
+    In the exploration's seed 1, a worker did not start in the recovery boot after a backward
+    clock step; its log was not read. The faults of seed 2 were not separated.
+
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -1677,6 +1698,12 @@ build machine, before 2026-10-13.
   React example `web-shop` gave one fingerprint per schedule; its flaky test fails on every run of
   one `H=` delay and passes without it; its stuck spinner was found blind. hydo-build leaves out
   layer entries with a backslash in the name. Nothing recorded moved
+- M250 (tentative number): the Hatchet onboarding (a task queue and workflow engine on
+  PostgreSQL), started with `hydo onboard` and run on hvx. A crash of an engine loses the messages
+  it read from Hatchet's PostgreSQL queue: acknowledged scheduled runs and triggers never run, and
+  finished runs run again. Reproduced with Docker, no upstream report found. A cancelled run that
+  becomes `COMPLETED` (issue #2655) and a scheduled run that runs twice (issue #4129) are known.
+  Nothing recorded moved
 
 ## Where to look
 

@@ -10458,3 +10458,85 @@ through `browser:`; `hydo build`'s fetch of a missing Playwright image (the imag
 fetched with `hydo-fetch-image` by the same digest). The watcher uses the instrumentation
 interface of Playwright's own runner,
 which a new Playwright version may change.
+### Milestone 250 (tentative number) - DONE (Hatchet, a task queue and workflow engine on PostgreSQL, onboarded with `hydo onboard` and hunted on hvx; a crash of an engine loses the messages it read from Hatchet's PostgreSQL queue, so acknowledged scheduled runs and triggers never run and finished runs run again; reproduced with Docker, no upstream report found; a cancelled run that becomes COMPLETED and a scheduled run that runs twice are known; nothing recorded moved; 2026-11-15)
+
+**In short.** Hatchet v0.120.5, the newest tag with images (2026-11-13), runs in
+`hydo/onboard/examples/hatchet` (RESULTS.md) with two engines, the API, and three workers of
+`hq`, a small Go program on Hatchet's Go SDK, on PostgreSQL 16.16. PostgreSQL is also Hatchet's
+message queue (`SERVER_MSGQUEUE_KIND: postgres`), as in Hatchet's release Compose file and in
+Hatchet Lite. The folder was started as a new user would: a Compose file, then `hydo onboard`.
+The workload triggers plain runs, runs with a concurrency key and with a rate limit, a DAG of
+three tasks, scheduled runs (one, or ten for one instant), and runs that it cancels; a cron task
+runs every 2 s.
+
+The rules state Hatchet's documented promises: a `type: messages` check (no acknowledged run
+lost, no scheduled run before its time) and ten rules over the workers' run records (the generic
+rule over the producer's acknowledged triggers; one run per cron tick and per scheduled run; no
+early run; one run at a time per concurrency key; the rate limit; DAG order; a confirmed
+cancellation stays; and, classified per duplicate, no overlapping and no repeated execution of
+a finished task run). `hydo rules scan` over Hatchet's documentation, schema and API listed the
+evidence, and `hydo rules check --mutate` judged the rules without faults
+(`hydo/rules.yaml`).
+
+**What was found.**
+
+- A Hatchet bug, new as far as the search found. Hatchet's PostgreSQL queue
+  (`internal/msgqueue/postgres/msgqueue.go`, `pkg/repository/sqlcv1/mq.sql`) sets the messages it
+  reads to `ASSIGNED` in one committed statement, handles them, and then deletes them. No query
+  sets an `ASSIGNED` message back to `PENDING`, and there is no visibility timeout, so a batch that
+  an engine read and did not acknowledge before it crashed stays until it expires after 5 minutes.
+  For a `task-trigger` message the run is never created. A scheduled run's schedule was deleted
+  when its trigger was sent, so an acknowledged scheduled run is lost; a `RunNoWait` that is not
+  scheduled at once (the optimistic path) and every cron tick go the same way. A lost
+  `task-completed` message makes a finished run run again. On hvx the directed kills of an engine
+  lost acknowledged runs at several kill points of each image. Natively (`native/`, the example's
+  Compose file on Docker), 4 of 8 SIGKILLs of an engine that read the queue alone lost 10 to 95 of
+  150 scheduled runs, 2 of 19 with both engines running lost 28 and 2, and no SIGTERM and no
+  control lost one; every lost run's trigger message stayed `ASSIGNED`. The search of Hatchet's
+  issues, pull requests, discussions, CHANGELOG and the history of both files found no report.
+  Issue #4129 (scheduled-run trigger not atomic) and pull request #4543 (an outbox for OLAP
+  messages) are close and not the same. Nothing was posted.
+- Known, in a new path: after a crash of an engine a cancelled run became `COMPLETED`. `hydo
+  inspect exec` read `v1_task_event`: `CANCELLED`, then `COMPLETED` for the same attempt, from a
+  worker that never got the cancellation. Issue #2655 reports that the engine takes such a
+  completion (fixed in the TypeScript SDK only).
+- Known: a crash of an engine ran a scheduled run twice (issue #4129).
+- What held: one run per cron tick, no early cron or scheduled run, the concurrency key, the rate
+  limit, DAG order, and no task run executed twice at once, in every run.
+
+**Runs.** Every hydo run used hvx on the bare-metal machine, with this tree's `hydo` in a copy
+of the 0.3.3 Linux release, one VM at a time, at a load of 12 to 28 from other sessions.
+
+| what | runs | result |
+|---|---|---|
+| directed kills of each engine, `K=hatchet_engine_N@S+3`, on four images | 39 | lost acknowledged runs in 7 (at 5 kill points), a cancelled run completed in 5, a scheduled run ran twice in 5, a finished run ran again in most of these; the failing kill points move with each image |
+| the final image: `disk=none \| run`, twice | 2 | OK, `2d17c0c77d838bbd` both times |
+| the regression `lost-run-after-engine-crash` (`K=hatchet_engine_1@6+3`), twice on the final image, once on the image before it (only the regression's line differs, with the same length, and `disk=none \| run` gives one fingerprint on both), and `hydo repro --regressions` | 4 | VIOLATION `[acked]` (`b10_4` and `b10_5` never ran), `a2ef47c5068b01ba` each time; 1 of 1 as expected |
+| `hydo rules check rules.yaml --mutate` | 4 | 10 hold, 1 messages rule not run by it, 5 of 5 changes caught |
+| `P=hatchet_engine_1@3~0:15000` | 1 | OK |
+| `hydo inspect exec` of the cancelled run at the end of a run | 1 | `CANCELLED`, then `COMPLETED` in `v1_task_event` |
+| `hydo explore --strategy process --new-faults --more-faults --cluster-faults --no-shrink --time-limit 1800` on the final image | 3 seeds and the 2 failures again | seed 2 (`K=postgres@4+3` with a partition and a pause): a DAG acknowledged and never completed, and a rerun (not separated); seed 1: `worker_1` did not start in the recovery boot after `T=13:-300` and a power cut (cause not read) |
+| `native/measure.sh` on the Mac (Docker 28.4), four series | 27 SIGKILLs, 27 SIGTERMs, 27 controls | lost runs after 6 SIGKILLs (4 of 8 with the stopped engine alone, 2 of 19 with both engines), none after a SIGTERM or without a stop; 6 earlier probes with a first script lost runs in 3 crashes |
+
+**Goldens and tests.** On the bare-metal machine, in a copy of this tree with its own index
+(Rust 1.90.0): the explorer's identity goldens (quick and full) and corpus golden, and the core
+controller's corpus golden, are re-recorded for the new example (`HYDO_BLESS=1`) and then pass
+without it. Before the re-recording, the explorer's `identity::` and `corpus::` failed only with
+`new input: hydo/onboard/examples/hatchet/...`. The full identity golden only grew (the example's
+inputs); the quick one samples every fifth group, so a new example moves which groups it holds.
+The core controller's golden gained two lines, the example's input and `not core: restart
+policies`. The re-recording ran on `main` at `6aeaf271` with this milestone on top, so it takes
+`main`'s goldens and adds only this example. `public_content::` and `test_tiers::` pass,
+`sh ci/consolidate-tests.sh --check` passes, and `sh ci/vale.sh` has no findings. No Rust code
+changed. The answer files of the `hydo-manifest` and `hydo-build` equivalence tests read the
+tracked manifests only when they are re-recorded, so they do not hold this example yet; they
+were not re-recorded here, because their answers depend on the host's `/nix/store` (open item
+115) and the re-recording belongs on the Mac.
+
+**Open.** Open item 121: a service without `image:` has no `env:`, YAML anchors stop `hydo
+build` with a wrong message, the import's port and readiness from `EXPOSE`, one-shot jobs run in
+several `setup:` at once, links through one-shot jobs, `fetch-images.sh` without Docker,
+`hydo onboard` writes `AGENTS.md` and `.gitignore` into the project, and a verdict that names one
+broken rule. The example ran on hvx only. Not done: the faults of the exploration's seed 2 were
+not separated, the worker that did not start in seed 1's recovery boot was not explained, and the
+cancelled run that completed was not reproduced without hydo.

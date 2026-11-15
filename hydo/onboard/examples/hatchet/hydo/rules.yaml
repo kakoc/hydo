@@ -1,0 +1,94 @@
+# The rules proposed from Hatchet's documentation (hydo rules scan over its docs, schema and API),
+# validated with `hydo rules check rules.yaml --mutate` on runs without faults (RESULTS.md, "The
+# rules"). Each rule runs one `hq check <rule>` over the workers' run records in the database `app`.
+format: 1
+rules:
+  - id: acked
+    says: Every trigger the engine acknowledged runs to completion, and no trigger that failed runs.
+    kind: command
+    confidence: high
+    evidence:
+      - {file: frontend/docs/content/docs/v1/architecture-and-guarantees.mdx, line: 105, quote: "Hatchet is at least once: tasks are not silently dropped"}
+    run: /bin/hq check acked
+    cases: /bin/hq cases acked
+    mutate: /bin/hq mutate acked
+  - id: cron
+    says: A cron tick runs once; a tick that the engine misses is skipped, never replayed or doubled.
+    kind: command
+    confidence: high
+    evidence:
+      - {file: frontend/docs/content/docs/v1/cron-runs.mdx, line: 215, quote: "If the engine is down when a cron is due, that occurrence is skipped ... It does not replay the ticks"}
+    run: /bin/hq check cron
+    cases: /bin/hq cases cron
+    mutate: /bin/hq mutate cron
+  - id: scheduled
+    says: A scheduled run runs once.
+    kind: command
+    confidence: high
+    evidence:
+      - {file: frontend/docs/content/docs/v1/scheduled-runs.mdx, line: 181, quote: "A scheduled run that comes due while the engine is down still runs once"}
+    run: /bin/hq check scheduled
+    cases: /bin/hq cases scheduled
+    mutate: /bin/hq mutate scheduled
+  - id: early
+    says: A cron or scheduled run does not start before its time.
+    kind: command
+    confidence: medium
+    evidence:
+      - {file: frontend/docs/content/docs/v1/scheduled-runs.mdx, line: 24, quote: "The scheduled time is when Hatchet enqueues the task"}
+    run: /bin/hq check early
+    cases: /bin/hq cases early
+  - id: concurrency
+    says: With GROUP_ROUND_ROBIN and max runs 1, two runs of one key never run at the same time.
+    kind: command
+    confidence: high
+    evidence:
+      - {file: frontend/docs/content/docs/v1/concurrency.mdx, line: 56, quote: "If no slots are available, the new task or workflow is added to a queue for its key."}
+    run: /bin/hq check concurrency
+    cases: /bin/hq cases concurrency
+    mutate: /bin/hq mutate concurrency
+  - id: dag
+    says: A DAG task starts only after its parents completed successfully.
+    kind: command
+    confidence: high
+    evidence:
+      - {file: frontend/docs/content/docs/v1/directed-acyclic-graphs.mdx, line: 76, quote: "those parent tasks must complete successfully before the child task is allowed to run"}
+    run: /bin/hq check dag
+    cases: /bin/hq cases dag
+    mutate: /bin/hq mutate dag
+  - id: rate
+    says: The static rate limit of 2 per second holds (at most 4 starts in any second, two windows).
+    kind: command
+    confidence: medium
+    evidence:
+      - {file: frontend/docs/content/docs/v1/rate-limits.mdx, line: 88, quote: "If a step run exceeds the rate limit, Hatchet re-queues the step run until the rate limit is no longer exceeded."}
+    run: /bin/hq check rate
+    cases: /bin/hq cases rate
+  - id: cancelled
+    says: A run whose cancellation the API confirmed stays cancelled and does not complete afterwards.
+    kind: command
+    confidence: medium
+    evidence:
+      - {file: frontend/docs/content/docs/v1/cancellation.mdx, line: 14, quote: "Hatchet sends a cancellation signal to the task"}
+    run: /bin/hq check cancelled
+    cases: /bin/hq cases cancelled
+  - id: overlap
+    says: One task run is not executed by two workers at the same time.
+    kind: command
+    confidence: low
+    evidence: [the at-least-once guarantee allows a second execution after a failure, not two at once]
+    run: /bin/hq check overlap
+    cases: /bin/hq cases overlap
+  - id: rerun
+    says: A task run that a worker finished successfully is not started again.
+    kind: command
+    confidence: low
+    evidence: [at least once allows a rerun after a crash mid-run, not after a reported completion]
+    run: /bin/hq check rerun
+    cases: /bin/hq cases rerun
+  - id: tasks
+    says: Every acknowledged trigger starts on a worker, and a scheduled run not before its time.
+    kind: messages
+    confidence: high
+    evidence:
+      - {file: frontend/docs/content/docs/v1/architecture-and-guarantees.mdx, line: 105, quote: "tasks are not silently dropped"}
