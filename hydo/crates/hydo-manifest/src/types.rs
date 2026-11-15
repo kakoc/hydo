@@ -65,6 +65,9 @@ pub struct Guest {
     pub cpu_cache: Option<bool>,
     pub clock_start: Option<Value>,
     pub clock_after_cut: Option<i64>,
+    /// `guest.kernel` (Milestone 256): a guest kernel variant (`containers`), recorded in the
+    /// image's record (`hydo_image::ImageRecord::kernel_variant`). None: the engine's usual kernel.
+    pub kernel: Option<String>,
 }
 
 impl Guest {
@@ -80,6 +83,7 @@ impl Guest {
             cpu_cache: get("cpu_cache").and_then(Value::as_bool),
             clock_start: get("clock_start").cloned(),
             clock_after_cut: i_of(get("clock_after_cut")),
+            kernel: get("kernel").and_then(Value::as_str).map(str::to_string),
         }
     }
 }

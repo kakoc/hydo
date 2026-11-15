@@ -11164,3 +11164,95 @@ recorded moved.
 `hydo-manifest`, `hydo-build`, `hydo`, `hydo-config` (inventory), `hydo-agents`
 (`public_content::`, `skill_check::`), `hydo-release` (`test_tiers::`) and
 `hydo-schema-compat`; `sh ci/consolidate-tests.sh --check`; `sh ci/vale.sh`.
+### Milestone 256 (tentative number) - PARTLY DONE (the guest kernel for containers: `guest.kernel: containers`, an opt-in format-1 key named in the image record as `kernel_variant`, gives the Mac engine `Image-explore-containers` and the KVM engine `bzImage-kvm-containers` and `bzImage-kvm-smp-containers`, each built twice; on the Mac engine runc, overlayfs, NAT, conntrack and ipsets work in the guest, but k3s's boot stops with SPIN in a loop without VM exits (open item 13), so the two-leaders finding was not repeated there; KVM runs in the one-off workflow `tmp-k3s-kvm`; nothing recorded moved, and the epoch stays 3; 2026-11-15)
+
+**Why.** Milestone 246 ran k3s on hvx, whose distribution kernel has every option k3s needs. The
+Mac and KVM engines boot small kernels built from `allnoconfig` and a short list. They lack the
+namespaces, seccomp, the memory and pids controllers, overlayfs, connection tracking and NAT. The
+design (`docs/design/k3s-in-guest.md`) chose an opt-in kernel variant that moves no recorded value.
+
+**The key and the record.** `guest.kernel: containers` is a format-1 addition (the schema's
+`KernelVariant`; any other value is refused). `hydo build` writes `kernel_variant: "containers"`
+into `/etc/hydo/image.json` (an addition to `hydo/schema/image-v1.json`). An image without the
+key gets a record without the field, so its bytes do not change.
+
+- The Mac engine: the record names `Image-explore-containers` by sha256, with or without service
+  networks, and `/etc/hydo/kernel` names it too. The run code does not change.
+- KVM: the record names hvx's `bzImage`, as for every x86_64 image. `hydo_kvm::kernel::twin_for`
+  takes the record's variant and picks `bzImage-kvm-containers` or, with `--vcpus N`,
+  `bzImage-kvm-smp-containers`. A variant this hydo does not know is refused before any VM.
+- hvx: the key changes nothing. hvx's kernel has the options, the network ones as modules, which
+  an image loads itself. The key is not refused, so one x86_64 image runs on hvx and KVM.
+
+`root.files` now copies a symbolic link whose target is not on the build machine (a link to
+`/run` or to `/opt/...` built on a Mac). Before, `hydo build` refused it as a missing file, so no
+image that built before changes.
+
+**The kernels.** Each variant takes the list of the kernel with cgroups for its engine
+(Milestone 234), drops the options its own list names, and appends that list:
+`hv/hvm/explore/hvm-containers.config` (`build-guest-containers.sh`) and
+`hv/kvm/linux/hydo-kvm-containers.config` (`kernel-containers.nix`, `CONTAINERS=1 sh
+hv/kvm/linux/build-kernel.sh`). The lists add the UTS, IPC, PID and user namespaces, seccomp,
+POSIX message queues, keys, the memory and pids controllers, cgroup BPF, overlayfs, dummy and
+VXLAN interfaces, bridge netfilter, connection tracking, NAT, the iptables tables and matches of
+k3s-lease's module list, IPv6 tables, nftables and ipsets. The cpuset controller needs SMP, so
+only the Mac kernel and the SMP KVM kernel have it. Every option is built in, and every `=y` line
+was checked in the result. On the bare-metal machine:
+
+| kernel | built | sha256 |
+|---|---|---|
+| `Image-explore-containers` | twice, two directories, the same bytes | `b6211b80d1faa0e4542b244d5f481998a38add8f24fe713938128f3e9728e86a` |
+| `bzImage-kvm-containers` | `nix-build` (no sandbox) | `0c9c1c9531eda025e096c60530055a556a7f25754376c260b17482066808f4fe` |
+| `bzImage-kvm-smp-containers` | `nix-build` (no sandbox) | `6f85c1c5efc381afbbdf8845d44603258223e7dfdec9260ce5bf4956f271250c` |
+
+The `nix-build --check` of each KVM kernel gave the same `vmlinux` and `.config` and another
+`bzImage`, as Milestones 159 and 234 saw outside Nix's sandbox. The one-off workflow
+`tmp-k3s-kvm` builds both in a sandboxed Nix twice and compares them with these pins. The RDTSC
+audit of each `vmlinux` lists the same 10 sites as `bzImage-kvm-cg`'s. k3s's `check-config` on
+the three `.config` files reports only options for cgroup v1, IPVS, the IPsec of flannel's
+encrypted backends, and `CONFIG_IP_NF_TARGET_REDIRECT`, whose target the lists have under its
+new name. Both releases list the kernels (`assets.sha256`, `third-party.json`,
+`build-release.sh`).
+
+**The example.** `hydo/onboard/examples/k3s-lease/containers/` holds a second manifest, so the hvx
+image of `../hydo.yaml` keeps its bytes. Its `fetch-k3s.sh` fetches k3s v1.37.2+k3s1 for arm64
+or amd64 and unpacks it, in a Docker container of that architecture when the machine is another.
+The pods mount k3s's tools through the link `/opt/k3s/bin`. `probe.yaml` checks the kernel
+without k3s, with k3s's own runc, iptables, ipset and busybox: 16 checks.
+
+**The Mac engine.** The 0.3.3 release's guest files and this tree's programs, one VM at a time:
+
+| image | schedule | runs | fingerprint | verdict |
+|---|---|---|---|---|
+| `probe.yaml` (`610fea05…`, built twice to these bytes) | `disk=none \| run` | 2 | `bc9b021a4c1cc0c0` | OK, 16 of 16 checks |
+| the same without `guest.kernel` | `disk=none \| run` | 1 | `51d0dceb26e3d9b0` | VIOLATION, 13 checks fail |
+| `containers/hydo.yaml` (`50c600fa…`) | `disk=none \| run` | 2 | none | `ERROR boot: SPIN`, at VM exit 51,150 both times |
+
+In the probe, runc ran busybox as PID 1 of its own PID namespace, with the host name `runc`,
+`memory.max` 67108864 and `pids.max` 64. runc needs `--no-pivot` there, because the image's
+root is the initramfs and the kernel refuses `pivot_root` from it.
+
+k3s did not become Ready on the Mac engine. Its setup ran, and k3s started. A frame-pointer walk
+at the stop (a debugging change of hydo-hvm, not kept) showed a thread in `runtime.selectgo`,
+called from kine v0.17.1's `(*watcher).watch` (`pkg/server/watch.go`). The thread makes no VM
+exits, so the Mac engine's exit clock gives no timer interrupt, and the thread it waits for never
+runs. The loop's state changes in every pass (`select` draws a random order), so the spin
+observer cannot prove a cycle. With `HVM_SPIN_SECS=120` the run was still in the loop after 10
+minutes. With k3s's embedded etcd (`--cluster-init`) the boot reached 119.5 s of guest time and
+stopped in another such loop. This is open item 13. On hvx the PMU clock interrupts such loops.
+
+**Nothing recorded moved.** On the Mac, `hydo-bench rebaseline --check --build-only --only
+hvm/redis,hvm/redis-bridge,hvm/ledger` built the three images with the recorded bytes
+(`073c0b9f…`, `0b5837c4…`, `0af6b72a…`). Then `--check --only
+hvm/redis,hvm/ledger` ran their 14 recorded schedules, each with the recorded fingerprint, control
+transcript hash and verdict, and the first schedule of each image in the worker pool too. The code paths of an image without the key
+are those of before: the record has no `kernel_variant`, and `twin_for` with no variant picks
+the builds of Milestone 234.
+
+**Checks.** `cargo fmt --all --check`, `cargo clippy --locked --workspace --all-targets -- -D
+warnings`, `sh ci/consolidate-tests.sh --check`, the tests of hydo-image, hydo-kvm, hydo-engine,
+hydo-build, hydo-manifest, hydo-release (with `test_tiers`), hydo-config (the inventory),
+hydo-schema-compat, hydo-agents (`public_content::`), hydo-control and hydo (`docs::`), and `sh
+ci/vale.sh`. The answers of hydo-build's and hydo-manifest's equivalence tests and the CLI's
+golden are re-recorded: the list of known `guest` keys, the guide's hashes, and the pinned inputs
+(the release lists, and files of earlier milestones that the answers did not list yet).

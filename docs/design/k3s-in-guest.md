@@ -2,8 +2,12 @@
 
 Status: an experiment, Milestone 246 (tentative number), 2026-11-14. k3s runs in the guest on
 hvx with no change to hydo, to the hvx module, or to the guest kernel. The example is
-`hydo/onboard/examples/k3s-lease`, and its measurements are in its `RESULTS.md`. The Mac and
-KVM engines cannot run k3s: their guest kernels lack what it needs.
+`hydo/onboard/examples/k3s-lease`, and its measurements are in its `RESULTS.md`.
+
+Milestone 256 (tentative number), 2026-11-15, built the kernel variant of the section "The Mac
+and KVM engines" below: `guest.kernel: containers`. With it, containers run on the Mac engine.
+k3s itself does not start there: a loop of k3s's makes no VM exits, and the Mac engine cannot
+interrupt such a loop (section "The variant, as built").
 
 ## The question
 
@@ -90,7 +94,68 @@ bytes, the KVM ones with a sandboxed Nix on GitHub's runners (`docs/BUILD-PINS.m
 is the cost of the four kernels of Milestone 234 again, and it was not spent here. The k3s
 binary exists for arm64 too, so the Mac engine could run the same example with such a variant.
 
-## What the image holds
+## The variant, as built (Milestone 256)
+
+The manifest key `guest.kernel: containers` is a format-1 addition. `hydo build` writes the
+variant into the image's record as `kernel_variant`. An image without the key has a record
+without the field, so its bytes do not change.
+
+| engine | kernel | what the key does |
+|---|---|---|
+| the Mac engine | `Image-explore-containers` (`b6211b80…`) | the record names this kernel by sha256 |
+| KVM, 1 vCPU | `bzImage-kvm-containers` (`0c9c1c95…`) | `twin_for` picks it by the record's `kernel_variant` |
+| KVM, 2 to 8 vCPUs | `bzImage-kvm-smp-containers` (`6f85c1c5…`) | the same, with the cpuset controller |
+| hvx | its one `bzImage` | nothing: the kernel has every option, the network ones as modules |
+
+Each variant takes the list of the kernel with cgroups for its engine, drops the options that
+its own list names, and appends that list (`hv/hvm/explore/hvm-containers.config`,
+`hv/kvm/linux/hydo-kvm-containers.config`). The lists hold every `y` option of the first table,
+and `CONFIG_DUMMY`, `CONFIG_NF_CT_NETLINK`, and the nftables options. Every option is built in.
+Pressure accounting (`CONFIG_PSI`) stays off. The KVM engine's one-vCPU kernel has no cpuset
+controller, because that controller needs SMP; the kubelet uses only the controllers that the
+kernel has. `docs/BUILD-PINS.md` "The guest kernels for containers" has the pins and how each
+kernel was built twice.
+
+On hvx the key changes nothing. hvx's guest kernel has all these options, so it needs no variant,
+and the key is not refused: an x86_64 image with the key runs on hvx and on KVM. An image for hvx
+that needs the network options carries their modules and loads them itself, as `../hydo.yaml`
+of the example does.
+
+**The probe.** `hydo/onboard/examples/k3s-lease/containers/probe.yaml` checks the kernel without
+k3s, with k3s's own `runc`, `iptables`, `ipset` and `busybox`. It runs 16 checks:
+
+- the cpu, memory and pids controllers, and overlayfs;
+- a container that runc starts with a memory and a pids limit;
+- NAT through iptables-legacy, iptables-nft and ip6tables;
+- the conntrack, comment, multiport, statistic and mark matches;
+- connection tracking, bridged traffic through iptables, ipsets, and VXLAN.
+
+On the Mac engine, with the key, all 16 passed, and two runs gave one fingerprint,
+`bc9b021a4c1cc0c0`. The same image without the key failed 13 of them: its kernel has only the
+cpu controller, no overlayfs, no NAT table, and no nftables.
+
+The container ran as PID 1 of its own PID namespace, with the host name `runc`, `memory.max`
+67108864 and `pids.max` 64. On the Mac engine runc needs `--no-pivot`: the image's root is the
+initramfs, and the kernel refuses `pivot_root` from it. containerd has the same option
+(`no_pivot`).
+
+**k3s on the Mac engine.** The image of `containers/hydo.yaml` boots the variant, and k3s's setup
+runs: the cgroup v2 mount, the overlay over k3s's files and the dummy interface. Then the boot
+stops with `ERROR boot: SPIN` at 31 s of guest time (VM exit 51,150). One thread of k3s runs in
+`runtime.selectgo`, called from the watcher of kine (k3s's SQLite store, kine v0.17.1,
+`pkg/server/watch.go`), and makes no VM exits. The Mac engine's clock counts VM exits, so no
+timer interrupt comes, the kernel never preempts the thread, and the thread it waits for never
+runs (open item 13). The loop draws a new random number in every pass, so the engine's spin
+observer cannot prove it a cycle. With `HVM_SPIN_SECS=120` the run was still in the loop after
+10 minutes. With k3s's embedded etcd (`--cluster-init`) the boot reached 119.5 s of guest time
+and stopped in another such loop. On hvx the PMU clock interrupts such loops, so k3s runs there.
+
+**k3s on KVM.** The one-off workflow `tmp-k3s-kvm` builds the two KVM kernels in a sandboxed
+Nix on a GitHub runner and runs the probe and k3s on KVM with 1 and 2 vCPUs. The KVM engine's
+clock also counts VM exits, so k3s's loop can stop the boot there too. `docs/HISTORY.md`
+Milestone 256 has the results.
+
+
 
 k3s expects a writable Linux host. hydo's image has a read-only root, a data disk on `/data`,
 and only the loopback interface. The example bridges the gap in its `k3s-setup.sh`, which runs
@@ -183,7 +248,8 @@ The results, on hvx with one vCPU (the example's `RESULTS.md` has every fingerpr
 
 ## What is left
 
-- The Mac and KVM engines: the kernel variant of this page, with its pins.
+- k3s on the Mac engine: a loop without VM exits stops its boot (open item 13). The kernel
+  variant is built; the engine needs a deterministic way to interrupt such a loop.
 - `guest.modules:` in hydo, so that a project names modules and the release supplies them.
 - Faults on pods by name. hydo's faults name services, and here the only service is k3s. A
   kill of one pod is a knob of the example's own workload.

@@ -197,6 +197,14 @@ pub struct ImageRecord {
     /// agent); arm64 images are their own initramfs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initrd: Option<FileRef>,
+    /// The guest kernel variant the manifest asked for with `guest.kernel` (Milestone 256):
+    /// `containers`, a kernel with what containers and Kubernetes need, on the Mac and KVM
+    /// engines (`hydo_image::kernels::CONTAINERS`). Absent: the kernel of the image's epoch. On
+    /// arm64 `kernel` names the variant's file too; on x86_64 `kernel` names hvx's kernel, which
+    /// has those options already, and the KVM engine picks its build of the variant by this
+    /// field. An image without the key has no field, so its record keeps its bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kernel_variant: Option<String>,
 }
 
 /// The hydo that built an image.

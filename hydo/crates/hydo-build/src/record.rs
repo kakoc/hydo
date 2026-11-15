@@ -6,9 +6,19 @@
 use crate::{fsx, oci::OciService, outln, Fail, Io};
 use std::path::Path;
 
-/// Write `/etc/hydo/image.json` into the staged root `r`.
-pub fn write_inside(r: &Path, arch: &str, netns_kernel: bool) -> Result<(), Fail> {
-    let rec = hydo_image::kernels::record_for(arch, netns_kernel);
+/// The kernel variant the manifest `m` asks for (`guest.kernel`, Milestone 256), if any.
+pub fn kernel_variant(m: &serde_json::Value) -> Option<String> {
+    hydo_manifest::Guest::from_value(m).kernel
+}
+
+/// Write `/etc/hydo/image.json` into the staged root `r` (`variant`: [`kernel_variant`]).
+pub fn write_inside(
+    r: &Path,
+    arch: &str,
+    netns_kernel: bool,
+    variant: Option<&str>,
+) -> Result<(), Fail> {
+    let rec = hydo_image::kernels::record_with(arch, netns_kernel, variant);
     fsx::makedirs(&r.join("etc/hydo"))?;
     fsx::write_text(
         &r.join(hydo_image::RECORD_PATH),
@@ -23,12 +33,12 @@ fn file_ref(p: &Path) -> Result<hydo_image::FileRef, Fail> {
     })
 }
 
-/// Write `<image>.json` next to the finished image (`disk`: arm64's data disk).
+/// Write `<image>.json` next to the finished image (`disk`: arm64's data disk; `record`: the image
+/// record [`write_inside`] wrote, `hydo_image::kernels::record_with`).
 pub fn write_sidecar(
     image: &Path,
     disk: Option<&Path>,
-    arch: &str,
-    netns_kernel: bool,
+    record: hydo_image::ImageRecord,
     manifest_path: &str,
     oci: &[OciService],
     io: &mut Io,
@@ -55,7 +65,7 @@ pub fn write_sidecar(
     let rec = hydo_image::BuildRecord {
         image: file_ref(image)?,
         disk: disk.map(file_ref).transpose()?,
-        record: hydo_image::kernels::record_for(arch, netns_kernel),
+        record,
         hydo: hydo_image::Hydo {
             version: hydo_image::hydo_version().into(),
             commit: hydo_image::hydo_commit().map(str::to_string),
@@ -79,10 +89,15 @@ pub fn write_sidecar(
     outln(
         io,
         &format!(
-            "hydo-build: {} (the build record; the image records guest kernel {} sha256 {}, fingerprint epoch {})",
+            "hydo-build: {} (the build record; the image records guest kernel {} sha256 {}{}, fingerprint epoch {})",
             p.display(),
             rec.record.kernel.file,
             &rec.record.kernel.sha256[..16],
+            rec.record
+                .kernel_variant
+                .as_deref()
+                .map(|v| format!(", variant {v}"))
+                .unwrap_or_default(),
             rec.record.epoch
         ),
     );

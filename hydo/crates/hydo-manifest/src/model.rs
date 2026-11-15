@@ -400,6 +400,10 @@ choice!(
     CpuLevel { V2 = "v2", V3 = "v3" }
 );
 choice!(
+    /// A guest kernel variant (Milestone 256).
+    KernelVariant { Containers = "containers" }
+);
+choice!(
     /// A fault kind the explorer may use.
     FaultKind {
         Kill = "kill",
@@ -758,6 +762,13 @@ pub struct Guest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = true))]
     pub cpu_cache: Option<bool>,
+    /// A guest kernel variant. containers: on the Mac and KVM engines the image boots a kernel
+    /// with what containers and Kubernetes need (namespaces, seccomp, the memory and pids
+    /// controllers, overlayfs, connection tracking, NAT, iptables, nftables, ipsets), all built
+    /// in. hvx boots its one kernel, which has all of it, the network parts as modules that the
+    /// image loads itself. Without the key, the engine's usual kernel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kernel: Option<KernelVariant>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

@@ -239,6 +239,9 @@ pub fn build(
     };
     let netns_k = needs_netns_kernel(&m);
     let netns = shell::has_netns(&m);
+    // guest.kernel (Milestone 256): the variant's kernel, which serves service networks too
+    let variant = crate::record::kernel_variant(&m);
+    let containers = variant.as_deref() == Some(hydo_image::kernels::CONTAINERS);
     let mut fcbin = None;
     let mut fc = None;
     if shell::has_freeze(&m) {
@@ -375,7 +378,13 @@ pub fn build(
             ),
         );
     }
-    if netns_k {
+    if containers {
+        let k = &hydo_image::kernels::ARM64_KERNEL_CONTAINERS;
+        fsx::write_text(
+            &r.join("etc/hydo/kernel"),
+            &format!("{} {}\n", k.file, k.sha256),
+        )?;
+    } else if netns_k {
         fsx::write_text(
             &r.join("etc/hydo/kernel"),
             &format!("{NETNS_KERNEL} {NETNS_KERNEL_SHA256}\n"),
@@ -424,7 +433,7 @@ pub fn build(
     }
     // the agent is the kernel's first process itself (rdinit=/init): no shell before it
     crate::agent::install(&agent_bin, &agent_sha, &r, "/init", io)?;
-    crate::record::write_inside(&r, "arm64", netns_k)?;
+    crate::record::write_inside(&r, "arm64", netns_k, variant.as_deref())?;
     let dsec = section(&m, "data")?;
     let dmib = pyv::get(dsec, "size_mib")?
         .map(|v| pyv::int(v, "data.size_mib"))
@@ -487,14 +496,23 @@ pub fn build(
     crate::record::write_sidecar(
         &cpio,
         Some(&disk),
-        "arm64",
-        netns_k,
+        hydo_image::kernels::record_with("arm64", netns_k, variant.as_deref()),
         manifest_path,
         &p.oci,
         io,
     )?;
     crate::contracts::write_plan(&m, manifest_path, &cpio, io)?;
-    if netns_k {
+    if containers {
+        let k = &hydo_image::kernels::ARM64_KERNEL_CONTAINERS;
+        outln(
+            io,
+            &format!(
+                "hydo-build: this image boots the guest kernel variant containers (guest.kernel), {} (sha256 {}); recorded in the image as /etc/hydo/kernel",
+                k.file,
+                &k.sha256[..16]
+            ),
+        );
+    } else if netns_k {
         let mut why = Vec::new();
         if netns {
             why.push("network: bridge");

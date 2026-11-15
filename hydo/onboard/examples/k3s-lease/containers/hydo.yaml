@@ -1,0 +1,107 @@
+# k3s in the guest on the Mac and KVM engines: the example of ../hydo.yaml with the guest kernel
+# variant for containers (guest.kernel: containers, docs/design/k3s-in-guest.md). The kernel has
+# every option k3s needs built in, so the image carries no kernel modules. The k3s files are for
+# one architecture, which fetch-k3s.sh fetches: arm64 for the Mac engine, amd64 for KVM.
+#   sh fetch-k3s.sh                 # ARCH=arm64 or ARCH=amd64; the default is this machine's
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"      # no faults: one leader, it renews
+#   hydo run "disk=none | run T=2:30"
+# On hvx, ../hydo.yaml is the example: hvx's kernel has the options, the network ones as modules
+# that its image loads. ../RESULTS.md has the measurements of both.
+name: k3s-lease-containers
+description: a Kubernetes StatefulSet whose pods elect a leader on a Lease, in single-node k3s, on the guest kernel for containers
+
+guest:
+  ram_mib: 2048
+  kernel: containers
+
+root:
+  files:
+    - {src: k3s/k3s, dst: /opt/k3s/k3s, mode: "0755"}
+    - {src: k3s/data, dst: /opt/k3s/data}
+    - {src: k3s/data-hash, dst: /opt/k3s/data-hash}
+    - {src: k3s/bin, dst: /opt/k3s/bin}
+    - {src: k3s/images, dst: /opt/k3s/images}
+    - {src: k3s/var-run, dst: /var/run}
+    - {src: manifests, dst: /opt/k3s/manifests}
+    - {src: ../k3s-setup.sh, dst: /opt/k3s/setup.sh, mode: "0755"}
+    - {src: ../elect.sh, dst: /opt/k3s/app/elect.sh, mode: "0755"}
+    - {src: ../workload.sh, dst: /opt/k3s/workload.sh, mode: "0755"}
+    - {src: ../one-leader.sh, dst: /opt/k3s/one-leader.sh, mode: "0755"}
+  dirs: [/var/lib/rancher, /var/lib/kubelet, /var/lib/cni, /var/log, /var/tmp, /etc/rancher, /run]
+
+data:
+  size_mib: 2048
+
+env:
+  KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+shell: |
+  kc() { /opt/k3s/bin/kubectl "$@"; }
+  up() { cut -d' ' -f1 /proc/uptime; }
+  mark() { echo "$1 $(up) $(awk '/MemAvailable/ { print $2 }' /proc/meminfo)" >> /data/k3s-marks; }
+
+services:
+  - name: k3s
+    setup: /opt/k3s/setup.sh
+    cmd: >-
+      /opt/k3s/k3s server --node-name hydo-k3s --node-ip 10.77.0.2 --flannel-iface k3s0
+      --flannel-backend host-gw --disable traefik,servicelb,metrics-server,local-storage,coredns
+      --disable-network-policy --disable-helm-controller --write-kubeconfig-mode 644
+      --kubelet-arg=volume-plugin-dir=/var/lib/kubelet/volumeplugins
+      '--kubelet-arg=eviction-hard=memory.available<20Mi,nodefs.available<1%,imagefs.available<1%'
+    ready: kc get node hydo-k3s 2>/dev/null | grep -q ' Ready'
+    ready_timeout: 900
+    logs: [/var/lib/rancher/k3s/agent/containerd/containerd.log]
+
+provision: |
+  mark k3s-ready
+  n=0
+  until [ "$(kc get sts elect -o 'jsonpath={.status.readyReplicas}' 2>/dev/null)" = 3 ]; do
+    n=$((n + 1)); [ $n -lt 600 ] || { kc get pods -A -o wide > /dev/console 2>&1; exit 1; }
+    sleep 1
+  done
+  mark elect-ready
+  until grep -q '^L' /data/elect/*.log 2>/dev/null; do
+    n=$((n + 1)); [ $n -lt 900 ] || exit 1
+    sleep 1
+  done
+  mark leader
+
+knobs:
+  - token: Z
+    name: kill the process of the pod that holds the Lease before this step
+    default: none
+    set: echo "$HYDO_VALUE" > /tmp/hydo-k3s-kill-at
+    values: [none, "1", "4", "9"]
+    safe: none
+
+workload:
+  steps: 16
+  run: |
+    if [ "$HYDO_FROM" = 0 ]; then
+      sed 's/^/hydo-k3s: mark (name, uptime s, MemAvailable kB): /' /data/k3s-marks > /dev/console
+      echo "hydo-k3s: mark run-start $(up) $(awk '/MemAvailable/ { print $2 }' /proc/meminfo)" > /dev/console
+    fi
+    /opt/k3s/workload.sh $HYDO_FROM $HYDO_TO && echo "steps-$HYDO_FROM-$HYDO_TO" >> $HYDO_ACKED
+  timeout: 300
+
+faults: [kill, pause, clock]
+
+invariants:
+  - id: elect.one_leader
+    msg: no two pods act as leader at the same instant
+    cmd: /opt/k3s/one-leader.sh
+  - id: elect.leader_again
+    msg: a pod leads again within 60 s after the faults heal
+    type: eventually
+    cmd: |
+      last=$(cat /data/elect/*.log 2>/dev/null | awk '$1 == "L" && $2 > m { m = $2 } END { print m + 0 }')
+      now=$(awk '{ printf "%d", $1 * 100 }' /proc/uptime)
+      [ $((now - last)) -lt 300 ]
+    within: 60
+  - id: elect.statefulset_healed
+    msg: the StatefulSet has its 3 ready replicas again within 120 s after the faults heal
+    type: eventually
+    cmd: '[ "$(kc get sts elect -o "jsonpath={.status.readyReplicas}" 2>/dev/null)" = 3 ]'
+    within: 120

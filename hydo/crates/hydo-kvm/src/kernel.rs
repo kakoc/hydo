@@ -15,6 +15,11 @@
 //! keeps its fingerprints; an image of epoch 3 or later boots the build with cgroups,
 //! `bzImage-kvm-cg` (or `bzImage-kvm-smp-cg`), on which a pause of threads runs (Milestone 234,
 //! docs/design/guest-cgroups.md).
+//!
+//! An image whose manifest asks for a kernel variant (`guest.kernel: containers`, Milestone 256,
+//! docs/design/k3s-in-guest.md) records it in `kernel_variant`, and boots the build of that
+//! variant: `bzImage-kvm-containers` (or `bzImage-kvm-smp-containers`). The recorded kernel is
+//! still hvx's, which has those options already.
 
 /// A KVM build of a recorded kernel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,6 +33,9 @@ pub struct Twin {
     pub version: &'static str,
     /// the fingerprint epochs of the images it boots, from and to (both included)
     pub epochs: (u64, u64),
+    /// the kernel variant an image's record names (`kernel_variant`), None for the images
+    /// without one
+    pub variant: Option<&'static str>,
 }
 
 /// The KVM build of the x86_64 guest kernel (Linux 6.6.35) for images built at the fingerprint
@@ -38,6 +46,7 @@ pub const KERNEL: Twin = Twin {
     sha256: "d50fbc67261a2544404d7a5f3e7a79cabe3b0a2e1f455158ccc5369d878d6207",
     version: "6.6.35",
     epochs: (0, 2),
+    variant: None,
 };
 
 /// The SMP build of the same kernel, for several vCPUs (docs/design/kvm-vcpus.md):
@@ -48,6 +57,7 @@ pub const KERNEL_SMP: Twin = Twin {
     sha256: "b40b2711a845dcf8622bf5230e0cb4d775b27ad2c297b16b0e5a8d631e23aac3",
     version: "6.6.35",
     epochs: (0, 2),
+    variant: None,
 };
 
 /// The KVM build with cgroups, for images built at the fingerprint epoch 3 and later
@@ -58,6 +68,7 @@ pub const KERNEL_CG: Twin = Twin {
     sha256: "f0e2d441f334437fa4a5053645dd21057cba4843d890b7d9fda90f7be50da9bc",
     version: "6.6.35",
     epochs: (3, u64::MAX),
+    variant: None,
 };
 
 /// The SMP build with cgroups (`CGROUPS=1 SMP=1 sh hv/kvm/linux/build-kernel.sh`).
@@ -67,32 +78,58 @@ pub const KERNEL_SMP_CG: Twin = Twin {
     sha256: "f24a52e3f76c782b4bb559bb5d47d3e1acce8c8e862aa8201268abeccb8c1f01",
     version: "6.6.35",
     epochs: (3, u64::MAX),
+    variant: None,
+};
+
+/// The KVM build of the variant `containers` (Milestone 256): `bzImage-kvm-cg`'s list with the
+/// options of hv/kvm/linux/hydo-kvm-containers.config (hv/kvm/linux/kernel-containers.nix,
+/// `CONTAINERS=1 sh hv/kvm/linux/build-kernel.sh`).
+pub const KERNEL_CONTAINERS: Twin = Twin {
+    of: KERNEL.of,
+    file: "bzImage-kvm-containers",
+    sha256: "0c9c1c9531eda025e096c60530055a556a7f25754376c260b17482066808f4fe",
+    version: "6.6.35",
+    epochs: (3, u64::MAX),
+    variant: Some("containers"),
+};
+
+/// The SMP build of the variant `containers`, with the cpuset controller too
+/// (`CONTAINERS=1 SMP=1 sh hv/kvm/linux/build-kernel.sh`).
+pub const KERNEL_SMP_CONTAINERS: Twin = Twin {
+    of: KERNEL.of,
+    file: "bzImage-kvm-smp-containers",
+    sha256: "6f85c1c5efc381afbbdf8845d44603258223e7dfdec9260ce5bf4956f271250c",
+    version: "6.6.35",
+    epochs: (3, u64::MAX),
+    variant: Some("containers"),
 };
 
 /// The one-vCPU builds this engine knows.
-pub const TWINS: [Twin; 2] = [KERNEL, KERNEL_CG];
+pub const TWINS: [Twin; 3] = [KERNEL, KERNEL_CG, KERNEL_CONTAINERS];
 
 /// The SMP builds, as [`TWINS`].
-pub const SMP_TWINS: [Twin; 2] = [KERNEL_SMP, KERNEL_SMP_CG];
+pub const SMP_TWINS: [Twin; 3] = [KERNEL_SMP, KERNEL_SMP_CG, KERNEL_SMP_CONTAINERS];
 
-fn pick(list: &[Twin], of: &str, epoch: u64) -> Option<Twin> {
+fn pick(list: &[Twin], of: &str, epoch: u64, variant: Option<&str>) -> Option<Twin> {
     list.iter()
         .copied()
-        .find(|t| t.of == of && (t.epochs.0..=t.epochs.1).contains(&epoch))
+        .find(|t| t.of == of && (t.epochs.0..=t.epochs.1).contains(&epoch) && t.variant == variant)
 }
 
-/// The one-vCPU KVM build of the kernel with sha256 `of` for an image built at `epoch`.
+/// The one-vCPU KVM build of the kernel with sha256 `of` for an image built at `epoch` without a
+/// kernel variant.
 pub fn twin_of(of: &str, epoch: u64) -> Option<Twin> {
-    pick(&TWINS, of, epoch)
+    pick(&TWINS, of, epoch, None)
 }
 
-/// The KVM build of the kernel with sha256 `of` for an image built at `epoch` on a machine of
-/// `vcpus` vCPUs: the UP build for one, the SMP build for more.
-pub fn twin_for(of: &str, vcpus: u32, epoch: u64) -> Option<Twin> {
+/// The KVM build of the kernel with sha256 `of` for an image built at `epoch` with the kernel
+/// variant `variant` (the record's `kernel_variant`) on a machine of `vcpus` vCPUs: the UP build
+/// for one, the SMP build for more.
+pub fn twin_for(of: &str, vcpus: u32, epoch: u64, variant: Option<&str>) -> Option<Twin> {
     if vcpus > 1 {
-        pick(&SMP_TWINS, of, epoch)
+        pick(&SMP_TWINS, of, epoch, variant)
     } else {
-        twin_of(of, epoch)
+        pick(&TWINS, of, epoch, variant)
     }
 }
 

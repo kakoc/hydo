@@ -669,6 +669,51 @@ first. There a `nix-build --check` of each gave the same `vmlinux` and `.config`
 values are in `hydo/crates/hydo-kvm/src/kernel.rs` (`KERNEL_CG`, `KERNEL_SMP_CG`) and in
 `hydo/dist/linux/assets.sha256`. In a tree, put them in `hv/kvm/linux/out/` or `build/`.
 
+## The guest kernels for containers (Milestone 256)
+
+An image whose manifest says `guest.kernel: containers` boots a variant of the guest kernel with
+what containers and Kubernetes need, on the Mac and KVM engines (docs/design/k3s-in-guest.md).
+hvx's kernel does not change. Each variant takes the list of a kernel with cgroups above, drops
+the options that its own list names, and appends that list: `hv/hvm/explore/hvm-containers.config`
+for the Mac and `hv/kvm/linux/hydo-kvm-containers.config` for KVM, the same options but the
+cpuset controller, which needs SMP (the KVM build for several vCPUs adds it). Every option is
+built in: the guest has no module tree. No other kernel's recipe changes, so every pin above
+stays.
+
+The Mac kernel is built with `hv/hvm/explore/build-guest-containers.sh` from the inputs of
+"Mac guest kernel for service networks" above, from `Image-explore-netns-cg`'s list, so it serves
+service networks too. On the bare-metal machine it was built twice, in two directories, with the
+same bytes:
+
+| file | bytes | sha256 |
+|---|---|---|
+| `Image-explore-containers` | 9,105,416 | `b6211b80d1faa0e4542b244d5f481998a38add8f24fe713938128f3e9728e86a` |
+| `Image-explore-containers.config` | 61,404 | `c4326f4d825a2fd1bca3528e06beba577d898796597fd83a1bf56b4cf9690aff` |
+
+The KVM kernels are built by `hv/kvm/linux/kernel-containers.nix` with the pinned nixpkgs:
+`CONTAINERS=1 sh hv/kvm/linux/build-kernel.sh` gives `bzImage-kvm-containers` from
+`bzImage-kvm-cg`'s list, and `CONTAINERS=1 SMP=1` gives `bzImage-kvm-smp-containers` from
+`bzImage-kvm-smp-cg`'s list.
+
+| file | bytes | sha256 |
+|---|---|---|
+| `bzImage-kvm-containers` | 3,908,608 | `0c9c1c9531eda025e096c60530055a556a7f25754376c260b17482066808f4fe` |
+| `bzImage-kvm-containers.config` | 57,029 | `47bb3dab9d2a428182abe890bdb3c7fb03501360fc38d6a655bb4fb00357a484` |
+| `bzImage-kvm-smp-containers` | 4,199,424 | `6f85c1c5efc381afbbdf8845d44603258223e7dfdec9260ce5bf4956f271250c` |
+| `bzImage-kvm-smp-containers.config` | 58,334 | `4d31460138852553370a4c33d9c049638921a2f6668e3be34f9f8494dcd64979` |
+
+Proof: the store paths are `2y6n4034…-hydo-kvm-guest-kernel-containers-6.6.35` and
+`4v121077…-hydo-kvm-guest-kernel-smp-containers-6.6.35`. The bare-metal machine's single-user
+Nix, outside a sandbox, built them first. A `nix-build --check` there gave the same `vmlinux` and
+`.config` but another `bzImage` for each (`f772e981…` and `61a6a97c…`), as Milestones 159 and
+234 saw outside the sandbox. The pins are therefore the first builds, and the one-off workflow
+`tmp-k3s-kvm` checks them with a sandboxed Nix on a GitHub runner, `nix-build` and then
+`nix-build --check`. The RDTSC audit of each `vmlinux` lists the same
+10 sites as `bzImage-kvm-cg`'s. The sha256 values are in `hydo/crates/hydo-kvm/src/kernel.rs`
+(`KERNEL_CONTAINERS`, `KERNEL_SMP_CONTAINERS`), `hydo/crates/hydo-image/src/kernels.rs`
+(`ARM64_KERNEL_CONTAINERS`) and both releases' `assets.sha256`. In a tree, put the Mac kernel in
+`hv/hvm/explore/out/` and the KVM kernels in `hv/kvm/linux/out/` or `build/`.
+
 ## Headless Chromium and the GUI driver (Milestone 166, an experiment)
 
 `hydo/onboard/examples/compose-voting-browser/` (docs/design/gui-testing.md) puts a real browser

@@ -4,12 +4,17 @@
 //! The kernels are the releases' pinned files (`hydo/dist/linux/assets.sha256`: `guest/bzImage`
 //! and `guest/initramfs-kafka.cpio.gz`; `hydo/dist/mac/assets.sha256`: `Image-explore`,
 //! `Image-explore-netns`, and since the fingerprint epoch 3 `Image-explore-cg` and
-//! `Image-explore-netns-cg`; docs/BUILD-PINS.md). `tests/kernels.rs` checks this table against
+//! `Image-explore-netns-cg`, and the variant `Image-explore-containers`; docs/BUILD-PINS.md). `tests/kernels.rs` checks this table against
 //! those pin files and the command lines against the engines'.
 //!
 //! An image records the kernel it was built for, so an image built at epoch 2 or before keeps
 //! naming `Image-explore` or `Image-explore-netns` and keeps its fingerprints; [`record_for`]
 //! names the kernels with cgroups (Milestone 234, docs/design/guest-cgroups.md).
+//!
+//! A manifest may ask for a kernel variant with `guest.kernel` (Milestone 256,
+//! docs/design/k3s-in-guest.md): [`CONTAINERS`], a kernel with what containers and Kubernetes
+//! need. [`record_with`] names it in the record's `kernel_variant`, and on arm64 also as the
+//! kernel's file. An image without the key gets the record it got before.
 //!
 //! A run looks the image's kernel up by sha256 ([`find`]): among the files with a known kernel
 //! name (and the name the image records) in the directories the caller gives (a release's
@@ -101,15 +106,37 @@ pub const ARM64_NETNS_KERNEL_CG: Known = Known {
     version: "6.6.35",
 };
 
+/// The arm64 guest kernel of the variant [`CONTAINERS`] (Milestone 256,
+/// `hv/hvm/explore/build-guest-containers.sh`): `Image-explore-netns-cg`'s list with the options
+/// of `hv/hvm/explore/hvm-containers.config`, so it serves `network: bridge` too.
+pub const ARM64_KERNEL_CONTAINERS: Known = Known {
+    arch: "arm64",
+    role: Role::Kernel,
+    file: "Image-explore-containers",
+    sha256: "b6211b80d1faa0e4542b244d5f481998a38add8f24fe713938128f3e9728e86a",
+    version: "6.6.35",
+};
+
 /// Every file of the table.
-pub const KNOWN: [Known; 6] = [
+pub const KNOWN: [Known; 7] = [
     X86_KERNEL,
     X86_INITRD,
     ARM64_KERNEL,
     ARM64_NETNS_KERNEL,
     ARM64_KERNEL_CG,
     ARM64_NETNS_KERNEL_CG,
+    ARM64_KERNEL_CONTAINERS,
 ];
+
+/// The guest kernel variant for containers (`guest.kernel: containers`, Milestone 256): the
+/// namespaces, seccomp, the memory, pids and BPF device controllers of cgroup v2, overlayfs,
+/// connection tracking, NAT, iptables and nftables, and ipsets, all built in. The Mac engine boots
+/// [`ARM64_KERNEL_CONTAINERS`], the KVM engine its own builds (`hydo_kvm::kernel`). hvx boots its
+/// one kernel, which has all of it, the network parts as modules that the image loads itself.
+pub const CONTAINERS: &str = "containers";
+
+/// The kernel variants `guest.kernel` takes.
+pub const VARIANTS: [&str; 1] = [CONTAINERS];
 
 /// The x86_64 kernel command line of an agent image's boot (hydo-hvx's `ROOTFS_CMDLINE` and
 /// ` quiet loglevel=1`).
@@ -144,6 +171,24 @@ pub fn arm64_kernel(netns: bool) -> &'static Known {
 /// The record `hydo build` writes into an image of `arch` (`netns`: an arm64 image that needs the
 /// second kernel).
 pub fn record_for(arch: &str, netns: bool) -> ImageRecord {
+    record_with(arch, netns, None)
+}
+
+/// [`record_for`] for a manifest that names a kernel variant (`guest.kernel`, one of
+/// [`VARIANTS`]; the manifest's validation refuses any other). On arm64 the variant's kernel
+/// serves `network: bridge` too, so `netns` does not matter then.
+pub fn record_with(arch: &str, netns: bool, variant: Option<&str>) -> ImageRecord {
+    let mut rec = record_plain(arch, netns);
+    if let Some(v) = variant {
+        if arch == "arm64" && v == CONTAINERS {
+            rec.kernel = kernel_of(&ARM64_KERNEL_CONTAINERS, ARM64_CMDLINE);
+        }
+        rec.kernel_variant = Some(v.to_string());
+    }
+    rec
+}
+
+fn record_plain(arch: &str, netns: bool) -> ImageRecord {
     if arch == "arm64" {
         ImageRecord {
             arch: "arm64".into(),

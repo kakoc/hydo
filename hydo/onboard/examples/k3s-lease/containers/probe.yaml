@@ -1,0 +1,31 @@
+# What containers need from the guest kernel, checked without k3s: probe.sh runs runc, iptables,
+# ipset and overlayfs with k3s's own tools (fetch-k3s.sh fetches them). With guest.kernel:
+# containers every check passes on the Mac and KVM engines; without the key the Mac and KVM
+# kernels fail most of them.
+#   sh fetch-k3s.sh && hydo build probe.yaml && hydo run "disk=none | run"
+name: k3s-probe
+description: the guest kernel's options for containers, checked with runc, iptables and ipset
+
+guest:
+  kernel: containers
+
+root:
+  files:
+    - {src: k3s/data, dst: /opt/k3s/data}
+    - {src: k3s/data-hash, dst: /opt/k3s/data-hash}
+    - {src: k3s/images, dst: /opt/k3s/images}
+    - {src: probe.sh, dst: /opt/k3s/probe.sh, mode: "0755"}
+  dirs: [/run]
+
+data:
+  size_mib: 512
+
+workload:
+  steps: 1
+  run: /opt/k3s/probe.sh && echo probe >> $HYDO_ACKED
+  timeout: 300
+
+invariants:
+  - id: probe.kernel_has_it
+    msg: every check of probe.sh passes
+    cmd: grep -q 'summary [0-9]* checks, 0 failed' /data/probe.log

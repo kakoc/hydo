@@ -152,3 +152,35 @@ This is k3s's behaviour on any node whose clock goes back past its certificates'
 example a node whose hardware clock was reset. Here every cluster is one minute old, because
 the image starts it at `guest.clock_start`, so every backward step of more than an hour meets
 it. On a cluster made long before the run, only a step back past the cluster's age would.
+
+## The Mac and KVM engines (Milestone 256)
+
+The folder `containers/` holds the same example for the guest kernel variant for containers
+(`guest.kernel: containers`, `docs/design/k3s-in-guest.md`). Its `hydo.yaml` uses this folder's
+scripts, carries no kernel modules, and takes k3s's files for one architecture from its own
+`fetch-k3s.sh`: arm64 for the Mac engine, amd64 for KVM. The arm64 k3s binary unpacks its files
+to the hash `10bae91d040ed733…`. `containers/probe.yaml` checks the kernel without k3s.
+
+On the Mac engine, with the 0.3.3 release's guest files and this tree's programs:
+
+| image | schedule | runs | fingerprint | verdict |
+|---|---|---|---|---|
+| `probe.yaml` (`610fea05…`) | `disk=none \| run` | 2 | `bc9b021a4c1cc0c0` | OK: 16 of 16 checks |
+| `probe.yaml` without `guest.kernel` | `disk=none \| run` | 1 | `51d0dceb26e3d9b0` | VIOLATION: 13 of 16 checks fail |
+| `containers/hydo.yaml` (`50c600fa…`) | `disk=none \| run` | 2 | none | `ERROR boot: SPIN` at 31 s of guest time |
+
+In the probe, runc started busybox as PID 1 of its own PID namespace, with the host name `runc`,
+a memory limit of 64 MiB and a limit of 64 processes. Without the key the kernel has only the cpu
+controller, no overlayfs, no NAT table, and no nftables.
+
+k3s did not reach the node's readiness on the Mac engine. Its setup ran, and k3s started. Then a
+thread of k3s looped in `runtime.selectgo`, called from the watcher of kine, k3s's SQLite store,
+and made no VM exits. The Mac engine's clock counts VM exits, so no timer interrupt preempted the
+thread. With `HVM_SPIN_SECS=120` the loop still ran after 10 minutes. With k3s's embedded etcd
+(`--cluster-init`) the boot reached 119.5 s of guest time and stopped in another such loop. So
+the two-leaders finding of `T=2:30` could not be repeated on the Mac engine. This is open item
+13 of AGENTS.md, a limit of the engine, not of the kernel.
+
+On KVM the one-off workflow `tmp-k3s-kvm` builds the two KVM kernels in a sandboxed Nix and runs
+the probe and `containers/hydo.yaml` with 1 and 2 vCPUs. Its results are in `docs/HISTORY.md`
+Milestone 256.

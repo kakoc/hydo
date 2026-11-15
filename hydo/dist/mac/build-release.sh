@@ -15,6 +15,9 @@
 #     (Milestone 234), Image-explore-cg and Image-explore-netns-cg: $HYDO_KERNEL_CG and
 #     $HYDO_KERNEL_NETNS_CG, built by hv/hvm/explore/build-guest-cg.sh NETNS=0 and NETNS=1
 #     (docs/BUILD-PINS.md); the two above stay for images built before;
+#   - the arm64 kernel of the variant `containers` (guest.kernel: containers, Milestone 256),
+#     Image-explore-containers: $HYDO_KERNEL_CONTAINERS, built by
+#     hv/hvm/explore/build-guest-containers.sh (docs/BUILD-PINS.md);
 #   - the freeze helper hydo_fc: $HYDO_FC_BIN, hydo/onboard/hydo_fc.c compiled for aarch64 with the
 #     pinned Arm GNU toolchain (docs/BUILD-PINS.md; the toolchain is an x86_64 Linux program, so on
 #     a Mac it runs in an x86_64 Linux container);
@@ -80,6 +83,10 @@ fi
 if [ ! -f "$A/Image-explore-netns-cg" ]; then
   [ -n "$HYDO_KERNEL_NETNS_CG" ] || { echo "set HYDO_KERNEL_NETNS_CG to an Image-explore-netns-cg built by NETNS=1 sh hv/hvm/explore/build-guest-cg.sh" >&2; exit 1; }
   cp "$HYDO_KERNEL_NETNS_CG" "$A/Image-explore-netns-cg"
+fi
+if [ ! -f "$A/Image-explore-containers" ]; then
+  [ -n "$HYDO_KERNEL_CONTAINERS" ] || { echo "set HYDO_KERNEL_CONTAINERS to an Image-explore-containers built by sh hv/hvm/explore/build-guest-containers.sh" >&2; exit 1; }
+  cp "$HYDO_KERNEL_CONTAINERS" "$A/Image-explore-containers"
 fi
 if [ ! -f "$A/hydo_fc" ]; then
   [ -n "$HYDO_FC_BIN" ] || { echo "set HYDO_FC_BIN to hydo/onboard/hydo_fc.c built for aarch64 with the pinned toolchain (docs/BUILD-PINS.md)" >&2; exit 1; }
@@ -174,7 +181,8 @@ cp "$TOP/hv/hvm/hv.entitlements" "$REL/hv/hvm/"
 # the arm64 kernels: hydo-build records the kernel an image needs (the second one for service
 # networks; since the fingerprint epoch 3 the ones with cgroups, M234) and the engine boots the
 # kernel the image names, so an image built before epoch 3 keeps its kernels
-cp "$A/Image-explore" "$A/Image-explore-netns" "$A/Image-explore-cg" "$A/Image-explore-netns-cg" "$REL/hv/hvm/explore/out/"
+cp "$A/Image-explore" "$A/Image-explore-netns" "$A/Image-explore-cg" "$A/Image-explore-netns-cg" \
+  "$A/Image-explore-containers" "$REL/hv/hvm/explore/out/"
 cp "$A/busybox" "$A/mke2fs" "$REL/guest/"; chmod 755 "$REL/guest/busybox" "$REL/guest/mke2fs"
 # guest/hydo-world: the in-guest program of fakes: and proxies: (hydo/crates/hydo-world, Rust since
 # M111), a static aarch64 musl build made here on the Mac; `hydo build` stages it

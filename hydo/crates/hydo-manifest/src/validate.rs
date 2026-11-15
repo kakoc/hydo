@@ -112,6 +112,8 @@ pub(crate) const KNOWN_WORKLOAD: &[&str] = &[
     "timeout",
     "description",
 ];
+/// `guest.kernel` (Milestone 256): the guest kernel variants (`hydo_image::kernels::VARIANTS`).
+pub const KERNEL_VARIANTS: &[&str] = &["containers"];
 /// `workload.kind` (M205).
 pub const WORKLOAD_KINDS: &[&str] = &["system", "test"];
 pub(crate) const KNOWN_DATA: &[&str] = &["size_mib", "mount", "dirs", "description"];
@@ -132,6 +134,7 @@ pub(crate) const KNOWN_GUEST: &[&str] = &[
     "outcomes_after_cut",
     "cpu",
     "cpu_cache",
+    "kernel",
     "description",
 ];
 pub const KNOWN_KNOB: &[&str] = &[
@@ -914,6 +917,15 @@ pub fn validate(m: &mut Value) -> R<()> {
             return Err(err(format!(
                 "guest.cpu_cache: true (the guest's CPUID describes its caches; x86_64 only; the default) or false (got {})",
                 repr(c)
+            )));
+        }
+    }
+    if has(&guest, "kernel")? {
+        let k = index(&guest, "kernel")?;
+        if !in_strs(k, KERNEL_VARIANTS) {
+            return Err(err(format!(
+                "guest.kernel: containers (a guest kernel with what containers and Kubernetes need, on the Mac and KVM engines) (got {})",
+                repr(k)
             )));
         }
     }

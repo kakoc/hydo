@@ -422,6 +422,17 @@
           ],
           "default": true
         },
+        "kernel": {
+          "description": "A guest kernel variant. containers: on the Mac and KVM engines the image boots a kernel\nwith what containers and Kubernetes need (namespaces, seccomp, the memory and pids\ncontrollers, overlayfs, connection tracking, NAT, iptables, nftables, ipsets), all built\nin. hvx boots its one kernel, which has all of it, the network parts as modules that the\nimage loads itself. Without the key, the engine's usual kernel.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KernelVariant"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -447,6 +458,13 @@
       "description": "A string with a {{param}} reference, replaced by params: before the value is checked.",
       "type": "string",
       "pattern": "\\{\\{[A-Za-z_][A-Za-z0-9_]*\\}\\}"
+    },
+    "KernelVariant": {
+      "description": "A guest kernel variant (Milestone 256).",
+      "type": "string",
+      "enum": [
+        "containers"
+      ]
     },
     "Network": {
       "description": "How the services reach each other.",

@@ -372,7 +372,9 @@ pub fn stage_files(
         if !src.starts_with('/') {
             src = format!("{}/{}", mdir.trim_end_matches('/'), src);
         }
-        if !exists(&src) {
+        // a symbolic link is copied as a link, so its target need not be on the build machine
+        // (a link to /opt/... or to /run in the guest; Milestone 256)
+        if !exists(&src) && !fsx::is_link(Path::new(&src)) {
             return Err(Fail::Manifest(format!("root.files: {src} does not exist")));
         }
         let dst = under(r, &py::str_of(&o["dst"]));
@@ -731,7 +733,8 @@ pub fn build(
     write_compiled(ctx, p, manifest_path, &r, &tools)?;
     let (bin, sha) = crate::agent::binary(ctx, bdir, false, io)?;
     crate::agent::install(&bin, &sha, &r, "/sbin/init", io)?;
-    crate::record::write_inside(&r, "x86_64", false)?;
+    let variant = crate::record::kernel_variant(&m);
+    crate::record::write_inside(&r, "x86_64", false, variant.as_deref())?;
     crate::stage::compose_stage(&m, &r)?;
     // `writable: true` image services: their trees go onto the data partition (staged here)
     let dstage = bdir.join(format!("{out}-data"));
@@ -905,6 +908,19 @@ pub fn build(
         ),
     );
     image::print_shas(io, &[&ext4, &data, &disk])?;
-    crate::record::write_sidecar(&disk, None, "x86_64", false, manifest_path, &p.oci, io)?;
+    crate::record::write_sidecar(
+        &disk,
+        None,
+        hydo_image::kernels::record_with("x86_64", false, variant.as_deref()),
+        manifest_path,
+        &p.oci,
+        io,
+    )?;
+    if variant.as_deref() == Some(hydo_image::kernels::CONTAINERS) {
+        outln(
+            io,
+            "hydo-build: guest.kernel: containers: the KVM engine boots this image with its kernel for containers (bzImage-kvm-containers); hvx boots its own kernel, which has those options, the network ones as modules that the image must load itself",
+        );
+    }
     crate::contracts::write_plan(&m, manifest_path, &disk, io)
 }

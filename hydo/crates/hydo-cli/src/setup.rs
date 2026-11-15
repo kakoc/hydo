@@ -142,7 +142,8 @@ pub fn asset_release_path(p: Platform, asset: &str) -> Option<String> {
                 "Image-explore"
                 | "Image-explore-netns"
                 | "Image-explore-cg"
-                | "Image-explore-netns-cg" => Some(format!("hv/hvm/explore/out/{a}")),
+                | "Image-explore-netns-cg"
+                | "Image-explore-containers" => Some(format!("hv/hvm/explore/out/{a}")),
                 "busybox"
                 | "mke2fs"
                 | "hydo_fc"
@@ -1483,8 +1484,8 @@ mod tests {
     #[test]
     fn the_built_in_lists_parse_and_map_into_the_release() {
         for (p, assets, guest, n_assets, n_guest) in [
-            (Platform::Linux, LINUX_ASSETS, LINUX_GUEST, 42, 6),
-            (Platform::Mac, MAC_ASSETS, MAC_GUEST, 64, 5),
+            (Platform::Linux, LINUX_ASSETS, LINUX_GUEST, 44, 6),
+            (Platform::Mac, MAC_ASSETS, MAC_GUEST, 65, 5),
         ] {
             let a = parse_sums(assets).unwrap();
             assert_eq!(a.len(), n_assets, "{p:?} assets");

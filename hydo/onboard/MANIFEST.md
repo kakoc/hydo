@@ -148,6 +148,8 @@ guest:
                                # v3 = adds AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE, XSAVE
   cpu_cache: false             # optional (x86_64): CPUID describes the CPU's caches (default true
                                # since fingerprint epoch 2); see "The CPU's caches"
+  kernel: containers           # optional: the guest kernel for containers and Kubernetes on the
+                               # Mac and KVM engines; see "The guest kernel for containers"
 
 network: bridge                # loopback (default): one network for everything in the guest;
                                # bridge: each service in its own network namespace at its addr:
@@ -1095,6 +1097,43 @@ v3` with `guest.cpu_cache: false`.
 On hvx the key needs a kernel module that knows it (`HVX_VM_CPU_CACHE`, Milestone 203). A run on
 an older module stops before the boot with "this hvx.ko ... does not give" the cache leaves. Load
 a module built from this hydo with `hydo module install`.
+
+### The guest kernel for containers (`guest.kernel: containers`)
+
+The Mac and KVM engines boot small guest kernels, built from a short list of options. They lack
+what a container runtime needs: the namespaces, seccomp, the memory and pids controllers of
+cgroup v2, overlayfs, connection tracking and NAT. `guest.kernel: containers` (Milestone 256)
+gives an image a variant of the guest kernel with these options, all built in, so that
+containerd, runc and Kubernetes (k3s) run in the guest:
+
+| needed for | options |
+|---|---|
+| containers | the UTS, IPC, PID and user namespaces, seccomp, POSIX message queues, keys |
+| container limits (cgroup v2) | the memory and pids controllers, BPF device filters (cpuset too, except on the KVM engine's one-vCPU kernel) |
+| image layers | overlayfs |
+| the pod network | dummy interfaces, VXLAN, bridged traffic through iptables |
+| Service addresses | connection tracking, NAT, the iptables tables and matches, nftables, IPv6 tables |
+| network policies | ipsets |
+
+What the key means on each engine:
+
+- **The Mac engine** boots `Image-explore-containers`. It also has the service networks' options,
+  so it serves `network: bridge` too. The image's record (`/etc/hydo/image.json`) names it by
+  sha256, as for every kernel.
+- **The KVM engine** boots `bzImage-kvm-containers`, or `bzImage-kvm-smp-containers` with
+  `--vcpus N`. The record names hvx's kernel and the variant (`kernel_variant`), and the engine
+  picks its build of the variant by both.
+- **hvx** boots its one kernel, which has all these options already, the network ones as modules.
+  The key changes nothing there. An image for hvx that needs those modules carries them and loads
+  them itself (the example `hydo/onboard/examples/k3s-lease` does this).
+
+The key is opt-in: an image without it gets the same bytes and fingerprints as before, and the
+fingerprint epoch does not change. An image with it has other bytes (its record names the
+variant) and its own fingerprints. The variant has no pressure accounting (`CONFIG_PSI`), whose
+averages a timer updates. The example `hydo/onboard/examples/k3s-lease/containers` has the key,
+and its `probe.yaml` checks these options with runc, iptables and ipset. On the Mac engine k3s
+itself stops with `ERROR boot: SPIN`, in a loop without VM exits that the engine cannot
+interrupt. The measurements are in `hydo/onboard/examples/k3s-lease/RESULTS.md`.
 
 ### Link faults (a network fault between two named services)
 

@@ -84,6 +84,32 @@ fn records() {
     assert!(n.initrd.is_none());
     assert_eq!(a.epoch, hydo_image::EPOCH);
     assert!(hydo_image::defaults(a.epoch, "arm64").cgroups);
+    // without guest.kernel the record has no variant, so its bytes are those of before M256
+    for r in [&x, &a, &n] {
+        assert!(r.kernel_variant.is_none());
+        assert!(!hydo_image::canonical(r).contains("kernel_variant"));
+    }
+    assert_eq!(kernels::record_with("arm64", true, None), n);
+}
+
+#[test]
+fn the_containers_variant() {
+    // arm64: the record names the variant's kernel, with or without service networks
+    for netns in [false, true] {
+        let c = kernels::record_with("arm64", netns, Some(kernels::CONTAINERS));
+        assert_eq!(c.kernel.file, "Image-explore-containers");
+        assert_eq!(c.kernel.sha256, kernels::ARM64_KERNEL_CONTAINERS.sha256);
+        assert_eq!(c.kernel_variant.as_deref(), Some("containers"));
+        assert_eq!(c.epoch, hydo_image::EPOCH);
+        let t = hydo_image::canonical(&c);
+        assert!(t.contains("\"kernel_variant\":\"containers\""), "{t}");
+        assert_eq!(hydo_image::parse_record(&t).unwrap(), c);
+    }
+    // x86_64: hvx's kernel, and the field the KVM engine picks its build by
+    let x = kernels::record_with("x86_64", false, Some(kernels::CONTAINERS));
+    assert_eq!(x.kernel, kernels::record_for("x86_64", false).kernel);
+    assert_eq!(x.kernel_variant.as_deref(), Some("containers"));
+    assert_eq!(kernels::VARIANTS, ["containers"]);
 }
 
 #[test]

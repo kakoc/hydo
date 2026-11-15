@@ -600,8 +600,17 @@ about 8 s of guest time after k3s starts, and a StatefulSet of 3 pods is ready a
 Two fresh boots of a schedule give one fingerprint. In `hydo/onboard/examples/k3s-lease` the
 pods elect a leader on a Lease. A forward clock step gives two leaders at once, and a leader that
 crashes in a loop hands over. The explorer found that a step back of more than an hour leaves no
-leader, because the clock goes before the cluster's certificates. The Mac and KVM guest kernels lack the options; an opt-in kernel
-variant would move no recorded value (`docs/design/k3s-in-guest.md`, open item 119).
+leader, because the clock goes before the cluster's certificates.
+
+**The guest kernel for containers (M256).** `guest.kernel: containers` (a format-1 addition)
+gives an image a guest kernel with what containers and Kubernetes need, all built in: the Mac
+engine's `Image-explore-containers` and the KVM engine's `bzImage-kvm-containers` and
+`bzImage-kvm-smp-containers`. The image's record names the variant (`kernel_variant`), and an
+image without the key keeps its bytes, so nothing recorded moves and the epoch stays 3. On hvx
+the key changes nothing: its kernel has the options, the network ones as modules. On the Mac
+engine runc runs a container with memory and pids limits, and NAT, conntrack, and ipsets work.
+k3s's boot stops there with `SPIN`, in a loop without VM exits (open item 13). The example is
+`hydo/onboard/examples/k3s-lease/containers`; `docs/design/k3s-in-guest.md` (open item 119).
 
 **Ready-made emulators of outside services (M242).** One `emulators:` line gives a project Stripe
 (stripe-mock), SMTP (Mailpit) or S3 (`rclone serve s3`). The validator expands each entry into a
@@ -1211,10 +1220,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     (`--ref` names it). A `DELETE` does not remove the saved object, and a `PATCH` saves nothing.
     The example ran on the Mac engine only. It did not run on hvx or on KVM. The changed
     `hydo-world` (`errors:`, `{uuid}`) reaches a release at its next re-pin.
-119. Kubernetes in the guest (M246). k3s runs on hvx only. What is left:
-    - The Mac and KVM engines need an opt-in kernel variant with the options of
-      `docs/design/k3s-in-guest.md`, chosen by the manifest. Each of the four kernels must be
-      built twice and pinned. No recorded value moves.
+119. Kubernetes in the guest (M246, M256). k3s runs on hvx only. What is left:
+    - The kernel variant `guest.kernel: containers` is built (M256). On the Mac engine k3s's boot
+      stops with `SPIN`: a thread of k3s loops in `runtime.selectgo` from kine's watcher without
+      VM exits, and the engine cannot interrupt it (open item 13). With embedded etcd it stops in
+      another such loop. On the Mac engine runc needs `--no-pivot`, because the root is the
+      initramfs; containerd would need its `no_pivot` option.
+    - KVM: the one-off workflow `tmp-k3s-kvm` builds the KVM kernels in a sandboxed Nix and runs
+      the example. Until it runs, the KVM pins are the bare-metal machine's first build.
     - hydo has no `guest.modules:`: the example stages the modules with `root.files:` from the
       nixpkgs store path, and the Linux release ships 14 of the 57.
     - hydo's faults name services, and k3s is the only service. A kill of one pod is the
@@ -1785,6 +1798,11 @@ build machine, before 2026-10-13.
   pixel. On KVM (seven GitHub hosts, Intel and AMD) the web-shop example gave hvx's verdicts and
   the same screenshots on every host, and `hydo build` fetched the Playwright image itself. Some
   runs first stopped in early boot, cause not found. Nothing recorded moved
+- M256 (tentative number): the guest kernel for containers, `guest.kernel: containers`, an opt-in
+  variant named in the image record (`kernel_variant`): `Image-explore-containers`,
+  `bzImage-kvm-containers` and `bzImage-kvm-smp-containers`, each built twice. On the Mac engine
+  a probe runs runc, overlayfs, NAT, conntrack and ipsets, but k3s stops with `SPIN` (open item
+  13). Nothing recorded moved
 
 ## Where to look
 
