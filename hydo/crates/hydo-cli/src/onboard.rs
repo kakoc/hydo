@@ -570,6 +570,7 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
             args.push("--no-resolve".into());
         }
         println!("hydo: starting hydo/ from {c}: hydo compose {c} --out hydo/hydo.yaml --images-dir images");
+        hydo_compose::NO_NEXT_LINE.store(true, std::sync::atomic::Ordering::Relaxed);
         let r = hydo_compose::main_clock(&args, clock);
         if r != 0 {
             rc = 1;
@@ -728,6 +729,17 @@ pub fn cmd_onboard(ctx: &Ctx, argv: &[String]) -> i32 {
                 println!("      In {}, ask it to use the onboard skill.", name_of(k));
             }
         }
+    } else if fetch_first {
+        // the import wrote the services: what is left is the test (0.3.4's docs review)
+        println!("Next: replace the import's two placeholders in hydo/hydo.yaml (`hydo guide workflow`):");
+        println!(
+            "  1. workload.run: write a client that uses your system as commands in hydo/workload/"
+        );
+        println!("     (create the folder; hydo guide composer), and delete workload.run");
+        println!("     (keep workload.steps and workload.timeout)");
+        println!("  2. the TODO invariant: write the rules that must hold as checks in hydo/checks/, or a");
+        println!("     `type: messages` check for a queue or a log (hydo guide checks, hydo guide messages)");
+        println!("Check the folder after each change: hydo build hydo/hydo.yaml --check");
     } else {
         println!("Next: fill in three things in hydo/ (`hydo guide workflow` walks through them):");
         println!("  1. how to start your system: one service per process in hydo/hydo.yaml (hydo guide services)");

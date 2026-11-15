@@ -507,11 +507,25 @@ pub fn check_summary(path_as_given: &str, l: &Loaded) -> Vec<String> {
         .and_then(|w| w.get("steps"))
         .map(py::d)
         .unwrap_or_default();
+    // the test composer adds its own invariant over its commands: name it, so that the count
+    // matches the folder (0.3.4, two readers counted one check file and read "2 invariants")
+    let composed = m
+        .get("invariants")
+        .and_then(Value::as_array)
+        .is_some_and(|a| {
+            a.iter()
+                .any(|v| v.get("id") == Some(&Value::from("compose.commands")))
+        });
     let mut line = format!(
-        "hydo-build: {} OK ({} services, {} invariants, {} workload steps)",
+        "hydo-build: {} OK ({} services, {} invariants{}, {} workload steps)",
         path_as_given,
         count("services"),
         count("invariants"),
+        if composed {
+            ", one of them compose.commands: no test command reported a violation"
+        } else {
+            ""
+        },
         steps
     );
     if m.get("checks").is_some_and(py::truthy) {

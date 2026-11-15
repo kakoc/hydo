@@ -168,6 +168,9 @@ fn render(st: &ExStory, doc: &Exploration, shown: &str) -> String {
                 "{INDENT}If it is expected: hydo ci accept {k} --reason \"…\"\n"
             ));
         }
+        if !it.accept_note.is_empty() {
+            o.push_str(&wrap(&it.accept_note, INDENT));
+        }
     }
     // what held
     if let Some(h) = &st.held {

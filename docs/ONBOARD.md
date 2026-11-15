@@ -14,7 +14,8 @@ live in a `hydo/` folder in your repository:
    one write or one sent message. The command records what the system confirmed.
 3. **The rules that must hold.** A check says what must be true after every run, for example that
    every confirmed write is still there. A check is a command in `hydo/checks/`, or a
-   ready-made check in `hydo/hydo.yaml`, such as `type: messages` for a queue.
+   ready-made check in `hydo/hydo.yaml`, such as the messages check for a queue
+   (`type: messages`, in the worked example below).
 
 hydo then composes the client's commands into runs, adds faults (process kills, pauses, power
 cuts, clock steps), and runs the checks at the end of each run.
@@ -32,11 +33,13 @@ changes a `hydo/` folder that already exists. The next steps depend on what your
 
 **A Docker Compose file.** `hydo onboard` imports it with `hydo compose`. The import writes one
 service per Compose service, with its image, ports, readiness check, and restart policy. Named
-volumes go on the data disk, which keeps its files across a restart. A volume on `/data` needs no
+volumes go on the data disk (the image's second disk, for the services' data), which keeps its
+files across a restart. A volume on `/data` needs no
 mount, because `/data` is already the data disk; the import prints a warning that says so. The
 import also writes `hydo/fetch-images.sh`, which copies the images in once. The workload and the
-check it writes are placeholders that fail every run, and `hydo build hydo/hydo.yaml --check`
-warns about them. The client and the rules are left for you or your AI tool. The first next step
+check it writes are placeholders that fail every run. Once the images are fetched,
+`hydo build hydo/hydo.yaml --check` warns about the placeholders; before that it stops and names
+`hydo/fetch-images.sh`. The client and the rules are left for you or your AI tool. The first next step
 is to copy the images in:
 
 ```text
@@ -114,7 +117,8 @@ Fix the folder until the run without faults passes. Only then do faults mean som
 
 The example is in hydo's repository,
 [hydo/onboard/examples/messages-tutorial/](../hydo/onboard/examples/messages-tutorial/), not in
-the release. It was run on the Mac engine only, so the values below are the Mac engine's. Building the queue needs Go 1.22 or later; `build.sh`
+the release. It was run only with the Mac engine (hydo's engine on an Apple Silicon Mac), so the
+fingerprints below are the Mac's. It was not run on Linux; there, compare only the verdicts. Building the queue needs Go 1.22 or later; `build.sh`
 builds it for an arm64 guest on a Mac and for an x86_64 guest on Linux.
 
 ### The system
@@ -241,7 +245,8 @@ hydo report --details
 ```
 
 The exploration ran 20 schedules on the Mac engine and found one failure, which reproduced. It
-shrank the failure to one producer and a power cut, and named its class `unsafe-knob`.
+shrank the failure (cut it down to the fewest faults that still cause it) to one producer and a
+power cut, and named its class `unsafe-knob`.
 `hydo report` says the same in words; `--details` shows the minimal schedule and the verdict.
 `dseed=` is the seed of the disk's faults. The schedule's last word, `W=...`, is written by hydo: it records which client commands ran and in
 which order, so that a replay runs the same ones. Copy it as it is.
@@ -264,7 +269,8 @@ hydo run "disk=cut | run C=10"
 ```
 
 The first prints `VIOLATION [queue.no-loss]` with the message it lost; the second prints `OK`.
-Read the verdict on the line `hydo: VERDICT`: the run's `RESULT` line says `OK`, because the
+Read the verdict on the line `hydo: VERDICT`. The run's `RESULT` line, the summary line at the
+end of `hydo run` with `verdict=` and the fingerprint `fp=`, says `OK`. The reason is that the
 messages check runs on the host after the guest's own checks. `hydo run` prints the `VERDICT` line
 whenever the host's checks change the verdict.
 In your own system the same report points at a real bug: a claim names the rule that broke, and

@@ -27,10 +27,10 @@ export PATH="$HOME/.hydo/bin:$PATH"
 
 ## Linux
 
-Linux has two engines. Use the KVM engine unless you need one of three things: several virtual
-CPUs, a power cut at an exact disk flush, or inserted timer ticks. Inserted timer ticks are extra
-timer interrupts that hydo puts into the guest at chosen points, to change the order in which its
-threads run. Those three need the kernel module on your own Intel machine.
+Linux has two engines. Use the KVM engine unless you need one of two things: a power cut at an
+exact disk flush, or inserted timer ticks. Inserted timer ticks are extra timer interrupts that
+hydo puts into the guest at chosen points, to change the order in which its threads run. Those
+two need the kernel module on your own Intel machine. Both engines run several virtual CPUs.
 
 - The KVM engine uses the KVM that comes with Linux. It runs on Intel and AMD CPUs, and on a cloud
   VM with nested virtualization (a VM that can run VMs itself). It has one virtual CPU, or 2 to 8

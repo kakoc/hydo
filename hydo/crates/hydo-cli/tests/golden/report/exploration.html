@@ -103,7 +103,7 @@ a{color:var(--note)}
 </div>
 <p><b>Is it a bug?</b> Decide whether your system must survive a failing disk.</p>
 <div class="cmdrow"><pre class="cmd">hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms&quot;" aria-label="Copy to the clipboard">Copy</button></div>
-<p class="small">If it is expected: <code>hydo ci accept f1:run-error:b90a956980 --reason &quot;…&quot;</code></p>
+<p class="small">If it is expected: <code>hydo ci accept f1:run-error:b90a956980 --reason &quot;…&quot;</code><br>This line is for <code>hydo ci run</code> (<code>hydo guide ci</code>).</p>
 <p class="small"><a href="#f2">Open this failure →</a></p>
 </div></div>
 <div class="card problem" id="p2"><div class="num">2</div><div>
@@ -113,12 +113,12 @@ a{color:var(--note)}
 <p class="when"><b>When it happens</b></p>
 <ol class="steps">
 <li>The disk is faulty: it throws away some writes that it had already confirmed, even ones flushed to disk.</li>
-<li>The power goes out after 11 steps, before the 12th step.</li>
+<li>The power goes out after 11 steps.</li>
 <li>After the restart, your check finds <code>lost acknowledged write</code>.</li>
 </ol>
 <p><b>Is it a bug?</b> No, not in your system: it lost what the disk threw away.</p>
 <div class="cmdrow"><pre class="cmd">hydo run --image scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;</pre><button type="button" class="copy" data-copy="hydo run --image scripted-disk.img &quot;disk=lying:1 dseed=63cbe1e459320dd7 | run C=11&quot;" aria-label="Copy to the clipboard">Copy</button></div>
-<p class="small">If it is expected: <code>hydo ci accept f1:invariant:b85cf53e33 --reason &quot;…&quot;</code></p>
+<p class="small">If it is expected: <code>hydo ci accept f1:invariant:b85cf53e33 --reason &quot;…&quot;</code><br>This line is for <code>hydo ci run</code> (<code>hydo guide ci</code>).</p>
 <p class="small"><a href="#f1">Open this failure →</a></p>
 </div></div>
 <div class="card problem" id="p3"><div class="num">3</div><div>

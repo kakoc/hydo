@@ -117,10 +117,8 @@ hydo run "disk=cut | run C=12 R=everysec"
 `R=everysec` is a guest token that sets Redis's `appendfsync` to `everysec` for this run. A knob
 is such a setting of the system that a guest token changes; the example's `hydo.yaml` lists its
 knobs under `knobs:`. Each command prints a `RESULT` line. Its `verdict=` field is the outcome,
-and `HYDO-ORACLE:` marks the verdict of the invariants. When checks that run on the host after the
-guest (history and messages checks, error logs) change the outcome, `hydo run` prints one more
-line, `hydo: VERDICT ...`, and that line is the run's verdict. `fp=` is the fingerprint; the other fields (`wfp=`, `stops=`, `typed=`,
-`inh=`, `ctl=`) are hydo's own counters, which `hydo diff` compares. The first ends `verdict=HYDO-ORACLE: OK` (fingerprint
+and `HYDO-ORACLE:` marks the verdict of the invariants. `fp=` is the fingerprint; the other
+fields are hydo's own counters. The first ends `verdict=HYDO-ORACLE: OK` (fingerprint
 `a62eee5332a5b9d2`). The second prints a violation: an acknowledged key is gone after the power
 cut (`key k:0 lost`, fingerprint `474b2874e7ef0fa2`; the check stops at the first lost key).
 That is Redis's documented `everysec` window, and the run reproduces it every time. Run either command again and the fingerprint
@@ -177,13 +175,15 @@ hydo run "disk=none | run P=front@10+2"
 ```
 
 The first ends `OK ... acked=30 each stored once`. Before its `RESULT` line, `hydo run` prints
-that the first run ended at a counter loop. It then ran the schedule again in rewind mode, and
-the result is from that second run. Rewind mode is slower: it keeps checkpoints and replays to the loop, so that the loop's wait ends at a point hydo
+`hydo: the run ended as SPIN; ran it again in the engine's rewind mode (...)`: the first run
+ended at a counter loop (`SPIN`), so hydo ran the schedule again in rewind mode, and the result
+is from that second run. Rewind mode is slower: it keeps checkpoints and replays to the loop, so that the loop's wait ends at a point hydo
 can compute. hydo switches to it on its own. The second pauses the example's web server, the service
 `front`, for two requests (`P=front@10+2`: a pause before step 10 that lasts two steps). The
 client's retry stores entry 10 twice, and the invariant catches it
 (`entry 10 stored 2 times`). This example's server is deliberately not idempotent. Each command
-gives the same fingerprint every time. A busy-wait run takes about eight seconds instead of two.
+gives the same fingerprint every time. A busy-wait run takes several times as long as a run
+without counter loops: about eight seconds instead of two on an idle M2 Pro.
 
 ## 3. Explore
 
@@ -211,7 +211,10 @@ in how many ways, and whether each failing run failed again when hydo replayed i
 - what happens, and whether it is a bug;
 - the `hydo run` command that shows it again. For a failed check it is shrunk to the fewest
   faults that still cause it. A run that stopped with an error is not shrunk, so its command
-  repeats the whole failing run, and the report says so.
+  repeats the whole failing run, and the report says so;
+- `If it is expected: hydo ci accept <key>`: this line is for `hydo ci run`, which runs hydo in
+  your continuous integration (`hydo guide ci`). It changes nothing in `hydo report`. A key names
+  the failing check, so two problems that fail the same check share one key.
 
 `hydo report --html` writes the same problems as one web page, with each failure's timeline.
 `hydo report --details` prints the technical report. It gives each failure's class (the cause),
@@ -221,21 +224,27 @@ In this example every problem comes from a fault that the example asks for:
 
 - Redis lost data it had confirmed, with a faulty disk that loses acknowledged writes (the class
   `lying-disk`);
-- redis did not start again after disk errors (`io-errors`);
+- redis did not start again after disk errors (`io-errors`). The report labels it `Worth a look`,
+  because a service that does not start is worth reading about in your own system. Here Redis's
+  log says why: Redis refuses by design to start from an append-only file that the disk errors
+  damaged;
 - Redis lost data it had confirmed after a power cut, with `appendfsync` set to a relaxed value
   (`unsafe-knob`: a knob such as `R=` set to a relaxed value).
 
 With the default settings and an honest disk Redis loses nothing (the `disk=cut | run C=12` run
 of section 2). The exploration finds 11 failures. The table of properties in `hydo report
---details` lists hydo's own `fault.*` properties and the invariants, each with how many runs
-passed and failed it. A program can also report properties of its own from inside, with hydo's
+--details` lists the invariants and hydo's own properties, named `fault.*` (below), each with
+how many runs passed and failed it. A program can also report properties of its own from inside, with hydo's
 assertion libraries for Rust, Go, Python and JavaScript (the SDKs, `hydo guide sdks`); this
 example has none. Its invariant is marked `[the project's own check]`, as every invariant
 and check of a `hydo.yaml` is. `fault.*` properties are hydo's own: one for each fault that the guest reports when it happens
 (a pause, a clock step, a one-way network fault). `NOT EXERCISED` means that no run reached it; in
 this exploration no run paused Redis or stepped its clock, so all six show it. The last line
-counts the runs (`runs=`), and in `setup-complete seen in` the runs whose program said through
-an SDK that its setup was done: 0 here, because the example uses no SDK.
+counts the runs (`runs=`). `setup-complete seen in` counts the runs whose program said through
+an SDK that its setup was done: 0 here, because the example uses no SDK. The run's timeline
+still shows hydo's own `HYDO-SETUP-COMPLETE` event. A run that stopped with an error before the
+invariants ran counts in neither the passed nor the failed column. So for this example's
+invariant the two add up to fewer runs than `runs=`.
 
 ## 4. Reproduce a failure
 

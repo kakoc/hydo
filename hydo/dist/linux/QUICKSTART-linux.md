@@ -22,7 +22,7 @@ Words this page uses:
 - Verdict: the run's outcome: `OK`, `VIOLATION` (an invariant, a property that must always hold,
   failed), or `ERROR` (the run could not finish its workload).
 - Fingerprint epoch: the generation of hydo's fingerprints. A change that moves recorded
-  fingerprints raises it; this release's is 2. Runs of different epochs compare only verdicts.
+  fingerprints raises it; this release's is 3. Runs of different epochs compare only verdicts.
 - Recovery: after a power cut, hydo boots the guest again on what the disk kept and runs the
   invariants there.
 - Engine: the program that runs the virtual machine: hvx (hydo's kernel module) or KVM.
@@ -40,8 +40,9 @@ hydo has two engines on Linux, and each needs different things:
   example in sections 2 to 5 works the same on KVM. Without the kernel module (no `/dev/hvx`),
   hydo uses the KVM engine by itself; on a machine with both engines, add `--backend kvm`.
 - The kernel module `hvx.ko`, which sections 1 to 5 use, needs what the rest of this list says.
-  It adds several virtual CPUs, a power cut at the k-th disk flush (`cf=`), and inserted timer
-  ticks (extra timer interrupts between the regular ones, which change thread interleavings).
+  It adds a power cut at the k-th disk flush (`cf=`) and inserted timer ticks (extra timer
+  interrupts between the regular ones, which change thread interleavings). Both engines run
+  several virtual CPUs (`--vcpus N`).
 
 For the kernel module:
 
@@ -164,10 +165,7 @@ This writes `hydo-out/explore-ob-redis-disk.img`, and next to it the steps of th
 and `hydo-agent`, plus a data partition. `hydo-agent` is a small program that is the guest's first
 process and only carries out what the host tells it. Every decision (when to start Redis, when to
 inject a fault, when to check the invariant) is made by `hydo` on the host, which also records it.
-Building the same `hydo.yaml` again gives the same bytes (sha256 `f3a152d62747c2b5…`). The image names the guest kernel it was built for, by sha256, in
-`/etc/hydo/image.json`. So a later hydo boots the same kernel, or says which one it needs. Next to
-the image, `explore-ob-redis-disk.img.json` records which hydo built it (version and commit) and
-the manifest's sha256.
+Building the same `hydo.yaml` again gives the same bytes (sha256 `f3a152d62747c2b5…`).
 
 Run one schedule with no faults. Then run one with a power cut before step 12, while Redis is set
 to sync its log only once a second. The workload's 20 steps count from 0, and step 5, for
@@ -256,8 +254,9 @@ hydo report
 the machine's CPUs and free memory. Each worker boots the guest once and starts every schedule
 from a snapshot of it. A snapshot is a saved copy of the whole machine after the boot; hvx
 keeps the snapshots in memory, the KVM engine in files. The strategy
-decides how schedules are drawn: `swarm` switches whole kinds of faults on and off per schedule,
-and `process` injects faults as a process over the run. `hydo guide faults` lists the other
+decides how schedules are drawn. `swarm` switches whole kinds of faults on and off per schedule.
+`process` puts two to four faults (a kill, a pause, a network fault, a clock step) one after
+another, each in its own part of the run. `hydo guide faults` lists the other
 options and explains them.
 
 In a terminal, `hydo explore` ends with how many runs failed, in how many ways, and whether
@@ -270,7 +269,10 @@ each failing run failed again when hydo replayed it. `hydo report` prints each p
 - what happens, and whether it is a bug;
 - the `hydo run` command that shows it again. For a failed check it is shrunk to the fewest
   faults that still cause it. A run that stopped with an error is not shrunk, so its command
-  repeats the whole failing run, and the report says so.
+  repeats the whole failing run, and the report says so;
+- `If it is expected: hydo ci accept <key>`: this line is for `hydo ci run`, which runs hydo in
+  your continuous integration (`hydo guide ci`). It changes nothing in `hydo report`. A key names
+  the failing check, so two problems that fail the same check share one key.
 
 `hydo report --html` writes the same problems as one web page, with each failure's timeline.
 `hydo report --details` prints the technical report. It gives each failure's class (the cause,
@@ -282,8 +284,11 @@ and JavaScript (the SDKs, `hydo guide sdks`). This example has none. Its invaria
 `[the project's own check]`, as every invariant and check of a `hydo.yaml` is. The `fault.*`
 properties are one for each fault that the guest reports when it happens (a pause, a clock step,
 a one-way network fault). `NOT EXERCISED` means that no run reached it. The last line counts the
-runs (`runs=`), and in `setup-complete seen in` the runs whose program said through an SDK that
-its setup was done: 0 here, because the example uses no SDK.
+runs (`runs=`). `setup-complete seen in` counts the runs whose program said through an SDK that
+its setup was done: 0 here, because the example uses no SDK. The run's timeline still shows
+hydo's own `HYDO-SETUP-COMPLETE` event. A run that stopped with an error before the invariants
+ran counts in neither the passed nor the failed column. So for this example's invariant the two
+add up to fewer runs than `runs=`.
 
 For this example expect only these classes in `hydo report --details`:
 
@@ -357,16 +362,6 @@ with the shared libraries the program loads, or a Docker/OCI image saved with `d
 everything else builds without Nix. Then: `hydo build hydo/hydo.yaml`, `hydo run "disk=none |
 run"`, `hydo explore`. The image of a `hydo/` folder goes to `.hydo/` instead of `hydo-out/`.
 
-Two ready-made tools come with the release:
-
-- `hydo-read` (in `guest/`) reads a MySQL, PostgreSQL, Kafka, Redis, or etcd store as JSON
-  Lines. In an image it also answers as `hydo-check`, which compares two readings. `hydo build`
-  puts them into an image when a command of the manifest calls them (MANIFEST.md, section
-  `Reading the stores`).
-- `hydo-grpc-gen <proto dir> --out <dir>` writes gRPC drivers for your services from their
-  `.proto` files, with the static client `hydo-grpc` copied from `guest/` (MANIFEST.md, section
-  `gRPC services`).
-
 ## 6. Run without the kernel module (KVM)
 
 hydo has a second engine for Linux that needs no kernel module and no root: it runs the same
@@ -438,8 +433,9 @@ The exploration finds 8 failures, and its report gives two minimal schedules:
   guest tools under `~/.hydo/guest/store/` are read-only.
 - A build leaves read-only files in `hydo-out/` too (the `*-root` folders of images with the
   guest network tools), so remove a project's outputs with `chmod -R u+w hydo-out; rm -rf
-  hydo-out`. Runs started with `sudo` leave files that belong to root; then use
-  `sudo rm -rf hydo-out`. After sections 2 to 4, `~/hydo-redis` holds about 580 MB.
+  hydo-out`. Without the udev rule every run uses `sudo` for the engine, so each run leaves
+  agent logs (`*.agent.log`) that belong to root. `chmod` then prints "Operation not permitted"
+  for them, and `rm -rf hydo-out` still removes them; if it does not, use `sudo rm -rf hydo-out`. After sections 2 to 4, `~/hydo-redis` holds about 580 MB.
 
 ## Licenses and source code
 

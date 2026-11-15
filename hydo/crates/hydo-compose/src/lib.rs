@@ -3216,7 +3216,7 @@ impl<'a> Importer<'a> {
         ), 0));
         l.push_str("workload:\n  steps: 20\n  run: ");
         l.push_str(&block(&format!(
-            "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  # TODO: one operation, e.g.\n  #   wget -q -T 5 -O /dev/null --post-data \"id=$i\" http://{}:{}/ && echo $i >> $HYDO_ACKED\n  echo \"hydo-compose: TODO write the workload (hydo.yaml)\" > /dev/console; exit 1\n  i=$((i + 1))\ndone",
+            "i=$HYDO_FROM\nwhile [ $i -lt $HYDO_TO ]; do\n  # TODO: one operation with item $i against {} (port {}), with a client the image has;\n  #   only when the system confirmed it: echo $i >> $HYDO_ACKED\n  echo \"hydo-compose: TODO write the workload (hydo.yaml)\" > /dev/console; exit 1\n  i=$((i + 1))\ndone",
             ex.compose, ex_port
         ), 4));
         l.push_str("  timeout: 300\n\n");
@@ -3568,13 +3568,19 @@ pub(crate) fn write_outputs(imp: &mut Importer, text: &str, out: &str, p: &str) 
             String::new()
         }
     );
-    eprintln!(
-        "{p}: next: sh {fs}; then delete workload.run and the TODO invariant in {out} \
-         (keep workload.steps and workload.timeout) and write the test as commands in \
-         hydo/workload/ and hydo/checks/, or a test: section (hydo guide workflow)"
-    );
+    if !NO_NEXT_LINE.load(std::sync::atomic::Ordering::Relaxed) {
+        eprintln!(
+            "{p}: next: sh {fs}; then delete workload.run and the TODO invariant in {out} \
+             (keep workload.steps and workload.timeout) and write the test as commands in \
+             hydo/workload/ and hydo/checks/, or a test: section (hydo guide workflow)"
+        );
+    }
     0
 }
+
+/// Set by `hydo onboard`, which prints one list of next steps itself (0.3.4's docs review: a
+/// reader got two lists that disagreed).
+pub static NO_NEXT_LINE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 #[cfg(test)]
 mod tests {

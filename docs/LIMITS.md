@@ -17,7 +17,9 @@ These are the limits of hydo 0.3.4. The [README](../README.md) shows what it doe
 - The kernel module needs an Intel CPU with VT-x, Intel's hardware support for virtual machines.
   The KVM engine runs on Intel and AMD CPUs.
 - A guest has at most 8 GiB of RAM, on every engine.
-- Time inside the virtual machine is virtual, so hydo does not measure performance.
+- Time inside the virtual machine is virtual, so hydo does not measure how fast your system
+  runs on real hardware. It can count how much work each step does and compare two builds
+  (`perf:`, `hydo guide workflow`, section "Performance tests").
 - Anyone who can open `/dev/hvx` can run guests through the kernel module, which runs with the
   rights of the kernel. Give that access only to people you would give sudo.
 - With Secure Boot on, Linux loads only signed modules. Sign `hvx.ko` with a key that you enrolled

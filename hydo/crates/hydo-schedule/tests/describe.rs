@@ -230,10 +230,7 @@ fn a_power_cut_with_a_relaxed_setting() {
                 "Redis appendfsync is set to `everysec`, not its safe value `always`.",
                 Part::Setup
             ),
-            (
-                "The power goes out after 12 steps, before the 13th step.",
-                Part::Fault
-            ),
+            ("The power goes out after 12 steps.", Part::Fault),
         ]
     );
     let glosses: Vec<(&str, &str)> = all
@@ -245,7 +242,7 @@ fn a_power_cut_with_a_relaxed_setting() {
         vec![
             ("disk=cut", "a power cut loses unflushed writes"),
             ("R=everysec", "Redis appendfsync set to `everysec`"),
-            ("C=12", "power cut before the 13th step"),
+            ("C=12", "power cut after 12 steps"),
         ]
     );
     assert_eq!(all[2].context.as_deref(), Some("after a power cut"));

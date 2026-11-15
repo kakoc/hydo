@@ -1038,19 +1038,10 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
             .fault(net_kind(netem), "during a network fault".into())
         }
         GuestToken::Cut(at) => {
-            let sentence = match at {
-                0 => "The power goes out before the first step.".to_string(),
-                n => format!(
-                    "The power goes out after {}, before {}.",
-                    if *n == 1 {
-                        "the first step".to_string()
-                    } else {
-                        format!("{n} steps")
-                    },
-                    nth_step(*n)
-                ),
-            };
-            fault(sentence, format!("power cut before {}", nth_step(*at)))
+            // "after N steps" only: the description does not know how many steps the workload
+            // has, and a cut after its last step has no next step to name (0.3.4's docs review)
+            let sentence = format!("The power goes out {}.", after(*at));
+            fault(sentence, format!("power cut {}", after(*at)))
                 .at(*at)
                 .fault("power cuts", "after a power cut".into())
         }

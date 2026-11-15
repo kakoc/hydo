@@ -807,6 +807,16 @@ pub fn cmd_module(ctx: &Ctx, argv: &[String]) -> i32 {
         die(&format!("unexpected arguments: {}", args.join(" ")));
     }
     match verb.as_str() {
+        // --dry-run builds nothing either (0.3.4's docs review: it built the module)
+        "build" if dry => {
+            println!(
+                "would build {} from {} for the running kernel {} (make in the kernel's build folder)",
+                module_ko(ctx, &name).display(),
+                ctx.p("module").display(),
+                uname_release()
+            );
+            0
+        }
         "build" => module_build(ctx, &name),
         "install" => module_install(ctx, &name, dry, &params),
         "uninstall" => module_uninstall(ctx, &name, dry),

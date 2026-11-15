@@ -448,6 +448,41 @@ fn explore_more(pr: &story::Project, image: &str, seeds: Option<&str>) -> String
     w.join(" ")
 }
 
+/// The sentence under each problem's accept lines: one key per way its runs failed, and the
+/// other problems that take the same key, because a key names the failing check and the
+/// failure, not the cause (two causes of one lost write share it).
+fn accept_notes(items: &mut [Item]) {
+    let keys: Vec<Vec<String>> = items.iter().map(|it| it.accept.clone()).collect();
+    for (i, it) in items.iter_mut().enumerate() {
+        let mut parts = Vec::new();
+        if it.accept.len() > 1 {
+            parts.push("one key for each way these runs failed".to_string());
+        }
+        let others: Vec<String> = keys
+            .iter()
+            .enumerate()
+            .filter(|(j, ks)| *j != i && ks.iter().any(|k| it.accept.contains(k)))
+            .map(|(j, _)| (j + 1).to_string())
+            .collect();
+        if !others.is_empty() {
+            parts.push(format!(
+                "the same key as problem {}: a key names the failing check, not the cause, so \
+                 accepting it accepts both",
+                describe::and_list(&others)
+            ));
+        }
+        if !parts.is_empty() {
+            let mut t = parts.join("; ");
+            if let Some(f) = t.get(..1) {
+                t = f.to_uppercase() + &t[1..];
+            }
+            it.accept_note = format!("{t}. These lines are for `hydo ci run` (`hydo guide ci`).");
+        } else if !it.accept.is_empty() {
+            it.accept_note = "This line is for `hydo ci run` (`hydo guide ci`).".into();
+        }
+    }
+}
+
 /// The finding key `hydo ci accept` takes for a failing run.
 fn key_of(run: &Run) -> Option<String> {
     crate::ci::key::of_verdict(&run.verdict.text, &run.findings).map(|(_, _, k)| k)
@@ -1464,6 +1499,9 @@ pub struct Item {
     /// The finding keys `hydo ci accept` takes for it, one per signature, each under the first
     /// problem it covers.
     pub accept: Vec<String>,
+    /// A sentence under the accept lines: why there are several keys, and which other problem
+    /// takes the same key (a key names the failing check, not the cause; 0.3.4's docs review).
+    pub accept_note: String,
     /// The run whose failing service's log the explorer reads by a replay: the run this problem
     /// shows, when it stopped with an error.
     pub replay: Option<String>,
@@ -1680,6 +1718,36 @@ pub fn exploration_story<'a>(
             }),
         }
     }
+    // a title names the minimal schedule's setting; when the problem's runs had several relaxed
+    // values of it, name them all (0.3.4's docs review: "set to `no`" over runs with `no` and
+    // `everysec`)
+    for x in probs.iter_mut() {
+        let mut vals: Vec<String> = Vec::new();
+        for f in &x.failures {
+            if let Some((_, v)) = Schedule::parse(&f.run.schedule)
+                .ok()
+                .and_then(|sc| advice::relaxed(&sc, &pr.knobs))
+            {
+                if !vals.contains(&v) {
+                    vals.push(v);
+                }
+            }
+        }
+        if vals.len() > 1 {
+            if let Some(i) = x.problem.title.find(" set to `") {
+                let rest = &x.problem.title[i + " set to `".len()..];
+                if let Some(j) = rest.find('`') {
+                    let quoted: Vec<String> = vals.iter().map(|v| format!("`{v}`")).collect();
+                    x.problem.title = format!(
+                        "{} set to {}{}",
+                        &x.problem.title[..i],
+                        describe::and_list(&quoted).replace(" and ", " or "),
+                        &rest[j + 1..]
+                    );
+                }
+            }
+        }
+    }
     // the most attention first, then the most runs
     let mut order: Vec<usize> = (0..probs.len()).collect();
     order.sort_by_key(|&i| {
@@ -1849,6 +1917,7 @@ pub fn exploration_story<'a>(
             more_lines: 0,
             command,
             accept,
+            accept_note: String::new(),
             replay: if error { first.run.tag.clone() } else { None },
             link: format!("f{}", x.groups[0] + 1),
         });
@@ -1905,10 +1974,12 @@ pub fn exploration_story<'a>(
             more_lines: new_kinds.len().saturating_sub(5),
             command: format!("hydo errors {}", quote(shown)),
             accept: Vec::new(),
+            accept_note: String::new(),
             replay: None,
             link: "errors".into(),
         });
     }
+    accept_notes(&mut items);
     let held = held_of(&pr, &first, total);
     let explore_more = explore_more(&pr, &doc.image.path, doc.config.seeds.as_deref());
     // details: which problem each group of failures is
@@ -2008,12 +2079,13 @@ fn exploration_page(
                 String::new()
             } else {
                 format!(
-                    "<p class=\"small\">If it is expected: {}</p>\n",
+                    "<p class=\"small\">If it is expected: {}<br>{}</p>\n",
                     it.accept
                         .iter()
                         .map(|k| code(&format!("hydo ci accept {k} --reason \"…\"")))
                         .collect::<Vec<_>>()
-                        .join("<br>")
+                        .join("<br>"),
+                    md(&it.accept_note)
                 )
             },
             link: Some(it.link.clone()),

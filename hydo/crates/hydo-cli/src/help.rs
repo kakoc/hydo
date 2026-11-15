@@ -121,8 +121,13 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
         "fake" => hydo_compose::openapi::USAGE.to_string(),
         "module" if linux => "usage: hydo module build|install|uninstall|load|unload|status [--name NAME] [--dry-run] [--param KEY=VALUE ...]
        hydo module udev install|remove|status [--name NAME] [--group GROUP] [--mode 0660] [--no-adduser] [--dry-run]
-  builds the hvx kernel module for the running kernel and loads it (install), or unloads and
-  deletes it (uninstall). `udev install` gives /dev/hvx to a group, so that runs need no sudo.
+  The hvx kernel module for the running kernel:
+    build      builds it from the release's sources, without loading it
+    install    builds it and loads it (sudo)
+    uninstall  unloads it and deletes it (sudo)
+    load       loads the module that was built, unload unloads it (sudo)
+    status     says whether it is loaded and whether it is this release's source
+    udev       install gives /dev/hvx to a group, so that runs need no sudo; remove, status
   --dry-run prints what it would do and does nothing."
             .to_string(),
         _ => return None,

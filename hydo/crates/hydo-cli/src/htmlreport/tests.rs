@@ -175,20 +175,20 @@ fn a_power_cut_run_against_its_passing_neighbour() {
     // the plain part, as the approved mockup: concrete facts of this run only
     for want in [
         "<h1>Redis lost data it had confirmed, after a power cut, with Redis appendfsync set to <code>everysec</code></h1>",
-        "Your workload ran 12 steps and Redis confirmed all 12. Then the power was cut before the 13th step. When Redis started again, <code>key k:0</code> was gone.",
-        "<li>The power goes out after 12 steps, before the 13th step.</li>",
+        "Your workload ran 12 steps and Redis confirmed all 12. Then the power was cut after 12 steps. When Redis started again, <code>key k:0</code> was gone.",
+        "<li>The power goes out after 12 steps.</li>",
         "<li>After the restart, your check finds <code>key k:0 lost</code>.</li>",
         "Expected for this setting",
         "A second run with Redis appendfsync at <code>always</code> instead of <code>everysec</code> passed every check.",
         "keep Redis appendfsync at <code>always</code>",
         // what hydo saw: the four lines of the mockup
         "Redis confirmed <code>k:0</code> … <code>k:11</code> (12 steps)",
-        "The power was cut before the 13th step",
+        "The power was cut after 12 steps",
         "The machine started again, and Redis started from what was on its disk",
         "<code>key k:0 lost</code> <span class=\"muted\">(the check stops at the first one)</span>",
         "In your project folder (<code>redis</code>), this failure repeats exactly, every time you run it:",
         "<pre class=\"cmd\">hydo run &quot;disk=cut | run C=12 R=everysec&quot;</pre>",
-        "In hydo's words: <code>disk=cut</code> = a power cut loses unflushed writes, <code>C=12</code> = power cut before the 13th step, <code>R=everysec</code> = Redis appendfsync set to <code>everysec</code>.",
+        "In hydo's words: <code>disk=cut</code> = a power cut loses unflushed writes, <code>C=12</code> = power cut after 12 steps, <code>R=everysec</code> = Redis appendfsync set to <code>everysec</code>.",
         "<code>hydo inspect start hydo-out/run-cut --at end</code>",
         "Details for a bug report",
     ] {
@@ -555,9 +555,9 @@ fn the_terminal_says_what_a_run_page_says() {
         "Redis lost data it had confirmed, after a power cut, with Redis appendfsync set\nto everysec\n"
     ));
     for want in [
-        "Your workload ran 12 steps and Redis confirmed all 12. Then the power was cut\nbefore the 13th step. When Redis started again, key k:0 was gone.\n",
+        "Your workload ran 12 steps and Redis confirmed all 12. Then the power was cut\nafter 12 steps. When Redis started again, key k:0 was gone.\n",
         "\nWhen it happens:\n",
-        "   3. The power goes out after 12 steps, before the 13th step.\n",
+        "   3. The power goes out after 12 steps.\n",
         "   4. After the restart, your check finds key k:0 lost.\n",
         "Is it a bug? Expected for this setting.",
         "\nWhat hydo saw:\n",
@@ -570,7 +570,7 @@ fn the_terminal_says_what_a_run_page_says() {
         assert!(text.contains(want), "the terminal lacks {want:?}:\n{text}");
     }
     assert!(!text.contains("findings:"), "{text}");
-    assert!(html.contains("The power goes out after 12 steps, before the 13th step."));
+    assert!(html.contains("The power goes out after 12 steps."));
     let words: String = text
         .lines()
         .map(|l| l.split(": hydo ").next().unwrap_or(""))

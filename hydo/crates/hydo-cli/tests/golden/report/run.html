@@ -84,14 +84,14 @@ a{color:var(--note)}
 <header>
 <p class="eyebrow">hydo report · project <b>redis</b> · one run</p>
 <h1>Redis lost data it had confirmed, after a power cut, with Redis appendfsync set to <code>everysec</code></h1>
-<p class="lead">Your workload ran 12 steps and Redis confirmed all 12. Then the power was cut before the 13th step. When Redis started again, <code>key k:0</code> was gone.</p>
+<p class="lead">Your workload ran 12 steps and Redis confirmed all 12. Then the power was cut after 12 steps. When Redis started again, <code>key k:0</code> was gone.</p>
 </header>
 <div class="verdictline"><span class="pill bad">Your check failed</span><span class="muted"><code>redis.acked_writes_survive</code>: every SET the client saw acknowledged reads back with its value</span></div>
 <h2 id="when">When it happens</h2>
 <div class="card"><ol class="steps">
 <li>The disk keeps recent writes in a cache that a power cut loses, as real disks do.</li>
 <li>Redis appendfsync is set to <code>everysec</code>, not its safe value <code>always</code>.</li>
-<li>The power goes out after 12 steps, before the 13th step.</li>
+<li>The power goes out after 12 steps.</li>
 <li>After the restart, your check finds <code>key k:0 lost</code>.</li>
 </ol>
 </div>
@@ -103,14 +103,14 @@ a{color:var(--note)}
 <h2 id="saw">What hydo saw</h2>
 <div class="card evidence">
 <div><span class="mark m-ok">✔</span>Redis confirmed <code>k:0</code> … <code>k:11</code> (12 steps)</div>
-<div><span class="mark m-warn">⚡</span>The power was cut before the 13th step</div>
+<div><span class="mark m-warn">⚡</span>The power was cut after 12 steps</div>
 <div><span class="mark m-note">↻</span>The machine started again, and Redis started from what was on its disk</div>
 <div><span class="mark m-bad">✘</span><code>key k:0 lost</code> <span class="muted">(the check stops at the first one)</span></div>
 </div>
 <h2 id="again">See it again</h2>
 <p>In your project folder (<code>redis</code>), this failure repeats exactly, every time you run it:</p>
 <div class="cmdrow"><pre class="cmd">hydo run &quot;disk=cut | run C=12 R=everysec&quot;</pre><button type="button" class="copy" data-copy="hydo run &quot;disk=cut | run C=12 R=everysec&quot;" aria-label="Copy to the clipboard">Copy</button></div>
-<p class="small">In hydo's words: <code>disk=cut</code> = a power cut loses unflushed writes, <code>C=12</code> = power cut before the 13th step, <code>R=everysec</code> = Redis appendfsync set to <code>everysec</code>.</p>
+<p class="small">In hydo's words: <code>disk=cut</code> = a power cut loses unflushed writes, <code>C=12</code> = power cut after 12 steps, <code>R=everysec</code> = Redis appendfsync set to <code>everysec</code>.</p>
 <p class="small">To look inside the machine at the moment it failed: <code>hydo inspect start hydo-out/run-cut --at end</code></p>
 <details class="share" id="details"><summary>Details for a bug report</summary>
 <div class="card"><dl class="facts">

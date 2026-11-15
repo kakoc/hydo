@@ -451,8 +451,8 @@ pub fn acked(evs: &[TimelineEvent]) -> Option<(Vec<u64>, Vec<u64>)> {
         })
 }
 
-/// "before step 12" in a note of the run (counted from 0) as the page says it: "before the 13th
-/// step".
+/// "before step 12" in a note of the run (counted from 0) as the page says it: "after 12 steps"
+/// (a cut after the workload's last step has no next step to name; 0.3.4's docs review).
 fn step_of(head: &str) -> String {
     let Some(i) = head.find("before step ") else {
         return String::new();
@@ -462,7 +462,7 @@ fn step_of(head: &str) -> String {
         .next()
         .and_then(|x| x.parse().ok());
     match n {
-        Some(n) => format!(" before {}", describe::nth_step(n)),
+        Some(n) => format!(" {}", describe::after(n)),
         None => String::new(),
     }
 }

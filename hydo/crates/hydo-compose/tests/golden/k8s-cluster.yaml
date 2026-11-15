@@ -280,8 +280,8 @@ workload:
   run: |
     i=$HYDO_FROM
     while [ $i -lt $HYDO_TO ]; do
-      # TODO: one operation, e.g.
-      #   wget -q -T 5 -O /dev/null --post-data "id=$i" http://kv-0:7000/ && echo $i >> $HYDO_ACKED
+      # TODO: one operation with item $i against kv-0 (port 7000), with a client the image has;
+      #   only when the system confirmed it: echo $i >> $HYDO_ACKED
       echo "hydo-compose: TODO write the workload (hydo.yaml)" > /dev/console; exit 1
       i=$((i + 1))
     done

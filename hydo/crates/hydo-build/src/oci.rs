@@ -1066,6 +1066,15 @@ fn image_path(v: &Value, arch: &str, mdir: &str, wh: &str) -> R<String> {
         };
     }
     if !Path::new(&p).exists() {
+        // an imported project has the script that makes these files: name it first (0.3.4, two
+        // readers ran `--check` before the fetch and were sent to docker save)
+        let fetch = Path::new(mdir).join("fetch-images.sh");
+        if fetch.is_file() {
+            return Err(format!(
+                "{wh}: image {p} does not exist yet. Run `sh {}` first: it fetches the images this project pins",
+                fetch.display()
+            ));
+        }
         return Err(format!(
             "{wh}: image {p} does not exist. hydo-build does not pull images; produce the file with `docker save -o <file>.tar <image>` or `skopeo copy docker://<image>@sha256:<digest> oci:<dir>:<tag>` (MANIFEST.md)"
         ));
