@@ -176,7 +176,7 @@ does not move a run.
 A finding is a Hatchet bug only when its cause is in Hatchet's code and it breaks a promise of
 Hatchet's documentation.
 
-### 1. A crash of an engine loses the messages it read from the PostgreSQL queue (a Hatchet bug, new as far as the search found)
+### 1. A crash of an engine loses the messages it read from the PostgreSQL queue (a Hatchet bug, reported as [hatchet-dev/hatchet#5527](https://github.com/hatchet-dev/hatchet/issues/5527))
 
 **How it was found.** The first directed kills of an engine broke the rules. On an earlier image of
 this example, `disk=none | run K=hatchet_engine_2@7+3` broke the generic rule and `tasks.no-loss`:

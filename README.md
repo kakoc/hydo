@@ -94,6 +94,10 @@ Each example folder holds the project's hydo setup and the recorded runs.
   job runs twice. A new bug, reported as
   [river#1602](https://github.com/riverqueue/river/issues/1602)
   ([the example](hydo/onboard/examples/river/)).
+- **Hatchet v0.120.5.** With its PostgreSQL queue, a crash of an engine loses the messages it had
+  just read, so runs it acknowledged never run. A new bug, reported as
+  [hatchet#5527](https://github.com/hatchet-dev/hatchet/issues/5527)
+  ([the example](hydo/onboard/examples/hatchet/)).
 
 ## Your own project
 
