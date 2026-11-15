@@ -1,0 +1,5 @@
+#!/bin/sh
+# helper_q "<SQL>": one statement on Saleor's PostgreSQL with psql from its own image; one row per
+# line, the columns separated by spaces (over the local socket, which needs no password).
+# Exit 2 when the database does not answer.
+timeout 30 hydo-oci db psql -U saleor -d saleor -Atq -F ' ' -v ON_ERROR_STOP=1 -c "$1" || exit 2

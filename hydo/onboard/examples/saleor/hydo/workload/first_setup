@@ -1,0 +1,17 @@
+#!/bin/sh
+# hydo: timeout=300
+# The shop, once, inside the snapshot every run starts from: the staff user, the channel's
+# settings, three variants with stock, vouchers, gift cards, the payment app and its webhooks,
+# and the client's own app token (helper_client.py setup). On a failure its output goes to the
+# console, where `hydo run` shows it.
+. /hydo/workload/helper_lib.sh
+out=/tmp/hydo-saleor-setup.txt
+{
+  hydo-oci api python3 manage.py createsuperuser --noinput &&
+  # WELCOME ends at 00:40 UTC of the day the guest clock starts (guest.clock_start)
+  hydo-oci api env SALEOR_URL=http://api:8000/graphql/ VOUCHER_END="$(date -u +%Y-%m-%dT00:40:00+00:00)" \
+    python3 /hydo/workload/helper_client.py setup http://10.89.0.1:9001
+} > "$out" 2>&1
+rc=$?
+[ $rc = 0 ] || sed 's/^/first_setup: /' "$out" > /dev/console
+exit $rc

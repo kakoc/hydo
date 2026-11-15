@@ -1,0 +1,8 @@
+# finding 4 (RESULTS.md), a Saleor bug: a power cut at the 270th disk flush, after a forward clock
+# step of half a year before round 8, stops a gift card charge between its two commits. The card's
+# balance is lowered, the charge is not recorded: the order stays unpaid and its gift card payment
+# keeps a charge request without a result. The exploration found it in seed 5 (with a pause of
+# Redis and a step of a year); each of the two faults alone passes.
+# verdict: HYDO-ORACLE: VIOLATION [gift_card_balance_is_its_ledger] db: 1 rows where none may be
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut dseed=978180e49ee2ae24 cf=270 | run T=8:15768000 W=3cc7df19,p1,q2,r1500

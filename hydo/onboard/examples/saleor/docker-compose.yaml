@@ -1,0 +1,99 @@
+# Saleor 3.23.49 (an e-commerce platform: a Django GraphQL API, Celery workers, PostgreSQL and
+# Redis), as Saleor's own platform file runs its backend (github.com/saleor/saleor-platform,
+# docker-compose.yml): the API, one Celery worker with the beat scheduler inside it (-B), the
+# database and the cache, which is also Celery's broker. Left out of that file: the dashboard (a
+# UI), Jaeger (traces) and Mailpit (e-mail; no test reads mail). The images are pinned: the
+# platform file names ghcr.io/saleor/saleor:3.23, postgres:15-alpine and valkey:8.1-alpine; this
+# file runs the newest 3.23 release, PostgreSQL 16 and Redis 7.4, which Saleor supports.
+#
+# Two settings differ from the platform file's backend.env, both for the test's payment app:
+# HTTP_IP_FILTER_ENABLED=False lets Saleor call an app on a private address (the platform file's
+# comment names this for local app development), and the one-shot `migrate` service runs the
+# migrations that the platform's README asks the user to run by hand.
+volumes:
+  saleor_db:
+  saleor_redis:
+  saleor_media:
+
+x-backend-environment: &backend-env
+  DATABASE_URL: postgres://saleor:saleor@db:5432/saleor
+  CACHE_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  SECRET_KEY: changeme
+  ALLOWED_HOSTS: localhost,127.0.0.1,api
+  DEFAULT_CHANNEL_SLUG: default-channel
+  DEFAULT_FROM_EMAIL: noreply@example.com
+  HTTP_IP_FILTER_ENABLED: "False"
+  HTTP_IP_FILTER_ALLOW_LOOPBACK_IPS: "True"
+  SEND_USAGE_TELEMETRY: "False"
+
+services:
+  db:
+    image: postgres:16.16-alpine3.24
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saleor -d saleor -h localhost -p 5432"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    environment:
+      POSTGRES_USER: saleor
+      POSTGRES_PASSWORD: saleor
+      POSTGRES_DB: saleor
+    volumes:
+      - saleor_db:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7.4.7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - saleor_redis:/data
+
+  migrate:
+    image: ghcr.io/saleor/saleor:3.23.49
+    command: ["python3", "manage.py", "migrate", "--no-input"]
+    environment: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    image: ghcr.io/saleor/saleor:3.23.49
+    restart: unless-stopped
+    environment: *backend-env
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/', timeout=5)"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - saleor_media:/app/media
+
+  worker:
+    image: ghcr.io/saleor/saleor:3.23.49
+    command: ["celery", "--app=saleor.celeryconf:app", "worker", "--loglevel=info", "-B", "--concurrency=2"]
+    restart: unless-stopped
+    environment: *backend-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - saleor_media:/app/media

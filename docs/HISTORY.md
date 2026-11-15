@@ -10653,3 +10653,103 @@ are copied to `~/hydo/build/m244` and give the same two values on hvx. On KVM th
 public_content::`, `cargo test -p hydo-image`, the list's own tests in hydo-bench and
 hydo-control, and `sh ci/vale.sh`. `hydo-bench rebaseline --check --thorough` exited 0 on the Mac
 and on the AMD KVM hosts. HVX_CHECK
+
+### Milestone 251 (tentative number) - DONE (Saleor 3.23.49, an e-commerce platform on Django, Celery, PostgreSQL and Redis, onboarded on hvx with business rules from the rule suggestion, on a project with Django models that hydo had not seen; two new candidates found blind and reproduced without hydo, no upstream report of either: a refund request that `transactionRequestAction` acknowledged is lost with its Celery task, and a gift card is charged without the charge being recorded; two known Saleor bugs reproduced; the rule suggestion's gaps on a Django project; nothing recorded moved; 2026-11-15)
+
+**In short.** Saleor 3.23.49 runs in `hydo/onboard/examples/saleor` (RESULTS.md) as Saleor's
+platform file runs its backend: the API (uvicorn), one Celery worker with beat, PostgreSQL 16.16
+and Redis 7.4.7, imported with `hydo compose` from the example's Compose file. The shop has three
+variants, three vouchers (a usage limit, single-use codes, and once per customer with an end
+time), and four gift cards. Customers pay through a payment app that Saleor calls synchronously
+(the fake `payments`, which keeps idempotency keys as a payment provider does) and with Saleor's
+own gift card gateway, new in 3.23. Staff refund orders with `transactionRequestAction`. Every
+run used hvx on the bare-metal machine, with this branch's `hydo` programs in a copy of the 0.3.3
+Linux release. Saleor's own images in Docker on this Mac ran the native probes.
+
+**The rule suggestion.** `hydo rules scan` printed 4,453 lines from 3,276 files of Saleor's
+repository. It read none of Saleor's 25 `models.py` files, because it takes a code file as
+schema only in a folder named `models`, and it read 1,109 lines of migrations instead. 55 of its
+84 documentation lines came from instruction files for coding agents. Of the 17 proposed rules,
+the scan's lines gave the evidence of 2; reading the files that it missed gave 14; the generic
+rule over the client's acknowledged operations is the 17th. `hydo rules check --mutate` finished
+one clean run on the image with the final workload and checks: 16 rules held there, each with
+cases, and the `hydo-world check` rule gave no result although it held. The host's
+out-of-memory killer ended its other runs, and all three runs of an earlier check, so no planted
+change ran. All 17 rules are the example's checks, and they held in the clean runs of the final
+image.
+
+**What was found.**
+
+- A Saleor bug, new as far as the search found: a refund request is lost with its Celery task.
+  `transactionRequestAction` saves the request and its webhook delivery, answers, and leaves the
+  request to the Celery task `handle_transaction_request_task`. Celery acknowledges a task
+  before it runs (Saleor keeps that default), and nothing sends a pending delivery again. A
+  worker that dies during the request, or a broker that loses the task, loses the refund: Saleor
+  shows the payment charged with no refund and nothing pending, and never sends the request
+  again or fails it; when the worker died after sending it, the provider did refund. The blind
+  exploration found it in its first seed; its shrinker kept packet loss between the worker and
+  PostgreSQL and a power cut, each of which alone passed. `disk=none | run
+  H=payments.refund@1-12:delay=6000 K=worker@6+1` breaks `refund_requests_end` on every run,
+  and each fault alone passes. Natively (`native/probe-refund-worker-kill.sh`,
+  `probe-refund-broker-loss.sh`) both ways lose the request; six minutes later the delivery is
+  still `pending`, and Redis holds no unacknowledged message. No report was found; issue #19835
+  names the same missing re-publish for the work after an order is placed, not for payment
+  requests. Nothing was posted.
+- A Saleor bug, new as far as the search found: a gift card is charged and the charge is not
+  recorded. `charge_gift_card_transactions` lowers the card's balance in one database
+  transaction and saves the `CHARGE_SUCCESS` event and the payment's charged amount after it. A
+  death between the two leaves the card short and the order unpaid, and the function skips a
+  payment with a charge request, so nothing charges it again; staff get
+  `MISSING_TRANSACTION_ACTION_REQUEST_WEBHOOK` when they try. The blind exploration found it in
+  its fifth seed (a power cut at the 270th disk flush after a clock step of a year), and the
+  shrinker kept the cut and the step, each of which alone passed. Natively
+  (`native/probe-giftcard-charge-crash.sh`, two row locks hold the charge after its balance
+  commit, then the API container is killed) a card of 60.00 ended at 15.00 with an order of
+  45.00 charged 0.00. No report was found. Nothing was posted.
+- A known Saleor bug (#19645). Two refunds of one payment that overlap both pass the limit of
+  `charged_value`. Natively the payment app was asked for 80.00 of a 40.00 payment, and two
+  simultaneous refunds of a gift card payment left a card issued with 60.00 holding 87.50. The
+  workload refunds each order at most once, so that this failure does not hide others.
+- A known Saleor bug (#19919). A process that ends between the two database transactions of
+  `create_order_from_checkout` leaves a single-use code spent with no order, and the paid
+  checkout's retry gets `VOUCHER_NOT_APPLICABLE` (`native/probe-voucher-crash.sh`). The open fix
+  #19955 releases the use after an exception, not after a process death.
+- Not a money bug: authorizing a gift card on a second checkout while the first one completes
+  ends in a PostgreSQL deadlock; the first completion answers `Internal Server Error` and its
+  retry is refused as not fully paid. No report was found.
+
+**Runs.**
+
+| what | runs | result |
+|---|---|---|
+| clean runs, an image without checks | 2 | OK, `fp=c065c7e0cbdb717f` both times |
+| clean runs with the 17 checks (4,096 and 3,072 MiB guests) | 3 | every check held; `fp=a4390ecc5d2f5471` (4,096), `d62fe7b18f4cbfd3` twice (3,072, the final image) |
+| `H=payments.refund@1-12:delay=6000 K=worker@6+1` | 3 | VIOLATION `[refund_requests_end]` each time; `fp=03fafdf938b9f887` twice on the final image |
+| the same faults one at a time | 2 | OK |
+| `hydo explore --strategy process --more-faults --new-faults --protocol-faults`, seeds 1 to 6 | 6 first runs, 38 shrink candidates of seed 1, 8 of seed 5 | findings 1 and 4; seeds 2, 3, 4 and 6 OK |
+| the gift card regression, from fresh boots | 2 | VIOLATION `[gift_card_balance_is_its_ledger]`, `fp=bd67c9fd8169cb50` both times |
+| `hydo rules check --mutate`, twice | 7 runs, 1 finished | 16 rules held with cases |
+| native probes on this Mac | 14 | as above |
+
+The out-of-memory killer and a module allocation failure (`HVX_SET_DISK: Cannot allocate
+memory`) ended 7 further runs, and `hydo run` refused one start for lack of memory; another
+session's exploration held up to 9 GB of the machine. The
+second regression file was added after the final image was built, and an image stages its
+regressions, so the image of the committed folder differs from the one these runs used in that
+file only.
+
+**Goldens.** The explorer's identity goldens (quick and full) and corpus golden, and the core
+controller's corpus golden, are re-recorded for the new example, on the bare-metal machine in a
+clean copy of this tree with its own index, and each verified after. The full identity golden
+only grew, by 69 lines. The explorer's corpus golden gained 33 input lines of the example, and
+the chunk lines of its stream after them changed (44 lines in, 37 out). The quick identity
+golden samples every fifth group, so a new example moves which groups it holds (47 lines in, 14
+out). The controller's golden gained two lines, the example's input and `not core: restart
+policies`.
+`public_content::` and `test_tiers::` pass there. `public_content::` ran without the local list
+of values, which was checked on this Mac by searching the changed files for each value.
+
+**Open.** Open item 122 lists what hydo lacked: the scan's gaps on a Django project, the import's
+port and RAM for a worker, a read-only image root that stopped Celery's beat quietly, a failing
+`first_` command's output, an engine that the out-of-memory killer ended reported as "the engine
+exited", and the `hydo-world check` rule without a result. The example ran on hvx only.

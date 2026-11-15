@@ -441,6 +441,25 @@ that engine, acknowledged scheduled runs and triggers never run, and finished ru
 regression `K=hatchet_engine_1@6+3` fails on every hvx run, and `native/` reproduces the loss with
 Docker. No upstream report names it, and nothing was posted. The runs used hvx only.
 
+**Saleor: business rules on an e-commerce platform (M251).** Saleor 3.23.49, its API, one
+Celery worker with beat, PostgreSQL and Redis, runs in `hydo/onboard/examples/saleor`
+(RESULTS.md), imported with `hydo compose`. Customers pay through a payment app (a fake that
+Saleor calls synchronously) and with Saleor's own gift card gateway; staff refund orders. The
+rule suggestion read none of Saleor's 25 `models.py` files, so 14 of the 17 rules came from
+reading the code; 16 held on a clean run. The blind exploration found two new candidates, and
+`native/` reproduces both with Docker; no upstream report names either:
+- A refund request that `transactionRequestAction` acknowledged is lost with its Celery task
+  when the worker dies or the broker loses it. Saleor never sends it again or marks it failed.
+  The regression `H=payments.refund@1-12:delay=6000 K=worker@6+1` breaks `refund_requests_end`
+  on every hvx run.
+- A gift card charge that stops between its balance commit and its `CHARGE_SUCCESS` event leaves
+  the card short and the order unpaid, and nothing can charge it again. The regression is a
+  power cut at a disk flush (`cf=270`) after a clock step.
+
+Two known bugs reproduced natively: overlapping refunds refund more than a payment charged
+(saleor/saleor#19645), and a single-use code is spent by a completion that made no order
+(#19919). Nothing was posted. The runs used hvx only.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -1203,6 +1222,25 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     names one broken rule. The example ran on hvx only: the Mac engine and KVM were not tried.
     In the exploration's seed 1, a worker did not start in the recovery boot after a backward
     clock step; its log was not read. The faults of seed 2 were not separated.
+122. What the Saleor onboarding lacked (M251). None of it is fixed:
+    - `hydo rules scan` reads a model file only in a folder named `models`, so it reads no
+      Django or SQLAlchemy `models.py`. On Saleor it read 1,109 lines of old migrations and none
+      of the 25 model files.
+    - The scan reads instruction files for coding agents (`AGENTS.md`, `CLAUDE.md`,
+      `.claude/skills/`) as documentation, and a GraphQL schema's names but not its
+      descriptions.
+    - `hydo compose` gives a worker that runs an image with another command the image's
+      `EXPOSE` port and a TCP readiness check that never passes.
+    - An image service's root is read-only in the guest and writable in Docker. A program that
+      writes into its working directory fails quietly. Celery's beat stopped at start, and the
+      service counted as ready. Neither the import nor `hydo build --check` warns.
+    - A failing `first_` command's own output is not in the diagnosis.
+    - An engine that the host's out-of-memory killer ends is reported with the words "the
+      engine exited." `hydo rules check` then reports every rule `unevaluated` without saying
+      why.
+    - `hydo rules check` gives no result for a command rule that is a `hydo-world check` line,
+      although the check runs and holds; the cause was not found.
+    - Saleor's example ran on hvx only. It did not run on the Mac engine or on KVM.
 
 ## Milestone index
 
@@ -1699,6 +1737,10 @@ build machine, before 2026-10-13.
   re-recorded at epoch 3 on hvx, the Mac and KVM (AMD hosts); on hvx only the image bytes moved.
   Two KVM verdicts changed: the quickstart's lost write is `C=11 R=everysec` on KVM now, and
   Qdrant's KVM failure is a pause of the test's thread. Open item 105 is empty
+- M251 (tentative number): the Saleor onboarding on hvx, with rules from the rule suggestion on a
+  project hydo had never seen. Two new candidates, found blind and reproduced natively, not
+  posted: a refund request lost with its Celery task, and a gift card charged without a record.
+  Two known bugs reproduced, and the scan misses Django's `models.py`. Nothing recorded moved
 
 ## Where to look
 

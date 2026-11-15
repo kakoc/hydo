@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=100
+# One purchase that a gift card pays half or all of (Saleor's gift card gateway); the rest as
+# parallel_driver_checkout.
+exec /hydo/workload/parallel_driver_checkout gift

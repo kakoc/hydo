@@ -1,0 +1,7 @@
+# finding 1 (RESULTS.md), a Saleor bug: the payment app answers refunds after 6 s, and the Celery
+# worker is killed before round 6 and comes back a round later. A refund request whose task the
+# worker had taken is lost with it: transactionRequestAction acknowledged the request, and 400 s
+# after the faults Saleor still shows it without a success or a failure (no retry, no failure).
+# verdict: HYDO-ORACLE: VIOLATION [refund_requests_end] not satisfied 400.54s after commands, deadline 400s (last check rc=1: db: 1 rows where none may be)
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run H=payments.refund@1-12:delay=6000 K=worker@6+1

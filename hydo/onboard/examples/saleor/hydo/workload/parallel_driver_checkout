@@ -1,0 +1,21 @@
+#!/bin/sh
+# hydo: timeout=100
+# One purchase: a new checkout with one or two lines, a delivery method, maybe a voucher, paid by
+# a gift card and/or the payment app, then checkoutComplete. The seed picks the lines, the
+# customer, the code and the gift card (helper_client.py checkout); `$1 = gift` makes a gift card
+# pay half or all of it (parallel_driver_checkout_gift). The client repeats a call whose answer
+# it did not get, with the same idempotency key for each payment.
+. /hydo/workload/helper_lib.sh
+op=co$HYDO_CMD_ID
+out=/tmp/hydo-saleor-$op.txt
+C checkout "$op" "${HYDO_SEED:-0}" "${1:-any}" > "$out" 2>&1
+rc=$?
+cat "$out"
+token=$(sed -n 's/^TOKEN \([^ ]*\)$/\1/p' "$out" | tail -1)
+[ -n "$token" ] || exit 1            # no checkout was made: nothing to judge
+total=$(sed -n 's/^ORDER [^ ]* [^ ]* \([^ ]*\)$/\1/p' "$out" | tail -1)
+case $rc in
+  0) record ack "co,$token,$total" ;;
+  1) record failed "co,$token,-"; exit 1 ;;
+  *) record unknown "co,$token,-"; exit 1 ;;
+esac

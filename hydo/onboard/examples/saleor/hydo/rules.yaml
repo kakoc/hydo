@@ -1,0 +1,231 @@
+# The rules proposed for Saleor 3.23.49 (hydo guide rules, "The candidates file"). Each rule
+# comes from Saleor's own sources: `hydo rules scan` pointed at some of them (the gift card ADR,
+# the idempotency keys of the GraphQL schema), and the rest come from reading the models and the
+# checkout and payment code that the scan did not reach (RESULTS.md, "The rule suggestion").
+# File paths are in Saleor's repository at the tag 3.23.49. `hydo rules check rules.yaml
+# --mutate` validated them on clean runs; RESULTS.md has its report.
+format: 1
+store: db
+rules:
+  - id: gift_card_never_negative
+    says: A gift card's balance never goes below zero.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: docs/adr/0004-race-safe-balance-adjustments.md, line: 7, quote: "self-clamping so a card can never go negative"}
+    query: SELECT code, current_balance_amount FROM giftcard_giftcard WHERE current_balance_amount < 0
+    cases: SELECT count(*) FROM giftcard_giftcard
+    mutate: UPDATE giftcard_giftcard SET current_balance_amount = -1 WHERE id = (SELECT min(id) FROM giftcard_giftcard)
+
+  - id: gift_card_not_above_initial
+    says: A gift card never holds more than it was issued with (this shop never tops a card up; a refund only gives back what was charged from it).
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: saleor/giftcard/gateway.py, line: 408, quote: "def refund_gift_card_transaction ... Refund funds to a gift card which previously were charged from the same gift card."}
+    query: SELECT code, initial_balance_amount, current_balance_amount FROM giftcard_giftcard WHERE current_balance_amount > initial_balance_amount
+    cases: SELECT count(*) FROM giftcard_giftcard
+    mutate: UPDATE giftcard_giftcard SET current_balance_amount = initial_balance_amount + 1 WHERE id = (SELECT min(id) FROM giftcard_giftcard)
+
+  - id: gift_card_balance_is_its_ledger
+    says: A gift card's balance is what it was issued with, less what orders charged from it, plus what was refunded to it.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: saleor/giftcard/gateway.py, line: 251, quote: "def charge_gift_card ... Deduct authorized amount from the gift card balance"}
+      - {file: saleor/giftcard/gateway.py, line: 443, quote: "gift_card.current_balance_amount = F(\"current_balance_amount\") + amount"}
+    query: |
+      SELECT g.code, g.initial_balance_amount, g.current_balance_amount, coalesce(m.charged, 0) AS charged, coalesce(m.refunded, 0) AS refunded
+      FROM giftcard_giftcard g
+      LEFT JOIN (SELECT t.gift_card_id,
+                        sum(CASE WHEN e.type = 'charge_success' THEN e.amount_value ELSE 0 END) AS charged,
+                        sum(CASE WHEN e.type = 'refund_success' THEN e.amount_value ELSE 0 END) AS refunded
+                 FROM payment_transactionitem t JOIN payment_transactionevent e ON e.transaction_id = t.id
+                 WHERE t.gift_card_id IS NOT NULL GROUP BY t.gift_card_id) m ON m.gift_card_id = g.id
+      WHERE g.current_balance_amount <> g.initial_balance_amount - coalesce(m.charged, 0) + coalesce(m.refunded, 0)
+    cases: SELECT count(*) FROM payment_transactionitem WHERE gift_card_id IS NOT NULL
+    mutate: UPDATE giftcard_giftcard SET current_balance_amount = current_balance_amount - 1 WHERE id = (SELECT min(gift_card_id) FROM payment_transactionitem WHERE gift_card_id IS NOT NULL)
+
+  - id: refund_within_charge
+    says: No payment is refunded for more than was charged by it.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: saleor/graphql/payment/mutations/transaction/transaction_request_action.py, line: 136, quote: "action_value = min(action_value, transaction.charged_value)"}
+    query: |
+      SELECT t.id, t.app_identifier,
+             sum(CASE WHEN e.type = 'charge_success' THEN e.amount_value ELSE 0 END) AS charged,
+             sum(CASE WHEN e.type = 'refund_success' THEN e.amount_value ELSE 0 END) AS refunded
+      FROM payment_transactionitem t JOIN payment_transactionevent e ON e.transaction_id = t.id
+      GROUP BY t.id, t.app_identifier
+      HAVING sum(CASE WHEN e.type = 'refund_success' THEN e.amount_value ELSE 0 END)
+           > sum(CASE WHEN e.type = 'charge_success' THEN e.amount_value ELSE 0 END)
+    cases: SELECT count(*) FROM payment_transactionitem
+    mutate: INSERT INTO payment_transactionevent (created_at, status, transaction_id, amount_value, currency, include_in_calculations, type, psp_reference, idempotency_key) SELECT now(), 'success', id, 1000, currency, true, 'refund_success', 'hydo-mutate', NULL FROM payment_transactionitem ORDER BY created_at LIMIT 1
+
+  - id: refund_requests_end
+    says: Every refund that staff request ends, as a success or a failure, after the faults stop (Saleor sends it to the payment app from a Celery task and retries it 5 times).
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: saleor/webhook/transport/synchronous/transport.py, line: 69, quote: "@app.task(bind=True, retry_backoff=10, retry_kwargs={\"max_retries\": 5}) def handle_transaction_request_task"}
+    query: |
+      SELECT t.id, t.app_identifier,
+             count(*) FILTER (WHERE e.type = 'refund_request') AS requests,
+             count(*) FILTER (WHERE e.type IN ('refund_success', 'refund_failure')) AS ends
+      FROM payment_transactionitem t JOIN payment_transactionevent e ON e.transaction_id = t.id
+      GROUP BY t.id, t.app_identifier
+      HAVING count(*) FILTER (WHERE e.type = 'refund_request') > count(*) FILTER (WHERE e.type IN ('refund_success', 'refund_failure'))
+    cases: SELECT count(*) FROM payment_transactionevent WHERE type = 'refund_request'
+    within: 400
+    mutate: DELETE FROM payment_transactionevent WHERE id = (SELECT max(id) FROM payment_transactionevent WHERE type IN ('refund_success', 'refund_failure'))
+
+  - id: one_order_per_checkout
+    says: A checkout becomes at most one order.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: saleor/order/models.py, line: 50, quote: "Return non-draft order with matched checkout token."}
+    query: SELECT checkout_token, count(*) FROM order_order WHERE checkout_token <> '' AND status <> 'draft' GROUP BY checkout_token HAVING count(*) > 1
+    cases: SELECT count(*) FROM order_order WHERE checkout_token <> ''
+    mutate: UPDATE order_order SET checkout_token = (SELECT checkout_token FROM order_order WHERE checkout_token <> '' ORDER BY number LIMIT 1) WHERE number = (SELECT max(number) FROM order_order)
+
+  - id: stock_allocated_is_sum
+    says: A stock's allocated quantity is the sum of its allocations to order lines.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: saleor/warehouse/models.py, line: 557, quote: "Coalesce(Sum(\"stock__allocations__quantity_allocated\"), 0)"}
+    query: SELECT s.id, s.quantity_allocated, coalesce(sum(a.quantity_allocated), 0) FROM warehouse_stock s LEFT JOIN warehouse_allocation a ON a.stock_id = s.id GROUP BY s.id HAVING s.quantity_allocated <> coalesce(sum(a.quantity_allocated), 0)
+    cases: SELECT count(*) FROM warehouse_stock
+    mutate: UPDATE warehouse_stock SET quantity_allocated = quantity_allocated + 1 WHERE id = (SELECT min(id) FROM warehouse_stock)
+
+  - id: allocations_within_stock
+    says: A warehouse never allocates more of a variant than it has.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: saleor/warehouse/management.py, line: 198, quote: "raise InsufficientStock(insufficient_stock)"}
+    query: SELECT s.id, s.quantity, sum(a.quantity_allocated) FROM warehouse_stock s JOIN warehouse_allocation a ON a.stock_id = s.id GROUP BY s.id, s.quantity HAVING sum(a.quantity_allocated) > s.quantity
+    cases: SELECT count(*) FROM warehouse_allocation
+    mutate: UPDATE warehouse_allocation SET quantity_allocated = quantity_allocated + 1000 WHERE id = (SELECT min(id) FROM warehouse_allocation)
+
+  - id: voucher_within_usage_limit
+    says: A voucher code is never used more times than its voucher's usage limit.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: saleor/graphql/schema.graphql, line: 31833, quote: "Limit number of times this voucher can be used in total."}
+    query: SELECT c.code, c.used, v.usage_limit FROM discount_vouchercode c JOIN discount_voucher v ON v.id = c.voucher_id WHERE v.usage_limit IS NOT NULL AND c.used > v.usage_limit
+    cases: SELECT count(*) FROM discount_vouchercode
+    mutate: UPDATE discount_vouchercode SET used = 99 WHERE code = 'SAVE5'
+
+  - id: voucher_usage_counts_orders
+    says: A limited voucher code's usage count equals the number of orders that used it.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: saleor/discount/utils/voucher.py, line: 99, quote: "def increase_voucher_code_usage_value ... Increase voucher code uses by 1."}
+    query: |
+      SELECT c.code, c.used, (SELECT count(*) FROM order_order o WHERE o.voucher_code = c.code AND o.status NOT IN ('draft', 'canceled', 'expired')) AS orders
+      FROM discount_vouchercode c JOIN discount_voucher v ON v.id = c.voucher_id
+      WHERE v.usage_limit IS NOT NULL
+        AND c.used <> (SELECT count(*) FROM order_order o WHERE o.voucher_code = c.code AND o.status NOT IN ('draft', 'canceled', 'expired'))
+    cases: SELECT count(*) FROM order_order WHERE voucher_code IS NOT NULL
+    mutate: UPDATE discount_vouchercode SET used = used + 1 WHERE code = 'SAVE5'
+
+  - id: single_use_code_spent_by_an_order
+    says: A single-use code is spent (inactive) exactly when one order used it.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: saleor/discount/utils/voucher.py, line: 95, quote: "if voucher.single_use: deactivate_voucher_code(code)"}
+    query: |
+      SELECT c.code, c.is_active, (SELECT count(*) FROM order_order o WHERE o.voucher_code = c.code AND o.status NOT IN ('draft', 'canceled', 'expired')) AS orders
+      FROM discount_vouchercode c JOIN discount_voucher v ON v.id = c.voucher_id
+      WHERE v.single_use
+        AND (CASE WHEN c.is_active THEN 0 ELSE 1 END)
+            <> (SELECT count(*) FROM order_order o WHERE o.voucher_code = c.code AND o.status NOT IN ('draft', 'canceled', 'expired'))
+    cases: SELECT count(*) FROM discount_vouchercode c JOIN discount_voucher v ON v.id = c.voucher_id WHERE v.single_use
+    mutate: UPDATE discount_vouchercode SET is_active = NOT is_active WHERE code = 'ONE-A'
+
+  - id: once_per_customer
+    says: A customer uses a once-per-customer voucher in at most one order.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: saleor/graphql/schema.graphql, line: 11410, quote: "Determine if the voucher usage should be limited to one use per customer."}
+    query: |
+      SELECT o.voucher_code, o.user_email, count(*) FROM order_order o
+      JOIN discount_vouchercode c ON c.code = o.voucher_code JOIN discount_voucher v ON v.id = c.voucher_id
+      WHERE v.apply_once_per_customer AND o.status NOT IN ('draft', 'canceled', 'expired')
+      GROUP BY o.voucher_code, o.user_email HAVING count(*) > 1
+    cases: SELECT count(*) FROM order_order WHERE voucher_code = 'WELCOME'
+    mutate: UPDATE order_order SET voucher_code = 'WELCOME', user_email = 'mutate@example.com' WHERE number IN (SELECT number FROM order_order ORDER BY number LIMIT 2)
+
+  - id: voucher_used_in_its_dates
+    says: No order is placed with a voucher after the voucher ended.
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: saleor/discount/models.py, line: 84, quote: "lookup = (Q(end_date__isnull=True) | Q(end_date__gte=date))"}
+    query: |
+      SELECT o.number, o.voucher_code, o.created_at, v.end_date FROM order_order o
+      JOIN discount_vouchercode c ON c.code = o.voucher_code JOIN discount_voucher v ON v.id = c.voucher_id
+      WHERE v.end_date IS NOT NULL AND o.created_at > v.end_date AND o.status <> 'draft'
+    cases: SELECT count(*) FROM order_order o JOIN discount_vouchercode c ON c.code = o.voucher_code JOIN discount_voucher v ON v.id = c.voucher_id WHERE v.end_date IS NOT NULL
+    mutate: UPDATE discount_voucher SET end_date = '2000-01-01' WHERE end_date IS NOT NULL
+
+  - id: order_total_adds_up
+    says: An order's total is its lines' total plus its shipping price.
+    kind: sql
+    confidence: medium
+    evidence:
+      - {file: saleor/order/base_calculations.py, line: 57, quote: "return subtotal + shipping_price"}
+    query: |
+      SELECT o.number, o.total_gross_amount, o.shipping_price_gross_amount, sum(l.total_price_gross_amount) AS lines
+      FROM order_order o JOIN order_orderline l ON l.order_id = o.id
+      WHERE o.status <> 'draft'
+      GROUP BY o.id, o.number, o.total_gross_amount, o.shipping_price_gross_amount, o.subtotal_gross_amount
+      HAVING o.total_gross_amount <> sum(l.total_price_gross_amount) + o.shipping_price_gross_amount
+          OR o.subtotal_gross_amount <> sum(l.total_price_gross_amount)
+    cases: SELECT count(*) FROM order_order WHERE status <> 'draft'
+    mutate: UPDATE order_order SET total_gross_amount = total_gross_amount + 1 WHERE number = (SELECT min(number) FROM order_order)
+
+  - id: placed_orders_are_paid
+    says: Every order placed from a checkout was charged its total (the channel allows no unpaid orders, and orders are confirmed at once, which charges gift cards).
+    kind: sql
+    confidence: high
+    evidence:
+      - {file: saleor/graphql/schema.graphql, line: 9387, quote: "Determine if it is possible to place unpaid order by calling `checkoutComplete` mutation."}
+    query: |
+      SELECT o.number, o.total_gross_amount,
+             coalesce(sum(CASE WHEN e.type = 'charge_success' THEN e.amount_value ELSE 0 END), 0) AS charged
+      FROM order_order o
+      LEFT JOIN payment_transactionitem t ON t.order_id = o.id
+      LEFT JOIN payment_transactionevent e ON e.transaction_id = t.id
+      WHERE o.origin = 'checkout' AND o.status NOT IN ('draft', 'canceled', 'expired')
+      GROUP BY o.id, o.number, o.total_gross_amount
+      HAVING coalesce(sum(CASE WHEN e.type = 'charge_success' THEN e.amount_value ELSE 0 END), 0) < o.total_gross_amount
+    cases: SELECT count(*) FROM order_order WHERE origin = 'checkout'
+    mutate: DELETE FROM payment_transactionevent WHERE type = 'charge_success' AND transaction_id = (SELECT t.id FROM payment_transactionitem t JOIN order_order o ON o.id = t.order_id ORDER BY o.number LIMIT 1)
+
+  - id: acked_operations_kept
+    says: Faults do not change the business result. Every purchase the client saw acknowledged is one order with the total the client saw; a purchase told it failed made no order; refunds are never more than the client asked for, and an acknowledged refund takes effect.
+    kind: command
+    confidence: high
+    evidence:
+      - "the client's records: $HYDO_OUTCOMES of workload/parallel_driver_checkout and parallel_driver_refund"
+    run: /hydo/workload/helper_business_result
+    within: 400
+    cases: /hydo/workload/helper_q 'SELECT count(*) FROM order_order'
+    mutate: /hydo/workload/helper_q "UPDATE order_order SET checkout_token = 'mutated' WHERE number = (SELECT min(number) FROM order_order)"
+
+  - id: provider_charged_once
+    says: The payment provider charges each checkout at most once.
+    kind: command
+    confidence: high
+    evidence:
+      - {file: saleor/graphql/schema.graphql, line: 39789, quote: "idempotencyKey: String!  (Idempotency key assigned to the transaction initialize.)"}
+    run: hydo-world check at-most-once payments.initialize --by ref
+    cases: /hydo/workload/helper_q "SELECT count(*) FROM payment_transactionitem WHERE app_identifier = 'hydo.payments'"

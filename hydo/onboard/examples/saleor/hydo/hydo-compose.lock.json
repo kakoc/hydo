@@ -1,0 +1,245 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "ghcr.io/saleor/saleor:3.23.49": {
+   "index_digest": "sha256:bb59cbf1efd764d9010390a4f08d681f17f771528b5e0688c641158e9c16680b",
+   "name": "ghcr.io/saleor/saleor",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "uvicorn",
+       "saleor.asgi:application",
+       "--host=0.0.0.0",
+       "--port=8000",
+       "--workers=2",
+       "--lifespan=auto",
+       "--ws=none",
+       "--no-server-header",
+       "--no-access-log",
+       "--timeout-keep-alive=35",
+       "--timeout-graceful-shutdown=30",
+       "--limit-max-requests=10000"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "LANG=C.UTF-8",
+       "GPG_KEY=7169605F62C751356D054A26A821E680E5FA6305",
+       "PYTHON_VERSION=3.12.16",
+       "PYTHON_SHA256=b5796915dc45ff745cfb4e990a7e7c93d6f546328a102ce31448d69ebc37575c",
+       "STATIC_URL=/static/",
+       "PYTHONUNBUFFERED=1"
+      ],
+      "ExposedPorts": {
+       "8000/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:671845a6b5d92b93417095d5a8d1d88de85096a846b698499395c638ccfd1ff8",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "uvicorn",
+       "saleor.asgi:application",
+       "--host=0.0.0.0",
+       "--port=8000",
+       "--workers=2",
+       "--lifespan=auto",
+       "--ws=none",
+       "--no-server-header",
+       "--no-access-log",
+       "--timeout-keep-alive=35",
+       "--timeout-graceful-shutdown=30",
+       "--limit-max-requests=10000"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "LANG=C.UTF-8",
+       "GPG_KEY=7169605F62C751356D054A26A821E680E5FA6305",
+       "PYTHON_VERSION=3.12.16",
+       "PYTHON_SHA256=b5796915dc45ff745cfb4e990a7e7c93d6f546328a102ce31448d69ebc37575c",
+       "STATIC_URL=/static/",
+       "PYTHONUNBUFFERED=1"
+      ],
+      "ExposedPorts": {
+       "8000/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:1a9d2807214087dbd41bf78c44c951441f48c40f8afcc83f2d79f31e8efe79bd",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "ghcr.io/saleor/saleor:3.23.49",
+   "registry": "ghcr.io",
+   "repo": "saleor/saleor",
+   "tag": "3.23.49"
+  },
+  "postgres:16.16-alpine3.24": {
+   "index_digest": "sha256:0adbf25a9e96d38823bb813f3ac0ed41fadb665c88f1df7fe6dbfb060cbdc106",
+   "name": "postgres",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GOSU_VERSION=1.19",
+       "LANG=en_US.utf8",
+       "PG_MAJOR=16",
+       "PG_VERSION=16.16",
+       "PG_SHA256=9d5cd8633043b75740d5d59749c6b7365e6aeb53c47098b1a5e80bb18f87881a",
+       "DOCKER_PG_LLVM_DEPS=llvm21-dev \t\tclang21",
+       "PGDATA=/var/lib/postgresql/data"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:a2f7e20374cd8fd8ed4a588b79549e10589bea7b1686e77922f5ac741b80b8a1",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "postgres"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GOSU_VERSION=1.19",
+       "LANG=en_US.utf8",
+       "PG_MAJOR=16",
+       "PG_VERSION=16.16",
+       "PG_SHA256=9d5cd8633043b75740d5d59749c6b7365e6aeb53c47098b1a5e80bb18f87881a",
+       "DOCKER_PG_LLVM_DEPS=llvm21-dev \t\tclang21",
+       "PGDATA=/var/lib/postgresql/data"
+      ],
+      "ExposedPorts": {
+       "5432/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/postgresql/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:40e58641410e030f5769096bca8372f68f243e1859c8ecdf11f227da390d514d",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "postgres:16.16-alpine3.24",
+   "registry": "docker.io",
+   "repo": "library/postgres",
+   "tag": "16.16-alpine3.24"
+  },
+  "redis:7.4.7-alpine": {
+   "index_digest": "sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf",
+   "name": "redis",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "redis-server"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GOSU_VERSION=1.17",
+       "REDIS_VERSION=7.4.7",
+       "REDIS_DOWNLOAD_URL=http://download.redis.io/releases/redis-7.4.7.tar.gz",
+       "REDIS_DOWNLOAD_SHA=c97e57b0df330a9e091cacff012bebe763c275398cf36ff44cdba876814b595b"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:b9f6cf0cab55fdd102fd2182deeae150457943d33439d18c6e2fc5666d3228c1",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "redis-server"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GOSU_VERSION=1.17",
+       "REDIS_VERSION=7.4.7",
+       "REDIS_DOWNLOAD_URL=http://download.redis.io/releases/redis-7.4.7.tar.gz",
+       "REDIS_DOWNLOAD_SHA=c97e57b0df330a9e091cacff012bebe763c275398cf36ff44cdba876814b595b"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:eaa5baba4031beadea0a970d578807f96ff6caf9282f1878f316059ed889a178",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "redis:7.4.7-alpine",
+   "registry": "docker.io",
+   "repo": "library/redis",
+   "tag": "7.4.7-alpine"
+  }
+ }
+}

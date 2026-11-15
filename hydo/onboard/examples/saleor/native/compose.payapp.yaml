@@ -1,0 +1,19 @@
+# Added to ../docker-compose.yaml for the native runs: the payment app (payapp.py) on the same
+# network, at http://payapp:9001 (paths are relative to ../, the project folder), the staff user's settings, and the test client's folder in the
+# API container.
+services:
+  payapp:
+    image: ghcr.io/saleor/saleor:3.23.49
+    command: ["python3", "/native/payapp.py", "9001"]
+    environment:
+      PAYAPP_DELAY: ${PAYAPP_DELAY:-0}
+      PAYAPP_LOSE: ${PAYAPP_LOSE:-}
+    volumes:
+      - ./native:/native:ro
+  api:
+    environment:
+      DJANGO_SUPERUSER_EMAIL: staff@example.com
+      DJANGO_SUPERUSER_PASSWORD: hydo-staff-password
+    volumes:
+      - ./hydo/workload:/hydo/workload:ro
+      - ./native:/native:ro

@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: within=400 after=commands
+# hydo-msg: Faults do not change the business result. Every purchase the client saw acknowledged is one order with the total the client saw; a purchase told it failed made no order; refunds are never more than the client asked for, and an acknowledged refund takes effect.
+# evidence: the client's records: $HYDO_OUTCOMES of workload/parallel_driver_checkout and parallel_driver_refund
+# proposed by rule suggestion (confidence high); validated by hydo rules check
+/hydo/workload/helper_business_result

@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo-msg: The payment provider charges each checkout at most once.
+# evidence: saleor/graphql/schema.graphql:39789: idempotencyKey: String!  (Idempotency key assigned to the transaction initialize.)
+# proposed by rule suggestion (confidence high); validated by hydo rules check
+hydo-world check at-most-once payments.initialize --by ref

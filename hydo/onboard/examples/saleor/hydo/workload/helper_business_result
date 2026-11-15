@@ -1,0 +1,52 @@
+#!/bin/sh
+# hydo-msg: faults do not change the business result: every acknowledged purchase is one order with the total the client saw, a refused one made no order, and no payment was refunded more than the client asked
+# The rule knows only the client's outcome lines and what Saleor stores:
+#   co,<checkout token>,<total> ack|failed|unknown   one purchase (parallel_driver_checkout)
+#   rf,<order>,<app|gift>,<amount>,<n> ack|unknown   one refund request (parallel_driver_refund)
+# ack: exactly one order for the token, with that total; failed: none; unknown: at most one.
+# Refunds: what Saleor refunded from an order's app or gift card payment is at most the sum of
+# the amounts the client asked for (acknowledged or unknown), and at least the acknowledged ones
+# when they add up to no more than that payment charged (Saleor refunds at most the charged
+# amount, so a larger request is cut to it).
+# Exit 0 holds, 1 violated, 2 cannot evaluate (the database did not answer).
+[ -n "${HYDO_OUTCOMES:-}" ] || exit 2
+Q=/hydo/workload/helper_q
+$Q "SELECT checkout_token, number, total_gross_amount FROM order_order WHERE checkout_token <> '' AND status <> 'draft'" > /tmp/saleor-orders.txt || exit 2
+$Q "SELECT o.number, CASE WHEN t.app_identifier = 'hydo.payments' THEN 'app' ELSE 'gift' END,
+           coalesce(sum(e.amount_value) FILTER (WHERE e.type = 'refund_success'), 0),
+           coalesce(sum(e.amount_value) FILTER (WHERE e.type = 'charge_success'), 0)
+    FROM payment_transactionevent e JOIN payment_transactionitem t ON t.id = e.transaction_id JOIN order_order o ON o.id = t.order_id
+    GROUP BY 1, 2" > /tmp/saleor-refunds.txt || exit 2
+cat "$HYDO_OUTCOMES" > /tmp/saleor-outcomes.txt 2>/dev/null
+awk '
+FILENAME == ARGV[1] { last[$1] = $2; next }                              # outcomes: last line per id wins
+FILENAME == ARGV[2] { n[$1]++; total[$1] = $3; num[$1] = $2; next }      # orders by checkout token
+FILENAME == ARGV[3] { refunded[$1 "," $2] = $3; charged[$1 "," $2] = $4; next }   # by order and means
+END {
+  bad = 0; judged = 0
+  for (id in last) {
+    split(id, f, ",")
+    if (f[1] == "co") {
+      t = f[2]; c = n[t] + 0; judged++
+      if (last[id] == "ack" && (c != 1 || total[t] + 0 != f[3] + 0)) {
+        printf "acknowledged purchase %s: %d orders (total %s, the client saw %s)\n", t, c, total[t], f[3]; bad++ }
+      else if (last[id] == "failed" && c != 0) {
+        printf "purchase %s was refused, but order %s exists\n", t, num[t]; bad++ }
+      else if (last[id] == "unknown" && c > 1) {
+        printf "purchase %s without an answer has %d orders\n", t, c; bad++ }
+    } else if (f[1] == "rf" && (last[id] == "ack" || last[id] == "unknown")) {
+      asked[f[2] "," f[3]] += f[4]
+      if (last[id] == "ack") acked_amount[f[2] "," f[3]] += f[4]
+    }
+  }
+  for (k in refunded) {
+    judged++
+    split(k, g, ",")
+    if (refunded[k] + 0 > asked[k] + 0.001) {
+      printf "order %s: Saleor refunded %s from its %s payment, the client asked for %s\n", g[1], refunded[k], g[2], asked[k] + 0; bad++ }
+    else if (acked_amount[k] + 0 <= charged[k] + 0 && refunded[k] + 0.001 < acked_amount[k] + 0) {
+      printf "order %s: the client saw refunds of %s from its %s payment acknowledged, Saleor refunded %s\n", g[1], acked_amount[k] + 0, g[2], refunded[k]; bad++ }
+  }
+  printf "%d of %d judged cases differ from the client'"'"'s records\n", bad, judged
+  exit bad > 0 ? 1 : 0
+}' /tmp/saleor-outcomes.txt /tmp/saleor-orders.txt /tmp/saleor-refunds.txt

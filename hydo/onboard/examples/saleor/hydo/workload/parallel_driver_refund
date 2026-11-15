@@ -1,0 +1,24 @@
+#!/bin/sh
+# hydo: timeout=80
+# A refund of part of an order's payment, as staff do from the dashboard: an order the client saw
+# placed, the payment app's or the gift card's part, 5.00 or 10.00 (helper_client.py refund).
+# Each order is refunded at most once in a run: two refunds of one payment that overlap refund
+# more than it charged, a known Saleor bug (saleor/saleor#19645, RESULTS.md finding 2) that
+# would hide every other failure of the refund rules.
+. /hydo/workload/helper_lib.sh
+s=${HYDO_SEED:-0}
+orders=$(acked | sed -n 's/^co,[^,]*,.*$/&/p' | wc -l)
+[ "$orders" -gt 0 ] || exit 0         # no order yet: nothing to refund
+token=$(acked | grep '^co,' | sed -n "$((1 + s % orders))p" | cut -d, -f2)
+number=$(C report | awk -v t="$token" '$1 == t { print $2 }')
+[ -n "$number" ] || exit 1
+mkdir "/tmp/hydo-saleor-refunded-$number" 2>/dev/null || exit 0   # this order had its refund
+if [ $((s / 7 % 2)) = 0 ]; then which=app; else which=gift; fi
+if [ $((s / 14 % 2)) = 0 ]; then amount=5.00; else amount=10.00; fi
+id="rf,$number,$which,$amount,$HYDO_CMD_ID"
+C refund "rf$HYDO_CMD_ID" "$number" "$amount" "$which"
+case $? in
+  0) record ack "$id" ;;
+  1) exit 1 ;;                        # refused: nothing charged by that means, or Saleor said no
+  *) record unknown "$id"; exit 1 ;;
+esac
