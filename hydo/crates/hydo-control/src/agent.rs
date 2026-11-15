@@ -390,18 +390,33 @@ pub fn write_run_files(dir: &Path, tag: &str, prefix: &str, ran: &Ran, boot: Opt
     // `browser:` (Milestone 254): the screenshots go to `<prefix>screens/`, and their notes stay
     // in the console and the transcript file without the bytes
     let run_t = take_screens(&ran.run.transcript, &dir.join(format!("{prefix}screens")));
+    // Milestone 263: the boots after reboots the guest asked for add their reports to the run's
+    // (or the recovery's) report, and each has its own transcript `control.reboot<n>.jsonl`
+    let more = |rec: bool| -> String {
+        ran.reboots
+            .iter()
+            .filter(|(r, _)| *r == rec)
+            .map(|(_, f)| console_text(&f.transcript, &f.console))
+            .collect()
+    };
     let _ = std::fs::write(
         dir.join(format!("{tag}.log")),
-        console_text(&run_t, &ran.run.console),
+        console_text(&run_t, &ran.run.console) + &more(false),
     );
     let [b, r, rc] = transcript_files(prefix);
     let _ = std::fs::write(dir.join(&r.1), run_t.to_jsonl());
     if let Some(rec) = &ran.recovery {
         let _ = std::fs::write(
             dir.join(format!("{tag}.recovery.log")),
-            console_text(&rec.transcript, &rec.console),
+            console_text(&rec.transcript, &rec.console) + &more(true),
         );
         let _ = std::fs::write(dir.join(&rc.1), rec.transcript.to_jsonl());
+    }
+    for (i, (_, f)) in ran.reboots.iter().enumerate() {
+        let _ = std::fs::write(
+            dir.join(format!("{prefix}control.reboot{}.jsonl", i + 1)),
+            f.transcript.to_jsonl(),
+        );
     }
     if let Some(bt) = boot {
         let _ = std::fs::write(dir.join(&b.1), bt.transcript.to_jsonl());

@@ -39,7 +39,8 @@ pub mod search;
 pub mod transcript;
 
 pub use control::{
-    Action, Controller, Ending, EngineAction, Out, Seen, StopInfo, VTime, When, Why,
+    Action, Controller, Ending, EngineAction, Out, RebootInputs, RebootStage, Seen, StopInfo,
+    VTime, When, Why,
 };
 pub use plan::{Layout, Plan};
 pub use replay::ReplayController;

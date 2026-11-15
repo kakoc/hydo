@@ -250,6 +250,10 @@ pub enum HostCmd {
     DiskOff,
     /// A power cut at this stop (agent images, M126): the run goes on in the recovery VM.
     Cut,
+    /// A reboot at this stop (Milestone 263, docs/design/devices.md): the guest shut down
+    /// cleanly; the run goes on in a new VM from S0 with the disks' flushed bytes, in the
+    /// workload phase. Answer `OK reboot at=<n>`; the next stop is the new VM's first.
+    Reboot,
     /// `TIME <host tokens>`: the run's timing from this stop on (the state search's branch point,
     /// docs/design/state-search.md): tick jitter and forced preemption points, the points drawn
     /// among the next `pctk` exits. Empty tokens switch the timing off. Answer `OK time at=<n>`.
@@ -269,6 +273,7 @@ impl HostCmd {
             }
             HostCmd::DiskOff => "DISKOFF".into(),
             HostCmd::Cut => "CUT".into(),
+            HostCmd::Reboot => "REBOOT".into(),
             HostCmd::Time(t) if t.is_empty() => "TIME".into(),
             HostCmd::Time(t) => format!("TIME {t}"),
             HostCmd::Cont => "CONT".into(),
@@ -284,6 +289,7 @@ impl HostCmd {
             "CONT" => return Some(HostCmd::Cont),
             "DISKOFF" => return Some(HostCmd::DiskOff),
             "CUT" => return Some(HostCmd::Cut),
+            "REBOOT" => return Some(HostCmd::Reboot),
             "TIME" => return Some(HostCmd::Time(String::new())),
             "END" => return Some(HostCmd::End(None)),
             _ => {}
@@ -421,6 +427,10 @@ pub enum Answer {
     Cut {
         at: u64,
     },
+    /// `OK reboot at=<n>` (Milestone 263): the run goes on in a new VM.
+    Reboot {
+        at: u64,
+    },
     /// `OK time at=<n>`: the timing of `TIME` is in force from the stop at `at`.
     Time {
         at: u64,
@@ -441,6 +451,7 @@ impl Answer {
             }
             Answer::DiskOff(d) => format!("OK diskoff at={} cut={}", d.at, d.cut as u8),
             Answer::Cut { at } => format!("OK cut at={at}"),
+            Answer::Reboot { at } => format!("OK reboot at={at}"),
             Answer::Time { at } => format!("OK time at={at}"),
             Answer::Refused(r) => format!("ERR {r}"),
         }
@@ -495,6 +506,9 @@ impl Answer {
                 Answer::DiskOff(DiskOff { at, cut })
             }
             "cut" => Answer::Cut {
+                at: kv(w.next(), "at=")?,
+            },
+            "reboot" => Answer::Reboot {
                 at: kv(w.next(), "at=")?,
             },
             "time" => Answer::Time {
@@ -865,6 +879,7 @@ mod tests {
             },
             HostCmd::DiskOff,
             HostCmd::Cut,
+            HostCmd::Reboot,
             HostCmd::Time(String::new()),
             HostCmd::Time("pct=5 pctn=3 pctk=100".into()),
             HostCmd::Cont,

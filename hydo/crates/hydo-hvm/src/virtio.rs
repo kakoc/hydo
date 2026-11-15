@@ -28,6 +28,9 @@ use crate::machine::{mix, GOLDEN};
 use hydo_hvx::cstr;
 use std::sync::Arc;
 
+mod extra;
+pub use extra::{Extra, ExtraCfg};
+
 /// device i at MMIO_BASE + i * MMIO_SIZE
 pub const MMIO_BASE: u64 = 0x0a00_0000;
 pub const MMIO_SIZE: u64 = 0x200;
@@ -249,6 +252,8 @@ pub struct Config {
     pub net_fault: Option<String>,
     pub net_fault_classes: Option<String>,
     pub net_fault_prob: Option<String>,
+    /// the added disks (Milestone 263; `HYDO_GUEST_DISKS`)
+    pub extra: Vec<ExtraCfg>,
 }
 
 /// A snapshot of the devices (`virtio_save`).
@@ -258,6 +263,7 @@ pub struct Save {
     disk: Option<Disk>,
     tx: Option<Arc<Vec<u8>>>,
     cache: Vec<Unsync>,
+    extra: Vec<Extra>,
 }
 
 pub struct Virtio {
@@ -271,6 +277,8 @@ pub struct Virtio {
     net_tx: Option<Arc<Vec<u8>>>,
     pub blk_idx: i32,
     pub net_idx: i32,
+    /// the added disks (Milestone 263), devices `v.ndev ..`
+    pub extra: Vec<Extra>,
 }
 
 fn parse_classes(s: Option<&str>, net: bool) -> u32 {
@@ -442,6 +450,7 @@ impl Virtio {
             net_tx: None,
             blk_idx: -1,
             net_idx: -1,
+            extra: Vec::new(),
         };
         if let Some(dp) = &c.disk {
             let d = Disk::open(dp).map_err(|e| format!("{dp}: {e}"))?;
@@ -468,6 +477,7 @@ impl Virtio {
                     .unwrap_or(8);
             }
         }
+        x.add_extra(&c.extra);
         if c.net {
             x.net_idx = x.v.ndev as i32;
             x.v.ndev += 1;
@@ -512,7 +522,7 @@ impl Virtio {
         self.v.step = step;
     }
     pub fn ndev(&self) -> usize {
-        self.v.ndev as usize
+        self.v.ndev as usize + self.extra.len()
     }
     pub fn attached(&self) -> bool {
         self.v.ndev > 0
@@ -522,7 +532,10 @@ impl Virtio {
         (MMIO_BASE + i as u64 * MMIO_SIZE, SPI_BASE + i as u32)
     }
     pub fn level(&self, i: usize) -> bool {
-        self.v.dev[i].isr_shown != 0
+        match i.checked_sub(self.v.ndev as usize) {
+            Some(j) => self.extra[j].dev.isr_shown != 0,
+            None => self.v.dev[i].isr_shown != 0,
+        }
     }
 
     fn complete(&mut self, i: usize, now: u64, extra_exits: u64) {
@@ -563,11 +576,15 @@ impl Virtio {
         val: &mut u64,
         now: u64,
     ) -> bool {
-        if ipa < MMIO_BASE || ipa >= MMIO_BASE + self.v.ndev as u64 * MMIO_SIZE {
+        if ipa < MMIO_BASE || ipa >= MMIO_BASE + self.ndev() as u64 * MMIO_SIZE {
             return false;
         }
         let i = ((ipa - MMIO_BASE) / MMIO_SIZE) as usize;
         let off = (ipa - MMIO_BASE) % MMIO_SIZE;
+        if let Some(j) = i.checked_sub(self.v.ndev as usize) {
+            self.extra_mmio(ram, j, off, write, size, val, now);
+            return true;
+        }
         let nq: u32 = if self.v.dev[i].ty == VDEV_NET { 2 } else { 1 };
         let qi = if (self.v.dev[i].qsel as usize) < VQ_MAX {
             self.v.dev[i].qsel as usize
@@ -686,8 +703,9 @@ impl Virtio {
         if self.net_idx >= 0 {
             self.net_poll(ram, now);
         }
-        for i in 0..self.v.ndev as usize {
-            let d = &mut self.v.dev[i];
+        let ndev = self.v.ndev as usize;
+        let extra = self.extra.iter_mut().map(|e| &mut e.dev);
+        for d in self.v.dev[..ndev].iter_mut().chain(extra) {
             if d.armed != 0 && now >= d.due {
                 d.isr_shown |= d.isr;
                 d.isr = 0;
@@ -699,8 +717,11 @@ impl Virtio {
     /// `virtio_next_due`: the earliest future event, 0 = none.
     pub fn next_due(&self, ram: &Ram, now: u64) -> u64 {
         let mut best = 0;
-        for i in 0..self.v.ndev as usize {
-            let d = &self.v.dev[i];
+        let ndev = self.v.ndev as usize;
+        for d in self.v.dev[..ndev]
+            .iter()
+            .chain(self.extra.iter().map(|e| &e.dev))
+        {
             if d.armed != 0 && (best == 0 || d.due < best) {
                 best = d.due;
             }
@@ -729,6 +750,9 @@ impl Virtio {
         if let Some(t) = &self.net_tx {
             h = fnv(&t[..self.v.net.tx_len as usize], h);
         }
+        for e in &self.extra {
+            h = e.hash(h);
+        }
         h
     }
 
@@ -738,6 +762,7 @@ impl Virtio {
             disk: self.disk.clone(),
             tx: self.net_tx.clone(),
             cache: self.cache[..self.v.blk.n_unsync as usize].to_vec(),
+            extra: self.extra.clone(),
         }
     }
 
@@ -750,6 +775,7 @@ impl Virtio {
             *t = st.clone();
         }
         self.cache = s.cache.clone();
+        self.extra = s.extra.clone();
     }
 
     /// `virtio_finish`: HVM_DISK_OUT (stable media only) and HVM_NET_TX_OUT.

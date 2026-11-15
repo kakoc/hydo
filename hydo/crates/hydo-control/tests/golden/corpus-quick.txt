@@ -29,7 +29,7 @@ input	hydo/onboard/examples/perf-kv/hydo.yaml	dad61c9cb9e12ebf519a5da06cbe35e685
 input	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	f5b1bb0d84df3db0115e938aa9e31c1088c75ff09ba5af7698347e618a75e84b
 input	hydo/onboard/examples/python-kv/hydo-mac.yaml	19ae1d6b5ec2705e9583e9d81d211586ef923b4efbef4ebafff6e4d4a7293d88
 input	hydo/onboard/examples/qdrant-flaky-10200/hydo.yaml	7a0715a35c8a4209da18621151fa894f1796efde4ae2742014f82f62d5c07667
-input	hydo/onboard/examples/rauc/hydo.yaml	a550ef87b218ef7e23677f7f0180c47f0b80f816779874f737af3fa96e8e5883
+input	hydo/onboard/examples/rauc/hydo.yaml	4ce15eaa8337453ab5315f73d2a8978fec897f77a86c63e04166762ec0b16111
 input	hydo/onboard/examples/redis-bridge/hydo.yaml	30da2c5ff1a49e0399e076cbda5bb3d62df316dcdc337a81077b3b24fc4003f6
 input	hydo/onboard/examples/redis-oci/hydo-metacheck.yaml	b4fde7c060d7d0c3c59fed9c223d2655a113ddf73d3e9a9cd322f3793ccdfdca
 input	hydo/onboard/examples/redis-oci/hydo.yaml	056cbfb7ef423ebf7c2cc96e445a180ca5510e2dc95fb62a7918b0b6f5f4e1c4
@@ -48,7 +48,8 @@ input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8
 input	hydo/onboard/examples/stack/hydo-grpcgen.yaml	72b3a42760bb79db3be04fe34d4e7a55645ed133e86008b059f0935cd3f247cf
 input	hydo/onboard/examples/stack/hydo-read.yaml	d3899b9ac926be02576d0f8e9b950bcc174682dc727791d4f1309294b3a1fb68
 input	hydo/onboard/examples/stack/hydo.yaml	369ed2074d0024dcbb5bf2218731bee7526fa006ff0e900aef339cc6cf69fb24
-input	hydo/onboard/examples/swupdate/hydo.yaml	fbffaa1b4971042390db22f6f0cea0de8ab0d182a967be7faf38e5bb1bbaad35
+input	hydo/onboard/examples/swupdate/hydo-devices.yaml	bb839f541c8475c32388e5f088c572e7d08e0f6936f8fea090910e66be24b4ed
+input	hydo/onboard/examples/swupdate/hydo.yaml	2c13d3b1ddef5d7e964d371a7cf999f3dba2b637b0bf406b6a78ecf93d7bd0b1
 input	hydo/onboard/examples/web-shop/hydo-walk.yaml	abf6900eb6261547cfa8e071f21c1721f1bd4ab747988690be44089b57ed5b86
 input	hydo/onboard/examples/web-shop/hydo.yaml	15a3d43c3de0e43da32d581a5bb199ed139ccde4349e777dbd868170183fc52f
 input	hydo/onboard/examples/blnk/hydo/hydo.yaml	7e97e5e2f1ff496ca70bf59e69bf32a213acbfe5b793f72d56bb293771353a9c
@@ -3308,6 +3309,7 @@ chunk	hydo/onboard/examples/stack/hydo.yaml	128	500	7108b5b0336c8ea934e15d929903
 chunk	hydo/onboard/examples/stack/hydo.yaml	129	500	3fcf8454fb37c8b7706b9a1cfb8647eb2681e6d76596c327911fa7a8c56662ae
 chunk	hydo/onboard/examples/stack/hydo.yaml	130	500	e06f4f68f253835a78154328eb693508d7bea8e2df30e4fae10cfcfa5a78b0e3
 chunk	hydo/onboard/examples/stack/hydo.yaml	131	394	3e745c2c1c8162cacdaaebb108e09167a69ef4c6f479340cbfa49afe8e4b969d
+manifest	hydo/onboard/examples/swupdate/hydo-devices.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/swupdate/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/web-shop/hydo-walk.yaml	core
 boot	hydo/onboard/examples/web-shop/hydo-walk.yaml	hydo/onboard/examples/web-shop/hydo-walk.yaml#0	snapshot	73be10c7f4870330

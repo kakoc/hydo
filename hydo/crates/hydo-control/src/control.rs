@@ -156,6 +156,65 @@ pub enum Ending {
     /// The conversation ends at the snapshot of this name, which later conversations resume
     /// from (the boot conversation ends at S1).
     AtSnapshot(String),
+    /// Milestone 263 (docs/design/devices.md): the guest asked for a reboot and shut down
+    /// cleanly; the engine starts a new boot from S0 with the disks' bytes, and the conversation
+    /// of that boot is given these inputs.
+    Reboot(RebootInputs),
+}
+
+/// Where a reboot's new boot goes on (Milestone 263).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum RebootStage {
+    /// With workload step `next` (the steps' count when the last step ended).
+    #[default]
+    Steps,
+    /// With the end of the run: the steps and the workload's retry are over.
+    End,
+    /// With the recovery boot's checks: the reboot came in a recovery boot after a power cut.
+    Recovery,
+}
+
+impl RebootStage {
+    pub fn word(&self) -> &'static str {
+        match self {
+            RebootStage::Steps => "steps",
+            RebootStage::End => "end",
+            RebootStage::Recovery => "recovery",
+        }
+    }
+
+    pub fn of_word(w: &str) -> Option<RebootStage> {
+        Some(match w {
+            "steps" => RebootStage::Steps,
+            "end" => RebootStage::End,
+            "recovery" => RebootStage::Recovery,
+            _ => return None,
+        })
+    }
+}
+
+/// What a reboot carries into the next boot's conversation (Milestone 263).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RebootInputs {
+    /// This reboot's number in the run (1 for the first).
+    pub n: u32,
+    pub stage: RebootStage,
+    /// The workload step the new boot goes on with ([`RebootStage::Steps`]).
+    pub next: i64,
+    /// The guest's realtime clock at the shutdown (None when it could not be read).
+    pub clock: Option<i64>,
+    /// The lines of `$HYDO_ACKED` and `$HYDO_OUTCOMES` at the shutdown.
+    pub acked: Vec<String>,
+    pub outcomes: Vec<String>,
+    /// The reactions (`A=`, indices into the schedule's tokens) that acted before the reboot.
+    pub fired: Vec<usize>,
+    /// [`RebootStage::Recovery`]: the recovery conversation's own ids (acknowledged, failed) and
+    /// carried outcomes.
+    pub rec_acked: Vec<String>,
+    pub rec_failed: Vec<String>,
+    pub rec_outcomes: Vec<String>,
+    /// The reason the guest gave (the words after `HYDO-REBOOT`).
+    pub reason: String,
 }
 
 /// One thing the controller does at a stop. `by` names the part of the controller that did it

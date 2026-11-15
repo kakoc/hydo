@@ -303,6 +303,14 @@ pub fn boot_files(
 }
 
 /// The manifest an image carries (`/etc/hydo/hydo.yaml`, whatever its format).
+/// The image's added disks (`guest.disks`, Milestone 263): its `/etc/hydo/disks` line, or None
+/// for an image without them.
+pub fn guest_disks(image: &Path) -> Option<String> {
+    let t = embedded_file(image, "etc/hydo/disks").ok()?;
+    let t = t.trim();
+    (!t.is_empty()).then(|| t.to_string())
+}
+
 pub fn embedded_manifest(image: &Path) -> Result<String, ImageError> {
     embedded_file(image, "etc/hydo/hydo.yaml")
 }

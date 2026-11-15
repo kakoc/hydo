@@ -34,6 +34,9 @@ fn options(h: &Hvm, spec: &BootSpec) -> hydo_config::hvm::Options {
     if let Some(d) = disk_for(&spec.image) {
         e = e.with([(hydo_config::registry::HVM_DISK, d.display().to_string())]);
     }
+    if let Some(d) = crate::image::guest_disks(&spec.image) {
+        e = e.with([(hydo_config::registry::HYDO_GUEST_DISKS, d)]);
+    }
     hydo_config::hvm::Options::from_env(&e)
 }
 

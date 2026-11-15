@@ -20,6 +20,7 @@ guest:
   clock_start: 1794700800        # 2026-11-15
   clock_after_cut: 30            # the device's clock runs on across a power cut
   outcomes_after_cut: true       # the checks after a power cut read the client's last outcomes
+  reboot: true                   # the agent's reboots are real ones (HYDO-REBOOT, Milestone 263)
 
 data:
   size_mib: 256

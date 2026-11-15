@@ -17,6 +17,10 @@ bootloader's variables differ.
   storage, each with its own volatile write cache, so that the environment's flush does not
   flush the slot. With both on one eMMC, Linux writes the slot's data to the eMMC when SWUpdate
   closes the device, the environment's flush makes it durable, and the same schedules pass.
+- **Does it hold with a real reboot and real storage chips?** Yes (Milestone 263). With the slots
+  on an eMMC disk with its own cache, the environment on SPI NOR flash, and real reboots of the
+  guest, `disk=cut | run C=4` boots v1 on the Mac engine on every run (section "With a real
+  reboot and two devices").
 - **And RAUC?** RAUC flushes the slot (`fsync`) before it switches the bootloader, and the same
   schedules pass on the RAUC example.
 - **What did hydo lack?** The section "What hydo lacked" of `../rauc/RESULTS.md` covers both
@@ -57,26 +61,41 @@ The checks are the RAUC example's, without `rauc.status_matches_slots`, and with
 
 ## The storage model
 
-The slots are loop devices over files on the guest's data disk, as in the RAUC example. The build
-parameter `dio` chooses how a write to a slot reaches the disk:
+`hydo.yaml` puts the slots in loop devices over files on the guest's data disk, as in the RAUC
+example. The build parameter `dio` chooses how a write to a slot reaches the disk.
+`hydo-devices.yaml` gives the device's storage chips disks of their own (`guest.disks`, Milestone
+263), on the Mac and KVM engines:
 
 | model | build | what it stands for |
 |---|---|---|
 | separate storage | `hydo build hydo.yaml` (`dio=0`, the default) | The slots' storage has a volatile write cache of its own. A flush of the environment's storage does not reach it. Examples: the environment on SPI NOR flash or a second device, and the root file systems on an eMMC, an SD card, or an SSD. |
 | one eMMC | `hydo build hydo.yaml --set dio=1` | The slots and the environment are on one eMMC. The loop devices use direct I/O (`loopdio`). So the data that Linux writes back when SWUpdate closes the device reaches the guest's disk, and the environment's flush makes it durable. |
+| two devices | `hydo build hydo-devices.yaml` | The slots are 16 MiB partitions of an eMMC, `/dev/vdb`, with a volatile write cache of its own: loop devices with direct I/O at offsets 0 and 16 MiB. U-Boot's environment is on SPI NOR flash, `/dev/vdc`, whose writes are durable at once. The application's data is on the main disk. |
 
-hydo has one disk per guest. With `disk=cut` that disk keeps a volatile write cache, and a flush
+In `hydo.yaml` the guest has one disk. With `disk=cut` that disk keeps a volatile write cache, and a flush
 (`fsync`) anywhere on it makes every earlier write durable. The default model gets a second cache
 from the loop device's backing file. Its pages stay in Linux's page cache until a flush of the
 slot, as data stays in a second device's cache until a flush of that device. This model loses
 more data than such a device, because a device's cache is smaller than the page cache. It loses
 the data in the same way.
 
+## Real reboots
+
+Since Milestone 263 the device's reboots are real ones (`guest.reboot: true`,
+docs/design/devices.md). The agent prints `HYDO-REBOOT <reason>` on the console and waits; hydo
+shuts the guest down cleanly and starts a new boot of the machine. The client asks for the reboot
+into update k-1 in step 2k. The reboot ends that step, and step 2k+1 checks the booted version in
+the new boot before it installs update k. So `C=4` still cuts after the acknowledged install of v3
+and before the reboot into it. A failed health check reboots the machine too: the broken v4 boots
+three times before U-Boot's boot counter returns to v3. The fingerprints of Milestone 259 below
+came from the scripted reboot of that milestone and do not repeat with this client.
+
 ## Without faults
 
-`disk=cut | run` runs 8 updates and 15 boots and holds every invariant. On hvx it gives
-`HYDO-ORACLE: OK invariants=5 held (device.boots: booted slot A v5 after 15 boot(s))` with the
-fingerprint `9a6b98defa5b7a98` on two runs.
+`disk=cut | run` runs 8 updates and 14 reboots and holds every invariant:
+`HYDO-ORACLE: OK invariants=5 held (device.boots: booted slot A v5 ...)`. On hvx (`hydo.yaml`) it
+gives `3adf77e343d3adeb` on two runs; on the Mac engine (`hydo-devices.yaml`) `ca737c0433e649b8`
+on two runs. With the scripted reboot of Milestone 259 it gave `9a6b98defa5b7a98` on hvx.
 
 The fingerprints in this file are of the image built with `workload.timeout: 60`. Milestone 261
 removed that line, so the image's bytes and its fingerprints changed. On hvx the regression
@@ -160,9 +179,58 @@ adds the flush. `hydo rules scan` listed these sentences as the documentation's 
 
 **The regression.** `regressions/stale-slot-after-switch.schedule`.
 
+### With a real reboot and two devices (Milestone 263)
+
+The candidate holds when the device reboots for real and its storage chips are disks of their own:
+
+| schedule | model | engine | verdict | fingerprint |
+|---|---|---|---|---|
+| `disk=cut \| run C=4` | two devices | the Mac | VIOLATION, booted v1, the updates allow only v3 | `57a5259c85fb401c` on 2 runs |
+| `disk=cut \| run C=6` | two devices | the Mac | VIOLATION, booted v2, the updates allow only v3 | `cc88a8c1a602f6f6` on 2 runs |
+| `disk=none \| run C=4` | two devices | the Mac | VIOLATION, booted v1 | `8fe5d844f298df5a` |
+| `disk=cut \| run C=4` | two devices | KVM, AMD EPYC 7763 / 9V74 | VIOLATION, booted v1 | `6b46d375709944a2` / `8a95a068bae8dc95`, 2 runs each |
+| `disk=cut \| run C=6` | two devices | KVM, AMD EPYC 7763 / 9V74 | VIOLATION, booted v2 | `0ccf864fd67b457c` / `3a00758c00612b9d`, 2 runs each |
+| `disk=cut \| run C=4` | separate storage | KVM, AMD EPYC 7763 / 9V74 | VIOLATION, booted v1 | `7fcf31006aa43c08` / `7ce325f0d53e453f`, 2 runs each |
+| `disk=cut \| run C=4` | separate storage | hvx | VIOLATION, booted v1 | `4781f6123233341f` on 2 runs |
+| `disk=cut \| run C=6` | separate storage | hvx | VIOLATION, booted v2 | `c82720edd41e397d` |
+| `disk=none \| run C=4` | separate storage | hvx | VIOLATION, booted v1 | `8a9ef3c5f6cb28ae` |
+| `disk=cut \| run C=4` | one eMMC | hvx | OK, booted v3 | `3346f68cc537f1da` |
+| `disk=cut \| run C=6` | one eMMC | hvx | OK, v4 boots three times and rolls back to v3 | `104aa91d15a69cc3` on 2 runs |
+
+In the two-device model the image's data reaches the eMMC's cache when `swupdate` closes the slot,
+and nothing flushes that cache before the reboot: SWUpdate's environment write goes to the NOR
+flash, and the application's synced record goes to the main disk. The reboot's clean shutdown
+flushes every disk, so a real reboot that comes before a power cut saves the image. A power cut
+between the install and the reboot loses it. `disk=none` makes the main disk keep every write,
+and the eMMC still loses its cache at the cut: its cache belongs to the device, not to the
+schedule. On a device whose application data is on the same eMMC as the slots, the application's
+next `fsync` would flush the image too, and the window would end there.
+
+On KVM the runs without faults gave OK: `7a06d00ca789d959` / `181656f38ded8062` (two devices)
+and `7948fd3a2a27ea69` / `d44bab782d65acab` (separate storage). The two AMD models disagree on
+every value (AGENTS.md open item 128). The KVM runs used the manifests' `workload.timeout: 60`
+of before Milestone 261, so the current manifests give other KVM values.
+
 ## The explorations
 
-Both explorations ran on hvx with one worker, on images with `workload.timeout: 300`. A later
+**With real reboots and two devices (Milestone 263).** On the Mac engine, `hydo-devices.yaml`, one
+worker:
+
+```sh
+hydo explore --seeds 1-20 --strategy process --reactive fault \
+  --react-events ota.install_started,ota.reboot_started,ota.mark_good_started
+```
+
+20 schedules gave 7 failures, each reproduced with its fingerprint, all finding 1 in three
+signatures (82 runs per hour). The minimal schedules are `disk=cut dseed=978180e49ee2ae24 | run
+C=16` (seeds 5, 8, 12, 17 and 20: the device boots v3 instead of the acknowledged v5),
+`disk=cut dseed=4127cc1347fae6ba | run K=device@1+1 C=16` (seed 1) and `disk=cut
+dseed=581cc68c71772e2c | run K=device@14+2 C=16` (seed 6). On the final image `C=16` gives
+`b422d1d29acdbd6d`.
+
+**Milestone 259's explorations** used the scripted reboot:
+
+They ran on hvx with one worker, on images with `workload.timeout: 300`. A later
 image had 60 s (`../rauc/RESULTS.md`, "What hydo lacked", item 4). The current one has the
 default 300 s again (Milestone 261). The fingerprints of other images differ:
 
@@ -197,5 +265,6 @@ hydo explore --seeds 1-60 --strategy process --more-faults --reactive fault \
 | `build.sh`, `build/` | the static tools (`build/Dockerfile`, `build/swupdate.config`, `build/loopdio.c`), the OS images and the SWUpdate images (`build/make-swu.sh`) |
 | `fetch-modules.sh` | the hvx guest kernel's loop module (on Linux) |
 | `hydo.yaml` | the device: one service, the workload, the checks |
+| `hydo-devices.yaml` | the same device with its eMMC and SPI NOR flash as disks of their own (`guest.disks`; the Mac and KVM engines) |
 | `device/` | the device's scripts: `lib.sh` (the slots, U-Boot with its boot counter, the boot, the client's model), `boot.sh`, `agent.sh`, `client.sh`, `check.sh` |
 | `regressions/` | the minimal schedule of finding 1 |

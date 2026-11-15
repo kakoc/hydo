@@ -1,0 +1,89 @@
+# The device of hydo.yaml with its storage chips as disks of their own (guest.disks, Milestone
+# 263; the Mac and KVM engines): the root file system slots on an eMMC with a volatile write
+# cache (/dev/vdb), U-Boot's environment on SPI NOR flash (/dev/vdc), the application's data on
+# the main disk. A flush of the environment does not reach the eMMC. RESULTS.md, "The storage
+# model".
+#
+#   hydo build hydo-devices.yaml
+#   hydo run "disk=cut | run C=4"
+format: 1
+name: swupdate-ota-devices
+description: "A device with A/B root slots updated by SWUpdate 2026.05.1 through U-Boot's environment and boot counter: power cuts and kills during installs"
+
+params:
+  dio: "1"   # the slots are partitions of the eMMC: their loop devices use direct I/O
+
+guest:
+  ram_mib: 1024
+  clock_start: 1794700800        # 2026-11-15
+  clock_after_cut: 30            # the device's clock runs on across a power cut
+  outcomes_after_cut: true       # the checks after a power cut read the client's last outcomes
+  reboot: true                   # the agent's reboots are real ones (HYDO-REBOOT, Milestone 263)
+  disks:                         # the device's storage chips (Milestone 263): /dev/vdb, /dev/vdc
+    - name: emmc                 # the slots: A at 0, B at 16 MiB; a volatile write cache
+      size_mib: 32
+      cache: volatile
+    - name: nor                  # U-Boot's environment on SPI NOR flash: every write durable
+      size_mib: 1
+      cache: none
+
+data:
+  size_mib: 256
+  dirs: [flash, app]
+
+root:
+  files:
+    - {src: out/bin-aarch64, dst: /opt/ota/bin-aarch64}
+    - {src: out/bin-x86_64, dst: /opt/ota/bin-x86_64}
+    - {src: out/images/v1.ext4, dst: /opt/ota/images/v1.ext4}
+    - {src: out/images/known, dst: /opt/ota/images/known}
+    - {src: out/images/uboot-default.env, dst: /opt/ota/images/uboot-default.env}
+    - {src: out/bundles, dst: /opt/ota/bundles}
+    - {src: out/modules, dst: /opt/ota/modules}
+    - {src: device, dst: /opt/ota/device}
+  dirs: [/run]
+  text:
+    /etc/fw_env.config: |
+      # U-Boot's redundant environment: two 16 KiB copies on the SPI NOR flash
+      /dev/vdc 0x0000 0x4000
+      /dev/vdc 0x4000 0x4000
+    /etc/ota/dio: "{{dio}}"
+    /etc/ota/storage: devices
+
+shell: |
+  export PATH=/opt/ota/bin-$(uname -m):$PATH
+
+services:
+  - name: device
+    setup: sh /opt/ota/device/boot.sh      # a cold boot when /tmp says the device has not booted
+    cmd: sh /opt/ota/device/agent.sh       # the confirmation after a boot, then the update agent
+    ready: test -f /tmp/ota/ready
+    ready_timeout: 300
+    restart: always
+    logs: [/tmp/ota/boots]
+
+workload:
+  steps: 16                                # 8 updates: v2, v3, v4 (broken), v5, v2, ...
+  run: sh /opt/ota/device/client.sh $HYDO_FROM $HYDO_TO
+  retry: sh /opt/ota/device/client.sh reboot
+
+invariants:
+  - id: device.boots
+    msg: after any power cut the device boots a complete, verified slot
+    cmd: sh /opt/ota/device/check.sh boots
+  - id: device.version
+    msg: an acknowledged install survives, and an install that did not complete never boots
+    cmd: sh /opt/ota/device/check.sh version
+  - id: device.primary_complete
+    msg: the slot in boot_slot holds a complete image
+    cmd: sh /opt/ota/device/check.sh primary
+  - id: data.records_survive
+    msg: every record the application synced is there
+    cmd: sh /opt/ota/device/check.sh records
+  - id: device.reboots_boot_allowed
+    msg: every reboot during the workload booted a version the updates allow
+    cmd: sh /opt/ota/device/check.sh violations
+    every: 2
+    final: true
+
+faults: [kill, cut, clock, disk]

@@ -20,6 +20,7 @@
 //!                                     SNAP <name> [retype]               -> OK snap ... | ERR snap ...
 //!                                     DISKOFF (agent images, M126)       -> OK diskoff at=<n> cut=<0|1>
 //!                                     CUT     (agent images, M126)       -> OK cut at=<n>, ends the stop
+//!                                     REBOOT  (Milestone 263)            -> OK reboot at=<n>, ends the stop
 //!                                     CONT | END [<verdict>]
 //! the run ends with:                  RESULT <tag> fp=.. wfp=.. secs=.. stops=.. typed=.. inh=.. verdict=..
 //! ```
@@ -268,6 +269,18 @@ impl<'a> Lockstep<'a> {
         match self.answer()? {
             Answer::Refused(e) => Ok(Err(e)),
             Answer::Cut { at } => Ok(Ok(at)),
+            a => Err(EngineError::Protocol(a.line())),
+        }
+    }
+
+    /// A reboot at this stop (Milestone 263, docs/design/devices.md). On Ok the stop is over: the
+    /// next stop is the new VM's start stop, in the workload phase. Err(reason) when the engine
+    /// refuses (the stop goes on).
+    pub fn reboot(&mut self) -> Result<Result<u64, String>, EngineError> {
+        self.cmd(HostCmd::Reboot)?;
+        match self.answer()? {
+            Answer::Refused(e) => Ok(Err(e)),
+            Answer::Reboot { at } => Ok(Ok(at)),
             a => Err(EngineError::Protocol(a.line())),
         }
     }

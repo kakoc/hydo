@@ -119,6 +119,8 @@ pub struct Options {
     pub preempt_record: bool,
     /// `HYDO_CONTRACTS`: the function contracts' plan (Milestone 241).
     pub contracts: Option<String>,
+    /// `HYDO_GUEST_DISKS`: the image's added disks (Milestone 263).
+    pub guest_disks: Option<String>,
 }
 
 impl Options {
@@ -163,6 +165,7 @@ impl Options {
             no_mlock: e.is_set(HVMX_NO_MLOCK),
             preempt_record: e.set_not_0(HYDO_PREEMPT_RECORD),
             contracts: t(HYDO_CONTRACTS).filter(|p| !p.is_empty()),
+            guest_disks: t(HYDO_GUEST_DISKS).filter(|p| !p.is_empty()),
         }
     }
 }

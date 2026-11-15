@@ -135,6 +135,8 @@ pub(crate) const KNOWN_GUEST: &[&str] = &[
     "cpu",
     "cpu_cache",
     "kernel",
+    "reboot",
+    "disks",
     "description",
 ];
 pub const KNOWN_KNOB: &[&str] = &[
@@ -910,6 +912,19 @@ pub fn validate(m: &mut Value) -> R<()> {
                 repr(c)
             )));
         }
+    }
+    // Milestone 263 (docs/design/devices.md): a reboot the guest asks for, and added disks
+    if has(&guest, "reboot")? {
+        let c = index(&guest, "reboot")?;
+        if !c.is_boolean() {
+            return Err(err(format!(
+                "guest.reboot: true (a guest program may ask for a reboot with the console line HYDO-REBOOT) or false (got {})",
+                repr(c)
+            )));
+        }
+    }
+    if has(&guest, "disks")? {
+        guest_disks(index(&guest, "disks")?)?;
     }
     if has(&guest, "cpu_cache")? {
         let c = index(&guest, "cpu_cache")?;
@@ -2309,4 +2324,61 @@ mod tests {
             "services[0]: writable: must be true or false"
         );
     }
+}
+
+/// `guest.disks` (Milestone 263, docs/design/devices.md): 1 to 4 added disks.
+fn guest_disks(d: &Value) -> Result<(), ManifestError> {
+    let Some(list) = d.as_array().filter(|l| (1..=4).contains(&l.len())) else {
+        return Err(err(format!(
+            "guest.disks: a list of 1 to 4 disks, each with name, size_mib and cache (got {})",
+            repr(d)
+        )));
+    };
+    let mut names: Vec<&str> = Vec::new();
+    for (i, x) in list.iter().enumerate() {
+        let w = format!("guest.disks[{i}]");
+        let Some(o) = x.as_object() else {
+            return Err(err(format!(
+                "{w}: a mapping with name, size_mib and cache (got {})",
+                repr(x)
+            )));
+        };
+        for k in o.keys() {
+            if !["name", "size_mib", "cache", "description"].contains(&k.as_str()) {
+                return Err(err(format!(
+                    "{w}: unknown key {k} (name, size_mib, cache, description)"
+                )));
+            }
+        }
+        let name = o.get("name").and_then(|n| n.as_str()).unwrap_or("");
+        let ok_name = name.len() <= 16
+            && name.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+        if !ok_name {
+            return Err(err(format!(
+                "{w}.name: a letter, then letters, digits and -, at most 16 bytes (got {})",
+                repr(o.get("name").unwrap_or(&Value::Null))
+            )));
+        }
+        if names.contains(&name) {
+            return Err(err(format!("{w}.name: {name} is named twice")));
+        }
+        names.push(name);
+        let sz = o.get("size_mib").unwrap_or(&Value::Null);
+        if !int_in(sz, 1, 4096) {
+            return Err(err(format!(
+                "{w}.size_mib: whole MiB in [1, 4096] (got {})",
+                repr(sz)
+            )));
+        }
+        if let Some(c) = o.get("cache") {
+            if !in_strs(c, &["volatile", "none"]) {
+                return Err(err(format!(
+                    "{w}.cache: volatile (writes wait in the disk's cache until a flush of that disk; the default) or none (every write is durable at once) (got {})",
+                    repr(c)
+                )));
+            }
+        }
+    }
+    Ok(())
 }

@@ -85,6 +85,10 @@ impl Hvm {
         if let Some(p) = contracts_for(&spec.image) {
             c.env(hydo_config::registry::HYDO_CONTRACTS, p);
         }
+        // Milestone 263: the image's added disks (guest.disks)
+        if let Some(d) = crate::image::guest_disks(&spec.image) {
+            c.env(hydo_config::registry::HYDO_GUEST_DISKS, d);
+        }
         c
     }
 

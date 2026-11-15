@@ -483,6 +483,23 @@ found one SWUpdate candidate, not reported upstream and not posted:
 The section "What hydo lacked" of the RAUC example lists what devices need from hydo (open item
 125).
 
+**Reboots and added disks (M263, tentative number).** Two format-1 additions for devices
+(`docs/design/devices.md`; MANIFEST.md "Reboots" and "Added disks"):
+- `guest.reboot: true`: a guest program asks for a reboot with the console line `HYDO-REBOOT`.
+  hydo shuts the guest down cleanly with SIGTERM, SIGKILL 2 s later, `sync`, and a disk flush.
+  The engine's new command `REBOOT` then starts a new boot from S0 with the disks' bytes. The next
+  conversation (`reboot <n>`) carries the clock and `$HYDO_ACKED` and `$HYDO_OUTCOMES`, starts
+  every service and goes on with the next workload step; each step is its own call. A reboot in a
+  recovery boot gives a new recovery boot. Built on hvx (no module change), the Mac, and KVM.
+- `guest.disks`: up to 4 disks beside the main one (`/dev/vdb` and on), each with a write cache of
+  its own (`cache: volatile | none`); a power cut drops every volatile cache. The Mac and KVM
+  engines; the hvx engine refuses them before any VM (open item 128).
+
+Without the keys nothing changes: the pinned reproducers gave their values on hvx. The SWUpdate
+example's `hydo-devices.yaml` puts the slots on an eMMC and the environment on SPI NOR flash. With
+a real reboot and those disks, M259's SWUpdate candidate holds: `disk=cut | run C=4`
+boots v1 on the Mac engine and on KVM, and with the loop model on hvx. RAUC held.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -1372,11 +1389,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The walk follows no links into other origins and no file uploads, and it sees no canvas,
       no iframe, and no shadow DOM that the accessibility tree does not show.
 125. What devices need from hydo (M259; the section "What hydo lacked" of
-    `hydo/onboard/examples/rauc/RESULTS.md` has the details).
-    - A reboot of the guest. The examples reboot with a script in the running guest, so the
-      page cache and the kernel survive it, and a service restart waits longer after each one.
-    - A second disk with a write cache of its own (slots and environment on different storage),
-      and the device's kernel command line, where RAUC reads the booted slot.
+    `hydo/onboard/examples/rauc/RESULTS.md` has the details). M263 built a reboot of the guest
+    (`guest.reboot`) and added disks with caches of their own (`guest.disks`); open item 128 has
+    what they left. What is left of the rest:
+    - The device's kernel command line, where RAUC reads the booted slot.
     - A power cut inside a step on the Mac. `cf=` runs on hvx only, so the examples cut with
       their own console records and reactions (`A=...:cut`).
     - squashfs and the device mapper in the Mac's guest kernel. RAUC needs a patch there, and
@@ -1385,8 +1401,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `hydo rules scan`, and disk faults and the strict `L=` in the explorer's draws.
 126. The device examples (M259). What is left:
     - SWUpdate's candidate is not reported upstream.
-    - The Mac engine ran neither SWUpdate nor RAUC's final client; this Mac's swap and disk were
-      over the session's limits.
+    - The Mac engine ran SWUpdate and RAUC with M263's client (real reboots) in directed runs and
+      one short exploration only, not in M259's explorations.
     - libubootenv 0.3.8, which both tools use, ignores its `fsync` result. It is fixed on its
       `master` (`ed3fce96`) and in no release; no run showed it.
 
@@ -1405,6 +1421,29 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     Also left: the agent reads its last 1 to 3 staged bytes with a 4-byte `IN`, and the hvx
     engine pads around it (M261). An agent that read them with 1-byte `IN`s needs no padding, but
     a new agent moves the agent pin.
+
+128. Reboots and added disks (M263). What is left:
+    - The hvx engine has no added disks, because its one block device is in the kernel module.
+      A second device needs its own PCI function, queue, and cache. It also needs its part of
+      the snapshot and of the fingerprint, and a disk window. That is a change on a side module
+      first, and a reload of the main module after the suite.
+    - Some runs refuse a reboot, because their state is not carried into the new boot yet:
+      - before any VM: `cf=`, `U=`, test compositions, `perf:`, `fakes:`, `proxies:`,
+        `emulators:`, and `walk:`;
+      - at the reboot on hvx: tick jitter, extra ticks, `pp=`, and `q=`;
+      - at the reboot on the Mac and KVM: tick jitter, `pct=`, several vCPUs, and `spin=rewind`.
+    - hydo does not watch `reboot(2)`: a program prints `HYDO-REBOOT` instead, because a change of
+      the agent changes every image's bytes.
+    - A request is taken in a step, the retry, a failed start after a reboot or a cut, and a
+      recovery boot before its checks. Elsewhere it is logged and ignored.
+    - `G=` and `L=` do not reach the added disks, the disks start empty (no `image:`), and the
+      schedule's `disk=` faults apply to the main disk only.
+    - `hydo repro --transcript` types the run's transcript again but runs the boots after a
+      reboot by the schedule's policy.
+    - On KVM the AMD EPYC 7763 and 9V74 gave different fingerprints for every SWUpdate schedule
+      with reboots, each one stable on its host and with the same verdicts. A run of the same
+      image without a reboot on both models decides whether the reboot path lets the host in.
+    - RAUC's example kept its loop devices, and RAUC did not run on KVM.
 
 ## Milestone index
 
@@ -1973,6 +2012,10 @@ build machine, before 2026-10-13.
   `cf=` run is cut at the first stop after its disk lost power, instead of waiting at the
   workload's end on the dead disk. If the agent itself waits on it, the run ends in ERROR. The
   examples drop `workload.timeout: 60`. Nothing in `recorded.json` moved; hvx runs with `cf=` did
+- M263 (tentative number): a reboot that the guest asks for (`guest.reboot`, the console line
+  `HYDO-REBOOT`, the engines' `REBOOT`) on hvx, the Mac, and KVM. Added disks with caches of
+  their own (`guest.disks`) on the Mac and KVM. With a real reboot and the slots and the
+  environment on separate disks, the SWUpdate candidate holds; RAUC held. Nothing recorded moved
 
 ## Where to look
 

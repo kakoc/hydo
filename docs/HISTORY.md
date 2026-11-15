@@ -12076,3 +12076,101 @@ and is unchanged.
 this Mac, `cargo test -p hydo-hvx --lib` on the bare-metal machine, `cargo clippy --all-targets
 -- -D warnings` of the changed crates on both, `sh ci/consolidate-tests.sh --check` and `sh
 ci/vale.sh`.
+
+### Milestone 263 (tentative number) - DONE (what hydo lacked for devices, open item 125: a reboot that a guest program asks for, `guest.reboot`, on hvx, the Mac and KVM without a module change, and added disks with write caches of their own, `guest.disks`, on the Mac and KVM; with a real reboot and the slots and U-Boot's environment on separate disks, M259's SWUpdate candidate holds; RAUC held; nothing recorded moved; 2026-11-15)
+
+**In short.** M259's device examples rebooted with a script inside the running guest, and one
+disk stood for every storage chip. This milestone gives hydo both pieces, designed in
+`docs/design/devices.md`:
+
+- `guest.reboot: true` (a format-1 addition): a guest program prints `HYDO-REBOOT [<reason>]` on
+  the console. The host controller takes the reboot in a workload step, in the retry, when a
+  service does not get ready after a boot, or in a recovery boot before its checks. It shuts the
+  guest down cleanly: the periodic checks and the restart supervisor stop, the workload and every
+  service get SIGTERM and SIGKILL 2 s of guest time later, then `sync` and `busybox sync -d` of
+  every `/dev/vd*` send each disk a cache flush. The conversation ends with `Ending::Reboot`,
+  which carries the clock, `$HYDO_ACKED`, `$HYDO_OUTCOMES` and the reactions that acted.
+- The engines' new lock-step command `REBOOT` (`OK reboot at=<n>`): the boot's fingerprint goes
+  into a chain, its console is saved as `<tag>.boot<n>.log`, and a new VM restored from S0 with
+  the disks' flushed bytes goes on in the same phase, with the schedule's disk fault policy. The
+  run's fingerprint folds the chain in front of the last boot's; a run without a reboot keeps its
+  fingerprint. hvx needs no module change: its recovery boot already restores S0 into a new VM.
+- The next conversation (`reboot <n>`, `control.reboot<n>.jsonl`) sets the clock, writes the run's
+  files back, mounts the data disk, starts every service, and goes on with the next step. A fault
+  that began before the reboot ends with it (the log names it). Each step is its own call of
+  `workload.run`. A reboot in a recovery boot gives a new recovery boot. At most 64 reboots per
+  run. `cf=`, `U=`, test compositions, `perf:`, `fakes:`/`proxies:`/`emulators:` and `walk:` are
+  refused before any VM (the explorer counts them as refused).
+- `guest.disks` (a format-1 addition, up to 4): virtio-mmio block devices after the main ones,
+  `/dev/vdb`, ... (`hydo_hvm::virtio::Extra`), each with a volatile cache that only its own
+  flush commits (`cache: none`: every write durable). A power cut drops every added disk's cache.
+  `hydo build` writes `/etc/hydo/disks`, and hydo-engine gives the engine `HYDO_GUEST_DISKS`. The
+  device tree (Mac) or the kernel's command line and the IRQs 9, 10, 11 and 15 (KVM) name them.
+  The hvx engine refuses such an image before any VM: its block device is in the module.
+
+**The examples.** Both examples set `guest.reboot: true`. The agent's reboot prints
+`HYDO-REBOOT <reason>` and waits. The client asks for the reboot into update k-1 in step 2k and
+checks the booted version in step 2k+1, before it installs update k, so `C=4` and `C=6` cut at the
+points of M259. A wrong boot goes to `/data/app/violations` (synced). SWUpdate's new
+`hydo-devices.yaml` puts the slots on an eMMC disk (32 MiB, volatile, loop devices with direct I/O
+at offsets 0 and 16 MiB) and the environment on a SPI NOR disk (1 MiB, `cache: none`), with the
+application's data on the main disk. The fingerprints of M259 came from the scripted reboot and
+do not repeat with this client.
+
+**The SWUpdate candidate holds.** With real reboots, on every engine:
+
+| schedule | model | engine | verdict | fingerprint |
+|---|---|---|---|---|
+| `disk=cut \| run` | two devices | the Mac | OK, v5 after 14 reboots | `ca737c0433e649b8` (2 runs) |
+| `disk=cut \| run C=4` | two devices | the Mac | VIOLATION, booted v1, allowed v3 | `57a5259c85fb401c` (2 runs) |
+| `disk=cut \| run C=6` | two devices | the Mac | VIOLATION, booted v2, allowed v3 | `cc88a8c1a602f6f6` (2 runs) |
+| `disk=none \| run C=4` | two devices | the Mac | VIOLATION, booted v1 | `8fe5d844f298df5a` |
+| `disk=cut \| run` | separate storage (loop) | hvx | OK, v5 | `3adf77e343d3adeb` (2 runs) |
+| `disk=cut \| run C=4` | separate storage | hvx | VIOLATION, booted v1 | `4781f6123233341f` (2 runs) |
+| `disk=cut \| run C=6` | separate storage | hvx | VIOLATION, booted v2 | `c82720edd41e397d` |
+| `disk=none \| run C=4` | separate storage | hvx | VIOLATION, booted v1 | `8a9ef3c5f6cb28ae` |
+| `disk=cut \| run C=4` | one eMMC (`dio=1`) | hvx | OK, booted v3 | `3346f68cc537f1da` |
+| `disk=cut \| run C=6` | one eMMC | hvx | OK, v4 boots three times, back to v3 | `104aa91d15a69cc3` (2 runs) |
+| `disk=cut \| run` | separate storage | KVM, EPYC 7763 / EPYC 9V74 | OK, v5 | `7948fd3a2a27ea69` / `d44bab782d65acab` |
+| `disk=cut \| run C=4` | separate storage | KVM, EPYC 7763 / EPYC 9V74 | VIOLATION, booted v1 | `7fcf31006aa43c08` / `7ce325f0d53e453f` |
+| `disk=cut \| run C=6` | separate storage | KVM, EPYC 7763 / EPYC 9V74 | VIOLATION, booted v2 | `2bdf3d6c83a20949` / `26cceb7958467cb7` |
+| `disk=cut \| run` | two devices | KVM, EPYC 7763 / EPYC 9V74 | OK, v5 | `7a06d00ca789d959` / `181656f38ded8062` |
+| `disk=cut \| run C=4` | two devices | KVM, EPYC 7763 / EPYC 9V74 | VIOLATION, booted v1 | `6b46d375709944a2` / `8a95a068bae8dc95` |
+| `disk=cut \| run C=6` | two devices | KVM, EPYC 7763 / EPYC 9V74 | VIOLATION, booted v2 | `0ccf864fd67b457c` / `3a00758c00612b9d` |
+
+Each value held on two runs (the examples' RESULTS.md say how many). The KVM values are from the
+one-off workflow's second run, 43762539701, on GitHub's runners, with the manifests' `workload.timeout:
+60` of before Milestone 261; the hvx and Mac values are from the final manifests. Each KVM value held on its host,
+and the two AMD models gave different values for every schedule, all with reboots. M244 found
+the EPYC 7763, 9V45 and 9V74 in agreement without reboots. Whether the reboot path lets a part of
+the host into the fingerprint was not separated: a run of the same image without a reboot on both
+models decides it (open item 128). In the two-device model the
+image's data reaches the eMMC's cache when `swupdate` closes the slot, and nothing flushes that
+cache before the reboot: the environment goes to the NOR flash and the application's record to
+the main disk. A reboot's clean shutdown flushes every disk; a power cut before it loses the image.
+
+**RAUC held.** hvx: `disk=cut | run` ``8db65afe7545c3b2`` (2 runs), `C=4` boots v3 ``c66b70a83653b127``, `C=6`
+boots v4 three times in the recovery boot and rolls back to v3 ``23d1282db24e337b`` (2 runs). The Mac:
+`1b886a1aa84b9fdc` (2 runs), `e8a91854d76263b7`, and `61fc4401e4e90686` (2 runs).
+
+**Nothing recorded moved.** With this tree's hydo over the 0.3.4 release on hvx, the pinned
+reproducers gave `a76d7fe857fdb37c` (VIOLATION) and `efbde7b57264be0f` (OK), on the tree rebased
+onto Milestone 261. The re-recorded goldens are the device examples' entries of the explorer's
+`identity-quick.txt` and `corpus-full.txt` (and the corpus chunks after them), the control
+corpus's input lines for the two manifests and the new `hydo-devices.yaml` (refused there: a
+restart policy has no shell model), the CLI golden's `guide manifest` answers, and
+`hydo-config/INVENTORY.md` (`HYDO_GUEST_DISKS`). The tests of hydo-engine-proto, hydo-engine, hydo-control, hydo-explore, hydo-hvm, hydo-kvm, hydo-hvx and hydo-config pass, and `agents_equivalence` and the CLI golden; hydo-manifest's `equivalence::` fails as before this milestone (open item 115).
+
+**The first KVM run found a gap.** In run 43760924998 the devices image ended every schedule with
+`VIOLATION service cannot start after a reboot (device)`. `hydo run --backend kvm` runs the engine
+inside hydo's process, and only the engine program was given `HYDO_GUEST_DISKS`. So the guest had
+no `/dev/vdb`, the factory wrote the slots into a file under `/dev`, in RAM, and the first reboot
+lost them. The in-process path passes the disks now, and the example stops at once without them. The
+loop model's values of that run (AMD EPYC 9V45 and Intel Xeon 6975P-C) came from an image built
+before that guard, and its verdicts were the ones above.
+
+**Explorations.** On the Mac engine, `hydo-devices.yaml` with one worker, `--seeds 1-20 --strategy process --reactive fault` and the agent's three events, gave 7 failures in 20 schedules, each reproduced, all the candidate: minimal `disk=cut dseed=978180e49ee2ae24 | run C=16` (the device boots v3 instead of the acknowledged v5; `b422d1d29acdbd6d` on the final image), and two with a kill before the cut. The image of that exploration lacked the example's final guard for missing disks, which changes nothing in a run. An hvx exploration was stopped after the rebase onto Milestone 261, before its first result; `--more-faults` there needs `cf=`, which a reboot plan refuses, so it is to run with `--strategy process --reactive fault`.
+
+**What is left** (AGENTS.md open item 128): added disks on hvx (a module change on a side
+module), the refused combinations, `reboot(2)` itself, `G=`/`L=` on added disks, and transcript
+replays of the boots after a reboot.

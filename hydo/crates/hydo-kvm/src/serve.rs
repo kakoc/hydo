@@ -67,6 +67,8 @@ const CTL_MAX_SENDS: usize = hydo_engine_proto::MAX_SENDS;
 /// differs from the RAM base and the disk image by.
 const CTL_MAX_SNAPS: usize = 64;
 const CTL_SEND_MAX: usize = crate::uart::RXQ;
+/// Milestone 263: the reboots one run may take (docs/design/devices.md).
+const REBOOT_MAX: u32 = 64;
 const CTL_RB_DEFAULT: u64 = 65536;
 
 /// The engine's options (hydo-config's typed group).
@@ -122,6 +124,8 @@ struct RunSt {
     rewind: bool,
     /// several vCPUs: the turns ended before the run (for `qn=`)
     turns0: Option<u64>,
+    /// the schedule's disk fault policy, set again in each new boot (Milestone 263)
+    dpol: (u64, u32, u32),
 }
 
 impl Default for RunSt {
@@ -136,6 +140,7 @@ impl Default for RunSt {
             tjinfo: String::new(),
             rewind: false,
             turns0: None,
+            dpol: (0, 0, 0),
         }
     }
 }
@@ -194,6 +199,9 @@ struct Ctl {
     /// DISKOFF/CUT given (1), then acted on (2)
     wdone: i32,
     cut: bool,
+    /// Milestone 263: a REBOOT was answered at this stop; the reboots of the run so far
+    reboot: bool,
+    reboots: u32,
     tag: String,
     phase: Phase,
     at: u64,
@@ -213,6 +221,8 @@ impl Default for Ctl {
             boot_s1: false,
             wdone: 0,
             cut: false,
+            reboot: false,
+            reboots: 0,
             tag: String::new(),
             phase: Phase::Workload,
             at: 0,
@@ -656,6 +666,33 @@ impl Host {
                 }
                 HostCmd::Snap { name, retype } => self.ctl_snap_cmd(vm, &name, retype),
                 HostCmd::Time(tokens) => self.ctl_time_cmd(vm, &tokens),
+                HostCmd::Reboot => {
+                    let no = if !matches!(self.c.phase, Phase::Workload | Phase::Recovery) {
+                        Some("only in the workload and recovery phases")
+                    } else if self.c.phase == Phase::Workload && self.c.wdone != 0 {
+                        Some("after DISKOFF/CUT")
+                    } else if self.snap_find("S0").is_none() {
+                        Some("without a snapshot S0")
+                    } else if self.c.reboots >= REBOOT_MAX {
+                        Some("more than 64 times in a run")
+                    } else if self.c.rs.pct_n != 0
+                        || vm.tj.on
+                        || vm.smp.is_some()
+                        || self.c.rs.rewind
+                    {
+                        Some("with tick jitter, pct=, several vCPUs or spin=rewind (not built)")
+                    } else {
+                        None
+                    };
+                    if let Some(no) = no {
+                        self.refuse(format!("reboot {no}"));
+                        continue;
+                    }
+                    self.c.reboot = true;
+                    let at = self.c.at;
+                    self.answer(Answer::Reboot { at });
+                    return false;
+                }
                 HostCmd::DiskOff | HostCmd::Cut => {
                     let cut = matches!(cmd, HostCmd::Cut);
                     let no = if self.c.phase != Phase::Workload {
@@ -704,6 +741,10 @@ impl Host {
         if let Some(w) = why {
             if self.ctl_stop(vm, w) {
                 self.c.ended = 1;
+                return true;
+            }
+            if self.c.reboot {
+                self.c.ended = 4;
                 return true;
             }
         }
@@ -868,6 +909,9 @@ impl Engine {
             if self.h.ctl_stop(&mut self.vm, w) {
                 return -3;
             }
+            if std::mem::take(&mut self.h.c.reboot) {
+                return -8;
+            }
             if self.h.c.boot_s1 {
                 return -4;
             }
@@ -884,12 +928,19 @@ impl Engine {
         match self.h.c.ended {
             2 => return -4,
             3 => return -7,
+            4 => {
+                self.h.c.reboot = false;
+                return -8;
+            }
             0 => {}
             _ => return -3,
         }
         self.h.c.at = self.vm.m.exits;
         if self.h.ctl_stop(&mut self.vm, StopWhy::Exit) {
             return -3;
+        }
+        if std::mem::take(&mut self.h.c.reboot) {
+            return -8;
         }
         *why = s;
         -1
@@ -1074,6 +1125,7 @@ impl Engine {
             t0,
             from,
             pct_n,
+            dpol: (dseed, dcl, dpr),
             ..RunSt::default()
         };
         if tj_wanted(&tj) {
@@ -1104,6 +1156,49 @@ impl Engine {
         self.run_rest(rs);
     }
 
+    /// Milestone 263 (docs/design/devices.md): while the host asks for reboots (`r == -8`), end
+    /// the boot (its fingerprint into the chain, its console as `<tag>.boot<n>.log`) and go on
+    /// in a new one from S0 with the disks' flushed bytes, in the same phase, with the disk
+    /// fault policy `dpol`. The last `run_to` result and the chain of the ended boots.
+    fn reboots(
+        &mut self,
+        mut r: i32,
+        why: &mut i32,
+        from: &mut usize,
+        tag: &str,
+        dpol: (u64, u32, u32),
+    ) -> (i32, Option<u64>) {
+        let mut rchain: Option<u64> = None;
+        while r == -8 {
+            self.h.c.reboots += 1;
+            let n = self.h.c.reboots;
+            let fp = self.xfp();
+            rchain = Some(fnv_u64(fp, rchain.unwrap_or(OFFSET)));
+            self.save_log(&format!("{tag}.boot{n}"), *from);
+            let durable = self.vm.vio.disk.clone();
+            let extra = self.vm.vio.extra_durable();
+            let Some(s0) = self.h.g_s0 else {
+                fatal(3, "hydo-kvm: a reboot without the host's S0 snapshot");
+            };
+            let snap = self.h.snaps[s0].as_ref().expect("S0");
+            if let Some(ct) = self.vm.ct.as_mut() {
+                ct.cut();
+            }
+            self.vm.restore(&snap.x);
+            if let (Some(d), Some(du)) = (&mut self.vm.vio.disk, durable) {
+                *d = du;
+            }
+            self.vm.vio.set_extra_durable(extra);
+            self.vm.vio.set_fault(dpol.0, dpol.1, dpol.2);
+            *from = self.vm.m.console_len as usize;
+            self.h.ctl_drop_pending();
+            self.h.c.start = 1;
+            self.h.c.k.evfrom = *from;
+            r = self.run_to(why);
+        }
+        (r, rchain)
+    }
+
     /// The rest of a run from the workload's start: a CTL goes on here, a RESUME starts here.
     fn run_rest(&mut self, rs: RunSt) {
         let tag = rs.tag.clone();
@@ -1117,8 +1212,12 @@ impl Engine {
         let mut from = rs.from;
         let rewind = rs.rewind;
         self.vm.set_rewind(rewind);
+        let dpol = rs.dpol;
         self.h.c.rs = rs;
-        let mut r = self.run_to(&mut why);
+        let r = self.run_to(&mut why);
+        // Milestone 263: each reboot the host asked for ends a boot; the run goes on in a new one
+        let (r2, rchain) = self.reboots(r, &mut why, &mut from, &tag, dpol);
+        let mut r = r2;
         if r == -7 {
             r = 0;
             cut |= self.h.c.cut;
@@ -1163,6 +1262,9 @@ impl Engine {
                 break 'out;
             }
             wfp = self.xfp();
+            if let Some(ch) = rchain {
+                wfp = fnv_u64(wfp, ch); // Milestone 263: the ended boots first
+            }
             self.diag(&tag, "w");
             if r == -3 {
                 verdict = self.h.ctl_verdict(&self.vm, r, from);
@@ -1187,6 +1289,7 @@ impl Engine {
             }
             // power cut: only the flushed disk bytes survive; recover from the host's S0
             let durable = self.vm.vio.disk.clone();
+            let extra = self.vm.vio.extra_durable();
             self.save_log(&tag, from);
             let Some(s0) = self.h.g_s0 else {
                 fatal(3, "hydo-kvm: a power cut without the host's S0 snapshot");
@@ -1199,6 +1302,7 @@ impl Engine {
             if let (Some(d), Some(du)) = (&mut self.vm.vio.disk, durable) {
                 *d = du;
             }
+            self.vm.vio.set_extra_durable(extra);
             self.vm.vio.set_fault(0, 0, 0);
             from = self.vm.m.console_len as usize;
             if self.h.c.on {
@@ -1208,10 +1312,16 @@ impl Engine {
                 self.h.c.k.evfrom = from;
             }
             r = self.run_to(&mut why);
+            // Milestone 263: reboots the guest asks for in the recovery boot
+            let (r2, rc) = self.reboots(r, &mut why, &mut from, &tag, (0, 0, 0));
+            r = r2;
             if r < 0 && r != -3 {
                 verdict = format!("ERROR recovery: {}", stop_name(why));
             } else {
                 ffp = self.xfp();
+                if let Some(ch) = rc {
+                    ffp = fnv_u64(ffp, ch);
+                }
                 self.diag(&tag, "f");
                 verdict = self.h.ctl_verdict(&self.vm, r, from);
             }
@@ -1308,6 +1418,11 @@ pub fn vm_opts(o: &KvmOptions, disk: Option<&std::path::Path>) -> VmOpts {
         fault: disk.map(|_| "0".to_string()),
         fault_classes: disk.map(|_| "unflushed".to_string()),
         fault_prob: disk.map(|_| "0".to_string()),
+        extra: o
+            .guest_disks
+            .as_deref()
+            .and_then(virtio::ExtraCfg::parse_list)
+            .unwrap_or_default(),
         ..virtio::Config::default()
     };
     VmOpts {

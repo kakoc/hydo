@@ -7,16 +7,19 @@
 # at a time: $RUN/req/<id> holds "install <version>" or "reboot", and the answer goes to
 # $RUN/res/<id> (swupdate's exit code, "rebooting", or "lost"). An install runs
 # `swupdate -i <bundle> -e stable,copy1|copy2`: the copy that is not booted.
-# A reboot is a clean one (sync, then the cold boot of lib.sh) inside this process.
+# A reboot is a real one (guest.reboot, docs/design/devices.md): the agent asks hydo for it
+# with the console line HYDO-REBOOT and waits to be stopped, as a program that calls `reboot`
+# does. hydo shuts the guest down cleanly (sync, a cache flush of every disk) and boots the
+# machine again; boot.sh then runs the cold boot of lib.sh.
 . /opt/ota/device/lib.sh
 mkdir -p $RUN/req $RUN/res
 echo $$ > $RUN/agent.pid   # the client stops waiting once this process is gone (a kill)
 
-reboot_device() {
+reboot_device() {   # reason
   event ota.reboot_started "a reboot started"
-  sync
-  rm -f $RUN/booted $RUN/marked $RUN/ready
-  cold_boot
+  c=/dev/ttyS0; [ -c $c ] || c=/dev/console
+  echo "HYDO-REBOOT $1" > $c
+  while :; do sleep 60; done
 }
 
 after_boot() {   # health check and confirmation; a failed health check reboots
@@ -41,7 +44,7 @@ after_boot() {   # health check and confirmation; a failed health check reboots
       return
     fi
     say "boot $(booted gen): v$(booted version) fails its health check: reboot"
-    reboot_device
+    reboot_device "v$(booted version) failed its health check"
   done
 }
 
@@ -75,8 +78,7 @@ while :; do
       reboot)
         say "request $id: reboot"
         echo rebooting > "$RUN/res/$id"
-        reboot_device
-        after_boot; : > $RUN/ready
+        reboot_device "the operator's reboot $id"
         ;;
       *) echo "unknown request" > "$RUN/res/$id" ;;
     esac

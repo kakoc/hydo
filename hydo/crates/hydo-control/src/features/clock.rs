@@ -30,6 +30,23 @@ fn date_now(fx: &mut F<'_>) -> Step<Option<i64>> {
     })
 }
 
+/// The guest's realtime clock now (Milestone 263: a reboot carries it).
+pub(super) fn now(fx: &mut F<'_>) -> Step<Option<i64>> {
+    date_now(fx)
+}
+
+/// Set the realtime clock to `sec` (Milestone 263: a reboot's new boot continues the clock).
+pub(super) fn set_to(fx: &mut F<'_>, sec: i64) -> Step<()> {
+    let _ = call(
+        fx,
+        Command::ClockSet(ClockSet {
+            sec: Some(sec),
+            step: None,
+        }),
+    )?;
+    Ok(())
+}
+
 fn text(v: Option<i64>) -> String {
     v.map(|x| x.to_string()).unwrap_or_default()
 }

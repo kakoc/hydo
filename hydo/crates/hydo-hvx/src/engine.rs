@@ -36,6 +36,8 @@ const EXP_MEM_MIB: u64 = 1024;
 const EXP_MEM_MIN_MIB: u64 = 256;
 const EXP_MEM_MAX_MIB: u64 = boot::RAM_MAX >> 20; // 8192 since M179 (3072 before)
 const BOOT_TSC_STEP: u64 = 0x10000;
+/// Milestone 263: the reboots one run may take (docs/design/devices.md).
+const REBOOT_MAX: u32 = 64;
 
 /// The engine's options (the variables hvx_explore and hvx_stack_verify.c read, and hydo-hvx's
 /// own), read once by the program's `main` or by hydo-engine for an in-process engine; since M144
@@ -175,6 +177,11 @@ struct Ctl {
     /// Milestone 261: a `cf=` schedule's disk lost power at its k-th flush (HVX_GET_FLUSHCUT
     /// `off`); every later stop of the workload says so (`Stop::dark`).
     dark: bool,
+    /// Milestone 263: a REBOOT was answered at this stop; the run call goes on in a new VM.
+    reboot: bool,
+    /// The reboots of this run, and the FNV-1a chain of the ended boots' fingerprints.
+    reboots: u32,
+    rchain: Option<u64>,
     tag: String,
     phase: &'static str,
     at: u64,
@@ -197,6 +204,9 @@ impl Ctl {
             wdone: 0,
             cut: false,
             dark: false,
+            reboot: false,
+            reboots: 0,
+            rchain: None,
             tag: String::new(),
             phase: "",
             at: 0,
@@ -1795,6 +1805,39 @@ impl Core {
                 // the state search's timing switch (docs/design/state-search.md) is built on
                 // KVM only; hydo_engine::refusal refuses br= schedules for hvx before any VM
                 HostCmd::Time(_) => refuse(self, "time not on hvx".into()),
+                HostCmd::Reboot => {
+                    let sc = &self.c.sc;
+                    let no = if self.c.phase != "workload" && self.c.phase != "recovery" {
+                        Some("only in the workload and recovery phases".to_string())
+                    } else if self.c.phase == "workload" && self.c.wdone != 0 {
+                        Some("after DISKOFF/CUT".to_string())
+                    } else if self.ctl_find("S0").is_none() {
+                        Some("without a snapshot S0".to_string())
+                    } else if self.c.reboots >= REBOOT_MAX {
+                        Some(format!("more than {REBOOT_MAX} times in a run"))
+                    } else if sc.cf_on
+                        || sc.tj_on
+                        || sc.xt_on
+                        || sc.q_on
+                        || sc.pp != 0
+                        || sc.pptsc != 0
+                    {
+                        Some(
+                            "with cf=, tick jitter, extra ticks, pp= or q= (not built on hvx)"
+                                .into(),
+                        )
+                    } else {
+                        None
+                    };
+                    if let Some(no) = no {
+                        refuse(self, format!("reboot {no}"));
+                        continue;
+                    }
+                    self.c.reboot = true;
+                    let at = self.c.at;
+                    self.emit(EngineMsg::Answer(Answer::Reboot { at }));
+                    return false;
+                }
                 HostCmd::DiskOff | HostCmd::Cut => {
                     let cut = c == HostCmd::Cut;
                     let no = if self.c.phase != "workload" {
@@ -1907,6 +1950,63 @@ impl Core {
     /// -2 wall limit, -3 the host ended the run, -4 the host took S1 in a `--control boot one`
     /// boot, -7 the host said DISKOFF or CUT.
     fn run_until_any(&mut self, b: &mut Boot) -> i32 {
+        loop {
+            let r = self.run_until_boot(b);
+            if r != -8 {
+                return r;
+            }
+            if self.ctl_reboot(b).is_err() {
+                return -1;
+            }
+        }
+    }
+
+    /// Milestone 263 (docs/design/devices.md): the guest shut down cleanly and the host asked for
+    /// a reboot. The ended boot's fingerprint goes into the run's chain, its console is saved as
+    /// `<tag>.boot<n>.log`, and the run goes on in a new VM restored from S0 with the disk's
+    /// flushed bytes and the schedule's disk fault policy, in the workload phase.
+    fn ctl_reboot(&mut self, b: &mut Boot) -> Result<(), ()> {
+        self.c.reboots += 1;
+        let n = self.c.reboots;
+        let fp = self.fingerprint(b);
+        self.c.rchain = Some(fnv(self.c.rchain.unwrap_or(BASIS), &fp.to_le_bytes()));
+        let tag = self.c.tag.clone();
+        self.save_console(b, self.c.from, &tag, &format!(".boot{n}"));
+        diag!(self, "REBOOT {tag} boot={n} fp={fp:016x} at={}", self.c.at);
+        let durable = Pages::store(b.p2());
+        self.teardown(b);
+        let Some((s0, slot)) = self.take_s0() else {
+            return Err(());
+        };
+        let Some(mut ob) = self.vm_for(s0.id) else {
+            self.put_s0(s0, slot);
+            return Err(());
+        };
+        let ok = self.snap_restore(&mut ob, &s0, Some(&durable)).is_ok();
+        self.put_s0(s0, slot);
+        if !ok {
+            self.teardown(&mut ob);
+            return Err(());
+        }
+        drop(durable);
+        *b = ob;
+        let sc = *self.c.sc;
+        if self.c.phase == "recovery" {
+            self.set_fault(b, 0, 0, 0)?;
+        } else {
+            self.set_fault(b, sc.dseed, sc.classes, sc.prob)?;
+        }
+        let from = b.ulen();
+        self.c.from = from;
+        self.ctl_drop_pending();
+        self.c.start = 1;
+        self.c.k.evfrom = from;
+        self.c.k.pevfrom = b.pbuf.len();
+        Ok(())
+    }
+
+    /// One VM's part of [`Engine::run_until_any`]: -8 when the host asked for a reboot.
+    fn run_until_boot(&mut self, b: &mut Boot) -> i32 {
         let t0 = now();
         if self.c.on && self.c.start != 0 {
             let why = if self.c.start == 2 { "resume" } else { "start" };
@@ -1920,6 +2020,9 @@ impl Core {
             }
             if self.c.boot_s1 {
                 return -4;
+            }
+            if std::mem::take(&mut self.c.reboot) {
+                return -8;
             }
             if self.c.wdone == 1 {
                 self.c.wdone = 2;
@@ -1999,6 +2102,9 @@ impl Core {
                 }
                 if self.c.boot_s1 {
                     return -4;
+                }
+                if std::mem::take(&mut self.c.reboot) {
+                    return -8;
                 }
                 if self.c.wdone == 1 {
                     self.c.wdone = 2;
@@ -2205,8 +2311,16 @@ impl Core {
                 ));
                 self.ph_zskip(&b);
             }
+            // Milestone 263: after reboots the console of the last boot starts at its own start
+            if self.c.reboots > 0 {
+                from = self.c.from;
+            }
             let pht = self.pt();
             wfp = self.fingerprint(&b);
+            // Milestone 263: the ended boots' fingerprints come first (no change without one)
+            if let Some(ch) = self.c.rchain.take() {
+                wfp = fnv(ch, &wfp.to_le_bytes());
+            }
             self.padd(Ph::Wfp, pht);
             self.schedstat(&b, tag, false);
             self.dump_state(&b, tag, "workload");
@@ -2391,7 +2505,9 @@ impl Core {
                 // M138: the recovery VM's host-call records start at the end of S0's
                 self.c.k.pevfrom = b.pbuf.len();
             }
+            self.c.from = from;
             let r = self.run_until_any(&mut b);
+            from = self.c.from; // Milestone 263: the last boot's console after reboots
             self.padd(Ph::Recov, pht);
             if r < 0 && r != -3 {
                 verdict = if r == -2 {
@@ -2413,6 +2529,10 @@ impl Core {
             }
             let pht = self.pt();
             ffp = self.fingerprint(&b);
+            // Milestone 263: the recovery's ended boots first
+            if let Some(ch) = self.c.rchain.take() {
+                ffp = fnv(ch, &ffp.to_le_bytes());
+            }
             self.padd(Ph::Rfp, pht);
             self.dump_state(&b, tag, "recovery");
             verdict = if r == -3 && !self.c.endv.is_empty() {

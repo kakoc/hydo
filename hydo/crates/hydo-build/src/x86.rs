@@ -447,7 +447,27 @@ pub fn write_compiled(
         let t: String = kv.iter().map(|(k, v)| format!("{k}={v}\n")).collect();
         fsx::write_text(&r.join("etc/hydo/params"), &t)?;
     }
+    // Milestone 263: `guest.disks`, the added disks the engines attach (docs/design/devices.md);
+    // nothing is written without them, so other images keep their bytes
+    if let Some(t) = disks_line(&p.data) {
+        fsx::write_text(&r.join("etc/hydo/disks"), &format!("{t}\n"))?;
+    }
     Ok(())
+}
+
+/// `guest.disks` as the engines read it: `<size_mib>:<volatile|none>` per disk, in order, joined
+/// by commas (Milestone 263). None without added disks.
+pub fn disks_line(data: &Value) -> Option<String> {
+    let d = data.get("guest")?.get("disks")?.as_array()?;
+    if d.is_empty() {
+        return None;
+    }
+    let one = |x: &Value| {
+        let mib = x.get("size_mib").and_then(Value::as_u64).unwrap_or(0);
+        let cache = x.get("cache").and_then(Value::as_str).unwrap_or("volatile");
+        format!("{mib}:{cache}")
+    };
+    Some(d.iter().map(one).collect::<Vec<_>>().join(","))
 }
 
 /// `tls:` (src/tls.rs): the certificates, the guest's trust and host names into the staged root

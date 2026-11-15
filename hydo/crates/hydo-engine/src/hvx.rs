@@ -186,6 +186,7 @@ impl ControlledEngine for Hvx {
         boot: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledBoot, EngineError> {
+        no_guest_disks(spec)?;
         if crate::inproc::chosen(self) {
             return crate::inproc::start_controlled(self, spec, boot, stderr_log);
         }
@@ -200,11 +201,25 @@ impl ControlledEngine for Hvx {
         schedule: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledRun, EngineError> {
+        no_guest_disks(spec)?;
         if crate::inproc::chosen(self) {
             return crate::inproc::one_controlled(self, spec, schedule, stderr_log);
         }
         self.check_built()?;
         let argv = self.control_argv(spec, "one", &["--control", "boot"], Some(schedule));
         ControlledRun::start(self.command(&argv), stderr_log)
+    }
+}
+
+/// Milestone 263: the hvx engine has one block device (the kernel module's), so an image with
+/// added disks (`guest.disks`) is refused before any VM (docs/design/devices.md).
+fn no_guest_disks(spec: &BootSpec) -> Result<(), EngineError> {
+    match crate::image::guest_disks(&spec.image) {
+        None => Ok(()),
+        Some(_) => Err(EngineError::Unsupported(
+            "guest.disks needs a second block device in the hvx kernel module, which is not \
+             built: run this image on the Mac or KVM engine (docs/design/devices.md)"
+                .into(),
+        )),
     }
 }

@@ -1,9 +1,17 @@
-# Shared by the device's scripts (busybox sh). The device:
-#   /data/flash/slot-a.img, slot-b.img   the two root file system slots (16 MiB each), attached
+# Shared by the device's scripts (busybox sh). The device has one of two storage models
+# (RESULTS.md, "The storage model"; /etc/ota/storage):
+#   loop (hydo.yaml):
+#     /data/flash/slot-a.img, slot-b.img the two root file system slots (16 MiB each), attached
 #                                        as /dev/loop0 (A) and /dev/loop1 (B): block devices
 #                                        whose writes are durable only after a flush (fsync)
-#   /data/flash/uboot.env                the U-Boot environment, two redundant 16 KiB copies
+#     /data/flash/uboot.env              the U-Boot environment, two redundant 16 KiB copies
+#   devices (hydo-devices.yaml, guest.disks):
+#     /dev/vdb                           the eMMC with its own volatile cache: slot A at 0,
+#                                        slot B at 16 MiB, as /dev/loop0 and /dev/loop1 with
+#                                        direct I/O (a partition of the eMMC)
+#     /dev/vdc                           the SPI NOR flash: the environment, every write durable
 #   /data/app/records                    the application's data: one synced line per update
+#   /data/app/violations                 the client's wrong boots (synced)
 #   /tmp/ota/                            what lives in RAM: lost at every boot
 # The bootloader's state is U-Boot's usual one for SWUpdate's double copy: boot_slot (A or B),
 # and U-Boot's boot counter: upgrade_available, bootcount, bootlimit.
@@ -23,7 +31,10 @@ event() {
   echo "HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"$1\",\"ok\":true,\"msg\":\"$2\",\"details\":{}}" > $c
 }
 
+STORAGE=$(cat /etc/ota/storage 2>/dev/null || echo loop)
+ENV_DEV=/data/flash/uboot.env; [ "$STORAGE" = devices ] && ENV_DEV=/dev/vdc
 slot_dev() { case $1 in A) echo /dev/loop0 ;; B) echo /dev/loop1 ;; esac; }
+slot_off() { case $1 in A) echo 0 ;; B) echo 16777216 ;; esac; }
 slot_file() { case $1 in A) echo $FLASH/slot-a.img ;; B) echo $FLASH/slot-b.img ;; esac; }
 other_slot() { case $1 in A) echo B ;; B) echo A ;; esac; }
 
@@ -44,11 +55,24 @@ load_modules() {   # hvx's guest kernel has loop as a module; the Mac's has it b
 # loop device's page cache is written back, as on an eMMC that also holds the environment.
 # Without it, a block also waits in the backing file's page cache until a flush of the slot,
 # as on a slot device that the environment's flushes do not reach.
+# the devices model needs the engine's added disks (guest.disks): a device node that is missing
+# would become a file in /dev, in RAM, and the device would forget its slots at a reboot
+need_disks() {
+  [ "$STORAGE" != devices ] || { [ -b /dev/vdb ] && [ -b /dev/vdc ]; } || { say "no eMMC /dev/vdb or SPI NOR /dev/vdc: the engine attached no added disks"; return 1; }
+}
+
 attach_slots() {
+  need_disks || return 1
   for s in A B; do
     d=$(slot_dev $s)
     [ -b "$d" ] || mknod "$d" b 7 "${d#/dev/loop}"
     losetup -d "$d" 2>/dev/null
+    if [ "$STORAGE" = devices ]; then
+      # a partition of the eMMC: the slot's 16 MiB of /dev/vdb, written through to the disk
+      losetup -o "$(slot_off $s)" "$d" /dev/vdb || { say "cannot attach slot $s"; return 1; }
+      loopdio "$d" on || say "cannot switch $d to direct I/O"
+      continue
+    fi
     losetup "$d" "$(slot_file $s)" || { say "cannot attach slot $s"; return 1; }
     if [ "$(cat /etc/ota/dio 2>/dev/null)" = 1 ]; then loopdio "$d" on || say "cannot switch $d to direct I/O"; fi
   done
@@ -57,13 +81,21 @@ attach_slots() {
 # the factory: both slots get v1, the environment U-Boot's first one (runs once, at the first boot)
 factory() {
   [ -f $FLASH/factory-done ] && return 0
+  need_disks || return 1
   say "factory: writing v1 into both slots"
   mkdir -p $FLASH
+  if [ "$STORAGE" = devices ]; then
+    for s in A B; do
+      dd if=$OTA/images/v1.ext4 of=/dev/vdb bs=1048576 seek=$(($(slot_off $s) / 1048576)) conv=notrunc,fsync 2>/dev/null
+    done
+    dd if=$OTA/images/uboot-default.env of=$ENV_DEV conv=notrunc,fsync 2>/dev/null
+  else
   for s in A B; do
     dd if=/dev/zero of="$(slot_file $s)" bs=1048576 count=16 2>/dev/null
     dd if=$OTA/images/v1.ext4 of="$(slot_file $s)" bs=1048576 conv=notrunc 2>/dev/null
   done
   cp $OTA/images/uboot-default.env $FLASH/uboot.env
+  fi
   mkdir -p $APP
   : > $APP/records
   sync
@@ -85,7 +117,11 @@ envvar() {   # a variable of the environment, or $2 when it is unset or empty
 uboot_choose() {
   if ! fw_printenv > /dev/null 2>&1; then
     say "uboot: no valid environment copy, using the default environment" >&2
-    cp $OTA/images/uboot-default.env $FLASH/uboot.env && fsync $FLASH/uboot.env
+    if [ "$STORAGE" = devices ]; then
+      dd if=$OTA/images/uboot-default.env of=$ENV_DEV conv=notrunc,fsync 2>/dev/null
+    else
+      cp $OTA/images/uboot-default.env $FLASH/uboot.env && fsync $FLASH/uboot.env
+    fi
   fi
   slot=$(envvar boot_slot A)
   ua=$(envvar upgrade_available 0)

@@ -6,8 +6,10 @@
 #   sh fetch-modules.sh         # on Linux, for hvx: the guest kernel's loop module
 #   hydo build hydo.yaml                       # slots on a device the environment's flush misses
 #   hydo build hydo.yaml --set dio=1           # slots on the environment's own eMMC
-#   hydo run "disk=cut | run"                  # 8 updates, each with a reboot: OK
-#   hydo run "disk=cut | run C=3"              # a power cut after the second install: VIOLATION
+#   hydo run "disk=cut | run"                  # 8 updates, each with a real reboot: OK
+#   hydo run "disk=cut | run C=4"              # a power cut after the second install: VIOLATION
+# hydo-devices.yaml is the same device with its storage chips as disks of their own (the Mac and
+# KVM engines): RESULTS.md, "The storage model".
 format: 1
 name: swupdate-ota
 description: "A device with A/B root slots updated by SWUpdate 2026.05.1 through U-Boot's environment and boot counter: power cuts and kills during installs"
@@ -20,6 +22,7 @@ guest:
   clock_start: 1794700800        # 2026-11-15
   clock_after_cut: 30            # the device's clock runs on across a power cut
   outcomes_after_cut: true       # the checks after a power cut read the client's last outcomes
+  reboot: true                   # the agent's reboots are real ones (HYDO-REBOOT, Milestone 263)
 
 data:
   size_mib: 256
@@ -42,6 +45,7 @@ root:
       /data/flash/uboot.env 0x0000 0x4000
       /data/flash/uboot.env 0x4000 0x4000
     /etc/ota/dio: "{{dio}}"
+    /etc/ota/storage: loop
 
 shell: |
   export PATH=/opt/ota/bin-$(uname -m):$PATH

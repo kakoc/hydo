@@ -143,6 +143,10 @@ variables! {
     /// guest sees nothing, so no fingerprint moves. The Mac engine since Milestone 241, the KVM
     /// engine since Milestone 255.
     HYDO_CONTRACTS: Engine, User, "path", "", "hydo-engine, hydo-hvm, hydo-kvm";
+    /// The image's added disks (`guest.disks`, Milestone 263): `<MiB>:<volatile|none>` per disk,
+    /// joined by commas, from the image's `/etc/hydo/disks`. hydo sets it for an image with added
+    /// disks; without it the engine attaches none.
+    HYDO_GUEST_DISKS: Engine, User, "list", "", "hydo-engine, hydo-hvm, hydo-kvm";
 
     // ------------------------------------------------------------------ HvxEngine
     /// `0` turns the host-call port off (M138; on by default since M140).

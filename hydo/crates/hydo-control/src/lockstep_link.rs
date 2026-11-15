@@ -142,10 +142,19 @@ impl Link for LockstepLink<'_, '_> {
             Ending::Verdict(v) => self.ls.end(Some(v)).map_err(err)?,
             Ending::AtSnapshot(_) => self.ls.end(None).map_err(err)?,
             Ending::PowerCut { .. } => return self.cut(e),
+            Ending::Reboot(_) => return self.reboot(e),
         };
         let line = r.line.clone();
         self.result = Some(r);
         Ok(line)
+    }
+
+    fn reboot(&mut self, _e: &Ending) -> Result<String, LinkError> {
+        self.ls
+            .reboot()
+            .map_err(err)?
+            .map_err(|e| LinkError(format!("the engine refused REBOOT: {e}")))?;
+        Ok(String::new())
     }
 
     fn cut(&mut self, _e: &Ending) -> Result<String, LinkError> {

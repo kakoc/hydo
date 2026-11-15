@@ -44,7 +44,8 @@ pub fn ram_offset(len: u64, gpa: u64, n: u64) -> Option<usize> {
 /// The virtio-mmio devices (hydo-hvm's `virtio`, with its 0x200-byte stride): device i at
 /// `VIRTIO_BASE + i * 0x200`, on IRQ `VIRTIO_IRQ[i]`.
 pub const VIRTIO_BASE: u64 = 0xd000_0000;
-pub const VIRTIO_IRQ: [u8; 2] = [5, 6];
+/// Milestone 263: IRQs 9, 10, 11 and 15 for the added disks (`guest.disks`), after the two.
+pub const VIRTIO_IRQ: [u8; 6] = [5, 6, 9, 10, 11, 15];
 
 /// KVM's TSS and identity-map pages (needed on Intel, ignored on AMD), above the devices.
 pub const KVM_TSS_ADDR: u64 = 0xfffb_d000;

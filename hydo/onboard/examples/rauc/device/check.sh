@@ -83,7 +83,7 @@ case $1 in
     echo "$(grep -c '^d' "$HYDO_ACKED") synced records present"
     ;;
   violations)   # every reboot during the workload booted a version the installs allow
-    if [ -f $RUN/violations ]; then head -n 1 $RUN/violations; exit 1; fi
+    if [ -f $APP/violations ]; then head -n 1 $APP/violations; exit 1; fi
     echo "none"
     ;;
 esac

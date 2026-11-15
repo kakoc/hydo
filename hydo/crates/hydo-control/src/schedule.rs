@@ -69,6 +69,9 @@ mod restart;
 // reactions, the schedule token A= (M139)
 #[path = "features/react.rs"]
 mod react;
+// Milestone 263: a reboot that the guest asks for (guest.reboot)
+#[path = "features/reboot.rs"]
+pub mod reboot;
 // the storage faults of one service, G= and L= (docs/design/storage-faults.md)
 mod storage;
 // Milestone 195: targets beyond one service (lists, group selectors, the primary's probe)
@@ -107,6 +110,8 @@ pub enum Conversation {
         failed: Vec<String>,
     },
     Solo,
+    /// Milestone 263: the boot after a reboot the guest asked for, which goes on with the run.
+    Reboot(crate::control::RebootInputs),
 }
 
 impl Conversation {
@@ -116,6 +121,7 @@ impl Conversation {
             Conversation::Run => "run",
             Conversation::Recovery { .. } => "recovery",
             Conversation::Solo => "solo",
+            Conversation::Reboot(_) => "reboot",
         }
     }
 }
@@ -187,6 +193,8 @@ struct Ctx {
     mount_data: Option<String>,
     /// What the recovery conversation was given besides the ids.
     carried: recovery::Carried,
+    /// Milestone 263: the reboots of the run before this conversation's boot.
+    reboots: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -325,6 +333,8 @@ pub struct ScheduleController {
     watch: bool,
     /// Milestone 261: the stop at which a `cf=` schedule's disk lost power ([`Seen::DiskDark`]).
     dark_stop: Option<u64>,
+    /// The guest's reboot requests are facts (guest.reboot, Milestone 263).
+    reboot_watch: bool,
 }
 
 /// Milestone 261: how many stops after a `cf=` schedule's disk lost power the power cut's reads
@@ -389,6 +399,7 @@ impl ScheduleController {
         let (mount_flags, mount_data) = mount_opts(&plan.data_opts)?;
         let fresh = at.is_none();
         let watch = !run.a.is_empty();
+        let reboot_watch = plan.reboot;
         let at = at.cloned().unwrap_or_default();
         let ctx = Arc::new(Ctx {
             plan,
@@ -397,6 +408,7 @@ impl ScheduleController {
             mount_flags,
             mount_data,
             carried: recovery::Carried::default(),
+            reboots: 0,
         });
         let host = Host {
             ctx,
@@ -445,7 +457,48 @@ impl ScheduleController {
             fresh,
             watch,
             dark_stop: None,
+            reboot_watch,
         })
+    }
+
+    /// Milestone 263: the boot after a reboot the guest asked for, from the snapshot S0 whose
+    /// guest state is `s0`, given what the reboot carried; it goes on with the schedule's run.
+    pub fn rebooted(
+        plan: Plan,
+        schedule: &Schedule,
+        inputs: &crate::control::RebootInputs,
+        s0: &GuestState,
+    ) -> Result<ScheduleController, Unsupported> {
+        let cfg = run_cfg(&plan, schedule)?;
+        let mut c = Self::new(plan, Conversation::Reboot(inputs.clone()), cfg, Some(s0))?;
+        Arc::get_mut(&mut c.flow.shared.ctx)
+            .expect("a new controller")
+            .reboots = inputs.n;
+        Ok(c)
+    }
+
+    /// Milestone 263: a recovery boot again, after a reboot that the guest asked for in a
+    /// recovery boot (its inputs: the recovery's own ids and outcomes, the clock at the shutdown).
+    pub fn recovery_rebooted(
+        plan: Plan,
+        inputs: &crate::control::RebootInputs,
+        s0: &GuestState,
+    ) -> Result<ScheduleController, Unsupported> {
+        let mut c = Self::recovery_from(
+            plan,
+            &RecoveryInputs {
+                acked: inputs.rec_acked.clone(),
+                failed: inputs.rec_failed.clone(),
+                clock: inputs.clock,
+                outcomes: inputs.rec_outcomes.clone(),
+                ..RecoveryInputs::default()
+            },
+            s0,
+        )?;
+        Arc::get_mut(&mut c.flow.shared.ctx)
+            .expect("a new controller")
+            .reboots = inputs.n;
+        Ok(c)
     }
 
     /// A fresh boot up to S1 (it waits for the agent's hello).
@@ -839,11 +892,20 @@ impl Controller for ScheduleController {
                     self.facts.events.push(e.clone());
                     new = true;
                 }
-                // M139: a run with reactions keeps the guest's assertion records
-                Seen::Console(line) if self.watch => {
-                    if let Some(r) = react::record_of(line) {
-                        self.facts.asserts.push(r);
-                        new = true;
+                // M139: a run with reactions keeps the guest's assertion records; Milestone
+                // 263: a plan with guest.reboot keeps the guest's reboot requests
+                Seen::Console(line) if self.watch || self.reboot_watch => {
+                    if self.watch {
+                        if let Some(r) = react::record_of(line) {
+                            self.facts.asserts.push(r);
+                            new = true;
+                        }
+                    }
+                    if self.reboot_watch {
+                        if let Some(r) = reboot::request_of(line) {
+                            self.facts.reboots.push(r);
+                            new = true;
+                        }
                     }
                 }
                 Seen::UnknownEvent(_) | Seen::Console(_) => {}
@@ -894,6 +956,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
             Conversation::Boot => main_boot(fx, &ctx),
             Conversation::Run => explore_run(fx, &ctx),
             Conversation::Recovery { acked, failed } => main_recovery(fx, &ctx, acked, failed),
+            Conversation::Reboot(r) => main_reboot(fx, &ctx, r),
             Conversation::Solo => main_solo(fx, &ctx),
         },
         Part::Every(i, exports) => periodic_loop(fx, &ctx, *i, exports),
@@ -1789,6 +1852,23 @@ fn probe_ready(
         log(fx, format!("{s} NOT ready after {}s", sv.timeout));
         return Ok((Probed::NotReady, 0));
     }
+    // Milestone 263: in a reboot's or a recovery's boot, a reboot the guest asks for ends the
+    // wait (start_all then takes the reboot, reboot::instead_of_failed_start)
+    if ctx.plan.reboot
+        && matches!(
+            ctx.conv,
+            Conversation::Reboot(_) | Conversation::Recovery { .. }
+        )
+    {
+        fx.until(|_, f| f.probes.contains_key(&pid) || !f.reboots.is_empty())?;
+        if !fx.effect_bool(|_, f| f.probes.contains_key(&pid)) {
+            log(
+                fx,
+                format!("{s}: a reboot the guest asked for ended its readiness check"),
+            );
+            return Ok((Probed::NotReady, 0));
+        }
+    }
     let p = fx.probe_done(pid)?;
     let tries = p.tries;
     match p.why {
@@ -1836,10 +1916,16 @@ fn start_all(fx: &mut F<'_>, ctx: &Ctx, verdict: &str, recovery: bool) -> Step<(
         if !pending.is_empty() || list.get(i + 1).is_some_and(|n| n.start_after_started) {
             match launch_tracked(fx, ctx, &s.name)? {
                 Some(e) => pending.push((s.name.clone(), e)),
-                None => return die_oracle(fx, format!("{verdict} ({})", s.name)),
+                None => {
+                    return reboot::instead_of_failed_start(
+                        fx,
+                        ctx,
+                        format!("{verdict} ({})", s.name),
+                    )
+                }
             }
         } else if !start_svc_with(fx, ctx, &s.name, true)? {
-            return die_oracle(fx, format!("{verdict} ({})", s.name));
+            return reboot::instead_of_failed_start(fx, ctx, format!("{verdict} ({})", s.name));
         }
     }
     await_launched(fx, ctx, verdict, &mut pending)
@@ -2228,6 +2314,9 @@ fn step_range_run(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     // composer's empty rounds ran instead, and every check passed)
     let st = if ctx.plan.composed() {
         composer::step(fx, ctx, a, b)? // SEAM(Composer): compose.sh step FROM TO
+    } else if ctx.plan.reboot {
+        // Milestone 263: one call per step; a reboot the guest asks for ends the boot
+        return reboot::steps(fx, ctx, a, b);
     } else if !ctx.run.a.is_empty() {
         // M139: the wait also ends at a reaction's power cut
         match react::workload(fx, ctx, a, b)? {
@@ -2271,6 +2360,9 @@ fn retry_workload(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     errlog::mark(fx, ctx, "end")?; // SEAM(ErrorLogs): el_mark end
     if ctx.plan.workload_retry.is_empty() {
         return Ok(());
+    }
+    if ctx.plan.reboot {
+        return reboot::retry(fx, ctx); // Milestone 263
     }
     let e = env(fx, ctx, &[]);
     let st = spawn_wait(
@@ -2626,8 +2718,15 @@ fn main_recovery(fx: &mut F<'_>, ctx: &Ctx, acked: &[String], failed: &[String])
         true,
     )?;
     restart::start(fx, ctx)?; // restart policies (M134): once every recovering service is up
+    reboot::before_checks(fx, ctx)?; // Milestone 263: a reboot the guest asked for goes first
     cost::probe(fx, ctx, "up", true)?; // HYDO_COST=full: the recovery boot up to its checks
     finish(fx, ctx)
+}
+
+/// Milestone 263: the boot after a reboot the guest asked for, then the rest of the run.
+fn main_reboot(fx: &mut F<'_>, ctx: &Ctx, r: &crate::control::RebootInputs) -> Step<()> {
+    reboot::boot(fx, ctx, r)?;
+    explore_run(fx, ctx)
 }
 
 /// explore_run: the schedule's guest part from S1.
@@ -2716,7 +2815,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
     }
     // SEAM(Clock): T= (tat, tdelta). SEAM(NetFaults): O= (osvc, ofrom, oto, odir).
-    let (tat, tdelta) = cfg.t.unwrap_or((-1, 0));
+    let (mut tat, tdelta) = cfg.t.unwrap_or((-1, 0));
     net.read_o(fx, ctx, cfg.o.as_ref());
     let (mut xtarget, mut xat, mut xoff) = (None::<Target>, -1i64, 0u64);
     if let Some((t, at, off)) = &cfg.x {
@@ -2746,13 +2845,63 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             (lat, lup, lstrict) = (-1, -1, false);
         }
     }
-    let mut pts: Vec<i64> = [0, kat, kup, cat, pat, pup, tat, xat, steps]
+    // Milestone 263: after a reboot the run goes on at step `from`; a reboot ended every fault
+    // that began before it, and a reaction that had not acted watches from `from` on
+    let cont = match &ctx.conv {
+        Conversation::Reboot(r) => Some(r.clone()),
+        _ => None,
+    };
+    let from = match &cont {
+        Some(r) if r.stage == crate::control::RebootStage::End => steps,
+        Some(r) => r.next.clamp(0, steps),
+        None => 0,
+    };
+    let mut reactions = reactions;
+    if let Some(r) = &cont {
+        let mut ended: Vec<String> = Vec::new();
+        let mut end_fault = |at: &mut i64, up: &mut i64, what: &str| {
+            if *at >= 0 && *at < from {
+                ended.push(what.to_string());
+                (*at, *up) = (-1, -1);
+            }
+        };
+        let mut none = -1i64;
+        end_fault(&mut kat, &mut kup, "K=");
+        end_fault(&mut pat, &mut pup, "P=");
+        end_fault(&mut xat, &mut none, "X=");
+        end_fault(&mut zat, &mut zup, "G=");
+        end_fault(&mut lat, &mut lup, "L=");
+        let mut tup = -1i64;
+        let mut t = tat;
+        end_fault(&mut t, &mut tup, "T=");
+        tat = t;
+        if lat < 0 {
+            lstrict = false;
+        }
+        ended.extend(net.drop_before(from).into_iter().map(str::to_string));
+        reactions.retain(|(i, _)| !r.fired.contains(i));
+        for (_, re) in reactions.iter_mut() {
+            if (re.at as i64) < from {
+                re.at = from as u64;
+            }
+        }
+        if !ended.is_empty() {
+            log(
+                fx,
+                format!(
+                    "the reboot before step {from} ended these faults: {}",
+                    ended.join(" ")
+                ),
+            );
+        }
+    }
+    let mut pts: Vec<i64> = [from, kat, kup, cat, pat, pup, tat, xat, steps]
         .into_iter()
         .chain([zat, zup, lat, lup])
         .chain(net.points())
         .chain(reactions.iter().map(|(_, r)| r.at as i64))
         .chain(cfg.u.iter().flat_map(|u| upgrade::steps(ctx, u)))
-        .filter(|p| *p >= 0 && *p <= steps)
+        .filter(|p| *p >= from && *p <= steps)
         .collect();
     pts.sort();
     pts.dedup();
@@ -2760,7 +2909,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     // provisioning stay (the snapshot S1 holds them); otherwise the run's files start empty
     let keep = plan.compose.as_ref().is_some_and(|c| c.first_records);
     for f in [l.acked(), l.outcomes(), format!("{}/workload.log", l.dir)] {
-        if keep && f != format!("{}/workload.log", l.dir) {
+        // Milestone 263: after a reboot the run's files are the ones it carried (reboot::boot)
+        if cont.is_some() || (keep && f != format!("{}/workload.log", l.dir)) {
             continue;
         }
         post(fx, write_cmd(&f, "", false))?;
@@ -3130,7 +3280,11 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let down = restart_dead(fx, ctx, NO_RESTART, true)?;
     // M136: a service with restart_may_fail that stayed down gets no retry pass (its un-ACKed
     // requests stay un-ACKed); the run ends as usual, so a cf= cut reaches its recovery boot
-    if down.is_empty() {
+    // Milestone 263: a reboot during the retry goes on after it
+    let retried = cont
+        .as_ref()
+        .is_some_and(|r| r.stage == crate::control::RebootStage::End);
+    if down.is_empty() && !retried {
         retry_workload(fx, ctx)?;
     }
     freeze::kill(fx)?;

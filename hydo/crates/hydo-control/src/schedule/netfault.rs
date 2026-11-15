@@ -397,6 +397,21 @@ impl Net {
     }
 
     /// The fault's points for the step sequence.
+    /// Milestone 263: after a reboot the new boot goes on at step `p`; the N= and O= faults that
+    /// began before it ended with the reboot. Their tokens' letters, for the log.
+    pub(super) fn drop_before(&mut self, p: i64) -> Vec<&'static str> {
+        let mut out = Vec::new();
+        if self.nfrom >= 0 && self.nfrom < p {
+            (self.nfrom, self.nto) = (-1, -1);
+            out.push("N=");
+        }
+        if self.ofrom >= 0 && self.ofrom < p {
+            (self.ofrom, self.oto) = (-1, -1);
+            out.push("O=");
+        }
+        out
+    }
+
     pub(super) fn points(&self) -> [i64; 4] {
         [self.nfrom, self.nto, self.ofrom, self.oto]
     }

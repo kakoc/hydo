@@ -62,6 +62,9 @@ pub(crate) struct Facts {
     /// the assertion's event: `ok:true` of a sometimes/reachable, `ok:false` of the others).
     /// Kept only for a run with reactions (`A=`, M139); empty otherwise.
     pub asserts: Vec<(String, bool)>,
+    /// Milestone 263: the guest's reboot requests (`HYDO-REBOOT [<reason>]` console lines), as
+    /// their reasons, in order. Kept only for a plan with `guest.reboot: true`; empty otherwise.
+    pub reboots: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

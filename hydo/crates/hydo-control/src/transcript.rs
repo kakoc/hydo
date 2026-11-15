@@ -159,8 +159,74 @@ fn ending_value(e: &Ending) -> Value {
         Ending::AtSnapshot(n) => {
             m.insert("snapshot".into(), s(n));
         }
+        // Milestone 263: only a conversation that a guest's reboot ended has it
+        Ending::Reboot(r) => {
+            let mut c = Obj::new();
+            c.insert("n".into(), int(r.n as u64));
+            c.insert("stage".into(), s(r.stage.word()));
+            c.insert("next".into(), s(&r.next.to_string()));
+            c.insert(
+                "clock".into(),
+                s(&r.clock.map(|c| c.to_string()).unwrap_or_default()),
+            );
+            c.insert("acked".into(), strs(&r.acked));
+            c.insert("outcomes".into(), strs(&r.outcomes));
+            let fired: Vec<String> = r.fired.iter().map(|i| i.to_string()).collect();
+            c.insert("fired".into(), strs(&fired));
+            c.insert("rec_acked".into(), strs(&r.rec_acked));
+            c.insert("rec_failed".into(), strs(&r.rec_failed));
+            c.insert("rec_outcomes".into(), strs(&r.rec_outcomes));
+            c.insert("reason".into(), s(&r.reason));
+            m.insert("reboot".into(), Value::Obj(c));
+        }
     }
     Value::Obj(m)
+}
+
+fn reboot_of(c: &Obj) -> Result<crate::control::RebootInputs, String> {
+    let list = |k: &str| -> Result<Vec<String>, String> {
+        match c.get(k) {
+            Some(Value::Arr(a)) => a
+                .iter()
+                .map(|x| match x {
+                    Value::Str(t) => Ok(t.clone()),
+                    _ => Err(format!("end.reboot.{k}: not a string")),
+                })
+                .collect(),
+            _ => Err(format!("end.reboot.{k} missing")),
+        }
+    };
+    let text = |k: &str| -> Result<String, String> {
+        match c.get(k) {
+            Some(Value::Str(t)) => Ok(t.clone()),
+            _ => Err(format!("end.reboot.{k} missing")),
+        }
+    };
+    Ok(crate::control::RebootInputs {
+        n: match c.get("n") {
+            Some(Value::Int(i)) if *i >= 0 && *i <= u32::MAX as i128 => *i as u32,
+            _ => return Err("end.reboot.n missing".into()),
+        },
+        stage: crate::control::RebootStage::of_word(&text("stage")?)
+            .ok_or("end.reboot.stage: not steps, end or recovery")?,
+        next: text("next")?
+            .parse()
+            .map_err(|_| "end.reboot.next: not a number")?,
+        clock: text("clock")?.parse().ok(),
+        acked: list("acked")?,
+        outcomes: list("outcomes")?,
+        fired: list("fired")?
+            .iter()
+            .map(|x| {
+                x.parse()
+                    .map_err(|_| "end.reboot.fired: not a number".to_string())
+            })
+            .collect::<Result<_, _>>()?,
+        rec_acked: list("rec_acked")?,
+        rec_failed: list("rec_failed")?,
+        rec_outcomes: list("rec_outcomes")?,
+        reason: text("reason")?,
+    })
 }
 
 fn ending_of(v: &Value) -> Result<Ending, String> {
@@ -172,6 +238,9 @@ fn ending_of(v: &Value) -> Result<Ending, String> {
     }
     if let Some(Value::Str(x)) = m.get("snapshot") {
         return Ok(Ending::AtSnapshot(x.clone()));
+    }
+    if let Some(Value::Obj(c)) = m.get("reboot") {
+        return Ok(Ending::Reboot(reboot_of(c)?));
     }
     if let Some(Value::Obj(c)) = m.get("cut") {
         let list = |k: &str| -> Result<Vec<String>, String> {
@@ -457,5 +526,31 @@ impl Transcript {
                 .count() as u64,
             transcript: file.map(str::to_string),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::control::{RebootInputs, RebootStage};
+
+    #[test]
+    fn a_reboot_ending_reads_back() {
+        let e = Ending::Reboot(RebootInputs {
+            n: 3,
+            stage: RebootStage::Recovery,
+            next: 16,
+            clock: Some(1794700900),
+            acked: vec!["i0".into(), "d0".into()],
+            outcomes: vec!["i0 ack".into()],
+            fired: vec![0, 2],
+            rec_acked: vec!["i0".into()],
+            rec_failed: vec![],
+            rec_outcomes: vec!["r0v2 ack".into()],
+            reason: "v4 failed its health check".into(),
+        });
+        assert_eq!(ending_of(&ending_value(&e)), Ok(e));
+        let none = Ending::Reboot(RebootInputs::default());
+        assert_eq!(ending_of(&ending_value(&none)), Ok(none));
     }
 }

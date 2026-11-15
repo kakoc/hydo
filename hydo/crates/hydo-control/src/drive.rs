@@ -83,6 +83,9 @@ pub struct Booted {
 /// Whether the controller can drive `schedule` on `plan` (an agent image): the guest tokens it
 /// reads, and the recovery boot after a power cut. A refusal names the seam.
 pub fn check(plan: &Plan, schedule: &Schedule) -> Result<(), Unsupported> {
+    if let Some(why) = crate::schedule::reboot::refusal(plan, schedule) {
+        return Err(Unsupported::other(why));
+    }
     let g = GuestState::default();
     ScheduleController::run(plan.clone(), schedule, &g)?;
     if schedule.has_power_cut() {
@@ -157,24 +160,47 @@ pub enum Policy {
 pub struct Ran {
     pub run: Finished,
     pub recovery: Option<Finished>,
+    /// Milestone 263: the conversations of the boots after reboots the guest asked for, in
+    /// order, each with whether it is a recovery boot. The ones that are not come between `run`
+    /// and `recovery`, the others after `recovery`. Empty without a reboot.
+    pub reboots: Vec<(bool, Finished)>,
 }
 
 impl Ran {
+    /// The conversations in the order they ran.
+    pub fn in_order(&self) -> Vec<&Finished> {
+        let mut v = vec![&self.run];
+        v.extend(self.reboots.iter().filter(|(r, _)| !r).map(|(_, f)| f));
+        v.extend(self.recovery.iter());
+        v.extend(self.reboots.iter().filter(|(r, _)| *r).map(|(_, f)| f));
+        v
+    }
+
     /// The engine's RESULT line of the run (the last conversation's).
     pub fn result_line(&self) -> &str {
-        match &self.recovery {
-            Some(r) => &r.result,
-            None => &self.run.result,
-        }
+        &self.in_order().last().expect("the run").result
     }
 
     /// The run's control hash (`ctl=`): the run conversation's transcript hash, or with a recovery
-    /// boot the first 16 hex digits of SHA-256 over both hashes ("`<run>` `<recovery>`").
+    /// boot the first 16 hex digits of SHA-256 over both hashes ("`<run>` `<recovery>`"). With
+    /// reboots (Milestone 263), the same over every conversation's hash in order.
     pub fn ctl(&self) -> String {
-        ctl_of(
-            &self.run.transcript,
-            self.recovery.as_ref().map(|r| &r.transcript),
-        )
+        if self.reboots.is_empty() {
+            return ctl_of(
+                &self.run.transcript,
+                self.recovery.as_ref().map(|r| &r.transcript),
+            );
+        }
+        use sha2::{Digest, Sha256};
+        let all: Vec<String> = self
+            .in_order()
+            .iter()
+            .map(|f| f.transcript.hash())
+            .collect();
+        Sha256::digest(all.join(" ").as_bytes())[..8]
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
     }
 }
 
@@ -235,7 +261,17 @@ pub fn run(
             runner::run(link, &mut ctl, start, h)?
         }
     };
-    let recovery = match &run.ending {
+    // Milestone 263: the boots after reboots the guest asked for, and a power cut's recovery
+    let mut reboots: Vec<(bool, Finished)> = Vec::new();
+    let mut last = run.ending.clone();
+    while let Some(Ending::Reboot(r)) = &last {
+        let h = header(&format!("reboot {}", r.n), Some(schedule), "resume S0");
+        let mut ctl = ScheduleController::rebooted(b.plan.clone(), schedule, r, &b.s0.1)?;
+        let f = runner::run(link, &mut ctl, Start::Resume(b.s0.0.clone()), h)?;
+        last = f.ending.clone();
+        reboots.push((false, f));
+    }
+    let recovery = match &last {
         Some(Ending::PowerCut {
             acked,
             failed,
@@ -251,16 +287,18 @@ pub fn run(
                 _ => {
                     // the ids, the fake world and the first boot's clock (M122), from the run's
                     // transcript, so a run typed again from its transcript hands over the same
-                    let inputs = RecoveryInputs::from_transcript(&run.transcript).unwrap_or(
-                        RecoveryInputs {
-                            acked: acked.clone(),
-                            failed: failed.clone(),
-                            clock: None,
-                            world: world.clone(),
-                            outcomes: outcomes.clone(),
-                            versions: Vec::new(),
-                        },
-                    );
+                    let cut_t = reboots
+                        .last()
+                        .map(|(_, f)| &f.transcript)
+                        .unwrap_or(&run.transcript);
+                    let inputs = RecoveryInputs::from_transcript(cut_t).unwrap_or(RecoveryInputs {
+                        acked: acked.clone(),
+                        failed: failed.clone(),
+                        clock: None,
+                        world: world.clone(),
+                        outcomes: outcomes.clone(),
+                        versions: Vec::new(),
+                    });
                     let mut ctl =
                         ScheduleController::recovery_from(b.plan.clone(), &inputs, &b.s0.1)?;
                     runner::run(link, &mut ctl, start, h)?
@@ -269,7 +307,21 @@ pub fn run(
         }
         _ => None,
     };
-    Ok(Ran { run, recovery })
+    if let Some(rc) = &recovery {
+        let mut last = rc.ending.clone();
+        while let Some(Ending::Reboot(r)) = &last {
+            let h = header(&format!("reboot {}", r.n), Some(schedule), "resume S0");
+            let mut ctl = ScheduleController::recovery_rebooted(b.plan.clone(), r, &b.s0.1)?;
+            let f = runner::run(link, &mut ctl, Start::Resume(b.s0.0.clone()), h)?;
+            last = f.ending.clone();
+            reboots.push((true, f));
+        }
+    }
+    Ok(Ran {
+        run,
+        recovery,
+        reboots,
+    })
 }
 
 /// A fresh boot and one schedule (the engine's `--control boot one`): the boot conversation to

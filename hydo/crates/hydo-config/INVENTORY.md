@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-56 user-facing and 92 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 36 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 7 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+57 user-facing and 92 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 36 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 7 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -15,6 +15,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_HVX_EXPLORE` | user | path | <root>/target/release/hydo-hvx, else <root>/bin/hydo-hvx | hydo-engine | The engine program started when the engine does not run in this process (the name is the C engine's, deleted in M137). |
 | `HYDO_PREEMPT_RECORD` | user | flag: set and not `0` | off | hydo-kvm, hydo-hvm | Set and not `0`: a run with forced preemption points (`pct=`) writes `<tag>.preempt.jsonl` into its directory, one record per point (its exit count, what it did, and the guest's instruction pointer, mode, page tables, thread pointer and stack pointer there); `hydo inspect events` and `hydo diff` read it (Milestone 208; the KVM and Mac engines). Only registers are read: no fingerprint moves. |
 | `HYDO_CONTRACTS` | user | path | - | hydo-engine, hydo-hvm, hydo-kvm | The function contracts' plan (`<image>.contracts.json`, Milestone 241): the engine stops at each contracted function's entry and return, makes the plan's reads there, and writes `<tag>.contracts.jsonl`, one record per call. hydo sets it for an image with a plan; the guest sees nothing, so no fingerprint moves. The Mac engine since Milestone 241, the KVM engine since Milestone 255. |
+| `HYDO_GUEST_DISKS` | user | list | - | hydo-engine, hydo-hvm, hydo-kvm | The image's added disks (`guest.disks`, Milestone 263): `<MiB>:<volatile\|none>` per disk, joined by commas, from the image's `/etc/hydo/disks`. hydo sets it for an image with added disks; without it the engine attaches none. |
 
 ## The hvx engine (`hydo_config::hvx::Options`)
 

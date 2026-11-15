@@ -228,6 +228,9 @@ pub struct Plan {
     /// first boot's last outcome of every id in `$HYDO_OUTCOMES` (without it that file starts
     /// empty there).
     pub outcomes_after_cut: bool,
+    /// `guest.reboot: true` (Milestone 263, docs/design/devices.md): a guest program may ask for
+    /// a reboot with the console line `HYDO-REBOOT`.
+    pub reboot: bool,
     pub invariants: Vec<PlanInvariant>,
     pub knobs: Vec<PlanKnob>,
     /// `buggify: true`: a B= token is then written to /tmp/hydo-buggify (features/buggify.rs);
@@ -679,6 +682,7 @@ impl Plan {
                 Some(c) => Some(int(c, "guest.clock_after_cut")?),
             },
             outcomes_after_cut: get(guest, "outcomes_after_cut").is_some_and(py::truthy),
+            reboot: get(guest, "reboot").is_some_and(py::truthy),
             cost: 0,
             perf: PlanPerf::of(d),
             screens: hydo_manifest::browser::screens_dir(d),

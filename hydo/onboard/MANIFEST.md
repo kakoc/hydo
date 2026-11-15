@@ -147,6 +147,9 @@ guest:
   clock_after_cut: 60          # optional: after a power cut the recovery boot's clock continues from the cut, + 60 s
                                #   (without it the recovery boot's clock starts at clock_start again)
   outcomes_after_cut: true     # optional: after a power cut the recovery boot's $HYDO_OUTCOMES holds the first boot's last outcomes
+  reboot: true                 # optional: a guest program may ask for a reboot (console line HYDO-REBOOT); see "Reboots"
+  disks:                       # optional (the Mac and KVM engines): disks beside the main one; see "Added disks"
+    - {name: emmc, size_mib: 64, cache: volatile}
   cpu: v3                      # guest CPU level (x86_64 only): v2 (default) = x86-64-v2, no AVX;
                                # v3 = adds AVX/AVX2, FMA, BMI1/2, F16C, LZCNT, MOVBE, XSAVE
   cpu_cache: false             # optional (x86_64): CPUID describes the CPU's caches (default true
@@ -1062,6 +1065,44 @@ cut and writes the last outcome of every id into the recovery boot's file (`<id>
 line per id, in numeric order of the ids); `hydo-read hydo unknown` and the checks then see what
 the client saw. Opt-in, so that images built before it keep their recorded fingerprints: a
 manifest without the key gets an empty file there, as before.
+
+### Reboots (`guest.reboot`)
+
+With `guest.reboot: true` a guest program asks for a reboot with one console line, `HYDO-REBOOT`,
+optionally followed by a space and a reason, and then waits to be stopped:
+
+```sh
+printf 'HYDO-REBOOT health check failed\n' > /dev/console
+```
+
+hydo then shuts the guest down cleanly. It sends SIGTERM to the workload and every service, and
+SIGKILL 2 s of guest time later. It runs `sync` and flushes the cache of every disk. Then it
+starts a new boot of the same machine from the snapshot S0, with the disks' bytes, the clock, and
+the run's `$HYDO_ACKED` and `$HYDO_OUTCOMES`. Every service starts again, its `setup:` included.
+
+With the key, each workload step is its own call of `workload.run`. A reboot during a step ends
+that step, and the run goes on with the next step in the new boot. A reboot during the workload's
+retry goes on with the end of the run. A reboot in a recovery boot after a power cut gives a new
+recovery boot. A reboot ends every fault that began before it; the faults of later steps apply as
+usual. A run takes at most 64 reboots. `cf=`, `U=`, test compositions, `perf:`, `fakes:`,
+`proxies:` and `emulators:` are refused with the key. Each boot's agent console is
+`<tag>.boot<n>.log`, and each boot's control transcript is `control.reboot<n>.jsonl`. The design
+is docs/design/devices.md.
+
+### Added disks (`guest.disks`)
+
+`guest.disks` adds up to 4 disks beside the main one, on the Mac and KVM engines. The guest sees
+them as `/dev/vdb`, `/dev/vdc` and so on, in the manifest's order, empty at the first boot. Each
+has a `name`, a `size_mib` (1 to 4096) and a `cache`:
+
+- `volatile` (the default): a write waits in the disk's own cache until the guest flushes that
+  disk; a power cut loses it, whatever the schedule's `disk=` says.
+- `none`: every write is durable when the disk completes it, as on a NOR flash chip.
+
+A flush of one disk leaves the other disks' caches as they were. The schedule's `disk=` faults
+apply to the main disk only, and `G=` and `L=` act on a service's storage on the main disk. The
+hvx engine refuses an image with added disks before any VM: its block device is in the kernel
+module, which has one. The example is `hydo/onboard/examples/swupdate/hydo-devices.yaml`.
 
 ### The CPU's caches (`guest.cpu_cache`)
 

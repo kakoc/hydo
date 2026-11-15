@@ -140,6 +140,9 @@ pub fn read_command(ln: &[u8]) -> Cmd {
     if ln == b"CUT" {
         return Cmd::Host(HostCmd::Cut);
     }
+    if ln == b"REBOOT" {
+        return Cmd::Host(HostCmd::Reboot);
+    }
     if ln == b"TIME" {
         return Cmd::Host(HostCmd::Time(String::new()));
     }
@@ -239,6 +242,7 @@ mod tests {
             "SNAP s retype",
             "DISKOFF",
             "CUT",
+            "REBOOT",
         ] {
             assert_eq!(c(l.as_bytes()), l);
         }

@@ -769,8 +769,43 @@ pub struct Guest {
     /// image loads itself. Without the key, the engine's usual kernel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kernel: Option<KernelVariant>,
+    /// A guest program may ask for a reboot with the console line HYDO-REBOOT: hydo shuts the
+    /// guest down cleanly, starts a new boot of the same machine with the disks' bytes, and goes
+    /// on with the next workload step (docs/design/devices.md).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub reboot: Option<bool>,
+    /// Disks beside the main disk, each with a write cache of its own: /dev/vdb, /dev/vdc, ...
+    /// in this order, empty at the first boot (the Mac and KVM engines; docs/design/devices.md).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disks: Option<Vec<GuestDisk>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
+}
+
+/// One added disk of `guest.disks`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct GuestDisk {
+    /// A letter, then letters, digits and -, at most 16 bytes.
+    pub name: String,
+    /// Whole MiB in [1, 4096].
+    pub size_mib: i64,
+    /// volatile: writes wait in the disk's cache until a flush of that disk, and a power cut
+    /// loses them; none: every write is durable at once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "volatile"))]
+    pub cache: Option<DiskCache>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
+}
+
+/// The write cache of an added disk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum DiskCache {
+    Volatile,
+    None,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]

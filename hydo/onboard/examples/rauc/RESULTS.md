@@ -199,20 +199,42 @@ of the data partition, 36 corruptions and 57 clock steps, at 524 runs per hour. 
 of the data partition, 28 corruptions and 43 clock steps. Neither drew disk errors or
 `L=...:strict`, which the explorer never draws.
 
+## Real reboots (Milestone 263)
+
+The agent's reboots are real ones since Milestone 263 (`guest.reboot: true`). The client asks for
+the reboot into update k-1 in step 2k; the reboot ends that step, and step 2k+1 checks the booted
+version in the new boot before it installs update k. So `C=4` still cuts after the acknowledged
+install of v3 and before the reboot into it. A failed health check reboots the machine too, three
+times for the broken v4, before U-Boot's boot counter returns to v3. The fingerprints of Milestone
+259 above came from the scripted reboot and do not repeat with this client.
+
+| run | engine | result |
+|---|---|---|
+| `disk=cut \| run` | the Mac | OK, booted v5 after 14 reboots, `1b886a1aa84b9fdc` on 2 runs |
+| `disk=cut \| run C=4` | the Mac | OK, booted v3, `e8a91854d76263b7` |
+| `disk=cut \| run C=6` | the Mac | OK: the recovery boot boots v4 three times and rolls back to v3, `61fc4401e4e90686` on 2 runs |
+
+On hvx the same schedules give `8db65afe7545c3b2` (OK, 2 runs), `c66b70a83653b127` (OK, booted
+v3) and `23d1282db24e337b` (OK, v4 three times and back to v3, 2 runs). RAUC held with the real
+reboots, as it did with the scripted one.
+
 ## What hydo lacked
 
 hydo has no device model. Each item says what the example did instead, and what a device team
 loses until hydo has it.
 
-1. **A reboot of the guest.** hydo's only reboot is the recovery boot after a power cut. The
-   example's reboot is a script in the running guest: Linux's page cache, the loop devices and
-   the kernel stay, so a reboot cannot lose what a real reboot loses. A service that ends is
-   started again after a delay that doubles each time, from 100 ms to 25.6 s after 9 restarts.
-   A reboot as a service restart got slower with every update.
-2. **A second disk, or a disk with partitions of its own.** The guest has one disk, and a flush
-   anywhere on it makes every earlier write durable. Slots on a second device, an environment on
-   SPI NOR, or eMMC boot partitions need their own caches. The example uses loop devices over
-   files instead (section "The storage model").
+1. **A reboot of the guest** (built in Milestone 263). Until then hydo's only reboot was the
+   recovery boot after a power cut, and the example's reboot was a script in the running guest:
+   Linux's page cache, the loop devices and the kernel stayed. Since Milestone 263 the agent
+   asks for a real reboot (`guest.reboot: true`, the console line `HYDO-REBOOT`). hydo shuts the
+   guest down cleanly and starts a new boot of the machine with the disk's bytes (section "Real
+   reboots" below, docs/design/devices.md).
+2. **A second disk, or a disk with partitions of its own** (built in Milestone 263 for the Mac
+   and KVM engines). A guest had one disk, and a flush anywhere on it made every earlier write
+   durable. `guest.disks` adds disks with caches of their own. The SWUpdate example's
+   `hydo-devices.yaml` puts the slots on an eMMC and the environment on SPI NOR flash. This
+   example keeps its loop devices over files. The hvx engine has one block device, in its kernel
+   module, and refuses added disks (AGENTS.md open item 128).
 3. **The device's kernel command line.** RAUC and other tools read the booted slot from
    `/proc/cmdline`; the example binds a file over it.
 4. **A power cut inside a step on the Mac.** `cf=` (a cut at the k-th flush) runs on hvx only.

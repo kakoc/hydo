@@ -433,6 +433,24 @@
             }
           ]
         },
+        "reboot": {
+          "description": "A guest program may ask for a reboot with the console line HYDO-REBOOT: hydo shuts the\nguest down cleanly, starts a new boot of the same machine with the disks' bytes, and goes\non with the next workload step (docs/design/devices.md).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
+        "disks": {
+          "description": "Disks beside the main disk, each with a write cache of its own: /dev/vdb, /dev/vdc, ...\nin this order, empty at the first boot (the Mac and KVM engines; docs/design/devices.md).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/GuestDisk"
+          }
+        },
         "description": {
           "anyOf": [
             {
@@ -464,6 +482,56 @@
       "type": "string",
       "enum": [
         "containers"
+      ]
+    },
+    "GuestDisk": {
+      "description": "One added disk of `guest.disks`.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "A letter, then letters, digits and -, at most 16 bytes.",
+          "type": "string"
+        },
+        "size_mib": {
+          "description": "Whole MiB in [1, 4096].",
+          "type": "integer",
+          "format": "int64"
+        },
+        "cache": {
+          "description": "volatile: writes wait in the disk's cache until a flush of that disk, and a power cut\nloses them; none: every write is durable at once.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiskCache"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "volatile"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "size_mib"
+      ]
+    },
+    "DiskCache": {
+      "description": "The write cache of an added disk.",
+      "type": "string",
+      "enum": [
+        "volatile",
+        "none"
       ]
     },
     "Network": {

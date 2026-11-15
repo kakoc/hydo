@@ -218,6 +218,10 @@ impl Kvm {
         if let Some(p) = crate::hvm::contracts_for(&spec.image) {
             c.env(hydo_config::registry::HYDO_CONTRACTS, p);
         }
+        // Milestone 263: the image's added disks (guest.disks)
+        if let Some(d) = crate::image::guest_disks(&spec.image) {
+            c.env(hydo_config::registry::HYDO_GUEST_DISKS, d);
+        }
         c
     }
 
@@ -246,6 +250,10 @@ fn spawn(
             hydo_config::registry::HYDO_CONTRACTS,
             p.display().to_string(),
         )]);
+    }
+    // Milestone 263: the image's added disks (guest.disks), as the engine program gets them
+    if let Some(d) = crate::image::guest_disks(&spec.image) {
+        e = e.with([(hydo_config::registry::HYDO_GUEST_DISKS, d)]);
     }
     let o = hydo_config::kvm::Options::from_env(&e);
     let dev = hydo_config::kvm::Engine::from_env(&e).dev();

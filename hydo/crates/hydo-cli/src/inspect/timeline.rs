@@ -524,6 +524,7 @@ pub fn conversations(rec: &Recorded) -> Vec<TimelineConversation> {
                 hydo_control::Ending::Verdict(v) => format!("verdict: {v}"),
                 hydo_control::Ending::AtSnapshot(s) => format!("at snapshot {s}"),
                 hydo_control::Ending::PowerCut { .. } => "power cut".into(),
+                hydo_control::Ending::Reboot(r) => format!("reboot {} asked by the guest", r.n),
             });
             let snapshots = match c {
                 Conv::Boot => "every stop".to_string(),

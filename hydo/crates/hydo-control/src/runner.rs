@@ -60,6 +60,12 @@ pub trait Link {
     fn cut(&mut self, e: &Ending) -> Result<String, LinkError> {
         self.end(e)
     }
+    /// A reboot at this stop ([`Ending::Reboot`], Milestone 263): the stop is over, and the
+    /// engine's next stop is the new boot's first (restored from S0 with the disks' flushed
+    /// bytes, in the workload phase). The default refuses: a link without a new boot.
+    fn reboot(&mut self, _e: &Ending) -> Result<String, LinkError> {
+        Err(LinkError("this engine link cannot reboot the guest".into()))
+    }
     /// Whether the last [`Link::engine`] action became a power cut on the engine's side: a
     /// `cf=` schedule's disk lost power at its k-th flush, so the workload's end
     /// ([`EngineAction::DiskFaultsOff`]) carries the run into the recovery VM at the next CONT,
@@ -489,6 +495,7 @@ pub fn run_with(
         if let Some(e) = ended {
             let result = match &e {
                 Ending::PowerCut { .. } => link.cut(&e)?,
+                Ending::Reboot(_) => link.reboot(&e)?,
                 Ending::AtSnapshot(_) if !opts.end_at_snapshot => String::new(),
                 _ => link.end(&e)?,
             };

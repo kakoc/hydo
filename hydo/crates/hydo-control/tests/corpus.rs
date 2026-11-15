@@ -250,6 +250,7 @@ fn class(t: &Transcript) -> &'static str {
         Some(Ending::Verdict(v)) if v.starts_with("HYDO-ORACLE: VIOLATION") => "violation",
         Some(Ending::Verdict(_)) => "error",
         Some(Ending::PowerCut { .. }) => "cut",
+        Some(Ending::Reboot(_)) => "reboot",
         Some(Ending::AtSnapshot(_)) => "snapshot",
         None => "none",
     }
