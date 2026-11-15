@@ -439,7 +439,29 @@ passed on each, and 3 failed:
   the process had not touched. The program now copies the string to the heap first. Its
   fingerprint (`2f90cfa5a0892450`) was one with the plan, without it and under main's hydo.
 
-The fourth run's results are not in yet.
+The fourth run, 43708821939, ran on an Intel Xeon Platinum 8573C, an Intel Xeon 6975P-C and
+two AMD EPYC 7763, and every check passed on each (42 of 42):
+
+- Each contracts image gave one fingerprint with the plan, without it and under main's hydo,
+  and wrote the same records twice, and the same records on all four runners. The fingerprints
+  differ between Intel and AMD, as every KVM fingerprint does, and agree between the two Intel
+  models:
+
+  | Image, schedule | Intel | AMD EPYC 7763 |
+  |---|---|---|
+  | Rust ledger, `disk=none \| run` | `f6ed193833c31bfa` | `d1338a9c6d551221` |
+  | Rust ledger, `disk=none \| run P=ledger@5+2` | `b555699aa09f7dca` | `6020a9f74650f151` |
+  | Go ledger, `disk=none \| run` | `0c32629f3ebac6b0` | `20539bf261bc06e8` |
+  | Go ledger, `disk=none \| run P=ledger@5+2` | `37398664b38ec727` | `1bec15da3ab3d63e` |
+  | Rust types, `disk=none \| run` | `bc526c733e940ac0` | `1dab6e70e4066993` |
+  | Go types, `disk=none \| run` | `c40f419405abfee5` | `059b215d61733dc3` |
+  | `hydo-local.yaml`, `disk=none \| run` | `8fa2192de4560c46` | `bb0b4392d2a07bf8` |
+
+- `hydo-local.yaml`: the program found in 4 processes at 4 load addresses, and `20000 calls
+  checked against 4 clauses, 0 broken`.
+- The types programs: 3 (Rust) and 5 (Go) clauses broken, each at 1 of 50,000 calls, 20,052
+  calls not judged, and no undecided check in the Rust one.
+- The Redis example gave main's fingerprints under this hydo.
 
 ## Next steps
 

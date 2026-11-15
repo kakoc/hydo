@@ -1192,14 +1192,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     whether its run had a clock step; the example's client records the clock it saw. The
     history, matching and frontend services ran in one process, not apart.
 113. Function contracts (M241, M255). What is left:
-    - KVM: the one-off workflow `tmp-contracts-kvm` ran three times (43697118540,
-      43700840743, 43704130071). The ledgers, the Go types program, and the Redis example
-      passed. Since the third run the engine finds a position-independent program at system
-      calls, and every call of `hydo-local.yaml`'s four processes was checked. Two checks of
-      the third run failed, and both are fixed. The engine's log undercounted the processes
-      found. A string literal that the process had not read yet left a clause of the Rust
-      types program undecided (docs/HISTORY.md Milestone 255). The fourth run's results are not in
-      yet.
+    - KVM: the proof ran only in the one-off workflow `tmp-contracts-kvm`, whose branch is
+      deleted. Its fourth run (43708821939) passed every check on two Intel and two AMD models
+      (docs/HISTORY.md Milestone 255). No test of CI runs contracts on a real KVM host.
     - hvx has no breakpoints for contracts: the side module is designed in
       docs/design/contracts.md, not built.
     - On KVM two functions with contracts fit in one program when they read their results
@@ -1828,8 +1823,8 @@ build machine, before 2026-10-13.
   not judge. Contracts read Rust strings, vectors, slices, `Option` and `Result` and Go strings,
   slices and later results. The KVM engine stops at them with three debug registers and finds a
   position-independent program's load address. The hvx side module is designed. On the Mac every
-  proof gave one fingerprint with and without the plan; the KVM proof is the one-off workflow
-  `tmp-contracts-kvm`. Nothing recorded moved
+  proof gave one fingerprint with and without the plan, and the one-off KVM workflow passed on
+  two Intel and two AMD models. Nothing recorded moved
 
 ## Where to look
 

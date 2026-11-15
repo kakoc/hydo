@@ -11298,7 +11298,7 @@ ci/vale.sh`. The answers of hydo-build's and hydo-manifest's equivalence tests a
 golden are re-recorded: the list of known `guest` keys, the guide's hashes, and the pinned inputs
 (the release lists, and files of earlier milestones that the answers did not list yet).
 
-### Milestone 255 (tentative number) - DONE (function contracts, continued: the report counts the calls a run did not judge; contracts read Rust `String`, `&str`, `Vec`, slices, `Option` and `Result`, Go strings, slices, results after the first and `error`, with `len()`, elements and string literals; the KVM engine stops at contracts with `KVM_SET_GUEST_DEBUG` and finds a position-independent program's load address in the guest's page tables; the hvx side module is designed, not built; on the Mac every proof gave one fingerprint with and without the plan; the KVM proof is a one-off workflow whose results are not in yet; nothing recorded moved; 2026-11-15)
+### Milestone 255 (tentative number) - DONE (function contracts, continued: the report counts the calls a run did not judge; contracts read Rust `String`, `&str`, `Vec`, slices, `Option` and `Result`, Go strings, slices, results after the first and `error`, with `len()`, elements and string literals; the KVM engine stops at contracts with `KVM_SET_GUEST_DEBUG` and finds a position-independent program's load address in the guest's page tables; the hvx side module is designed, not built; on the Mac every proof gave one fingerprint with and without the plan; the one-off KVM workflow passed on Intel and AMD runners in its fourth run; nothing recorded moved; 2026-11-15)
 
 **What was asked.** Four steps after Milestone 241: say how many calls a run judged and how many
 it did not; read more types; stop at contracts on the KVM engine, inert without a plan; and
@@ -11443,7 +11443,29 @@ runner 38 checks passed and 3 failed:
   the string to the heap before the call, and the report says how many checks of a clause were
   undecided.
 
-The fourth run's results are not in yet.
+The fourth run, 43708821939, ran on four runners: an Intel Xeon Platinum 8573C, an Intel Xeon
+6975P-C and two AMD EPYC 7763. Every check passed on each runner (42 of 42), the new ones
+included: the engine found `hydo-local.yaml`'s program in 4 processes at 4 load addresses and
+recorded all 20,000 calls, and no clause of the Rust types program was undecided. The
+fingerprints, each one with the plan, without it and under main's hydo:
+
+| Schedule | Intel (both models) | AMD EPYC 7763 |
+|---|---|---|
+| Rust ledger, `disk=none \| run` | `f6ed193833c31bfa` | `d1338a9c6d551221` |
+| Rust ledger, `disk=none \| run P=ledger@5+2` | `b555699aa09f7dca` | `6020a9f74650f151` |
+| Go ledger, `disk=none \| run` | `0c32629f3ebac6b0` | `20539bf261bc06e8` |
+| Go ledger, `disk=none \| run P=ledger@5+2` | `37398664b38ec727` | `1bec15da3ab3d63e` |
+| Rust types, `disk=none \| run` | `bc526c733e940ac0` | `1dab6e70e4066993` |
+| Go types, `disk=none \| run` | `c40f419405abfee5` | `059b215d61733dc3` |
+| `hydo-local.yaml`, `disk=none \| run` | `8fa2192de4560c46` | `bb0b4392d2a07bf8` |
+
+The AMD values are the third run's on the EPYC 9V45 and 9V74, except the Rust types program,
+which changed. Intel and AMD give other fingerprints, as every KVM fingerprint does (open item
+102), but the two Intel models agree. Each image wrote the same records twice on a runner, and
+the same records on all four runners. The Rust types program broke its 3 clauses and the Go one
+its 5, each at 1 of 50,000 calls, with 20,052 calls not judged. The Rust ledger was found in
+14 processes at 14 load addresses. The Redis example gave main's fingerprints under this hydo
+on each runner.
 
 **Tests.** `hydo-contracts`: the types of both languages on both architectures from the
 compiled programs (when Rust 1.90.0 with the musl targets and Go are present), the new language
@@ -11460,7 +11482,6 @@ re-recording.
 
 **Open** (AGENTS.md open item 113).
 
-- The KVM proof's fourth run.
 - hvx: the side module of the design.
 - KVM: two functions with contracts per program when they read their results, one in a
   position-independent program. The engine stops in the process of the latest system call and
