@@ -1625,6 +1625,7 @@ browser:
     alerts: ["[role=alert]", "[role=alertdialog]"]     # <name>.failures_shown; [] turns it off
     failures_within_ms: 5000
     requests: /api/            # judge only fetch and XHR requests under this path (default all)
+    failures_of: "(Create|Update|Delete)[A-Za-z]*$"   # only these failed requests must show (default all)
     text: [NaN, undefined, "[object Object]", Invalid Date]   # <name>.no_bad_text; [] turns it off
   screens: failures            # failures (default) | all | compare: which pages get a screenshot
   screens_ref: hydo-screens    # compare only: the reference screenshots (default hydo-screens)
@@ -1663,6 +1664,49 @@ browser:
   gives the number of changed pixels and the box around them, and `<file>.diff.png` shows them in
   red. `hydo build` refuses `compare` when the folder is missing. To record the references, copy a
   passing run's `screens/*.png` into the folder.
+
+#### A walk through the pages that hydo makes (`browser.explore`)
+
+`explore:` takes the place of `tests:` (Milestone 258, docs/design/ui-exploration.md): hydo walks
+through the app's pages itself, and the schedule token `I=` names the walk.
+
+```yaml
+browser:
+  explore:
+    start: http://10.89.0.11:5230/   # required: the URL the walk starts on, as the guest's browser reaches it
+    server: node /opt/hydo/web/app/serve.mjs   # started in the browser's service for each step (default none)
+    steps: 4                   # workload.steps (default 4, at least 4)
+    actions: 10                # actions per step (default 10; I=<seed>,n<k> takes k)
+    setup:                     # the first step without a saved session runs these first
+      - {open: /login}         # one of open, click (with role), fill (with with), press, see, wait
+      - {fill: Username, with: demo}
+      - {click: Sign in}
+    avoid: ["log ?out", "sign ?out"]   # regular expressions of control names never used (this is the default)
+    within: /                  # the walk follows only links under this path (default /)
+    values: [ACME-0001]        # more texts to type, besides hydo's edge values
+    settle_ms: 700             # the wait after each action (default 700)
+    quiet_ms: 3000             # the wait at the end of each step (default 3000)
+```
+
+- `tests`, `shards` and `args` are refused with `explore:`. `must_pass` defaults to false: the
+  invariant `<name>.tests_pass` then says only that the walker ran each step.
+- `root.files` gains `{src: browser/playwright-core-<version>, dst:
+  /opt/hydo/web/walk/node_modules/playwright-core}`; `hydo build` fetches the npm package by the
+  sha256 this hydo pins and unpacks it there. `root.text` gains `/opt/hydo/web/walk/walk.mjs` and
+  a stand-in `@playwright/test` beside it. The watcher's files are the same as with `tests:`.
+- `workload:` is written without `kind: test`: an ordinary workload of `steps` steps. Step i runs
+  `node walk.mjs <i> "$HYDO_WALK" "$HYDO_GUEST" "$HYDO_ACKED"` in `/opt/hydo/web/walk` with the
+  watcher loaded. The controller sets `$HYDO_WALK` to the schedule's `I=` value (empty: the seed
+  0) and `$HYDO_GUEST` to the schedule's guest part.
+- The walker's settings are the service's `HYDO_WEB_WALK` (JSON), with the fakes' routes for
+  `repro.spec.ts`.
+- Each write that the server answered 2xx adds to `$HYDO_ACKED` one word per resource name in
+  its request or answer, `<the path's last part>:<name>`, or the path's last part alone. A write
+  is a request under `watch.requests` that `watch.failures_of` matches, or without that key
+  that is not a GET. A line with the request's and the answer's text goes to
+  `/tmp/hydo/web/walk/acks.jsonl`.
+- Every run writes `screens/repro.spec.ts`; `I=...,rec` adds `walk-step-<i>.webm` and
+  `walk-step-<i>.trace.zip` for the last step i; a file of more than 200 KB stays in the guest.
 
 ### HTTPS for fakes and proxies (`tls:`)
 

@@ -24,8 +24,8 @@ pub fn is_workload(t: &str) -> bool {
 }
 pub const FAULT_KINDS: [&str; 7] = ["kill", "pause", "network", "oneway", "cut", "clock", "disk"];
 /// Guest tokens with a fixed meaning; a manifest knob may not reuse one.
-pub const RESERVED_TOKENS: [&str; 16] = [
-    "K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W", "A", "G", "L", "U",
+pub const RESERVED_TOKENS: [&str; 17] = [
+    "K", "P", "N", "O", "C", "T", "Q", "X", "B", "F", "H", "W", "A", "G", "L", "U", "I",
 ];
 pub const PF_REQ_KINDS: [&str; 4] = ["status", "delay", "drop", "reset"];
 pub const PF_HOOK_KINDS: [&str; 4] = ["dup", "reorder", "late", "lost"];

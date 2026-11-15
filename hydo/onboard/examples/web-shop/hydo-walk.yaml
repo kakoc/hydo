@@ -1,0 +1,79 @@
+# The web-shop app explored by hydo's own walk through its pages, with no Playwright test
+# (Milestone 258, `hydo guide web-apps`, docs/design/ui-exploration.md).
+#
+# The app and its fake API are those of hydo.yaml. Instead of the team's tests, `browser.explore`
+# lets hydo walk through the pages itself: each workload step starts a fresh browser that keeps
+# the cookies and the page of the step before, and takes `actions` actions, each drawn from the
+# schedule's I= seed and the page's accessibility tree (click, fill, choose, press Enter, click
+# twice, back, reload, wait). The watcher judges every page as it does for tests, and the fake's
+# record shows an order placed twice.
+#
+# Inputs: sh build.sh (the app's two builds; the tests' node_modules are not needed here).
+# `hydo build` fetches the Playwright image and playwright-core 1.65.1 into browser/.
+#   disk=none | run I=<seed>                     -> a walk without faults
+#   hydo explore --seeds 1-20 --protocol-faults  -> walks with H= faults on the fake's routes
+# (RESULTS.md, the section "The walk of Milestone 258", has every run)
+name: web-shop-walk
+description: the web-shop app explored by hydo's own walk through its pages; its API is a fake
+
+params:
+  variant: buggy                # fixed | buggy: which build of the app goes into the image
+
+network: bridge                 # the browser runs in its own network namespace
+
+root:
+  files:
+    - {src: "app/dist-{{variant}}", dst: /opt/hydo/web/app/dist}
+    - {src: app/serve.mjs, dst: /opt/hydo/web/app/serve.mjs}
+
+browser:
+  explore:
+    start: http://localhost:3000/
+    server: node /opt/hydo/web/app/serve.mjs   # as the tests' webServer: started for each step
+    steps: 4
+    actions: 10
+  env:
+    APP_DIST: /opt/hydo/web/app/dist
+    API_URL: http://10.89.0.1:9001
+  watch:
+    busy: [.spinner]
+    alerts: ["[role=alert]"]
+    requests: /api/
+
+fakes:
+  - name: api                   # the shop's API: its four routes and their usual answers
+    port: 9001
+    addr: 10.89.0.1
+    idempotency: header:Idempotency-Key
+    ref: json:cart
+    routes:
+      - name: products
+        method: GET
+        path: /api/products
+        headers: {Content-Type: application/json}
+        body: '[{"id":"p1","name":"Coffee mug","price":1200},{"id":"p2","name":"Tea pot","price":3000},{"id":"p3","name":"Notebook","price":550}]'
+      - name: add_item
+        method: POST
+        path: /api/cart/items
+        headers: {Content-Type: application/json}
+        body: '{"ok":true,"product":"{json:product}"}'
+      - name: place_order
+        method: POST
+        path: /api/orders
+        idempotent: true
+        save: {key: 'o{seq}', fields: {total: '{json:total}'}}
+        headers: {Content-Type: application/json}
+        body: '{"id":"o{seq}"}'
+      - name: get_order
+        method: GET
+        path: /api/orders/{id}
+        load: '{path:id}'
+        headers: {Content-Type: application/json}
+        body: '{"id":"{path:id}","total":{obj:total}}'
+
+invariants:
+  - id: api.order_placed_once
+    msg: the API took each cart's order at most once
+    cmd: hydo-world check at-most-once api.place_order
+
+faults: [protocol, clock, pause]

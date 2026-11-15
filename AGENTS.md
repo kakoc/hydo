@@ -661,6 +661,30 @@ pages' screenshots go to the run directory's `screens/` after the verdict, where
 page's screenshot with a recorded reference, pixel for pixel (`<name>.screens_match`). The
 example ran on KVM in M254, with hvx's verdicts and the same screenshots on Intel and AMD hosts.
 
+**hydo walks through a web app's pages itself (M258).** `browser.explore` (a format-1 addition)
+replaces `browser.tests`: no Playwright test is needed. hydo's walker (`walk.mjs`) runs in the
+Playwright image with playwright-core 1.65.1, which `hydo build` fetches by its sha256. The same
+five invariants watch it. Each workload step is a fresh browser that keeps the session. Each
+action reads the page's accessibility tree and does one thing, such as a click, an edge value in
+a field, a save, or a double click. The schedule token
+`I=<seed>[,n<k>][,x<step>.<k>][,rec]` names the walk, and every action draws from its own stream.
+`hydo explore` draws a walk for every schedule, and the shrinker lowers the actions per step and
+leaves actions out. A walk writes the server's acknowledged writes to `$HYDO_ACKED` for a
+project's own rules. Every run leaves the walk as a Playwright test, `screens/repro.spec.ts`, with
+`page.route` for `H=` faults. With `,rec` a run also records a video and a trace of the last
+step; `hydo explore` makes one such replay of each minimal walk. On hvx the web-shop example
+without its tests (`hydo-walk.yaml`) had both planted bugs found blind in 20 schedules. The
+minimal walk's test fails natively on the buggy build and passes on the fixed one. Memos 26.11.0
+(`hydo/onboard/examples/memos`) is onboarded with it. In 40 focused walks with faults, 19 of them
+power cuts, every one of 85 saved memos survived. There are two new candidates, not posted:
+
+- over plain HTTP from another host, a share link's copy button throws (`navigator.clipboard` is
+  undefined);
+- a reaction the server refuses disappears without a message.
+
+The design is `docs/design/ui-exploration.md`, the how-to `hydo guide web-apps` ("Let hydo walk
+through the pages"), and the details are in `docs/HISTORY.md` Milestone 258.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -953,8 +977,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `<tag>.screens/` beside the run's transcripts.
     - One pinned Playwright version (1.65.1). A team on another version needs its pin added to
       `hydo_manifest::browser::CATALOG`. Firefox and WebKit were not tried.
-    - The hydo-native list of steps (open, click, read) for teams without Playwright tests is not
-      built. Cypress suites do not run.
+    - Since M258 `browser.explore` walks through the pages without tests (open item 124). Cypress
+      suites do not run.
     - The watcher hooks the instrumentation that Playwright's own runner uses for traces, an
       internal interface that a new Playwright version may change.
     - An exploration of `T=` clock steps and of `P=workload` pauses against a frontend was not
@@ -1300,6 +1324,33 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     the process table and the kernel log for a failed check too. The web page's property table can
     list one check twice. Without the udev rule, each hvx run leaves root-owned agent logs in
     `hydo-out/`.
+
+124. Walks through the pages (M258). What is left:
+    - The walks ran on hvx only. KVM and the Mac engine did not run them (the Mac engine does not
+      run `browser:`, open item 51).
+    - The copy of the files out of the guest (Milestone 254's mechanism) runs inside the hvx
+      engine's check phase, which ended after about 386 reads of 1.5 KB. Recordings of every
+      step, about 600 KB and 340 KB, ended their runs `TIMEOUT check` in place of the verdict.
+      Only the last step is recorded, and a file over 200 KB stays in the guest, but nothing
+      bounds the copy by what the phase has left.
+    - A shrink candidate that drops a fault can change where the walk's sign-in happens, and so
+      every later action; such a candidate rarely keeps the failure, and the fault stays.
+    - The shrinker leaves out only the first action of a step; actions in the middle go only
+      through fewer actions per step. A full delta debugging over actions is not built.
+    - `repro.spec.ts` maps `H=` faults to `page.route`, but applies a fault with `p=` to every
+      request, and gives a backend fault only as a comment. Its native run was tried on the
+      web-shop example only.
+    - `hydo rules check` runs walks (`I=1`, `I=2` and on) for a walking image; it did not run on
+      one. The walk does not check what the page shows against the backend's state.
+    - A page's finding names the page's path, and a path with a random id (Memos's
+      `/memos/b4R4VE2u3vE8gqW7sZTJtL`) gives each shrink candidate its own signature, so the
+      shrinker takes none of them.
+    - A `watch.failures_of` that matches no request path makes `failures_shown` hold and records
+      no write, and nothing warns. Memos's first pattern did so for 60 schedules.
+    - After a power cut the page checks run in the recovery boot, where no page ran; the pages of
+      the first boot up to the cut are not judged.
+    - The walk follows no links into other origins and no file uploads, and it sees no canvas,
+      no iframe, and no shadow DOM that the accessibility tree does not show.
 
 ## Milestone index
 
@@ -1840,6 +1891,13 @@ build machine, before 2026-10-13.
   in two of three runs the end state hid the overdraft. The cause, a `float64` limit in a map,
   cannot be stated, nor the atomic bulk. Go named slices (`math/big.nat`) are read now. Nothing
   recorded moved
+- M258 (tentative number): hydo walks through a web app's pages itself. `browser.explore` replaces
+  the tests with a seeded walk named by `I=`. The explorer draws one for every schedule, and the
+  shrinker gives it fewer actions or leaves actions out. Each run leaves the walk as a Playwright
+  test, and a recording replay adds a video and a trace. On hvx the web-shop example without
+  tests had both planted bugs found blind in 20 schedules. Memos 26.11.0 onboarded: no saved memo
+  lost in 40 walks with faults. Two new candidates: a share link's copy button over plain HTTP,
+  and a reaction lost without a message. Nothing recorded moved
 
 ## Where to look
 

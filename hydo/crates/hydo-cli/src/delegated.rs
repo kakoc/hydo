@@ -123,6 +123,9 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
         for (tag, why) in explore_replays(ctx, Path::new(&out)) {
             eprintln!("hydo: the replay of {tag} did not read the failing service's log: {why}");
         }
+        for line in walk_replays(ctx, Path::new(&out)) {
+            eprintln!("hydo: {line}");
+        }
     }
     if rc == 0 && plain {
         if let Some(end) = crate::htmlreport::text::explore_end(Path::new(&out), &out) {
@@ -140,6 +143,79 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
 
 /// The most problems of one exploration that [`explore_replays`] runs again.
 const REPLAYS_MAX: usize = 4;
+
+/// A minimal schedule's walk with recording on (Milestone 258): its `I=` value with `,rec`, or
+/// None for a schedule without a walk (or one that records already).
+pub fn with_recording(sched: &str) -> Option<String> {
+    let (host, guest) = sched.split_once('|')?;
+    let mut found = false;
+    let words: Vec<String> = guest
+        .split_whitespace()
+        .map(|w| match w.strip_prefix("I=") {
+            Some(v) if !v.split(',').any(|f| f == "rec") => {
+                found = true;
+                format!("{w},rec")
+            }
+            _ => w.to_string(),
+        })
+        .collect();
+    found.then(|| format!("{}| {}", host, words.join(" ")))
+}
+
+/// The last step of `hydo explore` for a walk through the pages (Milestone 258): each minimal
+/// schedule with a walk (at most [`REPLAYS_MAX`]) runs once more with recording on (`I=...,rec`),
+/// into `replays/rec-<k>/` of the exploration's folder. Its `screens/` gets a video and a
+/// Playwright trace of the last step, and the walk as `repro.spec.ts`. Recording costs guest time, so
+/// the replay is a run of its own with its own fingerprint: the line says whether it ended with
+/// the minimal schedule's verdict. The exploration's own files do not change.
+pub fn walk_replays(ctx: &Ctx, dir: &Path) -> Vec<String> {
+    let Ok(hydo_results::Results::Exploration { doc: Some(doc), .. }) = hydo_results::read_dir(dir)
+    else {
+        return Vec::new();
+    };
+    let image = Path::new(&doc.image.path);
+    let mut opts = crate::runs::RunOpts::of_eargs(doc.engine.args.as_deref().unwrap_or(&[]));
+    if opts.vcpus.is_none() {
+        opts.vcpus = doc.engine.vcpus.filter(|n| *n > 1).map(|n| n as u32);
+    }
+    let mut lines = Vec::new();
+    for (k, sh) in doc
+        .shrinks
+        .iter()
+        .filter_map(|s| with_recording(&s.minimal).map(|r| (s, r)))
+        .take(REPLAYS_MAX)
+        .enumerate()
+    {
+        let (s, rec) = sh;
+        let out = dir
+            .join(crate::htmlreport::REPLAYS)
+            .join(format!("rec-{}", k + 1));
+        let _ = std::fs::create_dir_all(&out);
+        let shown = out.display();
+        lines.push(
+            match crate::runs::try_run_to_dir(ctx, image, doc.image.sha256.clone(), &rec, &out, &opts)
+            {
+                Err(w) => format!("the recording of {} did not run: {w}", s.minimal),
+                Ok(None) => format!("the recording of {} gave no result ({shown})", s.minimal),
+                Ok(Some(run)) => {
+                    let same = run.verdict.text == s.verdict
+                        || hydo_explore::results::signature(&run.verdict.text)
+                            == hydo_explore::results::signature(&s.verdict);
+                    format!(
+                        "the walk of {} {} with recording on: video, trace and repro.spec.ts in {shown}/screens",
+                        s.minimal,
+                        if same {
+                            "ended with the same verdict".to_string()
+                        } else {
+                            format!("ended otherwise ({})", run.verdict.text)
+                        }
+                    )
+                }
+            },
+        );
+    }
+    lines
+}
 
 /// The last step of `hydo explore` (Milestone 247): a service's own log is in no file of an
 /// exploration, so for each problem whose run stopped with an error (at most [`REPLAYS_MAX`]),

@@ -206,6 +206,8 @@ pub struct S {
     pub l: Option<(String, i64, i64, bool)>,
     /// U= upgrades (Milestone 238), each the text after `U=`, in token order.
     pub u: Vec<String>,
+    /// I= (Milestone 258): the walk of `browser.explore`, the text after `I=`.
+    pub i: Option<String>,
 }
 
 /// A G= token: (target, step, steps down or None for in place, the corruption's text). The

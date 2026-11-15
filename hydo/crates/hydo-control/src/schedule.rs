@@ -168,6 +168,8 @@ struct RunCfg {
     l: Option<(String, i64, i64, bool)>,
     /// U= (Milestone 238): the upgrades, in token order (schedule/upgrade.rs).
     u: Vec<hydo_schedule::Upgrade>,
+    /// I= (Milestone 258): the walk of `browser.explore`, as its value's text.
+    walk: Option<String>,
     /// The host token `cf=`: the engine may turn the workload's end into a power cut.
     cf: bool,
     /// The schedule has no fault: no disk fault, no `cf=`, and only knobs and `Q=` in its guest
@@ -578,9 +580,12 @@ fn no_faults(s: &Schedule) -> bool {
     );
     disk_ok
         && s.host_token("cf").is_none()
-        && s.guest
-            .iter()
-            .all(|t| matches!(t, GuestToken::Knob { .. } | GuestToken::Concurrency { .. }))
+        && s.guest.iter().all(|t| {
+            matches!(
+                t,
+                GuestToken::Knob { .. } | GuestToken::Concurrency { .. } | GuestToken::Walk(_)
+            )
+        })
 }
 
 fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
@@ -702,6 +707,8 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             } => c.l = Some((svc.clone(), *at as i64, (*at + *down) as i64, *strict)),
             // Milestone 238: upgrades (schedule/upgrade.rs); several U= are allowed
             GuestToken::Upgrade(u) => c.u.push(u.clone()),
+            // Milestone 258: the walk; the last I= wins, as for every letter
+            GuestToken::Walk(w) => c.walk = Some(w.to_string()),
             // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
             // branch with `buggify: true`, else an unknown knob), and H=, W=, Q= (core plans have
             // no fakes or composer; Q= is the stack's) are knobs the manifest does not have, so
@@ -2188,11 +2195,13 @@ fn step_range_run(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     } else if let Some(p) = &ctx.plan.perf {
         perf::steps(fx, ctx, p, a, b)? // perf: (Milestone 237): one marked call per step
     } else {
-        let e = env(
-            fx,
-            ctx,
-            &[("HYDO_FROM", a.to_string()), ("HYDO_TO", b.to_string())],
-        );
+        let mut extra = vec![("HYDO_FROM", a.to_string()), ("HYDO_TO", b.to_string())];
+        if ctx.plan.walk {
+            // Milestone 258: the walker reads the walk and writes repro.spec.ts from the schedule
+            extra.push(("HYDO_WALK", ctx.run.walk.clone().unwrap_or_default()));
+            extra.push(("HYDO_GUEST", ctx.run.guest_text.clone()));
+        }
+        let e = env(fx, ctx, &extra);
         spawn_wait(
             fx,
             "workload",

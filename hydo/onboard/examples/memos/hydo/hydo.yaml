@@ -1,0 +1,112 @@
+# Memos 26.11.0 (usememos/memos: a self-hosted note-taking app, a Go server with its React
+# frontend built in, SQLite) explored through its own pages by hydo's walk (Milestone 258).
+# Started with `hydo compose ../docker-compose.yaml`; RESULTS.md says what was found.
+#
+#   sh fetch-images.sh          # the Memos image by digest
+#   hydo build hydo.yaml        # x86_64 only (hvx, KVM): it fetches the Playwright image and
+#                               # playwright-core into browser/
+#   hydo run "disk=none | run I=1"
+#   hydo explore --seeds 1-20
+#
+# No Playwright test is written: `browser.explore` lets hydo walk through the pages. The first
+# step signs up the administrator (a fresh instance shows its setup page), and every step after
+# keeps the session. The faults are those of the Memos server: kills, pauses, network faults
+# between the browser and the server, power cuts, clock steps and disk faults.
+format: 1
+name: memos
+description: "Memos 26.11.0 explored by hydo's own walk through its pages, under kills, pauses, network faults, power cuts, clock steps and disk faults of the server"
+hydo_version: "0.3"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 4096
+  clock_start: 1794700800   # 2026-11-15 00:00 UTC, the day of the import
+  outcomes_after_cut: true  # the walk's acknowledged saves ($HYDO_ACKED) reach the recovery boot
+
+data:
+  size_mib: 512   # the data disk: Memos's SQLite database lives here (the fault target)
+  dirs: [vol/bind-memos-data]
+
+root:
+  files:
+    - {src: page-rules, dst: /opt/hydo/web/rules}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 memos
+
+services:
+  # Compose service memos
+  # image neosmemo/memos:26.11.0 = docker.io/neosmemo/memos@sha256:087e7dc6b76b31fcd1107a5767398b2a310ced209adb791efd8760c745dc8034
+  #   linux/amd64: sha256:7e8ca9de6504be7ea724793c1b7f1d1540cc1513aad1877aa3e141061013345a
+  #   linux/arm64: sha256:e6a083a1d6e9de2a41c889414a3299872328ee8e146b9c29e980cd7d1b6df1d5
+  - name: memos
+    image: {x86_64: images/neosmemo-memos-26.11.0-amd64.docker.tar, arm64: images/neosmemo-memos-26.11.0-arm64-oci}
+    image_ref: "neosmemo/memos:26.11.0"
+    port: 5230
+    addr: 10.89.0.11
+    ready: "nc -z -w 2 10.89.0.11 5230"
+    restart: on-failure
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/bind-memos-data, dst: /var/opt/memos}
+
+browser:
+  explore:
+    start: http://10.89.0.11:5230/
+    steps: 6
+    actions: 12
+    setup:                      # a fresh instance asks for its administrator
+      - {fill: Username, with: hydo}
+      - {fill: Password, with: hydo-pass-1}
+      - {click: Create admin account}
+      - {click: Skip}           # the welcome guide
+    avoid:
+      - "log ?out"
+      - "sign ?out"
+      - "^Map$"                 # the map's tiles come from the internet, which the guest has not
+      - "^Record audio$"        # no microphone in the guest
+      # the walk's time goes to the memos themselves: writing, editing, pinning, archiving,
+      # deleting, comments and reactions. Seeds 1-20 without these names spent most of their
+      # actions on the calendar, saved views, filters and spaces (RESULTS.md)
+      - "^(Previous|Next|Select) month$"
+      - "^\\d{4}-\\d{2}-\\d{2}$"
+      - " in \\d{4}-\\d{2}-\\d{2}$"
+      - "view"
+      - "==|\\("                # the saved views' presets
+      - "^Search"
+      - "^(Filter|Title|Expression|Text|Validate)$"
+      - "^Switch space"
+      - "^(English|Language)$"  # another language renames every control
+      - "^(Audio|Documents|Media|Unused|All)$"
+  watch:
+    console: false              # Memos logs every error it handles with console.error, next to its toast
+    alerts: ["[role=alert]", "[role=alertdialog]", "[role=status]"]   # react-hot-toast's toasts are role=status
+    requests: /memos.api.       # judge the API's requests (Connect RPC), not the static files
+    # a failed write must show; the reads that refresh lists and notifications in the
+    # background retry by themselves
+    failures_of: "/(Create|Update|Delete|Upsert|Set)[A-Za-z]*$"
+
+invariants:
+  - id: memos.saved_memos_survive
+    msg: every memo that Memos answered as saved is in its database
+    # a copy of the database and its WAL (SQLite rebuilds the index); a copy taken while Memos
+    # wrote it can be torn, and the rule then exits 3 and the copy is taken again
+    cmd: |
+      i=0
+      while [ $i -lt 5 ]; do
+        rm -rf /tmp/hydo/rules-db && mkdir -p /tmp/hydo/rules-db
+        cp /data/vol/bind-memos-data/memos_prod.db /data/vol/bind-memos-data/memos_prod.db-wal /tmp/hydo/rules-db/ 2>/dev/null
+        hydo-oci browser node --experimental-sqlite --no-warnings /opt/hydo/web/rules/saved_memos.mjs /tmp/hydo/rules-db/memos_prod.db "$HYDO_ACKED"
+        rc=$?
+        [ $rc -eq 3 ] || exit $rc
+        sleep 1
+        i=$((i + 1))
+      done
+      exit 2
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

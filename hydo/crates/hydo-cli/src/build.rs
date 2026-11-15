@@ -206,6 +206,11 @@ fn fetch_emulators(ctx: &Ctx, manifest: &str, arch: &str, rest: &[String]) -> Re
     // `browser:` (Milestone 253): the Playwright image of the tests' version; the tests' own
     // @playwright/test must be that version, or Playwright finds no browser in the image
     for (img, version, tests) in hydo_manifest::browser::images(data, arch) {
+        if tests.is_empty() {
+            // browser.explore (Milestone 258): no tests; the walker's playwright-core below
+            imgs.push(img);
+            continue;
+        }
         let pkg = dir
             .join(&tests)
             .join("node_modules/@playwright/test/package.json");
@@ -233,6 +238,22 @@ fn fetch_emulators(ctx: &Ctx, manifest: &str, arch: &str, rest: &[String]) -> Re
             Some(_) => {}
         }
         imgs.push(img);
+    }
+    // `browser.explore` (Milestone 258): the walker drives the browser with playwright-core of
+    // the image's version, fetched by its pinned sha256 and unpacked into browser/
+    if let Some((version, url, sha256, core)) = hydo_manifest::browser::walk_core(data) {
+        let out = dir.join(&core);
+        if !out.is_dir() {
+            eprintln!(
+                "hydo: fetching playwright-core {version} for the walk of browser.explore into {}",
+                out.display()
+            );
+            if let Some(p) = out.parent() {
+                std::fs::create_dir_all(p).map_err(|e| format!("{}: {e}", p.display()))?;
+            }
+            hydo_compose::registry::fetch_npm_package(&url, &sha256, &out)
+                .map_err(|e| format!("fetching playwright-core: {e}"))?;
+        }
     }
     // `browser.screens: compare` (Milestone 254): the references go into the image
     if let Some(r) = hydo_manifest::browser::screens_ref(data) {

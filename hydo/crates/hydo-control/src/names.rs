@@ -381,6 +381,12 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
                 service(plan, t, svc)
             }
         },
+        // Milestone 258: a walk needs a workload that walks
+        GuestToken::Walk(_) if plan.walk => Ok(()),
+        GuestToken::Walk(_) => Err(format!(
+            "{t} is a walk through the pages, and this image's workload is not one (browser.explore \
+             in the manifest)"
+        )),
         GuestToken::Compose(_) => {
             if plan.composed() {
                 Ok(())

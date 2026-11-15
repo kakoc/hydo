@@ -197,6 +197,8 @@ pub fn validator_keys() -> Vec<(&'static str, Vec<&'static str>)> {
         ("Emulator", emulators::KNOWN.to_vec()),
         ("Browser", browser::KNOWN.to_vec()),
         ("BrowserWatch", browser::KNOWN_WATCH.to_vec()),
+        ("BrowserExplore", browser::KNOWN_EXPLORE.to_vec()),
+        ("BrowserSetupStep", browser::KNOWN_SETUP.to_vec()),
         ("Webhook", v::KNOWN_HOOK.to_vec()),
         ("Tls", v::KNOWN_TLS.to_vec()),
         ("HistoryCheck", v::known_check_all()),

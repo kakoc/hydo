@@ -71,6 +71,8 @@ pub const WP_SALT: u64 = 0x57A11C0FFEE57A11;
 pub const WP_DURS: [i64; 6] = [10, 20, 50, 100, 200, 500];
 /// The latest drawn pause start after its step's start, ms of guest time (`--pause-max`).
 pub const WP_MAX: i64 = 1000;
+/// The walks' own stream (`browser.explore`, Milestone 258).
+pub const WALK_SALT: u64 = 0x57A1_4B5E_EDC0_FFEE;
 /// The upgrades' own stream (`--upgrades`, Milestone 238).
 pub const UPGRADE_SALT: u64 = 0x0B6EADEC0FFEE0B6;
 /// The cluster faults' own stream (`--cluster-faults`, Milestone 195).
@@ -1538,7 +1540,36 @@ impl Ex {
         let s = self.add_preempt(s, seed);
         let s = self.add_buggify(s, seed);
         let s = self.add_turns(s, seed);
+        let s = self.add_walk(s, seed);
         self.add_compose(s, seed)
+    }
+
+    /// Whether the manifest's workload is a walk through its pages (`browser.explore`).
+    pub fn walks(&self) -> bool {
+        self.space
+            .as_ref()
+            .is_some_and(|sp| hydo_manifest::browser::walks(&sp.m))
+    }
+
+    /// The manifest's actions per step of a walk.
+    fn walk_actions(&self) -> u64 {
+        self.space
+            .as_ref()
+            .and_then(|sp| sp.m.get(hydo_manifest::browser::META))
+            .and_then(|b| b.get("explore"))
+            .and_then(|e| e.get("actions"))
+            .and_then(|a| a.as_u64())
+            .unwrap_or(10)
+    }
+
+    /// Milestone 258: for a manifest whose workload walks through its pages, every schedule
+    /// gets a walk of its own (I=<seed>), from its own stream (WALK_SALT), so every other field
+    /// of a seed's schedule stays as it was. A manifest without `browser.explore` draws nothing.
+    pub fn add_walk(&self, mut s: S, seed: u64) -> S {
+        if self.walks() {
+            s.i = Some(format!("{:x}", SplitMix::new(seed ^ WALK_SALT).next()));
+        }
+        s
     }
 
     pub fn durable_only(&self, mut s: S) -> S {
@@ -1680,6 +1711,9 @@ impl Ex {
         }
         for u in &s.u {
             g.push(format!("U={u}"));
+        }
+        if let Some(i) = &s.i {
+            g.push(format!("I={i}"));
         }
         format!(
             "disk={} dseed={:x}{}{}{} | {}",
@@ -1890,6 +1924,7 @@ impl Ex {
                     s.l = Some((svc.into(), pint(at)?, pint(down)?, strict));
                 }
                 "U" => s.u.push(v.to_string()),
+                "I" => s.i = Some(v.to_string()),
                 k if self.knob_tokens.iter().any(|t| t == k) => {
                     s.set_knob(k, KV::Str(v.to_string()))
                 }
@@ -2121,6 +2156,39 @@ impl Ex {
             var(&|t| t.cf = None);
             if cf > 1 {
                 var(&|t| t.cf = Some(fdiv(cf, 2)));
+            }
+        }
+        // Milestone 258: a walk shrinks by fewer actions in each step, and by leaving out the
+        // first action of a step that has more than one left; each action draws from its own
+        // stream, so the other actions choose as before
+        if let Some(i) = &s.i {
+            if let Ok(hydo_schedule::GuestToken::Walk(w)) =
+                hydo_schedule::GuestToken::parse(&format!("I={i}"))
+            {
+                let n = w.actions.unwrap_or_else(|| self.walk_actions());
+                let mut shorter: Vec<hydo_schedule::Walk> = Vec::new();
+                if n > 1 {
+                    for k in [n / 2, n - 1] {
+                        let mut x = w.clone();
+                        x.actions = Some(k);
+                        x.skip.retain(|(_, j)| *j < k);
+                        if !shorter.contains(&x) {
+                            shorter.push(x);
+                        }
+                    }
+                }
+                for st in 0..self.norders.max(0) as u64 {
+                    let kept: Vec<u64> = (0..n).filter(|k| w.takes(st, *k)).collect();
+                    if kept.len() > 1 {
+                        let mut x = w.clone();
+                        x.skip.insert((st, kept[0]));
+                        shorter.push(x);
+                    }
+                }
+                for x in shorter {
+                    let t = x.to_string();
+                    var(&|s2| s2.i = Some(t.clone()));
+                }
             }
         }
         // Milestone 238: an upgrade shrinks by going, by not rolling back, and (a rolling

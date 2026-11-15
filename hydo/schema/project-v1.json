@@ -3248,8 +3248,20 @@
       "type": "object",
       "properties": {
         "tests": {
-          "description": "The folder of the Playwright project, relative to the manifest: its playwright.config,\nits tests and its node_modules (run `npm ci` there first: the guest has no network). It is\ncopied to /opt/hydo/web/tests.",
-          "$ref": "#/$defs/Text"
+          "description": "The folder of the Playwright project, relative to the manifest: its playwright.config,\nits tests and its node_modules (run `npm ci` there first: the guest has no network). It is\ncopied to /opt/hydo/web/tests. Required unless `explore` is given.",
+          "$ref": "#/$defs/Text",
+          "default": ""
+        },
+        "explore": {
+          "description": "A walk through the pages that hydo makes itself, instead of tests (Milestone 258): the\nworkload is a seeded walk, named by the schedule token I=.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BrowserExplore"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "playwright": {
           "description": "The version of @playwright/test in the tests' node_modules; hydo pins the Playwright\nimage of that version (default and only pinned version: 1.65.1).",
@@ -3382,10 +3394,201 @@
           ]
         }
       },
+      "additionalProperties": false
+    },
+    "BrowserExplore": {
+      "description": "`browser.explore` (Milestone 258): hydo walks through the app's pages itself. Each workload\nstep is one part of the walk, in a fresh browser that keeps the cookies and the page of the\npart before; each action is drawn from the schedule's I= seed and the page's accessibility\ntree.",
+      "type": "object",
+      "properties": {
+        "start": {
+          "description": "The URL the walk starts on, as the browser in the guest reaches the app\n(http://<a service's address or localhost>:<port>/<path>).",
+          "$ref": "#/$defs/Text"
+        },
+        "server": {
+          "description": "A command line that starts the app's web server in the browser's service before each\nstep, as Playwright's webServer does (default none: a service serves the app).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "steps": {
+          "description": "Workload steps (default 4, at least 4): a fault can fall between two parts of the walk.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 4
+        },
+        "actions": {
+          "description": "Actions in each step (default 10); I=<seed>,n<k> takes k.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 10
+        },
+        "setup": {
+          "description": "Steps before the walk, such as signing in: each one of open, click (with role), fill\n(with with), press, see, wait. They run in the first step without a saved session.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/BrowserSetupStep"
+          }
+        },
+        "avoid": {
+          "description": "Regular expressions of control names the walk never uses (default: log out, sign out).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "within": {
+          "description": "The walk follows only links under this path prefix (default /).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "values": {
+          "description": "More texts the walk types into text fields, besides hydo's own edge values.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "settle_ms": {
+          "description": "The wait after each action, in milliseconds (default 700).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 700
+        },
+        "quiet_ms": {
+          "description": "The wait at the end of each step, before the browser closes, in milliseconds (default\n3000).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": 3000
+        }
+      },
       "additionalProperties": false,
       "required": [
-        "tests"
+        "start"
       ]
+    },
+    "BrowserSetupStep": {
+      "description": "One step of `browser.explore.setup`: one of open, click, fill, press, see or wait.",
+      "type": "object",
+      "properties": {
+        "open": {
+          "description": "Open this path (or URL).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "click": {
+          "description": "Click the button or link of this accessible name.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "description": "The ARIA role of the control that click names (default: a button or a link).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fill": {
+          "description": "Fill the field of this label or placeholder.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "with": {
+          "description": "What fill types.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "press": {
+          "description": "Press this key, such as Enter.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "see": {
+          "description": "Wait until this text is on the page.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "wait": {
+          "description": "Wait this many milliseconds.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false
     },
     "BrowserWatch": {
       "description": "What hydo watches in the pages of `browser:` (Milestone 253). An empty list turns its\ninvariant off.",
@@ -3447,6 +3650,17 @@
         },
         "requests": {
           "description": "Only the pages' fetch and XHR requests under this path prefix are judged (default all).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failures_of": {
+          "description": "A regular expression over a request's path: only a failed request that matches must be\nshown (default every judged request), for example the writes of an API whose reads run in\nthe background (Milestone 258).",
           "anyOf": [
             {
               "$ref": "#/$defs/Text"

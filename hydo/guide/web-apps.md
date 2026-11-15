@@ -80,6 +80,63 @@ retry would only hide it.
   error status, a slow answer, a lost answer after the effect. This is the setup of the
   `web-shop` example.
 
+## Let hydo walk through the pages
+
+Without Playwright tests, or to go where your tests do not, let hydo drive the pages itself.
+`browser.explore` replaces `browser.tests`:
+
+```yaml
+browser:
+  explore:
+    start: http://10.89.0.11:5230/   # the URL the walk starts on, as the guest's browser reaches it
+    steps: 6                   # workload steps: a fault can fall between two parts of the walk
+    actions: 12                # actions in each step
+    setup:                     # signs in once; the later steps keep the session
+      - {fill: Username, with: demo}
+      - {fill: Password, with: demo-pass-1}
+      - {click: Sign in}
+    avoid: ["log ?out", "^Delete account$"]   # control names the walk never uses
+  watch:
+    requests: /api/            # judge the API's requests only
+```
+
+Each step starts a fresh browser that keeps the cookies and the page of the step before. Each
+action reads the page's accessibility tree and does one of these:
+
+- click a link or a button, or click a button twice;
+- fill a field with an edge value: empty, 300 characters, Unicode, a negative number;
+- fill a field and click Save, or fill it and press Enter;
+- choose an option, go back, or reload. The schedule token `I=<seed>` chooses every action, so a walk is the same walk on every
+run of its schedule. `hydo explore` draws a new walk for every schedule and shrinks a failing one
+to fewer actions. The run prints each action:
+
+```text
+hydo-web: walk 0.7: click button "Place order"
+```
+
+The five properties below judge every page of the walk. For your app's own promises, write
+invariants over the backend's state. The walk writes each write that the server answered 2xx
+to `$HYDO_ACKED`: one word per resource name in the request or the answer, after the last part
+of the request's path. A write is a request that `watch.failures_of` matches, or without it any
+request that is not a GET. For example:
+
+```text
+CreateMemo:memos/T5k4x8o58vBLJfJSXPXNS4
+```
+
+A rule such as "every memo the server answered as saved is in the database" reads these words
+(the example `hydo/onboard/examples/memos`). The recovery boot after a power cut starts with
+them too.
+
+Every run leaves the walk as a Playwright test, `screens/repro.spec.ts` in the run directory.
+Run it against your own instance without hydo: `BASE_URL=http://localhost:5230 npx playwright
+test repro.spec.ts`. An `H=` fault on a fake's route is a `page.route` handler in it; a fault of
+the backend, such as a kill, is a comment at the step where hydo made it. At its end `hydo
+explore` runs each minimal schedule with a walk once more with `I=<seed>,rec`, into
+`replays/rec-<k>/`. That run also records a video and a Playwright trace of the walk's last
+step. For a walk of 4 steps, `npx playwright show-trace screens/walk-step-3.trace.zip` opens
+the trace. `hydo report --html` of that folder shows the video and the test.
+
 ## The properties
 
 Each one is an invariant named `<browser>.<property>`; an empty list in `watch:` turns it off.
@@ -89,7 +146,7 @@ Each one is an invariant named `<browser>.<property>`; an empty list in `watch:`
 | `browser.tests_pass` | a test fails (turn it off with `must_pass: false` when faults make the tests' own assertions fail by design) |
 | `browser.no_page_errors` | a page throws an uncaught exception, leaves a promise rejection unhandled, or calls `console.error` (`watch.console: false` leaves `console.error` out) |
 | `browser.busy_ends` | a busy element stays for `busy_max_ms` (default 10000), or is still on the screen when its test ends after a failed request that the page did not send again |
-| `browser.failures_shown` | a request fails (an answer of 500 or more, or no answer) and within `failures_within_ms` (default 5000) the page shows no error element and does not send the request again |
+| `browser.failures_shown` | a request fails (an answer of 500 or more, or no answer) and within `failures_within_ms` (default 5000) the page shows no error element and does not send the request again. With `watch.failures_of`, a regular expression over the path, only the requests it matches count. |
 | `browser.no_bad_text` | a page prints a watched text (default `NaN`, `undefined`, `[object Object]`, `Invalid Date`) |
 
 A finding reads like this:

@@ -1159,7 +1159,7 @@ fn screens_html(dir: &Path, run: &Run) -> String {
         .iter()
         .filter(|e| {
             let f = field(e, "file");
-            !f.is_empty() && !f.ends_with(".diff.png")
+            f.ends_with(".png") && !f.ends_with(".diff.png")
         })
         .map(|e| {
             let f = field(e, "file");
@@ -1233,6 +1233,66 @@ fn screens_html(dir: &Path, run: &Run) -> String {
             "<p class=\"muted\">{} more in {}.</p>\n",
             total - MAX_SCREENS,
             code("screens/")
+        ));
+    }
+    s
+}
+
+/// The largest video of a walk the page embeds.
+const MAX_VIDEO_BYTES: u64 = 8 * 1024 * 1024;
+
+/// The walk of `browser.explore` (Milestone 258), from `screens/` of the run directory: the walk
+/// as a Playwright test (`repro.spec.ts`), and with `I=...,rec` a video and a trace of each step.
+fn walk_html(dir: &Path) -> String {
+    let sd = dir.join("screens");
+    let mut s = String::new();
+    let mut names: Vec<String> = std::fs::read_dir(&sd)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    for f in names.iter().filter(|f| f.ends_with(".webm")) {
+        let p = sd.join(f);
+        let len = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(u64::MAX);
+        s.push_str(&format!(
+            "<p><b>{}</b></p>\n",
+            code(&format!("screens/{f}"))
+        ));
+        match std::fs::read(&p) {
+            Ok(b) if len <= MAX_VIDEO_BYTES => s.push_str(&format!(
+                "<video controls muted style=\"display:block;max-width:100%;border:1px solid var(--line);border-radius:6px;margin:6px 0\" src=\"data:video/webm;base64,{}\"></video>\n",
+                base64(&b)
+            )),
+            _ => s.push_str("<p class=\"muted\">Too large to show here; open the file.</p>\n"),
+        }
+    }
+    let traces: Vec<&String> = names.iter().filter(|f| f.ends_with(".trace.zip")).collect();
+    if !traces.is_empty() {
+        let cmds: Vec<String> = traces
+            .iter()
+            .map(|f| code(&format!("npx playwright show-trace screens/{f}")))
+            .collect();
+        s.push_str(&format!(
+            "<p>Step through each part of the walk, with the page's DOM and its requests at every action: {}</p>\n",
+            cmds.join(", ")
+        ));
+    }
+    if let Ok(t) = std::fs::read_to_string(sd.join("repro.spec.ts")) {
+        let lines: Vec<&str> = t.lines().collect();
+        let shown: String = lines
+            .iter()
+            .take(300)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        s.push_str(&format!(
+            "<p>The walk as a Playwright test that runs without hydo against your own instance ({}). Faults on the page's own requests are <code>page.route</code> handlers; a fault of the backend is a comment at the step where hydo injected it.</p>\n<details><summary>{}</summary>\n<pre>{}</pre>\n</details>\n",
+            code("screens/repro.spec.ts"),
+            esc(&format!("repro.spec.ts, {} lines", lines.len())),
+            esc(&shown)
         ));
     }
     s
@@ -1376,6 +1436,12 @@ fn run_page(
     if !shots.is_empty() {
         body.push_str(&h2("screens", "What the pages showed"));
         body.push_str(&shots);
+    }
+    // browser.explore (Milestone 258): the walk itself, as a video, a trace and a test
+    let walk = walk_html(dir);
+    if !walk.is_empty() {
+        body.push_str(&h2("walk", "The walk"));
+        body.push_str(&walk);
     }
     // see it again
     body.push_str(&h2("again", "See it again"));

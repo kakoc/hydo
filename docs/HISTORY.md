@@ -11574,3 +11574,148 @@ corpus passed unchanged. The documents: the example's RESULTS.md section "Contra
 
 **Open** (AGENTS.md open item 113): the 30 more blind schedules on the buggy build and 20 on the
 fixed build that the disk did not allow; floats, maps and a `show` line in the language.
+
+### Milestone 258 (tentative number) - DONE (hydo walks through a web app's pages itself: `browser.explore` replaces a team's Playwright tests with a seeded walk that the schedule token `I=` names, the explorer draws a walk for every schedule and shrinks a failing one, every run leaves the walk as a Playwright test, and a recording replay adds a video and a trace; on hvx the web-shop example without tests had both planted bugs found blind; Memos 26.11.0 onboarded and explored through its pages; nothing recorded moved; 2026-11-15)
+
+The user asked for hydo to explore a web frontend as it explores backends: hydo drives the UI
+itself, with no Playwright tests written by the project, while it injects faults into the
+backend. Open item 51 named the missing piece, a hydo-native list of steps for teams without
+tests. The design, with the prior work it draws on, is `docs/design/ui-exploration.md`; the
+how-to is the section "Let hydo walk through the pages" of `hydo guide web-apps`; the reference
+is the section "A walk through the pages that hydo makes" of `hydo/onboard/MANIFEST.md`.
+
+**What is built.**
+
+- `browser.explore` (a format-1 addition; `browser.tests` becomes optional, and the two are
+  refused together). Its keys are `start`, `server`, `steps` (default 4, at least 4), `actions`
+  (default 10), `setup`, `avoid`, `within`, `values`, `settle_ms` and `quiet_ms`. The expansion
+  writes an ordinary workload, not a test program: step i runs `node walk.mjs <i> "$HYDO_WALK"
+  "$HYDO_GUEST" "$HYDO_ACKED"` in the browser's service. `must_pass` defaults to false.
+- The walker, `hydo-manifest/src/browser/walk.mjs`, drives Chromium with playwright-core 1.65.1.
+  `hydo build` fetches that npm package by its pinned sha256 (`browser::CORES`) and unpacks it
+  into `browser/playwright-core-1.65.1/` with fixed modes (`hydo_compose::registry::
+  fetch_npm_package`). The watcher `hook.cjs` is loaded into the walker as into a test run: a
+  stand-in `@playwright/test` (`walk-test-stub.cjs`) gives it the step as the test's title. A
+  manifest without `explore:` builds an image with the files of Milestone 254, but for two
+  changes of the watcher that every `browser:` image gets (below).
+- Each action reads the page's `ariaSnapshot` and does one of: click, fill a field with an edge
+  value by its type, fill and click the button that commits it, fill and press Enter, click a
+  button twice within 300 ms, choose an option, go back, reload, open the start page, or wait.
+  The control is chosen by family (role, and name with every number as `#`), preferring the
+  families the walk used least three times in four, then by rendezvous hashing. Each action
+  draws from its own stream `(seed, step, k)`.
+- The schedule token `I=<seed>[,n<actions>][,x<step>.<k>]...[,rec]` (`hydo_schedule::Walk`; the
+  letter `I` is reserved now, and no manifest used it as a knob). The controller passes its value
+  as `$HYDO_WALK` only for a walking plan, and a walk is no fault. `hydo explore` draws `I=` for
+  every schedule of a walking manifest from its own stream (`WALK_SALT`), so the other fields of
+  a seed's schedule do not change. The shrinker tries half and one less of the actions per step,
+  and leaving out the first action of each step.
+- The walk records the server's acknowledged writes (2xx answers to requests that
+  `watch.failures_of` matches, or that are not a GET) as words `<the path's last part>:<resource
+  name>` in `$HYDO_ACKED`, and with their text in `/tmp/hydo/web/walk/acks.jsonl`, for a
+  project's own rules. The first version wrote one line per write, and the controller, which
+  carries the file across a power cut as a list of words, gave the recovery boot words that the
+  rule did not read: 19 of the 40 schedules of the second Memos exploration had a power cut, and
+  their saved memos were not judged.
+- Evidence: every run writes `repro.spec.ts` (the walk as Playwright code with the walker's own
+  locators, `H=` faults on a fake's routes as `page.route` handlers, other faults as comments,
+  and an assertion that the page threw nothing). With `,rec` the walker records a 640 by 360
+  video and a trace of the last step. The files leave the guest as the screenshots
+  of Milestone 254 do. At its end `hydo explore` replays each minimal walk with `,rec` into
+  `replays/rec-<k>/` (`delegated::walk_replays`) and says whether that run kept the verdict.
+  `hydo report --html` of a run shows the videos, the trace commands and the test.
+- `hydo rules check` runs `disk=none | run I=<n>` for n = 1..`--runs` on a walking image.
+- Two changes of the watcher that every `browser:` image gets: `watch.failures_of` (a format-1
+  addition, a regular expression over a request's path that narrows the failures that must be
+  shown; without it `HYDO_WEB_WATCH` is as before), and `hook.cjs` ignores Chromium's
+  "ResizeObserver loop completed with undelivered notifications" error events, which carry no
+  error object (Memos's archive page raised one under a network fault).
+- `HYDO_WEB_WALK`, `HYDO_WALK` and `HYDO_GUEST` are in `hydo-config`'s registry.
+
+**On this Mac, before the VMs.** The walker ran against the web-shop app and a local stand-in
+for its fake API (Node.js 24.16.0, Playwright's headless Chromium) and against Memos 26.11.0 in
+Docker. With the stand-in dropping the first order answer, a walk of seed 2 placed one cart's
+order twice; with the order read answering 500 once, the order page left its rejection
+unhandled. These runs showed that the walk needed the family of a control (Memos's calendar has
+30 day buttons) and a commit action (Memos enables Save only after the editor has text).
+
+**The web-shop example without its tests (hvx).** `hydo-walk.yaml` is web-shop's app and fake
+with `browser.explore` (4 steps of 10 actions) and no test. The details are in the section "The
+walk of Milestone 258" of its RESULTS.md.
+
+- `disk=none | run I=2` gave one fingerprint twice, OK.
+- `hydo explore --seeds 1-20 --protocol-faults --workers 1` found both planted bugs blind in 40
+  minutes: the order page's unhandled rejection and stuck spinner (seed 7, shrunk from 40
+  actions to 5, `H=api.get_order@3-4:reset I=a0d28305209409f6,n2,x0.0,x1.0,x2.0`), and the
+  double order (seeds 8, 12 and 17). Each failure reproduced, and each minimal schedule gave one
+  fingerprint on both confirmation runs. No clean run was vacuous.
+- The minimal walk's `repro.spec.ts`, run with Playwright on this Mac against the app and the
+  stand-in, without hydo, fails on the buggy build ("uncaught exceptions and unhandled
+  rejections in the page") and passes on the fixed one.
+- The first recording replays recorded every step and ended `TIMEOUT check` while the
+  controller copied 340 KB to 600 KB out of the guest; the check phase ended after about 386
+  reads of 1.5 KB. Only the last step is recorded now.
+
+- On an image of this milestone's final code the same exploration found the same 4 failures
+  (seeds 7, 8, 12 and 17), each reproduced, in 24 minutes. Seed 7 shrank to the same 5-action
+  walk (`9cd5aa4edbe5c332` twice), seed 12 to the same schedule (`8b73b00d7084c42f` twice), and
+  seed 8 to `H=api.place_order@2-4:reset,p=50 I=7e1f0a19d3e49979,n8,x0.0,x0.1,x0.2`
+  (`e2257adfecbf4a4a` twice). The three recording replays at the exploration's end each kept
+  their verdict and left the walk's test, the last step's video and its trace in
+  `replays/rec-<k>/screens/`.
+
+**Goldens, tests and what moved.** Nothing recorded moved: a manifest without `browser.explore`
+and without `watch.failures_of` expands as before, but for `hook.cjs`, whose ResizeObserver
+filter changes the bytes of every `browser:` image (the web-shop example, which is not in
+`recorded.json`). Re-recorded for the two new example manifests: the explorer's identity
+goldens (quick and full) and corpus golden, and the core controller's corpus golden, on the
+bare-metal machine in a copy of the tree with its own index; the CLI's two `guide manifest`
+answers (MANIFEST.md changed); `hydo/schema/project-v1.json` (the format-1 additions; `tests`
+keeps its type and is no longer required, which the additions-only check accepts); and
+`INVENTORY.md`. New tests: `hydo-schedule::walk`, `hydo-explore::walks`, and unit tests of the
+expansion (`browser::tests`) and of the report page (`htmlreport::tests`).
+
+**Checks** (on `main` at `33f88f73` with this milestone on top). On the bare-metal machine, in a
+copy of the tree with its own index: `cargo fmt --all --check`; `cargo clippy -D warnings
+--all-targets` on `hydo-schedule`, `hydo-manifest`, `hydo-control`, `hydo-explore`,
+`hydo-compose`, `hydo` and `hydo-config`; every test of `hydo-schedule`, `hydo-explore` (also
+`identity` and `corpus` with `HYDO_IDENT_FULL=1`), `hydo-config`, `hydo-control` (the corpus
+too), `hydo-schema-compat`, the `hydo` program's unit tests, and `hydo-release`'s
+`test_tiers::`. `hydo-manifest`'s `equivalence::` failed there as open item 115 says, and
+`hydo`'s `cli_matches_golden` differed only in `build <stack> --check`, whose answer names the
+host's `/nix/store`. On this Mac: `hydo-manifest` (every test), `hydo-agents`'s
+`public_content::`, `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.
+
+**Memos 26.11.0 (hvx).** The candidates weighed were Vikunja, Memos, Actual Budget, Linkding,
+Docmost and Excalidraw. Memos was chosen: about 64,000 stars, one Go server with its React
+frontend built in and SQLite by default, one Docker image, and notes whose loss a user notices.
+`hydo compose` of the documented Compose file started `hydo/onboard/examples/memos/hydo/`; the
+workload became `browser.explore` (6 steps of 12 actions, the administrator's sign-up as
+`setup`), and the project's rule `memos.saved_memos_survive` reads the walk's acknowledged
+`CreateMemo` words and the database (with `node:sqlite` in the browser's service). The example's
+RESULTS.md has every run and the duplicate searches.
+
+- The first explorations stopped on false findings of hydo's, each fixed here: background reads
+  under disk errors (`watch.failures_of`), a ResizeObserver error event, page checks in a
+  recovery boot, a torn copy of the live database, and the line format of `$HYDO_ACKED`. A first
+  `failures_of` matched no path, so 60 schedules judged no write; nothing warned (open item 124).
+- Seeds 1-20 over all pages: no failure, but most actions went to the calendar, the saved views
+  and the filters. `avoid:` then kept the walk on the memos.
+- Seeds 21-60 with `--new-faults --durable-only`: 14 kills, 19 network faults, 16 pauses, 10
+  clock steps and 19 power cuts, in 42 minutes. 85 saved memos, all in the database at the end.
+  One failure, reproduced: finding 1.
+- Finding 1 (new candidate): over plain HTTP from another host, a share link's copy button
+  leaves a promise rejection unhandled (`navigator.clipboard` is undefined outside a secure
+  context), copies nothing and says nothing. `MemoSharePanel.tsx` calls
+  `navigator.clipboard.writeText` without a check; the rest of Memos uses `copy-to-clipboard`.
+  Seed 46, `disk=none dseed=baee56f32e223007 | run T=1:-2592000 I=fc8214f2a80db679`,
+  `0d4aeb5af21bf82a` twice. The shrinker kept the schedule: the clock step changes the page's
+  names and so the walk, and the finding's message holds the memo's random id.
+- Finding 2 (new candidate, small): a reaction whose save fails disappears without a message
+  (`catch { // skip error }`); nothing is lost. Found in seed 1 of the first exploration under a
+  disk I/O error, and confirmed by a timed kill at the reaction: `X=memos@1~10500` on seed 33's
+  walk, `2c94d41aa3e49398`.
+- With a disk that drops acknowledged writes (`disk=lying:3 ... C=4`), the rule reported 3 of 3
+  saved memos lost: the disk's loss, which `--durable-only` leaves out.
+- Both candidates are plain in the code, so no reproduction without hydo was made. Nothing was
+  posted upstream.

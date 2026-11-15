@@ -66,7 +66,12 @@ function pageScript(w) {
       return String(x);
     }
   };
-  addEventListener('error', (e) => send({ kind: 'error', what: 'exception', message: e.error ? brief(e.error) : String(e.message) }));
+  addEventListener('error', (e) => {
+    // Chromium reports a ResizeObserver whose callbacks changed the layout again as an error
+    // event without an error object; no code threw, and the page goes on (Milestone 258: Memos)
+    if (!e.error && /^ResizeObserver loop/.test(String(e.message))) return;
+    send({ kind: 'error', what: 'exception', message: e.error ? brief(e.error) : String(e.message) });
+  });
   addEventListener('unhandledrejection', (e) => send({ kind: 'error', what: 'rejection', message: brief(e.reason) }));
   if (w.console !== false) {
     const original = console.error;

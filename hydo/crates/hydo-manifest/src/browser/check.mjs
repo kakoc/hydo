@@ -29,7 +29,17 @@ import path from 'node:path';
 const dir = process.env.HYDO_WEB_DIR || '/tmp/hydo/web';
 const [rule, msArg] = process.argv.slice(2);
 const limit = Number(msArg || 0);
+// browser.watch.failures_of (Milestone 258): only these requests must show their failure
+const watchCfg = JSON.parse(process.env.HYDO_WEB_WATCH || '{}');
+const failuresOf = watchCfg.failures_of ? new RegExp(watchCfg.failures_of) : null;
 
+// The workload makes this folder before its first step. A recovery boot after a power cut runs
+// no workload, and the guest's /tmp starts empty: the pages of the first boot were judged there
+// (Milestone 258).
+if (!fs.existsSync(dir)) {
+  console.log('no page ran in this boot (a recovery boot after a power cut runs no workload)');
+  process.exit(0);
+}
 let lines = [];
 try {
   lines = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean);
@@ -148,7 +158,7 @@ if (rule === 'tests') {
   const found = [];
   for (const list of byPage.values()) {
     const close = closeOf(list);
-    for (const f of failures(list)) {
+    for (const f of failures(list).filter((x) => !failuresOf || failuresOf.test(x.path))) {
       const end = Math.min(f.t + limit, close ? close.t : Infinity);
       const before = list.filter((a) => a.kind === 'alert' && a.t < f.t).pop();
       const shown = (before && before.on) || list.some((a) => a.kind === 'alert' && a.on && a.t >= f.t && a.t <= end);

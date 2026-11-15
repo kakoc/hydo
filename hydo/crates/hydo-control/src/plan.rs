@@ -265,6 +265,9 @@ pub struct Plan {
     /// `browser:` (Milestone 254): the guest folder whose screenshots the controller copies out
     /// after the verdict (schedule/screens.rs); None without `browser:`.
     pub screens: Option<String>,
+    /// `browser.explore` (Milestone 258): the workload is a walk, which gets the schedule's
+    /// I= value as `$HYDO_WALK` and the schedule's guest part as `$HYDO_GUEST`.
+    pub walk: bool,
 }
 
 /// `perf:` (Milestone 237, schedule/perf.rs).
@@ -679,6 +682,7 @@ impl Plan {
             cost: 0,
             perf: PlanPerf::of(d),
             screens: hydo_manifest::browser::screens_dir(d),
+            walk: hydo_manifest::browser::walks(d),
             invariants,
             knobs,
             buggify: m.buggify,

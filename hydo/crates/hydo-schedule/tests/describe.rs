@@ -197,6 +197,8 @@ fn every_token_has_plain_words() {
         "U=redis@5:7.2",
         "U=nodes.all@4/3+10:3.6.0-rc.2",
         "U=n1,n2@4:v2",
+        "I=9f3a01c2",
+        "I=1,n4,x0.2,rec",
         "R=everysec",
         "R=always",
         "M=2",

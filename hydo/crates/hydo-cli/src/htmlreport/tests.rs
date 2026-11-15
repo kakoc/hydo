@@ -417,6 +417,46 @@ fn a_browser_run_shows_its_screenshots_next_to_the_finding() {
 }
 
 #[test]
+fn a_walk_shows_its_video_its_trace_and_its_test() {
+    let run = Run::new(
+        "disk=none | run H=api.place_order@0-1:drop I=2,rec",
+        hydo_results::Verdict {
+            kind: "violation".into(),
+            text: "HYDO-ORACLE: VIOLATION [api.order_placed_once] took effect 2 times".into(),
+            ..Default::default()
+        },
+        "0123456789abcdef",
+    );
+    let d = std::env::temp_dir().join(format!("hydo-htmlreport-walk-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("screens")).unwrap();
+    hydo_results::write_document(&d.join(hydo_results::RUN_DOC), &run).unwrap();
+    std::fs::write(d.join("screens/walk-step-0.webm"), [0x1a, 0x45, 0xdf, 0xa3]).unwrap();
+    std::fs::write(d.join("screens/walk-step-0.trace.zip"), b"PK").unwrap();
+    std::fs::write(
+        d.join("screens/repro.spec.ts"),
+        "test(\"hydo walk 2\", async ({ page }) => {\n  await page.getByRole(\"button\", { name: \"Place <order>\", exact: true }).nth(0).click();\n});\n",
+    )
+    .unwrap();
+    std::fs::write(
+        d.join("screens/index.jsonl"),
+        "{\"file\":\"repro.spec.ts\",\"test\":\"walk step 0\",\"url\":\"\",\"why\":\"the walk as a Playwright test\"}\n\
+         {\"file\":\"walk-step-0.webm\",\"test\":\"walk step 0\",\"url\":\"\",\"why\":\"the video of the walk\"}\n",
+    )
+    .unwrap();
+    let html = page_of(&d, "d", None);
+    let _ = std::fs::remove_dir_all(&d);
+    let s = &html[html.find("The walk").expect("the walk's section")..];
+    assert!(s.contains("src=\"data:video/webm;base64,GkXfow==\""), "{s}");
+    assert!(s.contains("npx playwright show-trace screens/walk-step-0.trace.zip"));
+    assert!(s.contains("repro.spec.ts, 3 lines"));
+    assert!(s.contains("Place &lt;order&gt;"));
+    // the files that are not screenshots are not shown as screenshots
+    assert!(!html.contains("What the pages showed"));
+    assert_eq!(html.matches("<img ").count(), 0);
+}
+
+#[test]
 fn how_a_neighbour_was_made() {
     let a = "disk=cut | run C=12 R=everysec";
     assert_eq!(

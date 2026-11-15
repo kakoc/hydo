@@ -592,6 +592,13 @@ variables! {
     /// alert selectors, texts, console, the request prefix, and `screens`, which pages get a
     /// screenshot, since Milestone 254).
     HYDO_WEB_WATCH: Guest, Guest, "JSON", "", "set by browser:'s service; read by its hook.cjs";
+    /// With `browser.explore` (Milestone 258): the walker's settings (JSON: the start page, the
+    /// actions per step, the setup steps, the controls to avoid, the fakes' routes).
+    HYDO_WEB_WALK: Guest, Guest, "JSON", "", "set by browser:'s service; read by its walk.mjs";
+    /// With `browser.explore` (Milestone 258): the schedule's `I=` value, the walk.
+    HYDO_WALK: Guest, Guest, "text", "", "set by hydo-control; read by browser.explore's workload";
+    /// With `browser.explore` (Milestone 258): the schedule's guest part, for repro.spec.ts.
+    HYDO_GUEST: Guest, Guest, "text", "", "set by hydo-control; read by browser.explore's workload";
     /// A knob's value.
     HYDO_VALUE: Guest, Guest, "text", "", "set by hydo-control";
     /// A composed command's id.

@@ -42,7 +42,8 @@ pub const HELP: &str = "usage: hydo rules scan [DIR] [--kind K] [--json] [--max 
   each with its rank).
   check: validates candidate rules (format: hydo guide rules). It runs the image's workload
   without faults, `disk=none | run W=<seed>` for the seeds 00000001..N (--runs, default 3; one run of
-  `disk=none | run` for an image without composed commands, or --schedule S), with every
+  `disk=none | run` for an image without composed commands, `disk=none | run I=<seed>` for a walk
+  through the pages, or --schedule S), with every
   candidate as a final check and without the project's own checks (--keep-checks keeps them).
   Each rule is reported as:
     holds        it held in every run and judged at least one case
@@ -791,6 +792,8 @@ fn cmd_check(ctx: &Ctx, argv: &[String]) -> i32 {
     };
     let layout = plan.as_ref().map(|p| p.layout.clone()).unwrap_or_default();
     let composed = plan.as_ref().map(|p| p.composed()).unwrap_or(true);
+    // browser.explore (Milestone 258): the runs without faults are walks, one seed each
+    let walks = plan.as_ref().is_some_and(|p| p.walk);
     let needs_store = cands
         .iter()
         .any(|c| c.kind == "sql" && c.store.is_none() && default_store.is_none());
@@ -821,6 +824,9 @@ fn cmd_check(ctx: &Ctx, argv: &[String]) -> i32 {
         Some(s) => vec![s.clone()],
         None if composed => (1..=runs)
             .map(|n| format!("disk=none | run W={n:08x}"))
+            .collect(),
+        None if walks => (1..=runs)
+            .map(|n| format!("disk=none | run I={n:x}"))
             .collect(),
         None => vec!["disk=none | run".to_string()],
     };

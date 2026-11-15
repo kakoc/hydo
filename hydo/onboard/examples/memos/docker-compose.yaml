@@ -1,0 +1,9 @@
+# Memos as its documentation runs it with Docker (https://usememos.com/docs/installation/docker):
+# one container, the frontend built in, SQLite in the data volume.
+services:
+  memos:
+    image: neosmemo/memos:26.11.0
+    ports:
+      - "5230:5230"
+    volumes:
+      - ./memos-data:/var/opt/memos

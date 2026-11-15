@@ -98,6 +98,7 @@ hydo-explore::refusals                   fast
 hydo-explore::route_errors               fast
 hydo-explore::storage_faults             fast
 hydo-explore::upgrades                   fast
+hydo-explore::walks                      fast
 hydo-explore::workload_pauses            fast
 hydo-grpc                                fast
 hydo-grpc-gen                            fast
@@ -142,6 +143,7 @@ hydo-results::reader                     fast
 hydo-results::schema                     fast
 hydo-schedule::describe                  fast
 hydo-schedule::language                  fast
+hydo-schedule::walk                      fast
 hydo-schema-compat::real_schemas         fast
 hydo-schema-compat::rules                fast
 hydo-tools                               fast

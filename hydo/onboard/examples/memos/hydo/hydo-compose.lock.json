@@ -1,0 +1,71 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "neosmemo/memos:26.11.0": {
+   "index_digest": "sha256:087e7dc6b76b31fcd1107a5767398b2a310ced209adb791efd8760c745dc8034",
+   "name": "neosmemo/memos",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/usr/local/memos/entrypoint.sh",
+       "/usr/local/memos/memos"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "TZ=UTC",
+       "MEMOS_PORT=5230"
+      ],
+      "ExposedPorts": {
+       "5230/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "root",
+      "Volumes": {
+       "/var/opt/memos": {}
+      },
+      "WorkingDir": "/var/opt/memos"
+     },
+     "digest": "sha256:7e8ca9de6504be7ea724793c1b7f1d1540cc1513aad1877aa3e141061013345a",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/usr/local/memos/entrypoint.sh",
+       "/usr/local/memos/memos"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "TZ=UTC",
+       "MEMOS_PORT=5230"
+      ],
+      "ExposedPorts": {
+       "5230/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "root",
+      "Volumes": {
+       "/var/opt/memos": {}
+      },
+      "WorkingDir": "/var/opt/memos"
+     },
+     "digest": "sha256:e6a083a1d6e9de2a41c889414a3299872328ee8e146b9c29e980cd7d1b6df1d5",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "neosmemo/memos:26.11.0",
+   "registry": "docker.io",
+   "repo": "neosmemo/memos",
+   "tag": "26.11.0"
+  }
+ }
+}

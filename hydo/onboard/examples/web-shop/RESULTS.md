@@ -11,6 +11,8 @@ This page records the runs that proved `browser:` (Milestone 253). The design is
 | `e2e/` | The shop's Playwright tests (`@playwright/test` 1.65.1): three tests in two files, and an ordinary `playwright.config.ts` with a `webServer`. |
 | `hydo.yaml` | `browser:` with the tests, a fake `api` with four routes, and one check over the fake's record. |
 | `build.sh` | `npm ci` in `app/` and `e2e/`, and both builds of the app. |
+| `hydo-walk.yaml` | The same app and fake with `browser.explore`: hydo walks through the pages, and no test runs (Milestone 258). |
+| `walk-repro/` | The minimal walk of the stuck order page as a Playwright test, as hydo wrote it. |
 
 The variant `buggy` (`--set variant=buggy`) has two planted bugs:
 
@@ -239,3 +241,85 @@ Some runs first stopped in the guest kernel's early boot with `SPIN`, before the
 (13 of 85, on Intel and on AMD). `hydo run` ran each again in the engine's rewind mode, and 10
 of them then ended with the schedule's fingerprint. The cause is not found; docs/HISTORY.md
 Milestone 254 has the details.
+
+## The walk of Milestone 258: no test, both planted bugs found blind
+
+`hydo-walk.yaml` is the same app and the same fake API with `browser.explore` in place of the
+tests: hydo walks through the pages itself (docs/design/ui-exploration.md). No Playwright test
+runs. Each of 4 workload steps takes 10 actions, drawn from the schedule's `I=` seed and the
+page's accessibility tree. The image is the buggy variant, built by `hydo build hydo-walk.yaml
+--set variant=buggy` on the bare-metal machine, and every run used hvx.
+
+**One walk, one run.** `disk=none | run I=2` gave `941a176ff3a25e7c` twice: OK, 5 invariants
+held, and the fake took 3 orders, each once. The walk opened the shop, added three products,
+went back, reloaded, opened the cart and placed the order in step 0, and went on. The run took
+65 s of wall time.
+
+**The double order, directed.** With the same walk, `disk=none | run I=2
+H=api.place_order@0-1:drop` loses the answer to the order of step 0 (`a99fbffc163e2f50`):
+
+```text
+VIOLATION [api.order_placed_once] api.place_order: ref cart-1767225603742-441263 took effect 3
+times (records 6,9,19)
+```
+
+**Both bugs, blind.** `hydo explore --seeds 1-20 --protocol-faults --workers 1` drew `H=` tokens
+on the fake's four routes and a walk for every schedule. It ran 20 schedules in 40 minutes of
+wall time (a mean of 19.2 s per run), and 4 failed. Each reproduced, and each was shrunk:
+
+| seed | minimal schedule | verdict | fingerprint, two runs | shrink runs |
+|---|---|---|---|---|
+| 7 | `disk=none dseed=63cbe1e459320dd7 \| run H=api.get_order@3-4:reset I=a0d28305209409f6,n2,x0.0,x1.0,x2.0` | VIOLATION `browser.no_page_errors`: "The page /orders/o7 left a promise rejection unhandled during the test "walk step 3": HttpError: HTTP 502 for /api/orders/o7" | `2eb637951be51766` | 32 |
+| 8 | `disk=none dseed=9e5651b0ef953636 \| run H=api.place_order@2-4:reset I=7e1f0a19d3e49979,x0.0,x0.1,x1.0` | VIOLATION `api.order_placed_once`: one cart took effect 4 times | `3185435799cf68dc` | 44 |
+| 12 | `disk=none dseed=943ff9fc99de8f03 \| run H=api.place_order@2-3:reset,p=50 H=api.products@2-3:status=500,effect=yes,p=25 I=93667175d6c2e640,n4,x0.0,x0.1` | VIOLATION `api.order_placed_once`: 2 times | `0ae952a0e752ca29` | 44 |
+| 17 | `disk=none dseed=808475f02ee37363 \| run H=api.place_order@2-3:reset I=37ce1f8dfefa7c4b,n4,x1.0,x2.0` | VIOLATION `api.order_placed_once`: 3 times | `06d6731eb67a2008` | 40 |
+
+Seed 7 is the order page's planted bug: the walk added a product, opened the cart and placed the
+order while the order read's connection was reset. Its run also failed `browser.busy_ends` and
+`browser.failures_shown`: the spinner stayed with no error on the screen. Seeds 8, 12 and 17 are
+the planted double order: the walk placed an order while `place_order`'s connection was reset,
+and the client sent the order again without a key. The shrinker cut seed 7's walk from 40
+actions to 5. None of the 16 clean runs was vacuous: each passing step of a walk counts as
+acknowledged work.
+
+**Images of later code.** The exploration above ran on an image built before the last changes
+to the walker: the recording, the format of the acknowledged writes, the size bound and the
+place of a clock step's comment in `repro.spec.ts`. An image of later code has other bytes, so
+other fingerprints, and its runs take other times.
+
+- On an image of the code before the last two of those changes, each minimal schedule ran twice
+  with one fingerprint: seeds 7, 8 and 12 failed as found (`d80d86bf54f21525`,
+  `d1a958789ad8faab`, `e916d9b6a70fd4ac`), and seed 17 passed (`fabc1311c86bba62`): its walk now
+  places the order where the reset of `place_order` does not catch it. A timing-sensitive
+  finding depends on its image's bytes, as Milestone 221 saw for `hydo versions`.
+- On an image of this milestone's final code: seed 7 gave `9cd5aa4edbe5c332` twice, with the
+  same sentence; seed 8 gave `d5559e9f96a59f8b` twice, one cart ordered 4 times; and `disk=none
+  | run I=2` gave `013f27dc85f842ce` twice, OK. The exploration of this image is below.
+
+**The evidence of a failing walk.** On the image before the last two changes, each minimal
+schedule ran once more with `,rec`; on the final image seed 7's did (`8bea8ca7eefc5cc3`). Each
+kept its verdict, and each run's `screens/` had the walk as `repro.spec.ts`, the video of the last
+step (`walk-step-3.webm`, 29,508 bytes for seed 7) and its Playwright trace
+(`walk-step-3.trace.zip`, 7,386 bytes). `hydo report --html` of seed 7's recording run shows the
+video under "The walk", with the trace's command and the test.
+
+**The walk as a test, without hydo.** Every run leaves `screens/repro.spec.ts`. The one of seed
+7's minimal schedule is `walk-repro/stuck-order-page.spec.ts`: 5 actions, with the reset of the
+order read as a `page.route` handler in step 3. On this Mac, against `app/serve.mjs` and a local
+stand-in for the fake API, Playwright 1.65.1 ran it: it failed on the buggy build ("uncaught
+exceptions and unhandled rejections in the page") and passed on the fixed one. Without hydo the
+reset reaches the page as `Failed to fetch`, where hydo's reset made `serve.mjs` answer 502.
+
+**The exploration of the final image.** The same `hydo explore --seeds 1-20 --protocol-faults
+--workers 1` on the image of this milestone's final code took 24 minutes (a mean of 19.1 s per
+run) and found the same 4 failures, seeds 7, 8, 12 and 17, each reproduced:
+
+| seed | minimal schedule | fingerprint, two runs |
+|---|---|---|
+| 7 | `disk=none dseed=63cbe1e459320dd7 \| run H=api.get_order@3-4:reset I=a0d28305209409f6,n2,x0.0,x1.0,x2.0` | `9cd5aa4edbe5c332` |
+| 8 (and 17) | `disk=none dseed=9e5651b0ef953636 \| run H=api.place_order@2-4:reset,p=50 I=7e1f0a19d3e49979,n8,x0.0,x0.1,x0.2` | `e2257adfecbf4a4a` |
+| 12 | `disk=none dseed=943ff9fc99de8f03 \| run H=api.place_order@2-3:reset,p=50 H=api.products@2-3:status=500,effect=yes,p=25 I=93667175d6c2e640,n4,x0.0,x0.1` | `8b73b00d7084c42f` |
+
+Seeds 8 and 17 had one signature, so one shrink. At its end `hydo explore` replayed the three
+minimal walks with `,rec`; each kept its verdict, and each `replays/rec-<k>/screens/` held the
+walk's test, the last step's video and its trace.

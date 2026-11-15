@@ -604,6 +604,88 @@ pub fn fetch_image(r: &str, digest: &str, tag: &str, out: &str) -> Result<(), St
     Ok(())
 }
 
+/// Milestone 258: an npm package's tarball (`url`), checked against its pinned sha256 and
+/// unpacked into the folder `out` (see [`unpack_npm`]). A folder that is there already is kept.
+pub fn fetch_npm_package(url: &str, sha256: &str, out: &Path) -> Result<(), String> {
+    if out.is_dir() {
+        return Ok(());
+    }
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .timeout_global(Some(std::time::Duration::from_secs(600)))
+        .build()
+        .into();
+    let r = agent.get(url).call().map_err(|e| format!("{url}: {e}"))?;
+    if r.status().as_u16() != 200 {
+        return Err(format!("{url}: HTTP {}", r.status().as_u16()));
+    }
+    let body = Http::read_all(r, url)?;
+    let got = sha256_hex(&body);
+    if got != sha256 {
+        return Err(format!(
+            "{url}: sha256 {got}, and this hydo pins {sha256}; nothing was unpacked"
+        ));
+    }
+    unpack_npm(&body, out).map_err(|e| format!("{url}: {e}"))
+}
+
+/// An npm tarball's `package/` folder into the folder `out`. Files get the mode 0644, or 0755
+/// when the tarball marks them executable, and folders 0755, so that the folder is the same
+/// whatever the umask: an image's bytes depend on the modes (open item 78).
+pub fn unpack_npm(tgz: &[u8], out: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    let part = out.with_extension("part");
+    let _ = std::fs::remove_dir_all(&part);
+    std::fs::create_dir_all(&part).map_err(|e| format!("{}: {e}", part.display()))?;
+    let mut ar = tar::Archive::new(flate2::read::GzDecoder::new(tgz));
+    for e in ar.entries().map_err(|e| e.to_string())? {
+        let mut e = e.map_err(|e| e.to_string())?;
+        let name = e
+            .path()
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .to_string();
+        let Some(rel) = name.strip_prefix("package/") else {
+            continue;
+        };
+        if rel.is_empty() || rel.split('/').any(|c| c == ".." || c.is_empty()) {
+            continue;
+        }
+        let dst = part.join(rel);
+        let kind = e.header().entry_type();
+        if kind.is_dir() {
+            std::fs::create_dir_all(&dst).map_err(|e| format!("{}: {e}", dst.display()))?;
+            continue;
+        }
+        if !kind.is_file() {
+            continue;
+        }
+        if let Some(p) = dst.parent() {
+            std::fs::create_dir_all(p).map_err(|e| format!("{}: {e}", p.display()))?;
+        }
+        let exec = e.header().mode().unwrap_or(0o644) & 0o111 != 0;
+        let mut bytes = Vec::new();
+        e.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+        std::fs::write(&dst, &bytes).map_err(|e| format!("{}: {e}", dst.display()))?;
+        let mode = if exec { 0o755 } else { 0o644 };
+        std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(mode))
+            .map_err(|e| format!("{}: {e}", dst.display()))?;
+    }
+    fn dirs(p: &Path) -> std::io::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o755))?;
+        for e in std::fs::read_dir(p)? {
+            let e = e?;
+            if e.file_type()?.is_dir() {
+                dirs(&e.path())?;
+            }
+        }
+        Ok(())
+    }
+    dirs(&part).map_err(|e| format!("{}: {e}", part.display()))?;
+    std::fs::rename(&part, out).map_err(|e| format!("{}: {e}", out.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

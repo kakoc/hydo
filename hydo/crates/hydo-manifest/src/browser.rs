@@ -45,8 +45,61 @@ pub const KNOWN: &[&str] = &[
     "watch",
     "screens",
     "screens_ref",
+    "explore",
     "description",
 ];
+
+/// The keys of `browser.explore` (Milestone 258, docs/design/ui-exploration.md).
+pub const KNOWN_EXPLORE: &[&str] = &[
+    "start",
+    "server",
+    "steps",
+    "actions",
+    "setup",
+    "avoid",
+    "within",
+    "values",
+    "settle_ms",
+    "quiet_ms",
+];
+
+/// The keys of one `browser.explore.setup` step.
+pub const KNOWN_SETUP: &[&str] = &[
+    "open", "click", "role", "fill", "with", "press", "see", "wait",
+];
+
+/// Where the walker and its playwright-core are in the guest (and in the browser's root).
+pub const WALK_DIR: &str = "/opt/hydo/web/walk";
+
+/// hydo's walker, and the stand-in for `@playwright/test` through which the unchanged watcher
+/// names a walk's step.
+pub const WALK: &str = include_str!("browser/walk.mjs");
+pub const WALK_STUB: &str = include_str!("browser/walk-test-stub.cjs");
+pub const WALK_STUB_PACKAGE: &str = r#"{"name":"@playwright/test","version":"0.0.0-hydo-walk","main":"index.js","private":true}
+"#;
+
+/// The npm package the walker drives the browser with: playwright-core of the image's version.
+/// `hydo build` fetches it by its sha256 into `browser/` and unpacks it there.
+pub struct Core {
+    pub version: &'static str,
+    pub url: &'static str,
+    pub sha256: &'static str,
+}
+
+/// The playwright-core packages this hydo pins, one per pinned Playwright image.
+pub const CORES: &[Core] = &[Core {
+    version: "1.65.1",
+    url: "https://registry.npmjs.org/playwright-core/-/playwright-core-1.65.1.tgz",
+    sha256: "6f5a60be62a4fddfbe7d10c448d8fbd54547da3358f2f8a04211440471ee863e",
+}];
+
+/// The folder of the unpacked playwright-core, relative to the manifest.
+pub fn core_dir(version: &str) -> String {
+    format!("browser/playwright-core-{version}")
+}
+
+/// The default controls a walk never uses.
+pub const AVOID: &[&str] = &["log ?out", "sign ?out"];
 
 /// The keys of `browser.watch`.
 pub const KNOWN_WATCH: &[&str] = &[
@@ -56,6 +109,7 @@ pub const KNOWN_WATCH: &[&str] = &[
     "busy_max_ms",
     "alerts",
     "failures_within_ms",
+    "failures_of",
     "requests",
     "text",
 ];
@@ -223,11 +277,23 @@ pub fn expand(m: &mut Value) -> R<()> {
             "browser: writes the workload (step i runs shard i+1 of the Playwright tests); remove workload:",
         ));
     }
+    let explore = match get(&b, "explore") {
+        None => None,
+        Some(e) => Some(explore_cfg(e, m)?),
+    };
     let tests = match get(&b, "tests") {
-        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(s)) if !s.is_empty() => {
+            if explore.is_some() {
+                return Err(err(
+                    "browser: tests and explore are two workloads; give one (tests runs your Playwright tests, explore lets hydo walk through the pages itself)",
+                ));
+            }
+            s.clone()
+        }
+        None if explore.is_some() => String::new(),
         _ => {
             return Err(err(
-                "browser.tests: the folder of the Playwright project (its playwright.config and node_modules), relative to the manifest",
+                "browser.tests: the folder of the Playwright project (its playwright.config and node_modules), relative to the manifest; or browser.explore, for a walk through the pages that hydo makes itself",
             ))
         }
     };
@@ -279,7 +345,17 @@ pub fn expand(m: &mut Value) -> R<()> {
         },
     };
     let args = strings(get(&b, "args"), "browser.args", &[])?;
-    let must_pass = flag(get(&b, "must_pass"), "browser.must_pass", true)?;
+    // a walk's step "passes" when the walker ran it: hydo's own walk has no assertions of its own
+    let must_pass = flag(get(&b, "must_pass"), "browser.must_pass", explore.is_none())?;
+    if explore.is_some() {
+        for k in ["shards", "args"] {
+            if get(&b, k).is_some() {
+                return Err(err(format!(
+                    "browser.{k}: only with tests (browser.explore.steps is the walk's number of workload steps)"
+                )));
+            }
+        }
+    }
     let mut env = Map::new();
     match get(&b, "env") {
         None => {}
@@ -367,6 +443,19 @@ pub fn expand(m: &mut Value) -> R<()> {
     if screens != "failures" {
         watch["screens"] = json!(screens);
     }
+    // Milestone 258: only these requests must show their failure (a manifest without the key
+    // keeps the watcher's settings as they were)
+    match get(&w, "failures_of") {
+        None => {}
+        Some(Value::String(s)) if !s.is_empty() && regex::Regex::new(s).is_ok() => {
+            watch["failures_of"] = json!(s)
+        }
+        Some(_) => {
+            return Err(err(
+                "browser.watch.failures_of: a regular expression over a request's path, such as (Create|Update|Delete)[A-Za-z]*$ (only a failed request whose path matches must be shown)",
+            ))
+        }
+    }
     let mut senv = json!({
         "HOME": format!("{RECORD_DIR}/home"),
         "TZ": "UTC",
@@ -374,6 +463,11 @@ pub fn expand(m: &mut Value) -> R<()> {
         "HYDO_WEB_DIR": RECORD_DIR,
         "HYDO_WEB_WATCH": serde_json::to_string(&watch).unwrap_or_default(),
     });
+    if let Some(x) = &explore {
+        let mut cfg = x.cfg.clone();
+        cfg["text"] = json!(text);
+        senv["HYDO_WEB_WALK"] = Value::String(serde_json::to_string(&cfg).unwrap_or_default());
+    }
     for (k, v) in env {
         senv[k] = v;
     }
@@ -442,13 +536,35 @@ pub fn expand(m: &mut Value) -> R<()> {
     );
     // a test program (M205): the explorer takes fewer than 4 steps, draws only the fault kinds
     // that `faults:` lists, and classes a failure test-failed
-    let workload = json!({
-        "kind": "test",
-        "steps": shards,
-        "run": run,
-        "timeout": timeout,
-        "process": "playwright/test/cli.js",
-    });
+    let workload = match &explore {
+        None => json!({
+            "kind": "test",
+            "steps": shards,
+            "run": run,
+            "timeout": timeout,
+            "process": "playwright/test/cli.js",
+        }),
+        // a walk (Milestone 258): step i runs part i of the walk. The controller gives the
+        // schedule's I= value as $HYDO_WALK and the schedule's guest part as $HYDO_GUEST (for
+        // repro.spec.ts); a schedule without I= walks seed 0. An ordinary workload: the explorer
+        // draws every fault kind that `faults:` allows
+        Some(x) => json!({
+            "steps": x.steps,
+            "run": format!(
+                "mkdir -p {RECORD_DIR}/home\n\
+                 i=$HYDO_FROM\n\
+                 while [ $i -lt $HYDO_TO ]; do\n\
+                 \x20 hydo-oci {name} /bin/sh -c 'cd {WALK_DIR} && NODE_OPTIONS=\"--require {WEB_DIR}/hydo/hook.cjs\" exec node walk.mjs \"$1\" \"$2\" \"$3\" \"$4\"' sh $i \"$HYDO_WALK\" \"$HYDO_GUEST\" \"$HYDO_ACKED\" > {RECORD_DIR}/step-$i.log 2>&1\n\
+                 \x20 rc=$?\n\
+                 \x20 grep '^hydo-web:' {RECORD_DIR}/step-$i.log > /dev/console\n\
+                 \x20 echo \"hydo-web: step $i: the walker exited $rc\" > /dev/console\n\
+                 \x20 i=$((i + 1))\n\
+                 done\n"
+            ),
+            "timeout": timeout,
+            "process": "walk.mjs",
+        }),
+    };
 
     // the invariants
     let check = |rule: &str| format!("hydo-oci {name} node {WEB_DIR}/hydo/check.mjs {rule}");
@@ -489,7 +605,12 @@ pub fn expand(m: &mut Value) -> R<()> {
         invs.push(json!({
             "id": format!("{name}.screens_match"),
             "msg": "every page's screenshot at the end of its test is its reference, pixel for pixel",
-            "cmd": check(&format!("screens {REF_DIR}")),
+            // the PNG library comes from the tests' playwright-core, or the walker's
+            "cmd": if explore.is_some() {
+                check(&format!("screens {REF_DIR} {WALK_DIR}"))
+            } else {
+                check(&format!("screens {REF_DIR}"))
+            },
         }));
     }
     // last: the verdict names the first property that fails, and a page's own failure says
@@ -531,7 +652,20 @@ pub fn expand(m: &mut Value) -> R<()> {
         Some(v) if !v.is_null() => return Err(err("root.files: must be a list")),
         _ => Vec::new(),
     };
-    files.push(json!({"src": tests, "dst": format!("{WEB_DIR}/tests")}));
+    let core = CORES.iter().find(|c| c.version == image.version);
+    match (&explore, core) {
+        (None, _) => files.push(json!({"src": tests, "dst": format!("{WEB_DIR}/tests")})),
+        (Some(_), Some(c)) => files.push(json!({
+            "src": core_dir(c.version),
+            "dst": format!("{WALK_DIR}/node_modules/playwright-core"),
+        })),
+        (Some(_), None) => {
+            return Err(err(format!(
+                "browser.explore: this hydo pins no playwright-core for Playwright {}",
+                image.version
+            )))
+        }
+    }
     if screens == "compare" {
         files.push(json!({"src": screens_ref, "dst": REF_DIR}));
     }
@@ -553,25 +687,217 @@ pub fn expand(m: &mut Value) -> R<()> {
             Value::String(body.to_string()),
         );
     }
+    if explore.is_some() {
+        let stub = format!("{WALK_DIR}/node_modules/@playwright/test");
+        t.insert(format!("{WALK_DIR}/walk.mjs"), Value::String(WALK.into()));
+        t.insert(format!("{stub}/index.js"), Value::String(WALK_STUB.into()));
+        t.insert(
+            format!("{stub}/package.json"),
+            Value::String(WALK_STUB_PACKAGE.into()),
+        );
+    }
     let guest = o.entry("guest").or_insert_with(|| json!({}));
     if let Some(g) = guest.as_object_mut() {
         // Chromium's browser, renderer and GPU processes, Node.js and the test runner
         g.entry("ram_mib").or_insert(json!(4096));
     }
-    o.insert(
-        META.into(),
-        json!({
-            "service": name,
-            "playwright": image.version,
-            "repo": image.repo,
-            "tag": image.tag,
-            "images": Value::Object(pins),
-            "tests": tests,
-            "screens": screens,
-            "screens_ref": (screens == "compare").then_some(screens_ref),
-        }),
-    );
+    let mut meta = json!({
+        "service": name,
+        "playwright": image.version,
+        "repo": image.repo,
+        "tag": image.tag,
+        "images": Value::Object(pins),
+        "tests": tests,
+        "screens": screens,
+        "screens_ref": (screens == "compare").then_some(screens_ref),
+    });
+    // only with explore:, so that the record of a manifest with tests stays as it was
+    if let (Some(x), Some(c)) = (&explore, core) {
+        meta["explore"] = json!({
+            "steps": x.steps,
+            "actions": x.actions,
+            "core": {"version": c.version, "url": c.url, "sha256": c.sha256, "dir": core_dir(c.version)},
+        });
+    }
+    o.insert(META.into(), meta);
     Ok(())
+}
+
+/// A validated `browser.explore`: the walker's configuration ($HYDO_WEB_WALK) and the walk's
+/// shape.
+struct Explore {
+    cfg: Value,
+    steps: i64,
+    actions: i64,
+}
+
+fn int_in(v: Option<&Value>, wh: &str, lo: i64, hi: i64, default: i64, what: &str) -> R<i64> {
+    match v {
+        None => Ok(default),
+        Some(x) => match x.as_i64() {
+            Some(n) if x.is_i64() && (lo..=hi).contains(&n) => Ok(n),
+            _ => Err(err(format!("{wh}: {what}, {lo} to {hi}"))),
+        },
+    }
+}
+
+/// `browser.explore` (Milestone 258, docs/design/ui-exploration.md): where the walk starts, how
+/// long it is, how it signs in, and what it never touches.
+fn explore_cfg(e: &Value, m: &Value) -> R<Explore> {
+    let wh = "browser.explore";
+    if !e.is_object() {
+        return Err(err(
+            "browser.explore: a mapping {start: <the URL the walk starts on>, ...}",
+        ));
+    }
+    crate::validate::unknown(e, KNOWN_EXPLORE, wh)?;
+    let start = match get(e, "start") {
+        Some(Value::String(s))
+            if (s.starts_with("http://") || s.starts_with("https://")) && !s.contains(' ') =>
+        {
+            s.clone()
+        }
+        _ => {
+            return Err(err(
+                "browser.explore.start: the URL the walk starts on, as the guest's browser reaches the app (http://<service address or localhost>:<port>/<path>)",
+            ))
+        }
+    };
+    let server = match get(e, "server") {
+        None => Value::Null,
+        Some(Value::String(s)) if !s.trim().is_empty() => Value::String(s.clone()),
+        Some(_) => {
+            return Err(err(
+                "browser.explore.server: a command line that starts the app's web server in the browser's service, before each step (as Playwright's webServer)",
+            ))
+        }
+    };
+    let steps = int_in(
+        get(e, "steps"),
+        "browser.explore.steps",
+        4,
+        100,
+        4,
+        "the walk's workload steps (a fault can fall between two)",
+    )?;
+    let actions = int_in(
+        get(e, "actions"),
+        "browser.explore.actions",
+        1,
+        hydo_schedule::MAX_ACTIONS as i64,
+        10,
+        "actions in each step",
+    )?;
+    let settle = ms(get(e, "settle_ms"), "browser.explore.settle_ms", 700)?;
+    let quiet = ms(get(e, "quiet_ms"), "browser.explore.quiet_ms", 3000)?;
+    let avoid = strings(get(e, "avoid"), "browser.explore.avoid", AVOID)?;
+    for a in &avoid {
+        if regex::Regex::new(&format!("(?i){a}")).is_err() {
+            return Err(err(format!(
+                "browser.explore.avoid: {} is not a regular expression",
+                repr_str(a)
+            )));
+        }
+    }
+    let values = strings(get(e, "values"), "browser.explore.values", &[])?;
+    let within = match get(e, "within") {
+        None => "/".to_string(),
+        Some(Value::String(s)) if s.starts_with('/') => s.clone(),
+        Some(_) => {
+            return Err(err(
+                "browser.explore.within: a path prefix such as /app/ (the walk follows only links under it)",
+            ))
+        }
+    };
+    let mut setup = Vec::new();
+    match get(e, "setup") {
+        None => {}
+        Some(Value::Array(a)) => {
+            for (i, s) in a.iter().enumerate() {
+                let w = format!("browser.explore.setup[{i}]");
+                if !s.is_object() {
+                    return Err(err(format!("{w}: a mapping such as {{open: /login}}")));
+                }
+                crate::validate::unknown(s, KNOWN_SETUP, &w)?;
+                let acts: Vec<&str> = ["open", "click", "fill", "press", "see", "wait"]
+                    .into_iter()
+                    .filter(|k| get(s, k).is_some())
+                    .collect();
+                if acts.len() != 1 {
+                    return Err(err(format!(
+                        "{w}: one of open, click, fill (with with:), press, see or wait"
+                    )));
+                }
+                let mut one = Map::new();
+                for (k, v) in s.as_object().into_iter().flatten() {
+                    if k == "wait" {
+                        one.insert(k.clone(), json!(ms(Some(v), &format!("{w}.wait"), 0)?));
+                    } else if v.is_string() || v.is_number() || v.is_boolean() {
+                        one.insert(k.clone(), Value::String(str_of(v)));
+                    } else {
+                        return Err(err(format!("{w}.{k}: a string")));
+                    }
+                }
+                if acts[0] == "fill" && !one.contains_key("with") {
+                    return Err(err(format!("{w}: fill needs with: <the value to type>")));
+                }
+                setup.push(Value::Object(one));
+            }
+        }
+        Some(_) => {
+            return Err(err(
+                "browser.explore.setup: a list of steps, such as [{open: /login}, {fill: Username, with: demo}, {click: Sign in}]",
+            ))
+        }
+    }
+    // the fakes' routes, for repro.spec.ts: an H= fault on a route becomes a page.route
+    let mut routes = Map::new();
+    if let Some(Value::Array(fakes)) = m.get("fakes") {
+        for f in fakes {
+            let fname = f.get("name").map(str_of).unwrap_or_default();
+            if let Some(Value::Array(rs)) = f.get("routes") {
+                for r in rs {
+                    let (Some(n), Some(p)) = (r.get("name"), r.get("path")) else {
+                        continue;
+                    };
+                    routes.insert(
+                        format!("{fname}.{}", str_of(n)),
+                        json!({"method": r.get("method").map(str_of).unwrap_or_default(), "path": str_of(p)}),
+                    );
+                }
+            }
+        }
+    }
+    Ok(Explore {
+        cfg: json!({
+            "start": start,
+            "server": server,
+            "actions": actions,
+            "setup": setup,
+            "avoid": avoid,
+            "within": within,
+            "values": values,
+            "steps": steps,
+            "settle_ms": settle,
+            "quiet_ms": quiet,
+            "routes": Value::Object(routes),
+        }),
+        steps,
+        actions,
+    })
+}
+
+/// The playwright-core package a build needs for `browser.explore` (none otherwise): its version,
+/// the URL, its sha256 and the folder it is unpacked into, relative to the manifest.
+pub fn walk_core(m: &Value) -> Option<(String, String, String, String)> {
+    let c = m.get(META)?.get("explore")?.get("core")?;
+    let s = |k: &str| c.get(k).map(str_of).unwrap_or_default();
+    Some((s("version"), s("url"), s("sha256"), s("dir")))
+}
+
+/// Whether a validated manifest walks through its pages (`browser.explore`).
+pub fn walks(m: &Value) -> bool {
+    m.get(META).and_then(|x| x.get("explore")).is_some()
 }
 
 /// The guest folder of the screenshots that the controller copies out (none without `browser:`).
@@ -786,6 +1112,133 @@ mod tests {
             (
                 json!({"tests": "e2e", "screens": "compare", "screens_ref": "/r"}),
                 "relative",
+            ),
+        ] {
+            let mut m = base(b);
+            let e = expand(&mut m).unwrap_err().message;
+            assert!(e.contains(want), "{e}");
+        }
+    }
+
+    #[test]
+    fn explore_becomes_a_walk_with_the_walker_and_its_playwright_core() {
+        let mut m = json!({"name": "web", "network": "bridge",
+            "browser": {"explore": {"start": "http://localhost:3000/", "server": "node s.mjs",
+                                    "actions": 6,
+                                    "setup": [{"open": "/login"}, {"fill": "Name", "with": "a"},
+                                              {"click": "Sign in"}, {"wait": 500}]}},
+            "fakes": [{"name": "api", "routes": [{"name": "add", "method": "POST", "path": "/api/x/{id}"}]}]});
+        expand(&mut m).unwrap();
+        let w = &m["workload"];
+        assert!(w.get("kind").is_none(), "a walk is an ordinary workload");
+        assert_eq!(w["steps"], 4);
+        let run = w["run"].as_str().unwrap();
+        assert!(
+            run.contains("cd /opt/hydo/web/walk && NODE_OPTIONS=\"--require /opt/hydo/web/hydo/hook.cjs\" exec node walk.mjs"),
+            "{run}"
+        );
+        assert!(
+            run.contains("sh $i \"$HYDO_WALK\" \"$HYDO_GUEST\" \"$HYDO_ACKED\""),
+            "{run}"
+        );
+        let ids: Vec<&str> = m["invariants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["id"].as_str().unwrap())
+            .collect();
+        assert!(!ids.contains(&"browser.tests_pass"), "{ids:?}");
+        assert_eq!(
+            m["root"]["files"][0],
+            json!({"src": "browser/playwright-core-1.65.1", "dst": "/opt/hydo/web/walk/node_modules/playwright-core"})
+        );
+        let t = &m["root"]["text"];
+        assert_eq!(t["/opt/hydo/web/walk/walk.mjs"], WALK);
+        assert_eq!(
+            t["/opt/hydo/web/walk/node_modules/@playwright/test/index.js"],
+            WALK_STUB
+        );
+        assert_eq!(t["/opt/hydo/web/hydo/hook.cjs"], HOOK);
+        let cfg: Value =
+            serde_json::from_str(m["services"][0]["env"]["HYDO_WEB_WALK"].as_str().unwrap())
+                .unwrap();
+        assert_eq!(cfg["actions"], 6);
+        assert_eq!(cfg["server"], "node s.mjs");
+        assert_eq!(cfg["setup"][3]["wait"], 500);
+        assert_eq!(cfg["avoid"], json!(AVOID));
+        assert_eq!(cfg["routes"]["api.add"]["path"], "/api/x/{id}");
+        assert_eq!(cfg["text"], json!(TEXT));
+        assert!(walks(&m));
+        let (v, url, sha, dir) = walk_core(&m).unwrap();
+        assert_eq!(v, "1.65.1");
+        assert!(url.ends_with("playwright-core-1.65.1.tgz"));
+        assert_eq!(sha.len(), 64);
+        assert_eq!(dir, "browser/playwright-core-1.65.1");
+        assert_eq!(images(&m, "x86_64")[0].2, "");
+        // a manifest with tests keeps its record as before Milestone 258
+        let mut d = base(json!({"tests": "e2e"}));
+        expand(&mut d).unwrap();
+        assert!(d[META].get("explore").is_none());
+        assert!(!walks(&d));
+        assert!(d["services"][0]["env"].get("HYDO_WEB_WALK").is_none());
+        let w: Value =
+            serde_json::from_str(d["services"][0]["env"]["HYDO_WEB_WATCH"].as_str().unwrap())
+                .unwrap();
+        assert!(w.get("failures_of").is_none());
+        // watch.failures_of narrows the failures that must be shown
+        let mut f =
+            base(json!({"tests": "e2e", "watch": {"failures_of": "(Create|Delete)[A-Za-z]*$"}}));
+        expand(&mut f).unwrap();
+        let w: Value =
+            serde_json::from_str(f["services"][0]["env"]["HYDO_WEB_WATCH"].as_str().unwrap())
+                .unwrap();
+        assert_eq!(w["failures_of"], "(Create|Delete)[A-Za-z]*$");
+        let mut bad = base(json!({"tests": "e2e", "watch": {"failures_of": "(x"}}));
+        assert!(expand(&mut bad)
+            .unwrap_err()
+            .message
+            .contains("failures_of"));
+    }
+
+    #[test]
+    fn what_explore_refuses() {
+        for (b, want) in [
+            (json!({"explore": {}}), "browser.explore.start"),
+            (
+                json!({"explore": {"start": "localhost:3000"}}),
+                "browser.explore.start",
+            ),
+            (
+                json!({"tests": "e2e", "explore": {"start": "http://a/"}}),
+                "two workloads",
+            ),
+            (
+                json!({"explore": {"start": "http://a/"}, "shards": 2}),
+                "only with tests",
+            ),
+            (
+                json!({"explore": {"start": "http://a/", "steps": 3}}),
+                "explore.steps",
+            ),
+            (
+                json!({"explore": {"start": "http://a/", "actions": 0}}),
+                "explore.actions",
+            ),
+            (
+                json!({"explore": {"start": "http://a/", "setup": [{"fill": "x"}]}}),
+                "with:",
+            ),
+            (
+                json!({"explore": {"start": "http://a/", "setup": [{"open": "/", "click": "x"}]}}),
+                "one of open",
+            ),
+            (
+                json!({"explore": {"start": "http://a/", "avoid": ["(x"]}}),
+                "regular expression",
+            ),
+            (
+                json!({"explore": {"start": "http://a/", "nope": 1}}),
+                "unknown field",
             ),
         ] {
             let mut m = base(b);

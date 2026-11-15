@@ -888,6 +888,7 @@ fn guest_noun(t: &GuestToken, knobs: &[KnobInfo]) -> Option<String> {
             code(&u.version),
             after(u.at)
         ),
+        GuestToken::Walk(w) => format!("the walk {} through the pages", code(&w.to_string())),
         GuestToken::Knob { letter, value } => match knob_named(*letter, knobs) {
             Some(k) => format!(
                 "{} at {}",
@@ -1343,6 +1344,26 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
             .at(u.at)
             .fault("upgrades", format!("after {who} switched to version {v}"))
         }
+        GuestToken::Walk(w) => setup(
+            format!(
+                "hydo walks through the pages itself: the number {} chooses every action, so the walk is the same on every run{}{}.",
+                code(&format!("{:x}", w.seed)),
+                match w.actions {
+                    Some(n) => format!(", {n} actions in each step"),
+                    None => String::new(),
+                },
+                if w.skip.is_empty() {
+                    String::new()
+                } else {
+                    format!(", {} of them left out", w.skip.len())
+                }
+            ) + if w.rec {
+                " A video and a trace of the last step are recorded."
+            } else {
+                ""
+            },
+            format!("the walk {} through the pages", code(&w.to_string())),
+        ),
         GuestToken::Knob { letter, value } => match knob_named(*letter, knobs) {
             Some(k) => {
                 let name = k

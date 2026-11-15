@@ -13,6 +13,7 @@ use crate::num::{dec, err, hex, name, sdec};
 use crate::storage::Corruption;
 use crate::target::{component_links, parse_components, parse_shape, Shape, Target};
 use crate::upgrade::Upgrade;
+use crate::walk::Walk;
 use crate::ParseError;
 use std::fmt;
 
@@ -812,6 +813,9 @@ pub enum GuestToken {
     /// `U=<target>@<at>[/<gap>][+<back>]:<version>`: services switched to another version of
     /// themselves (Milestone 238, `upgrade.rs`).
     Upgrade(Upgrade),
+    /// `I=<seed>[,n<actions>][,x<step>.<k>]...[,rec]`: the walk of `browser.explore`
+    /// (Milestone 258, `walk.rs`).
+    Walk(Walk),
     /// Any other single upper-case letter: a manifest knob (`M=`, `R=`, `S=`, ...), whose value
     /// the guest passes to the knob's `set:` command.
     Knob { letter: char, value: String },
@@ -819,7 +823,7 @@ pub enum GuestToken {
 
 /// The letters with a fixed meaning (manifest_space.RESERVED_TOKENS plus the stack's M/R knobs,
 /// which stay knobs).
-pub const RESERVED: &str = "KPNOCTQXBFHWAGLU";
+pub const RESERVED: &str = "KPNOCTQXBFHWAGLUI";
 
 fn at_plus(v: &str, what: &str) -> Result<(String, u64, u64), ParseError> {
     let (svc, r) = v
@@ -871,6 +875,7 @@ impl GuestToken {
             GuestToken::Corrupt { .. } => 'G',
             GuestToken::PowerLoss { .. } => 'L',
             GuestToken::Upgrade(_) => 'U',
+            GuestToken::Walk(_) => 'I',
             GuestToken::Knob { letter, .. } => *letter,
         }
     }
@@ -1045,6 +1050,7 @@ impl GuestToken {
             'W' => GuestToken::Compose(Compose::parse(v)?),
             'A' => GuestToken::React(React::parse(v)?),
             'U' => GuestToken::Upgrade(Upgrade::parse(v, what)?),
+            'I' => GuestToken::Walk(Walk::parse(v, what)?),
             'L' => {
                 let (v, strict) = match v.split_once(':') {
                     Some((x, "strict")) => (x, true),
@@ -1189,6 +1195,7 @@ impl fmt::Display for GuestToken {
                 Ok(())
             }
             GuestToken::Upgrade(u) => write!(f, "U={u}"),
+            GuestToken::Walk(w) => write!(f, "I={w}"),
             GuestToken::Knob { letter, value } => write!(f, "{letter}={value}"),
         }
     }

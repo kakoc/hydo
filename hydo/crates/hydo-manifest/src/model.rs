@@ -1693,8 +1693,13 @@ pub struct Emulator {
 pub struct Browser {
     /// The folder of the Playwright project, relative to the manifest: its playwright.config,
     /// its tests and its node_modules (run `npm ci` there first: the guest has no network). It is
-    /// copied to /opt/hydo/web/tests.
+    /// copied to /opt/hydo/web/tests. Required unless `explore` is given.
+    #[serde(default)]
     pub tests: Text,
+    /// A walk through the pages that hydo makes itself, instead of tests (Milestone 258): the
+    /// workload is a seeded walk, named by the schedule token I=.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explore: Option<BrowserExplore>,
     /// The version of @playwright/test in the tests' node_modules; hydo pins the Playwright
     /// image of that version (default and only pinned version: 1.65.1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1745,6 +1750,82 @@ pub struct Browser {
     pub description: Option<Scalar>,
 }
 
+/// `browser.explore` (Milestone 258): hydo walks through the app's pages itself. Each workload
+/// step is one part of the walk, in a fresh browser that keeps the cookies and the page of the
+/// part before; each action is drawn from the schedule's I= seed and the page's accessibility
+/// tree.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct BrowserExplore {
+    /// The URL the walk starts on, as the browser in the guest reaches the app
+    /// (http://<a service's address or localhost>:<port>/<path>).
+    pub start: Text,
+    /// A command line that starts the app's web server in the browser's service before each
+    /// step, as Playwright's webServer does (default none: a service serves the app).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<Text>,
+    /// Workload steps (default 4, at least 4): a fault can fall between two parts of the walk.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 4))]
+    pub steps: Option<i64>,
+    /// Actions in each step (default 10); I=<seed>,n<k> takes k.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 10))]
+    pub actions: Option<i64>,
+    /// Steps before the walk, such as signing in: each one of open, click (with role), fill
+    /// (with with), press, see, wait. They run in the first step without a saved session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setup: Option<Vec<BrowserSetupStep>>,
+    /// Regular expressions of control names the walk never uses (default: log out, sign out).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avoid: Option<Vec<Text>>,
+    /// The walk follows only links under this path prefix (default /).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub within: Option<Text>,
+    /// More texts the walk types into text fields, besides hydo's own edge values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub values: Option<Vec<Text>>,
+    /// The wait after each action, in milliseconds (default 700).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 700))]
+    pub settle_ms: Option<i64>,
+    /// The wait at the end of each step, before the browser closes, in milliseconds (default
+    /// 3000).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 3000))]
+    pub quiet_ms: Option<i64>,
+}
+
+/// One step of `browser.explore.setup`: one of open, click, fill, press, see or wait.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct BrowserSetupStep {
+    /// Open this path (or URL).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open: Option<Text>,
+    /// Click the button or link of this accessible name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub click: Option<Text>,
+    /// The ARIA role of the control that click names (default: a button or a link).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<Text>,
+    /// Fill the field of this label or placeholder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<Text>,
+    /// What fill types.
+    #[serde(rename = "with", default, skip_serializing_if = "Option::is_none")]
+    pub with: Option<Scalar>,
+    /// Press this key, such as Enter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub press: Option<Text>,
+    /// Wait until this text is on the page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub see: Option<Text>,
+    /// Wait this many milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait: Option<i64>,
+}
+
 /// What hydo watches in the pages of `browser:` (Milestone 253). An empty list turns its
 /// invariant off.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -1778,6 +1859,11 @@ pub struct BrowserWatch {
     /// Only the pages' fetch and XHR requests under this path prefix are judged (default all).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requests: Option<Text>,
+    /// A regular expression over a request's path: only a failed request that matches must be
+    /// shown (default every judged request), for example the writes of an API whose reads run in
+    /// the background (Milestone 258).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failures_of: Option<Text>,
     /// Texts no page may print (default NaN, undefined, [object Object], Invalid Date).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<Vec<Text>>,
