@@ -91,8 +91,8 @@ Each example folder holds the project's hydo setup and the recorded runs.
   ([lago-api#7164](https://github.com/getlago/lago-api/issues/7164),
   [the example](hydo/onboard/examples/lago/)).
 - **River v0.51.2.** After a PostgreSQL crash, two workers act as leader at once, and a periodic
-  job runs twice. A new bug, reported as
-  [river#1602](https://github.com/riverqueue/river/issues/1602)
+  job runs twice. Reported as [river#1602](https://github.com/riverqueue/river/issues/1602); the
+  maintainers keep the leader table this way by design and recommend unique jobs
   ([the example](hydo/onboard/examples/river/)).
 - **Hatchet v0.120.5.** With its PostgreSQL queue, a crash of an engine loses the messages it had
   just read, so runs it acknowledged never run. A new bug, reported as

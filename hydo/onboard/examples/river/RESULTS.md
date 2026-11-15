@@ -149,7 +149,7 @@ regression file changed, which differs from this one only in that file.
 A finding is a River bug only when its cause is in River's code and it breaks a promise of
 River's documentation.
 
-### 1. Two leaders after a PostgreSQL crash insert one periodic run twice (a River bug, reported as [riverqueue/river#1602](https://github.com/riverqueue/river/issues/1602))
+### 1. Two leaders after a PostgreSQL crash insert one periodic run twice (reported as [riverqueue/river#1602](https://github.com/riverqueue/river/issues/1602); closed as not planned on 2026-11-14: the maintainers keep `river_leader` unlogged by design, say that regular periodic jobs can be duplicated, and recommend unique jobs)
 
 **How it was found.** The first directed run with a fault broke the periodic rule. The run was
 `disk=none | run K=postgres@5+1` on hvx, and the run of 00:00:14 was inserted twice, by `w1`
