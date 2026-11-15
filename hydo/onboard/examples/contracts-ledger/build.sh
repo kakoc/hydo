@@ -22,6 +22,12 @@ cd "$HERE/rust"
 cargo +1.90.0 build --release --locked --target "$T"
 cp "target/$T/release/ledger" "$HERE/bin/ledger-rs"
 cd "$HERE/types/rust"
+# Rust's musl target links x86_64 programs position-independent. The KVM engine keeps one of its
+# three breakpoints at the system calls' entry for such a program, to find where each process
+# loaded it, and two functions that read their results need all three (two entries and one for
+# returns). So the types program is linked at a fixed address; ledger-rs and its one function
+# stay position-independent.
+if [ "$ARCH" = x86_64 ]; then RUSTFLAGS="$RUSTFLAGS -C relocation-model=static"; fi
 cargo +1.90.0 build --release --locked --target "$T"
 cp "target/$T/release/types" "$HERE/bin/types-rs"
 cd "$HERE/go"

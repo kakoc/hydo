@@ -134,8 +134,10 @@ changes the guest's scheduling. (a) is limited by the number of breakpoints:
 - On the Mac engine, four functions with contracts fit in one program, with one pair left for
   return addresses.
 - On KVM, two functions fit when they read their results, with one register left for return
-  addresses, and three when none does. A larger plan is refused before the run with the
-  message `the KVM engine has 3 breakpoints for contracts`.
+  addresses, and three when none does. A position-independent program takes one more register
+  ([below](#the-load-address-of-a-position-independent-program)), so one function that reads its
+  result fits, or two that do not. A larger plan is refused before the run with the message
+  `the KVM engine has 3 breakpoints for contracts`, which names the reasons.
 
 ## The KVM engine
 
@@ -182,18 +184,25 @@ Rust's musl target links x86_64 programs as static position-independent executab
 kernel loads such a program at an address of its choice, and each process gets its own. The
 plan marks such a program (`pie`) and keeps its first 64 bytes, the ELF header (`head`).
 
-The engine finds the load address without the agent and without a guest change. At the first
-exit in each address space (each CR3), it walks the user half of that address space's page
-tables and looks for a 4 KiB page that starts with the program's header. The program's start-up
-code reads its own header, so the page is mapped once the program runs. The header's address is
-the load address. In an address space without the program, the walk runs again every 256 exits.
-Exits are the engine's clock, so the walks and their results are the same in every run of a
-schedule.
+The engine finds the load address without the agent and without a guest change. One of its
+breakpoints stays at the kernel's entry of system calls (the address in the MSR LSTAR), so it
+stops at every system call of the guest. At the first system call in each address space (each
+CR3), it walks the user half of that address space's page tables and looks for a 4 KiB page that
+starts with the program's header. The program's start-up code reads its own header and makes
+system calls before `main`, so the page is found before the first call of a contracted
+function. The header's address is the load address. An address space without the program is
+searched again after the next `execve`. The guest's own instructions decide every stop, so the
+searches and their results are the same in every run of a schedule.
 
-Each process of the program has its own load address, and the entry breakpoints cover at most
-two processes of a function that reads its result (three of one that does not). The engine
-prefers the processes where calls were recorded, then the address spaces with the latest exits.
-A call in a process outside those is not recorded.
+The first version searched at VM exits. The second one-off KVM run (43700840743) showed why
+that fails: a process that only computes makes no VM exit, and no process of the Rust types
+program was found, so none of its calls was recorded.
+
+Each process of the program has its own load address, and the breakpoints that are left cover
+one process of a function that reads its result (two of one that does not). The engine stops in
+the process of the latest system call, which is the one that runs, and then in the processes
+where calls were recorded. A call in a process outside those is not recorded, for example in a
+process that another process preempts without a system call in between.
 The engine's log names the processes found (`hydo-kvm: contracts:` in `engine.log`).
 
 A Go program and an arm64 Rust program are linked at fixed addresses and need no search. The
@@ -387,8 +396,20 @@ Its first run, 43697118540, ran on four runners, each an AMD EPYC 9V45:
 - The types programs failed. The Rust one had four functions with contracts, and the engine
   refused its plan. The Go one recorded too few calls, because of the observer (above).
 
-The types programs now have two functions each, and the engine keeps the contracts' breakpoints
-while the observer works. The second run's results are not in yet.
+The types programs then got two functions each, and the engine kept the contracts' breakpoints
+while the observer worked. The second run, 43700840743, on four runners:
+
+- The Go types program passed: one fingerprint (`059b215d61733dc3`) with the plan, without it
+  and under main's hydo, the same records twice, 120,052 calls with 20,052 not judged, and 5
+  clauses broken, each at 1 of 50,000 calls. The ledgers and the Redis example passed as before.
+- The Rust types program, position-independent, recorded no call: the engine found no process
+  of it, because its processes made no VM exit, where the engine then searched. Its fingerprint
+  (`103e96ed50060f55`) was one with the plan and without it.
+
+Now the engine searches at system calls. The example's `hydo-local.yaml` runs
+position-independent processes that make no VM exit (`ledger local`, 5,000 calls each), and the
+types program is linked at a fixed address on x86_64 (`build.sh`). The third run's results are
+not in yet.
 
 ## Next steps
 

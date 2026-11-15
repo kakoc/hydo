@@ -11395,7 +11395,21 @@ ledger in 10 address spaces, each at another address. The types programs failed:
   to 2 s of guest code at a time chosen by the host's kicks. That is fixed as described above.
 - The check for the calls not judged failed because the runs recorded fewer than 100,000 calls.
 
-The types programs now have two functions each. The second run's results are not in yet.
+The types programs then got two functions each.
+
+The second run, 43700840743 (four runners), passed the Go types program: one fingerprint
+(`059b215d61733dc3`), the same records twice, 120,052 calls with 20,052 not judged, and 5
+clauses broken, each at 1 of 50,000 calls. The ledgers and the Redis example passed as before.
+The Rust types program, position-independent on x86_64, recorded no call. The engine then
+searched for a position-independent program's load address at VM exits, and a process that only
+computes makes none, so it found no process of the program. The engine now keeps one breakpoint
+at the kernel's entry of system calls (LSTAR) while the plan has a position-independent program,
+searches at the first system call in each address space and again after each `execve`, and stops
+in the process of the latest system call first. That breakpoint leaves one function that reads
+its result per position-independent program, so the types program is linked at a fixed address
+on x86_64 (`-C relocation-model=static` in `build.sh`). The new manifest `hydo-local.yaml` runs
+the position-independent ledger in four processes of 5,000 calls each that make no VM exit. The
+third run's results are not in yet.
 
 **Tests.** `hydo-contracts`: the types of both languages on both architectures from the
 compiled programs (when Rust 1.90.0 with the musl targets and Go are present), the new language
@@ -11414,6 +11428,8 @@ re-recording.
 
 - The KVM proof's second run.
 - hvx: the side module of the design.
-- KVM: two functions with contracts per program when they read their results; at most two
-  processes of one position-independent program are stopped at once.
+- KVM: two functions with contracts per program when they read their results, one in a
+  position-independent program. The engine stops in the process of the latest system call and
+  in processes with recorded calls; a process that another preempts without a system call is
+  not stopped in.
 - A run judges only its first 100,000 calls (now counted and reported).

@@ -1439,7 +1439,6 @@ impl Vmm {
         }
         self.m.vtime = self.m.vtime.wrapping_add(self.step);
         self.pct_at_exit();
-        self.ct_at_exit();
         if self.trace.is_some() {
             let (ex, rip) = (self.m.exits, self.cpu().rip());
             let line = match e {

@@ -1192,14 +1192,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     whether its run had a clock step; the example's client records the clock it saw. The
     history, matching and frontend services ran in one process, not apart.
 113. Function contracts (M241, M255). What is left:
-    - KVM: the one-off workflow `tmp-contracts-kvm` ran once (43697118540). The ledgers and the
-      Redis example passed on four AMD EPYC 9V45 runners; the types programs failed and were
-      fixed (docs/HISTORY.md Milestone 255). The second run's results are not in yet.
+    - KVM: the one-off workflow `tmp-contracts-kvm` ran twice (43697118540, 43700840743). The
+      ledgers, the Go types program, and the Redis example passed. The Rust types program was
+      not found, so the search for a position-independent program moved to system calls
+      (docs/HISTORY.md Milestone 255). The third run's results are not in yet.
     - hvx has no breakpoints for contracts: the side module is designed in
       docs/design/contracts.md, not built.
     - On KVM two functions with contracts fit in one program when they read their results
-      (three otherwise), and the engine stops in at most two processes of one
-      position-independent program.
+      (three otherwise), one less in a position-independent program. The engine stops in the
+      process of the latest system call and in processes with recorded calls.
     - A run judges at most 100,000 calls; the report says how many it did not judge.
 114. `hydo k8s` (M243). Its own call of `helm template` and `kubectl kustomize` ran in no test:
     the proof rendered the chart on the Mac and imported the output on the bare-metal machine.

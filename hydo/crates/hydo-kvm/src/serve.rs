@@ -997,9 +997,7 @@ impl Engine {
         self.vm.tj = snap.tj;
         self.vm.pct = snap.pct;
         self.vm.pct_log = (snap.rs.pct_n != 0 && self.h.o.preempt_record).then(Vec::new);
-        if let Some(ct) = self.vm.ct.as_mut() {
-            ct.begin();
-        }
+        self.vm.ct_begin();
         let (k, rb, mut rs) = (snap.k.clone(), snap.rb, snap.rs.clone());
         self.h.ctl_begin(tag);
         self.h.c.k = k;
@@ -1101,9 +1099,7 @@ impl Engine {
             self.vm.pct = Pct::set(pct_seed, pct_n, x, x.wrapping_add(pct_k));
         }
         self.vm.pct_log = (pct_n != 0 && self.h.o.preempt_record).then(Vec::new);
-        if let Some(ct) = self.vm.ct.as_mut() {
-            ct.begin();
-        }
+        self.vm.ct_begin();
         self.run_rest(rs);
     }
 

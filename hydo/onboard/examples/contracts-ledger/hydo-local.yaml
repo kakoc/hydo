@@ -1,0 +1,33 @@
+# The Rust account server's `apply` called in a loop inside one process (`ledger local`), with
+# its contract: no network, no service, and no VM exit while the loop runs. On x86_64 the program
+# is position-independent, so the KVM engine must find where each such process loaded it before
+# its first call; it does at the process's first system calls (docs/design/contracts.md, "The
+# load address of a position-independent program"). Each step is one process of 5,000 calls.
+# Build: ./build.sh (arm64, the Mac engine; ./build.sh x86_64 for KVM), then
+#   hydo build hydo-local.yaml
+# Try:  disk=none | run    -> OK: 20,000 calls checked, every clause held
+name: contracts-ledger-local
+description: the debit function with a contract called 5,000 times in each of four processes; every call is checked.
+
+root:
+  files:
+    - {src: bin/ledger-rs, dst: /bin/ledger, mode: "0755"}   # ./build.sh
+
+contracts:
+  - program: /bin/ledger
+    sources: [rust/src]
+
+workload:
+  steps: 4
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      /bin/ledger local 5000 > /dev/null
+      echo "$i ack" >> $HYDO_OUTCOMES
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: ledger.present
+    msg: the program is in the image
+    cmd: test -x /bin/ledger

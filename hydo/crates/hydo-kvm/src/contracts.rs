@@ -2,7 +2,7 @@
 //! breakpoints at the entry of each contracted function and at the return address of each call
 //! in progress, the plan's reads at each, and a record per call, in the Mac engine's format.
 //!
-//! What the guest sees: nothing. The breakpoints are the debug registers DR0 to DR3, set with
+//! What the guest sees: nothing. The breakpoints are three debug registers ([`SLOTS`]), set with
 //! `KVM_SET_GUEST_DEBUG` (`KVM_GUESTDBG_USE_HW_BP`), which KVM keeps apart from the guest's own
 //! debug registers. A hit is a `KVM_EXIT_DEBUG` that the engine handles without counting an
 //! exit, so the guest's clock does not move; the vCPU resumes over the instruction with
@@ -10,18 +10,22 @@
 //! registers and memory, so a run with contracts has the fingerprint of the same run without
 //! them. Without a plan nothing of this exists, and the vCPU's debugging stays off.
 //!
-//! The breakpoints are in the vCPU only while the spin observer neither steps it nor walks it
-//! with single steps (those use the debug registers themselves); a call that the observer steps
-//! into, by a jump from a loop without exits, is not recorded.
+//! While the spin observer runs the vCPU on to one address its breakpoint is in DR0 and the
+//! contracts' in DR1 to DR3; while it steps over two addresses or with the trap flag, the engine
+//! checks the contracts' addresses after every step ([`Vmm::run_ct`]). So every call is recorded
+//! however the observer's host-timed work falls.
 //!
 //! A position-independent program (Rust's musl target on x86_64) is loaded where the guest's
-//! kernel chooses, so the plan's addresses are offsets. At the first exit in each address space
-//! (CR3) the engine looks for the program's ELF header in the process's mapped pages (the
-//! program's startup reads its own header, so the page is mapped); the header's address is the
-//! load address. The search runs again in an address space without the program every
-//! [`RESCAN`] exits. Every process of the program has its own address, and with four debug
-//! registers the engine stops in at most three of them at once: those where calls were recorded
-//! first, then the ones seen last.
+//! kernel chooses, so the plan's addresses are offsets. A breakpoint at the kernel's entry of
+//! system calls (LSTAR) stops at every system call. At the first one in each address space (CR3)
+//! the engine looks for the program's ELF header in the process's mapped pages (the program's
+//! start-up reads its own header and makes system calls before `main`); the header's address is
+//! the load address. An address space without the program is searched again after the next
+//! `execve`. VM exits cannot be the trigger: a process that computes makes none (Milestone 255's
+//! second KVM run found no types process that way). Every process of the program has its own
+//! address, and the engine stops in as many of them at once as its breakpoints allow: the one
+//! of the latest system call first (the process that runs now), then those where calls were
+//! recorded.
 //!
 //! A return is matched with its call by the return address (read from the stack at entry), the
 //! page tables (CR3), and the stack pointer (Rust, C: 8 more at the return) or the goroutine
@@ -34,9 +38,8 @@ use hydo_contracts::plan::{self, Frame, Loc, Plan, Record};
 /// in DR0, so that no call is missed while it does (DR0 to DR2 otherwise; the observer's other
 /// steps check the contracts' addresses at each step).
 pub const SLOTS: usize = 3;
-/// Exits between two searches for a position-independent program in an address space without
-/// it.
-pub const RESCAN: u64 = 256;
+/// The mark of the breakpoint at the system calls' entry among the armed ones.
+const SYS: usize = usize::MAX;
 
 struct CtFn {
     id: u32,
@@ -67,10 +70,12 @@ struct Pending {
 struct Base {
     cr3: u64,
     prog: usize,
-    /// None: the program was not found (at exit `seen`).
+    /// None: the program was not found.
     at: Option<u64>,
-    /// The exit count when the address space was last seen.
+    /// The system call when the address space was last seen.
     seen: u64,
+    /// The `execve` count when it was searched.
+    gen: u64,
     /// Calls were recorded in it.
     hot: bool,
 }
@@ -93,9 +98,15 @@ pub struct Ct {
     pub active: bool,
     pending: Vec<Pending>,
     bases: Vec<Base>,
-    /// The address space at the last exit.
+    /// The address space at the last system call.
     last_cr3: Option<u64>,
-    /// The breakpoints now: (address, function or None for a return address).
+    /// Where the guest's system calls enter its kernel (LSTAR), with a position-independent
+    /// program in the plan; the system calls stopped at, and the `execve`s among them.
+    sys_entry: Option<u64>,
+    calls: u64,
+    exec_gen: u64,
+    /// The breakpoints now: (address, function, [`SYS`] for the system calls' entry, or None
+    /// for a return address).
     armed: Vec<(u64, Option<usize>)>,
     /// The last hit (pc, CR3, stack pointer), and the hit to step over without a record: the
     /// same call again, after a stop came between the hit and its instruction.
@@ -139,7 +150,8 @@ impl Ct {
             }
         }
         let has_ret = fns.iter().any(|f| !f.at_return.is_empty());
-        let room = if has_ret { SLOTS - 1 } else { SLOTS };
+        let any_pie = progs.iter().any(|p| p.pie);
+        let room = SLOTS - has_ret as usize - any_pie as usize;
         let fixed = fns.iter().filter(|f| !progs[f.prog].pie).count();
         let widest = (0..progs.len())
             .filter(|&k| progs[k].pie)
@@ -149,10 +161,17 @@ impl Ct {
         if fixed + widest > room {
             return Err(format!(
                 "the KVM engine has {SLOTS} breakpoints for contracts (the fourth debug register \
-                 is the spin observer's): at most {room} functions with contracts{} per program \
+                 is the spin observer's): at most {room} functions with contracts per program{}{} \
                  (this plan has {})",
                 if has_ret {
-                    " (one breakpoint stays for returns)"
+                    "; one breakpoint stays for returns"
+                } else {
+                    ""
+                },
+                if any_pie {
+                    "; one stays at the system calls' entry, where a position-independent \
+                     program's load address is found (link it static, not position-independent, \
+                     for one more)"
                 } else {
                     ""
                 },
@@ -166,6 +185,9 @@ impl Ct {
             pending: Vec::new(),
             bases: Vec::new(),
             last_cr3: None,
+            sys_entry: None,
+            calls: 0,
+            exec_gen: 0,
             armed: Vec::new(),
             last: None,
             skip: None,
@@ -185,6 +207,8 @@ impl Ct {
         self.over = 0;
         self.last_cr3 = None;
         self.last = None;
+        self.calls = 0;
+        self.exec_gen = 0;
         // a run from a snapshot has other address spaces than the run before it
         self.bases.clear();
     }
@@ -274,11 +298,15 @@ impl Ct {
                 out.push((f.entry, Some(i)));
             }
         }
+        if let Some(a) = self.sys_entry {
+            out.push((a, Some(SYS)));
+        }
         let has_ret = self.fns.iter().any(|f| !f.at_return.is_empty());
         let room = if has_ret { SLOTS - 1 } else { SLOTS };
         let mut found: Vec<&Base> = self.bases.iter().filter(|b| b.at.is_some()).collect();
-        // where calls were recorded, then the address spaces seen last
-        found.sort_by_key(|b| (!b.hot, u64::MAX - b.seen));
+        // the address space of the latest system call first (the process that runs now), then
+        // where calls were recorded
+        found.sort_by_key(|b| (u64::MAX - b.seen, !b.hot));
         for b in found {
             let base = b.at.unwrap_or(0);
             let add: Vec<(u64, Option<usize>)> = self
@@ -417,15 +445,48 @@ impl Vmm {
         self.cpu_mut().set_contract_bps(&addrs);
     }
 
-    /// At an exit: in a new address space, where a position-independent program is.
-    pub(crate) fn ct_at_exit(&mut self) {
+    /// A new run of the contracts: where the guest's system calls enter its kernel (LSTAR), the
+    /// stop at which a position-independent program's load address is searched for.
+    pub fn ct_begin(&mut self) {
         let Some(ct) = self.ct.as_ref() else { return };
-        if !ct.active || !ct.any_pie() {
+        let lstar = if ct.any_pie() {
+            self.cpu()
+                .save()
+                .msrs
+                .iter()
+                .find(|m| m.0 == 0xc000_0082)
+                .map(|m| m.1)
+                .filter(|&a| a != 0)
+        } else {
+            None
+        };
+        if let Some(ct) = self.ct.as_mut() {
+            ct.begin();
+            ct.sys_entry = lstar;
+        }
+    }
+
+    /// A system call (the breakpoint at the kernel's entry): an `execve` makes every address
+    /// space without the program worth a new search; in a new address space, or one searched
+    /// before the last `execve`, the search for a position-independent program's load address.
+    /// A process makes system calls from its start (the C library's own set-up), and a process
+    /// that runs without a VM exit makes them too, so every process of the program is found
+    /// before its first call, at a point the guest alone decides.
+    fn ct_syscall(&mut self) {
+        let Some(ct) = self.ct.as_ref() else { return };
+        if !ct.active {
             return;
         }
+        let nr = self.cpu().regs().rax;
         let cr3 = self.cpu().cr3() & !0xfff;
-        let exits = self.m.exits;
         let Some(ct) = self.ct.as_mut() else { return };
+        ct.calls += 1;
+        let now = ct.calls;
+        // execve, execveat: the process becomes another program
+        if nr == 59 || nr == 322 {
+            ct.exec_gen += 1;
+        }
+        let gen = ct.exec_gen;
         let fresh = ct.last_cr3 != Some(cr3);
         ct.last_cr3 = Some(cr3);
         let ram = self.ram.bytes();
@@ -442,12 +503,12 @@ impl Vmm {
                         true
                     } else {
                         if let Some(i) = i {
-                            ct.bases[i].seen = exits;
+                            ct.bases[i].seen = now;
                         }
                         false
                     }
                 }
-                Some(b) => exits >= b.seen + RESCAN,
+                Some(b) => b.gen != gen,
                 None => true,
             };
             if !look {
@@ -458,7 +519,8 @@ impl Vmm {
                 cr3,
                 prog: k,
                 at,
-                seen: exits,
+                seen: now,
+                gen,
                 hot: false,
             };
             match i {
@@ -476,6 +538,16 @@ impl Vmm {
     /// A contract's breakpoint at `pc`: a return of a call in progress, an entry, or both; then
     /// the vCPU goes on over the instruction.
     pub(crate) fn ct_hit(&mut self, pc: u64) {
+        if self.ct.as_ref().is_some_and(|c| c.sys_entry == Some(pc)) {
+            if let Some(c) = self.ct.as_mut() {
+                // not a call: a stop before the instruction here is never a call's again
+                c.last = None;
+                c.skip = None;
+            }
+            self.ct_syscall();
+            self.cpu_mut().contract_resume(pc);
+            return;
+        }
         let r = self.cpu().regs();
         let cr3 = self.cpu().cr3() & !0xfff;
         let exits = self.m.exits;
@@ -523,6 +595,14 @@ impl Vmm {
             return;
         }
         let r = self.cpu().regs();
+        if ct.sys_entry == Some(r.rip) {
+            // a system call the step reached (searching twice is harmless)
+            if let Some(c) = self.ct.as_mut() {
+                c.skip = None;
+            }
+            self.ct_syscall();
+            return;
+        }
         // the entries armed, and every return address of a call in progress (one that began
         // during the observer's steps has no breakpoint yet)
         if !ct.armed.iter().any(|a| a.0 == r.rip) && !ct.pending.iter().any(|p| p.ret == r.rip) {
@@ -604,6 +684,7 @@ impl Vmm {
             .iter()
             .filter(|a| a.0 == pc)
             .filter_map(|a| a.1)
+            .filter(|&i| i != SYS)
             .collect();
         if fids.is_empty() {
             return;
