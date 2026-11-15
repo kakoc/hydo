@@ -10652,7 +10652,7 @@ are copied to `~/hydo/build/m244` and give the same two values on hvx. On KVM th
 **Checks.** `cargo test -p hydo --test it docs::`, `cargo test -p hydo-agents --test it
 public_content::`, `cargo test -p hydo-image`, the list's own tests in hydo-bench and
 hydo-control, and `sh ci/vale.sh`. `hydo-bench rebaseline --check --thorough` exited 0 on the Mac
-and on the AMD KVM hosts. HVX_CHECK
+and on the AMD KVM hosts. On hvx it exited 0 in 8,926 s.
 
 ### Milestone 251 (tentative number) - DONE (Saleor 3.23.49, an e-commerce platform on Django, Celery, PostgreSQL and Redis, onboarded on hvx with business rules from the rule suggestion, on a project with Django models that hydo had not seen; two new candidates found blind and reproduced without hydo, no upstream report of either: a refund request that `transactionRequestAction` acknowledged is lost with its Celery task, and a gift card is charged without the charge being recorded; two known Saleor bugs reproduced; the rule suggestion's gaps on a Django project; nothing recorded moved; 2026-11-15)
 
