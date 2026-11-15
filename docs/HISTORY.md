@@ -11373,6 +11373,15 @@ now takes x0 when no parameter is in x0. Without a plan, the 0.3.3 Mac release's
 built with these programs has its recorded bytes (`706c8b95…`) and gave its recorded
 fingerprints `a62eee5332a5b9d2`, `474b2874e7ef0fa2` and `2e5f02d8ff33394f`.
 
+After the third KVM run (below), two more proofs ran on the Mac with this tree's programs:
+
+- `hydo-local.yaml`, `disk=none | run`, the Rust ledger's `apply` in four processes of 5,000
+  calls: `6b65b8e0e8070415` with the plan twice and without it, `20000 calls checked against 4
+  clauses, 0 broken`, and the same records in both runs with the plan (`a7fffbcc…`).
+- The Rust types program with its string on the heap (`hydo-types.yaml`): `7219d5075e86c1d9`
+  with the plan twice and without it, 3 clauses broken at 1 of 50,000 calls each, no undecided
+  check, and the same records twice (`8565b356…`).
+
 **Proof on the KVM engine.** Neither this Mac nor the bare-metal machine may run KVM. The engine
 test `contract_breakpoints_record_every_call_and_move_nothing` runs the scripted vCPU with and
 without a plan, also with forced preemption points: the same fingerprints, clock and verdict,
@@ -11408,8 +11417,33 @@ searches at the first system call in each address space and again after each `ex
 in the process of the latest system call first. That breakpoint leaves one function that reads
 its result per position-independent program, so the types program is linked at a fixed address
 on x86_64 (`-C relocation-model=static` in `build.sh`). The new manifest `hydo-local.yaml` runs
-the position-independent ledger in four processes of 5,000 calls each that make no VM exit. The
-third run's results are not in yet.
+the position-independent ledger in four processes of 5,000 calls each that make no VM exit.
+
+The third run, 43704130071, ran on four runners (one AMD EPYC 9V45, three EPYC 9V74). On each
+runner 38 checks passed and 3 failed:
+
+- The Redis example, the ledgers and the Go types program passed as before. The ledgers' and the
+  Go program's fingerprints were the same on all four runners (Rust `d1338a9c6d551221` and
+  `6020a9f74650f151`, Go `20539bf261bc06e8` and `1bec15da3ab3d63e`, Go types
+  `059b215d61733dc3`).
+- `hydo-local.yaml` passed its calls: one fingerprint (`bb0b4392d2a07bf8`) with the plan,
+  without it and under main's hydo, the same records twice, and `20000 calls checked against 4
+  clauses, 0 broken`. So the engine found each of the four processes. The check "the four
+  processes found" failed anyway, because the engine's log counted the address spaces it knew at
+  the end of the run: 1. The four processes ran one after the other, and each took the page
+  tables of the one before. The engine now counts each address space and load address where a
+  search found the program, once each, so a process searched again counts once.
+- The Rust types program, now at a fixed address, recorded its calls with one fingerprint
+  (`2f90cfa5a0892450`) and the same records twice, but broke 2 of the 3 clauses that its first
+  round breaks: both of `owned`. The clause of `text` that should break compares the string
+  `s` with `"hello"`. In that call the record has the string's length, 5, and no bytes: the first
+  round passes the literal `"hellO"`, which nothing in the process had read, so its page of the
+  program's file was not yet mapped, and the stop could not read it. The clause was undecided,
+  not broken. On the Mac the clause broke, so there the page was mapped. The program now copies
+  the string to the heap before the call, and the report says how many checks of a clause were
+  undecided.
+
+The fourth run's results are not in yet.
 
 **Tests.** `hydo-contracts`: the types of both languages on both architectures from the
 compiled programs (when Rust 1.90.0 with the musl targets and Go are present), the new language
@@ -11426,7 +11460,7 @@ re-recording.
 
 **Open** (AGENTS.md open item 113).
 
-- The KVM proof's second run.
+- The KVM proof's fourth run.
 - hvx: the side module of the design.
 - KVM: two functions with contracts per program when they read their results, one in a
   position-independent program. The engine stops in the process of the latest system call and

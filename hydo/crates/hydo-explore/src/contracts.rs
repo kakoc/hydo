@@ -108,6 +108,14 @@ pub fn summary(r: &Report) -> Vec<String> {
             hydo_contracts::plan::MAX_RECORDS
         ));
     }
+    let undecided: u64 = r.outcomes.iter().map(|o| o.undecided).sum();
+    if undecided > 0 {
+        out.push(format!(
+            "hydo: function contracts: {undecided} checks of a clause at a call were undecided: \
+             a value the stop could not read (memory the process had not mapped yet, an index \
+             past a length, another variant) or a return the run did not reach"
+        ));
+    }
     if r.without_return > 0 {
         out.push(format!(
             "hydo: function contracts: {} calls without their return (the run ended inside \

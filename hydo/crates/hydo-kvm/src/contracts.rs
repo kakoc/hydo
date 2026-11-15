@@ -38,6 +38,10 @@ use hydo_contracts::plan::{self, Frame, Loc, Plan, Record};
 /// in DR0, so that no call is missed while it does (DR0 to DR2 otherwise; the observer's other
 /// steps check the contracts' addresses at each step).
 pub const SLOTS: usize = 3;
+
+/// The finds [`Ct::summary`] counts at most.
+const FOUND_MAX: usize = 4096;
+
 /// The mark of the breakpoint at the system calls' entry among the armed ones.
 const SYS: usize = usize::MAX;
 
@@ -105,6 +109,12 @@ pub struct Ct {
     sys_entry: Option<u64>,
     calls: u64,
     exec_gen: u64,
+    /// Where a search found a position-independent program: (address space, program, load
+    /// address), each once, at most [`FOUND_MAX`]. A process searched again (its address space
+    /// left the table, or a rewind replays its search) adds nothing; a process in the page
+    /// tables of one that ended has another load address, because the guest's kernel places
+    /// each process at random. Kept over a rewind, which replays the same searches.
+    found: Vec<(u64, usize, u64)>,
     /// The breakpoints now: (address, function, [`SYS`] for the system calls' entry, or None
     /// for a return address).
     armed: Vec<(u64, Option<usize>)>,
@@ -188,6 +198,7 @@ impl Ct {
             sys_entry: None,
             calls: 0,
             exec_gen: 0,
+            found: Vec::new(),
             armed: Vec::new(),
             last: None,
             skip: None,
@@ -209,23 +220,27 @@ impl Ct {
         self.last = None;
         self.calls = 0;
         self.exec_gen = 0;
+        self.found.clear();
         // a run from a snapshot has other address spaces than the run before it
         self.bases.clear();
     }
 
     /// What the run's contracts did, for the engine's log: the calls recorded and not, the hits
-    /// in other programs, and the address spaces where a position-independent program was found.
+    /// in other programs, and in how many processes a position-independent program was found,
+    /// at how many load addresses (each address space and load address of a find once; a
+    /// process that ended gives its page tables to the next, so the address spaces known at the
+    /// end are fewer than the processes).
     pub fn summary(&self) -> String {
-        let found = self.bases.iter().filter(|b| b.at.is_some()).count();
-        let mut at: Vec<u64> = self.bases.iter().filter_map(|b| b.at).collect();
+        let mut at: Vec<u64> = self.found.iter().map(|f| f.2).collect();
         at.sort_unstable();
         at.dedup();
         format!(
             "hydo-kvm: contracts: {} calls recorded, {} not recorded, {} hits in other programs, \
-             {found} address spaces with a position-independent program at {} addresses",
+             a position-independent program found in {} processes at {} load addresses",
             self.recs.len(),
             self.over,
             self.foreign,
+            self.found.len(),
             at.len()
         )
     }
@@ -515,6 +530,12 @@ impl Vmm {
                 continue;
             }
             let at = find_head(ram, cr3, head);
+            if let Some(a) = at {
+                let f = (cr3, k, a);
+                if !ct.found.contains(&f) && ct.found.len() < FOUND_MAX {
+                    ct.found.push(f);
+                }
+            }
             let b = Base {
                 cr3,
                 prog: k,

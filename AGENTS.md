@@ -1192,10 +1192,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     whether its run had a clock step; the example's client records the clock it saw. The
     history, matching and frontend services ran in one process, not apart.
 113. Function contracts (M241, M255). What is left:
-    - KVM: the one-off workflow `tmp-contracts-kvm` ran twice (43697118540, 43700840743). The
-      ledgers, the Go types program, and the Redis example passed. The Rust types program was
-      not found, so the search for a position-independent program moved to system calls
-      (docs/HISTORY.md Milestone 255). The third run's results are not in yet.
+    - KVM: the one-off workflow `tmp-contracts-kvm` ran three times (43697118540,
+      43700840743, 43704130071). The ledgers, the Go types program, and the Redis example
+      passed. Since the third run the engine finds a position-independent program at system
+      calls, and every call of `hydo-local.yaml`'s four processes was checked. Two checks of
+      the third run failed, and both are fixed. The engine's log undercounted the processes
+      found. A string literal that the process had not read yet left a clause of the Rust
+      types program undecided (docs/HISTORY.md Milestone 255). The fourth run's results are not in
+      yet.
     - hvx has no breakpoints for contracts: the side module is designed in
       docs/design/contracts.md, not built.
     - On KVM two functions with contracts fit in one program when they read their results

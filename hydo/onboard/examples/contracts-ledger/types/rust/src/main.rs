@@ -56,7 +56,10 @@ fn owned(
 }
 
 fn round(bad: bool) {
-    let s = if bad { "hellO" } else { "hello" };
+    // on the heap: a string literal that nothing read yet can sit in a page the process has not
+    // mapped, where a stop cannot read it (the clause is then undecided, not broken)
+    let hello = String::from(if bad { "hellO" } else { "hello" });
+    let s = hello.as_str();
     let abc = String::from("abc");
     let v = vec![10u32, 20, 30, 40];
     let sl: [u16; 2] = [6, 7];

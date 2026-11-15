@@ -88,8 +88,10 @@ the clause undecided for that call.
   refused with the advice to write `len(v)`.
 
 A clause that cannot be read for a call is undecided for that call, not broken. Two examples are
-an unmapped address and a call that had not returned when the run ended. The report counts
-undecided calls.
+an unmapped address and a call that had not returned when the run ended. An unmapped address can
+be a string literal of the program that nothing in the process has read yet: the kernel maps a
+page of the program's file only when the process first touches it. The report counts the
+undecided checks of a clause.
 
 ## Where the stops happen
 
@@ -203,7 +205,11 @@ one process of a function that reads its result (two of one that does not). The 
 the process of the latest system call, which is the one that runs, and then in the processes
 where calls were recorded. A call in a process outside those is not recorded, for example in a
 process that another process preempts without a system call in between.
-The engine's log names the processes found (`hydo-kvm: contracts:` in `engine.log`).
+The engine's log says in how many processes it found the program and at how many load
+addresses (`hydo-kvm: contracts:` in `engine.log`). It counts each address space and load address
+where a search found the program once, so a process searched again counts once. A process that
+ends gives its page tables to a later one, which the kernel loads at another address, so the
+later process counts again.
 
 A Go program and an arm64 Rust program are linked at fixed addresses and need no search. The
 Mac engine refuses a position-independent program with a message.
@@ -316,7 +322,8 @@ hydo: function contracts: 120052 calls in all; 20052 of them were not judged, be
 ```
 
 A call whose return the run did not reach has its `ensures` clauses undecided, and the report
-says how many such calls there were.
+says how many such calls there were. It also says how many checks of a clause at a call were
+undecided for any reason.
 
 ## Proof on the example
 
@@ -370,6 +377,12 @@ records (`bb73ac81…` and `3793a645…`). Without a plan the Mac release's Redi
 with these programs, has its recorded bytes (`706c8b95…`) and gave its recorded fingerprints
 `a62eee5332a5b9d2`, `474b2874e7ef0fa2` and `2e5f02d8ff33394f`.
 
+Two proofs ran after the third KVM run (below). `hydo-local.yaml` gave `6b65b8e0e8070415` with
+the plan twice and without it, `20000 calls checked against 4 clauses, 0 broken`, and the same
+records in both runs with the plan. The Rust types program with its string on the heap gave
+`7219d5075e86c1d9` with the plan twice and without it, the same 3 broken clauses at 1 call
+each, no undecided check, and the same records twice.
+
 ### Milestone 255 on the KVM engine
 
 Neither this Mac nor the bare-metal machine may run KVM. The one-off workflow
@@ -408,8 +421,25 @@ while the observer worked. The second run, 43700840743, on four runners:
 
 Now the engine searches at system calls. The example's `hydo-local.yaml` runs
 position-independent processes that make no VM exit (`ledger local`, 5,000 calls each), and the
-types program is linked at a fixed address on x86_64 (`build.sh`). The third run's results are
-not in yet.
+types program is linked at a fixed address on x86_64 (`build.sh`).
+
+The third run, 43704130071, ran on four runners (one AMD EPYC 9V45, three EPYC 9V74). 38 checks
+passed on each, and 3 failed:
+
+- The ledgers, the Go types program and the Redis example passed as before.
+- `hydo-local.yaml` recorded and checked every call of its four processes: `20000 calls checked
+  against 4 clauses, 0 broken`, one fingerprint (`bb0b4392d2a07bf8`) with the plan, without it
+  and under main's hydo, and the same records twice. The check that the engine found four
+  processes failed, because the engine's log counted the address spaces it knew at the end. The
+  four processes ran one after the other in the same page tables, so that count was 1. The log
+  now counts each find (above).
+- The Rust types program, at a fixed address, broke 2 of the 3 clauses that its first round
+  breaks. The third, `s == "hello"` of `text`, was undecided: the record of that call has the
+  string's length and no bytes, because the literal `"hellO"` was in a page of the program that
+  the process had not touched. The program now copies the string to the heap first. Its
+  fingerprint (`2f90cfa5a0892450`) was one with the plan, without it and under main's hydo.
+
+The fourth run's results are not in yet.
 
 ## Next steps
 
