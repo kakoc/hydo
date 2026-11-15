@@ -1738,8 +1738,9 @@ build machine, before 2026-10-13.
   Two KVM verdicts changed: the quickstart's lost write is `C=11 R=everysec` on KVM now, and
   Qdrant's KVM failure is a pause of the test's thread. Open item 105 is empty
 - M251 (tentative number): the Saleor onboarding on hvx, with rules from the rule suggestion on a
-  project hydo had never seen. Two new candidates, found blind and reproduced natively, and
-  reported as saleor#20022 and #20023: a refund request lost with its Celery task, and a gift card charged without a record.
+  project hydo had never seen. Two new candidates were found blind and reproduced natively. They
+  are reported as saleor#20022 and #20023: a refund request lost with its Celery task, and a gift
+  card charged without a record.
   Two known bugs reproduced, and the scan misses Django's `models.py`. Nothing recorded moved
 - M257 (tentative number): `hydo explore --protocol-cover` gives each schedule one `H=` token
   from a walk over the cells of the fakes and proxies. A cell is a route, a step, and a rule
