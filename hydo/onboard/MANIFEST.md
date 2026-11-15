@@ -38,9 +38,12 @@ directory, each with `model.json`, the model it reads into; `INDEX` lists them).
   before it reads any other key, and names the format it needs: `format: this file is written in
   project format 2, and this hydo (0.3.4) reads project format 1 only; install a newer hydo, one
   that reads format 2`. `hydo_version:` is a different, optional pin: the hydo release the
-  project was made for (what runs in the guest), checked against `hydo/VERSION`. A document that
-  uses a key added in a later release should pin that release (`hydo_version: ">=0.2"`), so an
-  older hydo says which release it needs instead of "unknown field".
+  project was made for (what runs in the guest), checked against `hydo/VERSION`. A plan that
+  says `"0.3"` builds on hydo 0.3 and on every newer release of the same major, such as 0.4 or
+  0.9, so a project keeps its pin across releases. An older hydo refuses it and names the
+  release it needs. A document that uses a key added in a later release should pin that release
+  (`hydo_version: "0.4"`), so an older hydo says which release it needs instead of "unknown
+  field".
 - **Additions only within a version.** New optional keys and new values may be added; renaming,
   removing or changing the meaning of a key is not. Unknown keys are errors (typos are caught).
   A test compares the schema with the schema of the last release
@@ -1922,9 +1925,11 @@ program; nothing of the SDK's setup code runs in the guest.
 
 ```yaml
 format: 1                      # the project format ("The project format"; a newer one is refused)
-hydo_version: "0.3"            # the hydo the plan was written for: "0.3" (same major.minor; a
-                               #   different patch only warns), "0.3.0", or ">=0.3". A mismatch
-                               #   is an error unless HYDO_VERSION_CHECK=warn. hydo/VERSION (or the
+hydo_version: "0.3"            # the hydo the plan was written for: "0.3" (0.3 or any newer
+                               #   release of the same major), "0.3.1", or ">=0.3" (any major).
+                               #   An older minor refuses the plan and names the release it needs;
+                               #   an older patch of the same minor only warns. A refusal becomes a
+                               #   warning with HYDO_VERSION_CHECK=warn. hydo/VERSION (or the
                                #   release's VERSION) is the engine's version.
 workload:
   steps: 20                    # rounds of the composition (default 20); faults are placed at

@@ -11798,3 +11798,64 @@ cut inside a step on the Mac (`cf=` is hvx only; the examples cut with their own
 and reactions), squashfs and the device mapper in the Mac's guest kernel, a way to keep `G=` off
 one file of a service's storage, rules for system software in `hydo rules scan`, and disk faults
 and the strict power loss in the explorer's draws.
+
+### Milestone 262 (tentative number) - DONE (a plan's `hydo_version:` names the oldest hydo that builds it: `"0.3"` builds on 0.3 and every newer 0.x, so a release no longer refuses the projects of the release before it; an older minor refuses and names the release it needs; nothing recorded moved; 2026-11-15)
+
+**Why.** The user decided on 2026-11-15 that a release raises the middle number (0.4.0, then
+0.5.0), and that the last number is for small fixes only. Until now
+`hydo_manifest::composer::check_version` built a plan only when its `hydo_version:` named the
+same major.minor as the running hydo. hydo 0.4.0 would then have refused every project whose
+`hydo.yaml` says `hydo_version: "0.3"`, and every user's project would have broken at each
+release. The project format has its own version (`format: 1`), and it changes by additions
+only, so a newer hydo reads every older plan.
+
+**The rule.** A plan names `"X.Y"`, `"X.Y.Z"` or `">=X.Y[.Z]"`.
+
+| The plan says | This hydo | The answer |
+|---|---|---|
+| `"0.3"` or `"0.3.1"` | 0.3.1 or newer, up to any 0.x | builds |
+| `"0.3"` | 1.0.0 | refused: `the plan needs hydo 0.3 or a newer 0.x` |
+| `"0.5"` or `"0.5.2"` | 0.4.1 | refused: `the plan needs hydo 0.5 or newer` |
+| `"0.4.3"` | 0.4.1 | builds with a warning: `an older patch of the same release` |
+| `">=0.3.2"` | 0.3.2 or newer, of any major | builds, as before |
+| `">=0.3.2"` | 0.3.1 | refused: `the plan needs hydo at least 0.3.2`, as before |
+
+With major 0, every later 0.Y builds a 0.Y plan. A different major refuses, because a new major
+may change the format. Every refusal ends with `(install that hydo, or set
+HYDO_VERSION_CHECK=warn)`, and `HYDO_VERSION_CHECK=warn` still turns each refusal into a warning.
+
+**The decided case.** A plan of a newer minor than the running hydo is refused, not warned
+about: the plan may use keys that this hydo does not know, and the refusal names the release to
+install instead of a later "unknown field". A plan of a newer patch of the same minor builds with
+a warning, as before this milestone, because a patch release fixes and adds no keys. Before, a
+plan that named a patch other than the running one warned in both directions; now an older
+plan's patch builds without a word.
+
+**What changed.**
+
+- `check_version` in `hydo/crates/hydo-manifest/src/composer.rs`, with seven unit tests:
+  the same release, an older minor, a newer minor, a newer major hydo, the patches, `>=`, and
+  the warn mode.
+- The schema's description of `VersionPin` (`hydo/crates/hydo-manifest/src/model.rs` and
+  `hydo/schema/project-v1.json`; the released copy keeps its text).
+- `hydo/onboard/MANIFEST.md` ("The project format" and the plan's example), `hydo guide
+  composer`, docs/RELEASING.md step 1 (the numbering rule, and that plans keep their pin), and
+  AGENTS.md "Releases". `hydo init`, `hydo compose` and `hydo onboard` print nothing about the
+  rule, and their templates keep `hydo_version: "0.3"`.
+
+**Goldens.** Only answers that printed the old refusal moved. Each equivalence golden was
+re-recorded from Rust over its pinned inputs, and the pinned input digests were kept as they
+were:
+
+- hydo-manifest's `tests/golden/answers.txt`: 307 answers. Nine plans are accepted now (four
+  fixture cases on both architectures, and the TigerBeetle example's `hydo-single-storage.yaml`
+  on x86_64), with five new image-path answers for them. 297 mutants are refused by the next
+  check of the validator. One mutant that pins hydo 4096 is refused with the new message.
+- hydo-build's `tests/golden/answers.txt`: 276 answers of `--check`, `--print-shell` and
+  `--print-world`, each formerly the old refusal. A decoded comparison of every request showed no
+  other answer moved.
+
+No fingerprint, image or recorded value of `hydo/onboard/recorded.json` moved: the check runs
+before any image is built, and every plan that built before builds the same bytes now. The
+example plans that still pin `"0.1"` or `"0.2"` (postgres-sql, TigerBeetle's single-storage
+plan, Ghost, YugabyteDB) build again without `HYDO_VERSION_CHECK=warn`.

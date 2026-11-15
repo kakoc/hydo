@@ -229,7 +229,8 @@ and 257 to 0.3.3, as `docs/HISTORY.md` "The 0.3.4 release" says. The fingerprint
 releases ship M234's guest kernels with cgroups next to the old ones. 0.3.3 (`dad45fc9`) added
 Milestones 228–230, 232, 239, and 240. The next release raises the middle number (0.4.0): a release
 with features raises it, and the last number is for small fixes only (user, 2026-11-15).
-Plans keep `hydo_version: "0.3"`. The release index `hydo/dist/releases.txt` pins every published archive.
+Plans keep `hydo_version: "0.3"` across releases: since M262 it means 0.3 or any newer 0.x, and
+only an older hydo refuses a plan (`docs/RELEASING.md` step 1). The release index `hydo/dist/releases.txt` pins every published archive.
 Since 0.2.0 the Linux release ships the KVM engine, and the Mac programs are signed and notarized.
 `cargo install hydo` followed by `hydo setup` works on the Mac and, since M210, on Linux with KVM.
 How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`. The files of 0.3.4 and its prepared
@@ -1941,6 +1942,10 @@ build machine, before 2026-10-13.
   point of an install and a reboot. RAUC held. SWUpdate never flushes a written image before it
   switches the slot, so a cut before the reboot boots the slot's older contents. What hydo lacked
   for devices. Nothing recorded moved
+- M262 (tentative number): a plan's `hydo_version: "0.3"` builds on 0.3 and every newer 0.x, so
+  a release raises the middle number without breaking projects. An older hydo refuses and names
+  the release it needs; a plan of a newer patch only warns; `>=` and `HYDO_VERSION_CHECK=warn` are
+  unchanged. Only the old refusal's golden answers moved. Nothing recorded moved
 
 ## Where to look
 

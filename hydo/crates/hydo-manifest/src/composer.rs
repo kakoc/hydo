@@ -1220,6 +1220,22 @@ fn vt(x: &str) -> [i128; 3] {
 }
 
 /// `check_version(want, have, ...)`; `only_warn`: `HYDO_VERSION_CHECK=warn`.
+///
+/// A plan names the hydo it was written for: `"X.Y"`, `"X.Y.Z"` or `">=X.Y[.Z]"`. Since
+/// Milestone 262 `"X.Y"` and `"X.Y.Z"` mean "this release or a newer one of the same major":
+/// releases raise the middle number and keep the project format additions-only (`format: 1`),
+/// so a plan written for 0.3 builds on 0.4 and 0.9 too, also with major 0. Before, they meant
+/// the same major.minor, and every release refused every existing project.
+///
+/// - The same major, and this hydo's major.minor.patch at least the plan's: it builds.
+/// - An older minor (or major) than the plan's: refused, because the plan may use keys that
+///   this hydo does not know. The message names the release the plan needs.
+/// - The plan's major.minor with an older patch: it builds with a warning, because a patch
+///   release only fixes and adds no keys.
+/// - A newer major than the plan's: refused, because a new major may change the format.
+/// - `>=X.Y[.Z]`: at least that release, of any major.
+///
+/// With `only_warn` every refusal becomes a warning.
 pub fn check_version(want: &Value, have: &str, only_warn: bool, warn: &mut Vec<String>) -> R<()> {
     let w = py::strip(&str_of(want)).to_string();
     if !pyre::fullmatch(r"(>=)?\d+(\.\d+){0,2}", &w) {
@@ -1233,13 +1249,24 @@ pub fn check_version(want: &Value, have: &str, only_warn: bool, warn: &mut Vec<S
         (h >= vt(rest), format!("at least {rest}"))
     } else {
         let wv = vt(&w);
-        let ok = h[..2] == wv[..2];
-        if ok && pyre::digit_runs(&w).len() == 3 && h != wv {
-            warn.push(format!(
-                "hydo_version: the plan names {w}, this hydo is {have} (same major.minor: building)"
-            ));
+        if h[0] != wv[0] {
+            let why = if h[0] < wv[0] {
+                format!("{w} or newer")
+            } else {
+                format!("{w} or a newer {}.x", wv[0])
+            };
+            (false, why)
+        } else if h[1] < wv[1] {
+            (false, format!("{w} or newer"))
+        } else {
+            if h[1] == wv[1] && h[2] < wv[2] {
+                warn.push(format!(
+                    "hydo_version: the plan names {w}, this hydo is {have} (an older patch of \
+                     the same release: building)"
+                ));
+            }
+            (true, String::new())
         }
-        (ok, format!("{}.{}.x", wv[0], wv[1]))
     };
     if !ok {
         let msg = format!("hydo_version: the plan needs hydo {why}, this hydo is {have}");
@@ -1924,6 +1951,7 @@ pub fn has_test(m: &Value) -> Result<bool, ManifestError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn ints() {
@@ -1944,5 +1972,102 @@ mod tests {
     fn splitlines_like_python() {
         assert_eq!(splitlines("a\r\nb\rc\n"), vec!["a", "b", "c"]);
         assert_eq!(splitlines("a\n\nb"), vec!["a", "", "b"]);
+    }
+
+    /// `check_version(want, have)`: Ok with its warnings, or the refusal's message.
+    fn cv(want: Value, have: &str, only_warn: bool) -> Result<Vec<String>, String> {
+        let mut warn = Vec::new();
+        check_version(&want, have, only_warn, &mut warn)
+            .map(|()| warn)
+            .map_err(|e| e.message)
+    }
+
+    #[test]
+    fn version_the_same_release_builds() {
+        assert_eq!(cv(json!("0.4"), "0.4.0", false), Ok(vec![]));
+        assert_eq!(cv(json!("0.4.0"), "0.4.0", false), Ok(vec![]));
+        assert_eq!(cv(json!("0.4"), "0.4.2", false), Ok(vec![]));
+        // a YAML number reads as its text
+        assert_eq!(cv(json!(0.4), "0.4.0", false), Ok(vec![]));
+    }
+
+    #[test]
+    fn version_a_plan_of_an_older_minor_builds_on_a_newer_hydo() {
+        // the reason for Milestone 262: a 0.3 project keeps building on 0.4, 0.5, ...
+        assert_eq!(cv(json!("0.3"), "0.4.0", false), Ok(vec![]));
+        assert_eq!(cv(json!("0.1"), "0.9.3", false), Ok(vec![]));
+        assert_eq!(cv(json!("0.3.3"), "0.4.0", false), Ok(vec![]));
+        assert_eq!(cv(json!("1.2"), "1.7.1", false), Ok(vec![]));
+    }
+
+    #[test]
+    fn version_a_plan_of_a_newer_minor_is_refused_with_the_release_it_needs() {
+        let e = cv(json!("0.5"), "0.4.1", false).unwrap_err();
+        assert_eq!(
+            e,
+            "hydo_version: the plan needs hydo 0.5 or newer, this hydo is 0.4.1 (install that \
+             hydo, or set HYDO_VERSION_CHECK=warn)"
+        );
+        let e = cv(json!("0.5.2"), "0.4.9", false).unwrap_err();
+        assert!(e.contains("needs hydo 0.5.2 or newer"), "{e}");
+        // a newer major too
+        let e = cv(json!("1.0"), "0.9.0", false).unwrap_err();
+        assert!(e.contains("needs hydo 1.0 or newer"), "{e}");
+    }
+
+    #[test]
+    fn version_a_newer_major_hydo_refuses_an_older_majors_plan() {
+        let e = cv(json!("0.3"), "1.0.0", false).unwrap_err();
+        assert!(
+            e.contains("needs hydo 0.3 or a newer 0.x, this hydo is 1.0.0"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn version_patches() {
+        // the plan's patch is older than this hydo's: it builds without a word
+        assert_eq!(cv(json!("0.4.1"), "0.4.3", false), Ok(vec![]));
+        // the plan names a newer patch of this release: a patch adds no keys, so a warning
+        let w = cv(json!("0.4.3"), "0.4.1", false).unwrap();
+        assert_eq!(
+            w,
+            vec![
+                "hydo_version: the plan names 0.4.3, this hydo is 0.4.1 (an older patch of the \
+                 same release: building)"
+                    .to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn version_at_least_keeps_its_meaning() {
+        assert_eq!(cv(json!(">=0.3"), "0.3.0", false), Ok(vec![]));
+        assert_eq!(cv(json!(">=0.3"), "1.2.0", false), Ok(vec![]));
+        assert_eq!(cv(json!(">=0.3.2"), "0.3.2", false), Ok(vec![]));
+        let e = cv(json!(">=0.3.2"), "0.3.1", false).unwrap_err();
+        assert!(
+            e.contains("needs hydo at least 0.3.2, this hydo is 0.3.1"),
+            "{e}"
+        );
+        let e = cv(json!(">=1.0"), "0.9.9", false).unwrap_err();
+        assert!(e.contains("needs hydo at least 1.0"), "{e}");
+    }
+
+    #[test]
+    fn version_warn_mode_builds_with_the_refusal_as_a_warning() {
+        let w = cv(json!("0.5"), "0.4.1", true).unwrap();
+        assert_eq!(
+            w,
+            vec![
+                "hydo_version: the plan needs hydo 0.5 or newer, this hydo is 0.4.1 \
+                 (HYDO_VERSION_CHECK=warn: building anyway)"
+                    .to_string()
+            ]
+        );
+        assert_eq!(cv(json!(">=2.0"), "0.4.1", true).unwrap().len(), 1);
+        assert_eq!(cv(json!("0.3"), "1.0.0", true).unwrap().len(), 1);
+        // a malformed pin stays an error
+        assert!(cv(json!("v1"), "0.4.1", true).is_err());
     }
 }

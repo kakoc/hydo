@@ -15,6 +15,14 @@ docs/PUBLISHING.md lists every place hydo is published.
 1. Decide the version (`hydo/VERSION`, and `HYDO_VERSION` for the release scripts; AGENTS.md open
    item 40 says what a version change moves). The SDKs carry the same version (docs/PUBLISHING.md,
    "The next version", lists the files and the images a version change moves).
+   The numbering rule (the user, 2026-11-15) has two parts:
+   - A release raises the middle number: 0.4.0, then 0.5.0.
+   - A release of small fixes raises the last number: 0.4.1.
+
+   Plans keep their `hydo_version:` across releases. A plan that says `"0.3"` builds on 0.4.0
+   and every newer 0.x, and only an older hydo refuses it (Milestone 262). So a release changes
+   no plan's pin: not the examples', not `hydo init`'s template, and not the Rust test SDK's
+   `HYDO_VERSION`. A plan moves its pin only when it uses a key of a newer release.
    In the same release, copy each format's current schema (`hydo/schema/<format>-v1.json`) that
    differs from its released copy into `hydo/schema/released/`. The schema tests
    (`hydo-schema-compat`) check every later change as an addition to the released copy, so a

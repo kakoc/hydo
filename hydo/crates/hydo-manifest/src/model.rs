@@ -307,7 +307,7 @@ impl JsonSchema for VersionPin {
     }
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
         json_schema!({
-            "description": "The hydo the project was made for: \"0.1\" (same major.minor), \"0.1.0\", or \">=0.1\".",
+            "description": "The hydo the project was made for: \"0.3\" (that release or a newer one of the same major; an older hydo refuses), \"0.3.1\", or \">=0.3\" (at least that release, of any major).",
             "type": ["string", "number"],
         })
     }

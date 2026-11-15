@@ -111,7 +111,8 @@ A complete folder has more examples:
 
 ```yaml
 format: 1                    # the project format (a newer one is refused; hydo guide schema)
-hydo_version: "0.3"          # the hydo this plan was written for (hydo build refuses another major.minor)
+hydo_version: "0.3"          # the hydo this plan was written for: 0.3 or any newer 0.x builds it;
+                             #   an older hydo refuses it and names the release it needs
 workload:
   steps: 20                  # one round of commands per step; faults come before a step. No run: here.
   timeout: 300
