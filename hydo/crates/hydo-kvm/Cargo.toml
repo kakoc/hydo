@@ -28,6 +28,8 @@ hydo-hvm = { workspace = true }
 hydo-engine-proto = { workspace = true }
 hydo-schedule = { workspace = true }
 hydo-config = { workspace = true }
+# function contracts: the plan it follows and the records it writes (M255)
+hydo-contracts = { workspace = true }
 
 [[bin]]
 name = "hydo-kvm"

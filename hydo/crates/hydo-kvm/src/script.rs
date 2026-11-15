@@ -102,6 +102,8 @@ fn cpu_of(p: Arc<Program>, quirk: bool, host_dr6: Option<u64>) -> Box<dyn Cpu> {
         stepping: None,
         ready: false,
         ifl: false,
+        ct_bps: Vec::new(),
+        ct_skip: None,
     })
 }
 
@@ -161,6 +163,10 @@ pub struct ScriptCpu {
     /// first run, whatever state was loaded into it
     ready: bool,
     ifl: bool,
+    /// the function contracts' breakpoints ([`Cpu::set_contract_bps`]), and the one a resume
+    /// lets run once
+    ct_bps: Vec<u64>,
+    ct_skip: Option<u64>,
 }
 
 impl ScriptCpu {
@@ -200,6 +206,15 @@ impl ScriptCpu {
             if self.window && self.if_on() {
                 self.window = false;
                 return Exit::IrqWindow;
+            }
+            // a function contract's breakpoint, as KVM's debug registers stop there (not while
+            // the observer steps); the resume lets its instruction run once
+            if self.stepping.is_none() && self.ct_bps.contains(&self.s.regs.rip) {
+                if self.ct_skip.take() != Some(self.s.regs.rip) {
+                    return Exit::Contract(self.s.regs.rip);
+                }
+            } else {
+                self.ct_skip = None;
             }
             let pc = self.pc();
             let Some(op) = self.p.ops.get(pc).cloned() else {
@@ -475,6 +490,14 @@ impl Cpu for ScriptCpu {
 
     fn step_to(&mut self, step: Option<&crate::spin::Step>) {
         self.stepping = step.map(|s| s.addrs().to_vec());
+    }
+
+    fn set_contract_bps(&mut self, addrs: &[u64]) {
+        self.ct_bps = addrs.to_vec();
+    }
+
+    fn contract_resume(&mut self, pc: u64) {
+        self.ct_skip = Some(pc);
     }
 
     /// The scripted counterparts of [`crate::spin::decode`]: jumps, compares and register

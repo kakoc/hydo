@@ -109,6 +109,8 @@ pub struct Options {
     pub no_fp: bool,
     /// `HYDO_PREEMPT_RECORD`, set and not `0`: a record per forced preemption point.
     pub preempt_record: bool,
+    /// `HYDO_CONTRACTS`: the function contracts' plan (Milestone 255).
+    pub contracts: Option<String>,
 }
 
 impl Options {
@@ -128,6 +130,7 @@ impl Options {
             spin_state: e.text(HYDO_KVM_SPIN_STATE).map(|v| v != "0"),
             no_fp: e.is_set(HYDO_KVM_NO_FP),
             preempt_record: e.set_not_0(HYDO_PREEMPT_RECORD),
+            contracts: t(HYDO_CONTRACTS).filter(|p| !p.is_empty()),
         }
     }
 }

@@ -208,11 +208,15 @@ impl Kvm {
         a
     }
 
-    fn command(&self, argv: &[String]) -> Command {
+    fn command(&self, spec: &BootSpec, argv: &[String]) -> Command {
         let mut c = Command::new(&argv[0]);
         c.args(&argv[1..]);
         for (k, v) in &self.env {
             c.env(k, v);
+        }
+        // Milestone 255: the function contracts' plan next to the image, when it has one
+        if let Some(p) = crate::hvm::contracts_for(&spec.image) {
+            c.env(hydo_config::registry::HYDO_CONTRACTS, p);
         }
         c
     }
@@ -235,7 +239,14 @@ fn spawn(
 ) -> Result<crate::process::Started, EngineError> {
     use crate::protocol::{EngineMsg, HostMsg};
     use hydo_kvm::serve::{run, Mode, Start};
-    let e = k.engine_env();
+    let mut e = k.engine_env();
+    // Milestone 255: the function contracts' plan next to the image, when it has one
+    if let Some(p) = crate::hvm::contracts_for(&spec.image) {
+        e = e.with([(
+            hydo_config::registry::HYDO_CONTRACTS,
+            p.display().to_string(),
+        )]);
+    }
     let o = hydo_config::kvm::Options::from_env(&e);
     let dev = hydo_config::kvm::Engine::from_env(&e).dev();
     let hv = hydo_kvm::sys::Kvm::open(&dev.display().to_string())
@@ -337,7 +348,7 @@ impl ControlledEngine for Kvm {
         }
         self.check_built()?;
         let argv = self.argv(spec, "serve", boot);
-        ControlledBoot::start(self.command(&argv), stderr_log)
+        ControlledBoot::start(self.command(spec, &argv), stderr_log)
     }
 
     fn one_controlled(
@@ -354,7 +365,7 @@ impl ControlledEngine for Kvm {
         }
         self.check_built()?;
         let argv = self.argv(spec, "one", schedule);
-        ControlledRun::start(self.command(&argv), stderr_log)
+        ControlledRun::start(self.command(spec, &argv), stderr_log)
     }
 
     /// A worker keeps guest RAM, its disk and S0 and S1 of both in memory.

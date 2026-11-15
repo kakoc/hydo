@@ -45,6 +45,7 @@ fn ledger_plan() -> Plan {
         base,
         path,
         size: 8,
+        shift: 0,
     };
     Plan {
         v: PLAN_V,
@@ -53,6 +54,8 @@ fn ledger_plan() -> Plan {
             program: "/bin/ledger".into(),
             sha256: String::new(),
             arch: "arm64".into(),
+            pie: false,
+            head: String::new(),
             unchecked: vec![],
             functions: vec![Function {
                 id: 0,
@@ -143,10 +146,111 @@ fn plans_and_records_read_back() {
         at_return: None,
         lost: Some("no breakpoint".into()),
     };
-    let t = records_text(std::slice::from_ref(&r));
+    let t = records_text(std::slice::from_ref(&r), 3);
     assert_eq!(
         t,
-        "{\"f\":0,\"at\":7,\"in\":[1,null],\"lost\":\"no breakpoint\"}\n"
+        "{\"f\":0,\"at\":7,\"in\":[1,null],\"lost\":\"no breakpoint\"}\n\
+         {\"end\":{\"recorded\":1,\"not_recorded\":3}}\n"
     );
-    assert_eq!(serde_json::from_str::<Record>(t.trim()).unwrap(), r);
+    assert_eq!(
+        serde_json::from_str::<Record>(t.lines().next().unwrap()).unwrap(),
+        r
+    );
+    // the end line says how many calls were not recorded; records without one (before
+    // Milestone 255) count every call as recorded
+    let dir = std::env::temp_dir().join(format!("hydo-contracts-end-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = dir.join("a.contracts.jsonl");
+    std::fs::write(&p, &t).unwrap();
+    let (recs, end) = read_run(&p).unwrap();
+    assert_eq!(
+        (recs, end.recorded, end.not_recorded),
+        (vec![r.clone()], 1, 3)
+    );
+    std::fs::write(&p, t.lines().next().unwrap()).unwrap();
+    let (recs, end) = read_run(&p).unwrap();
+    assert_eq!((recs.len(), end.recorded, end.not_recorded), (1, 1, 0));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_report_counts_the_calls_not_judged() {
+    let mut rep = judge(&ledger_plan(), &[]);
+    rep.not_recorded = 100_000;
+    assert_eq!((rep.calls, rep.not_recorded), (0, 100_000));
+    let back: hydo_contracts::eval::Report =
+        serde_json::from_str(&serde_json::to_string(&rep).unwrap()).unwrap();
+    assert_eq!(back.not_recorded, 100_000);
+}
+
+#[test]
+fn guards_elements_strings_and_variants() {
+    // some(o) when o is Some (discriminant 1), undecided when it is None
+    let some = Expr::Guard {
+        cond: Box::new(Expr::Is {
+            discr: Box::new(Expr::In(0, Ty::U(8))),
+            any: vec!["1".into()],
+            not: vec![],
+        }),
+        then: Box::new(Expr::In(1, Ty::U(8))),
+        why: "`o` is not Some".into(),
+    };
+    assert_eq!(eval(&some, &[Some(1), Some(7)], None), Ok(V::Int(7)));
+    assert!(eval(&some, &[Some(0), Some(7)], None).is_err());
+    // a niche: the variant without a value is every discriminant the others do not have
+    let niche = Expr::Is {
+        discr: Box::new(Expr::In(0, Ty::U(8))),
+        any: vec![],
+        not: vec!["0".into()],
+    };
+    assert_eq!(eval(&niche, &[Some(0x1000)], None), Ok(V::Bool(true)));
+    assert_eq!(eval(&niche, &[Some(0)], None), Ok(V::Bool(false)));
+    // v[k]: the element the index names, undecided outside the elements read
+    let elem = Expr::Elem {
+        idx: Box::new(Expr::In(0, Ty::U(8))),
+        first: 0,
+        elems: vec![Expr::In(1, Ty::U(4)), Expr::In(2, Ty::U(4))],
+    };
+    assert_eq!(
+        eval(&elem, &[Some(1), Some(10), Some(20)], None),
+        Ok(V::Int(20))
+    );
+    assert!(eval(&elem, &[Some(2), Some(10), Some(20)], None).is_err());
+    // s == "hello": the length first, then the bytes
+    let s = Expr::StrEq {
+        len: Box::new(Expr::In(0, Ty::U(8))),
+        chunks: vec![Expr::In(1, Ty::Bytes(5))],
+        lit: "hello".into(),
+    };
+    let hello = u64::from_le_bytes(*b"hello\0\0\0");
+    assert_eq!(eval(&s, &[Some(5), Some(hello)], None), Ok(V::Bool(true)));
+    assert_eq!(
+        eval(&s, &[Some(5), Some(hello + 1)], None),
+        Ok(V::Bool(false))
+    );
+    // another length decides without the bytes, even unreadable ones
+    assert_eq!(eval(&s, &[Some(4), None], None), Ok(V::Bool(false)));
+}
+
+#[test]
+fn a_register_read_shifts_and_cuts() {
+    let l = Loc {
+        base: Base::Reg(0),
+        size: 2,
+        shift: 16,
+        ..Loc::default()
+    };
+    let v = l.load(&|_| Some(0x1122_3344_5566_7788), &[], &|_, _| None);
+    assert_eq!(v, Some(0x5566));
+    // a path: the last load reads `size` bytes
+    let m = Loc {
+        base: Base::Reg(0),
+        path: vec![8, 4],
+        size: 1,
+        ..Loc::default()
+    };
+    let v = m.load(&|_| Some(0x1000), &[], &|va, n| {
+        Some(if va == 0x1008 { 0x2000 } else { va + n as u64 })
+    });
+    assert_eq!(v, Some(0x2005));
 }

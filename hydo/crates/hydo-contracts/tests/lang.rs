@@ -77,9 +77,9 @@ fn precedence_old_and_fields() {
         *rhs,
         Ast::Bin(
             BinOp::Sub,
-            Box::new(Ast::Old(Box::new(Ast::Path(
-                "l".into(),
-                vec!["balance".into()]
+            Box::new(Ast::Old(Box::new(Ast::Field(
+                Box::new(Ast::Name("l".into())),
+                "balance".into()
             )))),
             Box::new(Ast::Int(1))
         )
@@ -92,11 +92,60 @@ fn precedence_old_and_fields() {
 }
 
 #[test]
+fn strings_elements_and_the_functions_that_read() {
+    use hydo_contracts::lang::Builtin;
+    let name = |n: &str| Box::new(Ast::Name(n.into()));
+    // len(v) and an element chosen by a parameter
+    assert_eq!(
+        parse_expr("len(v) > k && v[k] == 1").unwrap(),
+        Ast::Bin(
+            BinOp::And,
+            Box::new(Ast::Bin(
+                BinOp::Gt,
+                Box::new(Ast::Call(Builtin::Len, name("v"))),
+                name("k")
+            )),
+            Box::new(Ast::Bin(
+                BinOp::Eq,
+                Box::new(Ast::Index(name("v"), name("k"))),
+                Box::new(Ast::Int(1))
+            ))
+        )
+    );
+    // a string literal with its escapes
+    assert_eq!(
+        parse_expr(r#"s == "a\"b""#).unwrap(),
+        Ast::Bin(BinOp::Eq, name("s"), Box::new(Ast::Str("a\"b".into())))
+    );
+    // a variant's value, and a field of it
+    assert_eq!(
+        parse_expr("some(p).x").unwrap(),
+        Ast::Field(Box::new(Ast::Call(Builtin::Some, name("p"))), "x".into())
+    );
+    // len(old(v)) is old(len(v)); Go's nil is 0
+    assert_eq!(
+        parse_expr("len(old(v))").unwrap(),
+        Ast::Old(Box::new(Ast::Call(Builtin::Len, name("v"))))
+    );
+    assert_eq!(
+        parse_expr("err == nil").unwrap(),
+        Ast::Bin(BinOp::Eq, name("err"), Box::new(Ast::Int(0)))
+    );
+    assert!(parse_expr("len(1 + 2)")
+        .unwrap_err()
+        .contains("not an expression"));
+    assert!(parse_expr("s == \"open").unwrap_err().contains("closing"));
+}
+
+#[test]
 fn what_the_first_version_refuses() {
     let calls = parse_expr("balance(from) == 1").unwrap_err();
     assert!(calls.contains("is a call"), "{calls}");
-    let method = parse_expr("v.len() > 0").unwrap_err();
+    let method = parse_expr("v.push(1) > 0").unwrap_err();
     assert!(method.contains("is a call"), "{method}");
+    // a built-in written as a method: the message names the function form
+    let len = parse_expr("v.len() > 0").unwrap_err();
+    assert!(len.contains("write `len(v)`"), "{len}");
     assert!(parse_expr("a < b < c")
         .unwrap_err()
         .contains("do not chain"));

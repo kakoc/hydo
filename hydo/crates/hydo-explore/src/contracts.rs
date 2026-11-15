@@ -30,6 +30,8 @@ pub fn findings(r: &Report) -> Vec<Finding> {
             d.insert("calls".into(), json!(o.calls));
             d.insert("violations".into(), json!(o.violations));
             d.insert("undecided".into(), json!(o.undecided));
+            // calls past the run's first 100,000, which no clause was judged on (M255)
+            d.insert("not_recorded".into(), json!(r.not_recorded));
             if let Some(f) = &o.first {
                 d.insert(
                     "first".into(),
@@ -52,15 +54,20 @@ pub fn findings(r: &Report) -> Vec<Finding> {
 /// [`crate::results::CONTRACT_CALLS`], and an `OK` verdict made a `VIOLATION` by the first
 /// broken clause. Returns the report.
 pub fn fold(plan: &Plan, records: &Path, res: &mut Res) -> Result<Report, String> {
-    let recs = hydo_contracts::plan::read_records(records)?;
-    let rep = judge(plan, &recs);
+    let (recs, end) = hydo_contracts::plan::read_run(records)?;
+    let mut rep = judge(plan, &recs);
+    rep.not_recorded = end.not_recorded;
     let fs: Vec<Value> = findings(&rep)
         .into_iter()
         .map(|f| serde_json::to_value(f).expect("a finding"))
         .collect();
     res.insert(
         crate::results::CONTRACT_CALLS.into(),
-        json!({"calls": rep.calls, "without_return": rep.without_return}),
+        json!({
+            "calls": rep.calls,
+            "without_return": rep.without_return,
+            "not_recorded": rep.not_recorded,
+        }),
     );
     if fs.is_empty() {
         return Ok(rep);
@@ -80,6 +87,35 @@ pub fn fold(plan: &Plan, records: &Path, res: &mut Res) -> Result<Report, String
         }
     }
     Ok(rep)
+}
+
+/// The calls a run judged and the calls it did not (Milestone 255): every call past the run's
+/// first [`hydo_contracts::plan::MAX_RECORDS`], and the calls whose return the run did not reach
+/// (their `ensures` clauses are undecided).
+pub fn summary(r: &Report) -> Vec<String> {
+    let mut out = vec![format!(
+        "hydo: function contracts: {} calls checked against {} clauses, {} broken",
+        r.calls,
+        r.outcomes.len(),
+        r.violated().count()
+    )];
+    if r.not_recorded > 0 {
+        out.push(format!(
+            "hydo: function contracts: {} calls in all; {} of them were not judged, because a \
+             run records its first {} calls only",
+            r.calls + r.not_recorded,
+            r.not_recorded,
+            hydo_contracts::plan::MAX_RECORDS
+        ));
+    }
+    if r.without_return > 0 {
+        out.push(format!(
+            "hydo: function contracts: {} calls without their return (the run ended inside \
+             them, or no breakpoint was free): their `ensures` clauses were not judged",
+            r.without_return
+        ));
+    }
+    out
 }
 
 /// One line per broken clause for people, with the first broken call's values.

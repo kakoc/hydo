@@ -41,6 +41,7 @@
 pub mod abi;
 pub mod apic;
 pub mod boot;
+pub mod contracts;
 pub mod cpu;
 pub mod cpuid;
 pub mod hybrid;

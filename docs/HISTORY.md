@@ -11297,3 +11297,97 @@ hydo-schema-compat, hydo-agents (`public_content::`), hydo-control and hydo (`do
 ci/vale.sh`. The answers of hydo-build's and hydo-manifest's equivalence tests and the CLI's
 golden are re-recorded: the list of known `guest` keys, the guide's hashes, and the pinned inputs
 (the release lists, and files of earlier milestones that the answers did not list yet).
+
+### Milestone 255 (tentative number) - DONE (function contracts, continued: the report counts the calls a run did not judge; contracts read Rust `String`, `&str`, `Vec`, slices, `Option` and `Result`, Go strings, slices, results after the first and `error`, with `len()`, elements and string literals; the KVM engine stops at contracts with `KVM_SET_GUEST_DEBUG` and finds a position-independent program's load address in the guest's page tables; the hvx side module is designed, not built; on the Mac every proof gave one fingerprint with and without the plan; the KVM proof is a one-off workflow whose results are not in yet; nothing recorded moved; 2026-11-15)
+
+**What was asked.** Four steps after Milestone 241: say how many calls a run judged and how many
+it did not; read more types; stop at contracts on the KVM engine, inert without a plan; and
+design the hvx side module. The design is `docs/design/contracts.md`.
+
+**What was built.**
+
+- The calls not judged. A run records its first 100,000 calls. The engines now end the records
+  with a line `{"end":{"recorded":N,"not_recorded":M}}`, the report prints `120104 calls in all;
+  20104 of them were not judged`, and each `contract` finding has `details.not_recorded`. The
+  report also says how many calls had no return, whose `ensures` clauses are undecided.
+- More types (crate `hydo-contracts`). A value is a place now: in memory at an address that
+  reads give, or in registers piece by piece (DWARF's `DW_OP_piece`), so a Rust `&str`, an
+  `Option<u64>` or a Go string in two registers is read. The language gains string literals,
+  elements (`v[2]`, and `v[k]` over the first 8 elements), and the functions `len`, `is_some`,
+  `is_none`, `is_ok`, `is_err`, `some`, `ok` and `err`, which only read. Go's results after the
+  first are `result.1` or their names, and `err == nil` reads an interface's type word. The
+  result follows each language's convention: Rust's one or two scalars in registers, a small
+  value as a register's bytes (the plan's reads gain `shift`), a larger value in memory whose
+  address the caller passes; Go's words in its integer registers in order. Every engine makes
+  its reads with one function, `plan::Loc::load`.
+- A bug of Milestone 241. The compiler took every function's frame base as the canonical frame
+  address. Rust's frame base is the stack pointer, so a Rust parameter on the x86_64 stack was
+  read 8 bytes off. No plan of the example had one. The compiler now reads `DW_AT_frame_base`.
+- The KVM engine (`hydo-kvm/src/contracts.rs`). The breakpoints are DR0 to DR3, set with
+  `KVM_SET_GUEST_DEBUG` and `KVM_GUESTDBG_USE_HW_BP` only while a run with a plan records; a hit
+  is handled in the run loop, counted as no exit, and the vCPU goes on with RFLAGS.RF. The spin
+  observer's steps take the debug registers back while they run. The rewind mode takes the
+  records back to its checkpoint. A position-independent program's load address is the address
+  of a page that starts with its ELF header, found by a walk of each address space's page
+  tables at its first exit; the walk needs no agent and no guest change. `HYDO_CONTRACTS`
+  reaches the KVM engine in the process and as the `hydo-kvm` program.
+- The Mac engine refuses a position-independent program, whose link addresses are not where
+  the program runs.
+- The example `hydo/onboard/examples/contracts-ledger` gains `types/rust` and `types/go`, two
+  programs whose contracts read every type, and their manifests `hydo-types.yaml` and
+  `hydo-types-go.yaml`. `build.sh` builds all four programs.
+- The hvx design: a side module with an opt-in `HVX_SET_GUEST_DEBUG`, DR0 to DR3, MOV-DR exiting,
+  the `#DB` exit counted as no exit, and RF at the next entry (`docs/design/contracts.md`, "The
+  hvx design"). Nothing was built or loaded.
+
+**Proof on the Mac engine** (an M2 Pro; this tree's programs over the 0.3.3 Mac release with the
+kernel `Image-explore-cg`; images of the fingerprint epoch 3; one VM at a time). Each schedule
+ran with the plan and without it:
+
+| Image, schedule | fp without | fp with | Calls, broken |
+|---|---|---|---|
+| Rust ledger, `disk=none \| run` | `b90439bd647be814` | `b90439bd647be814` | 12, none |
+| Rust ledger, `disk=none \| run P=ledger@5+2` | `ccf20770efca87a8` | `ccf20770efca87a8` | 14, `ensures` at 2 |
+| Go ledger, `disk=none \| run` | `7b4cf7f428b528f4` | `7b4cf7f428b528f4` | 12, none |
+| Go ledger, `disk=none \| run P=ledger@5+2` | `4388a6af47647439` | `4388a6af47647439` | 14, `ensures` at 2 |
+| Rust types, `disk=none \| run` | `34ae597a1864ee59` | `34ae597a1864ee59` twice | 120,104, of them 100,000 judged; 6 clauses broken at 1 call each |
+| Go types, `disk=none \| run` | `6836ea1d65bfb460` | `6836ea1d65bfb460` twice | 120,078, of them 100,000 judged; 5 clauses broken at 1 call each |
+
+The types programs break one clause or more of each function in their first round and keep
+every clause afterwards. Each clause the first round breaks broke at exactly 1 call, and every
+other clause held at all of its 25,000 (Rust) or 33,333 (Go) calls. The two runs of each types
+image wrote the same records. The first run of the Rust types image found the second bug of
+this milestone: Rust 1.90 on arm64 passes the address of a result in memory in x0, as a first
+argument, not in x8, so `ok(result)` of `owned` read another value at every call. The compiler
+now takes x0 when no parameter is in x0. Without a plan, the 0.3.3 Mac release's Redis example
+built with these programs has its recorded bytes (`706c8b95…`) and gave its recorded
+fingerprints `a62eee5332a5b9d2`, `474b2874e7ef0fa2` and `2e5f02d8ff33394f`.
+
+**Proof on the KVM engine.** Neither this Mac nor the bare-metal machine may run KVM. The engine
+test `contract_breakpoints_record_every_call_and_move_nothing` runs the scripted vCPU with and
+without a plan, also with forced preemption points: the same fingerprints, clock and verdict,
+and one record per call. The one-off workflow `tmp-contracts-kvm` (on the branch of that name,
+not in main) builds `bzImage-kvm-cg` in a sandboxed Nix, this branch's hydo and main's, and the
+example's x86_64 programs, and runs on four runners: the Redis example with both hydos, and each
+contracts schedule with the plan, without it, and under main's hydo, twice. Its results are not
+in yet.
+
+**Tests.** `hydo-contracts`: the types of both languages on both architectures from the
+compiled programs (when Rust 1.90.0 with the musl targets and Go are present), the new language
+forms, guards, elements, strings, variants, the end line and `Loc::load`. `hydo-kvm`: the
+scripted contract test above. `cargo fmt --all --check`, clippy `-D warnings` on every changed
+crate (also for the x86_64 Linux target), the changed crates' tests, `consolidate-tests.sh
+--check`, `test_tiers::`, the inventory, `docs::`, `public_content::` and Vale. The goldens that
+list every example manifest gained the two types manifests (the explorer's identity and corpus,
+the control corpus), and `hydo guide manifest`'s golden the new MANIFEST.md text. The explorer
+needs 4 steps, so the types manifests have 4. The full tier's answers of `hydo-build` and
+`hydo-manifest` were already behind main's examples (Milestone 250's Hatchet files and the
+epoch-3 `recorded.json`) and do not name the new manifests; they are left for the next
+re-recording.
+
+**Open** (AGENTS.md open item 113).
+
+- The KVM proof's results.
+- hvx: the side module of the design.
+- KVM: at most three processes of one position-independent program are stopped at once.
+- A run judges only its first 100,000 calls (now counted and reported).

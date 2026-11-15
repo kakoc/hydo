@@ -1281,3 +1281,126 @@ fn the_hosts_dr6_bits_leave_the_fingerprint_from_epoch_3() {
         );
     }
 }
+
+/// A plan of one function of the scripted guest (Milestone 255): its "entry" is the timer
+/// handler's first operation, and the entry reads the tick counter (rbx). The scripted guest has
+/// no page tables, so the plan names no code bytes and no return reads.
+fn handler_plan(dir: &std::path::Path) -> std::path::PathBuf {
+    use hydo_contracts::plan::*;
+    let prog = program(6);
+    let handler = prog.handlers[&TIMER_VECTOR] as u64;
+    let plan = Plan {
+        v: PLAN_V,
+        kind: PLAN_TYPE.into(),
+        programs: vec![Program {
+            program: "/scripted".into(),
+            sha256: String::new(),
+            arch: "x86_64".into(),
+            pie: false,
+            head: String::new(),
+            unchecked: vec![],
+            functions: vec![Function {
+                id: 0,
+                name: "tick".into(),
+                file: "script".into(),
+                line: 1,
+                lang: Lang::C,
+                entry: hydo_kvm::script::ENTRY + handler,
+                code: String::new(),
+                frame: Frame::Sp,
+                at_entry: vec![Loc {
+                    name: "ticks".into(),
+                    base: Base::Reg(3),
+                    size: 8,
+                    ..Loc::default()
+                }],
+                at_return: vec![],
+                clauses: vec![Clause {
+                    kind: ClauseKind::Requires,
+                    text: "ticks < 3".into(),
+                    line: 1,
+                    expr: Expr::Bin(
+                        BinOp::Lt,
+                        Box::new(Expr::In(0, Ty::U(8))),
+                        Box::new(Expr::Int("3".into())),
+                    ),
+                }],
+                inputs: vec![],
+            }],
+        }],
+    };
+    std::fs::create_dir_all(dir).unwrap();
+    let p = dir.join("scripted.contracts.json");
+    std::fs::write(&p, plan_text(&plan)).unwrap();
+    p
+}
+
+fn run_contracts(s: &str, plan: Option<std::path::PathBuf>) -> (RunResult, Option<String>) {
+    let o = KvmOptions {
+        contracts: plan.map(|p| p.display().to_string()),
+        ..KvmOptions::default()
+    };
+    let (mut h, out) = Host::start_with(
+        Mode::Serve {
+            boot: Some(sched("rb=4 | run")),
+        },
+        program(6),
+        o,
+    );
+    boot(&mut h);
+    h.recv();
+    h.tx.send(HostMsg::Request(Request::Ctl {
+        tag: "c".into(),
+        schedule: sched(s),
+    }))
+    .unwrap();
+    let r = to_the_end(&mut h);
+    h.quit();
+    (
+        r,
+        std::fs::read_to_string(out.join("c.contracts.jsonl")).ok(),
+    )
+}
+
+/// Milestone 255: the function contracts' breakpoints stop the scripted vCPU at the handler, the
+/// engine reads and records each call, and the run is the run without them: the same
+/// fingerprints, verdict and clock. Without a plan nothing is written.
+#[test]
+fn contract_breakpoints_record_every_call_and_move_nothing() {
+    use hydo_contracts::plan::Record;
+    let dir = std::env::temp_dir().join(format!("hydo-kvm-contracts-{}", std::process::id()));
+    for s in ["rb=4 | run", "pct=5 pctn=6 pctk=200 rb=4 | run"] {
+        let (off, none) = run_contracts(s, None);
+        let (on, recs) = run_contracts(s, Some(handler_plan(&dir)));
+        assert!(none.is_none(), "{s}: nothing written without a plan");
+        assert_eq!(
+            (&off.fp, &off.wfp, &off.verdict, &off.extras),
+            (&on.fp, &on.wfp, &on.verdict, &on.extras),
+            "{s}"
+        );
+        let text = recs.expect("the records");
+        let p = dir.join("c.contracts.jsonl");
+        std::fs::write(&p, &text).unwrap();
+        let (recs, end): (Vec<Record>, _) = hydo_contracts::plan::read_run(&p).unwrap();
+        assert_eq!(
+            (end.recorded, end.not_recorded),
+            (recs.len() as u64, 0),
+            "{s}"
+        );
+        assert!(
+            text.ends_with(&format!(
+                "{{\"end\":{{\"recorded\":{},\"not_recorded\":0}}}}\n",
+                recs.len()
+            )),
+            "{s}: {text}"
+        );
+        // one call per tick of the run, the counter read at each entry, in order
+        assert!(recs.len() > 1, "{s}: {text}");
+        for w in recs.windows(2) {
+            assert_eq!((w[1].f, w[1].at_entry.len()), (0, 1));
+            assert!(w[1].at >= w[0].at, "{s}");
+            assert_eq!(w[1].at_entry[0], w[0].at_entry[0].map(|v| v + 1), "{s}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

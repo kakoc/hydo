@@ -187,6 +187,8 @@ pub struct Vmm {
     pub state_gave_up: u64,
     /// why the last full-state look proved nothing (the trace)
     state_why: &'static str,
+    /// Function contracts (`HYDO_CONTRACTS`, Milestone 255): in no snapshot and no fingerprint.
+    pub ct: Option<Box<crate::contracts::Ct>>,
 }
 
 /// A snapshot of the machine (the vCPU, the engine's state, RAM, the devices, the console). RAM
@@ -228,6 +230,8 @@ struct Ck {
     rx: uart::Rx,
     /// the loop top's `resume` (after a kick: no interrupt decision)
     resume: bool,
+    /// the function contracts' records and calls in progress (Milestone 255)
+    ct: Option<crate::contracts::Mark>,
 }
 
 /// The rewind mode's state (see the module documentation). Nothing of it is guest state: it is
@@ -359,6 +363,7 @@ impl Vmm {
             state_cycles: 0,
             state_gave_up: 0,
             state_why: "",
+            ct: None,
         };
         let mut cmdline = cmdline(&o.cmdline, vm.vio.ndev());
         if ncpu > 1 {
@@ -414,10 +419,10 @@ impl Vmm {
         self.cpus = c;
     }
 
-    fn cpu(&self) -> &dyn Cpu {
+    pub(crate) fn cpu(&self) -> &dyn Cpu {
         &*self.cpus[self.cur]
     }
-    fn cpu_mut(&mut self) -> &mut dyn Cpu {
+    pub(crate) fn cpu_mut(&mut self) -> &mut dyn Cpu {
         &mut *self.cpus[self.cur]
     }
 
@@ -1027,6 +1032,14 @@ impl Vmm {
     // ---------------- the run loop ----------------
     /// Run until `hook` says stop (`STOP_MARKER`) or the guest stops: the stop reason.
     pub fn run_until(&mut self, hook: &mut dyn FnMut(&mut Vmm) -> bool) -> i32 {
+        let r = self.run_until_stop(hook);
+        // the function contracts (Milestone 255): a stop between a contract's hit and its
+        // instruction leaves the guest's own state
+        self.ct_settle();
+        r
+    }
+
+    fn run_until_stop(&mut self, hook: &mut dyn FnMut(&mut Vmm) -> bool) -> i32 {
         let mut resume = false;
         if self.rw.on {
             self.rw_enter();
@@ -1075,7 +1088,19 @@ impl Vmm {
                 }
             }
             self.watch.armed.store(true, Ordering::Relaxed);
-            let e = self.cpu_mut().run();
+            let e = if self.ct.is_none() {
+                self.cpu_mut().run()
+            } else {
+                // the function contracts (Milestone 255): a breakpoint's stop is no exit of
+                // the guest; the engine reads and the guest goes on
+                loop {
+                    self.ct_arm();
+                    match self.cpu_mut().run() {
+                        Exit::Contract(pc) => self.ct_hit(pc),
+                        e => break e,
+                    }
+                }
+            };
             self.watch.armed.store(false, Ordering::Relaxed);
             if self.rw.armed {
                 match e {
@@ -1319,6 +1344,7 @@ impl Vmm {
             pct: self.pct,
             rx: self.rx.clone(),
             resume,
+            ct: self.ct.as_ref().map(|c| c.mark()),
         };
         self.rw.ck = Some(Box::new(ck));
         self.rw.ck_exits = self.m.exits;
@@ -1343,6 +1369,10 @@ impl Vmm {
         self.cpu_mut().dirty_log(true);
         self.cpu_mut().load(&ck.cpu);
         self.cpu_mut().set_run_flags(ck.flags);
+        if let (Some(ct), Some(m)) = (self.ct.as_mut(), ck.ct.as_ref()) {
+            // the replay records the calls after the checkpoint again
+            ct.rewind(m);
+        }
         self.m = ck.m;
         if let Some(v) = &ck.vio {
             self.vio.restore(v);
@@ -1415,6 +1445,7 @@ impl Vmm {
         }
         self.m.vtime = self.m.vtime.wrapping_add(self.step);
         self.pct_at_exit();
+        self.ct_at_exit();
         if self.trace.is_some() {
             let (ex, rip) = (self.m.exits, self.cpu().rip());
             let line = match e {
@@ -1443,7 +1474,7 @@ impl Vmm {
     fn exit(&mut self, first: Exit) -> Option<i32> {
         let mut e = first;
         loop {
-            if e == Exit::Kick || e == Exit::Debug {
+            if matches!(e, Exit::Kick | Exit::Debug | Exit::Contract(_)) {
                 return None; // not an exit of the guest
             }
             self.count(&e);
@@ -1472,7 +1503,7 @@ impl Vmm {
                     self.m.halted = 3;
                     return Some(STOP_HALT);
                 }
-                Exit::Kick | Exit::Debug => return None,
+                Exit::Kick | Exit::Debug | Exit::Contract(_) => return None,
                 Exit::Fail(msg) => {
                     let rip = self.cpu().rip();
                     fatal(

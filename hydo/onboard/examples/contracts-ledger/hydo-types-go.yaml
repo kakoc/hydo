@@ -1,0 +1,36 @@
+# hydo-types.yaml with the Go program of types/go: contracts over Go strings, slices, results
+# after the first, and an error. Step 0 breaks a clause of each function once; step 1 keeps every
+# clause 25 times; steps 2 and 3 call the functions 20,000 times each, past the 100,000 calls a
+# run records.
+# Build: ./build.sh (arm64, the Mac engine; ./build.sh x86_64 for KVM), then
+#   hydo build hydo-types-go.yaml
+# Try:  disk=none | run    -> VIOLATION [contract main.text] requires ...
+name: contracts-types-go
+description: three Go functions whose contracts read strings, slices, several results and an error; the first round breaks a clause of each.
+
+root:
+  files:
+    - {src: bin/types-go, dst: /bin/types, mode: "0755"}   # ./build.sh
+
+contracts:
+  - program: /bin/types
+    sources: [types/go]
+
+workload:
+  steps: 4
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      case $i in
+        0) /bin/types bad ;;
+        1) /bin/types run 25 ;;
+        *) /bin/types run 20000 ;;
+      esac
+      echo "$i ack" >> $HYDO_OUTCOMES
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: types.present
+    msg: the program is in the image
+    cmd: test -x /bin/types

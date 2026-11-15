@@ -1,4 +1,6 @@
 /target
+/rust/target
+/types/rust/target
 /bin
 /bin-x86
 /bin-arm64

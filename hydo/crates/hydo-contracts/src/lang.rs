@@ -14,8 +14,11 @@
 //! of `e` at the call's entry. A parameter in `ensures` is its value at entry; a field read
 //! through it is read at return unless it is inside `old()`. Operators, loosest first: `||`,
 //! `&&`, the comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), `+ -`, `* / %`, then `!` and unary
-//! `-`. Integers are exact: no overflow, no wrapping. There are no calls in the first version:
-//! a call would run the program's code, which a check must not do (docs/design/contracts.md).
+//! `-`. Integers are exact: no overflow, no wrapping. A call of the program's code is refused:
+//! it would run the program, which a check must not do (docs/design/contracts.md). Since
+//! Milestone 255 an expression may use string literals (`s == "ok"`), elements (`v[k]`), Go's
+//! `nil`, and the functions `len`, `is_some`, `is_none`, `is_ok`, `is_err`, `some`, `ok` and
+//! `err`, which only read.
 
 use crate::plan::{BinOp, ClauseKind};
 use std::fmt;
@@ -25,12 +28,97 @@ use std::fmt;
 pub enum Ast {
     Int(i128),
     Bool(bool),
-    /// A name and the fields read through it: `l.balance` is `Path("l", ["balance"])`.
-    Path(String, Vec<String>),
+    /// A string literal (`s == "hello"`; Milestone 255).
+    Str(String),
+    /// A parameter, `result`, or a Go result's name.
+    Name(String),
+    /// A field: `l.balance` is `Field(Name("l"), "balance")`; `result.1` is a tuple field (Rust)
+    /// or the second result (Go).
+    Field(Box<Ast>, String),
+    /// An element: `v[k]` (Milestone 255).
+    Index(Box<Ast>, Box<Ast>),
+    /// One of the built-in functions over a value (Milestone 255): they read, they run nothing.
+    Call(Builtin, Box<Ast>),
     Old(Box<Ast>),
     Not(Box<Ast>),
     Neg(Box<Ast>),
     Bin(BinOp, Box<Ast>, Box<Ast>),
+}
+
+/// The functions an expression may call (Milestone 255). Each reads the value it is given; none
+/// runs the program's code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Builtin {
+    /// The length of a string, a vector or a slice.
+    Len,
+    /// Which variant a Rust `Option` or `Result` is.
+    IsSome,
+    IsNone,
+    IsOk,
+    IsErr,
+    /// The value inside a variant: `some(o)`, `ok(r)`, `err(r)` (the clause is undecided for a
+    /// call where the value is the other variant).
+    Some,
+    Ok,
+    Err,
+}
+
+impl Builtin {
+    pub fn of(name: &str) -> Option<Builtin> {
+        Some(match name {
+            "len" => Builtin::Len,
+            "is_some" => Builtin::IsSome,
+            "is_none" => Builtin::IsNone,
+            "is_ok" => Builtin::IsOk,
+            "is_err" => Builtin::IsErr,
+            "some" => Builtin::Some,
+            "ok" => Builtin::Ok,
+            "err" => Builtin::Err,
+            _ => return None,
+        })
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Builtin::Len => "len",
+            Builtin::IsSome => "is_some",
+            Builtin::IsNone => "is_none",
+            Builtin::IsOk => "is_ok",
+            Builtin::IsErr => "is_err",
+            Builtin::Some => "some",
+            Builtin::Ok => "ok",
+            Builtin::Err => "err",
+        }
+    }
+}
+
+impl fmt::Display for Ast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Ast::Int(v) => write!(f, "{v}"),
+            Ast::Bool(b) => write!(f, "{b}"),
+            Ast::Str(s) => write!(f, "{s:?}"),
+            Ast::Name(n) => write!(f, "{n}"),
+            Ast::Field(x, n) => write!(f, "{x}.{n}"),
+            Ast::Index(x, i) => write!(f, "{x}[{i}]"),
+            Ast::Call(b, x) => write!(f, "{}({x})", b.name()),
+            Ast::Old(x) => write!(f, "old({x})"),
+            Ast::Not(x) => write!(f, "!{x}"),
+            Ast::Neg(x) => write!(f, "-{x}"),
+            Ast::Bin(..) => write!(f, "(...)"),
+        }
+    }
+}
+
+impl Ast {
+    /// The name a place expression starts from (`l` in `l.balance`, `v` in `len(v)`).
+    pub fn root(&self) -> Option<&str> {
+        match self {
+            Ast::Name(n) => Some(n),
+            Ast::Field(x, _) | Ast::Index(x, _) | Ast::Call(_, x) => x.root(),
+            _ => None,
+        }
+    }
 }
 
 /// A clause as written.
@@ -266,18 +354,19 @@ fn parse_int(s: &str) -> Option<i128> {
 /// Whether an expression names `name` as a root.
 pub fn mentions(a: &Ast, name: &str) -> bool {
     match a {
-        Ast::Path(r, _) => r == name,
+        Ast::Name(r) => r == name,
+        Ast::Field(x, _) | Ast::Call(_, x) => mentions(x, name),
         Ast::Old(x) | Ast::Not(x) | Ast::Neg(x) => mentions(x, name),
-        Ast::Bin(_, x, y) => mentions(x, name) || mentions(y, name),
-        Ast::Int(_) | Ast::Bool(_) => false,
+        Ast::Bin(_, x, y) | Ast::Index(x, y) => mentions(x, name) || mentions(y, name),
+        Ast::Int(_) | Ast::Bool(_) | Ast::Str(_) => false,
     }
 }
 
 fn has_old(a: &Ast) -> bool {
     match a {
         Ast::Old(_) => true,
-        Ast::Not(x) | Ast::Neg(x) => has_old(x),
-        Ast::Bin(_, x, y) => has_old(x) || has_old(y),
+        Ast::Not(x) | Ast::Neg(x) | Ast::Field(x, _) | Ast::Call(_, x) => has_old(x),
+        Ast::Bin(_, x, y) | Ast::Index(x, y) => has_old(x) || has_old(y),
         _ => false,
     }
 }
@@ -286,12 +375,13 @@ fn has_old(a: &Ast) -> bool {
 enum Tok {
     Int(i128),
     Ident(String),
+    Str(String),
     Op(&'static str),
 }
 
-const OPS: [&str; 19] = [
+const OPS: [&str; 20] = [
     "||", "&&", "==", "!=", "<=", ">=", "<", ">", "+", "-", "*", "/", "%", "!", "(", ")", ".", ",",
-    "[",
+    "[", "]",
 ];
 
 fn lex(s: &str) -> Result<Vec<Tok>, String> {
@@ -317,6 +407,27 @@ fn lex(s: &str) -> Result<Vec<Tok>, String> {
                 i += 1;
             }
             out.push(Tok::Ident(s[st..i].to_string()));
+        } else if c == '"' {
+            // a string literal: `\"`, `\\` and `\n` are its escapes
+            let mut lit = String::new();
+            let mut it = s[i + 1..].char_indices();
+            let end = loop {
+                match it.next() {
+                    None => return Err(format!("a string without its closing `\"` in `{s}`")),
+                    Some((k, '"')) => break i + 1 + k + 1,
+                    Some((_, '\\')) => match it.next() {
+                        Some((_, '"')) => lit.push('"'),
+                        Some((_, '\\')) => lit.push('\\'),
+                        Some((_, 'n')) => lit.push('\n'),
+                        _ => {
+                            return Err(format!("`{s}`: a string's escapes are \\\", \\\\ and \\n"))
+                        }
+                    },
+                    Some((_, ch)) => lit.push(ch),
+                }
+            };
+            out.push(Tok::Str(lit));
+            i = end;
         } else if let Some(op) = OPS.iter().find(|o| s[i..].starts_with(**o)) {
             out.push(Tok::Op(op));
             i += op.len();
@@ -375,6 +486,7 @@ impl Parser<'_> {
         match self.t.get(i) {
             Some(Tok::Int(v)) => v.to_string(),
             Some(Tok::Ident(n)) => n.clone(),
+            Some(Tok::Str(s)) => format!("{s:?}"),
             Some(Tok::Op(o)) => o.to_string(),
             None => "end".into(),
         }
@@ -434,52 +546,69 @@ impl Parser<'_> {
     }
     fn postfix(&mut self) -> Result<Ast, String> {
         let mut e = self.primary()?;
-        while self.peek_op() == Some(".") {
-            self.i += 1;
-            let name = match self.t.get(self.i) {
-                Some(Tok::Ident(n)) => n.clone(),
-                Some(Tok::Int(v)) => v.to_string(),
-                _ => {
-                    return Err(format!(
-                        "`{}`: a field name after `.`, found `{}`",
-                        self.src,
-                        self.show(self.i)
-                    ))
+        loop {
+            match self.peek_op() {
+                Some(".") => {
+                    self.i += 1;
+                    let name = match self.t.get(self.i) {
+                        Some(Tok::Ident(n)) => n.clone(),
+                        Some(Tok::Int(v)) => v.to_string(),
+                        _ => {
+                            return Err(format!(
+                                "`{}`: a field name after `.`, found `{}`",
+                                self.src,
+                                self.show(self.i)
+                            ))
+                        }
+                    };
+                    self.i += 1;
+                    if self.peek_op() == Some("(") {
+                        if let Some(b) = Builtin::of(&name) {
+                            return Err(format!(
+                                "`{}`: write `{n}({e})` for `{e}.{n}()`: contracts call their \
+                                 functions with the value as the argument",
+                                self.src,
+                                n = b.name()
+                            ));
+                        }
+                        return Err(no_calls(self.src, &name));
+                    }
+                    if e.root().is_none() {
+                        return Err(format!(
+                            "`{}`: a field is read from a name (`l.balance`, `some(o).x`), not \
+                             from an expression",
+                            self.src
+                        ));
+                    }
+                    e = Ast::Field(Box::new(e), name);
                 }
-            };
-            self.i += 1;
-            if self.peek_op() == Some("(") {
-                return Err(no_calls(self.src, &name));
+                Some("[") => {
+                    self.i += 1;
+                    let ix = self.expr(0)?;
+                    self.expect("]")?;
+                    if e.root().is_none() {
+                        return Err(format!(
+                            "`{}`: an element is read from a name (`v[0]`), not from an \
+                             expression",
+                            self.src
+                        ));
+                    }
+                    e = Ast::Index(Box::new(e), Box::new(ix));
+                }
+                _ => return Ok(e),
             }
-            e = match e {
-                Ast::Path(r, mut f) => {
-                    f.push(name);
-                    Ast::Path(r, f)
-                }
-                _ => {
-                    return Err(format!(
-                        "`{}`: a field is read from a name (`l.balance`, `old(l.balance)`), \
-                         not from an expression",
-                        self.src
-                    ))
-                }
-            };
         }
-        if self.peek_op() == Some("[") {
-            return Err(format!(
-                "`{}`: indexing is not in the first version (docs/design/contracts.md)",
-                self.src
-            ));
-        }
-        Ok(e)
     }
     fn primary(&mut self) -> Result<Ast, String> {
         let t = self.t.get(self.i).cloned();
         self.i += 1;
         match t {
             Some(Tok::Int(v)) => Ok(Ast::Int(v)),
+            Some(Tok::Str(s)) => Ok(Ast::Str(s)),
             Some(Tok::Ident(n)) if n == "true" => Ok(Ast::Bool(true)),
             Some(Tok::Ident(n)) if n == "false" => Ok(Ast::Bool(false)),
+            // Go's nil: a pointer, or an interface whose type word is 0
+            Some(Tok::Ident(n)) if n == "nil" => Ok(Ast::Int(0)),
             Some(Tok::Ident(n)) if n == "old" && self.peek_op() == Some("(") => {
                 self.i += 1;
                 let e = self.expr(0)?;
@@ -497,9 +626,27 @@ impl Parser<'_> {
             }
             Some(Tok::Ident(n)) => {
                 if self.peek_op() == Some("(") {
-                    return Err(no_calls(self.src, &n));
+                    let Some(b) = Builtin::of(&n) else {
+                        return Err(no_calls(self.src, &n));
+                    };
+                    self.i += 1;
+                    let e = self.expr(0)?;
+                    self.expect(")")?;
+                    if e.root().is_none() && !matches!(e, Ast::Old(_)) {
+                        return Err(format!(
+                            "`{}`: `{}()` reads a value named by a parameter or `result`, not an \
+                             expression",
+                            self.src,
+                            b.name()
+                        ));
+                    }
+                    // `len(old(v))` is `old(len(v))`
+                    if let Ast::Old(x) = e {
+                        return Ok(Ast::Old(Box::new(Ast::Call(b, x))));
+                    }
+                    return Ok(Ast::Call(b, Box::new(e)));
                 }
-                Ok(Ast::Path(n, Vec::new()))
+                Ok(Ast::Name(n))
             }
             Some(Tok::Op("(")) => {
                 let e = self.expr(0)?;
@@ -517,8 +664,9 @@ impl Parser<'_> {
 
 fn no_calls(src: &str, name: &str) -> String {
     format!(
-        "`{src}`: `{name}(...)` is a call, and the first version has none: a check reads values \
-         and never runs the program's code. Read the field the function would return instead \
-         (docs/design/contracts.md, \"Calls\")"
+        "`{src}`: `{name}(...)` is a call of the program's code, which a check never runs: a \
+         check reads values. Read the field the function would return instead. The functions a \
+         contract may use are len, is_some, is_none, is_ok, is_err, some, ok, err and old \
+         (docs/design/contracts.md, \"The language\")"
     )
 }

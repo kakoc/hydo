@@ -19,7 +19,7 @@
 use crate::hv::{sr, HV_REG_CPSR, HV_REG_PC, HV_REG_X0};
 use crate::layout::RAM_BASE;
 use crate::vmm::Vmm;
-use hydo_contracts::plan::{self, Base, Frame, Loc, Plan, Record};
+use hydo_contracts::plan::{self, Frame, Loc, Plan, Record};
 
 /// The breakpoint register pairs the contracts use (pair 0 is the spin observer's).
 const SLOTS: [usize; 5] = [1, 2, 3, 4, 5];
@@ -91,6 +91,14 @@ impl Ct {
     pub fn from_plan(p: &Plan) -> Result<Ct, String> {
         let mut fns = Vec::new();
         for prog in p.programs.iter().filter(|p| p.arch == "arm64") {
+            if prog.pie {
+                return Err(format!(
+                    "{} is position-independent: the Mac engine stops at the addresses the \
+                     program was linked at (build it static, as Rust's and Go's arm64 Linux \
+                     targets do)",
+                    prog.program
+                ));
+            }
             for f in &prog.functions {
                 fns.push(CtFn {
                     id: f.id,
@@ -177,7 +185,7 @@ impl Ct {
         }
         self.active = false;
         let p = outdir.join(format!("{tag}{}", plan::RECORDS_SUFFIX));
-        let _ = std::fs::write(p, plan::records_text(&self.recs));
+        let _ = std::fs::write(p, plan::records_text(&self.recs, self.over));
         self.recs.clear();
         self.pending.clear();
     }
@@ -417,24 +425,9 @@ impl Vmm {
     }
 
     fn ct_load(&self, l: &Loc, entry: &[Option<u64>]) -> Option<u64> {
-        let mut v = match l.base {
-            Base::Reg(n) => self.ct_reg(n),
-            Base::In(k) => (*entry.get(k as usize)?)?,
-        };
-        let n = l.path.len();
-        if n == 0 {
-            let m = if l.size >= 8 {
-                u64::MAX
-            } else {
-                (1u64 << (8 * l.size)) - 1
-            };
-            return Some(v & m);
-        }
-        for (i, off) in l.path.iter().enumerate() {
-            let size = if i + 1 == n { l.size.min(8) } else { 8 };
-            v = self.ct_read(v.wrapping_add(*off as u64), size)?;
-        }
-        Some(v)
+        l.load(&|n| Some(self.ct_reg(n)), entry, &|va, n| {
+            self.ct_read(va, n)
+        })
     }
 
     fn ct_hit(&mut self, pc: u64) {

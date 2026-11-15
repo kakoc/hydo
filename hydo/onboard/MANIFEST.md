@@ -1295,9 +1295,9 @@ than a run without it, so its fingerprints are its own. The example is
 
 `contracts:` names programs whose sources carry `// hydo:` comments next to functions. `hydo
 build` reads each program's debug information and writes the plan `<image>.contracts.json` next
-to the image. The Mac engine then stops at every call of each contracted function. It reads
-the arguments at entry and the fields and the result at return, and changes nothing in the guest
-(docs/design/contracts.md).
+to the image. The Mac and KVM engines then stop at every call of each contracted function. They
+read the arguments at entry and the fields and the result at return, and change nothing in the
+guest (docs/design/contracts.md).
 
 ```yaml
 root:
@@ -1322,10 +1322,14 @@ fn apply(l: &mut Ledger, c: &mut Conn, req_id: u64, amount: u64) -> u64
 A broken clause makes the run's verdict `VIOLATION [contract <function>] <clause> (<file>:<line>)`
 and adds a finding of kind `contract` to `result.json`. Build the program with its debug
 information (Rust: `debug = true` in the release profile; Go keeps it unless linked with
-`-ldflags=-w`). The first version stops only at a function of its own: a function that the
-compiler copied into its callers is listed by `hydo build` as not checked. It reads integers,
-booleans, pointers and fields through pointers, has no calls in expressions, and runs on the
-Mac engine only. The example is `hydo/onboard/examples/contracts-ledger`.
+`-ldflags=-w`). hydo stops only at a function of its own: a function that the compiler copied
+into its callers is listed by `hydo build` as not checked. An expression reads integers,
+booleans, pointers, fields through pointers, strings, vectors and slices (`len(v)`, `v[i]`,
+`s == "text"`), Rust's `Option` and `Result` (`is_some(o)`, `some(o)`, `is_ok(r)`, `ok(r)`,
+`err(r)`), and Go's results after the first (`result.1`, or the result's name; `err == nil`).
+It calls none of the program's code. Contracts run on the Mac and KVM engines, not on hvx. A run
+judges its first 100,000 calls, and the report says how many calls were not judged. The example
+is `hydo/onboard/examples/contracts-ledger`; its `hydo-types.yaml` shows every type.
 
 ### Service networks (`network: bridge`)
 

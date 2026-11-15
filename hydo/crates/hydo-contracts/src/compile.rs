@@ -3,15 +3,22 @@
 //! parameters are at entry, the offsets of the fields its clauses read, and where its result is
 //! at return.
 //!
-//! What the first version reads: integer, boolean and pointer parameters in a register or on the
-//! stack at entry; fields of structures through any number of pointers (Rust references, Go
-//! pointers), and of a structure parameter passed in memory; an integer, boolean or pointer
-//! result (Rust's return value, Go's first result). Everything else is refused with its reason
-//! (docs/design/contracts.md, "Reading values").
+//! A value is a [`Place`]: in memory at an address that reads give, or in registers, piece by
+//! piece (a Rust `&str` is a pointer and a length in two registers; so is an `Option<u64>`). What
+//! it reads (docs/design/contracts.md, "Reading values"):
+//!
+//! - integers, booleans and pointers, and fields of structures through any number of pointers;
+//! - since Milestone 255: Rust `String`, `&str`, `Vec<T>` and slices, and Go strings and slices
+//!   (`len()`, elements, and a string compared with a literal), Rust `Option` and `Result` (the
+//!   variant, and the value inside), Go's results after the first and its `error` (nil or not);
+//! - the result: Rust's in one or two registers or in memory the caller gave, Go's in the
+//!   integer registers in order.
+//!
+//! Everything else is refused with its reason.
 
-use crate::lang::{self, Ast, SrcContract};
+use crate::lang::{self, Ast, Builtin, SrcContract};
 use crate::plan::{
-    Base, Clause, ClauseKind, Expr, Frame, Function, Input, Lang, Loc, Plan, Program, Ty,
+    Base, BinOp, Clause, ClauseKind, Expr, Frame, Function, Input, Lang, Loc, Plan, Program, Ty,
     Unchecked, PLAN_TYPE, PLAN_V,
 };
 use gimli::{AttributeValue, EndianSlice, LittleEndian, Operation, UnitOffset};
@@ -23,6 +30,12 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 type R<'a> = EndianSlice<'a, LittleEndian>;
+
+/// How many elements an index computed per call can reach (`v[k]`): the engine reads the first
+/// this many.
+pub const ELEMS: u64 = 8;
+/// How many bytes of a string a comparison with a literal reads at most.
+pub const STR_BYTES: usize = 64;
 
 /// One program with contracts: where it is in the guest, the file on the host, and the folders
 /// (or files) of its sources.
@@ -161,34 +174,88 @@ impl Elf {
 #[derive(Clone, Debug)]
 enum Type {
     Scalar(Ty, u8),
+    /// A floating-point number of this many bytes (not read: contracts compare integers).
+    Float(u8),
     Pointer(Option<TRef>),
-    Struct(String, Vec<(String, u64, Option<TRef>)>),
+    Struct(Struct),
     Other(String),
 }
 
-/// What a function's debug information says.
-struct FnInfo {
+#[derive(Clone, Debug, Default)]
+struct Struct {
     name: String,
-    file: String,
-    line: u32,
-    low_pc: u64,
-    lang: Lang,
-    params: Vec<Param>,
-    /// Rust's return type, or Go's result parameters in order.
-    results: Vec<Option<TRef>>,
-    concrete: bool,
+    size: u64,
+    members: Vec<Member>,
+    /// Rust's generic parameters (`T` of `Vec<T>`).
+    tparams: Vec<(String, Option<TRef>)>,
+    /// A Rust enumeration's variants.
+    variants: Option<Variants>,
 }
 
-struct Param {
+#[derive(Clone, Debug)]
+struct Member {
     name: String,
+    off: u64,
     ty: Option<TRef>,
-    /// Where the parameter is at the first instruction, or why it cannot be read there.
-    loc: Result<Loc, String>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct Variants {
+    /// The discriminant's offset and type (none: one variant only).
+    discr: Option<(u64, Option<TRef>)>,
+    list: Vec<Variant>,
+}
+
+#[derive(Clone, Debug)]
+struct Variant {
+    name: String,
+    /// The discriminant's value for this variant (none: every value the others do not have).
+    value: Option<u64>,
+    off: u64,
+    ty: Option<TRef>,
+}
+
+/// A string, a vector or a slice: where its pointer and length are, and its elements.
+#[derive(Clone, Debug)]
+struct Seq {
+    ptr_off: u64,
+    len_off: u64,
+    elem: Option<TRef>,
+    /// Text (`&str`, `String`, Go `string`): it compares with a string literal.
+    text: bool,
+    /// The elements belong to someone else (a Rust `&str` or slice, a Go string or slice): a
+    /// parameter's elements in `ensures` are read at return, through the pointer at entry. A Rust
+    /// `Vec` or `String` passed by value is the function's own and is dropped by then.
+    borrowed: bool,
+}
+
+impl Struct {
+    fn member(&self, n: &str) -> Option<&Member> {
+        self.members.iter().find(|m| m.name == n)
+    }
+    /// A Go interface (`error`, `any`): its first word says whether it is nil.
+    fn iface(&self) -> bool {
+        self.name == "runtime.iface" || self.name == "runtime.eface"
+    }
 }
 
 struct Dwarf<'a> {
     dwarf: gimli::Dwarf<R<'a>>,
     units: Vec<gimli::Unit<R<'a>>>,
+}
+
+fn byte_size(e: &gimli::DebuggingInformationEntry<R<'_>>) -> u64 {
+    match e.attr_value(gimli::DW_AT_byte_size) {
+        Ok(Some(v)) => v.udata_value().unwrap_or(0),
+        _ => 0,
+    }
+}
+
+fn member_off(e: &gimli::DebuggingInformationEntry<R<'_>>) -> Option<u64> {
+    match e.attr_value(gimli::DW_AT_data_member_location) {
+        Ok(Some(v)) => v.udata_value(),
+        _ => None,
+    }
 }
 
 impl<'a> Dwarf<'a> {
@@ -202,10 +269,7 @@ impl<'a> Dwarf<'a> {
                 return Type::Other("unreadable".into());
             };
             let name = self.name(unit, &e).unwrap_or_default();
-            let size = match e.attr_value(gimli::DW_AT_byte_size) {
-                Ok(Some(v)) => v.udata_value().unwrap_or(0),
-                _ => 0,
-            };
+            let size = byte_size(&e);
             match e.tag() {
                 gimli::DW_TAG_typedef
                 | gimli::DW_TAG_const_type
@@ -229,6 +293,7 @@ impl<'a> Dwarf<'a> {
                         gimli::DW_ATE_unsigned
                         | gimli::DW_ATE_unsigned_char
                         | gimli::DW_ATE_UTF => Ty::U(n),
+                        gimli::DW_ATE_float => return Type::Float(n),
                         _ => return Type::Other(name),
                     };
                     if size > 8 {
@@ -245,27 +310,7 @@ impl<'a> Dwarf<'a> {
                     return Type::Pointer(self.type_ref(unit, &e))
                 }
                 gimli::DW_TAG_structure_type | gimli::DW_TAG_class_type => {
-                    let mut members = Vec::new();
-                    if let Ok(mut tree) = u.entries_tree(Some(off)) {
-                        if let Ok(root) = tree.root() {
-                            let mut ch = root.children();
-                            while let Ok(Some(c)) = ch.next() {
-                                let ce = c.entry();
-                                if ce.tag() != gimli::DW_TAG_member {
-                                    continue;
-                                }
-                                let mname = self.name(unit, ce).unwrap_or_default();
-                                let mo = match ce.attr_value(gimli::DW_AT_data_member_location) {
-                                    Ok(Some(v)) => v.udata_value(),
-                                    _ => None,
-                                };
-                                if let Some(mo) = mo {
-                                    members.push((mname, mo, self.type_ref(unit, ce)));
-                                }
-                            }
-                        }
-                    }
-                    return Type::Struct(name, members);
+                    return Type::Struct(self.structure(unit, off, name, size))
                 }
                 _ => return Type::Other(name),
             }
@@ -273,6 +318,251 @@ impl<'a> Dwarf<'a> {
         Type::Other("a chain of type names".into())
     }
 
+    /// A structure's members, generic parameters and variants.
+    fn structure(&self, unit: usize, off: UnitOffset, name: String, size: u64) -> Struct {
+        let u = &self.units[unit];
+        let mut s = Struct {
+            name,
+            size,
+            ..Struct::default()
+        };
+        let Ok(mut tree) = u.entries_tree(Some(off)) else {
+            return s;
+        };
+        let Ok(root) = tree.root() else { return s };
+        let mut ch = root.children();
+        while let Ok(Some(c)) = ch.next() {
+            let ce = c.entry().clone();
+            match ce.tag() {
+                gimli::DW_TAG_member => {
+                    if let Some(mo) = member_off(&ce) {
+                        s.members.push(Member {
+                            name: self.name(unit, &ce).unwrap_or_default(),
+                            off: mo,
+                            ty: self.type_ref(unit, &ce),
+                        });
+                    }
+                }
+                gimli::DW_TAG_template_type_parameter => {
+                    s.tparams.push((
+                        self.name(unit, &ce).unwrap_or_default(),
+                        self.type_ref(unit, &ce),
+                    ));
+                }
+                gimli::DW_TAG_variant_part => {
+                    let mut v = Variants::default();
+                    let discr_at = Self::same_unit_ref(&ce, gimli::DW_AT_discr);
+                    let mut vch = c.children();
+                    while let Ok(Some(vc)) = vch.next() {
+                        let ve = vc.entry().clone();
+                        if ve.tag() == gimli::DW_TAG_member && Some(ve.offset()) == discr_at {
+                            v.discr = member_off(&ve).map(|o| (o, self.type_ref(unit, &ve)));
+                            continue;
+                        }
+                        if ve.tag() != gimli::DW_TAG_variant {
+                            continue;
+                        }
+                        let value = match ve.attr_value(gimli::DW_AT_discr_value) {
+                            Ok(Some(x)) => x
+                                .udata_value()
+                                .or_else(|| x.sdata_value().map(|v| v as u64)),
+                            _ => None,
+                        };
+                        let mut mch = vc.children();
+                        while let Ok(Some(m)) = mch.next() {
+                            let me = m.entry();
+                            if me.tag() == gimli::DW_TAG_member {
+                                v.list.push(Variant {
+                                    name: self.name(unit, me).unwrap_or_default(),
+                                    value,
+                                    off: member_off(me).unwrap_or(0),
+                                    ty: self.type_ref(unit, me),
+                                });
+                            }
+                        }
+                    }
+                    s.variants = Some(v);
+                }
+                _ => {}
+            }
+        }
+        s
+    }
+
+    /// The bytes a value of a type takes.
+    fn size_of(&self, r: Option<TRef>) -> u64 {
+        match self.ty(r) {
+            Type::Scalar(_, n) | Type::Float(n) => n as u64,
+            Type::Pointer(_) => 8,
+            Type::Struct(s) => s.size,
+            Type::Other(_) => {
+                // an array or another type: its own byte size, when it says one
+                let Some((unit, off)) = r else { return 0 };
+                self.units[unit]
+                    .entry(off)
+                    .map(|e| byte_size(&e))
+                    .unwrap_or(0)
+            }
+        }
+    }
+
+    /// A string, a vector or a slice.
+    fn seq(&self, s: &Struct) -> Option<Seq> {
+        let n = s.name.as_str();
+        // Rust: &str and &[T] are a pointer and a length
+        if let (Some(p), Some(l)) = (s.member("data_ptr"), s.member("length")) {
+            let elem = match self.ty(p.ty) {
+                Type::Pointer(t) => t,
+                _ => None,
+            };
+            return Some(Seq {
+                ptr_off: p.off,
+                len_off: l.off,
+                elem,
+                text: n.ends_with("str"),
+                borrowed: true,
+            });
+        }
+        // Rust: String holds a Vec<u8>
+        if n == "String" || n.ends_with("::String") {
+            let v = s.member("vec")?;
+            let Type::Struct(vs) = self.ty(v.ty) else {
+                return None;
+            };
+            let inner = self.seq(&vs)?;
+            return Some(Seq {
+                ptr_off: v.off + inner.ptr_off,
+                len_off: v.off + inner.len_off,
+                text: true,
+                ..inner
+            });
+        }
+        // Rust: Vec<T> is a raw buffer (whose pointer is untyped) and a length
+        if n.starts_with("Vec<") {
+            let buf = s.member("buf")?;
+            let len = s.member("len")?;
+            let ptr = self.first_pointer(buf.ty, 0)?;
+            let elem = s.tparams.iter().find(|t| t.0 == "T").and_then(|t| t.1);
+            return Some(Seq {
+                ptr_off: buf.off + ptr,
+                len_off: len.off,
+                elem,
+                text: false,
+                borrowed: false,
+            });
+        }
+        // Go: string, and []T
+        if n == "string" {
+            let (p, l) = (s.member("str")?, s.member("len")?);
+            return Some(Seq {
+                ptr_off: p.off,
+                len_off: l.off,
+                elem: match self.ty(p.ty) {
+                    Type::Pointer(t) => t,
+                    _ => None,
+                },
+                text: true,
+                borrowed: true,
+            });
+        }
+        if n.starts_with("[]") {
+            let (p, l) = (s.member("array")?, s.member("len")?);
+            return Some(Seq {
+                ptr_off: p.off,
+                len_off: l.off,
+                elem: match self.ty(p.ty) {
+                    Type::Pointer(t) => t,
+                    _ => None,
+                },
+                text: false,
+                borrowed: true,
+            });
+        }
+        None
+    }
+
+    /// The offset of the first pointer inside a structure (a Rust `Vec`'s buffer).
+    fn first_pointer(&self, r: Option<TRef>, depth: u32) -> Option<u64> {
+        if depth > 8 {
+            return None;
+        }
+        match self.ty(r) {
+            Type::Pointer(_) => Some(0),
+            Type::Struct(s) => s
+                .members
+                .iter()
+                .find_map(|m| self.first_pointer(m.ty, depth + 1).map(|o| m.off + o)),
+            _ => None,
+        }
+    }
+
+    /// The scalar pieces of a value (offset, size), over every variant: how Rust's calling
+    /// convention returns it ([`Reads::result_place`]).
+    fn slots(
+        &self,
+        r: Option<TRef>,
+        at: u64,
+        out: &mut Vec<(u64, u64)>,
+        depth: u32,
+    ) -> Result<(), String> {
+        if depth > 16 {
+            return Err("a type nested too deep".into());
+        }
+        match self.ty(r) {
+            Type::Scalar(_, n) => out.push((at, n as u64)),
+            Type::Pointer(_) => out.push((at, 8)),
+            Type::Float(_) => return Err("a floating-point value".into()),
+            Type::Other(n) => return Err(format!("a type the compiler does not read ({n})")),
+            Type::Struct(s) => {
+                for m in &s.members {
+                    self.slots(m.ty, at + m.off, out, depth + 1)?;
+                }
+                if let Some(v) = &s.variants {
+                    if let Some((o, t)) = v.discr {
+                        self.slots(t, at + o, out, depth + 1)?;
+                    }
+                    for x in &v.list {
+                        self.slots(x.ty, at + x.off, out, depth + 1)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The machine words of a Go value in the order Go's calling convention puts them into
+    /// registers (offset, size).
+    fn go_words(
+        &self,
+        r: Option<TRef>,
+        at: u64,
+        out: &mut Vec<(u64, u64)>,
+        depth: u32,
+    ) -> Result<(), String> {
+        if depth > 16 {
+            return Err("a type nested too deep".into());
+        }
+        match self.ty(r) {
+            Type::Scalar(_, n) => out.push((at, n as u64)),
+            Type::Pointer(_) => out.push((at, 8)),
+            Type::Float(_) => {
+                return Err(
+                    "a floating-point result (Go returns it in a floating-point register)".into(),
+                )
+            }
+            Type::Other(n) => {
+                return Err(format!(
+                    "a result of a type the compiler does not read ({n})"
+                ))
+            }
+            Type::Struct(s) => {
+                for m in &s.members {
+                    self.go_words(m.ty, at + m.off, out, depth + 1)?;
+                }
+            }
+        }
+        Ok(())
+    }
     fn name(&self, unit: usize, e: &gimli::DebuggingInformationEntry<R<'a>>) -> Option<String> {
         let v = e.attr_value(gimli::DW_AT_name).ok()??;
         let s = self.dwarf.attr_string(&self.units[unit], v).ok()?;
@@ -336,15 +626,116 @@ fn sp_reg(arch: &str) -> u8 {
     }
 }
 
+/// A register's value as a read.
+fn reg(r: u8) -> Loc {
+    Loc {
+        base: Base::Reg(r),
+        size: 8,
+        ..Loc::default()
+    }
+}
+
+/// Where a value is.
+#[derive(Clone, Debug)]
+enum Place {
+    /// In memory, at the value of `addr` (a read that gives an address) plus `off`.
+    Mem { addr: Loc, off: i64 },
+    /// In registers or memory piece by piece: each piece's offset in the value, its size, and
+    /// the read that gives it. A part of the value without a piece was optimised out.
+    Pieces(Vec<(i64, u64, Loc)>),
+}
+
+impl Place {
+    /// The part of the value at `off` of `size` bytes.
+    fn field(&self, off: u64, size: u64) -> Place {
+        let off = off as i64;
+        match self {
+            Place::Mem { addr, off: o } => Place::Mem {
+                addr: addr.clone(),
+                off: o + off,
+            },
+            Place::Pieces(ps) => Place::Pieces(
+                ps.iter()
+                    .map(|(po, s, l)| (po - off, *s, l.clone()))
+                    .filter(|(po, s, _)| *po < size as i64 && po + *s as i64 > 0)
+                    .collect(),
+            ),
+        }
+    }
+
+    /// The read of the first `n` bytes of the value.
+    fn scalar(&self, n: u8, what: &str) -> Result<Loc, String> {
+        match self {
+            Place::Mem { addr, off } => {
+                let mut path = addr.path.clone();
+                path.push(*off);
+                Ok(Loc {
+                    base: addr.base,
+                    path,
+                    size: n,
+                    ..Loc::default()
+                })
+            }
+            Place::Pieces(ps) => {
+                let p = ps
+                    .iter()
+                    .find(|(po, s, _)| *po <= 0 && po + *s as i64 >= n as i64);
+                let Some((po, _, l)) = p else {
+                    return Err(format!(
+                        "`{what}` is not where the debug information says the value is at the \
+                         function's entry (the compiler optimised it out, or keeps it in parts)"
+                    ));
+                };
+                let mut l = l.clone();
+                l.size = n;
+                if *po < 0 {
+                    if l.path.is_empty() {
+                        l.shift = (-po * 8) as u8;
+                    } else if let Some(last) = l.path.last_mut() {
+                        *last -= po;
+                    }
+                }
+                Ok(l)
+            }
+        }
+    }
+}
+
+/// A function's frame base at its first instruction, as a register and an offset: the stack
+/// pointer (Rust's `DW_OP_reg7`, `DW_OP_reg31`), or the canonical frame address (Go's
+/// `DW_OP_call_frame_cfa`), which is the stack pointer on arm64 and the stack pointer plus the
+/// return address on x86_64.
+fn frame_base(
+    d: &Dwarf,
+    unit: usize,
+    e: &gimli::DebuggingInformationEntry<R<'_>>,
+    arch: &str,
+) -> Result<(u8, i64), String> {
+    let u = &d.units[unit];
+    let Ok(Some(AttributeValue::Exprloc(x))) = e.attr_value(gimli::DW_AT_frame_base) else {
+        return Err("a stack location without the function's frame base".into());
+    };
+    let mut r = x.0;
+    let op = Operation::parse(&mut r, u.encoding()).map_err(|e| e.to_string())?;
+    match op {
+        Operation::Register { register } if r.is_empty() => Ok((register.0 as u8, 0)),
+        Operation::CallFrameCFA if r.is_empty() => {
+            Ok((sp_reg(arch), if arch == "arm64" { 0 } else { 8 }))
+        }
+        _ => Err("a frame base the compiler does not read".into()),
+    }
+}
+
 /// Where a parameter is at the function's first instruction, from its location expression.
-fn entry_loc(
+fn entry_place(
     d: &Dwarf,
     unit: usize,
     v: AttributeValue<R>,
     pc: u64,
     arch: &str,
-    size: u8,
-) -> Result<Loc, String> {
+    size: u64,
+    fb: &Result<(u8, i64), String>,
+) -> Result<Place, String> {
     let u = &d.units[unit];
     let expr = match v {
         AttributeValue::Exprloc(e) => e,
@@ -369,39 +760,80 @@ fn entry_loc(
     while !r.is_empty() {
         ops.push(Operation::parse(&mut r, u.encoding()).map_err(|e| e.to_string())?);
     }
-    let sp = sp_reg(arch);
-    // at the first instruction the canonical frame address is the stack pointer on arm64, and
-    // the stack pointer plus the return address on x86_64
-    let cfa_adj: i64 = if arch == "arm64" { 0 } else { 8 };
-    match ops.as_slice() {
-        [Operation::Register { register }] => Ok(Loc {
-            name: String::new(),
-            base: Base::Reg(register.0 as u8),
-            path: vec![],
-            size,
-        }),
-        [Operation::RegisterOffset {
-            register, offset, ..
-        }] => Ok(Loc {
-            name: String::new(),
-            base: Base::Reg(register.0 as u8),
-            path: vec![*offset],
-            size,
-        }),
-        [Operation::FrameOffset { offset }] => Ok(Loc {
-            name: String::new(),
-            base: Base::Reg(sp),
-            path: vec![*offset + cfa_adj],
-            size,
-        }),
-        [Operation::CallFrameCFA] => Err("an unusual location (the frame address itself)".into()),
-        _ if ops.iter().any(|o| matches!(o, Operation::Piece { .. })) => {
-            Err("a value split over several registers (the first version reads a structure's fields only through a pointer)".into())
-        }
-        _ => Err(format!("a location the first version does not read ({} operations)", ops.len())),
+    // the general registers only (x86_64: 0 to 15; arm64: x0 to x30 and sp)
+    let gpr = |r: u16| if arch == "arm64" { r <= 31 } else { r <= 15 };
+    let one =
+        |ops: &[Operation<R>]| -> Result<Option<Place>, String> {
+            match ops {
+                [] => Ok(None),
+                [Operation::Register { register }] if gpr(register.0) => Ok(Some(Place::Pieces(
+                    vec![(0, size.max(1), reg(register.0 as u8))],
+                ))),
+                [Operation::Register { .. }] => {
+                    Err("a value in a floating-point or vector register".into())
+                }
+                [Operation::RegisterOffset {
+                    register, offset, ..
+                }] => Ok(Some(Place::Mem {
+                    addr: reg(register.0 as u8),
+                    off: *offset,
+                })),
+                [Operation::FrameOffset { offset }] => {
+                    let (r, adj) = fb.clone()?;
+                    Ok(Some(Place::Mem {
+                        addr: reg(r),
+                        off: *offset + adj,
+                    }))
+                }
+                // a constant the compiler folded into the code: not in the machine at the entry
+                [.., Operation::StackValue] | [Operation::ImplicitValue { .. }] => Ok(None),
+                [Operation::CallFrameCFA] => {
+                    Err("an unusual location (the frame address itself)".into())
+                }
+                _ => Err(format!(
+                    "a location the compiler does not read ({} operations)",
+                    ops.len()
+                )),
+            }
+        };
+    if !ops.iter().any(|o| matches!(o, Operation::Piece { .. })) {
+        return one(&ops)?.ok_or_else(|| {
+            "a constant the compiler folded into the code: not in the machine at the entry".into()
+        });
     }
+    // pieces: each run of operations up to a DW_OP_piece is one part of the value
+    let mut pieces = Vec::new();
+    let mut at: i64 = 0;
+    let mut start = 0;
+    for (i, o) in ops.iter().enumerate() {
+        let Operation::Piece {
+            size_in_bits,
+            bit_offset,
+        } = o
+        else {
+            continue;
+        };
+        if bit_offset.is_some() || size_in_bits % 8 != 0 {
+            return Err("a value split at bits, not bytes".into());
+        }
+        let n = size_in_bits / 8;
+        match one(&ops[start..i])? {
+            None => {}
+            Some(Place::Pieces(p)) => {
+                for (po, _, l) in p {
+                    pieces.push((at + po, n, l));
+                }
+            }
+            Some(p @ Place::Mem { .. }) => {
+                // a part of the value in memory: read it as a scalar of the piece's size
+                pieces.push((at, n, p.scalar(n.min(8) as u8, "")?));
+            }
+        }
+        at += n as i64;
+        start = i + 1;
+    }
+    Ok(Place::Pieces(pieces))
 }
-
 fn is_fn_tag(t: gimli::DwTag) -> bool {
     t == gimli::DW_TAG_subprogram
 }
@@ -459,6 +891,27 @@ fn walk<'a>(
     }
 }
 
+/// What a function's debug information says.
+struct FnInfo {
+    name: String,
+    file: String,
+    line: u32,
+    low_pc: u64,
+    lang: Lang,
+    params: Vec<Param>,
+    /// Rust's return type (named `result`), or Go's results in order with their names (`~r0`
+    /// for one without a name).
+    results: Vec<(String, Option<TRef>)>,
+    concrete: bool,
+}
+
+struct Param {
+    name: String,
+    ty: Option<TRef>,
+    /// Where the parameter is at the first instruction, or why it cannot be read there.
+    place: Result<Place, String>,
+}
+
 fn fn_info<'a>(
     d: &Dwarf<'a>,
     ui: usize,
@@ -502,8 +955,12 @@ fn fn_info<'a>(
     let mut params = Vec::new();
     let mut results = Vec::new();
     if lang == Lang::Rust || lang == Lang::C {
-        results.push(d.type_ref(ui, &src).or_else(|| d.type_ref(ui, e)));
+        results.push((
+            "result".to_string(),
+            d.type_ref(ui, &src).or_else(|| d.type_ref(ui, e)),
+        ));
     }
+    let fb = frame_base(d, ui, e, arch);
     if let (Some(pc), Ok(mut tree)) = (low_pc, u.entries_tree(Some(e.offset()))) {
         if let Ok(root) = tree.root() {
             let mut ch = root.children();
@@ -525,22 +982,18 @@ fn fn_info<'a>(
                     Ok(Some(AttributeValue::Flag(true)))
                 );
                 if lang == Lang::Go && is_result {
-                    results.push(ty);
+                    results.push((pname, ty));
                     continue;
                 }
-                let size = match d.ty(ty) {
-                    Type::Scalar(_, n) => n,
-                    Type::Pointer(_) => 8,
-                    _ => 8,
-                };
-                let loc = match ce.attr_value(gimli::DW_AT_location) {
-                    Ok(Some(v)) => entry_loc(d, ui, v, pc, arch, size),
+                let size = d.size_of(ty);
+                let place = match ce.attr_value(gimli::DW_AT_location) {
+                    Ok(Some(v)) => entry_place(d, ui, v, pc, arch, size, &fb),
                     _ => Err("no location (optimised out)".into()),
                 };
                 params.push(Param {
                     name: pname,
                     ty,
-                    loc,
+                    place,
                 });
             }
         }
@@ -556,7 +1009,6 @@ fn fn_info<'a>(
         concrete: low_pc.is_some(),
     })
 }
-
 /// Every source file under the given folders (or the files themselves), with the path relative
 /// to its folder.
 fn source_files(roots: &[PathBuf]) -> Vec<(PathBuf, String)> {
@@ -655,10 +1107,21 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
     }
     let d = Dwarf { dwarf, units };
     let fns = functions(&d, arch);
+    // ET_DYN: a position-independent program, loaded where the guest's kernel chooses
+    let pie = rd16(&elf.data, 16) == Some(3);
     let mut prog = Program {
         program: src.program.clone(),
         sha256,
         arch: arch.into(),
+        pie,
+        head: if pie {
+            elf.data[..64.min(elf.data.len())]
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect()
+        } else {
+            String::new()
+        },
         functions: Vec::new(),
         unchecked: Vec::new(),
     };
@@ -700,7 +1163,7 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
                 }));
                 continue;
             };
-            match function_plan(&d, &elf, f, &c, &rel, id) {
+            match function_plan(&d, &elf, f, &c, &rel, id, arch) {
                 Ok(func) => {
                     prog.functions.push(func);
                     id += 1;
@@ -731,24 +1194,86 @@ pub fn compile(sources: &[Source]) -> Result<Plan, String> {
     Ok(plan)
 }
 
+/// A value an expression names, on its way to a read.
+#[derive(Clone, Debug)]
+struct Pv {
+    place: Place,
+    ty: Option<TRef>,
+    /// The reads happen at the return (else at the entry).
+    ret: bool,
+    /// A parameter in an `ensures` clause, outside `old()`, that points at something (a
+    /// reference, a pointer, a borrowed string or slice): what it points to is read at return,
+    /// through the pointer as it was at entry.
+    lazy: bool,
+    /// What the value needs to exist (its variant, an index inside the length), with the reason
+    /// a call is undecided without it.
+    guards: Vec<(Expr, String)>,
+    /// How the contract writes it (the report's names).
+    text: String,
+}
+
 /// The reads of one function, collected while its clauses compile.
 struct Reads<'a> {
     d: &'a Dwarf<'a>,
     f: &'a FnInfo,
+    arch: &'a str,
     at_entry: Vec<Loc>,
     at_return: Vec<Loc>,
 }
 
+/// The first index in a chain of fields and elements that is not a number (`k` in `v[k].x`).
+fn dyn_index(a: &Ast) -> Option<&Ast> {
+    match a {
+        Ast::Field(x, _) | Ast::Call(_, x) => dyn_index(x),
+        Ast::Index(x, i) => dyn_index(x).or(match **i {
+            Ast::Int(_) => None,
+            _ => Some(&**i),
+        }),
+        _ => None,
+    }
+}
+
+/// `a` with the index `target` replaced by the number `j`.
+fn subst(a: &Ast, target: &Ast, j: i128) -> Ast {
+    match a {
+        Ast::Field(x, f) => Ast::Field(Box::new(subst(x, target, j)), f.clone()),
+        Ast::Call(b, x) => Ast::Call(*b, Box::new(subst(x, target, j))),
+        Ast::Index(x, i) if std::ptr::eq(&**i, target) => {
+            Ast::Index(Box::new(subst(x, target, j)), Box::new(Ast::Int(j)))
+        }
+        Ast::Index(x, i) => Ast::Index(Box::new(subst(x, target, j)), i.clone()),
+        other => other.clone(),
+    }
+}
+
 impl Reads<'_> {
     fn add(list: &mut Vec<Loc>, l: Loc) -> u32 {
-        if let Some(i) = list
-            .iter()
-            .position(|x| x.base == l.base && x.path == l.path && x.size == l.size)
-        {
+        if let Some(i) = list.iter().position(|x| {
+            x.base == l.base && x.path == l.path && x.size == l.size && x.shift == l.shift
+        }) {
             return i as u32;
         }
         list.push(l);
         (list.len() - 1) as u32
+    }
+
+    /// A read of the value, wrapped in what it needs.
+    fn read(&mut self, pv: &Pv, mut loc: Loc, ty: Ty) -> Expr {
+        loc.name = pv.text.clone();
+        let e = if pv.ret {
+            Expr::Out(Self::add(&mut self.at_return, loc), ty)
+        } else {
+            Expr::In(Self::add(&mut self.at_entry, loc), ty)
+        };
+        Self::guarded(pv, e)
+    }
+
+    fn guarded(pv: &Pv, e: Expr) -> Expr {
+        pv.guards.iter().rev().fold(e, |e, (c, why)| Expr::Guard {
+            cond: Box::new(c.clone()),
+            then: Box::new(e),
+            why: why.clone(),
+        })
     }
 
     fn param(&self, name: &str) -> Result<&Param, String> {
@@ -759,175 +1284,609 @@ impl Reads<'_> {
             .ok_or_else(|| {
                 let names: Vec<&str> = self.f.params.iter().map(|p| p.name.as_str()).collect();
                 format!(
-                "`{name}` is not a parameter of {} (its parameters: {}; the result is `result`)",
-                self.f.name,
-                names.join(", ")
-            )
+                    "`{name}` is not a parameter of {} (its parameters: {}; the result is `result`)",
+                    self.f.name,
+                    names.join(", ")
+                )
             })
     }
 
-    /// Follow `fields` from a value at `loc` of type `ty`: the read of the last field and its
-    /// type.
-    fn fields(
-        &self,
-        mut loc: Loc,
-        mut ty: Option<TRef>,
-        fields: &[String],
-        what: &str,
-    ) -> Result<(Loc, Ty), String> {
-        let mut shown = what.to_string();
-        for (k, fname) in fields.iter().enumerate() {
-            let mut t = self.d.ty(ty);
-            // read through pointers (Rust references, Go pointers)
-            let mut deref = 0;
-            while let Type::Pointer(p) = t {
-                if deref > 0 {
-                    loc.path.push(0);
-                }
-                deref += 1;
-                ty = p;
-                t = self.d.ty(ty);
-                if deref > 4 {
+    /// Whether a value points at something a parameter's `ensures` reads at return.
+    fn points(&self, ty: Option<TRef>) -> bool {
+        match self.d.ty(ty) {
+            Type::Pointer(_) => true,
+            Type::Struct(s) => self.d.seq(&s).is_some_and(|q| q.borrowed),
+            _ => false,
+        }
+    }
+
+    /// The result with this name: `result` (the first), or a Go result's own name.
+    fn result_index(&self, n: &str) -> Option<usize> {
+        if n == "result" {
+            return (!self.f.results.is_empty()).then_some(0);
+        }
+        if self.f.lang == Lang::Go && !n.starts_with('~') {
+            return self.f.results.iter().position(|r| r.0 == n);
+        }
+        None
+    }
+
+    /// A parameter or a result.
+    fn name(&mut self, n: &str, kind: ClauseKind, old: bool) -> Result<Pv, String> {
+        if let Some(i) = self.result_index(n) {
+            if kind == ClauseKind::Requires || old {
+                return Err(format!("`{n}` is a result: it has no value at entry"));
+            }
+            return self.result(i, n);
+        }
+        let p = self.param(n)?;
+        let place = p
+            .place
+            .clone()
+            .map_err(|e| format!("`{n}` cannot be read at entry: {e}"))?;
+        let ty = p.ty;
+        Ok(Pv {
+            place,
+            ty,
+            ret: false,
+            lazy: kind == ClauseKind::Ensures && !old && self.points(ty),
+            guards: Vec::new(),
+            text: n.to_string(),
+        })
+    }
+
+    /// The `i`-th result at return.
+    fn result(&mut self, i: usize, text: &str) -> Result<Pv, String> {
+        let fname = &self.f.name;
+        let ty = self.f.results.get(i).and_then(|r| r.1);
+        if ty.is_none() {
+            return Err(format!("{fname} returns nothing"));
+        }
+        let arm = self.arch == "arm64";
+        let place = if self.f.lang == Lang::Go {
+            // Go's calling convention: the results' words in the integer registers in order
+            // (amd64: RAX, RBX, RCX, RDI, RSI, R8 to R11; arm64: R0 to R15)
+            let regs: Vec<u8> = if arm {
+                (0..16).collect()
+            } else {
+                vec![0, 3, 2, 5, 4, 8, 9, 10, 11]
+            };
+            let mut next = 0;
+            let mut place = None;
+            for (j, (_, t)) in self.f.results.iter().enumerate() {
+                let mut w = Vec::new();
+                let r = self.d.go_words(*t, 0, &mut w, 0);
+                if j == i {
+                    r.map_err(|e| format!("`{text}` is {e}"))?;
+                    if next + w.len() > regs.len() {
+                        return Err(format!(
+                            "`{text}` is returned on the stack (the results need more than \
+                             {} registers)",
+                            regs.len()
+                        ));
+                    }
+                    place = Some(Place::Pieces(
+                        w.iter()
+                            .enumerate()
+                            .map(|(k, (o, s))| (*o as i64, *s, reg(regs[next + k])))
+                            .collect(),
+                    ));
                     break;
                 }
+                if r.is_ok() && next + w.len() <= regs.len() {
+                    next += w.len();
+                }
             }
-            let Type::Struct(sname, members) = &t else {
-                return Err(format!(
-                    "`{shown}` has no field `{fname}`: it is not a structure"
-                ));
-            };
-            let want = if self.f.lang == Lang::Rust && fname.chars().all(|c| c.is_ascii_digit()) {
-                format!("__{fname}")
-            } else {
-                fname.clone()
-            };
-            let Some((_, off, mty)) = members.iter().find(|m| m.0 == want) else {
-                let names: Vec<&str> = members.iter().map(|m| m.0.as_str()).collect();
-                return Err(format!(
-                    "`{sname}` has no field `{fname}` (its fields: {})",
-                    names.join(", ")
-                ));
-            };
-            if deref > 0 {
-                // the value is a pointer: load it, then the field
-                loc.path.push(*off as i64);
-            } else if let Some(last) = loc.path.last_mut() {
-                // a structure in memory: the field is further in
-                *last += *off as i64;
-            } else {
-                return Err(format!(
-                    "`{shown}` is a structure passed in registers; the first version reads a \
-                     structure's fields only through a pointer"
-                ));
+            place.ok_or_else(|| format!("{fname} has no result {i}"))?
+        } else {
+            // Rust's calling convention: one scalar in the first return register, two scalars
+            // in the first two, another value of up to 8 bytes as the first register's bytes,
+            // and a larger one in memory the caller gives (its address in x8 on arm64, rdi on
+            // x86_64, at entry)
+            let mut sl = Vec::new();
+            self.d
+                .slots(ty, 0, &mut sl, 0)
+                .map_err(|e| format!("`{text}` is {e}"))?;
+            sl.sort_unstable();
+            sl.dedup();
+            let size = self.d.size_of(ty);
+            if sl.is_empty() || size == 0 {
+                return Err(format!("{fname} returns nothing"));
             }
-            ty = *mty;
-            shown = format!(
-                "{shown}.{}",
-                fields[..=k].last().cloned().unwrap_or_default()
+            if sl.len() == 1 {
+                Place::Pieces(vec![(sl[0].0 as i64, sl[0].1, reg(0))])
+            } else if sl.len() == 2 && sl[0].0 + sl[0].1 <= sl[1].0 && sl[1].1 <= 8 {
+                Place::Pieces(vec![
+                    (sl[0].0 as i64, sl[0].1, reg(0)),
+                    (sl[1].0 as i64, sl[1].1, reg(1)),
+                ])
+            } else if size <= 8 {
+                Place::Pieces(vec![(0, size, reg(0))])
+            } else if self.f.lang == Lang::C {
+                return Err(format!(
+                    "`{text}` is a structure a C function returns: the compiler reads it only \
+                     through a pointer"
+                ));
+            } else {
+                // the caller's memory: x86_64 passes its address in rdi; on arm64 Rust 1.90
+                // passes it in x0 as a first argument (the parameters then start at x1), and
+                // the C convention in x8
+                let uses_x0 = self.f.params.iter().any(|p| match &p.place {
+                    Ok(Place::Pieces(ps)) => ps.iter().any(|(_, _, l)| l.base == Base::Reg(0)),
+                    Ok(Place::Mem { addr, .. }) => addr.base == Base::Reg(0),
+                    Err(_) => false,
+                });
+                let sret = match (arm, uses_x0) {
+                    (false, _) => 5,
+                    (true, false) => 0,
+                    (true, true) => 8,
+                };
+                let k = Self::add(
+                    &mut self.at_entry,
+                    Loc {
+                        name: format!("address of {text}"),
+                        ..reg(sret)
+                    },
+                );
+                Place::Mem {
+                    addr: Loc {
+                        base: Base::In(k),
+                        size: 8,
+                        ..Loc::default()
+                    },
+                    off: 0,
+                }
+            }
+        };
+        Ok(Pv {
+            place,
+            ty,
+            ret: true,
+            lazy: false,
+            guards: Vec::new(),
+            text: text.to_string(),
+        })
+    }
+
+    /// What a pointer value points to.
+    fn deref(&mut self, pv: Pv) -> Result<Pv, String> {
+        let target = match self.d.ty(pv.ty) {
+            Type::Pointer(t) => t,
+            _ => None,
+        };
+        let loc = pv.place.scalar(8, &pv.text)?;
+        if pv.lazy && !pv.ret {
+            // the pointer as it was at entry; what it points to, at return
+            let k = Self::add(
+                &mut self.at_entry,
+                Loc {
+                    name: pv.text.clone(),
+                    ..loc
+                },
             );
+            return Ok(Pv {
+                place: Place::Mem {
+                    addr: Loc {
+                        base: Base::In(k),
+                        size: 8,
+                        ..Loc::default()
+                    },
+                    off: 0,
+                },
+                ty: target,
+                ret: true,
+                lazy: false,
+                ..pv
+            });
         }
-        match self.d.ty(ty) {
+        Ok(Pv {
+            place: Place::Mem { addr: loc, off: 0 },
+            ty: target,
+            lazy: false,
+            ..pv
+        })
+    }
+
+    /// Through pointers (references, Go pointers) to the value they point to.
+    fn auto_deref(&mut self, mut pv: Pv) -> Result<Pv, String> {
+        for _ in 0..4 {
+            if !matches!(self.d.ty(pv.ty), Type::Pointer(_)) {
+                return Ok(pv);
+            }
+            pv = self.deref(pv)?;
+        }
+        Ok(pv)
+    }
+
+    fn structure(&mut self, pv: Pv) -> Result<(Pv, Struct), String> {
+        let pv = self.auto_deref(pv)?;
+        match self.d.ty(pv.ty) {
+            Type::Struct(s) => Ok((pv, s)),
+            _ => Err(format!("`{}` is not a structure", pv.text)),
+        }
+    }
+
+    fn field(&mut self, pv: Pv, name: &str) -> Result<Pv, String> {
+        let (pv, s) = self.structure(pv)?;
+        let want = if self.f.lang == Lang::Rust && name.chars().all(|c| c.is_ascii_digit()) {
+            format!("__{name}")
+        } else {
+            name.to_string()
+        };
+        let Some(m) = s.member(&want) else {
+            let names: Vec<&str> = s.members.iter().map(|m| m.name.as_str()).collect();
+            return Err(format!(
+                "`{}` has no field `{name}` (its fields: {})",
+                s.name,
+                names.join(", ")
+            ));
+        };
+        Ok(Pv {
+            place: pv.place.field(m.off, self.d.size_of(m.ty)),
+            ty: m.ty,
+            lazy: false,
+            text: format!("{}.{name}", pv.text),
+            ..pv
+        })
+    }
+
+    /// A string, a vector or a slice, and where its parts are.
+    fn seq(&mut self, pv: Pv) -> Result<(Pv, Seq), String> {
+        let lazy = pv.lazy;
+        let (mut pv, s) = self
+            .structure(pv)
+            .map_err(|_| "not a string, a vector or a slice".to_string())?;
+        let q = self.d.seq(&s).ok_or_else(|| {
+            format!(
+                "`{}` is not a string, a vector or a slice (it is `{}`)",
+                pv.text, s.name
+            )
+        })?;
+        // a borrowed string or slice parameter: its elements at return
+        pv.lazy = lazy && q.borrowed && !pv.ret;
+        Ok((pv, q))
+    }
+
+    fn len(&mut self, pv: Pv) -> Result<Expr, String> {
+        let text = format!("len({})", pv.text);
+        let (pv, q) = self.seq(pv)?;
+        let len_ty = match &self.d.ty(pv.ty) {
+            Type::Struct(s) => s
+                .members
+                .iter()
+                .find(|m| m.off == q.len_off)
+                .and_then(|m| m.ty),
+            _ => None,
+        };
+        let n = Pv {
+            place: pv.place.field(q.len_off, 8),
+            ty: len_ty,
+            text,
+            lazy: false,
+            ..pv
+        };
+        match self.d.ty(len_ty) {
+            Type::Scalar(t, w) => {
+                let l = n.place.scalar(w, &n.text)?;
+                Ok(self.read(&n, l, t))
+            }
+            // a Vec's length is a plain usize; String's is through its Vec
+            _ => {
+                let l = n.place.scalar(8, &n.text)?;
+                Ok(self.read(&n, l, Ty::U(8)))
+            }
+        }
+    }
+
+    /// Element `j` of a string, a vector or a slice (undecided past its length).
+    fn elem(&mut self, pv: Pv, j: u64) -> Result<Pv, String> {
+        let text = format!("{}[{j}]", pv.text);
+        let len = self.len(pv.clone())?;
+        let (pv, q) = self.seq(pv)?;
+        let esize = self.d.size_of(q.elem);
+        if esize == 0 {
+            return Err(format!(
+                "`{}`: elements of a size the compiler does not know",
+                pv.text
+            ));
+        }
+        let ptr = Pv {
+            place: pv.place.field(q.ptr_off, 8),
+            ty: None,
+            ..pv.clone()
+        };
+        let mut e = self.deref(ptr)?;
+        e.place = e.place.field(j * esize, esize);
+        e.ty = q.elem;
+        e.guards.push((
+            Expr::Bin(BinOp::Lt, Box::new(Expr::Int(j.to_string())), Box::new(len)),
+            format!("index {j} is past the length of `{}`", pv.text),
+        ));
+        e.text = text;
+        e.lazy = false;
+        Ok(e)
+    }
+
+    /// Whether an `Option` or `Result` is the variant `want`.
+    fn is_variant(&mut self, pv: Pv, want: &str) -> Result<(Pv, Struct, Expr), String> {
+        let (pv, s) = self.structure(pv)?;
+        let Some(v) = &s.variants else {
+            return Err(format!(
+                "`{}` is not an Option or a Result (it is `{}`)",
+                pv.text, s.name
+            ));
+        };
+        let Some(var) = v.list.iter().find(|x| x.name == want) else {
+            let names: Vec<&str> = v.list.iter().map(|x| x.name.as_str()).collect();
+            return Err(format!(
+                "`{}` has no variant {want} (its variants: {})",
+                pv.text,
+                names.join(", ")
+            ));
+        };
+        let Some((doff, dty)) = v.discr else {
+            return Ok((pv.clone(), s.clone(), Expr::Bool(true)));
+        };
+        let n = self.d.size_of(dty).clamp(1, 8) as u8;
+        let m = if n >= 8 {
+            u64::MAX
+        } else {
+            (1u64 << (8 * n)) - 1
+        };
+        let d = Pv {
+            place: pv.place.field(doff, n as u64),
+            text: format!("the variant of {}", pv.text),
+            ..pv.clone()
+        };
+        let l = d.place.scalar(n, &d.text)?;
+        let discr = Box::new(self.read(&d, l, Ty::U(n)));
+        let e = match var.value {
+            Some(x) => Expr::Is {
+                discr,
+                any: vec![(x & m).to_string()],
+                not: Vec::new(),
+            },
+            None => Expr::Is {
+                discr,
+                any: Vec::new(),
+                not: v
+                    .list
+                    .iter()
+                    .filter_map(|o| o.value.map(|x| (x & m).to_string()))
+                    .collect(),
+            },
+        };
+        Ok((pv, s, e))
+    }
+
+    /// The value inside a variant: `some(o)`, `ok(r)`, `err(r)`.
+    fn payload(&mut self, pv: Pv, b: Builtin, want: &str) -> Result<Pv, String> {
+        let text = format!("{}({})", b.name(), pv.text);
+        let (pv, s, cond) = self.is_variant(pv, want)?;
+        let var = s
+            .variants
+            .as_ref()
+            .and_then(|v| v.list.iter().find(|x| x.name == want))
+            .cloned()
+            .ok_or("no variant")?;
+        let Type::Struct(vs) = self.d.ty(var.ty) else {
+            return Err(format!("`{}`'s variant {want} has no value", pv.text));
+        };
+        let Some(m) = vs.member("__0") else {
+            return Err(format!("`{}`'s variant {want} has no value", pv.text));
+        };
+        let mut guards = pv.guards.clone();
+        guards.push((cond, format!("`{}` is not {want}", pv.text)));
+        Ok(Pv {
+            place: pv.place.field(var.off + m.off, self.d.size_of(m.ty)),
+            ty: m.ty,
+            lazy: false,
+            guards,
+            text,
+            ..pv
+        })
+    }
+
+    /// The value a name, a field, an element or a variant's value names.
+    fn place(&mut self, a: &Ast, kind: ClauseKind, old: bool) -> Result<Pv, String> {
+        match a {
+            Ast::Name(n) => self.name(n, kind, old),
+            Ast::Field(x, f) => {
+                // Go's results after the first: result.1, result.2, ...
+                if let (Ast::Name(r), Ok(i)) = (&**x, f.parse::<usize>()) {
+                    if r == "result" && self.f.lang == Lang::Go && self.f.results.len() > 1 {
+                        if kind == ClauseKind::Requires || old {
+                            return Err("`result` has no value at entry".into());
+                        }
+                        if i >= self.f.results.len() {
+                            return Err(format!(
+                                "{} has {} results (result.0 to result.{})",
+                                self.f.name,
+                                self.f.results.len(),
+                                self.f.results.len() - 1
+                            ));
+                        }
+                        return self.result(i, &format!("result.{i}"));
+                    }
+                }
+                let pv = self.place(x, kind, old)?;
+                self.field(pv, f)
+            }
+            Ast::Index(x, i) => match **i {
+                Ast::Int(j) if j >= 0 => {
+                    let pv = self.place(x, kind, old)?;
+                    self.elem(pv, j as u64)
+                }
+                _ => Err(format!("`{a}`: an index is a number of zero or more")),
+            },
+            Ast::Call(b @ (Builtin::Some | Builtin::Ok | Builtin::Err), x) => {
+                let want = match b {
+                    Builtin::Some => "Some",
+                    Builtin::Ok => "Ok",
+                    _ => "Err",
+                };
+                let pv = self.place(x, kind, old)?;
+                self.payload(pv, *b, want)
+            }
+            Ast::Old(x) => self.place(x, kind, true),
+            _ => Err(format!("`{a}` is not a value with fields or elements")),
+        }
+    }
+
+    /// The scalar a value is: an integer, a boolean, a pointer, or a Go interface (nil or not).
+    fn scalar(&mut self, pv: Pv) -> Result<Expr, String> {
+        match self.d.ty(pv.ty) {
             Type::Scalar(t, n) => {
-                loc.size = n;
-                Ok((loc, t))
+                let l = pv.place.scalar(n, &pv.text)?;
+                Ok(self.read(&pv, l, t))
             }
             Type::Pointer(_) => {
-                loc.size = 8;
-                Ok((loc, Ty::Ptr))
+                let l = pv.place.scalar(8, &pv.text)?;
+                Ok(self.read(&pv, l, Ty::Ptr))
             }
-            Type::Struct(n, _) => Err(format!(
-                "`{shown}` is a structure ({n}); compare its fields one by one"
+            Type::Struct(s) if s.iface() => {
+                // nil or not: the interface's type word
+                let l = pv.place.scalar(8, &pv.text)?;
+                Ok(self.read(&pv, l, Ty::Ptr))
+            }
+            Type::Struct(s) if self.d.seq(&s).is_some() => Err(format!(
+                "`{}` is a string, a vector or a slice: use len({0}), {0}[i], or compare it \
+                 with a string literal",
+                pv.text
+            )),
+            Type::Struct(s) if s.variants.is_some() => Err(format!(
+                "`{}` is an enumeration ({}): use is_some, is_ok, is_err, some, ok or err",
+                pv.text, s.name
+            )),
+            Type::Struct(s) => Err(format!(
+                "`{}` is a structure ({}); compare its fields one by one",
+                pv.text, s.name
+            )),
+            Type::Float(_) => Err(format!(
+                "`{}` is a floating-point number; contracts compare integers",
+                pv.text
             )),
             Type::Other(n) => Err(format!(
-                "`{shown}` has a type the first version does not read ({n})"
+                "`{}` has a type the compiler does not read ({n})",
+                pv.text
             )),
         }
     }
 
-    fn result_loc(&self) -> Result<(Loc, Option<TRef>), String> {
-        let ty = match self.f.results.first() {
-            Some(t) => *t,
-            None => return Err(format!("{} has no result", self.f.name)),
-        };
-        if ty.is_none() {
-            return Err(format!("{} returns nothing", self.f.name));
+    /// `x == "literal"`.
+    fn str_eq(&mut self, x: &Ast, lit: &str, kind: ClauseKind, old: bool) -> Result<Expr, String> {
+        if dyn_index(x).is_some() {
+            return Err(format!(
+                "`{x}`: a string chosen by a computed index is not compared with a literal"
+            ));
         }
-        // Rust's and C's scalar return value, and Go's first integer result, are in the first
-        // return register (x0, rax: DWARF register 0 on both)
-        Ok((
-            Loc {
-                name: "result".into(),
-                base: Base::Reg(0),
-                path: vec![],
-                size: 8,
-            },
-            ty,
-        ))
+        if lit.len() > STR_BYTES {
+            return Err(format!(
+                "a string literal of more than {STR_BYTES} bytes (the engine reads at most \
+                 {STR_BYTES} bytes of a string)"
+            ));
+        }
+        let pv = self.place(x, kind, old)?;
+        let len = self.len(pv.clone())?;
+        let (pv, q) = self.seq(pv)?;
+        if !q.text {
+            return Err(format!("`{}` is not a string", pv.text));
+        }
+        let mut chunks = Vec::new();
+        let mut at = 0;
+        while at < lit.len() {
+            let n = (lit.len() - at).min(8);
+            let ptr = Pv {
+                place: pv.place.field(q.ptr_off, 8),
+                ty: None,
+                ..pv.clone()
+            };
+            let mut e = self.deref(ptr)?;
+            e.place = e.place.field(at as u64, n as u64);
+            e.text = format!("{}[{at}..{}]", pv.text, at + n);
+            let l = e.place.scalar(n as u8, &e.text)?;
+            chunks.push(self.read(&e, l, Ty::Bytes(n as u8)));
+            at += n;
+        }
+        Ok(Expr::StrEq {
+            len: Box::new(len),
+            chunks,
+            lit: lit.to_string(),
+        })
     }
 
-    fn compile(&mut self, a: &Ast, kind: ClauseKind, entry: bool) -> Result<Expr, String> {
+    fn compile(&mut self, a: &Ast, kind: ClauseKind, old: bool) -> Result<Expr, String> {
+        if let Some(i) = dyn_index(a) {
+            // an index the call computes: every element up to the bound, and the index
+            let idx = self.compile(i, kind, old)?;
+            let mut elems = Vec::new();
+            for j in 0..ELEMS as i128 {
+                elems.push(self.compile(&subst(a, i, j), kind, old)?);
+            }
+            return Ok(Expr::Elem {
+                idx: Box::new(idx),
+                first: 0,
+                elems,
+            });
+        }
         Ok(match a {
             Ast::Int(v) => Expr::Int(v.to_string()),
             Ast::Bool(b) => Expr::Bool(*b),
-            Ast::Not(x) => Expr::Not(Box::new(self.compile(x, kind, entry)?)),
-            Ast::Neg(x) => Expr::Neg(Box::new(self.compile(x, kind, entry)?)),
+            Ast::Str(s) => {
+                return Err(format!(
+                    "the string {s:?} is compared with a string: `s == {s:?}`"
+                ))
+            }
+            Ast::Not(x) => Expr::Not(Box::new(self.compile(x, kind, old)?)),
+            Ast::Neg(x) => Expr::Neg(Box::new(self.compile(x, kind, old)?)),
             Ast::Old(x) => self.compile(x, kind, true)?,
+            Ast::Bin(op @ (BinOp::Eq | BinOp::Ne), x, y)
+                if matches!(**x, Ast::Str(_)) || matches!(**y, Ast::Str(_)) =>
+            {
+                let (v, lit) = match (&**x, &**y) {
+                    (Ast::Str(l), v) | (v, Ast::Str(l)) => (v, l),
+                    _ => unreachable!("one side is a string"),
+                };
+                if matches!(v, Ast::Str(_)) {
+                    return Err("two string literals compared".into());
+                }
+                let (v, old) = match v {
+                    Ast::Old(inner) => (&**inner, true),
+                    v => (v, old),
+                };
+                let e = self.str_eq(v, lit, kind, old)?;
+                if *op == BinOp::Ne {
+                    Expr::Not(Box::new(e))
+                } else {
+                    e
+                }
+            }
             Ast::Bin(op, x, y) => Expr::Bin(
                 *op,
-                Box::new(self.compile(x, kind, entry)?),
-                Box::new(self.compile(y, kind, entry)?),
+                Box::new(self.compile(x, kind, old)?),
+                Box::new(self.compile(y, kind, old)?),
             ),
-            Ast::Path(root, fields) => {
-                let text = std::iter::once(root.as_str())
-                    .chain(fields.iter().map(String::as_str))
-                    .collect::<Vec<_>>()
-                    .join(".");
-                if root == "result" {
-                    let (loc, ty) = self.result_loc()?;
-                    let (mut loc, t) = self.fields(loc, ty, fields, "result")?;
-                    if fields.is_empty() {
-                        if let Type::Scalar(_, n) = self.d.ty(ty) {
-                            loc.size = n;
-                        }
-                    }
-                    loc.name = text;
-                    return Ok(Expr::Out(Self::add(&mut self.at_return, loc), t));
-                }
-                let p = self.param(root)?;
-                let ploc = p
-                    .loc
-                    .clone()
-                    .map_err(|e| format!("`{root}` cannot be read at entry: {e}"))?;
-                let pty = p.ty;
-                if entry || fields.is_empty() || kind == ClauseKind::Requires {
-                    let (mut loc, t) = self.fields(ploc, pty, fields, root)?;
-                    loc.name = if entry && kind == ClauseKind::Ensures && !fields.is_empty() {
-                        format!("old({text})")
-                    } else {
-                        text
-                    };
-                    return Ok(Expr::In(Self::add(&mut self.at_entry, loc), t));
-                }
-                // a field read after the call: through the parameter's value at entry, which
-                // must be a pointer (a structure passed by value cannot change for the caller)
-                if !matches!(self.d.ty(pty), Type::Pointer(_)) {
-                    let (mut loc, t) = self.fields(ploc, pty, fields, root)?;
-                    loc.name = text;
-                    return Ok(Expr::In(Self::add(&mut self.at_entry, loc), t));
-                }
-                let mut pl = ploc;
-                pl.size = 8;
-                pl.name = root.clone();
-                let k = Self::add(&mut self.at_entry, pl);
-                let base = Loc {
-                    name: String::new(),
-                    base: Base::In(k),
-                    path: vec![],
-                    size: 8,
+            Ast::Call(Builtin::Len, x) => {
+                let pv = self.place(x, kind, old)?;
+                self.len(pv)?
+            }
+            Ast::Call(
+                b @ (Builtin::IsSome | Builtin::IsNone | Builtin::IsOk | Builtin::IsErr),
+                x,
+            ) => {
+                let want = match b {
+                    Builtin::IsSome => "Some",
+                    Builtin::IsNone => "None",
+                    Builtin::IsOk => "Ok",
+                    _ => "Err",
                 };
-                let (mut loc, t) = self.fields(base, pty, fields, root)?;
-                loc.name = text;
-                Expr::Out(Self::add(&mut self.at_return, loc), t)
+                let pv = self.place(x, kind, old)?;
+                let (pv, _, e) = self.is_variant(pv, want)?;
+                Self::guarded(&pv, e)
+            }
+            Ast::Name(_) | Ast::Field(..) | Ast::Index(..) | Ast::Call(..) => {
+                let pv = self.place(a, kind, old)?;
+                self.scalar(pv)?
             }
         })
     }
@@ -940,6 +1899,7 @@ fn function_plan<'a>(
     c: &SrcContract,
     rel: &str,
     id: u32,
+    arch: &'a str,
 ) -> Result<Function, String> {
     let code = elf
         .bytes_at(f.low_pc, 16)
@@ -947,13 +1907,14 @@ fn function_plan<'a>(
     let mut r = Reads {
         d,
         f,
+        arch,
         at_entry: Vec::new(),
         at_return: Vec::new(),
     };
     let mut clauses = Vec::new();
     for cl in &c.clauses {
         let expr = r
-            .compile(&cl.ast, cl.kind, cl.kind == ClauseKind::Requires)
+            .compile(&cl.ast, cl.kind, false)
             .map_err(|e| format!("line {}: {e}", cl.line))?;
         clauses.push(Clause {
             kind: cl.kind,

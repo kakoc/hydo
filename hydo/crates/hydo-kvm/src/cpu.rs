@@ -54,6 +54,10 @@ pub enum Exit {
     Kick,
     /// A step of the spin observer ended at one of its breakpoints ([`Cpu::step_to`]).
     Debug,
+    /// A function contract's breakpoint at this address (Milestone 255,
+    /// [`Cpu::set_contract_bps`]): not an exit of the guest. The engine reads, resumes the vCPU
+    /// over the instruction ([`Cpu::contract_resume`]) and counts no exit.
+    Contract(u64),
     /// Anything else (an internal error, a failed entry): the message.
     Fail(String),
 }
@@ -432,6 +436,21 @@ pub trait Cpu: Send {
     /// flag is visible to an instruction that saves RFLAGS (PUSHF, SYSCALL, an exception's
     /// frame). [`Cpu::step_to`] turns it off.
     fn single_step(&mut self, _on: bool) {}
+    /// The function contracts' breakpoints (Milestone 255): up to four instruction addresses
+    /// where a run stops with [`Exit::Contract`]. They are in the vCPU's debug registers only
+    /// while the spin observer neither steps it nor single-steps it, and they leave the guest's
+    /// own debug registers as they are. Empty: none, which is what a vCPU starts with.
+    fn set_contract_bps(&mut self, _addrs: &[u64]) {}
+    /// Resume over the instruction at the contract breakpoint the vCPU stopped at: RFLAGS.RF
+    /// for that one instruction, which the CPU clears when the instruction completes (and which
+    /// a fault's frame has anyway), so nothing of it reaches the guest.
+    fn contract_resume(&mut self, _pc: u64) {}
+    /// Take RF back when the vCPU stops before the instruction of [`Cpu::contract_resume`] ran
+    /// (a stop of the run): the guest's state is then its own again. Whether it did (the next
+    /// hit there is the same call).
+    fn contract_settle(&mut self) -> bool {
+        false
+    }
     /// Start (or stop) KVM's dirty-page log of guest RAM (the rewind mode).
     fn dirty_log(&mut self, _on: bool) {}
     /// Append the pages the guest wrote since the last call (or since the log started), and

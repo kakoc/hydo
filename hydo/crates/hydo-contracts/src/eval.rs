@@ -15,7 +15,7 @@ pub fn typed(raw: u64, ty: Ty) -> V {
     match ty {
         Ty::Bool => V::Bool(raw & 0xff != 0),
         Ty::Ptr => V::Int(raw as i128),
-        Ty::U(n) => {
+        Ty::U(n) | Ty::Bytes(n) => {
             let n = n.min(8) as u32;
             let m = if n >= 8 {
                 u64::MAX
@@ -65,6 +65,48 @@ pub fn eval(
         Expr::Out(i, ty) => read(at_return, *i, *ty, "return")?,
         Expr::Not(x) => V::Bool(!boolean(eval(x, at_entry, at_return)?)),
         Expr::Neg(x) => V::Int(-int(eval(x, at_entry, at_return)?)),
+        Expr::Guard { cond, then, why } => {
+            if !boolean(eval(cond, at_entry, at_return)?) {
+                return Err(Undecided(why.clone()));
+            }
+            eval(then, at_entry, at_return)?
+        }
+        Expr::Elem { idx, first, elems } => {
+            let i = int(eval(idx, at_entry, at_return)?);
+            let j = i - *first as i128;
+            if j < 0 || j >= elems.len() as i128 {
+                return Err(Undecided(format!(
+                    "index {i} is outside the elements read ({} to {})",
+                    first,
+                    *first as usize + elems.len().saturating_sub(1)
+                )));
+            }
+            eval(&elems[j as usize], at_entry, at_return)?
+        }
+        Expr::StrEq { len, chunks, lit } => {
+            let n = int(eval(len, at_entry, at_return)?);
+            if n != lit.len() as i128 {
+                return Ok(V::Bool(false));
+            }
+            for (j, c) in chunks.iter().enumerate() {
+                let want = lit
+                    .as_bytes()
+                    .iter()
+                    .skip(8 * j)
+                    .take(8)
+                    .enumerate()
+                    .fold(0i128, |a, (k, b)| a | ((*b as i128) << (8 * k)));
+                if int(eval(c, at_entry, at_return)?) != want {
+                    return Ok(V::Bool(false));
+                }
+            }
+            V::Bool(true)
+        }
+        Expr::Is { discr, any, not } => {
+            let d = int(eval(discr, at_entry, at_return)?);
+            let has = |l: &[String]| l.iter().any(|s| s.parse::<i128>().ok() == Some(d));
+            V::Bool(if any.is_empty() { !has(not) } else { has(any) })
+        }
         Expr::Bin(op, a, b) => {
             // `||` and `&&` look at their right side only when they must: a clause like
             // `p == 0 || p.x > 1` stays decided when the left side settles it
@@ -135,6 +177,10 @@ pub struct Report {
     pub calls: u64,
     /// Calls without a return read (the run ended inside the call, or no breakpoint was left).
     pub without_return: u64,
+    /// Calls the engine stopped at but did not record, after the first
+    /// [`crate::plan::MAX_RECORDS`] of the run: no clause was judged on them (Milestone 255).
+    #[serde(default)]
+    pub not_recorded: u64,
 }
 
 impl Report {
@@ -149,6 +195,11 @@ fn shown(v: Option<u64>, ty: Option<Ty>) -> String {
         (None, _) => "unreadable".into(),
         (Some(r), Some(t)) => match typed(r, t) {
             V::Int(x) if t == Ty::Ptr => format!("{x:#x}"),
+            V::Int(x) if matches!(t, Ty::Bytes(_)) => {
+                let n = if let Ty::Bytes(n) = t { n.min(8) } else { 0 };
+                let b: Vec<u8> = (0..n).map(|k| (x >> (8 * k)) as u8).collect();
+                format!("{:?}", String::from_utf8_lossy(&b))
+            }
             V::Int(x) => x.to_string(),
             V::Bool(b) => b.to_string(),
         },
@@ -171,10 +222,26 @@ fn read_types(f: &Function) -> (Vec<Option<Ty>>, Vec<Option<Ty>>) {
                 }
             }
             Expr::Not(x) | Expr::Neg(x) => walk(x, i, o),
-            Expr::Bin(_, a, b) => {
+            Expr::Bin(_, a, b)
+            | Expr::Guard {
+                cond: a, then: b, ..
+            } => {
                 walk(a, i, o);
                 walk(b, i, o);
             }
+            Expr::Elem { idx, elems, .. } => {
+                walk(idx, i, o);
+                for e in elems {
+                    walk(e, i, o);
+                }
+            }
+            Expr::StrEq { len, chunks, .. } => {
+                walk(len, i, o);
+                for e in chunks {
+                    walk(e, i, o);
+                }
+            }
+            Expr::Is { discr, .. } => walk(discr, i, o),
             Expr::Int(_) | Expr::Bool(_) => {}
         }
     }

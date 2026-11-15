@@ -559,15 +559,19 @@ stream has three 8 MB blocks per node. Flipped bits in the first block of two no
 replicas different for good, and with the intact node killed 2,456 acknowledged messages are
 lost. The details are in the section "Several nodes' corrupted blocks" of its RESULTS.md.
 
-**Function contracts (M241, a prototype on the Mac engine).** `// hydo: requires` and `ensures`
-comments next to a function, with `old()` and `result`, are checked at every call. The
-manifest's `contracts:` names the program and its sources. `hydo build` compiles the plan
-`<image>.contracts.json` from the program's DWARF (crate `hydo-contracts`). The Mac engine stops
-at hardware breakpoints and only reads. A run with the plan has the fingerprint of the run
-without it, and a broken clause is a `contract` finding and a `VIOLATION`. On hvx, uprobes
-changed the fingerprint. The example is `hydo/onboard/examples/contracts-ledger`; the design and
-the measurements are `docs/design/contracts.md`. A stop costs 4.8 µs on the Mac (open item
-113).
+**Function contracts (M241 and M255, a prototype on the Mac and KVM engines).** `// hydo:
+requires` and `ensures` comments next to a function, with `old()` and `result`, are checked at
+every call. The manifest's `contracts:` names the program and its sources. `hydo build` compiles
+the plan `<image>.contracts.json` from the program's DWARF (crate `hydo-contracts`). Since M255
+an expression reads Rust `String`, `&str`, `Vec`, slices, `Option` and `Result`, Go strings,
+slices, results after the first and `error` (`len()`, `v[i]`, `s == "text"`, `some(o)`,
+`result.1`). The Mac engine and, since M255, the KVM engine (DR0 to DR3 with
+`KVM_SET_GUEST_DEBUG`) stop at hardware breakpoints and only read. A run with the plan has the
+fingerprint of the run without it, and a broken clause is a `contract` finding and a
+`VIOLATION`. A run judges its first 100,000 calls and reports the rest. On hvx, uprobes changed
+the fingerprint, and engine breakpoints are designed only. The example is
+`hydo/onboard/examples/contracts-ledger`; the design and the measurements are
+`docs/design/contracts.md` (open item 113).
 
 **Fakes from OpenAPI descriptions (M249).** `hydo fake from-openapi <spec>` writes a `fakes:`
 entry from an OpenAPI 3.0 or 3.1 description (the module `openapi` of `hydo-compose`). It writes
@@ -1187,9 +1191,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     a container; Temporal's entrypoint needed `TEMPORAL_BROADCAST_ADDRESS`. A check cannot tell
     whether its run had a clock step; the example's client records the clock it saw. The
     history, matching and frontend services ran in one process, not apart.
-113. Function contracts (M241). hvx and KVM have no breakpoints for contracts yet, and a
-    position-independent program needs its load address there. A run judges at most 100,000
-    calls, and the report does not say when it stopped recording.
+113. Function contracts (M241, M255). What is left:
+    - The KVM proof runs on GitHub's runners in the one-off workflow `tmp-contracts-kvm`; its
+      results are not in yet. KVM ran only in the engine's scripted test on this Mac.
+    - hvx has no breakpoints for contracts: the side module is designed in
+      docs/design/contracts.md, not built.
+    - On KVM the engine stops in at most three processes of one position-independent program.
+    - A run judges at most 100,000 calls; the report says how many it did not judge.
 114. `hydo k8s` (M243). Its own call of `helm template` and `kubectl kustomize` ran in no test:
     the proof rendered the chart on the Mac and imported the output on the bare-metal machine.
     The imports ran on hvx only, not on the Mac engine, and not on KVM. These are not mapped:
@@ -1808,6 +1816,12 @@ build machine, before 2026-10-13.
   `bzImage-kvm-containers` and `bzImage-kvm-smp-containers`, each built twice. On the Mac engine
   and on KVM a probe runs runc, overlayfs, NAT, conntrack, and ipsets. k3s does not start: kine
   loops without VM exits (open items 13 and 119). Nothing recorded moved
+- M255 (tentative number): function contracts, continued. The report counts the calls a run did
+  not judge. Contracts read Rust strings, vectors, slices, `Option` and `Result` and Go strings,
+  slices and later results. The KVM engine stops at them with DR0 to DR3 and finds a
+  position-independent program's load address. The hvx side module is designed. On the Mac every
+  proof gave one fingerprint with and without the plan; the KVM proof is the one-off workflow
+  `tmp-contracts-kvm`. Nothing recorded moved
 
 ## Where to look
 

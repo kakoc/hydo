@@ -6,3 +6,4 @@
 mod compile;
 mod eval;
 mod lang;
+mod types;

@@ -18,7 +18,8 @@ pub const PLAN_TYPE: &str = "contracts-plan";
 pub const PLAN_SUFFIX: &str = ".contracts.json";
 /// The file name suffix of a run's records, after the run's tag.
 pub const RECORDS_SUFFIX: &str = ".contracts.jsonl";
-/// At most this many calls are recorded per run; the rest are counted.
+/// At most this many calls are recorded per run; the rest are counted, and the records' last
+/// line ([`End`]) says how many (Milestone 255).
 pub const MAX_RECORDS: usize = 100_000;
 
 /// The plan of an image: every program with contracts.
@@ -39,6 +40,14 @@ pub struct Program {
     pub sha256: String,
     /// `arm64` or `x86_64`.
     pub arch: String,
+    /// A position-independent program (Rust's musl target on x86_64 builds them): the
+    /// functions' addresses are offsets from where the guest loads it. An engine finds that
+    /// address by the program's first bytes, its ELF header (`head`, in hexadecimal), in the
+    /// process's memory (Milestone 255).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pie: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub head: String,
     pub functions: Vec<Function>,
     /// Contracts that are not checked, each with the reason.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -105,10 +114,22 @@ pub struct Function {
 impl Function {
     /// The first bytes of the code as bytes.
     pub fn code_bytes(&self) -> Vec<u8> {
-        (0..self.code.len() / 2)
-            .filter_map(|i| u8::from_str_radix(&self.code[2 * i..2 * i + 2], 16).ok())
-            .collect()
+        hex_bytes(&self.code)
     }
+}
+
+impl Program {
+    /// The ELF header of a position-independent program as bytes.
+    pub fn head_bytes(&self) -> Vec<u8> {
+        hex_bytes(&self.head)
+    }
+}
+
+/// Bytes from hexadecimal text.
+pub fn hex_bytes(s: &str) -> Vec<u8> {
+    (0..s.len() / 2)
+        .filter_map(|i| u8::from_str_radix(s.get(2 * i..2 * i + 2)?, 16).ok())
+        .collect()
 }
 
 /// Where a read starts.
@@ -124,10 +145,17 @@ pub enum Base {
     In(u32),
 }
 
+impl Default for Base {
+    fn default() -> Base {
+        Base::Reg(0)
+    }
+}
+
 /// One read: the base's value, then for each offset of `path` a load from (value + offset);
 /// every load but the last reads 8 bytes (a pointer), the last reads `size` bytes. With an
-/// empty path the value is the base's own, cut to `size` bytes.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+/// empty path the value is the base's own, shifted right by `shift` bits and cut to `size`
+/// bytes (a small structure returned in a register has a field in the register's upper bytes).
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Loc {
     /// What the read is, as the contract writes it (`amount`, `l.balance`, `result`); for the
     /// report only.
@@ -137,6 +165,44 @@ pub struct Loc {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub path: Vec<i64>,
     pub size: u8,
+    /// Bits to shift a register's value right by (an empty path only; Milestone 255).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub shift: u8,
+}
+
+fn is_zero(v: &u8) -> bool {
+    *v == 0
+}
+
+impl Loc {
+    /// Make the read: `reg` gives a register's value (the plan's numbering), `entry` the call's
+    /// entry reads (for a base [`Base::In`]), and `mem` gives `n` bytes (1 to 8) of guest memory
+    /// at a virtual address, little-endian (None: not mapped). Every engine reads with this.
+    pub fn load(
+        &self,
+        reg: &dyn Fn(u8) -> Option<u64>,
+        entry: &[Option<u64>],
+        mem: &dyn Fn(u64, u8) -> Option<u64>,
+    ) -> Option<u64> {
+        let mut v = match self.base {
+            Base::Reg(n) => reg(n)?,
+            Base::In(k) => (*entry.get(k as usize)?)?,
+        };
+        let n = self.path.len();
+        if n == 0 {
+            let m = if self.size >= 8 {
+                u64::MAX
+            } else {
+                (1u64 << (8 * self.size)) - 1
+            };
+            return Some(v.checked_shr(self.shift as u32).unwrap_or(0) & m);
+        }
+        for (i, off) in self.path.iter().enumerate() {
+            let size = if i + 1 == n { self.size.clamp(1, 8) } else { 8 };
+            v = mem(v.wrapping_add(*off as u64), size)?;
+        }
+        Some(v)
+    }
 }
 
 /// `requires` or `ensures`.
@@ -185,6 +251,8 @@ pub enum Ty {
     Bool,
     /// An address.
     Ptr,
+    /// This many bytes of a string, little-endian (shown as text; Milestone 255).
+    Bytes(u8),
 }
 
 /// A compiled expression. Integers are exact (no overflow and no wrapping): `a - b` of two
@@ -202,6 +270,38 @@ pub enum Expr {
     Not(Box<Expr>),
     Neg(Box<Expr>),
     Bin(BinOp, Box<Expr>, Box<Expr>),
+    /// `then` when `cond` holds; otherwise the clause is undecided for the call, with `why`
+    /// (the value of `some(o)` when `o` is `None`, an element past a sequence's length).
+    Guard {
+        cond: Box<Expr>,
+        then: Box<Expr>,
+        why: String,
+    },
+    /// An element chosen by an index the call computes (`v[k]`): the reads of the elements
+    /// `first`, `first + 1`, ... (a sequence is read up to a bound). Another index leaves the
+    /// clause undecided for the call.
+    Elem {
+        idx: Box<Expr>,
+        first: u64,
+        elems: Vec<Expr>,
+    },
+    /// Whether a string equals a literal: its length, then its bytes in reads of up to 8
+    /// bytes (little-endian), which are compared only when the length is the literal's.
+    StrEq {
+        len: Box<Expr>,
+        chunks: Vec<Expr>,
+        lit: String,
+    },
+    /// Whether an enumeration's discriminant names a variant: one of `any` (in decimal); or,
+    /// when `any` is empty (the variant without a value of its own, where a niche keeps the
+    /// others), none of `not`.
+    Is {
+        discr: Box<Expr>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        any: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        not: Vec<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -274,23 +374,62 @@ pub fn plan_text(plan: &Plan) -> String {
     s
 }
 
-/// The records of a run, one JSON object per line.
-pub fn records_text(recs: &[Record]) -> String {
+/// The last line of a run's records (Milestone 255): the calls recorded, and the calls the
+/// engine stopped at but did not record, because the run had recorded [`MAX_RECORDS`] calls.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct End {
+    pub recorded: u64,
+    pub not_recorded: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct EndLine {
+    end: End,
+}
+
+/// The records of a run, one JSON object per line, and then the line [`End`] with the calls
+/// that were not recorded.
+pub fn records_text(recs: &[Record], not_recorded: u64) -> String {
     let mut s = String::new();
     for r in recs {
         s.push_str(&serde_json::to_string(r).expect("a record serializes"));
         s.push('\n');
     }
+    let end = EndLine {
+        end: End {
+            recorded: recs.len() as u64,
+            not_recorded,
+        },
+    };
+    s.push_str(&serde_json::to_string(&end).expect("an end line serializes"));
+    s.push('\n');
     s
+}
+
+/// Read a run's records and their end line (a missing file: none). Records written before
+/// Milestone 255 have no end line: every call was recorded or the count was lost.
+pub fn read_run(p: &Path) -> Result<(Vec<Record>, End), String> {
+    let Ok(t) = std::fs::read_to_string(p) else {
+        return Ok((Vec::new(), End::default()));
+    };
+    let mut recs = Vec::new();
+    let mut end = None;
+    for l in t.lines().filter(|l| !l.trim().is_empty()) {
+        let bad = |e: serde_json::Error| format!("{}: {e}: {l}", p.display());
+        if l.starts_with("{\"end\"") {
+            end = Some(serde_json::from_str::<EndLine>(l).map_err(bad)?.end);
+        } else {
+            recs.push(serde_json::from_str(l).map_err(bad)?);
+        }
+    }
+    let end = end.unwrap_or(End {
+        recorded: recs.len() as u64,
+        not_recorded: 0,
+    });
+    Ok((recs, end))
 }
 
 /// Read a run's records (a missing file: none).
 pub fn read_records(p: &Path) -> Result<Vec<Record>, String> {
-    let Ok(t) = std::fs::read_to_string(p) else {
-        return Ok(Vec::new());
-    };
-    t.lines()
-        .filter(|l| !l.trim().is_empty())
-        .map(|l| serde_json::from_str(l).map_err(|e| format!("{}: {e}: {l}", p.display())))
-        .collect()
+    read_run(p).map(|r| r.0)
 }

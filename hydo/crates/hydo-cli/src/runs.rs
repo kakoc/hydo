@@ -627,14 +627,10 @@ pub fn contracts_one(
     match hydo_explore::contracts::fold(&plan, &records, &mut res) {
         Ok(rep) => {
             if !quiet {
-                let clauses = rep.outcomes.len();
-                println!(
-                    "hydo: function contracts: {} calls checked against {clauses} clauses, {} \
-                     broken",
-                    rep.calls,
-                    rep.violated().count()
-                );
-                for l in hydo_explore::contracts::lines(&rep) {
+                for l in hydo_explore::contracts::summary(&rep)
+                    .into_iter()
+                    .chain(hydo_explore::contracts::lines(&rep))
+                {
                     println!("{l}");
                 }
             }

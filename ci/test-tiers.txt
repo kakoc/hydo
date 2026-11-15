@@ -77,6 +77,7 @@ hydo-contracts                           fast
 hydo-contracts::compile                  fast
 hydo-contracts::eval                     fast
 hydo-contracts::lang                     fast
+hydo-contracts::types                    fast
 hydo-errors                              fast
 hydo-errors::equivalence                 fast
 hydo-explore                             fast

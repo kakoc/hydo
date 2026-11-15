@@ -997,6 +997,9 @@ impl Engine {
         self.vm.tj = snap.tj;
         self.vm.pct = snap.pct;
         self.vm.pct_log = (snap.rs.pct_n != 0 && self.h.o.preempt_record).then(Vec::new);
+        if let Some(ct) = self.vm.ct.as_mut() {
+            ct.begin();
+        }
         let (k, rb, mut rs) = (snap.k.clone(), snap.rb, snap.rs.clone());
         self.h.ctl_begin(tag);
         self.h.c.k = k;
@@ -1098,6 +1101,9 @@ impl Engine {
             self.vm.pct = Pct::set(pct_seed, pct_n, x, x.wrapping_add(pct_k));
         }
         self.vm.pct_log = (pct_n != 0 && self.h.o.preempt_record).then(Vec::new);
+        if let Some(ct) = self.vm.ct.as_mut() {
+            ct.begin();
+        }
         self.run_rest(rs);
     }
 
@@ -1189,6 +1195,9 @@ impl Engine {
                 fatal(3, "hydo-kvm: a power cut without the host's S0 snapshot");
             };
             let snap = self.h.snaps[s0].as_ref().expect("S0");
+            if let Some(ct) = self.vm.ct.as_mut() {
+                ct.cut();
+            }
             self.vm.restore(&snap.x);
             if let (Some(d), Some(du)) = (&mut self.vm.vio.disk, durable) {
                 *d = du;
@@ -1212,6 +1221,13 @@ impl Engine {
             log_tag = format!("{tag}.recovery");
         }
         self.save_log(&log_tag, from);
+        if let Some(ct) = self.vm.ct.as_mut() {
+            if ct.active {
+                let s = ct.summary();
+                self.h.say(&format!("{s} ({tag})"));
+            }
+            ct.finish(std::path::Path::new(&self.h.outdir), &tag);
+        }
         if rewind {
             let rw = &self.vm.rw;
             self.h.say(&format!(
@@ -1531,7 +1547,15 @@ fn engine_main(
         preempt_record: o.preempt_record,
     };
     let echo = if o.echo { echo } else { None };
-    let vm = Vmm::new(&vo, &kernel, &initrd, hv, diag.clone(), echo);
+    let mut vm = Vmm::new(&vo, &kernel, &initrd, hv, diag.clone(), echo);
+    // Milestone 255: the function contracts' plan, when the image has one
+    if let Some(p) = &o.contracts {
+        let plan = hydo_contracts::plan::read_plan(std::path::Path::new(p))
+            .unwrap_or_else(|e| fatal(1, &format!("hydo-kvm: contracts: {e}")));
+        let ct = crate::contracts::Ct::from_plan(&plan)
+            .unwrap_or_else(|e| fatal(1, &format!("hydo-kvm: contracts: {e}")));
+        vm.ct = Some(Box::new(ct));
+    }
     drop(kernel);
     drop(initrd);
     let t0 = Instant::now();
