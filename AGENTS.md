@@ -640,7 +640,8 @@ layer entries whose names have a backslash or a quote instead of refusing the im
 `docs/HISTORY.md` Milestone 253. Since M254 a passing test counts as acknowledged work, and the
 pages' screenshots go to the run directory's `screens/` after the verdict, where `hydo report
 --html` shows them under the finding that names them. `browser.screens: compare` compares each
-page's screenshot with a recorded reference, pixel for pixel (`<name>.screens_match`).
+page's screenshot with a recorded reference, pixel for pixel (`<name>.screens_match`). The
+example ran on KVM in M254, with hvx's verdicts and the same screenshots on Intel and AMD hosts.
 
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
@@ -923,7 +924,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     workload and watches the pages; M166's hand-written driver stays an example. Since M254 the
     screenshots leave the guest and `screens: compare` checks them against references. Left:
     - The Mac engine does not run it: it keeps the root in guest RAM, and the Playwright image is
-      about 3 GB unpacked. KVM_ITEM
+      about 3 GB unpacked. KVM ran it in M254 on seven hosts of GitHub's runners (Intel and
+      AMD), with hvx's verdicts and one fingerprint per schedule and vendor.
+    - On those runners 13 of 85 KVM runs first stopped in the guest kernel's early boot with
+      `SPIN` (no VM exit for 10 s of host time). The rewind mode's second run ended 10 of them
+      normally. The cause is not found; the guess is a delay on the host while the 4 GiB guest first
+      touches its memory (`docs/HISTORY.md` Milestone 254).
     - hvx did not run M254's code, so no hvx run has screenshots in its run directory yet.
     - An exploration's report page does not show the screenshots, which the explorer writes to
       `<tag>.screens/` beside the run's transcripts.
@@ -935,10 +941,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       internal interface that a new Playwright version may change.
     - An exploration of `T=` clock steps and of `P=workload` pauses against a frontend was not
       run, and neither was a frontend with its real backend through `browser:`.
-    - `hydo build`'s fetch of a missing Playwright image did not run (the image was fetched with
-      `hydo-fetch-image` by the same digest). A passing test acknowledges nothing, so the
-      explorer counts passes as vacuous. The double order was not found blind in 40 schedules;
-      `--sweep protocol` reaches it but was stopped for time.
 52. The skill: `hydo skill update` never ran against the real GitHub API (M170).
 53. The benchmark images and the browser example are not in `recorded.json` (M164, M177).
 55. [user decision] The label `full-ci` does not exist on GitHub yet (M171).
@@ -1776,6 +1778,13 @@ build machine, before 2026-10-13.
   project and results schemas are the current ones, and the examples are re-recorded (epoch 3).
   Both releases are built twice to the same bytes, the Mac one signed and notarized, and verified
   on hvx, KVM and the Mac; published on 2026-11-15
+- M254 (tentative number): web apps, continued. A passing Playwright test is acknowledged work,
+  so a clean run is not called vacuous. The pages' screenshots go to the run directory's
+  `screens/` after the verdict, and `hydo report --html` shows them under the finding that names
+  them. `browser.screens: compare` checks each page against a recorded reference, pixel for
+  pixel. On KVM (seven GitHub hosts, Intel and AMD) the web-shop example gave hvx's verdicts and
+  the same screenshots on every host, and `hydo build` fetched the Playwright image itself. Some
+  runs first stopped in early boot, cause not found. Nothing recorded moved
 
 ## Where to look
 

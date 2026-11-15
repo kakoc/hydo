@@ -11018,3 +11018,149 @@ first version is published by hand before `release.yml` can publish it with trus
   not run, because the tap was not tapped on the Mac;
 - the release index on `main`, with its twelve lines;
 - the skill release `skill-v2.3.1` on the release commit, not marked as the latest release.
+
+### Milestone 254 (tentative number) - DONE (web apps, continued: a passing Playwright test counts as acknowledged work, so a clean run is no longer called a pass that checked nothing; the pages' screenshots leave the guest into the run directory's `screens/` after the verdict and appear in `hydo report --html` under the finding that names them; `browser.screens: compare` compares every page's screenshot with a recorded reference, pixel for pixel; on KVM the web-shop example ran on seven hosts of GitHub's runners, Intel and AMD: every run that ended gave its schedule's fingerprint and the verdicts of hvx, the screenshots had the same bytes on every host, and `hydo build` fetched the Playwright image itself; some runs first stopped in the guest kernel's early boot (cause not found); nothing recorded moved; 2026-11-15)
+
+Milestone 253's report named four next steps for `browser:`. This milestone does them. The design
+notes are in the section "Screenshots and acknowledged work" of `docs/design/web-apps.md`; the
+how-to is the section "Screenshots" of `hydo guide web-apps`.
+
+**What is built.**
+
+- A passing test is acknowledged work. `hydo_explore::results::vacuous` warns of a pass whose
+  workload acknowledged nothing. A `browser:` workload writes nothing to `$HYDO_ACKED`, so the
+  explorer called each of the 16 clean runs of Milestone 253 vacuous. The reporter's console line
+  `hydo-web: test "<title>" passed in <s> s` now counts as acknowledged work
+  (`results::browser_test_passed`). The check reads the console on the host, so the guest does not
+  change. A failed or skipped test does not count.
+- Screenshots out of the guest. The watcher names each screenshot after the test's title path and
+  the page's number in the test (`checkout-spec-ts-places-an-order-1.png`), and lists it in
+  `/tmp/hydo/web/shots/index.jsonl` with the test, the page's path and the reason. Before, the
+  files were numbered in the order they were taken, and each shard's process restarted the count,
+  so the second shard overwrote the first one's `1.png`. After the verdict the host controller
+  reads the index and each file through the agent, in hex chunks of 1,500 bytes
+  (`hydo_control::schedule::screens`, at most 64 files and 16 MiB), and sends each file as one
+  `HYDO-SCREEN` note. `write_run_files` writes the files into `screens/` of the run directory
+  (`<tag>.screens/` beside the transcripts of an explorer's run), with `screens/index.jsonl`, and keeps only a short
+  note without the bytes in the console and the transcript file. A note is covered by no
+  fingerprint and no control-transcript hash. The reads come after the verdict, as the `perf:`
+  numbers of Milestone 237 do, and after the `HYDO_COST` probe, so they decide nothing. A plan without `browser:` sends the same
+  commands as before (`screens::without_browser_nothing_is_read`).
+- A finding names its screenshot as `Screenshot: screens/<file> in the run directory`, where it
+  named the guest's path before.
+- `hydo report --html` shows the screenshots of a run directory in the section "What the pages
+  showed", the ones a failing check names first and under that check's id, each with its
+  `.diff.png` when it has one. The page carries the images as `data:` addresses, so it still
+  fetches nothing. At most 12 are shown, each at most 2 MiB.
+- `browser.screens` (a format-1 addition): `failures` (the default, Milestone 253's rule: a page
+  that ends its test with a busy or error element), `all` (every page at the end of its test), or
+  `compare`. `compare` copies `browser.screens_ref` (default `hydo-screens`, relative to the
+  manifest) to `/opt/hydo/web/screens-ref` and adds the invariant `<name>.screens_match` before
+  `<name>.tests_pass`. `check.mjs screens` compares each screenshot with the reference of the same
+  name: equal bytes pass, other bytes are decoded with the PNG library that Playwright bundles
+  (`playwright-core/lib/utilsBundle`), and one changed pixel fails. The finding gives the number
+  of changed pixels and the box around them, and `<file>.diff.png` shows the reference in grey
+  with the changed pixels in red. A screenshot without a reference, and a reference without a
+  screenshot, fail too. `hydo build` refuses `compare` without the folder and says how to record
+  it. With the default, the watcher's settings (`HYDO_WEB_WATCH`) are Milestone 253's.
+- The web-shop example has a parameter `screens` (default `failures`), so `--set screens=all` and
+  `--set screens=compare` choose the mode.
+
+**Before the VMs, on this Mac.** The watcher and the checks ran with the example's Playwright
+tests outside hydo, against a local stand-in for the fake API (Node.js 24.16.0, Playwright's
+headless Chromium). With `screens: all` the three tests gave three screenshots. A second run
+with them as references gave `all 3 screenshots are their references, pixel for pixel`. With the
+order read answering 500, `screens_match` failed with `differs from its reference in 5,296 of
+921,600 pixels (0.57 %), inside the box from x=15, y=56 to x=311, y=138`; the diff image showed
+the spinner and the missing order title in red. Outside hydo the spinner's frame differs between
+runs: a second such run gave 5,270 pixels.
+
+**On KVM** (GitHub's runners, the one-off workflow `tmp-web-kvm` on a temporary branch). Neither
+this Mac nor the bare-metal machine may run KVM, and the Mac engine does not run `browser:`. The
+workflow built this tree's `hydo` and `bzImage-kvm-cg` (the pin's bytes), and took the published
+0.3.3 Linux release (sha256 checked) with its own `hydo setup`. It built the example's inputs
+with Node.js 24.16.0 and the image with `--set variant=buggy --set screens=all`, on each host
+from an empty `browser/`.
+
+- Run 43690697894 stopped after the fetch. The workflow ran `hydo setup` after it had replaced
+  `bin/hydo`, setup refused that release, and `hydo build` then stopped at `HYDO_IPROUTE2 not
+  found` (open item 98). The fetch itself worked.
+- Run 43691975177: three hosts, an Intel Xeon 6975P-C and two AMD EPYC 7763, two runs of each
+  schedule.
+- Run 43696058230: four hosts, two Intel Xeon 6975P-C, an AMD EPYC 9V45 and an AMD EPYC 9V74,
+  three runs of each schedule.
+
+On every host the Playwright archive had the bytes that `hydo-fetch-image` had fetched for the
+hvx runs (1,012,681,216 bytes, sha256 `6c535d9b038b3d8d…`), and the image had the same bytes
+(`028b1d5957c784c5…`, 4,094,689,280 bytes). The values of both runs:
+
+| schedule | verdict | Intel (3 hosts) | AMD (4 hosts, 3 models) |
+|---|---|---|---|
+| `disk=none \| run` | OK, 6 held, 3 tests passed | `aeeddec40e376597` | `079609ace3862b46` |
+| `disk=none \| run H=api.add_item@1-2:delay=1000` | VIOLATION `browser.tests_pass` (the flaky test) | `219021f0d8672b2b` | `a49c1cf2ef161478` |
+| `disk=none \| run H=api.get_order@0-1:status=500` | VIOLATION `browser.no_page_errors`, with `busy_ends` and `failures_shown` | `ac4a12df281ec556` | `1cd86738d0cc3e6f` |
+| `disk=none \| run H=api.place_order@0-1:drop` | VIOLATION `api.order_placed_once` (one cart, two orders) | `3c570752469652b4` | `88db5112508eb1f0` |
+
+Every verdict is the one hvx gave in Milestone 253. Every run that ended gave its schedule's
+fingerprint: 82 runs, each schedule on each host two or three times. The AMD models gave the same
+values as each other, and Intel gives its own (the guest's FXSAVE area differs between the
+vendors, Milestone 252). A run took 22 to 130 s by the engine's count (`secs`) and 47 to 187 s
+of wall time.
+
+The screenshots had the same bytes on all seven hosts, Intel and AMD, for every schedule. The
+clean runs were not called vacuous. `hydo report --html` of a `status=500` run carried its 3
+images. Made on this Mac from a downloaded run directory, the page put the order page's
+screenshot first, under `browser.busy_ends`, `browser.failures_shown` and, in the compare run,
+`browser.screens_match`. That needed one fix: an invariant's sentence is in the finding's
+details, not in its message.
+
+With a clean run's screenshots as references, a second image (`--set screens=compare`) gave:
+
+- `disk=none | run`: OK with 7 invariants held, `browser.screens_match` among them, on all seven
+  hosts (`347304adaa7f6766` on Intel, `8eccf9dd9e2445e8` on AMD, twice on each host);
+- `disk=none | run H=api.get_order@0-1:status=500`: `browser.screens_match` failed with "differs
+  from its reference in 5,505 of 921,600 pixels (0.60 %), inside the box from x=15, y=56 to
+  x=311, y=138". `screens/checkout-spec-ts-places-an-order-1.diff.png` showed the spinner and the
+  missing order title in red (`12b8bc640c3f8108` on Intel, `f7a5b5b3614fc73c` on AMD).
+
+**Runs that stopped in early boot.** Some runs first ended `SPIN`: the KVM engine saw no VM exit
+for 10 s of host time (`HYDO_KVM_SPIN_SECS`). Each stopped in the guest kernel's early boot,
+before the agent started: exit 1297 or 1315, 22 stops, nothing typed, and the console ends at
+`printk: bootconsole [earlyser0] enabled`. `hydo run` then ran the schedule again in the
+engine's rewind mode, and that run ended with the schedule's fingerprint in most cases:
+
+- run 43691975177: 6 of 14 runs on AMD and none of 11 on Intel. 4 of the 6 ended in the rewind
+  mode, and 2 stayed `ERROR boot: SPIN`.
+- run 43696058230: 7 of 60 runs, 4 on Intel and 3 on AMD. 6 ended in the rewind mode, and one, on
+  the EPYC 9V74, stayed `ERROR boot: SPIN`.
+
+The guest's instruction pointer differed between the stops (`0xffffffff81a92197`,
+`0xffffffff81a92253`, `0xffffffff810e9aef`, `0xffffffff813d4866`), always on the boot stack. The
+host's memory and CPU pressure were 0 and its load was about 1. The cause is not found. The guess
+is a delay on the runner's host while this 4 GiB guest first touches its memory, not a loop in
+the guest: the guest was in another place each time, and the same boot passed on the next try.
+
+**Left** (AGENTS.md open item 51).
+
+- hvx did not run this milestone's code: the bare-metal machine was building a release. The hvx
+  fingerprints of Milestone 253 belong to its images; the helper files changed, so a new build of
+  the example has other image bytes and other fingerprints.
+- An exploration's report page does not show the screenshots: the explorer writes them to
+  `<tag>.screens/` beside the run's transcripts, which the page does not read.
+- The stops in early boot on GitHub's runners are not explained (the section on KVM).
+- A screenshot is taken when a test's browser context closes, so a page that a test leaves
+  earlier has none.
+
+**Goldens.** Re-recorded only where the web-shop manifest changed: `hydo-control`'s corpus (the
+web-shop lines only), `hydo-build`'s answers (the web-shop answer, and the inputs that `main` had
+added without recording them, since the seeded mutants depend on the whole input set), and the
+CLI's two `guide manifest` answers (MANIFEST.md changed). `INVENTORY.md` is regenerated for the
+new words of `HYDO_WEB_WATCH`, and `hydo-control::screens` is in `ci/test-tiers.txt`. Nothing
+recorded moved.
+
+**Checks.** On this Mac: `cargo fmt --all --check`; `cargo clippy -D warnings --all-targets` on
+`hydo-control`, `hydo-manifest`, `hydo-explore`, `hydo` and `hydo-config`; every test of
+`hydo-control` (the corpus too), `hydo-explore` (also `identity` with `HYDO_IDENT_FULL=1`),
+`hydo-manifest`, `hydo-build`, `hydo`, `hydo-config` (inventory), `hydo-agents`
+(`public_content::`, `skill_check::`), `hydo-release` (`test_tiers::`) and
+`hydo-schema-compat`; `sh ci/consolidate-tests.sh --check`; `sh ci/vale.sh`.

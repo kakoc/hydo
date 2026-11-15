@@ -211,3 +211,31 @@ The config digest is the one in `docs/BUILD-PINS.md`. The file that `hydo-fetch-
 for the hvx runs on this page is 1,012,681,216 bytes with sha256 `6c535d9b038b3d8d…`. That build then
 stopped at `HYDO_IPROUTE2 not found`, because the workflow had not run `hydo setup` for the
 unpacked release (AGENTS.md open item 98).
+
+## Runs on KVM (Milestone 254)
+
+The example ran on GitHub's runners with the KVM engine, in two runs of the workflow
+`tmp-web-kvm`. The seven hosts were three Intel Xeon 6975P-C, two AMD EPYC 7763, an EPYC 9V45,
+and an EPYC 9V74. Every host built the image `--set variant=buggy --set screens=all` with the same bytes
+(`028b1d5957c784c5…`). Each schedule ran two or three times on each host:
+
+| schedule | verdict | Intel | AMD |
+|---|---|---|---|
+| `disk=none \| run` | OK | `aeeddec40e376597` | `079609ace3862b46` |
+| `disk=none \| run H=api.add_item@1-2:delay=1000` | VIOLATION `browser.tests_pass` | `219021f0d8672b2b` | `a49c1cf2ef161478` |
+| `disk=none \| run H=api.get_order@0-1:status=500` | VIOLATION `browser.no_page_errors` | `ac4a12df281ec556` | `1cd86738d0cc3e6f` |
+| `disk=none \| run H=api.place_order@0-1:drop` | VIOLATION `api.order_placed_once` | `3c570752469652b4` | `88db5112508eb1f0` |
+
+The verdicts are the hvx verdicts on this page. Every run that ended gave its schedule's fingerprint,
+and the AMD models agree with each other. The screenshots in each run's `screens/` had the same
+bytes on all seven hosts.
+
+With a clean run's screenshots in `hydo-screens/` and `--set screens=compare`, the clean schedule
+passed on every host with `browser.screens_match` held. Under `H=api.get_order@0-1:status=500`
+it failed. The order page showed the spinner in place of the order's title. The finding counted
+5,505 changed pixels of 921,600 (0.60 %), inside the box from x=15, y=56 to x=311, y=138.
+
+Some runs first stopped in the guest kernel's early boot with `SPIN`, before the agent started
+(13 of 85, on Intel and on AMD). `hydo run` ran each again in the engine's rewind mode, and 10
+of them then ended with the schedule's fingerprint. The cause is not found; docs/HISTORY.md
+Milestone 254 has the details.
