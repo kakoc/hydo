@@ -565,7 +565,7 @@ every call. The manifest's `contracts:` names the program and its sources. `hydo
 the plan `<image>.contracts.json` from the program's DWARF (crate `hydo-contracts`). Since M255
 an expression reads Rust `String`, `&str`, `Vec`, slices, `Option` and `Result`, Go strings,
 slices, results after the first and `error` (`len()`, `v[i]`, `s == "text"`, `some(o)`,
-`result.1`). The Mac engine and, since M255, the KVM engine (DR0 to DR3 with
+`result.1`). The Mac engine and, since M255, the KVM engine (three debug registers with
 `KVM_SET_GUEST_DEBUG`) stop at hardware breakpoints and only read. A run with the plan has the
 fingerprint of the run without it, and a broken clause is a `contract` finding and a
 `VIOLATION`. A run judges its first 100,000 calls and reports the rest. On hvx, uprobes changed
@@ -1192,11 +1192,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     whether its run had a clock step; the example's client records the clock it saw. The
     history, matching and frontend services ran in one process, not apart.
 113. Function contracts (M241, M255). What is left:
-    - The KVM proof runs on GitHub's runners in the one-off workflow `tmp-contracts-kvm`; its
-      results are not in yet. KVM ran only in the engine's scripted test on this Mac.
+    - KVM: the one-off workflow `tmp-contracts-kvm` ran once (43697118540). The ledgers and the
+      Redis example passed on four AMD EPYC 9V45 runners; the types programs failed and were
+      fixed (docs/HISTORY.md Milestone 255). The second run's results are not in yet.
     - hvx has no breakpoints for contracts: the side module is designed in
       docs/design/contracts.md, not built.
-    - On KVM the engine stops in at most three processes of one position-independent program.
+    - On KVM two functions with contracts fit in one program when they read their results
+      (three otherwise), and the engine stops in at most two processes of one
+      position-independent program.
     - A run judges at most 100,000 calls; the report says how many it did not judge.
 114. `hydo k8s` (M243). Its own call of `helm template` and `kubectl kustomize` ran in no test:
     the proof rendered the chart on the Mac and imported the output on the bare-metal machine.
@@ -1818,7 +1821,7 @@ build machine, before 2026-10-13.
   loops without VM exits (open items 13 and 119). Nothing recorded moved
 - M255 (tentative number): function contracts, continued. The report counts the calls a run did
   not judge. Contracts read Rust strings, vectors, slices, `Option` and `Result` and Go strings,
-  slices and later results. The KVM engine stops at them with DR0 to DR3 and finds a
+  slices and later results. The KVM engine stops at them with three debug registers and finds a
   position-independent program's load address. The hvx side module is designed. On the Mac every
   proof gave one fingerprint with and without the plan; the KVM proof is the one-off workflow
   `tmp-contracts-kvm`. Nothing recorded moved

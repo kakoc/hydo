@@ -25,9 +25,9 @@ cd "$HERE/types/rust"
 cargo +1.90.0 build --release --locked --target "$T"
 cp "target/$T/release/types" "$HERE/bin/types-rs"
 cd "$HERE/go"
-CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH go build -trimpath -o "$HERE/bin/ledger-go" .
+CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH go build -trimpath -buildvcs=false -o "$HERE/bin/ledger-go" .
 cd "$HERE/types/go"
-CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH go build -trimpath -o "$HERE/bin/types-go" .
+CGO_ENABLED=0 GOOS=linux GOARCH=$GOARCH go build -trimpath -buildvcs=false -o "$HERE/bin/types-go" .
 cd "$HERE"
 shasum -a 256 bin/ledger-rs bin/ledger-go bin/types-rs bin/types-go 2>/dev/null \
   || sha256sum bin/ledger-rs bin/ledger-go bin/types-rs bin/types-go

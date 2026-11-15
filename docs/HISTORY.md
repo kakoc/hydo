@@ -11321,12 +11321,20 @@ design the hvx side module. The design is `docs/design/contracts.md`.
   address the caller passes; Go's words in its integer registers in order. Every engine makes
   its reads with one function, `plan::Loc::load`.
 - A bug of Milestone 241. The compiler took every function's frame base as the canonical frame
-  address. Rust's frame base is the stack pointer, so a Rust parameter on the x86_64 stack was
-  read 8 bytes off. No plan of the example had one. The compiler now reads `DW_AT_frame_base`.
-- The KVM engine (`hydo-kvm/src/contracts.rs`). The breakpoints are DR0 to DR3, set with
-  `KVM_SET_GUEST_DEBUG` and `KVM_GUESTDBG_USE_HW_BP` only while a run with a plan records; a hit
-  is handled in the run loop, counted as no exit, and the vCPU goes on with RFLAGS.RF. The spin
-  observer's steps take the debug registers back while they run. The rewind mode takes the
+  address. Rust's frame base is the stack pointer after the function's prologue, so a Rust
+  parameter on the x86_64 stack was read 8 bytes off, and further off in a function with a
+  prologue. No plan of the example had one. The compiler now reads `DW_AT_frame_base` and, for
+  a register, the call frame information (`.eh_frame`) for the prologue's size.
+- A function whose `DW_AT_calling_convention` is `DW_CC_nocall` returns its result where the
+  optimiser chose, not where its type says (a Rust `Option` that is always `Some` came back as
+  its value alone). The compiler refuses `result` in such a function with the reason.
+- The KVM engine (`hydo-kvm/src/contracts.rs`). The breakpoints are three of the four debug
+  registers, set with `KVM_SET_GUEST_DEBUG` and `KVM_GUESTDBG_USE_HW_BP` only while a run with a
+  plan records; a hit is handled in the run loop, counted as no exit, and the vCPU goes on with
+  RFLAGS.RF. While the spin observer runs on to one address, its breakpoint is in DR0 and the
+  contracts' in DR1 to DR3; while it steps over two addresses or with the trap flag, the engine
+  checks the contracts' addresses at every step. So two functions with contracts fit in one
+  program when both read their results, and three when none does. The rewind mode takes the
   records back to its checkpoint. A position-independent program's load address is the address
   of a page that starts with its ELF header, found by a walk of each address space's page
   tables at its first exit; the walk needs no agent and no guest change. `HYDO_CONTRACTS`
@@ -11334,8 +11342,10 @@ design the hvx side module. The design is `docs/design/contracts.md`.
 - The Mac engine refuses a position-independent program, whose link addresses are not where
   the program runs.
 - The example `hydo/onboard/examples/contracts-ledger` gains `types/rust` and `types/go`, two
-  programs whose contracts read every type, and their manifests `hydo-types.yaml` and
-  `hydo-types-go.yaml`. `build.sh` builds all four programs.
+  programs whose contracts read every type in two functions each, and their manifests
+  `hydo-types.yaml` and `hydo-types-go.yaml`. `build.sh` builds all four programs, the Go ones
+  now with `-buildvcs=false`: Go wrote the repository's commit and its dirty flag into the
+  binary, so the bytes of `ledger-go` changed with the checkout.
 - The hvx design: a side module with an opt-in `HVX_SET_GUEST_DEBUG`, DR0 to DR3, MOV-DR exiting,
   the `#DB` exit counted as no exit, and RF at the next entry (`docs/design/contracts.md`, "The
   hvx design"). Nothing was built or loaded.
@@ -11348,14 +11358,14 @@ ran with the plan and without it:
 |---|---|---|---|
 | Rust ledger, `disk=none \| run` | `b90439bd647be814` | `b90439bd647be814` | 12, none |
 | Rust ledger, `disk=none \| run P=ledger@5+2` | `ccf20770efca87a8` | `ccf20770efca87a8` | 14, `ensures` at 2 |
-| Go ledger, `disk=none \| run` | `7b4cf7f428b528f4` | `7b4cf7f428b528f4` | 12, none |
-| Go ledger, `disk=none \| run P=ledger@5+2` | `4388a6af47647439` | `4388a6af47647439` | 14, `ensures` at 2 |
-| Rust types, `disk=none \| run` | `34ae597a1864ee59` | `34ae597a1864ee59` twice | 120,104, of them 100,000 judged; 6 clauses broken at 1 call each |
-| Go types, `disk=none \| run` | `6836ea1d65bfb460` | `6836ea1d65bfb460` twice | 120,078, of them 100,000 judged; 5 clauses broken at 1 call each |
+| Go ledger, `disk=none \| run` | `d0b909b603aaed93` | `d0b909b603aaed93` | 12, none |
+| Go ledger, `disk=none \| run P=ledger@5+2` | `1e54d2f3e01e679a` | `1e54d2f3e01e679a` | 14, `ensures` at 2 |
+| Rust types, `disk=none \| run` | `2df8a778119d862c` | `2df8a778119d862c` twice | 120,052, of them 100,000 judged; 3 clauses broken at 1 call each |
+| Go types, `disk=none \| run` | `d2d8becb1f473bb2` | `d2d8becb1f473bb2` twice | 120,052, of them 100,000 judged; 5 clauses broken at 1 call each |
 
 The types programs break one clause or more of each function in their first round and keep
 every clause afterwards. Each clause the first round breaks broke at exactly 1 call, and every
-other clause held at all of its 25,000 (Rust) or 33,333 (Go) calls. The two runs of each types
+other clause held at all of its 50,000 calls. The two runs of each types
 image wrote the same records. The first run of the Rust types image found the second bug of
 this milestone: Rust 1.90 on arm64 passes the address of a result in memory in x0, as a first
 argument, not in x8, so `ok(result)` of `owned` read another value at every call. The compiler
@@ -11369,8 +11379,23 @@ without a plan, also with forced preemption points: the same fingerprints, clock
 and one record per call. The one-off workflow `tmp-contracts-kvm` (on the branch of that name,
 not in main) builds `bzImage-kvm-cg` in a sandboxed Nix, this branch's hydo and main's, and the
 example's x86_64 programs, and runs on four runners: the Redis example with both hydos, and each
-contracts schedule with the plan, without it, and under main's hydo, twice. Its results are not
-in yet.
+contracts schedule with the plan, without it, and under main's hydo, twice.
+
+Its first run, 43697118540, ran on four AMD EPYC 9V45 runners. The Redis example's four
+schedules gave main's fingerprints under this hydo. The ledgers passed: one fingerprint with the
+plan, without it and under main's hydo, the same records twice, and the Mac's calls and
+verdicts (Rust `d1338a9c6d551221` and `6020a9f74650f151`, Go `64b3b2b27807d132` and
+`dd15c7175f89da0b`, from that run's programs). The engine found the position-independent Rust
+ledger in 10 address spaces, each at another address. The types programs failed:
+
+- The Rust one then had four functions with contracts, and the engine refused the plan.
+- The Go one recorded 1,723, 4,216 and 10,826 of its 120,078 calls on three runners, other
+  records in each of its two runs, and up to 6,839 calls without a return. The engine took the
+  contracts' breakpoints out while the spin observer ran the guest on to the kick's address, up
+  to 2 s of guest code at a time chosen by the host's kicks. That is fixed as described above.
+- The check for the calls not judged failed because the runs recorded fewer than 100,000 calls.
+
+The types programs now have two functions each. The second run's results are not in yet.
 
 **Tests.** `hydo-contracts`: the types of both languages on both architectures from the
 compiled programs (when Rust 1.90.0 with the musl targets and Go are present), the new language
@@ -11387,7 +11412,8 @@ re-recording.
 
 **Open** (AGENTS.md open item 113).
 
-- The KVM proof's results.
+- The KVM proof's second run.
 - hvx: the side module of the design.
-- KVM: at most three processes of one position-independent program are stopped at once.
+- KVM: two functions with contracts per program when they read their results; at most two
+  processes of one position-independent program are stopped at once.
 - A run judges only its first 100,000 calls (now counted and reported).

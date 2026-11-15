@@ -1093,13 +1093,7 @@ impl Vmm {
             } else {
                 // the function contracts (Milestone 255): a breakpoint's stop is no exit of
                 // the guest; the engine reads and the guest goes on
-                loop {
-                    self.ct_arm();
-                    match self.cpu_mut().run() {
-                        Exit::Contract(pc) => self.ct_hit(pc),
-                        e => break e,
-                    }
-                }
+                self.run_ct()
             };
             self.watch.armed.store(false, Ordering::Relaxed);
             if self.rw.armed {
@@ -1593,7 +1587,7 @@ impl Vmm {
                 flows.push(flow);
             }
             self.cpu_mut().step_to(Some(&step));
-            match self.cpu_mut().run() {
+            match self.run_ct() {
                 Exit::Debug => {}
                 Exit::Kick => kicked = true,
                 e => break Outcome::Exit(e),
@@ -1653,7 +1647,7 @@ impl Vmm {
         let mut out = loop {
             self.cpu_mut().step_to(Some(&Step { at: [r0, 0], n: 1 }));
             self.watch.armed.store(true, Ordering::Relaxed);
-            let e = self.cpu_mut().run();
+            let e = self.run_ct();
             self.watch.armed.store(false, Ordering::Relaxed);
             match e {
                 Exit::Debug => {}
@@ -1770,7 +1764,7 @@ impl Vmm {
                 }));
                 let r = loop {
                     v.watch.armed.store(true, Ordering::Relaxed);
-                    let e = v.cpu_mut().run();
+                    let e = v.run_ct();
                     v.watch.armed.store(false, Ordering::Relaxed);
                     match e {
                         Exit::Debug => break Ok(()),
@@ -1788,7 +1782,7 @@ impl Vmm {
                 return Err(Outcome::GaveUp);
             }
             loop {
-                match v.cpu_mut().run() {
+                match v.run_ct() {
                     Exit::Debug => return Ok(()),
                     Exit::Kick => continue, // a late kick: nothing ran
                     e => return Err(Outcome::Exit(e)),

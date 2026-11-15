@@ -1327,7 +1327,9 @@ into its callers is listed by `hydo build` as not checked. An expression reads i
 booleans, pointers, fields through pointers, strings, vectors and slices (`len(v)`, `v[i]`,
 `s == "text"`), Rust's `Option` and `Result` (`is_some(o)`, `some(o)`, `is_ok(r)`, `ok(r)`,
 `err(r)`), and Go's results after the first (`result.1`, or the result's name; `err == nil`).
-It calls none of the program's code. Contracts run on the Mac and KVM engines, not on hvx. A run
+It calls none of the program's code. Contracts run on the Mac and KVM engines, not on hvx. The
+Mac engine stops at four functions of a program, the KVM engine at two that read their results
+(three that do not), and a larger plan is refused before the run. A run
 judges its first 100,000 calls, and the report says how many calls were not judged. The example
 is `hydo/onboard/examples/contracts-ledger`; its `hydo-types.yaml` shows every type.
 

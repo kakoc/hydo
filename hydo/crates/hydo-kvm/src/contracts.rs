@@ -30,8 +30,10 @@
 use crate::vmm::{translate, Vmm};
 use hydo_contracts::plan::{self, Frame, Loc, Plan, Record};
 
-/// The debug registers.
-pub const SLOTS: usize = 4;
+/// The debug registers the contracts use: DR1 to DR3 while the spin observer runs to an address
+/// in DR0, so that no call is missed while it does (DR0 to DR2 otherwise; the observer's other
+/// steps check the contracts' addresses at each step).
+pub const SLOTS: usize = 3;
 /// Exits between two searches for a position-independent program in an address space without
 /// it.
 pub const RESCAN: u64 = 256;
@@ -146,8 +148,9 @@ impl Ct {
             .unwrap_or(0);
         if fixed + widest > room {
             return Err(format!(
-                "the KVM engine has {SLOTS} breakpoints for contracts: at most {room} functions \
-                 with contracts{} (this plan has {})",
+                "the KVM engine has {SLOTS} breakpoints for contracts (the fourth debug register \
+                 is the spin observer's): at most {room} functions with contracts{} per program \
+                 (this plan has {})",
                 if has_ret {
                     " (one breakpoint stays for returns)"
                 } else {
@@ -486,6 +489,63 @@ impl Vmm {
             self.ct_entry(pc, &r, cr3, exits);
         }
         self.cpu_mut().contract_resume(pc);
+    }
+
+    /// Run the vCPU once with the contracts' stops handled: a contract's breakpoint is read and
+    /// the vCPU goes on; after a step of the spin observer the contracts' addresses are checked
+    /// at the address the step reached, because the observer's steps keep some or all of the
+    /// contracts' breakpoints out of the debug registers. So every call is recorded however
+    /// the observer's work falls, and the records are the same in every run of a schedule.
+    pub(crate) fn run_ct(&mut self) -> crate::cpu::Exit {
+        use crate::cpu::Exit;
+        loop {
+            if self.ct.is_some() {
+                self.ct_arm();
+            }
+            let e = self.cpu_mut().run();
+            match e {
+                Exit::Contract(pc) if self.ct.is_some() => self.ct_hit(pc),
+                Exit::Debug => {
+                    self.ct_after_step();
+                    return e;
+                }
+                e => return e,
+            }
+        }
+    }
+
+    /// After a step of the observer: a call at the address reached, recorded as a breakpoint's
+    /// hit would be. The instruction there has not run, so a breakpoint's hit there next is the
+    /// same call.
+    fn ct_after_step(&mut self) {
+        let Some(ct) = self.ct.as_ref() else { return };
+        if !ct.active {
+            return;
+        }
+        let r = self.cpu().regs();
+        // the entries armed, and every return address of a call in progress (one that began
+        // during the observer's steps has no breakpoint yet)
+        if !ct.armed.iter().any(|a| a.0 == r.rip) && !ct.pending.iter().any(|p| p.ret == r.rip) {
+            if let Some(ct) = self.ct.as_mut() {
+                ct.skip = None;
+            }
+            return;
+        }
+        let pc = r.rip;
+        let cr3 = self.cpu().cr3() & !0xfff;
+        let exits = self.m.exits;
+        let here = Some((pc, cr3, r.rsp));
+        let skip = self.ct.as_mut().and_then(|c| {
+            c.last = here;
+            c.skip.take()
+        });
+        if skip != here {
+            self.ct_return(pc, &r, cr3, exits);
+            self.ct_entry(pc, &r, cr3, exits);
+        }
+        if let Some(ct) = self.ct.as_mut() {
+            ct.skip = here;
+        }
     }
 
     /// The vCPU stops before the instruction a contract's stop resumed over: the guest's RFLAGS

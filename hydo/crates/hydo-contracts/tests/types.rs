@@ -50,7 +50,7 @@ fn rust_program(arch: &str) -> Option<PathBuf> {
 fn go_program(goarch: &str) -> Option<PathBuf> {
     let b = out_dir().join(format!("types-go-{goarch}"));
     let ok = Command::new("go")
-        .args(["build", "-trimpath", "-o"])
+        .args(["build", "-trimpath", "-buildvcs=false", "-o"])
         .arg(&b)
         .arg(".")
         .env("CGO_ENABLED", "0")
@@ -96,133 +96,129 @@ fn names(ls: &[Loc]) -> Vec<&str> {
     ls.iter().map(|l| l.name.as_str()).collect()
 }
 
-/// What every clause compiled to, as a few facts that do not depend on the architecture.
+/// The reads of a function, by name.
+fn has(ls: &[Loc], want: &[&str], what: &str) {
+    let n = names(ls);
+    for w in want {
+        assert!(n.contains(w), "{what}: {w} not in {n:?}");
+    }
+}
+
+fn base<'a>(ls: &'a [Loc], name: &str) -> &'a Loc {
+    ls.iter()
+        .find(|l| l.name == name)
+        .unwrap_or_else(|| panic!("{name} not in {:?}", names(ls)))
+}
+
+/// What every clause compiled to, as facts that hold on both architectures, and the registers
+/// that each architecture's calling convention gives.
 fn check_rust(p: &Program, arch: &str) {
+    assert_eq!(p.functions.len(), 2, "{:?}", p.functions);
     // Rust 1.90 passes the address of a result in memory in x0 on arm64 (rdi on x86_64)
     let sret = if arch == "arm64" { 0 } else { 5 };
-    // strings, vectors, slices: lengths at entry; a reference's vector at return; elements up
-    // to the bound for v[k]
+    // strings, vectors, slices: lengths at entry, a reference's vector at return, elements up
+    // to the bound for v[k]; an Option in two registers
     let t = func(p, "types::text");
-    assert_eq!(t.clauses.len(), 5);
-    let n = names(&t.at_entry);
-    for want in [
-        "len(s)",
-        "s[0..5]",
-        "len(owned)",
-        "owned[0..3]",
-        "len(sl)",
-        "sl[1]",
-        "k",
-    ] {
-        assert!(n.contains(&want), "{arch}: {want} not in {n:?}");
-    }
-    let r = names(&t.at_return);
-    assert!(
-        r.contains(&"len(v)") && r.contains(&"result"),
-        "{arch}: {r:?}"
+    assert_eq!(t.clauses.len(), 6);
+    has(
+        &t.at_entry,
+        &[
+            "len(s)",
+            "s[0..5]",
+            "len(owned)",
+            "owned[0..3]",
+            "len(v)",
+            "v[0]",
+            "v[7]",
+            "k",
+            "len(sl)",
+            "sl[1]",
+            "the variant of p",
+            "some(p).x",
+            "some(p).y",
+        ],
+        arch,
     );
-    assert!(
-        matches!(&t.clauses[2].expr, Expr::Bin(..)),
-        "{:?}",
-        t.clauses[2].expr
+    has(
+        &t.at_return,
+        &["the variant of result", "some(result)", "len(v)"],
+        arch,
     );
-    let s5 = t.at_entry.iter().find(|l| l.name == "s[0..5]").unwrap();
+    let s5 = base(&t.at_entry, "s[0..5]");
     assert_eq!((s5.size, s5.path.len()), (5, 1), "{s5:?}");
-    // options and results: the discriminant and the value in two registers, a niche pointer in
-    // one, a Result passed in memory
-    let o = func(p, "types::opt");
-    let n = names(&o.at_entry);
-    for want in [
-        "the variant of o",
-        "some(o)",
-        "the variant of r",
-        "err(r)",
-        "some(p).x",
-    ] {
-        assert!(n.contains(&want), "{arch}: {want} not in {n:?}");
-    }
-    let res = names(&o.at_return);
-    assert!(
-        res.contains(&"the variant of result") && res.contains(&"some(result)"),
-        "{arch}: {res:?}"
-    );
-    let disc = o
-        .at_return
-        .iter()
-        .find(|l| l.name == "the variant of result")
-        .unwrap();
-    let val = o
-        .at_return
-        .iter()
-        .find(|l| l.name == "some(result)")
-        .unwrap();
     assert_eq!(
-        (disc.base, val.base),
+        (
+            base(&t.at_return, "the variant of result").base,
+            base(&t.at_return, "some(result)").base
+        ),
         (Base::Reg(0), Base::Reg(1)),
         "{arch}"
     );
-    // a Vec and a String by value (in memory), a Result returned in memory the caller gave
+    assert!(matches!(base(&t.at_return, "len(v)").base, Base::In(_)));
+    // a Vec and a String by value (in memory), options and results by value, through a
+    // reference and on the stack, and a Result returned in memory the caller gives
     let w = func(p, "types::owned");
-    let n = names(&w.at_entry);
-    for want in ["len(v)", "v[2]", "len(s)", "s[0..2]", "address of result"] {
-        assert!(n.contains(&want), "{arch}: {want} not in {n:?}");
-    }
-    let a = w
-        .at_entry
-        .iter()
-        .find(|l| l.name == "address of result")
-        .unwrap();
-    assert_eq!(a.base, Base::Reg(sret), "{arch}");
-    assert!(w.at_return.iter().all(|l| matches!(l.base, Base::In(_))));
-    // a String result in memory, and a Result read through a reference
-    let c = func(p, "types::copy");
-    assert!(
-        names(&c.at_entry).contains(&"len(err(r))"),
-        "{:?}",
-        names(&c.at_entry)
+    has(
+        &w.at_entry,
+        &[
+            "len(v)",
+            "v[2]",
+            "len(s)",
+            "s[0..2]",
+            "the variant of r",
+            "len(err(r))",
+            "err(r)[0..4]",
+            "the variant of o",
+            "some(o)",
+            "n",
+            "address of result",
+        ],
+        arch,
     );
-    assert!(names(&c.at_return).contains(&"len(result)"));
+    assert_eq!(base(&w.at_entry, "address of result").base, Base::Reg(sret));
+    // x86_64: n is the seventh word, on the stack: 8 above the stack pointer at entry, whatever
+    // the prologue does to it (the frame base counts from after it); on arm64 a register
+    let n = base(&w.at_entry, "n");
+    if arch == "x86_64" {
+        assert_eq!((n.base, n.path.clone()), (Base::Reg(7), vec![8]), "{n:?}");
+        let k = base(&t.at_entry, "k");
+        assert_eq!((k.base, k.path.clone()), (Base::Reg(7), vec![8]), "{k:?}");
+        let p = base(&t.at_entry, "the variant of p");
+        assert_eq!((p.base, p.path.clone()), (Base::Reg(7), vec![16]), "{p:?}");
+    } else {
+        assert!(n.path.is_empty(), "{n:?}");
+    }
+    assert!(w.at_return.iter().all(|l| matches!(l.base, Base::In(_))));
 }
 
 fn check_go(p: &Program, arch: &str) {
+    assert_eq!(p.functions.len(), 2, "{:?}", p.functions);
     let t = func(p, "main.text");
-    let n = names(&t.at_entry);
-    for want in [
-        "len(s)", "s[0..5]", "s[4]", "len(v)", "v[0]", "k", "ps[0].X", "ps[0].Y",
-    ] {
-        assert!(n.contains(&want), "{arch}: {want} not in {n:?}");
-    }
-    // v[k]: the elements 0 to 7, each guarded by the length
-    assert!(n.contains(&"v[7]"), "{arch}: {n:?}");
+    has(
+        &t.at_entry,
+        &[
+            "len(s)", "s[0..5]", "s[4]", "len(v)", "v[0]", "v[7]", "k", "len(ps)", "ps[0].X",
+            "ps[0].Y",
+        ],
+        arch,
+    );
+    // Go's results in the integer registers in order: arm64 R0, R1, ...; amd64 RAX, RBX, RCX,
+    // RDI (DWARF 0, 3, 2, 5)
+    let r = &t.at_return;
+    let (second, third, fourth) = if arch == "arm64" {
+        (Base::Reg(1), Base::Reg(2), Base::Reg(3))
+    } else {
+        (Base::Reg(3), Base::Reg(2), Base::Reg(5))
+    };
+    assert_eq!(base(r, "result.0").base, Base::Reg(0), "{arch}");
+    assert_eq!(base(r, "result.1").base, second, "{arch}");
     // three results: a string in two registers, an int, an error in two registers
     let s = func(p, "main.split");
     let r = &s.at_return;
-    let reg = |name: &str| r.iter().find(|l| l.name == name).map(|l| l.base);
-    let (r2, r3) = if arch == "arm64" {
-        (Base::Reg(2), Base::Reg(3))
-    } else {
-        // RAX, RBX, RCX, RDI: DWARF 0, 3, 2, 5
-        (Base::Reg(2), Base::Reg(5))
-    };
-    assert_eq!(
-        reg("len(result.0)"),
-        Some(match arch {
-            "arm64" => Base::Reg(1),
-            _ => Base::Reg(3),
-        })
-    );
-    assert_eq!(reg("result.1"), Some(r2), "{arch}: {r:?}");
-    assert_eq!(reg("result.2"), Some(r3), "{arch}: {r:?}");
-    let f = func(p, "main.fail");
-    let r = &f.at_return;
-    assert_eq!(
-        r.iter().find(|l| l.name == "result.1").map(|l| l.base),
-        Some(if arch == "arm64" {
-            Base::Reg(1)
-        } else {
-            Base::Reg(3)
-        })
-    );
+    assert_eq!(base(r, "len(result.0)").base, second, "{arch}");
+    assert_eq!(base(r, "result.0[0..3]").base, Base::Reg(0), "{arch}");
+    assert_eq!(base(r, "result.1").base, third, "{arch}");
+    assert_eq!(base(r, "result.2").base, fourth, "{arch}");
 }
 
 #[test]

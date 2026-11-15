@@ -1,16 +1,18 @@
 # Function contracts over the types they read (docs/design/contracts.md, "Reading values"): the
-# Rust program of types/rust/src calls four functions whose contracts read strings, vectors,
-# slices, options and results, by value, through references, and as results in registers and in
-# memory. Step 0 calls each function once with values that break a clause; step 1 calls them 25
-# times with values that keep every clause; steps 2 and 3 call them 15,000 times each, past the
-# 100,000 calls a run records, so the report says how many calls were not judged.
+# Rust program of types/rust/src calls two functions whose contracts read strings, vectors,
+# slices, options and results, by value, through references, on the stack, and as results in
+# registers and in memory. Two is the most the KVM engine stops at in one program when both
+# functions read their results. Step 0 calls each function once with values that break a
+# clause; step 1 calls them 25 times with values that keep every clause; steps 2 and 3 call them
+# 30,000 times each, past the 100,000 calls a run records, so the report says how many calls
+# were not judged.
 # Build: ./build.sh (arm64, the Mac engine; ./build.sh x86_64 for KVM), then
 #   hydo build hydo-types.yaml
 # Try:  disk=none | run    -> VIOLATION [contract types::text] requires ...: each broken clause
 #         at 1 of its calls (the first round), and the calls past the first 100,000 not judged.
 # hydo-types-go.yaml is the same with the Go program of types/go.
 name: contracts-types
-description: four functions whose contracts read strings, vectors, slices, options and results; the first round breaks a clause of each.
+description: two functions whose contracts read strings, vectors, slices, options and results; the first round breaks a clause of each.
 
 root:
   files:
@@ -28,7 +30,7 @@ workload:
       case $i in
         0) /bin/types bad ;;
         1) /bin/types run 25 ;;
-        *) /bin/types run 15000 ;;
+        *) /bin/types run 30000 ;;
       esac
       echo "$i ack" >> $HYDO_OUTCOMES
       i=$((i + 1))

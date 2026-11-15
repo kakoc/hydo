@@ -1,6 +1,7 @@
 // types: the values function contracts read in a Go program (docs/design/contracts.md, "Reading
-// values"): strings, slices, results after the first, and an error. `types run <n>` calls each
-// function n times with values the contracts know, and `types bad` breaks clauses once.
+// values"): strings, slices, results after the first, and an error, in two functions, the most
+// the KVM engine stops at in one program when both read their results. `types run <n>` calls
+// each function n times with values the contracts know, and `types bad` breaks clauses once.
 // hydo-contracts' tests compile this program's plan; the example's hydo-types-go.yaml runs it.
 package main
 
@@ -19,16 +20,22 @@ type Pt struct {
 
 var sink []any
 
-// text reads strings and slices: their lengths and their first elements.
+var errCode = errors.New("a code")
+
+// text reads strings and slices (their lengths and elements), and returns an error as its
+// second result.
 // hydo: requires len(s) == 5 && s == "hello" && s[4] == 111
 // hydo: requires len(v) == 4 && v[0] == 10 && v[3] == 40 && v[k] == 10 * (k + 1)
 // hydo: requires len(ps) == 1 && ps[0].X == 1 && ps[0].Y == -2
-// hydo: ensures result == len(s) + len(v)
+// hydo: ensures result.0 == len(s) + len(v) && result.1 != nil
 //
 //go:noinline
-func text(s string, v []uint32, ps []Pt, k int) int {
+func text(s string, v []uint32, ps []Pt, k int, code int) (int, error) {
 	sink = append(sink[:0], s, v, ps, k)
-	return len(s) + len(v)
+	if code == 0 {
+		return 0, nil
+	}
+	return len(s) + len(v), errCode
 }
 
 // split returns three results: a string, a count and an error.
@@ -44,17 +51,6 @@ func split(s string, at int) (head string, n int, err error) {
 	return s[:at], len(s) - at, nil
 }
 
-// fail returns an error as its second result.
-// hydo: ensures result.0 == 0 && result.1 != nil
-//
-//go:noinline
-func fail(code int) (int, error) {
-	if code != 0 {
-		return 0, fmt.Errorf("code %d", code)
-	}
-	return 1, nil
-}
-
 func round(bad bool) {
 	s := "hello"
 	if bad {
@@ -65,19 +61,20 @@ func round(bad bool) {
 		v[3] = 41
 	}
 	ps := []Pt{{X: 1, Y: -2}}
-	sink = append(sink, text(s, v, ps, 2))
-	at := 3
-	if bad {
-		at = 2
-	}
-	h, n, err := split(s, at)
-	sink = append(sink, h, n, err)
 	code := 7
 	if bad {
 		code = 0
 	}
-	r, err := fail(code)
-	sink = append(sink, r, err)
+	r, err := text(s, v, ps, 2, code)
+	at := 3
+	if bad {
+		at = 2
+	}
+	h, n, err2 := split(s, at)
+	sink = append(sink, r, err, h, n, err2)
+	if len(sink) > 64 {
+		sink = sink[:0]
+	}
 }
 
 func main() {

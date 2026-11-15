@@ -411,6 +411,9 @@ impl Kvm {
             ct_bps: Vec::new(),
             ct_rf: None,
             ct_set: false,
+            ct_hw: false,
+            obs: Vec::new(),
+            obs_mask: 0,
             ram: ram as u64,
             ram_len: len,
             dirty: None,
@@ -476,6 +479,11 @@ pub struct KvmCpu {
     ct_rf: Option<u64>,
     /// the contracts' breakpoints are in KVM ([`Cpu::set_contract_bps`])
     ct_set: bool,
+    /// the contracts' breakpoints are in the debug registers now (after the observer's)
+    ct_hw: bool,
+    /// the observer's breakpoint addresses while it steps, and their DR6 bits
+    obs: Vec<u64>,
+    obs_mask: u64,
     /// guest RAM (memory slot 0, and slot 1 above 3 GiB: `layout::ram_blocks`)
     ram: u64,
     ram_len: usize,
@@ -580,21 +588,33 @@ impl KvmCpu {
         }
     }
 
-    /// The guest debugging of the function contracts' breakpoints (Milestone 255): execute
-    /// breakpoints in DR0 to DR3 with their local enables and DR7's fixed bit 10, as the spin
-    /// observer's; none at all without breakpoints (debugging off, as before contracts).
-    fn ct_debug(&self) -> kvm_guest_debug {
+    /// The guest debugging of the moment: the spin observer's breakpoints first (`obs`, from
+    /// DR0), then the function contracts' (Milestone 255), as execute breakpoints with their
+    /// local enables and DR7's fixed bit 10. The contracts' breakpoints are in it while the
+    /// observer runs to at most one address (they have DR1 to DR3 then); while it steps over
+    /// two addresses or with the trap flag the engine checks the contracts' addresses at each
+    /// step instead ([`crate::vmm::Vmm`]'s `ct_after_step`). Without any breakpoint debugging
+    /// is off, as before contracts. Sets [`KvmCpu::ct_hw`].
+    fn guest_debug(&mut self, obs: &[u64]) -> kvm_guest_debug {
         let mut d = kvm_guest_debug::default();
-        if self.ct_bps.is_empty() {
-            return d;
+        let mut addrs: Vec<u64> = obs.to_vec();
+        self.ct_hw = !self.tf && obs.len() <= 1 && !self.ct_bps.is_empty();
+        if self.ct_hw {
+            addrs.extend(self.ct_bps.iter().take(4 - obs.len()));
         }
-        d.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_HW_BP;
-        let mut dr7 = 0x400u64;
-        for (k, &a) in self.ct_bps.iter().take(4).enumerate() {
-            d.debugreg[k] = a;
-            dr7 |= 1 << (2 * k);
+        if !addrs.is_empty() {
+            d.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_HW_BP;
+            let mut dr7 = 0x400u64;
+            for (k, &a) in addrs.iter().enumerate() {
+                d.debugreg[k] = a;
+                dr7 |= 1 << (2 * k);
+            }
+            d.debugreg[7] = dr7;
         }
-        d.debugreg[7] = dr7;
+        if self.tf {
+            d.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP;
+        }
+        self.obs_mask = (1u64 << obs.len()) - 1;
         d
     }
 
@@ -658,10 +678,13 @@ impl KvmCpu {
                 // only the observer's two instruction breakpoints (DR6 B0, B1) are expected: the
                 // observer does not step a guest that uses the trap flag or its own breakpoints
                 let d: kvm_debug_exit_arch = self.exit_union();
-                if (self.stepping && d.dr6 & 3 != 0) || (self.tf && d.dr6 & 0x4000 != 0) {
-                    Exit::Debug
-                } else if !self.stepping && !self.tf && !self.ct_bps.is_empty() && d.dr6 & 0xf != 0
+                let ct_mask = if self.ct_hw { 0xf & !self.obs_mask } else { 0 };
+                if (self.stepping && d.dr6 & self.obs_mask != 0) || (self.tf && d.dr6 & 0x4000 != 0)
                 {
+                    // the observer's stop (a contract's breakpoint at the same address too is
+                    // seen by the engine's check after the step)
+                    Exit::Debug
+                } else if d.dr6 & ct_mask != 0 {
                     // a function contract's breakpoint (Milestone 255)
                     Exit::Contract(d.pc)
                 } else {
@@ -924,23 +947,14 @@ impl Cpu for KvmCpu {
     }
 
     fn step_to(&mut self, step: Option<&crate::spin::Step>) {
-        // without a step the function contracts' breakpoints, if any (none: debugging off)
-        let mut d = if step.is_none() {
-            self.ct_debug()
-        } else {
-            kvm_guest_debug::default()
-        };
+        // execute breakpoints (R/W and LEN 0) from DR0, local enables, and DR7's fixed bit 10;
+        // KVM puts them in the hardware while the guest runs and keeps the guest's own debug
+        // registers aside. Without a step only the function contracts' breakpoints, if any
+        // (none: debugging off).
+        self.tf = false;
+        let obs: Vec<u64> = step.map(|s| s.addrs().to_vec()).unwrap_or_default();
+        let d = self.guest_debug(&obs);
         if let Some(s) = step {
-            // execute breakpoints (R/W and LEN 0) in DR0 and DR1, local enables L0 and L1, and
-            // DR7's fixed bit 10; KVM puts them in the hardware while the guest runs and keeps
-            // the guest's own debug registers aside
-            d.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_HW_BP;
-            let mut dr7 = 0x400u64;
-            for (k, &a) in s.addrs().iter().enumerate() {
-                d.debugreg[k] = a;
-                dr7 |= 1 << (2 * k);
-            }
-            d.debugreg[7] = dr7;
             // a breakpoint at the instruction about to run (a jump to itself) would stop before
             // it: RF lets it run once (the CPU clears RF when the instruction completes, and an
             // exception's frame has RF set for a fault anyway)
@@ -963,9 +977,9 @@ impl Cpu for KvmCpu {
             }
         }
         self.stepping = step.is_some();
-        self.tf = false;
+        self.obs = obs;
         self.set(KVM_SET_GUEST_DEBUG, &d, "KVM_SET_GUEST_DEBUG");
-        self.ct_set = step.is_none();
+        self.ct_set = true;
     }
 
     fn can_single_step(&self) -> bool {
@@ -975,27 +989,31 @@ impl Cpu for KvmCpu {
     fn single_step(&mut self, on: bool) {
         // KVM sets RFLAGS.TF while the guest runs one instruction and takes the debug exception
         // (KVM_GET_REGS does not show the flag); turning the steps off takes the flag back
-        let mut d = kvm_guest_debug::default();
-        if on {
-            d.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP;
-        } else {
-            d = self.ct_debug();
-        }
+        // with the trap flag the function contracts' breakpoints are out: the engine checks
+        // their addresses at every step
         self.tf = on;
         self.stepping = false;
+        self.obs.clear();
+        let d = self.guest_debug(&[]);
         self.set(KVM_SET_GUEST_DEBUG, &d, "KVM_SET_GUEST_DEBUG");
-        self.ct_set = !on;
+        self.ct_set = true;
     }
 
     fn set_contract_bps(&mut self, addrs: &[u64]) {
-        let want: Vec<u64> = addrs.iter().take(4).copied().collect();
+        let want: Vec<u64> = addrs.iter().take(3).copied().collect();
         if self.ct_bps == want && self.ct_set {
             return;
         }
         self.ct_bps = want;
         self.ct_set = false;
-        if !self.stepping && !self.tf {
-            let d = self.ct_debug();
+        if self.tf || self.obs.len() > 1 {
+            // the observer's steps check the addresses themselves; its end puts them in
+            self.ct_set = true;
+            return;
+        }
+        {
+            let obs = self.obs.clone();
+            let d = self.guest_debug(&obs);
             // KVM refuses (EBUSY) while an exception waits to be delivered to the guest: the
             // breakpoints go in before the next run instead, which the guest's state decides
             // SAFETY: KVM_SET_GUEST_DEBUG reads a kvm_guest_debug from d

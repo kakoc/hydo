@@ -242,6 +242,37 @@ impl Struct {
 struct Dwarf<'a> {
     dwarf: gimli::Dwarf<R<'a>>,
     units: Vec<gimli::Unit<R<'a>>>,
+    /// The call frame information (`.eh_frame`) and the addresses its pointers count from.
+    eh: Vec<u8>,
+    eh_addr: u64,
+    text_addr: u64,
+}
+
+impl Dwarf<'_> {
+    /// The largest offset the call frame information gives the canonical frame address from
+    /// register `reg` in the function at `pc`: the offset after the function's prologue, where
+    /// the compiler's frame-base offsets count from.
+    fn cfa_offset(&self, pc: u64, reg: u16) -> Option<i64> {
+        use gimli::UnwindSection;
+        let eh = gimli::EhFrame::new(&self.eh, LittleEndian);
+        let bases = gimli::BaseAddresses::default()
+            .set_eh_frame(self.eh_addr)
+            .set_text(self.text_addr);
+        let mut ctx: gimli::UnwindContext<usize> = gimli::UnwindContext::new();
+        let fde = eh
+            .fde_for_address(&bases, pc, gimli::EhFrame::cie_from_offset)
+            .ok()?;
+        let mut rows = fde.rows(&eh, &bases, &mut ctx).ok()?;
+        let mut best: Option<i64> = None;
+        while let Ok(Some(row)) = rows.next_row() {
+            if let gimli::CfaRule::RegisterAndOffset { register, offset } = row.cfa() {
+                if register.0 == reg {
+                    best = Some(best.map_or(*offset, |b| b.max(*offset)));
+                }
+            }
+        }
+        best
+    }
 }
 
 fn byte_size(e: &gimli::DebuggingInformationEntry<R<'_>>) -> u64 {
@@ -710,6 +741,7 @@ fn frame_base(
     unit: usize,
     e: &gimli::DebuggingInformationEntry<R<'_>>,
     arch: &str,
+    pc: u64,
 ) -> Result<(u8, i64), String> {
     let u = &d.units[unit];
     let Ok(Some(AttributeValue::Exprloc(x))) = e.attr_value(gimli::DW_AT_frame_base) else {
@@ -717,11 +749,20 @@ fn frame_base(
     };
     let mut r = x.0;
     let op = Operation::parse(&mut r, u.encoding()).map_err(|e| e.to_string())?;
+    // at the first instruction the canonical frame address is the stack pointer on arm64, and
+    // the stack pointer plus the return address on x86_64
+    let at_entry: i64 = if arch == "arm64" { 0 } else { 8 };
     match op {
-        Operation::Register { register } if r.is_empty() => Ok((register.0 as u8, 0)),
-        Operation::CallFrameCFA if r.is_empty() => {
-            Ok((sp_reg(arch), if arch == "arm64" { 0 } else { 8 }))
+        Operation::Register { register } if r.is_empty() => {
+            // a register's frame base (Rust: the stack pointer, or the frame pointer) counts
+            // from the register's value after the prologue: the frame address minus the
+            // offset the call frame information gives there
+            let off = d.cfa_offset(pc, register.0).ok_or(
+                "a stack location relative to a register, without call frame information for it",
+            )?;
+            Ok((sp_reg(arch), at_entry - off))
         }
+        Operation::CallFrameCFA if r.is_empty() => Ok((sp_reg(arch), at_entry)),
         _ => Err("a frame base the compiler does not read".into()),
     }
 }
@@ -903,6 +944,9 @@ struct FnInfo {
     /// for one without a name).
     results: Vec<(String, Option<TRef>)>,
     concrete: bool,
+    /// The compiler changed how the function is called and returns (`DW_CC_nocall`): its
+    /// result is not where its type says.
+    nocall: bool,
 }
 
 struct Param {
@@ -960,7 +1004,7 @@ fn fn_info<'a>(
             d.type_ref(ui, &src).or_else(|| d.type_ref(ui, e)),
         ));
     }
-    let fb = frame_base(d, ui, e, arch);
+    let fb = frame_base(d, ui, e, arch, low_pc.unwrap_or(0));
     if let (Some(pc), Ok(mut tree)) = (low_pc, u.entries_tree(Some(e.offset()))) {
         if let Ok(root) = tree.root() {
             let mut ch = root.children();
@@ -1007,6 +1051,10 @@ fn fn_info<'a>(
         params,
         results,
         concrete: low_pc.is_some(),
+        nocall: matches!(
+            e.attr_value(gimli::DW_AT_calling_convention),
+            Ok(Some(AttributeValue::CallingConvention(gimli::DW_CC_nocall)))
+        ),
     })
 }
 /// Every source file under the given folders (or the files themselves), with the path relative
@@ -1105,7 +1153,19 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
             units.push(u);
         }
     }
-    let d = Dwarf { dwarf, units };
+    let addr_of = |n: &str| {
+        elf.sections
+            .iter()
+            .find(|s| s.name == n)
+            .map_or(0, |s| s.addr)
+    };
+    let d = Dwarf {
+        dwarf,
+        units,
+        eh: elf.section(".eh_frame")?,
+        eh_addr: addr_of(".eh_frame"),
+        text_addr: addr_of(".text"),
+    };
     let fns = functions(&d, arch);
     // ET_DYN: a position-independent program, loaded where the guest's kernel chooses
     let pie = rd16(&elf.data, 16) == Some(3);
@@ -1338,6 +1398,13 @@ impl Reads<'_> {
     /// The `i`-th result at return.
     fn result(&mut self, i: usize, text: &str) -> Result<Pv, String> {
         let fname = &self.f.name;
+        if self.f.nocall {
+            return Err(format!(
+                "the compiler changed how {fname} returns (it knew something of every call, for \
+                 example that the result is always `Some`), so `{text}` is not where its type \
+                 says"
+            ));
+        }
         let ty = self.f.results.get(i).and_then(|r| r.1);
         if ty.is_none() {
             return Err(format!("{fname} returns nothing"));

@@ -124,19 +124,24 @@ differ in what they offer:
 |---|---|---|
 | Mac (hvm) | Built (M241): 5 breakpoint pairs, debug exceptions to the engine | The guest kernel has no uprobes (`allnoconfig`); a new kernel is a new fingerprint epoch |
 | hvx | Designed, not built ([The hvx design](#the-hvx-design)): a side module with DR0 to DR3 and the `#DB` exit | The guest kernel (nixpkgs 6.6.35) has `UPROBE_EVENTS`; measured in the first table |
-| KVM | Built (M255): `KVM_SET_GUEST_DEBUG` with DR0 to DR3, `KVM_EXIT_DEBUG`, no exit counted ([The KVM engine](#the-kvm-engine)) | The guest kernel has no uprobes (`allnoconfig`) |
+| KVM | Built (M255): `KVM_SET_GUEST_DEBUG` with 3 of the 4 debug registers, `KVM_EXIT_DEBUG`, no exit counted ([The KVM engine](#the-kvm-engine)) | The guest kernel has no uprobes (`allnoconfig`) |
 
 The measurement favours (a). Its checks leave the run as it was, so a finding with contracts on
 is a finding of the plain run, and its replay needs no contracts. (b) changes the fingerprint.
 It also loses records unless a reader drains the buffer, and that reader is guest code that
-changes the guest's scheduling. (a) is limited by the number of breakpoints. Four functions
-with contracts fit on the Mac engine, with one pair left for return addresses. Three fit on
-KVM, with one debug register left for return addresses.
+changes the guest's scheduling. (a) is limited by the number of breakpoints:
+
+- On the Mac engine, four functions with contracts fit in one program, with one pair left for
+  return addresses.
+- On KVM, two functions fit when they read their results, with one register left for return
+  addresses, and three when none does. A larger plan is refused before the run with the
+  message `the KVM engine has 3 breakpoints for contracts`.
 
 ## The KVM engine
 
-The KVM engine (`hydo/crates/hydo-kvm/src/contracts.rs`) puts the breakpoints into DR0 to DR3
-with `KVM_SET_GUEST_DEBUG` and `KVM_GUESTDBG_USE_HW_BP`. KVM keeps them apart from the guest's
+The KVM engine (`hydo/crates/hydo-kvm/src/contracts.rs`) puts the breakpoints into three of the
+four debug registers with `KVM_SET_GUEST_DEBUG` and `KVM_GUESTDBG_USE_HW_BP`. KVM keeps them
+apart from the guest's
 own debug registers: `KVM_GET_DEBUGREGS`, and so a snapshot and a fingerprint, still give the
 guest's values. A hit is a `KVM_EXIT_DEBUG`, which the engine handles inside its run loop:
 
@@ -148,12 +153,24 @@ guest's values. A hit is a `KVM_EXIT_DEBUG`, which the engine handles inside its
 3. It counts no exit, so the guest's clock and every stop of the run are the same.
 
 Without a plan the engine never calls `KVM_SET_GUEST_DEBUG` for contracts, and the vCPU's
-debugging stays as it was before Milestone 255. The spin observer uses DR0 and DR1 for its own
-steps. While it steps a vCPU, the contracts' breakpoints are out of the vCPU. A call that the
-observer steps into, by a jump from a loop without exits, is not recorded. The observer steps
-loads, compares, register arithmetic and jumps only, so only a jump into a contracted function
-from such a loop is missed. The rewind mode goes back to a checkpoint and runs the same exits
-again; the contracts go back with it, so no call is recorded twice.
+debugging stays as it was before Milestone 255.
+
+The spin observer works on a vCPU that runs without exits, after a kick that comes at a time of
+the host's choosing. It uses the debug registers too, so a call must be recorded whatever the
+observer does when it comes:
+
+- When the observer runs the guest on to one address (its proof of a full-state cycle, and the
+  rewind mode's replay), its breakpoint is in DR0 and the contracts' are in DR1 to DR3.
+- When it steps over two addresses at a time, or with the trap flag, the contracts' breakpoints
+  are out, and the engine checks their addresses at every step instead. A step ends at every
+  instruction boundary the guest passes, so no call goes unseen.
+
+The first one-off KVM run (`tmp-contracts-kvm`, run 43697118540) showed why. The engine then
+took the contracts' breakpoints out while the observer ran on to one address, up to 2 s of
+guest code. The Go types program recorded between 1,723 and 10,826 of its 120,078 calls,
+another number on each runner, and up to 6,839 calls had no return. The rewind mode goes back to
+a checkpoint and runs the same exits again; the contracts go back with it, so no call is
+recorded twice.
 
 A return is matched with its call by the return address, which the engine reads from the stack
 at the entry, by CR3, and by the stack pointer (8 more at the return) or Go's goroutine
@@ -173,9 +190,10 @@ the load address. In an address space without the program, the walk runs again e
 Exits are the engine's clock, so the walks and their results are the same in every run of a
 schedule.
 
-Each process of the program has its own load address, and the three entry breakpoints cover at
-most three processes. The engine prefers the processes where calls were recorded, then the
-address spaces with the latest exits. A call in a process outside those three is not recorded.
+Each process of the program has its own load address, and the entry breakpoints cover at most
+two processes of a function that reads its result (three of one that does not). The engine
+prefers the processes where calls were recorded, then the address spaces with the latest exits.
+A call in a process outside those is not recorded.
 The engine's log names the processes found (`hydo-kvm: contracts:` in `engine.log`).
 
 A Go program and an arm64 Rust program are linked at fixed addresses and need no search. The
@@ -225,10 +243,13 @@ DWARF sections are inflated. It handles these:
 
 - A parameter's location at the function's first address: a register, a register plus an
   offset (in memory), the frame base plus an offset, or pieces of these (DWARF's
-  `DW_OP_piece`). Rust's frame base is the stack pointer; Go's is the canonical frame address,
-  which at the first address is the stack pointer on arm64 and the stack pointer plus 8 on
-  x86_64. Milestone 241 took the frame base as the canonical frame address for Rust too, which
-  put a Rust parameter on the x86_64 stack 8 bytes off; no recorded plan had one.
+  `DW_OP_piece`). Go's frame base is the canonical frame address, which at the first address is
+  the stack pointer on arm64 and the stack pointer plus 8 on x86_64. Rust's frame base is a
+  register, the stack pointer, whose offsets count from its value after the function's
+  prologue; the call frame information (`.eh_frame`) says how far that is from the canonical
+  frame address. Milestone 241 took Rust's frame base as the canonical frame address, which put
+  a parameter on the x86_64 stack 8 bytes off in a function without a prologue and further off
+  in one with; no recorded plan had one.
 - Integer, boolean, enumeration and pointer types, through typedefs and `const`.
 - Fields of structures through any number of pointers, of a structure passed in memory, and of
   a structure in registers piece by piece (a Rust `&str` is a pointer and a length in two
@@ -281,8 +302,8 @@ The report then says how many calls were not judged, and so does each finding
 (`details.not_recorded`):
 
 ```text
-hydo: function contracts: 100000 calls checked against 14 clauses, 6 broken
-hydo: function contracts: 120104 calls in all; 20104 of them were not judged, because a run records its first 100000 calls only
+hydo: function contracts: 100000 calls checked against 12 clauses, 3 broken
+hydo: function contracts: 120052 calls in all; 20052 of them were not judged, because a run records its first 100000 calls only
 ```
 
 A call whose return the run did not reach has its `ensures` clauses undecided, and the report
@@ -327,16 +348,16 @@ Mac release with the kernel `Image-explore-cg`. Each schedule ran with the plan 
 |---|---|---|---|
 | Rust ledger, `disk=none \| run` | `b90439bd647be814` | `b90439bd647be814` | 12, none |
 | Rust ledger, `disk=none \| run P=ledger@5+2` | `ccf20770efca87a8` | `ccf20770efca87a8` | 14, `ensures` at 2 calls |
-| Go ledger, `disk=none \| run` | `7b4cf7f428b528f4` | `7b4cf7f428b528f4` | 12, none |
-| Go ledger, `disk=none \| run P=ledger@5+2` | `4388a6af47647439` | `4388a6af47647439` | 14, `ensures` at 2 calls |
-| Rust types, `disk=none \| run` | `34ae597a1864ee59` | `34ae597a1864ee59` (twice) | 120,104; 100,000 judged; 6 clauses broken at 1 call each |
-| Go types, `disk=none \| run` | `6836ea1d65bfb460` | `6836ea1d65bfb460` (twice) | 120,078; 100,000 judged; 5 clauses broken at 1 call each |
+| Go ledger, `disk=none \| run` | `d0b909b603aaed93` | `d0b909b603aaed93` | 12, none |
+| Go ledger, `disk=none \| run P=ledger@5+2` | `1e54d2f3e01e679a` | `1e54d2f3e01e679a` | 14, `ensures` at 2 calls |
+| Rust types, `disk=none \| run` | `2df8a778119d862c` | `2df8a778119d862c` (twice) | 120,052; 100,000 judged; 3 clauses broken at 1 call each |
+| Go types, `disk=none \| run` | `d2d8becb1f473bb2` | `d2d8becb1f473bb2` (twice) | 120,052; 100,000 judged; 5 clauses broken at 1 call each |
 
 The types programs (`hydo-types.yaml`, `hydo-types-go.yaml`) call each function once with values
 that break a clause, then with values that keep every clause. Each clause that the first round
 breaks broke at exactly that call, and every other clause held at all of its calls, so every
 read of every type gave the program's values. The two runs of each types image wrote the same
-records (`13ffdab5…` and `637df48a…`). Without a plan the Mac release's Redis example, built
+records (`bb73ac81…` and `3793a645…`). Without a plan the Mac release's Redis example, built
 with these programs, has its recorded bytes (`706c8b95…`) and gave its recorded fingerprints
 `a62eee5332a5b9d2`, `474b2874e7ef0fa2` and `2e5f02d8ff33394f`.
 
@@ -346,7 +367,28 @@ Neither this Mac nor the bare-metal machine may run KVM. The one-off workflow
 `tmp-contracts-kvm` (branch `tmp-contracts-kvm`) runs the same images on GitHub's runners. For
 each schedule it compares the run with the plan, the run without it, and the run under main's
 hydo, whose KVM engine has no contracts, and it runs the Redis example with this hydo and with
-main's. Its results are not in yet.
+main's.
+
+Its first run, 43697118540, ran on four runners, each an AMD EPYC 9V45:
+
+- The Redis example's four schedules gave main's fingerprints under this hydo.
+- The ledgers gave one fingerprint with the plan, without it and under main's hydo, and the
+  same records twice:
+
+  | Program, schedule | fp | Calls, broken |
+  |---|---|---|
+  | Rust, `disk=none \| run` | `d1338a9c6d551221` | 12, none |
+  | Rust, `disk=none \| run P=ledger@5+2` | `6020a9f74650f151` | 14, `ensures` at 2 calls |
+  | Go, `disk=none \| run` | `64b3b2b27807d132` | 12, none |
+  | Go, `disk=none \| run P=ledger@5+2` | `dd15c7175f89da0b` | 14, `ensures` at 2 calls |
+
+  The Rust ledger is position-independent on x86_64. The engine found it in 10 address spaces
+  in the run without faults (the server and the clients), each at another address.
+- The types programs failed. The Rust one had four functions with contracts, and the engine
+  refused its plan. The Go one recorded too few calls, because of the observer (above).
+
+The types programs now have two functions each, and the engine keeps the contracts' breakpoints
+while the observer works. The second run's results are not in yet.
 
 ## Next steps
 
