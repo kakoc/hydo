@@ -148,7 +148,8 @@ On one vCPU of the KVM or the Mac engine, `pct=<seed> pctn=<n> pctk=<exits>` put
 preemption points at seeded VM exits among the first `pctk` exits of the workload. At a point
 whose guest timer is armed, the guest's clock jumps to the timer's deadline, so the timer
 interrupt preempts the thread that runs there. A verdict can change between `pctn=39` and
-`pctn=40` (the Qdrant example `hydo/onboard/examples/qdrant-flaky-10200`). The first 39 points
+`pctn=40` (the Qdrant example `hydo/onboard/examples/qdrant-flaky-10200`, on its image built at
+the fingerprint epoch 2; at epoch 3 its failure needs a pause of the test's thread). The first 39 points
 of both schedules are the same, so the fortieth point decides. To see where each point fired, set
 `HYDO_PREEMPT_RECORD=1`:
 

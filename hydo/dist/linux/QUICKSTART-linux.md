@@ -164,7 +164,7 @@ This writes `hydo-out/explore-ob-redis-disk.img`, and next to it the steps of th
 and `hydo-agent`, plus a data partition. `hydo-agent` is a small program that is the guest's first
 process and only carries out what the host tells it. Every decision (when to start Redis, when to
 inject a fault, when to check the invariant) is made by `hydo` on the host, which also records it.
-Building the same `hydo.yaml` again gives the same bytes (sha256 `668bf8adfdc64b2a…`). The image names the guest kernel it was built for, by sha256, in
+Building the same `hydo.yaml` again gives the same bytes (sha256 `f3a152d62747c2b5…`). The image names the guest kernel it was built for, by sha256, in
 `/etc/hydo/image.json`. So a later hydo boots the same kernel, or says which one it needs. Next to
 the image, `explore-ob-redis-disk.img.json` records which hydo built it (version and commit) and
 the manifest's sha256.
@@ -212,7 +212,7 @@ hydo run "disk=cut | run C=12"
 ```
 
 It ends `OK` with `acked=12 all present` (`f8af29d45e9502f8`; with `--backend kvm`
-`ff4fb00ab4f76b6b`).
+`a78154adc5dcd1e5`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json`: `ok`, `violation`, or `error`.
@@ -318,8 +318,8 @@ hydo build hydo-netem.yaml
 hydo run --image hydo-out/explore-ob-redis-netem-disk.img "disk=none | run N=redis@3-6:delay,300ms"
 ```
 
-It ends `OK` with `retrans=0` (`dc095cf7124dd3ac`; on the KVM engine `45ff2e9ddab67aa5`; image
-sha256 `8a402198b0099369…`): no packet was sent twice. With two images in `hydo-out`, `hydo
+It ends `OK` with `retrans=0` (`dc095cf7124dd3ac`; on the KVM engine `9f0b93a2fbeb7d21`; image
+sha256 `2c6ec46ea62a5b8b…`): no packet was sent twice. With two images in `hydo-out`, `hydo
 run` and `hydo explore` need `--image` to know which one you mean.
 
 ## 5. Onboard your own project
@@ -385,7 +385,7 @@ hydo doctor --backend kvm
 cp -R ~/.hydo/examples/redis ~/hydo-redis && cd ~/hydo-redis
 hydo build hydo.yaml                           # the same image as in section 2
 hydo run --backend kvm --image hydo-out/explore-ob-redis-disk.img "disk=none | run"
-hydo run --backend kvm --image hydo-out/explore-ob-redis-disk.img "disk=cut | run C=12 R=everysec"
+hydo run --backend kvm --image hydo-out/explore-ob-redis-disk.img "disk=cut | run C=11 R=everysec"
 hydo explore --backend kvm --image hydo-out/explore-ob-redis-disk.img --seeds 1-20 --strategy swarm --workers 2
 hydo repro hydo-out/explore
 ```
@@ -397,7 +397,8 @@ the KVM engine by itself, so `--backend kvm` is needed only on a machine that ha
 
 `HYDO_BACKEND=kvm` selects it for every command instead of `--backend kvm`. The engine runs inside
 `hydo` (or as `bin/hydo-kvm` with `HYDO_KVM=process`) and boots its own build of the guest kernel,
-`guest/bzImage-kvm`, which takes all its time from the engine's clock. Runs are deterministic, with
+`guest/bzImage-kvm-cg`, which takes all its time from the engine's clock. An image built by a hydo
+before the fingerprint epoch 3 boots the build it was made for, `guest/bzImage-kvm`. Runs are deterministic, with
 the same verdicts as with hvx, but they are counted differently:
 
 - Guest time advances with the virtual machine's exits to the engine; there is no PMU branch
@@ -405,7 +406,7 @@ the same verdicts as with hvx, but they are counted differently:
 - A guest has one virtual CPU, or 2 to 8 with `--vcpus N` (`hydo run --backend kvm --vcpus 2
   …`). Several vCPUs take turns: one vCPU runs until it has made a fixed number of VM exits,
   then the next one runs. They boot the kernel's build for several CPUs,
-  `guest/bzImage-kvm-smp` (`hydo guide flaky-tests`). The vCPUs run at the x86-64-v2 level (the
+  `guest/bzImage-kvm-smp-cg` (`hydo guide flaky-tests`). The vCPUs run at the x86-64-v2 level (the
   x86_64 instruction set with SSE4.2 and POPCNT, no AVX), or with `guest.cpu: v3` at x86-64-v3
   (AVX2) on a host that has it.
 - The fingerprints are this engine's own. `hydo repro` of an hvx run with `--backend kvm` (or the
@@ -413,22 +414,19 @@ the same verdicts as with hvx, but they are counted differently:
 
 A host power cut at the k-th disk flush (`cf=`) and inserted ticks (`pp=`, `xt…`) are hvx's
 alone; the explorer draws the faults both engines apply. With the image of section 2, the two
-schedules end `OK` (`b04d1932dfb20e09`) and `VIOLATION … key k:1 lost` (`1b61c2c7501a6f25`).
-These values come from an Intel Core i7-13700HX. Its performance cores and its efficiency cores
-give the same values. On Intel a KVM fingerprint holds for one CPU model: a Xeon Platinum 8370C
-and a Xeon 6975P-C each gave the same verdicts with fingerprints of their own. The AMD EPYC
-models measured (7763, 9V45, 9V74) gave one set of fingerprints among them, other than Intel's,
-with the same verdicts.
+schedules end `OK` (`fb237d7eebbf8b83`) and `VIOLATION … key k:1 lost` (`6a76d87a7dd2d6f2`).
+The power cut comes before step 11 here, not before step 12 as in section 2. The guest's timing
+differs between the engines, and on KVM Redis has synced every acknowledged write when the cut
+before step 12 comes, so that run ends `OK` with `acked=12 all present`. The values come from
+AMD EPYC CPUs (the 7763, 9V45 and 9V74 give the same values). Intel CPUs give the same verdicts
+with fingerprints of their own.
 
-On the Intel machine the exploration finds 11 failures, and its report gives three minimal
-schedules:
+The exploration finds 8 failures, and its report gives two minimal schedules:
 
 - `disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20` (`lying-disk`, a lost key);
-- `disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`unsafe-knob`);
-- `disk=lying:6 dseed=b3c3d806a5d34604 | run C=5` (`lying-disk`: the data disk cannot be
-  mounted after the cut, `Data consistency error`).
+- `disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`unsafe-knob`).
 
-`hydo repro hydo-out/explore` ends `hydo: 14 of 14 reproduced with the recorded fingerprint`.
+`hydo repro hydo-out/explore` ends `hydo: 10 of 10 reproduced with the recorded fingerprint`.
 `hydo repro` of a run or an exploration uses the engine that recorded it, so it needs no
 `--backend`.
 

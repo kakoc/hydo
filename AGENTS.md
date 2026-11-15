@@ -261,12 +261,13 @@ dry-runs the packages on every pull request that changes one. The details are in
 `docs/PUBLISHING.md`, section "Publishing from GitHub Actions" (M186).
 
 **Fingerprints.** The fingerprint epoch is 3 (M234; 2 from M204, 1 from M155). An image built at
-epoch 3 boots the Mac and KVM guest kernels with cgroups; its values wait for the next
-re-recording pass (open item 105). The pinned reproducers are
+epoch 3 boots the Mac and KVM guest kernels with cgroups. M244 re-recorded every value of the
+list at epoch 3. The pinned reproducers are
 `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` under `hydo run`: `a76d7fe857fdb37c`
 (VIOLATION, order 11) on `explore-ob-stack-old-disk.img` (`dab0e76c…`) and `efbde7b57264be0f`
 (OK) on `explore-ob-stack-fix-disk.img` (`d61cbf00…`), in `~/hydo/build/m204` on the bare-metal
-machine. Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
+machine. Their epoch-3 images (`b498b9c8…` and `c8fc9b42…`, in `~/hydo/build/m244`) give the same
+two values on hvx; on KVM they give `58cee6328470c677` and `8e53b18f9885e12f` (AMD). Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
 `ba0aa0612502a1df` under this hydo, because an image keeps the defaults of its own epoch
 (`hydo_image::defaults`). `hydo/onboard/examples/stack/build-reproducers.sh` rebuilds both
 images. Every recorded example value is in `hydo/onboard/recorded.json`, and `hydo-bench
@@ -298,7 +299,8 @@ x86-64-v2 level, or at x86-64-v3 for `guest.cpu: v3` on a host whose KVM has AVX
 Its fingerprints are its own. They differ between CPU vendors, because the guest's FXSAVE writes
 other bytes into its RAM on AMD. On Intel they differed between CPU models only in DR6's host
 bits, which leave the fingerprint of an image built at epoch 3 or later (M252). The AMD EPYC
-7763, 9V45, and 9V74 agree. The verdicts are the same. Details:
+7763, 9V45, and 9V74 agree, and the recorded KVM values are theirs since M244. The verdicts are
+the same. Details:
 `docs/design/kvm-engine.md`, Milestones 159, 161, 175 and 189, and open item 45 in
 `docs/HISTORY.md` Milestone 187. Some guest loops make no VM exits and store to memory, for
 example TigerBeetle's polling of io_uring. The full-state cycles prove such a loop by the whole
@@ -1102,18 +1104,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
     milestone and the values it moves; the pass removes the lines.
-    - M234 (the fingerprint epoch 3): every image of `hydo/onboard/recorded.json` gets new bytes
-      on all three platforms, because its record says epoch 3. So every recorded run's
-      fingerprint moves. The list has 21 images and 76 runs for hvm, 6 and 17 for kvm, and 43
-      and 141 for hvx. Set the list's `epoch` to 3 in the pass. On the Mac and KVM the images
-      also boot the kernels with cgroups. One verdict changes on KVM with one vCPU: the release
-      Redis example's `disk=cut | run C=12 R=everysec` gives OK at epoch 3 on four hosts. It was
-      VIOLATION at epoch 2, and stays VIOLATION with two vCPUs and on the Mac. The Linux
-      quickstart shows it as a lost write, so decide in the pass whether to accept the verdict or
-      show another schedule there. The pinned reproducers' images in `~/hydo/build/m204` stay at
-      epoch 2 and keep their values.
-    - M252: KVM fingerprints of epoch-3 images leave out DR6's host bits. Record the epoch-3 KVM
-      values with a hydo that has M252, so that they hold on every Intel model.
+    None are waiting. Milestone 244 re-recorded the whole list at the fingerprint epoch 3.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -1704,6 +1695,10 @@ build machine, before 2026-10-13.
   finished runs run again. Reproduced with Docker, no upstream report found. A cancelled run that
   becomes `COMPLETED` (issue #2655) and a scheduled run that runs twice (issue #4129) are known.
   Nothing recorded moved
+- M244 (tentative number): the epoch-3 re-recording. Every value of `recorded.json` is
+  re-recorded at epoch 3 on hvx, the Mac and KVM (AMD hosts); on hvx only the image bytes moved.
+  Two KVM verdicts changed: the quickstart's lost write is `C=11 R=everysec` on KVM now, and
+  Qdrant's KVM failure is a pause of the test's thread. Open item 105 is empty
 
 ## Where to look
 

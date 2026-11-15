@@ -214,7 +214,7 @@ hydo run "disk=none | run"
 hydo run "disk=none | run"
 ```
 
-On the Mac engine both runs printed `fp=289a5741a82716d8` and the verdict `OK`. `hydo report`
+On the Mac engine both runs printed `fp=a21e470b7ea6eb08` and the verdict `OK`. `hydo report`
 with the run directory shows each claim and how many cases it judged:
 
 ```text
@@ -248,7 +248,7 @@ which order, so that a replay runs the same ones. Copy it as it is.
 
 ```text
 - minimal schedule: `disk=cut dseed=362259904816818c | run C=10 S=never W=:p1,r50,cparallel_driver_produce,1.1.0.1802048978`
-- verdict: `HYDO-ORACLE: VIOLATION [queue.no-loss] m1 was acknowledged to process 1 at 0.116 s and never delivered in channel orders, which was drained`
+- verdict: `HYDO-ORACLE: VIOLATION [queue.no-loss] m1 was acknowledged to process 1 at 0.119 s and never delivered in channel orders, which was drained`
 ```
 
 ### Reading the result

@@ -125,6 +125,12 @@ same bytes on the bare-metal machine and on the build machine:
 
 ### On the KVM engine: one vCPU, forced preemption points
 
+This section describes images built at the fingerprint epoch 2. At epoch 3 the KVM engine boots a
+guest kernel with cgroups, and the guest's timing changes: the `pctn=40` schedule below passes,
+and so does every `pctn=` from 20 to 70 with its seed (Milestone 244, on six hosts). At epoch 3
+the failing KVM schedule is a pause of the test's thread, in the section "On the KVM engine: a
+pause of the test's thread" below.
+
 The KVM engine runs one vCPU. Its clock counts the VM exits that reach the engine. Without timing
 tokens the worker takes 17 of the 35 operations before the test reads the length
 (`length: 18, op_num: Some(481)`), so the window is real on one CPU. The test passes.
@@ -281,6 +287,18 @@ workload's start at 3.08 s. Of the 81 starts from 209 to 289 ms only 239 ms fail
 host. `P=workload/tests::wal_reco@0~239:500` failed twice with one fingerprint per CPU model
 (`517beb2033fd7b73` on both AMD models, `ba0774908428fd3e` on the 8370C, `54f19a65de224f96` on the
 6975P-C). The fixed test passed with that pause, and so did a pause of the whole workload.
+
+The re-recording at epoch 3 (Milestone 244) put this pause into `hydo/onboard/recorded.json` in
+place of the `pctn=` pair. With the images of `hydo-bench rebaseline` it gave the same result on
+six hosts (AMD EPYC 9V74 and 7763, Intel Xeon 6973P-C, 6975P-C and Platinum 8573C): the start at
+239 ms failed with `length: 0, op_num: Some(500)` (`517beb2033fd7b73` on AMD), every other start
+from 225 to 255 ms passed (238 ms: `length: 11`, `4bb4aaa58a2b4f8c`), and the fixed test passed
+with the pause at 239 ms (`cfc7ba6a4d360a36`). To run the failing schedule at epoch 3:
+
+```sh
+hydo build hydo.yaml
+hydo run --backend kvm "disk=none | run P=workload/tests::wal_reco@0~239:500"
+```
 
 With two vCPUs no start from 390 to 460 ms failed the test: 50 passed, and 21 (390 to 410 ms)
 ended in ERROR with the queue already full (`length: 35`). A wider window was not searched.

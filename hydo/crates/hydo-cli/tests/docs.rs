@@ -276,9 +276,9 @@ const CITED_ELSEWHERE: &[(&str, &str)] = &[
         "ctl of the Redis power cut; docs/HISTORY.md, Milestone 204",
     ),
     (
-        "289a5741a82716d8",
-        "fp of the messages tutorial's clean run on the Mac engine, twice, after 0.3.3 renamed its \
-         setting (docs/ONBOARD.md; docs/HISTORY.md, the 0.3.3 release)",
+        "a21e470b7ea6eb08",
+        "fp of the messages tutorial's clean run on the Mac engine, twice, at the fingerprint \
+         epoch 3 (docs/ONBOARD.md; docs/HISTORY.md, Milestone 244)",
     ),
     (
         "362259904816818c",

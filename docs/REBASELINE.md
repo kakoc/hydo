@@ -3513,3 +3513,32 @@ their values `a76d7fe857fdb37c` and `efbde7b57264be0f`: this hydo boots them as 
 bits 11 and 16 set, so that Intel CPU models give one value (AGENTS.md open item 102). An image
 built before keeps the host's bits. Record the epoch-3 KVM values with a hydo that has
 Milestone 252.
+
+**The re-recording pass (M244).** `hydo-bench rebaseline --write --thorough` re-recorded the list
+on the three engines (docs/HISTORY.md "Milestone 244"); its `epoch` is 3. Every image was built
+twice with the same bytes, and every run gave the same values twice from fresh boots.
+
+- hvx (the bare-metal machine): all 43 images have new bytes, and none of the 141 runs moved: the
+  same fingerprints, ctl values and verdicts as at epoch 2. hvx boots the same kernel at every
+  epoch, and the image record's new bytes do not reach what a fingerprint covers.
+- The Mac (`hvm`): all 21 images and all 76 runs moved, every ctl value included, because the
+  kernels with cgroups change the guest's timing. No verdict class changed.
+- KVM: the values come from AMD EPYC hosts on GitHub's runners (the 9V45, 9V74 and 7763 agree),
+  no longer from the build machine's Intel Core i7-13700HX. All 6 images and every run moved.
+  Intel hosts give other fingerprints with the same verdicts and ctl values, and the list does
+  not record them.
+
+Two KVM verdicts changed, and each got a new schedule, as section 20 did at epoch 2:
+
+- `kvm/release-redis` `disk=cut | run C=12 R=everysec` passes at epoch 3. `disk=cut | run C=11
+  R=everysec` replaces it (VIOLATION `key k:1 lost`, `6a76d87a7dd2d6f2`, on six hosts). The
+  Linux quickstart's KVM section shows it.
+- `kvm/qdrant-flaky-buggy` with `pctn=40` passes at epoch 3, as does every `pctn=` from 20 to 70
+  with its seed. The KVM Qdrant entries are now a pause of the test's thread,
+  `P=workload/tests::wal_reco@0~239:500` (VIOLATION, `517beb2033fd7b73`), its neighbour at 238 ms
+  (OK) and the fixed test with the pause (OK).
+
+The KVM exploration of the Redis example now gives two minimal schedules, and both are in the
+list: `disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20` and `disk=cut dseed=1f16055b6d41c6d9 |
+run C=9 R=no`. The pinned reproducers' epoch-3 images (`b498b9c8…` and `c8fc9b42…`, in
+`~/hydo/build/m244`) give the epoch-2 values `a76d7fe857fdb37c` and `efbde7b57264be0f` on hvx.
