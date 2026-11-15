@@ -181,6 +181,20 @@ thread. With `HVM_SPIN_SECS=120` the loop still ran after 10 minutes. With k3s's
 the two-leaders finding of `T=2:30` could not be repeated on the Mac engine. This is open item
 13 of AGENTS.md, a limit of the engine, not of the kernel.
 
-On KVM the one-off workflow `tmp-k3s-kvm` builds the two KVM kernels in a sandboxed Nix and runs
-the probe and `containers/hydo.yaml` with 1 and 2 vCPUs. Its results are in `docs/HISTORY.md`
-Milestone 256.
+On KVM, GitHub's runners ran the one-off workflow `tmp-k3s-kvm` (run 43698484545) with the amd64
+k3s, whose files unpack to the hash `342d21a06834327c…` as for hvx:
+
+| host | vCPUs | image | runs | fingerprint | verdict |
+|---|---|---|---|---|---|
+| Xeon 6975P-C, Xeon Platinum 8370C | 1 | `probe.yaml` | 2 each | `490a7a6c2ad8c861` | OK: 16 of 16 checks |
+| Xeon 6975P-C | 2 | `probe.yaml` | 2 | `d45ed401275c075c` | OK: 16 of 16 checks |
+| AMD EPYC 9V74 | 2 | `probe.yaml` | 2 | `6035b2f3d8f130c1` | OK: 16 of 16 checks |
+| Xeon 6975P-C, Xeon Platinum 8370C | 1 | `containers/hydo.yaml` | 9 each | `473f8c50652edfd6` | `ERROR service start (k3s)` |
+| Xeon 6975P-C, AMD EPYC 9V74 | 2 | `containers/hydo.yaml` | 1 each | none | `ERROR boot: SPIN` at VM exit 143,533 |
+
+With 1 vCPU every schedule ended the same way, also `T=1:30` to `T=6:30` and `Z=4`: k3s exits
+with `failed to find cpuset cgroup (v2)`. The one-vCPU KVM kernel has no cpuset controller,
+because that controller needs SMP. With 2 vCPUs the boot stopped in the loop of the Mac engine:
+the kicks hit the channel locks of `select` (`runtime.lock2`, `runtime.selunlock`).
+`docs/design/k3s-in-guest.md` explains the loop. So the two-leaders finding was not repeated on
+KVM either.

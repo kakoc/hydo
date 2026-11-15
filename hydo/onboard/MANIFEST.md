@@ -1131,9 +1131,10 @@ The key is opt-in: an image without it gets the same bytes and fingerprints as b
 fingerprint epoch does not change. An image with it has other bytes (its record names the
 variant) and its own fingerprints. The variant has no pressure accounting (`CONFIG_PSI`), whose
 averages a timer updates. The example `hydo/onboard/examples/k3s-lease/containers` has the key,
-and its `probe.yaml` checks these options with runc, iptables and ipset. On the Mac engine k3s
-itself stops with `ERROR boot: SPIN`, in a loop without VM exits that the engine cannot
-interrupt. The measurements are in `hydo/onboard/examples/k3s-lease/RESULTS.md`.
+and its `probe.yaml` checks these options with runc, iptables and ipset. On the Mac and KVM
+engines k3s itself stops with `ERROR boot: SPIN`, in a loop without VM exits that the engines
+cannot interrupt. On KVM with one vCPU it stops earlier, because k3s needs the cpuset
+controller. The measurements are in `hydo/onboard/examples/k3s-lease/RESULTS.md`.
 
 ### Link faults (a network fault between two named services)
 

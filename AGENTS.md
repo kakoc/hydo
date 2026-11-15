@@ -608,8 +608,9 @@ engine's `Image-explore-containers` and the KVM engine's `bzImage-kvm-containers
 `bzImage-kvm-smp-containers`. The image's record names the variant (`kernel_variant`), and an
 image without the key keeps its bytes, so nothing recorded moves and the epoch stays 3. On hvx
 the key changes nothing: its kernel has the options, the network ones as modules. On the Mac
-engine runc runs a container with memory and pids limits, and NAT, conntrack, and ipsets work.
-k3s's boot stops there with `SPIN`, in a loop without VM exits (open item 13). The example is
+and KVM engines runc runs a container with memory and pids limits, and NAT, conntrack, and ipsets
+work. k3s does not start there: kine loops without VM exits, which an exit clock cannot interrupt
+(open items 13 and 119). The example is
 `hydo/onboard/examples/k3s-lease/containers`; `docs/design/k3s-in-guest.md` (open item 119).
 
 **Ready-made emulators of outside services (M242).** One `emulators:` line gives a project Stripe
@@ -1221,13 +1222,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     The example ran on the Mac engine only. It did not run on hvx or on KVM. The changed
     `hydo-world` (`errors:`, `{uuid}`) reaches a release at its next re-pin.
 119. Kubernetes in the guest (M246, M256). k3s runs on hvx only. What is left:
-    - The kernel variant `guest.kernel: containers` is built (M256). On the Mac engine k3s's boot
-      stops with `SPIN`: a thread of k3s loops in `runtime.selectgo` from kine's watcher without
-      VM exits, and the engine cannot interrupt it (open item 13). With embedded etcd it stops in
-      another such loop. On the Mac engine runc needs `--no-pivot`, because the root is the
-      initramfs; containerd would need its `no_pivot` option.
-    - KVM: the one-off workflow `tmp-k3s-kvm` builds the KVM kernels in a sandboxed Nix and runs
-      the example. Until it runs, the KVM pins are the bare-metal machine's first build.
+    - The kernel variant `guest.kernel: containers` is built (M256), and its probe passes on the
+      Mac engine and on KVM. k3s does not start on either. After the API server cancels a watch,
+      kine's watch goroutine loops on a closed channel until another goroutine runs. The loop
+      makes no VM exits, so the exit clock gives no timer interrupt. `select`'s random order
+      changes memory in every pass, so no spin observer proves it (open item 13). The fix is an
+      interrupt inside such a loop at a point that does not depend on the host. With embedded
+      etcd the Mac boot stops in another such loop.
+    - On KVM with one vCPU k3s refuses to start without the cpuset controller, which needs an
+      SMP kernel. The engine boots the SMP kernel only with `--vcpus 2` or more.
+    - On the Mac engine runc needs `--no-pivot`, because the root is the initramfs; containerd
+      would need its `no_pivot` option.
     - hydo has no `guest.modules:`: the example stages the modules with `root.files:` from the
       nixpkgs store path, and the Linux release ships 14 of the 57.
     - hydo's faults name services, and k3s is the only service. A kill of one pod is the
@@ -1801,8 +1806,8 @@ build machine, before 2026-10-13.
 - M256 (tentative number): the guest kernel for containers, `guest.kernel: containers`, an opt-in
   variant named in the image record (`kernel_variant`): `Image-explore-containers`,
   `bzImage-kvm-containers` and `bzImage-kvm-smp-containers`, each built twice. On the Mac engine
-  a probe runs runc, overlayfs, NAT, conntrack and ipsets, but k3s stops with `SPIN` (open item
-  13). Nothing recorded moved
+  and on KVM a probe runs runc, overlayfs, NAT, conntrack, and ipsets. k3s does not start: kine
+  loops without VM exits (open items 13 and 119). Nothing recorded moved
 
 ## Where to look
 

@@ -706,9 +706,10 @@ Proof: the store paths are `2y6n4034…-hydo-kvm-guest-kernel-containers-6.6.35`
 `4v121077…-hydo-kvm-guest-kernel-smp-containers-6.6.35`. The bare-metal machine's single-user
 Nix, outside a sandbox, built them first. A `nix-build --check` there gave the same `vmlinux` and
 `.config` but another `bzImage` for each (`f772e981…` and `61a6a97c…`), as Milestones 159 and
-234 saw outside the sandbox. The pins are therefore the first builds, and the one-off workflow
-`tmp-k3s-kvm` checks them with a sandboxed Nix on a GitHub runner, `nix-build` and then
-`nix-build --check`. The RDTSC audit of each `vmlinux` lists the same
+234 saw outside the sandbox. A GitHub runner (an Intel Xeon Platinum 8370C) with a multi-user
+Nix 2.18.9, which builds in a sandbox, built each with `nix-build` and then `nix-build --check`:
+the same store paths and the bytes of the pins (run 43698484545, the one-off workflow
+`tmp-k3s-kvm`). The RDTSC audit of each `vmlinux` lists the same
 10 sites as `bzImage-kvm-cg`'s. The sha256 values are in `hydo/crates/hydo-kvm/src/kernel.rs`
 (`KERNEL_CONTAINERS`, `KERNEL_SMP_CONTAINERS`), `hydo/crates/hydo-image/src/kernels.rs`
 (`ARM64_KERNEL_CONTAINERS`) and both releases' `assets.sha256`. In a tree, put the Mac kernel in

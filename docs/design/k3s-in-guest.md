@@ -5,9 +5,9 @@ hvx with no change to hydo, to the hvx module, or to the guest kernel. The examp
 `hydo/onboard/examples/k3s-lease`, and its measurements are in its `RESULTS.md`.
 
 Milestone 256 (tentative number), 2026-11-15, built the kernel variant of the section "The Mac
-and KVM engines" below: `guest.kernel: containers`. With it, containers run on the Mac engine.
-k3s itself does not start there: a loop of k3s's makes no VM exits, and the Mac engine cannot
-interrupt such a loop (section "The variant, as built").
+and KVM engines" below: `guest.kernel: containers`. With it, containers run on the Mac engine and
+on KVM. k3s itself does not start there: a loop of k3s's makes no VM exits, and an engine whose
+clock counts VM exits cannot interrupt it (section "The variant, as built").
 
 ## The question
 
@@ -112,8 +112,8 @@ its own list names, and appends that list (`hv/hvm/explore/hvm-containers.config
 `hv/kvm/linux/hydo-kvm-containers.config`). The lists hold every `y` option of the first table,
 and `CONFIG_DUMMY`, `CONFIG_NF_CT_NETLINK`, and the nftables options. Every option is built in.
 Pressure accounting (`CONFIG_PSI`) stays off. The KVM engine's one-vCPU kernel has no cpuset
-controller, because that controller needs SMP; the kubelet uses only the controllers that the
-kernel has. `docs/BUILD-PINS.md` "The guest kernels for containers" has the pins and how each
+controller, because that controller needs SMP. runc and containerd run without it, but k3s
+refuses to start: `failed to find cpuset cgroup (v2)`. `docs/BUILD-PINS.md` "The guest kernels for containers" has the pins and how each
 kernel was built twice.
 
 On hvx the key changes nothing. hvx's guest kernel has all these options, so it needs no variant,
@@ -150,10 +150,30 @@ observer cannot prove it a cycle. With `HVM_SPIN_SECS=120` the run was still in 
 10 minutes. With k3s's embedded etcd (`--cluster-init`) the boot reached 119.5 s of guest time
 and stopped in another such loop. On hvx the PMU clock interrupts such loops, so k3s runs there.
 
-**k3s on KVM.** The one-off workflow `tmp-k3s-kvm` builds the two KVM kernels in a sandboxed
-Nix on a GitHub runner and runs the probe and k3s on KVM with 1 and 2 vCPUs. The KVM engine's
-clock also counts VM exits, so k3s's loop can stop the boot there too. `docs/HISTORY.md`
-Milestone 256 has the results.
+**k3s on KVM.** The one-off workflow `tmp-k3s-kvm` ran on GitHub's runners (run 43698484545):
+two Intel models and an AMD EPYC 9V74. The probe passed all 16 checks on every host. Each host
+and vCPU count gave one fingerprint. k3s did not start:
+
+- With 1 vCPU, k3s exits at 35 s of guest time with `failed to find cpuset cgroup (v2)`, the
+  same on two Intel models (`ERROR service start (k3s)`, fingerprint `473f8c50652edfd6`).
+- With 2 vCPUs, the boot reaches 94 s of guest time on AMD and 164 s on Intel, and stops with
+  `ERROR boot: SPIN` at VM exit 143,533 on both. The two kicks hit `runtime.lock2` and
+  `runtime.selunlock`, the channel locks of `select`.
+
+**Why the loop never ends.** When the API server cancels a watch, kine's `removeWatch` closes
+the watch's progress channel and cancels its context. The watch's goroutine then loops on
+`select`: the closed channel answers at once with revision 0, which sends nothing. It ends only
+when another goroutine of kine's backend sees the cancelled context and closes the event
+channel. On a host the scheduler soon runs that goroutine. Here the looping thread makes no VM
+exits, so the guest gets no timer interrupt, its kernel never preempts the thread, and the
+goroutine that ends the loop never runs. With 2 vCPUs the other vCPU does not run either: a
+vCPU's turn ends after a number of counted exits, and this vCPU makes none.
+
+The engines' spin observers cannot resolve the loop. `select` draws a random case order in every
+pass, so the Go runtime's random state in memory changes every pass. The machine never returns
+to a state it was in, so the full-state cycles of Milestone 194 prove nothing. The counter
+loops of the rewind mode need memory that a pass does not change. hvx is not affected: its PMU
+branch clock delivers the timer interrupt inside such a loop.
 
 
 
@@ -248,8 +268,10 @@ The results, on hvx with one vCPU (the example's `RESULTS.md` has every fingerpr
 
 ## What is left
 
-- k3s on the Mac engine: a loop without VM exits stops its boot (open item 13). The kernel
-  variant is built; the engine needs a deterministic way to interrupt such a loop.
+- k3s on the Mac and KVM engines: kine's loop without VM exits stops the boot (open items 13
+  and 119). The engines need an interrupt inside a loop that changes memory in every pass, at a
+  point that does not depend on the host, as hvx's PMU branch clock gives. On KVM with one vCPU,
+  k3s also needs the cpuset controller, which needs an SMP kernel.
 - `guest.modules:` in hydo, so that a project names modules and the release supplies them.
 - Faults on pods by name. hydo's faults name services, and here the only service is k3s. A
   kill of one pod is a knob of the example's own workload.

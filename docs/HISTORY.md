@@ -11164,7 +11164,8 @@ recorded moved.
 `hydo-manifest`, `hydo-build`, `hydo`, `hydo-config` (inventory), `hydo-agents`
 (`public_content::`, `skill_check::`), `hydo-release` (`test_tiers::`) and
 `hydo-schema-compat`; `sh ci/consolidate-tests.sh --check`; `sh ci/vale.sh`.
-### Milestone 256 (tentative number) - PARTLY DONE (the guest kernel for containers: `guest.kernel: containers`, an opt-in format-1 key named in the image record as `kernel_variant`, gives the Mac engine `Image-explore-containers` and the KVM engine `bzImage-kvm-containers` and `bzImage-kvm-smp-containers`, each built twice; on the Mac engine runc, overlayfs, NAT, conntrack and ipsets work in the guest, but k3s's boot stops with SPIN in a loop without VM exits (open item 13), so the two-leaders finding was not repeated there; KVM runs in the one-off workflow `tmp-k3s-kvm`; nothing recorded moved, and the epoch stays 3; 2026-11-15)
+
+### Milestone 256 (tentative number) - PARTLY DONE (the guest kernel for containers: `guest.kernel: containers`, an opt-in format-1 key named in the image record as `kernel_variant`, gives the Mac engine `Image-explore-containers` and the KVM engine `bzImage-kvm-containers` and `bzImage-kvm-smp-containers`, each built twice to the same bytes, the KVM ones in a sandboxed Nix too; on the Mac engine and on KVM runc, overlayfs, NAT, conntrack and ipsets work in the guest, but k3s does not start: kine loops without VM exits, which an exit clock cannot interrupt (open item 13), and on KVM with one vCPU k3s needs the cpuset controller; so the two-leaders finding was not repeated there; nothing recorded moved, and the epoch stays 3; 2026-11-15)
 
 **Why.** Milestone 246 ran k3s on hvx, whose distribution kernel has every option k3s needs. The
 Mac and KVM engines boot small kernels built from `allnoconfig` and a short list. They lack the
@@ -11202,12 +11203,14 @@ was checked in the result. On the bare-metal machine:
 | kernel | built | sha256 |
 |---|---|---|
 | `Image-explore-containers` | twice, two directories, the same bytes | `b6211b80d1faa0e4542b244d5f481998a38add8f24fe713938128f3e9728e86a` |
-| `bzImage-kvm-containers` | `nix-build` (no sandbox) | `0c9c1c9531eda025e096c60530055a556a7f25754376c260b17482066808f4fe` |
-| `bzImage-kvm-smp-containers` | `nix-build` (no sandbox) | `6f85c1c5efc381afbbdf8845d44603258223e7dfdec9260ce5bf4956f271250c` |
+| `bzImage-kvm-containers` | without a sandbox, then twice in a sandbox on a runner | `0c9c1c9531eda025e096c60530055a556a7f25754376c260b17482066808f4fe` |
+| `bzImage-kvm-smp-containers` | without a sandbox, then twice in a sandbox on a runner | `6f85c1c5efc381afbbdf8845d44603258223e7dfdec9260ce5bf4956f271250c` |
 
-The `nix-build --check` of each KVM kernel gave the same `vmlinux` and `.config` and another
-`bzImage`, as Milestones 159 and 234 saw outside Nix's sandbox. The one-off workflow
-`tmp-k3s-kvm` builds both in a sandboxed Nix twice and compares them with these pins. The RDTSC
+On the bare-metal machine a `nix-build --check` of each KVM kernel gave the same `vmlinux` and
+`.config` and another `bzImage`, as Milestones 159 and 234 saw outside Nix's sandbox. A GitHub
+runner (Xeon Platinum 8370C, multi-user Nix 2.18.9) built both with `nix-build` and `nix-build
+--check` in its sandbox: the same store paths (`2y6n4034…`, `4v121077…`) and the bytes of the
+pins (run 43698484545). The RDTSC
 audit of each `vmlinux` lists the same 10 sites as `bzImage-kvm-cg`'s. k3s's `check-config` on
 the three `.config` files reports only options for cgroup v1, IPVS, the IPsec of flannel's
 encrypted backends, and `CONFIG_IP_NF_TARGET_REDIRECT`, whose target the lists have under its
@@ -11240,6 +11243,44 @@ runs. The loop's state changes in every pass (`select` draws a random order), so
 observer cannot prove a cycle. With `HVM_SPIN_SECS=120` the run was still in the loop after 10
 minutes. With k3s's embedded etcd (`--cluster-init`) the boot reached 119.5 s of guest time and
 stopped in another such loop. This is open item 13. On hvx the PMU clock interrupts such loops.
+
+**KVM.** The one-off workflow `tmp-k3s-kvm` (commit `e596415b` on its own branch; run
+43698484545) used the 0.3.3 Linux release's guest files, this tree's `hydo`, the sandboxed
+kernels, and four jobs: two hosts, 1 and 2 vCPUs.
+
+| host | vCPUs | image | runs | fingerprint | verdict |
+|---|---|---|---|---|---|
+| Xeon 6975P-C, Xeon Platinum 8370C | 1 | `probe.yaml` | 2 each | `490a7a6c2ad8c861` | OK, 16 of 16 checks |
+| Xeon 6975P-C | 2 | `probe.yaml` | 2 | `d45ed401275c075c` | OK, 16 of 16 checks |
+| AMD EPYC 9V74 | 2 | `probe.yaml` | 2 | `6035b2f3d8f130c1` | OK, 16 of 16 checks |
+| Xeon 6975P-C, Xeon Platinum 8370C | 1 | `containers/hydo.yaml` | 9 each | `473f8c50652edfd6` | `ERROR service start (k3s)` |
+| Xeon 6975P-C, AMD EPYC 9V74 | 2 | `containers/hydo.yaml` | 1 each | none | `ERROR boot: SPIN` at VM exit 143,533 |
+
+- With 1 vCPU, k3s exits at 35 s of guest time with `failed to find cpuset cgroup (v2)`. The
+  one-vCPU kernel has no cpuset controller, because `CONFIG_CPUSETS` needs `CONFIG_SMP`, and the
+  KVM engine's one-vCPU machine has no APIC for an SMP kernel. Every schedule gave this result,
+  also `T=1:30` to `T=6:30` and `Z=4`.
+- With 2 vCPUs, the boot reached 94 s of guest time on AMD and 164 s on Intel and stopped at the
+  same VM exit on both. The kicks were at `0x7dfa0d8` and `0x7db0937`, which the amd64 k3s's
+  symbol table names `runtime.selunlock` and `runtime.lock2`: the channel locks of `select`.
+  The run again in the rewind mode stopped there too.
+
+**Why the loop never ends.** kine v0.17.1's `removeWatch` (`pkg/server/watch.go`) closes a
+watch's progress channel and cancels its context. The watch's goroutine then loops on `select`:
+the closed channel answers at once with revision 0, which sends nothing. The loop ends only when
+another goroutine of kine's backend closes the event channel. That goroutine needs the CPU. The
+looping thread makes no VM exits, so the engines' exit clock gives no timer interrupt, and the
+guest kernel never preempts the thread. With 2 vCPUs on KVM the other vCPU's turn never comes
+either, because a turn ends after counted exits. The spin observers cannot resolve the loop:
+`select` draws a random case order in every pass, so the Go runtime's random state in memory
+changes in every pass. The machine state never repeats, so M194's full-state cycles prove
+nothing, and the rewind mode's counter loops need a pass that leaves memory unchanged. hvx's PMU
+branch clock interrupts such a loop, so k3s runs on hvx.
+
+**What was not fixed, and why.** An SMP kernel on KVM's one-vCPU machine would give k3s its
+cpuset controller, but the boot would then stop in kine's loop, as with 2 vCPUs. The loop needs
+an interrupt at a point that does not depend on the host, which the exit clock cannot give. Both
+stay in open item 119. No second KVM run was made: it could only repeat these results.
 
 **Nothing recorded moved.** On the Mac, `hydo-bench rebaseline --check --build-only --only
 hvm/redis,hvm/redis-bridge,hvm/ledger` built the three images with the recorded bytes
