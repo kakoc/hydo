@@ -4,7 +4,8 @@
 //
 //   cc -O2 -Wall -o pmuprobe pmuprobe.c
 //   pmuprobe <test> <cpu> <pmu type> <raw config> [args]
-//   tests: exact N reps | skid T reps | step T margin reps | exits reps with(0|1) | kernel
+//   tests: exact N reps | skid T reps | step T margin reps | exits reps with(0|1) | kernel |
+//          info | readcost reps
 //
 // <pmu type> is /sys/bus/event_source/devices/<pmu>/type (cpu, or cpu_core and cpu_atom on a
 // hybrid Intel CPU), <raw config> the event: Intel's conditional branches retired, 0x11c4 on a
@@ -145,6 +146,48 @@ int main(int argc, char **argv) {
     a.exclude_hv = 1;
     int fd = syscall(SYS_perf_event_open, &a, 0, -1, -1, 0);
     printf("guest kernel+user counting: %s\n", fd < 0 ? strerror(errno) : "allowed");
+    return 0;
+  }
+  if (!strcmp(test, "info")) { // what KVM offers a guest PMU, and can the event be opened here?
+    int k = open("/dev/kvm", O_RDWR | O_CLOEXEC);
+    if (k < 0) die("/dev/kvm");
+    struct {
+      struct kvm_cpuid2 h;
+      struct kvm_cpuid_entry2 e[256];
+    } c = {.h.nent = 256};
+    if (ioctl(k, KVM_GET_SUPPORTED_CPUID, &c) < 0) die("supported cpuid");
+    for (unsigned i = 0; i < c.h.nent; i++) {
+      struct kvm_cpuid_entry2 *e = &c.e[i];
+      if (e->function == 0xa || e->function == 0x80000022 || e->function == 0x80000001)
+        printf("kvm cpuid %#x.%u: eax=%#x ebx=%#x ecx=%#x edx=%#x\n", e->function, e->index, e->eax, e->ebx,
+               e->ecx, e->edx);
+    }
+#ifdef KVM_CAP_PMU_CAPABILITY
+    printf("KVM_CAP_PMU_CAPABILITY: %d\n", ioctl(k, KVM_CHECK_EXTENSION, KVM_CAP_PMU_CAPABILITY));
+#endif
+    setup(1000);
+    open_counter(0, 1);
+    struct perf_event_mmap_page *pg = mmap(0, 4096, PROT_READ, MAP_SHARED, pfd, 0);
+    if (pg != MAP_FAILED)
+      printf("perf mmap: cap_user_rdpmc=%u index=%u pmc_width=%u\n", (unsigned)pg->cap_user_rdpmc, pg->index,
+             pg->pmc_width);
+    if (kvm_run() < 0) die("run");
+    printf("guest user-mode count after 1000 branches: %llu\n", (unsigned long long)count());
+    return 0;
+  }
+  if (!strcmp(test, "readcost")) { // the cost of reading the count at every exit
+    int reps = atoi(argv[5]);
+    setup(1);
+    open_counter(0, 1);
+    double t0 = now();
+    uint64_t sum = 0;
+    for (int i = 0; i < reps; i++) {
+      if (kvm_run() < 0) die("run");
+      sum += count();
+    }
+    double t = now() - t0;
+    printf("readcost: %d exits with a read each in %.3fs, %.0f ns per exit (sum %llu)\n", reps, t,
+           t / reps * 1e9, (unsigned long long)sum);
     return 0;
   }
   if (!strcmp(test, "exact")) { // N branches per OUT exit: is the count exactly N each time?
