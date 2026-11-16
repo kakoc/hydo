@@ -1443,10 +1443,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       schedule's `disk=` faults apply to the main disk only.
     - `hydo repro --transcript` types the run's transcript again but runs the boots after a
       reboot by the schedule's policy.
-    - On KVM the AMD EPYC 7763 and 9V74 gave different fingerprints for every SWUpdate schedule
-      with reboots, each one stable on its host and with the same verdicts. A run of the same
-      image without a reboot on both models decides whether the reboot path lets the host in.
-    - RAUC's example kept its loop devices, and RAUC did not run on KVM.
+    - RAUC's example kept its loop devices, and RAUC did not run on KVM. Its build makes new
+      signing keys and signed bundles, so a fresh build gives another image; `make-bundles.sh`
+      keeps them once made. Milestone 266 found that SWUpdate's bundles carried the build's time,
+      which split its KVM values between runners.
 129. Walks after Milestone 264. What is left:
     - A fault changes the page itself, and so the walk. Without its clock step Memos's seed 46
       took 9 of 72 actions otherwise, and the share-link failure did not happen, so the minimal
@@ -2041,6 +2041,11 @@ build machine, before 2026-10-13.
   An unmatched `watch.failures_of` warns. Recordings no longer end in `TIMEOUT check`: the hvx
   engine's buffer of the agent's lines was full. On KVM one fingerprint per schedule on four
   hosts. Nothing recorded moved
+- M266 (tentative number): open item 128. The KVM fingerprints of the SWUpdate reboot schedules
+  differed between builds of the image, not between AMD models: cpio put the build's time into
+  each bundle. With one image the EPYC 7763, 9V45, and 9V74 agree, with 0, 1, or 14 reboots.
+  `make-swu.sh` sets the bundles' times, and `HYDO_KVM_DIAG` covers the boots a reboot ends.
+  Nothing recorded moved
 
 ## Where to look
 

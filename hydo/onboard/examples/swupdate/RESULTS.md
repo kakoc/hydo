@@ -207,9 +207,12 @@ schedule. On a device whose application data is on the same eMMC as the slots, t
 next `fsync` would flush the image too, and the window would end there.
 
 On KVM the runs without faults gave OK: `7a06d00ca789d959` / `181656f38ded8062` (two devices)
-and `7948fd3a2a27ea69` / `d44bab782d65acab` (separate storage). The two AMD models disagree on
-every value (AGENTS.md open item 128). The KVM runs used the manifests' `workload.timeout: 60`
-of before Milestone 261, so the current manifests give other KVM values.
+and `7948fd3a2a27ea69` / `d44bab782d65acab` (separate storage). The two values of each row come
+from two builds of the image, one on each runner, not from the two CPU models (Milestone 266).
+Before Milestone 266, `build/make-swu.sh` packed each bundle with the time of the build, so every
+build gave another image and other fingerprints on every engine. No new build gives the
+fingerprints of this page; the verdicts stand. With one image the EPYC 7763, 9V45 and 9V74 give
+one fingerprint per schedule.
 
 ## The explorations
 

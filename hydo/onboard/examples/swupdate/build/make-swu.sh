@@ -66,6 +66,9 @@ for v in 2 3 4 5; do
     copy copy2 /dev/loop1 B
     printf '\t};\n}\n'
   } > "dir-v$v/sw-description"
+  # cpio's headers carry each file's time, and --reproducible fixes only the inode and device
+  # numbers: without this, every build gave other bundles, so another image (Milestone 266)
+  touch -h -d "@$SOURCE_DATE_EPOCH" "dir-v$v/sw-description" "dir-v$v/rootfs.ext4"
   (cd "dir-v$v" && printf 'sw-description\nrootfs.ext4\n' | cpio -o -H crc --reproducible --quiet > "../v$v.swu")
   rm -rf "dir-v$v"
 done

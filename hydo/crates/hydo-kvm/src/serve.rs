@@ -1174,6 +1174,8 @@ impl Engine {
             let n = self.h.c.reboots;
             let fp = self.xfp();
             rchain = Some(fnv_u64(fp, rchain.unwrap_or(OFFSET)));
+            // the ended boot's state, whose fingerprint the chain holds (open item 128)
+            self.diag(tag, &format!("b{n}"));
             self.save_log(&format!("{tag}.boot{n}"), *from);
             let durable = self.vm.vio.disk.clone();
             let extra = self.vm.vio.extra_durable();
@@ -1190,6 +1192,8 @@ impl Engine {
             }
             self.vm.vio.set_extra_durable(extra);
             self.vm.vio.set_fault(dpol.0, dpol.1, dpol.2);
+            // the new VM as KVM gives it back after the load of S0
+            self.diag(tag, &format!("r{n}"));
             *from = self.vm.m.console_len as usize;
             self.h.ctl_drop_pending();
             self.h.c.start = 1;
@@ -1304,6 +1308,8 @@ impl Engine {
             }
             self.vm.vio.set_extra_durable(extra);
             self.vm.vio.set_fault(0, 0, 0);
+            // the recovery boot's VM as KVM gives it back after the load of S0
+            self.diag(&tag, "c");
             from = self.vm.m.console_len as usize;
             if self.h.c.on {
                 self.h.ctl_drop_pending();

@@ -12360,3 +12360,70 @@ and `sh ci/vale.sh`. `same_as_hydo_build` failed with 20 mismatches, each the me
 unknown field(s) ... (known: ...)`, whose list of keys Milestone 263 changed (`guest.reboot`,
 `guest.disks`), and it names Blnk's manifest of Milestone 260 as a changed input. This milestone
 changes neither.
+
+### Milestone 266 (tentative number) - DONE (open item 128: the KVM fingerprints of the SWUpdate example's reboot schedules did not differ between AMD EPYC models; they differed between builds of the image, because the example's SWUpdate bundles carried the time of the build; with one image the EPYC 7763, 9V45 and 9V74 give one fingerprint per schedule, with 0, 1 or 14 reboots; `make-swu.sh` now gives the same bundles from every build; the KVM engine's diagnostics also cover the boots that a reboot ends; nothing recorded moved; 2026-11-16)
+
+**In short.** Milestone 263 found that the AMD EPYC 7763 and 9V74 gave different KVM
+fingerprints for every SWUpdate schedule with a reboot. Each value repeated on its host, and the
+verdicts agreed. Its one-off workflow (run 43762539701) built the image on each runner: a Docker
+build of the device's tools, `make-swu.sh` for the OS images and the update bundles, then `hydo
+build`. Each build gave another image. `make-swu.sh` packs each SWUpdate bundle (`v2.swu` to
+`v5.swu`) with `cpio -o -H crc --reproducible`. GNU cpio's `--reproducible` fixes only the inode
+and device numbers, and the header of each file keeps its modification time. The bundle's
+`sw-description` and its copy of `rootfs.ext4` had the time of the build. So "the two AMD models"
+were two builds. The KVM engine's reboot path lets nothing of the host into the fingerprint.
+
+**How it was found.** The one-off workflow `tmp-reboot-amd` ran three rounds on GitHub's runners,
+from a temporary branch.
+
+- Round 1 (run 43815464375) built the devices image once and ran it on eight runners with this
+  tree's hydo and `HYDO_KVM_DIAG`. The diagnostics now also cover the state of each boot that a
+  reboot ends (phase `b<n>`), and the VM after each load of S0 (`r<n>`, and `c` for a recovery
+  boot). Each schedule ran twice per runner:
+
+  | Schedule | Reboots | AMD: two each of EPYC 7763, 9V45, 9V74 | Intel: two Xeon 6975P-C |
+  |---|---|---|---|
+  | `disk=cut \| run C=2` | 0 | `5a2052b496c74741` | `a397575f18ce3bcf` |
+  | `disk=cut \| run C=4` | 1 | `ee343adfefb3765d` | `3efa872f9f8273f2` |
+  | `disk=cut \| run` | 14 | `3848283d719efc72` | `7176a0b6bc48d8f8` |
+
+  The verdicts are the example's: VIOLATION for the two power cuts (the device boots v1), and OK
+  with v5 after 14 reboots. AMD and Intel differ, as every KVM value does (open item 102).
+- Round 2 (run 43818118587, five EPYC 7763, one 9V45, two Xeon 6975P-C) told the two remaining
+  differences of Milestone 263's run apart: its hydo (`672c344e`, before Milestones 261 and 265)
+  and the image built on each runner. On one shared image both hydos gave the same fingerprint
+  on every AMD runner (`f4d539780ff171b0`, `94fecddd07a04b9e`, `5a36d5b7d6f34724` for the three
+  schedules). Each runner's own build gave another image: eight runners, eight sha256 values.
+  `disk=cut | run` on them gave five values on the five EPYC 7763 runners, each held twice. The
+  inputs of the builds differed only in the four bundles; the tools and the OS images had the
+  same bytes.
+- Round 3 (run 43820821954, five EPYC 9V74, one 7763, one 9V45, one Xeon Platinum 8573C) built
+  the image with the fixed `make-swu.sh` once and again on each runner. All nine builds gave the
+  same image (sha256 `426029e09231b91e…`). On every AMD runner, the shared image and the
+  runner's own build gave one fingerprint per schedule, twice each, with both hydos:
+  `451db7e961d5082c` (no reboot), `a3c3783769129065` (1 reboot), `5ad290ac00387979` (14
+  reboots). The Intel runner gave `54f82626817e3234`, `574b34d3813b1d41` and
+  `fce59387cd39edc7`, with the same verdicts.
+
+The diagnostics of two AMD models differed only in KVM's XSAVE image, outside the x87 and SSE
+fields that a fingerprint hashes at x86-64-v2. Every other part, guest RAM included, was the
+same in every phase.
+
+**The fix.** `hydo/onboard/examples/swupdate/build/make-swu.sh` sets both files of a bundle to
+`SOURCE_DATE_EPOCH` (2026-01-01) before cpio packs them. The KVM engine does not change, apart
+from the diagnostics. The fingerprints in the example's RESULTS.md came from builds with
+time-stamped bundles, so no new build gives them; the verdicts stand.
+
+**The pinned reproducers.** Round 3 built the two stack images with their recorded bytes
+(`b498b9c8…`, `c8fc9b42…`) with this tree's hydo-bench. On four EPYC 7763 runners they gave the
+recorded `58cee6328470c677` (VIOLATION, order 11) and `8e53b18f9885e12f` (OK). Four Xeon
+6975P-C runners gave `6e2e6c4d7a818e21` and `17741803dc38ac70` with the same verdicts.
+
+**What moved.** Nothing recorded: the SWUpdate example is not in `recorded.json`, and the
+engine's change writes diagnostics only. The goldens do not read `make-swu.sh`.
+
+**Checks** (on this Mac): `cargo fmt --all --check`; `cargo clippy --workspace --all-targets -D
+warnings`, and for hydo-kvm also with `--target x86_64-unknown-linux-musl`; every test of
+hydo-kvm (53 and 22); `hydo-schedule`'s `language::`; the `hydo` program's
+`equivalence::cli_matches_golden`, `agents_equivalence` and `docs::`; `hydo-agents`'s
+`public_content::`; `sh ci/consolidate-tests.sh --check`; and `sh ci/vale.sh`.
