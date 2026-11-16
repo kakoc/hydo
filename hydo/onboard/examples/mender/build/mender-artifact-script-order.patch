@@ -1,0 +1,9 @@
+--- a/artifact/scripter.go
++++ b/artifact/scripter.go
+@@ -100,5 +100,6 @@
+ 	for _, script := range s.names {
+ 		scr = append(scr, script)
+ 	}
++	sort.Strings(scr)
+ 	return scr
+ }

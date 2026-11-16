@@ -1,0 +1,8 @@
+# finding 2 (RESULTS.md), the same Mender candidate without a power cut: mender-update is killed
+# 7 ms after its commit of v2 entered ArtifactCommit. hydo starts the agent again at the end of
+# the workload, the operator's reboot keeps v2 (upgrade_available=0), and the operator's next
+# `mender-update commit` rolls v2 back, prints "Rolled back." and exits 0. On the Mac engine,
+# hydo-devices.yaml.
+# verdict: HYDO-ORACLE: VIOLATION [mender.commit_permanent] with Mender's update in progress (ArtifactCommit_Enter v2), mender-update commit exited 0 ('Rolled back.') on v2 in partition 3, but U-Boot boots partition 2 (v1) next, upgrade_available=0
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run A=mender.commit_started@3+7:kill-device

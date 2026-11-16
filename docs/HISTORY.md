@@ -12929,3 +12929,97 @@ unit test `a_recording_replay_repeats_the_walk_without_recording`.
 `hydo-schedule` and the `hydo` program (with `docs::`, `equivalence::cli_matches_golden` and
 `agents_equivalence`); `hydo-schedule`'s `language::`, `hydo-agents`'s `public_content::`, `sh
 ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.
+
+### Milestone 272 (tentative number) - DONE (the Mender client 5.2.0 in standalone mode on a device with A/B root partitions, U-Boot's redundant environment and Mender's data partition on one eMMC, with real reboots; two new Mender candidates: Mender syncs an Artifact's state scripts before the scripts' version file has its content, so a power cut soon after an install leaves an update that can be neither committed nor rolled back; and an interrupted `mender-update commit` makes the next commit roll the update back and exit 0, which undoes an update that U-Boot had made permanent; a tooling candidate in mender-artifact; both Mender candidates found blind on the Mac engine; what hydo lacked; nothing recorded moved; 2026-11-16)
+
+**In short.** `hydo/onboard/examples/mender` (RESULTS.md) runs Mender 5.2.0's `mender-update`,
+built statically from its release archive for arm64 (the x86_64 build did not finish), with mender-flash 1.1.0,
+libubootenv 0.3.8 and Mender's rootfs-image Update Module. The device has one eMMC with a volatile
+write cache, laid out as meta-mender lays out a storage device. U-Boot's redundant environment is
+at 4 and 8 MiB, root file systems A (Mender's partition 2) and B (3) follow, and an ext4 data
+partition holds Mender's database at `/data/mender`. The slots hold real root file systems, and
+every Mender command runs in a chroot on the booted slot. So the module's check of the mounted
+root sees the slot that U-Boot booted. U-Boot is an emulation of Mender's U-Boot integration with
+U-Boot's boot counter (`bootlimit=1`). The operator runs 8 standalone deployments: install, a
+real reboot, commit. The broken v4 is rolled back with `mender-update rollback` after its health
+check. On the Mac engine the eMMC is an added disk (`hydo-devices.yaml`); on hvx it is a file on
+the data disk (`hydo.yaml`). Every Artifact carries state scripts that print console events, the
+events of the reactions; with `--set artifacts=plain` the operator installs the same Artifacts
+without them. Seven checks: a complete slot boots; the booted version is one the outcomes allow;
+`mender_boot_part` holds a complete image; Mender's database names the running version when no
+update is in progress; the synced records survive; every reboot and every commit that exited 0
+held; and the operator's commit after the run keeps its promise.
+
+**What was found.**
+
+- **Mender, new as far as the search found: an empty version file of the Artifact scripts.**
+  `Parse` in `src/artifact/v3/header/header.cpp` writes the scripts' `version` file with an
+  `ofstream`. It calls `path::DataSyncRecursively` while the stream still holds the file's one
+  byte in its buffer. The byte reaches the page cache when the stream closes, and nothing syncs
+  it. The commit that added the sync (`b8a032e0`, 2023) says it is there "so that we don't risk
+  half written scripts in case of a spontaneous reboot after the installation has begun". After a
+  power cut between an install and the next writeback, the version file is empty: the agent logs
+  `the version file 0 bytes`. Then every Artifact state's scripts fail ("Error reading the
+  version number from the version file"). `disk=cut | run C=4`: the healthy v3 that booted
+  cannot be committed; the error path's rollback fails too; Mender names the artifact
+  `v3_INCONSISTENT`; and U-Boot returns to v2 (`e06faa5d58198d94`, 2 runs). `C=6`: after the
+  broken v4, the rollback after its health check fails, and Mender names `v4_INCONSISTENT`
+  while v3 runs (`780103d63e23cd06`, 2 runs). `disk=none | run C=4` fails as `C=4`
+  (`006c3b078505d65d`). Artifacts without state scripts pass both schedules.
+- **Mender, new as far as the search found: an interrupted commit rolls back and exits 0.**
+  `SetStartStateFromStateData` in `src/mender-update/standalone/standalone.cpp` resumes the saved
+  state `ArtifactCommit_Enter` on the rollback path. `ResultHandler` in `cli/actions.cpp` reports
+  a completed rollback as success. A power cut or a kill inside `ArtifactCommit` leaves that
+  state; the next `mender-update commit` (or `resume`) rolls back, prints `Rolled back.` and
+  exits 0. When the cut came after the module's `fw_setenv upgrade_available 0`
+  (`A=mender.commit_started@3+7:cut`, `d86603abb67442fe`; the kill, `837445ed6cac8646`; 2 runs
+  each), U-Boot had made v2 permanent, and the rollback sets `mender_boot_part` back to v1's
+  partition while v2 runs. A cut before it (`@3:cut`, `f84173ba7aaf1f25`) leaves v1 booted by
+  U-Boot's boot counter, and the commit still exits 0. `+8` passes (`f23c37c27bf666d1`). Without
+  state scripts the same happens 8 to 10 ms after the agent's own event, and `+11` passes.
+- **mender-artifact 4.4.2, a tooling candidate:** `Scripts.Get` returns the scripts from a Go
+  map, so an Artifact with two or more state scripts gets them in a random order, and two runs
+  give different bytes. Its `master` merged `SOURCE_DATE_EPOCH` for the archive times (pull
+  request 848) and still has the map. The example's build sorts them
+  (`build/mender-artifact-script-order.patch`) and copies each Artifact's outer tar with fixed
+  times (`build/retime.go`). Two builds then give the same bytes.
+
+The searches covered Mender's Jira through its public API, mendersoftware/mender's and
+mendersoftware/mender-artifact's issues and pull requests, and Mender Hub. They found no report
+of either Mender candidate; RESULTS.md lists the terms. Nothing was posted. Neither candidate was
+reproduced without hydo, because each cause is plain in a few lines of code.
+
+**The runs.** The Mac runs used this tree's hydo over the 0.3.4 Mac release, one VM at a time, on
+the image `explore-ob-mender-ota-devices-arm64.cpio.gz` (sha256 `31df3901bb65554e…`).
+`disk=cut | run` runs 8 deployments with 10 reboots and holds every check (`d854f95e3fe00126`,
+2 runs). The blind exploration, `hydo explore --seeds 1-24 --workers 1 --strategy process
+--reactive fault` with the eight console events, gave 9 failures in 24 schedules, each reproduced
+(128 runs per hour). The shrinker gave `disk=cut dseed=4127cc1347fae6ba | run C=16` (the failed
+commit, `1b083708a8690666`), `disk=cut dseed=581cc68c71772e2c | run K=device@14+1 C=16`
+(`v4_INCONSISTENT`, `49aaa2aa7d4bbe25`) and `disk=cut dseed=c054734a6f769762 | run
+A=mender.commit_started:cut` (the commit that exits 0, `7c6a84af1e182056`). An exploration of an
+earlier image (seeds 1-17, stopped there) gave the same signatures at seeds 6 and 10. hvx did not
+run the example: the x86_64 tools build under emulation in Docker on this Mac, and the first
+build stopped at a compiler segmentation fault, the second when the Docker VM stopped. The
+x86_64 programs and `hydo.yaml` are untested (open item 136). KVM did not run either.
+
+**What hydo lacked** (RESULTS.md, "What hydo lacked"; AGENTS.md open item 136):
+
+- a power cut at a point a millisecond after an event: the explorer draws a reaction's delay from
+  six fixed values, and the example swept the delay by hand;
+- reactions while a service starts, where a device's boot service commits or rolls back;
+- a restart after a reaction's kill, which keeps the service down until the heal;
+- a service's own log in an OK run;
+- a `/dev/loop4` in the Mac engine's guest kernel.
+
+**What moved.** Nothing recorded: the example is not in `hydo/onboard/recorded.json`, and no
+engine, controller or guest program changed. The new manifests are in the explorer's identity
+and corpus goldens (`identity-quick.txt`, `identity-full.txt`, `corpus-full.txt`) and in the
+control corpus (`corpus-quick.txt`), re-recorded on this Mac with `HYDO_BLESS=1`. The CLI golden and
+`agents_equivalence` pass unchanged.
+
+**Checks** (on this Mac, `main` at `47df6fee` with this milestone on top): `hydo-schedule`'s
+`language::`; `hydo-agents`'s `public_content::`; the `hydo` program's `docs::`,
+`equivalence::cli_matches_golden` and `agents_equivalence`; `hydo-explore`'s `identity::` (also
+with `HYDO_IDENT_FULL=1`) and `corpus::`; `hydo-control`'s `corpus::`; `sh
+ci/consolidate-tests.sh --check`; and `sh ci/vale.sh`.

@@ -1,0 +1,7 @@
+# finding 1 (RESULTS.md), the same Mender candidate with the broken release: mender-update installs
+# v4 and the power is cut before the reboot. v4 boots, fails its health check, and its
+# mender-update rollback fails on the empty version file of the Artifact scripts. U-Boot's boot
+# counter returns to v3, and Mender names the artifact v4_INCONSISTENT with no update in progress.
+# verdict: HYDO-ORACLE: VIOLATION [mender.state_matches_slots] no update in progress, Mender's artifact is v4_INCONSISTENT, but the device runs v3 (U-Boot boots partition 2, v3, next)
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run C=6

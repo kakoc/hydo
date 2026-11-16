@@ -1,0 +1,8 @@
+# finding 2 (RESULTS.md), a Mender candidate: the power is cut 7 ms after `mender-update commit`
+# of v2 entered ArtifactCommit, after the rootfs-image module wrote upgrade_available=0 and
+# before Mender saved the next state. U-Boot boots v2 for good; Mender's database still says
+# ArtifactCommit_Enter. The operator's next `mender-update commit` rolls v2 back (U-Boot boots v1
+# at the next reboot), prints "Rolled back." and exits 0. On the Mac engine, hydo-devices.yaml.
+# verdict: HYDO-ORACLE: VIOLATION [mender.commit_permanent] with Mender's update in progress (ArtifactCommit_Enter v2), mender-update commit exited 0 ('Rolled back.') on v2 in partition 3, but U-Boot boots partition 2 (v1) next, upgrade_available=0
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run A=mender.commit_started@3+7:cut

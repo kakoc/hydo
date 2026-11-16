@@ -1,0 +1,9 @@
+# finding 1 (RESULTS.md), a Mender candidate: mender-update installs v3, exits 0, and the power is
+# cut before the reboot into it. Mender synced its Artifact scripts directory while the version
+# file's one byte was still in its C++ stream buffer, so the version file comes back empty. v3
+# boots healthy, and mender-update commit fails ("Error reading the version number from the
+# version file"); Mender then names the artifact v3_INCONSISTENT, and U-Boot goes back to v2.
+# Artifacts without state scripts pass (build parameter artifacts=plain).
+# verdict: HYDO-ORACLE: VIOLATION [mender.commit_permanent] the commit of v3, which booted healthy and waits for it, failed: Mender names v3_INCONSISTENT (state none), U-Boot boots partition 3 (upgrade_available=0); its error: Error reading the version number from the version file
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run C=4

@@ -501,6 +501,23 @@ example's `hydo-devices.yaml` puts the slots on an eMMC and the environment on S
 a real reboot and those disks, M259's SWUpdate candidate holds: `disk=cut | run C=4`
 boots v1 on the Mac engine and on KVM, and with the loop model on hvx. RAUC held.
 
+**Mender in standalone mode (M272, tentative number).** Mender 5.2.0's `mender-update` updates a
+device in `hydo/onboard/examples/mender` (RESULTS.md). The device has A/B root partitions,
+U-Boot's redundant environment and Mender's data partition on one eMMC, and an emulation of
+Mender's U-Boot integration. The operator runs 8 standalone deployments with real reboots. Every
+Mender command runs in a chroot on the booted slot. The Mac engine ran it with the eMMC as an
+added disk; `hydo.yaml` (the eMMC in a file, for hvx) did not run. Two new candidates were
+found. Neither is reported upstream or posted:
+- Mender syncs an Artifact's state scripts before the scripts' `version` file leaves a C++ stream
+  buffer. After a power cut between an install and the next writeback, the file is empty. Then the
+  healthy update can be neither committed nor rolled back, and Mender names its artifact
+  `<name>_INCONSISTENT` (`disk=cut | run C=4`). Artifacts without state scripts pass.
+- After a power cut or a kill inside `mender-update commit`, the next commit rolls the update
+  back, prints `Rolled back.` and exits 0. When U-Boot had already made the update permanent, the
+  rollback undoes it (`disk=cut | run A=mender.commit_started@3+7:cut`).
+
+mender-artifact 4.4.2 writes an Artifact's state scripts in a random order; the build sorts them.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -1524,6 +1541,23 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       finish is tried again the same way. A recording whose pages answer more than 10 s later
       leaves actions out and says so; none of the seven recordings did.
     - The recordings ran on hvx only, not on KVM.
+136. The Mender example (M272). What is left:
+    - Its two Mender candidates and the mender-artifact one are not reported upstream.
+    - The explorer draws a reaction's delay from six fixed values, so a window of a millisecond
+      after an event is reached only by a sweep by hand. A sweep of one reaction's delay is not
+      built.
+    - Reactions act only during workload steps, and `kill-<svc>` keeps the service down until
+      the heal. So no reaction cuts the rollback that a device runs while it boots, and the
+      operator's retry after a kill comes only at the workload's end.
+    - A service's own output stays in the guest for an OK run; the example writes its log lines
+      to the console as well.
+    - The Mac engine's guest kernel has no `/dev/loop4`.
+    - hvx did not run the example. The x86_64 tools build under emulation in Docker on the Mac,
+      and neither build finished: a compiler segmentation fault, then a stopped Docker VM. A
+      build on an x86_64 host with Docker, then `hydo.yaml` and the four regressions on hvx, are
+      left. KVM did not run the example either.
+    - Managed mode (`mender-update daemon`) shares the Artifact parser of the first candidate
+      and did not run.
 
 ## Milestone index
 
@@ -2129,6 +2163,11 @@ build machine, before 2026-10-13.
   web-shop's two bugs kept their verdicts when recorded; the share-link finding has no
   recording, because the new walker's image changes the walks that reached it. Nothing
   recorded moved
+- M272 (tentative number): the Mender client 5.2.0 in standalone mode on a device with A/B
+  partitions and U-Boot's environment on one eMMC, with real reboots. Two new candidates. An empty
+  version file of the Artifact scripts after a power cut leaves an update that can be neither
+  committed nor rolled back. An interrupted commit makes the next commit roll back and exit 0.
+  mender-artifact writes state scripts in a random order. Nothing recorded moved
 
 ## Where to look
 

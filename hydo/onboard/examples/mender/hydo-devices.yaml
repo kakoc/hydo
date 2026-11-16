@@ -1,0 +1,96 @@
+# An embedded Linux device updated by Mender 5.2.0 in standalone mode: two root file system
+# partitions (A/B), U-Boot's redundant environment with Mender's variables and U-Boot's boot
+# counter, and a data partition with Mender's database and the application's records, all on one
+# eMMC with a volatile write cache, a disk of its own (guest.disks: the Mac and KVM engines).
+# RESULTS.md has the scenario, the checks and the findings.
+#
+#   sh build.sh                                  # the static tools, the images, the Artifacts
+#   hydo build hydo-devices.yaml                 # the Mac engine (arm64)
+#   hydo build hydo-devices.yaml --set arch=x86_64   # KVM
+#   hydo run "disk=cut | run"                    # 8 updates, each installed, rebooted, committed
+# hydo.yaml is the same device with its eMMC as a file on the guest's data disk (hvx).
+format: 1
+name: mender-ota-devices
+description: "A device with A/B root partitions updated by Mender 5.2.0 in standalone mode through U-Boot's environment and boot counter: power cuts and kills during installs, reboots and commits"
+
+params:
+  arch: aarch64   # the guest's architecture: aarch64 (the Mac engine) or x86_64 (KVM)
+  artifacts: scripts   # plain: the Artifacts without state scripts (RESULTS.md, finding 1)
+
+guest:
+  ram_mib: 1024
+  clock_start: 1794700800        # 2026-11-15
+  clock_after_cut: 30            # the device's clock runs on across a power cut
+  outcomes_after_cut: true       # the checks after a power cut read the client's last outcomes
+  reboot: true                   # the agent's reboots are real ones (HYDO-REBOOT, Milestone 263)
+  disks:                         # the device's eMMC: /dev/vdb, with a volatile write cache
+    - name: emmc
+      size_mib: 128
+      cache: volatile
+
+data:
+  size_mib: 64
+  dirs: [flash]
+
+root:
+  files:
+    - {src: "out/{{arch}}/bin", dst: "/opt/ota/{{arch}}/bin"}
+    - {src: "out/{{arch}}/images/v1.ext4", dst: "/opt/ota/{{arch}}/images/v1.ext4"}
+    - {src: "out/{{arch}}/images/data.ext4", dst: "/opt/ota/{{arch}}/images/data.ext4"}
+    - {src: "out/{{arch}}/images/known", dst: "/opt/ota/{{arch}}/images/known"}
+    - {src: "out/{{arch}}/artifacts", dst: "/opt/ota/{{arch}}/artifacts"}
+    - {src: out/common, dst: /opt/ota/common}
+    - {src: out/modules, dst: /opt/ota/modules}
+    - {src: device, dst: /opt/ota/device}
+  dirs: [/run, /sysroot]
+  text:
+    /etc/fw_env.config: |
+      # U-Boot's redundant environment: two 128 KiB copies in the eMMC's boot area
+      /dev/loop0 0x400000 0x20000
+      /dev/loop0 0x800000 0x20000
+    /etc/ota/artifacts: "{{artifacts}}"
+    /etc/ota/storage: devices
+
+shell: |
+  export PATH=/opt/ota/$(uname -m)/bin:$PATH
+
+services:
+  - name: device
+    setup: sh /opt/ota/device/boot.sh      # a cold boot when /tmp says the device has not booted
+    cmd: sh /opt/ota/device/agent.sh       # the health check, then the operator's requests
+    ready: test -f /tmp/ota/ready
+    ready_timeout: 300
+    restart: always
+    logs: [/tmp/ota/boots]
+
+workload:
+  steps: 16                                # 8 updates: v2, v3, v4 (broken), v5, v2, ...
+  run: sh /opt/ota/device/client.sh $HYDO_FROM $HYDO_TO
+  retry: sh /opt/ota/device/client.sh reboot
+
+invariants:
+  - id: device.boots
+    msg: after any power cut the device boots a complete, verified slot
+    cmd: sh /opt/ota/device/check.sh boots
+  - id: device.version
+    msg: an acknowledged install or commit survives, and an install that did not complete never boots
+    cmd: sh /opt/ota/device/check.sh version
+  - id: device.primary_complete
+    msg: the partition in mender_boot_part holds a complete image
+    cmd: sh /opt/ota/device/check.sh primary
+  - id: mender.state_matches_slots
+    msg: Mender's database names the version that runs and that U-Boot boots, or an update in progress
+    cmd: sh /opt/ota/device/check.sh state
+  - id: data.records_survive
+    msg: every record the application synced is there
+    cmd: sh /opt/ota/device/check.sh records
+  - id: device.reboots_boot_allowed
+    msg: every reboot during the workload booted a version the updates allow, and every commit that exited 0 held
+    cmd: sh /opt/ota/device/check.sh violations
+    every: 2
+    final: true
+  - id: mender.commit_permanent
+    msg: the operator's commit after the run, when it exits 0, leaves the booted version permanent (the last check, it commits)
+    cmd: sh /opt/ota/device/check.sh commit
+
+faults: [kill, cut, clock, disk]

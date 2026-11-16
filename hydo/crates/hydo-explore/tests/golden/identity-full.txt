@@ -19,6 +19,8 @@ input	hydo/onboard/examples/etcd/hydo.yaml	ec0ae3f206de4167150fb4c94a0ab2e0a1ef9
 input	hydo/onboard/examples/glibc-cache/hydo-nocache.yaml	be53f51ea2b3b915a93d8c9cdcf0be568aca3b717a2e59c5a9feaa83ecac6a2d
 input	hydo/onboard/examples/glibc-cache/hydo.yaml	3792407d2f5087d38119939c54ebf86dd3afdb80dc6905e580bf4c4ab4652732
 input	hydo/onboard/examples/k3s-lease/hydo.yaml	c00691d9a98e523e167032c5b9d71355b8d451b2643e7eda3ced7f6963a6d113
+input	hydo/onboard/examples/mender/hydo-devices.yaml	30c418df1096b3199559433ca85e7614c6c2336698745da98e5a79ca28f1fbfb
+input	hydo/onboard/examples/mender/hydo.yaml	f676cbe2ab1a1d4223b3ff34171272279c8842d4b9d92aed173b0e6a5c361353
 input	hydo/onboard/examples/miniflux/hydo-read.yaml	96baa7f3afccebb7dcbfb7ed78d64e79c6563096f2e84072ff62db752b34e26f
 input	hydo/onboard/examples/miniflux/hydo.yaml	7f74f2fac53dbc117de6152c0e43fe15e1bf1c4524e16f4226029de1b7ac003a
 input	hydo/onboard/examples/nats-flaky-8363/hydo.yaml	d8e8cbcf52ff01b080d3b7458f6dfffead9f027c6d1c201c03707d924a6c80f5
@@ -986,6 +988,72 @@ chunk	hydo/onboard/examples/k3s-lease/hydo.yaml/hvm/FalseFalse	7	256	70799d16d89
 chunk	hydo/onboard/examples/k3s-lease/hydo.yaml/hvm/FalseFalse	8	256	29d32498b8b0886c2ab1fd4ae2419b1e09034b795026288fe0e47fc733d317a0
 chunk	hydo/onboard/examples/k3s-lease/hydo.yaml/hvm/FalseFalse	9	256	876482715bd4e8559a7759ecfa0f951011db378e984a82aa16b5cf85811c8bc4
 chunk	hydo/onboard/examples/k3s-lease/hydo.yaml/hvm/FalseFalse	10	167	e1bde92afd64d242c9854e938ff0bb01f75e8f66737ce4fac38754d1c7f2f51c
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvx	0	256	b8e0a184341a9a6bce1959c85a30471c68a3c2b19fa8723f9410ef2d851cf88c
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvx	1	256	dcca708a1658f40ad3832e1382b77fb354ed361e9d1004621c3cd591f972415d
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvx	2	256	8087699287e968ed6b1ca26b4ad38e89b63b3f7246ea6abf754641bb67ab3ba5
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvx	3	256	4e3151a2ea4c8b1b21208d1925237988638205f6b5f0832172c4a2d99fd141e2
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvx	4	256	4db8c35f70b103a5f1b7996b303ac676595d1a5bd204e1a2343e9261162ddea0
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvx	5	256	ef4e193843651c44e5a2c56e81a625e07d88365e71c477410b7a0b5db944d7c3
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvx	6	256	1d48b65b1b1eeeaeeed4f13d8b6b70b473cbf9ff939942c09027fde53f615b66
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvx	7	256	e818c453019f50b76bb90af305133f44b8f8628c87169c6addbb7f574cefacc1
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvx	8	256	7f66557412ea37d741674e445e332081afea9618145f776c40fccb965df0c229
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvx	9	256	6e18506bc14b6f3f7b395af4be2daba1ba9a0febd8f134e46702bd504473f8da
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvx	10	162	4c7d8b8bdbd7240e79bd26fccd21d7520cec1fb0321bdf18458617e4d6acbac8
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/TrueTrue	0	256	e0ca110c60ec8d52461b866e8884494101f1c63613b898256a875d39543f49ad
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/TrueTrue	1	256	f9fa0c80fd5b193bc80f40dfd0c83ff459dd7e6a218d0c623c134f750727bd4b
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/TrueTrue	2	256	acd9f8a69ecabebb15eebf13b216923543fbcde54cbe0c04bde48c84d42f0c45
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/TrueTrue	3	256	f8a9acdb022fa99866c8d73fe503ac3c3287f938303e724abe7020d2b3b4c1af
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/TrueTrue	4	256	8307a1b09b56498967c9e254f343bfc2ebfff14d9c310e0790534046c82d8e0f
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/TrueTrue	5	256	9a72e1605b9458df9cc905563853393ef9f18ddfe82072604bce6e018774da5a
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/TrueTrue	6	256	f54de4181d8e6c1925f407f50954c6dc7d309e3d998c63ca595592dc397d9db8
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/TrueTrue	7	256	a3fc5ae37378ddb5876e0532e27ad0b11a8ad68a1ac992ddcc42ec0244bfc231
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/TrueTrue	8	256	12372f5a984ad4371a632b93d2c86358d2bea05589aa2c48e22f13035c4264d6
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/TrueTrue	9	256	7462b8ed4bc362cb4bce62ab8a8b6d1c05108c7d840bc8ad23bbe22875298ffc
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/TrueTrue	10	156	7b625887c499b51573ca8db6c60bc66b8852475ddc232f195ed2b59bc0987f86
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/FalseFalse	0	256	7bfda274d3829b549e1baa39f231650162831df8614ccc2cf02d4b1ce75c081a
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/FalseFalse	1	256	f569004bc4c56f2d005d17f314792c510f7ea3825cd6c44db193ee0658e8f24a
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/FalseFalse	2	256	3ef866cb20df2815ac5cb183d59ab3c485cbc30befbfbd531f0617ac8f31f713
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/FalseFalse	3	256	1e82f54e10aa2cee7dfd39dae3dad03a67bc42bf759b35f65870bb4a62873c89
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/FalseFalse	4	256	2ef18f77b404c716f5d3de8e6ff6a96ad6a94fecfa7fd05cae52736af81951ab
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/FalseFalse	5	256	3a97fe414646470510b6dd9dfe5ff659f6012aff9ae6362de43ca72ddeedbefb
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/FalseFalse	6	256	83065e55a5da85512b4f8ff38b092d50c777de6024d00bedd0d4ace253c5d7f4
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/FalseFalse	7	256	571e8b7ca1a5c418752a1f6763de243802ee690bc5c4f0f3a9ff51e2f4d2e2a6
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/FalseFalse	8	256	d0a924a48f5bfa7e2af1210d546db751f7188aad485f261d92457716e9a0844f
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/FalseFalse	9	256	34691a75f9830d418996b10d1433c55fa3d69335c2e424c2a49953edb8a2793d
+chunk	hydo/onboard/examples/mender/hydo-devices.yaml/hvm/FalseFalse	10	160	0e7a8bbbf2bb758cab7069691230e03207d88079ec34b426e77912e67c18020b
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvx	0	256	fc8cd39b4c550f776f7ed5470d536f65b82aaf0eb2309079e8ca2f9d767addc1
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvx	1	256	fe53de74bb88954eac6411429421d0df0fa40de946b7599aac478d1a11ae9e70
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvx	2	256	3f0a07ed8cd828d0435ba58ab08ee867dda5a61fa1a8bd3dbaaaf92ba3b686dc
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvx	3	256	0b09ab215a858a9cb21427378419224363cfb112d1d5aa674bd19413ba51ad5f
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvx	4	256	c2065474b413cfaf1f4bbd03bccd5963a156943e43c27a93b65148e84e39fe3a
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvx	5	256	ca88d340a1646a2f1305c0032ad8ba470a11cd7499127ce14e98095b8c461b1a
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvx	6	256	927dc40dd83b8ed947546671a4d0489ac1a60a684cd1592024b1b4bd6dfb3a78
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvx	7	256	2951185d1c910bba50cc4314ee5105d163a6ae4544dae1ce6ae5f1405e5ab692
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvx	8	256	a50b0670f72ce8004cdb2b16097f71931e14600b26fc5e5fc76a2ea2dad73515
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvx	9	256	eee3b39820e1a7068761a7b7369ba856cdf4de83ad72c0f7c2b007b81f968c16
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvx	10	161	29a136eacafef6d6253b5b53cd3bfac1c4e7c16c659dc921c325bb5878e40f19
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/TrueTrue	0	256	75055d28da70068e568de61663bf937833e0d7d8e2d1cb9fa849b3354d25e16f
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/TrueTrue	1	256	4053354f32e704c1e33f2adb16d540e61d4a7ab0e9e49dea700b31d161441f54
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/TrueTrue	2	256	92aac226f3be2a34d31b28acc8390c2be244877888c6cf59fba344b8dbefdca7
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/TrueTrue	3	256	2cb35f12a34f4aeb16616ecd04c542b6a885a5234af7c2a9ff8dac86cf9234ce
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/TrueTrue	4	256	f7a066a2fd9613310989db80c888bcba085ec8232e818b7f74e909c7e6189a07
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/TrueTrue	5	256	74d3ff079a64f22e6a3078e543c0f477bf673f5d3d0409f337840a3a524fd39b
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/TrueTrue	6	256	fb638f6af08d2d7d0fbae0d8ca43dcc04237608d11a07d22b3e33a839140cdaf
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/TrueTrue	7	256	12b1a86b40cdd0e7da3d3f9de7c491acf6d1763b513fa439e0b762395d563416
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/TrueTrue	8	256	098221d74e58450619795e0f65f3a48b0a49e3089296b9be35bd555ed808c7a5
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/TrueTrue	9	256	8886c0ddc2a45a5503a4349a8cd70870840c8d34b1c83f7723c0b26527d531aa
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/TrueTrue	10	155	49a5ce768f846a3325fffbd0372619dfbd3335feaedc4e35dd411b316d5cf9a7
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/FalseFalse	0	256	d8869eab6f3fe0d906af85de12ae7fb45795c1ca7c780debbed81626794624f9
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/FalseFalse	1	256	a7c9743e6cf7bc9be5d9c9cb82fc2549bf1db0d6c2bd45827eeb9b438554a523
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/FalseFalse	2	256	3d58dce4f942bcaa2b30f605c0aa54d2556b99ef30a4685f80b190c6789f7175
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/FalseFalse	3	256	7546e4f48bf3250ca2bbd399d5c95c846bea89b4717ac0204cd3e40255a0549a
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/FalseFalse	4	256	0711d2d2b0644fd9bfe7dceaa9d6722507dae7a8680965b61de78d9fbc5d0919
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/FalseFalse	5	256	23ef04baa850ee61f977fe5dd6b20587c2632fd48d676fe295fb7153782acef2
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/FalseFalse	6	256	9b81820827c19b063332216f19a2cbda8ce631cfd1c9ac9e8ba2bafeaa9eb28f
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/FalseFalse	7	256	4453290ae61aae4aa3758148275c64471923a694f48925f95e264852cadb3c90
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/FalseFalse	8	256	38313e53006bc353422110c2c7e11c9ea92f34253b53c87eaabb8fb0b11b5786
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/FalseFalse	9	256	36f6d511a6f2aed575fa30d097123ae2c644fbbce4e53ab0a5fa15fd276a5800
+chunk	hydo/onboard/examples/mender/hydo.yaml/hvm/FalseFalse	10	166	8f6bd9110ed769c6df9c64a4c0ecb0f98eed53c80e90bcd357103245f7753a82
 chunk	hydo/onboard/examples/miniflux/hydo-read.yaml/hvx	0	256	018902a06e7db29b859a5f77645a1127be498edfb26a06ce3f19728cefc920e2
 chunk	hydo/onboard/examples/miniflux/hydo-read.yaml/hvx	1	256	0aa9feb20b33ad3f24e83ee3aabc97075a9f6e586309f96d392bef1561730396
 chunk	hydo/onboard/examples/miniflux/hydo-read.yaml/hvx	2	256	6b4ff094571c46501c2f2577b6c76860bbcd94aa0e1a4986130694b1d4c415a4

@@ -19,6 +19,8 @@ input	hydo/onboard/examples/etcd/hydo.yaml	ec0ae3f206de4167150fb4c94a0ab2e0a1ef9
 input	hydo/onboard/examples/glibc-cache/hydo-nocache.yaml	be53f51ea2b3b915a93d8c9cdcf0be568aca3b717a2e59c5a9feaa83ecac6a2d
 input	hydo/onboard/examples/glibc-cache/hydo.yaml	3792407d2f5087d38119939c54ebf86dd3afdb80dc6905e580bf4c4ab4652732
 input	hydo/onboard/examples/k3s-lease/hydo.yaml	c00691d9a98e523e167032c5b9d71355b8d451b2643e7eda3ced7f6963a6d113
+input	hydo/onboard/examples/mender/hydo-devices.yaml	30c418df1096b3199559433ca85e7614c6c2336698745da98e5a79ca28f1fbfb
+input	hydo/onboard/examples/mender/hydo.yaml	f676cbe2ab1a1d4223b3ff34171272279c8842d4b9d92aed173b0e6a5c361353
 input	hydo/onboard/examples/miniflux/hydo-read.yaml	96baa7f3afccebb7dcbfb7ed78d64e79c6563096f2e84072ff62db752b34e26f
 input	hydo/onboard/examples/miniflux/hydo.yaml	7f74f2fac53dbc117de6152c0e43fe15e1bf1c4524e16f4226029de1b7ac003a
 input	hydo/onboard/examples/nats-flaky-8363/hydo.yaml	d8e8cbcf52ff01b080d3b7458f6dfffead9f027c6d1c201c03707d924a6c80f5
@@ -1106,6 +1108,8 @@ chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	59	500	eb5ee0160bd34b3ca50c294c7
 chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	60	500	6d272a9ff968a08f1d8be490d1146486833835e67b6fd51de1bc2c33fe1c4786
 chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	61	500	07b1d8a27073d43163c5be5a5fc3bcbe2ce85ef3c548f04d49b45cc94d07868a
 chunk	hydo/onboard/examples/k3s-lease/hydo.yaml	62	56	5e25f9182e4c06736000b4f811ecffc713e09a1b9ed5599a319e47c5d817b7be
+manifest	hydo/onboard/examples/mender/hydo-devices.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
+manifest	hydo/onboard/examples/mender/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/miniflux/hydo-read.yaml	core
 boot	hydo/onboard/examples/miniflux/hydo-read.yaml	hydo/onboard/examples/miniflux/hydo-read.yaml#0	error	cccaafbf624f82a7
 boot	hydo/onboard/examples/miniflux/hydo-read.yaml	hydo/onboard/examples/miniflux/hydo-read.yaml#1	snapshot	108b760bc0dfd72b
