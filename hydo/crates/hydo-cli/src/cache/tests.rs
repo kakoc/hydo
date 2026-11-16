@@ -175,6 +175,15 @@ fn serve(c: TcpStream, st: Arc<Mutex<State>>) {
 
 static N: AtomicU32 = AtomicU32::new(0);
 
+/// A test's folder, removed when the test ends, also when it fails (Milestone 271).
+struct Rm(PathBuf);
+
+impl Drop for Rm {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 fn scratch() -> PathBuf {
     let d = std::env::temp_dir().join(format!(
         "hydo-cache-test-{}-{}",
@@ -750,6 +759,7 @@ fn an_http_base_url_off_the_loopback_is_refused() {
         release_api: String::new(),
         offline: false,
     };
+    let _rm = Rm(cfg.home.clone());
     let c = Cache::new(&cfg, "linux", false, None);
     assert!(c.fetch.is_none());
     let e = c
@@ -770,6 +780,7 @@ fn moving_the_bin_link_to_another_version_is_said_first() {
         release_api: String::new(),
         offline: true,
     };
+    let _rm = Rm(cfg.home.clone());
     let c = Cache::new(&cfg, "linux", true, None);
     // no link yet: nothing to say
     assert_eq!(c.repoint_note("0.3.3"), None);

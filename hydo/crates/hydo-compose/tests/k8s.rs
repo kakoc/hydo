@@ -6,6 +6,7 @@
 //! - tests/fixtures/k8s/cluster.yaml: a small rendered chart written for this test (a StatefulSet
 //!   of three replicas, ConfigMaps, a Secret, an init container, a Helm test, an Ingress).
 
+use crate::tmpdir::TmpDir;
 use hydo_compose::registry::Registry;
 use std::path::{Path, PathBuf};
 
@@ -37,9 +38,9 @@ fn copy_dir(a: &Path, b: &Path) {
 }
 
 /// Import `input` (under a scratch folder) into `<scratch>/hydo/hydo.yaml`; the scratch folder.
-fn import(tag: &str, input: &str, extra: &[&str]) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("hydo-k8s-{}-{tag}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
+fn import(tag: &str, input: &str, extra: &[&str]) -> TmpDir {
+    let d =
+        TmpDir::fresh(std::env::temp_dir().join(format!("hydo-k8s-{}-{tag}", std::process::id())));
     copy_dir(&fixtures(), &d.join("m"));
     let mut a: Vec<String> = vec![
         d.join("m").join(input).display().to_string(),

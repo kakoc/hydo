@@ -5,6 +5,7 @@
 //! its own binds and mounts, and its mount points are made in the one tree. Without the option
 //! nothing changes (tests/oci.rs keeps the recorded answers).
 
+use crate::tmpdir::TmpDir;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -70,8 +71,9 @@ fn one_tree_for_two_services_of_one_image() {
     unsafe {
         libc::umask(0o022);
     }
-    let tmp = std::env::temp_dir().join(format!("hydo-build-oci-share-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
+    let tmp = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-build-oci-share-{}", std::process::id())),
+    );
     images(&tmp);
     std::fs::write(tmp.join("busybox"), b"#!/bin/sh\n").unwrap();
     for arch in ["x86_64", "arm64"] {

@@ -2,17 +2,16 @@
 //! declaration takes, the combinations refused before any run, `include:` bundles resolved at
 //! load time, and the resolved declaration in `hydo build --check`'s summary.
 
+use crate::tmpdir::TmpDir;
 use hydo_manifest::{check_summary, load_until_images, LoadOptions};
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-fn dir(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!(
+fn dir(name: &str) -> TmpDir {
+    let d = TmpDir::fresh(std::env::temp_dir().join(format!(
         "hydo-manifest-messages-{}-{name}",
         std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
+    )));
     d
 }
 

@@ -3,13 +3,15 @@
 //! built with. A hydo built in a checkout has no onboard/ directory next to it; until the
 //! TigerBeetle onboarding it then said "this hydo is 0.0.0" and refused every plan.
 
+use crate::tmpdir::TmpDir;
 use hydo_manifest::composer::{check_version, engine_version};
 use serde_json::json;
 
 #[test]
 fn a_release_version_file_wins() {
-    let d = std::env::temp_dir().join(format!("hydo-engine-version-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-engine-version-{}", std::process::id())),
+    );
     std::fs::create_dir_all(d.join("hydo/onboard")).unwrap();
     std::fs::write(d.join("hydo/VERSION"), "7.8.9\n").unwrap();
     assert_eq!(engine_version(&d.join("hydo/onboard")), "7.8.9");

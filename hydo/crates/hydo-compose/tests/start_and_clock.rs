@@ -3,8 +3,8 @@
 //! form (which means service_started; since Milestone 204), and an explicit `guest.clock_start`
 //! (the day of the import, or `HYDO_INIT_CLOCK_START`).
 
+use crate::tmpdir::TmpDir;
 use hydo_compose::registry::Registry;
-use std::path::PathBuf;
 
 struct Refuses;
 
@@ -18,19 +18,16 @@ impl Registry for Refuses {
 }
 
 fn import(tag: &str, compose: &str, clock: Option<i64>) -> String {
-    let d: PathBuf =
-        std::env::temp_dir().join(format!("hydo-compose-sc-{}-{tag}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-compose-sc-{}-{tag}", std::process::id())),
+    );
     std::fs::write(d.join("docker-compose.yml"), compose).unwrap();
     let a = vec![
         d.join("docker-compose.yml").display().to_string(),
         "--no-resolve".into(),
     ];
     assert_eq!(hydo_compose::main_with_clock(&a, &mut Refuses, clock), 0);
-    let m = std::fs::read_to_string(d.join("hydo.yaml")).unwrap();
-    let _ = std::fs::remove_dir_all(&d);
-    m
+    std::fs::read_to_string(d.join("hydo.yaml")).unwrap()
 }
 
 /// The lines of one service's entry in the written manifest.

@@ -25,6 +25,7 @@
 //! `hv/hvx`, which stay.)
 
 use crate::c_model;
+use crate::tmpdir::TmpDir;
 
 use c_model::CSched;
 use hydo_hvx::sched::Sched;
@@ -323,9 +324,8 @@ fn digest(lines: &[String]) -> String {
 /// The C parser's answers, from `HYDO_HVX_C_SRC` compiled with the probe (None: not given, or it
 /// does not compile here).
 fn c_answers(src: &Path, inputs: &[String]) -> Option<Vec<String>> {
-    let d = std::env::temp_dir().join(format!("hydo-hvx-parse-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
+    let d =
+        TmpDir::fresh(std::env::temp_dir().join(format!("hydo-hvx-parse-{}", std::process::id())));
     let text = std::fs::read_to_string(src).unwrap();
     let text = text.replacen(
         "int main(int argc, char **argv)\n{",

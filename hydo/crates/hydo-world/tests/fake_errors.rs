@@ -6,6 +6,7 @@
 //! of `{uuid}` is found again by a later `load: '{path:id}'`. Fixed port 28773 (below Linux's
 //! ephemeral port range).
 
+use crate::tmpdir::TmpDir;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::os::unix::net::UnixStream;
@@ -43,9 +44,8 @@ fn ctl(sock: &std::path::Path, line: &str) -> String {
 #[test]
 fn error_answers_by_status_and_uuids_by_sequence() {
     let port = 28773u16;
-    let dir = std::env::temp_dir().join(format!("hydo-world-ferr-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir =
+        TmpDir::fresh(std::env::temp_dir().join(format!("hydo-world-ferr-{}", std::process::id())));
     let sock = dir.join("world.sock");
     let cfg = serde_json::json!({
         "log": dir.join("world.log"), "sock": sock,

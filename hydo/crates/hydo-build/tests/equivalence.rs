@@ -30,6 +30,7 @@
 //! hydo-build --test it equivalence::` rewrites the golden from the Rust answers (the pinned list from
 //! the files as they are now); review the diff of `tests/golden/answers.txt` before committing.
 
+use crate::tmpdir::TmpDir;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -479,9 +480,8 @@ impl Compact {
 #[test]
 fn print_and_check_outputs_match_hydo_build() {
     let root = repo();
-    let tmp = std::env::temp_dir().join(format!("hydo-build-eq-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&tmp).unwrap();
+    let tmp =
+        TmpDir::fresh(std::env::temp_dir().join(format!("hydo-build-eq-{}", std::process::id())));
     let norm = Norm::new(&root, &tmp);
     let mode = mode();
     let golden = (mode == Mode::Golden).then(read_golden);

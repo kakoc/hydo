@@ -23,11 +23,13 @@
 
 mod common;
 
+mod tmpdir;
 use common::golden;
 use hydo_errors as he;
 use hydo_manifest::py::{json_dumps, json_dumps_indent};
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
+use tmpdir::TmpDir;
 
 const CHUNK: usize = 64;
 
@@ -46,11 +48,11 @@ fn golden_path() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/errors.sha256")
 }
 
-fn scratch(tag: &str) -> PathBuf {
+fn scratch(tag: &str) -> TmpDir {
     let d = std::env::temp_dir().join(format!("hydo-errors-eq-{}-{tag}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
-    d.canonicalize().unwrap()
+    TmpDir::adopt(d.canonicalize().unwrap())
 }
 
 fn srcs(v: &Value) -> Vec<(String, String)> {

@@ -161,6 +161,15 @@ fn no_machine_paths_and_links_resolve(html: &str) {
     }
 }
 
+/// A test's folder, removed when the test ends, also when it fails (Milestone 271).
+struct Rm(PathBuf);
+
+impl Drop for Rm {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 #[test]
 fn a_power_cut_run_against_its_passing_neighbour() {
     let html = page_of(
@@ -340,6 +349,7 @@ fn text_from_the_run_is_escaped() {
     let d = std::env::temp_dir().join(format!("hydo-htmlreport-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
+    let _rm = Rm(d.clone());
     hydo_results::write_document(&d.join(hydo_results::RUN_DOC), &run).unwrap();
     let html = page_of(&d, "d", None);
     let _ = std::fs::remove_dir_all(&d);
@@ -377,6 +387,7 @@ fn a_browser_run_shows_its_screenshots_next_to_the_finding() {
     let d = std::env::temp_dir().join(format!("hydo-htmlreport-shots-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(d.join("screens")).unwrap();
+    let _rm = Rm(d.clone());
     hydo_results::write_document(&d.join(hydo_results::RUN_DOC), &run).unwrap();
     let png = [0x89u8, b'P', b'N', b'G', 13, 10, 26, 10];
     for f in [
@@ -430,6 +441,7 @@ fn a_walk_shows_its_video_its_trace_and_its_test() {
     let d = std::env::temp_dir().join(format!("hydo-htmlreport-walk-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(d.join("screens")).unwrap();
+    let _rm = Rm(d.clone());
     hydo_results::write_document(&d.join(hydo_results::RUN_DOC), &run).unwrap();
     std::fs::write(d.join("screens/walk-step-0.webm"), [0x1a, 0x45, 0xdf, 0xa3]).unwrap();
     std::fs::write(d.join("screens/walk-step-0.trace.zip"), b"PK").unwrap();
@@ -505,6 +517,7 @@ fn versions_are_shown_when_the_results_carry_them() {
     let d = std::env::temp_dir().join(format!("hydo-htmlreport-v-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
+    let _rm = Rm(d.clone());
     hydo_results::write_document(&d.join(hydo_results::RUN_DOC), &run).unwrap();
     let without = page_of(&d, "d", None);
     assert!(!without.contains("id=\"versions\""));
@@ -741,6 +754,7 @@ fn one_problem_under_two_signatures() {
     let d = std::env::temp_dir().join(format!("hydo-htmlreport-m-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
+    let _rm = Rm(d.clone());
     let doc = Exploration {
         image: Image {
             path: "/x/explore-ob-redis-arm64.cpio.gz".into(),

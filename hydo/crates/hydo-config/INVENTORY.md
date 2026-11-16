@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-57 user-facing and 92 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 36 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 7 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+57 user-facing and 92 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 37 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 7 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -215,6 +215,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_BLESS` | test | flag | off | many crates' tests | `1`: rewrite a test's recorded answers (goldens) from this run's output. |
 | `HYDO_RELEASE_SCHEMA` | test | flag | off | hydo-results, hydo-agent-proto tests | `1`: copy the current schema to the released one (only when a release ships). |
 | `HYDO_COMPOSE_KEEP` | test | path | - | hydo-compose tests | Keep the Compose test's scratch files here. |
+| `HYDO_KEEP_TMP` | test | flag: set and not `0` | off | many crates' tests, the SDKs' tests | Set and not `0`: keep the tests' scratch folders in the temporary directory, to look at them after a test (Milestone 271; without it every folder is removed when its test ends, also when it fails). |
 | `HYDO_KVM_HEADERS` | test | path | /usr/include | hydo-kvm tests | Where the KVM ABI probe finds `linux/kvm.h` (the Linux UAPI headers). |
 | `HYDO_CONTROL_DUMP` | test | path | - | hydo-control tests | Dump the controller tests' transcripts here. |
 | `HYDO_CONTROL_FULL` | test | flag: set | off | hydo-control tests | Set: the controller tests' full seed ranges. |

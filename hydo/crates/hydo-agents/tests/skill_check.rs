@@ -32,6 +32,7 @@
 //! `cargo test -p hydo-agents --test it skill_check:: -- --nocapture` to see what it checked.
 //! The negative tests below run it on a copy of the relevant files with one thing broken.
 
+use crate::tmpdir::TmpDir;
 use hydo_manifest::py::repr_str;
 use regex::Regex;
 use std::collections::BTreeMap;
@@ -523,14 +524,13 @@ fn the_skills_hold_the_specification_and_their_copies() {
 
 /// A scratch copy of what the check reads: skills/, the guide, the marketplace file, the two
 /// tool symlinks (relative, so they point into the copy) and the example the guide copies.
-fn copy_tree() -> PathBuf {
+fn copy_tree() -> TmpDir {
     static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let d = std::env::temp_dir().join(format!(
+    let d = TmpDir::fresh(std::env::temp_dir().join(format!(
         "hydo-skill-check-{}-{}",
         std::process::id(),
         N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-    ));
-    let _ = std::fs::remove_dir_all(&d);
+    )));
     let t = top();
     std::fs::create_dir_all(d.join("hydo/onboard/examples/redis-composed")).unwrap();
     for (from, to) in [

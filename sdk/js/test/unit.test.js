@@ -11,6 +11,11 @@ const { spawnSync } = require('child_process');
 const ha = require('..');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hydo-js-unit-'));
+// removed at the end, also after a failure; HYDO_KEEP_TMP=1 keeps it to look at
+process.on('exit', () => {
+  if (!['', '0', undefined].includes(process.env.HYDO_KEEP_TMP)) return;
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
 let n = 0;
 function capture(fn) {
   const f = path.join(tmp, 'out' + n++);

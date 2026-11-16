@@ -11,6 +11,7 @@
 //! `hydo-fetch-image build`, and stops when the new build's digest differs from the pin, until
 //! `HYDO_ACCEPT_REBUILD=1` takes it. Without Docker, both say what to install.
 
+use crate::tmpdir::TmpDir;
 use hydo_compose::registry::Registry;
 use sha2::{Digest, Sha256};
 use std::os::unix::fs::PermissionsExt;
@@ -29,9 +30,10 @@ impl Registry for Refuses {
     }
 }
 
-fn dir(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("hydo-compose-local-{}-{name}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
+fn dir(name: &str) -> TmpDir {
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-compose-local-{}-{name}", std::process::id())),
+    );
     std::fs::create_dir_all(d.join("shop")).unwrap();
     d
 }

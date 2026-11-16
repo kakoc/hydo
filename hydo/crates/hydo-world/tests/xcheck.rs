@@ -16,6 +16,7 @@
 //! A step whose records race on the host (a duplicated webhook is delivered twice at once) is
 //! marked, and its records are compared as a sorted set.
 
+use crate::tmpdir::TmpDir;
 use bytes::Bytes;
 use std::collections::BTreeSet;
 use std::future::{poll_fn, Future};
@@ -1021,10 +1022,10 @@ fn group_racy(
     out
 }
 
-fn tmpdir() -> PathBuf {
-    let d = std::env::temp_dir().join(format!("hydo-world-xcheck-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
+fn tmpdir() -> TmpDir {
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-world-xcheck-{}", std::process::id())),
+    );
     d
 }
 
@@ -1066,7 +1067,7 @@ async fn scenario() {
         bin,
         log: dir.join("world.log"),
         sock: dir.join("world.sock"),
-        dir: dir.clone(),
+        dir: dir.to_path_buf(),
         child: None,
         out: Vec::new(),
         seen: seen.clone(),

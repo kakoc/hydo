@@ -23,6 +23,7 @@
 //! golden is the transcripts of those checked runs.
 
 use crate::support;
+use crate::tmpdir::TmpDir;
 
 use hydo_control::{Ending, Plan, Transcript};
 use hydo_explore::gen::{Backend, Ex};
@@ -30,7 +31,6 @@ use hydo_explore::space::{grpc_targets, Space};
 use hydo_schedule::Schedule;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use support::{boot, data_of, run_schedule, top, Booted, Item};
 
 // ------------------------------------------------------------------ the plans
@@ -418,10 +418,10 @@ fn the_m123_features_recorded_transcripts() {
 
 // ------------------------------------------------------------------ scratch roots
 
-fn scratch(tag: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("hydo-control-m123-{}-{tag}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
+fn scratch(tag: &str) -> TmpDir {
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-control-m123-{}-{tag}", std::process::id())),
+    );
     d
 }
 // ------------------------------------------------------------------ the plans and hydo-build

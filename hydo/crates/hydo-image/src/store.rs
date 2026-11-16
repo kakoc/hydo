@@ -224,7 +224,31 @@ impl Home {
 mod tests {
     use super::*;
 
-    fn scratch(tag: &str) -> PathBuf {
+    /// A test's folder, removed when the test ends, also when it fails (Milestone 271;
+    /// `HYDO_KEEP_TMP=1` keeps it).
+    struct Tmp(std::path::PathBuf);
+
+    impl std::ops::Deref for Tmp {
+        type Target = std::path::Path;
+        fn deref(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Tmp {
+        fn drop(&mut self) {
+            if std::env::var_os("HYDO_KEEP_TMP").is_some_and(|v| !v.is_empty() && v != "0") {
+                return;
+            }
+            // the store's entries and folders are read-only
+            for e in walk(&self.0) {
+                let _ = std::fs::set_permissions(&e, std::fs::Permissions::from_mode(0o755));
+            }
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn scratch(tag: &str) -> Tmp {
         let d = std::env::temp_dir().join(format!("hydo-store-{tag}-{}", std::process::id()));
         if d.exists() {
             for e in walk(&d) {
@@ -233,7 +257,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(&d);
         }
         std::fs::create_dir_all(&d).unwrap();
-        d
+        Tmp(d)
     }
 
     fn walk(d: &Path) -> Vec<PathBuf> {

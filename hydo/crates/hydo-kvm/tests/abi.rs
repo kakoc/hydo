@@ -4,6 +4,7 @@
 //! headers (`$HYDO_KVM_HEADERS`, default `/usr/include`); where `linux/kvm.h` is not there (a
 //! Mac), the test says so and passes (`src/abi.rs` checks the sizes against recorded values).
 
+use crate::tmpdir::TmpDir;
 use hydo_kvm::abi::*;
 use std::mem::{offset_of, size_of};
 use std::path::PathBuf;
@@ -253,8 +254,8 @@ fn types_and_numbers_match_linux_kvm_h() {
         ));
     }
     c.push_str("return 0;}\n");
-    let d = std::env::temp_dir().join(format!("hydo-kvm-abi-{}", std::process::id()));
-    std::fs::create_dir_all(&d).unwrap();
+    let d =
+        TmpDir::fresh(std::env::temp_dir().join(format!("hydo-kvm-abi-{}", std::process::id())));
     std::fs::write(d.join("probe.c"), c).unwrap();
     let cc = std::env::var("CC").unwrap_or_else(|_| "cc".into());
     let st = Command::new(cc)

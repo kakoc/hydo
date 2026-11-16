@@ -15,6 +15,7 @@
 //! `model.json` of a NEW case (one listed in INDEX without a model.json); a model.json that exists
 //! is never rewritten.
 
+use crate::tmpdir::TmpDir;
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -274,8 +275,7 @@ fn migrate_is_safe_on_every_example() {
 
 #[test]
 fn a_newer_format_is_refused_with_the_format_it_needs() {
-    let d = std::env::temp_dir().join(format!("hydo-format-{}", std::process::id()));
-    std::fs::create_dir_all(&d).unwrap();
+    let d = TmpDir::fresh(std::env::temp_dir().join(format!("hydo-format-{}", std::process::id())));
     let p = d.join("hydo.yaml");
     std::fs::write(
         &p,
@@ -306,8 +306,8 @@ fn the_check_names_the_placeholders_of_hydo_init() {
     use hydo_manifest::{check_summary, load_until_images};
     let top = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     // the template with its name filled in, as `hydo init` writes it
-    let d = std::env::temp_dir().join(format!("hydo-init-check-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
+    let d =
+        TmpDir::fresh(std::env::temp_dir().join(format!("hydo-init-check-{}", std::process::id())));
     let src = top.join("hydo/guide/init/hydo");
     for sub in ["", "workload", "checks", "regressions"] {
         std::fs::create_dir_all(d.join(sub)).unwrap();

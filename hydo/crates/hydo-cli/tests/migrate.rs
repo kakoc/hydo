@@ -1,6 +1,7 @@
 //! `hydo migrate` (M114) on the project format's own example pair: `--check` reports and writes
 //! nothing, a rewrite gives the canonical file byte for byte, and a second run changes nothing.
 
+use crate::tmpdir::TmpDir;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -23,7 +24,7 @@ fn hydo(args: &[&str], dir: &std::path::Path) -> (i32, String, String) {
 
 #[test]
 fn migrate_rewrites_a_retired_spelling() {
-    let d = std::env::temp_dir().join(format!("hydo-migrate-{}", std::process::id()));
+    let d = TmpDir::new(&format!("hydo-migrate-{}", std::process::id()));
     std::fs::create_dir_all(d.join("hydo")).unwrap();
     let old = examples().join("retired-history-check-in-test/hydo.yaml");
     let new = std::fs::read_to_string(
@@ -59,5 +60,4 @@ fn migrate_rewrites_a_retired_spelling() {
 
     let (rc, _, err) = hydo(&["migrate", "--bogus"], &d);
     assert_eq!(rc, 2, "{err}");
-    let _ = std::fs::remove_dir_all(&d);
 }

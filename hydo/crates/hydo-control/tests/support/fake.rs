@@ -194,6 +194,11 @@ pub struct Fake {
     /// With `dark_at`: the agent itself waits on the dark disk (its own mount was under way at
     /// the flush), so nothing at all comes after the dark point.
     pub dark_agent: bool,
+    /// Milestone 271 (open item 127): the data disk loses power at the next mount of a file
+    /// system, as when a `cf=` run's k-th flush is the one that an `L=`'s mount makes. A mount
+    /// the agent makes itself (`mount`) leaves the agent waiting ([`Fake::dark_agent`]); a mount
+    /// in a child process (`run` of busybox `mount`) leaves only that process waiting.
+    pub dark_at_mount: bool,
     dark: bool,
 }
 
@@ -221,6 +226,7 @@ impl Fake {
             cut_at_go: false,
             dark_at: None,
             dark_agent: false,
+            dark_at_mount: false,
             dark: false,
         };
         f.emit(
@@ -268,6 +274,7 @@ impl Fake {
             cut_at_go: false,
             dark_at: None,
             dark_agent: false,
+            dark_at_mount: false,
             dark: false,
         }
     }
@@ -503,6 +510,10 @@ impl Fake {
                 },
             },
             Command::Mount(m) => {
+                if self.dark_at_mount && self.dark_at.is_none() {
+                    self.dark_at = Some(t);
+                    self.dark_agent = true;
+                }
                 // now and then the disk cannot be mounted, with the errno a real agent reports:
                 // a corrupt ext4 (EUCLEAN), a bad superblock (EINVAL), a read error (EIO), a bad
                 // checksum (EBADMSG), or a read-only device (EROFS: busybox tries again read-only,
@@ -575,6 +586,15 @@ impl Fake {
                     x
                 } else if let Some(x) = self.m123_run(&r) {
                     x
+                } else if a1 == "mount" {
+                    // a mount in a child process (Milestone 271)
+                    if self.dark_at_mount && self.dark_at.is_none() {
+                        self.dark_at = Some(t);
+                    }
+                    (2, 0, String::new())
+                } else if script.contains(" od -An -tx1") {
+                    // one byte read in a child process (Milestone 271)
+                    (2, 0, format!(" {:02x}\n", self.h(&["byte", &script]) % 256))
                 } else if a1 == "sleep" {
                     let ms: f64 = r.argv.get(2).and_then(|x| x.parse().ok()).unwrap_or(1.0);
                     ((ms * 40.0) as u64 + 3, 0, String::new())

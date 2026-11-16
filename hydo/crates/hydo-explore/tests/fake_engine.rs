@@ -35,8 +35,10 @@
 //! the goldens were recorded (explore.py on fake_engine.py) and cross-checked (explore.py on this
 //! engine, hydo-explore on fake_engine.py).
 
+mod tmpdir;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tmpdir::TmpDir;
 
 /// The image every scenario names (the scripted engine never opens it). Until M146 the scenarios
 /// took the explorer's default, `explore-disk.img`; that default is gone (a shell-init image), and
@@ -133,11 +135,11 @@ fn top() -> PathBuf {
         .expect("root")
 }
 
-fn scratch(name: &str) -> PathBuf {
+fn scratch(name: &str) -> TmpDir {
     let d = std::env::temp_dir().join(format!("hydo-explore-fake-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).expect("scratch");
-    d.canonicalize().expect("scratch")
+    TmpDir::adopt(d.canonicalize().expect("scratch"))
 }
 
 fn engine_path() -> PathBuf {

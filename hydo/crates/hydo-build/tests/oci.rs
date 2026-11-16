@@ -16,6 +16,7 @@
 //! directory are written `<tmp>`. From now on Rust is the reference: `HYDO_BLESS=1 cargo test -p
 //! hydo-build --test it oci::` rewrites `answers.json` from the Rust answers; review the diff.
 
+use crate::tmpdir::TmpDir;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
 use std::os::unix::fs::MetadataExt;
@@ -137,9 +138,8 @@ fn oci_staging_matches_hydo_oci() {
     unsafe {
         libc::umask(0o022);
     }
-    let tmp = std::env::temp_dir().join(format!("hydo-build-oci-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&tmp).unwrap();
+    let tmp =
+        TmpDir::fresh(std::env::temp_dir().join(format!("hydo-build-oci-{}", std::process::id())));
     let busybox = golden_dir().join("busybox");
     let bless = std::env::var_os("HYDO_BLESS").is_some_and(|v| v == "1");
     let st = Command::new("tar")

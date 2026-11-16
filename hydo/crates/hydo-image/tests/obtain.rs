@@ -2,6 +2,7 @@
 //! refusal says why the source could not help. Its own test program, because a source is
 //! registered once per process.
 
+use crate::tmpdir::TmpDir;
 use hydo_image::kernels::{self, Source};
 use hydo_image::FileRef;
 use std::path::PathBuf;
@@ -23,9 +24,10 @@ impl Source for Fake {
 
 #[test]
 fn the_registered_source_is_asked_after_the_directories() {
-    let d = std::env::temp_dir().join(format!("hydo-image-obtain-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
+    let tmp = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-image-obtain-{}", std::process::id())),
+    );
+    let d = tmp.to_path_buf();
     let img = d.join("explore-ob-x-arm64.cpio.gz");
     let mut rec = kernels::record_for("arm64", false);
     // before a source is registered: the refusal of M155, nothing added

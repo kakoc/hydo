@@ -58,10 +58,16 @@ test('every js block of the README runs', () => {
   assert.ok(found.length >= 6, `only ${found.length} js blocks`);
   for (const [, text, heading] of found) {
     const { p, dir } = run(text, { HYDO_ASSERT_OUT: 'off', HYDO_HIST_OUT: 'off' });
-    fs.rmSync(dir, { recursive: true, force: true });
+    remove(dir);
     assert.strictEqual(p.status, 0, `${heading}:\n${text}\n${p.stderr}`);
   }
 });
+
+// A test's directory removed, also after a failure; HYDO_KEEP_TMP=1 keeps it to look at.
+function remove(dir) {
+  if (!['', '0', undefined].includes(process.env.HYDO_KEEP_TMP)) return;
+  fs.rmSync(dir, { recursive: true, force: true });
+}
 
 test('the complete program writes what the README shows', () => {
   const bs = blocks();
@@ -69,13 +75,18 @@ test('the complete program writes what the README shows', () => {
   assert.ok(i >= 0);
   assert.strictEqual(bs[i + 1][0], 'text');
   const dir0 = fs.mkdtempSync(path.join(os.tmpdir(), 'hydo-js-readme-out-'));
-  const out = path.join(dir0, 'console');
-  fs.writeFileSync(out, '');
-  const { p, dir } = run(bs[i][1], { HYDO_ASSERT_OUT: out });
-  assert.strictEqual(p.status, 0, p.stderr);
-  assert.strictEqual(fs.readFileSync(out, 'utf8'), bs[i + 1][1]);
-  fs.rmSync(dir, { recursive: true, force: true });
-  fs.rmSync(dir0, { recursive: true, force: true });
+  let dir;
+  try {
+    const out = path.join(dir0, 'console');
+    fs.writeFileSync(out, '');
+    const r = run(bs[i][1], { HYDO_ASSERT_OUT: out });
+    dir = r.dir;
+    assert.strictEqual(r.p.status, 0, r.p.stderr);
+    assert.strictEqual(fs.readFileSync(out, 'utf8'), bs[i + 1][1]);
+  } finally {
+    if (dir) remove(dir);
+    remove(dir0);
+  }
 });
 
 test('every link of the README is absolute', () => {

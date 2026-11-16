@@ -4,6 +4,8 @@
 //! message where a request cannot be made (a `from` field with no earlier value). Four schemas,
 //! 12 RPCs, 3 seeds, 100 to 300 requests each.
 
+mod tmpdir;
+
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::process::Command;
@@ -17,6 +19,8 @@ fn request_streams_like_go() {
     let golden = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../hydo-grpc-gen/tests/golden");
     let lines = std::fs::read_to_string(golden.join("streams.txt")).unwrap();
     let state = std::env::temp_dir().join(format!("hydo-grpc-streams-{}", std::process::id()));
+    // removed at the end, also when a line fails (Milestone 271)
+    let _rm = tmpdir::TmpDir::adopt(state.clone());
     let mut n = 0;
     for l in lines.lines() {
         let f: Vec<&str> = l.split_whitespace().collect();

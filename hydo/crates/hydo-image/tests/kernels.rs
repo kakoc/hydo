@@ -1,5 +1,6 @@
 //! The kernel table is the releases' pins, and the recorded command lines are the engines'.
 
+use crate::tmpdir::TmpDir;
 use hydo_image::kernels::{self, Known, ARM64_CMDLINE, KNOWN, X86_CMDLINE};
 use std::path::{Path, PathBuf};
 
@@ -114,9 +115,9 @@ fn the_containers_variant() {
 
 #[test]
 fn lookup_by_sha256_and_the_refusal() {
-    let d = std::env::temp_dir().join(format!("hydo-image-k-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
+    let tmp =
+        TmpDir::fresh(std::env::temp_dir().join(format!("hydo-image-k-{}", std::process::id())));
+    let d = tmp.to_path_buf();
     // a record that names a kernel by the sha256 of a file we write
     std::fs::write(d.join("Image-explore"), b"not the kernel").unwrap();
     std::fs::write(d.join("Image-explore-netns"), b"a kernel").unwrap();

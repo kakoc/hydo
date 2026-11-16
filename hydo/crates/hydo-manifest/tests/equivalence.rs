@@ -31,6 +31,7 @@
 //! from the tracked files as they are now); review the diff of `tests/golden/answers.txt` before
 //! committing.
 
+use crate::tmpdir::TmpDir;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -564,8 +565,9 @@ const GOLDEN_HEADER: &str = "\
 fn same_as_hydo_build() {
     let root = repo_root();
     let fixtures = crate_dir().join("tests/fixtures");
-    let tmp = std::env::temp_dir().join(format!("hydo-manifest-eq-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
+    let tmp = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-manifest-eq-{}", std::process::id())),
+    );
     std::fs::create_dir_all(tmp.join("cases")).unwrap();
     std::fs::create_dir_all(tmp.join("yaml")).unwrap();
     std::fs::create_dir_all(tmp.join("embedded")).unwrap();

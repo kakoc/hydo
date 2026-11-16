@@ -20,6 +20,7 @@
 //! file); the golden holds the Rust CLI's `hydo:` message there (M101, M104). A golden answer
 //! that still holds a traceback accepts any `hydo:` message.
 
+use crate::tmpdir::{self, TmpDir};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -63,7 +64,12 @@ fn record_python() -> bool {
     std::env::var_os("HYDO_RECORD_PYTHON").is_some()
 }
 
-fn scratch(tag: &str) -> PathBuf {
+/// A fresh folder, removed with the value (Milestone 271).
+fn scratch(tag: &str) -> TmpDir {
+    TmpDir::adopt(scratch_path(tag))
+}
+
+fn scratch_path(tag: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!(
         "hydo-eq-{}-{}-{}",
         std::process::id(),
@@ -77,7 +83,7 @@ fn scratch(tag: &str) -> PathBuf {
 
 /// A release-like root: bin/hydo, hydo -> repo/hydo, hv -> repo/hv, plugin ->
 /// repo/plugin, guest/ with the closure listings the build patches read.
-fn release() -> PathBuf {
+fn release() -> TmpDir {
     let r = scratch("rel");
     let repo = repo();
     std::fs::create_dir_all(r.join("bin")).unwrap();
@@ -182,7 +188,8 @@ struct Host {
 fn host() -> &'static Host {
     static HOST: std::sync::OnceLock<Host> = std::sync::OnceLock::new();
     HOST.get_or_init(|| {
-        let base = scratch("host");
+        // the test program's whole life: removed at its exit
+        let base = tmpdir::at_exit(scratch_path("host"));
         let root = base.join("root");
         std::fs::create_dir_all(&root).unwrap();
         let mut dirs = Vec::new();
@@ -309,7 +316,7 @@ fn same(root: &Path, platform: &str, setup: Setup, steps: &[&[&str]]) -> usize {
         }
         st.produced.push((key, got));
     }
-    let _ = std::fs::remove_dir_all(&cwd);
+    drop(cwd);
     steps.len()
 }
 
@@ -407,7 +414,7 @@ fn doctor_needs_no_python() {
             assert!(out.contains("WARN missing: guest/hydo_fc"), "{out}");
         }
     }
-    let _ = std::fs::remove_dir_all(&root);
+    drop(root);
 }
 
 /// Without `--backend` or `HYDO_BACKEND`, `hydo` takes the engine the machine has (0.3.1): hvx
@@ -454,9 +461,6 @@ fn the_machine_engine_is_chosen() {
         kvm_doctor(&doctor(&both, Some("kvm"))),
         "HYDO_BACKEND=kvm wins"
     );
-    for d in [root, none, kvm, both] {
-        let _ = std::fs::remove_dir_all(d);
-    }
 }
 
 /// A run on hvx where `/dev/hvx` is not there stops before the engine starts, and says what to
@@ -498,9 +502,6 @@ fn no_hvx_device_is_explained() {
         err.contains("/dev/kvm is usable here: run on the KVM engine with --backend kvm"),
         "{err}"
     );
-    for d in [root, cwd, none, kvm] {
-        let _ = std::fs::remove_dir_all(d);
-    }
 }
 
 /// `hydo doctor` never fetches: with the install cache empty, `HYDO_OFFLINE` unset and the release
@@ -556,8 +557,6 @@ fn doctor_never_fetches() {
         left.is_empty(),
         "hydo doctor wrote into the install cache: {left:?}"
     );
-    let _ = std::fs::remove_dir_all(&root);
-    let _ = std::fs::remove_dir_all(&home);
 }
 
 /// `hydo <command> --help` and `-h` print the command's options in a directory with no image,
@@ -638,7 +637,6 @@ fn every_command_prints_its_help_without_an_image() {
                         .map(|e| e.file_name())
                         .collect();
                     assert!(left.is_empty(), "{what} wrote {left:?}");
-                    let _ = std::fs::remove_dir_all(d);
                 }
             }
         }
@@ -1009,7 +1007,7 @@ fn cli_matches_golden() {
             ],
         );
     }
-    let _ = std::fs::remove_dir_all(&root);
+    drop(root);
     let st = STATE.lock().unwrap().take().unwrap();
     if bless() {
         write_golden(&st.produced);

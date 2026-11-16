@@ -2,6 +2,8 @@
 //! (sqld's HTTP API and PostgreSQL's wire protocol, answering canned messages), so the rules
 //! that decide ok / failed / unknown are tested without a database.
 
+mod tmpdir;
+use tmpdir::TmpDir;
 use hydo_sql::conf::{Conf, Dialect, Role};
 use hydo_sql::db::{self, Fail};
 use hydo_sql::work;
@@ -341,8 +343,7 @@ fn pg_interactive_outcomes() {
 
 #[test]
 fn world_and_check_sources() {
-    let dir = std::env::temp_dir().join(format!("hydo-sql-test-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = TmpDir::fresh(std::env::temp_dir().join(format!("hydo-sql-test-{}", std::process::id())));
     let log = dir.join("world.log");
     std::fs::write(&log, "seq=1 t=1 kind=req ep=stripe route=refund ref=pi_1 fx=1 out=ok\nseq=2 t=2 kind=req ep=stripe route=refund ref=pi_2 fx=0 out=replay\n").unwrap();
     let books = dir.join("books.txt");

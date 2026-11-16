@@ -98,6 +98,15 @@ fn serve(c: TcpStream, st: Arc<Mutex<State>>) {
 
 static N: AtomicU32 = AtomicU32::new(0);
 
+/// A test's folder, removed when the test ends, also when it fails (Milestone 271).
+struct Rm(PathBuf);
+
+impl Drop for Rm {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 fn scratch() -> PathBuf {
     let d = std::env::temp_dir().join(format!(
         "hydo-skill-update-test-{}-{}",
@@ -199,6 +208,7 @@ fn the_newest_release_is_the_highest_skill_tag() {
 fn an_older_copy_is_updated_and_nothing_else_is_touched() {
     let srv = Server::start();
     let d = scratch();
+    let _rm_d = Rm(d.clone());
     publish(
         &srv,
         &d,
@@ -271,6 +281,7 @@ fn an_older_copy_is_updated_and_nothing_else_is_touched() {
 fn a_wrong_sha256_is_refused_and_changes_nothing() {
     let srv = Server::start();
     let d = scratch();
+    let _rm_d = Rm(d.clone());
     publish(&srv, &d, "1.1.0", &[("skill-v1.1.0", false, false)]);
     let name = archive_name("1.1.0");
     srv.put(
@@ -298,6 +309,7 @@ fn a_wrong_sha256_is_refused_and_changes_nothing() {
 fn offline_it_refuses_without_touching_anything() {
     let srv = Server::start();
     let d = scratch();
+    let _rm_d = Rm(d.clone());
     let skills = d.join("skills");
     skill(&skills, "1.0.0");
     let to = skills.display().to_string();
@@ -317,6 +329,7 @@ fn offline_it_refuses_without_touching_anything() {
 fn a_newer_copy_is_kept_unless_a_version_is_asked_for() {
     let srv = Server::start();
     let d = scratch();
+    let _rm_d = Rm(d.clone());
     publish(&srv, &d, "1.1.0", &[("skill-v1.1.0", false, false)]);
     let skills = d.join("skills");
     skill(&skills, "2.0.0");
@@ -344,6 +357,7 @@ fn a_newer_copy_is_kept_unless_a_version_is_asked_for() {
 fn a_release_whose_skill_has_another_version_is_refused() {
     let srv = Server::start();
     let d = scratch();
+    let _rm_d = Rm(d.clone());
     let a = publish(&srv, &d, "1.1.0", &[("skill-v1.2.0", false, false)]);
     // the archive of 1.1.0 published as 1.2.0
     let name = archive_name("1.2.0");
@@ -369,6 +383,7 @@ fn a_release_whose_skill_has_another_version_is_refused() {
 fn foreign_folders_links_and_plain_http_are_refused() {
     let srv = Server::start();
     let d = scratch();
+    let _rm_d = Rm(d.clone());
     publish(&srv, &d, "1.1.0", &[("skill-v1.1.0", false, false)]);
     let src = srv.source();
     // a folder of the same name that is another skill
@@ -437,6 +452,7 @@ fn each_agent_gets_its_folder() {
 #[test]
 fn a_claude_code_copy_gets_the_plugin_folder_and_others_the_skill() {
     let d = scratch();
+    let _rm_d = Rm(d.clone());
     let src = plugin(&d.join("src"), "1.1.0");
     // an older plugin copy in .claude/skills/hydo, an older skill copy in .agents/skills/onboard
     let claude = plugin(&d.join("proj/.claude/skills"), "1.0.0");

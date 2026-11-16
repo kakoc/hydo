@@ -2,6 +2,8 @@
 //! ported): deterministic steps, retries of unknown outcomes with the same request, the end-of-run
 //! retry, composer drives and scenarios, field extraction, and reflection.
 
+mod tmpdir;
+
 use bytes::{Buf, Bytes, BytesMut};
 use hydo_grpc::client::{extract, Client, Options, WorkerEnv};
 use hydo_grpc::rng::R;
@@ -12,6 +14,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tmpdir::TmpDir;
 
 /// The tests share environment variables (HYDO_OUTCOMES, HYDO_SEED, ...): one at a time.
 static SERIAL: Mutex<()> = Mutex::new(());
@@ -271,20 +274,19 @@ fn serve(f: Shared) -> String {
     addr
 }
 
-fn tmp(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!(
+/// A fresh folder, removed with the value, also when the test fails (Milestone 271).
+fn tmp(name: &str) -> TmpDir {
+    TmpDir::fresh(std::env::temp_dir().join(format!(
         "hydo-grpc-client-{}-{}-{:?}",
         std::process::id(),
         name,
         std::time::Instant::now()
-    ));
-    std::fs::create_dir_all(&d).unwrap();
-    d
+    )))
 }
 
 /// desc.pb + plan.json for the demo schema and hints (plus `extra`), pointed at addr, with short
 /// deadlines and backoffs.
-fn setup(addr: &str, extra: &str) -> PathBuf {
+fn setup(addr: &str, extra: &str) -> TmpDir {
     let dir = tmp("plan");
     let hints = std::fs::read_to_string(repo().join("hydo/grpcgen/demo/hints.yaml")).unwrap();
     let hp = dir.join("hints.yaml");
@@ -304,7 +306,7 @@ fn setup(addr: &str, extra: &str) -> PathBuf {
     dir
 }
 
-fn client(dir: &Path, seed: u64) -> (Arc<Client>, PathBuf) {
+fn client(dir: &Path, seed: u64) -> (Arc<Client>, TmpDir) {
     let st = tmp("state");
     std::env::set_var("HYDO_GRPC_CONSOLE", "off");
     std::env::set_var("HYDO_OUTCOMES", st.join("outcomes"));

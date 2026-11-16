@@ -4,8 +4,10 @@ The byte-for-byte comparison with the reference SDK is tests/test_cases.py (the 
 Go's own unit test (hydohist_test.go) and cover the argument checks, the sink switches, threads
 and fork."""
 
+import atexit
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +19,16 @@ sys.path.insert(0, SRC)
 
 from hydo_assert import history as h  # noqa: E402
 
+def mkdtemp(**kw):
+    """A temporary directory, removed when the tests end, also after a failure
+    (HYDO_KEEP_TMP=1 keeps it to look at)."""
+    d = tempfile.mkdtemp(**kw)
+    if os.environ.get("HYDO_KEEP_TMP", "") in ("", "0"):
+        pid = os.getpid()
+        atexit.register(lambda: os.getpid() == pid and shutil.rmtree(d, ignore_errors=True))
+    return d
+
+
 LINE = re.compile(rb"^HYDO-HIST (\S+) (\S+) (invoke|ok|fail|info) ([0-9]+) (.*)$")
 
 
@@ -24,7 +36,7 @@ class Out(object):
     """Point HYDO_HIST_OUT at a temporary file for the duration of a test."""
 
     def __init__(self, create=True):
-        d = tempfile.mkdtemp(prefix="hydo-hist.")
+        d = mkdtemp(prefix="hydo-hist.")
         self.path = os.path.join(d, "hist")
         if create:
             open(self.path, "wb").close()
@@ -150,11 +162,11 @@ class TestSink(unittest.TestCase):
         r = self.run_child("stderr")
         self.assertEqual(r.stdout, b"")
         self.assertRegex(r.stderr, rb"^HYDO-HIST s 1 invoke [0-9]+ read k\nHYDO-HIST s 1 ok [0-9]+ read k nil\n$")
-        r = self.run_child(os.path.join(tempfile.mkdtemp(), "no-such-dir", "x"))
+        r = self.run_child(os.path.join(mkdtemp(), "no-such-dir", "x"))
         self.assertRegex(r.stderr, rb"^HYDO-HIST s 1 invoke ")
 
     def test_append_and_separate_from_assertions(self):
-        d = tempfile.mkdtemp()
+        d = mkdtemp()
         hist, asrt = os.path.join(d, "hist"), os.path.join(d, "assert")
         with open(hist, "wb") as f:
             f.write(b"PRE\n")

@@ -3,6 +3,7 @@
 //! both, so a Linux user downloaded every arm64 image too (the YugabyteDB and libSQL
 //! onboardings). The import reads the YugabyteDB example's lock file, so no registry is asked.
 
+use crate::tmpdir::TmpDir;
 use hydo_compose::registry::Registry;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -24,9 +25,10 @@ fn example() -> PathBuf {
 
 /// The import in a fresh directory, and a fetcher that records what it was asked and makes the
 /// file (or the OCI layout directory).
-fn imported(tag: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("hydo-compose-arch-{}-{tag}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
+fn imported(tag: &str) -> TmpDir {
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-compose-arch-{}-{tag}", std::process::id())),
+    );
     std::fs::create_dir_all(d.join("p")).unwrap();
     std::fs::copy(
         example().join("docker-compose.yaml"),

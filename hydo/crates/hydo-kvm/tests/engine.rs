@@ -3,6 +3,7 @@
 //! initializes the PIC as Linux does, arms the hydo timer, idles in HLT, counts ticks in its
 //! interrupt handler (EOI, re-arm), reads the clock, prints its verdict and halts.
 
+use crate::tmpdir::TmpDir;
 use hydo_engine_proto::{
     Answer, EngineMsg, HostCmd, HostMsg, Phase, Request, RunResult, SendAnswer, StopWhy,
 };
@@ -61,6 +62,28 @@ struct Host {
     rx: Receiver<EngineMsg>,
     join: Option<std::thread::JoinHandle<i32>>,
     log: Vec<String>,
+    /// The engine's folder (its kernel, initrd and output), removed when the host and every
+    /// [`Out`] of it are dropped (Milestone 271: 22,000 of them were left).
+    _dir: Arc<TmpDir>,
+}
+
+/// An engine's output directory; its folder stays while this or its [`Host`] is alive.
+struct Out {
+    path: std::path::PathBuf,
+    _dir: Arc<TmpDir>,
+}
+
+impl std::ops::Deref for Out {
+    type Target = std::path::Path;
+    fn deref(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+impl AsRef<std::path::Path> for Out {
+    fn as_ref(&self) -> &std::path::Path {
+        &self.path
+    }
 }
 
 impl Host {
@@ -73,17 +96,12 @@ impl Host {
     }
 
     /// An engine with options `o`, and its output directory.
-    fn start_with(mode: Mode, prog: Program, o: KvmOptions) -> (Host, std::path::PathBuf) {
+    fn start_with(mode: Mode, prog: Program, o: KvmOptions) -> (Host, Out) {
         Host::start_machine(mode, Script::new(prog), 1, o)
     }
 
     /// An engine of `vcpus` scripted vCPUs (`hv` has their programs), and its output directory.
-    fn start_machine(
-        mode: Mode,
-        hv: Script,
-        vcpus: usize,
-        o: KvmOptions,
-    ) -> (Host, std::path::PathBuf) {
+    fn start_machine(mode: Mode, hv: Script, vcpus: usize, o: KvmOptions) -> (Host, Out) {
         Host::start_epoch(mode, hv, vcpus, o, None)
     }
 
@@ -95,16 +113,15 @@ impl Host {
         vcpus: usize,
         o: KvmOptions,
         epoch: Option<u64>,
-    ) -> (Host, std::path::PathBuf) {
-        let dir = std::env::temp_dir().join(format!(
+    ) -> (Host, Out) {
+        let dir = Arc::new(TmpDir::fresh(std::env::temp_dir().join(format!(
             "hydo-kvm-engine-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
+        ))));
         let k = dir.join("bzImage-kvm");
         std::fs::write(&k, hydo_kvm::script::bzimage()).unwrap();
         let i = dir.join("initrd");
@@ -139,8 +156,12 @@ impl Host {
                 rx: erx,
                 join: Some(join),
                 log: Vec::new(),
+                _dir: dir.clone(),
             },
-            out,
+            Out {
+                path: out,
+                _dir: dir,
+            },
         )
     }
 
@@ -1408,7 +1429,9 @@ fn run_contracts(s: &str, plan: Option<std::path::PathBuf>) -> (RunResult, Optio
 #[test]
 fn contract_breakpoints_record_every_call_and_move_nothing() {
     use hydo_contracts::plan::Record;
-    let dir = std::env::temp_dir().join(format!("hydo-kvm-contracts-{}", std::process::id()));
+    let dir = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-kvm-contracts-{}", std::process::id())),
+    );
     for s in ["rb=4 | run", "pct=5 pctn=6 pctk=200 rb=4 | run"] {
         let (off, none) = run_contracts(s, None);
         let (on, recs) = run_contracts(s, Some(handler_plan(&dir)));

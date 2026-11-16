@@ -1,6 +1,7 @@
 //! The Rust-only surface: call-site macros (file/line, registered before main), declare!,
 //! catalog order, the async eventually, and the noop feature. One test function,
 //! because the SDK's state (sink, seen flags, BUGGIFY configuration) is per process.
+mod tmpdir;
 use hydo_assert::{declare, details, hydo_always, hydo_buggify, hydo_eventually, hydo_reachable, hydo_sometimes, hydo_unreachable, Value};
 use std::time::Duration;
 
@@ -19,8 +20,7 @@ fn never_called() {
 
 #[tokio::test]
 async fn macros_and_catalog() {
-    let dir = std::env::temp_dir().join(format!("hydo-assert-macros-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = tmpdir::TmpDir::new(&format!("hydo-assert-macros-{}", std::process::id()));
     let out = dir.join("console");
     std::fs::write(&out, b"").unwrap();
     std::env::set_var("HYDO_ASSERT_OUT", &out);

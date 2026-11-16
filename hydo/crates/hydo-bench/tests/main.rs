@@ -3,5 +3,7 @@
 //! after adding a tests/<name>.rs). Each tests/<name>.rs is the module <name>, so its tests are
 //! `<name>::<test>`: `cargo test -p hydo-bench --test it <name>::`.
 
+mod tmpdir;
+
 mod golden;
 mod recorded;

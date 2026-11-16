@@ -13,6 +13,7 @@
 //! output (review the diff). M107 did that once, for its one deliberate change: the generated
 //! fetch-images.sh calls hydo-fetch-image instead of skopeo.
 
+use crate::tmpdir::TmpDir;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::os::unix::fs::PermissionsExt;
@@ -189,6 +190,8 @@ fn compose_equals_python() {
     let base = keep.clone().unwrap_or_else(|| {
         std::env::temp_dir().join(format!("hydo-compose-eq-{}", std::process::id()))
     });
+    // removed at the end, also when a case fails (kept with HYDO_COMPOSE_KEEP)
+    let _rm = keep.is_none().then(|| TmpDir::adopt(base.clone()));
     let mut bad = Vec::new();
     let (mut n, mut crashes) = (0, 0);
     for case in &cases {

@@ -4,6 +4,7 @@
 //! `<name>::<test>`: `cargo test -p hydo-composer --test it <name>::`.
 
 mod common;
+mod tmpdir;
 
 mod compositions;
 mod equivalence;

@@ -505,6 +505,10 @@ variables! {
     HYDO_RELEASE_SCHEMA: Tests, Test, "flag", "off", "hydo-results, hydo-agent-proto tests";
     /// Keep the Compose test's scratch files here.
     HYDO_COMPOSE_KEEP: Tests, Test, "path", "", "hydo-compose tests";
+    /// Set and not `0`: keep the tests' scratch folders in the temporary directory, to look at
+    /// them after a test (Milestone 271; without it every folder is removed when its test ends,
+    /// also when it fails).
+    HYDO_KEEP_TMP: Tests, Test, "flag: set and not `0`", "off", "many crates' tests, the SDKs' tests";
     /// Where the KVM ABI probe finds `linux/kvm.h` (the Linux UAPI headers).
     HYDO_KVM_HEADERS: Tests, Test, "path", "/usr/include", "hydo-kvm tests";
     /// Dump the controller tests' transcripts here.

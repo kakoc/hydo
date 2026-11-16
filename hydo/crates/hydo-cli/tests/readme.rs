@@ -9,6 +9,7 @@
 //! `hydo skill install --agent claude`. The version in the example's path is this crate's
 //! version, and every link is absolute.
 
+use crate::tmpdir::TmpDir;
 use std::path::Path;
 use std::process::Command;
 
@@ -117,9 +118,7 @@ fn every_command_on_the_page_is_one_hydo_has() {
 
 #[test]
 fn the_commands_that_need_no_release_run() {
-    let tmp = std::env::temp_dir().join(format!("hydo-readme-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&tmp).unwrap();
+    let tmp = TmpDir::new(&format!("hydo-readme-{}", std::process::id()));
     let (ok, out) = hydo(&tmp, &["--version"]);
     let want = format!("hydo {}", env!("CARGO_PKG_VERSION"));
     assert!(ok && out.starts_with(&want), "hydo --version: {out}");
@@ -148,7 +147,6 @@ fn the_commands_that_need_no_release_run() {
         let (ok, out) = hydo(&tmp, &words[1..]);
         assert!(ok, "{c}: {out}");
     }
-    let _ = std::fs::remove_dir_all(&tmp);
 }
 
 #[test]

@@ -15,6 +15,7 @@
 //! - depth1map-*: depth1map.py on M55's tail sweeps of d7 and its control, both ways, with --sig
 //!   and --json.
 
+use crate::tmpdir::TmpDir;
 use hydo_bench::{analysis, buggify, cells};
 use hydo_explore::gen::Ex;
 use sha2::{Digest, Sha256};
@@ -152,8 +153,8 @@ fn sh(cmd: &str, dir: &Path) {
 #[test]
 fn addbuggify_is_addbuggify_py() {
     let bench = here().join("../../bench");
-    let work = std::env::temp_dir().join(format!("hydo-bench-bg-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&work);
+    let work =
+        TmpDir::fresh(std::env::temp_dir().join(format!("hydo-bench-bg-{}", std::process::id())));
     for line in golden("addbuggify.golden").lines() {
         let f: Vec<&str> = line.split('|').collect();
         let (name, report, sha) = (f[0], f[1], f[2]);
@@ -253,7 +254,8 @@ fn depth1map_is_depth1map_py() {
 #[test]
 fn depth1map_reads_the_results_format() {
     let f = here().join("tests/fixtures/results/m55-tail");
-    let tmp = std::env::temp_dir().join(format!("hydo-bench-d1m-{}", std::process::id()));
+    let tmp =
+        TmpDir::fresh(std::env::temp_dir().join(format!("hydo-bench-d1m-{}", std::process::id())));
     let conv = |name: &str| {
         let src = f.join(name);
         let pts: std::collections::HashMap<i64, String> =

@@ -6,6 +6,7 @@
 //! `status=500,effect=yes` the service acts, the client sees 500, and its retry with the same key
 //! gets the stored answer. Fixed ports 28771 and 28772 (below Linux's ephemeral port range).
 
+use crate::tmpdir::TmpDir;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::net::UnixStream;
@@ -45,9 +46,9 @@ fn ctl(sock: &std::path::Path, line: &str) -> String {
 #[test]
 fn a_proxy_replays_the_first_answer_of_a_key() {
     let (proxy, svc) = (28771u16, 28772u16);
-    let dir = std::env::temp_dir().join(format!("hydo-world-pidem-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-world-pidem-{}", std::process::id())),
+    );
     // the emulator: every request it gets is a new object, numbered
     let n = Arc::new(AtomicUsize::new(0));
     let ln = TcpListener::bind(("127.0.0.1", svc)).unwrap();

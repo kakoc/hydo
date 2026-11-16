@@ -20,6 +20,7 @@
 //! saved Python stream instead (how the goldens were made).
 
 use crate::common;
+use crate::tmpdir::TmpDir;
 
 use common::golden;
 use common::pyrandom::PyRandom;
@@ -44,9 +45,9 @@ fn golden_dir() -> PathBuf {
 }
 
 fn scratch(tag: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("hydo-composer-eq-{}-{tag}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-composer-eq-{}-{tag}", std::process::id())),
+    );
     d.canonicalize().unwrap()
 }
 

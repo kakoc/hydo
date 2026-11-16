@@ -4,6 +4,7 @@
 //! creation's webhook carries `t=<ts>,v1=<HMAC-SHA256 of "<ts>.<body>">` under the endpoint
 //! secret (src/objects.rs, src/sign.rs). Fixed ports 28761 and 28762 (below Linux's ephemeral port range).
 
+use crate::tmpdir::TmpDir;
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -46,9 +47,9 @@ fn http(port: u16, method: &str, path: &str, body: &str) -> (String, String) {
 fn objects_and_signed_webhooks() {
     let base: u16 = 28760;
     let (stripe, hook) = (base + 1, base + 2);
-    let dir = std::env::temp_dir().join(format!("hydo-world-objects-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-world-objects-{}", std::process::id())),
+    );
     let show = r#"{"id":"{path:id}","currency":"{obj:currency}","amount":{obj:amount},"status":"{obj:status}"}"#;
     let cfg = serde_json::json!({
         "log": dir.join("world.log"), "sock": dir.join("world.sock"),

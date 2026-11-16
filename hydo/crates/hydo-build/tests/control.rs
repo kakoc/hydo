@@ -3,9 +3,10 @@
 //! that have the build tools (docs/HISTORY.md M121 and M136: two builds identical on each
 //! architecture).
 
+use crate::tmpdir::TmpDir;
 use hydo_build::agent;
 use hydo_build::{main_with, Ctx, Io};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn redis() -> String {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -60,10 +61,10 @@ fn control_flag() {
     assert_eq!(a, b);
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("hydo-build-control-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
+fn scratch(name: &str) -> TmpDir {
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-build-control-{name}-{}", std::process::id())),
+    );
     d
 }
 

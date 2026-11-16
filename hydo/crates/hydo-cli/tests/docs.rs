@@ -14,7 +14,9 @@
 //! - The README's commands that need no virtual machine and no network run as written, in a
 //!   temporary directory (`the_readme_commands_that_need_no_vm_run_as_written`).
 
+use crate::tmpdir::TmpDir;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 fn top() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
@@ -352,8 +354,12 @@ fn help_lines(sub: &str) -> String {
 /// What `hydo <sub> --help` prints, for the commands that have a help text of their own
 /// (`hydo inspect`, `hydo sql-gen`, `hydo compose`, ...).
 fn own_help(sub: &str) -> String {
-    let tmp = std::env::temp_dir().join(format!("hydo-docs-help-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&tmp);
+    static N: AtomicU32 = AtomicU32::new(0);
+    let tmp = TmpDir::new(&format!(
+        "hydo-docs-help-{}-{}",
+        std::process::id(),
+        N.fetch_add(1, Ordering::SeqCst)
+    ));
     let o = std::process::Command::new(env!("CARGO_BIN_EXE_hydo"))
         .args([sub, "--help"])
         .current_dir(&tmp)
@@ -550,11 +556,8 @@ fn run_hydo(dir: &Path, args: &[&str]) -> (bool, String) {
     (o.status.success(), text)
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("hydo-docs-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
-    d
+fn scratch(name: &str) -> TmpDir {
+    TmpDir::new(&format!("hydo-docs-{name}-{}", std::process::id()))
 }
 
 /// The commands of `docs/YOUR-PROJECT.md` that need no virtual machine run as
@@ -614,7 +617,7 @@ fn the_readme_commands_that_need_no_vm_run_as_written() {
         topics >= 5,
         "docs/YOUR-PROJECT.md names fewer guide topics than expected"
     );
-    let _ = std::fs::remove_dir_all(&d);
+    drop(d);
 
     // hydo compose, as written, after hydo init
     let d = scratch("compose");
@@ -650,7 +653,7 @@ fn the_readme_commands_that_need_no_vm_run_as_written() {
         yaml.contains("cache"),
         "hydo/hydo.yaml lacks the service: {yaml}"
     );
-    let _ = std::fs::remove_dir_all(&d);
+    drop(d);
 }
 
 // ---------------------------------------------------------------- the release's docs review
@@ -730,5 +733,5 @@ fn run_help_prints_the_usage() {
     assert!(ok, "{out}");
     assert!(out.starts_with("usage: hydo run "), "{out}");
     assert!(out.contains("verdict.kind"), "{out}");
-    let _ = std::fs::remove_dir_all(&d);
+    drop(d);
 }

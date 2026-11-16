@@ -363,3 +363,93 @@ fn a_cf_run_whose_agent_waits_on_the_dark_disk_ends_in_error() {
         .expect("the dark point's note");
     assert_eq!(*n, dark + hydo_control::DARK_STOPS);
 }
+
+/// A plan with one service on a file system of its own (`storage:`), as tests/storage.rs's.
+fn storage_plan() -> hydo_control::Plan {
+    let text = "name: storage-test
+data:
+  dirs: [db]
+services:
+  - name: db
+    cmd: db-server
+    ready: db-ping
+    storage: {dir: db, size_mib: 64}
+workload:
+  steps: 8
+  run: client
+invariants:
+  - id: all.done
+    final: true
+    cmd: final-check
+faults: [kill, powerloss]
+";
+    let m = hydo_manifest::from_embedded(text, None)
+        .unwrap_or_else(|e| panic!("the manifest: {e}\n{text}"));
+    hydo_control::Plan::from_manifest(&m).unwrap()
+}
+
+/// The commands of a transcript, as the lines it sent.
+fn sent(records: &[Record]) -> Vec<String> {
+    records
+        .iter()
+        .filter_map(|r| match r {
+            Record::Send { bytes, .. } => Some(bytes.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Milestone 271 (open item 127): a `cf=` run whose k-th flush is the one that an `L=`'s mount of
+/// the service's own file system makes (its journal replay), as in the RAUC example's `cf=83 |
+/// run T=12:-300 L=device@6+2`. Before, the agent made that mount itself and waited on the dark
+/// disk, so the power cut's reads got no answer and the run ended in `DARK_AGENT_VERDICT` without
+/// its recovery boot. Now busybox mounts in a child process, which alone waits: the agent answers
+/// on, the power cut comes with the reported ids, and the recovery boot gives the verdict. A run
+/// without `cf=` still sends the agent's own `mount`, so its transcript stays.
+#[test]
+fn a_cf_cut_at_the_mount_of_an_l_reaches_the_recovery_boot() {
+    let plan = storage_plan();
+    let (sb, db) = booted(&plan, "storage-test");
+    let text = "disk=cut cf=3 | run L=db@2+2";
+    let s: Schedule = text.parse().unwrap();
+    let cad = support::cadence(Some(&s));
+    let mut cur = Fake::resume(&sb.s1.0, text, cad);
+    cur.dark_at_mount = true;
+    let mut m = Machine {
+        cur,
+        s0: Some(sb.s0.0.clone()),
+        salt: text.into(),
+        cad,
+        cf: true,
+        cut: false,
+    };
+    let got = drive::run(&mut m, &db, &s, RunFrom::Restored, &Policy::Schedule)
+        .unwrap_or_else(|e| panic!("{text}: {e}"));
+    let cmds = sent(&got.run.transcript.records);
+    let child = "\"mount\",\"-t\",\"ext4\",\"-o\",\"errors=remount-ro\",\"/dev/vda5\",\"/data/db\"";
+    assert!(cmds.iter().any(|c| c.contains(child)), "{cmds:#?}");
+    assert!(
+        !cmds.iter().any(|c| c.contains("\"op\":\"mount\"")),
+        "{cmds:#?}"
+    );
+    assert!(
+        matches!(got.run.ending, Some(Ending::PowerCut { .. })),
+        "{:?}",
+        got.run.ending
+    );
+    let rec = got.recovery.as_ref().expect("a recovery boot");
+    assert!(
+        matches!(rec.ending, Some(Ending::Verdict(_))),
+        "{:?}",
+        rec.ending
+    );
+    // the same schedule without cf=: the agent's own mount, as before Milestone 271
+    let s: Schedule = "disk=cut | run L=db@2+2".parse().unwrap();
+    let ran = support::run_schedule(&sb, &s).unwrap();
+    let cmds = sent(&ran.run.fin.transcript.records);
+    assert!(
+        cmds.iter().any(|c| c.contains("\"op\":\"mount\"")),
+        "{cmds:#?}"
+    );
+    assert!(!cmds.iter().any(|c| c.contains(child)), "{cmds:#?}");
+}

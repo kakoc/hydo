@@ -1416,15 +1416,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 
     Its two hydo errors are fixed in M261: the agent's refused line and the hang after a `cf=`
     cut. What is left of the second is open item 127.
-127. A `cf=` cut inside the agent's own disk operation (M261). Since M261 a `cf=` run is cut at
-    the first stop after its disk lost power. When the flush is the agent's own, as the `mount`
-    of an `L=`, the agent waits on the dead disk and cannot read the ids. The run then ends in an
-    ERROR that says so, without its recovery boot. One such run is seed 37 of RAUC's
-    exploration, `cf=83 | run T=12:-300 L=device@6+2`. Two ways would reach the recovery boot.
-    - A module flag that fails the power domain's requests with an I/O error after the cut,
-      instead of keeping them pending. It is a module change, and the reload is the user's.
-    - The storage faults' mounts and reads in a child process instead of the agent. It moves the
-      transcripts of every `L=` and `G=` run.
+127. A `cf=` cut inside the agent's own disk operation (M261, M271). Since M271 a `cf=` run
+    makes the storage faults' mounts and byte reads with busybox in a child process, so a flush
+    under an `L=`'s mount leaves only the child waiting. Seed 37 of RAUC's exploration, `cf=83 |
+    run T=12:-300 L=device@6+2`, reaches its recovery boot on hvx. What is left:
+    - A run without `cf=` keeps the agent's own `mount` and `read`, so a `cf=` run and the same
+      run without it send other commands.
+    - A `G=` flip's read in a child process ran only in the scripted tests, not on hvx.
+    - Any other agent command that waits on the dark disk still ends the run in the ERROR of
+      M261 after 200,000 stops. A module flag that fails the dark disk's requests with an I/O
+      error would end every such wait. It is a module change, and the reload is the user's.
 
     Also left: the agent reads its last 1 to 3 staged bytes with a 4-byte `IN`, and the hvx
     engine pads around it (M261). An agent that read them with 1-byte `IN`s needs no padding, but
@@ -2101,6 +2102,10 @@ build machine, before 2026-10-13.
   card regression breaks both rules at `cf=271` now; `cf=270` had stopped reproducing when its
   image was rebuilt. d11 of the bug benchmark is no longer found at any flush cut. A saved
   regression changes the bytes of the image it tests (open item 132). Nothing recorded moved
+- M271 (tentative number): two small fixes. Every test removes the folder it makes in the
+  temporary directory when it ends, also when it fails, and `HYDO_KEEP_TMP=1` keeps them. A
+  `cf=` run makes the storage faults' mounts and reads in a child process, so a cut at an
+  `L=`'s mount reaches its recovery boot (open item 127). Nothing recorded moved
 
 ## Where to look
 

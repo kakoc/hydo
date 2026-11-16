@@ -3,6 +3,8 @@
 //! after adding a tests/<name>.rs). Each tests/<name>.rs is the module <name>, so its tests are
 //! `<name>::<test>`: `cargo test -p hydo-world --test it <name>::`.
 
+mod tmpdir;
+
 mod fake_errors;
 mod objects_sign;
 mod proxy_idempotent;

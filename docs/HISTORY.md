@@ -12704,3 +12704,111 @@ Mac, on `main` at `aec9edc5` with this milestone on top: `cargo clippy --workspa
 -- -D warnings`, `hydo-schedule`'s `language::`, `hydo-agents`'s `public_content::`, the `hydo`
 program's `docs::`, and its `equivalence::cli_matches_golden` and `agents_equivalence`, `sh
 ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.
+
+### Milestone 271 (tentative number) - DONE (two small fixes: every test removes the folder it makes in the temporary directory, also when it fails, and `HYDO_KEEP_TMP=1` keeps them; and open item 127, a `cf=` cut at the flush of an `L=`'s mount: in a `cf=` run busybox mounts and reads in a child process instead of the agent, so the run reaches its recovery boot; nothing recorded moved; 2026-11-16)
+
+**What was asked.** On this Mac the temporary directory (`getconf DARWIN_USER_TEMP_DIR`) had
+filled with 10 GB of folders that hydo's tests left. Make every test remove its folder when it
+ends, also when it fails. Then fix open item 127 without a module change, and keep every
+recorded value.
+
+**1. The folders the tests left.** One run of `cargo test --release --workspace` with an empty
+`TMPDIR` left 269 folders (25 MB). Each folder came from a test helper that never removed it:
+
+| Folders | Prefix | Made by |
+|---|---|---|
+| 235 | `hydo-kvm-engine-` | `hydo-kvm` tests, `engine.rs`: one engine folder per scripted run |
+| 18 | `hydo-grpc-client-` | `hydo-grpc-gen` tests, `client.rs`: the plan and state folders |
+| 4 | `hydo-hvx-abi-` | `hydo-hvx` tests, `abi.rs`: the C probes |
+| 4 | `hydo-world-test-` | `hydo-world`'s unit tests, `world.rs` |
+| 3 | `hydo-agents-eq-` | the `hydo` program's `agents_equivalence`: the release roots |
+| 2 | `hydo-manifest-messages-` | `hydo-manifest` tests, `messages.rs` |
+| 1 | `hydo-docs-help-` | the `hydo` program's `docs.rs`: the folder of `hydo <command> --help` |
+| 1 | `hydo-eq-` | the `hydo` program's `equivalence.rs`: the `PATH` without `debugfs`, kept in a `static` |
+| 1 | `hydo-store-rw-` | `hydo-image`'s unit tests, `store.rs`: a store with read-only entries |
+
+On a developer's machine every run adds that many again. The 10 GB were about 135 release roots
+of `agents_equivalence`, 74 MB each when the plugin folder was larger, and 22,000 engine folders
+of `hydo-kvm`. Most other helpers removed their folder as the last line of the test. So a
+failing test left it in these test programs: `hydo-world`, `hydo-compose`, `hydo-manifest`, `hydo-build`, `hydo-control`,
+`hydo-composer`, `hydo-errors`, `hydo-bench`, `hydo-contracts`, `hydo-image`, `hydo-grpc`,
+`hydo-sql`, `hydo-hvm`, the explorer's scripted engine, and the Rust SDK's tests. The SDK tests in
+other languages left theirs too. The JavaScript `unit` and `history` tests left one folder per
+run each (`hydo-js-unit-`, `hydo-js-hist-`), and the Python history tests seven per run
+(`hydo-hist.`, one per test that records, and two without a prefix).
+
+- The fix. Each test program that makes such folders has a support module `tests/tmpdir/mod.rs`
+  with the type `TmpDir`. A `TmpDir` is a folder that is removed with its contents when the value
+  is dropped. A test that fails unwinds, so its folders go too. A helper that made a folder now
+  returns a `TmpDir`, which reads as a path. A folder that a `static` keeps for the whole test
+  program (the `PATH` folder of `equivalence.rs`) is removed when the program exits
+  (`tmpdir::at_exit`, with C's `atexit`). The unit tests in `src/` have a small guard of their
+  own in their test module. The JavaScript tests remove their folder at the process's exit or in
+  a `finally`, and the Python ones with `atexit`.
+- `HYDO_KEEP_TMP=1` keeps every folder, to look at it after a test; the guard then prints the
+  folder's path. It is a test switch in `hydo_config::registry` and `INVENTORY.md`. The guards of
+  `hydo`'s and `hydo-errors`' unit tests in separate files under `src/` (`htmlreport/tests.rs`,
+  `cache/tests.rs`, `skillupdate/tests.rs`, `src/tests.rs`) remove their folder always, because
+  only `hydo-config` may read a variable in a crate's `src/` (the `inventory` test).
+- `own_help` of `docs.rs` named its folder by the process alone, and the tests that call it run
+  as threads of one process. Its folder now has a counter in its name too, so that one test
+  cannot remove another's folder.
+- The proof. The same run with the fix and an empty `TMPDIR` left 0 folders, and every test passed. The JavaScript
+  tests (`node --test` of the four files) left 2 folders before and 0 after; the Python history
+  tests left 7 before and 0 after.
+
+**2. Open item 127: a `cf=` cut at the agent's own mount.** Milestone 261 cuts the power of a
+`cf=` run at the first stop after its data disk lost power. The cut freezes the workload and the
+services and reads the ids through the agent. An `L=` (the power loss of one service) mounts the
+service's file system again with the agent's own `mount` command, and a `G=` flip reads a byte
+with the agent's own `read`. When the k-th flush came from that mount (its journal replay), the
+agent waited on the dark disk in the `mount` call and answered nothing. The run then ended 200,000
+stops later in `ERROR the disk lost power at its flush of cf= while the agent itself waited on it`,
+without its recovery boot.
+
+- The fix (`hydo/crates/hydo-control/src/schedule/storage.rs`). In a `cf=` schedule's run, the
+  storage faults' mounts and reads are made by busybox in a child process. The mount is
+  `$BB mount -t <type> -o <flags and data> <device> <dir>`, with the agent's flags written as
+  their mount options. The byte read is `$BB dd ... | $BB od -An -tx1`. When the disk loses power
+  under the child, only the child waits. The agent answers the power cut, and the recovery boot
+  gives the verdict. A run without `cf=` sends the agent's own commands as before, so its
+  transcript and its values stay. The agent and the module are unchanged.
+- The test (`hydo-control`, `tests/drive.rs`):
+  `a_cf_cut_at_the_mount_of_an_l_reaches_the_recovery_boot`. The scripted engine's disk now
+  loses power at the next mount when a test asks for it. With the agent's own mount the agent
+  answers nothing after it, as the real agent does. With the agent's own mount, as before the
+  fix, the test fails. Now the run ends with the power cut and the reported ids, the recovery boot
+  gives a verdict, and the same schedule without `cf=` still sends the agent's `mount`.
+- The runs on hvx. They ran on the bare-metal machine, one VM at a time through `~/bin/hvx-run`.
+  The programs `hydo` and `hydo-hvx` were built from this branch over the 0.3.4 Linux release.
+  The image is a copy of Milestone 261's final RAUC image. "Before" is `main`'s `hydo` at
+  `588c76dd`.
+
+| Schedule | Before | After |
+|---|---|---|
+| `disk=cut dseed=b867e156d88e8c87 cf=83 \| run T=12:-300 L=device@6+2` (seed 37 of M261's exploration) | `ERROR the disk lost power ... while the agent itself waited on it`, `ea37cda227ebf2cb`, 229,181 stops | `OK invariants=6 held (device.boots: booted slot A v3 after 4 boot(s))`, `0cad7c03d59862fa` on two runs, 35,073 stops |
+| the same without `cf=` | `OK`, `71a6a8ff2ef5db3e` | `OK`, `71a6a8ff2ef5db3e`, the same control transcript |
+| `disk=cut dseed=72b4b958fb4479ee cf=34 \| run T=12:-30` | `88efb2c07865ffab` (M261) | `88efb2c07865ffab` |
+| `disk=cut dseed=9f14bde427152010 cf=83 \| run G=device@13:zero,len=512,seed=3a12608b` | `6db779f596d5296e` (M261) | `6db779f596d5296e` |
+
+The run's control transcript shows the busybox `mount` of `/dev/vda5` on `/data/part`, the note
+`the disk lost power at its flush of cf=: the power cut is now`, and the recovery conversation's
+verdict. A flip of `G=` with `cf=83` (`G=device@13:flip,n=2,seed=5`) was cut before its step
+13, so no run here reads a byte in a child.
+
+**What moved.** Nothing in `hydo/onboard/recorded.json`: it has no `cf=` run and no `L=` or `G=`.
+The pinned reproducers give `a76d7fe857fdb37c` (VIOLATION) and `efbde7b57264be0f` (OK) on the
+images in `~/hydo/build/m204`. `hydo-bench rebaseline --check --only stack-fix,stack-old --jobs 1`
+on the bare-metal machine built the six images of the two stages and ran their 31 schedules in
+1,726 s. The report says: verdicts unchanged, 0 images with new bytes, 0 runs with a new
+fingerprint or `ctl` value. Each hvx run with `cf=` and an `L=` gives other values and another
+transcript, and so does each run with `cf=` and a `G=` flip. This holds also when the disk did not
+lose power during the mount.
+
+**Checks.** On this Mac, on `main` at `47df6fee` with this milestone on top: `cargo test --release
+--workspace` (every test program, the CLI golden `equivalence::cli_matches_golden` and
+`agents_equivalence` among them), `cargo clippy --workspace --all-targets -- -D warnings`, `cargo
+fmt --all --check`, `hydo-config`'s `inventory` after `HYDO_BLESS=1`, the Rust SDK's tests,
+`node --test` of the JavaScript tests and the Python tests, `hydo-schedule`'s `language::`,
+`hydo-agents`'s `public_content::`, the `hydo` program's `docs::`, `sh
+ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.

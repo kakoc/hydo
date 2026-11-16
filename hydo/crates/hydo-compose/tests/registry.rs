@@ -8,6 +8,7 @@
 //! index under the tag's name, the registry as it was when the lock was written) and checks that a
 //! run without a lock writes hydo-compose.lock.json byte for byte.
 
+use crate::tmpdir::TmpDir;
 use hydo_compose::pyval::{from_json, Y};
 use hydo_compose::registry::{resolve_image, Http, Recorded, Recording, Registry};
 use std::path::{Path, PathBuf};
@@ -98,8 +99,9 @@ fn voting_lock_from_registry() {
             s("index_digest"),
         ));
     }
-    let d = std::env::temp_dir().join(format!("hydo-compose-reg-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-compose-reg-{}", std::process::id())),
+    );
     std::fs::create_dir_all(d.join("proj/healthchecks")).unwrap();
     std::fs::copy(
         voting().join("docker-compose.yml"),

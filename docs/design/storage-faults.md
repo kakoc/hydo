@@ -107,7 +107,10 @@ take both away for that service only.
    metadata reaches the disk), kills the tree, unmounts the file system (the kernel drops the
    pages it had not written back) and mounts it again (the journal is replayed, as at a boot after
    a power loss). This is the guest-side half, and it needs no engine and no new program: the
-   agent's `signal`, `run` and `mount` commands and the image's busybox do it.
+   agent's `signal`, `run` and `mount` commands and the image's busybox do it. In a run with
+   `cf=`, busybox mounts the file system and reads a `G=` byte in a child process instead of
+   the agent (Milestone 271). The data disk can lose power under such a mount, and then only
+   the child waits on it.
 4. **A file system in user space that keeps unsynced writes and drops them on command** (the
    approach of LazyFS, which Jepsen's analyses use). A FUSE program in the guest: a new pinned
    guest program, a kernel with FUSE, and a second copy of every write.

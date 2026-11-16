@@ -20,6 +20,7 @@
 //! `HYDO_BLESS=1` rewrites the golden from the Rust output (the Rust is the reference from M107 on;
 //! bless only a deliberate change, for example an edited skill, and say so in the commit).
 
+use crate::tmpdir::TmpDir;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -40,7 +41,9 @@ fn golden() -> PathBuf {
 
 static N: AtomicU32 = AtomicU32::new(0);
 
-fn scratch(tag: &str) -> PathBuf {
+/// A fresh folder, removed with the value, also when the test fails (Milestone 271: the release
+/// roots of 74 MB each were never removed).
+fn scratch(tag: &str) -> TmpDir {
     let d = std::env::temp_dir().join(format!(
         "hydo-agents-eq-{}-{}-{}",
         std::process::id(),
@@ -49,7 +52,7 @@ fn scratch(tag: &str) -> PathBuf {
     ));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
-    d.canonicalize().unwrap()
+    TmpDir::adopt(d.canonicalize().unwrap())
 }
 
 fn hex(b: &[u8]) -> String {
@@ -207,7 +210,7 @@ fn run_seq(
 /// test starts here, so the process's umask is set to 022 and the skill folder is a copy with
 /// the modes git records (directories 0755, files 0755 or 0644), whatever the machine's umask
 /// and the checkout's modes (a umask of 002, common for users on Linux, gave other modes).
-fn release(with_skill: bool) -> PathBuf {
+fn release(with_skill: bool) -> TmpDir {
     // SAFETY: umask only sets the process's file creation mask (every test sets the same).
     unsafe {
         libc::umask(0o022);
@@ -443,7 +446,7 @@ fn rows(root: &Path, paths: bool, sk: &Skill) -> Vec<(String, Value)> {
             r["setup"] = json!(sname);
             out.push((format!("{i}.{k}"), r));
         }
-        let _ = std::fs::remove_dir_all(&cwd);
+        drop(cwd);
     }
     if paths {
         let cwd = scratch("paths");
@@ -464,7 +467,7 @@ fn rows(root: &Path, paths: bool, sk: &Skill) -> Vec<(String, Value)> {
             r["setup"] = json!("nothing");
             out.push((format!("paths.{k}"), r));
         }
-        let _ = std::fs::remove_dir_all(&cwd);
+        drop(cwd);
     }
     out
 }
@@ -570,7 +573,6 @@ fn built_in_skill_as_recorded() {
         .as_str()
         .unwrap()
         .contains("built into this hydo binary"));
-    let _ = std::fs::remove_dir_all(&cwd);
 }
 
 /// test_hydo_agents.py's test_new_agents_md_and_check: the `hydo/` skeleton that `hydo init`
@@ -608,5 +610,4 @@ fn init_skeleton_builds() {
         String::from_utf8_lossy(&o.stdout),
         String::from_utf8_lossy(&o.stderr)
     );
-    let _ = std::fs::remove_dir_all(&cwd);
 }

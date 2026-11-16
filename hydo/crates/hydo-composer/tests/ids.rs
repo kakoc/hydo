@@ -2,6 +2,7 @@
 //! stable compositions (M98) on examples/redis-composed's plan, and history checks as
 //! test.checks entries.
 
+use crate::tmpdir::TmpDir;
 use hydo_composer as hc;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -13,10 +14,10 @@ fn onboard() -> PathBuf {
         .unwrap()
 }
 
-fn scratch(tag: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("hydo-composer-ids-{}-{tag}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
+fn scratch(tag: &str) -> TmpDir {
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-composer-ids-{}-{tag}", std::process::id())),
+    );
     d
 }
 

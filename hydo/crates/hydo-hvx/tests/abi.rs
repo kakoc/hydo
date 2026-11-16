@@ -5,6 +5,7 @@
 //! synthetic bzImage and initramfs and writes guest RAM and the initial system registers, which
 //! must equal the Rust recipe's bytes. Needs a C compiler (`$CC`, default `cc`).
 
+use crate::tmpdir::TmpDir;
 use hydo_hvx::abi::*;
 use std::mem::{offset_of, size_of};
 use std::path::{Path, PathBuf};
@@ -14,9 +15,10 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("hydo-hvx-abi-{}-{name}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
+fn scratch(name: &str) -> TmpDir {
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-hvx-abi-{}-{name}", std::process::id())),
+    );
     std::fs::create_dir_all(d.join("linux")).unwrap();
     d
 }

@@ -1,11 +1,13 @@
 // The history recorder writes the documented lines (hydo/HISTORIES.md), the same as the Go recorder.
+mod tmpdir;
+
 use hydo_assert::history::{append_mop, enc, list, read_mop, read_result_mop, ver, value_or_nil, History};
 
 #[test]
 #[cfg(not(feature = "noop"))]
 fn records() {
-    let p = std::env::temp_dir().join(format!("hydo-hist-test-{}", std::process::id()));
-    let _ = std::fs::remove_file(&p);
+    let tmp = tmpdir::TmpDir::new(&format!("hydo-hist-test-{}", std::process::id()));
+    let p = tmp.join("hist");
     std::env::set_var("HYDO_HIST_OUT", &p);
     let kv = History::new("kv");
     let op = kv.invoke(3, "write", &["k1", &enc("a b")]);
@@ -39,5 +41,4 @@ fn records() {
     assert_eq!(enc("nil"), "%6Eil");
     assert_eq!(enc("é x"), "é%20x");
     assert_eq!(list(&[]), "[]");
-    let _ = std::fs::remove_file(&p);
 }

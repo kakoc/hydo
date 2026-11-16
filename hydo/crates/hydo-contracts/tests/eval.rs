@@ -1,5 +1,6 @@
 //! Judging records: exact integers, entry and return reads, and the first broken call.
 
+use crate::tmpdir::TmpDir;
 use hydo_contracts::eval::{eval, judge, typed, V};
 use hydo_contracts::plan::*;
 
@@ -158,8 +159,9 @@ fn plans_and_records_read_back() {
     );
     // the end line says how many calls were not recorded; records without one (before
     // Milestone 255) count every call as recorded
-    let dir = std::env::temp_dir().join(format!("hydo-contracts-end-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-contracts-end-{}", std::process::id())),
+    );
     let p = dir.join("a.contracts.jsonl");
     std::fs::write(&p, &t).unwrap();
     let (recs, end) = read_run(&p).unwrap();

@@ -1,11 +1,13 @@
 // The messaging recorder writes exactly the lines of the shared case sdk/cases/history/messages
 // (which the other SDKs replay with their generic recorders).
+mod tmpdir;
+
 #[test]
 #[cfg(not(feature = "noop"))]
 fn messages_records_the_shared_case() {
     use hydo_assert::history::messages::{Item, Messages, Outcome};
-    let p = std::env::temp_dir().join(format!("hydo-hist-msg-test-{}", std::process::id()));
-    let _ = std::fs::remove_file(&p);
+    let tmp = tmpdir::TmpDir::new(&format!("hydo-hist-msg-test-{}", std::process::id()));
+    let p = tmp.join("hist");
     // its own test program: the recorder reads HYDO_HIST_OUT once per process
     std::env::set_var("HYDO_HIST_OUT", &p);
     let q = Messages::new("q");
@@ -47,5 +49,4 @@ fn messages_records_the_shared_case() {
         q.send(1, "c", &[Item::new("m1")]).ok_same();
     });
     assert!(r.is_err());
-    let _ = std::fs::remove_file(&p);
 }

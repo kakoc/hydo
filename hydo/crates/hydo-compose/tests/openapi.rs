@@ -8,6 +8,7 @@
 //!
 //! tests/fixtures/openapi/SOURCE names where each was fetched; the test checks their sha256.
 
+use crate::tmpdir::TmpDir;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
@@ -43,9 +44,9 @@ fn golden(name: &str, text: &str) {
 
 /// `hydo fake from-openapi <spec> <args> -o <tmp>`; the file it wrote.
 fn run(tag: &str, spec: &Path, args: &[&str]) -> String {
-    let dir = std::env::temp_dir().join(format!("hydo-openapi-{tag}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-openapi-{tag}-{}", std::process::id())),
+    );
     let out = dir.join("fake.yaml");
     let mut a: Vec<String> = vec!["from-openapi".into(), spec.to_string_lossy().into_owned()];
     a.extend(args.iter().map(|s| s.to_string()));
@@ -101,8 +102,9 @@ fn the_same_fake_from_the_spec_as_json() {
         "b1633b6309c065c43d56be7c659b0f2c4be03be5a4013b7c3f74b32bd33f62eb",
     );
     let v = hydo_compose::openapi::load_spec(&std::fs::read_to_string(&spec).unwrap()).unwrap();
-    let dir = std::env::temp_dir().join(format!("hydo-openapi-spec-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-openapi-spec-{}", std::process::id())),
+    );
     let j = dir.join("petstore-expanded.json");
     std::fs::write(&j, serde_json::to_string_pretty(&v).unwrap()).unwrap();
     let from_json = run("json", &j, &["--stateful", "--name", "petstore"]);

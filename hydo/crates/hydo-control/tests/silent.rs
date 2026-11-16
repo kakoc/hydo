@@ -5,6 +5,7 @@
 //! the other tests are the proof).
 
 use crate::support;
+use crate::tmpdir::TmpDir;
 
 use hydo_agent_proto::msg::Command;
 use hydo_control::{Ending, Plan, ScheduleController};
@@ -339,9 +340,9 @@ fn a_plan_without_commands_keeps_the_manifests_own_workload() {
     let src = top.join("hydo/onboard/examples/shop/hydo.yaml");
     let sched = Schedule::parse("disk=none | run H=payments.charge@3-4:delay=3000").unwrap();
     for sub in ["regressions", "checks"] {
-        let dir =
-            std::env::temp_dir().join(format!("hydo-control-silent-{}-{sub}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let dir = TmpDir::fresh(
+            std::env::temp_dir().join(format!("hydo-control-silent-{}-{sub}", std::process::id())),
+        );
         std::fs::create_dir_all(dir.join(sub)).unwrap();
         std::fs::copy(&src, dir.join("hydo.yaml")).unwrap();
         if sub == "regressions" {

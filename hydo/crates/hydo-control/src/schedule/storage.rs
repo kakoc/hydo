@@ -30,8 +30,13 @@
 //!   or a group's selector (Milestone 245) kills every service first, then corrupts each. The
 //!   changes are written through the page cache with busybox `dd`, so they are subject to the
 //!   same durability as any write (a later whole-guest power cut may take them away).
+//! - **A `cf=` run** (Milestone 271, open item 127): its data disk swallows every request from
+//!   the k-th flush on, and a mount or a read that the agent makes itself would then wait
+//!   forever, with the agent, so that nothing could read the ids for the recovery boot. In such
+//!   a run the mounts and the reads of these faults are made by busybox in a child process
+//!   ([`in_child`]), which alone waits. Every other run sends the agent's own commands as before.
 
-use super::{bb, busybox, call, die_oracle, log, run, sh, svc_sig, xassert, Ctx, F};
+use super::{bb, busybox, call, die_oracle, log, run, sh, svc_sig, xassert, Conversation, Ctx, F};
 use crate::flow::Step;
 use crate::plan::PlanStorage;
 use hydo_agent_proto::msg::{Command, Mkdir, Mount, MountFlag, Read, Reply, Sig, Signal};
@@ -63,23 +68,111 @@ fn vol_data(ctx: &Ctx) -> String {
     }
 }
 
-/// Mount one own file system on its directory; Err(the words for the verdict) when it fails.
-fn mount_one(fx: &mut F<'_>, ctx: &Ctx, st: &PlanStorage, dev: &str) -> Step<Result<(), String>> {
-    let l = &ctx.plan.layout;
-    let id = fx.send(Command::Mount(Mount {
-        src: dev.into(),
-        dst: st.dir.clone(),
-        fstype: l.data_fstype.clone(),
-        flags: (!ctx.mount_flags.is_empty()).then(|| ctx.mount_flags.clone()),
-        data: Some(vol_data(ctx)),
-    }))?;
+/// Milestone 271 (open item 127): whether this conversation's data disk can lose power under
+/// the storage faults' commands. In a `cf=` schedule's run the disk swallows every request from
+/// its k-th flush on. When that flush was the agent's own (the journal replay of an `L=`'s
+/// mount, or a `G=`'s read of a byte), the agent waited on the dark disk forever and answered
+/// nothing, so the power cut could not read the ids, and the run ended in an ERROR without its
+/// recovery boot. Such a run makes the mounts and reads in a child process, which alone waits;
+/// the agent answers on, and the power cut comes at the next stop. Every other conversation
+/// sends the agent's own `mount` and `read`, so its transcript and its values stay.
+fn in_child(ctx: &Ctx) -> bool {
+    matches!(ctx.conv, Conversation::Run) && ctx.run.cf
+}
+
+/// A mount: the agent's own `mount`, or busybox `mount` in a child process ([`in_child`]);
+/// Err(the words for the verdict) when it fails, as busybox says them in both cases.
+fn mount(fx: &mut F<'_>, ctx: &Ctx, m: Mount) -> Step<Result<(), String>> {
+    if in_child(ctx) {
+        return mount_in_child(fx, ctx, &m);
+    }
+    let (src, dst) = (m.src.clone(), m.dst.clone());
+    let id = fx.send(Command::Mount(m))?;
     Ok(match fx.reply(id)? {
         Ok(_) => Ok(()),
         Err(e) => Err(match e.errno {
-            Some(n) => busybox::mount_error(dev, &st.dir, n, l.strerror),
+            Some(n) => busybox::mount_error(&src, &dst, n, ctx.plan.layout.strerror),
             None => e.msg,
         }),
     })
+}
+
+/// `m` as busybox `mount -t <type> -o <flags and data> <src> <dst>` in a child process;
+/// Err(busybox's words) when it fails.
+fn mount_in_child(fx: &mut F<'_>, ctx: &Ctx, m: &Mount) -> Step<Result<(), String>> {
+    let mut opts: Vec<String> = m
+        .flags
+        .iter()
+        .flatten()
+        .map(|f| f.as_str().to_string())
+        .collect();
+    opts.extend(m.data.iter().filter(|d| !d.is_empty()).cloned());
+    let mut argv = vec![bb(ctx), "mount".into(), "-t".into(), m.fstype.clone()];
+    if !opts.is_empty() {
+        argv.push("-o".into());
+        argv.push(opts.join(","));
+    }
+    argv.push(m.src.clone());
+    argv.push(m.dst.clone());
+    let r = run(fx, argv, Vec::new(), Some(512))?;
+    Ok(if r.status == 0 {
+        Ok(())
+    } else {
+        Err(match r.out.trim() {
+            "" => format!("mount: mounting {} on {} failed", m.src, m.dst),
+            out => out.to_string(),
+        })
+    })
+}
+
+/// One byte of a file as two hex digits: the agent's own `read`, or busybox `dd` and `od` in a
+/// child process ([`in_child`]); None when it cannot be read.
+fn read_byte(fx: &mut F<'_>, ctx: &Ctx, path: &str, off: u64) -> Step<Option<String>> {
+    if in_child(ctx) {
+        let b = bb(ctx);
+        let r = run(
+            fx,
+            sh(
+                ctx,
+                format!(
+                    "{b} dd if={} bs=1 skip={off} count=1 2>/dev/null | {b} od -An -tx1",
+                    q(path)
+                ),
+            ),
+            Vec::new(),
+            Some(64),
+        )?;
+        let v = r.out.trim().to_string();
+        return Ok((r.status == 0 && v.len() == 2).then_some(v));
+    }
+    let r = call(
+        fx,
+        Command::Read(Read {
+            path: path.into(),
+            offset: Some(off),
+            max: 1,
+            hex: Some(true),
+        }),
+    )?;
+    Ok(match r {
+        Ok(Reply::Read(r)) => Some(r.data.trim().to_string()),
+        _ => None,
+    })
+}
+
+/// Mount one own file system on its directory; Err(the words for the verdict) when it fails.
+fn mount_one(fx: &mut F<'_>, ctx: &Ctx, st: &PlanStorage, dev: &str) -> Step<Result<(), String>> {
+    mount(
+        fx,
+        ctx,
+        Mount {
+            src: dev.into(),
+            dst: st.dir.clone(),
+            fstype: ctx.plan.layout.data_fstype.clone(),
+            flags: (!ctx.mount_flags.is_empty()).then(|| ctx.mount_flags.clone()),
+            data: Some(vol_data(ctx)),
+        },
+    )
 }
 
 /// After the data disk is mounted: every storage directory made, every own file system mounted
@@ -161,20 +254,11 @@ pub(super) fn corrupt(fx: &mut F<'_>, ctx: &Ctx, svc: &str, how: &Corruption, p:
     for e in &edits {
         match e {
             Edit::Flip { off, bit } => {
-                let r = call(
-                    fx,
-                    Command::Read(Read {
-                        path: path.clone(),
-                        offset: Some(*off),
-                        max: 1,
-                        hex: Some(true),
-                    }),
-                )?;
-                let Ok(Reply::Read(r)) = r else {
+                let Some(r) = read_byte(fx, ctx, &path, *off)? else {
                     done.push(format!("byte {off} unreadable"));
                     continue;
                 };
-                let Ok(v) = u8::from_str_radix(r.data.trim(), 16) else {
+                let Ok(v) = u8::from_str_radix(&r, 16) else {
                     done.push(format!("byte {off} unreadable"));
                     continue;
                 };
@@ -307,20 +391,26 @@ pub(super) fn strict_start(fx: &mut F<'_>, ctx: &Ctx, svc: &str) -> Step<Option<
     let was = r.out.split_whitespace().next().unwrap_or("?").to_string();
     let mut flags = ctx.mount_flags.clone();
     flags.push(MountFlag::Remount);
-    let id = fx.send(Command::Mount(Mount {
+    let again = Mount {
         src: dev.clone(),
         dst: st.dir.clone(),
         fstype: l.data_fstype.clone(),
         flags: Some(flags),
         data: Some(format!("{},noauto_da_alloc", vol_data(ctx))),
-    }))?;
-    if let Err(e) = fx.reply(id)? {
+    };
+    // the agent's refusal is the words outside a cf= run, as before Milestone 271
+    let mounted = if in_child(ctx) {
+        mount_in_child(fx, ctx, &again)?
+    } else {
+        let id = fx.send(Command::Mount(again))?;
+        fx.reply(id)?.map(|_| ()).map_err(|e| e.msg)
+    };
+    if let Err(words) = mounted {
         return die_oracle(
             fx,
             format!(
                 "HYDO-ORACLE: ERROR strict power loss of {svc}: {dev} could not be mounted \
-                 again without auto_da_alloc ({})",
-                e.msg
+                 again without auto_da_alloc ({words})"
             ),
         );
     }

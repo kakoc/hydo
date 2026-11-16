@@ -735,11 +735,31 @@ mod tests {
         World::new(cfg, &p.to_string_lossy(), Some(f))
     }
 
-    fn tmpdir(name: &str) -> std::path::PathBuf {
+    /// A test's folder, removed when the test ends, also when it fails (Milestone 271;
+    /// `HYDO_KEEP_TMP=1` keeps it).
+    struct Tmp(std::path::PathBuf);
+
+    impl std::ops::Deref for Tmp {
+        type Target = std::path::Path;
+        fn deref(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Tmp {
+        fn drop(&mut self) {
+            if std::env::var_os("HYDO_KEEP_TMP").is_some_and(|v| !v.is_empty() && v != "0") {
+                return;
+            }
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn tmpdir(name: &str) -> Tmp {
         let d = std::env::temp_dir().join(format!("hydo-world-test-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        d
+        Tmp(d)
     }
 
     /// A power cut carries effects, events and pending webhooks; the recovery world sees them, in

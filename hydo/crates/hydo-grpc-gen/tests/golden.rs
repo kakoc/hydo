@@ -8,6 +8,7 @@
 //!
 //! `HYDO_BLESS=1` rewrites the golden files from the Rust output (review the diff).
 
+use crate::tmpdir::TmpDir;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,14 +21,12 @@ fn repo() -> PathBuf {
     here().join("../../..")
 }
 
-fn tmp(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!(
+fn tmp(name: &str) -> TmpDir {
+    let d = TmpDir::fresh(std::env::temp_dir().join(format!(
         "hydo-grpc-gen-golden-{}-{}",
         std::process::id(),
         name
-    ));
-    let _ = fs::remove_dir_all(&d);
-    fs::create_dir_all(&d).unwrap();
+    )));
     d
 }
 

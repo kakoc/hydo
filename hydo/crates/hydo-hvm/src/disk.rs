@@ -304,10 +304,31 @@ mod tests {
         assert_eq!(fed, flat[..n - 100]);
     }
 
+    /// A test's folder, removed when the test ends, also when it fails (Milestone 271;
+    /// `HYDO_KEEP_TMP=1` keeps it).
+    struct Tmp(std::path::PathBuf);
+
+    impl std::ops::Deref for Tmp {
+        type Target = std::path::Path;
+        fn deref(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Tmp {
+        fn drop(&mut self) {
+            if std::env::var_os("HYDO_KEEP_TMP").is_some_and(|v| !v.is_empty() && v != "0") {
+                return;
+            }
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn opens_a_file_and_writes_one() {
         let dir = std::env::temp_dir().join(format!("hydo-disk-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
+        let dir = Tmp(dir);
         let p = dir.join("d.img");
         let bytes: Vec<u8> = (0..3 * BLOCK + 512).map(|i| (i % 13) as u8).collect();
         std::fs::write(&p, &bytes).unwrap();
@@ -321,6 +342,6 @@ mod tests {
         want[BLOCK + 1..BLOCK + 6].copy_from_slice(b"hello");
         assert_eq!(std::fs::read(&p).unwrap(), want);
         assert_eq!(d.to_vec(), want);
-        let _ = std::fs::remove_dir_all(&dir);
+        drop(dir);
     }
 }

@@ -4,6 +4,7 @@
 //! `<name>::<test>`: `cargo test -p hydo-hvx --test it <name>::`.
 
 mod c_model;
+mod tmpdir;
 
 mod abi;
 mod options;

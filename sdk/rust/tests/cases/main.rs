@@ -16,6 +16,8 @@
 mod model;
 mod defs;
 mod programs;
+#[path = "../tmpdir/mod.rs"]
+mod tmpdir;
 
 use model::{Case, Run, Step};
 use std::collections::BTreeMap;
@@ -222,8 +224,7 @@ fn run_child(case: &Case, run: &Run) -> Result<(Vec<u8>, String), String> {
         std::process::id(),
         SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = tmpdir::TmpDir::fresh(dir);
     let mut cmd = Command::new(std::env::current_exe().unwrap());
     cmd.args(["case_child", "--exact", "--nocapture", "--test-threads=1", "-q"]);
     cmd.env("HYDO_CASE", case.id())
@@ -292,7 +293,6 @@ fn run_child(case: &Case, run: &Run) -> Result<(Vec<u8>, String), String> {
     let text = String::from_utf8(raw).map_err(|_| "the Rust SDK wrote invalid UTF-8".to_string())?;
     let out = mask_times(&unmark(&text))?;
     let returns = std::fs::read_to_string(dir.join("returns")).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     Ok((out, returns))
 }
 

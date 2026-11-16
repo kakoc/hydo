@@ -4,6 +4,7 @@
 //! `<name>::<test>`: `cargo test -p hydo-control --test it <name>::`.
 
 mod support;
+mod tmpdir;
 
 mod clock_cut;
 mod conversations;

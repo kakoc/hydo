@@ -4,6 +4,7 @@
 //! `browser:` the run sends the same commands as before.
 
 use crate::support;
+use crate::tmpdir::TmpDir;
 
 use hydo_agent_proto::msg::Command;
 use hydo_control::transcript::Record;
@@ -80,8 +81,8 @@ fn the_screenshots_come_out_after_the_verdict() {
     let lines = hydo_control::agent::console_text(&a.run.fin.transcript, &[]);
     assert!(lines.find("HYDO-ORACLE: OK").unwrap() < lines.find("HYDO-SCREEN").unwrap());
     // the run directory gets the files, and the transcript keeps the notes without the bytes
-    let d = std::env::temp_dir().join(format!("hydo-screens-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
+    let d =
+        TmpDir::fresh(std::env::temp_dir().join(format!("hydo-screens-{}", std::process::id())));
     let t = hydo_control::agent::take_screens(&a.run.fin.transcript, &d.join("screens"));
     assert_eq!(
         std::fs::read(d.join("screens/step-1-1.png")).unwrap(),

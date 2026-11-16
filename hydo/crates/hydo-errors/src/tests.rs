@@ -5,6 +5,15 @@
 use super::*;
 use serde_json::json;
 
+/// A test's folder, removed when the test ends, also when it fails (Milestone 271).
+struct Rm(PathBuf);
+
+impl Drop for Rm {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 const CON: &str = concat!(
     "hydo-ob: x\n",
     r##"HYDO-ERRLOG {"svc":"redis","src":"log","n":1,"at":"s","tpl":"#:C <date> <time> # Redis is starting","ex":"57:C ..."}"##,
@@ -64,6 +73,7 @@ fn host() {
     );
 
     let d = scratch("host");
+    let _rm_d = Rm(d.clone());
     let f = d.join("known-errors.yaml").display().to_string();
     let kj = |k: &Kind| Value::Object(k.to_json());
     let ban = p
@@ -215,6 +225,7 @@ fn accept_writes_no_name_unless_given() {
     let p = parse_consoles(&src(&[("a", CON)])).unwrap();
     let k = Value::Object(p.kinds[0].to_json());
     let d = scratch("by");
+    let _rm_d = Rm(d.clone());
     let f = d.join("known-errors.yaml").display().to_string();
     let add = accept(
         &f,

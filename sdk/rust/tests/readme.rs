@@ -5,6 +5,8 @@
 //! This file is its own test program with one test: the SDK's state (the catalog, which outcomes
 //! were written, where records go) belongs to the process.
 
+mod tmpdir;
+
 mod kv_store {
     include!("../examples/kv_store.rs");
 
@@ -38,8 +40,7 @@ fn the_complete_program_writes_what_the_readme_shows() {
         PROGRAM,
         "the README's complete program and examples/kv_store.rs must be the same text"
     );
-    let dir = std::env::temp_dir().join(format!("hydo-assert-readme-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = tmpdir::TmpDir::new(&format!("hydo-assert-readme-{}", std::process::id()));
     let out = dir.join("console");
     std::fs::write(&out, "").unwrap();
     std::env::set_var("HYDO_ASSERT_OUT", &out);

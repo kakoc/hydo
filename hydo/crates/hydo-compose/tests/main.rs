@@ -4,6 +4,7 @@
 //! `<name>::<test>`: `cargo test -p hydo-compose --test it <name>::`.
 
 mod common;
+mod tmpdir;
 
 mod equivalence;
 mod fetch_arch;

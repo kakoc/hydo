@@ -243,11 +243,12 @@ loses until hydo has it.
    A process that touched the dead disk waited forever, such as the workload's client or the
    agent's own mount of an `L=`. Such a run ended at the explorer's limit of 900 s
    (`TIMEOUT workload`). The examples used `workload.timeout: 60`. Since Milestone 261 the run
-   is cut at the first stop after the flush. `disk=cut dseed=b867e156d88e8c87 cf=83 | run
-   T=12:-300 L=device@6+2` still cannot reach its recovery boot: the flush is the agent's own
-   mount of the `L=`, so the agent waits on the dead disk. It ends in 8 s with `ERROR the disk
-   lost power at its flush of cf= while the agent itself waited on it` (AGENTS.md, open item
-   127).
+   is cut at the first stop after the flush. In `disk=cut dseed=b867e156d88e8c87 cf=83 | run
+   T=12:-300 L=device@6+2` the flush is the mount of the `L=`. Until Milestone 271 the agent
+   made that mount itself, waited on the dead disk, and the run ended in `ERROR the disk lost
+   power at its flush of cf= while the agent itself waited on it`. Since Milestone 271 busybox
+   mounts in a child process in a `cf=` run. The schedule reaches its recovery boot and gives
+   `OK invariants=6 held` (`0cad7c03d59862fa` on two hvx runs, on Milestone 261's final image).
 5. **Kernel features of devices.** The Mac's guest kernel has no squashfs and no device mapper,
    so RAUC needed a patch there and no engine ran `verity` bundles. The hvx guest kernel has
    them as modules, which the example loads from the kernel's build (`fetch-modules.sh`).
