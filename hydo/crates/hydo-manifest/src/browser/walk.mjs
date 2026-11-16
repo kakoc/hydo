@@ -13,7 +13,8 @@
 // so leaving one action out (x<step>.<k>) leaves the other actions' choices as they were. A time
 // or a date in a name ("1 minute ago", "now", "2026-10-16 00:00:42") counts as one word for the
 // choice (Milestone 264), so that a clock step, which changes such names, does not change which
-// control the walk takes.
+// control the walk takes. When a menu or a dialog is open, an action most often acts in it
+// (Milestone 267).
 //
 // The watcher (hook.cjs, loaded with NODE_OPTIONS=--require) watches every page as it watches a
 // team's Playwright tests, and check.mjs judges what it saw. This file also writes the walk as a
@@ -48,13 +49,17 @@ fs.mkdirSync(own, { recursive: true });
 fs.mkdirSync(shots, { recursive: true });
 
 function parseWalk(v) {
-  const w = { seed: 0n, actions: 0, skip: new Set(), rec: false };
+  const w = { seed: 0n, actions: 0, skip: new Set(), rec: false, recStep: undefined };
   if (!v) return w;
   const [seed, ...fields] = v.split(',');
   w.seed = BigInt(`0x${seed}`);
   for (const f of fields) {
     if (f === 'rec') w.rec = true;
-    else if (f.startsWith('n')) w.actions = Number(f.slice(1));
+    else if (/^rec\d+$/.test(f)) {
+      // rec<step>: record that step (Milestone 267: the step of a failure)
+      w.rec = true;
+      w.recStep = Number(f.slice(3));
+    } else if (f.startsWith('n')) w.actions = Number(f.slice(1));
     else if (f.startsWith('x')) {
       // x<step>.<k>, or x<step>.<k>-<last> (Milestone 264)
       const m = /^x(\d+)\.(\d+)(?:-(\d+))?$/.exec(f);
@@ -116,6 +121,7 @@ function indexLine(file, why) {
 // The walk as Playwright code, for repro.spec.ts: each step's lines in walk/repro-<step>.json.
 const code = [];
 const q = (s) => JSON.stringify(s);
+const locate = (page, c) => (c.name ? page.getByRole(c.role, { name: c.name, exact: true }).nth(c.m) : page.getByRole(c.role).nth(c.j));
 function locatorCode(c) {
   return c.name
     ? `page.getByRole(${q(c.role)}, { name: ${q(c.name)}, exact: true }).nth(${c.m})`
@@ -139,6 +145,7 @@ const TIMES = [
   /\b(?:just now|now|today|yesterday|tomorrow)\b/gi,
   /\b(?:less than |about |almost |over )?(?:a few|an?|\d+) (?:second|sec|minute|min|hour|day|week|month|year)s?(?: ago)?\b/gi,
   /\b\d{4}-\d{2}-\d{2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?\b/g,
+  /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, // 11/15/2026 (Milestone 267: Memos's archived memos)
   /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]* \d{1,2}(?:, \d{4})?\b/gi,
   /\b\d{1,2}:\d{2}(?::\d{2})?(?: ?[ap]\.?m\.?)?(?![\w])/gi,
 ];
@@ -148,14 +155,21 @@ function timeless(name) {
   return n.replace(/\bin <time>/gi, '<time>');
 }
 
+// What opens over a page: a dialog, a menu, a list of options. A user acts in the one that opened
+// last (Milestone 267).
+const OVERLAY = new Set(['dialog', 'alertdialog', 'menu', 'listbox']);
+
 // The controls of an ariaSnapshot, in document order: {role, name, m (place among the same role
 // and name), j (place among the same role), key and km (the name without its times, and the
-// place among the same role and key), url, disabled}.
+// place among the same role and key), url, disabled, over (the overlays it is in, numbered in
+// document order)}.
 function controls(snapshot) {
   const out = [];
   const byKey = new Map();
   const byName = new Map();
   const byRole = new Map();
+  const open = []; // the overlays around the line: {indent, id}
+  let overlays = 0;
   let last = null;
   for (const raw of snapshot.split('\n')) {
     const line = unquote(raw);
@@ -166,6 +180,10 @@ function controls(snapshot) {
     }
     const m = /^(\s*)- ([a-z]+)(?: "((?:[^"\\]|\\.)*)")?((?: \[[^\]]*\])*)(?::.*)?$/.exec(line);
     if (!m) continue;
+    const indent = m[1].length;
+    while (open.length && open[open.length - 1].indent >= indent) open.pop();
+    const over = open.map((o) => o.id);
+    if (OVERLAY.has(m[2])) open.push({ indent, id: ++overlays });
     const role = m[2];
     let name = '';
     try {
@@ -182,7 +200,7 @@ function controls(snapshot) {
     const kk = `${role}\u0000${tk}`;
     const km = byKey.get(kk) || 0;
     byKey.set(kk, km + 1);
-    const c = { role, name, m: n, j, key: tk, km, url: undefined, disabled: /\[disabled/.test(m[4] || '') };
+    const c = { role, name, m: n, j, key: tk, km, url: undefined, disabled: /\[disabled/.test(m[4] || ''), over };
     out.push(c);
     last = role === 'link' ? c : null;
   }
@@ -209,35 +227,57 @@ function allowed(c) {
 // calendar are one family, as the rows of a list are). The walk first chooses a family, then a
 // control of it, so that a page with many alike controls does not hold the walk on them.
 const family = (c) => `${c.role}\u0000${c.key.replace(/\d+/g, '#')}`;
-// How often the walk acted on each family, carried from step to step.
-let uses = {};
+// How often the walk acted on each family in this step. Milestone 258 carried the counts from
+// step to step; once two walks parted, their counts parted, and so did every later choice of the
+// walk. Since Milestone 267 each step starts with none, so a step that starts on the same page
+// makes the same choices.
+const uses = {};
 
-// Three times in four the walk prefers the families it used least, so that it reaches new pages
-// instead of pressing the first button again; the fourth time any family may come again (a
-// repeated click is a user too). Then rendezvous hashing, for the family and then the control:
-// the one with the smallest hash of (stream, its key) wins, and it wins as long as it is on the
-// page, whatever else is.
-function choose(list, r, s) {
+// Three times in four the walk prefers the families it used least in the step, so that it
+// reaches new pages instead of pressing the first button again; the fourth time any family may
+// come again (a repeated click is a user too). Then rendezvous hashing, for the family and then
+// the control: the one with the smallest hash of (stream, its key) wins, and it wins as long as
+// it is on the page, whatever else is. A control that would not take the action (`ok`, Playwright's trial of it: hidden, covered, disabled) gives way to the next in the
+// same order, at most TRIES of them; when none takes it, the result is null and the walk presses
+// Escape, as a user does in a dialog that does not answer (Milestone 267: the unnamed buttons of
+// Memos's "Link memo" dialog never took a click, and held a walk for 8 actions in a row).
+const TRIES = 4;
+async function choose(list, r, s, ok) {
   let pool = list;
   if (r.below(4) > 0) {
     const least = Math.min(...list.map((c) => uses[family(c)] || 0));
     pool = list.filter((c) => (uses[family(c)] || 0) === least);
   }
-  let fam;
-  let famH;
-  for (const c of pool) {
-    const h = mix(s ^ fnv(family(c)));
-    if (famH === undefined || h < famH) {
-      fam = family(c);
-      famH = h;
+  const fams = [...new Set(pool.map(family))]
+    .map((f) => [mix(s ^ fnv(f)), f])
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    .map(([, f]) => f);
+  let first;
+  let chosen;
+  let tries = 0;
+  for (const fam of fams) {
+    for (const c of ranked(pool.filter((x) => family(x) === fam), mix(s))) {
+      first ??= c;
+      if (!ok || tries >= TRIES) break;
+      tries++;
+      if (await ok(c)) {
+        chosen = c;
+        break;
+      }
     }
+    if (chosen || !ok || tries >= TRIES) break;
   }
-  const c = pick(
-    pool.filter((x) => family(x) === fam),
-    mix(s),
-  );
-  uses[fam] = (uses[fam] || 0) + 1;
+  const c = ok ? chosen : first;
+  if (c) uses[family(c)] = (uses[family(c)] || 0) + 1;
   return c;
+}
+
+// The controls by rendezvous hashing, the winner first.
+function ranked(list, s) {
+  return list
+    .map((c) => [mix(s ^ fnv(`${c.role}\u0000${c.key}\u0000${c.km}`)), c])
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    .map(([, c]) => c);
 }
 
 function pick(list, s) {
@@ -251,6 +291,36 @@ function pick(list, s) {
     }
   }
   return best;
+}
+
+// The front of the page (Milestone 267): the controls of the overlay that opened last (a menu, a
+// dialog, a list of options), which a user acts on next. Memos's share link sits behind Share,
+// Manage share links, Create new link and its copy button, and an emoji behind Add reaction:
+// each opens a few controls on a page of dozens, and a choice among all of them took the four in
+// a row in 1 of 40 walks. Within the overlay, the controls that the action before made appear
+// come first (the row of the share link that Create new link added). The front is read from the
+// page alone. A front of the controls new on the whole page was tried and left out: it depends
+// on two pages, and without its clock step Memos's seed 46 then took 38 of 72 actions otherwise.
+const sig = (c) => `${c.role}\u0000${c.key}`;
+// the controls of the snapshot before, in this step
+let before = null;
+function front(all) {
+  const top = Math.max(0, ...all.flatMap((c) => c.over));
+  if (top === 0) return [];
+  const fresh = before ? all.filter((c) => !before.has(sig(c))) : [];
+  const inside = all.filter((c) => c.over.includes(top));
+  const newer = inside.filter((c) => fresh.includes(c));
+  return newer.length && newer.length < inside.length ? newer : inside;
+}
+
+// Whether a text field takes text: Memos shows each memo's text as a read-only textbox, and a
+// fill of it waited 3 s and did nothing (an eighth of Memos's actions before Milestone 267).
+async function editable(page, list) {
+  const out = [];
+  for (const c of list) {
+    if (await locate(page, c).isEditable({ timeout: 1000 }).catch(() => false)) out.push(c);
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ values to type
@@ -304,8 +374,27 @@ const T = { timeout: 3000 };
 // of files per run (hydo-control's screens::MAX_BYTES, Milestone 264): the test, a trace and a
 // video of this size fit
 const RECORDING_MAX = 640 * 1024;
+// the names of controls that only close an overlay
+const DISMISS = /^(close|cancel|dismiss|skip|not now|no thanks|×|✕)$/i;
 // the names of buttons that commit what a form holds
 const COMMIT = /^(save|submit|create|send|post|update|confirm|ok|done|apply|publish|place)\b/i;
+
+// No control of the chosen ones takes a click: press Escape, which closes a menu or a dialog
+async function escape(page) {
+  const lines = [];
+  let what = 'press Escape (no control took the click)';
+  try {
+    await page.keyboard.press('Escape');
+    lines.push("await page.keyboard.press('Escape');");
+  } catch (e) {
+    const why = String((e && e.message) || e).split('\n')[0].slice(0, 120);
+    what += `: not done (${why})`;
+    lines.push(`// not done in hydo's run: ${why}`);
+  }
+  await page.waitForTimeout(settle);
+  lines.push(`await page.waitForTimeout(${settle});`);
+  return { what, lines };
+}
 
 async function act(page, k) {
   const r = new Stream(streamOf(k));
@@ -315,9 +404,31 @@ async function act(page, k) {
   } catch {
     snap = '';
   }
-  const all = controls(snap).filter(allowed);
+  const seen = controls(snap).filter(allowed);
+  const ahead = front(seen);
+  before = new Set(seen.map(sig));
+  const ks = r.next();
+  // seven times in eight the action stays in the overlay, when it has a control to act on (an
+  // action elsewhere closes it); the draw comes from the action's own stream. There the walk does
+  // not leave the page (back, reload, the start page): a user finishes what opened first
+  let all = seen;
+  let atFront = false;
+  if (ahead.length && mix(ks ^ fnv('\u0000front')) % 8n > 0n) {
+    const fe = await editable(page, ahead.filter((c) => FILL.has(c.role)));
+    if (fe.length || ahead.some((c) => CLICK.has(c.role) || c.role === 'combobox')) {
+      all = ahead;
+      atFront = true;
+    }
+  }
+  // In an overlay, three times in four the walk leaves out the controls that only close it
+  // (Close, Cancel): a dialog's purpose is behind its other controls. Memos's Manage share links
+  // dialog has Close and Create new link, and 3 of 4 walks that opened it closed it at once.
+  if (atFront && mix(ks ^ fnv('\u0000stay')) % 4n > 0n) {
+    const stay = all.filter((c) => !DISMISS.test(c.name.trim()));
+    if (stay.some((c) => CLICK.has(c.role) || c.role === 'combobox' || FILL.has(c.role))) all = stay;
+  }
   const clickable = all.filter((c) => CLICK.has(c.role));
-  const fillable = all.filter((c) => FILL.has(c.role));
+  const fillable = await editable(page, all.filter((c) => FILL.has(c.role)));
   const have = {
     click: clickable.length > 0,
     fill: fillable.length > 0,
@@ -325,18 +436,19 @@ async function act(page, k) {
     submit: fillable.length > 0,
     double: all.some((c) => c.role === 'button'),
     select: all.some((c) => c.role === 'combobox'),
-    back: true,
-    reload: true,
-    home: true,
+    back: !atFront,
+    reload: !atFront,
+    home: !atFront,
     wait: true,
   };
+  // whether a control takes a click: Playwright's trial of it, without the click
+  const clicks = (c) => locate(page, c).click({ trial: true, timeout: 500 }).then(() => true, () => false);
   // The kind by weighted rendezvous hashing (Milestone 264): each kind the page allows scores
   // -ln(u)/weight, with u from the action's stream and the kind's name, and the lowest wins. So a
   // kind that the page allows or not (a select on one page and not on the next) changes the
   // choice only when it wins; a roll over the sum of the weights moved every other kind with it,
   // and a clock step that changed the page changed the rest of the walk.
   const kinds = KINDS.filter(([kind]) => have[kind]);
-  const ks = r.next();
   let kind = kinds[0][0];
   let best;
   for (const [kd, w] of kinds) {
@@ -353,10 +465,11 @@ async function act(page, k) {
   try {
     if (kind === 'click' || kind === 'double') {
       const list = kind === 'double' ? all.filter((c) => c.role === 'button') : clickable;
-      const c = choose(list, r, s2);
+      const c = await choose(list, r, s2, clicks);
+      if (!c) return escape(page);
       const loc = locatorCode(c);
       what = `${kind === 'double' ? 'click twice' : 'click'} ${c.role} ${q(c.name)}`;
-      const el = c.name ? page.getByRole(c.role, { name: c.name, exact: true }).nth(c.m) : page.getByRole(c.role).nth(c.j);
+      const el = locate(page, c);
       if (kind === 'double') {
         // two clicks as fast as a user's double click on a submit button: the second may find the
         // button gone or disabled, which is the page handling it
@@ -368,7 +481,7 @@ async function act(page, k) {
         lines.push(`await ${loc}.click();`);
       }
     } else if (kind === 'fill' || kind === 'submit' || kind === 'commit') {
-      const c = choose(fillable, r, s2);
+      const c = await choose(fillable, r, s2);
       const el = c.name ? page.getByRole(c.role, { name: c.name, exact: true }).nth(c.m) : page.getByRole(c.role).nth(c.j);
       const type = await el.evaluate((e) => (e.tagName === 'INPUT' ? e.type : e.tagName.toLowerCase()), null, T);
       const v = valueFor(type, r);
@@ -403,8 +516,9 @@ async function act(page, k) {
         }
       }
     } else if (kind === 'select') {
-      const c = choose(all.filter((x) => x.role === 'combobox'), r, s2);
-      const el = c.name ? page.getByRole(c.role, { name: c.name, exact: true }).nth(c.m) : page.getByRole(c.role).nth(c.j);
+      const c = await choose(all.filter((x) => x.role === 'combobox'), r, s2, clicks);
+      if (!c) return escape(page);
+      const el = locate(page, c);
       const n = await el.evaluate((e) => (e.tagName === 'SELECT' ? e.options.length : 0), null, T);
       const loc = locatorCode(c);
       if (n > 0) {
@@ -586,7 +700,6 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const opts = { viewport: { width: 1280, height: 720 }, locale: 'en-US', timezoneId: 'UTC' };
   if (state && state.storage) opts.storageState = state.storage;
-  uses = (state && state.uses) || {};
   // the controller copies these files out through the agent, about 1.5 KB per call, after the
   // verdict and at most 1 MiB of them: a video and a trace (DOM snapshots, no screenshots) of the
   // last step that takes an action, where a walk's failure shows most often (Milestone 264: a
@@ -595,7 +708,8 @@ async function main() {
   const acts = (s) => Array.from({ length: actions }, (_, k) => k).some((k) => !walk.skip.has(`${s}.${k}`));
   let lastActive = nsteps - 1;
   while (lastActive > 0 && !acts(lastActive)) lastActive--;
-  const tracing = walk.rec && step === lastActive;
+  // rec<s> names the step to record (Milestone 267: the step whose failure the replay shows)
+  const tracing = walk.rec && step === (walk.recStep ?? lastActive);
   if (tracing) opts.recordVideo = { dir: path.join(own, 'video'), size: { width: 640, height: 360 } };
   const context = await browser.newContext(opts);
   if (tracing) await context.tracing.start({ screenshots: false, snapshots: true, title });
@@ -675,7 +789,7 @@ async function main() {
   try {
     const url = page.url();
     if (url.startsWith('http')) {
-      fs.writeFileSync(statePath, JSON.stringify({ url, signedIn: signedIn || !!(state && state.signedIn), uses, storage: await context.storageState() }));
+      fs.writeFileSync(statePath, JSON.stringify({ url, signedIn: signedIn || !!(state && state.signedIn), storage: await context.storageState() }));
     }
   } catch {
     /* the page went away: the next step starts where this one started */

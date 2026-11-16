@@ -1357,10 +1357,12 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
                 } else {
                     format!(", {} of them left out", w.skip.len())
                 }
-            ) + if w.rec {
-                " A video and a trace of the last step are recorded."
-            } else {
-                ""
+            ) + &match (w.rec, w.rec_step) {
+                (true, Some(s)) => format!(" A video and a trace of step {s} are recorded."),
+                (true, None) => {
+                    " A video and a trace of the last step with an action are recorded.".to_string()
+                }
+                (false, _) => String::new(),
             },
             format!("the walk {} through the pages", code(&w.to_string())),
         ),

@@ -13,7 +13,13 @@ fn walk(v: &str) -> Result<Walk, String> {
 
 #[test]
 fn a_walk_prints_as_it_was_written() {
-    for t in ["9f3a01c2", "1,n6", "abc,n4,x0.2,x1.0,rec", "0,rec"] {
+    for t in [
+        "9f3a01c2",
+        "1,n6",
+        "abc,n4,x0.2,x1.0,rec",
+        "0,rec",
+        "0,x3.0-11,rec2",
+    ] {
         let w = walk(t).unwrap();
         assert_eq!(w.to_string(), t);
         assert_eq!(GuestToken::Walk(w).to_string(), format!("I={t}"));
@@ -45,6 +51,18 @@ fn a_range_leaves_out_actions_of_one_step() {
     }
 }
 
+/// Milestone 267: `rec<step>` records the step of a failure; `rec` the last step with an action.
+#[test]
+fn a_recording_names_its_step() {
+    let w = walk("7,rec2").unwrap();
+    assert!(w.rec);
+    assert_eq!(w.rec_step, Some(2));
+    let w = walk("7,rec").unwrap();
+    assert!(w.rec);
+    assert_eq!(w.rec_step, None);
+    assert!(walk("7").unwrap().rec_step.is_none());
+}
+
 #[test]
 fn what_a_walk_refuses() {
     for t in [
@@ -57,6 +75,9 @@ fn what_a_walk_refuses() {
         "1,x1",
         "1,y",
         "1,rec,rec",
+        "1,rec1,rec",
+        "1,rec02",
+        "1,recx",
         "1,x0.1,x0.1",
         "1,x0.3-2",
         "1,x0.0-200",

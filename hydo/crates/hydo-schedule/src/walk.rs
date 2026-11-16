@@ -1,14 +1,15 @@
 //! `I=`: a walk through a web app's pages that hydo makes itself (Milestone 258,
 //! docs/design/ui-exploration.md).
 //!
-//! `I=<seed>[,n<actions>][,x<step>.<k>[-<last>]]...[,rec]`: the walker of `browser.explore`
+//! `I=<seed>[,n<actions>][,x<step>.<k>[-<last>]]...[,rec[<step>]]`: the walker of `browser.explore`
 //! chooses each action of the walk from this seed. Workload step `s` runs `actions` actions (the
 //! manifest's `explore.actions` without `n`). Each action draws from its own stream, `(seed, s,
 //! k)`, so an action left out with `x<s>.<k>` changes no other action's draw: the shrinker cuts a
 //! walk by lowering `n` and by leaving actions out. `x<s>.<k>-<last>` leaves out actions `k` to
 //! `last` of step `s` (Milestone 264); a walk prints a run of four or more left-out actions of one
 //! step that way, and shorter runs one by one, as Milestone 258 wrote them. `rec` records a video and a Playwright trace of the
-//! last step; recording costs guest time, so a run with `rec` is a run of its own, with its own
+//! last step that takes an action, and `rec<step>` of that step (Milestone 267: the step of a
+//! failure); recording costs guest time, so a run with `rec` is a run of its own, with its own
 //! fingerprint.
 
 use crate::num::{dec, err, hex};
@@ -19,7 +20,7 @@ use std::fmt;
 /// The most actions per step a walk takes.
 pub const MAX_ACTIONS: u64 = 200;
 
-/// `I=<seed>[,n<actions>][,x<step>.<k>]...[,rec]`.
+/// `I=<seed>[,n<actions>][,x<step>.<k>]...[,rec[<step>]]`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Walk {
     pub seed: u64,
@@ -27,13 +28,15 @@ pub struct Walk {
     pub actions: Option<u64>,
     /// The actions left out: (step, index of the action in its step).
     pub skip: BTreeSet<(u64, u64)>,
-    /// Record a video and a Playwright trace of the last step.
+    /// Record a video and a Playwright trace of one step.
     pub rec: bool,
+    /// The step to record (`rec<step>`); None: the last step that takes an action.
+    pub rec_step: Option<u64>,
 }
 
 impl Walk {
     pub(crate) fn parse(v: &str, what: &str) -> Result<Walk, ParseError> {
-        let form = "I=<seed hex>[,n<actions>][,x<step>.<k>[-<last>]]...[,rec]";
+        let form = "I=<seed hex>[,n<actions>][,x<step>.<k>[-<last>]]...[,rec[<step>]]";
         let mut it = v.split(',');
         let seed = hex(it.next().unwrap_or(""), what)
             .map_err(|e| err(format!("{} ({form})", e.message)))?;
@@ -42,11 +45,14 @@ impl Walk {
             ..Walk::default()
         };
         for f in it {
-            if f == "rec" {
+            if let Some(s) = f.strip_prefix("rec") {
                 if w.rec {
                     return Err(err(format!("{what}: rec twice")));
                 }
                 w.rec = true;
+                if !s.is_empty() {
+                    w.rec_step = Some(dec(s, what)?);
+                }
             } else if let Some(n) = f.strip_prefix('n') {
                 if w.actions.is_some() {
                     return Err(err(format!("{what}: n twice")));
@@ -114,6 +120,9 @@ impl fmt::Display for Walk {
         }
         if self.rec {
             f.write_str(",rec")?;
+            if let Some(s) = self.rec_step {
+                write!(f, "{s}")?;
+            }
         }
         Ok(())
     }

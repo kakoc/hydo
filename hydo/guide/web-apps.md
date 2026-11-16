@@ -110,8 +110,9 @@ action reads the page's accessibility tree and does one of these:
 run of its schedule. `hydo explore` draws a new walk for every schedule and shrinks a failing one
 to fewer actions. It leaves out whole steps, halves of a step, and single actions. It writes the
 result as `I=<seed>,x<step>.<first>-<last>`. A time in a control's name (such as `1 minute ago`)
-does not steer the walk, so a clock step that a shrink drops changes fewer of its actions. The
-run prints each action:
+does not steer the walk, so a clock step that a shrink drops changes fewer of its actions. When
+an action opens a menu or a dialog, the next action most often acts in it, so a walk reaches
+controls that sit behind several clicks. The run prints each action:
 
 ```text
 hydo-web: walk 0.7: click button "Place order"
@@ -135,10 +136,12 @@ Every run leaves the walk as a Playwright test, `screens/repro.spec.ts` in the r
 Run it against your own instance without hydo: `BASE_URL=http://localhost:5230 npx playwright
 test repro.spec.ts`. An `H=` fault on a fake's route is a `page.route` handler in it; a fault of
 the backend, such as a kill, is a comment at the step where hydo made it. At its end `hydo
-explore` runs each minimal schedule with a walk once more with `I=<seed>,rec`, into
-`replays/rec-<k>/`. That run also records a video and a Playwright trace of the walk's last
-step. For a walk of 4 steps, `npx playwright show-trace screens/walk-step-3.trace.zip` opens
-the trace. `hydo report --html` of that folder shows the video and the test.
+explore` runs each minimal schedule with a walk once more with recording on, into
+`replays/rec-<k>/`. That run also records a video and a Playwright trace of the step in which
+the finding happened, `I=<seed>,rec<step>`. For a finding during step 2, `npx playwright
+show-trace screens/walk-step-2.trace.zip` opens the trace. A finding that names no step
+records the last step that takes an action (`I=<seed>,rec`). `hydo report --html` of that
+folder shows the video and the test.
 
 ## The properties
 

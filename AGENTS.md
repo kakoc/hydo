@@ -732,6 +732,13 @@ no longer ends in `TIMEOUT check`, and it records the last step that takes an ac
 both examples gave one fingerprint per schedule on four hosts. The details are in
 `docs/HISTORY.md` Milestone 264.
 
+Since M267, when a menu or a dialog is open, an action most often acts in it. A fill takes only
+an editable field, and a click only a control that takes Playwright's trial click. The walk
+counts the families it used per step. A dropped clock step moves 7.4 of a walk's 72 actions on
+average over five Memos walks, against 19.8 for M264's walker. The blind exploration of Memos still reached neither finding (open item 131). A
+finding's recording replay records the step that the finding names (`I=<seed>,rec<step>`). The
+details are in `docs/HISTORY.md` Milestone 267.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -1373,9 +1380,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `hydo-out/`.
 124. Walks through the pages (M258, M264). What is left:
     - The Mac engine does not run the walks (it does not run `browser:`, open item 51).
-    - Only one step is recorded, the last that takes an action. A run copies at most 1 MiB of
-      files out of the guest (M264), and the videos of every step of a Memos walk would pass
-      2 MB.
+    - Only one step is recorded: the step that a finding names (M267), else the last that
+      takes an action. A run copies at most 1 MiB of files out of the guest (M264), and the
+      videos of every step of a Memos walk would pass 2 MB.
     - A fault still changes the page itself (open item 129). A clock step changes a memo list's
       order and what a calendar shows, so a shrink candidate without it can take other actions.
     - `repro.spec.ts` maps `H=` faults to `page.route`, but applies a fault with `p=` to every
@@ -1445,14 +1452,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       signing keys and signed bundles, so a fresh build gives another image; `make-bundles.sh`
       keeps them once made. Milestone 266 found that SWUpdate's bundles carried the build's time,
       which split its KVM values between runners.
-129. Walks after Milestone 264. What is left:
-    - A fault changes the page itself, and so the walk. Without its clock step Memos's seed 46
-      took 9 of 72 actions otherwise, and the share-link failure did not happen, so the minimal
-      walk keeps the step. A walk that follows the page, such as one that chooses among the
-      memos by their text, is not built.
-    - The share-link walk was shrunk on the first image of M264. The final walker takes other
-      actions at seed 46, and the explorations of seeds 21-60 on its image reached neither
-      Memos finding.
+129. Walks after Milestone 264 (M267). What is left:
+    - A fault changes the page itself, and so the walk. Without a clock step, five Memos walks
+      take 7.4 of 72 actions otherwise on M267's walker, and 19.8 on M264's. One of the five
+      takes 32 otherwise. A walk that follows the page, such as one that chooses among the memos
+      by their text, is not built.
+    - M267 measured why M264's walker reached neither Memos finding in seeds 21-60. The share
+      link is four controls deep, behind a menu and a dialog, and M258 reached it in 1 walk of
+      40. Open item 131 has what is left.
     - The shrink kept 31 of 72 actions. Halves of a step and single actions in the middle lose
       the failure when they change the page that a later action of the failing step needs.
       A delta debugging that also tries the failing step's own actions one by one is not built.
@@ -1461,6 +1468,27 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       on KVM and fails on hvx: its double order needs a moment of the exit clock.
     - An image built before M264 ignores the range `x<step>.<first>-<last>` and walks the
       actions it was meant to leave out.
+131. Walks after Milestone 267. What is left:
+    - A recording replay does not show the failing run. With `,rec` on, a walk can take other
+      actions than the run it replays: recording costs time, so the pages answer later, and the
+      walker chooses again. Two walks that failed with the share link took other actions with
+      `rec0` and `rec4` and passed (M267). A possible fix: the recording replay replays the
+      actions that the failing run's log names, instead of choosing them again.
+    - The final walker of M267 reaches neither Memos finding in seeds 21-60. Over those 40 walks
+      it clicked Share in 7 and opened Manage share links in 1; M258's walker clicked Share in
+      24 walks. A dropped clock step moves 7.4 of 72 actions on M267's walker, 19.8 on M264's.
+    - Breadth against a stable shrink. A version of M267 carried the family counts across
+      steps, as M258 did. It clicked Share in 21 walks and a copy button in 2. But a dropped
+      clock step moved 37.4 of 72 actions on it. A breadth that depends on the page alone is
+      not built.
+    - Faults inside a step. A kill, a pause or a network fault starts at a workload step, when
+      the walk's page loads, so it never meets an action in the middle of a step. `hydo explore`
+      draws a timed kill (`X=`) only for a manifest without `faults:`. Finding 2 needs a refused
+      write in the middle of a step, so no schedule of seeds 21-60 with `--durable-only` can
+      fail it.
+    - A walk that a power cut ends is not judged. Two walks of that version clicked a share
+      link's copy button and passed, because `C=5` cut the power (open item 124).
+    - M267's walker did not run on KVM.
 132. What Milestone 268 left.
     - A saved regression changes the bytes of the image it tests. `hydo build` copies the
       folder `regressions/` into the image as `/hydo/regressions/`, comments included, and puts
@@ -2062,6 +2090,13 @@ build machine, before 2026-10-13.
   each bundle. With one image the EPYC 7763, 9V45, and 9V74 agree, with 0, 1, or 14 reboots.
   `make-swu.sh` sets the bundles' times, and `HYDO_KVM_DIAG` covers the boots a reboot ends.
   Nothing recorded moved
+- M267 (tentative number): why M264's walker reached neither Memos finding. The share link is
+  four controls deep, and M258's walker reached it in 1 walk of 40. The walk now acts in the menu
+  or dialog that opened last. It fills only editable fields and clicks only controls that take a
+  trial click. It counts the families it used per step. A dropped clock step moves 7.4 of 72
+  actions on average over five walks (19.8 for M264's). web-shop's two bugs were found blind, Memos's
+  were not. A finding's recording replay records the step the finding names. Nothing recorded
+  moved
 - M268 (tentative number): open item 105's two `cf=` schedules after M261. The Saleor gift
   card regression breaks both rules at `cf=271` now; `cf=270` had stopped reproducing when its
   image was rebuilt. d11 of the bug benchmark is no longer found at any flush cut. A saved

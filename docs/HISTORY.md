@@ -12498,3 +12498,209 @@ checkout to tell an ignored output from an input: the test tree there was a copy
 (`HYDO_BLESS=1 cargo test -p hydo-build --test it equivalence::`), and it passes after that.
 Its one changed line is the digest of Saleor's `hydo/` folder, which holds `regressions/`; no
 answer changed. `sh ci/vale.sh` on this Mac.
+
+### Milestone 267 (tentative number) - DONE (why Milestone 264's walker reached neither Memos finding: the share link's copy button is four controls deep, behind a menu and a dialog, and Milestone 258's walker reached it in 1 walk of 40; the walk now acts in the menu or dialog that opened last, fills only editable fields, clicks only controls that take a trial click, and counts the families it used per step; a dropped clock step moves 7.4 of 72 actions on average over five walks, 19.8 for Milestone 264's walker; web-shop's two planted bugs were found blind, the Memos findings were not; a finding's recording replay records the step that the finding names; nothing recorded moved; 2026-11-16)
+
+Open item 129 said that Milestone 264's final walker reached neither Memos finding in seeds
+21-60 of the exploration that found the share link in Milestone 258. A blind walker that finds
+less after a change is a regression of the product, so this milestone measured why. The design
+is the updated section "One action" of `docs/design/ui-exploration.md`. Every hvx run used the
+0.3.3 Linux release with this milestone's `hydo`, in a folder of its own on the bare-metal
+machine, one VM at a time.
+
+**What the walks reached.** The console of every run prints each action (`hydo-web: walk
+<step>.<k>: ...`). The two explorations of seeds 21-60 (`--new-faults --durable-only`, the same
+40 fault draws) were read in place: Milestone 258's on its final image, Milestone 264's on its
+final image. Each has 40 walks of up to 72 actions.
+
+The table counts, over the 40 walks of each exploration, the actions of the share link's path
+and of a reaction, and the walks that took them. The last two columns are this milestone's
+walkers on their own images, with the same 40 fault draws: the first version (a front of new
+controls too, and the family counts across steps; below), and the final walker.
+
+| | Milestone 258 | Milestone 264 | 267, first version | 267, final |
+|---|---|---|---|---|
+| actions in all | 2,160 | 2,184 | 2,184 | 2,184 |
+| a memo opened by its time link (walks) | 30 | 30 | 31 | 21 |
+| Share clicked (actions, walks) | 28, 24 | 18, 16 | 22, 21 | 8, 7 |
+| an item of Share's menu right after Share | 3 of 24 | 3 of 14 | 10 of 17 | 3 of 7 |
+| Manage share links (walks) | 2 | 1 | 4 | 1 |
+| Create new link (walks) | 1 | 0 | 3 | 0 |
+| the copy button of a share link (walks) | 1 | 0 | 2 | 0 |
+| a menu item right after a memo's More | 8 of 42 | 7 of 55 | 42 of 56 | 32 of 45 |
+| Add reaction (actions, walks) | 10, 9 | 20, 17 | 38, 26 | 13, 12 |
+| an emoji clicked (walks) | 6 | 8 | 18 | 7 |
+| fills of a read-only memo text (3 s each, nothing done) | 273 | 280 | 0 | 0 |
+| clicks that waited 3 s and did nothing | 24 | 20 | 0 | 0 |
+| different actions per walk (mean) | 27.3 | 26.1 | 31.0 | 25.8 |
+
+The "Share" rows count Memos's welcome guide's Share button too, whose next control is Done.
+
+**The cause.** Milestone 264 did not make the walker worse at the share link. Both walkers
+rarely reach it, and Milestone 258 reached it once in 40 walks:
+
+- The copy button is behind four controls: Share, Manage share links, Create new link and the
+  button itself. Share opens a menu of three items, and the dialog of Manage share links shows
+  a few controls. The walk chose among all the families of the page, about 15 on a memo's page,
+  so the action after Share took one of its items in 3 of 24 tries (Milestone 258) and 3 of 14
+  (Milestone 264). The action after a memo's More took a menu item in 8 of 42 and 7 of 55.
+- The least-used preference does not starve these controls: a menu item is a family the walk
+  has not used. It competes with every other unused family on the page.
+- An eighth of all actions (273 of 2,160 and 280 of 2,184) were fills of a memo's text, which
+  Memos shows as a read-only textbox. Each waited 3 s and did nothing.
+- Milestone 264's changes reordered the walks: the choice of an action's kind by weighted
+  rendezvous hashing has the shares of Milestone 258's roll, but other draws. Seed 46 then took
+  other actions, and no other seed of the 40 made the four clicks.
+
+Finding 2 needs a reaction while the server refuses writes. `--durable-only` turns a disk that
+fails writes (`disk=ioerr`) into `disk=none`, and kills, pauses and network faults start at a
+workload step, when the walk's page loads. So no schedule of seeds 21-60 with `--durable-only`
+could fail a reaction: Milestone 258 found finding 2 in seed 1 of the exploration of all pages,
+which had a disk I/O error, and confirmed it with a timed kill.
+
+**The change** (`hydo-manifest/src/browser/walk.mjs`):
+
+- **The front of the page.** Before it chooses, an action reads the front: the controls of the
+  overlay that opened last (`dialog`, `alertdialog`, `menu` or `listbox` in the accessibility
+  tree). Within it, the controls that just appeared come first, such as the row that Create new
+  link adds. The action stays in the overlay seven times in eight, by a draw from its own
+  stream, and there it does not go back, reload, or open the start page.
+- **Controls that only close an overlay.** In an overlay, three times in four the walk leaves
+  out Close, Cancel, Dismiss, Skip, Not now, No thanks, `×` and `✕`, when another control is
+  left. Three of the four walks that opened Manage share links on the image before this rule
+  closed it at once.
+- **Fields that take text.** A fill takes only a text field that Playwright's `isEditable`
+  accepts.
+- **Controls that take a click.** A click goes to the first control, in the order of the
+  rendezvous hashing, that takes Playwright's trial click (`click({ trial: true })`), at most
+  four of them. When none takes it, the action presses Escape. The unnamed buttons of Memos's
+  "Link memo" dialog took no click, and on the first image with the front they held a walk for 8
+  actions in a row.
+- **The counts of the families used start at each step.** Three times in four the walk prefers
+  the families it has used least, as in Milestone 258, but it counts them in the step only.
+  Milestone 258 carried the counts from step to step, so once two walks parted, every later
+  choice of the walk could part too.
+- **Dates with slashes.** `11/15/2026` in a name (Memos's archived memos) counts as `<time>` too.
+
+Three versions came before the final one, each on its own image. The measure of Milestone 264
+decided between them: how many of the 72 actions of seed 46's walk (`disk=none
+dseed=baee56f32e223007 | run T=1:-2592000 I=fc8214f2a80db679`) differ without its clock step.
+
+| walker | actions that differ |
+|---|---|
+| Milestone 258's | 24 (Milestone 264's count) |
+| Milestone 264's | 9 (Milestone 264's count) |
+| this milestone: a front of new controls too, counts across steps | 38 |
+| this milestone: the overlay front, counts across steps | 33 |
+| this milestone: the overlay front, no counts | 5 |
+| this milestone, final: the overlay front, counts in the step | 3 |
+
+A front of the controls new on the page depends on two pages in a row. Counts carried across
+steps part as soon as two walks part, and with the overlay front the walks did not meet again.
+Without any counts the walks stayed together, but they reached less: in the first 26 seeds of
+the focused exploration only 2 walks clicked Share and none opened Manage share links, because
+the walk went back to the sidebar's links (Attachments, Timeline, Calendar) again and again.
+With counts in the step, the final walk parts from its twin at actions 3.0, 3.2 and 4.0 only.
+
+Every choice still draws from the action's own stream `(seed, step, k)`, and the front is read
+from the page alone. So leaving out an action changes another action's choice only through the
+page it leaves, as before.
+
+**The recording of the failing step.** The schedule token `I=` takes `rec<step>`
+(`hydo_schedule::Walk::rec_step`): the walker records a video and a trace of that step. `rec`
+alone records the last step that takes an action, as in Milestone 264. At its end `hydo explore`
+replays each minimal walk with `rec<step>`, the step that the finding's verdict names ("during
+the test \"walk step 2\""), and with `rec` for a verdict that names no step (`failing_step`
+in the `hydo` program's `delegated.rs`). The bound of 640 KB per recording stays. An image
+built before this milestone reads `rec2` as no recording.
+
+**The walkers, blind (hvx).** Each row is one exploration with one worker. The Memos
+explorations are `--seeds 21-60 --new-faults --durable-only`, and the web-shop explorations of
+`hydo-walk.yaml` are `--seeds 1-20 --protocol-faults`. Milestone 258's and 264's runs were read
+in place on the bare-metal machine; the last two columns ran on this milestone's images.
+
+| | Milestone 258 | Milestone 264 | 267, first version | 267, final |
+|---|---|---|---|---|
+| Memos, findings in 40 seeds | 1: the share link at seed 46 | none | none judged | none |
+| Memos, walks that clicked the share link's copy button | 1 (seed 46) | 0 | 2 (seeds 31 and 42) | 0 |
+| web-shop, failing seeds of 20 | 7, 8, 12, 17 | 7, 17 | 7, 8, 12, 17 | 7, 17 |
+| web-shop, first seed of the unhandled rejection | 7 | 7 | 7 | 7 |
+| web-shop, first seed of the double order | 8 | 17 | 8 | 17 |
+
+The first version clicked the copy button in seeds 31 and 42, and each run
+ended OK. Both schedules cut the power at step 5 (`C=5`). The page checks then run in the
+recovery boot, where no page ran, and the records of the first boot's pages are gone: open item
+124 named this gap. Seed 42's walk without its cut, `disk=none dseed=bdd732262feb6e95 | run
+I=36c25063a25340e7`, failed with finding 1 in step 0 on that image (`c2d65d1273cfce25`). It
+saves a memo, opens it, and goes Share, Manage share links, Create new link and Copy link, at
+actions 0.4 to 0.7.
+
+The final walker's seed 7 of web-shop shrank to the minimal walk of Milestone 264,
+`I=a0d28305209409f6,n7,x0.0-6,x1.0-6,x2.0-6`. On the version with the overlay front and the
+family counts across steps, Memos's seed 46 without its clock step failed with finding 1 in
+step 2: `disk=none dseed=baee56f32e223007 | run I=fc8214f2a80db679`. The walk opened the memo and went
+Share, Manage share links, Create new link and Copy link at actions 2.3 to 2.7.
+
+**Every fault kind.** The final walker's exploration of seeds 21-60 with `--new-faults` and
+without `--durable-only` (no shrink, 30 minutes) failed 5 schedules, all with a disk that drops
+acknowledged writes (`disk=lying`): 4 lost saved memos, and one data disk did not mount. They are
+the disk's losses, as in Milestone 258. Its walks reached neither finding.
+
+**A dropped fault, over five walks.** One walk is a small sample, so the same measure ran on four
+more walks: those of seeds 21, 22, 23 and 25 of the focused exploration, each as `disk=none |
+run T=1:-2592000 I=<walk>` and as `disk=none | run I=<walk>`. Milestone 264's final image was
+read in place.
+
+| walker | seed 46 | 21 | 22 | 23 | 25 | mean of 72 |
+|---|---|---|---|---|---|---|
+| Milestone 264's | 9 | 12 | 38 | 11 | 29 | 19.8 |
+| this milestone, first version | 38 | 40 | 33 | 30 | 46 | 37.4 |
+| this milestone, final | 3 | 2 | 32 | 0 | 0 | 7.4 |
+
+So the final walker keeps Milestone 264's property better than Milestone 264's walker: a dropped
+clock step moves fewer of a walk's actions. One walk of five (seed 22) still parts for 32 actions.
+
+**The recordings of the two findings.** The findings come from directed walks, each with
+`rec<step>`, for the upstream reports:
+
+- Finding 2, the reaction that the page drops: seed 58's walk on the final image (no fault; it
+  adds a reaction in step 4) with a timed kill of the server in step 4, `disk=none
+  dseed=7daf7bd7b0085fd2 | run X=memos@4~3000 I=8690c91dedf1a78f,rec4`. The run failed with
+  `browser.failures_shown` ("POST /memos.api.MemoService/UpsertMemoReaction got no answer
+  (net::ERR_CONNECTION_REFUSED) during the test "walk step 4""), `fd3697e735ca2e30`. The walk
+  goes Add reaction (4.6) and 😢 (4.8). The run copied `repro.spec.ts` (9,349 bytes), the trace
+  of step 4 (110,789) and its video (365,052).
+- Finding 1, the share link's copy button: no recording shows it yet. The final walker reached
+  the button in no walk. On the first version, two walks without their power
+  cut failed with finding 1 without recording: seed 42's in step 0 (above) and seed 31's in
+  step 4, `disk=none dseed=d7599677879feaea | run N=memos@3-5:corrupt,6%,delay,20ms,reorder,29%
+  P=memos@1+1 T=2:3600 I=4faa1d8cb3256a54` (`fac36a381b8bb73b`; Create new link at 4.6, Copy
+  link at 4.7). With `rec0` and `rec4` the two walks took other actions in the recorded step,
+  from actions 0.2 and 4.3 on, and passed. Each failing run left the walk as `repro.spec.ts`.
+
+A recording is a run of its own: it slows the browser, and Milestone 264 noted that it has its
+own fingerprint. Milestone 264's walker kept its verdict under recording. This milestone's
+walker parted in both recorded steps. Why was not traced; the walker now waits for Playwright's
+trial click (500 ms) and `isEditable` (1 s), so a slower page can change which control comes
+first.
+
+**Goldens, tests and what moved.** Nothing recorded moved: Memos and web-shop are not in
+`recorded.json`, and a manifest without `browser.explore` builds the same image as before. Every
+walking image gets other bytes (the walker), so its fingerprints change. The explorer's identity
+and corpus goldens, quick and full, were re-recorded on the bare-metal machine in a copy of the
+tree with an index of the tracked files only, and did not move. Re-recorded: the CLI's two
+`guide manifest` answers (MANIFEST.md changed), on this Mac. The text that `hydo_schedule::describe`
+gives `I=...,rec` changed ("the last step with an action"). New tests: `hydo-schedule`'s
+`a_recording_names_its_step` (and `rec2` in the walk and describe cases), and the `hydo`
+program's unit test `a_recording_replay_records_the_step_that_failed`.
+
+**Checks.** On the bare-metal machine, in its copy of the tree (`main` at `588c76dd` with this
+milestone on top): `cargo fmt --all --check`; `cargo clippy --workspace --all-targets -- -D
+warnings`; every test of `hydo-schedule` and `hydo-manifest` but `equivalence::same_as_hydo_build`;
+every test of `hydo-explore` (also `identity` and `corpus` with `HYDO_IDENT_FULL=1`); the `hydo`
+program's unit tests; `hydo-schedule`'s `language::`, `hydo-agents`'s `public_content::` and
+the `hydo` program's `docs::`. `same_as_hydo_build` failed there as open item 115 says. On this
+Mac, on `main` at `aec9edc5` with this milestone on top: `cargo clippy --workspace --all-targets
+-- -D warnings`, `hydo-schedule`'s `language::`, `hydo-agents`'s `public_content::`, the `hydo`
+program's `docs::`, and its `equivalence::cli_matches_golden` and `agents_equivalence`, `sh
+ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.

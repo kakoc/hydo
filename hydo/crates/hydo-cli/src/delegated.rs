@@ -145,16 +145,21 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
 const REPLAYS_MAX: usize = 4;
 
 /// A minimal schedule's walk with recording on (Milestone 258): its `I=` value with `,rec`, or
-/// None for a schedule without a walk (or one that records already).
-pub fn with_recording(sched: &str) -> Option<String> {
+/// None for a schedule without a walk (or one that records already). With the step of the
+/// failure, the replay records that step, `,rec<step>` (Milestone 267); without it, the walker
+/// records the last step that takes an action.
+pub fn with_recording(sched: &str, step: Option<u64>) -> Option<String> {
     let (host, guest) = sched.split_once('|')?;
     let mut found = false;
     let words: Vec<String> = guest
         .split_whitespace()
         .map(|w| match w.strip_prefix("I=") {
-            Some(v) if !v.split(',').any(|f| f == "rec") => {
+            Some(v) if !v.split(',').any(|f| f.starts_with("rec")) => {
                 found = true;
-                format!("{w},rec")
+                match step {
+                    Some(s) => format!("{w},rec{s}"),
+                    None => format!("{w},rec"),
+                }
             }
             _ => w.to_string(),
         })
@@ -162,10 +167,23 @@ pub fn with_recording(sched: &str) -> Option<String> {
     found.then(|| format!("{}| {}", host, words.join(" ")))
 }
 
+/// The step of a walk in which a verdict's first violation happened (Milestone 267): the walker
+/// names the test of step `s` `walk step <s>`, and a page's finding says during which test it
+/// happened.
+pub fn failing_step(verdict: &str) -> Option<u64> {
+    let at = verdict.find("walk step ")? + "walk step ".len();
+    let digits: String = verdict[at..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse().ok()
+}
+
 /// The last step of `hydo explore` for a walk through the pages (Milestone 258): each minimal
 /// schedule with a walk (at most [`REPLAYS_MAX`]) runs once more with recording on (`I=...,rec`),
 /// into `replays/rec-<k>/` of the exploration's folder. Its `screens/` gets a video and a
-/// Playwright trace of the last step, and the walk as `repro.spec.ts`. Recording costs guest time, so
+/// Playwright trace of the step that failed (Milestone 267; of the last step with an action when
+/// the verdict names no step), and the walk as `repro.spec.ts`. Recording costs guest time, so
 /// the replay is a run of its own with its own fingerprint: the line says whether it ended with
 /// the minimal schedule's verdict. The exploration's own files do not change.
 pub fn walk_replays(ctx: &Ctx, dir: &Path) -> Vec<String> {
@@ -182,7 +200,7 @@ pub fn walk_replays(ctx: &Ctx, dir: &Path) -> Vec<String> {
     for (k, sh) in doc
         .shrinks
         .iter()
-        .filter_map(|s| with_recording(&s.minimal).map(|r| (s, r)))
+        .filter_map(|s| with_recording(&s.minimal, failing_step(&s.verdict)).map(|r| (s, r)))
         .take(REPLAYS_MAX)
         .enumerate()
     {
@@ -410,4 +428,32 @@ pub fn cmd_compose(ctx: &Ctx, argv: &[String]) -> i32 {
 
 pub fn cmd_agents(ctx: &Ctx, cmd: &str, argv: &[String]) -> i32 {
     hydo_agents::run_with(cmd, argv, &ctx.root, ctx.config.cli.init_clock_start)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{failing_step, with_recording};
+
+    /// Milestone 267: the recording replay records the step whose test the violation names.
+    #[test]
+    fn a_recording_replay_records_the_step_that_failed() {
+        let v = "VIOLATION [browser.no_page_errors] The page /memos/<id> left a promise rejection \
+                 unhandled during the test \"walk step 2\": TypeError";
+        assert_eq!(failing_step(v), Some(2));
+        assert_eq!(
+            failing_step("VIOLATION [api.order_placed_once] took effect 3 times"),
+            None
+        );
+        let s = "disk=none dseed=1 | run T=1:-2592000 I=fc8214f2a80db679,x3.0-11";
+        assert_eq!(
+            with_recording(s, Some(2)).as_deref(),
+            Some("disk=none dseed=1 | run T=1:-2592000 I=fc8214f2a80db679,x3.0-11,rec2")
+        );
+        assert_eq!(
+            with_recording(s, None).as_deref(),
+            Some("disk=none dseed=1 | run T=1:-2592000 I=fc8214f2a80db679,x3.0-11,rec")
+        );
+        assert_eq!(with_recording("disk=none | run I=1,rec3", Some(1)), None);
+        assert_eq!(with_recording("disk=none | run K=a@1+1", Some(1)), None);
+    }
 }

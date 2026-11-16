@@ -84,13 +84,53 @@ walk typed it.
 
 The walk then chooses the control in two levels. A family is the control's role and its name
 with every number as `#`, so the 30 day buttons of a calendar are one family. Three times in
-four the walk prefers the families it has used least in this walk, so that it reaches new pages,
+four the walk prefers the families it has used least in this step, so that it reaches new pages,
 as a curiosity reward does [6]; the fourth time any family may come again. Within the family it
-takes the control by rendezvous hashing of its role, name and place [8].
+takes the control by rendezvous hashing of its role, name and place [8]. Before Milestone 267
+the counts went on from step to step (below).
+
+Before it chooses, the walk looks at the front of the page (Milestone 267): the controls of the
+overlay that opened last, a `dialog`, `alertdialog`, `menu` or `listbox` of the accessibility
+tree. Within it, the controls that the action before made appear come first, such as the row
+that a dialog's Create button adds. By a draw from the action's own stream, the action stays in
+the overlay seven times in eight, because an action elsewhere closes it. There it does not go
+back, reload or open the start page, and three times in four it leaves out the controls that only
+close the overlay (Close, Cancel, Skip, Not now). Model-based crawlers fire the events of the
+state they have just reached [3]; the overlay is that state's part of the page.
+
+The front is read from the page, so it keeps both properties of the shrink: an action's draw
+does not depend on another action's draw, and an action left out changes the front only through
+the page it leaves. Two parts of the first versions broke them, and both are left out. The
+measure is how many of the 72 actions of Memos's seed 46 differ without its clock step
+(`T=1:-2592000`): 24 for Milestone 258's walker and 9 for Milestone 264's, as Milestone 264
+counted them.
+
+- A front of the controls that were new on the whole page, without an overlay, depends on two
+  pages in a row. With it, 38 actions differed.
+- The counts of the least-used families depended on every choice before, in every step. Once
+  two walks parted, their counts parted, and with the overlay front they did not meet again: 33
+  actions differed. Without any counts 5 differed, but the walk went back to the sidebar's links
+  again and again and reached a memo's Share in 2 of 26 walks. With counts that start at each
+  step, 3 differ.
+
+A text field is a control for a fill only when it takes text (Playwright's `isEditable`).
+Memos shows each memo's text as a read-only textbox. Before Milestone 267, an eighth of the
+actions of Memos's walks were fills of such a textbox, and each waited 3 s and did nothing.
+A click goes to the first control, in the order of the rendezvous hashing, that takes Playwright's
+trial click (visible, enabled, not covered), at most four of them. When none takes it, the
+action presses Escape, as a user does in a dialog that does not answer. The unnamed buttons of
+Memos's "Link memo" dialog never took a click, and with the front they held one walk for 8
+actions in a row.
+
+Milestone 258's walk of Memos reached a share link's copy button in 1 of 40 walks. The button
+is behind four controls: Share, Manage share links, Create new link and the copy button. Each
+of them opens a menu or a dialog of a few controls on a page of dozens. A choice among all the
+page's families took one of Share's menu items in 3 of 24 actions right after Share. Milestone
+264's walk took other actions at the same seeds and reached the button in no walk of the 40.
 
 ### The schedule names the walk
 
-The token `I=<seed>[,n<actions>][,x<step>.<k>[-<last>]]...[,rec]` names the walk. Action `k`
+The token `I=<seed>[,n<actions>][,x<step>.<k>[-<last>]]...[,rec[<step>]]` names the walk. Action `k`
 of step `s` draws from its own stream, made from `(seed, s, k)`. So the shrinker can cut the walk
 in ways that leave every other action's draw as it was:
 
@@ -108,9 +148,9 @@ budget of runs, as a composed workload does.
 
 This is delta debugging over actions [7], restricted to the cuts that keep the other draws. A cut
 can still change a later action's choice, because the page is different without the action
-that was cut, and the family counts change. Rendezvous hashing keeps that rare: the same control
-wins whenever it is on the page. The shrinker runs every candidate, so a cut that changes the
-failure is not taken.
+that was cut, and the step's family counts change. Rendezvous hashing keeps that rare: the same
+control wins whenever it is on the page. The shrinker runs every candidate, so a cut that
+changes the failure is not taken.
 
 Two things made the candidates of a real app fail although the failure stayed (Milestone 264):
 
@@ -166,18 +206,23 @@ without faults are walks without faults; the rules see the state that the walk l
   connection, or an answer that never comes after the server acted. A fault of the backend that
   a page cannot make (a kill, a clock step) is a comment at its step. A developer runs the file
   against their own instance with `npx playwright test`.
-- **A video and a trace.** With `,rec` the walker records a video of the last step that takes
-  an action (`recordVideo`, 640 by 360 pixels) and a Playwright trace of it
-  (`walk-step-<s>.trace.zip`, DOM snapshots without screenshots), which `npx playwright
-  show-trace` opens with the DOM and the requests at every action [10]. A shrunk walk often
-  leaves its last steps without actions; Milestone 258 recorded the last workload step all the
-  same. Only one step is recorded, because the controller copies the files through the agent
-  after the verdict, at most 1 MiB of them (below). The whole walk is in
+- **A video and a trace.** With `,rec<s>` the walker records a video of step `s`
+  (`recordVideo`, 640 by 360 pixels) and a Playwright trace of it (`walk-step-<s>.trace.zip`,
+  DOM snapshots without screenshots), which `npx playwright show-trace` opens with the DOM and
+  the requests at every action [10]. With `,rec` alone it records the last step that takes an
+  action. A shrunk walk often leaves its last steps without actions; Milestone 258 recorded the
+  last workload step all the same. Only one step is recorded, because the controller copies the
+  files through the agent after the verdict, at most 1 MiB of them (below). The whole walk is in
   `repro.spec.ts`. Recording costs guest time, so a run with `rec` is a run of its own, with its
-  own fingerprint. `hydo explore` does
-  not record during the exploration. At its end it runs each minimal schedule with a walk once
-  more with `,rec`, into `replays/rec-<k>/`, and says whether that run ended with the same
-  verdict. `hydo report --html` of such a run shows the videos, the trace commands and the test.
+  own fingerprint. `hydo explore` does not record during the exploration. At its end it runs
+  each minimal schedule with a walk once more with recording on, into `replays/rec-<k>/`, and
+  says whether that run ended with the same verdict. A page's finding names the test of its
+  step ("during the test \"walk step 2\""), and the replay records that step, `,rec2`
+  (Milestone 267). Milestone 264's replay of Memos's share link recorded step 5, which had no
+  action left, and the video showed nothing of the failure in step 2. A finding that names no
+  step, such as a rule over a fake's records, records the last step that takes an action. An
+  image built before Milestone 267 takes `rec<s>` for no recording. `hydo report --html` of
+  such a run shows the videos, the trace commands and the test.
 
 The files leave the guest as the screenshots of Milestone 254 do: the walker lists them in
 `/tmp/hydo/web/shots/index.jsonl`, and the controller copies them after the verdict, in reads

@@ -1751,7 +1751,9 @@ browser:
   that is not a GET. A line with the request's and the answer's text goes to
   `/tmp/hydo/web/walk/acks.jsonl`.
 - Every run writes `screens/repro.spec.ts`; `I=...,rec` adds `walk-step-<i>.webm` and
-  `walk-step-<i>.trace.zip` for the last step i that takes an action. A recording of more than
+  `walk-step-<i>.trace.zip` for the last step i that takes an action, and `I=...,rec<i>` for
+  step i (Milestone 267; `hydo explore`'s replay of a finding records the step that the finding
+  names). A recording of more than
   640 KB stays in the guest, and a run copies at most 1 MiB of files out of it; a file that
   does not fit stays in the guest with a `HYDO-SCREEN-LEFT` line in the console (Milestone
   264).
@@ -1759,6 +1761,10 @@ browser:
   last (Milestone 264); the shrinker writes such walks. A time or a date in a control's name
   ("1 minute ago", `2026-10-16 00:00:42`) counts as one word when the walk chooses, so that a
   clock step does not change which control the walk takes.
+- When a dialog, a menu or a list of options is open, seven actions in eight act in the one that
+  opened last, and three times in four they leave out its Close and Cancel. A fill takes only a
+  text field that is editable, and a click only a control that takes Playwright's trial click;
+  when no control takes it, the walk presses Escape (Milestone 267).
 - When `watch.failures_of` matches none of the requests the pages sent, `<name>.failures_shown`
   holds without judging a request, and the run prints a warning that names the pattern and one
   request (Milestone 264).
