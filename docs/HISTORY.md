@@ -12427,3 +12427,74 @@ warnings`, and for hydo-kvm also with `--target x86_64-unknown-linux-musl`; ever
 hydo-kvm (53 and 22); `hydo-schedule`'s `language::`; the `hydo` program's
 `equivalence::cli_matches_golden`, `agents_equivalence` and `docs::`; `hydo-agents`'s
 `public_content::`; `sh ci/consolidate-tests.sh --check`; and `sh ci/vale.sh`.
+
+### Milestone 268 (tentative number) - DONE (open item 105's two `cf=` schedules after Milestone 261: the Saleor gift card regression moves to `cf=271`, and the bug benchmark no longer finds d11 at a flush cut; a saved regression changes the bytes of the image it tests, open item 132; 2026-11-16)
+
+**What was asked.** Milestone 261 cuts an hvx `cf=` run at the first stop after its disk lost
+power. Check the two `cf=` schedules outside `hydo/onboard/recorded.json` that open item 105
+named. Run each twice on hvx with `main`, check its verdict and its fingerprint, and record the
+new values.
+
+**Where it ran.** On the bare-metal machine, one VM at a time through `~/bin/hvx-run`. The
+programs `hydo`, `hydo-build`, `hydo-fetch-image`, `hydo-hvx` and `hydo-bench` were built from
+`main` at `588c76dd` over the 0.3.4 Linux release. For a comparison, `hydo`, `hydo-bench` and
+`hydo-hvx` were also built from `a0d30bc7^`, the commit before Milestone 261.
+
+**The Saleor regression `gift-card-charged-without-record`.** The image was built from the
+committed folder with `fetch-images.sh` and `hydo build`.
+
+| image (sha256 of `explore-ob-saleor-disk.img`) | schedule | result, two runs each |
+|---|---|---|
+| the committed folder, `dcd00d39…` | `cf=270`, the committed schedule | VIOLATION `[placed_orders_are_paid]` only, `b22074e7b10e9078` |
+| the committed folder, `dcd00d39…` | `cf=271` | VIOLATION of both rules, `f899bca4fe59b72e` |
+| the file with `cf=271` and `# expect: fp=f899bca4fe59b72e`, `2eb0cab8…` | `cf=271` | VIOLATION of both rules, `9e11c72c71cd56fa` |
+| the file with `cf=271` and `# expect: violation`, `5284f4a5…` | `cf=271` | VIOLATION of both rules, `02bb8e7f7a2bc952` |
+| the committed file (the same lines as the row before, other comments), `3e1d4890…` | `cf=271` | VIOLATION of both rules, `57fef80bc350806e` |
+
+- At `cf=270` order 8 (30.00) is charged 15.00 and the card keeps its money: the cut comes before
+  the card's balance commit. At `cf=271` the card `1CE6-F37C-1B0F`, issued with 60.00, holds 0.00
+  with 45.00 charged, and order 8 is charged 15.00. These are the rows of finding 4.
+- The schedule had stopped reproducing before Milestone 261. The Milestone 251 session's logs
+  on the bare-metal machine show it: on the image rebuilt from the committed folder, which
+  stages the second regression file too, `cf=270` gave OK twice (`95c8f3ee94787d88`), and
+  `cf=272` broke `[placed_orders_are_paid]` only (`55a9dba94fa49164`).
+- On all four images the `cf=271` run made 206,672 stops and had the control transcript
+  `fb84171fa7fff421`. Only the fingerprint followed the file. `hydo build` copies the folder
+  `regressions/` into the image whole, comments included (`hydo-build`'s `stage.rs`), so an
+  `# expect: fp=` line cannot name its own image's value, and a changed comment moves the
+  fingerprint too. The file keeps `# expect: violation`, and RESULTS.md has the fingerprint and
+  the image's sha256 (full: `3e1d4890001c636f4e16b81d34abb938520316e932167ad8077f5f4ddeb32033`).
+- The regression file is `cf=271`, and RESULTS.md says that the earlier schedule stopped
+  reproducing when the image was rebuilt. saleor/saleor#20023 names the schedule as its way to
+  see the bug.
+
+**d11 of the bug benchmark.** The images are Milestone 146's (control `9f0c6c4c…`, d11
+`cc9452a3…`), run with `hydo-bench confirm --kind agent --defects d11-ack-unflushed-flag`.
+
+| programs | `disk=cut dseed=0 cf=270 \| run` on d11, twice | on the control |
+|---|---|---|
+| `a0d30bc7^` | VIOLATION `[stack.exactly_once] mysql order=25 acked but not marked published`, `c1d6852834dafd2b` both times | OK, `d1adf29dd7cac47e` |
+| `main` at `588c76dd` | OK `acked=25/30`, `e072ca2f62e6ffe9` both times | OK, `95f4bd74a4a5474b` |
+
+The older programs give Milestone 146's values, so Milestone 261 alone moved the verdict. d11
+acknowledges an order whose `published = 1` it only read, and it needs the services to run on
+after the disk stopped completing flushes. A run that stops at the flush acknowledges nothing
+after it. All 61 points `cf=245..305` gave OK on d11 with `main` (`hydo-bench list`, one run
+each). The trigger in `defects.rs` stays `cf=270`, with a comment, and `hydo/bench/README.md`
+has the section "The flush cut that stops the machine, and d11". The benchmark does not find d11
+now (open item 132).
+
+**What moved.** Nothing in `hydo/onboard/recorded.json`. The Saleor regression's text moved, and
+with it the explorer's goldens' hash of that file (`identity-quick.txt`, `identity-full.txt`,
+`corpus-full.txt`) and hydo-build's digest of Saleor's `hydo/` folder. Open item 105's two lines
+are gone, and open item 132 has what is left: the staged regressions and d11.
+
+**Checks.** On the bare-metal machine from this tree: `cargo test -p hydo --test it docs::`,
+`-p hydo-schedule --test it language::`, `-p hydo-agents --test it public_content::`,
+`-p hydo-bench`, and `-p hydo-explore --test it identity::` and `corpus::`, quick and with
+`HYDO_IDENT_FULL=1`. Each passed but `identity::local_outputs_are_no_inputs`, which needs a git
+checkout to tell an ignored output from an input: the test tree there was a copy without
+`.git`. hydo-build's `answers.txt` was recorded on this Mac
+(`HYDO_BLESS=1 cargo test -p hydo-build --test it equivalence::`), and it passes after that.
+Its one changed line is the digest of Saleor's `hydo/` folder, which holds `regressions/`; no
+answer changed. `sh ci/vale.sh` on this Mac.

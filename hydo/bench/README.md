@@ -825,3 +825,23 @@ d12 `Q=2` `9d2d6fc6e36147da`; the controls of d8–d12 `afb30661cd6d209a`, `385e
 `7f8b7705d77ceb9c`, `d1adf29dd7cac47e` (`acked=25/30`; M140 24 of 30), `385e6a4ffc39af5b`; the
 control's known bug (`O=kafka@25-30:resp:loss,100%`, order 26 twice) twice `e024e9f665fa1b83`. No
 trigger moved (`defects.rs` unchanged).
+
+## The flush cut that stops the machine, and d11 (Milestone 268)
+
+Since Milestone 261 a `cf=<k>` run is cut at the first stop after the disk lost power at its k-th
+flush. Before, the services ran on until the workload's end, and their writes after the flush
+were lost. d11 needs that: the order service acknowledges an order whose `published = 1` it only
+read, and the write of the flag reaches no disk. A machine that stops at the flush acknowledges
+nothing more, so a `cf=` cut no longer finds d11. The images are those of Milestone 146 (control
+`9f0c6c4c…`, d11 `cc9452a3…`), with hydo 0.3.4's programs on hvx:
+
+| programs | `disk=cut dseed=0 cf=270 \| run` on d11, twice | on the control |
+|---|---|---|
+| `a0d30bc7^`, before Milestone 261 | VIOLATION `[stack.exactly_once] mysql order=25 acked but not marked published`, `c1d6852834dafd2b` both times | OK, `d1adf29dd7cac47e` |
+| `main` at `588c76dd` | OK `acked=25/30`, `e072ca2f62e6ffe9` both times | OK, `95f4bd74a4a5474b` |
+
+The programs before Milestone 261 give Milestone 146's values, so Milestone 261 alone moved the
+verdict. With `main`, all 61 points `cf=245..305` give OK on d11 (one run each). The trigger in
+`defects.rs` stays `cf=270`, so `hydo-bench confirm` reports d11 as not found. No trigger with
+another fault was searched, for example a power loss of MySQL alone (`L=mysql@<step>+<down>`)
+(open item 132).

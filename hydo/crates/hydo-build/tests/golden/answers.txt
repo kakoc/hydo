@@ -250,7 +250,7 @@ I	hydo/onboard/examples/rust-kv/hydo.yaml	417a6848bf266242b33f2191e4eb173ad8e318
 I	hydo/onboard/examples/saleor/docker-compose.yaml	8b422f5eeb300572e70fa407a358eaefdf1cda0b5a06e47179a15e44f5242a5e
 I	hydo/onboard/examples/saleor/hydo/hydo-compose.lock.json	c9925a5bc4b53e7b08d1eb71d28e038cad1a95722c4495ad7d2231692bc96b01
 I	hydo/onboard/examples/saleor/hydo/hydo.generated.yaml	07954a8e6505d81825ce132d0099500290220bdb8b4ce192bb56837e5d86bb4b
-I	hydo/onboard/examples/saleor/hydo/hydo.yaml	768e16a8e219b55b857c832fffceb648d41d83b014e62ba6c40d5551a229b8e4
+I	hydo/onboard/examples/saleor/hydo/hydo.yaml	44242ad9c2fafd0520fd6d81b5df25d7be73fb09950b85c240ed01c316013723
 I	hydo/onboard/examples/saleor/hydo/rules.yaml	e542ec2ee511bf76e42e06258c96fc21d71bc7549781b2bc57a9bffb2e30241a
 I	hydo/onboard/examples/saleor/native/compose.payapp.yaml	e04ce17aaf9d41baab9f609c04ed729ad9497cce73df40dddb3de4aed310f6cb
 I	hydo/onboard/examples/shop/hydo.yaml	eaacf3830712aae4e796373238760925ec2a4eb282f51c21002d3da8a58d31f8

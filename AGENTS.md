@@ -461,7 +461,8 @@ reading the code; 16 held on a clean run. The blind exploration found two new ca
   on every hvx run. Reported as saleor/saleor#20022.
 - A gift card charge that stops between its balance commit and its `CHARGE_SUCCESS` event leaves
   the card short and the order unpaid, and nothing can charge it again. The regression is a
-  power cut at a disk flush (`cf=270`) after a clock step. Reported as saleor/saleor#20023.
+  power cut at a disk flush (`cf=271` since M268) after a clock step. Reported as
+  saleor/saleor#20023.
 
 Two known bugs reproduced natively: overlapping refunds refund more than a payment charged
 (saleor/saleor#19645), and a single-use code is spent by a completion that made no order
@@ -1224,10 +1225,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     coordination rules"). Each change that moves recorded values adds a line here with its
     milestone and the values it moves; the pass removes the lines.
     No value of the list waits. Milestone 244 re-recorded the whole list at the fingerprint
-    epoch 3. Milestone 261 moves every hvx run with `cf=` whose flush comes before the workload's
-    end. The list has none, but two such schedules outside it need a check: the bug benchmark's
-    d11 trigger `disk=cut dseed=0 cf=270 | run` (`hydo-bench`'s `defects.rs`), and the Saleor
-    regression `gift-card-charged-without-record` (expect: violation).
+    epoch 3.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -1463,6 +1461,24 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       on KVM and fails on hvx: its double order needs a moment of the exit clock.
     - An image built before M264 ignores the range `x<step>.<first>-<last>` and walks the
       actions it was meant to leave out.
+132. What Milestone 268 left.
+    - A saved regression changes the bytes of the image it tests. `hydo build` copies the
+      folder `regressions/` into the image as `/hydo/regressions/`, comments included, and puts
+      each schedule and `# expect:` value into `/etc/hydo/compose.json`. So saving or editing
+      one regression can break another, and the run's fingerprint follows every edit.
+      - In M251, saving the second Saleor regression moved the gift card schedule's run. Its
+        `cf=270` then gave OK, and in M268 it broke only `[placed_orders_are_paid]`.
+      - An `# expect: fp=` line cannot hold its own image's value. In M268 the line
+        `fp=f899bca4fe59b72e` gave an image whose run gave `9e11c72c71cd56fa` twice, with the
+        same stops and transcript. An edit of the file's comments moved it again. The Saleor
+        regression keeps `# expect: violation`.
+      - A fix: keep `regressions/` out of the guest image and out of the staged `compose.json`.
+        The host reads them from the project folder, or from a file beside the image that no
+        run reads.
+    - d11 of the bug benchmark is not found since M261. It needs a service that acknowledges
+      after the disk stopped completing flushes, and a `cf=` run now stops at the flush. None of
+      the 61 points `cf=245..305` fails. A trigger with another fault was not searched, for
+      example a power loss of MySQL alone (`L=mysql@<step>+<down>`).
 
 ## Milestone index
 
@@ -2046,6 +2062,10 @@ build machine, before 2026-10-13.
   each bundle. With one image the EPYC 7763, 9V45, and 9V74 agree, with 0, 1, or 14 reboots.
   `make-swu.sh` sets the bundles' times, and `HYDO_KVM_DIAG` covers the boots a reboot ends.
   Nothing recorded moved
+- M268 (tentative number): open item 105's two `cf=` schedules after M261. The Saleor gift
+  card regression breaks both rules at `cf=271` now; `cf=270` had stopped reproducing when its
+  image was rebuilt. d11 of the bug benchmark is no longer found at any flush cut. A saved
+  regression changes the bytes of the image it tests (open item 132). Nothing recorded moved
 
 ## Where to look
 

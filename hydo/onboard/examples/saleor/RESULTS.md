@@ -57,7 +57,7 @@ payments, vouchers at checkout completion, or Celery's handling of payment reque
 | `hydo/workload/` | `first_setup` makes the shop; three `parallel_driver_` commands are the client's operations; `helper_client.py` is the client, run with the API image's Python; `helper_business_result` is the generic rule |
 | `hydo/rules.yaml` | the proposed rules, with their evidence in Saleor's sources (section "The rules") |
 | `hydo/checks/` | the 17 rules as checks, in the format that `hydo rules check --write-checks` writes |
-| `hydo/regressions/` | the schedule that loses a refund request (finding 1) |
+| `hydo/regressions/` | the schedules that lose a refund request (finding 1) and charge a gift card without a record (finding 4) |
 | `native/` | the stack and the probes without hydo (`native/README.md`) |
 
 The shop has one channel in USD, one warehouse, a shipping method of 5.00, and three variants of
@@ -391,10 +391,26 @@ VIOLATION [placed_orders_are_paid]
 The card lost 15.00 more than its recorded charges, and order 8 is short by the same 15.00. The
 shrinker kept the cut and the clock step: the cut alone passed twice and the step alone twice,
 and a step of half a year failed too. The step most likely moves the 270th flush into the
-charge's window; the native probe needs no clock step. The schedule
-`disk=cut dseed=978180e49ee2ae24 cf=270 | run T=8:15768000 W=3cc7df19,p1,q2,r1500` is the saved
-regression `hydo/regressions/gift-card-charged-without-record.schedule`. From fresh boots of the
-final image it broke the rule twice with the same rows and `fp=bd67c9fd8169cb50` both times.
+charge's window; the native probe needs no clock step. From fresh boots of the final image,
+`disk=cut dseed=978180e49ee2ae24 cf=270 | run T=8:15768000 W=3cc7df19,p1,q2,r1500` broke the rule
+twice with the same rows and `fp=bd67c9fd8169cb50` both times.
+
+That schedule stopped reproducing when the image was rebuilt. `hydo build` stages every saved
+regression into the image, so saving it gave the image of the committed folder other bytes
+(open item 132 in AGENTS.md). On that image `cf=270` passed twice, already before Milestone 261.
+On the image that Milestone 268 built from hydo's `main` at `588c76dd`, the 270th flush comes
+before the card's balance commit: the run broke only `[placed_orders_are_paid]`, twice with
+`fp=b22074e7b10e9078`.
+One flush later both rules break with the exploration's rows, on card `1CE6-F37C-1B0F`.
+
+The saved regression `hydo/regressions/gift-card-charged-without-record.schedule` is now
+`disk=cut dseed=978180e49ee2ae24 cf=271 | run T=8:15768000 W=3cc7df19,p1,q2,r1500`, with
+`# expect: violation`. On the image of this folder it broke both rules twice with
+`fp=57fef80bc350806e`. The image's disk `explore-ob-saleor-disk.img` has the sha256
+`3e1d4890001c636f4e16b81d34abb938520316e932167ad8077f5f4ddeb32033` (hvx, fingerprint epoch 3).
+The image holds the folder `regressions/` with every comment, so any edit of a file there moves
+this fingerprint. For the same reason the file has no `# expect: fp=` line: the line would move
+the value it names.
 
 ### 5. Authorizing a gift card on a second checkout while the first one completes ends in a deadlock (not a money bug)
 

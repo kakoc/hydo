@@ -189,6 +189,9 @@ impl Set {
             // 272, 273, 283, 284, 294, 304); M135's images failed at 249, 250, 260, 271, 272, 282,
             // 292, 302, 303
             // (the stack images of M72: cf=238)
+            // M268: since M261 a cf= run stops at its flush, so d11 acknowledges nothing after
+            // it, and none of the 61 points fails (README "The flush cut that stops the machine,
+            // and d11")
             "d11-ack-unflushed-flag" => "disk=cut dseed=0 cf=270 | run",
             _ => return None,
         };
