@@ -13349,3 +13349,89 @@ platforms.
 program's `docs::` and `equivalence::`; `hydo-schedule`'s `language::`; `hydo-agents`'s
 `public_content::`. Nothing recorded moved: no engine, image, guest program, or example file
 changed.
+
+### Milestone 276 (tentative number) - DONE (open item 136's hvx part: the Mender example on hvx with `hydo.yaml`, the eMMC in a file on the data disk; the x86_64 tools built on the Mac under QEMU, with a retry of each compile command and no mender-artifact in the emulated image, and two builds that differ in `mender-update` because crashed CMake checks turn libarchive features off; finding 1's two regressions give their Mac verdicts, finding 2's two give their violation in the earlier form, and a cut 69 to 87 ms after the event gives the Mac's form; one fingerprint over two runs for each; nothing recorded moved; 2026-11-16)
+
+**What was asked.** Milestone 272 ran the Mender example (`hydo/onboard/examples/mender`) on the
+Mac engine only, because the x86_64 tools did not build in Docker on this Mac. Build them, run
+`hydo.yaml` and the four saved regressions on hvx, each twice, and say whether each regression
+gives its Mac verdict with one fingerprint. If a timing-sensitive one does not reach its bug,
+scan the points near it.
+
+**The build.** `sh build.sh amd64` builds the x86_64 tools under QEMU's user emulation in Colima
+(2 vCPUs, 8 GiB). There the compilers end with a segmentation fault at a random source file now
+and then. `cc1plus` stopped the Mender build three times at three different files. `cc1` stopped
+libarchive's once, and Go's compiler stopped mender-artifact's at once. Two changes, both in the
+example's build:
+
+- `build/retry.sh` (`retry` in the image) runs a compile command again, up to 10 times. make then
+  builds only the files it has not built yet. A compiler that crashed wrote no object file, so the
+  program's bytes are those of one run. Every `make` and `cc` of `build/Dockerfile` runs through
+  it.
+- The Dockerfile has a stage `tools` without mender-artifact, which writes the Artifacts on the
+  build host only. `build.sh` builds the other architecture's image to that stage.
+
+Results of the build:
+
+- The arm64 tools of the changed Dockerfile have the bytes of Milestone 272's (every file of the
+  old image's `/out` compared).
+- Two x86_64 builds gave the same busybox, `fw_printenv`, loopdio, `mdb_dump`, mender-flash and
+  rootfs-image module. They gave two `mender-update` programs, `e3bcd860…` (the first) and
+  `ad400115…` (the second), and with them other slot images and Artifacts. A third build of
+  the Mender step, on the second build's libraries and without a compiler crash, gave the
+  second's bytes in every object file.
+- The cause is libarchive's `config.h`. A check of CMake compiles a small program, and a check
+  whose compiler crashed reports a missing feature. The first build's libarchive (a layer
+  cached by an earlier attempt on this Mac) lacks `HAVE_OPENAT`, `HAVE_MBRTOWC` and
+  `HAVE_TZSET`. The second's lacks `HAVE_WCHAR_T`, `SIZEOF_WCHAR_T` and `SIZEOF_INT`. So an
+  x86_64 build on a Mac gives the same bytes only by chance (open item 136). A build on an
+  x86_64 host with Docker was not tried: the bare-metal machine has no Docker.
+
+**The runs on hvx.** On the bare-metal machine, in the tree `~/hydo-mender-hvx`, with `hydo`,
+`hydo-hvx` and `hydo-build` built from this tree over the 0.3.4 Linux release (`04ccae1f…`),
+one VM at a time through `~/bin/hvx-run`. The loop module came from `fetch-modules.sh`. Two
+builds of `hydo.yaml` gave the image `explore-ob-mender-ota-disk.img` with the sha256
+`6d46a6a1b4ea1a6d…`; with `--set artifacts=plain` it is `d12f74e89b593aef…`.
+
+| schedule | verdict on hvx | fingerprint, 2 runs each |
+|---|---|---|
+| `disk=cut \| run` | OK, 7 checks held, v5 after 10 reboots | `43a98c8ee471b072` |
+| `C=4` (regression) | the Mac's verdict, VIOLATION `[mender.commit_permanent]` with `v3_INCONSISTENT` | `a5450ade5f9535cc` |
+| `C=6` (regression) | the Mac's verdict, VIOLATION `[mender.state_matches_slots]` with `v4_INCONSISTENT` | `bc2380c4573776f9` |
+| `C=4`, `artifacts=plain` | OK | `2323dea1290f9937` |
+| `C=6`, `artifacts=plain` | OK | `2a3e428b780f6fd5` |
+| `A=mender.commit_started@3+7:cut` (regression) | VIOLATION `[mender.commit_permanent]`: the commit exited 0, Mender's artifact is v1, and v1 runs | `216a4d3c4eaf41f7` |
+| `A=mender.commit_started@3+7:kill-device` (regression) | the row before's violation | `a6ad6d8ee0e65e9f` |
+| `A=mender.commit_started@3:cut` | the row before's violation | `85acf4397831368d` |
+| `A=mender.commit_started@3+80:cut` | the Mac's `+7` violation: the commit exited 0 on v2, and U-Boot boots v1 next | `45683a8ad6f64cfa` (3 runs) |
+| `A=mender.commit_started@3+80:kill-device` | the same | `d129e303c1b8e8db` |
+
+So finding 1 gives its Mac verdicts on hvx. Finding 2's regressions break the same check on
+hvx, so `expect: violation` holds on both engines. But they break it in the earlier form: 7 ms
+after the event, hvx has not reached the module's `fw_setenv upgrade_available 0`. A scan of
+the delay, with one run each, gave these results:
+
+- the earlier form at 1 to 63 and 65 to 68 ms;
+- the Mac's form at 64 ms and at 69 to 87 ms;
+- OK at 88 to 1,000 ms;
+- at 2,000 and 5,000 ms, a step that ended before the cut was due.
+
+So finding 2's window is about 88 ms of guest time on hvx, against about 8 ms on the Mac. Why
+64 ms gives the later form and 65 to 68 ms do not was not investigated. The regressions keep the
+Mac's 7 ms. The section "On hvx" of the example's RESULTS.md has the tables.
+
+The table's values come from the first x86_64 build. The second build's image (`c7d80b2a…`)
+gave the same verdicts for the fault-free run and the four regressions, with other fingerprints
+(`06c8329b0209afa7`, `f98d56872f1b5cf3`, `6e23979a26e77df2`, `86a3b37807b3f007`,
+`89b1a9247bd07ff8`), each twice. Its later form of finding 2 came at 65, 70 and 75 ms, and
+80 ms gave OK. So the window depends on the program's bytes; 70 ms reaches it with both builds.
+
+**What moved.** Nothing recorded: the example is not in `hydo/onboard/recorded.json`. The
+manifests and the regressions did not change, so the explorer's and the controller's goldens did
+not move, and the hvx image does not contain `build/`.
+
+**What is left** (AGENTS.md open item 136): no exploration ran on hvx, and KVM did not run the
+example.
+
+**Checks** (on this Mac): `hydo-schedule`'s `language::`; `hydo-agents`'s `public_content::`;
+the `hydo` program's `docs::`; and `sh ci/vale.sh`. No document that the guide prints changed.

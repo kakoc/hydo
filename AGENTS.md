@@ -517,7 +517,7 @@ device in `hydo/onboard/examples/mender` (RESULTS.md). The device has A/B root p
 U-Boot's redundant environment and Mender's data partition on one eMMC, and an emulation of
 Mender's U-Boot integration. The operator runs 8 standalone deployments with real reboots. Every
 Mender command runs in a chroot on the booted slot. The Mac engine ran it with the eMMC as an
-added disk; `hydo.yaml` (the eMMC in a file, for hvx) did not run. Two new candidates were
+added disk, and hvx with the eMMC in a file (`hydo.yaml`, M276). Two new candidates were
 found. Neither is reported upstream or posted:
 - Mender syncs an Artifact's state scripts before the scripts' `version` file leaves a C++ stream
   buffer. After a power cut between an install and the next writeback, the file is empty. Then the
@@ -525,7 +525,8 @@ found. Neither is reported upstream or posted:
   `<name>_INCONSISTENT` (`disk=cut | run C=4`). Artifacts without state scripts pass.
 - After a power cut or a kill inside `mender-update commit`, the next commit rolls the update
   back, prints `Rolled back.` and exits 0. When U-Boot had already made the update permanent, the
-  rollback undoes it (`disk=cut | run A=mender.commit_started@3+7:cut`).
+  rollback undoes it (`disk=cut | run A=mender.commit_started@3+7:cut` on the Mac; on hvx a cut
+  69 to 87 ms after the event).
 
 mender-artifact 4.4.2 writes an Artifact's state scripts in a random order; the build sorts them.
 
@@ -1585,10 +1586,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A service's own output stays in the guest for an OK run; the example writes its log lines
       to the console as well.
     - The Mac engine's guest kernel has no `/dev/loop4`.
-    - hvx did not run the example. The x86_64 tools build under emulation in Docker on the Mac,
-      and neither build finished: a compiler segmentation fault, then a stopped Docker VM. A
-      build on an x86_64 host with Docker, then `hydo.yaml` and the four regressions on hvx, are
-      left. KVM did not run the example either.
+    - hvx ran `hydo.yaml` and the four regressions since M276, each with one fingerprint over
+      two runs. The two commit regressions keep the Mac's delay of 7 ms. On hvx that cut comes
+      before U-Boot's environment is written, so they show the commit that exits 0 after
+      U-Boot's own rollback. The rollback of a permanent update needs `+69` to `+87` on hvx
+      with the first build's tools. Why `+64` gives it too and `+65` to `+68` do not was not
+      investigated. No exploration ran on hvx, and KVM did not run the example.
+    - The x86_64 tools build on a Mac under QEMU, whose compilers crash at random. A retry of
+      each compile command makes the build finish, but a crash inside one of CMake's checks
+      turns a libarchive feature off. So two builds gave two `mender-update` programs, and with
+      them other fingerprints and a window of finding 2 that is 5 ms earlier. A build on an
+      x86_64 host with Docker, or CMake's checks done once and pinned, is left.
     - Managed mode (`mender-update daemon`) shares the Artifact parser of the first candidate
       and did not run.
 138. The branch tick (M274, `docs/design/exit-free-loops.md`). What is left:
@@ -2259,6 +2267,11 @@ build machine, before 2026-10-13.
   harness fails on `no_std` crates and private fields of other modules, runs that test nothing
   pass, and short values miss real paths. Two candidates in num-integer and byteorder, not
   posted. A developer would not keep using it yet. Nothing recorded moved
+- M276 (tentative number): the Mender example on hvx. The x86_64 tools build on the Mac under
+  QEMU, with each compile command tried again after a compiler crash; two builds still differ
+  in `mender-update`. Finding 1's regressions give their Mac verdicts; finding 2's give its
+  violation in the earlier form, and a cut 69 to 87 ms after the event gives the Mac's form.
+  Each schedule gave one fingerprint over two runs. Nothing recorded moved
 
 ## Where to look
 

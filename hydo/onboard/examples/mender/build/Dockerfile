@@ -7,9 +7,10 @@
 #   writes through to it (RESULTS.md, "The device")
 #   mdb_dump of LMDB 0.9.33: the checks read Mender's database with it, without changing it
 #   mender-artifact 4.4.2 (only in the native image: it writes the Artifacts on the build host)
-# build.sh runs it once per architecture and copies /out out of the image. Every source is
-# pinned by sha256, the base image by digest.
-FROM alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f
+# build.sh runs it once per architecture and copies /out out of the image. For the other
+# architecture it builds only the stage `tools`, without mender-artifact. Every source is pinned
+# by sha256, the base image by digest.
+FROM alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f AS tools
 RUN apk add --no-cache build-base cmake curl linux-headers perl boost1.84-dev boost1.84-static \
       openssl-dev openssl-libs-static zlib-dev zlib-static yaml-dev yaml-static busybox-static \
       e2fsprogs cpio go bsd-compat-headers
@@ -29,8 +30,10 @@ RUN curl -sSfL -o mender-5.2.0.tar.gz https://github.com/mendersoftware/mender/r
       'b2c75b132a0ec43274d2867221befcb425034cd038e465afbfad09911abb1abb  libarchive-3.8.4.tar.gz' \
     | sha256sum -c - \
  && for f in *.tar.gz; do tar xzf "$f"; done
+# retry runs a build command again after a compiler crash under emulation (retry.sh)
+COPY retry.sh /usr/local/bin/retry
 # LMDB and a small libarchive (tar and gzip only), as static libraries
-RUN make -C lmdb-LMDB_0.9.33/libraries/liblmdb liblmdb.a XCFLAGS=-O2 \
+RUN retry make -C lmdb-LMDB_0.9.33/libraries/liblmdb liblmdb.a XCFLAGS=-O2 \
  && cp lmdb-LMDB_0.9.33/libraries/liblmdb/lmdb.h /usr/include/ \
  && cp lmdb-LMDB_0.9.33/libraries/liblmdb/liblmdb.a /usr/lib/
 RUN cmake -S libarchive-3.8.4 -B la -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
@@ -39,12 +42,12 @@ RUN cmake -S libarchive-3.8.4 -B la -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LI
       -DENABLE_BZip2=OFF -DENABLE_LZ4=OFF -DENABLE_LZMA=OFF -DENABLE_ZSTD=OFF -DENABLE_LZO=OFF \
       -DENABLE_LIBB2=OFF -DENABLE_OPENSSL=OFF -DENABLE_MBEDTLS=OFF -DENABLE_NETTLE=OFF \
       -DENABLE_CNG=OFF -DENABLE_PCREPOSIX=OFF -DENABLE_PCRE2POSIX=OFF -DENABLE_WIN32_XMLLITE=OFF \
- && make -C la -j8 archive_static && make -C la install > /dev/null \
+ && retry make -C la -j8 archive_static && make -C la install > /dev/null \
  && rm -f /usr/local/lib/libarchive.so*
 RUN cd libubootenv-0.3.8 && cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
- && make -C build -j8 ubootenv_static \
+ && retry make -C build -j8 ubootenv_static \
  && mkdir -p /out \
- && cc -O2 -static -Isrc -Ibuild/src -o /out/fw_printenv src/fw_printenv.c build/src/libubootenv.a -lyaml -lz \
+ && retry cc -O2 -static -Isrc -Ibuild/src -o /out/fw_printenv src/fw_printenv.c build/src/libubootenv.a -lyaml -lz \
  && strip /out/fw_printenv && cp /out/fw_printenv /out/fw_setenv
 RUN cd mender-5.2.0 && cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DMENDER_VERSION=5.2.0 \
       -DMENDER_USE_DBUS=OFF -DMENDER_USE_ASIO_LIBDBUS=OFF -DMENDER_EMBED_MENDER_AUTH=ON \
@@ -52,18 +55,20 @@ RUN cd mender-5.2.0 && cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=O
       -DBoost_USE_STATIC_LIBS=ON -DOPENSSL_USE_STATIC_LIBS=ON \
       -DCMAKE_PREFIX_PATH=/usr/local -DCMAKE_EXE_LINKER_FLAGS=-static -DCMAKE_CXX_STANDARD_LIBRARIES=-lz \
       -DCMAKE_CXX_FLAGS=-ffile-prefix-map=/src/= -DCMAKE_C_FLAGS=-ffile-prefix-map=/src/= \
- && make -C build -j8 mender-update \
+ && retry make -C build -j8 mender-update \
  && cp build/src/mender-update/mender-update /out/ && strip /out/mender-update \
  && cp support/modules/rootfs-image /out/rootfs-image
-RUN cd mender-flash-1.1.0 && cc -O2 -include libgen.h -static -o /out/mender-flash main.c && strip /out/mender-flash
+RUN cd mender-flash-1.1.0 && retry cc -O2 -include libgen.h -static -o /out/mender-flash main.c && strip /out/mender-flash
 RUN cp /bin/busybox.static /out/busybox
 COPY loopdio.c /src/
-RUN cc -O2 -static -o /out/loopdio loopdio.c && strip /out/loopdio
-RUN make -C lmdb-LMDB_0.9.33/libraries/liblmdb mdb_dump XCFLAGS=-O2 LDFLAGS=-static \
+RUN retry cc -O2 -static -o /out/loopdio loopdio.c && strip /out/loopdio
+RUN retry make -C lmdb-LMDB_0.9.33/libraries/liblmdb mdb_dump XCFLAGS=-O2 LDFLAGS=-static \
  && cp lmdb-LMDB_0.9.33/libraries/liblmdb/mdb_dump /out/ && strip /out/mdb_dump
 RUN for p in mender-update mender-flash fw_printenv busybox loopdio mdb_dump; do ldd "/out/$p" 2>&1 | grep -q 'Not a valid dynamic program' \
       || { echo "$p is not static" >&2; exit 1; }; done; ls -l /out
 # the Artifact writer, for the build host (build.sh runs make-images.sh in the native image).
+# Go's compiler crashes under QEMU's emulation, so the other architecture's image ends at `tools`.
+FROM tools
 # mender-artifact 4.4.2 keeps an Artifact's state scripts in a Go map and writes them in the
 # map's random order, so the patch sorts them: every build then gives the same Artifacts.
 COPY mender-artifact-script-order.patch /src/

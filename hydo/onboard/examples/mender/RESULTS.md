@@ -22,7 +22,10 @@ U-Boot integration.
 - **When do they happen?** Finding 1 needs Artifacts with state scripts, and a power cut or a
   hard reset after an install, before the reboot's `sync` or the page cache's writeback. Finding
   2 needs an interruption between Mender's save of the state `ArtifactCommit_Enter` and its save
-  of the next state: about 8 ms of guest time on the Mac engine.
+  of the next state. That window is about 8 ms of guest time on the Mac engine and about 88 ms on
+  hvx.
+- **Which engines ran it?** The Mac engine and hvx. Both findings give their violations on hvx,
+  each with one fingerprint over two runs (the section "On hvx"). KVM did not run the example.
 - **Did the rest hold?** Yes. A complete slot booted after every power cut, an update that was not
   committed rolled back, and the application's synced records survived. With Artifacts without
   state scripts, `C=4` and `C=6` pass.
@@ -70,10 +73,8 @@ lays out its storage device (`device/lib.sh`):
   (A), `/dev/loop3` (B) and `/dev/loop1` (data): loop devices with direct I/O. So every write
   reaches the eMMC, and every flush of a partition flushes the eMMC, as on a real eMMC. On the Mac
   engine the eMMC is an added disk with its own cache (`hydo-devices.yaml`, `guest.disks`). On
-  hvx it is a file on the guest's data disk (`hydo.yaml`). Every run on this page used the Mac
-  engine. hvx did not run the example: the x86_64 tools build under emulation in Docker on the
-  Mac, and neither build finished (a compiler segmentation fault, then a stopped Docker VM). So
-  the x86_64 programs and `hydo.yaml` are untested.
+  hvx it is a file on the guest's data disk (`hydo.yaml`). The runs of the section "On hvx" used
+  hvx; every other run on this page used the Mac engine.
 - **Mender's configuration** is meta-mender's: `RootfsPartA` and `RootfsPartB` and the device
   type in the data partition, the data store at `/var/lib/mender`, a link to `/data/mender`, and
   a bootstrap Artifact that records v1 at the first command. mender-flash writes the inactive
@@ -350,6 +351,57 @@ power was cut before the first install was acknowledged.
 An exploration of an earlier image (seeds 1-17, stopped there) gave the same signatures at seeds
 6 and 10, with a check that missed a failed commit.
 
+## On hvx
+
+The example ran on hvx with `hydo.yaml` on 2026-11-16, on the bare-metal machine. There the eMMC
+is the file `/data/flash/emmc.img` on the guest's data disk, and `disk=cut` gives that disk a
+volatile write cache. The programs `hydo`, `hydo-hvx` and `hydo-build` were built from this tree
+over the 0.3.4 Linux release, and each VM ran through `~/bin/hvx-run`, one at a time. The
+x86_64 tools came from `sh build.sh amd64` on the Mac (section "Building the same bytes"), and
+the loop module from `fetch-modules.sh`. Two builds gave the image
+`explore-ob-mender-ota-disk.img` with the sha256 `6d46a6a1b4ea1a6d…`; with `--set
+artifacts=plain` it is `d12f74e89b593aef…`.
+
+| schedule | verdict on hvx | fingerprint | the same as on the Mac engine? |
+|---|---|---|---|
+| `disk=cut \| run` | OK `invariants=7 held (device.boots: booted partition 2 v5 ...)`, with 10 reboots | `43a98c8ee471b072` on 2 runs | yes |
+| `disk=cut \| run C=4` (a regression) | VIOLATION `[mender.commit_permanent]`: the commit of the healthy v3 failed, and Mender names `v3_INCONSISTENT` | `a5450ade5f9535cc` on 2 runs | yes, the same text |
+| `disk=cut \| run C=6` (a regression) | VIOLATION `[mender.state_matches_slots]`: no update in progress, Mender names `v4_INCONSISTENT`, and the device runs v3 | `bc2380c4573776f9` on 2 runs | yes, the same text |
+| `disk=cut \| run C=4`, `artifacts=plain` | OK, the device runs v3 | `2323dea1290f9937` on 2 runs | yes |
+| `disk=cut \| run C=6`, `artifacts=plain` | OK, the device runs v3 | `2a3e428b780f6fd5` on 2 runs | yes |
+| `disk=cut \| run A=mender.commit_started@3+7:cut` (a regression) | VIOLATION `[mender.commit_permanent]`: the commit exited 0 (`Rolled back.`), and Mender's artifact is v1 while v1 runs | `216a4d3c4eaf41f7` on 2 runs | the same check, in the form of `@3:cut` on the Mac |
+| `disk=cut \| run A=mender.commit_started@3+7:kill-device` (a regression) | the same violation as the row before | `a6ad6d8ee0e65e9f` on 2 runs | the same check, in the form of `@3:cut` on the Mac |
+| `disk=cut \| run A=mender.commit_started@3:cut` | the same violation as the row before | `85acf4397831368d` on 2 runs | yes |
+| `disk=cut \| run A=mender.commit_started@3+80:cut` | VIOLATION `[mender.commit_permanent]`: the commit exited 0 on v2 in partition 3, but U-Boot boots partition 2 (v1) next | `45683a8ad6f64cfa` on 3 runs | the text of `+7` on the Mac |
+| `disk=cut \| run A=mender.commit_started@3+80:kill-device` | the same violation as the row before | `d129e303c1b8e8db` on 2 runs | the text of `+7:kill-device` on the Mac |
+
+So finding 1 gives its Mac verdicts on hvx. Finding 2's regressions give their violation on hvx
+too, so their `expect: violation` holds on both engines. But 7 ms after the event, hvx has not yet
+reached the module's `fw_setenv upgrade_available 0`. So the cut leaves a commit that exits 0
+for an update that U-Boot has already rolled back, the Mac's form of `@3:cut`. The rollback of
+an update that U-Boot had made permanent needs a later point on hvx.
+
+A scan of the cut's delay after `mender.commit_started` found that point, with one run per delay:
+
+| delay (ms) | the result on hvx |
+|---|---|
+| 1 to 16, 18, 20, 25, 30, 40, 50, 60 to 63, 65 to 68 | the commit exits 0 after U-Boot rolled back, and Mender names v1 |
+| 64, 69, 70, 73, 76, 79, 80, 83, 86, 87 | the commit exits 0 and undoes v2, which U-Boot had made permanent |
+| 88, 89, 92, 95, 98, 100, 150, 200, 300, 500, 1,000 | OK, the device runs v2 |
+| 2,000 and 5,000 | OK, the device runs v5: the commit's step ended before the cut was due, and the run went on |
+
+On hvx the window of finding 2 is 0 to 87 ms of guest time, and the Mac's form is 69 to 87 ms
+(and 64 ms alone). Why 64 ms gives the later form and 65 to 68 ms the earlier one was not
+investigated. The regressions keep the Mac's delay of 7 ms; `+80` reaches the later form on hvx.
+
+The table's values come from the first build of the x86_64 tools. A second build gave another
+`mender-update` (section "Building the same bytes") and the image `c7d80b2a7df37018…`. With it,
+one run each gave the table's verdicts for `disk=cut | run` (`06c8329b0209afa7`), `C=4`
+(`f98d56872f1b5cf3`), `C=6` (`6e23979a26e77df2`), `+7:cut` (`86a3b37807b3f007`) and
+`+7:kill-device` (`89b1a9247bd07ff8`), each the same on a second run. The later form of finding
+2 moved: it came at 65, 70 and 75 ms, and 80 ms gave OK. `+80:kill-device` still gave it
+(`1a6f57bae2757626`). A delay of 70 ms gives the later form with both builds.
+
 ## Building the same bytes
 
 `sh build.sh` builds the tools in Docker, and then the images and Artifacts. Every file time in
@@ -357,6 +409,23 @@ the slot images, the data partition, the environment and the Artifacts is `SOURC
 (2026-01-01). mke2fs gets fixed UUIDs and hash seeds, and the Artifacts' state scripts are sorted
 (finding 3). Two builds on this Mac gave the same sha256 for every file of `out/aarch64/` and
 `out/common/`.
+
+On a Mac, Docker builds the x86_64 tools under QEMU's emulation of x86_64. There the compilers
+end with a segmentation fault at a random source file now and then. Without a retry, no build
+finished: `cc1plus` stopped the Mender build three times, `cc1` stopped libarchive's once, and
+Go's compiler stopped mender-artifact's at once. So every `make` and `cc` of `build/Dockerfile`
+runs through `build/retry.sh`, which runs the command again up to 10 times. The x86_64 image ends
+at the stage `tools`, without mender-artifact, which runs only in the native image. The arm64
+tools of the changed Dockerfile have the bytes of the arm64 tools before the change.
+
+Two x86_64 builds still gave two `mender-update` programs, `e3bcd860…` and `ad400115…`. The
+other programs were the same, but the slot images and the Artifacts carry `mender-update`, so
+they differ too. The cause is libarchive's configuration. CMake's checks compile small programs,
+and a check whose compiler crashes reports a missing feature. The first build's libarchive has no
+`openat`, `mbrtowc` or `tzset`, and the second's no `wchar_t` and no size of `int`. A third build
+of the Mender step on the second build's libarchive gave the second build's bytes. So two x86_64
+builds on a Mac give the same bytes only by chance. A build on an x86_64 host with Docker was not
+tried.
 
 ## What hydo lacked
 
@@ -388,7 +457,7 @@ added disks, and `G=` and `L=` do not reach an added disk.
 
 | file | what it is |
 |---|---|
-| `build.sh`, `build/` | the static tools (`build/Dockerfile`, `build/loopdio.c`), the slot images, the data partition, U-Boot's environment and the Artifacts (`build/make-images.sh`, `build/state-script.sh`, `build/retime.go`, `build/mender-artifact-script-order.patch`) |
+| `build.sh`, `build/` | the static tools (`build/Dockerfile`, `build/loopdio.c`, `build/retry.sh`), the slot images, the data partition, U-Boot's environment and the Artifacts (`build/make-images.sh`, `build/state-script.sh`, `build/retime.go`, `build/mender-artifact-script-order.patch`) |
 | `fetch-modules.sh` | the hvx guest kernel's loop module (on Linux) |
 | `hydo-devices.yaml` | the device with its eMMC as a disk of its own (`guest.disks`; the Mac and KVM engines) |
 | `hydo.yaml` | the same device with its eMMC as a file on the data disk (hvx) |
