@@ -12213,7 +12213,8 @@ actions. Two parts of the walker made that so.
   not `select`.
 
 How far the walk with the clock step and the one without it part, for seed 46's walk of 72
-actions (`disk=none dseed=baee56f32e223007 | run [T=1:-2592000] I=fc8214f2a80db679`):
+actions (`disk=none dseed=baee56f32e223007 | run T=1:-2592000 I=fc8214f2a80db679`, run with
+and without its `T=` token):
 
 | walker | actions that differ | with the step | without it |
 |---|---|---|---|
