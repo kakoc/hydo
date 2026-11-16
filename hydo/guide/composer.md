@@ -136,14 +136,16 @@ workload.
 the default), `# expect: violation` (a known open bug still fails) or `# expect: fp=<16 hex>`, and
 one schedule line. `hydo save <explore dir>` writes them from an exploration; `hydo repro
 --regressions` replays them from fresh boots and exits 1 if one is not as expected.
+`hydo build` writes them beside the image (`<image>.regressions.json`), not into it, so a saved
+or edited regression does not change the image or the runs of the other regressions.
 
 A saved regression keeps its composition when you add, remove, or rename other commands. Every
 command has a stable id, `<kind>_<name>`, which is its filename in `hydo/workload/`. `hydo save`
 writes the composition in its resolved form, for example
 `W=:p2,r200,cparallel_driver_transfer,7.4.0.721476632,...`. It lists each command run by id,
 with its round, its entry number, and its `HYDO_SEED`. A long one
-is written as `W=@<key>` plus a `# compose: <resolved form>` line, which `hydo build` puts into
-the image. The file also records `# command-sha: <id> <hash>` for each command used. So:
+is written as `W=@<key>` plus a `# compose: <resolved form>` line, which `hydo build` writes
+beside the image with the regression. The file also records `# command-sha: <id> <hash>` for each command used. So:
 
 - Do not rename a command that a saved regression uses: a missing id fails that regression
   with a message that names the command (the image still builds). Restore the command, or

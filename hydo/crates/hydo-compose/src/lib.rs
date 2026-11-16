@@ -38,7 +38,8 @@ pub const USAGE: &str = include_str!("usage.txt");
 
 /// The lock file's `generated_by` (Milestone 239; before, the path of the deleted Python
 /// importer, `hvx/onboard/hydo-compose`). The lock file stays outside the image: hydo-build
-/// copies only the folder's `workload/`, `checks/` and `regressions/`.
+/// copies only the folder's `workload/` and `checks/` (and `regressions/` before the fingerprint
+/// epoch 4, Milestone 269).
 pub const GENERATED_BY: &str = "hydo compose";
 
 const ADDR_BASE: usize = 11; // 127.0.0.11, .12, ... ; 10.89.0.11, .12, ... (network: bridge)

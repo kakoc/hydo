@@ -3,13 +3,92 @@
 //! reads, the plan for the explorer (compose.json), the saved compositions of regressions, the
 //! plan's own regressions as files. (hydo-composer.sh, the guest composer of the shell-init
 //! images, was staged as /etc/hydo/compose.sh until M136; the host controller runs the rounds.)
+//!
+//! From the fingerprint epoch 4 (Milestone 269) the saved regressions stay out of the image:
+//! [`take_regressions`] takes them out of the manifest before anything is staged, so the image of
+//! a project with regressions is byte for byte the image of the same project without them, and
+//! [`write_regressions`] writes them beside the image (`<image>.regressions.json`), where the host
+//! reads them. Before, saving or editing one regression, even a comment, moved the timing of
+//! every run of the image (docs/HISTORY.md Milestones 251 and 268).
 
 use crate::fsx;
-use crate::{pyjson, Fail};
+use crate::{outln, pyjson, Fail, Io};
 use hydo_manifest::composer::{key_of, shell_of};
 use hydo_manifest::py;
 use serde_json::{Map, Value};
 use std::path::Path;
+
+/// Take the plan's saved regressions out of the manifest `m` that the build stages, and return
+/// them (the plan meta's entries, `test.regressions` and the folder's `regressions/*.schedule`).
+/// What stays is what the same project gives without any regression: the plan meta's
+/// `regressions` is empty, the folder's `regressions/` is not copied, and a plan of only
+/// regressions is no plan (no `/etc/hydo/compose.json`, no composer lines in manifest.sh).
+/// `test.regressions` leaves the validated manifest too, so no image decision reads it.
+pub fn take_regressions(m: &mut Value) -> Vec<Value> {
+    if let Some(t) = m.get_mut("test").and_then(Value::as_object_mut) {
+        t.remove("regressions");
+        // merge_folder adds an empty `test:` for a folder of only regressions/
+        if t.is_empty() {
+            if let Some(o) = m.as_object_mut() {
+                o.remove("test");
+            }
+        }
+    }
+    let Some(c) = m.get_mut("_compose").filter(|c| py::truthy(c)) else {
+        return Vec::new();
+    };
+    let regs = match c.get_mut("regressions") {
+        Some(r) => std::mem::replace(r, Value::Array(Vec::new())),
+        None => Value::Array(Vec::new()),
+    };
+    if let Some(f) = c.get_mut("_folder").filter(|f| f.is_object()) {
+        f["regressions"] = Value::Array(Vec::new());
+        let empty = match f.get_mut("_dirs").and_then(Value::as_object_mut) {
+            Some(dirs) => {
+                dirs.remove("regressions");
+                dirs.is_empty()
+            }
+            None => true,
+        };
+        // scan_folder: a folder with none of workload/, checks/, regressions/ is no folder
+        if empty {
+            *f = Value::Null;
+        }
+    }
+    // expand: a plan without commands and checks is a plan only when it has regressions
+    if list(c, "commands").is_empty() && list(c, "checks").is_empty() {
+        if let Some(o) = m.as_object_mut() {
+            o.remove("_compose");
+        }
+    }
+    match regs {
+        Value::Array(a) => a,
+        _ => Vec::new(),
+    }
+}
+
+/// Write the saved regressions beside the finished `image` (`<image>.regressions.json`), or
+/// remove a stale file when the plan has none.
+pub fn write_regressions(image: &Path, regs: &[Value], io: &mut Io) -> Result<(), Fail> {
+    let p = hydo_image::regressions_path(image);
+    if regs.is_empty() {
+        let _ = std::fs::remove_file(&p);
+        return Ok(());
+    }
+    fsx::write_text(&p, &hydo_image::regressions_text(regs))?;
+    outln(
+        io,
+        &format!(
+            "hydo-build: {} ({} saved regression{}: the host replays {} with `hydo repro --regressions`; the image does not carry {})",
+            p.display(),
+            regs.len(),
+            if regs.len() == 1 { "" } else { "s" },
+            if regs.len() == 1 { "it" } else { "them" },
+            if regs.len() == 1 { "it" } else { "them" },
+        ),
+    );
+    Ok(())
+}
 
 /// `w_of(schedule)`: the W= value of a schedule's guest part.
 fn w_of(schedule: &str) -> Option<String> {

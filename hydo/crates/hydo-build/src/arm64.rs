@@ -502,6 +502,7 @@ pub fn build(
         io,
     )?;
     crate::contracts::write_plan(&m, manifest_path, &cpio, io)?;
+    crate::stage::write_regressions(&cpio, &p.regressions, io)?;
     if containers {
         let k = &hydo_image::kernels::ARM64_KERNEL_CONTAINERS;
         outln(

@@ -137,19 +137,11 @@ impl ComposePlan {
                 cmd: last_field(&hydo_composer::shell_of(&c["run"]).replace('\n', " ")),
             })
             .collect();
-        // stage(): a regression's composition is saved under the key its W=@<key> names
-        let mut saved = BTreeMap::new();
-        for r in meta["regressions"].as_array().cloned().unwrap_or_default() {
-            let w = hydo_composer::w_of(&py::str_of(&r["schedule"]));
-            let c = r.get("compose").filter(|c| py::truthy(c)).map(py::str_of);
-            if let (Some(w), Some(c)) = (w, c) {
-                if let Some(k) = w.strip_prefix('@') {
-                    if hydo_composer::key_of(&c) == k {
-                        saved.insert(k.to_string(), c);
-                    }
-                }
-            }
-        }
+        let saved = saved_of(
+            meta["regressions"]
+                .as_array()
+                .map_or(&[][..], |a| a.as_slice()),
+        );
         let prov = d.get("provision").map(py::str_of).unwrap_or_default();
         let first = format!("{SH} first");
         let tail = format!("\n) && {first}");
@@ -177,6 +169,26 @@ impl ComposePlan {
             first_records: meta.get("first_records") == Some(&Value::Bool(true)),
         }))
     }
+}
+
+/// The saved compositions of a plan's regressions (`compose.saved/<key>`, as hydo-build's stage
+/// wrote them into an image before the fingerprint epoch 4): each regression's `compose:` text
+/// under the key its `W=@<key>` names. From epoch 4 (Milestone 269) the regressions come from
+/// `<image>.regressions.json` (`agent::plan_of_image`).
+pub fn saved_of(regressions: &[Value]) -> BTreeMap<String, String> {
+    let mut saved = BTreeMap::new();
+    for r in regressions {
+        let w = hydo_composer::w_of(&py::str_of(&r["schedule"]));
+        let c = r.get("compose").filter(|c| py::truthy(c)).map(py::str_of);
+        if let (Some(w), Some(c)) = (w, c) {
+            if let Some(k) = w.strip_prefix('@') {
+                if hydo_composer::key_of(&c) == k {
+                    saved.insert(k.to_string(), c);
+                }
+            }
+        }
+    }
+    saved
 }
 
 // ------------------------------------------------------------------ W= and its composition

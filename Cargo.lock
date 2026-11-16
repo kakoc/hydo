@@ -635,6 +635,7 @@ dependencies = [
  "hydo-errors",
  "hydo-explore",
  "hydo-history",
+ "hydo-image",
  "hydo-manifest",
  "hydo-results",
  "hydo-schedule",

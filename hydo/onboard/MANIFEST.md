@@ -2205,10 +2205,16 @@ and `compose.<id>.no_violation` (always_or_unreachable). The invariant `compose.
 
 `hydo/regressions/<name>.schedule` (or `test.regressions`): comment lines, `# expect: ok`
 (default: the bug stays fixed), `# expect: violation` (a known open bug still fails) or
-`# expect: fp=<16 hex>` (bit for bit), and one schedule line. They are staged into the image
-(`/hydo/regressions/`, and `/etc/hydo/compose.json`), so `hydo repro --regressions [IMG]`
-replays exactly what the image was built with, from fresh boots, and exits 1 if one is not as
-expected. `hydo save <explore dir>` writes an exploration's minimal schedules there (with
+`# expect: fp=<16 hex>` (bit for bit), and one schedule line. `hydo build` writes them beside
+the image, as `<image>.regressions.json`, and not into it. So saving or editing a regression,
+even a comment, does not change the image's bytes or the runs of the other regressions, and an
+`# expect: fp=` line can hold the fingerprint of the image it is replayed on. `hydo repro
+--regressions [IMG]` replays the regressions of that file from fresh boots, and exits 1 if one
+is not as expected; keep the file next to the image when you copy it. An image built before the
+fingerprint epoch 4 carries its regressions inside (`/hydo/regressions/` and
+`/etc/hydo/compose.json`), and hydo replays those. A `test.regressions` entry in hydo.yaml is
+part of the manifest, which the image carries, so keep saved regressions in the folder.
+`hydo save <explore dir>` writes an exploration's minimal schedules there (with
 `expect: violation`; change it to `ok` once fixed).
 
 ### Stable compositions (command ids)
@@ -2234,8 +2240,9 @@ hydo may draw differently and old regressions still replay). It runs exactly the
 in this order, with the same timing rules as the seed form.
 
 **The saved form** `W=@<key>` names a resolved composition by a hash of its text (12 hex digits).
-A regression file carries the resolved form on a `# compose: <resolved form>` line, and `hydo
-build` stages it as `/etc/hydo/compose.saved/<key>`; it is used when the resolved form would make
+A regression file carries the resolved form on a `# compose: <resolved form>` line, which
+`hydo build` writes beside the image with the regression, and the host reads it from there when
+a run names its key; it is used when the resolved form would make
 the schedule's guest part longer than 500 bytes (the engine's limit is 511).
 
 **Where each form appears.** The explorer draws the seed form. After shrinking, it turns the

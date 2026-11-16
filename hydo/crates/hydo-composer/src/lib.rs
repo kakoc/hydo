@@ -18,7 +18,9 @@
 //! - saved regressions: [`regression_status`] (what a replay does), [`regression_warning`],
 //!   [`saved_regression_text`] (`hydo save`);
 //! - what a plan puts into an image: [`shell_lines`] (manifest.sh) and [`stage`] (compose.list,
-//!   compose.checks, compose.json, compose.saved/, hydo/regressions/).
+//!   compose.checks, compose.json, compose.saved/, hydo/regressions/). [`stage`] stages the
+//!   regressions as an image built before the fingerprint epoch 4 carried them; from epoch 4
+//!   (Milestone 269) hydo-build writes them beside the image instead (`<image>.regressions.json`).
 //!
 //! Until M136 the guest side was `hydo/onboard/hydo-composer.sh` with two awk programs that
 //! mirrored [`plan`] exactly (the tests checked that they agreed); since M136 the host controller
@@ -49,7 +51,8 @@ pub use hydo_manifest::{regression_status, ManifestError, Status};
 pub const COMPOSE_SH: &str = "/etc/hydo/compose.sh";
 /// The composer's schedule token.
 pub const W_TOKEN: &str = "W";
-/// Resolved compositions of saved regressions (`W=@<key>`) inside an image.
+/// Resolved compositions of saved regressions (`W=@<key>`) inside an image built before the
+/// fingerprint epoch 4 (Milestone 269).
 pub const SAVED_DIR: &str = "/etc/hydo/compose.saved";
 
 /// Why a `W=` value cannot be used here.

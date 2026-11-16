@@ -167,7 +167,7 @@ These rules are in force. Do not break them.
 - Keep existing fingerprints stable. A new module feature must be opt-in and inert when off, so
   that every recorded baseline stays the same. Check this with `deploy-metal.sh` and the pinned
   reproducers before and after the change.
-- The fingerprint epoch rule. `hydo_image::EPOCH` (now 3, since M234; 2 from M204, 1 from M155) names the
+- The fingerprint epoch rule. `hydo_image::EPOCH` (now 4, since M269; 3 from M234, 2 from M204, 1 from M155) names the
   generation of fingerprints. Raise it by one in the same commit as any change that moves a
   recorded fingerprint. Such changes are changes of an engine, the host controller, the agent pin
   or the guest kernels, or of a default that an image's run depends on. Add a section of
@@ -266,9 +266,13 @@ this way. Other tags, such as the action's moving tag `v1`, do not start it. `pa
 dry-runs the packages on every pull request that changes one. The details are in
 `docs/PUBLISHING.md`, section "Publishing from GitHub Actions" (M186).
 
-**Fingerprints.** The fingerprint epoch is 3 (M234; 2 from M204, 1 from M155). An image built at
-epoch 3 boots the Mac and KVM guest kernels with cgroups. M244 re-recorded every value of the
-list at epoch 3. The pinned reproducers are
+**Fingerprints.** The fingerprint epoch is 4 (M269; 3 from M234, 2 from M204, 1 from M155). An
+image built at epoch 3 or later boots the Mac and KVM guest kernels with cgroups. An image built
+at epoch 4 carries no saved regression: `hydo build` writes them beside it, as
+`<image>.regressions.json`, so saving or editing one leaves the image's bytes and the other
+regressions' runs alone. An image built before keeps them inside and is replayed from them. M244
+re-recorded every value of the list at epoch 3; the epoch-4 values wait for the pass before
+0.4.0 (open item 105). The pinned reproducers are
 `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` under `hydo run`: `a76d7fe857fdb37c`
 (VIOLATION, order 11) on `explore-ob-stack-old-disk.img` (`dab0e76c…`) and `efbde7b57264be0f`
 (OK) on `explore-ob-stack-fix-disk.img` (`d61cbf00…`), in `~/hydo/build/m204` on the bare-metal
@@ -1370,8 +1374,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
     milestone and the values it moves; the pass removes the lines.
-    No value of the list waits. Milestone 244 re-recorded the whole list at the fingerprint
-    epoch 3.
+    - M269 raised the fingerprint epoch to 4. Every image of the list built at epoch 4 has new
+      bytes: its record says epoch 4, and an image whose plan has saved regressions no longer
+      carries them. These are 21 hvm images, 6 kvm images, and 43 hvx images. Each of their runs
+      may move: 76 hvm runs, 17 kvm runs, and 141 hvx runs. Record them in one pass before the 0.4.0 release, with `epoch` 4 in
+      `hydo/onboard/recorded.json` (docs/REBASELINE.md section 26).
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -1627,20 +1634,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A walk that a power cut ends is not judged. Two walks of that version clicked a share
       link's copy button and passed, because `C=5` cut the power (open item 124).
     - M267's walker did not run on KVM.
-132. What Milestone 268 left.
-    - A saved regression changes the bytes of the image it tests. `hydo build` copies the
-      folder `regressions/` into the image as `/hydo/regressions/`, comments included, and puts
-      each schedule and `# expect:` value into `/etc/hydo/compose.json`. So saving or editing
-      one regression can break another, and the run's fingerprint follows every edit.
-      - In M251, saving the second Saleor regression moved the gift card schedule's run. Its
-        `cf=270` then gave OK, and in M268 it broke only `[placed_orders_are_paid]`.
-      - An `# expect: fp=` line cannot hold its own image's value. In M268 the line
-        `fp=f899bca4fe59b72e` gave an image whose run gave `9e11c72c71cd56fa` twice, with the
-        same stops and transcript. An edit of the file's comments moved it again. The Saleor
-        regression keeps `# expect: violation`.
-      - A fix: keep `regressions/` out of the guest image and out of the staged `compose.json`.
-        The host reads them from the project folder, or from a file beside the image that no
-        run reads.
+132. What Milestone 268 left. The saved regressions are out of the image since M269 (the
+    fingerprint epoch 4): `hydo build` writes them beside it, and an edited or new regression
+    leaves the image's bytes alone. What is left:
     - d11 of the bug benchmark is not found since M261. It needs a service that acknowledges
       after the disk stopped completing flushes, and a `cf=` run now stops at the flush. None of
       the 61 points `cf=245..305` fails. A trigger with another fault was not searched, for
@@ -1789,6 +1785,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       topic with `retention.ms=-1` would keep the check strict.
     - The Mac engine did not run the example; the Mac had too little free disk. KVM ran it only
       in the one-off workflow of finding 4.
+133. What Milestone 269 left.
+    - A `test.regressions` entry written in hydo.yaml is part of the manifest, which the image
+      carries as `/etc/hydo/hydo.yaml`, so it still changes the image's bytes. Only the folder
+      `regressions/` is out of the image. Moving inline entries out needs a manifest that the
+      image carries without them.
+    - `hydo ci`'s image input key still covers the folder `regressions/`, because the cached
+      image's folder holds `<image>.regressions.json`. An edited regression therefore builds the
+      image again, with the same bytes.
+    - An image copied without its `<image>.regressions.json` has no saved regressions, and
+      `hydo repro --regressions` says so. The Saleor gift card regression can take an `# expect:
+      fp=` line after the re-recording pass.
 
 ## Milestone index
 
@@ -2457,12 +2464,18 @@ build machine, before 2026-10-13.
   takes lengths, characters and examples, sizes stay bounded, and `with T = i64` fuzzes a
   generic function. On the six crates every harness built, and the planted memchr bug and
   num-integer#55 came from the functions' own contracts. Nothing recorded moved
+- M269 (tentative number): open item 132. The saved regressions leave the image: `hydo build`
+  writes them beside it as `<image>.regressions.json`. An edited, new, or removed regression
+  leaves the image's sha256 the same (hvx and the Mac), and an `# expect: fp=` line holds its
+  own image's value. The fingerprint epoch is 4; an image built before keeps its regressions
+  inside. Every image built at epoch 4 has new bytes, and its values wait for the pass before
+  0.4.0 (open item 105)
 
 ## Where to look
 
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.
 - `docs/REBASELINE.md`: the recorded fingerprints by section; section 13 is epoch 1, section 19
-  is epoch 2, section 24 is epoch 3.
+  is epoch 2, section 24 is epoch 3, section 26 is epoch 4.
 - `docs/BUILD-PINS.md`: the pinned toolchain and guest programs.
 - `docs/CI.md`: what CI runs, where, and how long it takes.
 - `docs/RELEASING.md` and `docs/PUBLISHING.md`: the release and publishing steps.

@@ -3563,3 +3563,33 @@ python-kv-hist, rust-kv, the shop's two images, the gRPC demo's two images). The
 images and runs that moved at 0.3.1, 0.3.2 and 0.3.3. Every verdict is unchanged, every moved run
 gave the same values twice, and every worker-pool run gave its fresh boot's values. KVM's images
 carry none of these programs, so no KVM value moves.
+
+## 26. The fingerprint epoch 4 (M269, 2026-11-16)
+
+Open item 132 showed that a saved regression changed the bytes of the image it tests
+(docs/HISTORY.md Milestones 251 and 268). `hydo build` copied the folder `regressions/` into the
+image, comments included, and put each schedule and `# expect:` value into
+`/etc/hydo/compose.json`. So saving or editing one regression moved the runs of every other one,
+and an `# expect: fp=` line could not hold its own image's value. This section records the
+decision. Under the rule "Re-recording runs in batches" (AGENTS.md), the values are not
+re-recorded with the change: `hydo/onboard/recorded.json` keeps its epoch-3 values and its
+`epoch` 3 until the next re-recording pass, before the 0.4.0 release (AGENTS.md open item 105).
+
+**The fingerprint epoch is 4.** An image built at epoch 4 carries no saved regression: no
+`/hydo/regressions/`, an empty `regressions` list in `/etc/hydo/compose.json`, no
+`/etc/hydo/compose.saved/`, and no test composer plan at all for a plan of only regressions.
+`hydo build` writes the regressions beside the image, as `<image>.regressions.json`, and the
+host reads them from there (`hydo_image::defaults`, `regressions_in_image`). An image built at
+epoch 3 or before keeps its regressions inside and is replayed from them, so it keeps its bytes
+and its values under this hydo.
+
+**What moves.** Every image built at epoch 4 has new bytes, because its record
+`/etc/hydo/image.json` says epoch 4: hvm 21 images, kvm 6 and hvx 43 (the counts of section 24).
+The images whose plan has saved regressions lose them too. Until the pass, `hydo-bench rebaseline
+--check` reports every image as moved. Which runs move is not known before the pass. On hvx the
+record's new bytes alone moved none of the 141 runs at epoch 3. The Mac keeps the image's root in
+guest RAM, so its 76 runs are likely to move. The pass shows which hvm, kvm (17) and hvx runs
+move, and whether a verdict or a recorded ctl value moves.
+
+**The pinned reproducers** stay the stack example's epoch-2 images in `~/hydo/build/m204`, with
+their values `a76d7fe857fdb37c` and `efbde7b57264be0f`: this hydo boots them as before.

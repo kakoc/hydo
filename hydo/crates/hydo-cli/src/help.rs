@@ -60,7 +60,8 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
   recorded the run unless --backend names one. The exit status is 1 when a run did not come out
   the same.
   With a schedule it is `hydo run` (`hydo run --help`). --regressions replays the saved
-  regressions the image carries (hydo/regressions/). --transcript types an agent image's recorded
+  regressions that `hydo build` wrote beside the image (IMG.regressions.json, from
+  hydo/regressions/; an image built before the fingerprint epoch 4 carries them). --transcript types an agent image's recorded
   run (its control.jsonl) again.
 {RUN_OPTS_HELP}"
         ),
@@ -70,8 +71,8 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
         "save" => "usage: hydo save <explore dir> [--to hydo/regressions]
   saves the minimal schedules of an exploration as regressions, one file each in the --to
   directory (default hydo/regressions, or regressions inside the hydo/ folder). `hydo build`
-  puts them into the image, and
-  `hydo repro --regressions` replays them."
+  writes them beside the image (not into it, so a saved regression leaves the image's bytes
+  alone), and `hydo repro --regressions` replays them."
             .to_string(),
         "report" => "usage: hydo report [DIR] [--details]
        hydo report --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]

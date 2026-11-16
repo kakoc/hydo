@@ -27,6 +27,8 @@ hydo-agent-proto = { workspace = true }
 hydo-schedule = { workspace = true }
 hydo-manifest = { workspace = true }
 hydo-engine = { workspace = true }
+# the saved regressions beside an image built at the fingerprint epoch 4 (M269)
+hydo-image = { workspace = true }
 hydo-results = { workspace = true }
 hydo-composer = { workspace = true }
 serde_json = { workspace = true }

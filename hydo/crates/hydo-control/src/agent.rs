@@ -162,6 +162,19 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
             what: format!("{}: {}", image.display(), e.what),
             ..e
         })?;
+    // From the fingerprint epoch 4 (M269) the compositions that a `W=@<key>` names are beside the
+    // image, with the saved regressions, not in its /etc/hydo/compose.saved/.
+    if let Some(cp) = plan.compose.as_mut() {
+        if !hydo_engine::image::image_defaults(image)
+            .1
+            .regressions_in_image
+        {
+            let regs = hydo_image::read_regressions(image)
+                .map_err(Unsupported::other)?
+                .unwrap_or_default();
+            cp.saved = crate::schedule::composer::saved_of(&regs);
+        }
+    }
     // The musl table of the image's busybox: the words of an unmountable data disk (M131).
     let bb = plan.layout.busybox.trim_start_matches('/').to_string();
     if let Ok(bytes) = hydo_engine::image::embedded_file(image, &bb) {
@@ -222,6 +235,49 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
         }
     }
     Ok(plan)
+}
+
+/// An image's saved regressions as the host replays them ([`regressions_of_image`]).
+#[derive(Clone, Debug)]
+pub struct ImageRegressions {
+    /// The plan meta the replay checks each regression against (`/etc/hydo/compose.json`, or an
+    /// empty object for an image without a plan), with `regressions` set to the entries.
+    pub meta: serde_json::Value,
+    /// The entries, in their order.
+    pub regressions: Vec<serde_json::Value>,
+    /// Where they are: `None` inside the image (built before the fingerprint epoch 4), else the
+    /// file beside it (`<image>.regressions.json`, Milestone 269), which may be missing.
+    pub file: Option<std::path::PathBuf>,
+}
+
+/// The saved regressions of `image`, by the epoch it was built at: before epoch 4 the image's own
+/// `/etc/hydo/compose.json` carries them; from epoch 4 (Milestone 269) `hydo build` writes them
+/// beside the image, so editing one does not change the image's bytes.
+pub fn regressions_of_image(image: &Path) -> Result<ImageRegressions, String> {
+    let mut meta = hydo_engine::image::embedded_compose(image)
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .filter(serde_json::Value::is_object)
+        .unwrap_or_else(|| serde_json::json!({}));
+    let in_image = hydo_engine::image::image_defaults(image)
+        .1
+        .regressions_in_image;
+    let (regressions, file) = if in_image {
+        let r = meta
+            .get("regressions")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        (r, None)
+    } else {
+        let r = hydo_image::read_regressions(image)?.unwrap_or_default();
+        (r, Some(hydo_image::regressions_path(image)))
+    };
+    meta["regressions"] = serde_json::Value::Array(regressions.clone());
+    Ok(ImageRegressions {
+        meta,
+        regressions,
+        file,
+    })
 }
 
 /// The history checks a manifest.sh carries (hydo-build's compile_checks: `HYDO_CHECKS` names

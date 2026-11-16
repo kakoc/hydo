@@ -13964,3 +13964,111 @@ clause's parts, the harness without `std`, and private fields. The guide gained 
 `fuzz`. `cli.jsonl` was re-recorded on purpose for `guide`, `guide --list` and `guide
 manifest` on both platforms, and `agents.jsonl` for the guide topics after `fuzz` (`HYDO_BLESS=1`). Nothing recorded moved: no engine, image, guest
 program or example changed.
+
+### Milestone 269 (tentative number) - DONE (open item 132, the first item of release 0.4.0: the saved regressions leave the image; `hydo build` writes them beside it as `<image>.regressions.json`, so saving or editing one no longer changes the image's bytes, and an `# expect: fp=` line can hold its own image's value; the fingerprint epoch is 4; an image built before keeps its regressions inside and is replayed from them; every image built at epoch 4 has new bytes, and its values wait for the pass before 0.4.0; 2026-11-16)
+
+**What was asked.** Milestones 251 and 268 showed that a saved regression changed the image it
+tests. `hydo build` copied the folder `regressions/` into the image as `/hydo/regressions/`,
+comments included, and put each schedule and `# expect:` value into `/etc/hydo/compose.json`,
+and each `W=@<key>` composition into `/etc/hydo/compose.saved/<key>`. So saving the second
+Saleor regression moved the gift card schedule's run, and an `# expect: fp=` line could not name
+its own image's value. The task: find what reads regressions inside the guest, move them to the
+host side, prove with a test that an edited regression leaves the image's sha256 alone, and raise
+the fingerprint epoch.
+
+**What reads regressions.** Nothing in the guest. The agent runs only primitives, and the copy
+under `/hydo/regressions/` was read by nobody. The host read them out of the image:
+
+- `hydo repro --regressions` and `hydo ci run` (`runs::replay_regressions`) read the entries and
+  the plan meta from the image's `/etc/hydo/compose.json`;
+- the host controller took the compositions that a `W=@<key>` names from the same entries
+  (`ComposePlan::of`, the `compose.saved` of the image);
+- hydo-build read the folder's files for its search of the programs a manifest uses
+  (`uses_program`: `hydo-sql`, `hydo-read`), and the plan meta for manifest.sh.
+
+The test composer's guest calls, `hydo ci`'s input key and the explorer read no regression from
+the image. The explorer reads the plan meta for its commands only.
+
+**The change.**
+
+- `hydo_image::EPOCH` is 4, and `hydo_image::defaults` has `regressions_in_image`, true before
+  epoch 4. `hydo_image::regressions_path`, `regressions_text` and `read_regressions` name, write
+  and read the file beside an image: `{"regressions": [...], "type": "regressions", "v": 1}`,
+  with the plan meta's entries as an image before epoch 4 carried them.
+- hydo-build (`stage::take_regressions`, called by `prepare` when the epoch says so) takes the
+  regressions out of the manifest it stages: the plan meta's `regressions` is empty, the folder's
+  `regressions/` is not copied, `test.regressions` leaves the validated manifest, and a plan of
+  only regressions is no plan (no `compose.json`, no composer lines in manifest.sh). What stays is
+  what the same project gives without any regression. At the end of a build `write_regressions`
+  writes `<image>.regressions.json`, or removes a stale one.
+- hydo-control: `agent::regressions_of_image` gives the entries and the plan meta by the image's
+  epoch, from the image before epoch 4 and from the file beside it from epoch 4.
+  `agent::plan_of_image` takes the `W=@<key>` compositions of an epoch-4 image from that file
+  (`schedule::composer::saved_of`). A missing file means no regressions; a file that is not a
+  regressions file is an error that names it.
+- The `hydo` program's replay reads `regressions_of_image`. For an epoch-4 image without the
+  file, `hydo repro --regressions` says that no file is beside the image. The help of `hydo
+  repro` and `hydo save` says where the regressions go.
+- MANIFEST.md "Regressions" and "Stable compositions", and `hydo guide composer`, say where
+  `hydo build` writes the regressions and that a `test.regressions` entry in hydo.yaml stays part
+  of the manifest the image carries.
+
+**The proof.** The composed Redis example, with its regression `lost-update.schedule`, built
+three times in one folder: as committed (a), with a new comment and `# expect:
+fp=0123456789abcdef` (b), and without `regressions/` (c). Each build by the 0.3.4 release's
+`hydo` and by this milestone's.
+
+| platform | hydo | a | b | c |
+|---|---|---|---|---|
+| x86_64, the bare-metal machine (`-disk.img`) | 0.3.4 | `98aff836…` | `27b2ae22…` | `fc2b75c4…` |
+| x86_64, the bare-metal machine (`-disk.img`) | this milestone | `ff17a4b4…` | `ff17a4b4…` | `ff17a4b4…` |
+| arm64, this Mac (`.cpio.gz`) | 0.3.4 | `8ca1cae5…` | `d363baf9…` | `6357f21a…` |
+| arm64, this Mac (`.cpio.gz`) | this milestone | `f96995ac…` | `f96995ac…` | `f96995ac…` |
+
+The arm64 data disk was `d47e86f7…` in every build. The new builds of a and b wrote
+`<image>.regressions.json` beside the image, and the build of c wrote none.
+
+`hydo repro --regressions` on the new images, one VM at a time (hvx through `~/bin/hvx-run`):
+
+- On hvx, image a: PASS `expect ok`, `948119c545e7ae2e`. Image b: FAIL `expect
+  fp=0123456789abcdef` with `948119c545e7ae2e`, the same run. Image c: "has no saved
+  regressions: there is no ... .regressions.json beside it".
+- A fourth build with `# expect: fp=948119c545e7ae2e` gave the image `ff17a4b4…` again, and its
+  replay passed: an `# expect: fp=` line now holds its own image's value.
+- On the Mac engine, image a: PASS, `414cc2e809d104ac`; image b: FAIL with `414cc2e809d104ac`.
+
+The tests are hydo-build's `regressions_beside::` (an edited, a new and a removed regression
+leave the staged manifest, the composer's files in the root, manifest.sh and the prelude the
+same; a plan of only regressions stages no plan) and hydo-control's `regressions_beside::` (on
+small arm64 images: an epoch-4 image's entries and `W=@<key>` composition come from the file
+beside it, an epoch-3 image's from inside it, and a file beside an epoch-3 image is not read).
+
+**What moves.** Every image built at epoch 4 has new bytes, because its record says epoch 4, and
+an image whose plan has saved regressions loses them too. The values of `hydo/onboard/recorded.json`
+are not re-recorded here (AGENTS.md "Re-recording runs in batches"): open item 105 lists them for
+the pass before 0.4.0 (docs/REBASELINE.md section 26). The pinned reproducers' epoch-2 images
+keep their values. Re-recorded goldens, each diff read:
+
+- hydo-build's equivalence answers: six. The `--print-shell` of three manifests with only a
+  `regressions/` folder (the RAUC example and the SWUpdate example's two manifests), on both
+  architectures, lost the composer's lines, because such a plan is no plan for the image now.
+  A `W=` on such an image was refused before and is refused now, with the message for an image
+  without a test composer plan.
+- hydo-manifest's equivalence answers: one input digest, of the Saleor example's `hydo/`
+  folder, whose regression Milestone 268 edited. No answer changed.
+- The `hydo` program's CLI goldens: ten answers on the two platforms, `hydo guide composer` and
+  `hydo guide manifest` (the text above) and `hydo save`'s last line, which says that `hydo
+  build` writes the regressions beside the image.
+
+No answer names a host path. The epoch's literal in hydo-image's unit tests is 4.
+
+**Checks.** On this Mac, on `main` at `47df6fee` with this milestone on top: `cargo fmt --all
+--check`; `cargo clippy --workspace --all-targets -- -D warnings`; every test of hydo-image,
+hydo-build, hydo-composer, hydo-compose, hydo-control (its full-tier `m123`, `features` and
+`corpus` included), hydo-engine, hydo-agents, hydo-release and the `hydo` program; the `hydo`
+program's `equivalence::cli_matches_golden` and `agents_equivalence`, with `HYDO_BLESS=1` for
+the guide's new text; `HYDO_BLESS=1` for the equivalence answers of hydo-manifest and
+hydo-build; hydo-schedule's `language::`, hydo-agents's `public_content::`, the `hydo`
+program's `docs::`, `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`. On the bare-metal
+machine, in a folder of its own under umask 022: the x86_64 builds and the hvx replays above,
+with this tree's `hydo` over the 0.3.4 Linux release.

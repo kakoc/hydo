@@ -13,7 +13,7 @@ use hydo_control::agent::AgentEngine;
 use hydo_control::drive::Policy;
 use hydo_engine::hvm::Hvm;
 use hydo_engine::hvx::Hvx;
-use hydo_engine::image::{boot_files, embedded_compose, sha256_file};
+use hydo_engine::image::{boot_files, sha256_file};
 use hydo_engine::protocol::verdict_kind;
 use hydo_engine::{BootSpec, ControlledEngine, CpuLevel, RunResult};
 use hydo_manifest::Guest;
@@ -1544,10 +1544,10 @@ fn regression_ok(expect: &str, verdict: &str, fp: &str) -> bool {
     }
 }
 
-fn compose_meta(image: &Path) -> Value {
-    embedded_compose(image)
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_else(|| json!({}))
+/// The image's saved regressions and the plan meta they are checked against: inside the image
+/// before the fingerprint epoch 4, beside it (`<image>.regressions.json`) from epoch 4 (M269).
+fn image_regressions(image: &Path) -> hydo_control::agent::ImageRegressions {
+    hydo_control::agent::regressions_of_image(image).unwrap_or_else(|e| die(&format!("hydo: {e}")))
 }
 
 /// One regression's pre-run check (M98). Returns why it must not run.
@@ -1581,12 +1581,8 @@ fn regression_precheck(r: &Value, meta: &Value) -> Option<String> {
 /// result each (`hydo repro --regressions`, `hydo ci run`). Prints a PASS or FAIL line per
 /// regression.
 pub fn replay_regressions(ctx: &Ctx, image: &Path, base: &Path) -> Vec<hydo_results::CiRegression> {
-    let meta = compose_meta(image);
-    let regs: Vec<Value> = meta
-        .get("regressions")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
+    let got = image_regressions(image);
+    let (meta, regs) = (got.meta, got.regressions);
     let eargs = engine_args(image, None, None, 1);
     let mut out = Vec::new();
     for (k, r) in regs.iter().enumerate() {
@@ -1657,17 +1653,21 @@ pub fn truthy(v: &Value) -> bool {
 /// and the others still run.
 fn cmd_regressions(ctx: &Ctx, mut args: Vec<String>) -> i32 {
     let image = find_image(ctx, &mut args);
-    let meta = compose_meta(&image);
-    let regs: Vec<Value> = meta
-        .get("regressions")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
+    let found = image_regressions(&image);
+    let regs = found.regressions;
     if regs.is_empty() {
-        println!(
-            "hydo: {} carries no regressions (hydo/regressions/*.schedule or test.regressions in the plan)",
-            image.display()
-        );
+        match &found.file {
+            None => println!(
+                "hydo: {} carries no regressions (hydo/regressions/*.schedule or test.regressions in the plan)",
+                image.display()
+            ),
+            // M269: an image of the fingerprint epoch 4 or later has them beside it
+            Some(f) => println!(
+                "hydo: {} has no saved regressions: there is no {} beside it (`hydo build` writes it from hydo/regressions/*.schedule and test.regressions)",
+                image.display(),
+                f.display()
+            ),
+        }
         return 0;
     }
     let base = image
@@ -1771,7 +1771,7 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
             println!("hydo: note: {}", py_str(&x["stable_note"]));
         }
     }
-    println!("hydo: {n} regressions saved; `hydo build` stages them, `hydo repro --regressions` replays them");
+    println!("hydo: {n} regressions saved; `hydo build` writes them beside the image, `hydo repro --regressions` replays them");
     0
 }
 

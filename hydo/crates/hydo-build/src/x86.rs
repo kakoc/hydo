@@ -964,5 +964,6 @@ pub fn build(
             "hydo-build: guest.kernel: containers: the KVM engine boots this image with its kernel for containers (bzImage-kvm-containers); hvx boots its own kernel, which has those options, the network ones as modules that the image must load itself",
         );
     }
-    crate::contracts::write_plan(&m, manifest_path, &disk, io)
+    crate::contracts::write_plan(&m, manifest_path, &disk, io)?;
+    crate::stage::write_regressions(&disk, &p.regressions, io)
 }

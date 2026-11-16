@@ -352,11 +352,16 @@ fn manifest_fail(e: &hydo_manifest::ManifestError) -> Fail {
 }
 
 /// A loaded, image-prepared manifest: the normalised data as hydo-build held it after
-/// `_oci_prepare`, with the plan's meta in `_compose`.
+/// `_oci_prepare`, with the plan's meta in `_compose`. From the fingerprint epoch 4 (Milestone
+/// 269) `data` has no saved regressions: they are in `regressions`, which the build writes beside
+/// the image ([`stage::take_regressions`]).
 pub struct Prepared {
     pub data: serde_json::Value,
     pub loaded: hydo_manifest::Loaded,
     pub oci: Vec<oci::OciService>,
+    /// The plan's saved regressions, for `<image>.regressions.json` (empty when the image's epoch
+    /// keeps them inside the image, before epoch 4).
+    pub regressions: Vec<serde_json::Value>,
 }
 
 /// hydo-build's `main()` up to the flags: read, `--set`, the composer's plan, validate, the
@@ -389,7 +394,18 @@ pub fn prepare(
     let oci = oci::prepare(&mut data, path, oarch, io)?;
     // the project model (hydo-manifest model.rs) after the image reader's own checks
     hydo_manifest::check_document(&loaded).map_err(|e| manifest_fail(&e))?;
-    Ok(Prepared { data, loaded, oci })
+    // the image's epoch decides where the saved regressions go (M269: beside the image)
+    let regressions = if hydo_image::defaults(hydo_image::EPOCH, oarch).regressions_in_image {
+        Vec::new()
+    } else {
+        stage::take_regressions(&mut data)
+    };
+    Ok(Prepared {
+        data,
+        loaded,
+        oci,
+        regressions,
+    })
 }
 
 /// The `--print-shell` placeholders for the tool paths.

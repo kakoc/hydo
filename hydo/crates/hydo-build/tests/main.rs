@@ -11,4 +11,5 @@ mod errlog;
 mod netns;
 mod oci;
 mod oci_share;
+mod regressions_beside;
 mod world_objects;

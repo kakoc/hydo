@@ -19,6 +19,7 @@ mod lago_gaps;
 mod m123;
 mod perf;
 mod react;
+mod regressions_beside;
 mod restart;
 mod restart_may_fail;
 mod screens;
