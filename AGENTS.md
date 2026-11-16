@@ -651,7 +651,10 @@ contracts-ledger example it found the planted bug from the contract alone, and t
 contract. On 12 functions of Qdrant's `common` crate nine held. `decompress_sequence` panics in
 the test profile on a header that `compress_sequence` never writes, on the path that decodes
 untrusted sparse vectors. The run inside the VM with faults is designed only. Design:
-`docs/design/function-fuzzing.md` (open item 139).
+`docs/design/function-fuzzing.md` (open item 139). An evaluation on six popular crates (M280,
+`docs/design/function-fuzzing-evaluation.md`) found that a new user would not keep using it
+yet. The main reasons are harness builds that fail, runs that test nothing and still pass, and
+generated values too short to reach real code.
 
 **Fakes from OpenAPI descriptions (M249).** `hydo fake from-openapi <spec>` writes a `fakes:`
 entry from an OpenAPI 3.0 or 3.1 description (the module `openapi` of `hydo-compose`). It writes
@@ -1609,6 +1612,21 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Qdrant's `decompress_sequence` accepts a header of more than 64 bits per value. What
       `decode_untrusted_bytes` returns for such a blob in a release build was not checked, and
       nothing was posted.
+    - The evaluation on six crates (M280, `docs/design/function-fuzzing-evaluation.md`) found
+      these problems, worst first:
+      - The harness does not build on a `#![no_std]` crate (it needs `std`) or on a structure
+        with private fields from another module, and one such function stops every function.
+      - `every clause held` and exit status 0 also for a run that tested nothing: 2 inputs
+        after 49,998 rejections, or text that never parses.
+      - Strings and lists hold at most 16 elements, and `input` takes no length or character
+        set, so memchr's 64-byte loop and semver's parser were reached only by hand.
+      - A size parameter without an `input` line makes calls of terabytes that each wait for
+        `--timeout`, with no progress output.
+      - Generic functions, trait methods, and types with pointer fields are refused, so most of
+        a crate's API needs a hand-written property function.
+    - The two candidates of M280 were not posted: num-integer's `i64::MIN.nth_root(1)` panics
+      in a debug build, and byteorder's `ReadBytesExt::read_uint` panics for `nbytes` of 0 or
+      more than 8 without a documented panic.
 
 ## Milestone index
 
@@ -2237,6 +2255,10 @@ build machine, before 2026-10-13.
   worked, the faults that found bugs, five phases with time limits, and the judgment of a finding. It also covers the
   write-up, the upstream report, the retro, throughput, and common setup problems. Skill 2.3.2 links it. Nothing
   recorded moved
+- M280 (tentative number): an evaluation of `hydo fuzz` on six crates as a new user. The
+  harness fails on `no_std` crates and private fields of other modules, runs that test nothing
+  pass, and short values miss real paths. Two candidates in num-integer and byteorder, not
+  posted. A developer would not keep using it yet. Nothing recorded moved
 
 ## Where to look
 

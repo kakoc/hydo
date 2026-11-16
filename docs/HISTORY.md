@@ -13291,3 +13291,61 @@ for the skill's new text and version.
 and `public_content::`; `cargo test -p hydo-schedule --test it language::`. No VM ran: the page
 cites the recorded runs of the examples. Nothing recorded moved: no engine, image, guest program
 or example file changed.
+
+### Milestone 280 (tentative number) - DONE (an evaluation of `hydo fuzz` as a Rust developer new to hydo would meet it, on six crates from crates.io: semver, base64, fixedbitset, memchr, num-integer and byteorder; the harness does not build on `#![no_std]` crates or on a structure with private fields in another module, runs that test nothing report `every clause held`, and short generated values miss real code paths; two bug candidates, nothing posted; the verdict is that a developer would not keep using it yet; no code of the feature changed; nothing recorded moved; 2026-11-16)
+
+**What and why.** Milestone 275 built `hydo fuzz` and proved it on hydo's own example and on
+Qdrant. This milestone asks whether a developer who has never used hydo would keep using it.
+The evaluator learned the feature only from `hydo fuzz --help`, `hydo guide`, and the design
+document that the help names. They wrote contracts on 8 to 14 functions per crate from each
+crate's documentation, and ran `hydo fuzz` natively on this Mac with Rust 1.90.0 and hydo at
+`9294778e`. The full report is `docs/design/function-fuzzing-evaluation.md`.
+
+**What happened per crate.**
+
+- semver 1.0.28: `--list` said `can be fuzzed` for the five functions, and the harness did not
+  build. It names the private fields of `Identifier`, a structure of another module. The nine
+  properties ran; four of them tested nothing, because 0 of 2,000 generated strings were
+  versions.
+- base64 0.23.1: four functions and seven properties held. `Alphabet::new` with `requires
+  len(alphabet) == 64` ran 2 inputs after 49,998 rejections and still exited 0.
+- fixedbitset 0.5.9: `#![no_std]` stops the harness's build until the crate says
+  `#![cfg_attr(not(test), no_std)]`. `insert` and `grow` were refused (a pointer field). Ten
+  properties held. `with_capacity` without an `input` line ran for 23 minutes, at up
+  to 2 GB per call, with no output, until it was stopped by hand. With an `input` line it
+  held in 2 s.
+- memchr 2.8.3: five functions and seven properties held, 20,000 inputs each in 4 s. A planted
+  bug in the 64-byte vector loop was caught only by a property that builds a long haystack.
+  memchr's own quickcheck tests caught it too.
+- num-integer 0.1.47: both contracted functions are generic and were refused. Eleven
+  properties over concrete types found the known negative gcd (rust-num/num-integer#55) and
+  one candidate.
+- byteorder 1.5.0: a trait implementation's method was fuzzed, and a default method of a
+  trait was refused. Six properties over `Cursor` and a failing writer found one candidate.
+
+**Bug candidates.** Each was searched for in the crate's open and closed issues; nothing was
+posted.
+
+1. num-integer 0.1.47: `i64::MIN.nth_root(1)` panics with `attempt to negate with overflow` in
+   a debug build, although the documentation allows a negative value with an odd root. The
+   answer `i64::MIN` exists, and a release build returns it. No issue names it.
+2. byteorder 1.5.0: `ReadBytesExt::read_uint` panics for `nbytes` of 0 or more than 8, while
+   its documentation lists only the errors of `read_exact`. Issue #230 is the same kind of gap
+   for `write_uint`; no issue names this one.
+
+**The problems, in order.** The harness does not build on `#![no_std]` crates (three of six) or
+on a private field of another module, and one such function stops every function. `every
+clause held` hides runs that tested nothing. Strings and lists have at most 16 elements, and
+`input` takes no length or character set. A run with a large size parameter looks hung. Most of
+a crate's API is generic or a trait. The replay line drops `--release`, `--json` starts with a
+progress line, a panic in macro code is placed at the harness, and `hydo guide` has no topic on
+fuzzing. Each has a fix proposal in the report, and the first five are in open item 139.
+
+**The guide.** `hydo guide manifest` (MANIFEST.md, section on contracts) gained a list of the
+limits that a first run meets, so `cli.jsonl` was re-recorded for `guide manifest` on both
+platforms.
+
+**Tests and checks.** On this Mac: `sh ci/vale.sh` on its documents and on the new document; the `hydo`
+program's `docs::` and `equivalence::`; `hydo-schedule`'s `language::`; `hydo-agents`'s
+`public_content::`. Nothing recorded moved: no engine, image, guest program, or example file
+changed.

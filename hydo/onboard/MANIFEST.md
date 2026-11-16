@@ -1418,6 +1418,18 @@ which `--input` replays. An `input` line can narrow a field too: `input l.balanc
 0..=1_000_000`. A property that needs a call, such as a round trip, is a function that returns
 `bool` with `// hydo: ensures result`.
 
+The limits that a first run meets (Milestone 280, docs/design/function-fuzzing-evaluation.md):
+
+- A generic function, a method of a trait, and a parameter of an enumeration or a
+  floating-point type are not fuzzed. Write a property function of concrete types that calls it.
+- A string has at most 16 characters from a set of 20, and a list at most 16 elements. Build a
+  longer or a valid input inside a property function.
+- A property that returns `true` for an input it cannot use holds without testing anything.
+  An example is text that does not parse.
+- The harness needs `std`. In a `#![no_std]` crate, write `#![cfg_attr(not(test), no_std)]`.
+- Give a size parameter an `input` line. Without one, a call that allocates terabytes waits for
+  `--timeout`.
+
 ### Service networks (`network: bridge`)
 
 ```yaml
