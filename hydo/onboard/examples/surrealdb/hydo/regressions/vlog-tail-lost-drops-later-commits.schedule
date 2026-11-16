@@ -1,0 +1,9 @@
+# New (RESULTS.md, finding 1), in SurrealKV 1.2.0: before step 40 the server is killed and the
+# tail of its value log is cut off, as a disk that loses synced bytes does. The next open ends the
+# WAL at the first record whose value is gone. No later record has its value in the log, so the
+# open drops every later acknowledged commit, also the small ones, and starts. The blind
+# explorations found the same loss with zeroed bytes and flipped bits of the value log.
+# verdict on hvx: HYDO-ORACLE: VIOLATION [marks] not satisfied 60.25s after heal, deadline 60s (last check rc=1: of 28 acknowledged events 13 lost and 0 not marked; 0 marks without their event)
+# The Mac engine gives the same verdict.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run G=surrealdb@40+1:trunc,file=vlog

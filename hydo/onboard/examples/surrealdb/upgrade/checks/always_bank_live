@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: every=2
+# hydo-msg: while the workload runs, a read of the accounts sees 800 in all and none below zero
+exec /bin/sdbc check bank

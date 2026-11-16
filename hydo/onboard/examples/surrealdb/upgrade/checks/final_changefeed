@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: the blob table's changefeed holds every blob of the table once, and its versionstamps follow the order of the acknowledgements
+exec /bin/sdbc check feed

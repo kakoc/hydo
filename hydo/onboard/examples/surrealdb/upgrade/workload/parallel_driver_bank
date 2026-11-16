@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# one transfer between two of the eight accounts, refused below zero (opBank)
+exec /bin/sdbc op bank

@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: the eight accounts hold 800 in all and none is below zero
+exec /bin/sdbc check bank

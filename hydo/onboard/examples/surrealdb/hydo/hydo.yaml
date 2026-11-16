@@ -1,0 +1,83 @@
+# SurrealDB 4.0.1 (the newest release), one server on SurrealKV, the only disk engine of 4.0, as
+# ../docker-compose.yaml runs it: the default sync=every, so every commit is synced before it
+# returns. RESULTS.md says what was hunted and found.
+#
+#   sh ../build.sh            # bin/sdbc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the SurrealDB image by digest
+#   hydo build hydo.yaml --arch arm64 --set arch=arm64     # on a Mac; on Linux: hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-40 --strategy process --new-faults --storage-faults
+#
+# A backward clock step reaches two known SurrealDB bugs (RESULTS.md, findings 2 and 3) through
+# the changefeeds and the ASYNC event. To explore without them, either build with
+# --set feeds=no, or explore without clock steps through a copy of this file:
+#   sed '/^faults:/s/, clock//' hydo.yaml > explore-noclock.yaml   # next to hydo.yaml
+#   hydo explore --manifest explore-noclock.yaml --seeds 1-40 --strategy process --new-faults
+#
+# Started with `hydo onboard` on ../docker-compose.yaml. The service below is the importer's,
+# without the bridge network (one service, and the client in the guest's own namespace), and with
+# the client's readiness check (a query must answer, not only the HTTP port).
+format: 1
+name: surrealdb
+description: "SurrealDB 4.0.1 on SurrealKV: acknowledged commits, snapshot-isolated transactions, registers, bank transfers, values in the value log and the changefeed under kills, pauses, power cuts, clock steps and disk faults"
+hydo_version: "0.3"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  sync: every     # every | never | an interval such as 1s: SurrealKV's sync mode (the default is every)
+  feeds: "yes"     # yes | no: CHANGEFEED on the four tables and the ASYNC event on ev
+
+guest:
+  ram_mib: 1024
+  clock_start: 1794787200   # 2026-11-16 00:00 UTC, the day of the import
+  clock_after_cut: 60       # SurrealKV's versions and the changefeed's versionstamps are wall-clock
+                            #   times: no real clock runs back across a power cut
+  outcomes_after_cut: true  # the blob check looks the failed creations up after a power cut too
+
+data:
+  size_mib: 512   # the data disk (the fault target); SurrealKV's directory is a file system of its own on it
+  dirs: [vol/anon-surrealdb-logs]
+
+errors: true      # SurrealDB's ERROR and panic lines become findings (hydo/known-errors.yaml)
+
+env:
+  SDB_FEEDS: "{{feeds}}"   # the client's init and checks read it
+
+root:
+  files:
+    - {src: "../bin/sdbc-{{arch}}", dst: /bin/sdbc, mode: "0755"}
+
+services:
+  # Compose service surrealdb
+  # image surrealdb/surrealdb:v4.0.1 = docker.io/surrealdb/surrealdb@sha256:408eb8e5c9436670525e2bc2634b1e50ba74ce1b447eaf0094c35f73b67f9cb6
+  #   linux/amd64: sha256:d9501f6da5e1b8f83e81a9f6893899b0a3b84aec16748ac685718c75ce27b9ea
+  #   linux/arm64: sha256:3a9db34b57ae9a4d89bc818691037bfa495bce2871c7a47bec74157fade53a22
+  # the image declares VOLUME /logs: an anonymous volume on the data disk
+  - name: surrealdb
+    image: {x86_64: images/surrealdb-surrealdb-v4.0.1-amd64.docker.tar, arm64: images/surrealdb-surrealdb-v4.0.1-arm64-oci}
+    image_ref: "surrealdb/surrealdb:v4.0.1"
+    cmd: [start, "--user", root, "--pass", root, "--bind", "127.0.0.1:8000", "surrealkv:///data/db?sync={{sync}}"]
+    user: "root"
+    port: 8000
+    ready: "timeout 5 /bin/sdbc ready"
+    ready_timeout: 120
+    restart: "on-failure"
+    storage: {dir: vol/sdb, size_mib: 256}   # SurrealKV's files: the target of G= and L=
+    mounts:
+      - {src: /data/vol/sdb, dst: /data}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/anon-surrealdb-logs, dst: /logs, copy_up: true}
+
+workload:
+  steps: 80
+  timeout: 600
+
+test:
+  parallel: 8
+  per_round: 4
+  round_ms: 300
+  command_timeout: 60
+  drain_timeout: 60
+
+faults: [kill, pause, cut, clock, disk, corrupt, powerloss]

@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: no two users share an address (UNIQUE index), and every index lookup finds what a scan finds
+exec /bin/sdbc check index

@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: every acknowledged blob is there with its whole value, and no blob whose creation failed
+exec /bin/sdbc check blobs

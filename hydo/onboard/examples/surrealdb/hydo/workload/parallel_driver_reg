@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# one read, write or compare-and-set of reg:k0..k4, recorded in history reg (opReg)
+exec /bin/sdbc op reg

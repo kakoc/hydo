@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# RELATE two persons with follows:e<id>, or delete an earlier edge (opRel)
+exec /bin/sdbc op rel

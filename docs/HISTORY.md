@@ -13659,3 +13659,97 @@ corpus (`corpus-quick.txt`), re-recorded on this Mac with `HYDO_BLESS=1`. The CL
 `equivalence::cli_matches_golden` and `agents_equivalence`; `hydo-explore`'s `identity::` (also
 with `HYDO_IDENT_FULL=1`) and `corpus::`; `hydo-control`'s `corpus::`; `sh
 ci/consolidate-tests.sh --check`; and `sh ci/vale.sh`.
+
+### Milestone 277 (tentative number) - DONE (SurrealDB 4.0.1 on SurrealKV, onboarded with `hydo onboard` and hunted on hvx and the Mac engine; one new SurrealKV candidate: when a damaged value of the value log belongs to the WAL's newest large record, the next open drops every later acknowledged commit and starts with a warning, while one more large record after it makes the open refuse; found blind 7 times in 167 schedules and reproduced with Docker; two known SurrealDB bugs reached; the experimental upgrade from 3.3.5 on RocksDB held; nothing recorded moved; 2026-11-16)
+
+**In short.** SurrealDB 4.0.1 (2026-11-09) keeps its data in SurrealKV 1.2.0, its only disk
+engine since RocksDB was removed in 4.0. `hydo/onboard/examples/surrealdb` (RESULTS.md) runs one
+server from SurrealDB's image with the default `sync=every`, started with `hydo onboard` from a
+one-service Compose file. The test client `sdbc` (Go, `client/`) sends SurrealQL to `/sql` and
+registers live queries on the WebSocket endpoint `/rpc`. Eight drivers and nine checks state
+SurrealDB's documented promises:
+
+- list-append transactions, checked at `strong-snapshot-isolation`, and registers with
+  compare-and-set, checked for linearizability;
+- a bank whose total stays 800;
+- records of 1 byte to 20 KiB, half of them in the value log, that must survive, with no failed
+  creation applied, and the changefeed of their table, complete and in the order of the
+  acknowledgements;
+- an `ASYNC` event, a `UNIQUE` index and a plain index, and a graph of `RELATE` edges;
+- live queries, whose commits of one client must arrive in order and only when committed.
+
+SurrealKV's directory is a file system of its own (`storage:`), so `G=` and `L=` apply. Two
+known clock bugs are kept out of the blind explorations by the build parameter `feeds=no` (no
+changefeeds and no event) or by a copy of `hydo.yaml` without `clock` in `faults:`.
+
+**What was found.**
+
+- **SurrealKV, new as far as the search found: a damaged value drops the commits after it.** At
+  an open, `TailCheck::run` in `wal/tail.rs` holds every value-log pointer of the WAL's last
+  segment to its entry. When an entry fails, the open refuses only when a later record of the
+  segment points to a value that passes, and a sync mark claims the failed record
+  (`holds_a_value` and `synced_to`). Otherwise it ends the segment before the failed record. So
+  when the damaged value is the newest large one, every later commit is dropped: also the small
+  ones, which share no byte with it, and also when sync marks say they were synced. SurrealDB
+  logs `WARN surrealkv::lsm: WAL segment 1 ends before record 76 ... 12 record(s) ... were left
+  out` and starts. The blind explorations found it 7 times: hvx seeds 3, 10 and 32 (zeroed bytes,
+  a cut tail, one flipped bit of `vlog/00000000000000000001.vlog`) and Mac seeds 111, 121, 150
+  and 156. The explorer shrank hvx seed 3 to the `G=` token alone, which failed on both hvx runs
+  of its image (`fp=aa638ed17df30148`). The saved regression `G=surrealdb@40+1:trunc,file=vlog`
+  fails on the explorations' image on hvx (`fp=6b6e85bf41bea7d4`, twice) and on the Mac engine
+  (`fp=8f77af7e6cb5a8b7`, twice), and on the committed folder's image (Mac
+  `fp=63e1ed905f64c9b8`, hvx `fp=7d5ebcc3b9ac3b16`, twice).
+  `native/vlog-tail-cut.sh` reproduces it with Docker in seconds: 11 small acknowledged records
+  are lost. With one more large record after them (`LATER_BIG=1`) the open refuses, naming "a sync
+  mark says that the segment was synced past record 76". surrealkv's `main` at 1.4.0 has the same
+  condition. Nothing was posted.
+- **SurrealDB, known (#7606, open): changefeed versionstamps go back after a backward clock step
+  and a restart.** `T=20:-3600 K=surrealdb@25+1` gave 21 creations a versionstamp below one
+  acknowledged before them, on every Mac run. It is saved as a known regression.
+- **SurrealDB, known (pull request #7672, open): writes to a table with a changefeed or an
+  `ASYNC` event wait for the length of a backward clock step.** Steps of one day and 30 days back
+  ended Mac runs with `ERROR workload: exit budget exhausted`.
+
+**What held.** In 167 blind schedules (40 on hvx, 127 on the Mac engine) and the hand
+schedules, no acknowledged commit was lost to a kill, a pause, a power cut at a step or at the
+k-th disk flush, a power loss of the service or disk I/O errors. The list-append history showed
+no anomaly at strong snapshot isolation, the registers stayed linearizable, the indexes and the
+graph agreed with their tables, every acknowledged event was marked, and every live query
+reported its client's commits in order. With `feeds=no`, 20 schedules with clock steps of 30 s to
+30 days passed. Damage that SurrealKV detects at the open (its manifest, a value with a later
+large one) stops the server with an error, which the explorer classifies as `corrupted-files`.
+
+**The upgrade from 3.x.** `upgrade/` runs SurrealDB's experimental in-place upgrade
+(`SURREAL_EXPERIMENTAL_UPGRADE_FROM_3X=true`). The service's first start runs 3.3.5 on RocksDB,
+and every later start 4.0.1, so the first kill or power cut of a run upgrades the store with the
+workload running. The 3.3.5 program comes from the root of a second image service, a job that
+only sleeps, because versions of an image service are refused (open item 109). On hvx: two clean
+runs on 3.3.5, two runs with `K=surrealdb@30+1` (the server's log shows the conversion, "301
+version(s) in 1 table(s)", and the data migrations to 4.0.1), and two with `disk=cut | run C=40`
+held every check. Twelve power cuts at the 84th to the 128th disk flush with
+`K=surrealdb@3+1` held too: 11 of them came after the restart began and before the server was
+ready, inside the 4.0.1 open, and each recovery boot finished the upgrade. Which of them cut the
+conversion itself was not separated.
+
+**What hydo lacked** (open item 140; RESULTS.md, section "What hydo lacked"):
+
+- An exploration cannot leave out one fault kind. `faults:` with a build parameter
+  (`"{{clockfault}}"`) stopped `hydo explore` and the explorer's corpus test with `faults: unknown
+  kind`, so the example keeps `faults:` literal and explores through a copy without `clock`.
+- No way to keep a known bug out of a blind exploration: half of the drawn clock steps go back,
+  and each reached a known finding.
+- The explorer shrinks every `ERROR ... restart failed (its files were corrupted)`: detected
+  corruption, which is right. Seed 3's shrink took an hour on hvx, then wrote nothing for 25
+  minutes, and the exploration was stopped before its report.
+- A failed check gives no service log when no service exited; the cause of the finding is a
+  `WARN` line, which `hydo inspect logs` and Docker showed.
+
+**Onboarding retro** (RESULTS.md): the first clean run passed 18 minutes after the start; the
+first new finding came in about the 10th blind schedule, 44 minutes after the start.
+
+**Checks.** Before the commit, on this Mac: `cargo test -p hydo --test it
+equivalence::cli_matches_golden` and `agents_equivalence`, `hydo-schedule`'s `language::`,
+`hydo-config`, `hydo-agents`'s `public_content::`, `hydo`'s `docs::`, `sh
+ci/consolidate-tests.sh --check` and `sh ci/vale.sh`. The explorer's identity and corpus goldens
+and the control corpus golden were re-recorded for the new example's files only. Nothing
+recorded moved: no engine, guest program or recorded example changed.

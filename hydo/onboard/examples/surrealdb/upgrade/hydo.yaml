@@ -1,0 +1,90 @@
+# SurrealDB 3.3.5 on RocksDB, upgraded in place to 4.0.1 on SurrealKV during the run: the
+# experimental upgrade of a 3.x directory (SURREAL_EXPERIMENTAL_UPGRADE_FROM_3X=true), which
+# converts the RocksDB files to SurrealKV when 4.0.1 first opens them. The first start of the
+# service (in provisioning) runs 3.3.5; every later start (after a kill, and in the recovery boot
+# after a power cut) runs 4.0.1, so the first kill or cut of a run is the upgrade. The workload and
+# the checks are copies of ../hydo/workload and ../hydo/checks. RESULTS.md, section "The upgrade
+# from 3.x", says what ran. x86_64 only: the 3.3.5 binary (308 MB) would be in the Mac guest's RAM.
+#
+#   sh ../build.sh                       # bin/sdbc-<arch>
+#   sh fetch-images.sh x86_64            # both SurrealDB images by digest
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run K=surrealdb@30+1"
+format: 1
+name: surrealdb-upgrade
+description: "SurrealDB 3.3.5 on RocksDB upgraded in place to 4.0.1 on SurrealKV in the middle of a run, under kills, pauses, power cuts and disk faults"
+hydo_version: "0.3"
+
+params:
+  arch: amd64
+
+guest:
+  ram_mib: 1536
+  clock_start: 1794787200   # 2026-11-16 00:00 UTC
+  clock_after_cut: 60
+  outcomes_after_cut: true
+
+data:
+  size_mib: 768
+  dirs: [vol/surreal-logs]
+
+errors: true
+
+env:
+  SDB_FEEDS: "yes"
+
+root:
+  files:
+    - {src: "../bin/sdbc-{{arch}}", dst: /bin/sdbc, mode: "0755"}
+  text:
+    /etc/surreal-start: |
+      # The first start runs 3.3.5 on RocksDB, every later one 4.0.1 on SurrealKV. The marker is in
+      # /logs, outside the storage directory that G= corrupts.
+      B=/.hydo/busybox
+      if [ ! -e /logs/started-on-3x ]; then
+        $B touch /logs/started-on-3x && $B sync
+        exec /opt/surreal-3.3.5 start --user root --pass root --bind 127.0.0.1:8000 rocksdb:///data/db
+      fi
+      export SURREAL_EXPERIMENTAL_UPGRADE_FROM_3X=true
+      exec /surreal start --user root --pass root --bind 127.0.0.1:8000 surrealkv:///data/db
+
+services:
+  # surrealdb/surrealdb:v3.3.5, only for its program: /oci/surreal3/surreal
+  #   linux/amd64: sha256:bbba754d9bea5cf7ef46d6dfb45031b4600e1ee4369985d103131a3006c19678
+  - name: surreal3
+    image: {x86_64: images/surrealdb-surrealdb-v3.3.5-amd64.docker.tar, arm64: images/surrealdb-surrealdb-v3.3.5-arm64-oci}
+    image_ref: "surrealdb/surrealdb:v3.3.5"
+    entrypoint: [/.hydo/busybox, sleep, "2147483647"]
+    ready: "true"
+    job: true
+  # surrealdb/surrealdb:v4.0.1 (../hydo/hydo.yaml has its digests)
+  - name: surrealdb
+    image: {x86_64: ../hydo/images/surrealdb-surrealdb-v4.0.1-amd64.docker.tar, arm64: ../hydo/images/surrealdb-surrealdb-v4.0.1-arm64-oci}
+    image_ref: "surrealdb/surrealdb:v4.0.1"
+    entrypoint: [/.hydo/busybox, sh, /etc/surreal-start]
+    user: "root"
+    port: 8000
+    ready: "timeout 5 /bin/sdbc ready"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/sdb, size_mib: 384}
+    mounts:
+      - {src: /data/vol/sdb, dst: /data}
+      - {src: /etc/surreal-start, dst: /etc/surreal-start}
+      - {src: /oci/surreal3/surreal, dst: /opt/surreal-3.3.5}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/surreal-logs, dst: /logs}
+
+workload:
+  steps: 80
+  timeout: 600
+
+test:
+  parallel: 8
+  per_round: 4
+  round_ms: 300
+  command_timeout: 60
+  drain_timeout: 60
+
+faults: [kill, pause, cut, disk]

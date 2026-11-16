@@ -1,0 +1,4 @@
+github.com/kakoc/hydo/sdk/go v0.3.3 h1:lOSXDQBYqIhAEmYtKzFKHaotJ0bUyoFbRU2gircYqCI=
+github.com/kakoc/hydo/sdk/go v0.3.3/go.mod h1:IsPL0RtdgauwTn2LCe6J8Bd9nG1dfJc4sixE2Zw515w=
+golang.org/x/net v0.62.0 h1:18ELalfM5+XNRwzM2nYqXsZQ9ByS1uhj2O/U7+5jqRY=
+golang.org/x/net v0.62.0/go.mod h1:WgDCOTH8iwtB66T4/GfI94AHo/hhdb7Hah9NDseQfiI=

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# create a user with an address of a pool of 24 (UNIQUE index), or move a user to another address and group (opUser)
+exec /bin/sdbc op user

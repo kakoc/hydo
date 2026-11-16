@@ -1,0 +1,7 @@
+# Known upstream as surrealdb/surrealdb issue 7606 (RESULTS.md, finding 2): the realtime clock
+# steps back one hour before step 20, and the server restarts at step 25. The changefeed's stamps
+# come from a clock that starts again at the wall time when the process starts, so the creations
+# after the restart get versionstamps below ones that were acknowledged before them.
+# verdict on the Mac engine: HYDO-ORACLE: VIOLATION [changefeed] changefeed of 25 blobs: 0 missing, 0 extra, 21 creations stamped below an earlier acknowledged one
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=20:-3600 K=surrealdb@25+1

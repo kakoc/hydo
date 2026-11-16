@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=120
+# the namespace, the database, the four tables with their changefeeds, and the first rows
+exec /bin/sdbc init

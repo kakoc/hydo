@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=60
+# LIVE SELECT on lq over the WebSocket, six creations over HTTP, each notified in commit order and only if committed (opLive; exit 100 on a broken promise)
+exec /bin/sdbc op live

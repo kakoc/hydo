@@ -541,6 +541,18 @@ it blind, and the shrinker reduced it to `T=8:-18` and the composition. A power 
 snapshots that `SAVE` acknowledged (known, #8646). With `--set takeover=yes`, `REPLTAKEOVER` kept
 its promise in 80 schedules of kills, pauses, and partitions.
 
+**SurrealDB on SurrealKV (M277, tentative number).** SurrealDB 4.0.1, whose only disk engine is
+SurrealKV 1.2.0, runs as one server in `hydo/onboard/examples/surrealdb` (RESULTS.md), started
+with `hydo onboard` from a Compose file. Eight drivers and nine checks state its promises:
+list-append transactions at snapshot isolation, registers, a bank, large values, an `ASYNC`
+event, a `UNIQUE` index, a graph, the changefeed, and live queries. One new candidate is in
+SurrealKV. When a damaged value of the value log belongs to the WAL's newest large record, the
+next open drops every later acknowledged commit and starts with a warning. With one more large
+record after it, the open refuses. The blind explorations found it 7 times, with `G=` on the
+value log. `native/` reproduces it with Docker; nothing was posted. Two known bugs were reached:
+surrealdb#7606 and the open pull request #7672. `upgrade/` upgrades 3.3.5 on RocksDB to 4.0.1 in
+the middle of a run, and every check held. The runs used hvx and the Mac engine.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -1681,6 +1693,20 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The two candidates of M280 were not posted: num-integer's `i64::MIN.nth_root(1)` panics
       in a debug build, and byteorder's `ReadBytesExt::read_uint` panics for `nbytes` of 0 or
       more than 8 without a documented panic.
+140. The SurrealDB example (M277). What is left:
+    - The SurrealKV candidate is not reported upstream.
+    - An exploration cannot leave out one fault kind, and `hydo explore` reads `faults:` without
+      the build's parameters. The example explores without clock steps through a copy of
+      `hydo.yaml` (`explore-noclock.yaml`).
+    - No way to keep a known bug out of a blind exploration: half of the drawn clock steps go
+      back, and each reached a known finding. The example turns the changefeeds off instead.
+    - The explorer shrinks every `ERROR ... restart failed (its files were corrupted)`, which is
+      detected corruption. On hvx seed 3's shrink then wrote nothing for 25 minutes, and the
+      exploration was stopped before its report.
+    - A failed check gives no service log when no service exited.
+    - One node only: a cluster needs TiKV, which 4.0 moved to its own repository. `upgrade/` ran
+      on hvx only. Of its power cuts inside the 4.0.1 open, which ones hit the conversion itself
+      and which the data migrations after it was not separated.
 141. The Dragonfly example (M278). What is left:
     - The snapshot candidate is not reported upstream. It was not reproduced with a real clock
       step outside hydo; `native/` shows the choice by modification time with `touch`.
@@ -2343,6 +2369,11 @@ build machine, before 2026-10-13.
   and loses every saved write since. It was found blind and shrunk to `T=8:-18`. A power cut loses acknowledged
   snapshots (known, #8646), and Dragonfly's Lua needs AVX (known). REPLTAKEOVER kept its promise.
   Nothing recorded moved
+- M277 (tentative number): the SurrealDB 4.0.1 onboarding on SurrealKV, on hvx and the Mac
+  engine. A new SurrealKV candidate: after a damaged value of the value log, the next open drops
+  every later acknowledged commit when none of them has a large value. With one, it refuses.
+  Found blind 7 times in 167 schedules, reproduced with Docker, not posted. Two known SurrealDB
+  clock bugs reached; the experimental upgrade from 3.3.5 held. Nothing recorded moved
 
 ## Where to look
 

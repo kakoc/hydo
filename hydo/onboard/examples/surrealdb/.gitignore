@@ -1,0 +1,10 @@
+# hydo (hydo init): the build cache, fetched images and run results
+.hydo/
+hydo/images/
+hydo-out/
+hydo/explore-*.yaml
+upgrade/images/
+upgrade/.hydo/
+upgrade/hydo-out/
+bin/
+work/

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: history=reg model=cas
+# hydo-msg: the registers are linearizable (reads, writes and compare-and-set of one record each)
+exec /bin/sdbc readback reg

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# create ev:<id>; its ASYNC event marks it in mark:<id> (opEv)
+exec /bin/sdbc op ev

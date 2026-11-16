@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# create blob:<id> with 1 byte to 20 KiB, half of them in the value log (opBlob)
+exec /bin/sdbc op blob

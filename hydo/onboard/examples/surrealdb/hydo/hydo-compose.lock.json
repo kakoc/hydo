@@ -1,0 +1,91 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "surrealdb/surrealdb:v4.0.1": {
+   "index_digest": "sha256:408eb8e5c9436670525e2bc2634b1e50ba74ce1b447eaf0094c35f73b67f9cb6",
+   "name": "surrealdb/surrealdb",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/surreal"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin",
+       "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
+       "SURREAL_BIND=0.0.0.0:8000"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": {
+       "Interval": 30000000000,
+       "Retries": 3,
+       "StartPeriod": 20000000000,
+       "Test": [
+        "CMD",
+        "/surreal",
+        "isready",
+        "--endpoint",
+        "http://localhost:8000"
+       ],
+       "Timeout": 5000000000
+      },
+      "User": "nonroot",
+      "Volumes": {
+       "/data": {},
+       "/logs": {}
+      },
+      "WorkingDir": null
+     },
+     "digest": "sha256:d9501f6da5e1b8f83e81a9f6893899b0a3b84aec16748ac685718c75ce27b9ea",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/surreal"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin",
+       "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
+       "SURREAL_BIND=0.0.0.0:8000"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": {
+       "Interval": 30000000000,
+       "Retries": 3,
+       "StartPeriod": 20000000000,
+       "Test": [
+        "CMD",
+        "/surreal",
+        "isready",
+        "--endpoint",
+        "http://localhost:8000"
+       ],
+       "Timeout": 5000000000
+      },
+      "User": "nonroot",
+      "Volumes": {
+       "/data": {},
+       "/logs": {}
+      },
+      "WorkingDir": null
+     },
+     "digest": "sha256:3a9db34b57ae9a4d89bc818691037bfa495bce2871c7a47bec74157fade53a22",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "surrealdb/surrealdb:v4.0.1",
+   "registry": "docker.io",
+   "repo": "surrealdb/surrealdb",
+   "tag": "v4.0.1"
+  }
+ }
+}

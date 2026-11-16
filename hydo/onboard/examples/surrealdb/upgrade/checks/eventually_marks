@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=60 poll=2
+# hydo-msg: every acknowledged ev is marked by its ASYNC event, and no ev whose creation failed
+exec /bin/sdbc check marks

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# one transaction of 1 to 4 appends and reads on la:k0..k7, recorded in history la (../../client/main.go, opLA)
+exec /bin/sdbc op la

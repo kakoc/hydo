@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: history=la consistency=strong-snapshot-isolation
+# hydo-msg: the list-append transactions are snapshot-isolated with real time (no lost, aborted or duplicated append, no G0, G1c or G-single cycle)
+# SurrealDB claims snapshot isolation; one server serves every request, so its reads are current
+# and an acknowledged append missing from a later read is a lost write, also across a power cut.
+# The read-back: every list, recorded as reads.
+exec /bin/sdbc readback la
