@@ -12174,3 +12174,188 @@ before that guard, and its verdicts were the ones above.
 **What is left** (AGENTS.md open item 128): added disks on hvx (a module change on a side
 module), the refused combinations, `reboot(2)` itself, `G=`/`L=` on added disks, and transcript
 replays of the boots after a reboot.
+
+### Milestone 264 (tentative number) - DONE (the gaps of the walks through the pages, open item 124: a page invariant's signature blanks generated ids, and a walk shrinks by whole steps, halves of a step and single actions with a budget of runs, so Memos's share-link walk shrank from 72 actions to 31; the kind of an action and a time in a control's name no longer move the rest of a walk when a clock step changes the page, which cut the actions that differ without the step from 24 of 72 to 9; a `watch.failures_of` that matches no request warns; a recording no longer ends a run in `TIMEOUT check`, because the hvx engine keeps 16 MiB of the agent's lines and a run copies at most 1 MiB of files; on KVM every walk gave one fingerprint per schedule on four hosts, with hvx's verdicts but one; nothing recorded moved; 2026-11-16)
+
+Milestone 258 left open item 124. This milestone takes five of its parts. The design is the
+updated `docs/design/ui-exploration.md` (the sections "The schedule names the walk" and "The
+evidence of a failing walk"); the reference is the section "A walk through the pages that hydo
+makes" of `hydo/onboard/MANIFEST.md` and `hydo guide web-apps`. Every hvx run used the 0.3.3
+Linux release with this milestone's `hydo`, in a folder of its own on the bare-metal machine,
+one VM at a time.
+
+**Generated ids in a page's finding.** Milestone 258's shrink of Memos's share-link finding kept
+the schedule as found. A page's finding names the page, and Memos's memo page has a random id
+(`/memos/b4R4VE2u3vE8gqW7sZTJtL`), another in each run that makes another memo. The shrinker
+keeps a candidate whose verdict has the failure's signature, so it kept none. A violation of a
+page invariant (`<browser>.no_page_errors`, `busy_ends`, `failures_shown`, `no_bad_text`,
+`screens_match`, `tests_pass`) now has `<id>` in its signature for every token that the error
+templates of Milestone 222 take for an id, and for sixteen letters or more whose case changes at
+every third letter or more often (`hydo_explore::report::blank_ids` and `page_violation`,
+`hydo_control::schedule::errlog::id_like`). Every other verdict keeps its signature. The first
+version blanked every violation and moved the fake engine's golden `stack_swarm_errors_fail`,
+whose error-log signatures are 12 hex digits; `hydo ci`'s finding keys never change, since a
+violation's key is its property id.
+
+**A fault that steers the walk.** A candidate without the clock step `T=1:-2592000` took other
+actions. Two parts of the walker made that so.
+
+- Its choice hashed the controls' names, and a clock step changes names such as a memo's age
+  ("now", "1 minute ago"). A relative time, a date or a clock time in a name now counts as one
+  word, `<time>`, for the choice, and places are counted among the controls with that name; the
+  locator keeps the real name.
+- The kind of an action (click, fill, select, and so on) was a roll over the sum of the weights
+  of the kinds the page allowed, so a select that one page had and the next lacked moved every
+  later kind. The kind is now chosen by weighted rendezvous hashing: each allowed kind scores
+  `-ln(u)/weight`, with `u` from the action's stream and the kind's name, and a kind that comes
+  or goes changes the choice only when it wins. Over 20,000 draws the shares are the weights
+  (click 0.373 for 0.375), and taking `select` away moved none of the 18,750 choices that were
+  not `select`.
+
+How far the walk with the clock step and the one without it part, for seed 46's walk of 72
+actions (`disk=none dseed=baee56f32e223007 | run [T=1:-2592000] I=fc8214f2a80db679`):
+
+| walker | actions that differ | with the step | without it |
+|---|---|---|---|
+| Milestone 258's (its own image, read in place) | 24 | the share-link VIOLATION, `93e46fd99f8d9b62` as Milestone 258 recorded | OK, `aa1667af03f163ec` |
+| with `<time>` only (the image of `tmp-ui-kvm`) | 33 | the share-link VIOLATION, `e7ee071302d414dc` | OK, `e8285fb5e5b90c4e` |
+| final, with the kinds by rendezvous | 9 | OK, `980decfcaab3f5de` | OK, `146857e0c5c3270a` |
+
+The names alone made it worse on this walk; the kinds made the difference. The 9 that still
+differ were not traced one by one; the clock step changes the page itself, such as the memo
+list's order and the calendar. The share-link failure needs one exact sequence (Share, Manage share links, Create new
+link, Copy link), so a candidate without the step still loses it (open item 129).
+
+**The shrink of a walk.** The candidates for a walk are new (`Ex::candidates`): first all the
+actions of one step, the last step first; then the later and the earlier half of a step's
+actions; then half and one less of the actions per step; then the first and the last action of
+each step. The token gains a range, `x<step>.<first>-<last>` (`hydo_schedule::Walk`); a walk
+prints a run of four or more left-out actions of one step that way and shorter runs one by one,
+so Milestone 258's schedules print as they were written. An image older than this milestone
+ignores a range. A walk doubles the shrink budget, as a composed workload does, and its budget
+counts the runs the shrinker decided on: counting every candidate of a round, as for other
+schedules, ended the first shrink below after three rounds and 9 runs, at 36 actions.
+
+**Memos's share-link walk, shrunk.** `hydo explore --seeds 46-46 --new-faults --durable-only`
+drew Milestone 258's seed 46 again, on the first Memos image of this milestone (the walker with
+`<time>`, whose walk still reaches the link; the final walker's does not). It failed and
+reproduced (`e7ee071302d414dc`), and the shrinker ran 96 candidates and kept 8:
+
+- before: `disk=none dseed=baee56f32e223007 | run T=1:-2592000 I=fc8214f2a80db679`, 72 actions
+  in 6 steps;
+- after: `disk=none dseed=baee56f32e223007 | run T=1:-2592000
+  I=fc8214f2a80db679,x1.9,x1.10,x1.11,x2.0,x2.1,x3.0-11,x4.0-11,x5.0-11`, 31 actions: all of
+  step 0, actions 0 to 8 of step 1, and actions 2 to 11 of step 2, where the walk opens the memo
+  and goes Share, Manage share links, Create new link (twice), Revoke, Copy link (twice).
+- The minimal schedule gave `2a8e9519764ea12f` on both confirmation runs. Every candidate
+  without the clock step, every half of steps 0 to 2, and fewer actions per step lost the
+  failure; the steps after the failure went first, at one run each.
+- Its recording replay kept the verdict in 32.4 s and copied `repro.spec.ts` (6,271 bytes), the
+  trace (46,963) and the video (49,880) of step 5. Step 5 had no action left, so the recording
+  showed nothing of the failure; the walker now records the last step that takes an action.
+
+**A `watch.failures_of` that matches nothing.** `check.mjs failures` counts the requests the
+pages sent. When the pattern matches none of them, its sentence says so, and hydo turns that
+into a warning of the run (`hydo_explore::results::failures_of_unmatched`) that `hydo run`
+prints and `hydo explore` counts over its first runs. Memos's first pattern, on an image of this
+milestone's code (`disk=none | run I=1`, `fd7fac03ba69edaa`):
+
+```text
+hydo: warning: the page check browser.failures_shown judged no failed request: watch.failures_of
+(/[A-Za-z]+/(Create|Update|Delete|Upsert|Set)[A-Za-z]*$) matched none of the 221 requests the
+pages sent (such as POST /memos.api.AuthService/RefreshToken), so no failed request was judged;
+fix the pattern in hydo.yaml (browser.watch.failures_of)
+```
+
+The warning comes at the end of a run, not at the build: which requests a page sends is known
+only then.
+
+**Recordings and the copy limit.** The `TIMEOUT check` of Milestone 258's recording replays was
+not the check phase's time. Each read's reply carries 1.5 KB as hex, and on hvx the agent's lines
+reach the host through the host-call port into the engine's buffer `pbuf`, which kept at most
+1 MiB per boot, the console's limit. The copy filled it. The engine dropped the later replies,
+the controller waited for one, and the phase ran until the engine's wall limit of 900 s
+(`stops=27342984` in Milestone 258's Memos replay, where a run has about 150,000). A read that
+arrives costs little: Memos's seed 46 with `,rec` copied a trace of 116,294 bytes in 78 reads,
+and its run took 1.3 s longer than without. Now:
+
+- `hydo-hvx` keeps up to 16 MiB of the agent's lines per boot (`PBUF_CAP`) and writes once to
+  `engine.log` when a boot fills them. A boot below 1 MiB keeps every byte, and so its
+  fingerprint, as before.
+- The controller copies at most 1 MiB of files per run (`screens::MAX_BYTES`, 16 MiB before).
+  It is a number of bytes, not a time, so that a replay copies the same files and keeps its
+  fingerprint, and it fits the KVM engine's 4 MiB console beside a run's own lines. A file that
+  does not fit what is left costs one read and stays in the guest, with a `HYDO-SCREEN-LEFT`
+  line in the console.
+- The walker keeps a video or a trace of up to 640 KB (200 KB before): the last-step video of
+  seed 46 had 524,990 bytes. Only one step is recorded still, the last that takes an action: the
+  videos of every step of a Memos walk would pass 2 MB.
+
+**The explorations on images of the final walker (hvx).**
+
+- Memos, `--seeds 21-60 --new-faults --durable-only` as in Milestone 258: the same 40 fault
+  draws (14 kills, 19 network faults, 2 one-way, 16 pauses, 10 clock steps, 19 power cuts), each
+  with its walk, in 29 minutes (a mean of 41.3 s per run). None failed, and every saved memo
+  was in the database at the end. One pass was vacuous: its walk saved nothing. The walks are
+  other walks than Milestone 258's, and none reached the share link or a reaction under a
+  fault.
+- web-shop's walk, `--seeds 1-20 --protocol-faults` (on the image before the recording change,
+  with the final shrinker): both planted bugs found blind, in 36 minutes, each reproduced. Seed 7,
+  the order page's unhandled rejection, shrank in 30 runs from 40 actions to 7, all in step 3:
+  `disk=none dseed=63cbe1e459320dd7 | run H=api.get_order@3-4:reset
+  I=a0d28305209409f6,n7,x0.0-6,x1.0-6,x2.0-6`. Seed 17, the double order, shrank in 60 runs from
+  40 actions to 4, and its fault from two steps to one: `disk=none dseed=808475f02ee37363 | run
+  H=api.place_order@2-3:reset I=37ce1f8dfefa7c4b,n8,x0.0-6,x1.0-7,x2.0,x2.4-7,x3.0-7`. Milestone
+  258 shrank seed 7 to 5 actions, with other draws of the kinds.
+- On the final image (the recording of the last step with an action) both minimal walks gave one
+  fingerprint twice, `2cd8d7443ee18329` and `955bccfddfa2e910`, with the same verdicts. With
+  `,rec` each kept its verdict and copied its video and trace: step 3 for seed 7 (73,197 and
+  11,929 bytes), and step 2 for seed 17 (88,538 and 7,681), whose step 3 has no action left.
+
+**KVM.** The one-off workflow on the branch `tmp-ui-kvm` (run 43758919372, the code of its commit
+`be457269`: the walker with `<time>` but the old kinds, and the shrinker that counted rounds) ran
+on GitHub's KVM runners with the 0.3.4 Linux release and that commit's `hydo`. It built each
+example's image there, with `hydo build`'s own fetch of the Playwright image, and ran each
+schedule twice on two hosts:
+
+| example | hosts | schedule | fingerprint (both runs) | verdict | hvx, the same code |
+|---|---|---|---|---|---|
+| Memos | Xeon Platinum 8370C, Xeon 6975P-C | `disk=none \| run I=1` | `d9c5237088e458ad` on both | OK | OK |
+| | | seed 46 with `T=` | `b4cab44599bb800c` on both | VIOLATION, the share link | the same |
+| | | seed 46 without `T=` | `777aba6b6b33d106` on both | OK | OK |
+| | | `X=memos@1~10500 I=beedbb3199dc2417` | `9364201b743d6152` on both | VIOLATION, the reaction | the same |
+| | | seed 46 without `T=`, `,rec` | `91f57fdde6e22c08` on both | OK; trace 94,813 and video 345,592 bytes copied | — |
+| web-shop | AMD EPYC 7763, Xeon 6975P-C | `disk=none \| run I=2` | `aa10acb8a00b67b5`, `edba8114693ec22c` | OK | OK |
+| | | seed 7's minimal walk | `09fedc9ca1f4bf4f`, `bebcff2cb073238b` | VIOLATION, the order page | the same |
+| | | seed 8's minimal walk (`p=50`) | `f304ec104c79a546` (one run), `9a2fd0bab5319358` | OK, one order | VIOLATION, one cart 3 times |
+| | | seed 7's, `,rec` | `9d9667b13c42fa20`, `af71a882ac40c594` | VIOLATION; video and trace copied | the same |
+
+Every schedule gave one fingerprint in its two runs on each host, and Memos's two Intel models
+gave the same values. web-shop's values differ between AMD and Intel, as every KVM value does
+(open item 102). Seed 8's minimal walk passes on KVM: the reset of `place_order` with `p=50`
+meets the order at another moment of the exit clock, and the double order needs that moment.
+One run on the AMD host (that schedule's first) stopped `ERROR boot: SPIN` at 46 s: the early-boot
+stop of KVM's spin observer that Milestone 265 fixed, on `main` after this branch was cut.
+
+**Goldens, tests and what moved.** Nothing recorded moved: web-shop and Memos are not in
+`recorded.json`, a boot whose agent lines stay below 1 MiB keeps its fingerprint on hvx, and
+every verdict but a page invariant's keeps its signature. Every walking image gets other bytes
+(the walker), so its fingerprints change. Re-recorded on top of `main` at `74a3eac6`: the
+explorer's full identity golden and full corpus golden (`identity-full.txt`, `corpus-full.txt`;
+the quick ones did not move), and the CLI's two `guide manifest` answers (MANIFEST.md changed).
+New or changed tests: `hydo-schedule`'s `a_range_leaves_out_actions_of_one_step`,
+`hydo-explore`'s `a_walk_shrinks_by_fewer_actions_and_by_leaving_out_actions` and
+`a_violation_signature_has_no_generated_ids`, its unit test
+`a_failures_of_that_matched_nothing_warns`, and `hydo-control`'s
+`a_file_larger_than_the_copy_budget_stays_in_the_guest`.
+
+**Checks** (on this Mac, on `main` at `74a3eac6` with this milestone on top): `cargo fmt --all
+--check`; `cargo clippy -D warnings --all-targets` on `hydo-schedule`, `hydo-explore`,
+`hydo-control`, `hydo-hvx`, `hydo-manifest` and `hydo`; every test of `hydo-schedule`,
+`hydo-explore` (also `identity` and `corpus` with `HYDO_IDENT_FULL=1`) and `hydo-control`; every
+test of `hydo-manifest` but `equivalence::same_as_hydo_build`; the `hydo` program's
+`equivalence::cli_matches_golden` and `agents_equivalence`; `hydo-agents`'s `public_content::`;
+and `sh ci/vale.sh`. `same_as_hydo_build` failed with 20 mismatches, each the message `guest:
+unknown field(s) ... (known: ...)`, whose list of keys Milestone 263 changed (`guest.reboot`,
+`guest.disks`), and it names Blnk's manifest of Milestone 260 as a changed input. This milestone
+changes neither.

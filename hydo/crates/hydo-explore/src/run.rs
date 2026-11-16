@@ -8,7 +8,8 @@
 //! failure as explore.py's), all shrinks run side by side, and a shrink round stops running its
 //! candidates once the first one that keeps the failure is known. Every result is still a pure
 //! function of its schedule, so the records, the shrink paths and the minimal schedules are
-//! explore.py's; `tries` counts every candidate of a round, as explore.py did, so shrink budgets
+//! explore.py's; `tries` counts every candidate of a round, as explore.py did (a walk counts the
+//! runs it decided on, Milestone 264), so shrink budgets
 //! end at the same place.
 //!
 //! What it writes is the results format (hydo-results): `events.jsonl` as it runs (a start
@@ -2104,9 +2105,16 @@ fn shrink(
     if cur.tj.is_some() {
         budget *= 3;
     }
-    if cur.w.is_some() {
+    // a walk through the pages (Milestone 264): its actions are cut step by step, and each
+    // candidate is a full run of a browser
+    if cur.w.is_some() || cur.i.is_some() {
         budget *= 2;
     }
+    // a walk's budget counts the runs the shrinker decided on, not every candidate of a round: a
+    // walk of 72 actions has some 30 candidates a round, and the first rounds keep their first
+    // candidates (the steps after the failure), so counting whole rounds ended its shrink after
+    // three rounds and nine runs (Milestone 264). Every other schedule counts as explore.py did.
+    let walk = cur.i.is_some();
     while tries < budget {
         let cands = cx.ex.candidates(&cur, tjk);
         if cands.is_empty() {
@@ -2118,7 +2126,9 @@ fn shrink(
             .enumerate()
             .map(|(i, c)| (format!("{prefix}-{rnd}-{i}"), cx.render(c)))
             .collect();
-        tries += items.len() as i64;
+        if !walk {
+            tries += items.len() as i64;
+        }
         // run the round's candidates side by side, but decide in candidate order and stop as soon
         // as the first one that keeps the failure is known (explore.py ran the whole round and then
         // took the first one that kept it: the same candidate)
@@ -2144,6 +2154,9 @@ fn shrink(
                     kept,
                 });
                 log.push(run);
+                if walk {
+                    tries += 1;
+                }
                 if kept {
                     cur = cands[next].clone();
                     cur_v = v;
@@ -2750,17 +2763,37 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
              (their run records in events.jsonl have the class refused); they are not failures"
         );
     }
-    // first runs that passed but may have checked nothing (results::vacuous)
+    // first runs that passed but may have checked nothing (results::vacuous), and (Milestone
+    // 264) first runs whose page check judged no failed request (results::failures_of_unmatched)
+    let mut unmatched: Vec<String> = Vec::new();
+    let mut nunmatched = 0u64;
     let vacuous = seeds
         .iter()
         .filter(|sd| {
             let tag = format!("seed-{sd}");
             res_all.get(&tag).is_some_and(|x| {
-                let r = results::run_of(&tag, "", &x.1, &results::explorer_consoles(&cx.out, &tag));
-                !r.warnings.is_empty()
+                let consoles = results::explorer_consoles(&cx.out, &tag);
+                let r = results::run_of(&tag, "", &x.1, &consoles);
+                let u = results::failures_of_unmatched(&consoles);
+                if !u.is_empty() {
+                    nunmatched += 1;
+                    for w in &u {
+                        if !unmatched.contains(w) {
+                            unmatched.push(w.clone());
+                        }
+                    }
+                }
+                r.warnings.iter().any(|w| !u.contains(w))
             })
         })
         .count() as u64;
+    if nunmatched > 0 {
+        eprintln!(
+            "hydo: warning: in {nunmatched} of {} first runs {}",
+            seeds.len(),
+            unmatched.first().map(String::as_str).unwrap_or("")
+        );
+    }
     if vacuous > 0 {
         summary.vacuous_passes = Some(vacuous);
         eprintln!(

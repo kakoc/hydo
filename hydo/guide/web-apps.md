@@ -108,7 +108,10 @@ action reads the page's accessibility tree and does one of these:
 - fill a field and click Save, or fill it and press Enter;
 - choose an option, go back, or reload. The schedule token `I=<seed>` chooses every action, so a walk is the same walk on every
 run of its schedule. `hydo explore` draws a new walk for every schedule and shrinks a failing one
-to fewer actions. The run prints each action:
+to fewer actions. It leaves out whole steps, halves of a step, and single actions. It writes the
+result as `I=<seed>,x<step>.<first>-<last>`. A time in a control's name (such as `1 minute ago`)
+does not steer the walk, so a clock step that a shrink drops changes fewer of its actions. The
+run prints each action:
 
 ```text
 hydo-web: walk 0.7: click button "Place order"
@@ -146,7 +149,7 @@ Each one is an invariant named `<browser>.<property>`; an empty list in `watch:`
 | `browser.tests_pass` | a test fails (turn it off with `must_pass: false` when faults make the tests' own assertions fail by design) |
 | `browser.no_page_errors` | a page throws an uncaught exception, leaves a promise rejection unhandled, or calls `console.error` (`watch.console: false` leaves `console.error` out) |
 | `browser.busy_ends` | a busy element stays for `busy_max_ms` (default 10000), or is still on the screen when its test ends after a failed request that the page did not send again |
-| `browser.failures_shown` | a request fails (an answer of 500 or more, or no answer) and within `failures_within_ms` (default 5000) the page shows no error element and does not send the request again. With `watch.failures_of`, a regular expression over the path, only the requests it matches count. |
+| `browser.failures_shown` | a request fails (an answer of 500 or more, or no answer) and within `failures_within_ms` (default 5000) the page shows no error element and does not send the request again. With `watch.failures_of`, a regular expression over the path, only the requests it matches count. When the pattern matches none of the requests the pages sent, the run warns: `hydo: warning: ... judged no failed request`. |
 | `browser.no_bad_text` | a page prints a watched text (default `NaN`, `undefined`, `[object Object]`, `Invalid Date`) |
 
 A finding reads like this:

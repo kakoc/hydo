@@ -794,6 +794,22 @@ impl Fake {
                                     "{{\"file\":\"{file}\",\"test\":\"step {i}\",\"url\":\"/\",\"why\":\"end of test\"}}\n"
                                 ));
                         }
+                        // Milestone 264: a recording larger than a run copies out, listed first
+                        if s.argv.join(" ").contains("HYDO_FAKE_BIG_SHOT") && f == 0 {
+                            let file = "walk-step-0.webm";
+                            self.world.files.insert(
+                                format!("{dir}/{file}"),
+                                "v".repeat(hydo_control::schedule::screens::MAX_BYTES + 1),
+                            );
+                            let index = self
+                                .world
+                                .files
+                                .entry(format!("{dir}/index.jsonl"))
+                                .or_default();
+                            *index = format!(
+                                "{{\"file\":\"{file}\",\"test\":\"walk step 0\",\"url\":\"\",\"why\":\"the video\"}}\n{index}"
+                            );
+                        }
                     }
                     let dur = 10 + 30 * t2.saturating_sub(f);
                     self.emit(

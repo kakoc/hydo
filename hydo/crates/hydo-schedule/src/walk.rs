@@ -1,11 +1,13 @@
 //! `I=`: a walk through a web app's pages that hydo makes itself (Milestone 258,
 //! docs/design/ui-exploration.md).
 //!
-//! `I=<seed>[,n<actions>][,x<step>.<k>]...[,rec]`: the walker of `browser.explore` chooses each
-//! action of the walk from this seed. Workload step `s` runs `actions` actions (the manifest's
-//! `explore.actions` without `n`). Each action draws from its own stream, `(seed, s, k)`, so an
-//! action left out with `x<s>.<k>` changes no other action's draw: the shrinker cuts a walk by
-//! lowering `n` and by leaving actions out. `rec` records a video and a Playwright trace of the
+//! `I=<seed>[,n<actions>][,x<step>.<k>[-<last>]]...[,rec]`: the walker of `browser.explore`
+//! chooses each action of the walk from this seed. Workload step `s` runs `actions` actions (the
+//! manifest's `explore.actions` without `n`). Each action draws from its own stream, `(seed, s,
+//! k)`, so an action left out with `x<s>.<k>` changes no other action's draw: the shrinker cuts a
+//! walk by lowering `n` and by leaving actions out. `x<s>.<k>-<last>` leaves out actions `k` to
+//! `last` of step `s` (Milestone 264); a walk prints a run of four or more left-out actions of one
+//! step that way, and shorter runs one by one, as Milestone 258 wrote them. `rec` records a video and a Playwright trace of the
 //! last step; recording costs guest time, so a run with `rec` is a run of its own, with its own
 //! fingerprint.
 
@@ -31,7 +33,7 @@ pub struct Walk {
 
 impl Walk {
     pub(crate) fn parse(v: &str, what: &str) -> Result<Walk, ParseError> {
-        let form = "I=<seed hex>[,n<actions>][,x<step>.<k>]...[,rec]";
+        let form = "I=<seed hex>[,n<actions>][,x<step>.<k>[-<last>]]...[,rec]";
         let mut it = v.split(',');
         let seed = hex(it.next().unwrap_or(""), what)
             .map_err(|e| err(format!("{} ({form})", e.message)))?;
@@ -60,8 +62,20 @@ impl Walk {
                 let (s, k) = x
                     .split_once('.')
                     .ok_or_else(|| err(format!("{what}: x<step>.<k> ({form})")))?;
-                if !w.skip.insert((dec(s, what)?, dec(k, what)?)) {
-                    return Err(err(format!("{what}: {f} twice")));
+                let s = dec(s, what)?;
+                let (a, b) = match k.split_once('-') {
+                    Some((a, b)) => (dec(a, what)?, dec(b, what)?),
+                    None => (dec(k, what)?, dec(k, what)?),
+                };
+                if b < a || b >= MAX_ACTIONS {
+                    return Err(err(format!(
+                        "{what}: {f}: x<step>.<first>-<last> with first <= last < {MAX_ACTIONS}"
+                    )));
+                }
+                for j in a..=b {
+                    if !w.skip.insert((s, j)) {
+                        return Err(err(format!("{what}: {f} leaves out {s}.{j} twice")));
+                    }
                 }
             } else {
                 return Err(err(format!("{what}: field {f:?} ({form})")));
@@ -82,8 +96,21 @@ impl fmt::Display for Walk {
         if let Some(n) = self.actions {
             write!(f, ",n{n}")?;
         }
-        for (s, k) in &self.skip {
-            write!(f, ",x{s}.{k}")?;
+        // runs of consecutive actions of one step: four or more as a range
+        let mut it = self.skip.iter().peekable();
+        while let Some(&(s, a)) = it.next() {
+            let mut b = a;
+            while it.peek() == Some(&&(s, b + 1)) {
+                b += 1;
+                it.next();
+            }
+            if b - a >= 3 {
+                write!(f, ",x{s}.{a}-{b}")?;
+            } else {
+                for k in a..=b {
+                    write!(f, ",x{s}.{k}")?;
+                }
+            }
         }
         if self.rec {
             f.write_str(",rec")?;

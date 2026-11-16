@@ -11,8 +11,16 @@
 //! A note is for people: no control transcript's hash and no fingerprint covers it. The reads
 //! come after the verdict, so they change nothing the run decided. Without `browser:` nothing
 //! here runs, and a run sends the same commands as before.
+//!
+//! A run copies at most [`MAX_BYTES`] (Milestone 264). Every byte crosses the agent's channel
+//! twice, as hex, and the engines keep that channel's lines in a buffer of their own: 1 MiB of
+//! the agent's lines per boot on hvx before Milestone 264 (16 MiB since), 4 MiB of console on
+//! KVM. A copy that filled the buffer lost its replies, and the run waited for them until the
+//! engine's limit, `TIMEOUT check`: the "about 386 reads" of Milestone 258. The bound is a number
+//! of bytes, not a time, so that the same run copies the same files and keeps its fingerprint.
+//! A file that does not fit what is left stays in the guest, and a note names it.
 
-use super::text::read_hex;
+use super::text::read_hex_sized;
 use super::{read_all, Ctx, F};
 use crate::flow::Step;
 use serde_json::Value;
@@ -21,8 +29,9 @@ use serde_json::Value;
 pub const NOTE: &str = "HYDO-SCREEN";
 /// The most screenshots a run copies out.
 pub const MAX_FILES: usize = 64;
-/// The most bytes of screenshots a run copies out.
-pub const MAX_BYTES: usize = 16 * 1024 * 1024;
+/// The most bytes of screenshots, recordings and tests a run copies out (Milestone 264: 16 MiB
+/// before, more than the engines' channels hold).
+pub const MAX_BYTES: usize = 1024 * 1024;
 
 /// A file name the index may give: a plain name, no folder.
 pub fn plain_name(f: &str) -> bool {
@@ -51,8 +60,16 @@ pub(super) fn collect(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         if !plain_name(&file) || !seen.insert(file.clone()) || seen.len() > MAX_FILES {
             continue;
         }
-        let bytes = read_hex(fx, &format!("{dir}/{file}"), MAX_BYTES - total)?;
+        let path = format!("{dir}/{file}");
+        let (bytes, size) = read_hex_sized(fx, &path, MAX_BYTES - total)?;
         if bytes.is_empty() {
+            if size as usize > MAX_BYTES - total {
+                fx.note(format!(
+                    "{NOTE}-LEFT {{\"file\":{},\"bytes\":{size},\"why\":\"a run copies at most {MAX_BYTES} bytes of files out of the guest; {} were left\"}}",
+                    Value::String(file.clone()),
+                    MAX_BYTES - total
+                ));
+            }
             continue;
         }
         total += bytes.len() / 2;

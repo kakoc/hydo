@@ -591,6 +591,19 @@ fn random_like(tok: &[u8]) -> bool {
         && 5 * distinct >= 3 * tok.len()
 }
 
+/// Whether a token of letters and digits is a generated id by the template's rules ([`nums`]):
+/// eight hex digits or more with a digit, sixteen characters or more with a digit and a letter,
+/// or a shorter random-looking mix (`qjGcd4lJvd`). The explorer blanks such tokens in a
+/// violation's signature (Milestone 264), so that a page `/memos/b4R4VE2u3vE8gqW7sZTJtL` and
+/// the same page of another memo are one failure.
+pub fn id_like(tok: &[u8]) -> bool {
+    tok.iter().all(|c| is_alnum(*c))
+        && tok.iter().any(u8::is_ascii_digit)
+        && ((tok.len() >= 8 && tok.iter().all(u8::is_ascii_hexdigit))
+            || (tok.len() >= 16 && tok.iter().any(u8::is_ascii_alphabetic))
+            || random_like(tok))
+}
+
 /// The value of a request's id in `key=value` or `key: value` form, after a key that names a
 /// trace, span, request or correlation id (`trace-id=FXkZAHyuua`, `'request_id':'r7Kd2x'`,
 /// `reqId: aB3dE9`): six characters or more with a digit and a letter, or with capitals and

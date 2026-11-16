@@ -2160,29 +2160,54 @@ impl Ex {
         }
         // Milestone 258: a walk shrinks by fewer actions in each step, and by leaving out the
         // first action of a step that has more than one left; each action draws from its own
-        // stream, so the other actions choose as before
+        // stream, so the other actions choose as before. Milestone 264: first by leaving out a
+        // whole step's actions, the last step first (a step after the failure cannot matter),
+        // then the later and the earlier half of a step's actions, and the last action of a step
         if let Some(i) = &s.i {
             if let Ok(hydo_schedule::GuestToken::Walk(w)) =
                 hydo_schedule::GuestToken::parse(&format!("I={i}"))
             {
                 let n = w.actions.unwrap_or_else(|| self.walk_actions());
+                let steps = self.norders.max(0) as u64;
+                let kept = |st: u64| -> Vec<u64> { (0..n).filter(|k| w.takes(st, *k)).collect() };
                 let mut shorter: Vec<hydo_schedule::Walk> = Vec::new();
+                let mut push = |x: hydo_schedule::Walk| {
+                    if x != w && !shorter.contains(&x) {
+                        shorter.push(x);
+                    }
+                };
+                let without = |st: u64, ks: &[u64]| {
+                    let mut x = w.clone();
+                    x.skip.extend(ks.iter().map(|k| (st, *k)));
+                    x
+                };
+                for st in (0..steps).rev() {
+                    let k = kept(st);
+                    if !k.is_empty() {
+                        push(without(st, &k));
+                    }
+                }
+                for st in (0..steps).rev() {
+                    let k = kept(st);
+                    if k.len() > 3 {
+                        let h = k.len() / 2;
+                        push(without(st, &k[h..]));
+                        push(without(st, &k[..h]));
+                    }
+                }
                 if n > 1 {
                     for k in [n / 2, n - 1] {
                         let mut x = w.clone();
                         x.actions = Some(k);
                         x.skip.retain(|(_, j)| *j < k);
-                        if !shorter.contains(&x) {
-                            shorter.push(x);
-                        }
+                        push(x);
                     }
                 }
-                for st in 0..self.norders.max(0) as u64 {
-                    let kept: Vec<u64> = (0..n).filter(|k| w.takes(st, *k)).collect();
-                    if kept.len() > 1 {
-                        let mut x = w.clone();
-                        x.skip.insert((st, kept[0]));
-                        shorter.push(x);
+                for st in 0..steps {
+                    let k = kept(st);
+                    if k.len() > 1 {
+                        push(without(st, &k[..1]));
+                        push(without(st, &k[k.len() - 1..]));
                     }
                 }
                 for x in shorter {

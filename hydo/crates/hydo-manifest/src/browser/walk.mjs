@@ -5,17 +5,20 @@
 //
 // Each workload step runs one part of the walk in a fresh browser that keeps the cookies, the
 // local storage and the page of the part before ($HYDO_WEB_DIR/walk/state.json). <walk> is the
-// value of the schedule's I= token: <seed hex>[,n<actions>][,x<step>.<k>]...[,rec]; without it
+// value of the schedule's I= token: <seed hex>[,n<actions>][,x<step>.<k>[-<last>]]...[,rec]; without it
 // the walk is seed 0. Every action reads the page's accessibility tree (Playwright's
 // ariaSnapshot) and draws what to do from its own stream (seed, step, k): click a link or a
 // button, fill a text field with a seeded value, choose an option, press Enter, click twice, go
 // back, reload, or wait. The element is chosen by rendezvous hashing of its role, name and place,
-// so leaving one action out (x<step>.<k>) leaves the other actions' choices as they were.
+// so leaving one action out (x<step>.<k>) leaves the other actions' choices as they were. A time
+// or a date in a name ("1 minute ago", "now", "2026-10-16 00:00:42") counts as one word for the
+// choice (Milestone 264), so that a clock step, which changes such names, does not change which
+// control the walk takes.
 //
 // The watcher (hook.cjs, loaded with NODE_OPTIONS=--require) watches every page as it watches a
 // team's Playwright tests, and check.mjs judges what it saw. This file also writes the walk as a
 // Playwright test, repro.spec.ts, which the controller copies into the run directory's screens/.
-// With rec, each step also leaves a video and a Playwright trace there.
+// With rec, the last step that takes an action also leaves a video and a Playwright trace there.
 //
 // The configuration is $HYDO_WEB_WALK (JSON, written by the expansion of `browser.explore`):
 //   start, actions, setup, avoid, within, values, settle_ms, quiet_ms, text, routes
@@ -52,7 +55,11 @@ function parseWalk(v) {
   for (const f of fields) {
     if (f === 'rec') w.rec = true;
     else if (f.startsWith('n')) w.actions = Number(f.slice(1));
-    else if (f.startsWith('x')) w.skip.add(f.slice(1));
+    else if (f.startsWith('x')) {
+      // x<step>.<k>, or x<step>.<k>-<last> (Milestone 264)
+      const m = /^x(\d+)\.(\d+)(?:-(\d+))?$/.exec(f);
+      if (m) for (let k = Number(m[2]); k <= Number(m[3] ?? m[2]); k++) w.skip.add(`${m[1]}.${k}`);
+    }
   }
   return w;
 }
@@ -125,10 +132,28 @@ function unquote(line) {
   return m ? `${m[1]}- ${m[2].replace(/''/g, "'")}${m[3] || ''}` : line;
 }
 
+// A name as the walk's choice sees it: every time and date as <time> (Milestone 264). A memo's
+// age ("now", "1 minute ago", "in 30 days") or a time stamp changes with the guest's clock, and a
+// clock step would otherwise change the walk; the locator keeps the real name.
+const TIMES = [
+  /\b(?:just now|now|today|yesterday|tomorrow)\b/gi,
+  /\b(?:less than |about |almost |over )?(?:a few|an?|\d+) (?:second|sec|minute|min|hour|day|week|month|year)s?(?: ago)?\b/gi,
+  /\b\d{4}-\d{2}-\d{2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?\b/g,
+  /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]* \d{1,2}(?:, \d{4})?\b/gi,
+  /\b\d{1,2}:\d{2}(?::\d{2})?(?: ?[ap]\.?m\.?)?(?![\w])/gi,
+];
+function timeless(name) {
+  let n = name;
+  for (const r of TIMES) n = n.replace(r, '<time>');
+  return n.replace(/\bin <time>/gi, '<time>');
+}
+
 // The controls of an ariaSnapshot, in document order: {role, name, m (place among the same role
-// and name), j (place among the same role), url, disabled}.
+// and name), j (place among the same role), key and km (the name without its times, and the
+// place among the same role and key), url, disabled}.
 function controls(snapshot) {
   const out = [];
+  const byKey = new Map();
   const byName = new Map();
   const byRole = new Map();
   let last = null;
@@ -153,7 +178,11 @@ function controls(snapshot) {
     const key = `${role}\u0000${name}`;
     const n = byName.get(key) || 0;
     byName.set(key, n + 1);
-    const c = { role, name, m: n, j, url: undefined, disabled: /\[disabled/.test(m[4] || '') };
+    const tk = timeless(name);
+    const kk = `${role}\u0000${tk}`;
+    const km = byKey.get(kk) || 0;
+    byKey.set(kk, km + 1);
+    const c = { role, name, m: n, j, key: tk, km, url: undefined, disabled: /\[disabled/.test(m[4] || '') };
     out.push(c);
     last = role === 'link' ? c : null;
   }
@@ -179,7 +208,7 @@ function allowed(c) {
 // A family of controls: the role, and the name with every number as # (the 30 day buttons of a
 // calendar are one family, as the rows of a list are). The walk first chooses a family, then a
 // control of it, so that a page with many alike controls does not hold the walk on them.
-const family = (c) => `${c.role}\u0000${c.name.replace(/\d+/g, '#')}`;
+const family = (c) => `${c.role}\u0000${c.key.replace(/\d+/g, '#')}`;
 // How often the walk acted on each family, carried from step to step.
 let uses = {};
 
@@ -215,7 +244,7 @@ function pick(list, s) {
   let best;
   let bestH;
   for (const c of list) {
-    const h = mix(s ^ fnv(`${c.role}\u0000${c.name}\u0000${c.m}`));
+    const h = mix(s ^ fnv(`${c.role}\u0000${c.key}\u0000${c.km}`));
     if (bestH === undefined || h < bestH) {
       best = c;
       bestH = h;
@@ -271,9 +300,10 @@ const KINDS = [
   ['wait', 1],
 ];
 const T = { timeout: 3000 };
-// the largest video or trace that the controller copies out: two of them, about 270 reads of
-// 1.5 KB, fit the check phase on hvx (about 386 reads)
-const RECORDING_MAX = 200 * 1024;
+// the largest video or trace that the controller copies out. The controller copies at most 1 MiB
+// of files per run (hydo-control's screens::MAX_BYTES, Milestone 264): the test, a trace and a
+// video of this size fit
+const RECORDING_MAX = 640 * 1024;
 // the names of buttons that commit what a form holds
 const COMMIT = /^(save|submit|create|send|post|update|confirm|ok|done|apply|publish|place)\b/i;
 
@@ -300,15 +330,22 @@ async function act(page, k) {
     home: true,
     wait: true,
   };
+  // The kind by weighted rendezvous hashing (Milestone 264): each kind the page allows scores
+  // -ln(u)/weight, with u from the action's stream and the kind's name, and the lowest wins. So a
+  // kind that the page allows or not (a select on one page and not on the next) changes the
+  // choice only when it wins; a roll over the sum of the weights moved every other kind with it,
+  // and a clock step that changed the page changed the rest of the walk.
   const kinds = KINDS.filter(([kind]) => have[kind]);
-  let roll = r.below(kinds.reduce((s, [, w]) => s + w, 0));
+  const ks = r.next();
   let kind = kinds[0][0];
+  let best;
   for (const [kd, w] of kinds) {
-    if (roll < w) {
+    const u = (Number(mix(ks ^ fnv(kd)) >> 11n) + 0.5) / 2 ** 53;
+    const score = -Math.log(u) / w;
+    if (best === undefined || score < best) {
+      best = score;
       kind = kd;
-      break;
     }
-    roll -= w;
   }
   const s2 = r.next();
   const lines = [];
@@ -550,10 +587,15 @@ async function main() {
   const opts = { viewport: { width: 1280, height: 720 }, locale: 'en-US', timezoneId: 'UTC' };
   if (state && state.storage) opts.storageState = state.storage;
   uses = (state && state.uses) || {};
-  // the controller copies these files out through the agent, about 1.5 KB per call, within the
-  // check phase, which on hvx ends after about 400 such calls: a video and a trace (DOM snapshots,
-  // no screenshots) of the last step only, where a walk's failure shows most often
-  const tracing = walk.rec && step === (cfg.steps || 1) - 1;
+  // the controller copies these files out through the agent, about 1.5 KB per call, after the
+  // verdict and at most 1 MiB of them: a video and a trace (DOM snapshots, no screenshots) of the
+  // last step that takes an action, where a walk's failure shows most often (Milestone 264: a
+  // shrunk walk leaves the steps after its failure without actions)
+  const nsteps = cfg.steps || 1;
+  const acts = (s) => Array.from({ length: actions }, (_, k) => k).some((k) => !walk.skip.has(`${s}.${k}`));
+  let lastActive = nsteps - 1;
+  while (lastActive > 0 && !acts(lastActive)) lastActive--;
+  const tracing = walk.rec && step === lastActive;
   if (tracing) opts.recordVideo = { dir: path.join(own, 'video'), size: { width: 640, height: 360 } };
   const context = await browser.newContext(opts);
   if (tracing) await context.tracing.start({ screenshots: false, snapshots: true, title });
@@ -638,8 +680,8 @@ async function main() {
   } catch {
     /* the page went away: the next step starts where this one started */
   }
-  // A recording larger than this stays in the guest: the copy out of it must fit the check
-  // phase, and a trace's snapshots carry the app's scripts and styles (Memos's: megabytes).
+  // A recording larger than this stays in the guest: the copy out of it must fit the run's copy
+  // budget, and a trace's snapshots carry the app's scripts and styles (Memos's: megabytes).
   const keep = (file, why) => {
     let size = 0;
     try {

@@ -442,6 +442,7 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
         Vec::new()
     };
     warnings.extend(unseen_events(text, consoles));
+    warnings.extend(failures_of_unmatched(consoles));
     let messages: Vec<hydo_results::MessagesCheck> = match r.get(MESSAGES) {
         Some(Value::Array(a)) => a
             .iter()
@@ -549,6 +550,32 @@ pub fn vacuous(consoles: &[(String, String)], findings: &[Finding]) -> Vec<Strin
                     "the messages claim {} had nothing to judge: it holds vacuously",
                     f.id
                 ));
+            }
+        }
+    }
+    out
+}
+
+/// What `check.mjs failures` adds to its held sentence when `browser.watch.failures_of` matched
+/// none of the requests the pages sent (Milestone 264).
+pub const FAILURES_OF_UNMATCHED: &str = "; but watch.failures_of (";
+
+/// A page check that judged no failed request because `browser.watch.failures_of` matched none
+/// of the requests the pages sent (Milestone 264: Memos's first pattern did so for 60 schedules,
+/// and nothing said it). One warning per check, from its held record.
+pub fn failures_of_unmatched(consoles: &[(String, String)]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (_, t) in consoles {
+        for (id, said) in last_held(t) {
+            if let Some(i) = said.find(FAILURES_OF_UNMATCHED) {
+                let w = format!(
+                    "the page check {id} judged no failed request: {}; fix the pattern in \
+                     hydo.yaml (browser.watch.failures_of)",
+                    &said[i + "; but ".len()..]
+                );
+                if !out.contains(&w) {
+                    out.push(w);
+                }
             }
         }
     }
@@ -1187,6 +1214,43 @@ mod tests {
 
     fn con(t: &str) -> Vec<(String, String)> {
         vec![("one.log".into(), t.into())]
+    }
+
+    /// Milestone 264: a page check whose `watch.failures_of` matched no request warns, once.
+    #[test]
+    fn a_failures_of_that_matched_nothing_warns() {
+        let held = |out: &str| {
+            format!(
+                "HYDO-ASSERT {{\"t\":\"always\",\"id\":\"browser.failures_shown\",\"ok\":true,\"msg\":\"m\",\"details\":{{\"out\":\"{out}\"}}}}\n"
+            )
+        };
+        let ok = "every failed request was followed by an error on the page, or sent again, within 5.0 s";
+        assert!(failures_of_unmatched(&con(&held(ok))).is_empty());
+        let none = format!(
+            "{ok}; but watch.failures_of (/[A-Za-z]+/(Create|Update)$) matched none of the 41 \
+             requests the pages sent (such as POST /memos.api.MemoService/CreateMemo), so no \
+             failed request was judged"
+        );
+        let w = failures_of_unmatched(&con(&format!("{}{}", held(&none), held(&none))));
+        assert_eq!(
+            w,
+            [
+                "the page check browser.failures_shown judged no failed request: \
+              watch.failures_of (/[A-Za-z]+/(Create|Update)$) matched none of the 41 requests the \
+              pages sent (such as POST /memos.api.MemoService/CreateMemo), so no failed request \
+              was judged; fix the pattern in hydo.yaml (browser.watch.failures_of)"
+            ]
+        );
+        // a run's warnings carry it, whatever its verdict
+        let r = run_of(
+            "t",
+            "disk=none | run",
+            serde_json::json!({"verdict": "HYDO-ORACLE: OK invariants=1 held"})
+                .as_object()
+                .unwrap(),
+            &con(&held(&none)),
+        );
+        assert!(r.warnings.contains(&w[0]), "{:?}", r.warnings);
     }
 
     #[test]

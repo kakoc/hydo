@@ -170,7 +170,18 @@ if (rule === 'tests') {
       }
     }
   }
-  finish(found, `every failed request was followed by an error on the page, or sent again, within ${secs(limit)}`);
+  // Milestone 264: a watch.failures_of that matches none of the requests the pages sent judges
+  // nothing; the held sentence says so, and hydo turns it into a warning of the run
+  // (hydo_explore::results::FAILURES_OF_UNMATCHED)
+  let unmatched = '';
+  const sent = pageEvents.filter((e) => e.kind === 'send');
+  if (failuresOf && sent.length > 0 && !sent.some((e) => failuresOf.test(e.path))) {
+    const ex = sent.find((e) => e.method !== 'GET') || sent[0];
+    unmatched =
+      `; but watch.failures_of (${watchCfg.failures_of}) matched none of the ${sent.length} requests the pages sent` +
+      ` (such as ${req(ex)}), so no failed request was judged`;
+  }
+  finish(found, `every failed request was followed by an error on the page, or sent again, within ${secs(limit)}${unmatched}`);
 } else if (rule === 'text') {
   const found = pageEvents.filter((e) => e.kind === 'text').map((e) => `The page ${e.url} printed "${e.value}"${during(e)}: "${e.line}"`);
   finish(found, 'no page printed a watched text');

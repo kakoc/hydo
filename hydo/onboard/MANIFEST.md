@@ -1751,7 +1751,17 @@ browser:
   that is not a GET. A line with the request's and the answer's text goes to
   `/tmp/hydo/web/walk/acks.jsonl`.
 - Every run writes `screens/repro.spec.ts`; `I=...,rec` adds `walk-step-<i>.webm` and
-  `walk-step-<i>.trace.zip` for the last step i; a file of more than 200 KB stays in the guest.
+  `walk-step-<i>.trace.zip` for the last step i that takes an action. A recording of more than
+  640 KB stays in the guest, and a run copies at most 1 MiB of files out of it; a file that
+  does not fit stays in the guest with a `HYDO-SCREEN-LEFT` line in the console (Milestone
+  264).
+- `I=<seed>,x<step>.<k>` leaves out action k of a step, and `x<step>.<k>-<last>` actions k to
+  last (Milestone 264); the shrinker writes such walks. A time or a date in a control's name
+  ("1 minute ago", `2026-10-16 00:00:42`) counts as one word when the walk chooses, so that a
+  clock step does not change which control the walk takes.
+- When `watch.failures_of` matches none of the requests the pages sent, `<name>.failures_shown`
+  holds without judging a request, and the run prints a warning that names the pattern and one
+  request (Milestone 264).
 
 ### HTTPS for fakes and proxies (`tls:`)
 

@@ -813,7 +813,7 @@ pub enum GuestToken {
     /// `U=<target>@<at>[/<gap>][+<back>]:<version>`: services switched to another version of
     /// themselves (Milestone 238, `upgrade.rs`).
     Upgrade(Upgrade),
-    /// `I=<seed>[,n<actions>][,x<step>.<k>]...[,rec]`: the walk of `browser.explore`
+    /// `I=<seed>[,n<actions>][,x<step>.<k>[-<last>]]...[,rec]`: the walk of `browser.explore`
     /// (Milestone 258, `walk.rs`).
     Walk(Walk),
     /// Any other single upper-case letter: a manifest knob (`M=`, `R=`, `S=`, ...), whose value

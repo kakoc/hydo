@@ -90,18 +90,45 @@ takes the control by rendezvous hashing of its role, name and place [8].
 
 ### The schedule names the walk
 
-The token `I=<seed>[,n<actions>][,x<step>.<k>]...[,rec]` names the walk. Action `k` of step `s`
-draws from its own stream, made from `(seed, s, k)`. So the shrinker can cut the walk in two
-ways that leave every other action's draw as it was:
+The token `I=<seed>[,n<actions>][,x<step>.<k>[-<last>]]...[,rec]` names the walk. Action `k`
+of step `s` draws from its own stream, made from `(seed, s, k)`. So the shrinker can cut the walk
+in ways that leave every other action's draw as it was:
 
-- `n<actions>` takes fewer actions in each step; the shrinker tries half and one less.
-- `x<s>.<k>` leaves out one action; the shrinker tries the first action of each step.
+- `x<s>.<k>` leaves out one action, and `x<s>.<k>-<last>` the actions `k` to `last` of a step.
+  A walk prints a run of four or more left-out actions of one step as a range (Milestone 264).
+- `n<actions>` takes fewer actions in each step.
+
+The shrinker's candidates come in this order (Milestone 264): all the actions of one step, the
+last step first; the later and the earlier half of a step's actions; half and one less of the
+actions in every step; the first and the last action of each step. A step after the one that
+failed cannot change the failure, so the first rounds remove the steps after it at the cost of
+one run each. Milestone 258 tried only fewer actions per step and the first action of each step,
+which left a walk of 72 actions almost whole within the budget. A walk doubles the shrinker's
+budget of runs, as a composed workload does.
 
 This is delta debugging over actions [7], restricted to the cuts that keep the other draws. A cut
 can still change a later action's choice, because the page is different without the action
 that was cut, and the family counts change. Rendezvous hashing keeps that rare: the same control
 wins whenever it is on the page. The shrinker runs every candidate, so a cut that changes the
 failure is not taken.
+
+Two things made the candidates of a real app fail although the failure stayed (Milestone 264):
+
+- **Generated ids in the finding.** The shrinker takes a candidate when its verdict has the
+  failure's signature: the verdict with every number as `#`. A page's finding names the page,
+  and Memos's memo page has a random id, `/memos/b4R4VE2u3vE8gqW7sZTJtL`, which differs in every
+  run that makes another memo. The signature of a page invariant's violation
+  (`<browser>.no_page_errors` and the other five) now has `<id>` for every token that the error
+  templates of Milestone 222 take for an id (hex of eight digits or more, sixteen characters or
+  more with a digit, a shorter random mix), and for sixteen letters or more whose case changes
+  often. Words such as `UpsertMemoReaction` keep their letters. Every other verdict keeps its
+  signature, so no recorded exploration changes, and `hydo ci`'s finding keys are unchanged: a
+  violation's key is its property id.
+- **Times in the names of controls.** A clock step changes names such as a memo's age ("now",
+  "1 minute ago", "in 30 days"), and the walk hashed the names, so a candidate without the
+  clock step took other actions. The walk's choice now sees every relative time, date and clock
+  time in a name as one word, `<time>`, and counts places among the controls with that name.
+  The locator keeps the real name. A name without a time hashes as before.
 
 `hydo explore` draws `I=` in every schedule of a manifest with `explore:`, from its own stream,
 so the other fields of a seed's schedule are those of a seed without it. A schedule without `I=`
@@ -139,11 +166,13 @@ without faults are walks without faults; the rules see the state that the walk l
   connection, or an answer that never comes after the server acted. A fault of the backend that
   a page cannot make (a kill, a clock step) is a comment at its step. A developer runs the file
   against their own instance with `npx playwright test`.
-- **A video and a trace.** With `,rec` the walker records a video of the last step
-  (`recordVideo`, 640 by 360 pixels) and a Playwright trace of it (`walk-step-<s>.trace.zip`,
-  DOM snapshots without screenshots), which `npx playwright show-trace` opens with the DOM and
-  the requests at every action [10]. Only the last step is recorded, because the controller
-  copies the files through the agent within the check phase (below). The whole walk is in
+- **A video and a trace.** With `,rec` the walker records a video of the last step that takes
+  an action (`recordVideo`, 640 by 360 pixels) and a Playwright trace of it
+  (`walk-step-<s>.trace.zip`, DOM snapshots without screenshots), which `npx playwright
+  show-trace` opens with the DOM and the requests at every action [10]. A shrunk walk often
+  leaves its last steps without actions; Milestone 258 recorded the last workload step all the
+  same. Only one step is recorded, because the controller copies the files through the agent
+  after the verdict, at most 1 MiB of them (below). The whole walk is in
   `repro.spec.ts`. Recording costs guest time, so a run with `rec` is a run of its own, with its
   own fingerprint. `hydo explore` does
   not record during the exploration. At its end it runs each minimal schedule with a walk once
@@ -152,15 +181,29 @@ without faults are walks without faults; the rules see the state that the walk l
 
 The files leave the guest as the screenshots of Milestone 254 do: the walker lists them in
 `/tmp/hydo/web/shots/index.jsonl`, and the controller copies them after the verdict, in reads
-of 1,500 bytes through the agent. On hvx the check phase ended after about 386 reads, about
-570 KB. The first recording replay of the web-shop example recorded a trace with screenshots
-and a 1280 by 720 video of every step, about 600 KB, and the run ended `TIMEOUT check` in place
-of its verdict. A later one with a 640 by 360 video of every step and one trace still made
-about 340 KB of videos for a walk of 37 actions, and ended the same way. So only the last step
-is recorded, and a video or a trace of more than 200 KB stays in the guest. The recording
-replay of the Memos finding, before that bound, copied a trace of 105,758 bytes and then more
-than 384,000 bytes of the last step's video, and ended `TIMEOUT check`. A copy that is too large
-is open item 124.
+of 1,500 bytes through the agent. In Milestone 258 the first recording replay of the web-shop
+example recorded a trace with screenshots and a 1280 by 720 video of every step, about 600 KB,
+and the run ended `TIMEOUT check` in place of its verdict, after about 386 reads. So did the
+recording replay of the Memos finding, after a trace of 105,758 bytes and more than 384,000
+bytes of the last step's video.
+
+The cause was not time (Milestone 264). Each read's reply carries its bytes as hex, and on hvx
+the agent's lines travel through the host-call port into a buffer of the engine that kept at
+most 1 MiB per boot, the console's limit. The copy filled it: the engine dropped the later
+replies, the controller waited for a reply that never came, and the check phase ran until the
+engine's wall limit of 900 s. A read that arrives costs about a tenth of a second. Now:
+
+- The hvx engine keeps up to 16 MiB of the agent's lines per boot (`PBUF_CAP`), and says once
+  in `engine.log` when a boot fills them. A boot below 1 MiB keeps every byte, and so its
+  fingerprint, as before.
+- The controller copies at most 1 MiB of files per run (`screens::MAX_BYTES`, 16 MiB before).
+  It is a number of bytes, not a time, so that a run copies the same files on every replay and
+  keeps its fingerprint. It fits the KVM engine's 4 MiB console with the run's own lines, and
+  takes about two minutes on hvx. A file that does not fit what is left costs one read and stays
+  in the guest, and a `HYDO-SCREEN-LEFT` line in the console names it.
+- The walker keeps a video or a trace of up to 640 KB (200 KB before); the last-step video of
+  Memos's seed 46 had 524,990 bytes. Only one step is recorded still: the videos of every step
+  of a Memos walk would pass 2 MB.
 
 ## Sources
 

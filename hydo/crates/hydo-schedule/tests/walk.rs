@@ -25,6 +25,26 @@ fn a_walk_prints_as_it_was_written() {
     assert_eq!(GuestToken::Walk(w).letter(), 'I');
 }
 
+/// Milestone 264: a range leaves out several actions of one step; four or more in a row print
+/// as a range, fewer one by one (as Milestone 258's walks were written).
+#[test]
+fn a_range_leaves_out_actions_of_one_step() {
+    let w = walk("7,x2.3-11").unwrap();
+    assert_eq!(w.skip.len(), 9);
+    assert!(w.takes(2, 2) && !w.takes(2, 3) && !w.takes(2, 11) && w.takes(2, 12));
+    assert_eq!(w.to_string(), "7,x2.3-11");
+    for (t, out) in [
+        ("7,x0.0,x0.1,x0.2", "7,x0.0,x0.1,x0.2"),
+        ("7,x0.0-2", "7,x0.0,x0.1,x0.2"),
+        ("7,x0.0,x0.1,x0.2,x0.3", "7,x0.0-3"),
+        ("7,x1.4,x0.0-5,x0.7", "7,x0.0-5,x0.7,x1.4"),
+        ("7,x3.0-11,x4.0-11,x5.0-11", "7,x3.0-11,x4.0-11,x5.0-11"),
+    ] {
+        assert_eq!(walk(t).unwrap().to_string(), out, "{t}");
+        assert_eq!(walk(out).unwrap(), walk(t).unwrap(), "{t}");
+    }
+}
+
 #[test]
 fn what_a_walk_refuses() {
     for t in [
@@ -38,6 +58,10 @@ fn what_a_walk_refuses() {
         "1,y",
         "1,rec,rec",
         "1,x0.1,x0.1",
+        "1,x0.3-2",
+        "1,x0.0-200",
+        "1,x0.0-3,x0.2",
+        "1,x0.-3",
     ] {
         assert!(walk(t).is_err(), "{t}");
     }

@@ -196,6 +196,42 @@ reaction`, `upsertMemoReaction`, `handleReactionClick`, `skip error`, `toast`, `
 change to a memo can leave the page showing the older state") is about the order of two answers
 that both succeed; it names `handleReactionClick` for that race, not for a failed save.
 
+## Milestone 264: the share-link walk shrunk
+
+Milestone 264 (docs/HISTORY.md) took the two causes that kept finding 1's walk long. A page
+invariant's signature now has `<id>` in place of a generated id, so a candidate whose walk makes
+another memo keeps the failure. And a walk now shrinks by whole steps, halves of a step and
+single actions (`x<step>.<first>-<last>`), with a budget of runs.
+
+`hydo explore --seeds 46-46 --new-faults --durable-only` drew seed 46 again on the first image
+of that milestone, whose walk still reaches the share link. It failed, reproduced, and shrank in
+96 runs:
+
+| | schedule | actions |
+|---|---|---|
+| before | `disk=none dseed=baee56f32e223007 \| run T=1:-2592000 I=fc8214f2a80db679` | 72 in 6 steps |
+| after | `disk=none dseed=baee56f32e223007 \| run T=1:-2592000 I=fc8214f2a80db679,x1.9,x1.10,x1.11,x2.0,x2.1,x3.0-11,x4.0-11,x5.0-11` | 31 |
+
+The minimal walk keeps step 0, actions 0 to 8 of step 1, and actions 2 to 11 of step 2. Step 2
+saves a memo, opens it, and goes Share, Manage share links, Create new link, Revoke, and Copy
+link twice. It failed the same way on both confirmation runs (`2a8e9519764ea12f`). Every
+candidate without the clock step lost the failure, and so did the halves of steps 0 to 2: an
+action left out changes the page that a later action needs.
+
+The clock step still steers the walk, less than before. Without it, Milestone 258's walker took
+24 of the 72 actions otherwise; the final walker of Milestone 264, which chooses an action's kind
+by rendezvous hashing and reads times in names as one word, takes 9 otherwise. The final walker
+does not reach the share link at seed 46, and its exploration of seeds 21-60 (the same 40 fault
+draws as above, no failure, every saved memo in the database) reached neither finding. Both
+candidates still reproduce on the first image: finding 1 at seed 46, and finding 2 with
+`disk=none dseed=2c0e0fedbe2218a8 | run X=memos@1~10500 I=beedbb3199dc2417`
+(`91976dd01710c958`). On KVM both gave one fingerprint per schedule on two Intel models (the
+section "KVM" of Milestone 264).
+
+Since Milestone 264 a recording of Memos's last step leaves the guest: with `,rec` the walk of
+seed 46 copied a trace of 116,294 bytes, and without its clock step on KVM a trace of 94,813
+bytes and a video of 345,592.
+
 ## What held
 
 - No memo that Memos answered as saved was lost: 85 memos in 40 walks, through kills, pauses,
@@ -207,7 +243,8 @@ that both succeed; it names `handleReactionClick` for that race, not for a faile
 
 ## What hydo lacked
 
-The fixes are in this milestone; the rest is open item 124 of `AGENTS.md`.
+The first four fixes are in Milestone 258, the next four in Milestone 264 (the section above);
+the rest is open items 124 and 129 of `AGENTS.md`.
 
 - Background reads made `failures_shown` fail; `watch.failures_of` (new) narrows it to writes.
 - Chromium's ResizeObserver error event counted as an uncaught exception; `hook.cjs` ignores it.
@@ -216,12 +253,17 @@ The fixes are in this milestone; the rest is open item 124 of `AGENTS.md`.
 - The walk wrote lines to `$HYDO_ACKED`, which the controller carries across a power cut as
   words; it writes words now.
 - A `failures_of` that matched nothing made two explorations judge no write, without a warning.
+  Since Milestone 264 the run warns.
 - The finding's message holds the memo's id, a random 22-letter word, so a shrink candidate with
-  another memo gives another signature and is not taken. The shrink of finding 1 kept the
-  schedule as found.
+  another memo gave another signature and was not taken. Since Milestone 264 a page invariant's
+  signature has `<id>` there.
 - A shrink candidate without the clock step took other actions, because the page's names (a
-  memo's age) changed: a fault can steer the walk.
-- A recording of a Memos step is too large to leave the guest within the check phase (its video
-  passed 384 KB). A video or trace over 200 KB stays in the guest now.
+  memo's age) changed: a fault can steer the walk. Since Milestone 264 a time in a name and the
+  kind of an action no longer move the rest of the walk; the page itself still changes (open
+  item 129).
+- A recording of a Memos step was too large to leave the guest: the copy filled the hvx
+  engine's buffer of the agent's lines, and the run ended `TIMEOUT check`. Since Milestone 264
+  the buffer holds 16 MiB, a run copies at most 1 MiB, and a recording of up to 640 KB comes
+  out.
 - The walk spent its actions on the calendar, the saved views and the filters until `avoid:`
   named them.

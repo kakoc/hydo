@@ -97,6 +97,39 @@ fn the_screenshots_come_out_after_the_verdict() {
     assert_eq!(a.run.fin.transcript, again.run.fin.transcript);
 }
 
+/// Milestone 264: a run copies at most `screens::MAX_BYTES` out of the guest, so the copy fits
+/// the engines' channels and never ends a run in `TIMEOUT check`; a file larger than what is
+/// left costs one read, stays in the guest, and a note names it.
+#[test]
+fn a_file_larger_than_the_copy_budget_stays_in_the_guest() {
+    let text = "name: web\nservices:\n  - name: kv\n    cmd: kv-server\n    ready: kv-ping\n\
+                workload:\n  steps: 2\n  run: client HYDO_FAKE_SHOTS HYDO_FAKE_BIG_SHOT\ninvariants:\n  - id: all.done\n    final: true\n    cmd: final-check\n";
+    let m = hydo_manifest::from_embedded(text, None).unwrap();
+    let mut p = Plan::from_manifest(&m).unwrap();
+    p.screens = Some("/tmp/hydo/web/shots".into());
+    let b = support::boot(&p, "kv").unwrap();
+    let s = Schedule::parse("disk=none | run").unwrap();
+    let a = support::run_schedule(&b, &s).unwrap();
+    let shots: Vec<String> = reads(&a.run.items)
+        .into_iter()
+        .filter(|(p, _)| p.starts_with("/tmp/hydo/web/shots/walk"))
+        .map(|(p, _)| p)
+        .collect();
+    assert_eq!(shots, ["/tmp/hydo/web/shots/walk-step-0.webm"]);
+    let n = notes(&a.run.fin.transcript);
+    assert!(
+        n[0].starts_with("HYDO-SCREEN-LEFT {\"file\":\"walk-step-0.webm\",\"bytes\":1048577,"),
+        "{n:?}"
+    );
+    // the screenshots after it still come out
+    assert_eq!(n.len(), 3, "{n:?}");
+    assert!(hydo_control::schedule::screens::of_note(&n[0]).is_none());
+    assert_eq!(
+        hydo_control::schedule::screens::of_note(&n[2]).unwrap().0,
+        "step-1-1.png"
+    );
+}
+
 #[test]
 fn without_browser_nothing_is_read() {
     let p = plan(false);

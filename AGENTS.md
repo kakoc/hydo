@@ -720,6 +720,17 @@ power cuts, every one of 85 saved memos survived. There are two new candidates, 
 The design is `docs/design/ui-exploration.md`, the how-to `hydo guide web-apps` ("Let hydo walk
 through the pages"), and the details are in `docs/HISTORY.md` Milestone 258.
 
+Since M264 a walk shrinks by whole steps, halves of a step, and single actions
+(`I=<seed>,x<step>.<first>-<last>`), with a budget of runs. A page invariant's signature has
+`<id>` for a generated id. Memos's share-link walk shrank from 72 actions to 31. The walk
+chooses an action's kind by weighted rendezvous hashing. It reads a time in a control's name as
+one word. A clock step that a shrink drops now moves 9 of the 72 actions of Memos's seed 46; it
+moved 24. A `watch.failures_of` that matches no request warns at the run's end. The hvx engine
+keeps 16 MiB of the agent's lines per boot, and a run copies at most 1 MiB of files. So `,rec`
+no longer ends in `TIMEOUT check`, and it records the last step that takes an action. On KVM
+both examples gave one fingerprint per schedule on four hosts. The details are in
+`docs/HISTORY.md` Milestone 264.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -1362,28 +1373,20 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     the process table and the kernel log for a failed check too. The web page's property table can
     list one check twice. Without the udev rule, each hvx run leaves root-owned agent logs in
     `hydo-out/`.
-124. Walks through the pages (M258). What is left:
-    - The walks ran on hvx only. KVM and the Mac engine did not run them (the Mac engine does not
-      run `browser:`, open item 51).
-    - The copy of the files out of the guest (Milestone 254's mechanism) runs inside the hvx
-      engine's check phase, which ended after about 386 reads of 1.5 KB. Recordings of every
-      step, about 600 KB and 340 KB, ended their runs `TIMEOUT check` in place of the verdict.
-      Only the last step is recorded, and a file over 200 KB stays in the guest, but nothing
-      bounds the copy by what the phase has left.
-    - A shrink candidate that drops a fault can change where the walk's sign-in happens, and so
-      every later action; such a candidate rarely keeps the failure, and the fault stays.
-    - The shrinker leaves out only the first action of a step; actions in the middle go only
-      through fewer actions per step. A full delta debugging over actions is not built.
+124. Walks through the pages (M258, M264). What is left:
+    - The Mac engine does not run the walks (it does not run `browser:`, open item 51).
+    - Only one step is recorded, the last that takes an action. A run copies at most 1 MiB of
+      files out of the guest (M264), and the videos of every step of a Memos walk would pass
+      2 MB.
+    - A fault still changes the page itself (open item 129). A clock step changes a memo list's
+      order and what a calendar shows, so a shrink candidate without it can take other actions.
     - `repro.spec.ts` maps `H=` faults to `page.route`, but applies a fault with `p=` to every
       request, and gives a backend fault only as a comment. Its native run was tried on the
       web-shop example only.
     - `hydo rules check` runs walks (`I=1`, `I=2` and on) for a walking image; it did not run on
       one. The walk does not check what the page shows against the backend's state.
-    - A page's finding names the page's path, and a path with a random id (Memos's
-      `/memos/b4R4VE2u3vE8gqW7sZTJtL`) gives each shrink candidate its own signature, so the
-      shrinker takes none of them.
-    - A `watch.failures_of` that matches no request path makes `failures_shown` hold and records
-      no write, and nothing warns. Memos's first pattern did so for 60 schedules.
+    - Only the page invariants' signatures blank generated ids (M264); a project's own rule
+      whose message names a random id still gives each shrink candidate its own signature.
     - After a power cut the page checks run in the recovery boot, where no page ran; the pages of
       the first boot up to the cut are not judged.
     - The walk follows no links into other origins and no file uploads, and it sees no canvas,
@@ -1444,6 +1447,22 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       with reboots, each one stable on its host and with the same verdicts. A run of the same
       image without a reboot on both models decides whether the reboot path lets the host in.
     - RAUC's example kept its loop devices, and RAUC did not run on KVM.
+129. Walks after Milestone 264. What is left:
+    - A fault changes the page itself, and so the walk. Without its clock step Memos's seed 46
+      took 9 of 72 actions otherwise, and the share-link failure did not happen, so the minimal
+      walk keeps the step. A walk that follows the page, such as one that chooses among the
+      memos by their text, is not built.
+    - The share-link walk was shrunk on the first image of M264. The final walker takes other
+      actions at seed 46, and the explorations of seeds 21-60 on its image reached neither
+      Memos finding.
+    - The shrink kept 31 of 72 actions. Halves of a step and single actions in the middle lose
+      the failure when they change the page that a later action of the failing step needs.
+      A delta debugging that also tries the failing step's own actions one by one is not built.
+    - The KVM run used the code before the final walker (the kinds by rendezvous, the recording
+      of the last step with an action, the shrink budget in runs). web-shop's seed 8 walk passes
+      on KVM and fails on hvx: its double order needs a moment of the exit clock.
+    - An image built before M264 ignores the range `x<step>.<first>-<last>` and walks the
+      actions it was meant to leave out.
 
 ## Milestone index
 
@@ -2016,6 +2035,12 @@ build machine, before 2026-10-13.
   `HYDO-REBOOT`, the engines' `REBOOT`) on hvx, the Mac, and KVM. Added disks with caches of
   their own (`guest.disks`) on the Mac and KVM. With a real reboot and the slots and the
   environment on separate disks, the SWUpdate candidate holds; RAUC held. Nothing recorded moved
+- M264 (tentative number): the gaps of the walks through the pages. A page invariant's signature
+  blanks generated ids, and a walk shrinks by whole steps, halves, and single actions. Memos's
+  share-link walk shrank from 72 actions to 31. A clock step moves 9 of 72 actions, 24 before.
+  An unmatched `watch.failures_of` warns. Recordings no longer end in `TIMEOUT check`: the hvx
+  engine's buffer of the agent's lines was full. On KVM one fingerprint per schedule on four
+  hosts. Nothing recorded moved
 
 ## Where to look
 

@@ -82,7 +82,16 @@ struct Boot {
     /// The guest wrote more console than the module keeps (`HVX_CONSOLE_SZ`), and engine.log
     /// said so (once per VM).
     console_full: bool,
+    /// Milestone 264: the agent's lines filled [`PBUF_CAP`], and engine.log said so (once).
+    pbuf_full: bool,
 }
+
+/// Milestone 264: the most bytes of the agent's lines (`pbuf`) a boot keeps. It was the
+/// console's 1 MiB (`UBUF_CAP`) until Milestone 264. A boot that stays below 1 MiB keeps every
+/// byte and fingerprint as before; one that went over lost the agent's later replies and waited
+/// for them until the wall limit. The copy of a walk's recordings out of the guest went over it
+/// (each byte crosses as hex): `TIMEOUT check` after about 386 reads.
+pub const PBUF_CAP: usize = 16 << 20;
 
 /// M138: the snapshot a reusable VM was restored to: its RAM pages and its data partition's,
 /// so that the next in-place restore knows which pages may differ beside the dirty ones.
@@ -108,6 +117,7 @@ impl Boot {
             tgt: None,
             reused: false,
             console_full: false,
+            pbuf_full: false,
         }
     }
     fn vm(&self) -> &Vm {
@@ -537,6 +547,7 @@ impl Core {
     fn teardown(&mut self, b: &mut Boot) {
         b.ubuf = Vec::new();
         b.pbuf = Vec::new();
+        b.pbuf_full = false;
         // M138: a VM whose RAM and disk are known apart from its dirty pages goes to the pool
         // (and only while the machine has room for one more VM of this size: an idle VM holds
         // its memory; which VM a run gets never changes its result)
@@ -1031,8 +1042,17 @@ impl Core {
             diag!(self, "HVX_HC_GET: {e}");
             return Err(());
         }
-        if b.pbuf.len() + add.len() > UBUF_CAP {
-            add.truncate(UBUF_CAP.saturating_sub(b.pbuf.len()));
+        if b.pbuf.len() + add.len() > PBUF_CAP {
+            add.truncate(PBUF_CAP.saturating_sub(b.pbuf.len()));
+            if !b.pbuf_full {
+                b.pbuf_full = true;
+                diag!(
+                    self,
+                    "hvx: agent lines full: the agent wrote more than {PBUF_CAP} bytes of lines \
+                     through the host-call port in this boot; later lines are lost, and the run \
+                     waits for them until its wall limit"
+                );
+            }
         }
         b.pbuf.extend_from_slice(&add);
         if b.pbuf.len() > n0 {
@@ -1289,6 +1309,7 @@ impl Core {
         self.console_rebase(b)?;
         b.pbuf.clear();
         b.pbuf.extend_from_slice(&sn.pcon);
+        b.pbuf_full = false;
         b.hc_active = sn.hc_active;
         b.hc_staged.set(sn.hc_staged);
         if b.vm().hc {
