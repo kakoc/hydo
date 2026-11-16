@@ -1,0 +1,13 @@
+# The error-log kinds that are expected in this example (hydo guide error-logs).
+format: 1
+unknown: report
+known:
+  - match: 'Failed in deducing any cgroup limits'
+    reason: "every start: the guest's cgroup2 file system has no memory or CPU limits for Dragonfly to read, so it uses the machine's"
+    date: "2026-11-16"
+  - match: "Bad response to .PING.: .-LOADING"
+    reason: "a replica pings the primary while the primary loads its snapshot after a restart (SHUTDOWN or a kill); the replica tries again"
+    date: "2026-11-16"
+  - match: 'Could not shutdown socket system:107'
+    reason: "a replica closes a connection that its peer had closed already (ENOTCONN) after a restart or a network fault"
+    date: "2026-11-16"

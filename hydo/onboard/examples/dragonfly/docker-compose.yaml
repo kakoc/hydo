@@ -1,0 +1,32 @@
+# Dragonfly 2.1.0 with one primary and two replicas. Each server runs two threads, so that a key
+# space has two shards and a transaction can span both. Snapshots go to /data with the default
+# file name dump-{timestamp}; a server saves one on SAVE, BGSAVE and shutdown, and loads the
+# newest one when it starts. Docker's default seccomp profile blocks io_uring; Dragonfly then
+# uses epoll, which is enough without --aof.
+services:
+  df1:
+    image: ghcr.io/dragonflydb/dragonfly:v2.1.0
+    command: ["dragonfly", "--logtostderr", "--proactor_threads=2", "--maxmemory=1gb",
+              "--dir=/data", "--dbfilename=dump-{timestamp}", "--version_check=false"]
+    volumes: ["d1:/data"]
+    restart: always
+  df2:
+    image: ghcr.io/dragonflydb/dragonfly:v2.1.0
+    command: ["dragonfly", "--logtostderr", "--proactor_threads=2", "--maxmemory=1gb",
+              "--dir=/data", "--dbfilename=dump-{timestamp}", "--version_check=false",
+              "--replicaof=df1:6379"]
+    volumes: ["d2:/data"]
+    depends_on: [df1]
+    restart: always
+  df3:
+    image: ghcr.io/dragonflydb/dragonfly:v2.1.0
+    command: ["dragonfly", "--logtostderr", "--proactor_threads=2", "--maxmemory=1gb",
+              "--dir=/data", "--dbfilename=dump-{timestamp}", "--version_check=false",
+              "--replicaof=df1:6379"]
+    volumes: ["d3:/data"]
+    depends_on: [df1]
+    restart: always
+volumes:
+  d1: {}
+  d2: {}
+  d3: {}

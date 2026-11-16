@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# three keys in one MULTI/EXEC or one Lua script, on both shards most of the time (opTx)
+exec /bin/dfc op tx

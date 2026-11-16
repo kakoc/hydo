@@ -13562,3 +13562,100 @@ a tree on `47df6fee`, before Milestones 270 to 281): `cargo fmt --all --check`; 
 `hydo-agents`'s `public_content::`; the `hydo` program's `docs::`,
 `equivalence::cli_matches_golden` and `agents_equivalence`; `sh ci/consolidate-tests.sh --check`
 and `sh ci/vale.sh`.
+
+### Milestone 278 (tentative number) - DONE (Dragonfly 2.1.0 with one primary and two replicas on hvx; a new Dragonfly candidate: Dragonfly loads the snapshot whose files have the latest modification time, so after a backward step of the wall clock a restart, also a clean shutdown that saves first, loads a snapshot from before the step and loses every write since; found blind and shrunk to one clock step; a power cut loses snapshots that SAVE acknowledged, known as dragonflydb/dragonfly#8646; Dragonfly's Lua interpreter needs AVX, a known requirement; REPLTAKEOVER kept its promise; what hydo lacked; nothing recorded moved; 2026-11-16)
+
+**In short.** `hydo/onboard/examples/dragonfly` (RESULTS.md) runs Dragonfly 2.1.0, the newest
+release, from its official image as one primary and two replicas on `network: bridge`, imported
+with `hydo compose` from the example's own Compose file. Each server runs two threads, so a key
+space has two shards and a transaction spans both; snapshots use the default file name
+`dump-{timestamp}`. The Go client `dfc` writes keys and waits for the replicas (`WAIT 2 500`),
+sets three keys in one `MULTI`/`EXEC` or one Lua script, sets keys with expiries, and makes the
+primary save a snapshot: `SAVE`, `BGSAVE`, or `SHUTDOWN` and the wait for the restart. With
+`--set takeover=yes` a serial driver moves the primary with `REPLTAKEOVER 10` and checks the
+documented promise at once: the new primary holds every key the old primary held just before.
+Four final rules check that a write a completed snapshot holds survives, that transactions are
+whole on every server, that the replicas converge, and that no server returns a key after its
+expiry. Error logs are findings (glog's `E` and `F` lines).
+
+**What was found.**
+
+- **Dragonfly, new as far as the search found: a restart after a backward clock step loads an
+  older snapshot.** `FileSnapshotStorage::LoadPath` in `src/server/detail/snapshot_storage.cc`
+  sorts the files that match `--dbfilename` by `last_modified` and loads the latest. After a step
+  of D seconds back, every snapshot of the next D seconds has an older time than the last one
+  from before the step. So a restart in that time loads the old snapshot, also after a clean
+  `SHUTDOWN` that saves first, and every write since is lost although a `SAVE` answered `OK`.
+  The name's `{timestamp}` comes from the same clock. Dragonfly's `main` has the same choice.
+  hydo found it blind in 25 of 120 schedules of the default image (16 without a power cut), from
+  the fourth schedule on. The shrinker reduced it to one step of 18 s back, `disk=none
+  dseed=9836c546baaf0b5 | run T=8:-18 W=48c2cbb5,p5,q2,r300,oanytime_read`: 17 of 21 saved writes
+  lost (`4e00723d70706c54`, 2 runs), and without the step OK (`31d217a68cbef3d0`). After a kill
+  instead of a shutdown, `K=df1@21+9 T=12:-150` loses a saved key before its expiry
+  (`ec06181c11e9c87d`; without the step `d8e3cca2145b739f`). In ex1's shrink (`T=10:-81000`),
+  `hydo inspect exec` showed the restarted primary load `dump-2026-11-16T00:00:05`, although it
+  had saved `dump-2026-11-15T01:30:06` and `01:30:07` after the step.
+- **Dragonfly, known: a power cut loses snapshots that `SAVE` acknowledged.** The files are
+  renamed into place without an `fsync` of the files or the directory, so a power cut takes the
+  newest snapshots away (dragonflydb/dragonfly#8646, open). Six failures of the first
+  exploration had a cut and no backward step; `disk=cut dseed=9f14bde427152010 | run C=30
+  W=07713d5d,p1,q2,r150` loses 9 writes (`dc90bf5a49ea5252`, 2 runs), and the same schedule
+  without the cut passes (`7db895511e57586c`).
+- **Dragonfly, known: its Lua interpreter needs AVX.** On hvx's default x86-64-v2 guest the first
+  `EVAL` ends Dragonfly with "An attempt to execute an instruction failed". Dragonfly's own code
+  is built for Core 2 with SSE4.1, but its Lua fork (`dragonflydb/lua`, tag `Dragonfly-5.4.6a`)
+  is built with `-march=sandybridge`: `lua_newstate`, `luaV_execute` and about 60 other functions
+  of the 2.1.0 binary contain AVX instructions and no CPU check. hydo's v2 CPUID offers no AVX,
+  XSAVE or OSXSAVE, so the guest behaves as a CPU without AVX. The maintainers require Sandy
+  Bridge (issue #163); the closed issues #3166 and #5197 report the same message. The example
+  uses `guest.cpu: v3`.
+- **REPLTAKEOVER held.** With `takeover=yes` and kills, pauses, partitions and one-way faults (no
+  clock steps or power cuts), `REPLTAKEOVER` answered `OK` at least once in 73 of 80 schedules,
+  and after every `OK` the new primary held the old primary's keys.
+
+The searches covered dragonflydb/dragonfly's issues, pull requests and discussions; RESULTS.md
+lists the terms. Nothing was posted. Finding 1 was not reproduced with a real clock step without
+hydo, because its cause is plain in the code; `native/` shows the choice by modification time in
+Docker with `touch`.
+
+**The runs.** Every run used hvx on the bare-metal machine with the 0.3.4 Linux release, one VM
+at a time, in the tree `~/hydo-dragonfly`. The final image `explore-ob-dragonfly-disk.img`
+(sha256 `7cb07d1af0499bb3…`) gives `aba00945721586e9` for `disk=none | run` twice, and `hydo
+repro --regressions` gives 5 of 5 as expected, twice. The explorations, each `--strategy process
+--new-faults --cluster-faults --workers 1`:
+
+| exploration | image | seeds | failures |
+|---|---|---|---|
+| ex1 | the first image | 1-60 | 26: 18 finding 1, 6 finding 2, 2 a rule that was too strict |
+| ex2 | the final checks, error logs on | 61-120 | 13: 7 finding 1, 6 finding 2 |
+| ex3 | `takeover=yes`, faults `[kill, pause, network, oneway]` | 1-59, stopped | 4 liveness failures of the client's takeover bookkeeping |
+| ex3b | the same, the client fixed | 1-80 | 0; `REPLTAKEOVER` answered `OK` in 73 |
+
+ex1 ran 299 schedules an hour, ex2 286 and ex3b 588. A run of an image at `guest.cpu: v2` showed
+the Lua cause: the primary stopped 6 times, no Lua transaction was acknowledged and 7 failed,
+while 5 `MULTI` transactions were acknowledged.
+
+**What hydo lacked** (RESULTS.md, "What the onboarding needed from hydo"; AGENTS.md open item 141):
+
+- the cgroup2 file system in hvx's guest: Dragonfly exits at start when `/proc/self/cgroup` is
+  empty, which it is until a cgroup2 file system is mounted, so each service's `setup` mounts one;
+- a restarted service's earlier log in the run directory: `logs/df1.log` held only the last
+  start, and the reason of the first crash needed `hydo inspect`;
+- `guest.cpu` as a parameter: `{{cpu}}` passes `hydo build --check`, and the explorer's corpus
+  test refuses it;
+- a way to leave a fault kind out of one exploration: the takeover search needed a copy of the
+  manifest with a shorter `faults:` list;
+- the faults' clock steps and restarts in a check: the client records the primary's process id
+  with every write.
+
+**What moved.** Nothing recorded: the example is not in `hydo/onboard/recorded.json`, and no
+engine, controller or guest program changed. The new manifest is in the explorer's identity and
+corpus goldens (`identity-quick.txt`, `identity-full.txt`, `corpus-full.txt`) and in the control
+corpus (`corpus-quick.txt`), re-recorded on this Mac with `HYDO_BLESS=1`. The CLI golden and
+`agents_equivalence` pass unchanged.
+
+**Checks** (on this Mac, `main` at `03fdacb9` with this milestone on top): `hydo-schedule`'s
+`language::`; `hydo-config`; `hydo-agents`'s `public_content::`; the `hydo` program's `docs::`,
+`equivalence::cli_matches_golden` and `agents_equivalence`; `hydo-explore`'s `identity::` (also
+with `HYDO_IDENT_FULL=1`) and `corpus::`; `hydo-control`'s `corpus::`; `sh
+ci/consolidate-tests.sh --check`; and `sh ci/vale.sh`.

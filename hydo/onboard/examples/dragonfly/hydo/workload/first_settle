@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=90
+# wait until both replicas are in stable sync before the test starts
+exec /bin/dfc settle 80

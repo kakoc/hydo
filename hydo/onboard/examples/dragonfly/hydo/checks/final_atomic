@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: on every server, the three keys of a MULTI/EXEC or Lua transaction are all there or none is
+exec /bin/dfc check atomic

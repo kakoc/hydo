@@ -1,0 +1,11 @@
+# The neighbour of snapshot-older-after-clock-step.schedule without the clock step: the same
+# composition with the same SAVEs and SHUTDOWNs keeps every saved write.
+# composition: r0: parallel_driver_px, parallel_driver_tx | r1: parallel_driver_tx, parallel_driver_set | r2: parallel_driver_px | r3: parallel_driver_tx | r4: serial_driver_save | r5: parallel_driver_px, parallel_driver_set | r6: parallel_driver_px, parallel_driver_tx | r7: parallel_driver_set | r8: parallel_driver_tx | r9: parallel_driver_px | r10: serial_driver_takeover | r11: parallel_driver_set, parallel_dr
+# commands: anytime_read eventually_settle first_settle parallel_driver_px parallel_driver_set parallel_driver_tx serial_driver_save serial_driver_takeover
+# command-sha: parallel_driver_px b97a722a072c4a08
+# command-sha: parallel_driver_set 9348593ceb73e94c
+# command-sha: parallel_driver_tx c099d02b156cde73
+# command-sha: serial_driver_save 0d55e1dd7ee978a1
+# command-sha: serial_driver_takeover 51811255a1a87b22
+# expect: ok
+disk=none dseed=9836c546baaf0b5 | run W=48c2cbb5,p5,q2,r300,oanytime_read

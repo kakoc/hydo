@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=120
+# after the faults heal: both replicas online with no lag within 100 s
+exec /bin/dfc settle 100

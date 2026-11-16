@@ -1,0 +1,7 @@
+# Known upstream as dragonflydb/dragonfly issue 8646 (RESULTS.md, finding 2): SAVE renames its
+# files into place and answers OK without an fsync, so the power cut at the end takes the
+# newest snapshots away, and the recovery boot loads an older one. From seed 99 of exploration
+# ex2 with only the cut kept.
+# commands: anytime_read eventually_settle first_settle parallel_driver_px parallel_driver_set parallel_driver_tx serial_driver_save serial_driver_takeover
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut dseed=7d395f3a77b937a8 | run C=30 W=b63a6982,p1,q3,r150

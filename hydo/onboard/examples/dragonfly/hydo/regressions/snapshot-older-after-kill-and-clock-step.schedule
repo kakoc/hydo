@@ -1,0 +1,15 @@
+# Finding 1 (RESULTS.md) after a kill: the clock steps 150 s back before round 12, and df1, the
+# primary, is killed (SIGKILL) before round 21. Its restart loads a snapshot from before the
+# step, and a key with a 10-minute expiry that a later SAVE held is gone before its expiry.
+# Found by `hydo explore` (seed 66 of exploration ex2) and shrunk to the kill and the step.
+# verdict: HYDO-ORACLE: VIOLATION [expiry] 1 items break the expiry rule
+# composition: r0: parallel_driver_px, parallel_driver_px, anytime_read | r1: parallel_driver_set, anytime_read | r2: serial_driver_takeover, anytime_read | r3: parallel_driver_set, parallel_driver_px | r4: parallel_driver_px, parallel_driver_tx | r5: parallel_driver_tx, parallel_driver_px | r6: serial_driver_takeover | r7: parallel_driver_px | r8: parallel_driver_set | r9: parallel_driver_set, anytime_read | r1
+# commands: anytime_read eventually_settle first_settle parallel_driver_px parallel_driver_set parallel_driver_tx serial_driver_save serial_driver_takeover
+# command-sha: anytime_read 42234098b7a4f90f
+# command-sha: parallel_driver_px b97a722a072c4a08
+# command-sha: parallel_driver_set 9348593ceb73e94c
+# command-sha: parallel_driver_tx c099d02b156cde73
+# command-sha: serial_driver_save 0d55e1dd7ee978a1
+# command-sha: serial_driver_takeover 51811255a1a87b22
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=ff6a37cd7620524e | run K=df1@21+9 T=12:-150 W=c854bf22,p4,q2,r600

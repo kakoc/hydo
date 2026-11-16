@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: every write acknowledged before a completed SAVE or SHUTDOWN of the primary is on the primary at the end
+exec /bin/dfc check durable

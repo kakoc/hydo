@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=90
+# a snapshot of the primary: SAVE, BGSAVE, or SHUTDOWN (which saves) and the wait for its restart (opSave)
+exec /bin/dfc op save

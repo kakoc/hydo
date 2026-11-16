@@ -1,0 +1,133 @@
+# Dragonfly 2.1.0 (the newest release) with one primary and two replicas, as ../docker-compose.yaml
+# runs them: two threads per server, so that a key space has two shards and a transaction spans
+# both; snapshots in /data with the default file name dump-{timestamp}, written on SAVE, BGSAVE
+# and shutdown and loaded at every start. RESULTS.md says what was hunted and found.
+#
+#   sh ../build.sh            # bin/dfc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the Dragonfly image by digest
+#   hydo build hydo.yaml      # x86_64 only (guest.cpu: v3): hvx or KVM
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-40 --strategy process --new-faults --cluster-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with three changes:
+# - the readiness check is the client's: a read must answer, not LOADING;
+# - each server reads its --replicaof flag from /data/replicaof, which `setup` writes once with
+#   Compose's value and a takeover (`--set takeover=yes`) changes, so that a restarted server
+#   comes back in its current role;
+# - `setup` mounts cgroup2: Dragonfly exits at start when /proc/self/cgroup is empty, and in the
+#   guest it is empty until cgroup2 is mounted.
+format: 1
+name: dragonfly
+description: "Dragonfly 2.1.0, a primary and two replicas: acknowledged writes, snapshots on SAVE and shutdown, MULTI/EXEC and Lua transactions across two shards, and key expiry under kills, pauses, partitions, power cuts, clock steps and disk faults"
+hydo_version: "0.3"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  takeover: "no"  # yes | no: the serial driver takeover moves the primary with REPLTAKEOVER
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 2048
+  cpu: v3   # Dragonfly's Lua interpreter is built for Sandy Bridge: the v2 guest stops it at the first EVAL (RESULTS.md, "The CPU level")
+  clock_start: 1794787200   # 2026-11-16 00:00 UTC, the day of the import
+  clock_after_cut: 60       # expiry times are wall-clock times: no real clock runs back across a power cut
+  outcomes_after_cut: true
+
+data:
+  size_mib: 768   # the three servers' data directories (the fault target)
+  dirs: [vol/d1, vol/d2, vol/d3]
+
+root:
+  files:
+    - {src: "../bin/dfc-{{arch}}", dst: /bin/dfc, mode: "0755"}
+  text:
+    /etc/dfc.conf: "takeover={{takeover}}\n"
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 df1
+      10.89.0.12 df2
+      10.89.0.13 df3
+
+# Error logs as findings: Dragonfly logs with glog, whose error and fatal lines start with E or F
+# and the date (hydo guide error-logs). hydo/known-errors.yaml lists the expected kinds.
+errors: true
+
+groups:
+  - name: nodes
+    services: [df1, df2, df3]
+
+services:
+  # Compose service df1, the primary
+  # image ghcr.io/dragonflydb/dragonfly:v2.1.0 = ghcr.io/dragonflydb/dragonfly@sha256:94891bb22ce2fb0f7a5a3ff1bb3b2fbbc5830e2523293e47723d87fa3e5b1184
+  #   linux/amd64: sha256:1936953db764986adfdcc8ffd347e50665299ad0c1e761c8fe2b888330821022
+  #   linux/arm64: sha256:3a31efa21abea5f648c044a2071f1e2183f0ac64d4c7e6b542ce3fa1004a4aa5
+  - name: df1
+    image: {x86_64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-amd64.docker.tar, arm64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-arm64-oci}
+    image_ref: "ghcr.io/dragonflydb/dragonfly:v2.1.0"
+    cmd: [sh, -c, "exec entrypoint.sh dragonfly --logtostderr --proactor_threads=2 --maxmemory=1gb --dir=/data --dbfilename=dump-{timestamp} --version_check=false $(cat /data/replicaof)"]
+    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 cgroup2 /sys/fs/cgroup; [ -e /data/vol/d1/replicaof ] || echo  > /data/vol/d1/replicaof"
+    port: 6379
+    addr: 10.89.0.11
+    ready: "timeout 5 /bin/dfc ready 10.89.0.11:6379"
+    ready_timeout: 150
+    restart: "always"
+    errors: {format: none, match: '^[EF][0-9]{8} '}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/d1, dst: /data}
+  # Compose service df2, a replica of df1
+  - name: df2
+    image: {x86_64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-amd64.docker.tar, arm64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-arm64-oci}
+    image_ref: "ghcr.io/dragonflydb/dragonfly:v2.1.0"
+    cmd: [sh, -c, "exec entrypoint.sh dragonfly --logtostderr --proactor_threads=2 --maxmemory=1gb --dir=/data --dbfilename=dump-{timestamp} --version_check=false $(cat /data/replicaof)"]
+    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 cgroup2 /sys/fs/cgroup; [ -e /data/vol/d2/replicaof ] || echo --replicaof=df1:6379 > /data/vol/d2/replicaof"
+    port: 6379
+    addr: 10.89.0.12
+    depends_on: [df1]
+    start_after: started   # Compose's service_started: no wait for readiness
+    ready: "timeout 5 /bin/dfc ready 10.89.0.12:6379"
+    ready_timeout: 150
+    restart: "always"
+    errors: {format: none, match: '^[EF][0-9]{8} '}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/d2, dst: /data}
+  # Compose service df3, a replica of df1
+  - name: df3
+    image: {x86_64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-amd64.docker.tar, arm64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-arm64-oci}
+    image_ref: "ghcr.io/dragonflydb/dragonfly:v2.1.0"
+    cmd: [sh, -c, "exec entrypoint.sh dragonfly --logtostderr --proactor_threads=2 --maxmemory=1gb --dir=/data --dbfilename=dump-{timestamp} --version_check=false $(cat /data/replicaof)"]
+    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 cgroup2 /sys/fs/cgroup; [ -e /data/vol/d3/replicaof ] || echo --replicaof=df1:6379 > /data/vol/d3/replicaof"
+    port: 6379
+    addr: 10.89.0.13
+    depends_on: [df1]
+    start_after: started
+    ready: "timeout 5 /bin/dfc ready 10.89.0.13:6379"
+    ready_timeout: 150
+    restart: "always"
+    errors: {format: none, match: '^[EF][0-9]{8} '}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/d3, dst: /data}
+
+workload:
+  steps: 30
+  timeout: 600
+
+test:
+  parallel: 6
+  per_round: 3
+  round_ms: 300
+  command_timeout: 60
+  drain_timeout: 60
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

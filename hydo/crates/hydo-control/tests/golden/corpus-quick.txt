@@ -55,6 +55,7 @@ input	hydo/onboard/examples/swupdate/hydo.yaml	2c13d3b1ddef5d7e964d371a7cf999f3d
 input	hydo/onboard/examples/web-shop/hydo-walk.yaml	abf6900eb6261547cfa8e071f21c1721f1bd4ab747988690be44089b57ed5b86
 input	hydo/onboard/examples/web-shop/hydo.yaml	15a3d43c3de0e43da32d581a5bb199ed139ccde4349e777dbd868170183fc52f
 input	hydo/onboard/examples/blnk/hydo/hydo.yaml	7e97e5e2f1ff496ca70bf59e69bf32a213acbfe5b793f72d56bb293771353a9c
+input	hydo/onboard/examples/dragonfly/hydo/hydo.yaml	5be70d4a048877e521ea88d9982348b8e73db20160eea49140441776f929db31
 input	hydo/onboard/examples/formance-ledger/hydo/hydo.yaml	c2d48d2d9012cbeb2f305ad2e12cb70d6fd2896f07f6c098102cd7901b757308
 input	hydo/onboard/examples/ghost/hydo/hydo.yaml	e5a0a96f7d60faa87ba107f15fc1757aaf7111ade412aeeadb0424613c6392c6
 input	hydo/onboard/examples/hatchet/hydo/hydo.yaml	e3672df0fb0e8111b40656afe8cbb75554c01acce9e44903591c30ebefc6c557
@@ -3405,6 +3406,7 @@ chunk	hydo/onboard/examples/web-shop/hydo.yaml	30	500	0062629e287a762fa2d780295e
 chunk	hydo/onboard/examples/web-shop/hydo.yaml	31	500	a1a603ce011f8a7d14aeac3cffbbcc2a89546e54f47dececd85ea39d088ffde3
 chunk	hydo/onboard/examples/web-shop/hydo.yaml	32	478	f23244317c99c21ef7ca4018ff8de585b49265b1ea311f3176efc1f405ae5e0e
 manifest	hydo/onboard/examples/blnk/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
+manifest	hydo/onboard/examples/dragonfly/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/formance-ledger/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/ghost/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/hatchet/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)

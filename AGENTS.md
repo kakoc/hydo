@@ -530,6 +530,17 @@ found. Neither is reported upstream or posted:
 
 mender-artifact 4.4.2 writes an Artifact's state scripts in a random order; the build sorts them.
 
+**Dragonfly with replicas (M278, tentative number).** Dragonfly 2.1.0 runs as one primary and two
+replicas from its official image in `hydo/onboard/examples/dragonfly` (RESULTS.md), imported with
+`hydo compose`, on hvx only. It needs `guest.cpu: v3`, because Dragonfly's Lua interpreter is
+built for Sandy Bridge, a known requirement (issue #163). One new candidate is not reported
+upstream or posted. Dragonfly loads the snapshot whose files have the latest modification time.
+So after a backward step of the wall clock, a restart loads a snapshot from before the step. This
+happens also after a clean `SHUTDOWN` that saves first, and every write since is lost. hydo found
+it blind, and the shrinker reduced it to `T=8:-18` and the composition. A power cut loses
+snapshots that `SAVE` acknowledged (known, #8646). With `--set takeover=yes`, `REPLTAKEOVER` kept
+its promise in 80 schedules of kills, pauses, and partitions.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -1670,6 +1681,19 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The two candidates of M280 were not posted: num-integer's `i64::MIN.nth_root(1)` panics
       in a debug build, and byteorder's `ReadBytesExt::read_uint` panics for `nbytes` of 0 or
       more than 8 without a documented panic.
+141. The Dragonfly example (M278). What is left:
+    - The snapshot candidate is not reported upstream. It was not reproduced with a real clock
+      step outside hydo; `native/` shows the choice by modification time with `touch`.
+    - hvx's guest has no cgroup2 file system until a service mounts one, and Dragonfly exits at
+      start without it. Each service's `setup` mounts it; hydo could mount it at boot.
+    - A restarted service's earlier log (`<svc>.log.old`) is not copied into the run directory.
+    - `guest.cpu` cannot be a parameter: `{{cpu}}` passes `hydo build --check`, and the
+      explorer's corpus test refuses it. The example is for x86_64 only.
+    - An exploration cannot leave a fault kind out. The takeover search used a copy of the
+      manifest with `faults: [kill, pause, network, oneway]`.
+    - The experimental AOF (`--aof`), cluster mode, and `REPLTAKEOVER` together with clock
+      steps or power cuts did not run. The Mac engine and KVM did not run the example.
+    - The example is not in `hydo/onboard/recorded.json`.
 
 ## Milestone index
 
@@ -2313,6 +2337,12 @@ build machine, before 2026-10-13.
   Vikunja acknowledged in the last seconds (WAL with `synchronous=NORMAL`). The quick actions
   dialog loses a task that the server refuses and leaves the error unhandled. Nothing recorded
   moved
+- M278 (tentative number): the onboarding of Dragonfly 2.1.0, one primary and two replicas, on
+  hvx. In a new candidate, Dragonfly loads the snapshot with the latest file time. After a
+  backward clock step, a restart (also a clean SHUTDOWN) loads a snapshot from before the step
+  and loses every saved write since. It was found blind and shrunk to `T=8:-18`. A power cut loses acknowledged
+  snapshots (known, #8646), and Dragonfly's Lua needs AVX (known). REPLTAKEOVER kept its promise.
+  Nothing recorded moved
 
 ## Where to look
 

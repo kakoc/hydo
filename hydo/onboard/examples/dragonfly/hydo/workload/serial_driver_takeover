@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=60
+# with --set takeover=yes: REPLTAKEOVER 10 on a replica in stable sync, then the new primary must hold every key the old one held (opTakeover)
+exec /bin/dfc op takeover

@@ -1,0 +1,85 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "ghcr.io/dragonflydb/dragonfly:v2.1.0": {
+   "index_digest": "sha256:94891bb22ce2fb0f7a5a3ff1bb3b2fbbc5830e2523293e47723d87fa3e5b1184",
+   "name": "ghcr.io/dragonflydb/dragonfly",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "dragonfly",
+       "--logtostderr"
+      ],
+      "Entrypoint": [
+       "/usr/bin/tini",
+       "--",
+       "entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": {
+       "Test": [
+        "CMD-SHELL",
+        "/usr/local/bin/healthcheck.sh"
+       ]
+      },
+      "User": null,
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:1936953db764986adfdcc8ffd347e50665299ad0c1e761c8fe2b888330821022",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "dragonfly",
+       "--logtostderr"
+      ],
+      "Entrypoint": [
+       "/usr/bin/tini",
+       "--",
+       "entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": {
+       "Test": [
+        "CMD-SHELL",
+        "/usr/local/bin/healthcheck.sh"
+       ]
+      },
+      "User": null,
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:3a31efa21abea5f648c044a2071f1e2183f0ac64d4c7e6b542ce3fa1004a4aa5",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "ghcr.io/dragonflydb/dragonfly:v2.1.0",
+   "registry": "ghcr.io",
+   "repo": "dragonflydb/dragonfly",
+   "tag": "v2.1.0"
+  }
+ }
+}

@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: no server returns a key after its expiry, and the primary keeps a key whose expiry has not come
+exec /bin/dfc check expiry

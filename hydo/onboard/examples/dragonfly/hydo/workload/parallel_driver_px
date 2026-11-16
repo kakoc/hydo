@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# a key with an expiry (SET PX, EX or PXAT, or SET and PEXPIRE); records the primary's view (opPx)
+exec /bin/dfc op px
