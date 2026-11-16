@@ -664,6 +664,10 @@ variables! {
     HYDO_CHECKS: Image, Image, "list", "", "written by hydo-build; read by hydo-control";
 
     // ------------------------------------------------------------------ Passed
+    /// The cases file `hydo fuzz` writes for the harness it generates (Milestone 275).
+    HYDO_FUZZ_CASES: Passed, Passed, "path", "", "set by hydo fuzz for its generated test harness";
+    /// Where the generated harness of `hydo fuzz` appends its answers (Milestone 275).
+    HYDO_FUZZ_OUT: Passed, Passed, "path", "", "set by hydo fuzz for its generated test harness";
     /// `hydo-bench rebaseline`'s work folder, for its staging script
     /// (`hydo/onboard/rebaseline/stage.sh`, M164).
     HYDO_REBASE_WORK: Passed, Passed, "path", "", "set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh";

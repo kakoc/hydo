@@ -178,6 +178,11 @@ const NON_LITERAL_READS: &[(&str, &str)] = &[
         "hydo-engine/src/inproc.rs",
         "the module lock's default: SUDO_USER, SUDO_UID, SUDO_GID, HOME",
     ),
+    (
+        "hydo-contracts/src/fuzz/harness.rs",
+        "the text of the test harness that `hydo fuzz` generates for another crate: its reads of \
+         HYDO_FUZZ_CASES and HYDO_FUZZ_OUT run in that harness, not in hydo",
+    ),
 ];
 
 #[test]
