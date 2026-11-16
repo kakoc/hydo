@@ -283,3 +283,5 @@ change of your system and says whether the failure came back.
 - `hydo guide workflow`: every step of onboarding with the commands of your hydo.
 - `hydo guide messages`: the messages check, its claims, and its records.
 - [YOUR-PROJECT.md](YOUR-PROJECT.md): how to write the `hydo/` folder by hand.
+- [ONBOARDING-PLAYBOOK.md](ONBOARDING-PLAYBOOK.md): the process for onboarding a real project, from
+  the choice of a target to the upstream report.

@@ -368,7 +368,8 @@ services and partitions` of `hydo/onboard/MANIFEST.md`.
 skill (M229). The skill `onboard` in the Claude Code plugin `hydo` (`plugin/skills/onboard/`;
 `/plugin marketplace add kakoc/hydo`, `/plugin install hydo@hydo`, then `/hydo:onboard`) holds
 the process; every hydo fact is in the guide `hydo/guide/`, printed by `hydo guide <topic>`.
-docs/ONBOARD.md is the user's page. The assertion SDKs are in `sdk/`
+docs/ONBOARD.md is the user's page. `docs/ONBOARDING-PLAYBOOK.md` is the process for an onboarding
+of a real project, from the choice of a target to the upstream report (M281). The assertion SDKs are in `sdk/`
 (Rust is the reference), with the shared cases in `sdk/cases/`. `sdk/README.md` is for SDK
 maintainers: the shared cases, and the Go module with its frozen copy in `hydo/stack` (section
 "The Go module and the frozen copy in `hydo/stack`"). Every code example on the package pages is a
@@ -952,7 +953,7 @@ is the recipe for other systems.
 The history page, the `workflow_run` recorder and budgets from history are not built (open item
 67).
 
-**Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 51 documents
+**Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 60 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
 facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
 fresh reader (`docs/RELEASING.md`). Before M187 this file held the full current state; that text
@@ -2231,6 +2232,11 @@ build machine, before 2026-10-13.
   contracts-ledger bug from the contract alone; on Qdrant's `common` crate nine of 12 functions
   held, and a decoder panics on a header its encoder never writes. The VM run is designed only.
   Nothing recorded moved
+- M281 (tentative number): the onboarding playbook, `docs/ONBOARDING-PLAYBOOK.md`. It is one
+  process for every onboarding of a real project. It covers the choice of a target, the rules that
+  worked, the faults that found bugs, five phases with time limits, and the judgment of a finding. It also covers the
+  write-up, the upstream report, the retro, throughput, and common setup problems. Skill 2.3.2 links it. Nothing
+  recorded moved
 
 ## Where to look
 

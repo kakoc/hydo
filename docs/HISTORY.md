@@ -13231,3 +13231,63 @@ Mac, on `main` at `566cd876` with this milestone on top: `cargo clippy --workspa
 `hydo-schedule`'s `language::`, `hydo-agents`'s `public_content::`, `sh
 ci/consolidate-tests.sh --check` and `sh ci/vale.sh`. Nothing recorded moved: no engine, image,
 guest program or example file changed.
+
+### Milestone 281 (tentative number) - DONE (the onboarding playbook: one written process for every onboarding of a real project, from the choice of a target to the upstream report and the retro, built from the onboardings of Milestones 215 to 275; skill 2.3.2 links it; nothing recorded moved; 2026-11-16)
+
+**What and why.** About 15 onboardings of real projects (Formance Ledger, Lago, Blnk, Temporal,
+Valkey, River, Hatchet, Saleor, NATS JetStream, etcd, TigerBeetle, the web-shop example, Memos,
+RAUC, SWUpdate and Mender) each found their own way through the same steps. The lessons were in
+the examples' `RESULTS.md` files and in the working rules of the maintainer who ran them. The
+new page `docs/ONBOARDING-PLAYBOOK.md` writes them down as one how-to guide that a maintainer
+of hydo or an agent follows from top to bottom. The skill writes the `hydo/` folder; the
+playbook adds what comes before and after it.
+
+**The page's sections.**
+
+1. Picking a target: GitHub issues, a simple setup, a promise about state, and a reproduction
+   with released hydo; the red flags (a tracker that needs an account, a device-style setup,
+   memory over the guest's limit, kernel features, documented behaviour).
+2. The promises of each type of system, with the rule shapes that worked: queues and job
+   runners, ledgers and billing, key-value stores and databases, update tools and devices, and
+   web apps.
+3. Which faults found which findings, from power cuts to storage faults.
+4. The five phases with their time limits (scouting 45 minutes with no VM, setup to a first
+   clean run 3 hours, exploration and shrinking 4 to 5 hours, the write-up 1 hour), the two
+   checkpoints, and the commands.
+5. Judging a finding: the labels, the required duplicate search with its phrases recorded,
+   separating the faults, the conditional native reproduction, and `hydo versions`.
+6. The write-up: the sections of `RESULTS.md`, the regressions, the milestone, the open items,
+   and the checks before a merge.
+7. The upstream report: its fixed format with the one sentence about hydo, where to post,
+   attachments by hand in the browser, and following the threads.
+8. The retro in a fixed form, with reference values from the onboardings.
+9. Throughput of hvx, the Mac engine and GitHub's KVM runners, and sharding by seed ranges.
+10. Fifteen common setup problems with their fixes, from the examples' lists of what hydo lacked.
+
+**The five lessons that matter most.**
+
+- The generic rule over the client's acknowledged operations found more than any domain rule.
+  In Lago it failed in all 11 runs that broke a business result, and in Formance and Blnk it
+  was the only rule that saw a lost acknowledged operation.
+- The first failures of an exploration are mostly the rules' own mistakes: five kinds in River,
+  all 10 failures of Valkey's first exploration, and TigerBeetle's false loss at every power
+  cut.
+- Clock steps against durations measured on the wall clock gave the most new upstream reports
+  (Valkey, Temporal, River), so the clock audit runs before the exploration.
+- A crashed consumer that held acknowledged work lost it in Hatchet, Saleor and Lago, so a kill
+  aimed between the acknowledgement and the completion belongs in every queue's exploration.
+- Disk errors and lying disks broke hydo's disk model, not the systems, in every onboarding
+  that drew them; `--durable-only` keeps them out once that is seen.
+
+**Other changes.** `ci/vale.sh` checks the new page (60 documents). The skill
+`plugin/skills/onboard/SKILL.md` links it in one line, with an absolute link because the
+published plugin has no `docs/` folder; the skill's version is 2.3.2 in its frontmatter,
+`plugin/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`. `docs/ONBOARD.md`
+links it under "Where to read more". The CLI golden and `agents_equivalence` were re-recorded
+for the skill's new text and version.
+
+**Proof.** On this Mac: `sh ci/vale.sh` (no findings); `cargo test -p hydo --test it docs::`,
+`equivalence::` and `agents_equivalence::`; `cargo test -p hydo-agents --test it skill_check::`
+and `public_content::`; `cargo test -p hydo-schedule --test it language::`. No VM ran: the page
+cites the recorded runs of the examples. Nothing recorded moved: no engine, image, guest program
+or example file changed.

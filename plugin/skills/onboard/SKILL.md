@@ -4,7 +4,7 @@ description: Set up deterministic fault testing with hydo for a software project
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "2.3.1"
+  version: "2.3.2"
   hydo-min: "0.1.0"
 ---
 
@@ -19,6 +19,9 @@ This skill is the **process**. It does not contain hydo's facts (the format's ke
 and their options, the fault kinds, the limits): those change between hydo versions, and the
 installed `hydo` prints the ones that are true for it. Never write a key, command or option from
 memory or from the web; read it from `hydo guide`.
+
+An onboarding of a real project for hydo's own record (the target, the time limits, judging a
+finding, the upstream report) also follows the [onboarding playbook](https://github.com/kakoc/hydo/blob/main/docs/ONBOARDING-PLAYBOOK.md).
 
 ## 0. Check hydo
 
