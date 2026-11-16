@@ -363,6 +363,10 @@ impl Hypervisor for Kvm {
     fn describe(&self) -> String {
         self.desc.clone()
     }
+
+    fn branches(&self) -> Result<Box<dyn crate::branches::Branches>, String> {
+        Ok(Box::new(PerfBranches::open()?))
+    }
 }
 
 impl Kvm {
@@ -414,6 +418,7 @@ impl Kvm {
             ct_hw: false,
             obs: Vec::new(),
             obs_mask: 0,
+            dr6: 0,
             ram: ram as u64,
             ram_len: len,
             dirty: None,
@@ -484,6 +489,8 @@ pub struct KvmCpu {
     /// the observer's breakpoint addresses while it steps, and their DR6 bits
     obs: Vec<u64>,
     obs_mask: u64,
+    /// DR6 of the last debug exit (the branch tick's landing, Milestone 274)
+    dr6: u64,
     /// guest RAM (memory slot 0, and slot 1 above 3 GiB: `layout::ram_blocks`)
     ram: u64,
     ram_len: usize,
@@ -612,7 +619,15 @@ impl KvmCpu {
             d.debugreg[7] = dr7;
         }
         if self.tf {
-            d.control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP;
+            // with the branch tick's handler breakpoints (Milestone 274) the steps keep them;
+            // the observer's walk steps without any (`addrs` empty), as before
+            d.control = KVM_GUESTDBG_ENABLE
+                | KVM_GUESTDBG_SINGLESTEP
+                | if addrs.is_empty() {
+                    0
+                } else {
+                    KVM_GUESTDBG_USE_HW_BP
+                };
         }
         self.obs_mask = (1u64 << obs.len()) - 1;
         d
@@ -678,6 +693,7 @@ impl KvmCpu {
                 // only the observer's two instruction breakpoints (DR6 B0, B1) are expected: the
                 // observer does not step a guest that uses the trap flag or its own breakpoints
                 let d: kvm_debug_exit_arch = self.exit_union();
+                self.dr6 = d.dr6;
                 let ct_mask = if self.ct_hw { 0xf & !self.obs_mask } else { 0 };
                 if (self.stepping && d.dr6 & self.obs_mask != 0) || (self.tf && d.dr6 & 0x4000 != 0)
                 {
@@ -986,6 +1002,20 @@ impl Cpu for KvmCpu {
         true
     }
 
+    fn land_step(&mut self, bps: &[u64]) {
+        // trap-flag steps with instruction breakpoints at `bps` (the branch tick's handlers)
+        self.tf = true;
+        self.stepping = !bps.is_empty();
+        self.obs = bps.to_vec();
+        let d = self.guest_debug(bps);
+        self.set(KVM_SET_GUEST_DEBUG, &d, "KVM_SET_GUEST_DEBUG");
+        self.ct_set = true;
+    }
+
+    fn last_dr6(&self) -> u64 {
+        self.dr6
+    }
+
     fn single_step(&mut self, on: bool) {
         // KVM sets RFLAGS.TF while the guest runs one instruction and takes the debug exception
         // (KVM_GET_REGS does not show the flag); turning the steps off takes the flag back
@@ -1196,5 +1226,202 @@ impl Drop for KvmCpu {
         unsafe {
             libc::munmap(self.run.cast(), self.run_size);
         }
+    }
+}
+
+// ---------------- the branch tick's counter (Milestone 274) ----------------
+
+/// `struct perf_event_attr` up to `sig_data` (`PERF_ATTR_SIZE_VER7`, Linux 5.13 and later).
+#[repr(C)]
+#[derive(Default)]
+struct PerfAttr {
+    type_: u32,
+    size: u32,
+    config: u64,
+    sample_period: u64,
+    sample_type: u64,
+    read_format: u64,
+    flags: u64,
+    wakeup_events: u32,
+    bp_type: u32,
+    config1: u64,
+    config2: u64,
+    branch_sample_type: u64,
+    sample_regs_user: u64,
+    sample_stack_user: u32,
+    clockid: i32,
+    sample_regs_intr: u64,
+    aux_watermark: u32,
+    sample_max_stack: u16,
+    reserved2: u16,
+    aux_sample_size: u32,
+    reserved3: u32,
+    sig_data: u64,
+}
+
+const PERF_TYPE_RAW: u32 = 4;
+const PERF_FLAG_PINNED: u64 = 1 << 2;
+const PERF_FLAG_EXCLUDE_KERNEL: u64 = 1 << 5;
+const PERF_FLAG_EXCLUDE_HV: u64 = 1 << 6;
+const PERF_FLAG_EXCLUDE_HOST: u64 = 1 << 19;
+/// `_IOW('$', 4, __u64)`
+const PERF_EVENT_IOC_PERIOD: u64 = 0x4008_2404;
+const F_SETSIG: i32 = 10;
+const F_SETOWN_EX: i32 = 15;
+const F_OWNER_TID: i32 = 0;
+/// no overflow in practice (a sampling event needs a period)
+const NO_ALARM: u64 = 1 << 62;
+
+/// The raw event that counts retired conditional branches, taken and not taken, on this host's
+/// CPU, or why there is none. Intel from Ice Lake on (and the performance cores of hybrid CPUs):
+/// `BR_INST_RETIRED.COND` (`0x11c4`); Skylake to Comet Lake: `BR_INST_RETIRED.CONDITIONAL`
+/// (`0x01c4`). Exact counts were measured on a Xeon 6975P-C only (Milestone 274); AMD is refused:
+/// its count is exact only with a setting that needs root (rr's `SpecLockMap` note), and no AMD
+/// runner had a counter to measure.
+pub fn branch_event() -> Result<u64, String> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // SAFETY: CPUID is available on every x86_64 CPU
+        let v = unsafe { std::arch::x86_64::__cpuid(0) };
+        let vendor: Vec<u8> = [v.ebx, v.edx, v.ecx]
+            .iter()
+            .flat_map(|r| r.to_le_bytes())
+            .collect();
+        if vendor != b"GenuineIntel" {
+            return Err(format!(
+                "the branch tick (guest.branch_tick) counts on Intel CPUs only; this host's CPU is {}",
+                String::from_utf8_lossy(&vendor)
+            ));
+        }
+        // SAFETY: as above
+        let l1 = unsafe { std::arch::x86_64::__cpuid(1) };
+        let family = (l1.eax >> 8) & 0xf;
+        let model = ((l1.eax >> 4) & 0xf) | (((l1.eax >> 16) & 0xf) << 4);
+        if family != 6 {
+            return Err(format!(
+                "the branch tick (guest.branch_tick): no conditional-branch event known for Intel family {family}"
+            ));
+        }
+        Ok(match model {
+            0x4e | 0x5e | 0x55 | 0x8e | 0x9e | 0xa5 | 0xa6 => 0x01c4,
+            _ => 0x11c4,
+        })
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    Err("the branch tick needs an x86_64 host".into())
+}
+
+/// The branch tick's counter: a `perf_event` on the calling thread that counts the guest's
+/// retired conditional branches in user mode, pinned, with its overflow signal to this thread.
+pub struct PerfBranches {
+    fd: File,
+    event: u64,
+}
+
+// SAFETY: the file is used from the engine's thread only
+unsafe impl Send for PerfBranches {}
+
+impl PerfBranches {
+    /// Open the counter on the calling thread (the thread that runs the vCPUs).
+    pub fn open() -> Result<PerfBranches, String> {
+        let event = branch_event()?;
+        install_kick_handler()?;
+        unblock_kick();
+        let mut a = PerfAttr {
+            type_: PERF_TYPE_RAW,
+            size: std::mem::size_of::<PerfAttr>() as u32,
+            config: event,
+            sample_period: NO_ALARM,
+            flags: PERF_FLAG_PINNED
+                | PERF_FLAG_EXCLUDE_KERNEL
+                | PERF_FLAG_EXCLUDE_HV
+                | PERF_FLAG_EXCLUDE_HOST,
+            wakeup_events: 1,
+            ..PerfAttr::default()
+        };
+        if std::path::Path::new("/sys/bus/event_source/devices/cpu_core").exists() {
+            // a hybrid CPU: the performance cores' PMU (the engine binds a v3 vCPU to one kind)
+            a.type_ = std::fs::read_to_string("/sys/bus/event_source/devices/cpu_core/type")
+                .ok()
+                .and_then(|t| t.trim().parse().ok())
+                .unwrap_or(PERF_TYPE_RAW);
+        }
+        // SAFETY: perf_event_open with an attribute block of its stated size, on this thread
+        let r = unsafe {
+            libc::syscall(
+                libc::SYS_perf_event_open,
+                &a as *const PerfAttr,
+                0,
+                -1,
+                -1,
+                0,
+            )
+        } as i32;
+        if r < 0 {
+            let e = std::io::Error::last_os_error();
+            let p = std::fs::read_to_string("/proc/sys/kernel/perf_event_paranoid")
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
+            return Err(format!(
+                "the branch tick (guest.branch_tick) needs a performance counter of the guest's \
+                 branches: perf_event_open: {e} (perf_event_paranoid {p}; it must be 2 or lower, \
+                 and a virtual machine must have a virtual PMU)"
+            ));
+        }
+        let fd = new_fd(r);
+        // SAFETY: gettid has no preconditions
+        let tid = unsafe { libc::syscall(libc::SYS_gettid) } as i32;
+        let own = [F_OWNER_TID, tid];
+        // SAFETY: fcntl on our own descriptor with the arguments each command takes
+        let ok = unsafe {
+            libc::fcntl(fd.as_raw_fd(), F_SETOWN_EX, own.as_ptr()) == 0
+                && libc::fcntl(fd.as_raw_fd(), F_SETSIG, kick_signal()) == 0
+                && libc::fcntl(fd.as_raw_fd(), libc::F_SETFL, libc::O_ASYNC) == 0
+        };
+        if !ok {
+            return Err(format!(
+                "the branch tick: the counter's signal: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        Ok(PerfBranches { fd, event })
+    }
+}
+
+impl crate::branches::Branches for PerfBranches {
+    fn read(&mut self) -> u64 {
+        let mut v = [0u8; 8];
+        // SAFETY: an 8-byte read of the counter's value into v
+        let n = unsafe { libc::read(self.fd.as_raw_fd(), v.as_mut_ptr().cast(), 8) };
+        if n != 8 {
+            crate::fatal(
+                1,
+                &format!(
+                    "hydo-kvm: the branch tick's counter: {}",
+                    std::io::Error::last_os_error()
+                ),
+            );
+        }
+        u64::from_le_bytes(v)
+    }
+    fn alarm(&mut self, after: Option<u64>) {
+        let p: u64 = after.unwrap_or(NO_ALARM).max(1);
+        // SAFETY: PERF_EVENT_IOC_PERIOD reads a u64
+        let r = unsafe {
+            ioctl(
+                self.fd.as_raw_fd(),
+                PERF_EVENT_IOC_PERIOD,
+                &p as *const u64 as u64,
+            )
+        };
+        if let Err(e) = chk("PERF_EVENT_IOC_PERIOD", r) {
+            crate::fatal(1, &e);
+        }
+    }
+    fn describe(&self) -> String {
+        format!(
+            "the branch tick counts raw event {:#x} (the guest's retired conditional branches in user mode)",
+            self.event
+        )
     }
 }

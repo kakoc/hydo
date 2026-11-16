@@ -9,6 +9,13 @@ and KVM engines" below: `guest.kernel: containers`. With it, containers run on t
 on KVM. k3s itself does not start there: a loop of k3s's makes no VM exits, and an engine whose
 clock counts VM exits cannot interrupt it (section "The variant, as built").
 
+Milestone 274 (tentative number), 2026-11-16, added `guest.branch_tick`: the KVM engine of an
+Intel host with a counter of the guest's branches interrupts such a loop at a count of its
+branches (`docs/design/exit-free-loops.md`). With it, and with a `cpu MHz` line for the kubelet,
+k3s runs on KVM with 2 vCPUs: the node is Ready, the pods elect a leader, and each schedule
+repeats its fingerprint (`hydo/onboard/examples/k3s-lease/RESULTS.md`). The Mac engine has no
+such counter.
+
 ## The question
 
 Some software is about Kubernetes itself. An operator or a controller reads and writes the

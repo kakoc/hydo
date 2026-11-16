@@ -137,6 +137,7 @@ pub(crate) const KNOWN_GUEST: &[&str] = &[
     "kernel",
     "reboot",
     "disks",
+    "branch_tick",
     "description",
 ];
 pub const KNOWN_KNOB: &[&str] = &[
@@ -925,6 +926,16 @@ pub fn validate(m: &mut Value) -> R<()> {
     }
     if has(&guest, "disks")? {
         guest_disks(index(&guest, "disks")?)?;
+    }
+    // Milestone 274 (docs/design/exit-free-loops.md): the KVM engine's branch tick
+    if has(&guest, "branch_tick")? {
+        let c = index(&guest, "branch_tick")?;
+        if !c.is_boolean() {
+            return Err(err(format!(
+                "guest.branch_tick: true (the KVM engine interrupts code without VM exits after a count of its branches) or false (got {})",
+                repr(c)
+            )));
+        }
     }
     if has(&guest, "cpu_cache")? {
         let c = index(&guest, "cpu_cache")?;

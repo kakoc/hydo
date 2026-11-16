@@ -13023,3 +13023,120 @@ control corpus (`corpus-quick.txt`), re-recorded on this Mac with `HYDO_BLESS=1`
 `equivalence::cli_matches_golden` and `agents_equivalence`; `hydo-explore`'s `identity::` (also
 with `HYDO_IDENT_FULL=1`) and `corpus::`; `hydo-control`'s `corpus::`; `sh
 ci/consolidate-tests.sh --check`; and `sh ci/vale.sh`.
+
+### Milestone 274 (tentative number) - DONE (guest loops without VM exits on the Mac and KVM engines: on GitHub's runners only the Xeon 6975P-C hosts have a counter of the guest's branches, exact with `0x11c4`, with a skid of 26 branches; the KVM engine's branch tick, `guest.branch_tick`, an opt-in format-1 key, interrupts code without exits after 2^26 user-mode conditional branches at the exact count, so kine's loop gives way; the Mac engine has no such counter, and refuses the key; its spin observer now resolves TigerBeetle's polling loop, so the single replica boots on the Mac; nothing recorded moved; 2026-11-16)
+
+**Why.** The Mac and KVM engines count the guest's time in VM exits and deliver interrupts at
+exits. A loop that makes no exit gets no timer interrupt. Milestone 256 found kine's watch loop
+in k3s: Go's `select` on a closed channel changes the runtime's random state in every pass, so no
+spin observer proves a cycle, and k3s stopped with `ERROR boot: SPIN` on both engines. The Mac
+could not boot TigerBeetle (open item 13). hvx's PMU branch clock interrupts such loops. The design
+is `docs/design/exit-free-loops.md`.
+
+**The options measured.** The interrupt must come at a point that the guest alone fixes, so it
+must follow from a count of the guest's work since its last exit.
+
+- A host counter of the guest's branches on KVM. `hv/kvm/pmu/pmuprobe.c` gained the tests `info`
+  and `readcost`. The one-off workflow `tmp-exitfree-kvm` (branch of that name, run 43903881480)
+  ran it on eight runners. Three Xeon 6975P-C hosts had a counter. With `0x11c4` it counted 3,000
+  of 3,000 runs of 1,000 branches and 50 of 50 runs of 10^6 exactly. `0x01c4` counted only taken
+  branches, and `0x00c4` the loop's jump too. The overflow stopped the guest 26 branches late (once
+  28), never early. A trap-flag step cost 17.0 µs. An exit cost 10.6 µs, 14.4 µs with the counter
+  on, and 16.1 µs with a read of it. The Xeon Platinum 8573C host had "no PMU driver", and the four
+  AMD hosts (EPYC 7763, 9V45, 9V74) "PMU not available due to virtualization".
+- A guest PMU that the guest kernel programs: KVM offers version 2 with 8 counters on the 6975P-C,
+  but its overflow interrupt needs KVM's in-kernel local APIC, which the engine does not use, and
+  it has the same skid. Not built.
+- Single steps from the last exit: a stretch is known to be long only from the host-timed kick, so
+  the count must cover what a fast host runs in 5 ms, about 2.5·10^7 instructions. One tick would
+  take about 425 s on the runners (17 µs per step) and 60 s on the Mac (2.4 µs): not built.
+- The Mac: no counter of the guest. The guest PMU traps with nothing behind it (`hv/hvm/PROBE.md`),
+  the host counters count host work too (Milestone 48), and the emulated guest PMU needs guest EL2,
+  which an M2 lacks.
+
+**Built: the branch tick on KVM** (`hydo/crates/hydo-kvm/src/branches.rs`, the `bt_` functions of
+`vmm.rs`, `PerfBranches` in `sys.rs`). `guest.branch_tick: true` (a format-1 addition, the schema
+and MANIFEST.md "Loops without VM exits") makes `hydo build` write the period 2^26 into
+`/etc/hydo/branch-tick`. hydo-engine passes it as `HYDO_BRANCH_TICK`; the Mac engine refuses the
+image before any VM ("guest.branch_tick needs a counter of the guest's branches, which the Mac
+engine does not have"); hvx ignores it.
+
+- The rule: after 2^26 retired conditional branches in user mode of one vCPU without one of its
+  exits, the engine stops the vCPU right after the branch that makes the count, and treats the
+  point as a proven loop. The clock jumps to its next event, as at an idle HLT; with several vCPUs
+  the turn ends when another vCPU can run.
+- The count: a pinned `perf_event` (`exclude_host`, `exclude_kernel`) on the engine's thread, read
+  after every `KVM_RUN`, its difference given to the vCPU that ran. An exit sets the vCPU's count to
+  0, so the count is in no snapshot and no fingerprint. The raw event is `0x11c4` from Ice Lake on
+  and `0x01c4` for Skylake to Comet Lake; AMD is refused.
+- The overflow: the watchdog's first kick of a stretch arms it 256 branches before the tick
+  (`HYDO_KVM_BRANCH_MARGIN`); its signal is the watchdog's. A count past the tick ends the run as a
+  SPIN.
+- The landing: trap-flag steps to the exact count. `PUSHF`'s pushed word loses the flag; `SYSCALL`
+  and `POPF` are run over to a breakpoint; breakpoints at the guest's #DE, #UD, #GP and #PF
+  handlers let the engine take the flag out of a fault's frame. `INT`, `INT3`, `UD2`, `IRET`,
+  `SYSENTER` and `SYSRET` end the run as a SPIN.
+- The observer: with the tick on, a kick whose count advanced skips the spin observer, and a look
+  whose steps advanced it proves nothing, so a cycle with branches is always the tick's.
+
+**Built: the Mac observer at the return address** (`hydo/crates/hydo-hvm/src/spin.rs`). The Mac
+observer compared the pages a pass writes, so TigerBeetle's loop was a cycle it could prove. Its
+breakpoint sat at the kick's instruction, inside `memset`, which one frame calls twice per pass;
+consecutive arrivals never matched, and every look gave up after 64. After 16 arrivals without a
+repeat a look now moves its breakpoint to `x30`, up to three times. Where a look is armed decides
+only whether a cycle is found, not the canonical state it is resolved at.
+
+**Proof on the Mac** (an M2 Pro; the 0.3.4 Mac release's guest files and this milestone's
+programs; one VM at a time). TigerBeetle 0.17.9's single replica (`hydo/hydo-single.yaml` without
+`cpu: v3`, `--set tb=0.17.9-aarch64`, image `4f8e200c…`): before the change `ERROR boot: SPIN`
+(43 looks, 36 gave up, at exit 18,043); after it, each schedule twice from a fresh boot, every
+command and the three invariants OK, one fingerprint per schedule: `disk=none | run`
+`ac51e985c3361285`, `K=tigerbeetle_0@5+3` `35357e63660b2d80`, `disk=cut | run C=10`
+`dc817c32c558ba2c`, `P=tigerbeetle_0@5+5` `6908fd6ad74d193a`, `T=6:3600` `290308a7857401d1`. The
+first run resolved 175 loops and moved to a return address 160 times. An image with
+`guest.branch_tick` was refused before any VM. `hydo-bench rebaseline --check --platform hvm
+--only hvm/redis,hvm/ledger,hvm/ledger-spin --jobs 1`: 16 of 16 schedules with the recorded
+fingerprints and verdicts, the counter-loop example `hvm/ledger-spin` among them.
+
+**Proof on KVM** (the one-off workflow `tmp-exitfree-kvm`, branch of that name, deleted after the
+runs; the published 0.3.4 Linux release, this milestone's `hydo`, and the containers kernels of
+Milestone 256's run 43698484545, whose bytes are the pins).
+
+- Nothing moved. The 0.3.4 release's own `hydo` built the quickstart image with the recorded bytes
+  `f3a152d6…` (`kvm/release-redis`), and this milestone's `hydo` ran it without the key. In runs
+  43910568187, 43916305446 and 43917522895, all 24 jobs gave the published values: on Intel
+  (Xeon 6975P-C, Xeon Platinum 8370C) `2d059466fb87a253` and `8af0c14d4ec2c470` (`disk=cut | run
+  C=11 R=everysec`, VIOLATION), on AMD (EPYC 7763, 9V45, 9V74) the recorded `fb237d7eebbf8b83` and
+  `6a76d87a7dd2d6f2`. On every host with a counter the same image with `guest.branch_tick` gave OK
+  and one fingerprint twice.
+- kine's loop gives way. k3s-lease's `containers/hydo.yaml` with the key on 2 vCPUs: without the
+  key the boot stopped with Milestone 256's `ERROR boot: SPIN`; with it, 32 to 63 ticks per boot,
+  each landed by about 1,500 trap-flag steps (90 ms) with the default margin. Run 43913419444, on
+  five 6975P-C hosts, gave one fingerprint (`a0a7c82d991b1b99`) on every run, with margins of 256
+  and 3000 branches (up to 18,136 steps in one landing) and with `HYDO_KVM_DIAG`. Its verdict was
+  `ERROR service start (k3s)`: the kubelet stopped with "could not detect clock speed", because the
+  KVM guest's `/proc/cpuinfo` has no `cpu MHz` line. The example's new `containers/cpuinfo.sh`
+  binds a copy with the line `cpu MHz : 2000.000` over the file when the line is missing.
+- k3s on KVM (run 43917522895, one Xeon 6975P-C host; the other seven jobs were AMD, without a
+  counter; image `5897029e…`). The node was Ready at 3.1 s of guest time, the StatefulSet's 3 pods
+  at 9.2 s, and a pod led on the Lease. `disk=none | run` gave OK (`elect.one_leader`: one leader
+  span) and `8c43fbd8700b2862` three times, once with a margin of 1024 branches. `T=2:30` gave
+  `4736cf7ec6c1d53e` twice and `T=3:30` `7f36d45d138bf971`: a second leader span, without overlap,
+  verdict OK. So hvx's two leaders at once after a forward step did not repeat with these steps.
+
+**Goldens and what moved.** Nothing recorded moved: an image without the key builds the same
+bytes and runs the same code paths. Re-recorded on this Mac: `hydo/schema/project-v1.json`, the
+configuration inventory (`HYDO_BRANCH_TICK`, `HYDO_KVM_BRANCH_MARGIN`), the answers of
+hydo-build's and hydo-manifest's equivalence tests (the list of known `guest` keys, the changed
+k3s manifest and the mutants made from it, and the pin of the Saleor manifest, which Milestone 268
+changed), and the CLI's `guide manifest` answers and the agents golden's guide hash
+(MANIFEST.md). New unit tests in hydo-kvm's `branches`: the steps' instruction classes, a gate's
+handler, and the count per vCPU.
+
+**Checks** (this Mac, on `main` at `47df6fee` with this milestone on top): `cargo fmt --all
+--check`; `cargo clippy --locked --workspace --all-targets -- -D warnings`; `cargo clippy --locked
+--target x86_64-unknown-linux-musl -p hydo-kvm -p hydo-engine --all-targets -- -D warnings`; the
+tests of hydo-kvm, hydo-hvm, hydo-engine, hydo-build, hydo-manifest, hydo-config,
+hydo-schema-compat, hydo-schedule (`language::`), hydo-agents (`public_content::`) and the `hydo`
+program (`docs::`, `equivalence::cli_matches_golden`, `agents_equivalence`); `sh
+ci/consolidate-tests.sh --check`; `sh ci/vale.sh`, and Vale on `docs/design/exit-free-loops.md`.

@@ -452,7 +452,29 @@ pub fn write_compiled(
     if let Some(t) = disks_line(&p.data) {
         fsx::write_text(&r.join("etc/hydo/disks"), &format!("{t}\n"))?;
     }
+    // Milestone 274: `guest.branch_tick`, the KVM engine's interrupt for loops without exits
+    // (docs/design/exit-free-loops.md); nothing is written without it, so other images keep
+    // their bytes
+    if branch_tick(&p.data) {
+        fsx::write_text(
+            &r.join("etc/hydo/branch-tick"),
+            &format!("{BRANCH_TICK_PERIOD}\n"),
+        )?;
+    }
     Ok(())
+}
+
+/// The branch tick's period, in the guest's user-mode conditional branches without an exit, that
+/// an image with `guest.branch_tick: true` records (Milestone 274). An image keeps the period it
+/// was built with.
+pub const BRANCH_TICK_PERIOD: u64 = 1 << 26;
+
+/// Whether the manifest turns the branch tick on (`guest.branch_tick: true`).
+pub fn branch_tick(data: &Value) -> bool {
+    data.get("guest")
+        .and_then(|g| g.get("branch_tick"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 /// `guest.disks` as the engines read it: `<size_mib>:<volatile|none>` per disk, in order, joined

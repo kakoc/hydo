@@ -41,6 +41,7 @@
 pub mod abi;
 pub mod apic;
 pub mod boot;
+pub mod branches;
 pub mod contracts;
 pub mod cpu;
 pub mod cpuid;

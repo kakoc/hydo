@@ -436,6 +436,15 @@ pub trait Cpu: Send {
     /// flag is visible to an instruction that saves RFLAGS (PUSHF, SYSCALL, an exception's
     /// frame). [`Cpu::step_to`] turns it off.
     fn single_step(&mut self, _on: bool) {}
+    /// The branch tick's landing (Milestone 274, [`crate::branches`]): trap-flag steps, with
+    /// instruction breakpoints at `bps` (the exception handlers whose frames the engine fixes).
+    /// A run stops with [`Exit::Debug`] after one instruction or at a breakpoint
+    /// ([`Cpu::last_dr6`] says which). [`Cpu::step_to`] turns it off.
+    fn land_step(&mut self, _bps: &[u64]) {}
+    /// DR6 at the last [`Exit::Debug`] (bits 0 to 3: a breakpoint, bit 14: a single step).
+    fn last_dr6(&self) -> u64 {
+        0
+    }
     /// The function contracts' breakpoints (Milestone 255): up to four instruction addresses
     /// where a run stops with [`Exit::Contract`]. They are in the vCPU's debug registers only
     /// while the spin observer neither steps it nor single-steps it, and they leave the guest's
@@ -490,6 +499,11 @@ pub trait Hypervisor: Send {
     }
     /// One line naming the host (its KVM and CPU), for the engine's diagnostics.
     fn describe(&self) -> String;
+    /// The branch tick's counter (Milestone 274, [`crate::branches`]), opened on the calling
+    /// thread, which must be the thread that runs the vCPUs.
+    fn branches(&self) -> Result<Box<dyn crate::branches::Branches>, String> {
+        Err("this vCPU maker has no branch counter".into())
+    }
 }
 
 #[cfg(test)]

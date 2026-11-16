@@ -222,6 +222,10 @@ impl Kvm {
         if let Some(d) = crate::image::guest_disks(&spec.image) {
             c.env(hydo_config::registry::HYDO_GUEST_DISKS, d);
         }
+        // Milestone 274: the image's branch tick (guest.branch_tick)
+        if let Some(p) = crate::image::branch_tick(&spec.image) {
+            c.env(hydo_config::registry::HYDO_BRANCH_TICK, p);
+        }
         c
     }
 
@@ -254,6 +258,10 @@ fn spawn(
     // Milestone 263: the image's added disks (guest.disks), as the engine program gets them
     if let Some(d) = crate::image::guest_disks(&spec.image) {
         e = e.with([(hydo_config::registry::HYDO_GUEST_DISKS, d)]);
+    }
+    // Milestone 274: the image's branch tick (guest.branch_tick)
+    if let Some(p) = crate::image::branch_tick(&spec.image) {
+        e = e.with([(hydo_config::registry::HYDO_BRANCH_TICK, p)]);
     }
     let o = hydo_config::kvm::Options::from_env(&e);
     let dev = hydo_config::kvm::Engine::from_env(&e).dev();

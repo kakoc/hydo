@@ -156,6 +156,8 @@ guest:
                                # since fingerprint epoch 2); see "The CPU's caches"
   kernel: containers           # optional: the guest kernel for containers and Kubernetes on the
                                # Mac and KVM engines; see "The guest kernel for containers"
+  branch_tick: true            # optional (the KVM engine on Intel): interrupt code that runs
+                               # without VM exits; see "Loops without VM exits"
 
 network: bridge                # loopback (default): one network for everything in the guest;
                                # bridge: each service in its own network namespace at its addr:
@@ -1179,7 +1181,35 @@ averages a timer updates. The example `hydo/onboard/examples/k3s-lease/container
 and its `probe.yaml` checks these options with runc, iptables and ipset. On the Mac and KVM
 engines k3s itself stops with `ERROR boot: SPIN`, in a loop without VM exits that the engines
 cannot interrupt. On KVM with one vCPU it stops earlier, because k3s needs the cpuset
-controller. The measurements are in `hydo/onboard/examples/k3s-lease/RESULTS.md`.
+controller. The measurements are in `hydo/onboard/examples/k3s-lease/RESULTS.md`. With
+`guest.branch_tick` (the next section) k3s runs on the KVM engine of an Intel host.
+
+### Loops without VM exits (`guest.branch_tick`)
+
+The Mac and KVM engines measure the guest's time in VM exits and deliver interrupts at exits. A
+loop that makes no exit gets no timer interrupt, so the guest kernel never preempts it. A loop
+that waits for another thread then waits forever, and the run ends as `ERROR boot: SPIN`. The
+engines resolve loops that return to the same machine state. They cannot resolve a loop whose
+memory changes in every pass, such as Go's `select` on a closed channel in kine, k3s's storage
+layer.
+
+With `guest.branch_tick: true` (Milestone 274) the KVM engine counts the guest's retired
+conditional branches in user mode with a host performance counter. After 2^26 of them without
+an exit, the engine stops the vCPU right after the branch that makes that count. The clock then
+jumps to its next event and the interrupt is delivered there, as at an idle HLT. The point
+depends on the guest alone, so a run repeats its fingerprint.
+
+What the key needs and means on each engine:
+
+- **The KVM engine** needs an Intel host whose counters count a guest: `perf_event_paranoid`
+  2 or lower, and in a virtual machine a virtual PMU. Of GitHub's runners only the Xeon 6975P-C
+  hosts have one. Elsewhere the engine stops before the boot and says why.
+- **The Mac engine** has no counter of the guest's branches, and refuses the image before any VM.
+- **hvx** ignores the key: its PMU branch clock interrupts such loops already.
+
+The key is opt-in. An image without it gets the same bytes and fingerprints as before. An image
+with it records the period in `/etc/hydo/branch-tick` and has its own fingerprints. The design
+and the measurements are in `docs/design/exit-free-loops.md`.
 
 ### Link faults (a network fault between two named services)
 

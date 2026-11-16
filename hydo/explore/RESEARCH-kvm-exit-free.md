@@ -295,3 +295,14 @@ The prototype's check below was run on 2026-11-08 (the results above); option 1'
 - Xen and rr, 2016: https://old-list-archives.xen.org/archives/html/xen-devel/2016-10/msg01288.html
 - KVM, AMD Zen 3 event mapping (2022): https://www.lkml.org/lkml/2022/5/3/21 ; emulated
   instruction accounting (RFC, 2026): https://lkml.iu.edu/2607.2/08518.html
+
+## Option 1, built (Milestone 274)
+
+Milestone 274 built option 1 as the branch tick (`guest.branch_tick`,
+`docs/design/exit-free-loops.md`), for kine's loop in k3s, whose memory changes in every pass, so
+that option 2 cannot prove it. Two choices differ from the analysis above. The exact stop uses
+trap-flag steps, not a decoder: the steps repair what the flag leaks (the word `PUSHF` pushes, and
+a fault's frame, at a breakpoint on the handler's first instruction), run over `SYSCALL` and
+`POPF`, and refuse the rest. And the rule counts from the vCPU's last exit, so a guest whose
+stretches stay below the period runs as it does without the tick. On GitHub's runners only the Xeon 6975P-C
+hosts had a counter; the AMD hosts had none, so AMD stays unmeasured.

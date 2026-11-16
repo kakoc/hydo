@@ -311,6 +311,14 @@ pub fn guest_disks(image: &Path) -> Option<String> {
     (!t.is_empty()).then(|| t.to_string())
 }
 
+/// The branch tick's period (`guest.branch_tick`, Milestone 274), from the image's
+/// `/etc/hydo/branch-tick`; None without the key (the file is written only with it).
+pub fn branch_tick(image: &Path) -> Option<String> {
+    let t = embedded_file(image, "etc/hydo/branch-tick").ok()?;
+    let t = t.trim();
+    (!t.is_empty()).then(|| t.to_string())
+}
+
 pub fn embedded_manifest(image: &Path) -> Result<String, ImageError> {
     embedded_file(image, "etc/hydo/hydo.yaml")
 }

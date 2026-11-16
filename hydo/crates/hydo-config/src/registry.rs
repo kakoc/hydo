@@ -147,6 +147,11 @@ variables! {
     /// joined by commas, from the image's `/etc/hydo/disks`. hydo sets it for an image with added
     /// disks; without it the engine attaches none.
     HYDO_GUEST_DISKS: Engine, User, "list", "", "hydo-engine, hydo-hvm, hydo-kvm";
+    /// The branch tick (`guest.branch_tick`, Milestone 274): its period in the guest's user-mode
+    /// conditional branches, from the image's `/etc/hydo/branch-tick`. hydo sets it for an image
+    /// with the key; the KVM engine then interrupts a stretch without exits at that count, and the
+    /// Mac engine refuses the image. Without it neither engine changes.
+    HYDO_BRANCH_TICK: Engine, User, "number", "", "hydo-engine, hydo-kvm";
 
     // ------------------------------------------------------------------ HvxEngine
     /// `0` turns the host-call port off (M138; on by default since M140).
@@ -381,6 +386,10 @@ variables! {
     /// like an exact cycle. Unset: on for images built at fingerprint epoch 2 and later, off for
     /// older images (Milestone 204).
     HYDO_KVM_SPIN_STATE: Kvm, Developer, "flag: exactly `0` turns it off", "on (epoch 2 images)", "hydo-kvm";
+    /// The branch tick (Milestone 274): how many branches before its count the engine sets the
+    /// counter's overflow; trap-flag steps cover the rest. A run gives the same fingerprint with
+    /// any margin above the overflow's skid, which is what changing it checks.
+    HYDO_KVM_BRANCH_MARGIN: Kvm, Developer, "number", "256", "hydo-kvm";
     /// Set: the engine computes no fingerprint (`fp=0000000000000000`), which on a large image
     /// is most of the cost of a short conversation (docs/design/agent-environments.md); for
     /// measuring that cost only.

@@ -1454,6 +1454,13 @@ pub fn vm_opts(o: &KvmOptions, disk: Option<&std::path::Path>) -> VmOpts {
         cmdline: CMDLINE.to_string(),
         virtio: virt,
         vcpus: 1,
+        branch_tick: o.branch_tick,
+        branch_margin: o
+            .branch_margin
+            .clone()
+            .map(|v| cstr::strtoull0(v.as_bytes()))
+            .filter(|&m| m > 0)
+            .unwrap_or(crate::branches::MARGIN),
     }
 }
 

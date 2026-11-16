@@ -8,12 +8,16 @@
 #   hydo run "disk=none | run T=2:30"
 # On hvx, ../hydo.yaml is the example: hvx's kernel has the options, the network ones as modules
 # that its image loads. ../RESULTS.md has the measurements of both.
+# kine's watch loop runs without VM exits, so k3s needs guest.branch_tick (Milestone 274): the KVM
+# engine of an Intel host with a counter of the guest's branches, with --vcpus 2 (k3s needs the
+# cpuset controller of the SMP kernel). The Mac engine has no such counter and refuses the image.
 name: k3s-lease-containers
 description: a Kubernetes StatefulSet whose pods elect a leader on a Lease, in single-node k3s, on the guest kernel for containers
 
 guest:
   ram_mib: 2048
   kernel: containers
+  branch_tick: true   # kine loops without exits (docs/design/exit-free-loops.md)
 
 root:
   files:
@@ -25,6 +29,7 @@ root:
     - {src: k3s/var-run, dst: /var/run}
     - {src: manifests, dst: /opt/k3s/manifests}
     - {src: ../k3s-setup.sh, dst: /opt/k3s/setup.sh, mode: "0755"}
+    - {src: cpuinfo.sh, dst: /opt/k3s/cpuinfo.sh, mode: "0755"}
     - {src: ../elect.sh, dst: /opt/k3s/app/elect.sh, mode: "0755"}
     - {src: ../workload.sh, dst: /opt/k3s/workload.sh, mode: "0755"}
     - {src: ../one-leader.sh, dst: /opt/k3s/one-leader.sh, mode: "0755"}
@@ -43,7 +48,7 @@ shell: |
 
 services:
   - name: k3s
-    setup: /opt/k3s/setup.sh
+    setup: /opt/k3s/cpuinfo.sh && /opt/k3s/setup.sh
     cmd: >-
       /opt/k3s/k3s server --node-name hydo-k3s --node-ip 10.77.0.2 --flannel-iface k3s0
       --flannel-backend host-gw --disable traefik,servicelb,metrics-server,local-storage,coredns

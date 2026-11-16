@@ -317,6 +317,16 @@ models. Since the fingerprint epoch 2 (M204) they are on by default. Every KVM f
 leaves out what KVM keeps of a finished event. `HYDO_KVM_SPIN_STATE=0` turns the cycles off. An
 image built at epoch 1 runs as it did then (`hydo-kvm --image-epoch 1`).
 
+**Loops without VM exits (M274).** The Mac and KVM engines deliver interrupts at exits, so a
+loop without exits gets no timer interrupt. The spin observers resolve loops that repeat the
+whole machine; on the Mac the observer also looks at the return address since M274, so
+TigerBeetle boots there. `guest.branch_tick: true` (a format-1 addition) makes the KVM engine
+count the guest's user-mode conditional branches with a host performance counter. After 2^26 of
+them without an exit it stops the vCPU at the exact count. Trap-flag steps from the counter's
+overflow reach the count, and the timer comes there as at an idle HLT. It needs an Intel host whose counters count a
+guest; of GitHub's runners only the Xeon 6975P-C hosts do. The Mac engine refuses the key, and
+hvx ignores it. The design and the measurements are in `docs/design/exit-free-loops.md`.
+
 **The CPU's caches (M203, the default since M204).** The key `guest.cpu_cache` (a format-1
 addition) makes the CPUID leaves 2, 4 and `0x80000006` describe one fixed hierarchy on hvx and
 KVM. It has 32 KiB L1 data and instruction caches, a 256 KiB L2, and an 8 MiB L3. The values are
@@ -670,8 +680,9 @@ engine's `Image-explore-containers` and the KVM engine's `bzImage-kvm-containers
 image without the key keeps its bytes, so nothing recorded moves and the epoch stays 3. On hvx
 the key changes nothing: its kernel has the options, the network ones as modules. On the Mac
 and KVM engines runc runs a container with memory and pids limits, and NAT, conntrack, and ipsets
-work. k3s does not start there: kine loops without VM exits, which an exit clock cannot interrupt
-(open items 13 and 119). The example is
+work. kine loops without VM exits, which an exit clock cannot interrupt, so k3s does not start
+on the Mac. On KVM with `guest.branch_tick` and 2 vCPUs it does since M274: the node is Ready, the
+pods elect a leader, and a schedule repeats its fingerprint (open items 13 and 119). The example is
 `hydo/onboard/examples/k3s-lease/containers`; `docs/design/k3s-in-guest.md` (open item 119).
 
 **Ready-made emulators of outside services (M242).** One `emulators:` line gives a project Stripe
@@ -963,8 +974,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 11. Images built before M71 drop netem's queue when a delay fault ends.
 12. Processor Trace limits: no guest modules, no JIT-compiled Java, and buffers of about 1 GiB can
     fail to allocate (M40, M44).
-13. Mac engine: a memory-flag spin in user space with no exits cannot be interrupted
-    deterministically (M48, M53, M57).
+13. Loops without VM exits (M48, M53, M57, M194, M274). The KVM engine interrupts one with
+    `guest.branch_tick` on an Intel host with a counter of the guest's branches (M274). The Mac
+    engine resolves a loop that repeats the whole machine, TigerBeetle's since M274. It cannot
+    interrupt a loop whose memory changes in every pass, such as kine's: an M2 has no counter of
+    the guest. The guest PMU that macOS 15 emulates with guest EL2 (M3 and later) was not
+    measured.
 14. Older limits: the PMU clock is not instruction-exact (M33), host performance counters are off
     while a PMU-clock guest runs (M34), and a read-write ext4 root is not done (M29).
 15. Images not rebuilt with the pinned tools: `explore-cc0/1/cc`, `explore-dx` and `richcov`
@@ -1187,8 +1202,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     three-replica cluster TigerBeetle clamps request timestamps to the cluster's agreed time, so
     the guest-clock construction does not carry over. Whether every replica stops is not
     checked. The release binaries are stripped, so the guest shows `panic: reached unreachable
-    code` without the assert; no build with symbols ran. The Mac engine cannot boot TigerBeetle
-    (`ERROR boot: SPIN`, open item 13). Since M222 a replica that stops in a run without faults
+    code` without the assert; no build with symbols ran. The Mac engine boots TigerBeetle's
+    single replica since M274; the `tie/` schedule did not run there. Since M222 a replica that stops in a run without faults
     gets its own verdict, and the checks run; the `tie/` schedule did not run again with it.
 90. One shrink per cause (M218, M225). `hydo explore --shrink-causes N` shrinks up to N failures
     of one signature, each with other fault kinds. Two causes with the same fault kinds, such as
@@ -1343,14 +1358,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     (`--ref` names it). A `DELETE` does not remove the saved object, and a `PATCH` saves nothing.
     The example ran on the Mac engine only. It did not run on hvx or on KVM. The changed
     `hydo-world` (`errors:`, `{uuid}`) reaches a release at its next re-pin.
-119. Kubernetes in the guest (M246, M256). k3s runs on hvx only. What is left:
-    - The kernel variant `guest.kernel: containers` is built (M256), and its probe passes on the
-      Mac engine and on KVM. k3s does not start on either. After the API server cancels a watch,
-      kine's watch goroutine loops on a closed channel until another goroutine runs. The loop
-      makes no VM exits, so the exit clock gives no timer interrupt. `select`'s random order
-      changes memory in every pass, so no spin observer proves it (open item 13). The fix is an
-      interrupt inside such a loop at a point that does not depend on the host. With embedded
-      etcd the Mac boot stops in another such loop.
+119. Kubernetes in the guest (M246, M256, M274). k3s runs on hvx, and on KVM with
+    `guest.branch_tick` and 2 vCPUs on a Xeon 6975P-C runner (M274). What is left:
+    - On the Mac engine k3s does not start. kine's watch goroutine loops on a closed channel
+      without VM exits, and `select`'s random order changes memory in every pass. The Mac has no
+      counter of the guest's branches (open item 13). With embedded etcd the Mac boot stops in
+      another such loop.
+    - On KVM the forward clock steps `T=2:30` and `T=3:30` gave a second leader span but not
+      hvx's two leaders at once; other steps and the explorer were not run there. The
+      `containers/` example binds a `/proc/cpuinfo` with a `cpu MHz` line for the kubelet,
+      which the KVM guest kernel does not print.
     - On KVM with one vCPU k3s refuses to start without the cpuset controller, which needs an
       SMP kernel. The engine boots the SMP kernel only with `--vcpus 2` or more.
     - On the Mac engine runc needs `--no-pivot`, because the root is the initramfs; containerd
@@ -1558,6 +1575,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       left. KVM did not run the example either.
     - Managed mode (`mender-update daemon`) shares the Artifact parser of the first candidate
       and did not run.
+138. The branch tick (M274, `docs/design/exit-free-loops.md`). What is left:
+    - It ran on the Xeon 6975P-C only. The other Intel event (`0x01c4`, Skylake to Comet Lake)
+      and hybrid CPUs were not measured. AMD is refused, because its exact count needs root.
+    - k3s with the tick ran on one host in one run; the explorer did not run with the tick.
+    - While the counter counts, every exit costs 3.8 µs more on the runners, and a read 1.7 µs.
+      A landing takes about 1,500 trap-flag steps (90 ms there).
+    - A fault of a stepped instruction other than #DE, #UD, #GP and #PF leaves the trap flag in
+      its frame. Only user mode is counted, so a loop in the guest kernel stays the observer's.
+    - The k3s example is not in `hydo/onboard/recorded.json`.
 
 ## Milestone index
 
@@ -2168,6 +2194,13 @@ build machine, before 2026-10-13.
   version file of the Artifact scripts after a power cut leaves an update that can be neither
   committed nor rolled back. An interrupted commit makes the next commit roll back and exit 0.
   mender-artifact writes state scripts in a random order. Nothing recorded moved
+- M274 (tentative number): loops without VM exits. Of GitHub's runners only the Xeon 6975P-C
+  hosts count a guest's branches, exactly with `0x11c4` and 26 branches late. `guest.branch_tick`
+  makes the KVM engine stop a vCPU after 2^26 user-mode conditional branches without an exit, at
+  the exact count, and deliver the timer there. k3s's kine loop gives way, and k3s-lease runs on
+  KVM with 2 vCPUs, one fingerprint per schedule. The Mac has no such counter and refuses the
+  key. Its observer looks at the return address, so TigerBeetle boots on the Mac. Nothing
+  recorded moved
 
 ## Where to look
 

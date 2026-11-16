@@ -451,6 +451,14 @@
             "$ref": "#/$defs/GuestDisk"
           }
         },
+        "branch_tick": {
+          "description": "The KVM engine interrupts guest code that runs without a VM exit after a count of its\nuser-mode conditional branches, a point the guest alone fixes, so a loop that waits for\nanother thread gives way (an Intel host with a counter of the guest's branches; the Mac\nengine refuses the image; docs/design/exit-free-loops.md).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
         "description": {
           "anyOf": [
             {

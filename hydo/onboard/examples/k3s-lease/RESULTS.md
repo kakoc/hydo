@@ -198,3 +198,27 @@ because that controller needs SMP. With 2 vCPUs the boot stopped in the loop of 
 the kicks hit the channel locks of `select` (`runtime.lock2`, `runtime.selunlock`).
 `docs/design/k3s-in-guest.md` explains the loop. So the two-leaders finding was not repeated on
 KVM either.
+
+## KVM with the branch tick (Milestone 274)
+
+`containers/hydo.yaml` now has `guest.branch_tick: true` (`docs/design/exit-free-loops.md`). On
+the KVM engine of an Intel host with a counter of the guest's branches, the engine interrupts
+kine's loop after 2^26 of the guest's user-mode conditional branches, at that exact count. The
+setup also runs `containers/cpuinfo.sh`. The KVM guest's `/proc/cpuinfo` has no `cpu MHz` line,
+and without it the kubelet stopped with "could not detect clock speed". The script binds a copy
+with the line `cpu MHz : 2000.000` over the file when the line is missing.
+
+The one-off workflow `tmp-exitfree-kvm` ran it on GitHub's runners with the 0.3.4 Linux release,
+2 vCPUs (k3s needs the cpuset controller of the SMP kernel), and the image `5897029e…` (run
+43917522895, one Xeon 6975P-C host):
+
+| schedule | runs | fingerprint | verdict |
+|---|---|---|---|
+| `disk=none \| run` | 3, one with a margin of 1024 branches | `8c43fbd8700b2862` | OK: one leader span |
+| `disk=none \| run T=2:30` | 2 | `4736cf7ec6c1d53e` | OK: two leader spans, none overlap |
+| `disk=none \| run T=3:30` | 1 | `7f36d45d138bf971` | OK: two leader spans, none overlap |
+
+The node was Ready at 3.1 s of guest time, the 3 pods at 9.2 s, and a pod led on the Lease at
+9.2 s. A boot had 32 to 63 ticks. The forward steps gave a second leader span, but not the two
+leaders at once that hvx shows. On the Mac engine the image is refused: an M2 has no counter of
+the guest's branches.

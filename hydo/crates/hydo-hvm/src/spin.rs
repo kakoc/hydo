@@ -69,6 +69,10 @@ pub enum Ob {
 }
 
 const OB_MAXHITS: i32 = 64;
+/// hits without a repeat before a look moves to the return address (Milestone 274)
+const OB_UP_AFTER: i32 = 16;
+/// how many times one look moves up
+const OB_UP_MAX: u32 = 3;
 /// BAS = all, PMC = EL1 + EL0, enabled
 const BCR_ON: u64 = (0xf << 5) | (3 << 1) | 1;
 
@@ -131,6 +135,8 @@ pub struct Spin {
     pub ob_hits: i32,
     ob_have_prev: i32,
     pub ob_pc: u64,
+    /// how many times this look moved its breakpoint to the return address (Milestone 274)
+    ob_up: u32,
     ob_mdscr: u64,
     ob_bvr: u64,
     ob_bcr: u64,
@@ -170,6 +176,7 @@ impl Spin {
             ob_hits: 0,
             ob_have_prev: 0,
             ob_pc: 0,
+            ob_up: 0,
             ob_mdscr: 0,
             ob_bvr: 0,
             ob_bcr: 0,
@@ -458,6 +465,7 @@ impl Vmm {
             self.sp_protect(true);
             self.v().trap_debug_reg_accesses(true);
             self.sp.ob_on = true;
+            self.sp.ob_up = 0;
         } else {
             self.dirty_reset();
         }
@@ -759,6 +767,28 @@ impl Vmm {
             }
         }
         self.sp.ob_hits += 1;
+        if self.sp.ob_hits > OB_UP_AFTER
+            && self.sp.ob_up < OB_UP_MAX
+            && cur.x[30] != cur.pc
+            && cur.x[30] & 3 == 0
+            && (cur.x[30] >> 63) == (cur.pc >> 63)
+            && self.fetch_insn(cur.x[30]).is_some()
+        {
+            // Milestone 274: the kick came inside an inner loop (TigerBeetle's memset, called
+            // twice from one frame), whose arrivals differ in every pass; look at the return
+            // address instead, where a pass arrives once. Where a look is armed decides only
+            // whether a cycle is found, never the canonical state it is resolved at.
+            let up = self.sp.ob_up + 1;
+            if self.sp.splog.is_some() {
+                let (n, lr) = (self.sp.ob_hits, cur.x[30]);
+                self.sp.log(format_args!(
+                    "  no repeat in {n} hits: look at the return address 0x{lr:x}"
+                ));
+            }
+            self.ob_arm(cur.x[30]);
+            self.sp.ob_up = up;
+            return Ob::Cont;
+        }
         if self.sp.ob_hits > OB_MAXHITS {
             self.ob_disarm();
             self.sp.notcycle += 1;

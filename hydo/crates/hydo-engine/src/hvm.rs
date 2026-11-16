@@ -271,6 +271,7 @@ impl ControlledEngine for Hvm {
         boot: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledBoot, EngineError> {
+        no_branch_tick(spec)?;
         if self.in_process() {
             return crate::hvm_inproc::start_controlled(self, spec, boot, stderr_log);
         }
@@ -285,11 +286,28 @@ impl ControlledEngine for Hvm {
         schedule: &Schedule,
         stderr_log: &Path,
     ) -> Result<ControlledRun, EngineError> {
+        no_branch_tick(spec)?;
         if self.in_process() {
             return crate::hvm_inproc::one_controlled(self, spec, schedule, stderr_log);
         }
         self.check_built()?;
         let argv = self.control_argv(spec, "one", &["--control", "boot"], Some(schedule));
         ControlledRun::start(self.command(spec, &argv), stderr_log)
+    }
+}
+
+/// Milestone 274: the Mac engine has no counter of the guest's branches (hv/hvm/PROBE.md: the
+/// guest PMU traps with nothing behind it on an M2, and the host's counters count the host too),
+/// so an image with the branch tick (`guest.branch_tick`) is refused before any VM
+/// (docs/design/exit-free-loops.md).
+fn no_branch_tick(spec: &BootSpec) -> Result<(), EngineError> {
+    match crate::image::branch_tick(&spec.image) {
+        None => Ok(()),
+        Some(_) => Err(EngineError::Unsupported(
+            "guest.branch_tick needs a counter of the guest's branches, which the Mac engine \
+             does not have: run this image on the KVM engine of an Intel host \
+             (docs/design/exit-free-loops.md)"
+                .into(),
+        )),
     }
 }

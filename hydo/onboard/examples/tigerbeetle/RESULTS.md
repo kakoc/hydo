@@ -514,7 +514,25 @@ executes the same expiries; no run checked this.
 
 ### Other engines
 
-The Mac engine cannot run TigerBeetle. With the arm64 release binary, the boot ends `ERROR boot:
-SPIN` (a guest loop without VM exits: TigerBeetle polls io_uring's completion queue from user
-space; open item 13). On the Mac itself, without hydo, 0.17.9 ran 120 s of batches of 8,000 holds
+Until Milestone 274 the Mac engine could not run TigerBeetle. With the arm64 release binary, the
+boot ended `ERROR boot: SPIN` (a guest loop without VM exits: TigerBeetle polls io_uring's
+completion queue from user space; open item 13). The loop repeats the whole machine in every
+pass, but the spin observer's breakpoint sat in `memset`, which one frame calls twice per pass,
+so no two arrivals there matched. Since Milestone 274 the observer moves its breakpoint to the
+return address, and the replica runs. To run it, fetch the arm64 binary (`sh
+fetch-tigerbeetle.sh 0.17.9-aarch64`), delete the line `cpu: v3` of `hydo/hydo-single.yaml`
+(an x86_64 option), and build with `--set tb=0.17.9-aarch64`. On an M2 Pro with the 0.3.4 Mac
+release's guest files and the programs of Milestone 274, each schedule ran twice from a fresh
+boot, with one fingerprint and the verdict OK (every command and the three invariants):
+
+| schedule | fingerprint | seconds per run |
+|---|---|---|
+| `disk=none \| run` | `ac51e985c3361285` | 24, 30 |
+| `disk=none \| run K=tigerbeetle_0@5+3` | `35357e63660b2d80` | 47, 51 |
+| `disk=cut \| run C=10` | `dc817c32c558ba2c` | 50, 61 |
+| `disk=none \| run P=tigerbeetle_0@5+5` | `6908fd6ad74d193a` | 39, 29 |
+| `disk=none \| run T=6:3600` | `290308a7857401d1` | 23, 35 |
+
+In the first run the observer resolved 175 loops and moved its breakpoint to a return address
+160 times. On the Mac itself, without hydo, 0.17.9 ran 120 s of batches of 8,000 holds
 and 101 s of TigerBeetle's own benchmark with `--transfer-pending`, and never stopped.

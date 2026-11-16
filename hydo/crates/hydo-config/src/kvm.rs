@@ -115,6 +115,10 @@ pub struct Options {
     pub contracts: Option<String>,
     /// `HYDO_GUEST_DISKS`: the image's added disks (Milestone 263).
     pub guest_disks: Option<String>,
+    /// `HYDO_BRANCH_TICK`: the branch tick's period (Milestone 274).
+    pub branch_tick: Option<u64>,
+    /// `HYDO_KVM_BRANCH_MARGIN`: where the branch tick's overflow is set (Milestone 274).
+    pub branch_margin: Option<String>,
 }
 
 impl Options {
@@ -137,6 +141,8 @@ impl Options {
             preempt_record: e.set_not_0(HYDO_PREEMPT_RECORD),
             contracts: t(HYDO_CONTRACTS).filter(|p| !p.is_empty()),
             guest_disks: t(HYDO_GUEST_DISKS).filter(|p| !p.is_empty()),
+            branch_tick: t(HYDO_BRANCH_TICK).and_then(|p| p.trim().parse().ok()),
+            branch_margin: t(HYDO_KVM_BRANCH_MARGIN),
         }
     }
 }

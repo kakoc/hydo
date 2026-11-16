@@ -122,6 +122,13 @@ pub struct VmOpts {
     pub virtio: virtio::Config,
     /// the vCPUs (1: the machine of every recorded value; more: [`crate::smp`])
     pub vcpus: usize,
+    /// `guest.branch_tick` (Milestone 274, [`crate::branches`]): the tick's period in the guest's
+    /// user-mode conditional branches; None: off, as every recorded value was taken
+    pub branch_tick: Option<u64>,
+    /// branches before the tick where its overflow is set (`HYDO_KVM_BRANCH_MARGIN`; the default
+    /// [`crate::branches::MARGIN`]): the steps cover the rest, so a run gives its fingerprint
+    /// with any margin above the overflow's skid
+    pub branch_margin: u64,
 }
 
 /// What the watchdog calls to kick the current vCPU out of `KVM_RUN` (None between vCPUs).
@@ -201,6 +208,26 @@ pub struct Vmm {
     pub ct: Option<Box<crate::contracts::Ct>>,
     /// `HYDO_KVM_GAPS`: where the host time of long exit-free stretches went ([`crate::gaps`])
     gaps: crate::gaps::Gaps,
+    /// the branch tick's period ([`VmOpts::branch_tick`])
+    bt_period: Option<u64>,
+    /// [`VmOpts::branch_margin`]
+    bt_margin: u64,
+    /// the branch tick's counter and counts, opened at the first run (on the vCPUs' thread)
+    pub bt: Option<Box<crate::branches::Bt>>,
+}
+
+/// What a kick means with the branch tick on ([`Vmm::bt_kick`]).
+enum BtKick {
+    /// the spin observer looks, as without the tick
+    Observe,
+    /// the count advances: the tick, not the observer, ends the stretch
+    Advancing,
+    /// the vCPU is at the tick's exact count
+    Landed,
+    /// a real exit came while the engine stepped to the count
+    Exit(Exit),
+    /// the run ends
+    Stop(i32),
 }
 
 /// A snapshot of the machine (the vCPU, the engine's state, RAM, the devices, the console). RAM
@@ -382,6 +409,9 @@ impl Vmm {
             state_why: "",
             ct: None,
             gaps: crate::gaps::Gaps::new(o.gaps),
+            bt_period: o.branch_tick,
+            bt_margin: o.branch_margin.max(32),
+            bt: None,
         };
         let mut cmdline = cmdline(&o.cmdline, vm.vio.ndev());
         if ncpu > 1 {
@@ -1059,6 +1089,7 @@ impl Vmm {
 
     fn run_until_stop(&mut self, hook: &mut dyn FnMut(&mut Vmm) -> bool) -> i32 {
         let mut resume = false;
+        self.bt_open();
         if self.rw.on {
             self.rw_enter();
         }
@@ -1118,6 +1149,9 @@ impl Vmm {
                 self.gaps.t_run += t.elapsed().as_secs_f64();
             }
             self.watch.armed.store(false, Ordering::Relaxed);
+            if let Some(bt) = self.bt.as_mut() {
+                bt.account(self.cur);
+            }
             if self.rw.armed {
                 match e {
                     Exit::Debug => {
@@ -1184,8 +1218,35 @@ impl Vmm {
                     self.gap_end("SPIN");
                     return STOP_SPIN;
                 }
+                // the branch tick (Milestone 274): a count that advances is the tick's
+                if self.bt.is_some() {
+                    match self.bt_kick() {
+                        BtKick::Observe => {}
+                        BtKick::Advancing => continue,
+                        BtKick::Stop(s) => return s,
+                        BtKick::Exit(e) => {
+                            self.set_wait(self.spin_look);
+                            self.gap_end("an exit while stepping to the branch tick");
+                            self.new_stretch();
+                            self.spin_rips.clear();
+                            if let Some(s) = self.exit(e) {
+                                return s;
+                            }
+                            resume = false;
+                            continue;
+                        }
+                        BtKick::Landed => {
+                            if let Some(s) = self.bt_tick() {
+                                return s;
+                            }
+                            resume = false;
+                            continue;
+                        }
+                    }
+                }
                 // the spin observer (crate::spin): is this a provable cycle?
                 let t_obs = Instant::now();
+                let bt0 = self.bt_count();
                 let mut seen = self.observe();
                 let dt = t_obs.elapsed().as_secs_f64();
                 self.look_secs += dt;
@@ -1199,6 +1260,16 @@ impl Vmm {
                     self.look_secs += dt;
                     self.gaps.t_state += dt;
                     self.gaps.states += 1;
+                }
+                if bt0 != self.bt_count()
+                    && !matches!(
+                        seen,
+                        crate::spin::Outcome::Exit(_) | crate::spin::Outcome::GaveUp
+                    )
+                {
+                    // the branch tick: a loop whose passes count branches is the tick's, which
+                    // comes at a count fixed by the guest; the observer's look is only running
+                    seen = crate::spin::Outcome::GaveUp;
                 }
                 match seen {
                     crate::spin::Outcome::Resolved => {
@@ -1433,6 +1504,9 @@ impl Vmm {
         self.rw.armed = false;
         self.set_wait(self.spin_look);
         self.new_stretch();
+        if let Some(bt) = self.bt.as_mut() {
+            bt.reset_all(); // the checkpoint is at an exit: every count since an exit is 0
+        }
         if self.trace.is_some() {
             let from = self.m.exits;
             if let Some(t) = &mut self.trace {
@@ -1570,6 +1644,10 @@ impl Vmm {
     fn new_stretch(&mut self) {
         self.last_exit = Instant::now();
         self.look_secs = 0.0;
+        let cur = self.cur;
+        if let Some(bt) = self.bt.as_mut() {
+            bt.reset(cur);
+        }
     }
 
     /// Host seconds of the current stretch in which the guest ran freely: its whole host time
@@ -1601,6 +1679,306 @@ impl Vmm {
     }
     fn set_wait(&self, w: f64) {
         self.watch.wait.store(w.to_bits(), Ordering::Relaxed);
+    }
+
+    // ---------------- the branch tick (Milestone 274, crate::branches) ----------------
+
+    /// Open the branch tick's counter on this thread at the first run (the tick is on).
+    fn bt_open(&mut self) {
+        let Some(p) = self.bt_period else { return };
+        if self.bt.is_some() {
+            return;
+        }
+        if p <= self.bt_margin * 4 {
+            fatal(
+                1,
+                &format!("hydo-kvm: the branch tick's period {p} is too short"),
+            );
+        }
+        if self.ct.is_some() {
+            fatal(
+                1,
+                "hydo-kvm: the branch tick (guest.branch_tick) and function contracts both need the debug registers; \
+                 run the image without the contracts' plan",
+            );
+        }
+        match self.hv.branches() {
+            Ok(c) => {
+                let line = c.describe();
+                self.say(&format!("hydo-kvm: {line}, a tick every {p}"));
+                self.bt = Some(Box::new(crate::branches::Bt::new(c, self.ncpu)));
+            }
+            Err(e) => fatal(1, &format!("hydo-kvm: {e}")),
+        }
+    }
+
+    /// The counter's value now, with the running vCPU's count brought up to date (0: no tick).
+    fn bt_count(&mut self) -> u64 {
+        let cur = self.cur;
+        match self.bt.as_mut() {
+            Some(bt) => {
+                bt.account(cur);
+                bt.last
+            }
+            None => 0,
+        }
+    }
+
+    /// A kick with the branch tick on: arm the counter's overflow before the tick, or step to the
+    /// tick's exact count when the overflow brought the vCPU near it.
+    fn bt_kick(&mut self) -> BtKick {
+        let (cur, p, margin) = (self.cur, self.bt_period.unwrap_or(u64::MAX), self.bt_margin);
+        let Some(bt) = self.bt.as_mut() else {
+            return BtKick::Observe;
+        };
+        let since = bt.account(cur);
+        let advancing = since > bt.at_kick;
+        bt.at_kick = since;
+        let near = p - margin;
+        if since > p {
+            let (rip, ex) = (self.cpu().rip(), self.m.exits);
+            self.say(&format!(
+                "hydo-kvm: SPIN: the branch tick passed its count ({since} of {p} branches) before the engine could stop the vCPU, at exit {ex}, rip {rip:#x}; this run is invalid"
+            ));
+            return BtKick::Stop(STOP_SPIN);
+        }
+        if since >= near {
+            let t = Instant::now();
+            let r = self.bt_land(p);
+            let dt = t.elapsed().as_secs_f64();
+            self.look_secs += dt;
+            if let Some(bt) = self.bt.as_mut() {
+                bt.landing_secs += dt;
+            }
+            return r;
+        }
+        if !bt.armed {
+            bt.ctr.alarm(Some(near - since));
+            bt.armed = true;
+        }
+        if advancing {
+            BtKick::Advancing
+        } else {
+            BtKick::Observe
+        }
+    }
+
+    /// Guest bytes at a virtual address through the current page tables.
+    fn bt_read(&self, va: u64, n: usize) -> Option<Vec<u8>> {
+        let (ram, cr3) = (self.ram.bytes(), self.cpu().cr3());
+        let mut out = Vec::with_capacity(n);
+        for k in 0..n as u64 {
+            let pa = translate(ram, cr3, va.wrapping_add(k))?;
+            out.push(*ram.get(pa as usize)?);
+        }
+        Some(out)
+    }
+
+    /// Clear RFLAGS.TF (bit 8) in the 8 bytes of guest memory at `va`.
+    fn bt_clear_tf(&mut self, va: u64) -> bool {
+        let cr3 = self.cpu().cr3();
+        let Some(pa) = translate(self.ram.bytes(), cr3, va) else {
+            return false;
+        };
+        let b = self.ram.bytes_mut();
+        match b.get_mut(pa as usize + 1) {
+            Some(x) => {
+                *x &= !1; // bit 8 is bit 0 of the second byte
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The handlers of [`crate::branches::VECTORS`] from the guest's IDT.
+    fn bt_handlers(&self) -> Option<Vec<u64>> {
+        let base = self.cpu().save().sregs.idt.base;
+        crate::branches::VECTORS
+            .iter()
+            .map(|&(v, _)| {
+                let g = self.bt_read(base + 16 * v as u64, 16)?;
+                crate::branches::gate_target(&g)
+            })
+            .collect()
+    }
+
+    /// Step the running vCPU to exactly `p` branches since its last exit: trap-flag steps from
+    /// where the overflow stopped it (docs/design/exit-free-loops.md, "Landing").
+    fn bt_land(&mut self, p: u64) -> BtKick {
+        use crate::branches::{TfStep, MAX_STEPS, VECTORS};
+        let cur = self.cur;
+        let fail = |vm: &mut Vmm, why: String| {
+            vm.cpu_mut().step_to(None);
+            let (rip, ex) = (vm.cpu().rip(), vm.m.exits);
+            vm.say(&format!(
+                "hydo-kvm: SPIN: the branch tick cannot reach its count: {why} (exit {ex}, rip {rip:#x}); this run is invalid"
+            ));
+            BtKick::Stop(STOP_SPIN)
+        };
+        let Some(handlers) = self.bt_handlers() else {
+            return fail(self, "the guest's IDT is not readable".into());
+        };
+        if let Some(bt) = self.bt.as_mut() {
+            if bt.armed {
+                bt.ctr.alarm(None);
+                bt.armed = false;
+            }
+        }
+        let mut steps = 0u64;
+        let r = loop {
+            let since = match self.bt.as_mut() {
+                Some(bt) => bt.account(cur),
+                None => return BtKick::Observe,
+            };
+            if since == p {
+                break BtKick::Landed;
+            }
+            if since > p {
+                break fail(self, format!("{since} branches, past {p}"));
+            }
+            steps += 1;
+            if steps > MAX_STEPS {
+                break fail(self, format!("{MAX_STEPS} steps"));
+            }
+            let regs = self.cpu().regs();
+            if steps == 1 && self.cpu().save().sregs.cs.selector & 3 != 3 {
+                // the overflow's signal came after the guest entered its kernel, which the count
+                // leaves out: an overflow at the next user-mode branch brings it back in user
+                // mode, short of the count while the margin left is more than the skid
+                if p - since > 64 {
+                    if let Some(bt) = self.bt.as_mut() {
+                        bt.ctr.alarm(Some(1));
+                        bt.armed = true;
+                    }
+                    break BtKick::Advancing;
+                }
+                break fail(self, "the vCPU is in its kernel near the count".into());
+            }
+            let code = self.bt_read(regs.rip, 15).unwrap_or_default();
+            let class = crate::branches::tf_step(&code);
+            let e = match class {
+                TfStep::Refuse => {
+                    break fail(
+                        self,
+                        format!("an instruction the steps cannot follow ({code:02x?})"),
+                    )
+                }
+                TfStep::RunOver(n) => {
+                    if let Some(bt) = self.bt.as_mut() {
+                        bt.runovers += 1;
+                    }
+                    let to = regs.rip.wrapping_add(n as u64);
+                    self.cpu_mut()
+                        .step_to(Some(&crate::spin::Step { at: [to, 0], n: 1 }));
+                    self.cpu_mut().run()
+                }
+                TfStep::Plain | TfStep::Pushf(_) => {
+                    self.cpu_mut().land_step(&handlers);
+                    self.cpu_mut().run()
+                }
+            };
+            match e {
+                Exit::Debug => {}
+                Exit::Kick => continue,
+                other => {
+                    self.cpu_mut().step_to(None);
+                    break BtKick::Exit(other);
+                }
+            }
+            let dr6 = self.cpu().last_dr6();
+            let hit = (0..VECTORS.len()).find(|&k| dr6 & (1 << k) != 0);
+            if class == TfStep::Plain || matches!(class, TfStep::Pushf(_)) {
+                if let Some(k) = hit {
+                    // a fault of the stepped instruction: its frame (from RSP: the error code,
+                    // RIP, CS, RFLAGS) has the trap flag; take it out before the handler runs,
+                    // then let the handler run to the guest's return
+                    let r = self.cpu().regs();
+                    let at = r.rsp + if VECTORS[k].1 { 8 } else { 0 };
+                    let Some(fr) = self.bt_read(at, 24) else {
+                        break fail(self, "the fault's frame is not readable".into());
+                    };
+                    let ret = u64::from_le_bytes(fr[0..8].try_into().unwrap());
+                    let cs = u64::from_le_bytes(fr[8..16].try_into().unwrap());
+                    if cs & 3 != 3 || !self.bt_clear_tf(at + 16) {
+                        break fail(
+                            self,
+                            "a fault in the stepped code not from user mode".into(),
+                        );
+                    }
+                    if let Some(bt) = self.bt.as_mut() {
+                        bt.fixed_frames += 1;
+                    }
+                    self.cpu_mut()
+                        .step_to(Some(&crate::spin::Step { at: [ret, 0], n: 1 }));
+                    match self.cpu_mut().run() {
+                        Exit::Debug => continue,
+                        Exit::Kick => {
+                            // the handler did not return there (a signal): the count is the
+                            // judge at the next kick
+                            self.cpu_mut().step_to(None);
+                            break BtKick::Advancing;
+                        }
+                        other => {
+                            self.cpu_mut().step_to(None);
+                            break BtKick::Exit(other);
+                        }
+                    }
+                }
+                if let TfStep::Pushf(w) = class {
+                    let rsp = self.cpu().regs().rsp;
+                    if w == 8 && !self.bt_clear_tf(rsp) {
+                        break fail(self, "PUSHF's word is not writable".into());
+                    }
+                    if w == 2 {
+                        let cr3 = self.cpu().cr3();
+                        if let Some(pa) = translate(self.ram.bytes(), cr3, rsp + 1) {
+                            if let Some(x) = self.ram.bytes_mut().get_mut(pa as usize) {
+                                *x &= !1;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        self.cpu_mut().step_to(None);
+        if let Some(bt) = self.bt.as_mut() {
+            bt.steps += steps;
+            bt.max_steps = bt.max_steps.max(steps);
+        }
+        r
+    }
+
+    /// The vCPU is at the tick's count: as at a proven loop, the clock jumps to its next event
+    /// and the interrupt is delivered at the next entry (with several vCPUs the turn ends when
+    /// another can run). Some(stop) when the run ends.
+    fn bt_tick(&mut self) -> Option<i32> {
+        let line = self.bt.as_mut().and_then(|bt| {
+            bt.ticks += 1;
+            (bt.ticks <= 3 || bt.ticks.is_power_of_two()).then(|| bt.stats())
+        });
+        if let Some(l) = line {
+            let (ex, rip, cur) = (self.m.exits, self.cpu().rip(), self.cur);
+            self.say(&format!(
+                "hydo-kvm: {l}; this tick at exit {ex}, vCPU {cur}, rip {rip:#x}"
+            ));
+        }
+        self.m.n_spin += 1;
+        self.set_wait(self.spin_look);
+        self.gap_end("the branch tick");
+        self.new_stretch();
+        if self.trace.is_some() {
+            let (ex, rip) = (self.m.exits, self.cpu().rip());
+            self.trace_line(&format!("{ex} branch-tick {rip:x}"));
+        }
+        if self.smp.is_some() && self.others_runnable() {
+            self.end_turn();
+            return None;
+        }
+        let next = self.next_event();
+        if next > self.m.vtime {
+            self.m.vtime = next; // as at an idle HLT
+        }
+        None
     }
 
     /// One look of the spin observer ([`crate::spin`]): single-step pure instructions until the
@@ -2150,6 +2528,9 @@ impl Vmm {
         self.rw.replay_to = None;
         self.rw.target = None;
         self.rw.armed = false;
+        if let Some(bt) = self.bt.as_mut() {
+            bt.reset_all(); // a snapshot is taken at an exit
+        }
     }
 
     /// What guest RAM costs: the base's nonzero pages and RAM's own pages (pages of 4 KiB).
@@ -2400,6 +2781,9 @@ impl Vmm {
                 " full-state cycles resolved {} (looks that proved nothing {})",
                 self.state_cycles, self.state_gave_up
             ));
+        }
+        if let Some(bt) = &self.bt {
+            t.push_str(&format!(" {}", bt.stats()));
         }
         if let Some(sm) = &self.smp {
             t.push_str(&format!(

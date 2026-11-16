@@ -1,9 +1,9 @@
 #!/bin/sh
 # Download the TigerBeetle releases this example runs (the static Linux binary from each GitHub
 # release) into bin/<name>/tigerbeetle, checked by sha256. Needs network once. A name is a
-# release (the x86_64 binary) or <release>-aarch64 (the arm64 binary). The Mac engine stops the
-# arm64 binary's boot as a loop without VM exits (RESULTS.md, "Holds and expiry"), so the example
-# runs the x86_64 binaries on hvx.
+# release (the x86_64 binary) or <release>-aarch64 (the arm64 binary). The example runs the
+# x86_64 binaries on hvx; the Mac engine runs the arm64 binary's single replica since
+# Milestone 274 (RESULTS.md, "Other engines").
 #   sh fetch-tigerbeetle.sh                  # every x86_64 release below
 #   sh fetch-tigerbeetle.sh 0.17.9           # one
 set -e

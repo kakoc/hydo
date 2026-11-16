@@ -779,6 +779,13 @@ pub struct Guest {
     /// in this order, empty at the first boot (the Mac and KVM engines; docs/design/devices.md).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub disks: Option<Vec<GuestDisk>>,
+    /// The KVM engine interrupts guest code that runs without a VM exit after a count of its
+    /// user-mode conditional branches, a point the guest alone fixes, so a loop that waits for
+    /// another thread gives way (an Intel host with a counter of the guest's branches; the Mac
+    /// engine refuses the image; docs/design/exit-free-loops.md).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub branch_tick: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
