@@ -1,0 +1,846 @@
+//! Values of a fuzzed function's parameters and results: the text the harness reads and writes
+//! (the wire form), the form a report shows and `--input` reads back, generation from a seed,
+//! and the simpler values a shrink tries.
+
+use super::rust::FTy;
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
+
+/// A value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Val {
+    Int(i128),
+    Bool(bool),
+    Str(String),
+    List(Vec<Val>),
+    Opt(Option<Box<Val>>),
+    Res(Result<Box<Val>, Box<Val>>),
+    Tuple(Vec<Val>),
+    /// A structure's fields by name (a tuple structure's are `0`, `1`, ...).
+    Struct(Vec<(String, Val)>),
+    /// A value of a type fuzzing does not read.
+    Opaque,
+}
+
+/// The smallest and largest value of an integer type (a `u128` is limited to `i128::MAX`).
+pub fn int_range(signed: bool, bits: u32) -> (i128, i128) {
+    if bits >= 128 {
+        return if signed {
+            (i128::MIN, i128::MAX)
+        } else {
+            (0, i128::MAX)
+        };
+    }
+    if signed {
+        (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
+    } else {
+        (0, (1i128 << bits) - 1)
+    }
+}
+
+/// The wire form: space-separated words in the order of the type. An integer is its decimal
+/// digits, a boolean `t` or `f`, a string `s` and its bytes in hexadecimal, a list `L<n>` and its
+/// elements, an option `N` or `S` and the value, a result `O` or `E` and the value, a tuple or a
+/// structure its fields in order, and an opaque value `X`.
+pub fn encode(v: &Val, o: &mut String) {
+    match v {
+        Val::Int(x) => {
+            let _ = write!(o, "{x} ");
+        }
+        Val::Bool(b) => o.push_str(if *b { "t " } else { "f " }),
+        Val::Str(s) => {
+            o.push('s');
+            for b in s.as_bytes() {
+                let _ = write!(o, "{b:02x}");
+            }
+            o.push(' ');
+        }
+        Val::List(l) => {
+            let _ = write!(o, "L{} ", l.len());
+            for x in l {
+                encode(x, o);
+            }
+        }
+        Val::Opt(None) => o.push_str("N "),
+        Val::Opt(Some(x)) => {
+            o.push_str("S ");
+            encode(x, o);
+        }
+        Val::Res(Ok(x)) => {
+            o.push_str("O ");
+            encode(x, o);
+        }
+        Val::Res(Err(x)) => {
+            o.push_str("E ");
+            encode(x, o);
+        }
+        Val::Tuple(v) => v.iter().for_each(|x| encode(x, o)),
+        Val::Struct(f) => f.iter().for_each(|(_, x)| encode(x, o)),
+        Val::Opaque => o.push_str("X "),
+    }
+}
+
+/// Read one value of type `t` from wire words.
+pub fn decode<'a>(t: &FTy, w: &mut impl Iterator<Item = &'a str>) -> Result<Val, String> {
+    let mut word = || w.next().ok_or_else(|| "the answer ended early".to_string());
+    Ok(match t {
+        FTy::Int { .. } => {
+            let x = word()?;
+            if x == "X" {
+                return Ok(Val::Opaque);
+            }
+            Val::Int(x.parse().map_err(|_| format!("`{x}` is not an integer"))?)
+        }
+        FTy::Bool => match word()? {
+            "t" => Val::Bool(true),
+            "f" => Val::Bool(false),
+            "X" => Val::Opaque,
+            x => return Err(format!("`{x}` is not a boolean")),
+        },
+        FTy::Str => {
+            let x = word()?;
+            if x == "X" {
+                return Ok(Val::Opaque);
+            }
+            let h = x
+                .strip_prefix('s')
+                .ok_or_else(|| format!("`{x}` is not a string"))?;
+            let bytes: Result<Vec<u8>, _> = (0..h.len() / 2)
+                .map(|i| u8::from_str_radix(&h[2 * i..2 * i + 2], 16))
+                .collect();
+            Val::Str(String::from_utf8_lossy(&bytes.map_err(|e| e.to_string())?).into_owned())
+        }
+        FTy::List(x) | FTy::Array(x, _) => {
+            let n = word()?;
+            if n == "X" {
+                return Ok(Val::Opaque);
+            }
+            let n: usize = n
+                .strip_prefix('L')
+                .and_then(|n| n.parse().ok())
+                .ok_or_else(|| format!("`{n}` is not a list's length"))?;
+            let mut l = Vec::with_capacity(n.min(4096));
+            for _ in 0..n {
+                l.push(decode(x, w)?);
+            }
+            Val::List(l)
+        }
+        FTy::Opt(x) => match word()? {
+            "N" => Val::Opt(None),
+            "S" => Val::Opt(Some(Box::new(decode(x, w)?))),
+            "X" => Val::Opaque,
+            o => return Err(format!("`{o}` is not an option")),
+        },
+        FTy::Res(a, b) => match word()? {
+            "O" => Val::Res(Ok(Box::new(decode(a, w)?))),
+            "E" => Val::Res(Err(Box::new(decode(b, w)?))),
+            "X" => Val::Opaque,
+            o => return Err(format!("`{o}` is not a result")),
+        },
+        FTy::Tuple(v) => Val::Tuple(v.iter().map(|x| decode(x, w)).collect::<Result<_, _>>()?),
+        FTy::Boxed(_, x) => decode(x, w)?,
+        FTy::Struct { fields, .. } => Val::Struct(
+            fields
+                .iter()
+                .map(|(n, x)| Ok((n.clone(), decode(x, w)?)))
+                .collect::<Result<_, String>>()?,
+        ),
+        FTy::Opaque(_) => {
+            word()?;
+            Val::Opaque
+        }
+    })
+}
+
+/// The value as a report shows it, close to a Rust literal.
+pub fn show(v: &Val, t: &FTy) -> String {
+    match (v, t) {
+        (Val::Int(x), _) => x.to_string(),
+        (Val::Bool(b), _) => b.to_string(),
+        (Val::Str(s), _) => format!("{s:?}"),
+        (Val::List(l), FTy::List(x) | FTy::Array(x, _)) => format!(
+            "[{}]",
+            l.iter().map(|e| show(e, x)).collect::<Vec<_>>().join(", ")
+        ),
+        (Val::Opt(None), _) => "None".into(),
+        (Val::Opt(Some(x)), FTy::Opt(t)) => format!("Some({})", show(x, t)),
+        (Val::Res(Ok(x)), FTy::Res(t, _)) => format!("Ok({})", show(x, t)),
+        (Val::Res(Err(x)), FTy::Res(_, t)) => format!("Err({})", show(x, t)),
+        (_, FTy::Boxed(_, t)) => show(v, t),
+        (Val::Tuple(v), FTy::Tuple(ts)) => {
+            let p: Vec<String> = v.iter().zip(ts).map(|(x, t)| show(x, t)).collect();
+            if p.len() == 1 {
+                format!("({},)", p[0])
+            } else {
+                format!("({})", p.join(", "))
+            }
+        }
+        (
+            Val::Struct(fv),
+            FTy::Struct {
+                path,
+                tuple,
+                fields,
+            },
+        ) => {
+            let name = path.rsplit("::").next().unwrap_or(path);
+            if *tuple {
+                let p: Vec<String> = fv
+                    .iter()
+                    .zip(fields)
+                    .map(|((_, x), (_, t))| show(x, t))
+                    .collect();
+                format!("{name}({})", p.join(", "))
+            } else if fv.is_empty() {
+                format!("{name} {{}}")
+            } else {
+                let p: Vec<String> = fv
+                    .iter()
+                    .zip(fields)
+                    .map(|((n, x), (_, t))| format!("{n}: {}", show(x, t)))
+                    .collect();
+                format!("{name} {{ {} }}", p.join(", "))
+            }
+        }
+        _ => "<not read>".into(),
+    }
+}
+
+/// Read back the form [`show`] writes, for a value of type `t`.
+pub fn parse(s: &str, t: &FTy) -> Result<Val, String> {
+    let mut p = Reader { s, i: 0 };
+    let v = p.val(t)?;
+    p.ws();
+    if p.i != s.len() {
+        return Err(format!("unexpected `{}` in `{s}`", &s[p.i..]));
+    }
+    Ok(v)
+}
+
+/// Read several `name = value` pairs separated by commas (an `--input` text).
+pub fn parse_args(s: &str, params: &[(String, FTy)]) -> Result<Vec<Val>, String> {
+    let mut p = Reader { s, i: 0 };
+    let mut got: BTreeMap<String, Val> = BTreeMap::new();
+    loop {
+        p.ws();
+        if p.i >= s.len() {
+            break;
+        }
+        let name = p.ident();
+        let Some((_, t)) = params.iter().find(|(n, _)| *n == name) else {
+            return Err(format!("`{name}` is not a parameter of the function"));
+        };
+        p.ws();
+        p.expect("=")?;
+        let v = p.val(t)?;
+        got.insert(name, v);
+        p.ws();
+        if p.i < s.len() {
+            p.expect(",")?;
+        }
+    }
+    params
+        .iter()
+        .map(|(n, _)| {
+            got.remove(n)
+                .ok_or_else(|| format!("the input names no value for `{n}`"))
+        })
+        .collect()
+}
+
+struct Reader<'a> {
+    s: &'a str,
+    i: usize,
+}
+
+impl Reader<'_> {
+    fn ws(&mut self) {
+        while self.s[self.i..].starts_with(char::is_whitespace) {
+            self.i += self.s[self.i..].chars().next().map_or(1, char::len_utf8);
+        }
+    }
+    fn eat(&mut self, t: &str) -> bool {
+        self.ws();
+        if self.s[self.i..].starts_with(t) {
+            self.i += t.len();
+            true
+        } else {
+            false
+        }
+    }
+    fn expect(&mut self, t: &str) -> Result<(), String> {
+        if self.eat(t) {
+            Ok(())
+        } else {
+            Err(format!("expected `{t}` at `{}`", &self.s[self.i..]))
+        }
+    }
+    fn ident(&mut self) -> String {
+        self.ws();
+        let st = self.i;
+        while self.s[self.i..].starts_with(|c: char| c.is_alphanumeric() || c == '_') {
+            self.i += 1;
+        }
+        self.s[st..self.i].to_string()
+    }
+    fn val(&mut self, t: &FTy) -> Result<Val, String> {
+        self.ws();
+        match t {
+            FTy::Int { signed, bits, .. } => {
+                let st = self.i;
+                if self.s[self.i..].starts_with('-') {
+                    self.i += 1;
+                }
+                while self.s[self.i..].starts_with(|c: char| c.is_ascii_digit() || c == '_') {
+                    self.i += 1;
+                }
+                let x: i128 = self.s[st..self.i]
+                    .replace('_', "")
+                    .parse()
+                    .map_err(|_| format!("expected an integer at `{}`", &self.s[st..]))?;
+                let (lo, hi) = int_range(*signed, *bits);
+                if x < lo || x > hi {
+                    return Err(format!("{x} is outside the type's range"));
+                }
+                Ok(Val::Int(x))
+            }
+            FTy::Bool => match self.ident().as_str() {
+                "true" => Ok(Val::Bool(true)),
+                "false" => Ok(Val::Bool(false)),
+                o => Err(format!("`{o}` is not a boolean")),
+            },
+            FTy::Str => {
+                // a string in Rust's escaped form
+                self.expect("\"")?;
+                let mut out = String::new();
+                let mut it = self.s[self.i..].char_indices();
+                loop {
+                    let Some((k, c)) = it.next() else {
+                        return Err("a string without its closing `\"`".into());
+                    };
+                    match c {
+                        '"' => {
+                            self.i += k + 1;
+                            break;
+                        }
+                        '\\' => match it.next().map(|x| x.1) {
+                            Some('n') => out.push('\n'),
+                            Some('t') => out.push('\t'),
+                            Some('r') => out.push('\r'),
+                            Some('0') => out.push('\0'),
+                            Some('\\') => out.push('\\'),
+                            Some('"') => out.push('"'),
+                            Some('\'') => out.push('\''),
+                            Some('u') => {
+                                let rest: String =
+                                    it.by_ref().map(|x| x.1).take_while(|&c| c != '}').collect();
+                                let h = rest.trim_start_matches('{');
+                                let c = u32::from_str_radix(h, 16)
+                                    .ok()
+                                    .and_then(char::from_u32)
+                                    .ok_or("a bad \\u escape")?;
+                                out.push(c);
+                            }
+                            _ => return Err("an unknown escape in a string".into()),
+                        },
+                        c => out.push(c),
+                    }
+                }
+                Ok(Val::Str(out))
+            }
+            FTy::List(x) | FTy::Array(x, _) => {
+                self.eat("vec!");
+                self.eat("&");
+                self.expect("[")?;
+                let mut l = Vec::new();
+                if self.eat("]") {
+                    return Ok(Val::List(l));
+                }
+                loop {
+                    l.push(self.val(x)?);
+                    if self.eat("]") {
+                        break;
+                    }
+                    self.expect(",")?;
+                    if self.eat("]") {
+                        break;
+                    }
+                }
+                if let FTy::Array(_, n) = t {
+                    if l.len() != *n {
+                        return Err(format!("an array of {n} needs {n} elements"));
+                    }
+                }
+                Ok(Val::List(l))
+            }
+            FTy::Opt(x) => {
+                if self.eat("None") {
+                    return Ok(Val::Opt(None));
+                }
+                self.expect("Some(")?;
+                let v = self.val(x)?;
+                self.expect(")")?;
+                Ok(Val::Opt(Some(Box::new(v))))
+            }
+            FTy::Res(a, b) => {
+                if self.eat("Ok(") {
+                    let v = self.val(a)?;
+                    self.expect(")")?;
+                    return Ok(Val::Res(Ok(Box::new(v))));
+                }
+                self.expect("Err(")?;
+                let v = self.val(b)?;
+                self.expect(")")?;
+                Ok(Val::Res(Err(Box::new(v))))
+            }
+            FTy::Boxed(_, x) => self.val(x),
+            FTy::Tuple(ts) => {
+                self.expect("(")?;
+                let mut v = Vec::new();
+                for (k, x) in ts.iter().enumerate() {
+                    if k > 0 {
+                        self.expect(",")?;
+                    }
+                    v.push(self.val(x)?);
+                }
+                self.eat(",");
+                self.expect(")")?;
+                Ok(Val::Tuple(v))
+            }
+            FTy::Struct {
+                path,
+                tuple,
+                fields,
+            } => {
+                let name = self.ident();
+                let want = path.rsplit("::").next().unwrap_or(path);
+                if name != want {
+                    return Err(format!("expected `{want}`, found `{name}`"));
+                }
+                let mut fv = Vec::new();
+                if *tuple {
+                    if fields.is_empty() && !self.s[self.i..].trim_start().starts_with('(') {
+                        return Ok(Val::Struct(fv));
+                    }
+                    self.expect("(")?;
+                    for (k, (n, x)) in fields.iter().enumerate() {
+                        if k > 0 {
+                            self.expect(",")?;
+                        }
+                        fv.push((n.clone(), self.val(x)?));
+                    }
+                    self.expect(")")?;
+                } else {
+                    self.expect("{")?;
+                    for (k, (n, x)) in fields.iter().enumerate() {
+                        if k > 0 {
+                            self.expect(",")?;
+                        }
+                        let got = self.ident();
+                        if got != *n {
+                            return Err(format!("expected the field `{n}`, found `{got}`"));
+                        }
+                        self.expect(":")?;
+                        fv.push((n.clone(), self.val(x)?));
+                    }
+                    self.eat(",");
+                    self.expect("}")?;
+                }
+                Ok(Val::Struct(fv))
+            }
+            FTy::Opaque(o) => Err(format!("a value of `{o}` cannot be given")),
+        }
+    }
+}
+
+/// A deterministic generator (SplitMix64).
+#[derive(Clone, Debug)]
+pub struct Rng(u64);
+
+impl Rng {
+    pub fn new(seed: u64) -> Rng {
+        Rng(seed)
+    }
+    pub fn word(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    }
+    /// A number in `0..n` (`n` > 0).
+    pub fn below(&mut self, n: u64) -> u64 {
+        self.word() % n.max(1)
+    }
+    /// A number in `lo..=hi`.
+    pub fn within(&mut self, lo: i128, hi: i128) -> i128 {
+        if hi <= lo {
+            return lo;
+        }
+        let span = (hi - lo) as u128;
+        let r = ((self.word() as u128) << 64 | self.word() as u128) % span.saturating_add(1).max(1);
+        lo + r as i128
+    }
+}
+
+/// What the clauses and the `input` lines say about the values at a path (`amount`,
+/// `l.balance`, `len(data)` as `data#len`).
+#[derive(Clone, Debug, Default)]
+pub struct Hints {
+    /// `input <path> in lo..=hi`.
+    pub domains: BTreeMap<String, (i128, i128)>,
+    /// Constants a clause compares the path with: the generator tries each, one below and one
+    /// above.
+    pub consts: BTreeMap<String, Vec<i128>>,
+    /// Pairs of paths that a clause relates (`req_id > old(l.last_req)`): the generator sometimes
+    /// makes them equal or one apart.
+    pub pairs: Vec<(String, String)>,
+}
+
+/// How a generated value grows: lists and strings are short in the first cases and longer later.
+pub struct Gen<'a> {
+    pub rng: &'a mut Rng,
+    pub hints: &'a Hints,
+    /// 0 for the smallest values, 1 for the largest, 2 for random ones.
+    pub mode: u8,
+    /// The longest list or string.
+    pub max_len: usize,
+}
+
+const CHARS: &[char] = &[
+    'a', 'b', 'c', 'x', 'y', 'z', '0', '1', '9', ' ', '-', '_', '.', '/', 'A', 'Z', '\n', '\0',
+    'é', '€', '😀',
+];
+
+impl Gen<'_> {
+    pub fn val(&mut self, t: &FTy, path: &str) -> Val {
+        match t {
+            FTy::Int { signed, bits, .. } => Val::Int(self.int(*signed, *bits, path)),
+            FTy::Bool => Val::Bool(match self.mode {
+                0 => false,
+                1 => true,
+                _ => self.rng.below(2) == 1,
+            }),
+            FTy::Str => {
+                let n = self.len(path);
+                Val::Str(
+                    (0..n)
+                        .map(|_| CHARS[self.rng.below(CHARS.len() as u64) as usize])
+                        .collect(),
+                )
+            }
+            FTy::List(x) => {
+                let n = self.len(path);
+                let ep = format!("{path}[]");
+                Val::List((0..n).map(|_| self.val(x, &ep)).collect())
+            }
+            FTy::Array(x, n) => {
+                let ep = format!("{path}[]");
+                Val::List((0..*n).map(|_| self.val(x, &ep)).collect())
+            }
+            FTy::Opt(x) => {
+                let none = match self.mode {
+                    0 => true,
+                    1 => false,
+                    _ => self.rng.below(4) == 0,
+                };
+                if none {
+                    Val::Opt(None)
+                } else {
+                    Val::Opt(Some(Box::new(self.val(x, path))))
+                }
+            }
+            FTy::Res(a, b) => {
+                if self.rng.below(4) == 0 {
+                    Val::Res(Err(Box::new(self.val(b, path))))
+                } else {
+                    Val::Res(Ok(Box::new(self.val(a, path))))
+                }
+            }
+            FTy::Tuple(v) => Val::Tuple(
+                v.iter()
+                    .enumerate()
+                    .map(|(i, x)| self.val(x, &format!("{path}.{i}")))
+                    .collect(),
+            ),
+            FTy::Boxed(_, x) => self.val(x, path),
+            FTy::Struct { fields, .. } => Val::Struct(
+                fields
+                    .iter()
+                    .map(|(n, x)| (n.clone(), self.val(x, &format!("{path}.{n}"))))
+                    .collect(),
+            ),
+            FTy::Opaque(_) => Val::Opaque,
+        }
+    }
+
+    fn len(&mut self, path: &str) -> usize {
+        let key = format!("{path}#len");
+        if let Some(&(lo, hi)) = self.hints.domains.get(&key) {
+            return self.rng.within(lo.max(0), hi.min(4096)) as usize;
+        }
+        match self.mode {
+            0 => 0,
+            1 => self.max_len,
+            _ => {
+                if let Some(c) = self.hints.consts.get(&key).filter(|c| !c.is_empty()) {
+                    if self.rng.below(4) == 0 {
+                        let k = c[self.rng.below(c.len() as u64) as usize];
+                        let d = self.rng.below(3) as i128 - 1;
+                        return (k + d).clamp(0, self.max_len as i128 * 4) as usize;
+                    }
+                }
+                // short lists more often than long ones
+                let cap = 1 + self.rng.below(self.max_len as u64 + 1);
+                self.rng.below(cap + 1) as usize
+            }
+        }
+    }
+
+    fn int(&mut self, signed: bool, bits: u32, path: &str) -> i128 {
+        let (tlo, thi) = int_range(signed, bits);
+        let (lo, hi) = match self.hints.domains.get(path) {
+            Some(&(a, b)) => (a.max(tlo), b.min(thi)),
+            None => (tlo, thi),
+        };
+        match self.mode {
+            0 => return 0i128.clamp(lo, hi),
+            1 => return hi,
+            _ => {}
+        }
+        let r = self.rng.below(10);
+        if r < 3 {
+            // an edge: a bound of the domain or the type, 0, 1, -1, or a clause's constant
+            let mut e = vec![lo, hi, lo.saturating_add(1), hi.saturating_sub(1), 0, 1, -1];
+            if let Some(c) = self.hints.consts.get(path) {
+                for &k in c {
+                    e.extend([k.saturating_sub(1), k, k.saturating_add(1)]);
+                }
+            }
+            e.retain(|x| (lo..=hi).contains(x));
+            if !e.is_empty() {
+                return e[self.rng.below(e.len() as u64) as usize];
+            }
+        }
+        if r < 6 {
+            // a small value
+            let base = 0i128.clamp(lo, hi);
+            let v = base
+                + self.rng.below(17) as i128
+                    * if signed && self.rng.below(2) == 0 {
+                        -1
+                    } else {
+                        1
+                    };
+            return v.clamp(lo, hi);
+        }
+        // a value of a random magnitude: each bit width as likely as the others
+        let width = (hi - lo).max(0) as u128;
+        let wbits = 128 - width.leading_zeros();
+        let k = self.rng.below(wbits as u64 + 1) as u32;
+        let m: u128 = if k >= 128 {
+            u128::MAX
+        } else {
+            (1u128 << k).wrapping_sub(1)
+        };
+        let raw = ((self.rng.word() as u128) << 64 | self.rng.word() as u128) & m;
+        let off = if width == u128::MAX {
+            raw
+        } else {
+            raw % (width + 1)
+        };
+        if signed && lo < 0 && hi > 0 && self.rng.below(2) == 0 {
+            // around 0 on both sides
+            let o = (off as i128).min(hi);
+            return if self.rng.below(2) == 0 {
+                o
+            } else {
+                (-o).max(lo)
+            };
+        }
+        lo.saturating_add(off as i128).min(hi)
+    }
+}
+
+/// The value at a path (`l.balance`, `p.0`), when the path names one.
+pub fn at<'a>(v: &'a Val, path: &[&str]) -> Option<&'a Val> {
+    let Some((first, rest)) = path.split_first() else {
+        return Some(v);
+    };
+    match v {
+        Val::Struct(f) => f
+            .iter()
+            .find(|(n, _)| n == first)
+            .and_then(|(_, x)| at(x, rest)),
+        Val::Tuple(t) => first
+            .parse::<usize>()
+            .ok()
+            .and_then(|i| t.get(i))
+            .and_then(|x| at(x, rest)),
+        _ => None,
+    }
+}
+
+/// The value at a path, to change.
+pub fn at_mut<'a>(v: &'a mut Val, path: &[&str]) -> Option<&'a mut Val> {
+    let Some((first, rest)) = path.split_first() else {
+        return Some(v);
+    };
+    match v {
+        Val::Struct(f) => f
+            .iter_mut()
+            .find(|(n, _)| n == first)
+            .and_then(|(_, x)| at_mut(x, rest)),
+        Val::Tuple(t) => first
+            .parse::<usize>()
+            .ok()
+            .and_then(|i| t.get_mut(i))
+            .and_then(|x| at_mut(x, rest)),
+        _ => None,
+    }
+}
+
+/// The type at a path.
+pub fn ty_at<'a>(t: &'a FTy, path: &[&str]) -> Option<&'a FTy> {
+    let Some((first, rest)) = path.split_first() else {
+        return Some(t);
+    };
+    match t {
+        FTy::Struct { fields, .. } => fields
+            .iter()
+            .find(|(n, _)| n == first)
+            .and_then(|(_, x)| ty_at(x, rest)),
+        FTy::Tuple(v) => first
+            .parse::<usize>()
+            .ok()
+            .and_then(|i| v.get(i))
+            .and_then(|x| ty_at(x, rest)),
+        FTy::Boxed(_, x) => ty_at(x, path),
+        _ => None,
+    }
+}
+
+/// Simpler values of `v` (one change each), for the shrink: each integer towards 0 (or the
+/// domain's bound nearest to it), lists and strings shorter, an option `None`, a boolean
+/// `false`. `path` is the value's path, for the domains.
+pub fn simpler(v: &Val, t: &FTy, path: &str, hints: &Hints) -> Vec<Val> {
+    let mut out = Vec::new();
+    match (v, t) {
+        (Val::Int(x), FTy::Int { signed, bits, .. }) => {
+            let (tlo, thi) = int_range(*signed, *bits);
+            let (lo, hi) = match hints.domains.get(path) {
+                Some(&(a, b)) => (a.max(tlo), b.min(thi)),
+                None => (tlo, thi),
+            };
+            let target = 0i128.clamp(lo, hi);
+            if *x != target {
+                // the target, then x moved towards it by half the distance, a quarter, ...,
+                // and by 1: a value that must stay near another one still shrinks in few steps
+                let mut d = *x - target;
+                let mut cs = vec![target];
+                while d != 0 {
+                    d /= 2;
+                    cs.push(*x - d);
+                }
+                cs.push(*x - (*x - target).signum());
+                for c in cs {
+                    if c != *x && (lo..=hi).contains(&c) && !out.contains(&Val::Int(c)) {
+                        out.push(Val::Int(c));
+                    }
+                }
+            }
+        }
+        (Val::Bool(true), _) => out.push(Val::Bool(false)),
+        (Val::Str(s), _) => {
+            let c: Vec<char> = s.chars().collect();
+            if !c.is_empty() {
+                out.push(Val::Str(String::new()));
+                if c.len() > 1 {
+                    out.push(Val::Str(c[..c.len() / 2].iter().collect()));
+                    out.push(Val::Str(c[c.len() / 2..].iter().collect()));
+                }
+                for i in 0..c.len().min(16) {
+                    let mut d = c.clone();
+                    d.remove(i);
+                    out.push(Val::Str(d.into_iter().collect()));
+                }
+                for i in 0..c.len().min(16) {
+                    if c[i] != 'a' {
+                        let mut d = c.clone();
+                        d[i] = 'a';
+                        out.push(Val::Str(d.into_iter().collect()));
+                    }
+                }
+            }
+        }
+        (Val::List(l), FTy::List(x)) => {
+            if !l.is_empty() {
+                out.push(Val::List(vec![]));
+                if l.len() > 1 {
+                    out.push(Val::List(l[..l.len() / 2].to_vec()));
+                    out.push(Val::List(l[l.len() / 2..].to_vec()));
+                }
+                for i in 0..l.len().min(32) {
+                    let mut d = l.clone();
+                    d.remove(i);
+                    out.push(Val::List(d));
+                }
+            }
+            let ep = format!("{path}[]");
+            for i in 0..l.len().min(32) {
+                for s in simpler(&l[i], x, &ep, hints) {
+                    let mut d = l.clone();
+                    d[i] = s;
+                    out.push(Val::List(d));
+                }
+            }
+        }
+        (Val::List(l), FTy::Array(x, _)) => {
+            let ep = format!("{path}[]");
+            for i in 0..l.len().min(32) {
+                for s in simpler(&l[i], x, &ep, hints) {
+                    let mut d = l.clone();
+                    d[i] = s;
+                    out.push(Val::List(d));
+                }
+            }
+        }
+        (Val::Opt(Some(x)), FTy::Opt(t)) => {
+            out.push(Val::Opt(None));
+            for s in simpler(x, t, path, hints) {
+                out.push(Val::Opt(Some(Box::new(s))));
+            }
+        }
+        (Val::Res(Ok(x)), FTy::Res(t, _)) => {
+            for s in simpler(x, t, path, hints) {
+                out.push(Val::Res(Ok(Box::new(s))));
+            }
+        }
+        (Val::Res(Err(x)), FTy::Res(_, t)) => {
+            for s in simpler(x, t, path, hints) {
+                out.push(Val::Res(Err(Box::new(s))));
+            }
+        }
+        (_, FTy::Boxed(_, t)) => return simpler(v, t, path, hints),
+        (Val::Tuple(vs), FTy::Tuple(ts)) => {
+            for (i, (x, t)) in vs.iter().zip(ts).enumerate() {
+                for s in simpler(x, t, &format!("{path}.{i}"), hints) {
+                    let mut d = vs.clone();
+                    d[i] = s;
+                    out.push(Val::Tuple(d));
+                }
+            }
+        }
+        (Val::Struct(fv), FTy::Struct { fields, .. }) => {
+            for (i, ((n, x), (_, t))) in fv.iter().zip(fields).enumerate() {
+                for s in simpler(x, t, &format!("{path}.{n}"), hints) {
+                    let mut d = fv.clone();
+                    d[i].1 = s;
+                    out.push(Val::Struct(d));
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}

@@ -12,9 +12,13 @@
 //! - [`plan`]: the plan an engine reads (`<image>.contracts.json`), and the records it writes
 //!   (`<tag>.contracts.jsonl`).
 //! - [`eval`]: the records judged on the host after the run.
+//! - [`fuzz`]: one function at a time, tested natively with inputs generated from its
+//!   `requires` and `input` lines and judged by its `ensures` (Milestone 275,
+//!   docs/design/function-fuzzing.md).
 
 #[cfg(feature = "compile")]
 pub mod compile;
 pub mod eval;
+pub mod fuzz;
 pub mod lang;
 pub mod plan;

@@ -1,0 +1,11 @@
+# The fixture of tests/fuzz.rs: functions with contracts and planted bugs, which `hydo fuzz`
+# (Milestone 275) must find from generated inputs.
+[package]
+name = "fuzz-fixture"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# its own workspace (not part of the repository root's)
+[workspace]

@@ -313,7 +313,15 @@ fn parse_input(t: &str, line: u32) -> Result<SrcInput, String> {
     let usage = || format!("`input {t}`: write `input <name> in <lo>..<hi>` (or `..=`)");
     let (name, range) = t.split_once(" in ").ok_or_else(usage)?;
     let name = name.trim();
-    if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+    // a parameter, or a field path under one (`l.balance`, Milestone 275: function fuzzing
+    // narrows the field's values)
+    if name.is_empty()
+        || name.starts_with('.')
+        || name.ends_with('.')
+        || !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+    {
         return Err(usage());
     }
     let (lo, hi, inclusive) = match range.split_once("..=") {

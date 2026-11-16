@@ -1999,7 +1999,7 @@ fn function_plan<'a>(
     }
     let mut inputs = Vec::new();
     for x in &c.inputs {
-        r.param(&x.name)
+        r.param(x.name.split('.').next().unwrap_or(&x.name))
             .map_err(|e| format!("line {}: {e}", x.line))?;
         inputs.push(Input {
             name: x.name.clone(),

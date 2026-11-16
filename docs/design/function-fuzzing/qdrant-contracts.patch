@@ -1,0 +1,119 @@
+diff -ru a/lib/common/common/src/bytes.rs b/lib/common/common/src/bytes.rs
+--- a/lib/common/common/src/bytes.rs
++++ b/lib/common/common/src/bytes.rs
+@@ -5,6 +5,7 @@
+ /// - 1024 -> "1.00 KiB"
+ /// - 1000000 -> "976.56 KiB"
+ /// - 1048576 -> "1.00 MiB"
++// hydo: ensures len(result) >= 3
+ pub fn bytes_to_human(bytes: usize) -> String {
+     const UNITS: [&str; 9] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"];
+ 
+diff -ru a/lib/common/common/src/defaults.rs b/lib/common/common/src/defaults.rs
+--- a/lib/common/common/src/defaults.rs
++++ b/lib/common/common/src/defaults.rs
+@@ -56,6 +56,8 @@
+ /// On low CPU systems, we want to reserve the minimal amount of CPUs for other tasks to allow
+ /// efficient optimization. On high CPU systems we want to reserve more CPUs.
+ #[inline(always)]
++// hydo: ensures result <= 0
++// hydo: ensures num_cpu > 128 || result >= -6
+ pub fn default_cpu_budget_unallocated(num_cpu: usize) -> isize {
+     match num_cpu {
+         0..=2 => 0,
+@@ -76,6 +78,8 @@
+ /// improve performance and is more likely to cause disconnected HNSW graphs.
+ /// Will be less if currently available CPU budget is lower.
+ #[inline(always)]
++// hydo: ensures result >= 1 && result <= 16
++// hydo: ensures num_cpu == 0 || num_cpu > 48 || result <= num_cpu
+ pub fn thread_count_for_hnsw(num_cpu: usize) -> usize {
+     match num_cpu {
+         0..=48 => 8.min(num_cpu).max(1),
+diff -ru a/lib/common/common/src/delta_pack.rs b/lib/common/common/src/delta_pack.rs
+--- a/lib/common/common/src/delta_pack.rs
++++ b/lib/common/common/src/delta_pack.rs
+@@ -14,6 +14,7 @@
+ /// Max length of the input: 2**32
+ /// Assume that the input is sorted
+ /// Output contains 4 bytes of the length of the input, followed by the packed data.
++// hydo: ensures len(data) != 0 || len(result) == 0
+ pub fn delta_pack(data: &[u64]) -> Vec<u8> {
+     let mut deltas = Vec::with_capacity(data.len());
+     let mut prev = 0;
+@@ -30,6 +31,9 @@
+ /// Max length of the input: 2**32
+ /// DO NOT Assume that the input is sorted
+ /// Output contains 4 bytes of the length of the input, followed by the packed data.
++// hydo: ensures len(data) != 0 || len(result) == 0
++// hydo: ensures len(data) == 0 || len(result) >= 1
++// hydo: ensures len(result) <= 8 * len(data) + 1
+ pub fn compress_sequence(data: &[u64]) -> Vec<u8> {
+     let length = data.len() as u32;
+     let mut output = Vec::with_capacity(4);
+@@ -54,6 +58,7 @@
+     output
+ }
+ 
++// hydo: ensures len(result) <= len(data)
+ pub fn decompress_sequence(data: &[u8]) -> Vec<u64> {
+     if data.is_empty() {
+         return Vec::new();
+@@ -97,6 +102,17 @@
+     use rand::RngExt;
+ 
+     use super::*;
++
++    // hydo: ensures result
++    fn roundtrip(data: Vec<u64>) -> bool {
++        decompress_sequence(&compress_sequence(&data)) == data
++    }
++
++    // hydo: ensures result
++    fn delta_roundtrip(mut data: Vec<u64>) -> bool {
++        data.sort();
++        delta_unpack(&delta_pack(&data)) == data
++    }
+ 
+     #[test]
+     fn pack_and_unpack_sorted_data() {
+diff -ru a/lib/common/common/src/prefetch.rs b/lib/common/common/src/prefetch.rs
+--- a/lib/common/common/src/prefetch.rs
++++ b/lib/common/common/src/prefetch.rs
+@@ -46,6 +46,8 @@
+ /// deliver, so extra window depth measured no effect in either direction and
+ /// the hints are pure issue overhead.
+ #[inline]
++// hydo: ensures result.0 >= 1 && result.0 <= 8
++// hydo: ensures result.1 == 0 || (result.1 >= result.0 + 2 && result.1 <= 16)
+ pub fn prefetch_windows(vector_size_bytes: usize) -> (usize, usize) {
+     let near = (NEAR_BYTES / vector_size_bytes.max(1)).clamp(1, 8);
+ 
+diff -ru a/lib/common/common/src/small_uint.rs b/lib/common/common/src/small_uint.rs
+--- a/lib/common/common/src/small_uint.rs
++++ b/lib/common/common/src/small_uint.rs
+@@ -5,12 +5,15 @@
+     pub const MAX: u32 = 0xFFFFFF;
+ 
+     #[inline]
++    // hydo: ensures result.0[0] == value % 256 && result.0[1] == value / 256 % 256
++    // hydo: ensures result.0[2] == value / 65536 % 256
+     pub const fn new_wrapped(value: u32) -> Self {
+         let arr = value.to_le_bytes();
+         Self([arr[0], arr[1], arr[2]])
+     }
+ 
+     #[inline]
++    // hydo: ensures result == self.0[0] + 256 * self.0[1] + 65536 * self.0[2]
+     pub const fn get(self) -> u32 {
+         u32::from_le_bytes([self.0[0], self.0[1], self.0[2], 0])
+     }
+@@ -20,6 +23,8 @@
+     type Error = ();
+ 
+     #[inline]
++    // hydo: ensures value > 16777215 || (is_ok(result) && ok(result).0[0] == value % 256)
++    // hydo: ensures value <= 16777215 || is_err(result)
+     fn try_from(value: u32) -> Result<Self, Self::Error> {
+         let arr = value.to_le_bytes();
+         if arr[3] != 0 {

@@ -20,6 +20,8 @@ on it from your own code. To use hydo, install the command with `cargo install h
 - The reads every engine makes (`plan::Loc::load`).
 - The plan an engine follows (`<image>.contracts.json`) and the records it writes, one per call.
 - The judgement of a run's records: each broken clause with the first broken call's values.
+- Function fuzzing (`hydo fuzz`): one Rust function at a time, called in a copy of its crate
+  with inputs generated from `requires` and `input`, judged by `ensures`, and shrunk.
 
 ## License
 

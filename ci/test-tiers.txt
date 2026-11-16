@@ -76,6 +76,7 @@ hydo-engine::lockstep                    fast
 hydo-contracts                           fast
 hydo-contracts::compile                  fast
 hydo-contracts::eval                     fast
+hydo-contracts::fuzz                     fast
 hydo-contracts::lang                     fast
 hydo-contracts::types                    fast
 hydo-errors                              fast

@@ -640,6 +640,18 @@ contract broke in the same runs as the rule and named the call and its values. I
 state the cause, a `float64` limit lost in a map, and no contract over memory states the atomic
 bulk (the Blnk example's RESULTS.md, "Contracts against rules").
 
+**Function fuzzing from contracts (M275, a prototype for Rust, natively).** `hydo fuzz
+[CRATE_DIR]` tests each contracted Rust function on its own. It generates inputs from a seed
+that keep `requires` and the `input` lines (now also field paths, `input l.balance in ...`), with
+edges from the clauses' constants and related paths. It calls the function in a copy of the
+crate through a one-line test module written after the function, and judges each call by
+`ensures`. A broken clause or a panic shrinks to a small input, and `--input` replays it. On the
+contracts-ledger example it found the planted bug from the contract alone, and two gaps in the
+contract. On 12 functions of Qdrant's `common` crate nine held. `decompress_sequence` panics in
+the test profile on a header that `compress_sequence` never writes, on the path that decodes
+untrusted sparse vectors. The run inside the VM with faults is designed only. Design:
+`docs/design/function-fuzzing.md` (open item 139).
+
 **Fakes from OpenAPI descriptions (M249).** `hydo fake from-openapi <spec>` writes a `fakes:`
 entry from an OpenAPI 3.0 or 3.1 description (the module `openapi` of `hydo-compose`). It writes
 one route per operation, with the spec's example or a body made from the schema, and no random
@@ -1584,6 +1596,18 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A fault of a stepped instruction other than #DE, #UD, #GP and #PF leaves the trap flag in
       its frame. Only user mode is counted, so a loop in the guest kernel stays the observer's.
     - The k3s example is not in `hydo/onboard/recorded.json`.
+139. Function fuzzing (M275). What is left:
+    - The run inside hydo's VM with faults is designed and not built
+      (docs/design/function-fuzzing.md, "Inside the virtual machine"). It needs the harness built
+      for the guest and a runner that makes an image per batch. Durability properties also need a
+      second phase in the recovery boot.
+    - Rust only, natively. Go, floating-point values, enumerations, generic functions, and trait
+      methods are not fuzzed.
+    - The language has no quantifier, so a precondition such as "the input is sorted" cannot be
+      stated (Qdrant's `delta_pack`).
+    - Qdrant's `decompress_sequence` accepts a header of more than 64 bits per value. What
+      `decode_untrusted_bytes` returns for such a blob in a release build was not checked, and
+      nothing was posted.
 
 ## Milestone index
 
@@ -2201,6 +2225,12 @@ build machine, before 2026-10-13.
   KVM with 2 vCPUs, one fingerprint per schedule. The Mac has no such counter and refuses the
   key. Its observer looks at the return address, so TigerBeetle boots on the Mac. Nothing
   recorded moved
+- M275 (tentative number): function fuzzing from contracts. `hydo fuzz` generates inputs from
+  a Rust function's `requires` and `input` lines, calls it in a copy of its crate, judges each
+  call by `ensures`, and shrinks a failure to an input that replays. It found the
+  contracts-ledger bug from the contract alone; on Qdrant's `common` crate nine of 12 functions
+  held, and a decoder panics on a header its encoder never writes. The VM run is designed only.
+  Nothing recorded moved
 
 ## Where to look
 

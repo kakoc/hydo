@@ -13140,3 +13140,94 @@ tests of hydo-kvm, hydo-hvm, hydo-engine, hydo-build, hydo-manifest, hydo-config
 hydo-schema-compat, hydo-schedule (`language::`), hydo-agents (`public_content::`) and the `hydo`
 program (`docs::`, `equivalence::cli_matches_golden`, `agents_equivalence`); `sh
 ci/consolidate-tests.sh --check`; `sh ci/vale.sh`, and Vale on `docs/design/exit-free-loops.md`.
+
+### Milestone 275 (tentative number) - DONE (function fuzzing from contracts: `hydo fuzz` tests one Rust function at a time, natively, with inputs generated from its `requires` and `input` lines and each call judged by its `ensures`; a broken clause or a panic shrinks to a small input that replays; it found the contracts-ledger example's planted bug from the contract alone and one candidate in Qdrant's `common` crate; the run inside the VM with faults is designed, not built; nothing recorded moved; 2026-11-16)
+
+**What and why.** The same `// hydo: requires` and `ensures` comments that a whole-system run
+checks at every call (Milestones 241, 255 and 260) now also drive the testing of single
+functions. `requires` and the `input` lines describe the valid inputs, `ensures` judges each
+result, and a panic, a call that does not return, or a process that ends is a finding too. A
+property that needs a call, such as a round trip, is a function that returns `bool` with
+`// hydo: ensures result`. The design is `docs/design/function-fuzzing.md`.
+
+**The prototype.** `hydo fuzz [CRATE_DIR] [--fn NAME] [--cases N] [--seed S] [--input ...]
+[--release] [--list]`, in the new module `fuzz` of `hydo-contracts`:
+
+- hydo reads the package with `cargo metadata` and its sources as text (comments and literals
+  masked, brackets matched): each contracted function's signature, its `impl` block, the
+  crate's structures and type aliases. It refuses generic, `async` and trait functions, and
+  parameters of types it cannot generate (floating-point values, enumerations, references
+  inside structures), with one reason each.
+- It copies the package to `--out` (default `hydo-out/fuzz`), writes the copy's manifest from
+  `cargo metadata` (with the workspace's lock file, profiles, patches and toolchain file), and
+  writes one test module per function on the line of the function's closing brace. The module
+  is a child of the function's own module, so private items and binary crates work, and every
+  line keeps its number. `cargo test --no-run` builds it.
+- hydo generates the inputs from a seed. The first input is the smallest values, the second the
+  largest, the rest random with edges: type and domain bounds, 0, 1, -1, the clauses' constants
+  and their neighbours. Pairs of paths that a clause compares are made equal or one apart in
+  1 of 4 inputs. Inputs that break `requires` are not run.
+- The harness reads each input as text, calls the function under `catch_unwind`, and writes the
+  result and the `&mut` parameters after the call, or the panic's location and message. A panic
+  in the standard library is placed at the crate's own frame of the backtrace. hydo judges the
+  clauses on those values with the language's meaning (`old()`, reads through references after
+  the call, exact integers).
+- Each failure kind shrinks once (integers towards 0 or the domain's bound by halving steps,
+  lists and strings shorter, options `None`), and the smallest input runs once more. The same
+  seed writes the same `fuzz.json`; `--input 'name = value, ...'` replays one input.
+- An `input` line may name a field path (`input l.balance in 0..=1_000_000`); the plan's compiler
+  checks only its root.
+
+**Proof on the contracts-ledger example.** `hydo fuzz hydo/onboard/examples/contracts-ledger/rust
+--toolchain 1.90.0`, 1,000 inputs of `apply`, 5.1 s with the build, the example's files
+unchanged:
+
+- `ensures req_id > old(l.last_req) || l.balance == old(l.balance)` broke on 96 inputs; the
+  smallest is `l = Ledger { balance: 1, last_req: 1, applied: 0 }, c = Conn { last_req: 0 },
+  req_id = 1, amount = 1`. This is the planted bug: a request that the ledger applied is applied
+  again on a new connection. The whole-system run reached it only under a pause or a lost answer.
+- `ensures req_id <= old(l.last_req) || l.balance == old(l.balance) - amount` broke on 159
+  inputs, with a connection that saw a higher request id than the ledger, which the server never
+  makes. The contract lacks `requires c.last_req <= l.last_req`.
+- Two panics: `attempt to subtract with overflow` at `src/main.rs:46` (a debit larger than the
+  balance, 180 inputs) and `attempt to add with overflow` at line 48 (`applied` at
+  `u64::MAX`, 13 inputs).
+- `ensures result == l.balance` held on the 807 calls that returned. A second run wrote the same
+  `fuzz.json` (`16c3e7aa3b43882da574d275bbe29dac56058219114d45bc4597c51b9c1fb9a4`), and the first
+  smallest input replayed with `--input`.
+
+**Proof on Qdrant.** Contracts on 12 functions of Qdrant's `lib/common/common` at `222b2e44`
+(the commit of the example `qdrant-flaky-10200`): 10 of Qdrant's own and two round trips in the
+test module of `delta_pack.rs`. The contracts are
+`docs/design/function-fuzzing/qdrant-contracts.patch`. With Rust 1.99.0, 1,000 inputs each,
+7.8 s with a built copy:
+
+- Nine functions held every clause: `bytes_to_human`, `thread_count_for_hnsw`,
+  `compress_sequence`, both round trips, `prefetch_windows`, and `U24::new_wrapped`, `get` and
+  `try_from`.
+- `default_cpu_budget_unallocated` broke `ensures result <= 0` for `num_cpu =
+  9223372036854775808` (`num_cpu as isize` wraps). No machine has that many CPUs.
+- `delta_pack` panicked on `[1, 0]`: its comment says that the input is sorted, which the
+  language cannot state.
+- `decompress_sequence` panicked on `[57]`, a header that asks for 65 bits per value and that
+  `compress_sequence` never writes. `StoredSparseVector::decode_untrusted_bytes` says that a
+  malformed blob from outside the storage is a user error and never a crash, and it reaches this
+  function. The test profile stops at a debug assertion. With `--release` no input panicked,
+  and the decoder returns values without an error. What the caller does with them was not
+  checked. Nothing was posted upstream.
+
+**Inside the VM.** Designed only (docs/design/function-fuzzing.md, "Inside the virtual
+machine"): the harness built for the guest, a runner that makes an image per batch and reads
+the answers from the console, and the schedule's faults (`disk=ioerr`, `T=`, `P=workload`,
+`pct=`). A hidden `fsync` error or a lost write shows only after a recovery boot, which needs a
+second phase of the harness. Open item 139.
+
+**Tests and checks.** New: `hydo-contracts`'s `fuzz::` (10 tests, with one end-to-end run of the
+fixture `tests/fuzz-crate`, five functions with four planted bugs, about 5 s). The CLI's main
+help gained the `hydo fuzz` line and `hydo fuzz --help` exists, so `cli.jsonl` and
+`agents.jsonl` (MANIFEST.md's contracts section gained a paragraph) were re-recorded. On this
+Mac, on `main` at `566cd876` with this milestone on top: `cargo clippy --workspace
+--all-targets -- -D warnings`; every test of `hydo-contracts` and of the `hydo` program;
+`hydo-schedule`'s `language::`, `hydo-agents`'s `public_content::`, `sh
+ci/consolidate-tests.sh --check` and `sh ci/vale.sh`. Nothing recorded moved: no engine, image,
+guest program or example file changed.

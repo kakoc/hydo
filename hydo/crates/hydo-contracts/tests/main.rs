@@ -7,5 +7,6 @@ mod tmpdir;
 
 mod compile;
 mod eval;
+mod fuzz;
 mod lang;
 mod types;

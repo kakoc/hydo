@@ -100,6 +100,9 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
     hydo rules   scan [DIR] | check <candidates.yaml> [IMG] [--runs N] [--mutate] [--write-checks DIR]
                                                    list what a project promises; validate proposed rules
                                                    on runs without faults (hydo guide rules)
+    hydo fuzz    [CRATE_DIR] [--fn NAME] [--cases N] [--seed S]
+                                                   test each Rust function with a contract on its own:
+                                                   inputs from requires, results judged by ensures
     hydo run|repro|explore ... --backend kvm       run the guests on the KVM engine (stock /dev/kvm, no
                                                    module, no root; also HYDO_BACKEND=kvm)
 
@@ -163,6 +166,9 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
     hydo rules   scan [DIR] | check <candidates.yaml> [IMG] [--runs N] [--mutate] [--write-checks DIR]
                                                    list what a project promises; validate proposed rules
                                                    on runs without faults (hydo guide rules)
+    hydo fuzz    [CRATE_DIR] [--fn NAME] [--cases N] [--seed S]
+                                                   test each Rust function with a contract on its own:
+                                                   inputs from requires, results judged by ensures
 
 IMG defaults to the one *-arm64.cpio.gz in ./hydo-out, or in ./.hydo for a project whose manifest
 is hydo/hydo.yaml (the agreed repository layout; `hydo build` with no manifest uses ./hydo/hydo.yaml).
@@ -254,6 +260,9 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         "k8s" => hydo_compose::k8s::main(rest, ctx.config.cli.init_clock_start),
         // Milestone 249: a fake outside service from an OpenAPI description (`hydo fake --help`)
         "fake" => hydo_compose::openapi::main(rest),
+        // Milestone 275: one function at a time, inputs from its contract (`hydo fuzz --help`;
+        // docs/design/function-fuzzing.md)
+        "fuzz" => hydo_contracts::fuzz::main(rest),
         "build" => build::cmd_build(ctx, rest),
         "run" => runs::cmd_run(ctx, rest),
         "repro" => runs::cmd_repro(ctx, rest),

@@ -1410,6 +1410,14 @@ before the run. A run
 judges its first 100,000 calls, and the report says how many calls were not judged. The example
 is `hydo/onboard/examples/contracts-ledger`; its `hydo-types.yaml` shows every type.
 
+The same comments test one Rust function at a time, without an image: `hydo fuzz [CRATE_DIR]`
+(Milestone 275, docs/design/function-fuzzing.md). It generates inputs that keep `requires` and
+the `input` lines, calls the function on each in a copy of the crate, and judges each call by
+`ensures`. A broken clause, a panic, or a call that does not return is shrunk to a small input,
+which `--input` replays. An `input` line can narrow a field too: `input l.balance in
+0..=1_000_000`. A property that needs a call, such as a round trip, is a function that returns
+`bool` with `// hydo: ensures result`.
+
 ### Service networks (`network: bridge`)
 
 ```yaml
