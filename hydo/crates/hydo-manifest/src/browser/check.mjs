@@ -31,7 +31,10 @@ const [rule, msArg] = process.argv.slice(2);
 const limit = Number(msArg || 0);
 // browser.watch.failures_of (Milestone 258): only these requests must show their failure
 const watchCfg = JSON.parse(process.env.HYDO_WEB_WATCH || '{}');
-const failuresOf = watchCfg.failures_of ? new RegExp(watchCfg.failures_of) : null;
+const failuresRe = watchCfg.failures_of ? new RegExp(watchCfg.failures_of) : null;
+// Milestone 273: the pattern also matches `<METHOD> <path>`, so that an API whose reads and writes
+// share a path (GET and PATCH /api/v2/tasks/4) can name its writes: ^(POST|PUT|PATCH|DELETE) /api/
+const failuresOf = failuresRe && { test: (e) => failuresRe.test(e.path) || failuresRe.test(`${e.method} ${e.path}`) };
 
 // The workload makes this folder before its first step. A recovery boot after a power cut runs
 // no workload, and the guest's /tmp starts empty: the pages of the first boot were judged there
@@ -158,7 +161,7 @@ if (rule === 'tests') {
   const found = [];
   for (const list of byPage.values()) {
     const close = closeOf(list);
-    for (const f of failures(list).filter((x) => !failuresOf || failuresOf.test(x.path))) {
+    for (const f of failures(list).filter((x) => !failuresOf || failuresOf.test(x))) {
       const end = Math.min(f.t + limit, close ? close.t : Infinity);
       const before = list.filter((a) => a.kind === 'alert' && a.t < f.t).pop();
       const shown = (before && before.on) || list.some((a) => a.kind === 'alert' && a.on && a.t >= f.t && a.t <= end);
@@ -175,7 +178,7 @@ if (rule === 'tests') {
   // (hydo_explore::results::FAILURES_OF_UNMATCHED)
   let unmatched = '';
   const sent = pageEvents.filter((e) => e.kind === 'send');
-  if (failuresOf && sent.length > 0 && !sent.some((e) => failuresOf.test(e.path))) {
+  if (failuresOf && sent.length > 0 && !sent.some((e) => failuresOf.test(e))) {
     const ex = sent.find((e) => e.method !== 'GET') || sent[0];
     unmatched =
       `; but watch.failures_of (${watchCfg.failures_of}) matched none of the ${sent.length} requests the pages sent` +

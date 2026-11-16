@@ -521,7 +521,7 @@ pub fn expand(m: &mut Value) -> R<()> {
         }
         Some(_) => {
             return Err(err(
-                "browser.watch.failures_of: a regular expression over a request's path, such as (Create|Update|Delete)[A-Za-z]*$ (only a failed request whose path matches must be shown)",
+                "browser.watch.failures_of: a regular expression over a request's path or its `<METHOD> <path>`, such as (Create|Update|Delete)[A-Za-z]*$ or ^(POST|PATCH|DELETE) /api/ (only a failed request that it matches must be shown)",
             ))
         }
     }
@@ -1292,6 +1292,15 @@ mod tests {
             serde_json::from_str(f["services"][0]["env"]["HYDO_WEB_WATCH"].as_str().unwrap())
                 .unwrap();
         assert_eq!(w["failures_of"], "(Create|Delete)[A-Za-z]*$");
+        // Milestone 273: a pattern over `<METHOD> <path>` (the writes of a REST API)
+        let mut m = base(
+            json!({"tests": "e2e", "watch": {"failures_of": "^(POST|PATCH|DELETE) /api/v[12]/"}}),
+        );
+        expand(&mut m).unwrap();
+        let w: Value =
+            serde_json::from_str(m["services"][0]["env"]["HYDO_WEB_WATCH"].as_str().unwrap())
+                .unwrap();
+        assert_eq!(w["failures_of"], "^(POST|PATCH|DELETE) /api/v[12]/");
         let mut bad = base(json!({"tests": "e2e", "watch": {"failures_of": "(x"}}));
         assert!(expand(&mut bad)
             .unwrap_err()

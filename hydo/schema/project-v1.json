@@ -3736,7 +3736,7 @@
           ]
         },
         "failures_of": {
-          "description": "A regular expression over a request's path: only a failed request that matches must be\nshown (default every judged request), for example the writes of an API whose reads run in\nthe background (Milestone 258).",
+          "description": "A regular expression over a request's path: only a failed request that matches must be\nshown (default every judged request), for example the writes of an API whose reads run in\nthe background (Milestone 258). It also matches `<METHOD> <path>`, such as\n`^(POST|PATCH|DELETE) /api/` for an API whose reads and writes share a path\n(Milestone 273).",
           "anyOf": [
             {
               "$ref": "#/$defs/Text"

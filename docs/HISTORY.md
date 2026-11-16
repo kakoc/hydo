@@ -13435,3 +13435,130 @@ example.
 
 **Checks** (on this Mac): `hydo-schedule`'s `language::`; `hydo-agents`'s `public_content::`;
 the `hydo` program's `docs::`; and `sh ci/vale.sh`. No document that the guide prints changed.
+
+### Milestone 273 (tentative number) - DONE (a second web app for the walk through the pages: Vikunja 2.8.0, a self-hosted task manager on SQLite, onboarded with `hydo compose` and explored blind on hvx with walks and backend faults; the walk records the ids of a REST API's answers, and `watch.failures_of` matches the method; two new candidates, not posted: a power cut loses the tasks Vikunja acknowledged in the last seconds, because its SQLite runs in WAL mode with the driver's `synchronous=NORMAL`, and a task of the quick action bar that the server refuses is lost and leaves its rejection unhandled; what the walk lacked on this app; nothing recorded moved; 2026-11-16)
+
+The user asked for a second popular open-source web app for `browser.explore`, after Memos
+(Milestone 258), with a real backend and data whose integrity users care about. The example is
+`hydo/onboard/examples/vikunja`, and its RESULTS.md has every run and the duplicate searches.
+Every hvx run used the 0.3.3 Linux release with this milestone's `hydo`, in a folder of its own on
+the bare-metal machine, one VM at a time.
+
+**The choice.** The candidates weighed were Actual Budget (about 30,000 stars), Docmost (about
+22,000), Mealie (about 14,000), Linkding (about 11,000) and Vikunja (about 6,100). Actual keeps
+the budget in the browser, syncs binary messages, and needs a secure context, which the guest's
+plain HTTP is not. Docmost saves a page's text over a WebSocket that the walk does not see.
+Linkding saves with HTML forms answered by a redirect, which the walk does not record. Vikunja
+was chosen: one Go server with its frontend built in, SQLite by default in the documentation's
+Docker example, a REST API, and tasks whose loss a user notices.
+
+**What the walk needed (built here).**
+
+- The acknowledged writes of a REST API. The walk wrote words for resource names of the shape
+  `memos/<id>` only, and Vikunja's answers name a new task by a number (`{"tasks":[{"id":6,...}]}`).
+  Since this milestone each acknowledged write also adds `<METHOD>:<path>=<id>` for every id of
+  the objects that its JSON answer returns (its `id`, or the `id` of each object in a field), or
+  `<METHOD>:<path>` without an id: `POST:/api/v2/projects/1/tasks/bulk=6`,
+  `DELETE:/api/v2/tasks/6` (`walk.mjs`, `idsOf`). The old words stay, so Memos's rule reads the
+  same words as before.
+- The writes of an API whose reads use the same paths. Vikunja reads a task with `GET
+  /api/v2/tasks/4` and saves it with `PATCH` on the same path, so a pattern over the path cannot
+  name the writes. `watch.failures_of` now matches the path or `<METHOD> <path>` (`walk.mjs` and
+  `check.mjs`), so `^(POST|PUT|PATCH|DELETE) /api/v[12]/(projects|tasks|labels|teams|filters)`
+  names them. A pattern that matched a path matches it as before. The validator still compiles
+  the pattern with Rust's `regex`, so a lookahead such as `(?!user/token)` is refused.
+
+The reference is MANIFEST.md, section "A walk through the pages that hydo makes", and `hydo guide
+web-apps`; the design is the section "Faults and rules" of `docs/design/ui-exploration.md`.
+
+**The onboarding.** `hydo compose` of the documentation's Compose file started
+`hydo/onboard/examples/vikunja/hydo/`. The image runs as uid 1000, and the documentation has
+`chown 1000` of both volumes: without it the server stopped at its start ("Could not init file
+handler: ... permission denied"), so the service's `setup:` gives both volumes to uid 1000. The
+workload became `browser.explore` (6 steps of 12 actions, the account's registration as
+`setup`). Two rules in `page-rules/vikunja.mjs` read the walk's words and the database, with
+`node:sqlite` in the browser's service:
+
+- `vikunja.saved_work_survives`: every task, project, comment, label, saved filter and team that
+  Vikunja answered as created is in its table, unless an acknowledged write deleted it.
+- `vikunja.kanban_matches_done`: on every Kanban view with its own buckets, each task is in one
+  bucket, and in the done bucket exactly when it is done.
+
+`disk=none | run I=1` saved five tasks and held, with one fingerprint twice (`e6e35a2ab56471e5`).
+
+**The blind exploration of all faults.** `hydo explore --seeds 1-20` (kills, network faults,
+power cuts and disk faults) ran in 106 minutes with one worker. Four schedules failed, and each
+reproduced:
+
+- Finding 1 (new candidate), seed 18: a power cut lost a task that Vikunja had answered as
+  saved. `disk=cut dseed=1120b3d00955f032 | run N=vikunja@0-1:reorder,29%,delay,17ms C=6
+  I=d94729ae6c47c1f6` shrank in 40 runs to `disk=cut dseed=1120b3d00955f032 | run C=6
+  I=d94729ae6c47c1f6,n4,x0.0-3,x1.0-3,x2.0-3,x3.0-3,x4.0-3,x5.0,x5.1,x5.2`, a walk of one action
+  after the registration: it types a task and presses Enter, and the power is cut after the step
+  (`14dd446ea98dd932` twice). Vikunja opens SQLite in WAL mode and sets no `synchronous`, and
+  `mattn/go-sqlite3` compiles SQLite with `SQLITE_DEFAULT_WAL_SYNCHRONOUS=1`, so a commit is
+  not synced until a checkpoint. The WAL mode came with commit `98f2893f`, first released in
+  v2.2.0. On the second image, `disk=none | run C=5 I=1` lost the two tasks of step 4 (tasks 4
+  and 5) and kept the three of steps 0, 1 and 3 (`b9c4ca304679f322` twice).
+- Finding 2 (new candidate, small), seed 9: under disk I/O errors the quick action bar's "New
+  task" failed, the page left `ApiError: unexpected error occurred` unhandled, and the typed
+  title was gone. `onEnter` calls `doCmd()` without a `catch`, and `newTask` does not catch the
+  create's error. The shrink took 81 runs (`65f8e47405e63d25` twice). A Playwright test with a
+  `page.route` 500, `walk-repro/quick-add-new-task.spec.ts`, fails the same way on this Mac
+  against Vikunja in Docker.
+- Seeds 1 and 8 ended in ERROR: under disk I/O errors the rule could not read its copy of the
+  database. Not findings.
+
+**The exploration with every fault kind but the lying disk.** `hydo explore --seeds 21-60
+--new-faults --durable-only` ran in 114 minutes on the third image (14 kills, 19 network faults,
+2 one-way network faults, 16 pauses, 10 clock steps and 19 power cuts). Five schedules failed,
+all with finding 1 (seeds 24, 49, 55, 59 and 60), and lost 9 of the 21 objects that they had
+saved. The 35 passing walks saved 65 objects, and all were in the database at the end. The five
+failures had one signature, so one shrink ran: seed 24, in 47 runs, to `disk=cut
+dseed=aac8c00000a81e44 | run C=4
+I=772ff9303a3b7ac5,n2,x0.0,x1.0,x1.1,x2.0,x2.1,x3.0,x3.1,x4.0,x4.1,x5.0,x5.1`
+(`a6607ec0eb8fce80` twice). Its one action types a task with Markdown, and Vikunja's quick add
+makes a label and three tasks of it; the cut loses all four. The Kanban rule held in all 40.
+
+The second image's exploration of the same seeds was stopped after 5 schedules. Its rule named
+every lost object in the verdict, so losses of four and of two objects had two signatures, and
+each would have been shrunk on its own. The third image prints the list on a line before the
+verdict, whose words stay the same.
+
+**What the walk lacked on Vikunja** (open item 137): it never marked a task done, because
+Vikunja's done check boxes are hidden inputs that take no trial click; it did not sign in again
+after the session ended; and the recording replay of a walk that a power cut ends recorded
+nothing. Under disk I/O errors the rule could not read its copy of the database.
+
+Both candidates were searched for in Vikunja's issues and pull requests (the terms are in
+RESULTS.md), and none names them. Finding 1's cause is plain in the code, so no reproduction
+without hydo was made. Nothing was posted.
+
+**A mistake in the runs.** The runs went through chain scripts, each a list of commands run one
+after another, and a chain waited for the line that ends another chain's log. One chain was
+stopped and started again with a new list, and the stopped one still wrote its end line into the
+same log. The chain that waited for it then started five runs of the second image while the new
+chain's own runs and the start of an exploration ran: for about ten minutes two VMs of this
+milestone ran at once on the shared machine. Each run had its own VM, and the minimal schedule
+of finding 1 gave one fingerprint on both of its runs then; the `disk=none` form, `disk=cut |
+run C=6 I=1` and the quick-add schedule ran once each. The script now reads its list once and gives every command
+`/dev/null` as its input.
+
+**Goldens, tests and what moved.** Nothing recorded moved: Vikunja is not in `recorded.json`,
+and a manifest without `browser.explore` builds the same image as before. Every walking image
+gets other bytes (the walker), so the walks' fingerprints change. Re-recorded on this Mac for the
+new example manifest: the explorer's identity goldens (quick and full) and corpus golden (full;
+the quick one did not change), and the core controller's corpus golden. The full goldens only
+gained the new manifest's lines; the quick identity golden samples every fifth manifest, so its
+sample moved by one. Re-recorded: the CLI's two `guide manifest` answers (MANIFEST.md changed)
+and `hydo/schema/project-v1.json` (the description of `failures_of`). New test: the expansion's
+unit test takes a `failures_of` over `<METHOD> <path>`.
+
+**Checks.** On this Mac, on `main` at `8b1f87c3` with this milestone on top (the runs above used
+a tree on `47df6fee`, before Milestones 270 to 281): `cargo fmt --all --check`; `cargo clippy
+--workspace --all-targets -- -D warnings`; every test of `hydo-config`; every unit test of
+`hydo-manifest` and its `format::`; `hydo-explore`'s `identity::` and `corpus::` (also with
+`HYDO_IDENT_FULL=1`); `hydo-control`'s `corpus::`; `hydo-schedule`'s `language::`;
+`hydo-agents`'s `public_content::`; the `hydo` program's `docs::`,
+`equivalence::cli_matches_golden` and `agents_equivalence`; `sh ci/consolidate-tests.sh --check`
+and `sh ci/vale.sh`.

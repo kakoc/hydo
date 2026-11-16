@@ -1,0 +1,67 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "vikunja/vikunja:2.8.0": {
+   "index_digest": "sha256:35d937baf3b5d5803bed6b9e11d007448b7b536df9e4346dc35551e1072636c3",
+   "name": "vikunja/vikunja",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/app/vikunja/vikunja"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "VIKUNJA_SERVICE_ROOTPATH=/app/vikunja/",
+       "VIKUNJA_DATABASE_PATH=/db/vikunja.db",
+       "GODEBUG=multipathtcp=0"
+      ],
+      "ExposedPorts": {
+       "3456/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app/vikunja"
+     },
+     "digest": "sha256:12c860da57e1d354d3a75f01ec6b88acb35ea3a38b213a1b9ecab339d59aa243",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/app/vikunja/vikunja"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "VIKUNJA_SERVICE_ROOTPATH=/app/vikunja/",
+       "VIKUNJA_DATABASE_PATH=/db/vikunja.db",
+       "GODEBUG=multipathtcp=0"
+      ],
+      "ExposedPorts": {
+       "3456/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000",
+      "Volumes": null,
+      "WorkingDir": "/app/vikunja"
+     },
+     "digest": "sha256:7faf05f6be4b4250b3e7f3d4ef52a9b30d9f3bed758977dadb387a9f3461bc01",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "vikunja/vikunja:2.8.0",
+   "registry": "docker.io",
+   "repo": "vikunja/vikunja",
+   "tag": "2.8.0"
+  }
+ }
+}

@@ -1720,7 +1720,8 @@ browser:
     alerts: ["[role=alert]", "[role=alertdialog]"]     # <name>.failures_shown; [] turns it off
     failures_within_ms: 5000
     requests: /api/            # judge only fetch and XHR requests under this path (default all)
-    failures_of: "(Create|Update|Delete)[A-Za-z]*$"   # only these failed requests must show (default all)
+    failures_of: "(Create|Update|Delete)[A-Za-z]*$"   # only these failed requests must show (default all);
+                               #   it matches the path or `<METHOD> <path>`: "^(POST|PATCH|DELETE) /api/"
     text: [NaN, undefined, "[object Object]", Invalid Date]   # <name>.no_bad_text; [] turns it off
   screens: failures            # failures (default) | all | compare: which pages get a screenshot
   screens_ref: hydo-screens    # compare only: the reference screenshots (default hydo-screens)
@@ -1796,10 +1797,13 @@ browser:
 - The walker's settings are the service's `HYDO_WEB_WALK` (JSON), with the fakes' routes for
   `repro.spec.ts`.
 - Each write that the server answered 2xx adds to `$HYDO_ACKED` one word per resource name in
-  its request or answer, `<the path's last part>:<name>`, or the path's last part alone. A write
-  is a request under `watch.requests` that `watch.failures_of` matches, or without that key
-  that is not a GET. A line with the request's and the answer's text goes to
-  `/tmp/hydo/web/walk/acks.jsonl`.
+  its request or answer, `<the path's last part>:<name>`, or the path's last part alone. It also
+  adds one word `<METHOD>:<path>=<id>` per id of the objects that a JSON answer returns (its
+  `id`, or the `id` of each object in one of its fields), or `<METHOD>:<path>` without an id,
+  such as `POST:/api/v2/projects/1/tasks/bulk=6` and `DELETE:/api/v2/tasks/6` (Milestone 273).
+  A write is a request under `watch.requests` that `watch.failures_of` matches (its path, or
+  `<METHOD> <path>`), or without that key that is not a GET. A line with the request's and the
+  answer's text goes to `/tmp/hydo/web/walk/acks.jsonl`.
 - Every run writes `screens/repro.spec.ts`; `I=...,rec` adds `walk-step-<i>.webm` and
   `walk-step-<i>.trace.zip` for the last step i that takes an action, and `I=...,rec<i>` for
   step i (Milestone 267; `hydo explore`'s replay of a finding records the step that the finding

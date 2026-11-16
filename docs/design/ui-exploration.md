@@ -192,6 +192,13 @@ The judges are:
   goes to `/tmp/hydo/web/walk/acks.jsonl`. A rule such as "every note the server answered as
   saved is in the database" reads the words. The recovery boot after a power cut starts with the
   first boot's `$HYDO_ACKED`.
+- A REST API names a new object by a number in its answer, not by a resource name, and it keeps
+  reads and writes on one path (`GET` and `PATCH /api/v2/tasks/4`). So since Milestone 273 each
+  write also adds the word `<METHOD>:<path>=<id>` for every id of the objects that its JSON
+  answer returns, such as `POST:/api/v2/projects/1/tasks/bulk=6`, or `<METHOD>:<path>` when it
+  returns none, such as `DELETE:/api/v2/tasks/6`. `watch.failures_of` matches the path or
+  `<METHOD> <path>`, so `^(POST|PATCH|DELETE) /api/` names the writes. Vikunja's rule reads
+  these words (`hydo/onboard/examples/vikunja`).
 
 `hydo rules scan` lists a project's promises from its schema, its API and its documentation, and
 `hydo rules check` runs candidate rules without faults (Milestone 236). With a walk, the runs

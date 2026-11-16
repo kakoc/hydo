@@ -1,0 +1,16 @@
+# Vikunja as its documentation runs it with Docker and SQLite
+# (https://vikunja.io/docs/full-docker-example/, "Example with SQLite"): one container, the
+# frontend built in, the database in a volume.
+services:
+  vikunja:
+    image: vikunja/vikunja:2.8.0
+    environment:
+      VIKUNJA_SERVICE_SECRET: hydo-example-secret-not-for-production
+      VIKUNJA_SERVICE_PUBLICURL: http://vikunja:3456/
+      VIKUNJA_DATABASE_PATH: /db/vikunja.db
+    ports:
+      - "3456:3456"
+    volumes:
+      - ./files:/app/vikunja/files
+      - ./db:/db
+    restart: unless-stopped

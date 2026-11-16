@@ -909,7 +909,31 @@ async function main() {
   // answer. $HYDO_ACKED gets one word per resource name in them, `<the path's last part>:<name>`
   // (such as CreateMemo:memos/T5k4x8o5), or the path's last part alone: the file is a list of
   // words, and a power cut keeps it for the recovery boot. A project's own checks read them.
+  // Since Milestone 273 each write also adds `<METHOD>:<path>=<id>` for every id of the objects
+  // that a JSON answer returns (its own `id`, and the `id` of each object in a field or a list of
+  // it), or `<METHOD>:<path>` without one: a REST API names a new object by a number, as Vikunja's
+  // `POST /api/v2/projects/1/tasks/bulk` answers {"tasks":[{"id":6,...}]}. watch.failures_of
+  // matches the path or `<METHOD> <path>` (an API whose reads and writes share a path).
   const writes = watch.failures_of ? new RegExp(watch.failures_of) : null;
+  const isWrite = (method, p) => (writes ? writes.test(p) || writes.test(`${method} ${p}`) : method !== 'GET');
+  const idsOf = (text) => {
+    let v;
+    try {
+      v = JSON.parse(text);
+    } catch {
+      return [];
+    }
+    const out = [];
+    const take = (o) => {
+      if (o && typeof o === 'object' && !Array.isArray(o) && (typeof o.id === 'number' || (typeof o.id === 'string' && /^[A-Za-z0-9_-]+$/.test(o.id)))) out.push(String(o.id));
+    };
+    if (Array.isArray(v)) v.forEach(take);
+    else if (v && typeof v === 'object') {
+      take(v);
+      if (out.length === 0) for (const f of Object.values(v)) Array.isArray(f) ? f.forEach(take) : take(f);
+    }
+    return [...new Set(out)].slice(0, 20);
+  };
   context.on('response', async (res) => {
     const req = res.request();
     const t = req.resourceType();
@@ -921,7 +945,7 @@ async function main() {
       return;
     }
     if (watch.requests && !p.startsWith(watch.requests)) return;
-    if (writes ? !writes.test(p) : req.method() === 'GET') return;
+    if (!isWrite(req.method(), p)) return;
     const printable = (b) =>
       (b || '')
         .toString('latin1')
@@ -929,18 +953,23 @@ async function main() {
         .trim()
         .slice(0, 600);
     let answer = '';
+    let ids = [];
     try {
-      answer = printable(await res.body());
+      const body = await res.body();
+      answer = printable(body);
+      ids = idsOf(body.toString('utf8'));
     } catch {
       answer = '';
     }
     const sent = printable(req.postDataBuffer());
     const names = [...new Set(`${sent} ${answer}`.match(/\b[a-z][a-z0-9_-]*\/[A-Za-z0-9_-]{6,}\b/g) || [])].slice(0, 6);
-    fs.appendFileSync(path.join(own, 'acks.jsonl'), JSON.stringify({ t: Date.now(), step, method: req.method(), path: p, status: res.status(), names, sent, answer }) + '\n');
+    fs.appendFileSync(path.join(own, 'acks.jsonl'), JSON.stringify({ t: Date.now(), step, method: req.method(), path: p, status: res.status(), names, ids, sent, answer }) + '\n');
     if (ackedFile) {
       try {
         const last = p.split('/').filter(Boolean).pop() || p;
         const words = names.length ? names.map((n) => `${last}:${n}`) : [last];
+        const at = `${req.method()}:${p.replace(/\s+/g, '')}`;
+        words.push(...(ids.length ? ids.map((id) => `${at}=${id}`) : [at]));
         fs.appendFileSync(ackedFile, words.join('\n') + '\n');
       } catch {
         /* no acknowledged-work file in this guest */

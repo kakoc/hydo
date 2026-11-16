@@ -1903,7 +1903,9 @@ pub struct BrowserWatch {
     pub requests: Option<Text>,
     /// A regular expression over a request's path: only a failed request that matches must be
     /// shown (default every judged request), for example the writes of an API whose reads run in
-    /// the background (Milestone 258).
+    /// the background (Milestone 258). It also matches `<METHOD> <path>`, such as
+    /// `^(POST|PATCH|DELETE) /api/` for an API whose reads and writes share a path
+    /// (Milestone 273).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failures_of: Option<Text>,
     /// Texts no page may print (default NaN, undefined, [object Object], Invalid Date).

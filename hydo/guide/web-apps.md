@@ -121,16 +121,19 @@ hydo-web: walk 0.7: click button "Place order"
 The five properties below judge every page of the walk. For your app's own promises, write
 invariants over the backend's state. The walk writes each write that the server answered 2xx
 to `$HYDO_ACKED`: one word per resource name in the request or the answer, after the last part
-of the request's path. A write is a request that `watch.failures_of` matches, or without it any
-request that is not a GET. For example:
+of the request's path. It also writes one word with the method, the path and each `id` that
+the JSON answer returns. A write is a request that `watch.failures_of` matches, or without it
+any request that is not a GET. For example:
 
 ```text
 CreateMemo:memos/T5k4x8o58vBLJfJSXPXNS4
+POST:/api/v2/projects/1/tasks/bulk=6
+DELETE:/api/v2/tasks/6
 ```
 
 A rule such as "every memo the server answered as saved is in the database" reads these words
-(the example `hydo/onboard/examples/memos`). The recovery boot after a power cut starts with
-them too.
+(the examples `hydo/onboard/examples/memos` and `vikunja`). The recovery boot after a power cut
+starts with them too.
 
 Every run leaves the walk as a Playwright test, `screens/repro.spec.ts` in the run directory.
 Run it against your own instance without hydo: `BASE_URL=http://localhost:5230 npx playwright
@@ -160,7 +163,7 @@ Each one is an invariant named `<browser>.<property>`; an empty list in `watch:`
 | `browser.tests_pass` | a test fails (turn it off with `must_pass: false` when faults make the tests' own assertions fail by design) |
 | `browser.no_page_errors` | a page throws an uncaught exception, leaves a promise rejection unhandled, or calls `console.error` (`watch.console: false` leaves `console.error` out) |
 | `browser.busy_ends` | a busy element stays for `busy_max_ms` (default 10000), or is still on the screen when its test ends after a failed request that the page did not send again |
-| `browser.failures_shown` | a request fails (an answer of 500 or more, or no answer) and within `failures_within_ms` (default 5000) the page shows no error element and does not send the request again. With `watch.failures_of`, a regular expression over the path, only the requests it matches count. When the pattern matches none of the requests the pages sent, the run warns: `hydo: warning: ... judged no failed request`. |
+| `browser.failures_shown` | a request fails (an answer of 500 or more, or no answer) and within `failures_within_ms` (default 5000) the page shows no error element and does not send the request again. With `watch.failures_of`, a regular expression over the path or over `<METHOD> <path>`, only the requests it matches count: `^(POST|PATCH|DELETE) /api/` names the writes of an API whose reads use the same paths. When the pattern matches none of the requests the pages sent, the run warns: `hydo: warning: ... judged no failed request`. |
 | `browser.no_bad_text` | a page prints a watched text (default `NaN`, `undefined`, `[object Object]`, `Invalid Date`) |
 
 A finding reads like this:

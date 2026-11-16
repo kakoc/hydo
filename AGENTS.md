@@ -791,6 +791,26 @@ confirmation, and `hydo run` runs the schedule without `rec` first, into `walked
 finds its control by the same role and name, and a control that is not on the page is left out
 with a line that says so. The details are in `docs/HISTORY.md` Milestone 270.
 
+**Vikunja, the second web app of the walk (M273, tentative number).** Vikunja 2.8.0, a
+self-hosted task manager (one Go server with its Vue frontend, SQLite), runs in
+`hydo/onboard/examples/vikunja` (RESULTS.md), imported with `hydo compose`. The walk writes
+`<METHOD>:<path>=<id>` to `$HYDO_ACKED` for each id that a write's JSON answer returns.
+`watch.failures_of` also matches `<METHOD> <path>`, so it can name the writes of an API whose
+reads use the same paths. Two rules read the words and the database. The first says that every
+task, project, comment, label, saved filter and team that Vikunja answered as saved is in it.
+The second says that a Kanban board's done bucket holds exactly the done tasks. The blind
+exploration on hvx found two new candidates, not posted:
+
+- A power cut loses the tasks that Vikunja acknowledged in the last seconds. Since v2.2.0 its
+  SQLite runs in WAL mode with the driver's `synchronous=NORMAL`. The shrunk walk types one
+  task, and `C=6` loses it.
+- A task of the quick actions dialog that the server refuses is lost with its typed title, and
+  the page leaves the error unhandled.
+
+In 40 walks with every fault kind but the lying disk, 5 of 19 power cuts lost saved objects,
+and the other kinds (kills, pauses, network faults, clock steps) lost none. The details are in
+`docs/HISTORY.md` Milestone 273; open item 137 has what the walk lacked.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -1599,6 +1619,21 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       x86_64 host with Docker, or CMake's checks done once and pinned, is left.
     - Managed mode (`mender-update daemon`) shares the Artifact parser of the first candidate
       and did not run.
+137. Walks on Vikunja (M273). What is left:
+    - When the session ends, the walk does not sign in again: `setup` runs only in a step
+      without a saved session. Under disk errors seed 9's walk was on the login page from step 4
+      on; why the session ended was not traced.
+    - A recording replay of a walk that a power cut ends records nothing: the recording stays in
+      the first boot's guest, as the page checks do (open item 124). The replay of finding 1 left
+      no video, trace or `repro.spec.ts`.
+    - Under `disk=ioerr` a rule that copies the database through the same disk cannot read it,
+      and the run ends in ERROR (seeds 1 and 8). Which read failed was not traced.
+    - The words name ids of a JSON answer only. A write whose answer has no id, such as
+      `DELETE`, gives `<METHOD>:<path>`, and a rule reads the id from the path.
+    - No walk marked a task done. Vikunja's done check boxes are hidden inputs under a styled
+      label, and they take no trial click, so the walk leaves them out. On this Mac none of the
+      three on the home page took one. Drag and drop is no action either, so no walk moved a
+      task between Kanban buckets. The Kanban rule judged only tasks that are not done.
 138. The branch tick (M274, `docs/design/exit-free-loops.md`). What is left:
     - It ran on the Xeon 6975P-C only. The other Intel event (`0x01c4`, Skylake to Comet Lake)
       and hybrid CPUs were not measured. AMD is refused, because its exact count needs root.
@@ -2272,6 +2307,12 @@ build machine, before 2026-10-13.
   in `mender-update`. Finding 1's regressions give their Mac verdicts; finding 2's give its
   violation in the earlier form, and a cut 69 to 87 ms after the event gives the Mac's form.
   Each schedule gave one fingerprint over two runs. Nothing recorded moved
+- M273 (tentative number): a second web app for the walk, Vikunja 2.8.0 on SQLite. The walk
+  records the ids of a REST API's answers (`<METHOD>:<path>=<id>`), and `watch.failures_of`
+  matches the method. There are two new candidates, not posted. A power cut loses the tasks that
+  Vikunja acknowledged in the last seconds (WAL with `synchronous=NORMAL`). The quick actions
+  dialog loses a task that the server refuses and leaves the error unhandled. Nothing recorded
+  moved
 
 ## Where to look
 
