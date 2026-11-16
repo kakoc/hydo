@@ -141,3 +141,70 @@ fn without_browser_nothing_is_read() {
         .all(|(p, _)| !p.starts_with("/tmp/hydo/web/")));
     assert!(notes(&a.run.fin.transcript).is_empty());
 }
+
+/// The writes of a run's items to one guest file: (the text, whether it appends).
+fn writes_to(items: &[Item], file: &str) -> Vec<(String, bool)> {
+    items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Send {
+                cmd: Command::Write(w),
+                ..
+            } if w.path == file => Some((w.data.clone(), w.append == Some(true))),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Milestone 270: a recording replay (`I=...,rec`) gets the script of the run it replays in the
+/// guest before the walk's first step, in parts small enough for the agent's channel; a walk
+/// without `rec`, or a plan without a script, sends the same commands as before.
+#[test]
+fn a_recording_replay_gets_its_script_before_the_walk() {
+    let file = hydo_manifest::browser::WALK_SCRIPT;
+    let line = |k: usize| {
+        format!(
+            "0.{k} {{\"do\":\"fill\",\"value\":\"{}\"}}\n",
+            "a".repeat(300)
+        )
+    };
+    let script: String = (0..9).map(line).collect();
+    let mut p = plan(true);
+    p.walk = true;
+    p.walk_script = Some(script.clone());
+    let b = support::boot(&p, "kv").unwrap();
+    let run = |b: &support::Booted, s: &str| {
+        support::run_schedule(b, &Schedule::parse(s).unwrap()).unwrap()
+    };
+    let rec = run(&b, "disk=none | run I=1,rec");
+    let w = writes_to(&rec.run.items, file);
+    assert!(w.len() > 1, "{w:?}");
+    assert!(!w[0].1 && w[1..].iter().all(|(_, a)| *a));
+    assert!(w.iter().all(|(t, _)| t.len() <= 1200));
+    assert_eq!(
+        w.iter().map(|(t, _)| t.as_str()).collect::<String>(),
+        script
+    );
+    // the script comes before the workload's command
+    let at = |pred: &dyn Fn(&Command) -> bool| {
+        rec.run
+            .items
+            .iter()
+            .position(|i| matches!(i, Item::Send { cmd, .. } if pred(cmd)))
+            .unwrap()
+    };
+    let first_write = at(&|c| matches!(c, Command::Write(x) if x.path == file));
+    let workload = at(&|c| {
+        matches!(c, Command::Spawn(x)
+            if x.env.iter().flatten().any(|e| e.starts_with("HYDO_WALK=1,rec")))
+    });
+    assert!(first_write < workload);
+    // without rec, and without a script, nothing is written
+    let plain = run(&b, "disk=none | run I=1");
+    assert!(writes_to(&plain.run.items, file).is_empty());
+    let mut q = plan(true);
+    q.walk = true;
+    let b2 = support::boot(&q, "kv").unwrap();
+    let none = run(&b2, "disk=none | run I=1,rec");
+    assert!(writes_to(&none.run.items, file).is_empty());
+}

@@ -143,6 +143,14 @@ show-trace screens/walk-step-2.trace.zip` opens the trace. A finding that names 
 records the last step that takes an action (`I=<seed>,rec`). `hydo report --html` of that
 folder shows the video and the test.
 
+Recording slows the browser, so a walk with `rec` does not choose its actions again: it repeats
+the actions of the same schedule without `rec`. `hydo explore` takes them from the failing run's
+console. `hydo run` of a schedule with `rec` first runs it without `rec`, into `walked/` of the
+run directory, and prints how many actions that run took. Each action finds its control by the
+same role and name. When a control is not on the page, the walker leaves the action out and
+says so in the run's console, `hydo-web: walk <step>.<k>: ... not on the page`, and `hydo
+explore`'s line about the recording names the action.
+
 ## The properties
 
 Each one is an invariant named `<browser>.<property>`; an empty list in `watch:` turns it off.

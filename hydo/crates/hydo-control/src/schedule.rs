@@ -176,6 +176,9 @@ struct RunCfg {
     u: Vec<hydo_schedule::Upgrade>,
     /// I= (Milestone 258): the walk of `browser.explore`, as its value's text.
     walk: Option<String>,
+    /// The walk records (`rec`): a recording replay, which repeats the actions of the plan's
+    /// `walk_script` (Milestone 270).
+    walk_rec: bool,
     /// The host token `cf=`: the engine may turn the workload's end into a power cut.
     cf: bool,
     /// The schedule has no fault: no disk fault, no `cf=`, and only knobs and `Q=` in its guest
@@ -779,7 +782,10 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             // Milestone 238: upgrades (schedule/upgrade.rs); several U= are allowed
             GuestToken::Upgrade(u) => c.u.push(u.clone()),
             // Milestone 258: the walk; the last I= wins, as for every letter
-            GuestToken::Walk(w) => c.walk = Some(w.to_string()),
+            GuestToken::Walk(w) => {
+                c.walk = Some(w.to_string());
+                c.walk_rec = w.rec;
+            }
             // Every other letter is a knob to the shell (`?=*) set_knob`): B= (set_knob's BUGGIFY
             // branch with `buggify: true`, else an unknown knob), and H=, W=, Q= (core plans have
             // no fakes or composer; Q= is the stack's) are knobs the manifest does not have, so
@@ -2328,6 +2334,7 @@ fn step_range_run(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     } else {
         let mut extra = vec![("HYDO_FROM", a.to_string()), ("HYDO_TO", b.to_string())];
         if ctx.plan.walk {
+            walk_script(fx, ctx)?;
             // Milestone 258: the walker reads the walk and writes repro.spec.ts from the schedule
             extra.push(("HYDO_WALK", ctx.run.walk.clone().unwrap_or_default()));
             extra.push(("HYDO_GUEST", ctx.run.guest_text.clone()));
@@ -2355,6 +2362,54 @@ fn step_range_run(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     log(fx, format!("workload steps {a}..{} rc={st}", b - 1));
     Ok(())
 }
+
+/// Milestone 270: a recording replay's script, written once before the walk's first step range.
+/// The walker of a schedule with `rec` repeats these actions instead of choosing them again. A
+/// run without `rec`, or without a script from the host, sends nothing more than before.
+fn walk_script(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
+    let Some(text) = ctx.plan.walk_script.as_deref().filter(|_| ctx.run.walk_rec) else {
+        return Ok(());
+    };
+    if !fx.effect_bool(|h, _| h.marks.insert("walk.script".into())) {
+        return Ok(());
+    }
+    let file = hydo_manifest::browser::WALK_SCRIPT;
+    let parts = walk_script_chunks(text);
+    post(fx, write_cmd(file, &parts[0], false))?;
+    for p in &parts[1..] {
+        post(fx, write_cmd(file, p, true))?;
+    }
+    Ok(())
+}
+
+/// A script's lines in parts of at most [`WALK_CHUNK`] bytes, whole lines when they fit (at
+/// least one part, empty for an empty script). Its JSON doubles some characters in the command's
+/// own JSON, so the parts are smaller than [`CHUNK`].
+fn walk_script_chunks(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    for line in text.split_inclusive('\n') {
+        if !cur.is_empty() && cur.len() + line.len() > WALK_CHUNK {
+            out.push(std::mem::take(&mut cur));
+        }
+        cur.push_str(line);
+        while cur.len() > WALK_CHUNK {
+            let mut i = WALK_CHUNK;
+            while !cur.is_char_boundary(i) {
+                i -= 1;
+            }
+            let rest = cur.split_off(i);
+            out.push(std::mem::replace(&mut cur, rest));
+        }
+    }
+    if !cur.is_empty() || out.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// The most bytes of a recording replay's script in one write command.
+const WALK_CHUNK: usize = 1200;
 
 fn retry_workload(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     errlog::mark(fx, ctx, "end")?; // SEAM(ErrorLogs): el_mark end

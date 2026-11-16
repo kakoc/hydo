@@ -123,6 +123,75 @@ pub const WEB_DIR: &str = "/opt/hydo/web";
 /// Where the pages' record is (the guest's /tmp, which every image root shares).
 pub const RECORD_DIR: &str = "/tmp/hydo/web";
 
+/// Where a recording replay finds the actions it repeats (Milestone 270): the host writes the
+/// `walk-act` lines of the run without `rec` there, one `<step>.<k> <json>` per line, before the
+/// workload starts (`hydo_control`'s walk step range).
+pub const WALK_SCRIPT: &str = "/tmp/hydo/web/walk-script.txt";
+
+/// The prefix of the console line with which the walker prints each action it took.
+pub const WALK_ACT: &str = "hydo-web: walk-act ";
+
+/// The script of a recording replay from a run's console (Milestone 270): each `walk-act` line's
+/// `<step>.<k> <json>`, in the console's order, or None for a console without them (a run of an
+/// image built before Milestone 270, or a walk that took no action).
+pub fn walk_script(console: &str) -> Option<String> {
+    let mut out = String::new();
+    for l in console.lines() {
+        let Some(rest) = l.trim_end_matches('\r').strip_prefix(WALK_ACT) else {
+            continue;
+        };
+        let Some((at, json)) = rest.split_once(' ') else {
+            continue;
+        };
+        let ok = at.split_once('.').is_some_and(|(s, k)| {
+            !s.is_empty() && !k.is_empty() && s.bytes().chain(k.bytes()).all(|c| c.is_ascii_digit())
+        });
+        if ok && serde_json::from_str::<Value>(json).is_ok_and(|v| v.is_object()) {
+            out.push_str(at);
+            out.push(' ');
+            out.push_str(json);
+            out.push('\n');
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// The actions of a recording replay's console that it left out (Milestone 270): a control that
+/// was not on the page, or an action that the script did not have. Each as `<step>.<k>`, with the
+/// walker's line about it.
+pub fn walk_left_out(console: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for l in console.lines() {
+        if let Some(rest) = l.strip_prefix("hydo-web: walk ") {
+            if let Some((at, what)) = rest.split_once(": ") {
+                if what.starts_with("not in the script") {
+                    out.push((at.to_string(), what.to_string()));
+                }
+            }
+            continue;
+        }
+        let Some(rest) = l.strip_prefix(WALK_ACT) else {
+            continue;
+        };
+        let Some((at, json)) = rest.split_once(' ') else {
+            continue;
+        };
+        let missing = serde_json::from_str::<Value>(json)
+            .ok()
+            .and_then(|v| v.get("missing").and_then(Value::as_bool))
+            .unwrap_or(false);
+        if missing {
+            let what = console
+                .lines()
+                .find_map(|x| x.strip_prefix(&format!("hydo-web: walk {at}: ")))
+                .unwrap_or("")
+                .to_string();
+            out.push((at.to_string(), what));
+        }
+    }
+    out
+}
+
 /// Where the watcher saves the screenshots, with their `index.jsonl` (the controller copies them
 /// out into the run directory's `screens/`).
 pub const SHOTS_DIR: &str = "/tmp/hydo/web/shots";
@@ -951,6 +1020,36 @@ mod tests {
 
     fn base(b: Value) -> Value {
         json!({"name": "web", "network": "bridge", "browser": b})
+    }
+
+    #[test]
+    fn a_console_gives_the_script_of_a_recording_replay() {
+        let console = "hydo-web: walk 0: setup (4 steps)\n\
+            hydo-web: walk 0.0: click button \"Share\"\n\
+            hydo-web: walk-act 0.0 {\"do\":\"click\",\"c\":{\"role\":\"button\",\"name\":\"Share\",\"m\":0}}\n\
+            HYDO-ORACLE: noise\n\
+            hydo-web: walk-act 0.1 {\"do\":\"wait\",\"ms\":1000}\r\n\
+            hydo-web: walk-act x.1 {\"do\":\"wait\"}\n\
+            hydo-web: walk-act 0.2 {\"do\":\"wait\"\n";
+        assert_eq!(
+            walk_script(console).unwrap(),
+            "0.0 {\"do\":\"click\",\"c\":{\"role\":\"button\",\"name\":\"Share\",\"m\":0}}\n\
+             0.1 {\"do\":\"wait\",\"ms\":1000}\n"
+        );
+        assert_eq!(
+            walk_script("hydo-web: walk 0.0: click button \"Share\"\n"),
+            None
+        );
+        let replay =
+            "hydo-web: walk 4.7: click button \"Copy link\": not on the page within 10 s\n\
+            hydo-web: walk-act 4.7 {\"do\":\"click\",\"missing\":true}\n\
+            hydo-web: walk 4.8: not in the script: the run that this replays took no action 4.8\n\
+            hydo-web: walk-act 4.9 {\"do\":\"wait\",\"ms\":1000}\n";
+        let left: Vec<String> = walk_left_out(replay).into_iter().map(|(a, _)| a).collect();
+        assert_eq!(left, ["4.7", "4.8"]);
+        assert!(walk_left_out(replay)[0]
+            .1
+            .starts_with("click button \"Copy link\""));
     }
 
     #[test]

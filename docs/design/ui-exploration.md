@@ -223,6 +223,30 @@ without faults are walks without faults; the rules see the state that the walk l
   step, such as a rule over a fake's records, records the last step that takes an action. An
   image built before Milestone 267 takes `rec<s>` for no recording. `hydo report --html` of
   such a run shows the videos, the trace commands and the test.
+- **The recording repeats the failing run** (Milestone 270). Recording slows the browser, so
+  the pages answer later. A walk that chose its actions again from what the pages showed took
+  other actions than the run it replayed: two of Memos's share-link walks passed when recorded
+  (Milestone 267). So a walk with `rec` does not choose. `I=<walk>,rec<s>` means the actions
+  that `I=<walk>` takes, with the recording of step `s`:
+  - Every run prints each action it took as one console line, `hydo-web: walk-act <step>.<k>
+    <json>`: the kind of action, the control's role, accessible name and place among the
+    controls of that name, the value typed, the option chosen, or the time waited.
+  - Before a run with `rec`, the host takes those lines from the run of the same schedule
+    without `rec`. `hydo explore` takes them from the console of the minimal schedule's
+    confirmation run. `hydo run` and `hydo repro` run that schedule first, into the run
+    directory's `walked/`. The lines go to `walk-script.txt` in the run directory, and the
+    controller writes them into the guest before the walk's first step.
+  - Each action finds its control by the same role, name and place, and waits up to 10 s for it
+    to be visible, because a recorded page answers later. A name with a time in it ("1 minute
+    ago") may read otherwise when the clock moved on; then the control with the same name
+    without its times and the same place among them is the same control (Milestone 264's
+    rule).
+  - A control that is not on the page is left out. The walker's line says so, nothing takes its
+    place, and `hydo explore`'s line about the recording names each action it left out.
+
+  So a schedule with `rec` reproduces exactly: the actions are those of its schedule without
+  `rec`, which hydo runs deterministically. An image built before Milestone 270 prints no
+  actions, and its walker chooses again.
 
 The files leave the guest as the screenshots of Milestone 254 do: the walker lists them in
 `/tmp/hydo/web/shots/index.jsonl`, and the controller copies them after the verdict, in reads

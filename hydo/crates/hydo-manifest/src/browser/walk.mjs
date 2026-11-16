@@ -19,7 +19,10 @@
 // The watcher (hook.cjs, loaded with NODE_OPTIONS=--require) watches every page as it watches a
 // team's Playwright tests, and check.mjs judges what it saw. This file also writes the walk as a
 // Playwright test, repro.spec.ts, which the controller copies into the run directory's screens/.
-// With rec, the last step that takes an action also leaves a video and a Playwright trace there.
+// With rec, the last step that takes an action also leaves a video and a Playwright trace there,
+// and the walk repeats the actions that the same schedule without rec took, which the host writes
+// to $HYDO_WEB_DIR/walk-script.txt, instead of choosing them again (Milestone 270). Every run
+// prints each action it took as a `walk-act <step>.<k> <json>` line for that script.
 //
 // The configuration is $HYDO_WEB_WALK (JSON, written by the expansion of `browser.explore`):
 //   start, actions, setup, avoid, within, values, settle_ms, quiet_ms, text, routes
@@ -382,6 +385,7 @@ const COMMIT = /^(save|submit|create|send|post|update|confirm|ok|done|apply|publ
 // No control of the chosen ones takes a click: press Escape, which closes a menu or a dialog
 async function escape(page) {
   const lines = [];
+  const act = { do: 'escape' };
   let what = 'press Escape (no control took the click)';
   try {
     await page.keyboard.press('Escape');
@@ -393,8 +397,13 @@ async function escape(page) {
   }
   await page.waitForTimeout(settle);
   lines.push(`await page.waitForTimeout(${settle});`);
-  return { what, lines };
+  return { what, lines, act };
 }
+
+// A control as the script of a recording replay names it (Milestone 270): its role and accessible
+// name, its place among the controls of that role and name (m) or of that role (j, without a
+// name), and the name without its times with its place (key, km)
+const ctl = (c) => ({ role: c.role, name: c.name, m: c.m, j: c.j, key: c.key, km: c.km });
 
 async function act(page, k) {
   const r = new Stream(streamOf(k));
@@ -462,11 +471,14 @@ async function act(page, k) {
   const s2 = r.next();
   const lines = [];
   let what;
+  // the action as the script of a recording replay reads it (Milestone 270)
+  const done = { do: kind };
   try {
     if (kind === 'click' || kind === 'double') {
       const list = kind === 'double' ? all.filter((c) => c.role === 'button') : clickable;
       const c = await choose(list, r, s2, clicks);
       if (!c) return escape(page);
+      done.c = ctl(c);
       const loc = locatorCode(c);
       what = `${kind === 'double' ? 'click twice' : 'click'} ${c.role} ${q(c.name)}`;
       const el = locate(page, c);
@@ -482,9 +494,11 @@ async function act(page, k) {
       }
     } else if (kind === 'fill' || kind === 'submit' || kind === 'commit') {
       const c = await choose(fillable, r, s2);
+      done.c = ctl(c);
       const el = c.name ? page.getByRole(c.role, { name: c.name, exact: true }).nth(c.m) : page.getByRole(c.role).nth(c.j);
       const type = await el.evaluate((e) => (e.tagName === 'INPUT' ? e.type : e.tagName.toLowerCase()), null, T);
       const v = valueFor(type, r);
+      done.value = v;
       const loc = locatorCode(c);
       await el.fill(v, T);
       lines.push(`await ${loc}.fill(${q(v)});`);
@@ -508,6 +522,7 @@ async function act(page, k) {
           .filter((x) => x.role === 'button' && COMMIT.test(x.name));
         if (commits.length) {
           const b = pick(commits, r.next());
+          done.then = ctl(b);
           const bl = locatorCode(b);
           const be = b.name ? page.getByRole(b.role, { name: b.name, exact: true }).nth(b.m) : page.getByRole(b.role).nth(b.j);
           lines.push('await page.waitForTimeout(100);', `await ${bl}.click();`);
@@ -518,15 +533,18 @@ async function act(page, k) {
     } else if (kind === 'select') {
       const c = await choose(all.filter((x) => x.role === 'combobox'), r, s2, clicks);
       if (!c) return escape(page);
+      done.c = ctl(c);
       const el = locate(page, c);
       const n = await el.evaluate((e) => (e.tagName === 'SELECT' ? e.options.length : 0), null, T);
       const loc = locatorCode(c);
       if (n > 0) {
         const i = r.below(n);
+        done.index = i;
         await el.selectOption({ index: i }, T);
         lines.push(`await ${loc}.selectOption({ index: ${i} });`);
         what = `choose option ${i} of ${c.role} ${q(c.name)}`;
       } else {
+        done.do = 'click';
         await el.click(T);
         lines.push(`await ${loc}.click();`);
         what = `click ${c.role} ${q(c.name)}`;
@@ -545,6 +563,7 @@ async function act(page, k) {
       lines.push(`await page.goto(${q(start.pathname + start.search)});`);
     } else {
       const ms = [1000, 2000, 5000][r.below(3)];
+      done.ms = ms;
       what = `wait ${ms / 1000} s`;
       await page.waitForTimeout(ms);
       lines.push(`await page.waitForTimeout(${ms});`);
@@ -554,10 +573,181 @@ async function act(page, k) {
     const why = String((e && e.message) || e).split('\n')[0].slice(0, 120);
     what = `${what || kind}: not done (${why})`;
     lines.push(`// not done in hydo's run: ${why}`);
+    done.failed = true;
   }
   await page.waitForTimeout(settle);
   lines.push(`await page.waitForTimeout(${settle});`);
-  return { what, lines };
+  return { what, lines, act: done };
+}
+
+// ------------------------------------------------------------------ the recording replay
+// A walk with rec repeats the actions of the run it replays (Milestone 270). Recording costs the
+// browser time, so the pages answer later, and a walk that chose its actions again from what the
+// pages showed took other actions than the failing run: two of Memos's share-link walks passed
+// when recorded (Milestone 267). The schedule `I=<walk>,rec[<step>]` means the actions that the
+// same schedule without rec took. Each run prints them, one `walk-act <step>.<k> <json>` line per
+// action, and the host writes those lines of the run without rec to SCRIPT before the workload
+// starts. An action finds its control by the same role and accessible name, and the same place
+// among the controls of that name; a control that is not there is left out with a line that says
+// so, and nothing takes its place.
+const SCRIPT = path.join(dir, 'walk-script.txt');
+// how long a replayed action waits for its control to appear: a recorded page answers later
+const FIND_MS = 10000;
+function readScript() {
+  if (!walk.rec) return null;
+  let text;
+  try {
+    text = fs.readFileSync(SCRIPT, 'utf8');
+  } catch {
+    return null;
+  }
+  const out = new Map();
+  for (const line of text.split('\n')) {
+    const m = /^(\d+\.\d+) (\{.*\})$/.exec(line.trim());
+    if (!m) continue;
+    try {
+      out.set(m[1], JSON.parse(m[2]));
+    } catch {
+      /* a line cut short: the action counts as not in the script */
+    }
+  }
+  return out;
+}
+const script = readScript();
+
+const ordinal = (i) => {
+  const n = i + 1;
+  const t = n % 100;
+  const u = n % 10;
+  return `${n}${t >= 11 && t <= 13 ? 'th' : u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th'}`;
+};
+const named = (c) => (c.name ? `${c.role} ${q(c.name)}${c.m ? ` (the ${ordinal(c.m)} of that name)` : ''}` : `the ${ordinal(c.j)} ${c.role} without a name`);
+
+// The control of a scripted action: the same role, name and place, once it is visible. A name
+// with a time in it ("1 minute ago") may read otherwise, because the clock moved on while the
+// browser recorded; then the control with the same name without its times and the same place
+// among them is the same control, as the walk's own choice counts them (Milestone 264).
+async function findCtl(page, c) {
+  try {
+    await locate(page, c).waitFor({ state: 'visible', timeout: FIND_MS });
+    return c;
+  } catch {
+    /* not there as it was named */
+  }
+  if (!c.name || timeless(c.name) === c.name) return null;
+  let snap = '';
+  try {
+    snap = await page.locator('body').ariaSnapshot({ timeout: 5000 });
+  } catch {
+    return null;
+  }
+  return controls(snap).find((x) => x.role === c.role && x.key === c.key && x.km === c.km) || null;
+}
+
+const LEFT_OUT = `not on the page within ${FIND_MS / 1000} s; the run that this replays acted on it here, so the replay leaves the action out and takes no other control`;
+
+async function replay(page, a) {
+  const lines = [];
+  const done = { ...a };
+  delete done.failed;
+  let what = a.do;
+  const missing = (c, verb) => {
+    done.missing = true;
+    what = `${verb} ${named(c)}: ${LEFT_OUT}`;
+    lines.push(`// left out in hydo's recording replay: ${named(c)} was not on the page`);
+  };
+  const renamed = (c, was) => (c.name !== was.name ? ` (named ${q(was.name)} in the run that this replays)` : '');
+  try {
+    if (a.do === 'click' || a.do === 'double') {
+      const verb = a.do === 'double' ? 'click twice' : 'click';
+      const c = await findCtl(page, a.c);
+      if (!c) missing(a.c, verb);
+      else {
+        const loc = locatorCode(c);
+        const el = locate(page, c);
+        what = `${verb} ${c.role} ${q(c.name)}${renamed(c, a.c)}`;
+        await el.click(T);
+        lines.push(`await ${loc}.click();`);
+        if (a.do === 'double') {
+          await el.click({ timeout: 300 }).catch(() => {});
+          lines.push(`await ${loc}.click({ timeout: 300 }).catch(() => {});`);
+        }
+      }
+    } else if (a.do === 'fill' || a.do === 'submit' || a.do === 'commit') {
+      const c = await findCtl(page, a.c);
+      if (!c) missing(a.c, 'fill');
+      else if (a.value === undefined) {
+        what = `fill ${named(c)}: not done (the run that this replays typed no value)`;
+      } else {
+        const loc = locatorCode(c);
+        const el = locate(page, c);
+        const v = a.value;
+        what = `fill ${c.role} ${q(c.name)}${renamed(c, a.c)} with ${q(v.length > 40 ? `${v.slice(0, 40)}…` : v)}`;
+        await el.fill(v, T);
+        lines.push(`await ${loc}.fill(${q(v)});`);
+        if (a.do === 'submit') {
+          await el.press('Enter', T);
+          lines.push(`await ${loc}.press('Enter');`);
+          what += ' and press Enter';
+        } else if (a.do === 'commit') {
+          await page.waitForTimeout(100);
+          lines.push('await page.waitForTimeout(100);');
+          if (a.then) {
+            const b = await findCtl(page, a.then);
+            if (!b) {
+              done.missing = true;
+              what += ` and click ${named(a.then)}: ${LEFT_OUT}`;
+              lines.push(`// left out in hydo's recording replay: ${named(a.then)} was not on the page`);
+            } else {
+              lines.push(`await ${locatorCode(b)}.click();`);
+              what += ` and click ${b.role} ${q(b.name)}`;
+              await locate(page, b).click(T);
+            }
+          }
+        }
+      }
+    } else if (a.do === 'select') {
+      const c = await findCtl(page, a.c);
+      if (!c) missing(a.c, 'choose an option of');
+      else {
+        await locate(page, c).selectOption({ index: a.index }, T);
+        lines.push(`await ${locatorCode(c)}.selectOption({ index: ${a.index} });`);
+        what = `choose option ${a.index} of ${c.role} ${q(c.name)}`;
+      }
+    } else if (a.do === 'escape') {
+      what = 'press Escape';
+      await page.keyboard.press('Escape');
+      lines.push("await page.keyboard.press('Escape');");
+    } else if (a.do === 'back') {
+      what = 'go back';
+      await page.goBack({ timeout: 10000 });
+      lines.push('await page.goBack();');
+    } else if (a.do === 'reload') {
+      what = 'reload the page';
+      await page.reload({ timeout: 10000 });
+      lines.push('await page.reload();');
+    } else if (a.do === 'home') {
+      what = `open ${start.pathname}`;
+      await page.goto(start.href, { timeout: 10000 });
+      lines.push(`await page.goto(${q(start.pathname + start.search)});`);
+    } else if (a.do === 'wait') {
+      what = `wait ${a.ms / 1000} s`;
+      await page.waitForTimeout(a.ms);
+      lines.push(`await page.waitForTimeout(${a.ms});`);
+    } else {
+      done.missing = true;
+      what = `${a.do}: an action this walker does not know; the replay leaves it out`;
+    }
+  } catch (e) {
+    const why = String((e && e.message) || e).split('\n')[0].slice(0, 120);
+    what = `${what}: not done (${why})${a.failed ? ', as in the run that this replays' : ''}`;
+    lines.push(`// not done in hydo's recording replay: ${why}`);
+    done.failed = true;
+  }
+  if (a.failed && !done.failed && !done.missing) what += ' (the run that this replays could not do it)';
+  await page.waitForTimeout(settle);
+  lines.push(`await page.waitForTimeout(${settle});`);
+  return { what, lines, act: done };
 }
 
 // ------------------------------------------------------------------ setup steps (sign in)
@@ -779,11 +969,32 @@ async function main() {
     code.push(`// not done in hydo's run: ${error}`);
   }
   const signedIn = status === 'passed';
+  if (walk.rec && !script) {
+    log(`walk ${step}: this recording has no script of the run it replays (${SCRIPT}), so the walk chooses its actions again and may take others`);
+  }
+  let missed = 0;
   for (let k = 0; k < actions; k++) {
     if (walk.skip.has(`${step}.${k}`)) continue;
-    const { what, lines } = await act(page, k);
-    log(`walk ${step}.${k}: ${what}`);
-    code.push(...lines);
+    let done;
+    if (script) {
+      const a = script.get(`${step}.${k}`);
+      if (!a) {
+        missed++;
+        log(`walk ${step}.${k}: not in the script: the run that this replays took no action ${step}.${k}, so the replay takes none`);
+        code.push(`// left out in hydo's recording replay: the run that it replays took no action ${step}.${k}`);
+        continue;
+      }
+      done = await replay(page, a);
+      if (done.act.missing) missed++;
+    } else {
+      done = await act(page, k);
+    }
+    log(`walk ${step}.${k}: ${done.what}`);
+    log(`walk-act ${step}.${k} ${JSON.stringify(done.act)}`);
+    code.push(...done.lines);
+  }
+  if (script) {
+    log(`walk ${step}: the recording replay ${missed ? `left out ${missed} action${missed === 1 ? '' : 's'}` : 'repeated every action'} of the run it replays`);
   }
   await page.waitForTimeout(quiet);
   try {

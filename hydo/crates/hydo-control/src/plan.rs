@@ -271,6 +271,12 @@ pub struct Plan {
     /// `browser.explore` (Milestone 258): the workload is a walk, which gets the schedule's
     /// I= value as `$HYDO_WALK` and the schedule's guest part as `$HYDO_GUEST`.
     pub walk: bool,
+    /// Milestone 270: the script of a recording replay (`I=...,rec`), the `walk-act` lines of the
+    /// same schedule's run without `rec` ([`hydo_manifest::browser::walk_script`]). The controller
+    /// writes it to [`hydo_manifest::browser::WALK_SCRIPT`] before the walk's first step, and the
+    /// walker repeats those actions. Not a manifest key: the host sets it for a run whose walk
+    /// records, and None leaves every run as it was.
+    pub walk_script: Option<String>,
 }
 
 /// `perf:` (Milestone 237, schedule/perf.rs).
@@ -687,6 +693,7 @@ impl Plan {
             perf: PlanPerf::of(d),
             screens: hydo_manifest::browser::screens_dir(d),
             walk: hydo_manifest::browser::walks(d),
+            walk_script: None,
             invariants,
             knobs,
             buggify: m.buggify,

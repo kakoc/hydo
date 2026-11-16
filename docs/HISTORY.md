@@ -12812,3 +12812,120 @@ fmt --all --check`, `hydo-config`'s `inventory` after `HYDO_BLESS=1`, the Rust S
 `node --test` of the JavaScript tests and the Python tests, `hydo-schedule`'s `language::`,
 `hydo-agents`'s `public_content::`, the `hydo` program's `docs::`, `sh
 ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.
+
+### Milestone 270 (tentative number) - DONE (open item 131, a recording that shows the failing run: a walk with `rec` repeats the actions that the same schedule without `rec` took, by the same role and accessible name, instead of choosing them again; five Memos recordings repeated their run's 72 actions exactly, the reaction finding and web-shop's two planted bugs kept their verdicts under recording, and the share-link finding could not be filmed, because the new walker's image changes the walks that reached it; nothing recorded moved; 2026-11-16)
+
+Open item 131 said that a recording replay does not show the failing run. With `,rec` on, the
+walker chose each action again from what the page showed. Recording slows the browser, so the
+pages answered later, and the walk took other actions: in Milestone 267 two Memos walks that
+failed with the share link took other actions with `rec0` and `rec4`, and passed. The design is
+the new bullet "The recording repeats the failing run" in the section "The evidence of a failing
+walk" of `docs/design/ui-exploration.md`.
+
+**The change.**
+
+- **The walker prints a script.** Every run prints each action it takes as one console line,
+  `hydo-web: walk-act <step>.<k> <json>` (`hydo-manifest/src/browser/walk.mjs`). The JSON holds
+  the kind of action, the control's role, its accessible name, its place among the controls of
+  that name (and among the controls of its role, for a control without a name), the value
+  typed, the option chosen, the button that committed a form, or the time waited. An action
+  that did not finish is marked `failed`. The human line `hydo-web: walk <step>.<k>: ...` stays
+  as it was.
+- **The schedule.** `,rec` implies the script: `I=<walk>,rec<s>` means the actions that the same
+  schedule with `I=<walk>` takes, with step `s` recorded. hydo runs that schedule
+  deterministically, so a schedule with `rec` reproduces exactly, and no new token is needed.
+  `hydo_schedule::describe` says so in plain words.
+- **The host gets the script.** `hydo explore`'s recording replay takes the `walk-act` lines from
+  the console of the minimal schedule's confirmation run, which is the run of the same schedule
+  without `rec` (`walk_replays` in the `hydo` program's `delegated.rs`). `hydo run` and `hydo
+  repro` of a schedule with `rec` run it without `rec` first, into `walked/` of the run directory,
+  and print how many actions that run took and its verdict (`walk_script_for` in `runs.rs`).
+  Every recording's run directory keeps the script as `walk-script.txt`.
+- **The guest gets the script.** The host sets the new field `hydo_control::Plan::walk_script`,
+  which is not a manifest key. Before the walk's first step range, the controller writes it to
+  `/tmp/hydo/web/walk-script.txt` in parts of at most 1,200 bytes, because a part's JSON is
+  escaped once more inside the agent's command. A run without `rec`, or without a script, sends
+  exactly the commands it sent before.
+- **The walker repeats the script.** An action finds its control by the same role, name and
+  place, and waits up to 10 s for it to be visible, because a recorded page answers later. A
+  name with a time in it may read otherwise when the clock moved on; then the control with the
+  same name without its times and the same place among them is the same control, by Milestone
+  264's rule. A control that is not on the page is left out: the walker's line says that it was
+  not on the page and that the replay takes no other control. An action that the script lacks
+  is left out with its own line. Each step ends with `hydo-web: walk <step>: the recording replay
+  repeated every action of the run it replays`, or the number it left out. `hydo explore`'s line
+  about a recording names each action that it left out.
+- **An older image.** An image built before this milestone prints no `walk-act` lines. Its
+  recording then chooses again, and `hydo run` says so.
+
+**Proof on hvx.** Every run used the 0.3.3 Linux release with this milestone's `hydo`, in a folder
+of its own on the bare-metal machine, one VM at a time. Two images were built with this
+milestone's walker: Memos and web-shop's `hydo-walk.yaml` (buggy). One more Memos image has
+Milestone 267's first walker (`img-memos-e`, the one whose walks of seeds 31 and 42 clicked a
+share link's copy button) with this milestone's change on top, built only for this proof. Its
+walker is not in the tree.
+
+Each `hydo run` of a Memos schedule with `rec` ran the schedule without `rec` into `walked/` and
+then the recording. In all five, the recording's `walk-act` lines are byte for byte those of the
+run without `rec`, `failed` marks included. Every step printed "repeated every action".
+
+| walk | image | run without `rec` | the recording | video of the recorded step |
+|---|---|---|---|---|
+| seed 31's share-link walk (r31), `rec4` | first walker | OK, `67e323efabc3d44e` | OK, `801d602b4ba3782d` | 370,979 bytes |
+| seed 42's share-link walk, `rec0` | first walker | OK, `2da85e0ae10297f9` | OK, `eced80b58b29bed0` | 490,565 bytes |
+| the reaction walk (r2), kill at 3000 ms, `rec4` | this walker | OK, `9de8e41696feb816` | OK, `bccafcfbdad63486` | 151,884 bytes |
+| the reaction walk, kill at 4500 ms, `rec4` | this walker | finding 2, `b367255eab3296bb` | finding 2, `6ba714fd0f786c41` | 363,359 bytes |
+| the reaction walk, kill at 2000 ms, `rec4` | this walker | finding 2, `ae741082e88b5c3a` | finding 2, `2446b6a2b1ac4fa6` | 362,800 bytes |
+
+The schedules are r31's `disk=none dseed=d7599677879feaea | run
+N=memos@3-5:corrupt,6%,delay,20ms,reorder,29% P=memos@1+1 T=2:3600 I=4faa1d8cb3256a54,rec4`, seed
+42's `disk=none dseed=bdd732262feb6e95 | run I=36c25063a25340e7,rec0`, and the reaction walk's
+`disk=none dseed=7daf7bd7b0085fd2 | run X=memos@4~<ms> I=8690c91dedf1a78f,rec4`. Finding 2 is
+`browser.failures_shown`: "POST /memos.api.MemoService/UpsertMemoReaction got no answer
+(net::ERR_CONNECTION_REFUSED) during the test "walk step 4"". On this walker the reaction comes at
+actions 4.2 and 4.3 with the kill at 3000 ms. That is before the server dies, so both runs pass.
+With the kill at 4500 ms the walk adds a reaction while the server is down. A recording is still
+a run of its own with its own fingerprint, but now with the same actions and, in all five, the
+same verdict.
+
+**What the proofs show, and what they do not.**
+
+- The recording replay repeats the run it replays exactly, by the record of every action, in
+  all five Memos recordings and both web-shop recordings.
+- The reaction finding (finding 2) fails the same way when recorded. Its video is
+  `walk-step-4.webm` of the recording at 4500 ms.
+- web-shop's two planted bugs, found blind and recorded, show their bugs. The exploration of
+  seeds 1-20 with `--protocol-faults` (one worker, 2,630 s) failed seeds 7 and 17, as Milestone
+  267's final walker did, and confirmed both. Its two recordings ended with the minimal
+  schedules' verdicts, and each repeated every action of its run:
+  - `I=a0d28305209409f6,n7,x0.0-6,x1.0-6,x2.0-6` with `H=api.get_order@3-4:reset`: the
+    unhandled rejection on `/orders/o10` in step 3 (video 73,678 bytes);
+  - `I=37ce1f8dfefa7c4b,x0.0-9,x1.0-9,x2.0-4,x3.0-6,x3.8,x3.9` with `H=api.place_order@2-4:reset`:
+    the order that took effect 4 times (video 72,551 bytes).
+- The share-link finding (finding 1) is not filmed. A walker that prints its actions is another
+  file in the image, so the image's run takes other guest time, and the walk chooses otherwise
+  where a page answered at another moment. On the first walker with this change, r31's walk
+  takes the actions of r31 in steps 0 and 1 and other actions from step 2 on: in step 4 it
+  opens a memo's comment field and never clicks Share. Seed 42's walk clicks Share once, at action
+  5.10, and the next action leaves the page. Both
+  runs without `rec` pass, and so do their recordings. So r31's exact walk cannot be shown on a
+  new image, and a recording of finding 1 needs a walk that fails with the share link on this
+  image (open item 134).
+
+The videos are in the run directories of the proof on the bare-metal machine (`screens/` of each
+recording, and `replays/rec-1/screens/` and `rec-2/screens/` of the web-shop exploration).
+
+**Goldens, tests and what moved.** Nothing recorded moved: Memos and web-shop are not in
+`recorded.json`, and a run without `rec` sends the controller's commands as before. Every walking
+image gets other bytes (the walker prints `walk-act` lines), so its fingerprints change. The
+CLI's two `guide manifest` answers were re-recorded (MANIFEST.md changed). The text that
+`hydo_schedule::describe` gives `I=...,rec` changed. New tests: `hydo-manifest`'s
+`a_console_gives_the_script_of_a_recording_replay`, `hydo-control`'s
+`a_recording_replay_gets_its_script_before_the_walk` (in `screens`), and the `hydo` program's
+unit test `a_recording_replay_repeats_the_walk_without_recording`.
+
+**Checks.** On this Mac, on `main` at `e5534dd1` with this milestone on top: `cargo clippy
+--workspace --all-targets -- -D warnings`; every test of `hydo-manifest`, `hydo-control`,
+`hydo-schedule` and the `hydo` program (with `docs::`, `equivalence::cli_matches_golden` and
+`agents_equivalence`); `hydo-schedule`'s `language::`, `hydo-agents`'s `public_content::`, `sh
+ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.

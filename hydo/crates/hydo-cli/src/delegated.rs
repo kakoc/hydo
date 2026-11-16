@@ -167,6 +167,48 @@ pub fn with_recording(sched: &str, step: Option<u64>) -> Option<String> {
     found.then(|| format!("{}| {}", host, words.join(" ")))
 }
 
+/// A schedule's walk without recording (Milestone 270): its `I=` value without `rec` or
+/// `rec<step>`, or None for a schedule whose walk does not record. A recording replay repeats
+/// the actions of this schedule's run.
+pub fn without_recording(sched: &str) -> Option<String> {
+    let (host, guest) = sched.split_once('|')?;
+    let mut found = false;
+    let words: Vec<String> = guest
+        .split_whitespace()
+        .map(|w| match w.strip_prefix("I=") {
+            Some(v) if v.split(',').any(|f| f.starts_with("rec")) => {
+                found = true;
+                let kept: Vec<&str> = v.split(',').filter(|f| !f.starts_with("rec")).collect();
+                format!("I={}", kept.join(","))
+            }
+            _ => w.to_string(),
+        })
+        .collect();
+    found.then(|| format!("{}| {}", host, words.join(" ")))
+}
+
+/// What a recording replay's line adds when the replay could not repeat every action of the run
+/// it replays (Milestone 270): each action that it left out, with the walker's reason.
+pub fn left_out_note(console: &str) -> String {
+    let left = hydo_manifest::browser::walk_left_out(console);
+    if left.is_empty() {
+        return String::new();
+    }
+    let n = left.len();
+    let each: Vec<String> = left
+        .iter()
+        .take(3)
+        .map(|(at, what)| format!("action {at}: {what}"))
+        .collect();
+    format!(
+        "; it could not repeat {n} action{} of the failing run and left {} out ({}{})",
+        if n == 1 { "" } else { "s" },
+        if n == 1 { "it" } else { "them" },
+        each.join("; "),
+        if n > 3 { "; ..." } else { "" }
+    )
+}
+
 /// The step of a walk in which a verdict's first violation happened (Milestone 267): the walker
 /// names the test of step `s` `walk step <s>`, and a page's finding says during which test it
 /// happened.
@@ -210,27 +252,43 @@ pub fn walk_replays(ctx: &Ctx, dir: &Path) -> Vec<String> {
             .join(format!("rec-{}", k + 1));
         let _ = std::fs::create_dir_all(&out);
         let shown = out.display();
-        lines.push(
-            match crate::runs::try_run_to_dir(ctx, image, doc.image.sha256.clone(), &rec, &out, &opts)
-            {
-                Err(w) => format!("the recording of {} did not run: {w}", s.minimal),
-                Ok(None) => format!("the recording of {} gave no result ({shown})", s.minimal),
-                Ok(Some(run)) => {
-                    let same = run.verdict.text == s.verdict
-                        || hydo_explore::results::signature(&run.verdict.text)
-                            == hydo_explore::results::signature(&s.verdict);
-                    format!(
-                        "the walk of {} {} with recording on: video, trace and repro.spec.ts in {shown}/screens",
-                        s.minimal,
-                        if same {
-                            "ended with the same verdict".to_string()
-                        } else {
-                            format!("ended otherwise ({})", run.verdict.text)
-                        }
-                    )
-                }
-            },
+        // Milestone 270: the recording repeats the actions of the minimal schedule's confirmation
+        // run, which is the run of the same schedule without rec
+        let script = s.confirmations.iter().find_map(|c| {
+            let tag = c.tag.as_deref()?;
+            let console =
+                crate::ctx::read_text(&dir.join("consoles").join(format!("{tag}.log"))).ok()?;
+            hydo_manifest::browser::walk_script(&console)
+        });
+        let ran = crate::runs::try_run_to_dir_scripted(
+            ctx,
+            image,
+            doc.image.sha256.clone(),
+            &rec,
+            &out,
+            &opts,
+            script,
         );
+        lines.push(match ran {
+            Err(w) => format!("the recording of {} did not run: {w}", s.minimal),
+            Ok(None) => format!("the recording of {} gave no result ({shown})", s.minimal),
+            Ok(Some(run)) => {
+                let same = run.verdict.text == s.verdict
+                    || hydo_explore::results::signature(&run.verdict.text)
+                        == hydo_explore::results::signature(&s.verdict);
+                let console = crate::ctx::read_text(&out.join("one.log")).unwrap_or_default();
+                format!(
+                    "the walk of {} {} with recording on: video, trace and repro.spec.ts in {shown}/screens{}",
+                    s.minimal,
+                    if same {
+                        "ended with the same verdict".to_string()
+                    } else {
+                        format!("ended otherwise ({})", run.verdict.text)
+                    },
+                    left_out_note(&console)
+                )
+            }
+        });
     }
     lines
 }
@@ -432,7 +490,7 @@ pub fn cmd_agents(ctx: &Ctx, cmd: &str, argv: &[String]) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{failing_step, with_recording};
+    use super::{failing_step, left_out_note, with_recording, without_recording};
 
     /// Milestone 267: the recording replay records the step whose test the violation names.
     #[test]
@@ -455,5 +513,39 @@ mod tests {
         );
         assert_eq!(with_recording("disk=none | run I=1,rec3", Some(1)), None);
         assert_eq!(with_recording("disk=none | run K=a@1+1", Some(1)), None);
+    }
+
+    /// Milestone 270: a recording replays the actions of its schedule without `rec`, and its
+    /// line names each action it could not repeat.
+    #[test]
+    fn a_recording_replay_repeats_the_walk_without_recording() {
+        for (rec, plain) in [
+            (
+                "disk=none dseed=1 | run X=memos@4~3000 I=8690c91dedf1a78f,rec4",
+                "disk=none dseed=1 | run X=memos@4~3000 I=8690c91dedf1a78f",
+            ),
+            (
+                "disk=none | run I=a0d28305209409f6,n7,x0.0-6,rec T=1:5",
+                "disk=none | run I=a0d28305209409f6,n7,x0.0-6 T=1:5",
+            ),
+        ] {
+            assert_eq!(without_recording(rec).as_deref(), Some(plain));
+            let back = with_recording(plain, None).unwrap();
+            assert_eq!(without_recording(&back).as_deref(), Some(plain));
+        }
+        assert_eq!(without_recording("disk=none | run I=1"), None);
+        assert_eq!(without_recording("disk=none | run K=a@1+1"), None);
+        assert_eq!(
+            left_out_note("hydo-web: walk 4.7: click button \"Copy link\"\n"),
+            ""
+        );
+        let console =
+            "hydo-web: walk 4.7: click button \"Copy link\": not on the page within 10 s\n\
+                       hydo-web: walk-act 4.7 {\"do\":\"click\",\"missing\":true}\n";
+        assert_eq!(
+            left_out_note(console),
+            "; it could not repeat 1 action of the failing run and left it out (action 4.7: \
+             click button \"Copy link\": not on the page within 10 s)"
+        );
     }
 }

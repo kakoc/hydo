@@ -461,6 +461,12 @@ fn run_engine_edited(
     if let Some(f) = edit {
         f(&mut a.plan);
     }
+    if a.plan.walk && a.plan.walk_script.is_none() && matches!(policy, Policy::Schedule) {
+        a.plan.walk_script = walk_script_for(ctx, image, sched, &s, outdir, eargs, quiet)?;
+    }
+    if let Some(t) = &a.plan.walk_script {
+        let _ = std::fs::write(outdir.join(WALK_SCRIPT_FILE), t);
+    }
     if !quiet {
         println!("hydo: an agent image: the host controller drives the run (/etc/hydo/control)");
     }
@@ -483,6 +489,77 @@ fn run_engine_edited(
         }
     }
     Ok((run.result, run.output))
+}
+
+/// The file of a recording replay's run directory that holds the actions it repeated
+/// (Milestone 270): the `walk-act` lines of the run it replays, `<step>.<k> <json>` each.
+pub const WALK_SCRIPT_FILE: &str = "walk-script.txt";
+
+/// The folder of a recording replay's run directory with the run of the same schedule without
+/// `rec`, whose actions the recording repeats (Milestone 270).
+pub const WALKED_DIR: &str = "walked";
+
+/// The script of a recording replay that no caller gave (Milestone 270). A walk with `rec`
+/// repeats the actions that the same schedule without `rec` takes, so that the recording shows
+/// the failing run: recording slows the browser, and a walk that chose its actions again took
+/// others. This runs that schedule into `<outdir>/walked/` and takes the `walk-act` lines of its
+/// console. None for a schedule whose walk does not record, and for a run that printed no
+/// actions (an image built before Milestone 270, whose walker chooses again).
+fn walk_script_for(
+    ctx: &Ctx,
+    image: &Path,
+    sched: &str,
+    s: &Schedule,
+    outdir: &Path,
+    eargs: &[String],
+    quiet: bool,
+) -> Result<Option<String>, String> {
+    let records = s
+        .guest
+        .iter()
+        .any(|t| matches!(t, hydo_schedule::GuestToken::Walk(w) if w.rec));
+    if !records {
+        return Ok(None);
+    }
+    let Some(plain) = crate::delegated::without_recording(sched) else {
+        return Ok(None);
+    };
+    let dir = outdir.join(WALKED_DIR);
+    if !quiet {
+        println!(
+            "hydo: the walk records (rec), so it repeats the actions of the same schedule without rec; that run first: {plain} (in {})",
+            dir.display()
+        );
+    }
+    let (r, _) = run_engine_edited(
+        ctx,
+        image,
+        &plain,
+        &dir,
+        eargs,
+        true,
+        &Policy::Schedule,
+        None,
+    )?;
+    let console = read_text(&dir.join("one.log")).unwrap_or_default();
+    let script = hydo_manifest::browser::walk_script(&console);
+    if !quiet {
+        match (&script, &r) {
+            (Some(t), Some(r)) => println!(
+                "hydo: it took {} actions and ended {}; the recording repeats them",
+                t.lines().count(),
+                r.verdict
+            ),
+            (Some(t), None) => println!(
+                "hydo: it took {} actions; the recording repeats them",
+                t.lines().count()
+            ),
+            (None, _) => println!(
+                "hydo: that run printed no actions (an image built before Milestone 270), so the recording chooses its actions again and may take others"
+            ),
+        }
+    }
+    Ok(script)
 }
 
 /// The lines of a run's engine output that `hydo run` prints before the RESULT line: the spin
@@ -776,8 +853,38 @@ pub fn try_run_to_dir(
     outdir: &Path,
     opts: &RunOpts,
 ) -> Result<Option<hydo_results::Run>, String> {
+    try_run_to_dir_scripted(ctx, image, image_sha, sched, outdir, opts, None)
+}
+
+/// [`try_run_to_dir`] with the script of a recording replay (Milestone 270): the `walk-act`
+/// lines of the run that the recording replays, such as an exploration's confirmation of the
+/// minimal schedule. Without one, a schedule with `rec` runs the same schedule without `rec`
+/// first and takes its actions ([`walk_script_for`]).
+pub fn try_run_to_dir_scripted(
+    ctx: &Ctx,
+    image: &Path,
+    image_sha: Option<String>,
+    sched: &str,
+    outdir: &Path,
+    opts: &RunOpts,
+    script: Option<String>,
+) -> Result<Option<hydo_results::Run>, String> {
     let eargs = opts.eargs(image);
-    let (r, _) = run_engine_try(ctx, image, sched, outdir, &eargs, true, &Policy::Schedule)?;
+    let set = |p: &mut hydo_control::Plan| {
+        if script.is_some() {
+            p.walk_script = script.clone();
+        }
+    };
+    let (r, _) = run_engine_edited(
+        ctx,
+        image,
+        sched,
+        outdir,
+        &eargs,
+        true,
+        &Policy::Schedule,
+        Some(&set),
+    )?;
     let Some(r) = r else {
         return Ok(None);
     };

@@ -739,6 +739,13 @@ average over five Memos walks, against 19.8 for M264's walker. The blind explora
 finding's recording replay records the step that the finding names (`I=<seed>,rec<step>`). The
 details are in `docs/HISTORY.md` Milestone 267.
 
+Since M270 a walk with `rec` repeats the actions that the same schedule without `rec` took,
+instead of choosing them again, so a recording shows the failing run. Every run prints its
+actions as `hydo-web: walk-act` lines. `hydo explore` takes them from the minimal schedule's
+confirmation, and `hydo run` runs the schedule without `rec` first, into `walked/`. Each action
+finds its control by the same role and name, and a control that is not on the page is left out
+with a line that says so. The details are in `docs/HISTORY.md` Milestone 270.
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -1470,11 +1477,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - An image built before M264 ignores the range `x<step>.<first>-<last>` and walks the
       actions it was meant to leave out.
 131. Walks after Milestone 267. What is left:
-    - A recording replay does not show the failing run. With `,rec` on, a walk can take other
-      actions than the run it replays: recording costs time, so the pages answer later, and the
-      walker chooses again. Two walks that failed with the share link took other actions with
-      `rec0` and `rec4` and passed (M267). A possible fix: the recording replay replays the
-      actions that the failing run's log names, instead of choosing them again.
+    - A recording shows the failing run since M270. Open item 134 has what is left of it.
     - The final walker of M267 reaches neither Memos finding in seeds 21-60. Over those 40 walks
       it clicked Share in 7 and opened Manage share links in 1; M258's walker clicked Share in
       24 walks. A dropped clock step moves 7.4 of 72 actions on M267's walker, 19.8 on M264's.
@@ -1508,6 +1511,19 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       after the disk stopped completing flushes, and a `cf=` run now stops at the flush. None of
       the 61 points `cf=245..305` fails. A trigger with another fault was not searched, for
       example a power loss of MySQL alone (`L=mysql@<step>+<down>`).
+134. What Milestone 270 left (the recording that repeats the failing run):
+    - Memos's share-link finding has no recording yet. A walker that prints its actions changes
+      the image, and with it the walks. On the first walker with M270's change, r31's and seed
+      42's walks no longer open the share link's dialog, and they pass with and without `rec`.
+      A recording of the finding needs a walk that fails with the share link on an image with
+      M270's walker, for example from an exploration of that image.
+    - `hydo run` and `hydo repro` of a schedule with `rec` run the schedule twice: once without
+      `rec` for the actions, once recorded. A run directory's `walk-script.txt` is written but
+      not read back by `hydo repro`.
+    - A replayed action waits up to 10 s for its control, and an action that the run did not
+      finish is tried again the same way. A recording whose pages answer more than 10 s later
+      leaves actions out and says so; none of the seven recordings did.
+    - The recordings ran on hvx only, not on KVM.
 
 ## Milestone index
 
@@ -2106,6 +2122,13 @@ build machine, before 2026-10-13.
   temporary directory when it ends, also when it fails, and `HYDO_KEEP_TMP=1` keeps them. A
   `cf=` run makes the storage faults' mounts and reads in a child process, so a cut at an
   `L=`'s mount reaches its recovery boot (open item 127). Nothing recorded moved
+- M270 (tentative number): open item 131, a recording that shows the failing run. A walk with
+  `rec` repeats the actions that the same schedule without `rec` took, by the same role and
+  name. Each run prints them as `walk-act` lines. A missing control is left out and named.
+  Five Memos recordings repeated their run's 72 actions exactly. The reaction finding and
+  web-shop's two bugs kept their verdicts when recorded; the share-link finding has no
+  recording, because the new walker's image changes the walks that reached it. Nothing
+  recorded moved
 
 ## Where to look
 

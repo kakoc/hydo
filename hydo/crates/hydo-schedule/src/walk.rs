@@ -10,7 +10,9 @@
 //! step that way, and shorter runs one by one, as Milestone 258 wrote them. `rec` records a video and a Playwright trace of the
 //! last step that takes an action, and `rec<step>` of that step (Milestone 267: the step of a
 //! failure); recording costs guest time, so a run with `rec` is a run of its own, with its own
-//! fingerprint.
+//! fingerprint. A walk with `rec` repeats the actions that the same schedule without `rec` takes
+//! instead of choosing them again (Milestone 270): the host runs that schedule first, or takes the
+//! failing run's console, and hands the walker its actions.
 
 use crate::num::{dec, err, hex};
 use crate::ParseError;

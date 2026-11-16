@@ -1753,7 +1753,10 @@ browser:
 - Every run writes `screens/repro.spec.ts`; `I=...,rec` adds `walk-step-<i>.webm` and
   `walk-step-<i>.trace.zip` for the last step i that takes an action, and `I=...,rec<i>` for
   step i (Milestone 267; `hydo explore`'s replay of a finding records the step that the finding
-  names). A recording of more than
+  names). A walk with `rec` repeats the actions of the same schedule without `rec`, which each
+  run prints as `hydo-web: walk-act <step>.<k> <json>` lines; the host writes them to
+  `/tmp/hydo/web/walk-script.txt` before the first step, and an action whose control is not on
+  the page is left out with a line that says so (Milestone 270). A recording of more than
   640 KB stays in the guest, and a run copies at most 1 MiB of files out of it; a file that
   does not fit stays in the guest with a `HYDO-SCREEN-LEFT` line in the console (Milestone
   264).
