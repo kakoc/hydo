@@ -3,6 +3,6 @@
 # hour before step 20. PD's timestamps then keep their physical part, and TiKV judges a lock's
 # time to live by that part, so the locks that anytime_crash leaves never expire within the run:
 # 90 s after the heal no transaction can write the accounts. Without the step the accounts are
-# writable 2.18 s after the heal. Two runs on hvx gave fp=5c55bec66f806d2d.
+# writable 2.18 s after the heal. Two runs on hvx gave fp=718f926794984e13.
 # expect: violation      (change to ok when the bug is fixed)
 disk=none | run T=20:-3600

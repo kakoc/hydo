@@ -9,7 +9,7 @@ tikv/tikv and tikv/pd.
 
 ## The short answers
 
-- **One new candidate, a clock effect: after the wall clock steps back, the locks of a crashed
+- **A known clock effect (pingcap/tidb#44822): after the wall clock steps back, the locks of a crashed
   transaction block every writer of their keys for the length of the step.** PD's timestamps keep
   their physical part while the wall clock is behind it, as TiDB's documentation of the TSO says.
   TiKV judges whether a lock's time to live has passed by that physical part
@@ -205,7 +205,7 @@ happen in every run. On image base7:
 | schedule | verdict | `fp=` |
 |---|---|---|
 | `disk=none \| run` (twice) | `OK`; `writable` held 2.18 s after the heal | `b6f157e6448f0008` |
-| `disk=none \| run T=20:-3600` (twice) | `VIOLATION [writable] not satisfied 97.03s after heal, deadline 90s (last check rc=1: the accounts cannot be written: [10.89.0.14:20160](1) context deadline exceeded)` | `5c55bec66f806d2d` |
+| `disk=none \| run T=20:-3600` (twice) | `VIOLATION [writable] not satisfied 97.03s after heal, deadline 90s (last check rc=1: the accounts cannot be written: [10.89.0.14:20160](1) context deadline exceeded)` | `718f926794984e13` (the committed folder; `5c55bec66f806d2d` on the earlier image base7) |
 | `disk=none \| run T=20:-300` (twice) | the same violation | `5e36930d71d80471` |
 | `disk=none \| run T=20:-150` | the same violation | `ea5feca12068144a` |
 | `disk=none \| run T=20:-60` | `OK`; `writable` held 17.06 s after the heal | `8876ec667198dfce` |
@@ -265,7 +265,11 @@ It breaks a promise of the transaction model, that a crashed client's locks are 
 their time to live, for as long as the step lasts. Valkey's and Temporal's clock effects were
 reported for the same reason.
 
-**The duplicate search** found no report of it (section "The duplicate searches").
+**The duplicate search** of the onboarding found no report of it, but a later search did:
+pingcap/tidb#44822 (2023, "Resolve lock may hang for a long time after clock skew") describes
+the same effect with PD's failpoint `fallBackUpdate`. Its maintainers expect a `Resolve lock
+timeout` after the backoff and fixed only the endless backoff (tikv/client-go#847). So it is
+known and accepted, and it is not reported again.
 
 **No native run.** The cause is in three places of code and a documented behaviour, so the
 playbook's rule skips a reproduction with Docker.

@@ -639,8 +639,8 @@ records four things:
 - acknowledged writes of new keys.
 
 It also asks PD to move, split, and merge regions. Every promise held under kills, pauses,
-partitions, power cuts, one store's power loss and corrupted files, and clock steps. One new
-candidate is a clock effect, not reported upstream. After the wall clock steps back, PD's
+partitions, power cuts, one store's power loss and corrupted files, and clock steps. One clock
+effect is known as pingcap/tidb#44822 and accepted there. After the wall clock steps back, PD's
 timestamps keep their physical part (documented), and TiKV judges a lock's time to live by it
 (`check_txn_status.rs`). So the locks of a client that crashed inside its commit block every
 writer of their keys for the length of the step. `disk=none | run T=20:-3600` breaks the
@@ -2129,8 +2129,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A run with a power cut was not recorded; the boot number of the records is tested on
       synthetic records only.
 147. The TiKV example (M287). What is left:
-    - Its candidate (finding 1, crashed transactions' locks after a backward clock step) is not
-      reported upstream. Another way to reach it was not run: a move of PD's leadership away from a
+    - Finding 1 (crashed transactions' locks after a backward clock step) is the known and accepted
+      pingcap/tidb#44822, so it is not reported. Another way to reach it was not run: a move of PD's leadership away from a
       member whose clock runs ahead. Pessimistic locks and async commit's locks under the step
       were not tried.
     - Seed 4 of the first exploration also timed out the readers of the locked accounts. The
