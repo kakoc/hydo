@@ -553,6 +553,29 @@ value log. `native/` reproduces it with Docker; nothing was posted. Two known bu
 surrealdb#7606 and the open pull request #7672. `upgrade/` upgrades 3.3.5 on RocksDB to 4.0.1 in
 the middle of a run, and every check held. The runs used hvx and the Mac engine.
 
+**Redpanda (M279, tentative number).** Three nodes of Redpanda v26.2.7 run in one hvx guest in
+`hydo/onboard/examples/redpanda` (RESULTS.md), each with one core, 1 GiB, and its own file system.
+A Go client on franz-go produces idempotently, writes transactions and consumes as a group; one
+`type: messages` check and the invariant `tx.no_hanging` judge it. Seastar needs cgroup2 mounted
+once in the guest (each node's `setup:`). Strict power losses of one node and whole-guest cuts
+lost no acknowledged record, whether write caching was on or off. Three new candidates, not
+reported upstream:
+- A damaged `tx.snapshot` of one partition stops its node at every start (an assertion in
+  `persisted_stm.cc`), although a missing one is rebuilt from the log
+  (`G=n1@1+2:zero,len=4096,file=tx.snapshot,seed=626bd178`; Docker too).
+- A transaction whose coordinator record is still `empty` is never aborted. `do_try_abort` asks
+  for a state change that the coordinator's state machine forbids from `empty`. So the
+  partition's last stable offset stops for good. Two blind schedules reached it on hvx: one with
+  four coordinator failovers, and one with a whole-guest power cut.
+- A committed transaction is visible on one partition and not on the other. The client's commit
+  succeeds. A second producer's InitProducerId with the same transactional id aborts the open
+  transaction without an epoch bump (`do_init_tm_tx`, `do_abort_tm_tx`). The first producer's
+  next AddPartitionsToTxn then starts a new transaction with only its partition, and its commit
+  commits that one. Apache Kafka fences the first producer there. Two schedules reach it on hvx:
+  `K=nodes.primary@66+1 P=n2@42+11`, and one kill of any node during a transaction,
+  `A=rp.txn_add@20+3:kill-n1`. `native/half-commit.sh` reproduces it under Docker on 10 of 10
+  tries.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -1720,6 +1743,30 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The experimental AOF (`--aof`), cluster mode, and `REPLTAKEOVER` together with clock
       steps or power cuts did not run. The Mac engine and KVM did not run the example.
     - The example is not in `hydo/onboard/recorded.json`.
+142. The Redpanda example (M279). What is left:
+    - Its three candidates are not reported upstream.
+    - Finding 3's cause is found and reproduces under Docker. Why the hvx runs without faults
+      pass was not traced; the kill moves the partitions' leaders apart.
+    - The hanging transaction came from two blind schedules, each reproducing only on the image
+      it was found on (`hydo explore --schedule`, `repro --transcript`). A directed schedule that
+      fails the coordinator between `begin_tx` and `add_partitions` is not built, so it has no
+      saved regression.
+    - hydo shrinks only violations. An ERROR (a node that does not start, a drain that cannot
+      finish) is shrunk by hand; `tx.no_hanging` turns the hang into a violation.
+    - A run of `hydo run` from a fresh boot and the explorer's run of the same schedule differ, so
+      an explorer failure is replayed with `hydo explore --schedule` or `hydo repro --transcript`.
+    - `G=` chooses the damaged file and its place from the seed and the run's files; a byte or a
+      batch cannot be named.
+    - The `final:` read-back's output stays in the guest; the client writes its reason to the
+      console.
+    - `hydo rules scan --kind clock` found no place in Redpanda's C++, although the transaction
+      coordinator times expiries with Seastar's `lowres_system_clock` (the wall clock).
+    - Throughput: one 4,608 MiB worker, 4 to 20 schedules an hour. The blind explorations ran
+      37 schedules, fewer than the 60 to 100 planned.
+    - The example's topic keeps the default `retention.ms` of 7 days, so a forward clock step
+      of a year deletes records before the drain and breaks `fan-out` (seed 25). Creating the
+      topic with `retention.ms=-1` would keep the check strict.
+    - The Mac engine and KVM did not run the example; the Mac had too little free disk.
 
 ## Milestone index
 
@@ -2374,6 +2421,11 @@ build machine, before 2026-10-13.
   every later acknowledged commit when none of them has a large value. With one, it refuses.
   Found blind 7 times in 167 schedules, reproduced with Docker, not posted. Two known SurrealDB
   clock bugs reached; the experimental upgrade from 3.3.5 held. Nothing recorded moved
+- M279 (tentative number): the Redpanda v26.2.7 onboarding, three nodes on hvx, with a messages
+  check over idempotent produces, transactions, and a consumer group. Strict power losses and
+  whole-guest cuts lost nothing. Three new candidates. A damaged `tx.snapshot` stops its node at
+  every start. A transaction recorded as `empty` by its coordinator is never aborted. A
+  committed transaction is visible on only one of its partitions. Nothing recorded moved
 
 ## Where to look
 

@@ -1,0 +1,21 @@
+# Node configuration of n1 (node id 1). The cluster's properties are in .bootstrap.yaml next to
+# this file (bootstrap.yaml or bootstrap-write-caching.yaml in this folder).
+redpanda:
+  data_directory: /var/lib/redpanda/data
+  node_id: 1
+  empty_seed_starts_cluster: false
+  seed_servers:
+    - host: {address: n1, port: 33145}
+    - host: {address: n2, port: 33145}
+    - host: {address: n3, port: 33145}
+  rpc_server: {address: 0.0.0.0, port: 33145}
+  advertised_rpc_api: {address: n1, port: 33145}
+  kafka_api:
+    - {address: 0.0.0.0, port: 9092}
+  advertised_kafka_api:
+    - {address: n1, port: 9092}
+  admin:
+    - {address: 0.0.0.0, port: 9644}
+  developer_mode: false
+rpk:
+  coredump_dir: /var/lib/redpanda/coredump

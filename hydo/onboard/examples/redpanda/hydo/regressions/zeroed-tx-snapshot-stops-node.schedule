@@ -1,0 +1,7 @@
+# Finding 1 of RESULTS.md: one partition's zeroed snapshot stops the whole node at every start.
+# n1 is killed before step 1, the first 53 bytes of one of its tx.snapshot files are zeroed, and
+# n1 starts again: Redpanda asserts in persisted_stm.cc ("Can't load snapshot ... Corrupt
+# snapshot") on every start, and n1 never becomes ready. A missing snapshot would be rebuilt
+# from the log. Seed 6 of the blind exploration found it; two runs gave fp=f344a0a7214559d6 on an image without this file.
+# expect: fp=159d182a7374c040
+disk=none | run G=n1@1+2:zero,len=4096,file=tx.snapshot,seed=626bd178

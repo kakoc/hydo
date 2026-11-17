@@ -13753,3 +13753,111 @@ equivalence::cli_matches_golden` and `agents_equivalence`, `hydo-schedule`'s `la
 ci/consolidate-tests.sh --check` and `sh ci/vale.sh`. The explorer's identity and corpus goldens
 and the control corpus golden were re-recorded for the new example's files only. Nothing
 recorded moved: no engine, guest program or recorded example changed.
+
+### Milestone 279 (tentative number) - DONE (Redpanda v26.2.7, three nodes in one hvx guest, against what Redpanda promises its producers and consumer groups: the durability promises held under strict power losses of one node and whole-guest power cuts, with write caching off and on; three new candidates: one partition's damaged snapshot stops its whole node at every start, a transaction that the coordinator still records as `empty` is never aborted, so `read_committed` consumers stall for good, and a committed transaction is visible on only one of its two partitions; nothing recorded moved; 2026-11-17)
+
+**In short.** `hydo/onboard/examples/redpanda` (RESULTS.md) runs three nodes of Redpanda
+v26.2.7, the latest release, from its Docker image on hvx. Each node has one core, 1 GiB of
+Seastar memory and its own 384 MiB file system for its data directory. The cluster takes the
+sizing properties of `rpk`'s development mode without the two that change durability: fsync is
+not bypassed, and write caching stays off (`--set bootstrap=bootstrap-write-caching.yaml` turns
+it on). A static Go client on franz-go produces with the idempotent producer, writes two-record
+transactions that commit or abort, and consumes as group `g` with offset commits. All of it is
+one `type: messages` history, with the claims `no-loss`, `no-phantom` (no aborted record read
+with `read_committed`), `duplicates: forbidden`, `order: log` per partition, `fan-out` to the
+full read and to `g`, and `after-ack` (no redelivery after an acknowledged commit). The
+`eventually` invariant `tx.no_hanging` says that no transaction stays open after the heal.
+
+**What the guest needed.** Seastar reads `/proc/self/cgroup` at start and failed with
+`std::out_of_range (sstring out of range)` on the empty file of hvx's guest: Linux shows the
+cgroup v2 line only after cgroup2 was mounted once. Each node's `setup:` mounts it. The first
+clean run came 35 minutes after the start.
+
+**What was found.**
+
+- **Redpanda, new as far as the search found: a damaged `tx.snapshot` stops its node.**
+  `persisted_stm_base::start()` in `src/v/raft/persisted_stm.cc` turns any error of the local
+  snapshot's load into `vassert(false, "... Can't load snapshot from ...")`. A zeroed or
+  bit-flipped `tx.snapshot` (53 bytes) of one partition stops the whole node at every start,
+  although the same function rebuilds a missing or rejected snapshot from the log. Seed 6 of the
+  blind exploration found it; `G=n1@1+2:zero,len=4096,file=tx.snapshot,seed=626bd178` stops n1
+  on every run, and Docker shows the same assertion (`native/zero-snapshot.sh`). A truncated
+  snapshot is handled. Pull request 24662 (2025) says that a snapshot that cannot be loaded
+  "should trigger log replay"; the merged code throws again.
+- **Redpanda, new as far as the search found: a transaction that the coordinator records as
+  `empty` is never aborted.** `do_try_abort` in `src/v/cluster/tx_gateway_frontend.cc` handles
+  `tx_status::empty` like `ongoing` and asks for `preparing_internal_abort`, which the state
+  machine (`is_state_transition_valid`) allows only from `ongoing`. A partition that times out
+  such a transaction asks every 10 seconds and gets an error each time, so the transaction
+  stays open and the last stable offset stops. The `empty` record comes from
+  `do_add_partition_to_tx`, which starts the transaction on the data partitions before it stores
+  them. Seed 9 found it after four leader changes of the coordinator partition; it reproduced
+  three times on its image (explorer, `--schedule`, `repro --transcript`), and a harmless file in
+  place of the seeded corruption gives the same hang. Seed 37 of the fourth exploration reached
+  the same `empty` record after a whole-guest power cut, as a `VIOLATION [tx.no_hanging]`. The
+  code is unchanged on `dev` (2026-11-12).
+- **Redpanda, new as far as the search found: a committed transaction visible on one partition
+  only.** Seed 24 of the third exploration: the client's commit of a two-record transaction
+  returned no error, `read_committed` readers read one record and never the other, and a
+  `read_uncommitted` read showed the missing record in its partition's log. The explorer shrank
+  it to `disk=none dseed=2aa0ad4523ae213f | run K=nodes.primary@66+1 P=n2@42+11
+  W=02ecd045,p2,q2,r500` (a pause of n2 and a kill of partition 0's leader, 50 steps before the
+  transaction), which fails on every run of that image, also from a fresh boot. A single kill
+  of a node at the moment a transaction adds its partitions (`A=rp.txn_add@20+3:kill-n1`) breaks
+  it too, in five of nine runs, and is the saved regression. A raw `read_committed` fetch of
+  each partition showed the cause's shape: producer 9 at epoch 7 has a commit marker on one
+  partition and an abort marker on the other. Two commands with one transactional id ran at
+  once; epoch 8's start on the second partition aborted epoch 7's transaction there, after the
+  coordinator had already answered epoch 7's commit (`do_commit_tm_tx` answers at
+  `preparing_commit`). Why the coordinator let epoch 8 start before epoch 7's commit reached
+  every partition was not found: the nodes logged nothing about it at the default level. Three
+  tries under Docker did not reproduce it. The closest report is issue 17921 (v23.1.7, closed
+  as stale).
+
+The durability promises held: with write caching off, `disk=cut | run C=60`, the shape of
+Jepsen's NATS finding 3.5 with a strict power loss, and two more strict power losses lost
+nothing; with write caching on, two whole-guest cuts lost no record. The searches covered
+redpanda-data/redpanda's issues, pull requests and discussions and Jepsen's Redpanda analysis;
+RESULTS.md lists the terms. Nothing was posted.
+
+**The runs.** Every run used hvx on the bare-metal machine, one VM at a time, with this branch's
+`hydo`, `hydo-build` and `hydo-hvx` over the 0.3.4 Linux release, at the fingerprint epoch 3.
+A clean run takes about 2 minutes of the machine; a schedule of the explorer took 3 to 14
+minutes, on one worker, because the guest has 4,608 MiB. Four blind explorations
+(`--strategy process --more-faults --new-faults --storage-faults --cluster-faults`) ran 37
+schedules, seeds 1 to 37, on three images; six failed: findings 1 (seeds 6 and 35), 2 (seed 9;
+and seed 37, the same `empty` record after a power cut), 3 (seed 24), and records deleted by retention after
+a clock step of a year (seed 25, by design). The image of the committed folder gave
+`hydo repro --regressions` 2 of 2 as expected; its clean run, on the image before its last
+`expect` line changed, gave `dbe6a8ebad1212ca` twice. RESULTS.md lists every image and value.
+
+**Tests and checks.** The explorer's `identity-quick.txt` and `corpus-full.txt` were re-recorded
+for the new manifest (`HYDO_BLESS=1`): its inputs are added, and the chunks after it in the
+sorted stream move. The control corpus `corpus-quick.txt` gained the manifest's two lines. On
+this Mac, on `main` at `9294778e` with this milestone on top: `cargo test -p hydo --test it
+equivalence::cli_matches_golden` and `agents_equivalence`, `hydo-explore`'s `identity::` and
+`corpus::`, `hydo-control`'s `corpus::`, `hydo-schedule`'s `language::`, `cargo test -p
+hydo-config`, `hydo-agents`'s `public_content::`, `hydo`'s `docs::`, `sh
+ci/consolidate-tests.sh --check` and `sh ci/vale.sh`. Nothing recorded moved: no engine, guest program or existing
+example changed.
+
+**Finding 3's cause (a follow-up in this milestone).** An image with Redpanda's `tx` logger at
+trace level (`65b1c401…`) passed the saved regression, and five of the nine reaction variants
+still broke the claim. The trace of `A=rp.txn_add@20+3:kill-n2` shows the cause in
+`src/v/cluster/tx_gateway_frontend.cc` (v26.2.2, the same on `dev` at `d9944871`):
+
+- `do_init_tm_tx` aborts an `ongoing` transaction for a second producer with the same
+  transactional id, and `do_abort_tm_tx` finishes it without the epoch bump.
+- The first producer's next AddPartitionsToTxn, at the old epoch, passes `get_latest_tx`.
+  `init_add_resource_to_tx` then starts a new transaction (`reset_transaction_state`) with only
+  that partition.
+- The first producer's commit commits the new transaction and returns no error, and its earlier
+  partition keeps the abort marker.
+
+Apache Kafka bumps the epoch in that abort (`prepareFenceProducerEpoch`), so the old producer
+gets `PRODUCER_FENCED`. The earlier reading (epoch 8's start aborting a commit in flight) was
+wrong. `native/half-commit.sh` reproduces it without hydo under Docker. In the program's
+`steps` order, 10 of 10 commits returned no error and lost their record on partition 1. Two
+producers racing with no fault lost a record in 5 of 205 commits. Against Apache Kafka 3.9.1
+the same program got `PRODUCER_FENCED` and lost nothing. RESULTS.md, finding 3, has the trace and
+the commands.

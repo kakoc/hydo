@@ -1,0 +1,8 @@
+#!/bin/sh
+# hydo: timeout=30
+# Two records to two partitions in one transaction, which commits (3 in 4) or aborts, with a
+# transactional id from a pool of 4: commands with the same id fence each other. A commit that
+# completed is ok with both offsets; an abort that completed is fail (read_committed must never
+# show its records); anything else is info.
+. /hydo/workload/helper_lib.sh
+exec $RP txn "$HYDO_CMD_ID" "$HYDO_SEED"

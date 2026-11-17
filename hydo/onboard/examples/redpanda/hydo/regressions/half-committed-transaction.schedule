@@ -1,0 +1,10 @@
+# Finding 3 of RESULTS.md: a committed transaction is visible on one partition and not on the
+# other. n1 is killed 3 ms after the client's event rp.txn_add (a transaction adds its
+# partitions) at or after step 20, and stays down until the heal. Later two commands with one
+# transactional id run at once; the older epoch's commit returns no error and reaches one
+# partition, while the newer epoch's start aborts the older epoch's transaction on the other.
+# read_committed readers then never read that record, which the log holds. Seed 24 of a blind
+# exploration shrank to `K=nodes.primary@66+1 P=n2@42+11` on an earlier image; this reaction
+# schedule breaks the same claim with one fault on the image of the committed folder.
+# expect: violation
+disk=none | run A=rp.txn_add@20+3:kill-n1

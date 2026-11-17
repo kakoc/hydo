@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: timeout=30
+# One member of the consumer group g (read_committed, from the start when g has no offset):
+# poll up to 10..49 records, then commit the offsets of what it read. A serial driver, so one
+# member at a time: after an acknowledged commit, no later member may receive those records again.
+. /hydo/workload/helper_lib.sh
+exec $RP consume "$HYDO_CMD_ID" "$HYDO_SEED"

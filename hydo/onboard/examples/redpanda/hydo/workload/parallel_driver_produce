@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: timeout=20
+# One record to the partition the seed picks, with the idempotent producer and acks=all (the
+# client's defaults). The client records the send in the history rp: ok with its offset, or info
+# when no answer came (an idempotent retry may still have stored it).
+. /hydo/workload/helper_lib.sh
+exec $RP produce "$HYDO_CMD_ID" "$HYDO_SEED"

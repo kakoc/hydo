@@ -1,0 +1,164 @@
+# A three-node Redpanda cluster sized small (one core and 1 GiB per node, overprovisioned), each
+# node's data directory on a file system of its own (services[].storage), so that one node's
+# files can be corrupted (G=) and one node can lose its power (L=) while the others run on.
+# RESULTS.md has the promises under test and the findings.
+#
+#   sh fetch-images.sh                                   # the images by digest (network, once)
+#   sh ../client/build.sh amd64; sh ../client/build.sh arm64
+#   hydo build hydo.yaml                                 # write caching off (the production default)
+#   hydo build hydo.yaml --set bootstrap=bootstrap-write-caching.yaml   # write caching on
+format: 1
+hydo_version: "0.3"
+name: redpanda
+description: "Redpanda, three nodes, each data directory on its own file system: acknowledged, idempotent and transactional writes and consumer-group offsets under faults"
+
+params:
+  redpanda: "v26.2.7"            # the Redpanda release (images/redpanda-<version>-*)
+  bootstrap: "bootstrap.yaml"    # the cluster's first-start properties (../conf/)
+
+network: bridge   # each service in its own network namespace at its addr:
+
+guest:
+  ram_mib: 4608                  # 3 x 1 GiB of Seastar memory, the guest and its page cache
+  clock_after_cut: 60            # the recovery boot continues the clock: Redpanda keeps timestamps
+
+data:
+  size_mib: 256   # the shared data disk: the error-log scan's files; the nodes' data are on their own file systems
+  dirs: [vol/n1-data, vol/n2-data, vol/n3-data]
+
+root:
+  files:
+    - {src: ../conf/n1.yaml, dst: /etc/hydo/rp/n1.yaml}
+    - {src: ../conf/n2.yaml, dst: /etc/hydo/rp/n2.yaml}
+    - {src: ../conf/n3.yaml, dst: /etc/hydo/rp/n3.yaml}
+    - {src: "../conf/{{bootstrap}}", dst: /etc/hydo/rp/bootstrap.yaml}
+    - {src: ../bin/rpclient-arm64, dst: /bin/rpclient-aarch64, mode: "0755"}
+    - {src: ../bin/rpclient-amd64, dst: /bin/rpclient-x86_64, mode: "0755"}
+  text:
+    /etc/hosts: |
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 n1
+      10.89.0.12 n2
+      10.89.0.13 n3
+
+errors: true   # Redpanda starts an error line with ERROR
+
+services:
+  - name: n1
+    image: {x86_64: "images/redpanda-{{redpanda}}-amd64.docker.tar", arm64: "images/redpanda-{{redpanda}}-arm64.docker.tar"}
+    image_ref: "redpandadata/redpanda:{{redpanda}}"
+    user: ""                     # root: the data directory is a fresh file system
+    entrypoint: [/opt/redpanda/bin/redpanda]
+    cmd: [--redpanda-cfg, /etc/redpanda/redpanda.yaml, --smp, "1", --memory, 1G, --reserve-memory, 0M, --overprovisioned]
+    port: 9092
+    addr: 10.89.0.11
+    ready: "timeout 4 wget -q -T 3 -O - http://n1:9644/v1/status/ready 2>/dev/null | grep -q '\"ready\"'"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 none /sys/fs/cgroup"   # Seastar reads /proc/self/cgroup
+    errors:
+      format: none
+      match: '^ERROR '
+    storage: {dir: vol/n1-data, size_mib: 384}   # n1's data directory, a file system of its own
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {src: /etc/hydo/rp/n1.yaml, dst: /etc/redpanda/redpanda.yaml}
+      - {src: /etc/hydo/rp/bootstrap.yaml, dst: /etc/redpanda/.bootstrap.yaml}
+      - {src: /data/vol/n1-data, dst: /var/lib/redpanda/data}
+  - name: n2
+    image: {x86_64: "images/redpanda-{{redpanda}}-amd64.docker.tar", arm64: "images/redpanda-{{redpanda}}-arm64.docker.tar"}
+    image_ref: "redpandadata/redpanda:{{redpanda}}"
+    user: ""
+    entrypoint: [/opt/redpanda/bin/redpanda]
+    cmd: [--redpanda-cfg, /etc/redpanda/redpanda.yaml, --smp, "1", --memory, 1G, --reserve-memory, 0M, --overprovisioned]
+    port: 9092
+    addr: 10.89.0.12
+    ready: "timeout 4 wget -q -T 3 -O - http://n2:9644/v1/status/ready 2>/dev/null | grep -q '\"ready\"'"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 none /sys/fs/cgroup"   # Seastar reads /proc/self/cgroup
+    start_after: started         # the nodes form the cluster together: start all three, then check
+    errors:
+      format: none
+      match: '^ERROR '
+    storage: {dir: vol/n2-data, size_mib: 384}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {src: /etc/hydo/rp/n2.yaml, dst: /etc/redpanda/redpanda.yaml}
+      - {src: /etc/hydo/rp/bootstrap.yaml, dst: /etc/redpanda/.bootstrap.yaml}
+      - {src: /data/vol/n2-data, dst: /var/lib/redpanda/data}
+  - name: n3
+    image: {x86_64: "images/redpanda-{{redpanda}}-amd64.docker.tar", arm64: "images/redpanda-{{redpanda}}-arm64.docker.tar"}
+    image_ref: "redpandadata/redpanda:{{redpanda}}"
+    user: ""
+    entrypoint: [/opt/redpanda/bin/redpanda]
+    cmd: [--redpanda-cfg, /etc/redpanda/redpanda.yaml, --smp, "1", --memory, 1G, --reserve-memory, 0M, --overprovisioned]
+    port: 9092
+    addr: 10.89.0.13
+    ready: "timeout 4 wget -q -T 3 -O - http://n3:9644/v1/status/ready 2>/dev/null | grep -q '\"ready\"'"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 none /sys/fs/cgroup"   # Seastar reads /proc/self/cgroup
+    start_after: started
+    errors:
+      format: none
+      match: '^ERROR '
+    storage: {dir: vol/n3-data, size_mib: 384}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {src: /etc/hydo/rp/n3.yaml, dst: /etc/redpanda/redpanda.yaml}
+      - {src: /etc/hydo/rp/bootstrap.yaml, dst: /etc/redpanda/.bootstrap.yaml}
+      - {src: /data/vol/n3-data, dst: /var/lib/redpanda/data}
+
+# The nodes as a group: K=nodes.primary aims at the leader of partition 0 of the topic t.
+groups:
+  - name: nodes
+    services: [n1, n2, n3]
+    primary: |
+      for n in n1 n2 n3; do
+        l=$(timeout 3 wget -q -T 2 -O - "http://$n:9644/v1/partitions/kafka/t/0" 2>/dev/null | sed -n 's/.*"leader_id": *\([0-9]*\).*/\1/p' | head -n 1)
+        case $l in 1|2|3) echo "n$l"; exit 0 ;; esac
+      done
+      exit 1
+
+# the topic exists before the window under test: 3 partitions, 3 replicas
+provision: /bin/rpclient-$(uname -m) create
+
+# 120 rounds of 500 ms: 60 s of guest time
+workload:
+  steps: 120
+  timeout: 300    # also the drain's limit: it gives up after 230 s
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 500
+  command_timeout: 60
+  drain_timeout: 30
+
+# A transaction whose client went away is aborted after its timeout (10 s, set by the client), so
+# a read_committed consumer waits at most that long. RESULTS.md, finding 2.
+invariants:
+  - id: tx.no_hanging
+    msg: no transaction stays open after the faults heal (every partition's last stable offset reaches its high watermark)
+    type: eventually
+    cmd: /bin/rpclient-$(uname -m) lso
+    after: heal
+    within: 90
+
+checks:
+  - id: rp
+    type: messages
+    history: rp
+    msg: what Redpanda promises its producers and consumer groups
+    final: sh /hydo/workload/helper_drain.sh
+    acknowledgement: explicit       # the group g commits offsets
+    claims:
+      delivery: at-least-once       # every acknowledged record is read back (no-loss)
+      duplicates: forbidden         # a record is stored once: every delivery of it has one offset
+      order: {kind: log, scope: key}  # one record per offset of a partition, reads go up without gaps
+      fan_out: every-group          # the full read (-) and the group g both receive every record
+      after_ack: no-redelivery      # after an acknowledged offset commit, g does not receive the records again
+
+faults: [kill, pause, network, oneway, cut, clock, disk, corrupt, powerloss]

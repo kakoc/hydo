@@ -1,0 +1,17 @@
+# The cluster's properties of bootstrap.yaml with write caching on, as `rpk redpanda start --mode
+# dev-container` sets it (fsync is still not bypassed). Redpanda's documentation: a write is then
+# acknowledged once a majority holds it in memory, and "data written in the context of a
+# transaction and consumer offset commits is always written to disk and fsynced before being
+# acknowledged to the client".
+auto_create_topics_enabled: false
+group_topic_partitions: 3
+storage_min_free_bytes: 10485760
+topic_partitions_per_shard: 1000
+fetch_reads_debounce_timeout: 10
+group_initial_rebalance_delay: 0
+log_segment_size_min: 1
+write_caching_default: "true"
+# Small for one guest: 3 transaction-coordinator partitions (default 50), and segments grown in
+# steps of 1 MiB (default 32 MiB), so that each node's partitions fit a file system of 384 MiB.
+transaction_coordinator_partitions: 3
+segment_fallocation_step: 1048576
