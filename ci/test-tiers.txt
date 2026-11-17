@@ -82,6 +82,7 @@ hydo-contracts::eval                     fast
 hydo-contracts::fuzz                     fast
 hydo-contracts::lang                     fast
 hydo-contracts::types                    fast
+hydo-contracts::values                   fast
 hydo-errors                              fast
 hydo-errors::equivalence                 fast
 hydo-explore                             fast
