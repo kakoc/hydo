@@ -5920,6 +5920,13 @@
             "string",
             "null"
           ]
+        },
+        "properties": {
+          "description": "The plan's value properties (`// hydo: keep` lines) as the whole run judged them, before\nthe filters (added in Milestone 291).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueProperty"
+          }
         }
       },
       "required": [
@@ -5980,6 +5987,13 @@
             "$ref": "#/$defs/ValueChange"
           },
           "default": []
+        },
+        "breaks": {
+          "description": "The value properties (`// hydo: keep` lines) this key's history broke, each at its first\nbreak (added in Milestone 291).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueBreak"
+          }
         }
       }
     },
@@ -6097,6 +6111,103 @@
         "to",
         "point",
         "before"
+      ]
+    },
+    "ValueBreak": {
+      "description": "Where a key's history broke a value property (added in Milestone 291).",
+      "type": "object",
+      "properties": {
+        "property": {
+          "description": "The property as written after `// hydo:` (`keep overdraft_limit from ...`).",
+          "type": "string"
+        },
+        "name": {
+          "description": "The value's name.",
+          "type": "string"
+        },
+        "point": {
+          "description": "The index of the stop that broke it, in the key's `points`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reference": {
+          "description": "The index of the stop whose value it was compared with.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "changed": {
+          "description": "The index of the first stop after the reference whose value broke the property: the\nfirst changing call.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "value": {
+          "description": "The value at the stop that broke it, and the reference's.",
+          "type": "string"
+        },
+        "expected": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "property",
+        "name",
+        "point",
+        "reference",
+        "changed",
+        "value",
+        "expected"
+      ]
+    },
+    "ValueProperty": {
+      "description": "A value property of the plan and how a run judged it (added in Milestone 291).",
+      "type": "object",
+      "properties": {
+        "property": {
+          "description": "The property as written after `// hydo:`.",
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "words": {
+          "description": "What it says, in words.",
+          "type": "string"
+        },
+        "keys": {
+          "description": "Keys with at least one judged stop.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stops": {
+          "description": "Stops judged.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "broken": {
+          "description": "Keys that broke it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "property",
+        "file",
+        "line",
+        "words",
+        "keys",
+        "stops",
+        "broken"
       ]
     }
   }

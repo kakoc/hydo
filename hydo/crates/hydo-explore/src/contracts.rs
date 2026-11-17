@@ -2,10 +2,16 @@
 //! (`<tag>.contracts.jsonl`, written by the engine) judged against the image's plan. A broken
 //! clause is a finding of kind `contract`, and it turns an `OK` verdict into a `VIOLATION` that
 //! names the function, the clause and its line; the guest's own verdict is kept.
+//!
+//! Since Milestone 291 the same records also judge the plan's value properties (`// hydo:
+//! keep` lines, docs/design/value-history.md) on the run's value histories. A broken one is a
+//! finding of kind `values`, and it turns an `OK` verdict into a `VIOLATION` that names the
+//! property as written.
 
 use crate::pool::Res;
 use hydo_contracts::eval::{judge, Report};
-use hydo_contracts::plan::Plan;
+use hydo_contracts::plan::{Keep, Plan};
+use hydo_contracts::values::{History, KeepOutcome};
 use hydo_results::{kind, status, Finding};
 use serde_json::{json, Map, Value};
 use std::path::Path;
@@ -49,11 +55,104 @@ pub fn findings(r: &Report) -> Vec<Finding> {
         .collect()
 }
 
+/// What a run's records gave: the contracts' report, and the value properties (`// hydo: keep`,
+/// Milestone 291) judged on the run's value histories.
+#[derive(Clone, Debug)]
+pub struct Judged {
+    pub report: Report,
+    pub histories: Vec<History>,
+    pub keeps: Vec<KeepOutcome>,
+}
+
+/// The verdict a broken value property gives a run that passed otherwise: the property as
+/// written and what broke it, without a key or a value, so that every run that breaks it has
+/// one signature.
+pub fn values_verdict(k: &Keep) -> String {
+    format!(
+        "VIOLATION [{}] {}",
+        values_id(k),
+        hydo_contracts::values::break_words(k)
+    )
+}
+
+/// The id of a value property's finding: `values ` and the line as written.
+pub fn values_id(k: &Keep) -> String {
+    format!("values {}", k.text)
+}
+
+/// The findings of the value properties: one per broken property (kind `values`), with the
+/// first broken key's history up to the break as its output.
+pub fn values_findings(hs: &[History], outs: &[KeepOutcome]) -> Vec<Finding> {
+    let mut out = Vec::new();
+    for o in outs {
+        let Some(b) = o.breaks.first() else { continue };
+        let h = &hs[b.history];
+        let p = |i: usize| {
+            let x = &h.points[i];
+            json!({
+                "function": x.function,
+                "when": x.when,
+                "call": x.call,
+                "caller": x.caller,
+                "key": x.key,
+                "at": x.at,
+                "boot": x.boot,
+            })
+        };
+        let mut d = Map::new();
+        d.insert("property".into(), json!(o.keep.text));
+        d.insert("file".into(), json!(o.keep.file));
+        d.insert("line".into(), json!(o.keep.line));
+        d.insert("name".into(), json!(o.keep.name));
+        d.insert("keys".into(), json!(o.keys));
+        d.insert("stops".into(), json!(o.stops));
+        d.insert("broken_keys".into(), json!(o.breaks.len()));
+        d.insert(
+            "first".into(),
+            json!({
+                "key": h.key,
+                "value": b.value,
+                "expected": b.expected,
+                "stop": p(b.point),
+                "reference": p(b.reference),
+                "changed": p(b.changed),
+            }),
+        );
+        d.insert(
+            "output".into(),
+            json!(hydo_contracts::values::break_lines(h, b, &o.keep)),
+        );
+        out.push(Finding {
+            kind: kind::VALUES.into(),
+            id: values_id(&o.keep),
+            status: status::VIOLATION.into(),
+            message: hydo_contracts::values::keep_words(&o.keep),
+            details: d,
+        });
+    }
+    out
+}
+
+fn fold_verdict(res: &mut Res, text: String) {
+    let verdict = res
+        .get("verdict")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    if hydo_engine::protocol::verdict_kind(&verdict) == "ok" {
+        if !res.contains_key("guest_verdict") {
+            res.insert("guest_verdict".into(), json!(verdict));
+        }
+        res.insert("verdict".into(), json!(text));
+    }
+}
+
 /// Judge the records at `records` with `plan` and fold the outcome into a run's result: the
-/// findings under [`crate::results::CONTRACTS`], the calls checked under
-/// [`crate::results::CONTRACT_CALLS`], and an `OK` verdict made a `VIOLATION` by the first
-/// broken clause. Returns the report.
-pub fn fold(plan: &Plan, records: &Path, res: &mut Res) -> Result<Report, String> {
+/// contracts' findings under [`crate::results::CONTRACTS`], the value properties' under
+/// [`crate::results::VALUES`], the calls checked under [`crate::results::CONTRACT_CALLS`], and
+/// an `OK` verdict made a `VIOLATION` by the first broken clause, else by the first broken value
+/// property. Returns what was judged.
+pub fn fold(plan: &Plan, records: &Path, res: &mut Res) -> Result<Judged, String> {
     let (recs, end) = hydo_contracts::plan::read_run(records)?;
     let mut rep = judge(plan, &recs);
     rep.not_recorded = end.not_recorded;
@@ -69,24 +168,64 @@ pub fn fold(plan: &Plan, records: &Path, res: &mut Res) -> Result<Report, String
             "not_recorded": rep.not_recorded,
         }),
     );
-    if fs.is_empty() {
-        return Ok(rep);
-    }
-    res.insert(crate::results::CONTRACTS.into(), Value::Array(fs));
-    let verdict = res
-        .get("verdict")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    if hydo_engine::protocol::verdict_kind(&verdict) == "ok" {
+    // the value properties (Milestone 291): only for a plan with `keep` lines
+    let (histories, keeps) = if plan.programs.iter().any(|p| !p.keeps.is_empty()) {
+        let hs = hydo_contracts::values::histories(hydo_contracts::values::points(plan, &recs));
+        let ks = hydo_contracts::values::judge_keeps(plan, &hs);
+        (hs, ks)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    if !fs.is_empty() {
+        res.insert(crate::results::CONTRACTS.into(), Value::Array(fs));
         if let Some(o) = rep.violated().next() {
-            if !res.contains_key("guest_verdict") {
-                res.insert("guest_verdict".into(), json!(verdict));
-            }
-            res.insert("verdict".into(), json!(verdict_text(o)));
+            fold_verdict(res, verdict_text(o));
         }
     }
-    Ok(rep)
+    let vs: Vec<Value> = values_findings(&histories, &keeps)
+        .into_iter()
+        .map(|f| serde_json::to_value(f).expect("a finding"))
+        .collect();
+    if !vs.is_empty() {
+        res.insert(crate::results::VALUES.into(), Value::Array(vs));
+        if let Some(o) = keeps.iter().find(|o| !o.breaks.is_empty()) {
+            fold_verdict(res, values_verdict(&o.keep));
+        }
+    }
+    Ok(Judged {
+        report: rep,
+        histories,
+        keeps,
+    })
+}
+
+/// One line per value property for people: how many keys and stops it judged and how many keys
+/// broke it, and for a broken one the first broken key's history up to the break.
+pub fn values_lines(j: &Judged) -> Vec<String> {
+    let mut out = Vec::new();
+    for o in &j.keeps {
+        let (f, l) = (&o.keep.file, o.keep.line);
+        match o.breaks.first() {
+            None => out.push(format!(
+                "hydo: value property held: {} ({f}:{l}), {} stops of {} keys judged",
+                o.keep.text, o.stops, o.keys
+            )),
+            Some(b) => {
+                out.push(format!(
+                    "hydo: value property broken: {} ({f}:{l}) for {} of {} keys ({} stops \
+                     judged)",
+                    o.keep.text,
+                    o.breaks.len(),
+                    o.keys,
+                    o.stops
+                ));
+                for x in hydo_contracts::values::break_lines(&j.histories[b.history], b, &o.keep) {
+                    out.push(format!("hydo:   {x}"));
+                }
+            }
+        }
+    }
+    out
 }
 
 /// The calls a run judged and the calls it did not (Milestone 255): every call past the run's

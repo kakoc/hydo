@@ -1361,6 +1361,7 @@ fn handler_plan(dir: &std::path::Path) -> std::path::PathBuf {
             head: String::new(),
             unchecked: vec![],
             calls: vec![],
+            keeps: vec![],
             functions: vec![Function {
                 id: 0,
                 name: "tick".into(),

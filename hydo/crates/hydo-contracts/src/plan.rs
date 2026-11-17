@@ -56,6 +56,40 @@ pub struct Program {
     /// address names its caller.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calls: Vec<CallSite>,
+    /// The properties of recorded values that the program's `// hydo: keep` lines declare
+    /// (Milestone 291): judged on the host after the run, over the histories of every program.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keeps: Vec<Keep>,
+}
+
+/// A property of a recorded value along a key's history (`// hydo: keep <name> [once set]
+/// [from <function>] [to <function>] [across boots]`, Milestone 291,
+/// docs/design/value-history.md). A run breaks it at a stop where the value is not what the
+/// property says, and the break is a finding of kind `values`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct Keep {
+    /// The line as written after `// hydo:` (`keep overdraft_limit from ... to ...`): the
+    /// property's name in a finding and a verdict.
+    pub text: String,
+    /// The source file of the line, relative to the source folder.
+    pub file: String,
+    pub line: u32,
+    /// The recorded value's name.
+    pub name: String,
+    /// Once a stop recorded the value, no later stop records it absent (else: every judged stop
+    /// records the reference's value).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub once_set: bool,
+    /// The function whose last stop before a judged stop is its reference (its name in the
+    /// debug information); none: the key's first stop that recorded the value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    /// The function whose stops are judged; none: every stop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    /// A reference may be in an earlier boot (a power cut or a reboot between the two stops).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub across_boots: bool,
 }
 
 /// A contract that the plan cannot check, with the reason.

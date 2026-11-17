@@ -1,6 +1,7 @@
 # Value history
 
-Status: a first version (Milestone 285) on the Mac engine, opt-in. The KVM engine makes the same reads with
+Status: a first version (Milestone 285) on the Mac engine, opt-in; value properties since
+Milestone 291. The KVM engine makes the same reads with
 its breakpoints, and no KVM run was made. On hvx it is designed only, with the breakpoints of
 [the contracts' hvx design](contracts.md#the-hvx-design).
 
@@ -88,6 +89,53 @@ view per key:
 `hydo inspect events` lists the same stops as events of the kind `value`. `hydo report --html`
 adds the section "How the recorded values changed" with each key that changed.
 
+## Value properties
+
+Since Milestone 291 a history can fail a run. A `keep` line next to a recording function says
+what must hold for a recorded value along each key's history:
+
+```go
+// hydo: keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction
+```
+
+The line's grammar is `keep <name> [once set] [from <function>] [to <function>] [across boots]`.
+Each stop of `to` (every stop without it) that recorded the value is judged against a reference
+stop of the same key:
+
+- Without `once set`, the judged stop records the reference's value. The reference is the last
+  earlier stop of `from` that recorded the value, or without `from` the key's first such stop.
+- With `once set`, the reference is the last earlier stop where the value was present, and the
+  judged stop breaks the property when its value is `absent` or `nil`.
+- The reference is in the judged stop's boot, unless the line says `across boots`.
+- An unreadable value is neither judged nor a reference.
+
+The decisions:
+
+1. **The property is a comment line, as the records are.** The other way was a `values:` list in
+   `hydo.yaml`. A property names values by the `as` names of the `record` lines and functions
+   by their names, so it belongs to the same sources. The plan's compiler checks both names.
+   `hydo build` lists a property as not checked when no `record` line records its value, or
+   when a function it names records no such value. The line can stand next to any recording function. `to` and
+   `from` say which functions take part, so the line reads the same wherever it stands.
+2. **The engine does not change.** The properties are in the plan (`Program.keeps`), which only
+   the host reads. They are judged on the host after the run, from the same records, so a run
+   with them has the fingerprint of the run without the plan.
+3. **A broken property is a finding of the kind `values`.** It turns an `OK` verdict into
+   `VIOLATION [values <the line as written>] the value changed` (or `the value was absent after
+   it was set`). The verdict names no key and no value. A key is a random reference such as
+   `c27`, and two runs that break the property at two keys must give one signature, or the
+   shrinker treats them as two failures. The key, the values, the judged stop, the reference and
+   the first stop whose value broke the property are in the finding's `details`. Its `output`
+   is the first broken key's history up to the break, which `hydo report` shows like a check's
+   output.
+4. **The first changing call is named.** The judged stop is where the property breaks; the call
+   where the value first left the reference's value is often earlier. For Blnk the judged stop is
+   the decision, and the first changing call is the worker's coalesced copy.
+5. **The class stays the faults' class.** The explorer's classes describe the faults of a
+   schedule (`lying-disk`, `durable-defaults`). A values finding without faults is
+   `durable-defaults`, as a business rule's is. The advice knows the kind: its title is
+   "<system> broke a value property you declared", and it points at the history.
+
 ## The proof on a real service
 
 Blnk, a ledger in Go, ignores a draw's overdraft limit when its worker coalesces the draw with
@@ -131,7 +179,19 @@ The cost: the regression stopped at 98 entries and 44 returns, 142 breakpoint st
 single steps. A stop makes at most 115 reads. The engine's time was 5.5 s and 5.1 s with the
 plan, and 5.2 s and 5.5 s without it, so the cost is below the spread of the runs.
 
+The property of Milestone 291 is one line next to `canProcessTransaction`: `keep overdraft_limit
+from blnk.setTransactionMetadata to model.canProcessTransaction`. At the fingerprint epoch 4 it
+broke the regression for `c27` and `c29`, and it failed `disk=none | run`, which every rule
+passed, for 3 of 66 keys. Each schedule gave one fingerprint with the plan and without it, twice
+each (`ddb6f1730f6854ea` and `f52b32d3577045db`), and the fixed build held. In a blind
+exploration of 30 schedules the property broke in 9, first at seed 4, and the overdraft rule in
+1, at seed 21. Seed 4 shrank to a schedule without a fault. The Blnk example's RESULTS.md has
+the runs ("The limit as a property that a run can break").
+
 ## Next steps
+
+- Properties over two names (a value against its copy in another field), a comparison with a
+  constant, and an order of calls.
 
 - KVM: the plan's 3 functions with one return need 4 debug registers, and the KVM engine has 3.
   A record without return reads needs no return breakpoint; a plan of 3 functions at entry only

@@ -6,9 +6,9 @@
 use super::drive::{resolve, Conv, Recorded};
 use super::{Args, Problem};
 use hydo_contracts::plan::Plan;
-use hydo_contracts::values::{histories, points, History};
+use hydo_contracts::values::{histories, judge_keeps, keep_words, points, History};
 use hydo_control::transcript::{Record, Transcript};
-use hydo_results::{ValueChange, ValueHistory, ValueKey, ValuePoint};
+use hydo_results::{ValueBreak, ValueChange, ValueHistory, ValueKey, ValuePoint, ValueProperty};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
@@ -85,6 +85,15 @@ fn stop_at(t: Option<&Transcript>, at: u64) -> Option<u64> {
 
 /// The run's value history: every key, with its points placed at the run's stops.
 pub fn keys(rec: &Recorded, plan: &Plan) -> Result<(u64, Vec<ValueKey>), Problem> {
+    judged(rec, plan).map(|(c, k, _)| (c, k))
+}
+
+/// The run's value history and its value properties (Milestone 291): every key with its points
+/// and the properties it broke, and how the run judged each property.
+pub fn judged(
+    rec: &Recorded,
+    plan: &Plan,
+) -> Result<(u64, Vec<ValueKey>, Vec<ValueProperty>), Problem> {
     let p = rec.dir.join(rec.files.contracts());
     let (recs, _) =
         hydo_contracts::plan::read_run(&p).map_err(|e| Problem::new("no-run", e, vec![]))?;
@@ -99,11 +108,42 @@ pub fn keys(rec: &Recorded, plan: &Plan) -> Result<(u64, Vec<ValueKey>), Problem
         })
         .count() as u64;
     let has_recovery = rec.transcript(Conv::Recovery).is_some();
-    let out = histories(pts)
-        .into_iter()
-        .map(|h| key_doc(rec, h, has_recovery))
+    let hs = histories(pts);
+    let outs = judge_keeps(plan, &hs);
+    let props = outs
+        .iter()
+        .map(|o| ValueProperty {
+            property: o.keep.text.clone(),
+            file: o.keep.file.clone(),
+            line: o.keep.line,
+            words: keep_words(&o.keep),
+            keys: o.keys,
+            stops: o.stops,
+            broken: o.breaks.len() as u64,
+        })
         .collect();
-    Ok((calls, out))
+    let out = hs
+        .into_iter()
+        .enumerate()
+        .map(|(hi, h)| {
+            let mut k = key_doc(rec, h, has_recovery);
+            for o in &outs {
+                for b in o.breaks.iter().filter(|b| b.history == hi) {
+                    k.breaks.push(ValueBreak {
+                        property: o.keep.text.clone(),
+                        name: o.keep.name.clone(),
+                        point: b.point as u64,
+                        reference: b.reference as u64,
+                        changed: b.changed as u64,
+                        value: b.value.clone(),
+                        expected: b.expected.clone(),
+                    });
+                }
+            }
+            k
+        })
+        .collect();
+    Ok((calls, out, props))
 }
 
 fn key_doc(rec: &Recorded, h: History, has_recovery: bool) -> ValueKey {
@@ -154,6 +194,7 @@ fn key_doc(rec: &Recorded, h: History, has_recovery: bool) -> ValueKey {
                 before: c.before as u64,
             })
             .collect(),
+        breaks: Vec::new(),
     }
 }
 
@@ -162,12 +203,13 @@ pub fn short(name: &str) -> &str {
     name.rsplit('/').next().unwrap_or(name)
 }
 
-/// `hydo inspect values <run dir> [--key K] [--name N] [--changes] [--plan FILE]`.
+/// `hydo inspect values <run dir> [--key K] [--name N] [--changes] [--broken] [--plan FILE]`.
 pub fn cmd(rest: &[String]) -> Result<Value, Problem> {
     let mut a = Args::new(rest);
     let key = a.val("--key")?;
     let name = a.val("--name")?;
     let changes = a.flag("--changes");
+    let broken = a.flag("--broken");
     let plan_file = a.val("--plan")?.map(PathBuf::from);
     let limit = a.num("--limit")?.unwrap_or(50);
     let offset = a.num("--offset")?.unwrap_or(0);
@@ -175,7 +217,7 @@ pub fn cmd(rest: &[String]) -> Result<Value, Problem> {
     a.done()?;
     let rec = Recorded::load(Path::new(&dir))?;
     let (path, plan) = plan_of(&rec, plan_file.as_deref())?;
-    let (calls, all) = keys(&rec, &plan)?;
+    let (calls, all, properties) = judged(&rec, &plan)?;
     let matching: Vec<ValueKey> = all
         .into_iter()
         .filter(|k| {
@@ -190,6 +232,7 @@ pub fn cmd(rest: &[String]) -> Result<Value, Problem> {
                     .iter()
                     .any(|c| name.as_ref().is_none_or(|n| *n == c.name))
         })
+        .filter(|k| !broken || !k.breaks.is_empty())
         .collect();
     let total = matching.len() as u64;
     let changed = matching.iter().filter(|k| !k.changes.is_empty()).count() as u64;
@@ -229,6 +272,7 @@ pub fn cmd(rest: &[String]) -> Result<Value, Problem> {
         keys: shown,
         truncated,
         next,
+        properties,
         ..ValueHistory::default()
     };
     Ok(serde_json::to_value(&doc).unwrap_or(json!(null)))
@@ -289,6 +333,22 @@ pub fn text(doc: &ValueHistory) -> String {
         doc.changed,
         doc.keys.len()
     ));
+    for p in &doc.properties {
+        s.push_str(&format!(
+            "{}: {} ({}:{}), {} stops of {} keys judged{}\n",
+            if p.broken > 0 { "BROKEN" } else { "held" },
+            p.property,
+            p.file,
+            p.line,
+            p.stops,
+            p.keys,
+            if p.broken > 0 {
+                format!(", {} keys broke it", p.broken)
+            } else {
+                String::new()
+            }
+        ));
+    }
     for k in &doc.keys {
         s.push('\n');
         let mut head = match &k.key {
@@ -322,6 +382,27 @@ pub fn text(doc: &ValueHistory) -> String {
                 short(&p.function),
                 p.when,
                 p.point.clone().unwrap_or_default()
+            ));
+        }
+        for b in &k.breaks {
+            let at = |i: u64| {
+                let p = &k.points[i as usize];
+                format!(
+                    "{} {} ({})",
+                    short(&p.function),
+                    p.when,
+                    p.point.clone().unwrap_or_default()
+                )
+            };
+            s.push_str(&format!(
+                "  BROKEN: {}: {} = {} at {}, {} at the reference {}; first changed at {}\n",
+                b.property,
+                b.name,
+                b.value,
+                at(b.point),
+                b.expected,
+                at(b.reference),
+                at(b.changed)
             ));
         }
     }

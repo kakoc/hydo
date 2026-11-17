@@ -15,6 +15,7 @@
 //! | `corrupted-files` | anything | worth a look: decide whether the system must detect damaged files |
 //! | `test-failed` | the test program | worth a look |
 //! | `durable-defaults` and the rest | the user's own check | worth a look: hydo says that the user's rule failed and quotes it, and does not guess whether the rule must hold |
+//! | `durable-defaults` and the rest | a value property (`// hydo: keep`, Milestone 291) | worth a look: the value's history names the first call where it changed |
 //! | any | an error line new to the project's list | worth a look |
 //!
 //! The words name the user's system and its parts between backquotes (`` `redis` ``), as
@@ -356,6 +357,10 @@ pub fn problem(
                     x.contains("ack") || x.contains("confirm")
                 });
             match (lost, confirmed) {
+                _ if is_values(what) => with_context(
+                    format!("{system} broke a value property you declared"),
+                    &ctx,
+                ),
                 (true, true) if !ctx.is_empty() => {
                     format!("{system} lost data it had confirmed, {ctx}")
                 }
@@ -488,6 +493,19 @@ pub fn problem(
              only under these conditions depends on timing."
                 .to_string(),
         ),
+        (_, What::Check { .. }) if is_values(what) => (
+            Attention::Look,
+            "A `// hydo: keep` line next to your code says how a recorded value must stay \
+             along a key's history, and a call in this run saw another value. The disk and your \
+             settings were not at fault. Only you can say whether the value must stay; a \
+             business rule over the end state may not see it."
+                .to_string(),
+            "The run's value history names the first call where the value changed: `hydo \
+             inspect values <run dir> --broken --text` shows it for every key that broke the \
+             property. If the value must stay, this is a bug; if not, change the `keep` line or \
+             accept this finding."
+                .to_string(),
+        ),
         (_, What::Check { .. }) => (
             Attention::Look,
             "This is your own rule, and the disk and your settings were not at fault. hydo does \
@@ -527,6 +545,10 @@ pub fn problem(
                 .into()
         }
         ("refused" | "upgrade" | "test-failed", _) => todo.clone(),
+        (_, What::Check { .. }) if is_values(what) => todo
+            .strip_suffix(" or accept this finding.")
+            .map(|t| format!("{t}."))
+            .unwrap_or_else(|| todo.clone()),
         (_, What::Check { .. }) => "Replay the run and look at the moment it failed. If the rule \
                                     must hold, this is a bug; if not, change the check."
             .into(),
@@ -540,6 +562,12 @@ pub fn problem(
         todo,
         decide,
     }
+}
+
+/// Whether a check is a value property (`// hydo: keep`, Milestone 291): its finding's id, and
+/// so the verdict's brackets, start with `values `.
+pub fn is_values(what: &What) -> bool {
+    matches!(what, What::Check { id: Some(id), .. } if id.starts_with("values "))
 }
 
 fn capitalize(s: &str) -> String {

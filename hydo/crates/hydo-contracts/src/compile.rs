@@ -18,8 +18,8 @@
 
 use crate::lang::{self, Ast, Builtin, SrcContract, SrcRecord, When};
 use crate::plan::{
-    Base, BinOp, CallSite, Clause, ClauseKind, DynCase, Expr, Frame, Function, Input, Lang, Loc,
-    Plan, Program, Show, Slot, Ty, Unchecked, Value, PLAN_TYPE, PLAN_V,
+    Base, BinOp, CallSite, Clause, ClauseKind, DynCase, Expr, Frame, Function, Input, Keep, Lang,
+    Loc, Plan, Program, Show, Slot, Ty, Unchecked, Value, PLAN_TYPE, PLAN_V,
 };
 use gimli::{AttributeValue, EndianSlice, LittleEndian, Operation, UnitOffset};
 
@@ -1299,8 +1299,11 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
         functions: Vec::new(),
         unchecked: Vec::new(),
         calls: Vec::new(),
+        keeps: Vec::new(),
     };
     let mut lang_errors = Vec::new();
+    // the `keep` lines, with their file and the function they stand next to (Milestone 291)
+    let mut keeps: Vec<(lang::SrcKeep, String, String)> = Vec::new();
     let mut id = first_id;
     for (path, rel) in source_files(&src.sources) {
         let Ok(text) = std::fs::read_to_string(&path) else {
@@ -1311,6 +1314,17 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
             lang_errors.push(format!("{}:{}: {}", path.display(), e.line, e.message));
         }
         for c in contracts {
+            for k in &c.keeps {
+                keeps.push((k.clone(), rel.clone(), c.function.clone()));
+            }
+            // a function with only `keep` lines records nothing and needs no breakpoint
+            if !c.keeps.is_empty()
+                && c.clauses.is_empty()
+                && c.records.is_empty()
+                && c.inputs.is_empty()
+            {
+                continue;
+            }
             let cands: Vec<&FnInfo> = fns
                 .iter()
                 .filter(|f| {
@@ -1351,7 +1365,86 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
         return Err(lang_errors.join("\n"));
     }
     prog.calls = call_sites(&elf, arch, &fns, &prog.functions);
+    for (k, file, function) in keeps {
+        match keep_plan(&prog.functions, &k, &file) {
+            Ok(p) => prog.keeps.push(p),
+            Err(reason) => prog.unchecked.push(Unchecked {
+                function,
+                file,
+                line: k.line,
+                reason,
+            }),
+        }
+    }
     Ok(prog)
+}
+
+/// The recording function a `keep` line names: its full name in the debug information equals
+/// the name, or ends with it after `/`, `.` or `::` (`blnk.setTransactionMetadata` names
+/// `github.com/blnkfinance/blnk.setTransactionMetadata`).
+pub fn keep_function<'a>(
+    funcs: &'a [Function],
+    given: &str,
+    name: &str,
+) -> Result<&'a str, String> {
+    let hits: Vec<&Function> = funcs
+        .iter()
+        .filter(|f| !f.values.is_empty())
+        .filter(|f| name_matches(&f.name, given) || f.name.ends_with(&format!("/{given}")))
+        .collect();
+    match hits.as_slice() {
+        [f] if f.values.iter().any(|v| !v.key && v.name == name) => Ok(&f.name),
+        [f] => Err(format!(
+            "{} records no value named `{name}` (a `record` line's `as` name, else its \
+             expression)",
+            f.name
+        )),
+        [] => Err(format!(
+            "no function with `record` lines in the plan is named `{given}` (one the compiler \
+             copied into its callers has no stop of its own)"
+        )),
+        more => Err(format!(
+            "`{given}` names {} functions with `record` lines; write more of the name ({})",
+            more.len(),
+            more.iter()
+                .map(|f| f.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
+}
+
+/// A `keep` line's property for the plan (Milestone 291): a function of the program records its
+/// value, and the functions it names record it too.
+pub fn keep_plan(funcs: &[Function], k: &lang::SrcKeep, file: &str) -> Result<Keep, String> {
+    if !funcs
+        .iter()
+        .flat_map(|f| &f.values)
+        .any(|v| !v.key && v.name == k.name)
+    {
+        return Err(format!(
+            "`{}`: no `record` line of the program records a value named `{}`",
+            k.text, k.name
+        ));
+    }
+    let resolve = |g: &Option<String>| -> Result<Option<String>, String> {
+        match g {
+            None => Ok(None),
+            Some(g) => keep_function(funcs, g, &k.name)
+                .map(|n| Some(n.to_string()))
+                .map_err(|e| format!("`{}`: {e}", k.text)),
+        }
+    };
+    Ok(Keep {
+        text: k.text.clone(),
+        file: file.to_string(),
+        line: k.line,
+        name: k.name.clone(),
+        once_set: k.once_set,
+        from: resolve(&k.from)?,
+        to: resolve(&k.to)?,
+        across_boots: k.across_boots,
+    })
 }
 
 /// The direct calls of the functions that record values (Milestone 285), found in the program's

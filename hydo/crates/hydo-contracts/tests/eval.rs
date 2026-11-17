@@ -59,6 +59,7 @@ fn ledger_plan() -> Plan {
             head: String::new(),
             unchecked: vec![],
             calls: vec![],
+            keeps: vec![],
             functions: vec![Function {
                 id: 0,
                 name: "ledger::apply".into(),

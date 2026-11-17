@@ -4,7 +4,8 @@ Use this page when a check fails at the end of a run and you need to know where 
 wrong on its way. A value history records chosen values at chosen functions, at every call,
 while the whole system runs under faults. `hydo inspect values` then shows each value in the
 order the run made the calls, grouped by a key such as a transaction's reference, and marks
-each change.
+each change. A `keep` line says what must hold along a key's history, and a run that breaks it
+fails.
 
 The record reads the program's memory at hardware breakpoints and never writes to it. A run
 with the record plan has the fingerprint of the same run without it. The Mac engine and the KVM
@@ -78,6 +79,7 @@ hydo inspect values hydo-out/run --key d17 --text
 | `--key K` | Only the history of key `K` (or of its copy). |
 | `--name N` | Only keys that record the value `N`. |
 | `--changes` | Only keys where a value changed. |
+| `--broken` | Only keys that broke a `keep` line (section 4). |
 | `--plan FILE` | The plan, when the image is not where `result.json` says. |
 | `--limit N`, `--offset N` | Pages of keys (50 by default). |
 
@@ -90,6 +92,51 @@ and a `change:` line names the two stops between which it changed.
 Without `--text` the answer is one JSON document of the type `values` (results format 1). `hydo
 inspect events` lists the same stops as events of the kind `value`. `hydo report --html` adds
 the section "How the recorded values changed" with the keys that changed.
+
+## 4. Say what must hold, so a run can break it
+
+A history shows changes, and a `keep` line judges them. A run that breaks a `keep` line fails
+with a finding of the kind `values`, as a run that breaks a check does. Write the line next to
+any function with `record` lines:
+
+```go
+// hydo: keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction
+// hydo: key transaction.Reference
+// hydo: record transaction.OverdraftLimit as overdraft_limit at entry
+func canProcessTransaction(transaction *model.Transaction, sourceBalance *Balance) error {
+```
+
+| Line | What must hold for each key |
+|---|---|
+| `// hydo: keep <name>` | Every stop that records `<name>` records the key's first value of it. |
+| `... from <function>` | A stop records the value that `<function>` recorded last before it for the key. |
+| `... to <function>` | Only the stops of `<function>` are judged; without it, every later stop. |
+| `// hydo: keep <name> once set` | Once a stop recorded the value, no later stop records it `absent` or `nil`. |
+| `... across boots` | A stop after a power cut or a reboot is compared with the boot before it. |
+
+`<name>` is the name of a `record` line: its `as` name, or its expression. A function is named by
+its name in the debug information or by its end, after `/` or `.`
+(`blnk.setTransactionMetadata`). Both functions must record the value. A stop whose value is
+`unreadable` is not judged. Without `across boots`, a stop is compared only with stops of its own
+boot.
+
+A broken property makes an `OK` run a `VIOLATION` that names the line as written:
+
+```text
+hydo: value property broken: keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction (model/model.go:157) for 3 of 66 keys (77 stops judged)
+hydo:   key "c33" (and c33_q): the stops that recorded overdraft_limit up to the break
+hydo:     blnk.setTransactionMetadata return, called from blnk.(*Blnk).prepareTransactionForQueue: overdraft_limit = 50.0   <- the reference
+hydo:     blnk.createQueueCopy entry, called from blnk.(*Blnk).processSingleTransaction: overdraft_limit = 50.0
+hydo:     blnk.createQueueCopy entry, called from blnk.(*Blnk).buildQueuedCoalescingBatchForScope: overdraft_limit = 0.0   <- first changed here
+hydo:     model.canProcessTransaction entry [c33_q], called from model.UpdateBalances: overdraft_limit = 0.0   <- BROKEN
+hydo: VERDICT VIOLATION [values keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction] the value changed
+```
+
+The verdict names no key and no value, so every run that breaks the line fails the same way, and
+`hydo explore` shrinks such a failure as one. The finding in `result.json` keeps the first key, its
+values, the stop that broke the line, its reference, and the first stop where the value changed
+(`findings[].details`). `hydo report` and `hydo report --html` show that key's history up to the
+break. `hydo inspect values <run dir> --broken --text` lists every key that broke a line.
 
 ## What a record cannot read yet
 

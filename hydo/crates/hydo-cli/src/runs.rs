@@ -702,11 +702,12 @@ pub fn contracts_one(
     };
     let records = outdir.join(format!("{tag}{}", hydo_contracts::plan::RECORDS_SUFFIX));
     match hydo_explore::contracts::fold(&plan, &records, &mut res) {
-        Ok(rep) => {
+        Ok(j) => {
             if !quiet {
-                for l in hydo_explore::contracts::summary(&rep)
+                for l in hydo_explore::contracts::summary(&j.report)
                     .into_iter()
-                    .chain(hydo_explore::contracts::lines(&rep))
+                    .chain(hydo_explore::contracts::lines(&j.report))
+                    .chain(hydo_explore::contracts::values_lines(&j))
                 {
                     println!("{l}");
                 }

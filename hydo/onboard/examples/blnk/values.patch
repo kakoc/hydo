@@ -6,8 +6,8 @@ index 85fbc1b..35f2b92 100644
  // It returns an error if the balance is insufficient and overdraft is not allowed.
  // This function includes inflight balances and optionally queued balances in the available balance calculation
  // to prevent creating transactions that would exceed the actual available funds.
-+//
-+// The value history of the overdraft limit for hydo: what the overdraft decision sees.
++// The value history of the overdraft limit for hydo: the decision sees the limit the API set.
++// hydo: keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction
 +// hydo: key transaction.Reference
 +// hydo: record transaction.OverdraftLimit as overdraft_limit at entry
 +// hydo: record transaction.AllowOverdraft as allow_overdraft at entry

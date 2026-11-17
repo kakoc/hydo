@@ -80,6 +80,7 @@ hydo-contracts                           fast
 hydo-contracts::compile                  fast
 hydo-contracts::eval                     fast
 hydo-contracts::fuzz                     fast
+hydo-contracts::keeps                    fast
 hydo-contracts::lang                     fast
 hydo-contracts::types                    fast
 hydo-contracts::values                   fast
@@ -103,6 +104,7 @@ hydo-explore::refusals                   fast
 hydo-explore::route_errors               fast
 hydo-explore::storage_faults             fast
 hydo-explore::upgrades                   fast
+hydo-explore::value_properties           fast
 hydo-explore::walks                      fast
 hydo-explore::workload_pauses            fast
 hydo-grpc                                fast

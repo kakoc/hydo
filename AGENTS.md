@@ -779,6 +779,23 @@ throughout. The plan left the fingerprint as it was, and its 142 breakpoint stop
 than the runs' spread. The design is `docs/design/value-history.md`, the guide `hydo guide
 values` (open item 146).
 
+**Value properties (M291, tentative number).** `// hydo: keep <name> [once set] [from <function>]
+[to <function>] [across boots]` next to a recording function says what must hold for a recorded
+value along each key's history. Without `once set`, a judged stop has the value of its reference
+stop: the last stop of `from`, or the key's first. With `once set`, a value once present is
+never absent again. The host judges the lines from the run's records, so the fingerprint stays.
+A broken line is a finding of the kind `values`, and it turns an `OK` verdict into `VIOLATION
+[values <the line>] the value changed`. The verdict names no key, so a shrink keeps one
+signature. The finding's output is the first broken key's history up to the break, with the
+first changing call marked. `hydo report`, `hydo report --html`, `hydo inspect values --broken`
+and the advice show it. On Blnk, `keep overdraft_limit from blnk.setTransactionMetadata to
+model.canProcessTransaction` fails the run `disk=none | run`, where every business rule held: 3
+of 66 keys reached the decision with the limit 0.0. The fixed build holds. Each schedule gave one
+fingerprint with and without the plan. In 30 blind schedules the line broke in 9, first at seed
+4, and the overdraft rule in 1, at seed 21. Seed 4 shrank to a schedule without a fault. The
+design is the section "Value properties" of `docs/design/value-history.md`, and the how-to is
+section 4 of `hydo guide values` (open item 146).
+
 **Fakes from OpenAPI descriptions (M249).** `hydo fake from-openapi <spec>` writes a `fakes:`
 entry from an OpenAPI 3.0 or 3.1 description (the module `openapi` of `hydo-compose`). It writes
 one route per operation, with the spec's example or a body made from the schema, and no random
@@ -1919,7 +1936,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       passed on the Mac, whose pages answer at other moments of the guest's clock.
     - The Mac engine ran no `screens: compare` run, and its screenshots were not compared with
       those of hvx or KVM.
-146. Value history (M285, `docs/design/value-history.md`). What is left:
+146. Value history (M285, M291, `docs/design/value-history.md`). What is left:
     - KVM: the engine makes the reads, but no KVM run was made. Blnk's plan needs 3 entry
       breakpoints and 1 for returns, and KVM has 3 debug registers.
     - hvx has no breakpoints; the side module of `docs/design/contracts.md` is designed only.
@@ -1929,8 +1946,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       runtime's seed. A struct as a map's value, and an interface's value of a type outside the
       11 read types, are not shown.
     - A call through a function value or an interface method names its return address only.
-    - A record is not a finding: the history marks changes, and no rule judges them. An
-      exploration does not use the records.
+    - Since M291 a `// hydo: keep` line judges a value along each key's history, and a broken
+      one is a `values` finding. A property compares one value with an earlier value of the
+      same value's name. A property over two names (the limit with its metadata entry), a
+      comparison with a constant, and an order of calls are not built. The property table
+      of `result.json` does not list the `keep` lines, and `hydo rules check` does not run
+      them. No run with a power cut judged `across boots`, which is tested on synthetic
+      records only. An exploration's plain problem text (`hydo report <explore dir>`) does not
+      quote the broken key's history; its `report.md` does.
     - The view's step comes from the transcript's `workload steps a..z` notes, so a run
       without faults reads `workload steps 0..29` for every stop.
     - A run with a power cut was not recorded; the boot number of the records is tested on
@@ -2641,6 +2664,12 @@ build machine, before 2026-10-13.
   and `f64` values, and a clause it cannot decide is `not judged`, never `held`. The harness
   builds under `#![forbid(unsafe_code)]` and keeps the `[lints]` tables. Skipped functions exit 3
   (`--allow-skipped`). `like b"..."` and `--show-inputs N` are new. Nothing recorded moved
+- M291 (tentative number): value properties. `// hydo: keep <name> [once set] [from <function>]
+  [to <function>] [across boots]` judges a recorded value along each key's history, and a broken
+  line is a `values` finding and a `VIOLATION` that names the line, not the key. On Blnk the run
+  without faults, where every business rule held, now fails, and the fixed build holds. In 30
+  blind schedules the line broke in 9 (first seed 4), the overdraft rule in 1 (seed 21). One
+  fingerprint with and without the plan. Nothing recorded moved
 
 ## Where to look
 

@@ -731,6 +731,43 @@ pub fn seen(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -> Vec<
     if let Some((svc, lines)) = run.diagnosis.as_ref().and_then(log_tail) {
         s.push(log_seen(&svc, lines, "from a replay"));
     }
+    // a broken value property (Milestone 291): the first key's history up to the break
+    for f in run
+        .findings
+        .iter()
+        .filter(|f| f.kind == hydo_results::kind::VALUES && f.status != "ok")
+    {
+        let property = f.id.strip_prefix("values ").unwrap_or(&f.id);
+        let quote: Vec<String> = match f.details.get("output") {
+            Some(serde_json::Value::Array(ls)) => ls
+                .iter()
+                .filter_map(|l| l.as_str().map(str::to_string))
+                .collect(),
+            _ => Vec::new(),
+        };
+        let n = f
+            .details
+            .get("broken_keys")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(1);
+        let of = f
+            .details
+            .get("keys")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(n);
+        s.push(Seen {
+            quote,
+            ..Seen::new(
+                "✘",
+                "m-bad",
+                format!(
+                    "Your value property `{property}` broke for {n} of the {of} keys it judged. \
+                     It says that {}",
+                    f.message
+                ),
+            )
+        });
+    }
     if run.verdict.kind == "ok" {
         s.push(Seen::new("✔", "m-ok", "Every check held".into()));
     } else {
@@ -851,6 +888,10 @@ pub fn lead_words(run: &Run, evs: &[TimelineEvent], what: &What, pr: &Project) -
         parts.push(format!("{after}every check held."));
     } else {
         parts.push(match what {
+            What::Check { id: Some(id), .. } if advice::is_values(what) => format!(
+                "{after}a call saw another value than your value property `{}` allows.",
+                id.strip_prefix("values ").unwrap_or(id)
+            ),
             What::Check { found: Some(f), .. } => format!("{after}{}.", found_phrase(f)),
             What::Check { .. } => format!("{after}your check failed."),
             What::NoRestart { service: Some(x) } => format!("{after}`{x}` did not start again."),
@@ -888,6 +929,9 @@ pub fn outcome_line(run: &Run, what: &What, recovered: bool) -> String {
         "At the end"
     };
     match what {
+        What::Check { .. } if advice::is_values(what) => {
+            "While it runs, a recorded value breaks your value property.".into()
+        }
         What::Check { found: Some(f), .. } => format!("{when}, your check finds `{f}`."),
         What::Check { .. } => format!("{when}, your check fails."),
         What::NoRestart { service: Some(x) } => {

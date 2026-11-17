@@ -769,18 +769,131 @@ fn timeline_html(id: &str, evs: &[TimelineEvent], more: &str) -> String {
 /// How many keys with a change the page shows.
 const MAX_VALUE_KEYS: usize = 12;
 
+/// One key's history as a table: its stops in the run's order up to `upto` (every stop without
+/// it), each changed value marked, and the stops of a break marked (Milestone 291).
+fn value_table(
+    k: &hydo_results::ValueKey,
+    upto: Option<usize>,
+    b: Option<&hydo_results::ValueBreak>,
+) -> String {
+    let mut s = String::new();
+    let mut head = match &k.key {
+        Some(key) => format!("Key {}", code(key)),
+        None => "Values without a key".into(),
+    };
+    if !k.copies.is_empty() {
+        let c: Vec<String> = k.copies.iter().map(|c| code(c)).collect();
+        head.push_str(&format!(" and its copy {}", c.join(", ")));
+    }
+    s.push_str(&format!("<p><b>{head}</b></p>\n"));
+    s.push_str("<div class=\"scroll\"><table>\n<thead><tr><th>Stop</th><th>Function</th><th>When</th><th>Called from</th>");
+    for n in &k.names {
+        s.push_str(&format!("<th>{}</th>", esc(n)));
+    }
+    s.push_str("</tr></thead>\n<tbody>\n");
+    for (i, p) in k.points.iter().enumerate() {
+        if upto.is_some_and(|u| i > u) {
+            break;
+        }
+        let mut fun = esc(crate::inspect::values::short(&p.function));
+        if let Some(own) = &p.key {
+            fun.push_str(&format!(" {}", code(own)));
+        }
+        if let Some(b) = b {
+            let mut marks = Vec::new();
+            if b.reference == i as u64 {
+                marks.push(badge("ok", "the reference"));
+            }
+            if b.changed == i as u64 {
+                marks.push(badge("warn", "first changed here"));
+            }
+            if b.point == i as u64 {
+                marks.push(badge("bad", "broke the property"));
+            }
+            if !marks.is_empty() {
+                fun.push_str(&format!(" {}", marks.join(" ")));
+            }
+        }
+        s.push_str(&format!(
+            "<tr><td class=\"n\">{}</td><td>{fun}</td><td>{}</td><td>{}</td>",
+            esc(p.point.as_deref().unwrap_or("")),
+            esc(&p.when),
+            esc(p
+                .caller
+                .as_deref()
+                .map(crate::inspect::values::short)
+                .unwrap_or(""))
+        ));
+        for n in &k.names {
+            let v = p.values.get(n).map(String::as_str).unwrap_or("");
+            match k
+                .changes
+                .iter()
+                .find(|c| c.point == i as u64 && &c.name == n)
+            {
+                Some(c) => s.push_str(&format!(
+                    "<td>{} <span class=\"muted\">(was {})</span></td>",
+                    badge("bad", v),
+                    esc(&c.from)
+                )),
+                None => s.push_str(&format!("<td>{}</td>", esc(v))),
+            }
+        }
+        s.push_str("</tr>\n");
+    }
+    s.push_str("</tbody></table></div>\n");
+    s
+}
+
 /// The value history (Milestone 285): each key whose recorded values changed, as a table of
-/// its stops, the changed value marked. None: the run has no record plan or no recorded call.
+/// its stops, the changed value marked. Since Milestone 291 it starts with each broken value
+/// property (`// hydo: keep`): the first key that broke it, its history up to the break. None:
+/// the run has no record plan or no recorded call.
 fn values_html(dir: &Path, run: &Run, shown: &str) -> Option<String> {
     let rec = Recorded::of(dir, run.clone(), RunFiles::default()).ok()?;
     let (_, plan) = crate::inspect::values::plan_of(&rec, None).ok()?;
-    let (calls, keys) = crate::inspect::values::keys(&rec, &plan).ok()?;
+    let (calls, keys, props) = crate::inspect::values::judged(&rec, &plan).ok()?;
     if calls == 0 {
         return None;
     }
+    let mut s = String::new();
+    for p in &props {
+        let first = keys.iter().find_map(|k| {
+            k.breaks
+                .iter()
+                .find(|b| b.property == p.property)
+                .map(|b| (k, b))
+        });
+        let Some((k, b)) = first else {
+            s.push_str(&format!(
+                "<p>{} The value property {} ({}) held: {} stops of {} keys were judged.</p>\n",
+                badge("ok", "held"),
+                code(&p.property),
+                esc(&format!("{}:{}", p.file, p.line)),
+                p.stops,
+                p.keys
+            ));
+            continue;
+        };
+        s.push_str(&format!(
+            "<p>{} The value property {} ({}) says that {}. {} of the {} keys it judged broke \
+             it. The first is below, up to the stop that broke it: {} was {} there, and {} at the \
+             reference.</p>\n",
+            badge("bad", "broken"),
+            code(&p.property),
+            esc(&format!("{}:{}", p.file, p.line)),
+            md(&p.words),
+            p.broken,
+            p.keys,
+            code(&b.name),
+            code(&b.value),
+            code(&b.expected)
+        ));
+        s.push_str(&value_table(k, Some(b.point as usize), Some(b)));
+    }
     let changed: Vec<&hydo_results::ValueKey> =
         keys.iter().filter(|k| !k.changes.is_empty()).collect();
-    let mut s = format!(
+    s.push_str(&format!(
         "<p>The program's <code>// hydo: record</code> lines recorded {calls} calls for {} keys. \
          {} of the keys had a value that changed between two of their stops; each such key is \
          below, with every stop of its history in the run's order. A changed value is marked. \
@@ -788,55 +901,9 @@ fn values_html(dir: &Path, run: &Run, shown: &str) -> Option<String> {
         keys.len(),
         changed.len(),
         esc(&quote(shown))
-    );
+    ));
     for k in changed.iter().take(MAX_VALUE_KEYS) {
-        let mut head = match &k.key {
-            Some(key) => format!("Key {}", code(key)),
-            None => "Values without a key".into(),
-        };
-        if !k.copies.is_empty() {
-            let c: Vec<String> = k.copies.iter().map(|c| code(c)).collect();
-            head.push_str(&format!(" and its copy {}", c.join(", ")));
-        }
-        s.push_str(&format!("<p><b>{head}</b></p>\n"));
-        s.push_str("<div class=\"scroll\"><table>\n<thead><tr><th>Stop</th><th>Function</th><th>When</th><th>Called from</th>");
-        for n in &k.names {
-            s.push_str(&format!("<th>{}</th>", esc(n)));
-        }
-        s.push_str("</tr></thead>\n<tbody>\n");
-        for (i, p) in k.points.iter().enumerate() {
-            let mut fun = esc(crate::inspect::values::short(&p.function));
-            if let Some(own) = &p.key {
-                fun.push_str(&format!(" {}", code(own)));
-            }
-            s.push_str(&format!(
-                "<tr><td class=\"n\">{}</td><td>{fun}</td><td>{}</td><td>{}</td>",
-                esc(p.point.as_deref().unwrap_or("")),
-                esc(&p.when),
-                esc(p
-                    .caller
-                    .as_deref()
-                    .map(crate::inspect::values::short)
-                    .unwrap_or(""))
-            ));
-            for n in &k.names {
-                let v = p.values.get(n).map(String::as_str).unwrap_or("");
-                match k
-                    .changes
-                    .iter()
-                    .find(|c| c.point == i as u64 && &c.name == n)
-                {
-                    Some(c) => s.push_str(&format!(
-                        "<td>{} <span class=\"muted\">(was {})</span></td>",
-                        badge("bad", v),
-                        esc(&c.from)
-                    )),
-                    None => s.push_str(&format!("<td>{}</td>", esc(v))),
-                }
-            }
-            s.push_str("</tr>\n");
-        }
-        s.push_str("</tbody></table></div>\n");
+        s.push_str(&value_table(k, None, None));
     }
     if changed.len() > MAX_VALUE_KEYS {
         s.push_str(&format!(

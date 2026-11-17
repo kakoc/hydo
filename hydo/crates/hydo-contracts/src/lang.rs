@@ -194,6 +194,28 @@ pub struct SrcRecord {
     pub line: u32,
 }
 
+/// A property of a recorded value along a key's history (Milestone 291,
+/// docs/design/value-history.md): `keep <name> [once set] [from <function>] [to <function>]
+/// [across boots]`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SrcKeep {
+    /// The recorded value's name (a `record` line's `as` name, or its expression).
+    pub name: String,
+    /// `once set`: once a stop recorded the value, no later stop records it absent. Without it,
+    /// every judged stop records the value of its reference stop.
+    pub once_set: bool,
+    /// `from <function>`: the reference is the last stop of this function before the judged one
+    /// (without it: the key's first stop that recorded the value).
+    pub from: Option<String>,
+    /// `to <function>`: only this function's stops are judged (without it: every stop).
+    pub to: Option<String>,
+    /// `across boots`: a reference may be in an earlier boot (without it, only in the same boot).
+    pub across_boots: bool,
+    /// The line as written after `// hydo:`.
+    pub text: String,
+    pub line: u32,
+}
+
 /// The contract of one function in a source file.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SrcContract {
@@ -208,6 +230,8 @@ pub struct SrcContract {
     pub with: Vec<(String, String)>,
     /// The values the function records for the value history (Milestone 285).
     pub records: Vec<SrcRecord>,
+    /// The properties of recorded values declared next to the function (Milestone 291).
+    pub keeps: Vec<SrcKeep>,
 }
 
 /// A mistake in a contract, with its line.
@@ -299,6 +323,7 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
         let mut inputs = Vec::new();
         let mut with = Vec::new();
         let mut records: Vec<SrcRecord> = Vec::new();
+        let mut keeps: Vec<SrcKeep> = Vec::new();
         while i < lines.len() {
             let l = lines[i].trim_start();
             if let Some(t) = contract_text(l) {
@@ -313,6 +338,7 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
                         })
                     }
                     Ok(Line::Record(r)) => records.push(r),
+                    Ok(Line::Keep(k)) => keeps.push(k),
                     Err(e) => errs.push(e),
                 }
             } else if !(l.starts_with("//") || l.starts_with("#[") || l.starts_with("#![")) {
@@ -328,6 +354,7 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
                 inputs,
                 with,
                 records,
+                keeps,
             }),
             None => errs.push(LangError {
                 line: first as u32 + 1,
@@ -346,6 +373,50 @@ enum Line {
     Input(SrcInput),
     With(Vec<(String, String)>),
     Record(SrcRecord),
+    Keep(SrcKeep),
+}
+
+/// `keep <name> [once set] [from <function>] [to <function>] [across boots]` (Milestone 291).
+fn parse_keep(t: &str, line: u32) -> Result<SrcKeep, String> {
+    let usage = "write `keep <name> [once set] [from <function>] [to <function>] [across boots]`";
+    let words: Vec<&str> = t.split_whitespace().collect();
+    let Some(name) = words.first() else {
+        return Err(format!("`keep` names no value: {usage}"));
+    };
+    if ["once", "from", "to", "across"].contains(name) {
+        return Err(format!("`keep {}` names no value first: {usage}", t.trim()));
+    }
+    let mut k = SrcKeep {
+        name: name.to_string(),
+        once_set: false,
+        from: None,
+        to: None,
+        across_boots: false,
+        text: format!("keep {}", words.join(" ")),
+        line,
+    };
+    let mut i = 1;
+    while i < words.len() {
+        let next = words.get(i + 1).copied();
+        match (words[i], next) {
+            ("once", Some("set")) if !k.once_set => k.once_set = true,
+            ("across", Some("boots")) if !k.across_boots => k.across_boots = true,
+            ("from", Some(f)) if k.from.is_none() && !is_keep_word(f) => k.from = Some(f.into()),
+            ("to", Some(f)) if k.to.is_none() && !is_keep_word(f) => k.to = Some(f.into()),
+            (w, _) => {
+                return Err(format!(
+                    "`keep {}`: `{w}` is not understood here; {usage}, each part once",
+                    t.trim()
+                ))
+            }
+        }
+        i += 2;
+    }
+    Ok(k)
+}
+
+fn is_keep_word(w: &str) -> bool {
+    ["once", "from", "to", "across"].contains(&w)
 }
 
 /// `record <expr> [as <name>] [at entry|at return]` and `key <expr>` (Milestone 285).
@@ -461,10 +532,11 @@ fn parse_line(t: &str, line: u32) -> Result<Line, LangError> {
         "record" | "key" => parse_record(rest, line, kw == "key")
             .map(Line::Record)
             .map_err(err),
+        "keep" => parse_keep(rest, line).map(Line::Keep).map_err(err),
         _ => Err(err(format!(
             "`// hydo: {kw}`: a contract line is `requires <expr>`, `ensures <expr>`, \
              `input <path> ...`, `with <type parameter> = <type>`, `record <expr> [as <name>] \
-             [at entry|at return]` or `key <expr>`"
+             [at entry|at return]`, `key <expr>` or `keep <name> ...`"
         ))),
     }
 }

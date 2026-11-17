@@ -21,5 +21,6 @@ mod refusals;
 mod route_errors;
 mod storage_faults;
 mod upgrades;
+mod value_properties;
 mod walks;
 mod workload_pauses;

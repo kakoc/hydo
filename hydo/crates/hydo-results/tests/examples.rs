@@ -291,7 +291,13 @@ fn every_example_parses_and_is_valid() {
     ] {
         assert!(seen.types.contains(t), "no example has a {t} record");
     }
-    for k in ["invariant", "assertion", "history-check", "error-log"] {
+    for k in [
+        "invariant",
+        "assertion",
+        "history-check",
+        "error-log",
+        "values",
+    ] {
         assert!(seen.kinds.contains(k), "no example has a {k} finding");
     }
     for r in ["first", "rerun", "shrink", "minimal"] {

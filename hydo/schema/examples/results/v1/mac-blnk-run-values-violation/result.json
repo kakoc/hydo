@@ -1,0 +1,704 @@
+{
+  "v": 1,
+  "type": "run",
+  "hydo_version": "0.3.4",
+  "epoch": 4,
+  "schedule": "disk=none | run",
+  "image": {
+    "path": ".hydo/explore-ob-blnk-values-arm64.cpio.gz",
+    "sha256": "62d83259c5c99f237dcb1c81e44333f85a693d4364857124d5d34431a2a40050",
+    "epoch": 4,
+    "kernel": "Image-explore-netns-cg (Linux 6.6.35, sha256 603633696d91eea958a2a5818e4c54413a81befa78bc339b6d867b89113ef6a9)",
+    "built_by": {
+      "version": "0.3.4",
+      "commit": "74430ea2a2f4f45dcfad1a430d6732244e737d14"
+    },
+    "manifest_sha256": "fd49f164c7c21fd022b238f93425d5fbd8fa432ca2bce15de6e38545a1779772",
+    "services": [
+      {
+        "service": "postgres",
+        "image": "images/postgres-16-alpine-arm64-oci",
+        "config_digest": "sha256:dc638cdfb3aa32b6ff16a84de36d866b2c9f1089da8b6f23b060f874d3e1e8ce"
+      },
+      {
+        "service": "redis",
+        "image": "images/redis-7.2.4-arm64-oci",
+        "config_digest": "sha256:0b4893f528c4ecef3b9ba9f0cb3921c25d7e6088317ad3af6d1e4dc01a6de7cc"
+      }
+    ]
+  },
+  "engine": {
+    "backend": "hvm",
+    "args": [
+      "--ram-mib",
+      "1536"
+    ],
+    "ram_mib": 1536,
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "verdict": {
+    "kind": "violation",
+    "text": "VIOLATION [values keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction] the value changed",
+    "guest": "HYDO-ORACLE: OK invariants=13 held (compose.commands: started=58 ok=58 failed=0 timeout=0 violation=0 killed=0 skipped=0)"
+  },
+  "fingerprints": {
+    "fp": "f52b32d3577045db",
+    "wfp": "30a906fd08fd86e3",
+    "ctl": "dec820ba3ac00fdd"
+  },
+  "findings": [
+    {
+      "kind": "values",
+      "id": "values keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction",
+      "status": "violation",
+      "message": "`overdraft_limit` at model.canProcessTransaction is the value blnk.setTransactionMetadata recorded last for the same key",
+      "details": {
+        "property": "keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction",
+        "file": "model/model.go",
+        "line": 157,
+        "name": "overdraft_limit",
+        "keys": 66,
+        "stops": 77,
+        "broken_keys": 3,
+        "first": {
+          "key": "c33",
+          "value": "0.0",
+          "expected": "50.0",
+          "stop": {
+            "function": "github.com/blnkfinance/blnk/model.canProcessTransaction",
+            "when": "entry",
+            "call": 43,
+            "caller": "github.com/blnkfinance/blnk/model.UpdateBalances",
+            "key": "c33_q",
+            "at": 637141,
+            "boot": 0
+          },
+          "reference": {
+            "function": "github.com/blnkfinance/blnk.setTransactionMetadata",
+            "when": "return",
+            "call": 76,
+            "caller": "github.com/blnkfinance/blnk.(*Blnk).prepareTransactionForQueue",
+            "key": "c33",
+            "at": 627723,
+            "boot": 0
+          },
+          "changed": {
+            "function": "github.com/blnkfinance/blnk.createQueueCopy",
+            "when": "entry",
+            "call": 48,
+            "caller": "github.com/blnkfinance/blnk.(*Blnk).buildQueuedCoalescingBatchForScope",
+            "key": "c33",
+            "at": 636048,
+            "boot": 0
+          }
+        },
+        "output": [
+          "key \"c33\" (and c33_q): the stops that recorded overdraft_limit up to the break",
+          "  blnk.setTransactionMetadata entry, called from blnk.(*Blnk).QueueTransaction: overdraft_limit = 50.0",
+          "  blnk.setTransactionMetadata return, called from blnk.(*Blnk).QueueTransaction: overdraft_limit = 50.0",
+          "  blnk.setTransactionMetadata entry, called from blnk.(*Blnk).prepareTransactionForQueue: overdraft_limit = 50.0",
+          "  blnk.setTransactionMetadata return, called from blnk.(*Blnk).prepareTransactionForQueue: overdraft_limit = 50.0   <- the reference",
+          "  blnk.createQueueCopy entry, called from blnk.(*Blnk).processSingleTransaction: overdraft_limit = 50.0",
+          "  blnk.createQueueCopy entry, called from blnk.(*Blnk).buildQueuedCoalescingBatchForScope: overdraft_limit = 0.0   <- first changed here",
+          "  model.canProcessTransaction entry [c33_q], called from model.UpdateBalances: overdraft_limit = 0.0   <- BROKEN"
+        ]
+      }
+    },
+    {
+      "kind": "error-log",
+      "id": "6fd363c8e6f1",
+      "status": "known",
+      "message": "[server] time='<time>' level=error msg='API error' details='sql: no rows in result set'",
+      "details": {
+        "service": "server",
+        "source": "log",
+        "template": "time='<time>' level=error msg='API error' details='sql: no rows in result set'",
+        "example": "time='2026-01-01T00:00:04Z' level=error msg='API error' details='sql: no rows in result set'",
+        "lines": 62,
+        "at": [
+          "s",
+          "0"
+        ],
+        "known_entry": 0,
+        "reason": "the client polls GET /transactions/reference/<ref> until the worker has written the outcome; Blnk logs each 404 on the way as an API error"
+      }
+    },
+    {
+      "kind": "error-log",
+      "id": "47e420bb4ae7",
+      "status": "known",
+      "message": "[worker] time='<time>' level=error msg='failed to apply transaction to balances' error='insufficient funds in source balance'",
+      "details": {
+        "service": "worker",
+        "source": "log",
+        "template": "time='<time>' level=error msg='failed to apply transaction to balances' error='insufficient funds in source balance'",
+        "example": "time='2026-01-01T00:00:07Z' level=error msg='failed to apply transaction to balances' error='insufficient funds in source balance'",
+        "lines": 20,
+        "at": [
+          "0"
+        ],
+        "known_entry": 2,
+        "reason": "a refusal the workload provokes on purpose: a shop's spend or a transfer from the empty account without funds, or a draw beyond the credit line's overdraft limit"
+      }
+    },
+    {
+      "kind": "error-log",
+      "id": "ab1857f1953a",
+      "status": "known",
+      "message": "[worker] time='<time>' level=error msg='queued atomic bulk transaction rejected' batch_id=bulk_<uuid> error='transaction rejected'",
+      "details": {
+        "service": "worker",
+        "source": "log",
+        "template": "time='<time>' level=error msg='queued atomic bulk transaction rejected' batch_id=bulk_<uuid> error='transaction rejected'",
+        "example": "time='2026-01-01T00:00:07Z' level=error msg='queued atomic bulk transaction rejected' batch_id=bulk_2e9d6f94-df73-4a3a-87f7-c22bbf505cb4 error='transaction rejected'",
+        "lines": 2,
+        "at": [
+          "0"
+        ],
+        "known_entry": 4,
+        "reason": "an atomic bulk whose second transfer comes from the empty account is rejected as a whole, on purpose"
+      }
+    },
+    {
+      "kind": "error-log",
+      "id": "c7e493f78532",
+      "status": "known",
+      "message": "[worker] time='<time>' level=error msg='failed to apply transaction to balances' error='transaction exceeds overdraft limit'",
+      "details": {
+        "service": "worker",
+        "source": "log",
+        "template": "time='<time>' level=error msg='failed to apply transaction to balances' error='transaction exceeds overdraft limit'",
+        "example": "time='2026-01-01T00:00:17Z' level=error msg='failed to apply transaction to balances' error='transaction exceeds overdraft limit'",
+        "lines": 1,
+        "at": [
+          "0"
+        ],
+        "known_entry": 3,
+        "reason": "a refusal the workload provokes on purpose: a shop's spend or a transfer from the empty account without funds, or a draw beyond the credit line's overdraft limit"
+      }
+    }
+  ],
+  "properties": {
+    "runs": 1,
+    "setup_complete_runs": 0,
+    "violations": 0,
+    "properties": [
+      {
+        "id": "fault.paused",
+        "assertion": "reachable",
+        "message": "a service was paused (SIGSTOP)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.pause_mid_request",
+        "assertion": "sometimes",
+        "message": "a pause began while a client request was in flight",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_back",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped backwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_fwd",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped forwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_req",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the req direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_resp",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the resp direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "compose.parallel_driver_bulk.succeeded",
+        "assertion": "sometimes",
+        "message": "parallel_driver_bulk exited 0 at least once",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_bulk.no_violation",
+        "assertion": "always_or_unreachable",
+        "message": "parallel_driver_bulk never reports a violation (exit 100)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_deposit.succeeded",
+        "assertion": "sometimes",
+        "message": "parallel_driver_deposit exited 0 at least once",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_deposit.no_violation",
+        "assertion": "always_or_unreachable",
+        "message": "parallel_driver_deposit never reports a violation (exit 100)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_draw.succeeded",
+        "assertion": "sometimes",
+        "message": "parallel_driver_draw exited 0 at least once",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_draw.no_violation",
+        "assertion": "always_or_unreachable",
+        "message": "parallel_driver_draw never reports a violation (exit 100)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_hold.succeeded",
+        "assertion": "sometimes",
+        "message": "parallel_driver_hold exited 0 at least once",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_hold.no_violation",
+        "assertion": "always_or_unreachable",
+        "message": "parallel_driver_hold never reports a violation (exit 100)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_overdraw.succeeded",
+        "assertion": "sometimes",
+        "message": "parallel_driver_overdraw exited 0 at least once",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_overdraw.no_violation",
+        "assertion": "always_or_unreachable",
+        "message": "parallel_driver_overdraw never reports a violation (exit 100)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_repay.succeeded",
+        "assertion": "sometimes",
+        "message": "parallel_driver_repay exited 0 at least once",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_repay.no_violation",
+        "assertion": "always_or_unreachable",
+        "message": "parallel_driver_repay never reports a violation (exit 100)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_spend.succeeded",
+        "assertion": "sometimes",
+        "message": "parallel_driver_spend exited 0 at least once",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_spend.no_violation",
+        "assertion": "always_or_unreachable",
+        "message": "parallel_driver_spend never reports a violation (exit 100)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_transfer.succeeded",
+        "assertion": "sometimes",
+        "message": "parallel_driver_transfer exited 0 at least once",
+        "declared": true,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.parallel_driver_transfer.no_violation",
+        "assertion": "always_or_unreachable",
+        "message": "parallel_driver_transfer never reports a violation (exit 100)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "no_overdraft",
+        "assertion": "always",
+        "message": "overdraft rules hold: users, shops, the merchant and the empty account never go below zero, also counting what they hold; a credit line never below its limit o",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "compose.commands",
+        "assertion": "always",
+        "message": "no composed command reported a violation (exit status 100)",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "eventually_1_settle",
+        "assertion": "always",
+        "message": "after the faults stop, eventually_1_settle succeeds",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "eventually_2_settle",
+        "assertion": "always",
+        "message": "after the faults stop, eventually_2_settle succeeds",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "balance_is_sum",
+        "assertion": "always",
+        "message": "a balance is the sum of its applied transactions: its credit is what was applied to it, its debit what was applied from it",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "balanced",
+        "assertion": "always",
+        "message": "every transaction balances: per currency the balances sum to zero, credits equal debits, held amounts sum to zero, and a transaction moves one currency between",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "bulk_atomic",
+        "assertion": "always",
+        "message": "an atomic bulk applies whole or not at all: both of its transfers stay applied, or neither does (a rolled-back transfer is refunded)",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "business_result",
+        "assertion": "always",
+        "message": "faults do not change the business result: the operations the client saw determine every balance, in PostgreSQL and in the API",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "holds",
+        "assertion": "always",
+        "message": "a hold never commits more than it held, is voided at most once, and its void releases exactly what was still held",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "inflight_is_sum",
+        "assertion": "always",
+        "message": "a balance's held amounts are the sum of its open holds: what each INFLIGHT hold held, less what was committed and voided from it",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "no_overdraft_after",
+        "assertion": "always",
+        "message": "after the faults: users, shops, the merchant and the empty account are not below zero, also counting what they hold; a credit line is not below its limit of 50",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "queued_once",
+        "assertion": "always",
+        "message": "every queued transaction ends exactly once: one copy that is APPLIED, INFLIGHT or REJECTED, never none and never two",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      },
+      {
+        "id": "reference_once",
+        "assertion": "always",
+        "message": "a transaction with a reference is recorded once: no client operation is saved, applied or rejected twice, also when the client retried after a lost answer",
+        "declared": false,
+        "passes": 1,
+        "fails": 0,
+        "runs_passed": 1,
+        "runs_failed": 0,
+        "verdict": "PASS",
+        "status": "ok"
+      }
+    ]
+  },
+  "error_logs": {
+    "known_file": "known-errors.yaml",
+    "known_sha256": "47c4cd8de5e4b031465407f2b242effddf3b14bd5f3354e37d14759f1e2ca4d0",
+    "unknown": "report",
+    "steps": 30,
+    "boots": [
+      {
+        "boot": "first",
+        "steps": 30,
+        "lines": 85,
+        "kinds": 4,
+        "shown": 4
+      }
+    ],
+    "truncated": false
+  },
+  "secs": 7.3,
+  "result_line": "RESULT one fp=f52b32d3577045db wfp=30a906fd08fd86e3 secs=7.3 stops=16753 typed=536 inh=84ebeac2f956a7a2 ctl=dec820ba3ac00fdd verdict=HYDO-ORACLE: OK invariants=13 held (compose.commands: started=58 ok=58 failed=0 timeout=0 violation=0 killed=0 skipped=0)",
+  "artifacts": {
+    "consoles": [
+      "one.log"
+    ],
+    "engine_log": "engine.log"
+  },
+  "control": [
+    {
+      "conversation": "boot",
+      "controller": "schedule",
+      "cadence": "rb=64",
+      "hash": "1dcb75e3249afbea",
+      "sends": 58,
+      "stops": 95,
+      "transcript": "control.boot.jsonl"
+    },
+    {
+      "conversation": "run",
+      "controller": "schedule",
+      "cadence": "rb=64",
+      "hash": "dec820ba3ac00fdd",
+      "sends": 478,
+      "stops": 592,
+      "transcript": "control.jsonl"
+    }
+  ],
+  "diagnosis": {
+    "summary": "a check failed: VIOLATION [values keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction] the value changed. No service exited and every readiness check passed; look at the state behind it with hydo inspect",
+    "failure": "violation",
+    "verdict_at": {
+      "point": "run:16753",
+      "conversation": "run",
+      "stop": 16753,
+      "at": 1072064
+    },
+    "exits": [
+      {
+        "handle": "compose-step:30",
+        "command": "/bin/busybox sleep 895",
+        "status": 137,
+        "signal": 9,
+        "signal_name": "KILL",
+        "signal_by_hydo": true,
+        "at": {
+          "point": "run:13896",
+          "conversation": "run",
+          "stop": 13896,
+          "at": 889280
+        }
+      },
+      {
+        "handle": "compose-drain",
+        "command": "/bin/busybox sleep 90",
+        "status": 137,
+        "signal": 9,
+        "signal_name": "KILL",
+        "signal_by_hydo": true,
+        "at": {
+          "point": "run:13896",
+          "conversation": "run",
+          "stop": 13896,
+          "at": 889280
+        }
+      }
+    ],
+    "likely": [],
+    "kernel": [],
+    "evidence_status": "not-collected",
+    "evidence": [],
+    "next": [
+      "hydo inspect diagnose hydo-out/run --evidence",
+      "hydo inspect start hydo-out/run --at end",
+      "hydo inspect events hydo-out/run --kind exit,probe,fault,verdict"
+    ]
+  }
+}

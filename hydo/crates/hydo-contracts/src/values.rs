@@ -7,7 +7,7 @@
 //! after the run.
 
 use crate::eval::{eval, float_text, Undecided, V};
-use crate::plan::{Expr, Function, Plan, Program, Record, Show, Ty};
+use crate::plan::{Expr, Function, Keep, Plan, Program, Record, Show, Ty};
 use std::collections::BTreeMap;
 
 /// A recorded value as the history shows it.
@@ -388,6 +388,264 @@ pub fn histories(points: Vec<Point>) -> Vec<History> {
             }
         }
         out.push(h);
+    }
+    out
+}
+
+// ---------------------------------------------------------------- the properties (M291)
+
+/// A function's name without its package path (`blnk.setTransactionMetadata`).
+pub fn short(name: &str) -> &str {
+    name.rsplit('/').next().unwrap_or(name)
+}
+
+/// A value that is not there: a key not in its map, a nil interface or a nil pointer.
+pub fn is_absent(v: &Shown) -> bool {
+    matches!(v, Shown::Absent | Shown::Nil | Shown::Ptr(0))
+}
+
+/// Where a `keep` property broke in one key's history: the stop judged, its reference, and the
+/// first stop after the reference whose value broke the property (the first changing call).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Break {
+    /// The index of the history in the run's histories.
+    pub history: usize,
+    /// The index of the judged stop in the history's points.
+    pub point: usize,
+    /// The index of the reference stop.
+    pub reference: usize,
+    /// The index of the first stop after the reference with a value that breaks the property.
+    pub changed: usize,
+    /// The judged stop's value, and the reference's.
+    pub value: String,
+    pub expected: String,
+}
+
+/// A `keep` property judged on a run's histories.
+#[derive(Clone, Debug, PartialEq)]
+pub struct KeepOutcome {
+    pub keep: Keep,
+    /// Keys with at least one judged stop.
+    pub keys: u64,
+    /// Stops judged (a stop with its value and a reference).
+    pub stops: u64,
+    /// The first break of each key that broke the property, in the order of the histories.
+    pub breaks: Vec<Break>,
+}
+
+/// What a `keep` property says, in one sentence without a full stop.
+pub fn keep_words(k: &Keep) -> String {
+    let at = |f: &Option<String>, none: &str| match f {
+        Some(f) => format!("at {}", short(f)),
+        None => none.to_string(),
+    };
+    let boots = if k.across_boots {
+        ", also across a power cut or a reboot"
+    } else {
+        ""
+    };
+    if k.once_set {
+        format!(
+            "once `{}` is recorded {} for a key, it is never absent {} for that key{boots}",
+            k.name,
+            at(&k.from, "anywhere"),
+            at(&k.to, "later")
+        )
+    } else {
+        match &k.from {
+            Some(f) => format!(
+                "`{}` {} is the value {} recorded last for the same key{boots}",
+                k.name,
+                at(&k.to, "at every later stop"),
+                short(f)
+            ),
+            None => format!(
+                "`{}` {} is the value first recorded for the same key{boots}",
+                k.name,
+                at(&k.to, "at every stop")
+            ),
+        }
+    }
+}
+
+/// What a break found, in words without numbers or keys, so that every break of one property
+/// has one verdict (and one signature for the shrinker).
+pub fn break_words(k: &Keep) -> &'static str {
+    if k.once_set {
+        "the value was absent after it was set"
+    } else {
+        "the value changed"
+    }
+}
+
+/// Judge every `keep` property of the plan on a run's histories (Milestone 291). A stop is
+/// judged when it is a stop of the property's `to` function (any, without `to`) that recorded
+/// the value readably and has a reference: the last earlier stop of `from` that recorded it (the
+/// key's first such stop, without `from`; for `once set`, the last earlier stop where it was
+/// present). The reference is in the same boot unless the property says `across boots`. An
+/// unreadable value is neither judged nor a reference.
+pub fn judge_keeps(plan: &Plan, hs: &[History]) -> Vec<KeepOutcome> {
+    let mut out = Vec::new();
+    for k in plan.programs.iter().flat_map(|p| &p.keeps) {
+        let mut o = KeepOutcome {
+            keep: k.clone(),
+            keys: 0,
+            stops: 0,
+            breaks: Vec::new(),
+        };
+        for (hi, h) in hs.iter().enumerate() {
+            let pts = &h.points;
+            fn value_of<'p>(p: &'p Point, name: &str) -> Option<&'p Shown> {
+                p.values
+                    .iter()
+                    .find(|(n, _)| n == name)
+                    .map(|(_, v)| v)
+                    .filter(|v| !matches!(v, Shown::Unreadable(_)))
+            }
+            let val = |i: usize| value_of(&pts[i], &k.name);
+            let at =
+                |i: usize, f: &Option<String>| f.as_ref().is_none_or(|f| pts[i].function == *f);
+            let mut judged = false;
+            let mut broke = false;
+            for i in 0..pts.len() {
+                let Some(v) = val(i) else { continue };
+                if !at(i, &k.to) {
+                    continue;
+                }
+                let boot = |j: usize| k.across_boots || pts[j].boot == pts[i].boot;
+                let reference = if k.once_set {
+                    (0..i).rev().find(|&j| {
+                        boot(j) && at(j, &k.from) && val(j).is_some_and(|w| !is_absent(w))
+                    })
+                } else if k.from.is_some() {
+                    (0..i)
+                        .rev()
+                        .find(|&j| boot(j) && at(j, &k.from) && val(j).is_some())
+                } else {
+                    (0..i).find(|&j| boot(j) && val(j).is_some())
+                };
+                let Some(r) = reference else { continue };
+                let Some(rv) = val(r) else { continue };
+                judged = true;
+                o.stops += 1;
+                let expected = rv.to_string();
+                let bad = |w: &Shown| {
+                    if k.once_set {
+                        is_absent(w)
+                    } else {
+                        w.to_string() != expected
+                    }
+                };
+                if broke || !bad(v) {
+                    continue;
+                }
+                broke = true;
+                let changed = (r + 1..=i)
+                    .find(|&m| boot(m) && val(m).is_some_and(bad))
+                    .unwrap_or(i);
+                o.breaks.push(Break {
+                    history: hi,
+                    point: i,
+                    reference: r,
+                    changed,
+                    value: v.to_string(),
+                    expected,
+                });
+            }
+            if judged {
+                o.keys += 1;
+            }
+        }
+        out.push(o);
+    }
+    out
+}
+
+/// One stop of a history as a line for a finding's output: the function, the call's own key
+/// when it is a copy's (not the history's `key`), the caller, the boot after the first, and the
+/// property's value.
+pub fn stop_words(p: &Point, name: &str, key: Option<&str>) -> String {
+    let mut s = format!("{} {}", short(&p.function), p.when);
+    if let Some(own) = p.key.as_deref().filter(|own| Some(*own) != key) {
+        s.push_str(&format!(" [{own}]"));
+    }
+    if let Some(c) = &p.caller {
+        s.push_str(&format!(", called from {}", short(c)));
+    }
+    if p.boot > 0 {
+        s.push_str(&format!(", boot {}", p.boot));
+    }
+    if let Some((_, v)) = p.values.iter().find(|(n, _)| n == name) {
+        s.push_str(&format!(": {name} = {v}"));
+    }
+    s
+}
+
+/// How many stops of a key's history a finding's output shows at most.
+pub const BREAK_LINES: usize = 16;
+
+/// The key's history up to a break, as lines for a finding's output: every stop that recorded
+/// the property's value, from the key's first to the judged stop, with the reference, the first
+/// changing stop and the judged stop marked. A longer history keeps its first and last stops
+/// and the marked ones.
+pub fn break_lines(h: &History, b: &Break, k: &Keep) -> Vec<String> {
+    let idx: Vec<usize> = (0..=b.point)
+        .filter(|&i| h.points[i].values.iter().any(|(n, _)| *n == k.name))
+        .collect();
+    let shown: Vec<usize> = if idx.len() > BREAK_LINES {
+        let must = [b.reference, b.changed, b.point];
+        let head = BREAK_LINES / 2;
+        let tail = idx.len() - (BREAK_LINES - head);
+        idx.iter()
+            .enumerate()
+            .filter(|(n, i)| *n < head || *n >= tail || must.contains(i))
+            .map(|(_, i)| *i)
+            .collect()
+    } else {
+        idx.clone()
+    };
+    let mut out = vec![format!(
+        "key {:?}{}: the stops that recorded {} up to the break",
+        h.key.clone().unwrap_or_default(),
+        if h.copies.is_empty() {
+            String::new()
+        } else {
+            format!(" (and {})", h.copies.join(", "))
+        },
+        k.name
+    )];
+    let mut last: Option<usize> = None;
+    for &i in &shown {
+        if let Some(l) = last {
+            let gap = idx.iter().filter(|&&x| x > l && x < i).count();
+            if gap > 0 {
+                out.push(format!("  ... {gap} more stops"));
+            }
+        }
+        last = Some(i);
+        let mut marks = Vec::new();
+        if i == b.reference {
+            marks.push("the reference");
+        }
+        if i == b.changed && i != b.point {
+            marks.push("first changed here");
+        }
+        if i == b.point {
+            marks.push(if b.changed == b.point {
+                "BROKEN, first changed here"
+            } else {
+                "BROKEN"
+            });
+        }
+        let m = if marks.is_empty() {
+            String::new()
+        } else {
+            format!("   <- {}", marks.join(", "))
+        };
+        out.push(format!(
+            "  {}{m}",
+            stop_words(&h.points[i], &k.name, h.key.as_deref())
+        ));
     }
     out
 }

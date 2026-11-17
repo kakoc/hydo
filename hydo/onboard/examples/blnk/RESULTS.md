@@ -56,6 +56,10 @@ Error logs as findings (`errors: true`) ran beside both kinds, without a rule.
   at three functions showed the limit at 50.0 in the API, absent from the metadata that Blnk
   saves, and 0.0 in the worker's copy of the two draws that went past the limit. The runs are in
   the section "The overdraft limit's history" (Milestone 285).
+- **Can the history fail a run by itself?** Yes. One `keep` line says that the decision sees the
+  limit the API set (Milestone 291). It fails the run without faults, where every business rule
+  held, and the fixed build passes it. In 30 blind schedules it broke in 9, first at seed 4; the
+  overdraft rule broke in 1, at seed 21.
 - **What did hydo lack?** Four things, which the section "What hydo lacked" lists.
 
 ## The version
@@ -735,6 +739,73 @@ regression stopped at 98 entries and 44 returns: 142 breakpoint stops, each with
 step. The run took 5.5 s and 5.1 s of the engine's time with the plan, and 5.2 s and 5.5 s
 without it, with 10,288 stops of the run in each: the record's cost is below the spread of the
 runs. The records file is 59 KB.
+
+### The limit as a property that a run can break
+
+Milestone 291 made the history judge by itself. `values.patch` now has one more comment, in
+place of a blank comment line, so every line number and the program's bytes stay the same
+(`blnk-values-arm64` is `e6f51ac3…` as before):
+
+```go
+// hydo: keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction
+```
+
+It says that the decision sees, for each transaction, the limit that the API set last. A run
+whose decision sees another limit fails with a finding of the kind `values`
+(`docs/design/value-history.md`, "Value properties"). The runs used the Mac engine with this
+tree's hydo, on the epoch-4 image `62d83259…` and its build with the fixes (`7580be81…`):
+
+| image, schedule | with the plan | without it | the rules | the value property |
+|---|---|---|---|---|
+| buggy, `overdraft-limit-concurrent-draws` | `ddb6f1730f6854ea` twice | `ddb6f1730f6854ea` twice | `VIOLATION [no_overdraft]` | broken for 2 of 22 keys, 24 stops judged |
+| buggy, `disk=none \| run` | `f52b32d3577045db` twice | `f52b32d3577045db` twice | OK | broken for 3 of 66 keys, 77 stops judged |
+| fixed, `overdraft-limit-concurrent-draws` | `0d634838208d69f3` | `0d634838208d69f3` | OK | held, 25 stops of 22 keys |
+| fixed, `disk=none \| run` | `498a8cf0e45aa1d7` | not run | OK | held, 81 stops of 66 keys |
+
+The two runs with the plan of each buggy schedule wrote the same records (`eaf3d5fb…` and
+`d59ee3d0…`). The run without faults is the point of the milestone. Every business rule held in
+it, and its verdict is now this:
+
+```text
+hydo: value property broken: keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction (model/model.go:157) for 3 of 66 keys (77 stops judged)
+hydo:   key "c33" (and c33_q): the stops that recorded overdraft_limit up to the break
+hydo:     blnk.setTransactionMetadata entry, called from blnk.(*Blnk).QueueTransaction: overdraft_limit = 50.0
+hydo:     blnk.setTransactionMetadata return, called from blnk.(*Blnk).QueueTransaction: overdraft_limit = 50.0
+hydo:     blnk.setTransactionMetadata entry, called from blnk.(*Blnk).prepareTransactionForQueue: overdraft_limit = 50.0
+hydo:     blnk.setTransactionMetadata return, called from blnk.(*Blnk).prepareTransactionForQueue: overdraft_limit = 50.0   <- the reference
+hydo:     blnk.createQueueCopy entry, called from blnk.(*Blnk).processSingleTransaction: overdraft_limit = 50.0
+hydo:     blnk.createQueueCopy entry, called from blnk.(*Blnk).buildQueuedCoalescingBatchForScope: overdraft_limit = 0.0   <- first changed here
+hydo:     model.canProcessTransaction entry [c33_q], called from model.UpdateBalances: overdraft_limit = 0.0   <- BROKEN
+hydo: VERDICT VIOLATION [values keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction] the value changed
+```
+
+The finding names the first changing call: the worker's coalesced copy, made in
+`buildQueuedCoalescingBatchForScope`. The three keys `c33`, `c54` and `c57` reached the decision
+with the limit 0.0, which Blnk reads as an unlimited overdraft. Their credit lines did not fall below
+-50.00, by chance, so the rule over the balances held. On the regression the property broke for
+`c27` and `c29`, the rule's two rows. On the fixed build it held at every judged stop.
+
+A blind exploration of the buggy build compared the property with the overdraft rule. It ran
+`hydo explore --strategy random --workers 2` on the Mac engine, seeds 1 to 10 with shrinking and
+seeds 11 to 30 with `--no-shrink`. The rules and the property ran in every schedule:
+
+| | the value property | the rule `no_overdraft` |
+|---|---|---|
+| schedules that broke it, of 30 | 9: seeds 4, 13, 15, 16, 18, 21, 25, 26, 30 | 1: seed 21 |
+| the first seed that broke it | 4 | 21 |
+
+In seed 21 both broke. In seed 18 the property broke beside the generic rule `business_result`,
+which a lost commit of a hold broke (finding 3). The property's failure of seed 4 shrank in 89
+runs to a schedule without a fault, with only the draw and repay commands:
+
+```text
+disk=none dseed=6e73e372e2338aca | run W=:p1,r200,cparallel_driver_repay+parallel_driver_draw,3.2.0.1814685581,7.4.1.180685536,8.5.0.1754008997,9.5.0.1792339658,10.6.1.2044468054,12.7.1.781418244
+```
+
+Its two confirmations gave `87887f2853ae545c` twice, and the first broken key was `c12`, at the
+worker's coalesced copy. Eleven schedules cut the power or had a lying disk. The line does not
+say `across boots`, so their stops were compared within each boot. Seeds 18 and 26 broke the
+property in the first boot, before the cut.
 
 ## What hydo lacked
 

@@ -69,6 +69,8 @@ pub const ERRLOG: &str = "_errlog";
 pub const MESSAGES: &str = "_messages";
 /// The function contracts' findings (kind `contract`, Milestone 241).
 pub const CONTRACTS: &str = "_contracts";
+/// The value properties' findings (kind `values`, Milestone 291).
+pub const VALUES: &str = "_values";
 /// How many calls the function contracts judged ({calls, without_return}).
 pub const CONTRACT_CALLS: &str = "_contract_calls";
 
@@ -424,7 +426,10 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
                 .filter_map(|f| serde_json::from_value::<Finding>(f.clone()).ok()),
         );
     }
-    if let Some(Value::Array(fs)) = r.get(CONTRACTS) {
+    for key in [CONTRACTS, VALUES] {
+        let Some(Value::Array(fs)) = r.get(key) else {
+            continue;
+        };
         findings.extend(
             fs.iter()
                 .filter_map(|f| serde_json::from_value::<Finding>(f.clone()).ok()),

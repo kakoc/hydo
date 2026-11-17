@@ -14694,3 +14694,113 @@ comparisons, the allow list, the kept lints, and the byte examples. Nothing reco
 **Left** (open item 139): trait methods, methods of types that hold pointers, and enumeration
 results are still refused or not read. A workspace member without a lock file cannot be built
 apart.
+
+### Milestone 291 (tentative number) - DONE (value properties: a `// hydo: keep` line says what must hold for a recorded value along each key's history, and a run that breaks it fails with a finding of the kind `values` whose verdict names the line, not the key; the history up to the break, with the first changing call, is in the finding, `hydo report`, `hydo report --html` and `hydo inspect values --broken`; on Blnk the run without faults, where every business rule held, now fails; the fixed build holds; one fingerprint with and without the plan; the explorer finds and shrinks the finding; nothing recorded moved; 2026-11-17)
+
+**In short.** Milestone 285 recorded values and showed their changes, but no rule judged a change,
+so a person read the history only after another check had failed. A `keep` line makes the history
+a property that a run can break:
+
+```go
+// hydo: keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction
+```
+
+The grammar is `keep <name> [once set] [from <function>] [to <function>] [across boots]`. A
+stop of `to` (every stop without it) that recorded the value is judged against a reference stop
+of the same key. Without `once set` the values must be equal, and the reference is the last
+earlier stop of `from` (the key's first stop without `from`). With `once set` a value once present
+must not be absent or nil later. The reference is in the same boot unless the line says `across
+boots`. `docs/design/value-history.md`, "Value properties", has the decisions, and section 4 of
+`hydo guide values` the how-to.
+
+**Why a comment line.** The other way was a `values:` block in `hydo.yaml`. A property names the
+`as` names of `record` lines and the functions that have them, so it lives in the same sources,
+and the plan's compiler checks both names: a property whose value no `record` line records, or
+whose function records no such value or is ambiguous, is listed by `hydo build` as not checked.
+The line can stand next to any recording function, and `from` and `to` make it read the same
+anywhere.
+
+**The parts.**
+
+- The language (`hydo-contracts`, `lang.rs`): `SrcKeep` and `SrcContract.keeps`. A function with
+  only `keep` lines gets no breakpoint.
+- The plan (`plan.rs`): `Program.keeps` (`Keep`: the line, its file and line, the name, `once_set`,
+  `from` and `to` as full names in the debug information, `across_boots`), skipped when empty, so
+  every plan of before reads and writes as it did. `compile.rs` resolves a short name such as
+  `blnk.setTransactionMetadata` by its end after `/`, `.` or `::`. The engines do not read it.
+- The judge (`values.rs`): `judge_keeps` over the histories gives, per property, the keys and
+  stops judged and each key's first break: the judged stop, its reference, and the first stop
+  after the reference whose value broke the property (the first changing call). `break_lines`
+  writes the key's history up to the break with the three stops marked.
+- The run (`hydo-explore`, `contracts.rs`): `fold` judges the properties with the contracts, from
+  the same records, in `hydo run` and in every explorer run. A broken property is a finding of the
+  kind `values` (`hydo_results::kind::VALUES`), with `details.output` the history up to the break,
+  and it turns an `OK` verdict into `VIOLATION [values <the line>] the value changed` (or `the
+  value was absent after it was set`). The verdict has no key and no value, so the shrinker keeps
+  one signature across keys and values; the test `value_properties::` checks that two runs that
+  break at other keys give one signature. `hydo run` prints a line per property, held or broken,
+  with the history of the first broken key.
+- The advice (`advice.rs`): `is_values`; the title "<system> broke a value property you
+  declared", and a why and a what-to-do that point at the history. The class stays the class of
+  the schedule's faults, as for every check.
+- The view: `hydo inspect values --broken` (only keys that broke a line); the text view prints
+  each property's count and a `BROKEN:` line per broken key. The results type `values` gains
+  `ValueHistory.properties` (`ValueProperty`) and `ValueKey.breaks` (`ValueBreak`), additions
+  that hydo-schema-compat accepts. `hydo report` and its web page show the broken property in
+  "What hydo saw" with the history, and the web page's section "How the recorded values changed"
+  starts with each property, held or broken, and the first broken key's table up to the break.
+- `hydo build` prints `1 value property` beside the recorded values.
+
+**The proof on Blnk.** `values.patch` has the line in place of a blank comment line next to
+`canProcessTransaction`, so the line numbers and the program's bytes stay (`blnk-values-arm64`
+`e6f51ac3…`, `blnk-fixed-values-arm64` `e21aa543…`, as Milestone 285 built them). All runs used the
+Mac engine with this tree's hydo and engine over the 0.3.4 Mac release's guest files, at the
+fingerprint epoch 4, on `explore-ob-blnk-values-arm64.cpio.gz` (`62d83259…`, the image of
+Milestone 285's last row) and its build with the fixes (`7580be81…`):
+
+| image, schedule | with the plan | without it | the rules | the value property |
+|---|---|---|---|---|
+| buggy, `overdraft-limit-concurrent-draws` | `ddb6f1730f6854ea` twice | `ddb6f1730f6854ea` twice | `VIOLATION [no_overdraft]` | broken for 2 of 22 keys (`c27`, `c29`), 24 stops judged |
+| buggy, `disk=none \| run` | `f52b32d3577045db` twice | `f52b32d3577045db` twice | OK; the verdict is `VIOLATION [values ...]` | broken for 3 of 66 keys (`c33`, `c54`, `c57`), 77 stops judged |
+| fixed, `overdraft-limit-concurrent-draws` | `0d634838208d69f3` | `0d634838208d69f3` | OK | held, 25 stops of 22 keys |
+| fixed, `disk=none \| run` | `498a8cf0e45aa1d7` | not run | OK | held, 81 stops of 66 keys |
+
+The two runs with the plan of each buggy schedule wrote the same records (`eaf3d5fb…`, as in
+Milestone 285, and `d59ee3d0…`). Each break names the first changing call: the worker's coalesced
+copy (`createQueueCopy` called from `buildQueuedCoalescingBatchForScope`) has the limit 0.0, and
+the decision then sees 0.0 for the queue copy. The engine's time with the plan was 5.9 s and 5.6 s
+on the regression and 5.7 s and 5.8 s without it; 6.4 s and 7.3 s on the clean run, 6.5 s and 7.1
+s without it.
+
+**The exploration.** `hydo explore --strategy random --workers 2` of the buggy build on the Mac
+engine (2 x 1,536 MiB of guest RAM): seeds 1 to 10 with shrinking (1,858 s), and seeds 11 to 30
+with `--no-shrink --no-diagnose` (240 s). The property broke in 9 of the 30 schedules (seeds 4,
+13, 15, 16, 18, 21, 25, 26, 30); the overdraft rule `no_overdraft` broke in 1 (seed 21, where the
+property broke too). So the property found finding 1 first at seed 4, and the rule at seed 21.
+Seed 4's failure, class `durable-defaults`, shrank in 89 runs to a schedule without a fault and
+with only the draw and repay commands (`disk=none dseed=6e73e372e2338aca | run
+W=:p1,r200,cparallel_driver_repay+parallel_driver_draw,...`), whose two confirmations gave
+`87887f2853ae545c` twice; `report.md` shows its key's history up to the break. The schedules with
+a power cut compared stops within each boot; seeds 18 and 26 broke the property in the first
+boot.
+
+**Tests and checks.** New: `hydo-contracts`'s `keeps::` (the lines and their errors, a property
+from one function to another with its first changing call, `across boots`, a plain `keep`, `once
+set`, the names the compiler refuses) and `hydo-explore`'s `value_properties::` (the finding, the
+verdict and its signature, the advice, a held property). Two results examples recorded from the
+clean run: `mac-blnk-run-values-violation/result.json` (a run with a `values` finding) and
+`mac-blnk-values-broken/values.json`; `examples::` now asks for a `values` finding. `ci/test-tiers.txt`
+lists the two new test files as fast. On this Mac, after the rebase onto `origin/main`: `cargo fmt --all --check`, workspace clippy with `-D
+warnings`, `cargo test -p hydo-contracts`, `-p hydo-results` and `-p hydo-config`, `hydo`'s
+`equivalence::cli_matches_golden`, `agents_equivalence` and `docs::`, `hydo-agents`'s
+`public_content::`, `hydo-schedule`'s `language::`, `hydo-release`'s `test_tiers`,
+`hydo-explore`'s `--test it` and `--test fake_engine`, `hydo-schema-compat`, `sh
+ci/consolidate-tests.sh --check` and `sh ci/vale.sh`. Nothing recorded moved: a plan without
+`keep` lines is the plan it was, the engines did not change, and the Blnk programs kept their
+bytes.
+
+**Left** (open item 146): a property over two names (the limit against its metadata entry), a
+comparison with a constant and an order of calls are not built; the property table and `hydo
+rules check` do not know the lines; `across boots` ran on synthetic records only; and an
+exploration's plain problem text does not quote the history (its `report.md` and a run's report
+do).

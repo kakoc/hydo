@@ -100,11 +100,19 @@ pub fn write_plan(m: &Value, manifest_path: &str, image: &Path, io: &mut Io) -> 
         .flat_map(|p| &p.functions)
         .map(|f| f.values.iter().filter(|v| !v.key).count())
         .sum();
-    let recorded = if values > 0 {
+    let mut recorded = if values > 0 {
         format!(", {values} recorded values")
     } else {
         String::new()
     };
+    // the `keep` lines (Milestone 291)
+    let keeps: usize = plan.programs.iter().map(|p| p.keeps.len()).sum();
+    if keeps > 0 {
+        recorded.push_str(&format!(
+            ", {keeps} value propert{}",
+            if keeps == 1 { "y" } else { "ies" }
+        ));
+    }
     outln(
         io,
         &format!(

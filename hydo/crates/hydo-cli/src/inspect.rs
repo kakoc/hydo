@@ -1003,10 +1003,11 @@ Find where to look (no VM; instant):
   hydo inspect events <run dir> [--kind K,...] [--grep TEXT] [--conversation C]
                       [--from POINT] [--to POINT] [--limit N] [--offset N]
                                                  the run's events, each with its point (boot:172)
-  hydo inspect values <run dir> [--key K] [--name N] [--changes] [--plan FILE]
+  hydo inspect values <run dir> [--key K] [--name N] [--changes] [--broken] [--plan FILE]
                       [--limit N] [--offset N]
                                                  how the values of `// hydo: record` lines changed
-                                                 through the run, per key (hydo guide values)
+                                                 through the run, per key, and where they broke
+                                                 a `// hydo: keep` line (hydo guide values)
 
 Hold a stop (one replay of the run up to it: about as long as the run took to get there):
   hydo inspect start <run dir> [--at end|<conv>:<stop>|<stop>] [--freeze] [--idle SECS]

@@ -1,0 +1,189 @@
+{
+  "v": 1,
+  "type": "values",
+  "run_dir": "hydo-out/run",
+  "verdict": {
+    "kind": "violation",
+    "text": "VIOLATION [values keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction] the value changed",
+    "guest": "HYDO-ORACLE: OK invariants=13 held (compose.commands: started=58 ok=58 failed=0 timeout=0 violation=0 killed=0 skipped=0)"
+  },
+  "plan": ".hydo/explore-ob-blnk-values-arm64.cpio.gz.contracts.json",
+  "functions": [
+    "github.com/blnkfinance/blnk/model.canProcessTransaction",
+    "github.com/blnkfinance/blnk.setTransactionMetadata",
+    "github.com/blnkfinance/blnk.createQueueCopy"
+  ],
+  "calls": 289,
+  "total": 1,
+  "changed": 1,
+  "offset": 0,
+  "keys": [
+    {
+      "key": "c33",
+      "copies": [
+        "c33_q"
+      ],
+      "names": [
+        "overdraft_limit",
+        "allow_overdraft",
+        "meta.overdraft_limit",
+        "meta.allow_overdraft"
+      ],
+      "points": [
+        {
+          "function": "github.com/blnkfinance/blnk.setTransactionMetadata",
+          "file": "transaction_queue.go",
+          "line": 390,
+          "call": 75,
+          "when": "entry",
+          "caller": "github.com/blnkfinance/blnk.(*Blnk).QueueTransaction",
+          "point": "run:9817",
+          "conversation": "run",
+          "at": 627719,
+          "step": "workload steps 0..29",
+          "values": {
+            "allow_overdraft": "true",
+            "overdraft_limit": "50.0"
+          }
+        },
+        {
+          "function": "github.com/blnkfinance/blnk.setTransactionMetadata",
+          "file": "transaction_queue.go",
+          "line": 390,
+          "call": 75,
+          "when": "return",
+          "caller": "github.com/blnkfinance/blnk.(*Blnk).QueueTransaction",
+          "point": "run:9817",
+          "conversation": "run",
+          "at": 627721,
+          "step": "workload steps 0..29",
+          "values": {
+            "allow_overdraft": "true",
+            "meta.allow_overdraft": "true",
+            "meta.overdraft_limit": "absent",
+            "overdraft_limit": "50.0"
+          }
+        },
+        {
+          "function": "github.com/blnkfinance/blnk.setTransactionMetadata",
+          "file": "transaction_queue.go",
+          "line": 390,
+          "call": 76,
+          "when": "entry",
+          "caller": "github.com/blnkfinance/blnk.(*Blnk).prepareTransactionForQueue",
+          "point": "run:9817",
+          "conversation": "run",
+          "at": 627721,
+          "step": "workload steps 0..29",
+          "values": {
+            "allow_overdraft": "true",
+            "overdraft_limit": "50.0"
+          }
+        },
+        {
+          "function": "github.com/blnkfinance/blnk.setTransactionMetadata",
+          "file": "transaction_queue.go",
+          "line": 390,
+          "call": 76,
+          "when": "return",
+          "caller": "github.com/blnkfinance/blnk.(*Blnk).prepareTransactionForQueue",
+          "point": "run:9817",
+          "conversation": "run",
+          "at": 627723,
+          "step": "workload steps 0..29",
+          "values": {
+            "allow_overdraft": "true",
+            "meta.allow_overdraft": "true",
+            "meta.overdraft_limit": "absent",
+            "overdraft_limit": "50.0"
+          }
+        },
+        {
+          "function": "github.com/blnkfinance/blnk.createQueueCopy",
+          "file": "transaction_queue.go",
+          "line": 437,
+          "call": 46,
+          "when": "entry",
+          "caller": "github.com/blnkfinance/blnk.(*Blnk).processSingleTransaction",
+          "point": "run:9833",
+          "conversation": "run",
+          "at": 628918,
+          "step": "workload steps 0..29",
+          "values": {
+            "allow_overdraft": "true",
+            "meta.allow_overdraft": "true",
+            "meta.overdraft_limit": "absent",
+            "overdraft_limit": "50.0"
+          }
+        },
+        {
+          "function": "github.com/blnkfinance/blnk.createQueueCopy",
+          "file": "transaction_queue.go",
+          "line": 437,
+          "call": 48,
+          "when": "entry",
+          "caller": "github.com/blnkfinance/blnk.(*Blnk).buildQueuedCoalescingBatchForScope",
+          "point": "run:10105",
+          "conversation": "run",
+          "at": 636048,
+          "step": "workload steps 0..29",
+          "values": {
+            "allow_overdraft": "true",
+            "meta.allow_overdraft": "true",
+            "meta.overdraft_limit": "absent",
+            "overdraft_limit": "0.0"
+          }
+        },
+        {
+          "function": "github.com/blnkfinance/blnk/model.canProcessTransaction",
+          "file": "model/model.go",
+          "line": 161,
+          "call": 43,
+          "when": "entry",
+          "key": "c33_q",
+          "caller": "github.com/blnkfinance/blnk/model.UpdateBalances",
+          "point": "run:10105",
+          "conversation": "run",
+          "at": 637141,
+          "step": "workload steps 0..29",
+          "values": {
+            "allow_overdraft": "true",
+            "overdraft_limit": "0.0"
+          }
+        }
+      ],
+      "changes": [
+        {
+          "name": "overdraft_limit",
+          "from": "50.0",
+          "to": "0.0",
+          "point": 5,
+          "before": 4
+        }
+      ],
+      "breaks": [
+        {
+          "property": "keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction",
+          "name": "overdraft_limit",
+          "point": 6,
+          "reference": 3,
+          "changed": 5,
+          "value": "0.0",
+          "expected": "50.0"
+        }
+      ]
+    }
+  ],
+  "truncated": false,
+  "properties": [
+    {
+      "property": "keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction",
+      "file": "model/model.go",
+      "line": 157,
+      "words": "`overdraft_limit` at model.canProcessTransaction is the value blnk.setTransactionMetadata recorded last for the same key",
+      "keys": 66,
+      "stops": 77,
+      "broken": 3
+    }
+  ]
+}

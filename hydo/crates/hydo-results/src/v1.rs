@@ -86,6 +86,8 @@ pub mod kind {
     pub const ERROR_LOG: &str = "error-log";
     /// A function contract's clause broken at a call (`// hydo:` comments, Milestone 241).
     pub const CONTRACT: &str = "contract";
+    /// A value property broken along a key's history (`// hydo: keep` lines, Milestone 291).
+    pub const VALUES: &str = "values";
 }
 
 /// The values of [`Finding::status`] hydo writes.
@@ -1035,6 +1037,10 @@ pub struct ValueHistory {
     /// The command that shows the next page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next: Option<String>,
+    /// The plan's value properties (`// hydo: keep` lines) as the whole run judged them, before
+    /// the filters (added in Milestone 291).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<ValueProperty>,
 }
 
 /// One key's history: every stop of a recording function whose call had this key (or a copy's
@@ -1055,6 +1061,46 @@ pub struct ValueKey {
     pub points: Vec<ValuePoint>,
     #[serde(default)]
     pub changes: Vec<ValueChange>,
+    /// The value properties (`// hydo: keep` lines) this key's history broke, each at its first
+    /// break (added in Milestone 291).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub breaks: Vec<ValueBreak>,
+}
+
+/// Where a key's history broke a value property (added in Milestone 291).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ValueBreak {
+    /// The property as written after `// hydo:` (`keep overdraft_limit from ...`).
+    pub property: String,
+    /// The value's name.
+    pub name: String,
+    /// The index of the stop that broke it, in the key's `points`.
+    pub point: u64,
+    /// The index of the stop whose value it was compared with.
+    pub reference: u64,
+    /// The index of the first stop after the reference whose value broke the property: the
+    /// first changing call.
+    pub changed: u64,
+    /// The value at the stop that broke it, and the reference's.
+    pub value: String,
+    pub expected: String,
+}
+
+/// A value property of the plan and how a run judged it (added in Milestone 291).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ValueProperty {
+    /// The property as written after `// hydo:`.
+    pub property: String,
+    pub file: String,
+    pub line: u32,
+    /// What it says, in words.
+    pub words: String,
+    /// Keys with at least one judged stop.
+    pub keys: u64,
+    /// Stops judged.
+    pub stops: u64,
+    /// Keys that broke it.
+    pub broken: u64,
 }
 
 /// One stop of a recording function: a call's entry or its return.
