@@ -16163,3 +16163,124 @@ Retro: Restate v1.8.1-hotfix.2, the Mac engine and hvx, 2026-11-17
   execution's journal" is new.
 
 **What is left.** Open item 152.
+
+### Milestone 302 (tentative number) - DONE (the epoch-4 re-recording before 0.4.0: every value of `hydo/onboard/recorded.json` re-recorded on the three engines at the fingerprint epoch 4, whose `epoch` is now 4; every image has new bytes and every run moved on all three engines; seven verdicts changed, two are accepted and five have new schedules; a tick-jitter schedule that delays no timer at epoch 4 is replaced; the epoch-4 RAM tree hash follows the RAM, shown with whole-RAM dumps; the pinned reproducers keep their values on their images of the epochs 1 to 3; open item 105 is empty; 2026-11-17)
+
+**In short.** Milestones 269, 283, 290 and 294 made the fingerprint epoch 4 and, under the rule
+"Re-recording runs in batches" (AGENTS.md), left the recorded values for one pass before 0.4.0.
+This is that pass. It ran `hydo-bench rebaseline --write --thorough` on the bare-metal machine
+(hvx), on this Mac and on GitHub's runners (KVM). Every image was built twice with the same
+bytes, and every run gave the same values twice from fresh boots on all three engines.
+`hydo/onboard/recorded.json` now says `epoch` 4. The decisions are in docs/REBASELINE.md
+section 26.
+
+| platform | images (bytes moved) | runs (values moved) | verdicts |
+|---|---|---|---|
+| the Mac (`hvm`) | 21 (21) | 76 (76) | 1 changed, with a new schedule |
+| KVM (GitHub's AMD runners) | 6 (6) | 19 (19) | 2 changed: 1 accepted, 1 with a new schedule; 2 schedules replaced |
+| hvx (the bare-metal machine) | 43 (43) | 141 (141) | 4 changed: 1 accepted, 3 with new schedules |
+
+**Why the values moved.** An image built at epoch 4 records the epoch in `/etc/hydo/image.json`
+and carries no saved regression (M269), so every image has new bytes. Every boot of such an image
+mounts cgroup2 before the S0 snapshot (M283), so every boot conversation has one more command,
+and every `ctl` value and fingerprint moved on all three engines, hvx included. On the Mac and KVM
+the disks' and the RAM's tree hashes (M290, M294) move every fingerprint again. The guest's timing
+moved with the mount, and that changed the verdicts below.
+
+**The Mac** (an M2 Pro, this tree's programs over the 0.3.4 Mac release, Go 1.26.5 from go.dev as
+`HYDO_GO`). The images were built twice with `--build-only --thorough`, without a VM. Then each
+image ran with `--write --thorough --reuse-builds --jobs 1 --only <image>` while the pass held
+the Mac's shared VM lock, released after each image, and each image's kept build was deleted once
+its values were written. The runs took 1,096 s. Every run moved. One verdict changed:
+`hvm/redis-composed-racy` `W=0000002a,p4,q2,r100` passes now, and `W=0000002a,p4,q4,r100`
+breaks `total_conserved` with the epoch-3 verdict's words. Of 24 composition seeds with
+`p4,q2,r100`, 13 break it. Four verdict lines changed their numbers with the same class, for
+example `hvm/ledger` `O=front@0-30:resp:loss,50%` now stores entry 11 twice instead of entry 2.
+
+**KVM.** Neither this Mac nor the bare-metal machine may run KVM, so three one-off workflows ran
+on GitHub's runners from temporary branches, deleted afterwards. Each took the published 0.3.4
+Linux release (sha256 checked), whose KVM guest kernels with cgroups have their pins, with the
+branch's programs, and the Qdrant example's test programs built there with their pins.
+
+- Run 44145027179 (`--write --thorough`, six hosts: AMD EPYC 7763 three times, 9V74 twice, Intel
+  Xeon Platinum 8573C): the five AMD hosts wrote the same values. Every `ctl` value was the same
+  on all six. Two verdicts changed. The quickstart's KVM section ran there too: a power cut at
+  every step from 2 to 19 with `R=everysec`, the exploration, and its repro (13 of 13).
+- Run 44149877529 (four hosts: AMD EPYC 7763, Intel Xeon Platinum 8370C, two 6975P-C): the
+  Qdrant pause window with `pause-check.sh`, and the tick-jitter question below.
+- Run 44155738225 (six hosts: AMD EPYC 9V45, 7763, 9V74, three Intel Xeon 6975P-C): `--write
+  --thorough --accept-verdicts` of the final KVM list wrote nothing on the AMD hosts, `--check
+  --thorough` of the written list exited 0, and `hv/kvm/kvm-check.sh` passed 15 of 15 on every
+  host.
+
+**The tick jitter that delays nothing.** In the first run `disk=none tj=1234 tjpm=300 | run`
+gave the fingerprint of `disk=none | run` on every host, AMD and Intel, with another `ctl` value;
+at epoch 3 the two differed. That could have meant that M294's tree hash misses RAM that the
+guest writes through KVM's mapping. The second run ran both schedules with `HYDO_KVM_DIAG=1` and
+the whole 1 GiB of guest RAM dumped at each fingerprint (`HYDO_KVM_DIAG_RAM`), on the epoch-3
+image with 0.3.4's hydo and with this tree's hydo, and on the epoch-4 image. At epoch 4 the two
+runs' dumps have the same sha256 at the workload's end and at the run's end, with the same
+console, vCPU, device and machine hashes and the same exits and guest time. The RESULT line says
+`tjn=0`: the seed delays no armed timer of the run's ticks. `tj=99 tjpm=900 tjmax=900` applies 3
+delays, and its dumps and fingerprint differ. In all 7 runs per host the RAM hash changed exactly
+when the dump's bytes changed. The epoch-3 image gave 0.3.4's fingerprints under this tree's
+hydo. So the fingerprint is right, and the denser jitter replaces the old one in the list and in
+`hv/kvm/kvm-check.sh`.
+
+**hvx** (the bare-metal machine, this tree's programs over the published 0.3.4 Linux release
+unpacked under umask 022, a tree made from an archive of the commit's tracked files, the main
+module `91D86B693F4D4035C368F9B`, two VMs at a time): `--write --thorough` took 7,950 s (builds
+2,536 s, runs 5,413 s). All 43 images were built twice with the same bytes, and all 141 runs
+moved and gave their values twice. Four verdicts changed; the searches for new schedules ran one
+VM at a time on the pass's images, and the changed entries were written again with `--write
+--thorough --reuse-builds --only`.
+
+- `hvx/stack-errors-fix` `disk=ioerr:5 dseed=1`: the restart that fails after the disk errors is
+  now MySQL's, not Redis's. Accepted.
+- `hvx/redis-live`: pauses of 20 s at steps 16 and 17 miss the liveness deadline, and the pause
+  at step 18 and longer ones there hold. `P=redis@17~0:20000` replaces `@18`.
+- `hvx/nats-flaky-buggy`: the default turn sweep (21 runs) found the boundary between `q=19726`
+  and `q=19783`, which replace `q=18051` and `q=18140`. A dense sweep of 17,000 to 19,000 (56
+  runs) found five boundaries.
+- `hvx/etcd-3.5.5`: 90 schedules in section 20's shape did not reach etcd issue 14685's second
+  symptom. Two gave the first symptom, and `K=etcd2@25+1 P=etcd1@23+1` (VIOLATION
+  `etcd.members_agree` on 3.5.5, OK on 3.5.6) replaces `K=etcd2@20+1 P=etcd1@26+1` in both
+  releases' entries.
+
+The Linux quickstart's hvx values moved (`2f9186af5e3be2b1`, `d299dc487ceb5e3c`, image
+`80643bb1…`, netem `020c9cc8c6182c9f`). Its exploration finds 9 failures with the same classes and
+the same two minimal schedules, and `hydo repro hydo-out/explore` reproduces 11 of 11.
+
+**The quickstarts and the tutorial.** The Mac quickstart's values are the `hvm/release-redis`
+values (`05f433ee427f8e3c`, `2174995ebfb4d2d6`, `c95bf61bfaf5779a`, image `31e90668…`). Its
+exploration finds 11 failures with the same minimal schedules, and 13 of 13 reproduce. The Linux
+quickstart's KVM section uses section 2's `C=12 R=everysec` again (`fd41aeb199057728`), and its
+exploration finds 10 failures with three minimal schedules (`disk=lying:6 dseed=b3c3d806a5d34604
+| run C=5` is the third); 13 of 13 reproduce. The messages tutorial of docs/ONBOARD.md gives
+`1b5da9cd7de7df13` twice and the same claim counts and minimal schedule, whose verdict now says
+`0.111 s`.
+
+**The pinned reproducers** keep their images and values on hvx: the epoch-1 images give
+`1dc3677fb94053cf` and `ba0aa0612502a1df`, the epoch-2 and epoch-3 images `a76d7fe857fdb37c` and
+`efbde7b57264be0f`. Their epoch-4 images, `728e344c…` and `b83e3d39…`, are copied to
+`~/hydo/build/m302` and give `e153f376096a072c` (VIOLATION, order 11) and `6a5c2fe208174af3` (OK)
+on hvx, and `66da20bdbfafd6d2` and `0bcce788f5ef3f4d` on KVM (AMD).
+
+**The full tier.** `cargo test --locked --release --workspace --no-fail-fast` passed on this Mac
+with the pass's tree, so no golden of the full tier needed a new recording: the goldens that
+depend on the epoch were recorded with Milestones 269, 283, 290 and 294. On the bare-metal
+machine, in the tree made from the archive, 5 tests failed for reasons of the machine and of a
+tree without its repository. hydo-manifest's, hydo-build's and the `hydo` CLI's equivalence
+tests see the machine's `/nix/store` paths (AGENTS.md open item 115). The skill installer's
+test and the explorer's `local_outputs_are_no_inputs` need a checkout with its repository.
+hydo-build's 35 mismatches are the same with the epoch-3 list in the tree.
+
+**The final checks.** On this Mac, `hydo-bench rebaseline --check` (the fast mode, one image at a
+time under the VM lock) ran every one of the 76 runs once and found every value as recorded. On
+the bare-metal machine the fast `--check` in a tree made from the final tree's archive ran all
+141 runs and the worker-pool check of 41 images, and found every value as recorded (1,789 s).
+After the rebase onto `main` at `0a830557`, which changed the host controller, both fast checks
+ran again with the same result: the Mac's 76 runs, and hvx's 141 runs with its images built
+again to the same bytes (3,143 s). KVM's final check is run 44155738225 above, before the
+rebase; `main` changed no code of the KVM engine, and the controller's commands are the ones the
+hvx and Mac checks covered.

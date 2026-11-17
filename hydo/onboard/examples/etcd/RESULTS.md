@@ -269,3 +269,18 @@ The killed member now is etcd2, and the paused one is etcd1. It is M78's shape w
 roles moved: the member killed right after a defrag replays entries on restart and runs one
 revision ahead, and a client that switches members sees its revision go back. The values are in
 `hydo/onboard/recorded.json` (`hvx/etcd-3.5.5`, `hvx/etcd-3.5.6`).
+
+## The fingerprint epoch 4 (Milestone 302)
+
+At the fingerprint epoch 4 the guest mounts cgroup2 at every boot, and the timing moved again.
+`K=etcd2@20+1 P=etcd1@26+1` passes on 3.5.5. A hand sweep of 90 schedules in the same shape did
+not reach the second symptom. etcd2 was killed at steps 14 to 16, 19 to 21 and 24 to 26, and
+etcd1 or etcd3 was paused before or after the kill. Two schedules gave the first symptom. The
+list now records one of them for both releases, each run twice from a fresh boot:
+
+    disk=none dseed=1 | run K=etcd2@25+1 P=etcd1@23+1
+
+| image | verdict | fingerprint (both runs) |
+|---|---|---|
+| 3.5.5 | VIOLATION `etcd.members_agree`: members disagree, revisions 100 101 100 | `485e22a75d37bda7` |
+| 3.5.6 | OK, acked=90, every invariant holds | `e7334f935e51ecad` |

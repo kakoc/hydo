@@ -121,9 +121,11 @@ else
 fi
 
 # 7. the other fault kinds and timing tokens, each twice: a kill, a pause, a clock step, an I/O
-#    error, tick jitter, forced preemption points
+#    error, tick jitter, forced preemption points. The jitter delays 3 timers of an image built at
+#    the fingerprint epoch 4 (`tjn=3`); `tj=1234 tjpm=300`, used before, delays none there
+#    (docs/REBASELINE.md section 26)
 for s in "disk=none | run K=redis@5+2" "disk=none | run P=redis@4+3" "disk=none | run T=6:3600" \
-         "disk=ioerr:20 dseed=7 | run" "disk=none tj=1234 tjpm=300 | run" "disk=none pct=99 pctn=4 | run"; do
+         "disk=ioerr:20 dseed=7 | run" "disk=none tj=99 tjpm=900 tjmax=900 | run" "disk=none pct=99 pctn=4 | run"; do
   a=$(run "$OUT/r-a" "$s"); b=$(run "$OUT/r-b" "$s")
   say "  $s: $a"
   if [ "${a%% *}" != none ] && [ "$a" = "$b" ]; then ok "twice the same: $s"; else bad "twice the same: $s ($a / $b)"; fi

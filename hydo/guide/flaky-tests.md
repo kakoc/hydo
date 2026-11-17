@@ -70,13 +70,13 @@ instruction.
   nats-server test failed on every one of 209 schedules, whatever the timing tokens.
 - On hvx with several vCPUs (`--vcpus N`, up to 8), the vCPUs take turns of exactly `q=` guest
   branches (default 2^20). The other vCPU's threads run between the turns, so the turn length
-  decides where the threads interleave. The nats-server test fails at `q=18140` and passes at
-  `q=18051` on two vCPUs, each twice with one fingerprint. These are the values of the
-  fingerprint epoch 2; another epoch, image or engine can move the boundary.
+  decides where the threads interleave. The nats-server test fails at `q=19783` and passes at
+  `q=19726` on two vCPUs, each twice with one fingerprint. These are the values of the
+  fingerprint epoch 4; another epoch, image or engine can move the boundary.
 
 ```sh
-hydo run --vcpus 2 "disk=none q=18140 | run"
-hydo run --vcpus 2 "disk=none q=18051 | run"
+hydo run --vcpus 2 "disk=none q=19783 | run"
+hydo run --vcpus 2 "disk=none q=19726 | run"
 ```
 
 - On the KVM engine with several vCPUs (`--backend kvm --vcpus N`, up to 8), the vCPUs take turns
@@ -124,12 +124,13 @@ hydo explore --backend kvm --vcpus 2 --sweep turns --out turns
 
 The verdict need not change only once. The sweep bisects only between the lengths it ran, so a
 narrow band of other verdicts between two grid points stays hidden. On the nats-server image the
-default sweep made 19 runs and found one boundary, between `q=18051` (passes) and `q=18140`
-(fails). A dense sweep of the range around it found five boundaries in 36 runs, and it stepped
-over that one: `q=18140` fails, but its grid points `q=18098` and `q=18147` both pass.
+default sweep made 21 runs at the fingerprint epoch 4 and found one boundary, between
+`q=19726` (passes) and `q=19783` (fails). A dense sweep of 17,000 to 19,000 found five
+boundaries in 56 runs: failing bands start at 18,103, 18,421 and 18,895. The default sweep
+stepped over all three: its grid points `q=7222`, `q=18585` and `q=19498` pass.
 
 ```sh
-hydo explore --vcpus 2 --sweep turns --turn-range 18000-19000 --turn-points 21 \
+hydo explore --vcpus 2 --sweep turns --turn-range 17000-19000 --turn-points 41 \
   --turn-resolution 10 --out turns-dense
 ```
 

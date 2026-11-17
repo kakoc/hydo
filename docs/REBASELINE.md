@@ -3623,3 +3623,79 @@ hvx's fingerprint does not move. The same pass records them. An image built at e
 before keeps the old hash: the release's Redis example built by the 0.3.4 Mac release gave the
 quickstart's `a62eee5332a5b9d2`, `474b2874e7ef0fa2` and `2e5f02d8ff33394f` with this hydo
 (docs/HISTORY.md Milestone 294).
+
+**The re-recording pass (M302, 2026-11-17).** `hydo-bench rebaseline --write --thorough`
+re-recorded the list on the three engines (docs/HISTORY.md "Milestone 302"); its `epoch` is 4.
+Every image was built twice with the same bytes, and every run gave the same values twice from
+fresh boots.
+
+- hvx (the bare-metal machine): all 43 images have new bytes, and all 141 runs moved. The cgroup2
+  mount adds one command to every boot conversation, so every `ctl` value and every fingerprint
+  moved. Four verdicts changed (below).
+- The Mac (`hvm`): all 21 images and all 76 runs moved, every `ctl` value included. One verdict
+  changed (below).
+- KVM: the values come from AMD EPYC hosts on GitHub's runners (the 9V45, 9V74 and 7763 agree).
+  All 6 images and all 19 runs moved. Two verdicts changed, and two schedules were replaced
+  (below). Intel hosts (Xeon Platinum 8573C and 6975P-C) give other fingerprints with the same
+  verdicts and `ctl` values, and the list does not record them.
+
+Each verdict change was decided as in section 20: a change of the same class is accepted, and a
+finding that a schedule no longer shows gets a new schedule that shows it.
+
+- `hvx/stack-errors-fix` `disk=ioerr:5 dseed=1 | run`: ERROR `restart after the faults`, now of
+  mysql instead of redis. The disk errors now hit MySQL's restart first. The class is the same,
+  as in section 20, and it is accepted.
+- `kvm/release-redis` `disk=lying:6 dseed=b3c3d806a5d34604 | run C=5`: VIOLATION `data disk
+  unmountable` instead of `key k:3 lost`, the form it had at epoch 2. Both come from the lying
+  disk (class `lying-disk`), and it is accepted. The KVM exploration of the quickstart names it as
+  its third minimal schedule.
+- `hvx/redis-live` `P=redis@18~0:20000`: the liveness check now holds. At epoch 3 the pending
+  write missed its 10 s deadline by 0.15 s. Longer pauses at step 18 (20.5 s to 30 s) and a pause
+  at step 19 also hold, and pauses at steps 16 and 17 miss it by 0.13 s and 0.14 s.
+  `P=redis@17~0:20000` replaces it (VIOLATION `[redis.pending_resolved] not satisfied 10.14s
+  after heal`, `e4bae2b69c495e28`). The comment in `hydo-live.yaml` keeps step 18, because the
+  manifest's text is inside the image.
+- `hvx/nats-flaky-buggy` `q=18140` on 2 vCPUs: the test passes. The default turn sweep found the
+  boundary between `q=19726` (OK, `d105a00382081edb`) and `q=19783` (VIOLATION,
+  `2d2481dd7ef43f6e`), and these replace `q=18051` and `q=18140`. The fixed test passes at
+  `q=19783` (`7e8d4dd07067c30e`). The example's RESULTS.md has the dense sweep.
+- `hvx/etcd-3.5.5` `K=etcd2@20+1 P=etcd1@26+1` (etcd issue 14685's second symptom): it passes.
+  A hand sweep in section 20's way, 90 schedules on the epoch-4 image, did not reach the second
+  symptom (`client.revisions_monotonic`). etcd2 was killed at steps 14 to 16, 19 to 21 and 24 to
+  26, with etcd1 or etcd3 paused before or after the kill. Two schedules gave the first symptom,
+  `etcd.members_agree`. One of them, `K=etcd2@25+1 P=etcd1@23+1`, replaces the schedule in both
+  releases' entries: 3.5.5 ends VIOLATION `members disagree: revisions 100 101 100`
+  (`485e22a75d37bda7`), and 3.5.6, which has the fix, passes. The list now shows issue 14685 by
+  its first symptom only (AGENTS.md open item 8).
+- `hvm/redis-composed-racy` `W=0000002a,p4,q2,r100`: the racy transfer now conserves the total.
+  Of 24 composition seeds with `p4,q2,r100`, 13 break `total_conserved`, and the seed `0000002a`
+  breaks it with `q3` and `q4`. `W=0000002a,p4,q4,r100` replaces it (VIOLATION `balances sum to
+  495, not 500`, the epoch-3 verdict's words, `f1bfda77b8c4330f`). The example without the race
+  keeps `q2`.
+- `kvm/qdrant-flaky-buggy` `P=workload/tests::wal_reco@0~239:500`: the test passes.
+  `pause-check.sh` (run 44149877529, four hosts) found one failing start of 120 from 190 to 309
+  ms: 208 ms (VIOLATION `length: 0, op_num: Some(499)`, `893186276c24e149`). The pause at 208 ms
+  and its neighbour at 207 ms (OK) replace 239 and 238 ms, and the fixed test passes at 208 ms.
+  The three entries' `ctl` values come from the Intel hosts, because `ctl` agreed between the
+  vendors on every other run.
+
+Two KVM schedules were replaced although their verdicts kept their class:
+
+- `kvm/release-redis` `disk=cut | run C=11 R=everysec` replaced `C=12` at epoch 3, because `C=12`
+  passed on KVM then. At epoch 4 `C=12 R=everysec` loses `k:1` on KVM again
+  (`fd41aeb199057728`), so the list and the Linux quickstart use section 2's `C=12` on every
+  engine. A cut at every step from 2 to 19 loses `k:1` at steps 2, 4, 9 to 12, 15, 16, 18 and 19,
+  the same steps on all six hosts.
+- `kvm/release-redis` `disk=none tj=1234 tjpm=300 | run` gives the fingerprint of `disk=none |
+  run` at epoch 4. Its seed delays no armed timer of the run's ticks (`tjn=0`). A dump of the whole
+  1 GiB of guest RAM at each fingerprint showed the same bytes in both runs, and a jitter that
+  delays timers gave other bytes and another fingerprint, so the RAM's tree hash (M294) follows the
+  RAM. `disk=none tj=99 tjpm=900 tjmax=900 | run` (`tjn=3`, `6613094efdee25c1`) replaces it in the
+  list and in `hv/kvm/kvm-check.sh`, so that the jitter case tests a jitter.
+
+**The pinned reproducers** keep their images and values: on hvx the epoch-1 images in
+`~/hydo/build/m155` give `1dc3677fb94053cf` and `ba0aa0612502a1df`, and the epoch-2 images in
+`~/hydo/build/m204` and the epoch-3 images in `~/hydo/build/m244` give `a76d7fe857fdb37c` and
+`efbde7b57264be0f`. Their epoch-4 images (`728e344c…` and `b83e3d39…`, copied to
+`~/hydo/build/m302`) give `e153f376096a072c` (VIOLATION, order 11) and `6a5c2fe208174af3` (OK) on
+hvx, and `66da20bdbfafd6d2` and `0bcce788f5ef3f4d` on KVM (AMD).

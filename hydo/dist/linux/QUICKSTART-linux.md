@@ -165,7 +165,7 @@ This writes `hydo-out/explore-ob-redis-disk.img`, and next to it the steps of th
 and `hydo-agent`, plus a data partition. `hydo-agent` is a small program that is the guest's first
 process and only carries out what the host tells it. Every decision (when to start Redis, when to
 inject a fault, when to check the invariant) is made by `hydo` on the host, which also records it.
-Building the same `hydo.yaml` again gives the same bytes (sha256 `f3a152d62747c2b5…`).
+Building the same `hydo.yaml` again gives the same bytes (sha256 `80643bb10db1787b…`).
 
 Run one schedule with no faults. Then run one with a power cut before step 12, while Redis is set
 to sync its log only once a second. The workload's 20 steps count from 0, and step 5, for
@@ -181,8 +181,8 @@ hydo run "disk=cut | run C=12 R=everysec"
 Each prints the engine's `RESULT` line (shortened here; `…` stands for fields left out):
 
 ```
-RESULT one fp=5ec14b8b4bdcf367 wfp=30e74366625f3474 secs=0.4 stops=23604 typed=21 … inh=… ctl=c24534f57aab6d42 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)
-RESULT one fp=9f8f90a7d14566df wfp=f4de09236076bc87 secs=0.9 stops=24042 typed=30 … inh=… ctl=a98cc29af3d645f4 verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
+RESULT one fp=2f9186af5e3be2b1 wfp=fb8f826f99c291ed secs=0.4 stops=23617 typed=22 … inh=… ctl=f918a572bec1502b verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)
+RESULT one fp=d299dc487ceb5e3c wfp=ffe9697f49bd79e3 secs=1.0 stops=24050 typed=31 … inh=… ctl=157553d2c383a4bb verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 ```
 
 - `verdict=` is the outcome. `HYDO-ORACLE: OK` means every invariant held; `VIOLATION` names the
@@ -209,8 +209,8 @@ With this example's default setting, `appendfsync always`, the same cut loses no
 hydo run "disk=cut | run C=12"
 ```
 
-It ends `OK` with `acked=12 all present` (`f8af29d45e9502f8`; with `--backend kvm`
-`a78154adc5dcd1e5`).
+It ends `OK` with `acked=12 all present` (`28275db955114140`; with `--backend kvm`
+`87f1ea33b112285a`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json`: `ok`, `violation`, or `error`.
@@ -232,7 +232,7 @@ Run either command again: the fingerprint is the same. Each run leaves a directo
 
 ```
 $ hydo repro hydo-out/runs/run-…
-REPRODUCED   run  fp=9f8f90a7d14566df (recorded 9f8f90a7d14566df)  disk=cut | run C=12 R=everysec
+REPRODUCED   run  fp=d299dc487ceb5e3c (recorded d299dc487ceb5e3c)  disk=cut | run C=12 R=everysec
              HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under hydo-out/runs/run-…/repro-…)
 ```
@@ -300,8 +300,8 @@ For this example expect only these classes in `hydo report --details`:
 With the default settings and an honest disk, Redis loses nothing (the `disk=cut | run C=12`
 run of section 2). On the machine of section 2 it found 9 failures (io-errors 4, lying-disk 3, unsafe-knob 2), and all
 of them reproduced. The two minimal schedules were
-`disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`d3c11e15f3835b06`) and
-`disk=lying:2 dseed=17144527b62d669c | run C=17` (`32676d17c82aa953`).
+`disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`ec087a21903279d8`) and
+`disk=lying:2 dseed=17144527b62d669c | run C=17` (`b9ba9497e29887aa`).
 
 To re-run every failure of an exploration from a fresh boot and compare the fingerprints:
 
@@ -323,8 +323,8 @@ hydo build hydo-netem.yaml
 hydo run --image hydo-out/explore-ob-redis-netem-disk.img "disk=none | run N=redis@3-6:delay,300ms"
 ```
 
-It ends `OK` with `retrans=0` (`dc095cf7124dd3ac`; on the KVM engine `9f0b93a2fbeb7d21`; image
-sha256 `2c6ec46ea62a5b8b…`): no packet was sent twice. With two images in `hydo-out`, `hydo
+It ends `OK` with `retrans=0` (`020c9cc8c6182c9f`; on the KVM engine `46e0b32fc537a987`; image
+sha256 `b9d31daf7c494255…`): no packet was sent twice. With two images in `hydo-out`, `hydo
 run` and `hydo explore` need `--image` to know which one you mean.
 
 ## 5. Onboard your own project
@@ -380,7 +380,7 @@ hydo doctor --backend kvm
 cp -R ~/.hydo/examples/redis ~/hydo-redis && cd ~/hydo-redis
 hydo build hydo.yaml                           # the same image as in section 2
 hydo run --backend kvm --image hydo-out/explore-ob-redis-disk.img "disk=none | run"
-hydo run --backend kvm --image hydo-out/explore-ob-redis-disk.img "disk=cut | run C=11 R=everysec"
+hydo run --backend kvm --image hydo-out/explore-ob-redis-disk.img "disk=cut | run C=12 R=everysec"
 hydo explore --backend kvm --image hydo-out/explore-ob-redis-disk.img --seeds 1-20 --strategy swarm --workers 2
 hydo repro hydo-out/explore
 ```
@@ -409,19 +409,18 @@ the same verdicts as with hvx, but they are counted differently:
 
 A host power cut at the k-th disk flush (`cf=`) and inserted ticks (`pp=`, `xt…`) are hvx's
 alone; the explorer draws the faults both engines apply. With the image of section 2, the two
-schedules end `OK` (`fb237d7eebbf8b83`) and `VIOLATION … key k:1 lost` (`6a76d87a7dd2d6f2`).
-The power cut comes before step 11 here, not before step 12 as in section 2. The guest's timing
-differs between the engines, and on KVM Redis has synced every acknowledged write when the cut
-before step 12 comes, so that run ends `OK` with `acked=12 all present`. The values come from
-AMD EPYC CPUs (the 7763, 9V45 and 9V74 give the same values). Intel CPUs give the same verdicts
-with fingerprints of their own.
+schedules end `OK` (`7adecc09c07aaaa4`) and `VIOLATION … key k:1 lost` (`fd41aeb199057728`).
+The values come from AMD EPYC CPUs (the 7763 and 9V74 give the same values). Intel CPUs give the
+same verdicts with fingerprints of their own.
 
-The exploration finds 8 failures, and its report gives two minimal schedules:
+The exploration finds 10 failures, and its report gives three minimal schedules:
 
 - `disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20` (`lying-disk`, a lost key);
-- `disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`unsafe-knob`).
+- `disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`unsafe-knob`);
+- `disk=lying:6 dseed=b3c3d806a5d34604 | run C=5` (`lying-disk`, a data disk that does not mount
+  again).
 
-`hydo repro hydo-out/explore` ends `hydo: 10 of 10 reproduced with the recorded fingerprint`.
+`hydo repro hydo-out/explore` ends `hydo: 13 of 13 reproduced with the recorded fingerprint`.
 `hydo repro` of a run or an exploration uses the engine that recorded it, so it needs no
 `--backend`.
 

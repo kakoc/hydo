@@ -100,7 +100,7 @@ twice, so the example's `hydo-out/` holds about 150 MB after the build. The 512 
 the `hydo init` skeleton (section 5) takes about 1 GB.
 
 Building the same `hydo.yaml` again gives the same bytes:
-`shasum -a 256 hydo-out/explore-ob-redis-arm64.cpio.gz` prints `706c8b95f995e20c…` before and after
+`shasum -a 256 hydo-out/explore-ob-redis-arm64.cpio.gz` prints `31e906681736ecad…` before and after
 a second `hydo build hydo.yaml`. `appendfsync` is the Redis setting that
 decides when Redis writes its log to the disk: `always` (the example's default) after every
 write, `everysec` once a second.
@@ -119,12 +119,12 @@ is such a setting of the system that a guest token changes; the example's `hydo.
 knobs under `knobs:`. Each command prints a `RESULT` line. Its `verdict=` field is the outcome,
 and `HYDO-ORACLE:` marks the verdict of the invariants. `fp=` is the fingerprint; the other
 fields are hydo's own counters. The first ends `verdict=HYDO-ORACLE: OK` (fingerprint
-`a62eee5332a5b9d2`). The second prints a violation: an acknowledged key is gone after the power
-cut (`key k:0 lost`, fingerprint `474b2874e7ef0fa2`; the check stops at the first lost key).
+`05f433ee427f8e3c`). The second prints a violation: an acknowledged key is gone after the power
+cut (`key k:0 lost`, fingerprint `2174995ebfb4d2d6`; the check stops at the first lost key).
 That is Redis's documented `everysec` window, and the run reproduces it every time. Run either command again and the fingerprint
 (`fp=`) is the same. With the default `appendfsync always`, the same cut loses nothing:
 `hydo run "disk=cut | run C=12"` ends `OK` with `acked=12 all present` (fingerprint
-`2e5f02d8ff33394f`).
+`c95bf61bfaf5779a`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json` (in the folder under

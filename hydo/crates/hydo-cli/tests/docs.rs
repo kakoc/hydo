@@ -261,26 +261,19 @@ const USER_PAGES: &[&str] = &[
 /// where it is recorded. Add a value here only with its source.
 const CITED_ELSEWHERE: &[(&str, &str)] = &[
     (
-        "30e74366625f3474",
-        "wfp of the Redis example's clean run on hvx, recorded with fp 5ec14b8b4bdcf367 \
-         (docs/HISTORY.md, Milestone 204)",
+        "fb8f826f99c291ed",
+        "wfp of the Redis example's clean run on hvx at the fingerprint epoch 4, recorded with fp \
+         2f9186af5e3be2b1 (docs/HISTORY.md, Milestone 302)",
     ),
     (
-        "c24534f57aab6d42",
-        "ctl of the same run; docs/HISTORY.md, Milestone 204",
+        "ffe9697f49bd79e3",
+        "wfp of the Redis power cut on hvx at the fingerprint epoch 4, recorded with fp \
+         d299dc487ceb5e3c (Milestone 302)",
     ),
     (
-        "f4de09236076bc87",
-        "wfp of the Redis power cut on hvx, recorded with fp 9f8f90a7d14566df (Milestone 204)",
-    ),
-    (
-        "a98cc29af3d645f4",
-        "ctl of the Redis power cut; docs/HISTORY.md, Milestone 204",
-    ),
-    (
-        "a21e470b7ea6eb08",
+        "1b5da9cd7de7df13",
         "fp of the messages tutorial's clean run on the Mac engine, twice, at the fingerprint \
-         epoch 3 (docs/ONBOARD.md; docs/HISTORY.md, Milestone 244)",
+         epoch 4 (docs/ONBOARD.md; docs/HISTORY.md, Milestone 302)",
     ),
     (
         "362259904816818c",

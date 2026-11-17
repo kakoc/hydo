@@ -346,6 +346,27 @@ other boundaries: the failing bands are 18,171 to 18,387, 18,461 to 18,606, and 
 on. It stepped over the band at 18,140: its grid points 18,098 and 18,147 pass. At epoch 2,
 `q=18800` and `q=18700` both pass.
 
+## The fingerprint epoch 4 (Milestone 302): the current values
+
+At the fingerprint epoch 4 the guest mounts cgroup2 at every boot (Milestone 283), and the
+boundary moved again: `q=18140` passes. On the images built at epoch 4 (buggy `2a8028e20c10ff1e…`,
+fixed `8c75701627903192…`) the default turn sweep (`hydo explore --vcpus 2 --sweep turns
+--workers 1`, 21 runs) found one boundary, between `q=19726` and `q=19783`, both reproduced. Each
+schedule below ran twice from a fresh boot on the bare-metal machine:
+
+| image | schedule | vCPUs | verdict | fingerprint (both runs) |
+|---|---|---|---|---|
+| buggy | `disk=none q=19783 \| run` | 2 | VIOLATION, line 72, `3 vs 2` | `2d2481dd7ef43f6e` |
+| buggy | `disk=none q=19726 \| run` | 2 | OK, `pass=2 of 2` | `d105a00382081edb` |
+| fixed | `disk=none q=19783 \| run` | 2 | OK | `7e8d4dd07067c30e` |
+| buggy | `disk=none \| run` | 1 | VIOLATION | `4d9187b880886fe6` |
+
+These four runs replace the epoch-2 ones in `hydo/onboard/recorded.json`. A dense sweep of 17,000
+to 19,000 (`--turn-range 17000-19000 --turn-points 41 --turn-resolution 10`, 56 runs) found five
+boundaries: the failing bands are 18,103 to 18,135, 18,421 to 18,453, and 18,895 to the range's
+end at 19,000 (the default sweep's 19,498 passes). The comment
+in `hydo.yaml` keeps the epoch-2 lengths, because the manifest's text is inside the image.
+
 ## Files
 
 | file | what it is |

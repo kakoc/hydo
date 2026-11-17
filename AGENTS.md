@@ -272,18 +272,21 @@ image built at epoch 3 or later boots the Mac and KVM guest kernels with cgroups
 at epoch 4 carries no saved regression: `hydo build` writes them beside it, as
 `<image>.regressions.json`, so saving or editing one leaves the image's bytes and the other
 regressions' runs alone. An image built before keeps them inside and is replayed from them. An
-image built at epoch 4 also boots with cgroup2 mounted on `/sys/fs/cgroup` (M283). M244
-re-recorded every value of the list at epoch 3; the epoch-4 values wait for the pass before
-0.4.0 (open item 105). The pinned reproducers are
+image built at epoch 4 also boots with cgroup2 mounted on `/sys/fs/cgroup` (M283). M302
+re-recorded every value of the list at epoch 4. The pinned reproducers are
 `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` under `hydo run`: `a76d7fe857fdb37c`
 (VIOLATION, order 11) on `explore-ob-stack-old-disk.img` (`dab0e76c…`) and `efbde7b57264be0f`
 (OK) on `explore-ob-stack-fix-disk.img` (`d61cbf00…`), in `~/hydo/build/m204` on the bare-metal
 machine. Their epoch-3 images (`b498b9c8…` and `c8fc9b42…`, in `~/hydo/build/m244`) give the same
-two values on hvx; on KVM they give `58cee6328470c677` and `8e53b18f9885e12f` (AMD). Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
+two values on hvx. Their epoch-4 images (`728e344c…` and `b83e3d39…`, in `~/hydo/build/m302`)
+give `e153f376096a072c` and `6a5c2fe208174af3` on hvx and `66da20bdbfafd6d2` and
+`0bcce788f5ef3f4d` on KVM (AMD). Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
 `ba0aa0612502a1df` under this hydo, because an image keeps the defaults of its own epoch
 (`hydo_image::defaults`). `hydo/onboard/examples/stack/build-reproducers.sh` rebuilds both
-images. Every recorded example value is in `hydo/onboard/recorded.json`, and `hydo-bench
-rebaseline` checks or re-records them (`docs/REBASELINE.md` "How to re-baseline").
+images. The quickstart's Redis example gives `05f433ee427f8e3c` (OK) and `2174995ebfb4d2d6`
+(`C=12 R=everysec`, `k:0` lost) on the Mac, and `7adecc09c07aaaa4` and `fd41aeb199057728` (`k:1`
+lost) on KVM (AMD). Every recorded example value is in `hydo/onboard/recorded.json`, and
+`hydo-bench rebaseline` checks or re-records them (`docs/REBASELINE.md` "How to re-baseline").
 
 **The hvx engine.** The module (`hv/hvx/hvx.c`, ABI `hvx_abi.h`) boots Linux 6.6.35
 deterministically, with guest RAM up to 8 GiB. Its clock counts VM exits, or the guest's retired
@@ -322,7 +325,7 @@ x86-64-v2 level, or at x86-64-v3 for `guest.cpu: v3` on a host whose KVM has AVX
 Its fingerprints are its own. They differ between CPU vendors, because the guest's FXSAVE writes
 other bytes into its RAM on AMD. On Intel they differed between CPU models only in DR6's host
 bits, which leave the fingerprint of an image built at epoch 3 or later (M252). The AMD EPYC
-7763, 9V45, and 9V74 agree, and the recorded KVM values are theirs since M244. The verdicts are
+7763, 9V45, and 9V74 agree, and the recorded KVM values are theirs since M244, and at epoch 4 since M302. The verdicts are
 the same. Details:
 `docs/design/kvm-engine.md`, Milestones 159, 161, 175 and 189, and open item 45 in
 `docs/HISTORY.md` Milestone 187. Some guest loops make no VM exits and store to memory, for
@@ -1318,7 +1321,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 7. fwupd still runs on the bare-metal machine. Old single outliers were not checked against its
    times (M65).
 8. etcd 3.5.5: why issue 14685's second symptom needs a later pause of another member was not
-   investigated (M78).
+   investigated (M78). At the fingerprint epoch 4 no schedule of a 90-schedule sweep reached the
+   second symptom, so the list shows the issue by its first symptom (M302). A search with timed
+   kills and pauses inside a step was not run.
 9. Explorer gaps. The oracle reads Kafka before its restart after a kill at the last order (M55).
    The `xt` shrinker keeps a seeded policy (M49). An OK verdict shows only the first invariant's
    details (M47).
@@ -1527,7 +1532,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     What is left:
     - A pause of threads runs on the Mac and KVM engines since M234 (the fingerprint epoch 3:
       guest kernels with cgroups). It fails Qdrant's test on the Mac at 11 of 81 starts. On KVM
-      with one vCPU it fails it at 1 of 81 starts (239 ms) on four AMD and Intel hosts. With two vCPUs
+      with one vCPU it fails it at 1 of 81 starts (239 ms) on four AMD and Intel hosts. At the
+      fingerprint epoch 4 it fails it at 1 of 120 starts (208 ms, M302). With two vCPUs
       no start from 390 to 460 ms failed it on KVM: 50 passed and 21 ended in ERROR. A wider
       window was not searched, and the ERROR's cause was not read.
     - The freeze script ends the run with an error when a thread it listed exits before it is
@@ -1633,21 +1639,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
     milestone and the values it moves; the pass removes the lines.
-    - M269 raised the fingerprint epoch to 4. Every image of the list built at epoch 4 has new
-      bytes: its record says epoch 4, and an image whose plan has saved regressions no longer
-      carries them. These are 21 hvm images, 6 kvm images, and 43 hvx images. Each of their runs
-      may move: 76 hvm runs, 17 kvm runs, and 141 hvx runs. Record them in one pass before the 0.4.0 release, with `epoch` 4 in
-      `hydo/onboard/recorded.json` (docs/REBASELINE.md section 26).
-    - M283 mounts cgroup2 at every boot of an image built at epoch 4. The images' bytes do not
-      change. Each boot conversation sends one more command before S0, so every epoch-4 run of
-      the list gets another `ctl` value and another fingerprint on all three engines. The same
-      pass records them.
-    - M290 hashes the disks of an image built at epoch 4 by a tree of block hashes on the Mac
-      and KVM engines. Every epoch-4 Mac and KVM fingerprint of the list moves, and no verdict
-      or `ctl` value moves. hvx's values do not move. Tonight's pass records them.
-    - M294 hashes the guest RAM of an image built at epoch 4 by a tree of page hashes on the Mac
-      and KVM engines. Every epoch-4 Mac and KVM fingerprint of the list moves again, and no
-      verdict or `ctl` value moves. hvx's values do not move. Tonight's pass records them.
+    No value of the list waits. Milestone 302 re-recorded the whole list at the fingerprint
+    epoch 4.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -3042,6 +3035,13 @@ build machine, before 2026-10-13.
   candidate, not posted: after a backward clock step, a restart of the server holds accepted
   invocations until the wall clock reaches their creation time. The explorer reads an image's
   `guest:` with its parameter values. Nothing recorded moved
+- M302 (tentative number): the epoch-4 re-recording before 0.4.0. Every value of `recorded.json`
+  is re-recorded at epoch 4 on hvx, the Mac and KVM (AMD hosts). Every image and every run
+  moved on all three. Two verdict changes are accepted. Five findings have new schedules. They
+  are Qdrant's pause at 208 ms, nats at `q=19783`, Redis's liveness pause at step 17, the racy
+  composer at `q4`, and etcd 14685 by its first symptom. A tick jitter that delays no
+  timer at epoch 4 is replaced. Whole-RAM dumps showed that the RAM's tree hash follows the RAM.
+  Open item 105 is empty
 
 ## Where to look
 

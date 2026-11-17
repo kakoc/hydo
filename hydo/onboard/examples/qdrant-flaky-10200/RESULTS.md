@@ -300,6 +300,21 @@ hydo build hydo.yaml
 hydo run --backend kvm "disk=none | run P=workload/tests::wal_reco@0~239:500"
 ```
 
+At the fingerprint epoch 4 (Milestone 302) the start at 239 ms passes, because the guest mounts
+cgroup2 at every boot and its timing changed. `pause-check.sh` ran again on GitHub's runners (run
+44149877529: AMD EPYC 7763, Intel Xeon Platinum 8370C and two 6975P-C hosts). The reload still
+came at 3.33 s of guest uptime, with the workload's start at 3.08 s. Of the 120 starts from 190 to
+309 ms only 208 ms failed, on every host, with `length: 0, op_num: Some(499)`
+(`893186276c24e149` on AMD). The start at 207 ms passed with `length: 11`, and 269 and 273 ms
+ended in ERROR. The fixed test passed with the pause at 208 ms, and so did a pause of the whole
+workload. `hydo/onboard/recorded.json` now holds the pause at 208 ms and its neighbour at 207 ms.
+To run the failing schedule at epoch 4:
+
+```sh
+hydo build hydo.yaml
+hydo run --backend kvm "disk=none | run P=workload/tests::wal_reco@0~208:500"
+```
+
 With two vCPUs no start from 390 to 460 ms failed the test: 50 passed, and 21 (390 to 410 ms)
 ended in ERROR with the queue already full (`length: 35`). A wider window was not searched.
 
