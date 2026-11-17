@@ -132,7 +132,8 @@ the engine's own hash functions on the image. So with fingerprints every call co
 time. The definition of the fingerprint cannot change without moving every recorded KVM value; an
 agent environment would use a second, incremental state hash (hashes kept per disk block and RAM
 page, updated only for what a call wrote, combined as a tree), which costs in proportion to what
-the call changed.
+the call changed. Since Milestone 290 the disk's part is such a tree for an image built at the
+fingerprint epoch 4 or later (`hydo_hvm::disk`); the RAM's part still reads every page.
 
 **Memory per branch.** The session's own memory (`/proc/<pid>/smaps_rollup`, anonymous pages)
 grew by about 1 MB per branch after `true` (10 branches: 2.8 MB to 12.5 MB) and by 46 MB per

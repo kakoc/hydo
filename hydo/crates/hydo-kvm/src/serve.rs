@@ -97,7 +97,9 @@ pub struct Start {
     /// `--image-epoch`: the fingerprint epoch the image was built at (None: this hydo's). An
     /// image of epoch 1 runs as it did then (Milestone 204): no full-state cycles unless
     /// HYDO_KVM_SPIN_STATE asks for them, and a fingerprint that keeps KVM's leftover event fields.
-    /// An image of epoch 1 or 2 keeps DR6's host bits in its fingerprint (Milestone 252).
+    /// An image of epoch 1 or 2 keeps DR6's host bits in its fingerprint (Milestone 252). An image
+    /// of epoch 1 to 3 hashes its disks byte by byte, a later one by their tree hash (Milestone
+    /// 290, `hydo_hvm::disk`).
     pub image_epoch: Option<u64>,
     /// `--vcpus`: the vCPUs (1: the machine of every recorded value)
     pub vcpus: usize,
@@ -1647,6 +1649,9 @@ fn engine_main(
     vo.stale_events = before_2;
     // Milestone 252: DR6's host bits leave the fingerprint from epoch 3 on
     vo.host_dr6 = start.image_epoch.is_some_and(|e| e < 3);
+    // Milestone 290: the disks' tree hash in the fingerprint from epoch 4 on
+    vo.virtio.disk_tree =
+        hydo_image::defaults(start.image_epoch.unwrap_or(hydo_image::EPOCH), "x86_64").disk_tree;
     vo.ram_size = ram_mib << 20;
     vo.vcpus = start.vcpus.max(1);
     if vo.vcpus > 1 {

@@ -754,6 +754,7 @@ dependencies = [
  "hydo-contracts",
  "hydo-engine-proto",
  "hydo-hvx",
+ "hydo-image",
  "hydo-schedule",
  "libc",
 ]
@@ -790,6 +791,7 @@ dependencies = [
  "hydo-engine-proto",
  "hydo-hvm",
  "hydo-hvx",
+ "hydo-image",
  "hydo-schedule",
  "libc",
 ]

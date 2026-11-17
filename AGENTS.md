@@ -300,7 +300,11 @@ built at the fingerprint epoch 3 or later boots their builds with cgroups, `Imag
 An image's root file system is its initramfs, in guest RAM. With `guest.root: disk` (M284, a
 format-1 addition, the default with `browser:`) the root is a read-only ext4 file system on the
 disk, which a small initramfs mounts. `hydo build` makes it in a helper VM of the Mac engine.
-The details are in Milestones 48, 51, 99, 143, 147, and 284.
+From the fingerprint epoch 4 the disk's part of a fingerprint is a tree of 4 KiB block hashes
+(M290, `hydo_hvm::disk`, also on KVM). The base's hashes are made once per process while the
+guest runs, and a fingerprint hashes again only the blocks the run wrote. An older image keeps
+the byte-wise hash of every byte. The details are in Milestones 48, 51, 99, 143, 147, 284, and
+290.
 
 **The KVM engine.** `hydo/crates/hydo-kvm` runs the x86_64 images on stock Linux KVM, without the
 module or root, with one vCPU and a patched guest kernel (`bzImage-kvm`). With `--vcpus N` it runs
@@ -1483,6 +1487,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       change. Each boot conversation sends one more command before S0, so every epoch-4 run of
       the list gets another `ctl` value and another fingerprint on all three engines. The same
       pass records them.
+    - M290 hashes the disks of an image built at epoch 4 by a tree of block hashes on the Mac
+      and KVM engines. Every epoch-4 Mac and KVM fingerprint of the list moves, and no verdict
+      or `ctl` value moves. hvx's values do not move. Tonight's pass records them.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -1925,9 +1932,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - While the helper VM runs, a build needs free disk of about three times the root: 7 GB
       for Memos. Each image of `browser:` takes about 3.4 GB. Each example fetches its own copy
       of the 1 GB Playwright archive into its `browser/`.
-    - The Mac engine hashes every byte of the disk for a fingerprint, twice per run, and each
-      hash of web-shop's disk takes about five seconds. Hashing only the written blocks would
-      need a keyed change of the fingerprint.
+    - Since M290 an epoch-4 image's fingerprint hashes the disk by a tree of block hashes, and
+      web-shop's run takes 8 s in the engine instead of 42 to 55 s. Each fingerprint still hashes
+      all of guest RAM, about 1 s for web-shop's 4 GiB. A tree of RAM pages would need the
+      engine to know which pages the guest wrote. An image built before epoch 4 keeps the
+      byte-wise hash of its disk, 12 to 13 s per fingerprint for a disk of 3.4 GB.
     - A Linux host cannot build such an arm64 image, because the helper VM needs the Mac
       engine. No path with `mke2fs -d` was built.
     - A disk fault can now hit a read of the root, as on the x86_64 engines. No exploration
@@ -2670,6 +2679,11 @@ build machine, before 2026-10-13.
   without faults, where every business rule held, now fails, and the fixed build holds. In 30
   blind schedules the line broke in 9 (first seed 4), the overdraft rule in 1 (seed 21). One
   fingerprint with and without the plan. Nothing recorded moved
+- M290 (tentative number): a cheaper fingerprint, part of the fingerprint epoch 4. On the Mac
+  and KVM engines the disk's part is a tree of 4 KiB block hashes. The base's hashes are made
+  once per process while the guest runs, and only written blocks are hashed again. web-shop's
+  run takes 8 s in the engine instead of 42 to 55 s. Older images keep their values. Every
+  epoch-4 Mac and KVM fingerprint moves (open item 105)
 
 ## Where to look
 

@@ -27,6 +27,7 @@ hydo-schedule = { workspace = true }
 hydo-config = { workspace = true }
 # function contracts: the plan it follows and the records it writes (M241)
 hydo-contracts = { workspace = true }
+hydo-image = { workspace = true }
 
 [[bin]]
 name = "hydo-hvm"

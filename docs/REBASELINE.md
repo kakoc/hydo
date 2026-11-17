@@ -3603,3 +3603,13 @@ transcript (`ctl`) and another fingerprint on all three engines. The same pass r
 image built at epoch 3 or before mounts nothing at boot: the pinned reproducers gave their values
 on their epoch-1, epoch-2 and epoch-3 images on hvx before and after the change (docs/HISTORY.md
 Milestone 283).
+
+**The disks' tree hash (M290, 2026-11-17).** Epoch 4 has a third default. On the Mac and KVM
+engines the disk's part of a fingerprint of an image built at epoch 4 or later is a tree of
+4 KiB block hashes instead of the byte-wise FNV-1a of every byte (`hydo_image::defaults`,
+`disk_tree`; `hydo_hvm::disk`). The image's bytes and its boot conversation do not change, so no
+verdict and no `ctl` value moves, but every epoch-4 fingerprint of the list moves on the Mac and
+KVM engines. hvx's fingerprint is the kernel module's and does not move. The same pass records
+them. An image built at epoch 3 or before keeps the byte-wise hash: the release's Redis example
+built by the 0.3.4 Mac release gave the quickstart's `a62eee5332a5b9d2`, `474b2874e7ef0fa2` and
+`2e5f02d8ff33394f` with this hydo (docs/HISTORY.md Milestone 290).

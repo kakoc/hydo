@@ -59,6 +59,9 @@
 //!   fingerprint with the rewind mode on.
 //! - **Guest RAM:** `--ram-mib N` before the mode, else `HVM_MEM_MB`, else 1024 MiB; 256..8192.
 //!   Snapshots keep RAM in an unlinked file in `HVM_SNAP_DIR` (default `/tmp/hvm-snap`).
+//! - **The image's epoch:** `--image-epoch N` before the mode (none: this hydo's). An image built
+//!   before the fingerprint epoch 4 hashes its disks byte by byte; from epoch 4 on by their tree
+//!   hash (Milestone 290, [`crate::disk`]).
 //!
 //! Since M142's typed calls the engine core takes typed values: requests and commands at a stop
 //! come through a [`Port`] (`hydo_hvx::port`: hydo-engine's [`ChanPort`](hydo_hvx::port::ChanPort)
@@ -121,6 +124,10 @@ pub struct Start {
     pub outdir: std::path::PathBuf,
     /// `--ram-mib` (None: `HVM_MEM_MB`, else 1024).
     pub ram_mib: Option<u64>,
+    /// `--image-epoch`: the fingerprint epoch the image was built at (None: this hydo's). An
+    /// image of an epoch before 4 keeps the disks' byte-wise hash in its fingerprints (Milestone
+    /// 290, `hydo_image::EpochDefaults::disk_tree`).
+    pub image_epoch: Option<u64>,
 }
 
 pub enum Mode {
@@ -1523,6 +1530,8 @@ pub fn opts_from(o: &HvmOptions, hvmx: bool) -> VmOpts {
             .as_deref()
             .and_then(virtio::ExtraCfg::parse_list)
             .unwrap_or_default(),
+        // the engine sets it by the image's epoch; hvm's boot probes keep every byte
+        disk_tree: false,
     };
     if hvmx && virt.disk.is_some() && virt.fault.is_none() {
         // negotiate FLUSH: flush-aware class at probability 0
@@ -1570,10 +1579,24 @@ pub fn main_with(args: &[String], o: &HvmOptions, io: Io) -> i32 {
     } = io;
     let mut a: Vec<String> = args.to_vec();
     let mut ram_mib = None;
-    while a.len() > 2 && a[1] == "--ram-mib" {
-        match ram_mib_parse(&a[2], "--ram-mib", &diag) {
-            Some(n) => ram_mib = Some(n),
-            None => return 2,
+    let mut image_epoch = None;
+    while a.len() > 2 && (a[1] == "--ram-mib" || a[1] == "--image-epoch") {
+        if a[1] == "--ram-mib" {
+            match ram_mib_parse(&a[2], "--ram-mib", &diag) {
+                Some(n) => ram_mib = Some(n),
+                None => return 2,
+            }
+        } else {
+            match a[2].parse::<u64>() {
+                Ok(n) if n >= 1 => image_epoch = Some(n),
+                _ => {
+                    say(
+                        &diag,
+                        &format!("hvmx: --image-epoch {}: expected a number from 1", a[2]),
+                    );
+                    return 2;
+                }
+            }
         }
         a.drain(1..3);
     }
@@ -1590,7 +1613,7 @@ pub fn main_with(args: &[String], o: &HvmOptions, io: Io) -> i32 {
         || (a[1] != "serve" && a[1] != "one")
         || (a[1] == "one" && argc < 6);
     if usage {
-        say(&diag, "usage: hvmx [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> [\"<schedule>\"]");
+        say(&diag, "usage: hvmx [--ram-mib N] [--image-epoch N] --control boot serve|one <Image> <initramfs> <outdir> [\"<schedule>\"]");
         return 2;
     }
     // every schedule is read by hydo-schedule (M142, M143), as on hvx
@@ -1618,6 +1641,7 @@ pub fn main_with(args: &[String], o: &HvmOptions, io: Io) -> i32 {
         initrd: a[3].clone().into(),
         outdir: a[4].clone().into(),
         ram_mib,
+        image_epoch,
     };
     let port = Box::new(hydo_hvx::text::TextPort::new(input, out));
     run_diag(start, o, port, diag, echo)
@@ -1683,6 +1707,10 @@ fn engine_main(
     let outdir = start.outdir.display().to_string();
     let _ = std::fs::create_dir(&outdir);
     let mut vo = opts_from(o, true);
+    // what the image's own fingerprint epoch decides (hydo_image::defaults): the disks' tree hash
+    // from epoch 4 on (Milestone 290); an arm64 image's defaults
+    vo.virtio.disk_tree =
+        hydo_image::defaults(start.image_epoch.unwrap_or(hydo_image::EPOCH), "arm64").disk_tree;
     let o_contracts = o.contracts.clone();
     vo.ram_size = ram_mib << 20;
     if ram_mib != 1024 {

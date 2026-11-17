@@ -184,7 +184,8 @@ pub struct BootSpec {
     /// image's epoch (`image::cpu_cache_of`, M204).
     pub cpu_cache: bool,
     /// The fingerprint epoch the image was built at (its record; `image::image_epoch`). The KVM
-    /// engine runs an image of epoch 1 as it did at epoch 1 (`--image-epoch 1`, M204).
+    /// engine runs an image of epoch 1 as it did at epoch 1 (`--image-epoch 1`, M204), and the
+    /// Mac and KVM engines hash the disk of an image before epoch 4 byte by byte (M290).
     pub epoch: u64,
     /// The guest kernel: hvx's bzImage, or hvm's arm64 `Image` (an image built for the second
     /// kernel records it; the caller resolves that with `hvm::kernel_for`).
@@ -230,7 +231,10 @@ impl BootSpec {
             a.push("--cpu-cache".to_string());
             a.push("on".to_string());
         }
-        if self.epoch < 2 && kind == EngineKind::Kvm {
+        // an image of an older fingerprint epoch runs as at its epoch (the KVM engine since M204;
+        // since Milestone 290 both engines, whose fingerprints hash the disks by a tree from
+        // epoch 4 on): the in-process engines take the epoch as a value
+        if self.epoch < hydo_image::EPOCH && matches!(kind, EngineKind::Hvm | EngineKind::Kvm) {
             a.push("--image-epoch".to_string());
             a.push(self.epoch.to_string());
         }

@@ -256,6 +256,10 @@ pub struct Config {
     pub net_fault_prob: Option<String>,
     /// the added disks (Milestone 263; `HYDO_GUEST_DISKS`)
     pub extra: Vec<ExtraCfg>,
+    /// The disks' part of a fingerprint is their tree hash (Milestone 290, [`Disk::tree_hash`]),
+    /// not the byte-wise FNV of every byte: an image built at the fingerprint epoch 4 or later
+    /// (`hydo_image::EpochDefaults::disk_tree`).
+    pub disk_tree: bool,
 }
 
 /// A snapshot of the devices (`virtio_save`).
@@ -281,6 +285,8 @@ pub struct Virtio {
     pub net_idx: i32,
     /// the added disks (Milestone 263), devices `v.ndev ..`
     pub extra: Vec<Extra>,
+    /// [`Config::disk_tree`]: how [`Virtio::hash`] hashes the disks
+    pub disk_tree: bool,
 }
 
 fn parse_classes(s: Option<&str>, net: bool) -> u32 {
@@ -453,6 +459,7 @@ impl Virtio {
             blk_idx: -1,
             net_idx: -1,
             extra: Vec::new(),
+            disk_tree: c.disk_tree,
         };
         if let Some(dp) = &c.disk {
             let d = Disk::open(dp).map_err(|e| format!("{dp}: {e}"))?;
@@ -463,6 +470,10 @@ impl Virtio {
             x.v.ndev += 1;
             x.v.dev[x.blk_idx as usize].ty = VDEV_BLK;
             x.v.blk.disk_size = d.len() as u64;
+            if c.disk_tree {
+                // the base's tree hashes while the guest boots (Milestone 290)
+                d.hash_base_soon();
+            }
             x.disk = Some(d);
             if let Some(f) = &c.fault {
                 x.v.blk.seed = cstr::strtoull0(f.as_bytes());
@@ -741,7 +752,12 @@ impl Virtio {
     pub fn hash(&self, mut h: u64) -> u64 {
         h = fnv(&self.v.bytes(), h);
         if let Some(d) = &self.disk {
-            d.for_each(self.v.blk.disk_size as usize, |b| h = fnv(b, h));
+            if self.disk_tree {
+                // the whole disk: `disk_size` is its length (setup), and in the bytes above
+                h = d.tree_hash(h);
+            } else {
+                d.for_each(self.v.blk.disk_size as usize, |b| h = fnv(b, h));
+            }
         }
         for c in self.cache.iter().take(self.v.blk.n_unsync as usize) {
             h = fnv_u64(c.doff, h);
@@ -753,7 +769,7 @@ impl Virtio {
             h = fnv(&t[..self.v.net.tx_len as usize], h);
         }
         for e in &self.extra {
-            h = e.hash(h);
+            h = e.hash(h, self.disk_tree);
         }
         h
     }
@@ -1376,5 +1392,57 @@ mod tests {
         assert_eq!(parse_classes(Some("unflushed"), false), F_UNFLUSHED);
         assert_eq!(parse_classes(Some("lying,drop"), false), F_DROP);
         assert_eq!(parse_classes(None, true), NF_DROP);
+    }
+
+    /// Milestone 290: the devices' hash takes the disks' tree hash with `disk_tree`, and every
+    /// byte without it (an image before the fingerprint epoch 4) exactly as before.
+    #[test]
+    fn the_disks_hash_by_the_epochs_rule() {
+        use crate::fnv::OFFSET;
+        let dir = std::env::temp_dir().join(format!(
+            "hydo-virtio-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("d.img");
+        let bytes: Vec<u8> = (0..(crate::disk::BLOCK * 600))
+            .map(|i| (i % 253) as u8)
+            .collect();
+        let devices = |b: &[u8], tree: bool| {
+            std::fs::write(&p, b).unwrap();
+            let c = Config {
+                disk: Some(p.display().to_string()),
+                extra: vec![ExtraCfg {
+                    size: 1 << 20,
+                    write_through: false,
+                }],
+                disk_tree: tree,
+                ..Config::default()
+            };
+            Virtio::setup(&c).unwrap()
+        };
+        let old = devices(&bytes, false);
+        let new = devices(&bytes, true);
+        // without the tree: the state, the disk's bytes, then the added disk's state and bytes
+        let mut want = fnv(&old.v.bytes(), OFFSET);
+        want = fnv(&bytes, want);
+        want = old.extra[0].hash(want, false);
+        assert_eq!(old.hash(OFFSET), want);
+        let mut want = fnv(&new.v.bytes(), OFFSET);
+        want = new.disk.as_ref().unwrap().tree_hash(want);
+        want = new.extra[0].hash(want, true);
+        assert_eq!(new.hash(OFFSET), want);
+        assert_ne!(old.hash(OFFSET), new.hash(OFFSET));
+        // one changed byte of the image changes both
+        let mut b2 = bytes.clone();
+        b2[crate::disk::BLOCK * 517 + 9] ^= 4;
+        assert_ne!(devices(&b2, false).hash(OFFSET), old.hash(OFFSET));
+        assert_ne!(devices(&b2, true).hash(OFFSET), new.hash(OFFSET));
+        // a byte written to the added disk too
+        let mut w = devices(&bytes, true);
+        w.extra[0].disk.write(4097, b"y");
+        assert_ne!(w.hash(OFFSET), new.hash(OFFSET));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

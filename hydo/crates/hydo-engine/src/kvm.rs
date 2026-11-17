@@ -456,7 +456,7 @@ mod tests {
             vcpus: 1,
             cpu: crate::CpuLevel::V2,
             cpu_cache: false,
-            epoch: 2,
+            epoch: hydo_image::EPOCH,
             kernel: "/g/bzImage-kvm".into(),
             initrd: Some("/g/initramfs-kafka.cpio.gz".into()),
             outdir: "/o".into(),
@@ -498,6 +498,17 @@ mod tests {
         assert_eq!(
             k.argv(&old, "one", &s).join(" "),
             "/r/bin/hydo-kvm --ram-mib 2048 --image-epoch 1 --control boot one \
+             /g/bzImage-kvm /g/initramfs-kafka.cpio.gz /i/x-disk.img /o rb=64 | run"
+        );
+        // M290: every epoch before this hydo's is named, as the in-process engine gets it (an
+        // image before epoch 4 hashes its disk byte by byte)
+        let three = BootSpec {
+            epoch: 3,
+            ..spec.clone()
+        };
+        assert_eq!(
+            k.argv(&three, "one", &s).join(" "),
+            "/r/bin/hydo-kvm --ram-mib 2048 --image-epoch 3 --control boot one \
              /g/bzImage-kvm /g/initramfs-kafka.cpio.gz /i/x-disk.img /o rb=64 | run"
         );
         // several vCPUs (docs/design/kvm-vcpus.md): up to hydo_kvm::smp::MAX_VCPUS

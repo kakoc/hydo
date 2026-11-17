@@ -114,6 +114,18 @@ impl Host {
         o: KvmOptions,
         epoch: Option<u64>,
     ) -> (Host, Out) {
+        Host::start_disk(mode, hv, vcpus, o, epoch, None)
+    }
+
+    /// [`Host::start_epoch`] with a disk of these bytes (None: no disk).
+    fn start_disk(
+        mode: Mode,
+        hv: Script,
+        vcpus: usize,
+        o: KvmOptions,
+        epoch: Option<u64>,
+        disk: Option<&[u8]>,
+    ) -> (Host, Out) {
         let dir = Arc::new(TmpDir::fresh(std::env::temp_dir().join(format!(
             "hydo-kvm-engine-{}-{}",
             std::process::id(),
@@ -126,11 +138,16 @@ impl Host {
         std::fs::write(&k, hydo_kvm::script::bzimage()).unwrap();
         let i = dir.join("initrd");
         std::fs::write(&i, b"initramfs").unwrap();
+        let disk = disk.map(|b| {
+            let p = dir.join("disk.img");
+            std::fs::write(&p, b).unwrap();
+            p
+        });
         let start = Start {
             mode,
             kernel: k,
             initrd: i,
-            disk: None,
+            disk,
             outdir: dir.join("out"),
             ram_mib: Some(256),
             image_epoch: epoch,
@@ -1342,6 +1359,73 @@ fn the_hosts_dr6_bits_leave_the_fingerprint_from_epoch_3() {
         );
     }
 }
+
+/// One run of the idle guest with a disk of these bytes, for an image of `epoch`.
+fn run_with_disk(epoch: Option<u64>, disk: &[u8]) -> RunResult {
+    let (mut h, _) = Host::start_disk(
+        Mode::Serve {
+            boot: Some(sched("rb=4 | run")),
+        },
+        Script::new(program(5)),
+        1,
+        KvmOptions::default(),
+        epoch,
+        Some(disk),
+    );
+    boot(&mut h);
+    h.recv();
+    h.tx.send(HostMsg::Request(Request::Ctl {
+        tag: "d".into(),
+        schedule: sched("disk=none rb=4 | run"),
+    }))
+    .unwrap();
+    let r = to_the_end(&mut h);
+    h.quit();
+    r
+}
+
+/// Milestone 290: from the fingerprint epoch 4 on the fingerprint hashes the disk by its tree of
+/// block hashes (`hydo_hvm::disk`); an image built before keeps the byte-wise hash and its values.
+/// Either way the fingerprint repeats, and one changed byte of the disk changes it.
+#[test]
+fn the_disk_is_in_the_fingerprint_by_its_tree_from_epoch_4() {
+    // 3 MiB and a half block: two chunks of the tree, the second short
+    let disk: Vec<u8> = (0..(3 << 20) + 2048).map(|i| (i * 7 % 251) as u8).collect();
+    let mut flipped = disk.clone();
+    flipped[(2 << 20) + 4096 * 5 + 17] ^= 0x10;
+    let now = run_with_disk(None, &disk);
+    assert_eq!(now.verdict, "HYDO-ORACLE: OK ticks");
+    let four = run_with_disk(Some(4), &disk);
+    assert_eq!(
+        (&four.fp, &four.wfp),
+        (&now.fp, &now.wfp),
+        "epoch 4 is this hydo's"
+    );
+    let again = run_with_disk(None, &disk);
+    assert_eq!((&again.fp, &again.wfp), (&now.fp, &now.wfp), "two runs");
+    let three = run_with_disk(Some(3), &disk);
+    assert_eq!(three.verdict, now.verdict);
+    assert_ne!(three.fp, now.fp, "epoch 3 keeps the byte-wise hash");
+    // the values: epoch 3's is the one the byte-wise hash gave before Milestone 290
+    assert_eq!(
+        [three.fp.as_str(), now.fp.as_str()],
+        PINNED_DISK,
+        "got epoch 3 {}, epoch 4 {}",
+        three.fp,
+        now.fp
+    );
+    let f4 = run_with_disk(None, &flipped);
+    let f3 = run_with_disk(Some(3), &flipped);
+    assert_ne!(f4.fp, now.fp, "a changed byte at epoch 4");
+    assert_ne!(
+        f4.wfp, now.wfp,
+        "a changed byte at epoch 4, the workload's fingerprint"
+    );
+    assert_ne!(f3.fp, three.fp, "a changed byte at epoch 3");
+}
+
+/// [epoch 3, epoch 4] fingerprints of `the_disk_is_in_the_fingerprint_by_its_tree_from_epoch_4`.
+const PINNED_DISK: [&str; 2] = ["b997a5136b93d1cc", "5132693bfd56d785"];
 
 /// A plan of one function of the scripted guest (Milestone 255): its "entry" is the timer
 /// handler's first operation, and the entry reads the tick counter (rbx). The scripted guest has

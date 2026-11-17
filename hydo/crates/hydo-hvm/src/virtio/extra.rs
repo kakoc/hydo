@@ -55,7 +55,7 @@ impl Extra {
                 ty: VDEV_BLK,
                 ..VDev::default()
             },
-            disk: Disk::from_vec(vec![0u8; c.size as usize]),
+            disk: Disk::zeroed(c.size as usize),
             cache: Vec::new(),
             size: c.size,
             write_through: c.write_through,
@@ -85,7 +85,9 @@ impl Extra {
         }
     }
 
-    pub(super) fn hash(&self, mut h: u64) -> u64 {
+    /// The disk's part of the devices' hash: its bytes by their tree hash when `tree` (Milestone
+    /// 290, [`Disk::tree_hash`]), else every byte.
+    pub(super) fn hash(&self, mut h: u64, tree: bool) -> u64 {
         let d = &self.dev;
         let mut b = B(Vec::new());
         for v in [d.ty, d.status, d.dfsel, d.drfsel, d.qsel] {
@@ -110,7 +112,11 @@ impl Extra {
         b.u64(self.size);
         b.u64(self.cache.len() as u64);
         h = fnv(&b.0, h);
-        self.disk.for_each(self.size as usize, |x| h = fnv(x, h));
+        if tree {
+            h = self.disk.tree_hash(h);
+        } else {
+            self.disk.for_each(self.size as usize, |x| h = fnv(x, h));
+        }
         for c in &self.cache {
             h = fnv_u64(c.doff, h);
             h = fnv(&c.len.to_le_bytes(), h);

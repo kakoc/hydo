@@ -6,8 +6,11 @@
 //! The command line, as the Mac CLI builds it:
 //!
 //! ```text
-//! [env HVM_DISK=<data disk>] hydo-hvm [--ram-mib N] --control boot serve|one <Image> <initramfs> <outdir> ["<schedule>"]
+//! [env HVM_DISK=<data disk>] hydo-hvm [--ram-mib N] [--image-epoch N] --control boot serve|one <Image> <initramfs> <outdir> ["<schedule>"]
 //! ```
+//!
+//! `--image-epoch` names the fingerprint epoch of an image built before this hydo's (Milestone
+//! 290: such an image's fingerprints hash its disk byte by byte, as before).
 //!
 //! The plain `one` and `serve` modes, `--control one` and the request RUN were the shell-init
 //! images' and were deleted in Milestone 145.

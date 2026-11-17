@@ -70,6 +70,7 @@ fn spawn(
         outdir: spec.outdir.clone(),
         // only a value other than the default is passed, as on the program's command line
         ram_mib: (spec.ram_mib != 1024).then_some(spec.ram_mib as u64),
+        image_epoch: Some(spec.epoch),
     };
     let (htx, hrx) = std::sync::mpsc::channel::<crate::protocol::HostMsg>();
     let (etx, erx) = std::sync::mpsc::channel::<EngineMsg>();

@@ -14804,3 +14804,144 @@ comparison with a constant and an order of calls are not built; the property tab
 rules check` do not know the lines; `across boots` ran on synthetic records only; and an
 exploration's plain problem text does not quote the history (its `report.md` and a run's report
 do).
+
+### Milestone 290 (tentative number) - DONE (a cheaper fingerprint on the Mac and KVM engines, part of the fingerprint epoch 4: the disk's part of a fingerprint is a tree of block hashes, so a fingerprint hashes again only the blocks the run wrote; the base's block hashes are made once per process on a thread of their own while the guest runs; an image of the epochs 1 to 3 keeps the byte-wise hash and its values; web-shop's `disk=none | run` takes 7.6 to 8.2 s in the engine instead of 42 to 55 s; every epoch-4 Mac and KVM fingerprint moves and waits for the pass before 0.4.0; 2026-11-17)
+
+**Why.** Open item 145: the Mac engine hashed every byte of the guest's disk with byte-wise
+FNV-1a for each fingerprint, and a run takes two (the workload's `wfp` and the run's `fp`). The
+KVM engine uses the same devices (`hydo_hvm::virtio`), so it paid the same. Milestone 284
+estimated 10 s of web-shop's 45 s run for its 3.4 GB disk. In a real run it was more, because the
+disk's pages are not in the page cache at the run's end: an engine built for the measurement
+printed 12.0 s and 13.3 s for the devices' part of the two fingerprints of one web-shop run, of
+33.4 s in the engine.
+
+**The scheme** (`hydo/crates/hydo-hvm/src/disk.rs`, `Disk::tree_hash`).
+
+- A leaf is a 4 KiB block of the copy-on-write disk, the block that the engine already keeps per
+  write. Its hash is the word-wise mix of the RAM hash (`mix64`) over the block's bytes.
+- A node is a 2 MiB chunk of the disk table (512 blocks). Its hash folds its blocks' hashes in
+  order with `h ^= w; h *= P; h ^= h >> 29`.
+- The root continues the devices' hash with the text `hydo-disk-tree-v1`, the disk's length, and
+  the chunks' hashes in order.
+- The base's block and chunk hashes (8 bytes per 4 KiB, 6.5 MB for web-shop's disk) are made once
+  per disk base and shared by every copy of the disk: snapshots, the durable disk of a power cut,
+  reboots. The engine starts them on a thread of its own, on half of the cores, when it opens the
+  disk (`Disk::hash_base_soon`). A fingerprint that comes first waits for them.
+- At a fingerprint, a chunk that the run did not write gives the base's chunk hash. In a chunk it
+  wrote, each written block is hashed again from its bytes, and the other blocks give the base's
+  hashes.
+
+The root is a function of the disk's bytes alone. A block written back to its old bytes gives
+the base's hash again (a unit test). Each step is a bijection of the state when the other inputs
+are fixed, so a change of any one byte always changes the root. Added disks (`guest.disks`) use
+the same tree; their base is all zeros, so its hashes come from one block's hash. The state of
+the devices, the write cache, and RAM are hashed as before.
+
+**Why no cache file.** The base's hashes could be written beside the image by `hydo build`, or
+kept in a cache by the image's digest. A cache must be checked against the disk's bytes, and that
+check reads the whole disk, which costs what making the hashes costs. So the engine makes them in
+memory and keeps no file, and no stale cache can exist. A worker of `hydo explore` makes them
+once for all its runs.
+
+**The block size, measured.** On this M2 Pro (12 cores), over web-shop's disk
+(3,423,600,640 bytes) in the page cache:
+
+| what | time |
+|---|---|
+| the byte-wise FNV-1a of every byte (epoch 3) | 4.30 s |
+| the word-wise mix of every byte on one core | 0.80 s |
+| the base's leaf hashes on 12 threads, leaves of 4, 16, 64 and 256 KiB | 120, 122, 104 and 110 ms |
+| the root with nothing written | 17 µs |
+| the root with 256, 2,560, 25,600 and 102,400 written blocks | 0.55, 3.8, 39 and 132 ms |
+
+The leaf size does not change the base's time. A leaf of the table's block size hashes only the
+written bytes again and needs no read of the base, so the leaf is 4 KiB.
+
+**The epoch.** `hydo_image::EpochDefaults` gains `disk_tree`, on from epoch 4. The epoch stays 4:
+the change joins Milestones 269 and 283 before 0.4.0. The engines read it from the image's epoch:
+
+- The Mac engine's `Start` and the KVM engine's `Start` take `image_epoch` (in process, the
+  image's epoch). The program `hydo-hvm` takes `--image-epoch N`, as `hydo-kvm` did.
+- `BootSpec::engine_args` names `--image-epoch N` for both programs for every image before this
+  hydo's epoch. Before, it named it to `hydo-kvm` for epoch 1 only. So the program `hydo-kvm` now
+  also runs an epoch-2 image with DR6's host bits (Milestone 252), as the in-process engine did.
+- The boot probes of `hydo-hvm hvm` (the helper VM of `hydo build`) keep the byte-wise hash.
+
+hvx is not changed: its disk is in the kernel module, and the module computes its fingerprint.
+
+**The runs on this Mac.** The base commit's programs (`74430ea2`, "before") and this milestone's
+("after"), each over the 0.3.4 Mac release, one VM at a time, on web-shop's epoch-4 image built
+with `--set variant=buggy` (disk `bc0ad90a…`, the disk of Milestone 284):
+
+| programs | schedule | fingerprint | engine time | wall time |
+|---|---|---|---|---|
+| before | `disk=none \| run` | `7da8112398ae9137` | 42.4, 54.7, 47.4 s | 52.4, 63.6, 54.3 s |
+| after | `disk=none \| run` | `a6eef3eadef684d5` | 7.6, 8.0 s | 15.6, 15.5 s |
+| before | `disk=none \| run H=api.add_item@1-2:delay=1000` | `24c270f6f56a9d85` | 29.1 s | 36.1 s |
+| after | the same | `d72c2ed52f8a8630` | 7.7, 14.7 s | 14.7, 23.5 s |
+
+The verdicts are the same: OK with 6 invariants held, and the delay's VIOLATION
+`browser.tests_pass`. The before values are Milestone 284's epoch-4 values. The second delay run
+ran beside a build of the workspace. The engine built for
+the measurement printed each fingerprint's parts:
+
+- with the byte-wise hash (forced in that engine): the devices 12.0 s and 13.3 s, RAM 1.0 s and
+  1.0 s, and the before fingerprint `7da8112398ae9137`;
+- with the tree hash made at the first fingerprint: the devices 3.56 s and 31 µs;
+- with the tree hash made while the guest runs (this milestone): the devices 77 µs and 23 µs,
+  and 218 µs and 23 µs, with one written block of the disk.
+
+The run's own fingerprints now cost about 1 s each, all of it the hash of web-shop's 4 GiB of
+guest RAM.
+
+**Old images keep their values.** The release's Redis example built by the 0.3.4 Mac release
+(fingerprint epoch 3, `706c8b95…` and its disk `9ddfc929…`, the quickstart's bytes) gave the
+fingerprints that `QUICKSTART-mac.md` and `hydo/onboard/recorded.json` record, with the before
+programs once and with this milestone's twice:
+
+| schedule | fingerprint | engine time, before and after |
+|---|---|---|
+| `disk=none \| run` | `a62eee5332a5b9d2` | 0.7 s; 0.7 and 0.8 s |
+| `disk=cut \| run C=12 R=everysec` | `474b2874e7ef0fa2` | 1.0 s; 0.9 and 0.9 s |
+| `disk=cut \| run C=12` | `2e5f02d8ff33394f` | 1.6 s; 1.5 and 1.0 s |
+
+**New images.** The same example built with this milestone's programs (epoch 4, `31e90668…`, the
+same disk) gave one fingerprint over two runs, another one than the before programs, with the
+same verdicts:
+
+| schedule | before | after | engine time, before and after |
+|---|---|---|---|
+| `disk=none \| run` | `44beba5328a15e72` | `9c474f594a19bbe6` | 0.8 s; 0.6 and 0.6 s |
+| `disk=cut \| run C=12 R=everysec` | `39b5a4b564535451` | `61830a67167b6407` | 0.9 s; 0.7 and 0.8 s |
+
+The lying disk `disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20` gave `8ea3b1817c21d319` on both
+runs, with the epoch-3 verdict `key k:6 lost`; its before run did not get the Mac VM lock in 30
+minutes. The disk has 66 MiB, so the byte-wise hash took about 0.08 s per fingerprint.
+
+**Tests.** `hydo-hvm`'s `disk::` tests compare the tree hash with one made from the flat bytes,
+after writes, after a block written back, and with the base's hashes made on 1 and on 12 threads.
+They change one byte at 8 places in a written block and in the base, and they pin one root. Its
+`virtio::` test checks that the devices' hash takes the tree with `disk_tree` and every byte
+without it, and that a changed byte of the image or of an added disk changes both. The KVM
+engine's scripted guest (`hydo-kvm` `engine::the_disk_is_in_the_fingerprint_by_its_tree_from_epoch_4`)
+runs with a 3 MiB disk. Epoch 4 gives one fingerprint over two runs and equals the run without
+an epoch. Epoch 3 gives `b997a5136b93d1cc`, the value of the byte-wise hash, and epoch 4 gives
+`5132693bfd56d785`. A changed byte of the disk changes `fp` and `wfp` at epoch 4, and `fp` at
+epoch 3. hydo-engine's command-line test names `--image-epoch 3`.
+
+**KVM on GitHub's runners.** The one-off workflow `.github/workflows/tmp-fp-kvm.yml` (the branch
+`tmp-fp-kvm`, a commit of its own) builds the release's Redis example with 0.3.4 and with this
+branch. On four runners it checks that the epoch-3 image gives one fingerprint per schedule under
+0.3.4, main and this branch, in process and as the program, and the recorded values on AMD. It
+checks that the epoch-4 image gives one fingerprint over two runs and the program, with main's
+verdicts and control transcripts. It did not run before this commit.
+
+**What moves.** Every fingerprint of an image built at epoch 4 on the Mac and KVM engines that
+has a disk, which is every agent image. No verdict and no `ctl` value moves. The values wait for
+the pass before 0.4.0 (open item 105, docs/REBASELINE.md section 26).
+
+**Checks.** On this Mac, on `main` at `1e6528fe` with this milestone on top, these passed: `cargo
+fmt --all --check`, workspace clippy with `-D warnings`, `cargo test` of hydo-hvm, hydo-kvm,
+hydo-engine, hydo-image and hydo-config, `equivalence::cli_matches_golden`, `agents_equivalence`
+and `docs::`, `public_content::`, `language::`, `test_tiers`, the explorer's `it` and
+`fake_engine`, the control corpus, `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.

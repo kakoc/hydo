@@ -62,7 +62,8 @@ pub const VERSION: u64 = 1;
 /// docs/design/guest-cgroups.md), so a pause of threads runs on every engine. Epoch 4 (Milestone
 /// 269): the saved regressions leave the image for `<image>.regressions.json` beside it
 /// ([`regressions_path`]), so saving or editing one no longer changes the image's bytes, and
-/// (Milestone 283) the host controller mounts cgroup2 on `/sys/fs/cgroup` at every boot.
+/// (Milestone 283) the host controller mounts cgroup2 on `/sys/fs/cgroup` at every boot, and
+/// (Milestone 290) the Mac and KVM engines' fingerprints hash the disks by a tree of block hashes.
 pub const EPOCH: u64 = 4;
 
 /// The epoch of a run, exploration or cache entry that recorded none (written before M155).
@@ -96,6 +97,11 @@ pub struct EpochDefaults {
     /// that reads `/proc/self/cgroup` at start (Seastar, Dragonfly) finds its `0::/` line. From
     /// epoch 4 (Milestone 283).
     pub cgroup2: bool,
+    /// The Mac and KVM engines' fingerprints hash each disk by a tree of block hashes, so a
+    /// fingerprint hashes again only the blocks that the run wrote (`hydo_hvm::disk`,
+    /// `Disk::tree_hash`), instead of every byte with byte-wise FNV. From epoch 4 (Milestone 290).
+    /// hvx's disk is in the kernel module, whose fingerprint does not change.
+    pub disk_tree: bool,
 }
 
 /// The defaults of an image built at `epoch` for `arch` (`x86_64` or `arm64`).
@@ -108,6 +114,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         cgroups: epoch >= 3,
         regressions_in_image: epoch < 4,
         cgroup2: epoch >= 4,
+        disk_tree: epoch >= 4,
     }
 }
 
@@ -511,17 +518,20 @@ mod tests {
         assert!(one.regressions_in_image && two.regressions_in_image);
         assert!(three.regressions_in_image);
         assert!(!one.cgroup2 && !two.cgroup2 && !three.cgroup2);
-        // epoch 4 (M269, M283): the saved regressions beside the image, and cgroup2 mounted at
-        // every boot; the rest as at epoch 3
+        assert!(!one.disk_tree && !two.disk_tree && !three.disk_tree);
+        // epoch 4 (M269, M283, M290): the saved regressions beside the image, cgroup2 mounted at
+        // every boot, and the disks' tree hash; the rest as at epoch 3
         let four = defaults(4, "x86_64");
         assert_eq!(
             four,
             EpochDefaults {
                 regressions_in_image: false,
                 cgroup2: true,
+                disk_tree: true,
                 ..three
             }
         );
+        assert!(defaults(4, "arm64").disk_tree);
         assert!(defaults(4, "arm64").cgroup2);
         assert!(!defaults(4, "arm64").regressions_in_image);
         assert_eq!(defaults(EPOCH, "x86_64"), four);
