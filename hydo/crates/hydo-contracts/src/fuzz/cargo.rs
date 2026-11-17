@@ -453,6 +453,54 @@ fn abs_paths(line: &str, root: &Path) -> String {
     )
 }
 
+/// One error of the compiler: its first line (`error[E0616]: field ... is private`) and the
+/// places it names (the file as cargo gives it, the line, and the column in characters).
+#[derive(Clone, Debug)]
+pub struct Diag {
+    pub message: String,
+    pub spans: Vec<(String, u32, u32)>,
+}
+
+/// A build that failed: the compiler's errors, and the text to show.
+#[derive(Clone, Debug)]
+pub struct BuildFail {
+    pub errors: Vec<Diag>,
+    pub text: String,
+}
+
+impl BuildFail {
+    /// The first error's line, or the first line of the text.
+    pub fn first_error(&self) -> String {
+        match self.errors.first() {
+            Some(d) => d.message.clone(),
+            None => self.text.lines().next().unwrap_or("").to_string(),
+        }
+    }
+}
+
+/// Every place a diagnostic names: its spans, the macro expansions they come from, and its
+/// children's spans.
+fn spans_of(m: &Value, out: &mut Vec<(String, u32, u32)>) {
+    fn span(s: &Value, out: &mut Vec<(String, u32, u32)>) {
+        if let (Some(f), Some(l), Some(c)) = (
+            s["file_name"].as_str(),
+            s["line_start"].as_u64(),
+            s["column_start"].as_u64(),
+        ) {
+            out.push((f.to_string(), l as u32, c as u32));
+        }
+        if s["expansion"].is_object() {
+            span(&s["expansion"]["span"], out);
+        }
+    }
+    for s in m["spans"].as_array().into_iter().flatten() {
+        span(s, out);
+    }
+    for c in m["children"].as_array().into_iter().flatten() {
+        spans_of(c, out);
+    }
+}
+
 /// Build the copy's test program and return its path.
 pub fn build(
     cargo: &Cargo,
@@ -460,13 +508,13 @@ pub fn build(
     target_dir: &Path,
     target: &Target,
     log: &Path,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, BuildFail> {
+    let fail = |text: String| BuildFail {
+        errors: vec![],
+        text,
+    };
     let mut c = cargo.cmd();
-    c.args([
-        "test",
-        "--no-run",
-        "--message-format=json-render-diagnostics",
-    ]);
+    c.args(["test", "--no-run", "--message-format=json"]);
     if cargo.release {
         c.arg("--release");
     }
@@ -481,27 +529,65 @@ pub fn build(
         .stderr(Stdio::piped());
     let out = c
         .output()
-        .map_err(|e| format!("cargo test --no-run: {e}"))?;
-    let _ = std::fs::write(log, &out.stderr);
+        .map_err(|e| fail(format!("cargo test --no-run: {e}")))?;
+    // the log: the compiler's rendered messages, then cargo's own output
+    let mut rendered = String::new();
+    let mut errors = Vec::new();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let msgs: Vec<Value> = stdout
+        .lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .collect();
+    for v in &msgs {
+        if v["reason"] != "compiler-message" {
+            continue;
+        }
+        let m = &v["message"];
+        if let Some(r) = m["rendered"].as_str() {
+            rendered.push_str(r);
+        }
+        if m["level"] == "error" {
+            let code = m["code"]["code"]
+                .as_str()
+                .map(|c| format!("[{c}]"))
+                .unwrap_or_default();
+            let mut spans = Vec::new();
+            spans_of(m, &mut spans);
+            errors.push(Diag {
+                message: format!("error{code}: {}", m["message"].as_str().unwrap_or("")),
+                spans,
+            });
+        }
+    }
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let _ = std::fs::write(log, format!("{rendered}{stderr}"));
     if !out.status.success() {
-        let err = String::from_utf8_lossy(&out.stderr);
-        let lines: Vec<&str> = err.lines().collect();
+        let all = format!("{rendered}{stderr}");
+        let lines: Vec<&str> = all.lines().collect();
         let first = lines
             .iter()
             .position(|l| l.starts_with("error"))
             .unwrap_or(lines.len().saturating_sub(30));
-        let shown: Vec<&str> = lines[first..].iter().take(40).copied().collect();
-        return Err(format!(
-            "the harness did not build (all of cargo's output: {}):\n{}",
-            log.display(),
-            shown.join("\n")
-        ));
+        // a generated line is long: show its start
+        let shown: Vec<String> = lines[first..]
+            .iter()
+            .take(40)
+            .map(|l| match l.char_indices().nth(240) {
+                Some((i, _)) => format!("{}...", &l[..i]),
+                None => l.to_string(),
+            })
+            .collect();
+        return Err(BuildFail {
+            errors,
+            text: format!(
+                "the harness did not build (all of cargo's output: {}):\n{}",
+                log.display(),
+                shown.join("\n")
+            ),
+        });
     }
     let want = target.name.replace('-', "_");
-    for line in String::from_utf8_lossy(&out.stdout).lines() {
-        let Ok(v) = serde_json::from_str::<Value>(line) else {
-            continue;
-        };
+    for v in msgs {
         if v["reason"] == "compiler-artifact"
             && v["profile"]["test"] == true
             && v["target"]["name"].as_str().map(|n| n.replace('-', "_")) == Some(want.clone())
@@ -511,7 +597,7 @@ pub fn build(
             }
         }
     }
-    Err("cargo built no test program for the target".into())
+    Err(fail("cargo built no test program for the target".into()))
 }
 
 /// How one run of the test program ended.
@@ -522,7 +608,8 @@ pub struct Ran {
     pub hung: bool,
 }
 
-/// Run the test program on a cases file. `filter` names the harness's test.
+/// Run the test program on a cases file. `filter` names the harness's test. `tick` hears the
+/// number of answers so far about once a second.
 pub fn run(
     exe: &Path,
     filter: &str,
@@ -530,6 +617,7 @@ pub fn run(
     answers: &Path,
     timeout: Duration,
     env: &[(String, String)],
+    tick: &mut dyn FnMut(u64),
 ) -> Result<Ran, String> {
     let _ = std::fs::remove_file(answers);
     std::fs::write(answers, "").map_err(|e| e.to_string())?;
@@ -544,10 +632,18 @@ pub fn run(
         .map_err(|e| format!("{}: {e}", exe.display()))?;
     let mut last_len = 0u64;
     let mut last_change = Instant::now();
+    let mut last_tick = Instant::now();
     let mut hung = false;
     loop {
         if child.try_wait().map_err(|e| e.to_string())?.is_some() {
             break;
+        }
+        if last_tick.elapsed() >= Duration::from_secs(1) {
+            last_tick = Instant::now();
+            let n = std::fs::read(answers)
+                .map(|b| b.iter().filter(|&&c| c == b'\n').count() as u64)
+                .unwrap_or(0);
+            tick(n);
         }
         let len = std::fs::metadata(answers).map(|m| m.len()).unwrap_or(0);
         if len != last_len {

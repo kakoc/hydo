@@ -13890,3 +13890,77 @@ acknowledgement named another id when every delivery carries one id
 (`hydo-history` `messages/claims.rs`, with a test in `tests/messages.rs`). No issue or pull
 request of redpanda-data/redpanda or twmb/franz-go describes the case. Nothing was posted, and
 nothing recorded moved.
+
+### Milestone 282 (tentative number) - DONE (what the evaluation of `hydo fuzz` found, fixed before 0.4.0: the harness builds on `#![no_std]` crates and reads results with private fields of another module; each function whose harness does not build is reported and the others run; each function ends with one verdict, `held`, `broken`, `vacuous` or `too few inputs`, and the last two exit with status 3 with a `to fix:` line; `input` lines take lengths, character sets, example strings and list elements; lists grow to 256 with edge sizes to 4,096; sizes stay within 2^20 without an `input` line, with progress lines and a stop after 3 calls that do not return; `with T = i64` for a generic function; `hydo guide fuzz`; the six crates again: every harness builds, the planted memchr bug and num-integer#55 are found from the functions' own contracts; nothing new found and nothing posted; nothing recorded moved; 2026-11-17)
+
+**What was asked.** Milestone 280 found that a new Rust user would not keep using `hydo fuzz`.
+The gate for 0.4.0 was to fix its first four problems, with tests, and to run the six crates
+again. The full report is the section "After the fixes" of
+`docs/design/function-fuzzing-evaluation.md`.
+
+**The harness.** The test module that hydo writes declares `extern crate std` and names
+`self::std` paths, so it builds in a `#![no_std]` crate and in a crate of the 2015 edition. hydo
+now reads each structure's module and which of its fields are `pub`. A field that the
+harness's module cannot see is a new fuzzing type, `FTy::Hidden`. The harness writes `X` (not
+read) for it without naming it, and a parameter with such a field is refused with the field's
+name. The build uses cargo's JSON messages. An error whose place is a harness module's columns
+leaves that one function out with the compiler's first line, and the others build again. An
+error elsewhere is checked by a build without any harness. Constants such as `ALPHABET_LEN`
+give an array its length.
+
+**The verdicts.** `requires` rejections are counted per clause. A clause `a || ... || z` counts
+the calls on which `z` decided, and a property that returns `Option<bool>` counts its `Some`
+answers. `too few inputs` (fewer calls than `--min-inputs`, default a tenth of `--cases`) and
+`vacuous` (fewer decided calls than `--min-reach`, default 1 % of `--cases`) exit with status
+3. Each prints a `to fix:` line: an `input` line from the clause's bounds (`input alphabet len
+64`), `input s like "hydo"` for a string compared with a literal, or `like` for a parser.
+
+**The generator.** An `input` line takes `in`, `len`, `chars` (a named or a quoted set) and
+`like` (examples, used as they are in a third of the inputs and changed in the others), for a
+parameter, a field or a list's elements (`v[]`). The longest list or string grows from 4 to 256
+over the inputs, and one input in eight after the first 100 has an edge size up to 4,096. One
+long list in four repeats one value with a few others. A value that a clause compares with a
+list's element is put into the list in one input of four. An input holds at most 65,536 values.
+A list's shrink now reaches its first 256 elements, every element's simplest value first.
+
+**Long runs.** A `usize` or `isize` value without an `input` line stays within 2^20, its
+edges too. A progress line comes on standard error every 5 seconds. After 3 calls that do not
+return, a function's other inputs are not run, and a shrink stops after 3 such calls or 60
+seconds. With the rest of the fix, `FixedBitSet::with_capacity` without an `input` line took
+under a second, against 23 minutes before.
+
+**Smaller fixes.** `// hydo: with T = i64` fuzzes a generic function with that type, called
+with `::<i64>`. The `again:` line keeps `--release`, `--toolchain`, `--target-dir` and
+`--timeout`, and names the function by its path. `--json` prints only JSON on standard output.
+Names keep their module and type (`memchr::memmem::find`). `--list` says when no function has a
+contract, and a panic's place is shown relative to the package also for a relative `--out`.
+
+**The evaluation again.** The crates are the same archives as in Milestone 280, unpacked fresh.
+The contracts were written again, because Milestone 280 did not save them; they are
+`docs/design/function-fuzzing/m282-contracts.patch` and `m282-contracts-b.patch`. Phase A used
+Milestone 280's language only, on the old code (`hydo-contracts` at `7944ad08`) and the new:
+
+- semver: before, no harness built; after, 13 functions, 12 held and `Version::parse` is
+  `vacuous` (0 of 1,000 strings parsed). With `like` examples, 486 of 1,000 parsed and all 13
+  held.
+- base64: before, `Alphabet::new` held on 2 inputs with exit status 0; after, 1,000 calls and
+  `vacuous`; with two `like` alphabets, 875 of 1,000 calls built one.
+- fixedbitset and memchr: before, no harness built without `#![cfg_attr(not(test), no_std)]`;
+  after, 11 and 12 functions in 6 and 7 seconds with the crates unchanged.
+- memchr with the planted bug: before, every contract held; after, memchr's own contract broke
+  on 10 of 1,000 calls, shrunk to 80 bytes of 0 with a 3 at index 50.
+- num-integer: the same two failures as before without the workaround; with `with T = i64`,
+  `gcd`'s own contract finds rust-num/num-integer#55.
+- byteorder: the same two `read_uint` panics; the trait's default method stays refused.
+
+Nothing new was found, and nothing was posted. The verdict: a developer would now keep `hydo
+fuzz` for functions over integers, strings and lists, but not yet for APIs built on traits or on
+types that hold pointers. The contracts were written by the one who fixed the tool, so a fresh
+evaluator before 0.4.0 would give a less biased view.
+
+**Tests and checks.** `hydo-contracts` gained the fixture `tests/fuzz-nostd`, a `#![no_std]`
+crate with one function per problem, and tests of the `input` syntax, the generator, the
+clause's parts, the harness without `std`, and private fields. The guide gained the topic
+`fuzz`. `cli.jsonl` was re-recorded on purpose for `guide`, `guide --list` and `guide
+manifest` on both platforms, and `agents.jsonl` for the guide topics after `fuzz` (`HYDO_BLESS=1`). Nothing recorded moved: no engine, image, guest
+program or example changed.

@@ -35,19 +35,19 @@ fn rty(t: &FTy) -> String {
     match t {
         FTy::Boxed(k, x) => {
             let p = match k.as_str() {
-                "Rc" => "::std::rc::Rc",
-                "Arc" => "::std::sync::Arc",
-                _ => "::std::boxed::Box",
+                "Rc" => "self::std::rc::Rc",
+                "Arc" => "self::std::sync::Arc",
+                _ => "self::std::boxed::Box",
             };
             format!("{p}<{}>", rty(x))
         }
-        FTy::List(x) => format!("::std::vec::Vec<{}>", rty(x)),
+        FTy::List(x) => format!("self::std::vec::Vec<{}>", rty(x)),
         FTy::Array(x, n) => format!("[{}; {n}]", rty(x)),
-        FTy::Opt(x) => format!("::std::option::Option<{}>", rty(x)),
-        FTy::Res(a, b) => format!("::std::result::Result<{}, {}>", rty(a), rty(b)),
+        FTy::Opt(x) => format!("self::std::option::Option<{}>", rty(x)),
+        FTy::Res(a, b) => format!("self::std::result::Result<{}, {}>", rty(a), rty(b)),
         FTy::Tuple(v) if v.len() == 1 => format!("({},)", rty(&v[0])),
         FTy::Tuple(v) => format!("({})", v.iter().map(rty).collect::<Vec<_>>().join(", ")),
-        FTy::Str => "::std::string::String".into(),
+        FTy::Str => "self::std::string::String".into(),
         other => other.rust(),
     }
 }
@@ -59,19 +59,19 @@ fn dec(t: &FTy) -> String {
         FTy::Bool => "r.b()".into(),
         FTy::Str => "r.s()".into(),
         FTy::List(x) => format!(
-            "{{ let n = r.n(); let mut v = ::std::vec::Vec::with_capacity(n); for _ in 0..n {{ v.push({}); }} v }}",
+            "{{ let n = r.n(); let mut v = self::std::vec::Vec::with_capacity(n); for _ in 0..n {{ v.push({}); }} v }}",
             dec(x)
         ),
         FTy::Array(x, _) => format!(
-            "{{ r.n(); ::std::array::from_fn(|_| {}) }}",
+            "{{ r.n(); self::std::array::from_fn(|_| {}) }}",
             dec(x)
         ),
         FTy::Opt(x) => format!(
-            "if r.w() == \"S\" {{ ::std::option::Option::Some({}) }} else {{ ::std::option::Option::None }}",
+            "if r.w() == \"S\" {{ self::std::option::Option::Some({}) }} else {{ self::std::option::Option::None }}",
             dec(x)
         ),
         FTy::Res(a, b) => format!(
-            "if r.w() == \"O\" {{ ::std::result::Result::Ok({}) }} else {{ ::std::result::Result::Err({}) }}",
+            "if r.w() == \"O\" {{ self::std::result::Result::Ok({}) }} else {{ self::std::result::Result::Err({}) }}",
             dec(a),
             dec(b)
         ),
@@ -85,7 +85,7 @@ fn dec(t: &FTy) -> String {
         }
         FTy::Boxed(_, x) => {
             let p = rty(t);
-            let base = p.split('<').next().unwrap_or("::std::boxed::Box");
+            let base = p.split('<').next().unwrap_or("self::std::boxed::Box");
             format!("{base}::new({})", dec(x))
         }
         FTy::Struct {
@@ -108,7 +108,7 @@ fn dec(t: &FTy) -> String {
                 format!("{path} {{ {} }}", p.join(", "))
             }
         }
-        FTy::Opaque(_) => "unreachable!()".into(),
+        FTy::Opaque(_) | FTy::Hidden(_) => "unreachable!()".into(),
     }
 }
 
@@ -121,15 +121,15 @@ fn enc(t: &FTy, v: &str, d: usize) -> String {
         FTy::Bool => format!("eb({v}, o);"),
         FTy::Str => format!("es({v}, o);"),
         FTy::List(e) | FTy::Array(e, _) => format!(
-            "{{ let _ = ::std::write!(o, \"L{{}} \", ({v}).len()); for {x} in ({v}).iter() {{ {} }} }}",
+            "{{ let _ = self::std::write!(o, \"L{{}} \", ({v}).len()); for {x} in ({v}).iter() {{ {} }} }}",
             enc(e, &x, d + 1)
         ),
         FTy::Opt(e) => format!(
-            "match {v} {{ ::std::option::Option::None => o.push_str(\"N \"), ::std::option::Option::Some({x}) => {{ o.push_str(\"S \"); {} }} }}",
+            "match {v} {{ self::std::option::Option::None => o.push_str(\"N \"), self::std::option::Option::Some({x}) => {{ o.push_str(\"S \"); {} }} }}",
             enc(e, &x, d + 1)
         ),
         FTy::Res(a, b) => format!(
-            "match {v} {{ ::std::result::Result::Ok({x}) => {{ o.push_str(\"O \"); {} }} ::std::result::Result::Err({x}) => {{ o.push_str(\"E \"); {} }} }}",
+            "match {v} {{ self::std::result::Result::Ok({x}) => {{ o.push_str(\"O \"); {} }} self::std::result::Result::Err({x}) => {{ o.push_str(\"E \"); {} }} }}",
             enc(a, &x, d + 1),
             enc(b, &x, d + 1)
         ),
@@ -147,48 +147,54 @@ fn enc(t: &FTy, v: &str, d: usize) -> String {
             };
             format!("{{ let {x} = {f}({v}); {} }}", enc(e, &x, d + 1))
         }
+        // a field not read is not named: the harness's module may not see it
         FTy::Struct { fields, .. } => fields
             .iter()
-            .map(|(n, e)| enc(e, &format!("&({v}).{n}"), d + 1))
+            .map(|(n, e)| match e {
+                FTy::Opaque(_) | FTy::Hidden(_) => "o.push_str(\"X \");".to_string(),
+                _ => enc(e, &format!("&({v}).{n}"), d + 1),
+            })
             .collect::<Vec<_>>()
             .join(" "),
-        FTy::Opaque(_) => format!("{{ let _ = {v}; o.push_str(\"X \"); }}"),
+        FTy::Opaque(_) | FTy::Hidden(_) => format!("{{ let _ = {v}; o.push_str(\"X \"); }}"),
     }
 }
 
 /// The shared part of every harness module: the reader, the leaf writers, the panic hook.
 const COMMON: &str = concat!(
-    "use super::*; use ::std::fmt::Write as _; ",
-    "struct R<'a> { w: ::std::str::SplitAsciiWhitespace<'a> } ",
+    // `extern crate std` and `self::std` paths: a `#![no_std]` crate has no `std` and the core
+    // prelude only, and a crate of the 2015 edition reads `use` paths from its root
+    "extern crate std; use super::*; use self::std::fmt::Write as _; ",
+    "struct R<'a> { w: self::std::str::SplitAsciiWhitespace<'a> } ",
     "impl<'a> R<'a> { ",
     "fn w(&mut self) -> &'a str { self.w.next().unwrap_or(\"\") } ",
-    "fn int<T: ::std::convert::TryFrom<i128>>(&mut self) -> T { match self.w().parse::<i128>().ok().and_then(|x| T::try_from(x).ok()) { ::std::option::Option::Some(v) => v, ::std::option::Option::None => ::std::process::abort() } } ",
+    "fn int<T: self::std::convert::TryFrom<i128>>(&mut self) -> T { match self.w().parse::<i128>().ok().and_then(|x| T::try_from(x).ok()) { self::std::option::Option::Some(v) => v, self::std::option::Option::None => self::std::process::abort() } } ",
     "fn b(&mut self) -> bool { self.w() == \"t\" } ",
     "fn n(&mut self) -> usize { self.w().trim_start_matches('L').parse().unwrap_or(0) } ",
-    "fn s(&mut self) -> ::std::string::String { let h = self.w(); let h = h.get(1..).unwrap_or(\"\"); let b: ::std::vec::Vec<u8> = (0..h.len() / 2).map(|i| u8::from_str_radix(&h[2 * i..2 * i + 2], 16).unwrap_or(0)).collect(); ::std::string::String::from_utf8(b).unwrap_or_default() } ",
+    "fn s(&mut self) -> self::std::string::String { let h = self.w(); let h = h.get(1..).unwrap_or(\"\"); let b: self::std::vec::Vec<u8> = (0..h.len() / 2).map(|i| u8::from_str_radix(&h[2 * i..2 * i + 2], 16).unwrap_or(0)).collect(); self::std::string::String::from_utf8(b).unwrap_or_default() } ",
     "} ",
-    "fn ei<T: ::std::fmt::Display>(v: T, o: &mut ::std::string::String) { let _ = ::std::write!(o, \"{} \", v); } ",
-    "fn eb(v: &bool, o: &mut ::std::string::String) { o.push_str(if *v { \"t \" } else { \"f \" }); } ",
-    "fn es(v: &str, o: &mut ::std::string::String) { o.push('s'); for b in v.as_bytes() { let _ = ::std::write!(o, \"{:02x}\", b); } o.push(' '); } ",
-    "fn hx(v: &str, o: &mut ::std::string::String) { o.push('s'); for b in v.as_bytes() { let _ = ::std::write!(o, \"{:02x}\", b); } o.push(' '); } ",
-    "fn unbox<T: ?Sized>(b: &::std::boxed::Box<T>) -> &T { b } ",
-    "fn unrc<T: ?Sized>(b: &::std::rc::Rc<T>) -> &T { b } ",
-    "fn unarc<T: ?Sized>(b: &::std::sync::Arc<T>) -> &T { b } ",
-    "static LAST: ::std::sync::Mutex<::std::option::Option<(::std::string::String, ::std::string::String)>> = ::std::sync::Mutex::new(::std::option::Option::None); ",
+    "fn ei<T: self::std::fmt::Display>(v: T, o: &mut self::std::string::String) { let _ = self::std::write!(o, \"{} \", v); } ",
+    "fn eb(v: &bool, o: &mut self::std::string::String) { o.push_str(if *v { \"t \" } else { \"f \" }); } ",
+    "fn es(v: &str, o: &mut self::std::string::String) { o.push('s'); for b in v.as_bytes() { let _ = self::std::write!(o, \"{:02x}\", b); } o.push(' '); } ",
+    "fn hx(v: &str, o: &mut self::std::string::String) { o.push('s'); for b in v.as_bytes() { let _ = self::std::write!(o, \"{:02x}\", b); } o.push(' '); } ",
+    "fn unbox<T: ?Sized>(b: &self::std::boxed::Box<T>) -> &T { b } ",
+    "fn unrc<T: ?Sized>(b: &self::std::rc::Rc<T>) -> &T { b } ",
+    "fn unarc<T: ?Sized>(b: &self::std::sync::Arc<T>) -> &T { b } ",
+    "static LAST: self::std::sync::Mutex<self::std::option::Option<(self::std::string::String, self::std::string::String)>> = self::std::sync::Mutex::new(self::std::option::Option::None); ",
     "#[test] fn run() { ",
-    "let cases = ::std::env::var(\"HYDO_FUZZ_CASES\").unwrap_or_default(); if cases.is_empty() { return; } ",
-    "let text = ::std::fs::read_to_string(&cases).unwrap_or_default(); ",
-    "let mut out = ::std::fs::OpenOptions::new().create(true).append(true).open(::std::env::var(\"HYDO_FUZZ_OUT\").unwrap_or_default()).expect(\"HYDO_FUZZ_OUT\"); ",
-    "::std::panic::set_hook(::std::boxed::Box::new(|i| { let mut loc = i.location().map(|l| ::std::format!(\"{}:{}\", l.file(), l.line())).unwrap_or_default(); ",
+    "let cases = self::std::env::var(\"HYDO_FUZZ_CASES\").unwrap_or_default(); if cases.is_empty() { return; } ",
+    "let text = self::std::fs::read_to_string(&cases).unwrap_or_default(); ",
+    "let mut out = self::std::fs::OpenOptions::new().create(true).append(true).open(self::std::env::var(\"HYDO_FUZZ_OUT\").unwrap_or_default()).expect(\"HYDO_FUZZ_OUT\"); ",
+    "self::std::panic::set_hook(self::std::boxed::Box::new(|i| { let mut loc = i.location().map(|l| self::std::format!(\"{}:{}\", l.file(), l.line())).unwrap_or_default(); ",
     // a panic inside the standard library or a dependency is placed at the crate's own frame
     "fn foreign(p: &str) -> bool { p.starts_with(\"/rustc/\") || p.contains(\"/.cargo/\") || p.contains(\"/rustlib/\") } ",
-    "if foreign(&loc) { let bt = ::std::backtrace::Backtrace::force_capture().to_string(); ",
-    "if let ::std::option::Option::Some(at) = bt.lines().filter_map(|l| l.trim().strip_prefix(\"at \")).find(|p| !foreign(p)) { ",
-    "let at = at.trim_start_matches(\"./\"); let mut parts = at.rsplitn(3, ':'); let _ = parts.next(); let line = parts.next().unwrap_or(\"\"); let file = parts.next().unwrap_or(at); loc = ::std::format!(\"{}:{}\", file, line); } } ",
-    "let p = i.payload(); let msg = if let ::std::option::Option::Some(s) = p.downcast_ref::<&str>() { s.to_string() } else if let ::std::option::Option::Some(s) = p.downcast_ref::<::std::string::String>() { s.clone() } else { ::std::string::String::new() }; ",
-    "let mut g = LAST.lock().unwrap_or_else(|e| e.into_inner()); if g.is_none() { *g = ::std::option::Option::Some((loc, msg)); } })); ",
-    "for line in text.lines() { let (k, rest) = line.split_once(' ').unwrap_or((line, \"\")); let mut o = ::std::string::String::new(); o.push_str(k); o.push(' '); one(rest, &mut o); o.push('\\n'); ",
-    "use ::std::io::Write as _; let _ = out.write_all(o.as_bytes()); let _ = out.flush(); } } ",
+    "if foreign(&loc) { let bt = self::std::backtrace::Backtrace::force_capture(); let bt = self::std::string::ToString::to_string(&bt); ",
+    "if let self::std::option::Option::Some(at) = bt.lines().filter_map(|l| l.trim().strip_prefix(\"at \")).find(|p| !foreign(p)) { ",
+    "let at = at.trim_start_matches(\"./\"); let mut parts = at.rsplitn(3, ':'); let _ = parts.next(); let line = parts.next().unwrap_or(\"\"); let file = parts.next().unwrap_or(at); loc = self::std::format!(\"{}:{}\", file, line); } } ",
+    "let p = i.payload(); let msg = if let self::std::option::Option::Some(s) = p.downcast_ref::<&str>() { self::std::string::ToString::to_string(*s) } else if let self::std::option::Option::Some(s) = p.downcast_ref::<self::std::string::String>() { s.clone() } else { self::std::string::String::new() }; ",
+    "let mut g = LAST.lock().unwrap_or_else(|e| e.into_inner()); if g.is_none() { *g = self::std::option::Option::Some((loc, msg)); } })); ",
+    "for line in text.lines() { let (k, rest) = line.split_once(' ').unwrap_or((line, \"\")); let mut o = self::std::string::String::new(); o.push_str(k); o.push(' '); one(rest, &mut o); o.push('\\n'); ",
+    "use self::std::io::Write as _; let _ = out.write_all(o.as_bytes()); let _ = out.flush(); } } ",
 );
 
 /// The module's text: one line, with no line comment in it.
@@ -199,7 +205,7 @@ pub fn module(s: &Spec) -> String {
         " #[cfg(test)] #[allow(warnings, unused, unsafe_code, clippy::all, clippy::pedantic, clippy::nursery, clippy::restriction)] mod {} {{ {COMMON}",
         s.module
     );
-    b.push_str("fn one(line: &str, o: &mut ::std::string::String) { let mut r = R { w: line.split_ascii_whitespace() }; ");
+    b.push_str("fn one(line: &str, o: &mut self::std::string::String) { let mut r = R { w: line.split_ascii_whitespace() }; ");
     let mut args = Vec::new();
     for (i, p) in s.params.iter().enumerate() {
         let _ = write!(b, "let mut a{i}: {} = {}; ", rty(&p.ty), dec(&p.ty));
@@ -217,12 +223,14 @@ pub fn module(s: &Spec) -> String {
     } else {
         call
     };
-    b.push_str("*LAST.lock().unwrap_or_else(|e| e.into_inner()) = ::std::option::Option::None; ");
+    b.push_str(
+        "*LAST.lock().unwrap_or_else(|e| e.into_inner()) = self::std::option::Option::None; ",
+    );
     let _ = write!(
         b,
-        "let res = ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| {call})); "
+        "let res = self::std::panic::catch_unwind(self::std::panic::AssertUnwindSafe(|| {call})); "
     );
-    b.push_str("match res { ::std::result::Result::Ok(v) => { o.push_str(\"R \"); ");
+    b.push_str("match res { self::std::result::Result::Ok(v) => { o.push_str(\"R \"); ");
     let v = if s.ret_ref { "v" } else { "&v" };
     b.push_str(&enc(&s.ret, v, 0));
     b.push_str(" let _ = v; ");
@@ -232,7 +240,7 @@ pub fn module(s: &Spec) -> String {
             b.push_str(&enc(&p.ty, &format!("&a{i}"), 0));
         }
     }
-    b.push_str(" } ::std::result::Result::Err(_) => { let (loc, msg) = LAST.lock().unwrap_or_else(|e| e.into_inner()).take().unwrap_or_default(); o.push_str(\"P \"); hx(&loc, o); hx(&msg, o); } } } }");
+    b.push_str(" } self::std::result::Result::Err(_) => { let (loc, msg) = LAST.lock().unwrap_or_else(|e| e.into_inner()).take().unwrap_or_default(); o.push_str(\"P \"); hx(&loc, o); hx(&msg, o); } } } }");
     debug_assert!(!b.contains('\n'));
     b
 }

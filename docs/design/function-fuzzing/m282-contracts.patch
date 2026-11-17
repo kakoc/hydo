@@ -1,0 +1,749 @@
+diff -ruN -x Cargo.lock a/base64-0.23.1/src/alphabet.rs b/base64-0.23.1/src/alphabet.rs
+--- a/base64-0.23.1/src/alphabet.rs	2026-11-17 10:57:48
++++ b/base64-0.23.1/src/alphabet.rs	2026-11-17 10:57:48
+@@ -81,6 +81,8 @@
+     /// The padding symbol `=` is not allowed in the alphabet.
+     ///
+     /// See [`Self::new_with_padding`] if a non-default padding symbol is needed.
++    // hydo: requires len(alphabet) == 64
++    // hydo: ensures is_err(result) || ok(result).symbols[0] != 61
+     pub const fn new(alphabet: &str) -> Result<Self, ParseAlphabetError> {
+         Self::new_with_padding(alphabet, PADDING_SYMBOL)
+     }
+@@ -172,6 +174,7 @@
+ 
+ impl Symbol {
+     /// Returns `Some` if `symbol` is a valid printable ASCII symbol, otherwise `None`.
++    // hydo: ensures is_none(result) || some(result).0 == symbol
+     pub const fn new(symbol: u8) -> Option<Self> {
+         if is_valid_b64_symbol(symbol) {
+             Some(Self(symbol))
+diff -ruN -x Cargo.lock a/base64-0.23.1/src/decode.rs b/base64-0.23.1/src/decode.rs
+--- a/base64-0.23.1/src/decode.rs	2026-11-17 10:57:48
++++ b/base64-0.23.1/src/decode.rs	2026-11-17 10:57:48
+@@ -186,6 +186,8 @@
+ /// assert_eq!(6, decoded_len_estimate(5));
+ /// ```
+ #[must_use]
++// hydo: ensures result >= encoded_len * 3 / 4
++// hydo: ensures result % 3 == 0
+ pub fn decoded_len_estimate(encoded_len: usize) -> usize {
+     STANDARD
+         .internal_decoded_len_estimate(encoded_len)
+diff -ruN -x Cargo.lock a/base64-0.23.1/src/encode.rs b/base64-0.23.1/src/encode.rs
+--- a/base64-0.23.1/src/encode.rs	2026-11-17 10:57:48
++++ b/base64-0.23.1/src/encode.rs	2026-11-17 10:57:48
+@@ -98,6 +98,8 @@
+ /// Returns `None` if the encoded length can't be represented in `usize`. This will happen for
+ /// input lengths in approximately the top quarter of the range of `usize`.
+ #[must_use]
++// hydo: ensures is_none(result) || some(result) >= bytes_len
++// hydo: ensures is_none(result) || !padding || some(result) % 4 == 0
+ pub const fn encoded_len(bytes_len: usize, padding: bool) -> Option<usize> {
+     let rem = bytes_len % 3;
+ 
+diff -ruN -x Cargo.lock a/base64-0.23.1/src/hydo_props.rs b/base64-0.23.1/src/hydo_props.rs
+--- a/base64-0.23.1/src/hydo_props.rs	1970-01-01 01:00:00
++++ b/base64-0.23.1/src/hydo_props.rs	2026-11-17 10:57:48
+@@ -0,0 +1,61 @@
++//! Properties for `hydo fuzz`, from base64's documentation.
++
++use crate::engine::general_purpose::{STANDARD, STANDARD_NO_PAD_INDIFFERENT, URL_SAFE_NO_PAD};
++use crate::{decoded_len_estimate, encoded_len, Engine};
++
++/// Decoding what the standard engine encoded gives the bytes back.
++// hydo: ensures result
++pub fn roundtrip_standard(data: Vec<u8>) -> bool {
++    STANDARD.decode(STANDARD.encode(&data)).ok() == Some(data)
++}
++
++/// The same for the URL-safe engine without padding.
++// hydo: ensures result
++pub fn roundtrip_url_safe_no_pad(data: Vec<u8>) -> bool {
++    URL_SAFE_NO_PAD.decode(URL_SAFE_NO_PAD.encode(&data)).ok() == Some(data)
++}
++
++/// The encoded text is as long as `encoded_len` says.
++// hydo: ensures result
++pub fn encode_len_matches(data: Vec<u8>) -> bool {
++    Some(STANDARD.encode(&data).len()) == encoded_len(data.len(), true)
++}
++
++/// Text that decodes fits into a buffer of `decoded_len_estimate` bytes.
++// hydo: ensures result
++pub fn decode_slice_fits_estimate(text: &str) -> bool {
++    match STANDARD.decode(text) {
++        Ok(v) => {
++            let mut buf = vec![0u8; decoded_len_estimate(text.len())];
++            STANDARD.decode_slice(text, &mut buf).ok() == Some(v.len())
++        }
++        Err(_) => true,
++    }
++}
++
++/// A pad-indifferent engine decodes padded and unpadded text alike.
++// hydo: ensures result
++pub fn indifferent_takes_both(data: Vec<u8>) -> bool {
++    let padded = STANDARD.encode(&data);
++    let bare = padded.trim_end_matches('=');
++    STANDARD_NO_PAD_INDIFFERENT.decode(&padded).ok() == Some(data.clone())
++        && STANDARD_NO_PAD_INDIFFERENT.decode(bare).ok() == Some(data)
++}
++
++/// Standard text that decodes is the canonical encoding of its bytes.
++// hydo: ensures result
++pub fn decode_is_canonical(text: &str) -> bool {
++    match STANDARD.decode(text) {
++        Ok(v) => STANDARD.encode(v) == text,
++        Err(_) => true,
++    }
++}
++
++/// `encoded_len` grows with the input.
++// hydo: ensures result
++pub fn encoded_len_grows(n: usize) -> bool {
++    match (encoded_len(n, true), encoded_len(n.saturating_add(1), true)) {
++        (Some(a), Some(b)) => a <= b,
++        _ => true,
++    }
++}
+diff -ruN -x Cargo.lock a/base64-0.23.1/src/lib.rs b/base64-0.23.1/src/lib.rs
+--- a/base64-0.23.1/src/lib.rs	2026-11-17 10:57:48
++++ b/base64-0.23.1/src/lib.rs	2026-11-17 10:57:48
+@@ -318,3 +318,6 @@
+ 
+ #[cfg(test)]
+ mod tests;
++
++#[cfg(test)]
++mod hydo_props;
+diff -ruN -x Cargo.lock a/byteorder-1.5.0/src/hydo_props.rs b/byteorder-1.5.0/src/hydo_props.rs
+--- a/byteorder-1.5.0/src/hydo_props.rs	1970-01-01 01:00:00
++++ b/byteorder-1.5.0/src/hydo_props.rs	2026-11-17 10:57:48
+@@ -0,0 +1,71 @@
++//! Properties for `hydo fuzz`, from byteorder's documentation, over `Cursor` and writers.
++
++use crate::{BigEndian, ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
++use std::io::{self, Cursor, Write};
++
++/// Writing a u64 and reading it back gives it, in both orders.
++// hydo: ensures result
++pub fn prop_u64_roundtrip(x: u64) -> bool {
++    let mut w = Vec::new();
++    w.write_u64::<BigEndian>(x).unwrap();
++    w.write_u64::<LittleEndian>(x).unwrap();
++    let mut r = Cursor::new(w);
++    r.read_u64::<BigEndian>().unwrap() == x && r.read_u64::<LittleEndian>().unwrap() == x
++}
++
++/// `write_uint` then `read_uint` of the same width gives the value.
++// hydo: requires nbytes >= 1 && nbytes <= 8
++// hydo: ensures result
++pub fn prop_uint_roundtrip(x: u64, nbytes: usize) -> bool {
++    let x = if nbytes == 8 { x } else { x & ((1u64 << (8 * nbytes)) - 1) };
++    let mut w = Vec::new();
++    w.write_uint::<BigEndian>(x, nbytes).unwrap();
++    Cursor::new(w).read_uint::<BigEndian>(nbytes).unwrap() == x
++}
++
++/// `read_uint` on a reader returns the errors of `read_exact`, as documented.
++// hydo: ensures result
++pub fn prop_reader_read_uint(data: Vec<u8>, nbytes: usize) -> bool {
++    let mut r = Cursor::new(&data);
++    match r.read_uint::<BigEndian>(nbytes) {
++        Ok(_) => nbytes <= data.len(),
++        Err(e) => e.kind() == io::ErrorKind::UnexpectedEof && nbytes > data.len(),
++    }
++}
++
++/// The slice form agrees with the reader form.
++// hydo: requires len(data) >= 8
++// hydo: ensures result
++pub fn prop_slice_matches_reader(data: Vec<u8>) -> bool {
++    Cursor::new(&data).read_u64::<LittleEndian>().unwrap() == LittleEndian::read_u64(&data)
++}
++
++/// A writer that fails after `n` bytes makes `write_u32` fail.
++struct Fails(usize);
++impl Write for Fails {
++    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
++        if self.0 == 0 {
++            return Err(io::Error::new(io::ErrorKind::Other, "full"));
++        }
++        let k = b.len().min(self.0);
++        self.0 -= k;
++        Ok(k)
++    }
++    fn flush(&mut self) -> io::Result<()> {
++        Ok(())
++    }
++}
++
++// hydo: requires n < 4
++// hydo: ensures result
++pub fn prop_failing_writer(x: u32, n: usize) -> bool {
++    Fails(n).write_u32::<BigEndian>(x).is_err()
++}
++
++/// i16 values keep their sign through a reader.
++// hydo: ensures result
++pub fn prop_i16_sign(x: i16) -> bool {
++    let mut w = Vec::new();
++    w.write_i16::<LittleEndian>(x).unwrap();
++    Cursor::new(w).read_i16::<LittleEndian>().unwrap() == x
++}
+diff -ruN -x Cargo.lock a/byteorder-1.5.0/src/io.rs b/byteorder-1.5.0/src/io.rs
+--- a/byteorder-1.5.0/src/io.rs	2026-11-17 10:57:48
++++ b/byteorder-1.5.0/src/io.rs	2026-11-17 10:57:48
+@@ -424,6 +424,7 @@
+     /// let mut rdr = Cursor::new(vec![0x80, 0x74, 0xfa]);
+     /// assert_eq!(8418554, rdr.read_uint::<BigEndian>(3).unwrap());
+     #[inline]
++    // hydo: ensures is_err(result) || nbytes >= 1
+     fn read_uint<T: ByteOrder>(&mut self, nbytes: usize) -> Result<u64> {
+         let mut buf = [0; 8];
+         self.read_exact(&mut buf[..nbytes])?;
+diff -ruN -x Cargo.lock a/byteorder-1.5.0/src/lib.rs b/byteorder-1.5.0/src/lib.rs
+--- a/byteorder-1.5.0/src/lib.rs	2026-11-17 10:57:48
++++ b/byteorder-1.5.0/src/lib.rs	2026-11-17 10:57:48
+@@ -83,6 +83,8 @@
+ 
+ #[cfg(feature = "std")]
+ mod io;
++#[cfg(all(test, feature = "std"))]
++mod hydo_props;
+ 
+ #[inline]
+ fn extend_sign(val: u64, nbytes: usize) -> i64 {
+@@ -1957,6 +1959,8 @@
+     }
+ 
+     #[inline]
++    // hydo: requires nbytes >= 1 && nbytes <= 8 && nbytes <= len(buf)
++    // hydo: ensures nbytes == 8 || result < 72057594037927936
+     fn read_uint(buf: &[u8], nbytes: usize) -> u64 {
+         let mut out = [0; 8];
+         assert!(1 <= nbytes && nbytes <= out.len() && nbytes <= buf.len());
+diff -ruN -x Cargo.lock a/fixedbitset-0.5.9/src/hydo_props.rs b/fixedbitset-0.5.9/src/hydo_props.rs
+--- a/fixedbitset-0.5.9/src/hydo_props.rs	1970-01-01 01:00:00
++++ b/fixedbitset-0.5.9/src/hydo_props.rs	2026-11-17 10:57:48
+@@ -0,0 +1,82 @@
++//! Properties for `hydo fuzz`: sets built from bits, compared with a `BTreeSet`.
++
++use crate::FixedBitSet;
++use alloc::collections::BTreeSet;
++use alloc::vec::Vec;
++
++fn build(v: &[u16]) -> FixedBitSet {
++    let mut s = FixedBitSet::with_capacity(1 << 16);
++    for &b in v {
++        s.insert(b as usize);
++    }
++    s
++}
++
++fn model(v: &[u16]) -> BTreeSet<usize> {
++    v.iter().map(|&b| b as usize).collect()
++}
++
++// hydo: ensures result
++pub fn insert_then_contains(bits: Vec<u16>) -> bool {
++    let s = build(&bits);
++    bits.iter().all(|&b| s.contains(b as usize))
++}
++
++// hydo: ensures result
++pub fn count_ones_matches(bits: Vec<u16>) -> bool {
++    build(&bits).count_ones(..) == model(&bits).len()
++}
++
++// hydo: ensures result
++pub fn ones_sorted_and_unique(bits: Vec<u16>) -> bool {
++    build(&bits).ones().collect::<Vec<_>>() == model(&bits).into_iter().collect::<Vec<_>>()
++}
++
++// hydo: ensures result
++pub fn union_matches(a: Vec<u16>, b: Vec<u16>) -> bool {
++    let mut s = build(&a);
++    s.union_with(&build(&b));
++    let m: BTreeSet<usize> = model(&a).union(&model(&b)).copied().collect();
++    s.ones().collect::<BTreeSet<_>>() == m
++}
++
++// hydo: ensures result
++pub fn intersection_matches(a: Vec<u16>, b: Vec<u16>) -> bool {
++    let mut s = build(&a);
++    s.intersect_with(&build(&b));
++    let m: BTreeSet<usize> = model(&a).intersection(&model(&b)).copied().collect();
++    s.ones().collect::<BTreeSet<_>>() == m
++}
++
++// hydo: ensures result
++pub fn difference_matches(a: Vec<u16>, b: Vec<u16>) -> bool {
++    let mut s = build(&a);
++    s.difference_with(&build(&b));
++    let m: BTreeSet<usize> = model(&a).difference(&model(&b)).copied().collect();
++    s.ones().collect::<BTreeSet<_>>() == m
++}
++
++// hydo: ensures result
++pub fn symmetric_difference_matches(a: Vec<u16>, b: Vec<u16>) -> bool {
++    let mut s = build(&a);
++    s.symmetric_difference_with(&build(&b));
++    let m: BTreeSet<usize> = model(&a).symmetric_difference(&model(&b)).copied().collect();
++    s.ones().collect::<BTreeSet<_>>() == m
++}
++
++// hydo: ensures result
++pub fn subset_matches(a: Vec<u16>, b: Vec<u16>) -> bool {
++    build(&a).is_subset(&build(&b)) == model(&a).is_subset(&model(&b))
++}
++
++// hydo: ensures result
++pub fn disjoint_matches(a: Vec<u16>, b: Vec<u16>) -> bool {
++    build(&a).is_disjoint(&build(&b)) == model(&a).is_disjoint(&model(&b))
++}
++
++// hydo: ensures result
++pub fn min_max_match(bits: Vec<u16>) -> bool {
++    let s = build(&bits);
++    let m = model(&bits);
++    s.minimum() == m.first().copied() && s.maximum() == m.last().copied()
++}
+diff -ruN -x Cargo.lock a/fixedbitset-0.5.9/src/lib.rs b/fixedbitset-0.5.9/src/lib.rs
+--- a/fixedbitset-0.5.9/src/lib.rs	2026-11-17 10:57:48
++++ b/fixedbitset-0.5.9/src/lib.rs	2026-11-17 10:57:48
+@@ -26,6 +26,8 @@
+ use alloc::{vec, vec::Vec};
+ 
+ mod block;
++#[cfg(test)]
++mod hydo_props;
+ mod range;
+ 
+ #[cfg(feature = "serde")]
+@@ -101,6 +103,7 @@
+ 
+     /// Create a new **FixedBitSet** with a specific number of bits,
+     /// all initially clear.
++    // hydo: ensures result.length == bits
+     pub fn with_capacity(bits: usize) -> Self {
+         let (mut blocks, rem) = div_rem(bits, SimdBlock::BITS);
+         blocks += (rem > 0) as usize;
+@@ -140,6 +143,7 @@
+ 
+     /// Grow capacity to **bits**, all new bits initialized to zero
+     #[inline]
++    // hydo: ensures self.length >= bits
+     pub fn grow(&mut self, bits: usize) {
+         #[cold]
+         #[track_caller]
+@@ -434,6 +438,8 @@
+     ///
+     /// **Panics** if **bit** is out of bounds.
+     #[inline]
++    // hydo: requires bit < self.length
++    // hydo: ensures self.length == old(self.length)
+     pub fn insert(&mut self, bit: usize) {
+         assert!(
+             bit < self.length,
+diff -ruN -x Cargo.lock a/memchr-2.8.3/src/hydo_props.rs b/memchr-2.8.3/src/hydo_props.rs
+--- a/memchr-2.8.3/src/hydo_props.rs	1970-01-01 01:00:00
++++ b/memchr-2.8.3/src/hydo_props.rs	2026-11-17 10:57:48
+@@ -0,0 +1,59 @@
++//! Properties for `hydo fuzz`: memchr's searches against the naive ones.
++
++use alloc::vec::Vec;
++
++fn naive_find(h: &[u8], n: &[u8]) -> Option<usize> {
++    if n.is_empty() {
++        return Some(0);
++    }
++    h.windows(n.len()).position(|w| w == n)
++}
++
++fn naive_rfind(h: &[u8], n: &[u8]) -> Option<usize> {
++    if n.is_empty() {
++        return Some(h.len());
++    }
++    h.windows(n.len()).rposition(|w| w == n)
++}
++
++// hydo: ensures result
++pub fn memchr_naive(needle: u8, haystack: Vec<u8>) -> bool {
++    crate::memchr(needle, &haystack) == haystack.iter().position(|&b| b == needle)
++}
++
++// hydo: ensures result
++pub fn memrchr_naive(needle: u8, haystack: Vec<u8>) -> bool {
++    crate::memrchr(needle, &haystack) == haystack.iter().rposition(|&b| b == needle)
++}
++
++// hydo: ensures result
++pub fn memchr2_naive(n1: u8, n2: u8, haystack: Vec<u8>) -> bool {
++    crate::memchr2(n1, n2, &haystack) == haystack.iter().position(|&b| b == n1 || b == n2)
++}
++
++// hydo: ensures result
++pub fn memchr3_naive(n1: u8, n2: u8, n3: u8, haystack: Vec<u8>) -> bool {
++    crate::memchr3(n1, n2, n3, &haystack)
++        == haystack.iter().position(|&b| b == n1 || b == n2 || b == n3)
++}
++
++// hydo: ensures result
++pub fn find_naive(haystack: Vec<u8>, needle: Vec<u8>) -> bool {
++    crate::memmem::find(&haystack, &needle) == naive_find(&haystack, &needle)
++}
++
++// hydo: ensures result
++pub fn rfind_naive(haystack: Vec<u8>, needle: Vec<u8>) -> bool {
++    crate::memmem::rfind(&haystack, &needle) == naive_rfind(&haystack, &needle)
++}
++
++// hydo: ensures result
++pub fn memchr_iter_naive(needle: u8, haystack: Vec<u8>) -> bool {
++    crate::memchr_iter(needle, &haystack).collect::<Vec<_>>()
++        == haystack
++            .iter()
++            .enumerate()
++            .filter(|(_, &b)| b == needle)
++            .map(|(i, _)| i)
++            .collect::<Vec<_>>()
++}
+diff -ruN -x Cargo.lock a/memchr-2.8.3/src/lib.rs b/memchr-2.8.3/src/lib.rs
+--- a/memchr-2.8.3/src/lib.rs	2026-11-17 10:57:48
++++ b/memchr-2.8.3/src/lib.rs	2026-11-17 10:57:48
+@@ -218,4 +218,6 @@
+ mod ext;
+ mod memchr;
+ pub mod memmem;
++#[cfg(test)]
++mod hydo_props;
+ mod vector;
+diff -ruN -x Cargo.lock a/memchr-2.8.3/src/memchr.rs b/memchr-2.8.3/src/memchr.rs
+--- a/memchr-2.8.3/src/memchr.rs	2026-11-17 10:57:48
++++ b/memchr-2.8.3/src/memchr.rs	2026-11-17 10:57:48
+@@ -24,6 +24,8 @@
+ /// assert_eq!(memchr(b'k', haystack), Some(8));
+ /// ```
+ #[inline]
++// hydo: ensures is_none(result) || some(result) < len(haystack)
++// hydo: ensures is_none(result) || haystack[some(result)] == needle
+ pub fn memchr(needle: u8, haystack: &[u8]) -> Option<usize> {
+     // SAFETY: memchr_raw, when a match is found, always returns a valid
+     // pointer between start and end.
+@@ -56,6 +58,8 @@
+ /// assert_eq!(memrchr(b'o', haystack), Some(17));
+ /// ```
+ #[inline]
++// hydo: ensures is_none(result) || some(result) < len(haystack)
++// hydo: ensures is_none(result) || haystack[some(result)] == needle
+ pub fn memrchr(needle: u8, haystack: &[u8]) -> Option<usize> {
+     // SAFETY: memrchr_raw, when a match is found, always returns a valid
+     // pointer between start and end.
+@@ -89,6 +93,7 @@
+ /// assert_eq!(memchr2(b'k', b'q', haystack), Some(4));
+ /// ```
+ #[inline]
++// hydo: ensures is_none(result) || haystack[some(result)] == needle1 || haystack[some(result)] == needle2
+ pub fn memchr2(needle1: u8, needle2: u8, haystack: &[u8]) -> Option<usize> {
+     // SAFETY: memchr2_raw, when a match is found, always returns a valid
+     // pointer between start and end.
+diff -ruN -x Cargo.lock a/memchr-2.8.3/src/memmem/mod.rs b/memchr-2.8.3/src/memmem/mod.rs
+--- a/memchr-2.8.3/src/memmem/mod.rs	2026-11-17 10:57:48
++++ b/memchr-2.8.3/src/memmem/mod.rs	2026-11-17 10:57:48
+@@ -182,6 +182,7 @@
+ /// assert_eq!(None, memmem::find(haystack, b"quux"));
+ /// ```
+ #[inline]
++// hydo: ensures is_none(result) || some(result) + len(needle) <= len(haystack)
+ pub fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+     if haystack.len() < 64 {
+         rabinkarp::Finder::new(needle).find(haystack, needle)
+@@ -219,6 +220,7 @@
+ /// assert_eq!(None, memmem::rfind(haystack, b"quux"));
+ /// ```
+ #[inline]
++// hydo: ensures is_none(result) || some(result) + len(needle) <= len(haystack)
+ pub fn rfind(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+     if haystack.len() < 64 {
+         rabinkarp::FinderRev::new(needle).rfind(haystack, needle)
+diff -ruN -x Cargo.lock a/num-integer-0.1.47/src/hydo_props.rs b/num-integer-0.1.47/src/hydo_props.rs
+--- a/num-integer-0.1.47/src/hydo_props.rs	1970-01-01 01:00:00
++++ b/num-integer-0.1.47/src/hydo_props.rs	2026-11-17 10:57:48
+@@ -0,0 +1,101 @@
++//! Properties for `hydo fuzz`, from num-integer's documentation, over concrete types.
++
++use crate::{Average, Integer, Roots};
++
++/// The gcd is not negative and divides both values.
++// hydo: ensures result
++pub fn prop_gcd_i64(a: i64, b: i64) -> bool {
++    let g = a.gcd(&b);
++    g >= 0 && (g == 0 || (a % g == 0 && b % g == 0)) && (g != 0 || (a == 0 && b == 0))
++}
++
++/// The same for u64.
++// hydo: ensures result
++pub fn prop_gcd_u64(a: u64, b: u64) -> bool {
++    let g = a.gcd(&b);
++    (g == 0 && a == 0 && b == 0) || (g != 0 && a % g == 0 && b % g == 0)
++}
++
++/// `div_mod_floor`: `q * y + r == x`, and `r` has the sign of `y`.
++// hydo: requires y != 0
++// hydo: ensures result
++pub fn prop_div_mod_floor(x: i32, y: i32) -> bool {
++    if x == i32::MIN && y == -1 {
++        return true;
++    }
++    let (q, r) = x.div_mod_floor(&y);
++    (q as i64) * (y as i64) + (r as i64) == x as i64 && (r == 0 || (r < 0) == (y < 0))
++}
++
++/// `div_ceil` rounds up.
++// hydo: requires y > 0
++// hydo: ensures result
++pub fn prop_div_ceil(x: i64, y: i64) -> bool {
++    let q = x.div_ceil(&y) as i128;
++    q * (y as i128) >= x as i128 && (q - 1) * (y as i128) < x as i128
++}
++
++/// `next_multiple_of` is a multiple, at least `x`.
++// hydo: requires y > 0 && x <= 1000000000000
++// hydo: ensures result
++pub fn prop_next_multiple(x: u64, y: u64) -> bool {
++    let m = Integer::next_multiple_of(&x, &y);
++    m % y == 0 && m >= x && m - x < y
++}
++
++/// The extended gcd: `x * a + y * b == gcd`.
++// hydo: requires a > -1000000000 && a < 1000000000 && b > -1000000000 && b < 1000000000
++// hydo: ensures result
++pub fn prop_extended_gcd(a: i64, b: i64) -> bool {
++    let e = a.extended_gcd(&b);
++    (e.x as i128) * (a as i128) + (e.y as i128) * (b as i128) == e.gcd as i128
++}
++
++/// `sqrt` is the floor of the square root.
++// hydo: ensures result
++pub fn prop_sqrt_u64(x: u64) -> bool {
++    let r = x.sqrt() as u128;
++    r * r <= x as u128 && (r + 1) * (r + 1) > x as u128
++}
++
++/// `cbrt` is the floor of the cube root, for negative values too.
++// hydo: ensures result
++pub fn prop_cbrt_i64(x: i64) -> bool {
++    let r = x.cbrt() as i128;
++    let x = x as i128;
++    if x >= 0 {
++        r * r * r <= x && (r + 1) * (r + 1) * (r + 1) > x
++    } else {
++        r * r * r >= x && (r - 1) * (r - 1) * (r - 1) < x
++    }
++}
++
++/// For a negative `x` and an odd `n`, `(r-1)^n < x <= r^n`.
++// hydo: requires x < 0 && n % 2 == 1 && n < 64
++// hydo: ensures result
++pub fn prop_nth_root_negative(x: i64, n: u32) -> bool {
++    let r = x.nth_root(n) as i128;
++    let x = x as i128;
++    let pow = |b: i128| (0..n).fold(1i128, |p, _| p.saturating_mul(b));
++    pow(r - 1) < x && x <= pow(r)
++}
++
++/// `average_floor` is the floor of the mean.
++// hydo: ensures result
++pub fn prop_average_floor(a: i64, b: i64) -> bool {
++    let m = a.average_floor(&b) as i128;
++    let s = a as i128 + b as i128;
++    m == s.div_euclid(2)
++}
++
++/// `binomial(n, k)` is `n! / (k! (n-k)!)`, up to the documented n of 67.
++// hydo: requires n <= 67 && k <= n
++// hydo: ensures result
++pub fn prop_binomial(n: u64, k: u64) -> bool {
++    let b = crate::binomial(n, k) as u128;
++    let mut c: u128 = 1;
++    for i in 0..k as u128 {
++        c = c * (n as u128 - i) / (i + 1);
++    }
++    b == c
++}
+diff -ruN -x Cargo.lock a/num-integer-0.1.47/src/lib.rs b/num-integer-0.1.47/src/lib.rs
+--- a/num-integer-0.1.47/src/lib.rs	2026-11-17 10:57:48
++++ b/num-integer-0.1.47/src/lib.rs	2026-11-17 10:57:48
+@@ -26,6 +26,8 @@
+ pub use crate::roots::Roots;
+ pub use crate::roots::{cbrt, nth_root, sqrt};
+ 
++#[cfg(test)]
++mod hydo_props;
+ mod average;
+ pub use crate::average::Average;
+ pub use crate::average::{average_ceil, average_floor};
+@@ -397,6 +399,7 @@
+ }
+ /// Floored integer division
+ #[inline]
++// hydo: ensures result * y <= x || y < 0
+ pub fn div_floor<T: Integer>(x: T, y: T) -> T {
+     x.div_floor(&y)
+ }
+@@ -419,6 +422,7 @@
+ /// Calculates the Greatest Common Divisor (GCD) of the number and `other`. The
+ /// result is always non-negative.
+ #[inline(always)]
++// hydo: ensures result >= 0
+ pub fn gcd<T: Integer>(x: T, y: T) -> T {
+     x.gcd(&y)
+ }
+diff -ruN -x Cargo.lock a/semver-1.0.28/src/hydo_props.rs b/semver-1.0.28/src/hydo_props.rs
+--- a/semver-1.0.28/src/hydo_props.rs	1970-01-01 01:00:00
++++ b/semver-1.0.28/src/hydo_props.rs	2026-11-17 10:57:48
+@@ -0,0 +1,90 @@
++//! Properties for `hydo fuzz`, from semver's documentation.
++
++use crate::{Comparator, Prerelease, Version, VersionReq};
++use alloc::format;
++use alloc::string::ToString;
++
++/// A version that parses prints as text that parses to it again.
++// hydo: ensures result
++pub fn version_display_roundtrip(text: &str) -> bool {
++    match Version::parse(text) {
++        Ok(v) => Version::parse(&v.to_string()).ok() == Some(v),
++        Err(_) => true,
++    }
++}
++
++/// A version built from its parts parses to those parts.
++// hydo: ensures result
++pub fn version_parts_roundtrip(major: u64, minor: u64, patch: u64, pre: &str, build: &str) -> bool {
++    let mut text = format!("{major}.{minor}.{patch}");
++    if !pre.is_empty() {
++        text.push('-');
++        text.push_str(pre);
++    }
++    if !build.is_empty() {
++        text.push('+');
++        text.push_str(build);
++    }
++    match Version::parse(&text) {
++        Ok(v) => {
++            v.major == major
++                && v.minor == minor
++                && v.patch == patch
++                && v.pre.as_str() == pre
++                && v.build.as_str() == build
++        }
++        Err(_) => true,
++    }
++}
++
++/// `=M.m.p` matches `M.m.p`.
++// hydo: ensures result
++pub fn req_exact_matches(major: u64, minor: u64, patch: u64) -> bool {
++    let req = VersionReq::parse(&format!("={major}.{minor}.{patch}")).unwrap();
++    req.matches(&Version::new(major, minor, patch))
++}
++
++/// `^M.m.p` matches the next patch release unless major and minor are 0.
++// hydo: requires patch < 18446744073709551615
++// hydo: ensures result
++pub fn caret_next_patch(major: u64, minor: u64, patch: u64) -> bool {
++    let req = VersionReq::parse(&format!("^{major}.{minor}.{patch}")).unwrap();
++    let next = Version::new(major, minor, patch + 1);
++    req.matches(&next) == (major > 0 || minor > 0)
++}
++
++/// A requirement that parses prints as text that parses to it again.
++// hydo: ensures result
++pub fn req_display_roundtrip(text: &str) -> bool {
++    match VersionReq::parse(text) {
++        Ok(r) => VersionReq::parse(&r.to_string()).ok() == Some(r),
++        Err(_) => true,
++    }
++}
++
++/// A comparator that parses prints as text that parses to it again.
++// hydo: ensures result
++pub fn comparator_display_roundtrip(text: &str) -> bool {
++    match Comparator::parse(text) {
++        Ok(c) => Comparator::parse(&c.to_string()).ok() == Some(c),
++        Err(_) => true,
++    }
++}
++
++/// A pre-release that parses keeps its text.
++// hydo: ensures result
++pub fn prerelease_keeps_text(text: &str) -> bool {
++    match Prerelease::new(text) {
++        Ok(p) => p.as_str() == text,
++        Err(_) => true,
++    }
++}
++
++/// The order of two versions is antisymmetric and agrees with equality.
++// hydo: ensures result
++pub fn order_consistent(a: &str, b: &str) -> bool {
++    match (Version::parse(a), Version::parse(b)) {
++        (Ok(x), Ok(y)) => (x < y) == (y > x) && ((x == y) == (x.cmp(&y).is_eq())),
++        _ => true,
++    }
++}
+diff -ruN -x Cargo.lock a/semver-1.0.28/src/lib.rs b/semver-1.0.28/src/lib.rs
+--- a/semver-1.0.28/src/lib.rs	2026-11-17 10:57:48
++++ b/semver-1.0.28/src/lib.rs	2026-11-17 10:57:48
+@@ -93,6 +93,8 @@
+ mod eval;
+ mod identifier;
+ mod impls;
++#[cfg(test)]
++mod hydo_props;
+ mod parse;
+ 
+ #[cfg(feature = "serde")]
+@@ -386,6 +388,7 @@
+     /// }
+     /// # }
+     /// ```
++    // hydo: ensures result.major == major && result.minor == minor && result.patch == patch
+     pub const fn new(major: u64, minor: u64, patch: u64) -> Self {
+         Version {
+             major,
+@@ -419,6 +422,7 @@
+     ///   and `.` (dot).
+     ///
+     /// - `23456789999999999999.0.0` &mdash; overflow of a u64.
++    // hydo: ensures !is_ok(result) || len(text) >= 5
+     pub fn parse(text: &str) -> Result<Self, Error> {
+         Version::from_str(text)
+     }
+@@ -504,6 +508,7 @@
+     /// - `>=1.0 <2.0` &mdash; missing comma between comparators.
+     ///
+     /// - `*.*` &mdash; unsupported wildcard syntax.
++    // hydo: ensures !is_ok(result) || len(ok(result).comparators) <= len(text)
+     pub fn parse(text: &str) -> Result<Self, Error> {
+         VersionReq::from_str(text)
+     }
+@@ -523,6 +528,7 @@
+ }
+ 
+ impl Comparator {
++    // hydo: ensures !is_ok(result) || is_some(ok(result).minor) || is_none(ok(result).patch)
+     pub fn parse(text: &str) -> Result<Self, Error> {
+         Comparator::from_str(text)
+     }
+@@ -537,6 +543,7 @@
+         identifier: Identifier::empty(),
+     };
+ 
++    // hydo: ensures len(text) != 0 || is_ok(result)
+     pub fn new(text: &str) -> Result<Self, Error> {
+         Prerelease::from_str(text)
+     }

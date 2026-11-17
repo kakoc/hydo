@@ -707,8 +707,18 @@ the test profile on a header that `compress_sequence` never writes, on the path 
 untrusted sparse vectors. The run inside the VM with faults is designed only. Design:
 `docs/design/function-fuzzing.md` (open item 139). An evaluation on six popular crates (M280,
 `docs/design/function-fuzzing-evaluation.md`) found that a new user would not keep using it
-yet. The main reasons are harness builds that fail, runs that test nothing and still pass, and
-generated values too short to reach real code.
+yet. M282 fixed what it found, and the six crates ran again:
+- The harness builds on `#![no_std]` crates and reads results with private fields of other
+  modules. A function whose harness does not build is reported, and the others run.
+- Each function ends with `held`, `broken`, `vacuous` or `too few inputs`; the last two exit 3
+  with a `to fix:` line (`--min-inputs`, `--min-reach`).
+- `input` lines take `len`, `chars`, `like` examples and list elements (`v[]`). Lists grow to
+  256, with edge sizes to 4,096, and sizes stay within 2^20 without an `input` line.
+- `with T = i64` fuzzes a generic function. `hydo guide fuzz` is the user's reference.
+
+Every harness of the six crates built. memchr's own contract found the planted bug, and `gcd`'s
+found num-integer#55. The verdict: kept for functions over integers, strings and lists, not yet
+for APIs of traits or of types that hold pointers.
 
 **Fakes from OpenAPI descriptions (M249).** `hydo fake from-openapi <spec>` writes a `fakes:`
 entry from an OpenAPI 3.0 or 3.1 description (the module `openapi` of `hydo-compose`). It writes
@@ -1696,30 +1706,30 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A fault of a stepped instruction other than #DE, #UD, #GP and #PF leaves the trap flag in
       its frame. Only user mode is counted, so a loop in the guest kernel stays the observer's.
     - The k3s example is not in `hydo/onboard/recorded.json`.
-139. Function fuzzing (M275). What is left:
+139. Function fuzzing (M275, M280, M282). What is left:
     - The run inside hydo's VM with faults is designed and not built
       (docs/design/function-fuzzing.md, "Inside the virtual machine"). It needs the harness built
       for the guest and a runner that makes an image per batch. Durability properties also need a
       second phase in the recovery boot.
-    - Rust only, natively. Go, floating-point values, enumerations, generic functions, and trait
-      methods are not fuzzed.
+    - Rust only, natively. Go, floating-point values, enumerations, `char` and maps are not
+      fuzzed.
+    - Trait methods and methods of generic `impl` blocks are refused; `with T = <type>` covers
+      generic free functions and methods of plain `impl` blocks only. Most of base64's engine
+      API, byteorder's `ReadBytesExt` and num-integer's `Integer` still need property functions.
+    - Values built by a named constructor are not built: a structure with a pointer field
+      (`FixedBitSet`) or a private field of another module is refused as a parameter.
     - The language has no quantifier, so a precondition such as "the input is sorted" cannot be
       stated (Qdrant's `delta_pack`).
+    - The textual reading takes the first structure of a name; two of one name in two modules
+      make one harness fail to build (reported, the others run). `--list` cannot tell a build
+      failure in advance.
+    - A list's shrink keeps a length that the bug needs: memchr's input kept 80 bytes. A panic
+      inside code that a macro generates is still placed at the harness's line.
+    - The M282 re-run used contracts written by the one who fixed the tool. A fresh evaluator,
+      as in M280, should run it before 0.4.0.
     - Qdrant's `decompress_sequence` accepts a header of more than 64 bits per value. What
       `decode_untrusted_bytes` returns for such a blob in a release build was not checked, and
       nothing was posted.
-    - The evaluation on six crates (M280, `docs/design/function-fuzzing-evaluation.md`) found
-      these problems, worst first:
-      - The harness does not build on a `#![no_std]` crate (it needs `std`) or on a structure
-        with private fields from another module, and one such function stops every function.
-      - `every clause held` and exit status 0 also for a run that tested nothing: 2 inputs
-        after 49,998 rejections, or text that never parses.
-      - Strings and lists hold at most 16 elements, and `input` takes no length or character
-        set, so memchr's 64-byte loop and semver's parser were reached only by hand.
-      - A size parameter without an `input` line makes calls of terabytes that each wait for
-        `--timeout`, with no progress output.
-      - Generic functions, trait methods, and types with pointer fields are refused, so most of
-        a crate's API needs a hand-written property function.
     - The two candidates of M280 were not posted: num-integer's `i64::MIN.nth_root(1)` panics
       in a debug build, and byteorder's `ReadBytesExt::read_uint` panics for `nbytes` of 0 or
       more than 8 without a documented panic.
@@ -2428,7 +2438,7 @@ build machine, before 2026-10-13.
   and loses every saved write since. It was found blind and shrunk to `T=8:-18`. A power cut loses acknowledged
   snapshots (known, #8646), and Dragonfly's Lua needs AVX (known). REPLTAKEOVER kept its promise.
   Nothing recorded moved
-- M277 (tentative number): the SurrealDB 4.0.1 onboarding on SurrealKV, on hvx and the Mac
+- M277 (tentative number): the SurrealDB 4.0.1 onboarding on SurrealKV, on hvx, and on the Mac
   engine. A new SurrealKV candidate: after a damaged value of the value log, the next open drops
   every later acknowledged commit when none of them has a large value. With one, it refuses.
   Found blind 7 times in 167 schedules, reproduced with Docker, not posted. Two known SurrealDB
@@ -2441,6 +2451,12 @@ build machine, before 2026-10-13.
   change of leader, a produce answer names an earlier transaction's offset, and a new request
   can get one without being written. The messages check's `duplicates` message names a wrong
   acknowledged id. Nothing recorded moved
+- M282 (tentative number): what the evaluation of `hydo fuzz` found, fixed before 0.4.0. The
+  harness builds on `no_std` crates and around private fields, function by function. Each
+  function ends with a verdict, and `vacuous` and `too few inputs` exit 3 with a fix. `input`
+  takes lengths, characters and examples, sizes stay bounded, and `with T = i64` fuzzes a
+  generic function. On the six crates every harness built, and the planted memchr bug and
+  num-integer#55 came from the functions' own contracts. Nothing recorded moved
 
 ## Where to look
 

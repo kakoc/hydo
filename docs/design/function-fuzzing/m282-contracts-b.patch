@@ -1,0 +1,246 @@
+diff -ruN -x Cargo.lock a/base64-0.23.1/src/alphabet.rs b/base64-0.23.1/src/alphabet.rs
+--- a/base64-0.23.1/src/alphabet.rs	2026-11-17 10:57:48
++++ b/base64-0.23.1/src/alphabet.rs	2026-11-17 10:57:48
+@@ -83,6 +83,7 @@
+     /// See [`Self::new_with_padding`] if a non-default padding symbol is needed.
+     // hydo: requires len(alphabet) == 64
+     // hydo: ensures is_err(result) || ok(result).symbols[0] != 61
++    // hydo: input alphabet like "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+     pub const fn new(alphabet: &str) -> Result<Self, ParseAlphabetError> {
+         Self::new_with_padding(alphabet, PADDING_SYMBOL)
+     }
+diff -ruN -x Cargo.lock a/base64-0.23.1/src/hydo_props.rs b/base64-0.23.1/src/hydo_props.rs
+--- a/base64-0.23.1/src/hydo_props.rs	2026-11-17 10:57:48
++++ b/base64-0.23.1/src/hydo_props.rs	2026-11-17 10:57:48
+@@ -4,36 +4,37 @@
+ use crate::{decoded_len_estimate, encoded_len, Engine};
+ 
+ /// Decoding what the standard engine encoded gives the bytes back.
++// hydo: input data len 0..=1000
+ // hydo: ensures result
+ pub fn roundtrip_standard(data: Vec<u8>) -> bool {
+     STANDARD.decode(STANDARD.encode(&data)).ok() == Some(data)
+ }
+ 
+ /// The same for the URL-safe engine without padding.
++// hydo: input data len 0..=1000
+ // hydo: ensures result
+ pub fn roundtrip_url_safe_no_pad(data: Vec<u8>) -> bool {
+     URL_SAFE_NO_PAD.decode(URL_SAFE_NO_PAD.encode(&data)).ok() == Some(data)
+ }
+ 
+ /// The encoded text is as long as `encoded_len` says.
++// hydo: input data len 0..=1000
+ // hydo: ensures result
+ pub fn encode_len_matches(data: Vec<u8>) -> bool {
+     Some(STANDARD.encode(&data).len()) == encoded_len(data.len(), true)
+ }
+ 
+ /// Text that decodes fits into a buffer of `decoded_len_estimate` bytes.
++// hydo: input text like "aGVsbG8=", "AAAA", "YQ==", "YWJjZGVmZ2hpams=", ""
+ // hydo: ensures result
+-pub fn decode_slice_fits_estimate(text: &str) -> bool {
+-    match STANDARD.decode(text) {
+-        Ok(v) => {
+-            let mut buf = vec![0u8; decoded_len_estimate(text.len())];
+-            STANDARD.decode_slice(text, &mut buf).ok() == Some(v.len())
+-        }
+-        Err(_) => true,
+-    }
++pub fn decode_slice_fits_estimate(text: &str) -> Option<bool> {
++    let v = STANDARD.decode(text).ok()?;
++    let mut buf = vec![0u8; decoded_len_estimate(text.len())];
++    Some(STANDARD.decode_slice(text, &mut buf).ok() == Some(v.len()))
+ }
+ 
+ /// A pad-indifferent engine decodes padded and unpadded text alike.
++// hydo: input data len 0..=1000
+ // hydo: ensures result
+ pub fn indifferent_takes_both(data: Vec<u8>) -> bool {
+     let padded = STANDARD.encode(&data);
+@@ -43,12 +44,11 @@
+ }
+ 
+ /// Standard text that decodes is the canonical encoding of its bytes.
++// hydo: input text like "aGVsbG8=", "AAAA", "YQ==", "YWJjZGVmZ2hpams=", ""
+ // hydo: ensures result
+-pub fn decode_is_canonical(text: &str) -> bool {
+-    match STANDARD.decode(text) {
+-        Ok(v) => STANDARD.encode(v) == text,
+-        Err(_) => true,
+-    }
++pub fn decode_is_canonical(text: &str) -> Option<bool> {
++    let v = STANDARD.decode(text).ok()?;
++    Some(STANDARD.encode(v) == text)
+ }
+ 
+ /// `encoded_len` grows with the input.
+diff -ruN -x Cargo.lock a/num-integer-0.1.47/src/lib.rs b/num-integer-0.1.47/src/lib.rs
+--- a/num-integer-0.1.47/src/lib.rs	2026-11-17 10:57:48
++++ b/num-integer-0.1.47/src/lib.rs	2026-11-17 10:57:48
+@@ -400,6 +400,8 @@
+ /// Floored integer division
+ #[inline]
+ // hydo: ensures result * y <= x || y < 0
++// hydo: requires y != 0 && !(x == -9223372036854775808 && y == -1)
++// hydo: with T = i64
+ pub fn div_floor<T: Integer>(x: T, y: T) -> T {
+     x.div_floor(&y)
+ }
+@@ -423,6 +425,7 @@
+ /// result is always non-negative.
+ #[inline(always)]
+ // hydo: ensures result >= 0
++// hydo: with T = i64
+ pub fn gcd<T: Integer>(x: T, y: T) -> T {
+     x.gcd(&y)
+ }
+diff -ruN -x Cargo.lock a/semver-1.0.28/src/hydo_props.rs b/semver-1.0.28/src/hydo_props.rs
+--- a/semver-1.0.28/src/hydo_props.rs	2026-11-17 10:57:48
++++ b/semver-1.0.28/src/hydo_props.rs	2026-11-17 10:57:48
+@@ -1,21 +1,23 @@
+-//! Properties for `hydo fuzz`, from semver's documentation.
++//! Properties for `hydo fuzz`, from semver's documentation. A property returns `None` for an
++//! input it cannot use, so that hydo can tell how many inputs it checked.
+ 
+ use crate::{Comparator, Prerelease, Version, VersionReq};
+ use alloc::format;
+ use alloc::string::ToString;
+ 
+ /// A version that parses prints as text that parses to it again.
++// hydo: input text like "1.2.3", "0.0.0-alpha.1+build.5", "10.20.30-rc.1"
+ // hydo: ensures result
+-pub fn version_display_roundtrip(text: &str) -> bool {
+-    match Version::parse(text) {
+-        Ok(v) => Version::parse(&v.to_string()).ok() == Some(v),
+-        Err(_) => true,
+-    }
++pub fn version_display_roundtrip(text: &str) -> Option<bool> {
++    let v = Version::parse(text).ok()?;
++    Some(Version::parse(&v.to_string()).ok() == Some(v))
+ }
+ 
+ /// A version built from its parts parses to those parts.
++// hydo: input pre len 0..=12 chars "a-z0-9.-"
++// hydo: input build len 0..=12 chars "a-z0-9.-"
+ // hydo: ensures result
+-pub fn version_parts_roundtrip(major: u64, minor: u64, patch: u64, pre: &str, build: &str) -> bool {
++pub fn version_parts_roundtrip(major: u64, minor: u64, patch: u64, pre: &str, build: &str) -> Option<bool> {
+     let mut text = format!("{major}.{minor}.{patch}");
+     if !pre.is_empty() {
+         text.push('-');
+@@ -25,16 +27,14 @@
+         text.push('+');
+         text.push_str(build);
+     }
+-    match Version::parse(&text) {
+-        Ok(v) => {
+-            v.major == major
+-                && v.minor == minor
+-                && v.patch == patch
+-                && v.pre.as_str() == pre
+-                && v.build.as_str() == build
+-        }
+-        Err(_) => true,
+-    }
++    let v = Version::parse(&text).ok()?;
++    Some(
++        v.major == major
++            && v.minor == minor
++            && v.patch == patch
++            && v.pre.as_str() == pre
++            && v.build.as_str() == build,
++    )
+ }
+ 
+ /// `=M.m.p` matches `M.m.p`.
+@@ -54,37 +54,34 @@
+ }
+ 
+ /// A requirement that parses prints as text that parses to it again.
++// hydo: input text like ">=1.2.3, <2", "^0.1", "~1.2.3-beta", "*", "=1.0.0"
+ // hydo: ensures result
+-pub fn req_display_roundtrip(text: &str) -> bool {
+-    match VersionReq::parse(text) {
+-        Ok(r) => VersionReq::parse(&r.to_string()).ok() == Some(r),
+-        Err(_) => true,
+-    }
++pub fn req_display_roundtrip(text: &str) -> Option<bool> {
++    let r = VersionReq::parse(text).ok()?;
++    Some(VersionReq::parse(&r.to_string()).ok() == Some(r))
+ }
+ 
+ /// A comparator that parses prints as text that parses to it again.
++// hydo: input text like ">=1.2.3", "^1", "~0.1.2-pre", "<2.0"
+ // hydo: ensures result
+-pub fn comparator_display_roundtrip(text: &str) -> bool {
+-    match Comparator::parse(text) {
+-        Ok(c) => Comparator::parse(&c.to_string()).ok() == Some(c),
+-        Err(_) => true,
+-    }
++pub fn comparator_display_roundtrip(text: &str) -> Option<bool> {
++    let c = Comparator::parse(text).ok()?;
++    Some(Comparator::parse(&c.to_string()).ok() == Some(c))
+ }
+ 
+ /// A pre-release that parses keeps its text.
++// hydo: input text like "alpha.1", "rc.0", "beta-2.x"
+ // hydo: ensures result
+-pub fn prerelease_keeps_text(text: &str) -> bool {
+-    match Prerelease::new(text) {
+-        Ok(p) => p.as_str() == text,
+-        Err(_) => true,
+-    }
++pub fn prerelease_keeps_text(text: &str) -> Option<bool> {
++    let p = Prerelease::new(text).ok()?;
++    Some(p.as_str() == text)
+ }
+ 
+ /// The order of two versions is antisymmetric and agrees with equality.
++// hydo: input a like "1.2.3", "1.2.3-alpha", "1.2.3-alpha.1", "1.10.0"
++// hydo: input b like "1.2.3", "1.2.3-beta", "1.2.3-alpha.10", "1.9.9"
+ // hydo: ensures result
+-pub fn order_consistent(a: &str, b: &str) -> bool {
+-    match (Version::parse(a), Version::parse(b)) {
+-        (Ok(x), Ok(y)) => (x < y) == (y > x) && ((x == y) == (x.cmp(&y).is_eq())),
+-        _ => true,
+-    }
++pub fn order_consistent(a: &str, b: &str) -> Option<bool> {
++    let (x, y) = (Version::parse(a).ok()?, Version::parse(b).ok()?);
++    Some((x < y) == (y > x) && ((x == y) == (x.cmp(&y).is_eq())))
+ }
+diff -ruN -x Cargo.lock a/semver-1.0.28/src/lib.rs b/semver-1.0.28/src/lib.rs
+--- a/semver-1.0.28/src/lib.rs	2026-11-17 10:57:48
++++ b/semver-1.0.28/src/lib.rs	2026-11-17 10:57:48
+@@ -423,6 +423,7 @@
+     ///
+     /// - `23456789999999999999.0.0` &mdash; overflow of a u64.
+     // hydo: ensures !is_ok(result) || len(text) >= 5
++    // hydo: input text like "1.2.3", "0.0.0-alpha.1+build.5", "10.20.30-rc.1"
+     pub fn parse(text: &str) -> Result<Self, Error> {
+         Version::from_str(text)
+     }
+@@ -509,6 +510,7 @@
+     ///
+     /// - `*.*` &mdash; unsupported wildcard syntax.
+     // hydo: ensures !is_ok(result) || len(ok(result).comparators) <= len(text)
++    // hydo: input text like ">=1.2.3, <2", "^0.1", "~1.2.3-beta", "*", "=1.0.0"
+     pub fn parse(text: &str) -> Result<Self, Error> {
+         VersionReq::from_str(text)
+     }
+@@ -529,6 +531,7 @@
+ 
+ impl Comparator {
+     // hydo: ensures !is_ok(result) || is_some(ok(result).minor) || is_none(ok(result).patch)
++    // hydo: input text like ">=1.2.3", "^1", "~0.1.2-pre", "<2.0"
+     pub fn parse(text: &str) -> Result<Self, Error> {
+         Comparator::from_str(text)
+     }
+@@ -544,6 +547,7 @@
+     };
+ 
+     // hydo: ensures len(text) != 0 || is_ok(result)
++    // hydo: input text like "alpha.1", "rc.0", "beta-2.x"
+     pub fn new(text: &str) -> Result<Self, Error> {
+         Prerelease::from_str(text)
+     }

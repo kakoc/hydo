@@ -75,6 +75,8 @@ fn types_resolve_through_structures_aliases_and_self() {
     let r = Resolver {
         items: &items,
         self_ty: None,
+        module: &[],
+        subst: &Default::default(),
     };
     let t = |s: &str| r.resolve(&hydo_contracts::fuzz::rust::parse_ty(s).unwrap());
     let l = t("&mut Ledger");
@@ -148,6 +150,7 @@ fn generation_is_the_same_from_the_same_seed_and_keeps_the_domains() {
             hints: &h,
             mode: 2,
             max_len: 8,
+            budget: hydo_contracts::fuzz::value::BUDGET,
         };
         (0..200)
             .map(|_| {
@@ -352,4 +355,262 @@ fn fuzzing_the_fixture_finds_each_planted_bug_with_a_small_input() {
         ],
     );
     assert_eq!(code, 0);
+}
+
+// ---------------------------------------------------------------- Milestone 282
+
+#[test]
+fn input_lines_take_lengths_characters_examples_and_elements() {
+    use hydo_contracts::lang::scan;
+    let src = "\
+// hydo: input s len 0..200 chars ascii
+// hydo: input v len 0..=1000
+// hydo: input v[] in 1..=255
+// hydo: input len(a) in 64..=64
+// hydo: input t like \"1.2.3\", \"0.0.0-alpha\"
+// hydo: input u len 3 chars \"a-c.\"
+// hydo: with T = i64
+fn f<T>(s: &str, v: &[u8], a: &str, t: &str, u: &str, x: T) {}
+";
+    let (cs, errs) = scan(src);
+    assert!(errs.is_empty(), "{errs:?}");
+    let i = &cs[0].inputs;
+    assert_eq!(i[0].name, "s");
+    assert_eq!(i[0].len, Some((0, 199)));
+    assert_eq!(i[0].chars.as_ref().map(Vec::len), Some(95));
+    assert_eq!(i[1].len, Some((0, 1000)));
+    assert_eq!((i[2].name.as_str(), i[2].range), ("v[]", Some((1, 255))));
+    assert_eq!((i[3].name.as_str(), i[3].len), ("a", Some((64, 64))));
+    assert_eq!(i[4].like, ["1.2.3", "0.0.0-alpha"]);
+    assert_eq!(i[5].len, Some((3, 3)));
+    assert_eq!(i[5].chars, Some(vec!['.', 'a', 'b', 'c']));
+    assert_eq!(cs[0].with, [("T".to_string(), "i64".to_string())]);
+    for bad in [
+        "// hydo: input s chars greek\nfn f(s: &str) {}\n",
+        "// hydo: input s len\nfn f(s: &str) {}\n",
+        "// hydo: input s like 1.2.3\nfn f(s: &str) {}\n",
+        "// hydo: with T\nfn f<T>(x: T) {}\n",
+    ] {
+        let (_, errs) = scan(bad);
+        assert_eq!(errs.len(), 1, "{bad}");
+    }
+}
+
+#[test]
+fn lengths_characters_and_examples_reach_long_and_valid_values() {
+    let mut h = Hints::default();
+    h.domains.insert("v#len".into(), (0, 1000));
+    h.domains.insert("s#len".into(), (5, 5));
+    h.chars.insert("s".into(), vec!['x', 'y']);
+    h.like.insert("t".into(), vec!["1.2.3".into()]);
+    let mut rng = Rng::new(7);
+    let (mut longest, mut examples) = (0, 0);
+    for _ in 0..500 {
+        let mut g = Gen {
+            rng: &mut rng,
+            hints: &h,
+            mode: 2,
+            max_len: 4,
+            budget: hydo_contracts::fuzz::value::BUDGET,
+        };
+        let Val::List(v) = g.val(&FTy::List(Box::new(u64t())), "v") else {
+            panic!()
+        };
+        assert!(v.len() <= 1000);
+        longest = longest.max(v.len());
+        let Val::Str(s) = g.val(&FTy::Str, "s") else {
+            panic!()
+        };
+        assert!(
+            s.len() == 5 && s.chars().all(|c| c == 'x' || c == 'y'),
+            "{s}"
+        );
+        let Val::Str(t) = g.val(&FTy::Str, "t") else {
+            panic!()
+        };
+        examples += (t == "1.2.3") as u32;
+        // a size without an input line stays small
+        let usize_t = FTy::Int {
+            name: "usize".into(),
+            signed: false,
+            bits: 64,
+        };
+        let Val::Int(n) = g.val(&usize_t, "n") else {
+            panic!()
+        };
+        assert!(n <= hydo_contracts::fuzz::value::SIZE_BOUND, "{n}");
+    }
+    assert!(longest > 900, "{longest}");
+    assert!(examples > 100 && examples < 400, "{examples}");
+    // without a len part, the later inputs reach the edge sizes past 64
+    let mut rng = Rng::new(3);
+    let mut past = 0;
+    for _ in 0..400 {
+        let mut g = Gen {
+            rng: &mut rng,
+            hints: &Hints::default(),
+            mode: 2,
+            max_len: 256,
+            budget: hydo_contracts::fuzz::value::BUDGET,
+        };
+        if let Val::List(v) = g.val(&FTy::List(Box::new(u64t())), "v") {
+            past += (v.len() > 64) as u32;
+        }
+    }
+    assert!(past > 20, "{past}");
+}
+
+#[test]
+fn a_clause_splits_at_its_top_level_or() {
+    use hydo_contracts::fuzz::or_parts;
+    assert_eq!(
+        or_parts("is_none(result) || (a || b) || v[some(result)] == \"||\""),
+        ["is_none(result)", "(a || b)", "v[some(result)] == \"||\""]
+    );
+    assert_eq!(or_parts("x > 0"), ["x > 0"]);
+}
+
+#[test]
+fn the_harness_builds_without_std_and_names_no_hidden_field() {
+    let s = harness::Spec {
+        module: "__hydo_fuzz_0".into(),
+        call: "super::version".into(),
+        receiver: None,
+        params: vec![],
+        ret: FTy::Struct {
+            path: "Version".into(),
+            tuple: false,
+            fields: vec![
+                ("major".into(), u64t()),
+                ("pre".into(), FTy::Hidden("private".into())),
+            ],
+        },
+        ret_ref: false,
+        is_unsafe: false,
+    };
+    let m = harness::module(&s);
+    assert!(m.contains("extern crate std;"), "{m}");
+    assert!(!m.contains(" ::std::") && !m.contains("(::std::"), "{m}");
+    assert!(!m.contains(".pre"), "{m}");
+    // a value with a hidden field cannot be generated, and the reason says why
+    let why = FTy::Struct {
+        path: "Version".into(),
+        tuple: false,
+        fields: vec![(
+            "pre".into(),
+            FTy::Hidden("the field `head` is private".into()),
+        )],
+    }
+    .generable()
+    .unwrap_err();
+    assert!(why.contains("the field `head` is private"), "{why}");
+}
+
+#[test]
+fn a_structure_in_another_module_hides_its_private_fields() {
+    let mut items = Items::default();
+    hydo_contracts::fuzz::rust::read_items_in(
+        "pub struct Ident { head: u8, pub len: u8 }\nconst N: usize = 3;\npub struct A { pub a: [u8; N] }\n",
+        &["ident".to_string()],
+        &mut items,
+    );
+    let ty = hydo_contracts::fuzz::rust::parse_ty("Ident").unwrap();
+    let from_root = Resolver {
+        items: &items,
+        self_ty: None,
+        module: &[],
+        subst: &Default::default(),
+    }
+    .resolve(&ty);
+    let FTy::Struct { fields, .. } = &from_root else {
+        panic!("{from_root:?}")
+    };
+    assert!(matches!(fields[0].1, FTy::Hidden(_)), "{fields:?}");
+    assert!(matches!(fields[1].1, FTy::Int { .. }), "{fields:?}");
+    let inside = vec!["ident".to_string(), "deeper".to_string()];
+    let r = Resolver {
+        items: &items,
+        self_ty: None,
+        module: &inside,
+        subst: &Default::default(),
+    };
+    assert!(r.resolve(&ty).generable().is_ok());
+    // an array's length through a constant
+    let a = r.resolve(&hydo_contracts::fuzz::rust::parse_ty("A").unwrap());
+    assert!(a.generable().is_ok(), "{a:?}");
+    let module = |p: &str| hydo_contracts::fuzz::rust::file_module(Path::new(p));
+    assert_eq!(module("src/memmem/mod.rs"), ["memmem"]);
+    assert_eq!(module("src/a/b.rs"), ["a", "b"]);
+    assert!(module("src/lib.rs").is_empty());
+}
+
+/// The second fixture's report: a `#![no_std]` crate with what stopped Milestone 280.
+fn fuzz_nostd(dir: &Path, extra: &[&str]) -> (i32, Report) {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-nostd");
+    let out = dir.join("out");
+    let mut args: Vec<String> = vec![
+        fixture.to_string_lossy().into(),
+        "--out".into(),
+        out.to_string_lossy().into(),
+    ];
+    args.extend(extra.iter().map(|s| s.to_string()));
+    let code = hydo_contracts::fuzz::main(&args);
+    let text = std::fs::read_to_string(out.join("fuzz.json")).unwrap_or_default();
+    (code, serde_json::from_str(&text).unwrap_or_default())
+}
+
+#[test]
+fn a_no_std_crate_fuzzes_function_by_function_with_verdicts() {
+    let t = TmpDir::new("hydo-contracts-fuzz-nostd");
+    let (code, rep) = fuzz_nostd(t.path(), &[]);
+    assert_eq!(code, 1, "{rep:?}");
+    let f = |n: &str| {
+        rep.functions
+            .iter()
+            .find(|f| f.function.ends_with(n))
+            .unwrap_or_else(|| panic!("{n}: {rep:?}"))
+    };
+    let skipped = |n: &str| {
+        rep.skipped
+            .iter()
+            .find(|s| s.contains(n))
+            .unwrap_or_else(|| panic!("{n}: {:?}", rep.skipped))
+            .clone()
+    };
+    // a result with a hidden field is read but for it; a parameter with one is refused
+    assert_eq!(f("::version").verdict, "held");
+    assert!(skipped("::major_of").contains("is private to the module `ident`"));
+    // one function whose harness does not build stops no other
+    assert!(skipped("::b::get").contains("its harness did not build: error[E0560]"));
+    // too few inputs, and a clause that is never checked
+    let name = f("::is_name");
+    assert_eq!((name.verdict.as_str(), name.calls), ("too few inputs", 0));
+    assert!(
+        name.advice[0].contains("input s like \"hydo\""),
+        "{:?}",
+        name.advice
+    );
+    let d = f("::digit_of");
+    assert_eq!(d.verdict, "vacuous");
+    assert_eq!(d.held[0].reached, Some(0));
+    assert!(d.advice[0].contains("input s like"), "{:?}", d.advice);
+    let dl = f("::digit_of_like");
+    assert_eq!(dl.verdict, "held");
+    assert!(dl.held[0].reached.unwrap() > 100, "{dl:?}");
+    // a bug past the 100th element, found from the contract alone
+    let late = f("::find_late");
+    assert_eq!(late.verdict, "broken", "{late:?}");
+    assert!(late.broken[0].replayed);
+    // a size without an input line returns at once
+    assert_eq!(f("::zeros").verdict, "held");
+    assert!(f("::zeros").runs <= 2, "{:?}", f("::zeros"));
+    // a generic function with `with T = u8`
+    let tw = f("::twice");
+    assert_eq!(tw.broken[0].kind, "panic");
+    assert_eq!(tw.broken[0].input, "x = 128");
+    // a vacuous run exits 3; --min-reach 0 turns the check off
+    let (code, _) = fuzz_nostd(t.path(), &["--fn", "digit_of"]);
+    assert_eq!(code, 3);
+    let (code, rep) = fuzz_nostd(t.path(), &["--fn", "digit_of", "--min-reach", "0"]);
+    assert_eq!(code, 0, "{rep:?}");
 }

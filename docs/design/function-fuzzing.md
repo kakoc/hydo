@@ -95,8 +95,12 @@ assertions are on, as in its own unit tests. `--release` builds it as the progra
 ## How inputs are generated
 
 The first input is the smallest value of every parameter, and the second the largest. The rest
-are random. Lists and strings have at most 4 elements in the first 100 inputs and at most 16
-after them.
+are random. Since Milestone 282, the longest list or string grows with the inputs. It is 4 for the first
+100 inputs, 16 up to input 299, 64 up to input 599, and 256 after them. One input in eight after the
+first 100 has an edge size, such as 0, 63, 64, 65, or 4,096. One list of eight elements or more
+in four repeats one value with up to three others among it. A `usize` or `isize` value without
+an `input` line stays between -2^20 and 2^20. One input holds at most 65,536 integers,
+characters, and elements in all.
 
 The seeded generator draws each integer in one of three ways:
 
@@ -112,7 +116,11 @@ one apart in 1 of 4 inputs. This is how the ledger's input with `req_id == l.las
 often, and it is the input that shows the planted bug.
 
 An `input` line narrows a value: `input amount in 1..=10_000`. Since Milestone 275 it can
-narrow a field too: `input l.balance in 0..=1_000_000`. An input that breaks a `requires` clause,
+narrow a field too: `input l.balance in 0..=1_000_000`. Since Milestone 282 it takes a length
+(`input v len 0..1000`), a string's characters (`input s chars ascii`), example strings that the
+generator uses and changes (`input text like "1.2.3"`), and the elements of a list
+(`input v[] in 1..=255`). A clause that compares a list's element with a value (`v[i] == x`)
+makes the generator put the value into the list at a random place in one input of four. An input that breaks a `requires` clause,
 or one that a clause cannot judge, is counted and not run. hydo generates at most 50 times the
 wanted number of inputs.
 
@@ -154,8 +162,11 @@ smallest input once more and says whether it failed the same way (`replayed` in 
 `hydo fuzz` prints each broken clause, panic and other failure, with the number of inputs it
 broke on, the smallest input, what the call gave, and the command that replays it. It prints
 each clause that held, with the number of calls it judged. `--out DIR` (default
-`hydo-out/fuzz`) holds the copy, cargo's log and `fuzz.json`. The exit status is 1 when a
-clause broke or a call failed.
+`hydo-out/fuzz`) holds the copy, cargo's log and `fuzz.json`. Since Milestone 282 each function
+ends with one verdict: `held`, `broken`, `vacuous` (a clause `a || ... || z` whose `z` decided
+fewer calls than `--min-reach`), or `too few inputs` (fewer calls than `--min-inputs`). The exit
+status is 1 when a clause broke or a call failed, and 3 when none did but a function tested too
+little. `hydo guide fuzz` is the user's reference.
 
 ## Proof
 
@@ -246,7 +257,8 @@ pause.
   in the function's package, by the same design.
 - The language has no quantifier, so `delta_pack`'s "the input is sorted" cannot be stated. A
   property function that sorts its input first is the way around it.
-- No floating-point values, no enumerations, and no generic functions.
+- No floating-point values and no enumerations. A generic function needs a `with T = <type>`
+  line for each type parameter (Milestone 282), and a method of a trait is not fuzzed.
 - A result that borrows from a `&mut` parameter was not tried.
 - The reading of the sources is textual. A structure defined by a macro is not found, and a
   field type of a structure in another module is written as that module writes it.

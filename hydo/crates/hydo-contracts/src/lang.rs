@@ -130,16 +130,41 @@ pub struct SrcClause {
     pub ast: Ast,
 }
 
-/// An input domain as written: `input <name> in <lo>..<hi>` or `..=`.
+/// An input line as written, for function fuzzing: `input <path> <part>...`, each part one of
+/// `in <lo>..<hi>` (or `..=`) for an integer, `len <lo>..<hi>` (or `..=`, or one number) for
+/// the length of a string or a list, `chars <set>` for a string's characters, and
+/// `like "<text>", ...` for strings like the examples (Milestone 282). The path is a parameter,
+/// a field under one (`l.balance`), or the elements of a list (`v[]`); `len(v) in a..b` is
+/// `v len a..b`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SrcInput {
     pub name: String,
-    pub lo: i128,
-    pub hi: i128,
-    pub inclusive: bool,
+    /// `in`: the values, both bounds included.
+    pub range: Option<(i128, i128)>,
+    /// `len`: the lengths, both bounds included (a string's in bytes, as `len()` counts).
+    pub len: Option<(i128, i128)>,
+    /// `chars`: the characters of a string.
+    pub chars: Option<Vec<char>>,
+    /// `like`: example strings.
+    pub like: Vec<String>,
     pub text: String,
     pub line: u32,
 }
+
+/// The character sets that `chars` names, besides a quoted set.
+pub const CHAR_SETS: &[(&str, &str)] = &[
+    ("ascii", "the printable ASCII characters, from space to `~`"),
+    ("alnum", "`a-z`, `A-Z` and `0-9`"),
+    ("alpha", "`a-z` and `A-Z`"),
+    ("digits", "`0-9`"),
+    ("hex", "`0-9`, `a-f` and `A-F`"),
+    ("lower", "`a-z`"),
+    ("upper", "`A-Z`"),
+    (
+        "any",
+        "hydo's default mix: ASCII, a newline, a NUL, and characters of 2, 3 and 4 bytes",
+    ),
+];
 
 /// The contract of one function in a source file.
 #[derive(Clone, Debug, PartialEq)]
@@ -150,6 +175,9 @@ pub struct SrcContract {
     pub line: u32,
     pub clauses: Vec<SrcClause>,
     pub inputs: Vec<SrcInput>,
+    /// `with T = i64`: the concrete type that function fuzzing gives a generic function's type
+    /// parameter (Milestone 282).
+    pub with: Vec<(String, String)>,
 }
 
 /// A mistake in a contract, with its line.
@@ -239,12 +267,14 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
         let first = i;
         let mut clauses = Vec::new();
         let mut inputs = Vec::new();
+        let mut with = Vec::new();
         while i < lines.len() {
             let l = lines[i].trim_start();
             if let Some(t) = contract_text(l) {
                 match parse_line(t, i as u32 + 1) {
                     Ok(Line::Clause(c)) => clauses.push(c),
                     Ok(Line::Input(x)) => inputs.push(x),
+                    Ok(Line::With(w)) => with.extend(w),
                     Err(e) => errs.push(e),
                 }
             } else if !(l.starts_with("//") || l.starts_with("#[") || l.starts_with("#![")) {
@@ -258,6 +288,7 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
                 line: i as u32 + 1,
                 clauses,
                 inputs,
+                with,
             }),
             None => errs.push(LangError {
                 line: first as u32 + 1,
@@ -274,6 +305,7 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
 enum Line {
     Clause(SrcClause),
     Input(SrcInput),
+    With(Vec<(String, String)>),
 }
 
 fn parse_line(t: &str, line: u32) -> Result<Line, LangError> {
@@ -302,48 +334,268 @@ fn parse_line(t: &str, line: u32) -> Result<Line, LangError> {
             }))
         }
         "input" => parse_input(rest, line).map(Line::Input).map_err(err),
+        "with" => {
+            let mut out = Vec::new();
+            for part in rest.split(',') {
+                let (n, t) = part.split_once('=').ok_or_else(|| {
+                    err(format!(
+                        "`with {rest}`: write `with <type parameter> = <type>`, for example \
+                         `with T = i64`"
+                    ))
+                })?;
+                let (n, t) = (n.trim(), t.trim());
+                if n.is_empty()
+                    || t.is_empty()
+                    || !n.chars().all(|c| c.is_alphanumeric() || c == '_')
+                {
+                    return Err(err(format!(
+                        "`with {rest}`: write `with <type parameter> = <type>`"
+                    )));
+                }
+                out.push((n.to_string(), t.to_string()));
+            }
+            Ok(Line::With(out))
+        }
         _ => Err(err(format!(
-            "`// hydo: {kw}`: a contract line is `requires <expr>`, `ensures <expr>` or \
-             `input <name> in <lo>..<hi>`"
+            "`// hydo: {kw}`: a contract line is `requires <expr>`, `ensures <expr>`, \
+             `input <path> ...` or `with <type parameter> = <type>`"
         ))),
     }
 }
 
+/// The words, numbers, ranges and quoted strings of an `input` line.
+#[derive(Clone, Debug, PartialEq)]
+enum ITok {
+    Word(String),
+    Quoted(String),
+    Comma,
+}
+
+fn input_tokens(t: &str) -> Result<Vec<ITok>, String> {
+    let mut out = Vec::new();
+    let mut it = t.chars().peekable();
+    while let Some(&c) = it.peek() {
+        if c.is_whitespace() {
+            it.next();
+        } else if c == ',' {
+            it.next();
+            out.push(ITok::Comma);
+        } else if c == '"' {
+            it.next();
+            let mut s = String::new();
+            loop {
+                match it.next() {
+                    None => return Err("a string without its closing `\"`".into()),
+                    Some('"') => break,
+                    Some('\\') => match it.next() {
+                        Some('n') => s.push('\n'),
+                        Some('t') => s.push('\t'),
+                        Some('r') => s.push('\r'),
+                        Some('0') => s.push('\0'),
+                        Some('u') => {
+                            let mut h = String::new();
+                            for c in it.by_ref() {
+                                if c == '}' {
+                                    break;
+                                }
+                                if c != '{' {
+                                    h.push(c);
+                                }
+                            }
+                            let c = u32::from_str_radix(&h, 16)
+                                .ok()
+                                .and_then(char::from_u32)
+                                .ok_or("a bad `\\u{...}` escape")?;
+                            s.push(c);
+                        }
+                        Some(c) => s.push(c),
+                        None => return Err("a string without its closing `\"`".into()),
+                    },
+                    Some(c) => s.push(c),
+                }
+            }
+            out.push(ITok::Quoted(s));
+        } else {
+            let mut w = String::new();
+            while let Some(&c) = it.peek() {
+                if c.is_whitespace() || c == ',' || c == '"' {
+                    break;
+                }
+                w.push(c);
+                it.next();
+            }
+            out.push(ITok::Word(w));
+        }
+    }
+    Ok(out)
+}
+
+/// The characters of a set that `chars` names: a name of [`CHAR_SETS`], or a quoted set in
+/// which `a-z` is a range (a `-` first or last is itself).
+pub fn char_set(name: &str, quoted: bool) -> Result<Vec<char>, String> {
+    let range = |a: char, b: char| (a..=b).collect::<Vec<char>>();
+    if quoted {
+        let c: Vec<char> = name.chars().collect();
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < c.len() {
+            if i + 2 < c.len() && c[i + 1] == '-' {
+                if c[i] > c[i + 2] {
+                    return Err(format!("the range `{}-{}` is empty", c[i], c[i + 2]));
+                }
+                out.extend(range(c[i], c[i + 2]));
+                i += 3;
+            } else {
+                out.push(c[i]);
+                i += 1;
+            }
+        }
+        out.sort();
+        out.dedup();
+        if out.is_empty() {
+            return Err("the set is empty".into());
+        }
+        return Ok(out);
+    }
+    Ok(match name {
+        "ascii" => range(' ', '~'),
+        "alnum" => [range('0', '9'), range('A', 'Z'), range('a', 'z')].concat(),
+        "alpha" => [range('A', 'Z'), range('a', 'z')].concat(),
+        "digits" | "digit" => range('0', '9'),
+        "hex" => [range('0', '9'), range('A', 'F'), range('a', 'f')].concat(),
+        "lower" => range('a', 'z'),
+        "upper" => range('A', 'Z'),
+        "any" => DEFAULT_CHARS.to_vec(),
+        o => {
+            let names: Vec<&str> = CHAR_SETS.iter().map(|x| x.0).collect();
+            return Err(format!(
+                "`{o}` is no character set: write one of {} or a quoted set such as \"0-9.+-\"",
+                names.join(", ")
+            ));
+        }
+    })
+}
+
+/// The characters of `chars any`, the default of a string without a `chars` part.
+pub const DEFAULT_CHARS: &[char] = &[
+    'a', 'b', 'c', 'x', 'y', 'z', '0', '1', '9', ' ', '-', '_', '.', '/', 'A', 'Z', '\n', '\0',
+    'é', '€', '😀',
+];
+
 fn parse_input(t: &str, line: u32) -> Result<SrcInput, String> {
-    let usage = || format!("`input {t}`: write `input <name> in <lo>..<hi>` (or `..=`)");
-    let (name, range) = t.split_once(" in ").ok_or_else(usage)?;
-    let name = name.trim();
-    // a parameter, or a field path under one (`l.balance`, Milestone 275: function fuzzing
-    // narrows the field's values)
-    if name.is_empty()
-        || name.starts_with('.')
-        || name.ends_with('.')
-        || !name
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+    let usage = || {
+        format!(
+            "`input {t}`: write `input <path> in <lo>..<hi>` for an integer, `input <path> len \
+             <lo>..<hi>` for a length, `input <path> chars <set>` for a string's characters, or \
+             `input <path> like \"<text>\", ...` for strings like examples (`..=` includes <hi>)"
+        )
+    };
+    let toks = input_tokens(t).map_err(|e| format!("`input {t}`: {e}"))?;
+    let mut it = toks.into_iter().peekable();
+    let Some(ITok::Word(first)) = it.next() else {
+        return Err(usage());
+    };
+    // `len(v) in a..b` is `v len a..b`
+    let (name, mut len_from_in) = match first.strip_prefix("len(").and_then(|r| r.strip_suffix(')'))
     {
+        Some(p) => (p.to_string(), true),
+        None => (first.clone(), false),
+    };
+    // a parameter, a field path under one (`l.balance`, Milestone 275), or the elements of a
+    // list (`v[]`, Milestone 282)
+    let segs_ok = name.split('.').all(|s| {
+        let s = s.trim_end_matches("[]");
+        !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_')
+    });
+    if !segs_ok {
         return Err(usage());
     }
-    let (lo, hi, inclusive) = match range.split_once("..=") {
-        Some((a, b)) => (a, b, true),
-        None => {
-            let (a, b) = range.split_once("..").ok_or_else(usage)?;
-            (a, b, false)
-        }
-    };
-    let num = |s: &str| parse_int(s.trim()).ok_or_else(usage);
-    let (lo, hi) = (num(lo)?, num(hi)?);
-    if lo > hi || (!inclusive && lo == hi) {
-        return Err(format!("`input {t}`: the range is empty"));
-    }
-    Ok(SrcInput {
-        name: name.to_string(),
-        lo,
-        hi,
-        inclusive,
+    let mut x = SrcInput {
+        name,
+        range: None,
+        len: None,
+        chars: None,
+        like: Vec::new(),
         text: t.to_string(),
         line,
-    })
+    };
+    let range_of = |w: &str| -> Result<(i128, i128), String> {
+        let (lo, hi, inclusive) = match w.split_once("..=") {
+            Some((a, b)) => (a, b, true),
+            None => match w.split_once("..") {
+                Some((a, b)) => (a, b, false),
+                None => {
+                    let n = parse_int(w.trim()).ok_or_else(usage)?;
+                    return Ok((n, n));
+                }
+            },
+        };
+        let (lo, hi) = (
+            parse_int(lo.trim()).ok_or_else(usage)?,
+            parse_int(hi.trim()).ok_or_else(usage)?,
+        );
+        let hi = if inclusive { hi } else { hi - 1 };
+        if lo > hi {
+            return Err(format!("`input {t}`: the range is empty"));
+        }
+        Ok((lo, hi))
+    };
+    let mut any = false;
+    while let Some(tok) = it.next() {
+        let ITok::Word(kw) = tok else {
+            return Err(usage());
+        };
+        any = true;
+        let mut word = || match it.next() {
+            Some(ITok::Word(w)) => Ok(w),
+            _ => Err(usage()),
+        };
+        match kw.as_str() {
+            "in" if len_from_in => {
+                x.len = Some(range_of(&word()?)?);
+                len_from_in = false;
+            }
+            "in" => {
+                if x.range.is_some() {
+                    return Err(format!("`input {t}`: two `in` parts"));
+                }
+                x.range = Some(range_of(&word()?)?);
+            }
+            "len" => {
+                if x.len.is_some() {
+                    return Err(format!("`input {t}`: two `len` parts"));
+                }
+                x.len = Some(range_of(&word()?)?);
+                if x.len.is_some_and(|(lo, _)| lo < 0) {
+                    return Err(format!("`input {t}`: a length is not negative"));
+                }
+            }
+            "chars" => {
+                let set = match it.next() {
+                    Some(ITok::Word(w)) => char_set(&w, false),
+                    Some(ITok::Quoted(q)) => char_set(&q, true),
+                    _ => return Err(usage()),
+                };
+                x.chars = Some(set.map_err(|e| format!("`input {t}`: {e}"))?);
+            }
+            "like" => loop {
+                match it.next() {
+                    Some(ITok::Quoted(q)) => x.like.push(q),
+                    _ => return Err(usage()),
+                }
+                if it.peek() == Some(&ITok::Comma) {
+                    it.next();
+                } else {
+                    break;
+                }
+            },
+            _ => return Err(usage()),
+        }
+    }
+    if !any || len_from_in {
+        return Err(usage());
+    }
+    Ok(x)
 }
 
 fn parse_int(s: &str) -> Option<i128> {

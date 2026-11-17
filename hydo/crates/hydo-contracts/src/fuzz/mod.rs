@@ -28,27 +28,37 @@ use value::{Hints, Rng, Val};
 /// `hydo fuzz --help`.
 pub const USAGE: &str =
     "usage: hydo fuzz [CRATE_DIR] [--fn NAME]... [--cases N] [--seed S] [--out DIR]
-                 [--target-dir DIR] [--toolchain TC] [--release] [--timeout SECS] [--json]
+                 [--target-dir DIR] [--toolchain TC] [--release] [--timeout SECS]
+                 [--min-inputs N] [--min-reach N] [--json]
        hydo fuzz [CRATE_DIR] --fn NAME --input 'NAME = VALUE, ...'
        hydo fuzz [CRATE_DIR] --list
   tests each Rust function of the crate that has `// hydo: requires` and `ensures` comments on
   its own, natively: it generates inputs that keep `requires` and the `input` lines, calls the
   function on each, and judges each call by `ensures`. A broken clause or a panic is shrunk to
   a small input. The same seed gives the same inputs, so a finding replays exactly; --input
-  replays one input.
+  replays one input. `hydo guide fuzz` has the comment language and a worked example.
   CRATE_DIR is a package's folder (default .). hydo copies the package to --out DIR (default
-  hydo-out/fuzz) and adds a test module there; the project's files stay as they are.
-  --fn NAME      fuzz only this function (repeat it for more)
-  --cases N      inputs per function that keep `requires` (default 1000)
-  --seed S       the generator's seed (default 1)
-  --target-dir   cargo's build folder (default DIR/target)
-  --toolchain TC builds with `cargo +TC`
-  --release      builds the harness with --release: no overflow checks and no debug
-                 assertions, as the program ships (the default is the test profile)
-  --timeout SECS stops a call that takes longer (default 10)
-  --list         lists the contracted functions and whether each can be fuzzed
-  The exit status is 1 when a clause broke or a call panicked. `hydo guide manifest`, section
-  \"Function contracts\", has the comment language; docs/design/function-fuzzing.md the design.";
+  hydo-out/fuzz) and adds a test module there; the project's files stay as they are. A
+  function whose test module does not build is reported, and the others run.
+  --fn NAME        fuzz only this function (repeat it for more); a name or its path's end
+  --cases N        inputs per function that keep `requires` (default 1000)
+  --seed S         the generator's seed (default 1)
+  --target-dir     cargo's build folder (default DIR/target)
+  --toolchain TC   builds with `cargo +TC`
+  --release        builds the harness with --release: no overflow checks and no debug
+                   assertions, as the program ships (the default is the test profile)
+  --timeout SECS   stops a call that takes longer (default 10); after 3 such calls the
+                   function's other inputs are not run
+  --min-inputs N   fewer calls than N give the verdict `too few inputs` (default a tenth of
+                   --cases; 0 turns it off)
+  --min-reach N    a clause `a || ... || z` whose `z` decided fewer than N calls, or a
+                   property `-> Option<bool>` that answered `Some` fewer than N times, gives
+                   the verdict `vacuous` (default 1 % of --cases; 0 turns it off)
+  --list           lists the contracted functions and whether each can be fuzzed
+  --json           prints the report as one JSON line; the progress goes to standard error
+  Each function ends with one verdict: `held`, `broken`, `vacuous` or `too few inputs`.
+  The exit status is 1 when a clause broke or a call failed, 3 when none did but a function
+  tested too little, 2 for a mistake in the options or the contracts, and 0 otherwise.";
 
 /// One function to fuzz, as read from the sources.
 pub struct Fn {
@@ -87,7 +97,8 @@ pub fn find(
     let mut texts = Vec::new();
     for f in sources {
         if let Ok(t) = std::fs::read_to_string(f) {
-            rust::read_items(&t, &mut items);
+            let rel = f.strip_prefix(pkg_dir).unwrap_or(f);
+            rust::read_items_in(&t, &rust::file_module(rel), &mut items);
             texts.push((f.clone(), t));
         }
     }
@@ -102,14 +113,41 @@ pub fn find(
             errors.push(format!("{}:{}: {}", rel.display(), e.line, e.message));
         }
         let m = rust::mask(text);
+        let file_mod = rust::file_module(&rel);
         for c in contracts {
+            let mut module = file_mod.clone();
+            let at = rust::line_start(text, c.line);
+            module.extend(rust::inline_modules(&m, at));
+            // the type or trait of a method, for its name
+            let owner: Vec<String> = rust::enclosing(&m, at)
+                .iter()
+                .rev()
+                .find_map(|b| {
+                    if let Some((t, _)) = rust::impl_type(&b.header) {
+                        return Some(t.text());
+                    }
+                    let h = b.header.strip_prefix("pub ").unwrap_or(&b.header);
+                    h.strip_prefix("trait ").map(|r| {
+                        r.chars()
+                            .take_while(|c| c.is_alphanumeric() || *c == '_')
+                            .collect()
+                    })
+                })
+                .into_iter()
+                .collect();
             let skip = |why: String| Skipped {
-                name: format!("{pkg}::{}", c.function),
+                name: [pkg.to_string()]
+                    .into_iter()
+                    .chain(module.iter().cloned())
+                    .chain(owner.iter().cloned())
+                    .chain([c.function.clone()])
+                    .collect::<Vec<_>>()
+                    .join("::"),
                 file: rel.clone(),
                 line: c.line,
                 why,
             };
-            match read_fn(text, &m, &c, &items, pkg, &rel) {
+            match read_fn(text, &m, &c, &items, pkg, &module, &rel) {
                 Ok(f) => fns.push(f),
                 Err(why) => skipped.push(skip(why)),
             }
@@ -124,6 +162,7 @@ fn read_fn(
     c: &SrcContract,
     items: &rust::Items,
     pkg: &str,
+    module: &[String],
     rel: &Path,
 ) -> Result<Fn, String> {
     let decl = rust::line_start(text, c.line);
@@ -152,15 +191,40 @@ fn read_fn(
     if sig.is_async {
         return Err("an `async` function: not fuzzed yet".into());
     }
-    if !sig.generics.is_empty() {
+    // a generic function: each type parameter takes the type that a `with` line names
+    let mut subst: BTreeMap<String, TyAst> = BTreeMap::new();
+    let mut turbofish = Vec::new();
+    let mut missing = Vec::new();
+    for g in &sig.generics {
+        if g == "where" {
+            continue;
+        }
+        if g.starts_with("const ") {
+            return Err(format!("a const generic parameter (`{g}`): not fuzzed yet"));
+        }
+        let name = g.split([':', '=']).next().unwrap_or("").trim().to_string();
+        match c.with.iter().find(|(n, _)| *n == name) {
+            Some((_, t)) => {
+                let ty = rust::parse_ty(t).map_err(|e| format!("`with {name} = {t}`: {e}"))?;
+                turbofish.push(ty.text());
+                subst.insert(name, ty);
+            }
+            None => missing.push(name),
+        }
+    }
+    if let Some(m) = missing.first() {
         return Err(format!(
-            "a generic function (`{}`): write the contract on a function of concrete types that calls it",
+            "a generic function (`{}`): name the type to fuzz it with, for example \
+             `// hydo: with {m} = i64`, or write the contract on a function of concrete types \
+             that calls it",
             sig.generics.join(", ")
         ));
     }
     let res = rust::Resolver {
         items,
         self_ty: impl_ty.as_ref(),
+        module,
+        subst: &subst,
     };
     let mut params = Vec::new();
     if let Some(r) = sig.receiver {
@@ -168,8 +232,7 @@ fn read_fn(
             .as_ref()
             .ok_or("a `self` parameter outside an `impl` block")?;
         let ty = res.resolve(t);
-        ty.generable()
-            .map_err(|o| format!("`self`: hydo cannot generate a value of `{o}`"))?;
+        ty.generable().map_err(|why| format!("`self`: {why}"))?;
         params.push(harness::Param {
             name: "self".into(),
             pass: match r {
@@ -183,7 +246,7 @@ fn read_fn(
     for (n, t) in &sig.params {
         let ty = res.resolve(t);
         ty.generable()
-            .map_err(|o| format!("the parameter `{n}`: hydo cannot generate a value of `{o}`"))?;
+            .map_err(|why| format!("the parameter `{n}`: {why}"))?;
         if let TyAst::Ref(_, inner) = t {
             if matches!(**inner, TyAst::Ref(..)) {
                 return Err(format!("the parameter `{n}` is a reference to a reference"));
@@ -218,21 +281,26 @@ fn read_fn(
         check::hints_of(&cl.ast, &mut hints);
     }
     for x in &c.inputs {
-        let hi = if x.inclusive { x.hi } else { x.hi - 1 };
-        hints.domains.insert(x.name.replace(" ", ""), (x.lo, hi));
+        input_hints(x, &params, &mut hints)
+            .map_err(|e| format!("line {}: `input {}`: {e}", x.line, x.text))?;
     }
     for v in hints.consts.values_mut() {
         v.sort();
         v.dedup();
     }
+    let prefix: String = [pkg.to_string()]
+        .into_iter()
+        .chain(module.iter().cloned())
+        .collect::<Vec<_>>()
+        .join("::");
     let (call, name) = match &impl_ty {
         Some(t) => (
-            format!("<{}>::{}", t.text(), sig.name),
-            format!("{pkg}::{}::{}", t.text(), sig.name),
+            format!("<{}>::{}{}", t.text(), sig.name, fish(&turbofish)),
+            format!("{prefix}::{}::{}", t.text(), sig.name),
         ),
         None => (
-            format!("super::{}", sig.name),
-            format!("{pkg}::{}", sig.name),
+            format!("super::{}{}", sig.name, fish(&turbofish)),
+            format!("{prefix}::{}", sig.name),
         ),
     };
     let insert_at = match insert_at {
@@ -253,6 +321,113 @@ fn read_fn(
         insert_at,
         hints,
     })
+}
+
+/// The type arguments of a call (`::<i64>`), or nothing.
+fn fish(types: &[String]) -> String {
+    if types.is_empty() {
+        String::new()
+    } else {
+        format!("::<{}>", types.join(", "))
+    }
+}
+
+/// The type at an `input` line's path: a parameter, its fields (`l.balance`), and the elements of
+/// lists (`v[]`).
+fn input_ty<'a>(path: &str, params: &'a [harness::Param]) -> Result<&'a FTy, String> {
+    let mut segs = path.split('.');
+    let first = segs.next().unwrap_or("");
+    let name = first.trim_end_matches("[]");
+    let p = params
+        .iter()
+        .find(|p| p.name == name)
+        .ok_or_else(|| format!("`{name}` is not a parameter of the function"))?;
+    let elems = |mut t: &'a FTy, s: &str| -> Result<&'a FTy, String> {
+        for _ in 0..s.matches("[]").count() {
+            t = match t {
+                FTy::List(x) | FTy::Array(x, _) => x,
+                FTy::Boxed(_, b) => match &**b {
+                    FTy::List(x) | FTy::Array(x, _) => x,
+                    _ => return Err(format!("`{s}`: not a list")),
+                },
+                _ => return Err(format!("`{s}`: not a list")),
+            };
+        }
+        Ok(t)
+    };
+    let mut t = elems(&p.ty, first)?;
+    for s in segs {
+        let f = s.trim_end_matches("[]");
+        let inner = match t {
+            FTy::Boxed(_, b) => &**b,
+            o => o,
+        };
+        t = match inner {
+            FTy::Struct { fields, .. } => fields
+                .iter()
+                .find(|(n, _)| n == f)
+                .map(|(_, t)| t)
+                .ok_or_else(|| format!("no field `{f}`"))?,
+            FTy::Tuple(v) => f
+                .parse::<usize>()
+                .ok()
+                .and_then(|i| v.get(i))
+                .ok_or_else(|| format!("no field `{f}`"))?,
+            _ => return Err(format!("`.{f}` of a value without fields")),
+        };
+        t = elems(t, s)?;
+    }
+    Ok(match t {
+        FTy::Boxed(_, b) => b,
+        o => o,
+    })
+}
+
+/// What an `input` line tells the generator, checked against the type at its path.
+fn input_hints(x: &lang::SrcInput, params: &[harness::Param], h: &mut Hints) -> Result<(), String> {
+    let t = input_ty(&x.name, params)?;
+    let what = match t {
+        FTy::Int { .. } => "an integer",
+        FTy::Str => "a string",
+        FTy::List(_) | FTy::Array(..) => "a list",
+        _ => "a value of another type",
+    };
+    if let Some(r) = x.range {
+        if !matches!(t, FTy::Int { .. }) {
+            return Err(format!(
+                "`in` narrows an integer, and `{}` is {what}; write `len` for a length",
+                x.name
+            ));
+        }
+        h.domains.insert(x.name.clone(), r);
+    }
+    if let Some(r) = x.len {
+        if !matches!(t, FTy::Str | FTy::List(_)) {
+            return Err(format!(
+                "`len` is for a string or a list, and `{}` is {what}",
+                x.name
+            ));
+        }
+        h.domains.insert(format!("{}#len", x.name), r);
+    }
+    if x.chars.is_some() || !x.like.is_empty() {
+        if *t != FTy::Str {
+            return Err(format!(
+                "`chars` and `like` are for a string, and `{}` is {what}",
+                x.name
+            ));
+        }
+        if let Some(c) = &x.chars {
+            h.chars.insert(x.name.clone(), c.clone());
+        }
+        if !x.like.is_empty() {
+            h.like
+                .entry(x.name.clone())
+                .or_default()
+                .extend(x.like.iter().cloned());
+        }
+    }
+    Ok(())
 }
 
 fn roots_of(a: &Ast, out: &mut Vec<String>) {
@@ -284,6 +459,8 @@ pub enum Outcome {
     Ended,
     /// The call took longer than the timeout.
     Hung,
+    /// The call was not made: earlier calls did not return ([`MAX_HUNG`]).
+    NotRun,
 }
 
 /// What a failing call broke: a clause (its index in the contract), a panic at a location, or
@@ -301,7 +478,62 @@ pub struct Judged {
     pub failures: Vec<Failure>,
     /// The clauses (by index) that could not be judged.
     pub undecided: Vec<usize>,
+    /// The clauses `a || ... || z` (by index) whose last part decided the call: every part
+    /// before it was false. A clause that no call reached held without checking its point.
+    pub reached: Vec<usize>,
 }
+
+/// The parts of a clause's text `a || b || c`, split at the `||` outside parentheses and
+/// strings.
+pub fn or_parts(text: &str) -> Vec<&str> {
+    let b = text.as_bytes();
+    let (mut depth, mut in_str, mut from) = (0i32, false, 0);
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\\' if in_str => i += 1,
+            b'"' => in_str = !in_str,
+            b'(' | b'[' if !in_str => depth += 1,
+            b')' | b']' if !in_str => depth -= 1,
+            b'|' if !in_str && depth == 0 && b.get(i + 1) == Some(&b'|') => {
+                out.push(text[from..i].trim());
+                from = i + 2;
+                i += 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    out.push(text[from..].trim());
+    out
+}
+
+/// Whether a clause can hold without checking its point: `a || ... || z` (it holds through a
+/// part before `z`), or `result` of a property that returns `Option<bool>` (it holds on `None`).
+fn can_skip(f: &Fn, c: &lang::SrcClause) -> bool {
+    disjuncts(&c.ast).len() > 1
+        || (c.ast == Ast::Name("result".into()) && f.ret == FTy::Opt(Box::new(FTy::Bool)))
+}
+
+/// The parts of a clause `a || b || c`, in order (one part for any other clause).
+pub fn disjuncts(a: &Ast) -> Vec<&Ast> {
+    match a {
+        Ast::Bin(crate::plan::BinOp::Or, x, y) => {
+            let mut v = disjuncts(x);
+            v.extend(disjuncts(y));
+            v
+        }
+        o => vec![o],
+    }
+}
+
+/// The calls after which a function's inputs stop: calls that do not return each wait for the
+/// timeout, and the first three show the failure (Milestone 282).
+pub const MAX_HUNG: u32 = 3;
+
+/// The longest shrink of one failure; it then keeps the smallest input so far.
+pub const SHRINK_BUDGET: Duration = Duration::from_secs(60);
 
 impl Fn {
     fn module(&self, k: usize) -> String {
@@ -336,8 +568,9 @@ impl Fn {
             .collect()
     }
 
-    /// Whether the input keeps every `requires` clause (an undecided one does not).
-    pub fn admits(&self, args: &[Val]) -> bool {
+    /// The first `requires` clause (by index) that the input does not keep, an undecided one
+    /// included.
+    pub fn unmet(&self, args: &[Val]) -> Option<usize> {
         let e = self.entry_env(args);
         let env = check::Env {
             entry: &e,
@@ -347,8 +580,12 @@ impl Fn {
         self.contract
             .clauses
             .iter()
-            .filter(|c| c.kind == ClauseKind::Requires)
-            .all(|c| check::holds(&c.ast, &env) == Ok(true))
+            .position(|c| c.kind == ClauseKind::Requires && check::holds(&c.ast, &env) != Ok(true))
+    }
+
+    /// Whether the input keeps every `requires` clause (an undecided one does not).
+    pub fn admits(&self, args: &[Val]) -> bool {
+        self.unmet(args).is_none()
     }
 
     /// The values after the call: each `&mut` parameter's from the answer, the others' from
@@ -373,6 +610,7 @@ impl Fn {
         let mut j = Judged {
             failures: vec![],
             undecided: vec![],
+            reached: vec![],
         };
         match o {
             Outcome::Returned { result, after } => {
@@ -387,9 +625,34 @@ impl Fn {
                     if c.kind != ClauseKind::Ensures {
                         continue;
                     }
+                    // a property that returns `Option<bool>`: `None` is an input it cannot use
+                    if let Ok(Val::Opt(o)) = check::value(&c.ast, &env) {
+                        match o.as_deref() {
+                            None => {}
+                            Some(Val::Bool(b)) => {
+                                j.reached.push(i);
+                                if !b {
+                                    j.failures.push(Failure::Clause(i));
+                                }
+                            }
+                            _ => j.undecided.push(i),
+                        }
+                        continue;
+                    }
                     match check::holds(&c.ast, &env) {
-                        Ok(true) => {}
-                        Ok(false) => j.failures.push(Failure::Clause(i)),
+                        Ok(v) => {
+                            if !v {
+                                j.failures.push(Failure::Clause(i));
+                            }
+                            let parts = disjuncts(&c.ast);
+                            if parts.len() > 1
+                                && parts[..parts.len() - 1]
+                                    .iter()
+                                    .all(|p| check::holds(p, &env) == Ok(false))
+                            {
+                                j.reached.push(i);
+                            }
+                        }
                         Err(_) => j.undecided.push(i),
                     }
                 }
@@ -397,6 +660,7 @@ impl Fn {
             Outcome::Panicked { location, .. } => j.failures.push(Failure::Panic(location.clone())),
             Outcome::Ended => j.failures.push(Failure::Ended),
             Outcome::Hung => j.failures.push(Failure::Hung),
+            Outcome::NotRun => {}
         }
         j
     }
@@ -434,6 +698,7 @@ impl Fn {
             }
             Outcome::Ended => "the process ended during the call".into(),
             Outcome::Hung => "the call did not return within the timeout".into(),
+            Outcome::NotRun => "the call was not made".into(),
         }
     }
 
@@ -448,13 +713,18 @@ impl Fn {
                 1 => 1,
                 _ => 2,
             },
-            max_len: if k < 100 { 4 } else { 16 },
+            max_len: value::max_len_for(k),
+            budget: value::BUDGET,
         };
         let mut args: Vec<Val> = self.params.iter().map(|p| g.val(&p.ty, &p.name)).collect();
         if k >= 2 {
-            // relate the paths that a clause compares: sometimes equal, or one apart
+            // relate the paths that a clause compares: sometimes equal, or one apart; a value
+            // and a list's elements: the value put into the list
             for (a, b) in &self.hints.pairs {
                 if g.rng.below(4) != 0 {
+                    continue;
+                }
+                if self.plant(&mut args, a, b, g.rng) {
                     continue;
                 }
                 let (Some((ia, pa)), Some((ib, pb))) = (self.split_path(a), self.split_path(b))
@@ -484,6 +754,51 @@ impl Fn {
         args
     }
 
+    /// For a pair of a list's elements (`v[]`) and a value (`x`), put the value at a random
+    /// place of the list, as a search for it needs. Whether the pair is such a pair.
+    fn plant(&self, args: &mut [Val], a: &str, b: &str, rng: &mut Rng) -> bool {
+        let (lp, sp) = if a.ends_with("[]") && !b.contains('[') {
+            (a, b)
+        } else if b.ends_with("[]") && !a.contains('[') {
+            (b, a)
+        } else {
+            return false;
+        };
+        let base = &lp[..lp.len() - 2];
+        let (Some((il, pl)), Some((is, ps))) = (self.split_path(base), self.split_path(sp)) else {
+            return true;
+        };
+        let Some(v) = value::at(&args[is], &ps).cloned() else {
+            return true;
+        };
+        let et = match value::ty_at(&self.params[il].ty, &pl) {
+            Some(FTy::List(e) | FTy::Array(e, _)) => e,
+            _ => return true,
+        };
+        let fits = match (&**et, &v) {
+            (FTy::Int { signed, bits, .. }, Val::Int(x)) => {
+                let (lo, hi) = value::int_range(*signed, *bits);
+                let (lo, hi) = match self.hints.domains.get(lp) {
+                    Some(&(p, q)) => (p.max(lo), q.min(hi)),
+                    None => (lo, hi),
+                };
+                (lo..=hi).contains(x)
+            }
+            (FTy::Str, Val::Str(_)) | (FTy::Bool, Val::Bool(_)) => true,
+            _ => false,
+        };
+        if !fits {
+            return true;
+        }
+        if let Some(Val::List(l)) = value::at_mut(&mut args[il], &pl) {
+            if !l.is_empty() {
+                let at = rng.below(l.len() as u64) as usize;
+                l[at] = v;
+            }
+        }
+        true
+    }
+
     /// A path's parameter index and the rest of the path (none for paths into lists).
     fn split_path<'a>(&self, path: &'a str) -> Option<(usize, Vec<&'a str>)> {
         if path.contains('[') || path.contains('#') {
@@ -509,7 +824,15 @@ impl Fn {
         }
         out
     }
+
+    /// The function's name without the package (`Version::parse`), as `--fn` takes it.
+    pub fn short_name(&self) -> &str {
+        self.name.split_once("::").map_or(&self.name, |x| x.1)
+    }
 }
+
+/// How often a long run prints a progress line on standard error.
+pub const PROGRESS_EVERY: Duration = Duration::from_secs(5);
 
 /// The compiled harness of one function, ready to run inputs.
 pub struct Runner<'a> {
@@ -522,15 +845,57 @@ pub struct Runner<'a> {
     pub copy: PathBuf,
     /// Runs of the test program so far.
     pub runs: u64,
+    /// Calls made so far, the shrink's included.
+    pub calls: u64,
+    /// Calls that did not return so far.
+    pub hung: u32,
+    /// Stop making calls after [`MAX_HUNG`] calls that did not return.
+    pub hung_cap: bool,
+    /// What the progress line says the run does (`calls of 1000`, `shrinking`).
+    pub phase: String,
+    pub started: std::time::Instant,
+    pub last_print: std::time::Instant,
 }
 
-impl Runner<'_> {
+impl<'a> Runner<'a> {
+    pub fn new(
+        f: &'a Fn,
+        exe: PathBuf,
+        filter: String,
+        work: PathBuf,
+        timeout: Duration,
+        copy: PathBuf,
+    ) -> Runner<'a> {
+        let now = std::time::Instant::now();
+        Runner {
+            f,
+            exe,
+            filter,
+            work,
+            timeout,
+            copy,
+            runs: 0,
+            calls: 0,
+            hung: 0,
+            hung_cap: false,
+            phase: String::new(),
+            started: now,
+            last_print: now,
+        }
+    }
+
     /// Run inputs and return each one's outcome. A process that ends or hangs during a call
     /// gives that call `Ended` or `Hung`, and the calls after it run in a new process.
     pub fn run(&mut self, inputs: &[Vec<Val>]) -> Result<Vec<Outcome>, String> {
         let mut outs: Vec<Option<Outcome>> = vec![None; inputs.len()];
         let mut from = 0;
         while from < inputs.len() {
+            if self.hung_cap && self.hung >= MAX_HUNG {
+                for o in outs.iter_mut().skip(from) {
+                    *o = Some(Outcome::NotRun);
+                }
+                break;
+            }
             let mut text = String::new();
             for (k, a) in inputs.iter().enumerate().skip(from) {
                 text.push_str(&k.to_string());
@@ -543,7 +908,21 @@ impl Runner<'_> {
             let cases = self.work.join("cases.txt");
             let answers = self.work.join("answers.txt");
             std::fs::write(&cases, &text).map_err(|e| e.to_string())?;
-            let ran = cargo::run(&self.exe, &self.filter, &cases, &answers, self.timeout, &[])?;
+            let (exe, filter, timeout) = (self.exe.clone(), self.filter.clone(), self.timeout);
+            let before = self.calls;
+            let name = self.f.name.clone();
+            let (phase, started, last) = (&self.phase, self.started, &mut self.last_print);
+            let mut tick = |done: u64| {
+                if last.elapsed() >= PROGRESS_EVERY {
+                    *last = std::time::Instant::now();
+                    eprintln!(
+                        "hydo: fuzz: {name}: {phase}: {} calls, {} s",
+                        before + done,
+                        started.elapsed().as_secs()
+                    );
+                }
+            };
+            let ran = cargo::run(&exe, &filter, &cases, &answers, timeout, &[], &mut tick)?;
             self.runs += 1;
             let mut next = from;
             for line in &ran.lines {
@@ -555,13 +934,16 @@ impl Runner<'_> {
                 outs[k] = Some(self.parse_answer(rest)?);
                 next = k + 1;
             }
+            self.calls += (next - from) as u64;
             if next < inputs.len() {
                 // the call at `next` ended the process or did not return
                 outs[next] = Some(if ran.hung {
+                    self.hung += 1;
                     Outcome::Hung
                 } else {
                     Outcome::Ended
                 });
+                self.calls += 1;
                 next += 1;
             }
             from = next;
@@ -591,10 +973,19 @@ impl Runner<'_> {
                     _ => String::new(),
                 };
                 let mut location = s();
+                // the copy's path, also as the current folder sees it, is left out
+                let cwd = std::env::current_dir().unwrap_or_default();
                 for base in [
                     self.copy.clone(),
                     self.copy.canonicalize().unwrap_or_default(),
+                    self.copy
+                        .strip_prefix(&cwd)
+                        .map(Path::to_path_buf)
+                        .unwrap_or_default(),
                 ] {
+                    if base.as_os_str().is_empty() {
+                        continue;
+                    }
                     let b = format!("{}/", base.display());
                     if let Some(r) = location.strip_prefix(&b) {
                         location = r.to_string();
@@ -637,6 +1028,21 @@ pub struct Held {
     pub line: u32,
     pub cases: u64,
     pub undecided: u64,
+    /// For a clause `a || ... || z`: the calls on which every part before `z` was false, so
+    /// that `z` decided (Milestone 282).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reached: Option<u64>,
+    /// The clause held, but its last part decided fewer calls than `--min-reach`.
+    #[serde(default)]
+    pub vacuous: bool,
+}
+
+/// A `requires` clause and the generated inputs it turned away.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct Rejection {
+    pub text: String,
+    pub line: u32,
+    pub inputs: u64,
 }
 
 /// What fuzzing one function gave.
@@ -646,6 +1052,7 @@ pub struct FnReport {
     pub file: String,
     pub line: u32,
     pub seed: u64,
+    /// The inputs that kept `requires`.
     pub cases: u64,
     /// Generated inputs that broke `requires` and were not run.
     pub rejected: u64,
@@ -653,37 +1060,54 @@ pub struct FnReport {
     pub held: Vec<Held>,
     /// Runs of the test program, the shrink's included.
     pub runs: u64,
+    /// `broken`, `held`, `vacuous` (a clause was hardly checked) or `too few inputs`
+    /// (Milestone 282).
+    #[serde(default)]
+    pub verdict: String,
+    /// The calls made of the cases (the others were not made after calls that did not return).
+    #[serde(default)]
+    pub calls: u64,
+    /// The rejected inputs by the first `requires` clause they broke, most first.
+    #[serde(default)]
+    pub rejected_by: Vec<Rejection>,
+    /// What to change in the contract, for a verdict `vacuous` or `too few inputs`.
+    #[serde(default)]
+    pub advice: Vec<String>,
+}
+
+/// When a run tested too little to count (Milestone 282).
+#[derive(Clone, Copy, Debug)]
+pub struct Limits {
+    /// Fewer calls than this give the verdict `too few inputs`.
+    pub min_inputs: u64,
+    /// A clause `a || ... || z` whose last part decided fewer calls than this is `vacuous`.
+    pub min_reach: u64,
 }
 
 /// Fuzz one function: `cases` inputs from `seed`, then a shrink of the first input of each
 /// failure.
-pub fn fuzz(r: &mut Runner, seed: u64, cases: u64) -> Result<FnReport, String> {
+pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnReport, String> {
     let f = r.f;
     let mut rng = Rng::new(seed ^ fnv(&f.name));
     let (mut inputs, mut rejected) = (Vec::new(), 0u64);
+    let mut by_clause: BTreeMap<usize, u64> = BTreeMap::new();
     let mut k = 0;
     while (inputs.len() as u64) < cases && k < (cases as usize).saturating_mul(50).max(100) {
         let a = f.generate(&mut rng, k);
         k += 1;
-        if f.admits(&a) {
-            inputs.push(a);
-        } else {
-            rejected += 1;
+        match f.unmet(&a) {
+            None => inputs.push(a),
+            Some(ci) => {
+                rejected += 1;
+                *by_clause.entry(ci).or_default() += 1;
+            }
         }
     }
+    r.phase = format!("{} inputs", inputs.len());
+    r.hung_cap = true;
     let outs = r.run(&inputs)?;
+    r.hung_cap = false;
     let mut by_failure: BTreeMap<Failure, (u64, usize)> = BTreeMap::new();
-    let mut held: Vec<Held> = f
-        .contract
-        .clauses
-        .iter()
-        .filter(|c| c.kind == ClauseKind::Ensures)
-        .map(|c| Held {
-            text: c.text.clone(),
-            line: c.line,
-            ..Held::default()
-        })
-        .collect();
     let ens: Vec<usize> = f
         .contract
         .clauses
@@ -692,7 +1116,23 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64) -> Result<FnReport, String> {
         .filter(|(_, c)| c.kind == ClauseKind::Ensures)
         .map(|(i, _)| i)
         .collect();
+    let mut held: Vec<Held> = ens
+        .iter()
+        .map(|&i| {
+            let c = &f.contract.clauses[i];
+            Held {
+                text: c.text.clone(),
+                line: c.line,
+                reached: can_skip(f, c).then_some(0),
+                ..Held::default()
+            }
+        })
+        .collect();
+    let mut calls = 0u64;
     for (i, (a, o)) in inputs.iter().zip(&outs).enumerate() {
+        if *o != Outcome::NotRun {
+            calls += 1;
+        }
         let j = f.judge(a, o);
         for x in &j.failures {
             let e = by_failure.entry(x.clone()).or_insert((0, i));
@@ -705,12 +1145,18 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64) -> Result<FnReport, String> {
                 } else {
                     h.cases += 1;
                 }
+                if j.reached.contains(ci) {
+                    if let Some(n) = h.reached.as_mut() {
+                        *n += 1;
+                    }
+                }
             }
         }
     }
     let mut broken = Vec::new();
     for (x, (n, first)) in &by_failure {
         let start = inputs[*first].clone();
+        r.phase = format!("shrinking {}", describe(f, x));
         let (min, steps) = shrink(r, &start, x)?;
         let again = r.run(std::slice::from_ref(&min))?;
         let replayed = f.judge(&min, &again[0]).failures.contains(x);
@@ -741,7 +1187,31 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64) -> Result<FnReport, String> {
             .iter()
             .any(|b| b.kind == "ensures" && b.line == h.line && b.text == h.text)
     });
-    Ok(FnReport {
+    for h in &mut held {
+        h.vacuous = h.cases > 0 && h.reached.is_some_and(|n| n < lim.min_reach);
+    }
+    let mut rejected_by: Vec<Rejection> = by_clause
+        .iter()
+        .map(|(&ci, &n)| {
+            let c = &f.contract.clauses[ci];
+            Rejection {
+                text: c.text.clone(),
+                line: c.line,
+                inputs: n,
+            }
+        })
+        .collect();
+    rejected_by.sort_by(|a, b| b.inputs.cmp(&a.inputs).then(a.line.cmp(&b.line)));
+    let verdict = if !broken.is_empty() {
+        "broken"
+    } else if calls < lim.min_inputs {
+        "too few inputs"
+    } else if held.iter().any(|h| h.vacuous) {
+        "vacuous"
+    } else {
+        "held"
+    };
+    let mut rep = FnReport {
         function: f.name.clone(),
         file: f.file.to_string_lossy().into(),
         line: f.line,
@@ -751,15 +1221,205 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64) -> Result<FnReport, String> {
         broken,
         held,
         runs: r.runs,
-    })
+        verdict: verdict.into(),
+        calls,
+        rejected_by,
+        advice: vec![],
+    };
+    rep.advice = advice(f, &rep, lim);
+    Ok(rep)
+}
+
+/// What to change in a contract whose run tested too little: an `input` line that keeps the
+/// `requires` clause that turned most inputs away, and for a clause that was hardly checked,
+/// inputs of the shape the function needs.
+fn advice(f: &Fn, rep: &FnReport, lim: Limits) -> Vec<String> {
+    let mut out = Vec::new();
+    if rep.calls < lim.min_inputs {
+        if let Some(top) = rep.rejected_by.first() {
+            let mut lines = input_lines_for(f, top.line);
+            for c in f.contract.clauses.iter().filter(|c| c.line == top.line) {
+                string_eqs(&c.ast, &mut lines);
+            }
+            if lines.is_empty() {
+                out.push(format!(
+                    "add `input` lines that keep `requires {}` (line {}), so that the generated \
+                     inputs need not be thrown away: `input <path> in <lo>..=<hi>` for an \
+                     integer, `input <path> len <lo>..=<hi>` for a length",
+                    top.text, top.line
+                ));
+            } else {
+                out.push(format!(
+                    "add an input line that keeps `requires {}` (line {}): {}",
+                    top.text,
+                    top.line,
+                    lines
+                        .iter()
+                        .map(|l| format!("`// hydo: {l}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+        } else if rep.calls < rep.cases {
+            out.push(format!(
+                "calls did not return within the timeout, and the calls after the first {MAX_HUNG} \
+                 were not made: narrow the sizes with `input` lines, or raise --timeout"
+            ));
+        }
+    }
+    for h in rep
+        .held
+        .iter()
+        .filter(|h| h.vacuous && h.undecided > h.cases)
+    {
+        out.push(format!(
+            "`ensures {}` (line {}) could not be judged on {} calls: a value it reads is of a \
+             type that hydo does not read (`--input` shows it as `<not read>`); compare a part \
+             that hydo reads, such as a number, a string or a list",
+            h.text, h.line, h.undecided
+        ));
+    }
+    if rep.held.iter().any(|h| h.vacuous && h.undecided <= h.cases) {
+        let strings: Vec<&str> = f
+            .params
+            .iter()
+            .filter(|p| p.ty == FTy::Str && !f.hints.like.contains_key(&p.name))
+            .map(|p| p.name.as_str())
+            .collect();
+        let mut s = "give the inputs the shape that reaches the clause's last part".to_string();
+        if let Some(n) = strings.first() {
+            s.push_str(&format!(
+                ": for a string the function parses, `// hydo: input {n} like \"<a text it \
+                 accepts>\"`, or `// hydo: input {n} len 0..=64 chars \"<its characters>\"`"
+            ));
+        } else {
+            s.push_str(": `input` lines with ranges, lengths and characters");
+        }
+        out.push(s);
+    }
+    out
+}
+
+/// `input <path> like "<text>"` for each comparison of a string with a literal in a clause.
+fn string_eqs(a: &Ast, out: &mut Vec<String>) {
+    use crate::plan::BinOp;
+    match a {
+        Ast::Bin(BinOp::And | BinOp::Or, x, y) => {
+            string_eqs(x, out);
+            string_eqs(y, out);
+        }
+        Ast::Bin(BinOp::Eq, x, y) => {
+            let (p, s) = match (check::path_of(x), &**y, check::path_of(y), &**x) {
+                (Some(p), Ast::Str(s), _, _) | (_, _, Some(p), Ast::Str(s)) => (p, s),
+                _ => return,
+            };
+            if !p.contains('#') && !p.starts_with("result") {
+                out.push(format!("input {p} like {s:?}"));
+            }
+        }
+        _ => {}
+    }
+}
+
+/// `input` lines that keep the `requires` clause on `line`, when its comparisons of a path
+/// with a number give both of the path's bounds (`len(s) == 64`, `n >= 1 && n <= 8`).
+fn input_lines_for(f: &Fn, line: u32) -> Vec<String> {
+    use crate::plan::BinOp;
+    let mut bounds: BTreeMap<String, (Option<i128>, Option<i128>)> = BTreeMap::new();
+    let mut named: Vec<String> = Vec::new();
+    fn walk(
+        a: &Ast,
+        bounds: &mut BTreeMap<String, (Option<i128>, Option<i128>)>,
+        named: Option<&mut Vec<String>>,
+    ) {
+        match a {
+            Ast::Bin(BinOp::And, x, y) => {
+                let mut n2 = Vec::new();
+                walk(x, bounds, Some(&mut n2));
+                walk(y, bounds, Some(&mut n2));
+                if let Some(n) = named {
+                    n.extend(n2);
+                }
+            }
+            Ast::Bin(op, x, y) => {
+                let (p, k, op) = match (check::path_of(x), &**y, check::path_of(y), &**x) {
+                    (Some(p), Ast::Int(k), _, _) => (p, *k, *op),
+                    (_, _, Some(p), Ast::Int(k)) => (
+                        p,
+                        *k,
+                        match op {
+                            BinOp::Lt => BinOp::Gt,
+                            BinOp::Le => BinOp::Ge,
+                            BinOp::Gt => BinOp::Lt,
+                            BinOp::Ge => BinOp::Le,
+                            o => *o,
+                        },
+                    ),
+                    _ => return,
+                };
+                let b = bounds.entry(p.clone()).or_default();
+                match op {
+                    BinOp::Eq => *b = (Some(k), Some(k)),
+                    BinOp::Le => b.1 = Some(k),
+                    BinOp::Lt => b.1 = Some(k - 1),
+                    BinOp::Ge => b.0 = Some(k),
+                    BinOp::Gt => b.0 = Some(k + 1),
+                    _ => return,
+                }
+                if let Some(n) = named {
+                    n.push(p);
+                }
+            }
+            _ => {}
+        }
+    }
+    for c in &f.contract.clauses {
+        if c.kind == ClauseKind::Requires {
+            walk(&c.ast, &mut bounds, (c.line == line).then_some(&mut named));
+        }
+    }
+    named.sort();
+    named.dedup();
+    let mut out = Vec::new();
+    for p in named {
+        let (lo, hi) = bounds.get(&p).copied().unwrap_or_default();
+        let (base, len) = match p.strip_suffix("#len") {
+            Some(b) => (b.to_string(), true),
+            None => (p.clone(), false),
+        };
+        if base == "result" || base.starts_with("result.") {
+            continue;
+        }
+        let lo = if len { Some(lo.unwrap_or(0)) } else { lo };
+        let (Some(lo), Some(hi)) = (lo, hi) else {
+            continue;
+        };
+        if lo > hi {
+            continue;
+        }
+        let range = if lo == hi {
+            format!("{lo}")
+        } else {
+            format!("{lo}..={hi}")
+        };
+        out.push(if len {
+            format!("input {base} len {range}")
+        } else {
+            format!("input {base} in {lo}..={hi}")
+        });
+    }
+    out
 }
 
 /// Shrink an input that fails with `x`: take the first simpler input that fails the same way,
-/// until none does.
+/// until none does. A call that does not return waits for the timeout, so a shrink stops after
+/// [`MAX_HUNG`] such calls or [`SHRINK_BUDGET`], with the smallest input so far.
 fn shrink(r: &mut Runner, start: &[Val], x: &Failure) -> Result<(Vec<Val>, u64), String> {
     let f = r.f;
     let mut cur = start.to_vec();
     let mut steps = 0;
+    let began = std::time::Instant::now();
+    let hung_before = r.hung;
     let rounds = if *x == Failure::Hung { 3 } else { 300 };
     // the candidates run in chunks, and a round ends at the first chunk with a failing one
     let chunk = if *x == Failure::Hung { 2 } else { 64 };
@@ -767,6 +1427,9 @@ fn shrink(r: &mut Runner, start: &[Val], x: &Failure) -> Result<(Vec<Val>, u64),
         let mut cands = f.candidates(&cur);
         cands.truncate(if *x == Failure::Hung { 4 } else { 4096 });
         for part in cands.chunks(chunk) {
+            if began.elapsed() > SHRINK_BUDGET || r.hung >= hung_before + MAX_HUNG {
+                break 'rounds;
+            }
             let outs = r.run(part)?;
             if let Some(k) = part
                 .iter()
@@ -811,6 +1474,8 @@ struct Opts {
     input: Option<String>,
     list: bool,
     json: bool,
+    min_inputs: Option<u64>,
+    min_reach: Option<u64>,
 }
 
 fn opts(args: &[String]) -> Result<Opts, String> {
@@ -827,6 +1492,8 @@ fn opts(args: &[String]) -> Result<Opts, String> {
         input: None,
         list: false,
         json: false,
+        min_inputs: None,
+        min_reach: None,
     };
     let mut it = args.iter();
     let mut dir_set = false;
@@ -845,6 +1512,12 @@ fn opts(args: &[String]) -> Result<Opts, String> {
             "--toolchain" => o.toolchain = Some(val("--toolchain")?),
             "--timeout" => o.timeout = val("--timeout")?.parse().map_err(|_| "--timeout SECS")?,
             "--input" => o.input = Some(val("--input")?),
+            "--min-inputs" => {
+                o.min_inputs = Some(val("--min-inputs")?.parse().map_err(|_| "--min-inputs N")?)
+            }
+            "--min-reach" => {
+                o.min_reach = Some(val("--min-reach")?.parse().map_err(|_| "--min-reach N")?)
+            }
             "--list" => o.list = true,
             "--release" => o.release = true,
             "--json" => o.json = true,
@@ -859,6 +1532,36 @@ fn opts(args: &[String]) -> Result<Opts, String> {
         return Err("--input needs exactly one --fn".into());
     }
     Ok(o)
+}
+
+impl Opts {
+    fn limits(&self) -> Limits {
+        Limits {
+            min_inputs: self.min_inputs.unwrap_or(self.cases.div_ceil(10)),
+            min_reach: self.min_reach.unwrap_or(self.cases.div_ceil(100).max(1)),
+        }
+    }
+
+    /// The options that a replay needs to build and call the function as this run did.
+    fn replay_flags(&self) -> String {
+        let mut s = String::new();
+        if self.release {
+            s.push_str(" --release");
+        }
+        if let Some(t) = &self.toolchain {
+            s.push_str(&format!(" --toolchain {}", shell_quote(t)));
+        }
+        if let Some(t) = &self.target_dir {
+            s.push_str(&format!(
+                " --target-dir {}",
+                shell_quote(&t.to_string_lossy())
+            ));
+        }
+        if self.timeout != 10 {
+            s.push_str(&format!(" --timeout {}", self.timeout));
+        }
+        s
+    }
 }
 
 /// Whether the function is the one a `--fn` names: by its name, or by the end of its full name.
@@ -892,14 +1595,153 @@ pub fn main(args: &[String]) -> i32 {
     }
 }
 
+/// Where each harness module stands in the copy: its function's index, the file, the line and
+/// the first and last columns (1-based characters, as rustc counts).
+struct Placed {
+    k: usize,
+    file: PathBuf,
+    line: u32,
+    cols: (u32, u32),
+}
+
+/// Write the copy's sources with the harness modules of the functions `active` (indices into
+/// `fns`): every file that holds a function starts again from the project's own text.
+fn place(pkg_dir: &Path, copy: &Path, fns: &[Fn], active: &[usize]) -> Result<Vec<Placed>, String> {
+    let mut by_file: BTreeMap<&Path, Vec<(usize, usize, String)>> = BTreeMap::new();
+    for f in fns {
+        by_file.entry(f.file.as_path()).or_default();
+    }
+    for &k in active {
+        let f = &fns[k];
+        by_file.entry(f.file.as_path()).or_default().push((
+            f.insert_at,
+            k,
+            harness::module(&f.spec(k)),
+        ));
+    }
+    let mut placed = Vec::new();
+    for (file, mut ins) in by_file {
+        let src = pkg_dir.join(file);
+        let orig = std::fs::read_to_string(&src).map_err(|e| format!("{}: {e}", src.display()))?;
+        ins.sort_by_key(|x| x.0);
+        let mut text = String::with_capacity(orig.len());
+        let mut from = 0;
+        for (at, k, m) in ins {
+            text.push_str(&orig[from..at]);
+            let start = text.len();
+            let line = text.matches('\n').count() as u32 + 1;
+            let line_start = text.rfind('\n').map_or(0, |i| i + 1);
+            let col = text[line_start..start].chars().count() as u32 + 1;
+            text.push_str(&m);
+            placed.push(Placed {
+                k,
+                file: file.to_path_buf(),
+                line,
+                cols: (col, col + m.chars().count() as u32),
+            });
+            from = at;
+        }
+        text.push_str(&orig[from..]);
+        let p = copy.join(file);
+        std::fs::write(&p, text).map_err(|e| format!("{}: {e}", p.display()))?;
+    }
+    Ok(placed)
+}
+
+/// The functions whose harness module an error names, with the error's first line.
+fn blame(errors: &[cargo::Diag], placed: &[Placed], copy: &Path) -> BTreeMap<usize, String> {
+    let mut out = BTreeMap::new();
+    for e in errors {
+        for (file, line, col) in &e.spans {
+            let p = Path::new(file);
+            let rel = p.strip_prefix(copy).unwrap_or(p);
+            for pl in placed {
+                if pl.file == rel && pl.line == *line && (pl.cols.0..=pl.cols.1).contains(col) {
+                    out.entry(pl.k).or_insert_with(|| e.message.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The test program (none when no harness built), the functions in it, and the functions left
+/// out with the compiler's first error.
+type Built = (Option<PathBuf>, Vec<usize>, Vec<(usize, String)>);
+
+/// Build the harness of every function that builds. A function whose harness module does not
+/// compile is left out with the compiler's message, and the others are built again without it.
+#[allow(clippy::too_many_arguments)]
+fn build_each(
+    cg: &cargo::Cargo,
+    pkg: &cargo::Pkg,
+    copy: &Path,
+    target_dir: &Path,
+    target: &cargo::Target,
+    log: &Path,
+    fns: &[Fn],
+) -> Result<Built, String> {
+    let mut active: Vec<usize> = (0..fns.len()).collect();
+    let mut failed: Vec<(usize, String)> = Vec::new();
+    let mut alone_tried = false;
+    loop {
+        let placed = place(&pkg.dir, copy, fns, &active)?;
+        let err = match cargo::build(cg, copy, target_dir, target, log) {
+            Ok(exe) => return Ok((Some(exe), active, failed)),
+            Err(e) => e,
+        };
+        let blamed = blame(&err.errors, &placed, copy);
+        if !blamed.is_empty() {
+            for (k, m) in blamed {
+                active.retain(|&x| x != k);
+                failed.push((k, m));
+            }
+            if active.is_empty() {
+                return Ok((None, active, failed));
+            }
+            continue;
+        }
+        // an error outside the harness modules: the crate itself, or a function's harness that
+        // breaks code elsewhere; the crate without any harness tells them apart
+        place(&pkg.dir, copy, fns, &[])?;
+        if let Err(e) = cargo::build(cg, copy, target_dir, target, log) {
+            return Err(format!(
+                "the crate does not build in the test profile without hydo's harness, so no \
+                 function can be fuzzed: {}",
+                e.text
+            ));
+        }
+        if alone_tried || active.len() <= 1 {
+            if let Some(&k) = active.first() {
+                failed.push((k, err.first_error()));
+            }
+            return Ok((None, vec![], failed));
+        }
+        alone_tried = true;
+        let mut ok = Vec::new();
+        for &k in &active {
+            place(&pkg.dir, copy, fns, &[k])?;
+            match cargo::build(cg, copy, target_dir, target, log) {
+                Ok(_) => ok.push(k),
+                Err(e) => failed.push((k, e.first_error())),
+            }
+        }
+        if ok.is_empty() {
+            return Ok((None, ok, failed));
+        }
+        active = ok;
+    }
+}
+
 fn run_all(o: &Opts) -> Result<i32, String> {
     let cg = cargo::Cargo {
         toolchain: o.toolchain.clone(),
         release: o.release,
     };
+    let lim = o.limits();
     let pkg = cargo::metadata(&cg, &o.dir)?;
     let sources = pkg.sources();
-    let (fns, skipped, errors) = find(&pkg.dir, &sources, &pkg.name);
+    let (fns, mut skipped, errors) = find(&pkg.dir, &sources, &pkg.name);
     for e in &errors {
         eprintln!("hydo fuzz: {e}");
     }
@@ -907,7 +1749,17 @@ fn run_all(o: &Opts) -> Result<i32, String> {
         return Ok(2);
     }
     let fns: Vec<Fn> = fns.into_iter().filter(|f| named(f, &o.fns)).collect();
+    let no_contract = || {
+        format!(
+            "no function of {} has a `// hydo:` contract: write `// hydo: ensures <expr>` (and \
+             `requires`, `input`) right before a function (`hydo guide fuzz`)",
+            pkg.dir.display()
+        )
+    };
     if o.list {
+        if fns.is_empty() && skipped.is_empty() {
+            println!("hydo: fuzz: {}", no_contract());
+        }
         for f in &fns {
             println!(
                 "{} ({}:{}): can be fuzzed",
@@ -927,23 +1779,50 @@ fn run_all(o: &Opts) -> Result<i32, String> {
         }
         return Ok(0);
     }
+    let wanted = |name: &str| {
+        o.fns.is_empty()
+            || o.fns
+                .iter()
+                .any(|w| name == w || name.ends_with(&format!("::{w}")))
+    };
+    // with --json, standard output holds only the JSON
+    let say = |line: String| {
+        if o.json {
+            eprintln!("{line}");
+        } else {
+            println!("{line}");
+        }
+    };
     for s in &skipped {
-        if o.fns.is_empty() || o.fns.iter().any(|w| s.name.ends_with(w.as_str())) {
-            println!(
+        if wanted(&s.name) {
+            say(format!(
                 "hydo: fuzz: {} ({}:{}) is not fuzzed: {}",
                 s.name,
                 s.file.display(),
                 s.line,
                 s.why
-            );
+            ));
         }
     }
     if fns.is_empty() {
-        return Err(if o.fns.is_empty() {
-            "no function of the package can be fuzzed (`hydo fuzz --list` says why)".into()
-        } else {
+        return Err(if !o.fns.is_empty() {
             format!("no function named {} can be fuzzed", o.fns.join(", "))
+        } else if skipped.is_empty() {
+            no_contract()
+        } else {
+            "no function of the package can be fuzzed (`hydo fuzz --list` says why)".into()
         });
+    }
+    if o.input.is_some() && fns.len() > 1 {
+        return Err(format!(
+            "--fn {} names {} functions: {}; name one by its path",
+            o.fns[0],
+            fns.len(),
+            fns.iter()
+                .map(|f| f.short_name().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     // the copy, with the harness modules
     let out = if o.out.is_absolute() {
@@ -974,60 +1853,86 @@ fn run_all(o: &Opts) -> Result<i32, String> {
             let t = pkg.target_of(&pkg.dir.join(&f.file));
             let same = t.is_some_and(|t| t.name == first.name && t.kind == first.kind);
             if !same {
-                println!(
+                say(format!(
                     "hydo: fuzz: {} is in another target of the package than {}; fuzz it with its own --fn",
                     f.name, first.name
-                );
+                ));
             }
             same
         })
         .collect();
     std::fs::write(copy.join("Cargo.toml"), cargo::manifest(&pkg, &first))
         .map_err(|e| e.to_string())?;
-    let mut by_file: BTreeMap<&Path, Vec<(usize, String)>> = BTreeMap::new();
-    for (k, f) in fns.iter().enumerate() {
-        by_file
-            .entry(f.file.as_path())
-            .or_default()
-            .push((f.insert_at, harness::module(&f.spec(k))));
-    }
-    for (file, mut ins) in by_file {
-        let p = copy.join(file);
-        let mut text = std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?;
-        ins.sort_by(|a, b| b.0.cmp(&a.0));
-        for (at, m) in ins {
-            text.insert_str(at, &m);
-        }
-        std::fs::write(&p, text).map_err(|e| e.to_string())?;
-    }
     let target_dir = o.target_dir.clone().unwrap_or_else(|| out.join("target"));
-    println!(
+    eprintln!(
         "hydo: fuzz: building the harness of {} function{} ({})",
         fns.len(),
         if fns.len() == 1 { "" } else { "s" },
         copy.display()
     );
-    let exe = cargo::build(&cg, &copy, &target_dir, &first, &out.join("build.log"))?;
+    let (exe, active, failed) = build_each(
+        &cg,
+        &pkg,
+        &copy,
+        &target_dir,
+        &first,
+        &out.join("build.log"),
+        &fns,
+    )?;
+    for (k, why) in &failed {
+        let f = &fns[*k];
+        let why = format!("its harness did not build: {why}");
+        say(format!(
+            "hydo: fuzz: {} ({}:{}) is not fuzzed: {why}",
+            f.name,
+            f.file.display(),
+            f.line
+        ));
+        skipped.push(Skipped {
+            name: f.name.clone(),
+            file: f.file.clone(),
+            line: f.line,
+            why,
+        });
+    }
     let work = out.join("work");
     std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
     let timeout = Duration::from_secs(o.timeout.max(1));
+    let mut report = Report {
+        package: pkg.name.clone(),
+        functions: vec![],
+        skipped: skipped
+            .iter()
+            .filter(|s| wanted(&s.name))
+            .map(|s| format!("{} ({}:{}): {}", s.name, s.file.display(), s.line, s.why))
+            .collect(),
+    };
+    let Some(exe) = exe else {
+        write_report(&report, &out, o.json)?;
+        return Err(format!(
+            "no harness built (cargo's output: {})",
+            out.join("build.log").display()
+        ));
+    };
     if let Some(inp) = &o.input {
-        let f = &fns[0];
+        let Some(&k) = active.first() else {
+            return Err("the function's harness did not build".into());
+        };
+        let f = &fns[k];
         let named: Vec<(String, FTy)> = f
             .params
             .iter()
             .map(|p| (p.name.clone(), p.ty.clone()))
             .collect();
         let args = value::parse_args(inp, &named)?;
-        let mut r = Runner {
+        let mut r = Runner::new(
             f,
-            exe: exe.clone(),
-            filter: format!("{}::run", f.module(0)),
-            work: work.clone(),
+            exe.clone(),
+            format!("{}::run", f.module(k)),
+            work.clone(),
             timeout,
-            copy: copy.clone(),
-            runs: 0,
-        };
+            copy.clone(),
+        );
         if !f.admits(&args) {
             println!(
                 "hydo: fuzz: the input breaks a `requires` clause of {}",
@@ -1049,38 +1954,64 @@ fn run_all(o: &Opts) -> Result<i32, String> {
         }
         return Ok(if j.failures.is_empty() { 0 } else { 1 });
     }
-    let mut report = Report {
-        package: pkg.name.clone(),
-        functions: vec![],
-        skipped: skipped
-            .iter()
-            .map(|s| format!("{} ({}:{}): {}", s.name, s.file.display(), s.line, s.why))
-            .collect(),
-    };
-    let mut any = false;
-    for (k, f) in fns.iter().enumerate() {
-        let mut r = Runner {
+    for &k in &active {
+        let f = &fns[k];
+        let mut r = Runner::new(
             f,
-            exe: exe.clone(),
-            filter: format!("{}::run", f.module(k)),
-            work: work.clone(),
+            exe.clone(),
+            format!("{}::run", f.module(k)),
+            work.clone(),
             timeout,
-            copy: copy.clone(),
-            runs: 0,
-        };
-        let rep = fuzz(&mut r, o.seed, o.cases)?;
+            copy.clone(),
+        );
+        let rep = fuzz(&mut r, o.seed, o.cases, lim)?;
         if !o.json {
-            print_report(&rep, &o.dir, o.seed);
+            print_report(&rep, f, o, lim);
         }
-        any |= !rep.broken.is_empty();
         report.functions.push(rep);
     }
-    let j = serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?;
+    write_report(&report, &out, o.json)?;
+    let count = |v: &str| report.functions.iter().filter(|f| f.verdict == v).count();
+    let (broken, vacuous, few) = (count("broken"), count("vacuous"), count("too few inputs"));
+    if !o.json {
+        let mut parts = vec![format!("{} held", count("held"))];
+        for (n, w) in [
+            (broken, "broken"),
+            (vacuous, "vacuous"),
+            (few, "too few inputs"),
+        ] {
+            if n > 0 {
+                parts.push(format!("{n} {w}"));
+            }
+        }
+        let not = if report.skipped.is_empty() {
+            String::new()
+        } else {
+            format!("; {} not fuzzed", report.skipped.len())
+        };
+        println!(
+            "hydo: fuzz: {} function{} fuzzed: {}{not}",
+            report.functions.len(),
+            if report.functions.len() == 1 { "" } else { "s" },
+            parts.join(", ")
+        );
+    }
+    Ok(if broken > 0 {
+        1
+    } else if vacuous + few > 0 {
+        3
+    } else {
+        0
+    })
+}
+
+fn write_report(report: &Report, out: &Path, json: bool) -> Result<(), String> {
+    let j = serde_json::to_string_pretty(report).map_err(|e| e.to_string())?;
     std::fs::write(out.join("fuzz.json"), format!("{j}\n")).map_err(|e| e.to_string())?;
-    if o.json {
+    if json {
         println!(
             "{}",
-            serde_json::to_string(&report).map_err(|e| e.to_string())?
+            serde_json::to_string(report).map_err(|e| e.to_string())?
         );
     } else {
         println!(
@@ -1088,7 +2019,7 @@ fn run_all(o: &Opts) -> Result<i32, String> {
             out.join("fuzz.json").display()
         );
     }
-    Ok(if any { 1 } else { 0 })
+    Ok(())
 }
 
 fn describe(f: &Fn, x: &Failure) -> String {
@@ -1107,12 +2038,39 @@ fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
-fn print_report(r: &FnReport, dir: &Path, seed: u64) {
+fn pct(n: u64, of: u64) -> String {
+    if of == 0 {
+        return "0 %".into();
+    }
+    let p = n as f64 * 100.0 / of as f64;
+    if p > 0.0 && p < 0.1 {
+        "less than 0.1 %".into()
+    } else {
+        format!("{p:.1} %")
+    }
+}
+
+fn print_report(r: &FnReport, f: &Fn, o: &Opts, lim: Limits) {
+    let generated = r.cases + r.rejected;
     println!(
-        "hydo: fuzz: {} ({}:{}): {} inputs from seed {}, {} generated inputs broke `requires`",
-        r.function, r.file, r.line, r.cases, seed, r.rejected
+        "hydo: fuzz: {} ({}:{}): {} calls from seed {}; {} of {} generated inputs broke `requires` ({})",
+        r.function,
+        r.file,
+        r.line,
+        r.calls,
+        r.seed,
+        r.rejected,
+        generated,
+        pct(r.rejected, generated)
     );
-    let short = r.function.rsplit("::").next().unwrap_or(&r.function);
+    if let Some(top) = r.rejected_by.first() {
+        if r.rejected * 2 > generated {
+            println!(
+                "hydo:   most were turned away by `requires {}` (line {}): {} inputs",
+                top.text, top.line, top.inputs
+            );
+        }
+    }
     for b in &r.broken {
         let what = match b.kind.as_str() {
             "ensures" => format!(
@@ -1122,16 +2080,24 @@ fn print_report(r: &FnReport, dir: &Path, seed: u64) {
             "panic" => format!("{} panicked at {}", r.function, b.text),
             _ => format!("{}: {}", r.function, b.text),
         };
-        println!("hydo: {what} on {} of {} inputs", b.cases, r.cases);
+        println!("hydo: {what} on {} of {} calls", b.cases, r.calls);
         println!(
             "hydo:   smallest input ({} shrink steps): {}",
             b.shrink_steps, b.input
         );
         println!("hydo:   the call gave: {}", b.after);
         println!(
-            "hydo:   again: hydo fuzz {} --fn {short} --input {}",
-            dir.display(),
-            shell_quote(&b.input)
+            "hydo:   again: hydo fuzz {} --fn {} --input {}{}",
+            shell_quote(&o.dir.to_string_lossy()),
+            shell_quote(f.short_name()),
+            shell_quote(&b.input),
+            o.replay_flags()
+        );
+    }
+    if r.calls < r.cases {
+        println!(
+            "hydo:   {} inputs were not run after {MAX_HUNG} calls that did not return",
+            r.cases - r.calls
         );
     }
     for h in &r.held {
@@ -1140,12 +2106,53 @@ fn print_report(r: &FnReport, dir: &Path, seed: u64) {
         } else {
             String::new()
         };
+        let reach = match h.reached {
+            Some(n) if or_parts(&h.text).len() > 1 => format!(", its last part decided {n}"),
+            Some(n) => format!(", `Some` on {n}"),
+            None => String::new(),
+        };
+        let word = if h.vacuous { "vacuous" } else { "held" };
         println!(
-            "hydo:   held: ensures {} (line {}) on {} inputs{und}",
+            "hydo:   {word}: ensures {} (line {}) on {} calls{reach}{und}",
             h.text, h.line, h.cases
         );
+        if h.vacuous {
+            let parts = or_parts(&h.text);
+            let n = h.reached.unwrap_or(0);
+            if parts.len() > 1 {
+                println!(
+                    "hydo:     `{}` decided {n} of the calls: on the others `{}` was true, so the \
+                     clause held without checking it",
+                    parts[parts.len() - 1],
+                    parts[..parts.len() - 1].join(" || ")
+                );
+            } else {
+                println!(
+                    "hydo:     the property answered `Some` on {n} of the calls and `None` (an \
+                     input it cannot use) on the others"
+                );
+            }
+        }
     }
-    if r.broken.is_empty() {
-        println!("hydo: fuzz: {}: every clause held", r.function);
+    for a in &r.advice {
+        println!("hydo:   to fix: {a}");
+    }
+    match r.verdict.as_str() {
+        "held" => println!("hydo: fuzz: {}: every clause held", r.function),
+        "broken" => println!(
+            "hydo: fuzz: {}: broken ({} failure{})",
+            r.function,
+            r.broken.len(),
+            if r.broken.len() == 1 { "" } else { "s" }
+        ),
+        "too few inputs" => println!(
+            "hydo: fuzz: {}: too few inputs: {} calls of the {} wanted, and --min-inputs is {}",
+            r.function, r.calls, o.cases, lim.min_inputs
+        ),
+        _ => println!(
+            "hydo: fuzz: {}: vacuous: a clause's last part decided fewer than {} calls (--min-reach)",
+            r.function,
+            lim.min_reach
+        ),
     }
 }

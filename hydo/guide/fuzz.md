@@ -1,0 +1,132 @@
+# Test one Rust function from its contract: `hydo fuzz`
+
+A function contract is a set of `// hydo:` comments right before a Rust function. `hydo fuzz`
+reads them and tests each such function on its own, natively, without an image. It generates
+inputs that keep `requires` and the `input` lines, calls the function on each, and judges each
+call by `ensures`. A broken clause, a panic, or a call that does not return is shrunk to a small
+input that replays. The same comments are checked at every call of a whole-system run (`hydo
+guide manifest`, section "Function contracts").
+
+## A worked example
+
+```rust
+/// Where `x` first is.
+// hydo: input v len 0..=2000
+// hydo: ensures is_none(result) || v[some(result)] == x
+pub fn find(v: &[u8], x: u8) -> Option<usize> {
+    v.iter().position(|&b| b == x)
+}
+```
+
+```sh
+hydo fuzz path/to/crate --fn find
+```
+
+Each function gets one header line, one line per clause, and one verdict line. The last line
+counts the verdicts:
+
+```text
+hydo: fuzz: mycrate::find (src/lib.rs:4): 1000 calls from seed 1; 0 of 1000 generated inputs broke `requires` (0.0 %)
+hydo:   held: ensures is_none(result) || v[some(result)] == x (line 3) on 1000 calls, its last part decided 678
+hydo: fuzz: mycrate::find: every clause held
+hydo: fuzz: the report is /.../hydo-out/fuzz/fuzz.json
+hydo: fuzz: 1 function fuzzed: 1 held
+```
+
+A broken clause adds the smallest input, what the call gave, and an `again:` command that
+replays it with the run's own options. `fuzz.json` in `--out DIR` (default `hydo-out/fuzz`)
+holds the whole report.
+
+## The comment lines
+
+- `// hydo: requires <expr>`: the inputs that the function accepts. hydo throws away a generated
+  input that breaks it.
+- `// hydo: ensures <expr>`: what must hold after the call. `result` is the returned value.
+- `// hydo: input <path> ...`: the values that hydo generates for a parameter, a field
+  (`l.balance`), or the elements of a list (`v[]`).
+- `// hydo: with T = i64`: the type that a generic function's type parameter takes.
+
+An expression reads parameters, fields, `result`, integers, strings, `old(e)` (the value at the
+call's entry), and the functions `len`, `is_some`, `is_none`, `is_ok`, `is_err`, `some`, `ok` and
+`err`. The operators are `||`, `&&`, the comparisons, `+ - * / %`, `!` and unary `-`. Integers
+are exact, with no overflow. A call of the program's own code is refused.
+
+## The `input` line
+
+An `input` line has a path and one or more parts:
+
+| Part | For | Example |
+|---|---|---|
+| `in <lo>..<hi>` or `..=<hi>` | an integer | `input amount in 1..=10_000` |
+| `len <lo>..<hi>` or one number | a string's bytes or a list's elements | `input v len 0..1000` |
+| `chars <set>` | a string's characters | `input s len 0..200 chars ascii` |
+| `like "<text>", ...` | strings like these examples | `input text like "1.2.3", "0.1.0-rc.1"` |
+
+A set is `ascii`, `alnum`, `alpha`, `digits`, `hex`, `lower`, `upper`, `any`, or a quoted set in
+which `a-z` is a range, such as `"0-9.+-"`. A `like` string is used as it is in about a third of
+the inputs. In the others, a few characters are removed, added or replaced, a part is repeated,
+or the end comes from another example. Give a parser a few valid inputs with `like`: random text
+almost never parses.
+
+## How values are generated without an `input` line
+
+- The first input is the smallest value of each parameter, and the second the largest.
+- An integer is a bound, a constant that a clause names or a value next to it, a small value,
+  or a value of a random bit width.
+- A `usize` or `isize` value stays between -1,048,576 and 1,048,576, so that a size never asks
+  for terabytes. An `input` line gives the whole range.
+- A list or a string is short in the first inputs and up to 256 long later. Some lists are edge
+  sizes up to 4,096, such as 63, 64, and 65.
+- Some lists repeat one value with a few others among it.
+- A value that a clause compares with a list's element is put at a random place of the list.
+
+## The verdicts
+
+| Verdict | Meaning | Exit status |
+|---|---|---|
+| `held` | Every clause held, and the run tested enough. | 0 |
+| `broken` | A clause broke, or a call panicked, ended the process or did not return. | 1 |
+| `too few inputs` | Fewer calls than `--min-inputs` (default a tenth of `--cases`). | 3 |
+| `vacuous` | A clause held without being checked: see below. | 3 |
+
+A clause `a || ... || z` holds without checking `z` when a part before it is true. The report
+counts the calls on which `z` decided. Fewer than `--min-reach` such calls (default 1 % of
+`--cases`) make the run `vacuous`. Each `too few inputs` and `vacuous` verdict ends with a `to
+fix:` line that names an `input` line to add. `--min-inputs 0` and `--min-reach 0` turn the
+checks off.
+
+## Write a property function
+
+A property that needs a call, such as a round trip, is a function in the crate's `#[cfg(test)]`
+module with `// hydo: ensures result`. Return `Option<bool>`, and `None` for an input that the
+property cannot use. hydo then counts the `Some` answers like the last part of a clause.
+
+```rust
+// hydo: input text like "1.2.3", "0.0.0-alpha.1+build.5"
+// hydo: ensures result
+pub fn display_roundtrip(text: &str) -> Option<bool> {
+    let v = Version::parse(text).ok()?;
+    Some(Version::parse(&v.to_string()).ok() == Some(v))
+}
+```
+
+## What is not fuzzed
+
+`hydo fuzz --list` prints each contracted function and why it is not fuzzed. These are refused:
+
+- a method of a trait, and a method of a generic `impl` block;
+- a generic function without a `with` line for each type parameter;
+- a parameter of an enumeration, a floating-point type, or a type that holds a pointer;
+- a parameter whose structure has a private field of another module. Fuzz its constructor, or a
+  function that takes the parts.
+
+A result of such a type is read in part, and a clause that reads the rest is undecided. A
+function whose test module does not build is reported with the compiler's first error, and the
+other functions run. hydo builds the test module in a `#![no_std]` crate too.
+
+## Long runs
+
+A run prints a progress line on standard error every 5 seconds. A call that does not return
+within `--timeout` (default 10 seconds) is a finding. After 3 such calls, the function's other
+inputs are not run, and a shrink stops after 3 such calls or a minute. `--json` prints only the
+JSON report on standard output.

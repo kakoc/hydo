@@ -1,0 +1,11 @@
+# The second fixture of tests/fuzz.rs (Milestone 282): a `#![no_std]` crate with what stopped
+# `hydo fuzz` on real crates in Milestone 280.
+[package]
+name = "fuzz-nostd"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# its own workspace (not part of the repository root's)
+[workspace]

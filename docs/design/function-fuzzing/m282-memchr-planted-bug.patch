@@ -1,0 +1,12 @@
+diff -ruN -x Cargo.lock a/memchr-2.8.3/src/arch/generic/memchr.rs b/memchr-2.8.3/src/arch/generic/memchr.rs
+--- a/memchr-2.8.3/src/arch/generic/memchr.rs	2026-11-17 10:57:48
++++ b/memchr-2.8.3/src/arch/generic/memchr.rs	2026-11-17 10:57:48
+@@ -196,7 +196,7 @@
+ 
+                     let mask = eqc.movemask();
+                     if mask.has_non_zero() {
+-                        return Some(cur.add(2 * V::BYTES).add(topos(mask)));
++                        return Some(cur.add(2 * V::BYTES).add(topos(mask) + 1));
+                     }
+ 
+                     let mask = eqd.movemask();

@@ -542,6 +542,10 @@ pub struct StructDef {
     pub generic: bool,
     pub tuple: bool,
     pub fields: Vec<(String, TyAst)>,
+    /// Whether each field is declared with a `pub` visibility (`pub`, `pub(crate)`, ...).
+    pub public: Vec<bool>,
+    /// The module that defines the structure (`["identifier"]`; empty for the crate's root).
+    pub module: Vec<String>,
 }
 
 /// The structures and type aliases of a crate's sources.
@@ -549,14 +553,92 @@ pub struct StructDef {
 pub struct Items {
     pub structs: BTreeMap<String, StructDef>,
     pub aliases: BTreeMap<String, TyAst>,
+    /// `const N: usize = 64;`: the crate's integer constants, for array lengths.
+    pub consts: BTreeMap<String, usize>,
 }
 
-/// Add the structures and type aliases of one source file.
+/// Add the structures and type aliases of one source file of the crate's root module.
 pub fn read_items(text: &str, items: &mut Items) {
+    read_items_in(text, &[], items)
+}
+
+/// The module of a source file, from its path under the package: `src/lib.rs` and
+/// `src/main.rs` are the root, `src/a/mod.rs` and `src/a.rs` the module `a`, `src/a/b.rs` the
+/// module `a::b`. A file of `src/bin/` is the root of its own program.
+pub fn file_module(rel: &std::path::Path) -> Vec<String> {
+    let mut parts: Vec<String> = rel
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+    if parts.first().is_some_and(|p| p == "src") {
+        parts.remove(0);
+    }
+    if parts.first().is_some_and(|p| p == "bin") {
+        return vec![];
+    }
+    let Some(last) = parts.pop() else {
+        return vec![];
+    };
+    let stem = last.strip_suffix(".rs").unwrap_or(&last).to_string();
+    if parts.is_empty() && matches!(stem.as_str(), "lib" | "main") {
+        return vec![];
+    }
+    if stem != "mod" {
+        parts.push(stem);
+    }
+    parts
+}
+
+/// The inline modules (`mod a { ... }`) that enclose `pos` (masked text), outermost first.
+pub fn inline_modules(m: &[u8], pos: usize) -> Vec<String> {
+    enclosing(m, pos)
+        .iter()
+        .filter_map(|b| {
+            let h = strip_vis(&b.header);
+            let r = h.strip_prefix("mod ")?;
+            let name: String = r
+                .trim_start()
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            (!name.is_empty()).then_some(name)
+        })
+        .collect()
+}
+
+/// Add the structures and type aliases of one source file whose module is `module`.
+pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
     let m = mask(text);
     let ms = String::from_utf8_lossy(&m).to_string();
     let b = ms.as_bytes();
     let id = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    // `const NAME: <type> = <number>;`
+    {
+        let mut from = 0;
+        while let Some(p) = ms[from..].find("const ") {
+            let at = from + p;
+            from = at + 6;
+            if at > 0 && id(b[at - 1]) {
+                continue;
+            }
+            let rest = &ms[at + 6..];
+            let Some(semi) = rest.find(';') else { continue };
+            let decl = &rest[..semi];
+            let (Some(colon), Some(eq)) = (decl.find(':'), decl.find('=')) else {
+                continue;
+            };
+            if colon > eq {
+                continue;
+            }
+            let name = decl[..colon].trim();
+            let val = decl[eq + 1..].trim().replace('_', "");
+            if let Ok(v) = val.parse::<usize>() {
+                if name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    items.consts.entry(name.to_string()).or_insert(v);
+                }
+            }
+        }
+    }
     for kw in ["struct", "type"] {
         let mut from = 0;
         while let Some(p) = ms[from..].find(kw) {
@@ -620,12 +702,15 @@ pub fn read_items(text: &str, items: &mut Items) {
                 continue;
             };
             let mut fields = Vec::new();
+            let mut public = Vec::new();
             let mut ok = true;
             for (k, f) in split_top(body, ',').into_iter().enumerate() {
                 let f = strip_attrs(f.trim());
                 if f.is_empty() {
                     continue;
                 }
+                let is_pub = (f.starts_with("pub ") || f.starts_with("pub("))
+                    && !f.replace(' ', "").starts_with("pub(self)");
                 let f = strip_vis(&f);
                 let (fname, fty) = if tuple {
                     (k.to_string(), f.as_str())
@@ -639,7 +724,10 @@ pub fn read_items(text: &str, items: &mut Items) {
                     }
                 };
                 match parse_ty(fty) {
-                    Ok(t) => fields.push((fname, t)),
+                    Ok(t) => {
+                        fields.push((fname, t));
+                        public.push(is_pub);
+                    }
                     Err(_) => {
                         ok = false;
                         break;
@@ -647,11 +735,15 @@ pub fn read_items(text: &str, items: &mut Items) {
                 }
             }
             if ok {
+                let mut module = module.to_vec();
+                module.extend(inline_modules(&m, at));
                 items.structs.entry(name.clone()).or_insert(StructDef {
                     name,
                     generic,
                     tuple,
                     fields,
+                    public,
+                    module,
                 });
             }
         }
@@ -695,13 +787,20 @@ pub enum FTy {
     },
     /// A type fuzzing cannot generate: its text.
     Opaque(String),
+    /// A field that the harness's module cannot name (a private field of a structure of
+    /// another module): why. The harness neither builds nor reads it.
+    Hidden(String),
 }
 
 impl FTy {
-    /// Whether a value of the type can be generated (no opaque part).
+    /// Whether a value of the type can be generated (no opaque part), else why not.
     pub fn generable(&self) -> Result<(), String> {
         match self {
-            FTy::Opaque(t) => Err(t.clone()),
+            FTy::Opaque(t) => Err(format!("hydo cannot generate a value of `{t}`")),
+            FTy::Hidden(why) => Err(format!(
+                "{why}, so the harness cannot build the value (fuzz a function that takes its \
+                 parts and builds it, such as its constructor)"
+            )),
             FTy::List(x) | FTy::Array(x, _) | FTy::Opt(x) | FTy::Boxed(_, x) => x.generable(),
             FTy::Res(a, b) => a.generable().and(b.generable()),
             FTy::Tuple(v) => v.iter().try_for_each(FTy::generable),
@@ -728,14 +827,20 @@ impl FTy {
             FTy::Boxed(k, x) => format!("{k}<{}>", x.rust()),
             FTy::Struct { path, .. } => path.clone(),
             FTy::Opaque(t) => t.clone(),
+            FTy::Hidden(_) => "_".into(),
         }
     }
 }
 
-/// What resolving a type needs: the crate's items and the type `Self` stands for.
+/// What resolving a type needs: the crate's items, the type `Self` stands for, and the module
+/// of the function. Its harness is a child of that module, so it sees the private fields of the
+/// structures of that module and of its ancestors, and no others.
 pub struct Resolver<'a> {
     pub items: &'a Items,
     pub self_ty: Option<&'a TyAst>,
+    pub module: &'a [String],
+    /// The types that `with` lines give a generic function's type parameters.
+    pub subst: &'a BTreeMap<String, TyAst>,
 }
 
 impl Resolver<'_> {
@@ -751,12 +856,23 @@ impl Resolver<'_> {
         match t {
             TyAst::Ref(_, x) => self.res(x, stack),
             TyAst::Slice(x) => FTy::List(Box::new(self.res(x, stack))),
-            TyAst::Array(x, n) => match n.replace('_', "").parse::<usize>() {
+            TyAst::Array(x, n) => match n
+                .replace('_', "")
+                .parse::<usize>()
+                .ok()
+                .or_else(|| self.items.consts.get(n.trim()).copied())
+                .ok_or(())
+            {
                 Ok(n) if n <= 64 => FTy::Array(Box::new(self.res(x, stack)), n),
                 _ => FTy::Opaque(t.text()),
             },
             TyAst::Tuple(v) => FTy::Tuple(v.iter().map(|x| self.res(x, stack)).collect()),
             TyAst::Other(s) => FTy::Opaque(s.clone()),
+            TyAst::Path(segs, args)
+                if segs.len() == 1 && args.is_empty() && self.subst.contains_key(&segs[0]) =>
+            {
+                self.res(&self.subst[&segs[0]], stack)
+            }
             TyAst::Path(segs, args) => {
                 let last = segs.last().map(String::as_str).unwrap_or("");
                 let int = |name: &str, signed: bool, bits: u32| FTy::Int {
@@ -814,10 +930,25 @@ impl Resolver<'_> {
                             return FTy::Opaque(t.text());
                         }
                         stack.push(name.into());
+                        let seen = self.module.starts_with(&d.module);
                         let fields = d
                             .fields
                             .iter()
-                            .map(|(n, ft)| (n.clone(), self.res(ft, stack)))
+                            .zip(d.public.iter().chain(std::iter::repeat(&true)))
+                            .map(|((n, ft), &public)| {
+                                if public || seen {
+                                    return (n.clone(), self.res(ft, stack));
+                                }
+                                let m = if d.module.is_empty() {
+                                    "the crate's root".to_string()
+                                } else {
+                                    format!("`{}`", d.module.join("::"))
+                                };
+                                let why = format!(
+                                    "the field `{n}` of `{name}` is private to the module {m}"
+                                );
+                                (n.clone(), FTy::Hidden(why))
+                            })
                             .collect();
                         stack.pop();
                         FTy::Struct {

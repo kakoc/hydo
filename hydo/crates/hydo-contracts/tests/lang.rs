@@ -25,8 +25,7 @@ pub(crate) fn apply(l: &mut Ledger, amount: u64) -> u64 {
     assert_eq!(c.clauses[0].line, 2);
     assert_eq!(c.clauses[1].text, "result == l.balance");
     assert_eq!(c.inputs[0].name, "amount");
-    assert_eq!((c.inputs[0].lo, c.inputs[0].hi), (1, 10_000));
-    assert!(c.inputs[0].inclusive);
+    assert_eq!(c.inputs[0].range, Some((1, 10_000)));
 }
 
 #[test]

@@ -145,7 +145,7 @@ pub fn decode<'a>(t: &FTy, w: &mut impl Iterator<Item = &'a str>) -> Result<Val,
                 .map(|(n, x)| Ok((n.clone(), decode(x, w)?)))
                 .collect::<Result<_, String>>()?,
         ),
-        FTy::Opaque(_) => {
+        FTy::Opaque(_) | FTy::Hidden(_) => {
             word()?;
             Val::Opaque
         }
@@ -449,6 +449,7 @@ impl Reader<'_> {
                 Ok(Val::Struct(fv))
             }
             FTy::Opaque(o) => Err(format!("a value of `{o}` cannot be given")),
+            FTy::Hidden(why) => Err(format!("{why}: its value cannot be given")),
         }
     }
 }
@@ -484,11 +485,15 @@ impl Rng {
 }
 
 /// What the clauses and the `input` lines say about the values at a path (`amount`,
-/// `l.balance`, `len(data)` as `data#len`).
+/// `l.balance`, `v[]` for the elements of `v`, `len(data)` as `data#len`).
 #[derive(Clone, Debug, Default)]
 pub struct Hints {
-    /// `input <path> in lo..=hi`.
+    /// `input <path> in lo..=hi`, and `input <path> len lo..=hi` as `<path>#len`.
     pub domains: BTreeMap<String, (i128, i128)>,
+    /// `input <path> chars <set>`: a string's characters.
+    pub chars: BTreeMap<String, Vec<char>>,
+    /// `input <path> like "<text>", ...`: example strings that the generator uses and changes.
+    pub like: BTreeMap<String, Vec<String>>,
     /// Constants a clause compares the path with: the generator tries each, one below and one
     /// above.
     pub consts: BTreeMap<String, Vec<i128>>,
@@ -503,35 +508,70 @@ pub struct Gen<'a> {
     pub hints: &'a Hints,
     /// 0 for the smallest values, 1 for the largest, 2 for random ones.
     pub mode: u8,
-    /// The longest list or string.
+    /// The longest list or string of a random length; an edge size can be longer.
     pub max_len: usize,
+    /// The elements, characters and integers that one input may still have, so that nested
+    /// lists stay small ([`BUDGET`] at the start of an input).
+    pub budget: usize,
 }
 
-const CHARS: &[char] = &[
-    'a', 'b', 'c', 'x', 'y', 'z', '0', '1', '9', ' ', '-', '_', '.', '/', 'A', 'Z', '\n', '\0',
-    'é', '€', '😀',
+/// The elements, characters and integers of one generated input, at most.
+pub const BUDGET: usize = 1 << 16;
+
+/// The longest list or string without a `len` part.
+pub const MAX_LEN: usize = 4096;
+
+/// The largest `usize` or `isize` value without an `input` line (and the smallest is its
+/// negative): a size that large allocates a mebibyte or more, while terabytes would not return
+/// before the timeout (Milestone 282). An `input` line gives the whole range.
+pub const SIZE_BOUND: i128 = 1 << 20;
+
+/// The lengths that a loop or a buffer often has at its edges: the generator picks among them
+/// in some inputs.
+pub const EDGE_LENS: &[usize] = &[
+    0, 1, 2, 3, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129, 255, 256, 257, 511,
+    512, 513, 1023, 1024, 1025, 4095, 4096,
 ];
+
+/// The printable ASCII characters, the second default set of a string.
+fn ascii() -> Vec<char> {
+    (' '..='~').collect()
+}
+
+/// The longest random length for the `k`-th input: short first, then longer.
+pub fn max_len_for(k: usize) -> usize {
+    match k {
+        0..=99 => 4,
+        100..=299 => 16,
+        300..=599 => 64,
+        _ => 256,
+    }
+}
 
 impl Gen<'_> {
     pub fn val(&mut self, t: &FTy, path: &str) -> Val {
         match t {
-            FTy::Int { signed, bits, .. } => Val::Int(self.int(*signed, *bits, path)),
+            FTy::Int { name, signed, bits } => Val::Int(self.int(name, *signed, *bits, path)),
             FTy::Bool => Val::Bool(match self.mode {
                 0 => false,
                 1 => true,
                 _ => self.rng.below(2) == 1,
             }),
-            FTy::Str => {
-                let n = self.len(path);
-                Val::Str(
-                    (0..n)
-                        .map(|_| CHARS[self.rng.below(CHARS.len() as u64) as usize])
-                        .collect(),
-                )
-            }
+            FTy::Str => Val::Str(self.string(path)),
             FTy::List(x) => {
                 let n = self.len(path);
                 let ep = format!("{path}[]");
+                if n >= 8 && self.mode == 2 && self.rng.below(4) == 0 {
+                    // one value repeated, with a few others among it: a search or a scan then
+                    // runs far before it meets them
+                    let fill = self.val(x, &ep);
+                    let mut l = vec![fill; n];
+                    for _ in 0..1 + self.rng.below(3) {
+                        let at = self.rng.below(n as u64) as usize;
+                        l[at] = self.val(x, &ep);
+                    }
+                    return Val::List(l);
+                }
                 Val::List((0..n).map(|_| self.val(x, &ep)).collect())
             }
             FTy::Array(x, n) => {
@@ -570,25 +610,74 @@ impl Gen<'_> {
                     .map(|(n, x)| (n.clone(), self.val(x, &format!("{path}.{n}"))))
                     .collect(),
             ),
-            FTy::Opaque(_) => Val::Opaque,
+            FTy::Opaque(_) | FTy::Hidden(_) => Val::Opaque,
         }
     }
 
+    /// Take `n` from the budget, as far as it goes.
+    fn take(&mut self, n: usize) -> usize {
+        let n = n.min(self.budget);
+        self.budget -= n;
+        n
+    }
+
+    /// The length of the list or string at `path`.
     fn len(&mut self, path: &str) -> usize {
         let key = format!("{path}#len");
-        if let Some(&(lo, hi)) = self.hints.domains.get(&key) {
-            return self.rng.within(lo.max(0), hi.min(4096)) as usize;
+        let n = self.len_unbudgeted(&key);
+        self.take(n)
+    }
+
+    fn len_unbudgeted(&mut self, key: &str) -> usize {
+        if let Some(&(lo, hi)) = self.hints.domains.get(key) {
+            let (lo, hi) = (lo.max(0) as usize, hi.max(0) as usize);
+            return match self.mode {
+                0 => lo,
+                1 => hi.min(MAX_LEN.max(lo)),
+                _ => match self.rng.below(8) {
+                    // an edge of the domain, or an edge size inside it
+                    0 => [lo, hi, lo + 1, hi.saturating_sub(1)][self.rng.below(4) as usize]
+                        .clamp(lo, hi),
+                    1 | 2 => {
+                        let e: Vec<usize> = EDGE_LENS
+                            .iter()
+                            .copied()
+                            .filter(|n| (lo..=hi).contains(n))
+                            .collect();
+                        if e.is_empty() {
+                            self.rng.within(lo as i128, hi as i128) as usize
+                        } else {
+                            e[self.rng.below(e.len() as u64) as usize]
+                        }
+                    }
+                    3 => {
+                        // short, as most inputs of a short domain
+                        let top = hi.min(lo + 16);
+                        self.rng.within(lo as i128, top as i128) as usize
+                    }
+                    _ => self.rng.within(lo as i128, hi as i128) as usize,
+                },
+            };
         }
         match self.mode {
             0 => 0,
             1 => self.max_len,
             _ => {
-                if let Some(c) = self.hints.consts.get(&key).filter(|c| !c.is_empty()) {
+                if let Some(c) = self.hints.consts.get(key).filter(|c| !c.is_empty()) {
                     if self.rng.below(4) == 0 {
                         let k = c[self.rng.below(c.len() as u64) as usize];
                         let d = self.rng.below(3) as i128 - 1;
-                        return (k + d).clamp(0, self.max_len as i128 * 4) as usize;
+                        return (k + d).clamp(0, MAX_LEN as i128) as usize;
                     }
+                }
+                if self.max_len > 16 && self.rng.below(8) == 0 {
+                    // an edge size, past the lengths of the first inputs
+                    let e: Vec<usize> = EDGE_LENS
+                        .iter()
+                        .copied()
+                        .filter(|&n| n <= MAX_LEN)
+                        .collect();
+                    return e[self.rng.below(e.len() as u64) as usize];
                 }
                 // short lists more often than long ones
                 let cap = 1 + self.rng.below(self.max_len as u64 + 1);
@@ -597,10 +686,118 @@ impl Gen<'_> {
         }
     }
 
-    fn int(&mut self, signed: bool, bits: u32, path: &str) -> i128 {
+    /// A character of `set`, or the default mix when there is none.
+    fn pick(&mut self, set: &[char]) -> char {
+        set[self.rng.below(set.len() as u64) as usize]
+    }
+
+    /// A string at `path`: of a length in bytes (as `len()` counts), from the path's characters,
+    /// or like one of its examples.
+    fn string(&mut self, path: &str) -> String {
+        let key = format!("{path}#len");
+        let set: Vec<char> = match self.hints.chars.get(path) {
+            Some(s) => s.clone(),
+            None if self.mode == 2 && self.rng.below(2) == 0 => ascii(),
+            None => crate::lang::DEFAULT_CHARS.to_vec(),
+        };
+        if let Some(ex) = self.hints.like.get(path).filter(|e| !e.is_empty()).cloned() {
+            let s = self.like(&ex, &set);
+            let s = match self.hints.domains.get(&key) {
+                Some(&(lo, hi)) => fit(s, lo.max(0) as usize, hi.max(0) as usize, &set),
+                None => s,
+            };
+            self.take(s.len());
+            return s;
+        }
+        let n = self.len(path);
+        let mut s = String::new();
+        let small: Vec<char> = set.iter().copied().filter(|c| c.len_utf8() == 1).collect();
+        while s.len() < n {
+            let mut c = self.pick(&set);
+            if c.len_utf8() > n - s.len() {
+                if small.is_empty() {
+                    break;
+                }
+                c = self.pick(&small);
+            }
+            s.push(c);
+        }
+        s
+    }
+
+    /// A string like one of the examples: the example itself, or the example with a few
+    /// changes (a character removed, added or replaced, a part repeated, the end cut, or the
+    /// end of another example).
+    fn like(&mut self, ex: &[String], set: &[char]) -> String {
+        match self.mode {
+            0 => {
+                return ex
+                    .iter()
+                    .min_by_key(|e| e.len())
+                    .cloned()
+                    .unwrap_or_default()
+            }
+            1 => {
+                return ex
+                    .iter()
+                    .max_by_key(|e| e.len())
+                    .cloned()
+                    .unwrap_or_default()
+            }
+            _ => {}
+        }
+        let mut c: Vec<char> = ex[self.rng.below(ex.len() as u64) as usize]
+            .chars()
+            .collect();
+        if self.rng.below(3) == 0 {
+            return c.into_iter().collect();
+        }
+        // the characters a change adds: the examples' own, or the set's
+        let own: Vec<char> = ex.iter().flat_map(|e| e.chars()).collect();
+        for _ in 0..1 + self.rng.below(4) {
+            let add = if own.is_empty() || self.rng.below(4) == 0 {
+                self.pick(set)
+            } else {
+                self.pick(&own)
+            };
+            let at = self.rng.below(c.len() as u64 + 1) as usize;
+            match self.rng.below(6) {
+                0 if !c.is_empty() => {
+                    c.remove(at.min(c.len() - 1));
+                }
+                1 => c.insert(at, add),
+                2 if !c.is_empty() => {
+                    let i = at.min(c.len() - 1);
+                    c[i] = add;
+                }
+                3 if !c.is_empty() => {
+                    let from = self.rng.below(c.len() as u64) as usize;
+                    let to = from + 1 + self.rng.below((c.len() - from) as u64) as usize;
+                    let part: Vec<char> = c[from..to].to_vec();
+                    c.splice(at..at, part);
+                }
+                4 => c.truncate(at),
+                _ => {
+                    let other: Vec<char> = ex[self.rng.below(ex.len() as u64) as usize]
+                        .chars()
+                        .collect();
+                    let from = self.rng.below(other.len() as u64 + 1) as usize;
+                    c.truncate(at);
+                    c.extend_from_slice(&other[from..]);
+                }
+            }
+        }
+        c.into_iter().collect()
+    }
+
+    fn int(&mut self, name: &str, signed: bool, bits: u32, path: &str) -> i128 {
         let (tlo, thi) = int_range(signed, bits);
         let (lo, hi) = match self.hints.domains.get(path) {
             Some(&(a, b)) => (a.max(tlo), b.min(thi)),
+            // a size without an `input` line stays within SIZE_BOUND, its edges too
+            None if matches!(name, "usize" | "isize") => {
+                (tlo.max(-SIZE_BOUND), thi.min(SIZE_BOUND))
+            }
             None => (tlo, thi),
         };
         match self.mode {
@@ -608,6 +805,8 @@ impl Gen<'_> {
             1 => return hi,
             _ => {}
         }
+        self.take(1);
+        let (rlo, rhi) = (lo, hi);
         let r = self.rng.below(10);
         if r < 3 {
             // an edge: a bound of the domain or the type, 0, 1, -1, or a clause's constant
@@ -635,7 +834,7 @@ impl Gen<'_> {
             return v.clamp(lo, hi);
         }
         // a value of a random magnitude: each bit width as likely as the others
-        let width = (hi - lo).max(0) as u128;
+        let width = (rhi - rlo).max(0) as u128;
         let wbits = 128 - width.leading_zeros();
         let k = self.rng.below(wbits as u64 + 1) as u32;
         let m: u128 = if k >= 128 {
@@ -649,17 +848,34 @@ impl Gen<'_> {
         } else {
             raw % (width + 1)
         };
-        if signed && lo < 0 && hi > 0 && self.rng.below(2) == 0 {
+        if signed && rlo < 0 && rhi > 0 && self.rng.below(2) == 0 {
             // around 0 on both sides
-            let o = (off as i128).min(hi);
+            let o = (off as i128).min(rhi);
             return if self.rng.below(2) == 0 {
                 o
             } else {
-                (-o).max(lo)
+                (-o).max(rlo)
             };
         }
-        lo.saturating_add(off as i128).min(hi)
+        rlo.saturating_add(off as i128).min(rhi)
     }
+}
+
+/// `s` cut to at most `hi` bytes at a character's boundary, and filled up to `lo` bytes with
+/// one-byte characters of `set` (or `a`).
+fn fit(mut s: String, lo: usize, hi: usize, set: &[char]) -> String {
+    while s.len() > hi {
+        s.pop();
+    }
+    let fill = set
+        .iter()
+        .copied()
+        .find(|c| c.len_utf8() == 1)
+        .unwrap_or('a');
+    while s.len() < lo {
+        s.push(fill);
+    }
+    s
 }
 
 /// The value at a path (`l.balance`, `p.0`), when the path names one.
@@ -720,6 +936,26 @@ pub fn ty_at<'a>(t: &'a FTy, path: &[&str]) -> Option<&'a FTy> {
     }
 }
 
+/// Each element of a list made simpler, one at a time: first every element's simplest
+/// candidate, then the others, so that a long list's last elements shrink too.
+fn elements_simpler(l: &[Val], x: &FTy, ep: &str, hints: &Hints, out: &mut Vec<Val>) {
+    let per: Vec<Vec<Val>> = l
+        .iter()
+        .take(256)
+        .map(|e| simpler(e, x, ep, hints))
+        .collect();
+    let most = per.iter().map(Vec::len).max().unwrap_or(0);
+    for k in 0..most {
+        for (i, c) in per.iter().enumerate() {
+            if let Some(s) = c.get(k) {
+                let mut d = l.to_vec();
+                d[i] = s.clone();
+                out.push(Val::List(d));
+            }
+        }
+    }
+}
+
 /// Simpler values of `v` (one change each), for the shrink: each integer towards 0 (or the
 /// domain's bound nearest to it), lists and strings shorter, an option `None`, a boolean
 /// `false`. `path` is the value's path, for the domains.
@@ -759,12 +995,12 @@ pub fn simpler(v: &Val, t: &FTy, path: &str, hints: &Hints) -> Vec<Val> {
                     out.push(Val::Str(c[..c.len() / 2].iter().collect()));
                     out.push(Val::Str(c[c.len() / 2..].iter().collect()));
                 }
-                for i in 0..c.len().min(16) {
+                for i in 0..c.len().min(64) {
                     let mut d = c.clone();
                     d.remove(i);
                     out.push(Val::Str(d.into_iter().collect()));
                 }
-                for i in 0..c.len().min(16) {
+                for i in 0..c.len().min(64) {
                     if c[i] != 'a' {
                         let mut d = c.clone();
                         d[i] = 'a';
@@ -780,30 +1016,18 @@ pub fn simpler(v: &Val, t: &FTy, path: &str, hints: &Hints) -> Vec<Val> {
                     out.push(Val::List(l[..l.len() / 2].to_vec()));
                     out.push(Val::List(l[l.len() / 2..].to_vec()));
                 }
-                for i in 0..l.len().min(32) {
+                for i in 0..l.len().min(256) {
                     let mut d = l.clone();
                     d.remove(i);
                     out.push(Val::List(d));
                 }
             }
             let ep = format!("{path}[]");
-            for i in 0..l.len().min(32) {
-                for s in simpler(&l[i], x, &ep, hints) {
-                    let mut d = l.clone();
-                    d[i] = s;
-                    out.push(Val::List(d));
-                }
-            }
+            elements_simpler(l, x, &ep, hints, &mut out);
         }
         (Val::List(l), FTy::Array(x, _)) => {
             let ep = format!("{path}[]");
-            for i in 0..l.len().min(32) {
-                for s in simpler(&l[i], x, &ep, hints) {
-                    let mut d = l.clone();
-                    d[i] = s;
-                    out.push(Val::List(d));
-                }
-            }
+            elements_simpler(l, x, &ep, hints, &mut out);
         }
         (Val::Opt(Some(x)), FTy::Opt(t)) => {
             out.push(Val::Opt(None));

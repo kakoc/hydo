@@ -29,6 +29,11 @@ pub fn holds(a: &Ast, env: &Env) -> Result<bool, Undecided> {
     }
 }
 
+/// The value of `a` for one call.
+pub fn value(a: &Ast, env: &Env) -> Result<Val, Undecided> {
+    eval(a, env, false)
+}
+
 fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
     Ok(match a {
         Ast::Int(x) => Val::Int(*x),

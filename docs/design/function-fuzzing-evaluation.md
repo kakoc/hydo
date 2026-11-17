@@ -1,7 +1,9 @@
 # Function fuzzing: an evaluation on six crates (Milestone 280)
 
 Status: an evaluation of the prototype of Milestone 275, `hydo fuzz`, done on this Mac on
-2026-11-16 (Milestone 280, tentative number). No code of the feature changed.
+2026-11-16 (Milestone 280, tentative number). No code of the feature changed. Milestone 282
+fixed the first four problems and repeated the evaluation on the same six crates: the section
+[After the fixes](#after-the-fixes-milestone-282) has the numbers.
 
 The question was whether a Rust developer who has never used hydo would keep using `hydo fuzz`.
 The evaluator learned the feature only from what a user gets: `hydo fuzz --help`, `hydo guide`,
@@ -311,3 +313,107 @@ nothing (problem 2). The third is generators for lengths and characters (problem
 `hydo fuzz` is a quick way to turn a function's documented rules into tests without writing a
 generator. The run inside the VM with faults (open item 139) would then give what proptest
 cannot. It would check the same contracts under I/O errors, clock steps, and pauses.
+
+## After the fixes (Milestone 282)
+
+Milestone 282 fixed problems 1 to 4 of the ranked list, and parts of problems 5, 6, 7, and 9.
+It then ran the six crates again on 2026-11-17, from fresh copies of the same crates.io archives
+(the SHA-256 values of the setup).
+
+### What changed for a user
+
+- The harness builds on a `#![no_std]` crate: it declares `extern crate std` itself.
+- A result whose structure has a private field of another module is read except for that field.
+  A parameter of such a type is refused with the field's name.
+- Each function whose harness does not build is reported with the compiler's first error, and
+  the other functions run.
+- Each function ends with one verdict: `held`, `broken`, `vacuous`, or `too few inputs`. The last
+  two exit with status 3 and print a `to fix:` line. `--min-inputs` and `--min-reach` set the
+  thresholds.
+- An `input` line takes a length (`len 0..1000`), a character set (`chars ascii`), example
+  strings (`like "1.2.3"`), and the elements of a list (`v[] in 1..=255`).
+- Lists and strings grow to 256 elements, with edge sizes up to 4,096. A value that a clause
+  compares with a list's element is put into the list.
+- A `usize` value without an `input` line stays within 2^20. A progress line comes every 5
+  seconds, and a function stops its inputs after 3 calls that do not return.
+- `// hydo: with T = i64` fuzzes a generic function with that type.
+- A property may return `Option<bool>`, with `None` for an input it cannot use.
+- The `again:` line keeps `--release`, `--toolchain`, `--target-dir` and `--timeout`. `--json`
+  prints only JSON on standard output. Function names keep their module and type.
+- `hydo guide fuzz` is a new guide topic with the comment language and a worked example.
+
+### How the crates ran
+
+The contracts of Milestone 280 were not saved, so they were written again from this document's
+description. They are in
+[function-fuzzing/m282-contracts.patch](function-fuzzing/m282-contracts.patch): contracts on 21
+functions and 49 properties in all. Each crate ran in two phases, with the default 1,000 inputs and seed 1:
+
+- Phase A: the contracts in Milestone 280's language only, on the code before the fixes and on
+  the fixed code. The code before the fixes is `hydo-contracts` at `7944ad08`.
+- Phase B: the lines that the fixed run's `to fix:` advice and `hydo guide fuzz` suggest, in
+  [function-fuzzing/m282-contracts-b.patch](function-fuzzing/m282-contracts-b.patch).
+
+The planted memchr bug of Milestone 280 is
+[function-fuzzing/m282-memchr-planted-bug.patch](function-fuzzing/m282-memchr-planted-bug.patch).
+A match in the third 16-byte vector of a 64-byte step returns its index plus one.
+
+| Crate | Before the fixes | After, phase A | After, phase B |
+|---|---|---|---|
+| semver | the harness does not build (a private field); 0 of 13 functions | 13 functions, 13,000 calls in 12 s; 12 held, 1 `vacuous`; exit 3 | 13 held; exit 0 |
+| base64 | 11 functions; `Alphabet::new` held on 2 inputs after 49,998 rejections; exit 0 | 11 functions, 11,000 calls in 47 s; `Alphabet::new` is `vacuous`; exit 3 | 11 held; exit 0 |
+| fixedbitset | the harness does not build (`#![no_std]`); with the workaround, `with_capacity` ran 23 minutes | 11 functions, 11,000 calls in 6 s, the crate unchanged; 11 held | not needed |
+| memchr | the harness does not build (`#![no_std]`); with the workaround, 12 held, and the planted bug was missed | 12 functions, 12,000 calls in 7 s; 12 held | not needed |
+| memchr, planted bug | 12 held; exit 0 | 4 broken, among them memchr's own contract; exit 1 | not needed |
+| num-integer | the harness does not build (`#![no_std]`); with the workaround, 11 properties, 2 failures; `gcd` and `div_floor` refused | 11 functions, the same 2 failures; exit 1 | 13 functions with `gcd` and `div_floor`; `gcd`'s own contract fails; exit 1 |
+| byteorder | 7 functions; `read_uint` panics for `nbytes` of 0 and 9 | the same; the trait's default method still refused | not needed |
+
+The details per crate:
+
+- semver: in phase A, `Version::parse` with `ensures !is_ok(result) || len(text) >= 5` is
+  `vacuous`, because 0 of 1,000 random strings parsed. The report names the fix, `input text
+  like "<a text it accepts>"`. With three examples in phase B, 486 of 1,000 inputs parsed. The
+  six properties that return `Option<bool>` returned `Some` on 235 to 912 of 1,000 inputs.
+- base64: the generator now keeps `requires len(alphabet) == 64` on 1,000 of 10,865 inputs.
+  None was a valid alphabet, so the clause is `vacuous`. With two alphabets as `like` examples,
+  875 of 1,000 calls built an alphabet, and the clause was checked on each.
+- fixedbitset: `with_capacity` without an `input` line held on 1,000 calls in under a second.
+  `insert` and `grow` stay refused, because `FixedBitSet` holds a `NonNull` pointer.
+- memchr, planted bug: `ensures is_none(result) || haystack[some(result)] == needle` broke on 10
+  of 1,000 calls. The input shrank to 80 bytes of 0 with a 3 at index 50, and the call gave
+  `Some(51)`. Before the fixes, only a property that builds a long haystack by hand caught it.
+- num-integer: with `with T = i64`, `gcd`'s contract `ensures result >= 0` panics on `x =
+  i64::MIN, y = 0` in the test profile. That is the known rust-num/num-integer#55, now found
+  from the function's own contract.
+- byteorder: the two panics of `ReadBytesExt::read_uint` are found as before. The method itself
+  is a default method of a trait and is still refused.
+
+The runs found nothing new: the two candidates of Milestone 280 and the known gcd bug came back.
+Nothing was posted upstream.
+
+### What is still missing
+
+- Trait methods and methods of generic `impl` blocks. Most of base64's engine API, byteorder's
+  `ReadBytesExt`, and num-integer's `Integer` trait still need a property function.
+- Values built by a constructor. A structure that holds a pointer (`FixedBitSet`) or a private
+  field of another module (semver's `Version` as a parameter) is refused.
+- Enumerations, floating-point values, `char`, and maps.
+- A quantifier, so that "the input is sorted" cannot be stated.
+- The textual reading of the sources takes the first structure of a name. Two structures of one
+  name in two modules make one harness fail to build, which is then reported.
+- `--list` cannot tell whether a harness builds; only the run tells.
+- A list's shrink keeps the length that the bug needs. The memchr input kept 80 bytes, because a
+  shorter list takes another path of the search.
+
+### The verdict after the fixes
+
+A Rust developer would now keep `hydo fuzz` for functions over integers, strings and lists:
+parsers, encoders, searches, and numeric functions. Every run ended in 3 to 47 seconds with one
+verdict per function. A run that tested nothing now says so, names the line to add, and exits
+with status 3. The planted memchr bug and the known gcd bug were found from the functions' own
+contracts, without a property written by hand.
+
+A developer would not yet use it as the main tool for an API built on traits or on types that
+hold pointers. There the property function is still the way, and proptest has better generators
+for it. The person who fixed the tool also wrote these contracts. A fresh evaluator, as in
+Milestone 280, would give a less biased view before 0.4.0.
