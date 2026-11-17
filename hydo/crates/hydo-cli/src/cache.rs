@@ -532,25 +532,33 @@ impl Cache {
     /// is not this cache's link, or already points at `version`.
     pub fn repoint_note(&self, version: &str) -> Option<String> {
         let link = self.home.bin().join("hydo");
-        let old = std::fs::read_link(&link).ok()?;
+        let was = self.linked_version()?;
+        if was == version {
+            return None;
+        }
+        // Milestone 301: said as what happens if the setup succeeds; a setup that stops leaves
+        // the link where it was, and says so (0.4.0's trial: "this points ... at 0.3.4", and the
+        // setup stopped before it moved the link)
+        Some(format!(
+            "when the setup succeeds, it points {} at hydo {version} (it points at hydo {was} \
+             now). Every shell of this user that finds hydo there then runs {version}; `hydo \
+             setup --get {was}` points it back",
+            link.display()
+        ))
+    }
+
+    /// The version `bin/hydo` points at now (None: no link of this cache).
+    pub fn linked_version(&self) -> Option<String> {
+        let old = std::fs::read_link(self.home.bin().join("hydo")).ok()?;
         let parts: Vec<String> = old
             .components()
             .map(|c| c.as_os_str().to_string_lossy().into_owned())
             .collect();
-        let was = parts
+        parts
             .iter()
             .position(|c| c == "versions")
-            .and_then(|i| parts.get(i + 1))?
-            .clone();
-        if was == version {
-            return None;
-        }
-        Some(format!(
-            "this points {} at hydo {version}; it pointed at hydo {was}. Every shell of this user \
-             that finds hydo there runs {version} from now on; `hydo setup --get {was}` points it \
-             back",
-            link.display()
-        ))
+            .and_then(|i| parts.get(i + 1))
+            .cloned()
     }
 
     /// Point `bin/hydo` at `versions/<version>/bin/hydo` (atomically). Ok(Err(line)): left

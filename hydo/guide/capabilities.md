@@ -44,7 +44,7 @@ is Rust programs only and needs no Python.
 | `guest.clock_after_cut`, `guest.outcomes_after_cut` | yes | yes | yes |
 | `services[].start_after`, `services[].logs`, `root.fix_pyc` | yes (not run on hvx yet) | yes (not run on kvm yet) | yes |
 | `guest.cpu: v3` (AVX/AVX2) | yes | yes (on a host with AVX2; `hydo doctor --backend kvm` says) | no (arm64) |
-| `guest.cpu_cache` (the CPUID cache leaves; on by default for images built at fingerprint epoch 2) | yes (a module from Milestone 203 on) | yes | ignored (arm64) |
+| `guest.cpu_cache` (the CPUID cache leaves; on by default for images built at fingerprint epoch 2) | yes (a module with `HVX_VM_CPU_CACHE`) | yes | ignored (arm64) |
 | `guest.kernel: containers` (a guest kernel for containers: namespaces, cgroup v2 limits, overlayfs, NAT, iptables, ipsets) | changes nothing (the kernel has the options; the network ones are modules that the image loads) | yes (`bzImage-kvm-containers`; k3s needs `--vcpus 2` for the cpuset controller, then stops with SPIN) | yes (`Image-explore-containers`; runc needs `--no-pivot`; k3s stops with SPIN) |
 | `params:` (build variants, `hydo build --set k=v`) | yes | yes | yes |
 | `addr:` and link faults between services | yes | yes | yes (second guest kernel) |

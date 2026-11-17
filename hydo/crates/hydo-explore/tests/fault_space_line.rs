@@ -46,3 +46,45 @@ fn the_kinds_it_draws_in_words() {
     // no JSON on the line
     assert!(!sp.plain(false, "random").contains('{'));
 }
+
+/// Milestone 301: 0.4.0's trial explored web-shop's walk, `faults: [protocol, clock, pause]`,
+/// with `--protocol-faults`. The line said "none of the project's kinds", and the explorer then
+/// drew `H=` faults. The options that draw kinds of their own are in the list now, and a kind of
+/// `faults:` that only an option draws names that option.
+#[test]
+fn the_options_that_draw_their_own_kinds_are_in_the_line() {
+    let m = json!({
+        "name": "web-shop-walk",
+        "workload": {"steps": 4, "run": "true"},
+        "faults": ["protocol", "clock", "pause"],
+        "invariants": [{"id": "x", "cmd": "true"}],
+    });
+    let sp = Space::from_text(&serde_json::to_string(&m).unwrap(), None).unwrap();
+    let with = sp.plain_with(&hydo_explore::space::Drawn {
+        strategy: "random".into(),
+        protocol: true,
+        ..Default::default()
+    });
+    assert_eq!(
+        with,
+        "hydo explore: the faults it draws: faults of the outside services. --new-faults adds \
+         pauses and clock jumps."
+    );
+    let without = sp.plain(false, "random");
+    assert_eq!(
+        without,
+        "hydo explore: it draws no fault. --new-faults adds pauses and clock jumps. \
+         --protocol-faults adds faults of the outside services."
+    );
+    let more = sp.plain_with(&hydo_explore::space::Drawn {
+        strategy: "random".into(),
+        storage: true,
+        upgrades: true,
+        workload_pauses: true,
+        ..Default::default()
+    });
+    assert!(
+        more.contains("the faults it draws: storage faults, pauses of the workload and upgrades."),
+        "{more}"
+    );
+}

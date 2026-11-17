@@ -12,6 +12,23 @@ with the record plan has the fingerprint of the same run without it. The Mac eng
 engine make the reads; hvx has no breakpoints yet. The program keeps its debug information, and
 its sources sit next to the manifest.
 
+The snippets come from the Blnk example, a ledger in Go: `hydo/onboard/examples/blnk` in hydo's
+source repository, with its manifest `hydo/hydo-values.yaml`. Its build needs git, Go 1.27.3
+(`GOTOOLCHAIN` fetches it), and network access once. On a Mac:
+
+```sh
+cd hydo/onboard/examples/blnk
+sh build.sh                     # the programs, and the sources the record reads
+cd hydo
+sh fetch-images.sh              # PostgreSQL and Redis
+hydo build hydo-values.yaml --arch arm64 --set arch=arm64
+hydo run "disk=none | run"
+```
+
+`--arch arm64` builds the image for the Mac's guest, and `--set arch=arm64` is the manifest's
+own parameter that picks the programs of that architecture. Without the second, the image holds
+the amd64 programs.
+
 ## 1. Declare the values next to a function
 
 Write `// hydo:` comments right before the function, as for a function contract:

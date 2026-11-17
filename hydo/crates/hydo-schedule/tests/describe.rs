@@ -408,22 +408,50 @@ fn faults_on_groups_and_outside_services() {
     );
     assert_eq!(
         one("| run N=nodes.halves@3-9:loss,100%").sentence,
-        "During steps 4 to 9, hydo cuts every link between two halves of the group `nodes`: the \
+        "During steps 3 to 8, hydo cuts every link between two halves of the group `nodes`: the \
          two sides cannot reach each other."
     );
     assert_eq!(
         one("| run H=payments.charge@6-9:reset,p=50").sentence,
-        "During steps 7 to 9, the outside service `payments`, on its route `charge`, resets the \
+        "During steps 6 to 8, the outside service `payments`, on its route `charge`, resets the \
          connection for 50% of the requests."
     );
     assert_eq!(
         one("| run P=workload/tokio-rt-worker#2@0~100:200").sentence,
-        "100 ms after the first step starts, hydo pauses the 2nd thread named `tokio-rt-worker` of \
+        "100 ms after step 0 starts, hydo pauses the 2nd thread named `tokio-rt-worker` of \
          your workload for 200 ms."
     );
     assert_eq!(
         one("| run O=kafka@28-30:resp:loss,67%").sentence,
-        "During steps 29 to 30, the network drops 67% of the packets on the answers from \
+        "During steps 28 to 29, the network drops 67% of the packets on the answers from \
          `kafka`; the requests pass normally."
     );
+}
+
+/// Milestone 301: the words name a step by the schedule's own number, as the engine's lines
+/// (`PROTOCOL FAULT 1 on before step 0`), a walk's test (`walk step 3`) and `repro.spec.ts`
+/// (`// step 3`) do. 0.4.0's trial read "During step 1" for `@0-1` and "During step 4" for `@3-4`.
+#[test]
+fn a_step_has_the_schedules_number() {
+    assert!(
+        one("| run H=api.get_order@0-1:reset")
+            .sentence
+            .starts_with("During step 0, the outside service `api`"),
+        "{}",
+        one("| run H=api.get_order@0-1:reset").sentence
+    );
+    assert!(one("| run H=api.get_order@3-4:reset")
+        .sentence
+        .starts_with("During step 3,"));
+    assert!(one("| run O=redis@5-10:resp:loss,100%")
+        .sentence
+        .starts_with("During steps 5 to 9,"));
+    assert!(one("| run P=workload@12~4:45")
+        .sentence
+        .starts_with("4 ms after step 12 starts,"));
+    // a count of steps stays a count: after 12 steps is before step 12
+    assert!(one("| run K=redis@12+1")
+        .sentence
+        .contains("after 12 steps"));
+    assert!(one("| run K=redis@1+1").sentence.contains("after 1 step,"));
 }

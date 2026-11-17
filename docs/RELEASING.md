@@ -108,6 +108,14 @@ filled once from the machine with the Nix store paths).
   depends on it), from clean target directories, with the assets copied from
   `hydo/dist/mac/assets/` of the main checkout: `HYDO_SOURCES_FROM=<cache> sh hydo/dist/mac/build-release.sh <out>`.
   Twice.
+- The guest kernels of each tarball are the ones `assets.sha256` pins, and a test of `docs::`
+  checks that this list names each of them. Linux: `guest/bzImage`, `guest/bzImage-kvm`,
+  `guest/bzImage-kvm-smp`, `guest/bzImage-kvm-cg`, `guest/bzImage-kvm-smp-cg`, and from 0.4.0
+  on `guest/bzImage-kvm-containers` and `guest/bzImage-kvm-smp-containers`. Mac:
+  `Image-explore`, `Image-explore-netns`, `Image-explore-cg`, `Image-explore-netns-cg`, and from
+  0.4.0 on `Image-explore-containers` (`HYDO_KERNEL_CONTAINERS` for `build-release.sh`). A hydo
+  built from a tree after a release can pin a guest file that the release lacks; `hydo setup`
+  then names the file and refuses (Milestone 301).
 - The two builds of each platform must give the same sha256 for the tarball and for the
   sources archive. The Mac tarball is unsigned at this point (the linker's ad-hoc signatures);
   step 2a makes the published one.

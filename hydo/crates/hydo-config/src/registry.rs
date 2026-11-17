@@ -420,6 +420,12 @@ variables! {
     /// `/proc/locks`, `/sys/module`, `/dev`, `/etc/udev/rules.d`): the CLI test sets an empty one,
     /// so its recorded answers are those of a host without hvx, KVM or the udev rule.
     HYDO_CLI_HOST_ROOT: Cli, Developer, "path; empty = `/`", "/", "hydo-cli";
+    /// A release tree (a folder with `SHA256SUMS`, `bin/` and the guest files) that a `hydo`
+    /// built in a source tree uses instead of `~/.hydo/versions/<version>`: for a tree whose
+    /// pinned guest files no published release has yet (Milestone 301). `docs/RELEASING.md`,
+    /// section 2, builds one. A released or cargo-installed `hydo` ignores it. An empty value
+    /// means the default.
+    HYDO_RELEASE_DIR: Cli, Developer, "path", "~/.hydo/versions/<version>", "hydo-cli";
     /// The `guest.clock_start` (Unix seconds) that `hydo init` and `hydo compose` write into a
     /// new project. The default is today at 00:00 UTC, so a new project's guest clock does not
     /// start before the software it runs was built; the tests set a fixed value.

@@ -932,6 +932,11 @@ pub fn outcome_line(run: &Run, what: &What, recovered: bool) -> String {
         What::Check { .. } if advice::is_values(what) => {
             "While it runs, a recorded value breaks your value property.".into()
         }
+        // a check's sentence that ends with its own period ends the line (0.4.0's trial: "it
+        // showed no error..")
+        What::Check { found: Some(f), .. } if f.ends_with('.') => {
+            format!("{when}, your check finds `{f}`")
+        }
         What::Check { found: Some(f), .. } => format!("{when}, your check finds `{f}`."),
         What::Check { .. } => format!("{when}, your check fails."),
         What::NoRestart { service: Some(x) } => {

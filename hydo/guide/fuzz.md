@@ -167,8 +167,8 @@ A function that writes files, syncs them, or reads the clock can fail only under
 - disk errors (`disk=ioerr:<p>`);
 - clock steps (`T=<step>:<seconds>`);
 - pauses of the calls (`P=workload@<step>~<ms>:<ms>`);
-- since Milestone 296, a power cut, a clock step, a pause, or a kill inside one call (section
-  "Faults inside a call").
+- a power cut, a clock step, a pause, or a kill inside one call (section "Faults inside a
+  call").
 
 ```sh
 hydo fuzz --vm path/to/crate
@@ -182,9 +182,9 @@ it as natively. A failure that came also under the schedule without a fault gets
 function or its check is wrong before any fault meets it.
 
 The harness's target must be installed: `rustup target add x86_64-unknown-linux-musl` for hvx
-and KVM, or `aarch64-unknown-linux-musl` for the Mac engine. It runs on hvx since Milestone 292
-and on the Mac engine since Milestone 296. KVM has not run it yet. Only hvx has `cf=`, so on the
-Mac engine a power cut comes before a step (`C=`) or inside a call.
+and KVM, or `aarch64-unknown-linux-musl` for the Mac engine. It ran on hvx and on the Mac
+engine; KVM has not run it yet. Only hvx has `cf=`, so on the Mac engine a power cut comes before
+a step (`C=`) or inside a call.
 
 ### What survives a power cut: `durable`
 
@@ -216,8 +216,8 @@ pub fn save_survives(text: String, done: Option<Result<(), String>>) -> Option<b
 
 A clock step or a pause between two workload steps never meets a call, because each call ends
 inside its step. A function that measures a timeout with the wall clock, or that waits for a
-thread it started, fails only when the fault comes while the call runs. Since Milestone 296 most
-drawn schedules put the fault inside one call:
+thread it started, fails only when the fault comes while the call runs. Most drawn schedules put
+the fault inside one call:
 
 ```text
 disk=none | run E=2.3 A=fuzz.call+20:stop-workload/hydo-call#2-1000

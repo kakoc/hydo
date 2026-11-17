@@ -801,6 +801,8 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     DIE_CODE.store(2, Ordering::Relaxed);
     hydo_explore::DIE_CODE.store(2, Ordering::Relaxed);
     let t0 = Instant::now();
+    // the run's own start, for the history page (Milestone 301: it showed the record's time)
+    let started = super::history::utc_now();
     let mut args = argv.to_vec();
     if args.iter().any(|a| a == "-h" || a == "--help") {
         print!("{}", super::HELP);
@@ -1523,6 +1525,7 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
                 .clone()
                 .unwrap_or_else(|| crate::ctx::strftime("%Y%m%dT%H%M%S"))
         ),
+        started: Some(started.clone()),
         ci: CiSystem {
             name: cienv.system.clone(),
             run_id: cienv.run_id.clone(),

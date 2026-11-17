@@ -163,6 +163,9 @@ fn render(st: &ExStory, doc: &Exploration, shown: &str) -> String {
             "See it again"
         };
         o.push_str(&format!("{INDENT}{again}: {}\n", it.command));
+        if let Some(r) = &it.recording {
+            o.push_str(&wrap(&r.words(shown), INDENT));
+        }
         for k in &it.accept {
             o.push_str(&format!(
                 "{INDENT}If it is expected: hydo ci accept {k} --reason \"…\"\n"

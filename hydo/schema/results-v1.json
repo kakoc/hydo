@@ -4320,6 +4320,13 @@
           "description": "`<system>:<run id>` (`github:11873625`), or `local:<time>`.",
           "type": "string"
         },
+        "started": {
+          "description": "When the run started, in UTC (`2026-11-17T16:52:40Z`; added in Milestone 301). `hydo ci\npage` shows it; a run made before has only the time `hydo ci record` recorded it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "ci": {
           "$ref": "#/$defs/CiSystem"
         },

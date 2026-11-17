@@ -227,6 +227,9 @@ pub struct Damage {
     /// restored file can (a `SHA256SUMS` or record that cannot be read, or a file pinned in this
     /// hydo that the release lists with another sha256: a `bin/hydo` of another release).
     pub fix: Option<String>,
+    /// A file this hydo pins that the release does not have, or has with other bytes: the
+    /// release is as published, and this hydo needs another one's files (Milestone 301).
+    pub foreign: bool,
 }
 
 impl Damage {
@@ -604,6 +607,15 @@ pub fn inspect(root: &Path, p: Platform, pins: &[Pin], host: &dyn Host) -> Repor
             path: path.to_string(),
             why,
             fix: None,
+            foreign: false,
+        })
+    };
+    let foreign = |r: &mut Report, path: &str, why: String| {
+        r.damaged.push(Damage {
+            path: path.to_string(),
+            why,
+            fix: None,
+            foreign: true,
         })
     };
     let sums = match parse_sums(&sums_text) {
@@ -626,21 +638,21 @@ pub fn inspect(root: &Path, p: Platform, pins: &[Pin], host: &dyn Host) -> Repor
     let want: BTreeMap<&str, &str> = sums.iter().map(|(s, p)| (p.as_str(), s.as_str())).collect();
     for pin in pins {
         match want.get(pin.path.as_str()) {
-            None => damage(
+            None => foreign(
                 &mut r,
                 &pin.path,
                 format!(
                     "is a pinned {} of this hydo, but the release's {SUMS} does not list it \
-                     (this bin/hydo belongs to another release)",
+                     (this hydo belongs to another release)",
                     pin.list
                 ),
             ),
-            Some(s) if *s != pin.sha256 => damage(
+            Some(s) if *s != pin.sha256 => foreign(
                 &mut r,
                 &pin.path,
                 format!(
                     "the release's {SUMS} lists sha256 {s}, but this hydo's pinned {} is {} \
-                     (this bin/hydo belongs to another release)",
+                     (this hydo belongs to another release)",
                     pin.list, pin.sha256
                 ),
             ),
@@ -983,13 +995,52 @@ fn refusal(r: &Report) -> Vec<String> {
         if r.damaged.len() > 20 {
             v.push(format!("... and {} more", r.damaged.len() - 20));
         }
-        v.push(
-            "the release is damaged or incomplete, and hydo setup repairs no file: unpack the \
-             release again (check the download) and run its install.sh"
-                .into(),
-        );
+        if r.damaged.iter().any(|d| !d.foreign) {
+            v.push(
+                "the release is damaged or incomplete, and hydo setup repairs no file: unpack the \
+                 release again (check the download) and run its install.sh"
+                    .into(),
+            );
+        }
+        let foreign: Vec<&str> = r
+            .damaged
+            .iter()
+            .filter(|d| d.foreign)
+            .map(|d| d.path.as_str())
+            .collect();
+        if !foreign.is_empty() {
+            v.push(foreign_words(&foreign, r.damaged.iter().all(|d| d.foreign)));
+        }
     }
     v
+}
+
+/// Why a release lacks files that this hydo pins (Milestone 301: 0.4.0's trial was told that a
+/// release it had just downloaded was "damaged or incomplete", because the hydo built from the
+/// source tree pins a guest kernel that no release has yet).
+pub fn foreign_words(paths: &[&str], only: bool) -> String {
+    let named = paths
+        .iter()
+        .take(5)
+        .map(|p| format!("`{p}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "{} {} that this hydo pins ({named}): this hydo needs the guest files of a newer \
+         release. A hydo built from a source tree boots guests from a release tree that has its \
+         files: build one from the tree (docs/RELEASING.md, section 2) and set HYDO_RELEASE_DIR \
+         to it, or use the release that this hydo belongs to",
+        if only {
+            "the release's own files are as published, but it lacks"
+        } else {
+            "the release also lacks"
+        },
+        if paths.len() == 1 {
+            "a guest file"
+        } else {
+            "guest files"
+        },
+    )
 }
 
 /// The shell startup file `--add-to-path` writes to: by the login shell, `~/.zshrc` for zsh and
@@ -1081,7 +1132,11 @@ pub fn check_lines(
         r.checked, r.pinned
     ));
     for d in &r.damaged {
-        out.push(format!("  damaged: {}", d.line()));
+        if d.foreign {
+            out.push(format!("  not in this release: {}", d.line()));
+        } else {
+            out.push(format!("  damaged: {}", d.line()));
+        }
     }
     // what restoring from the version's archive would do (not for --verify, which checks the
     // files only)
@@ -1093,14 +1148,27 @@ pub fn check_lines(
         _ => Err(String::new()),
     };
     if !r.unsupported.is_empty() || (!r.damaged.is_empty() && restore.is_err()) {
+        let foreign: Vec<&str> = r
+            .damaged
+            .iter()
+            .filter(|d| d.foreign)
+            .map(|d| d.path.as_str())
+            .collect();
+        let damaged = r.damaged.iter().any(|d| !d.foreign);
         if let Err(e) = &restore {
-            if !e.is_empty() {
+            if !e.is_empty() && damaged {
                 out.push(format!("  cannot restore the damaged files: {e}"));
             }
         }
-        out.push(
-            "  the release is damaged or incomplete: unpack it again and run its install.sh".into(),
-        );
+        if damaged || foreign.is_empty() {
+            out.push(
+                "  the release is damaged or incomplete: unpack it again and run its install.sh"
+                    .into(),
+            );
+        }
+        if !foreign.is_empty() {
+            out.push(format!("  {}", foreign_words(&foreign, !damaged)));
+        }
         return (out, 1);
     }
     if verify {
@@ -1255,6 +1323,12 @@ pub fn cmd_setup(ctx: &Ctx, argv: &[String]) -> i32 {
             Err(lines) => {
                 for l in lines {
                     eprintln!("hydo setup: {l}");
+                }
+                if let Some(was) = cache.linked_version().filter(|w| *w != version) {
+                    eprintln!(
+                        "hydo setup: {} still points at hydo {was}",
+                        cache.home.bin().join("hydo").display()
+                    );
                 }
                 return 1;
             }
@@ -1555,6 +1629,7 @@ mod tests {
                 path: "guest/bzImage".into(),
                 why: format!("has changed (sha256 {now}, the release's is {want})"),
                 fix: Some("guest/bzImage".into()),
+                foreign: false,
             }]
         );
         let err = setup(&root, Platform::Linux, &pins, &host).unwrap_err();
@@ -1585,14 +1660,60 @@ mod tests {
         assert_eq!(lines.len(), 3, "{lines:?}");
         assert!(lines[0].starts_with("guest/bzImage: the release's SHA256SUMS lists sha256 "));
         assert!(lines[0].ends_with(&format!(
-            "but this hydo's pinned asset is {} (this bin/hydo belongs to another release)",
+            "but this hydo's pinned asset is {} (this hydo belongs to another release)",
             "1".repeat(64)
         )));
         assert!(lines[1].starts_with(
             "guest/hydo-world: is a pinned guest program of this hydo, but the release's SHA256SUMS does not list it"
         ));
         assert_eq!(lines[2], "guest/hydo-agent: is missing");
-        assert!(setup(&root, Platform::Linux, &pins, &host).is_err());
+        let err = setup(&root, Platform::Linux, &pins, &host).unwrap_err();
+        // a missing file is damage; the pins name the release this hydo needs
+        assert!(
+            err.iter().any(|l| l.contains("damaged or incomplete")),
+            "{err:?}"
+        );
+        assert!(
+            err.last()
+                .unwrap()
+                .contains("needs the guest files of a newer release"),
+            "{err:?}"
+        );
+        cleanup(&root);
+    }
+
+    /// Milestone 301: 0.4.0's trial ran `hydo setup --get 0.3.4` with a hydo built from `main`,
+    /// whose pins have a guest kernel that no release has. The release was as published, and
+    /// setup said it was "damaged or incomplete".
+    #[test]
+    fn a_release_without_a_newer_pin_is_not_called_damaged() {
+        let (root, mut pins) = linux_release();
+        let host = Fake::default();
+        pins.push(Pin {
+            path: "hv/hvm/explore/out/Image-explore-containers".into(),
+            sha256: "2".repeat(64),
+            list: "asset",
+        });
+        let err = setup(&root, Platform::Linux, &pins, &host).unwrap_err();
+        assert!(
+            err[0].starts_with("hv/hvm/explore/out/Image-explore-containers: is a pinned asset"),
+            "{err:?}"
+        );
+        assert!(!err.iter().any(|l| l.contains("damaged")), "{err:?}");
+        let last = err.last().unwrap();
+        assert!(
+            last.starts_with("the release's own files are as published"),
+            "{last}"
+        );
+        assert!(
+            last.contains("`hv/hvm/explore/out/Image-explore-containers`"),
+            "{last}"
+        );
+        assert!(
+            last.contains("needs the guest files of a newer release"),
+            "{last}"
+        );
+        assert!(last.contains("HYDO_RELEASE_DIR"), "{last}");
         cleanup(&root);
     }
 

@@ -789,7 +789,8 @@ fn moving_the_bin_link_to_another_version_is_said_first() {
     assert_eq!(c.repoint_note("0.3.1"), None);
     let n = c.repoint_note("0.3.3").expect("another version");
     assert!(
-        n.contains("at hydo 0.3.3; it pointed at hydo 0.3.1")
+        n.contains("when the setup succeeds, it points ")
+            && n.contains("at hydo 0.3.3 (it points at hydo 0.3.1 now)")
             && n.contains("`hydo setup --get 0.3.1` points it back"),
         "{n}"
     );

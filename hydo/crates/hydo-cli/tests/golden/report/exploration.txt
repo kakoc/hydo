@@ -7,7 +7,7 @@ cuts. Each failing run failed again the same way when hydo replayed it.
    When it happens (the whole failing run):
      1. The disk fails some reads and writes with an error.
      2. hydo kills kafka after 13 steps and starts it again after 16 steps.
-     3. During steps 24 to 27, the network on the way to redis delays every
+     3. During steps 23 to 26, the network on the way to redis delays every
         packet by 79 ms.
      4. The run stops with an error before your checks run.
    ✘ The run stopped with harness: guest did not finish (I/O error)

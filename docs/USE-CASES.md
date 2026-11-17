@@ -121,8 +121,8 @@ Ideas that would answer more:
 | The question | What hydo answers today | Status |
 |---|---|---|
 | Why is one of the team's Playwright tests flaky? | `browser:` runs the tests in the VM, and an `H=` delay of the API makes the flaky test fail on every run. | built; `web-shop` (M253) |
-| Does a page show an uncaught error, a spinner that stays, or a failed request it never shows? | Five invariants watch every page that a test or a walk opens. | built; `web-shop` (M253) |
-| Can hydo test the pages without the team's tests? | `browser.explore` and the token `I=` walk through the pages from a seed, and each run leaves the walk as a Playwright test. | partly built; `memos`, `vikunja` (M258, M273); open items 124 and 131 |
+| Does a page show an uncaught error, a spinner that stays, or a failed request it never shows? | Five invariants watch every page that a test or a walk opens. A spinner ends with its document, so a page that the walk leaves is not a stuck spinner. | built; `web-shop` (M253, M301) |
+| Can hydo test the pages without the team's tests? | `browser.explore` and the token `I=` walk through the pages from a seed, and each run leaves the walk as a Playwright test. The exploration's report links each problem's recording and says when the recorded run did not fail. | partly built; `memos`, `vikunja` (M258, M273, M301); open items 124 and 131 |
 | Is a saved object still saved after a crash? | A rule over the database, with power cuts of the whole guest. | built; `vikunja` finding 1 (M273) |
 | Did a page change visually? | `browser.screens: compare` compares each page with a recorded screenshot. | partly built; M254; the Mac engine ran no comparison (open item 145) |
 | Does the frontend behave when a payment API fails? | Fakes, emulators, and `hydo explore --protocol-cover`. | built; `web-shop`, `openapi-payouts` (M257) |
@@ -170,7 +170,7 @@ Ideas that would answer more:
 | Did this pull request add a failure? | `hydo ci run` decides each finding against the base by replay: `new`, `pre-existing`, `fixed`, and more. | built; M197; a GitHub trial in a private repository (open item 67) |
 | Can a known bug stay without failing every pull request? | `hydo ci accept` writes the finding into `hydo/known-findings.yaml`. | built; M223 |
 | Can the run fit a time budget? | `budget:`, `--shard I/N` with `hydo ci merge`, and `seeds_from: history`. | built; M223, M286; ran on the Mac only (open item 67) |
-| What is the history of each finding? | `hydo ci record` keeps a store, and `hydo ci page` writes it as one web page. | built; M286; not run on GitHub |
+| What is the history of each finding? | `hydo ci record` keeps a store, and `hydo ci page` writes it as one web page. Its headline counts the open findings of every branch, and each run shows when it started. | built; M286, M301; not run on GitHub |
 | Can the pull request show only what it changed? | `hydo ci run` writes `comment.md`, which the GitHub action posts and edits. | built; M286 |
 | Which commit introduced a finding? | `hydo versions --git A..B` replays it per commit, by hand. | partly built; M221 |
 
@@ -184,7 +184,7 @@ Ideas that would answer more:
 | The question | What hydo answers today | Status |
 |---|---|---|
 | Can the maintainer see it fail? | `hydo run <image> '<schedule>'` repeats the run bit for bit, and `hydo repro` replays a run directory. | built; every example |
-| Why did it fail? | `hydo report --html`, `hydo inspect` at any stop of the run, `hydo diff`, and `hydo explain`. | built; M165, M178, M220, M228 |
+| Why did it fail? | `hydo report --html`, `hydo inspect` at any stop of the run, `hydo diff`, and `hydo explain`. The report names a step by the schedule's number. | built; M165, M178, M220, M228, M301 |
 | Is it a bug of the system or of the setup? | Each failure class has a label and advice (`hydo_explore::advice`). A script under Docker in the example's `native/` folder confirms the cause outside hydo. | built; M228; `redpanda/native`, `saleor/native` |
 | Which versions have it? | `hydo versions` bisects over versions, assuming one change point. | built; `formance-ledger` (M221) |
 | Is the fix complete? | The same schedule on the fixed build, and the saved regression in CI. | built; `blnk`, `qdrant-flaky-10200` |

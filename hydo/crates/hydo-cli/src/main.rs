@@ -248,8 +248,8 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
     let linux = ctx.platform == Platform::Linux;
     // `hydo <command> --help` before the command looks for an image, a project or a run (M210)
     if help::asked(rest) {
-        // Milestone 296: `hydo fuzz --vm --help` is the VM's help, not the native one (the
-        // 0.4.0 user trial, Milestone 297)
+        // Milestones 296 and 301: `hydo fuzz --vm --help` is the VM's help, not the native one
+        // (the 0.4.0 user trial, Milestone 297)
         if cmd == "fuzz" && rest.iter().any(|a| a == "--vm") {
             println!("{}", hydo_contracts::fuzz::vm::USAGE);
             return 0;

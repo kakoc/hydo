@@ -15743,3 +15743,142 @@ proof's document with neutral paths.
 - The label is by values, not by cause.
 - The combinations run one after another, and nothing prunes the image cache.
 - `hydo ci run` and `hydo versions` do not use configurations.
+
+## Milestone 301 (tentative number): the frictions of the 0.4.0 trial
+
+Milestone 297's trial of 0.4.0 found that what hydo tells a new user is sometimes false. This
+milestone fixes its frictions, worst first, each with a test that would have caught it.
+
+**1. A walk's recording showed a passing run under a failing problem.** The trial's walk
+exploration of web-shop shrank seed 2 to a walk with no fault, `I=813a9e4ce991433d,n3` with every
+action but those of step 2 left out. Its verdict was `The page / showed the busy element .spinner
+("Loading products…") for 10.2 s, until the test ended`, and its recording replay ended `OK`.
+
+- The cause is the watcher, not the recording. Step 2 loads `/`, goes back, reloads, and waits
+  5 s. The back leaves `/` for `about:blank` while the products are loading. The new document has
+  no spinner, so the page script sent no "spinner gone" event, and `check.mjs` kept the spinner of
+  the old page open until the test ended, 10.2 s later, just over the 10 s limit. The recorded
+  run repeated the same three actions, as Milestone 270 makes it. Recording costs guest time, so
+  that run's span was under 10 s, and it passed.
+- The fix: the page script sends a `doc` event when a new document starts (`hook.cjs`, only for
+  the page's main frame), and `check.mjs` ends every open busy element at a `doc` event or at a
+  navigation to `about:`. A spinner that stays on its own page is still a finding.
+- On the Mac engine, the trial's minimal schedule gives `OK` twice with one fingerprint,
+  `fe1bc2e5e2990ead`. The walk takes the same actions: `back`, `reload`, `wait 5000`. Seed 2's own
+  schedule, `H=api.place_order@2-3:delay=10000,p=25 I=813a9e4ce991433d`, gives `OK` too.
+  Problem 2, `H=api.get_order@3-4:reset` with its walk, still breaks
+  `browser.no_page_errors` (`93b4514a28c3cf83`): the planted bug of the order page.
+- A recording can still pass, because its timing is its own. `hydo explore`'s line says so in
+  words. `hydo report` and `hydo report --html` of the exploration show each problem's recording,
+  `replays/rec-<k>/`, and link its video, its trace and its `repro.spec.ts`. When the recorded run
+  did not fail, the page says plainly that the recording does not show the failure, and why.
+- Tests: `hydo-manifest`'s `a_spinner_ends_with_its_document` runs `check.mjs` with `node` over
+  the trial's events (it fails without the fix), and `hydo`'s
+  `a_problem_links_its_recording_and_says_when_it_passed`.
+- The trial's verdict also ended in two periods: a check's sentence that ends with a period ends
+  the line now.
+
+**2. Step numbers disagreed.** `hydo_schedule::describe` counted a step window from 1: `@0-1` read
+"During step 1", while the engine's line says `before step 0`, the walk's test is `walk step 3`,
+and `repro.spec.ts` says `// step 3`. Every user-facing place now names a step by the schedule's
+own number, from 0: "during step 0", "during steps 5 to 9" for `@5-10`, "4 ms after step 12
+starts". A count stays a count: `C=12` reads "after 12 steps", and `@1` reads "after 1 step" (it
+read "after the first step"). `hydo guide inspect` promised steps counted from 1; it says the new
+rule now. Only step texts moved in the goldens: one line of each plain-words report golden
+(`During steps 24 to 27` became `During steps 23 to 26`), and four answers of the CLI golden
+(`after the first step` became `after 1 step`). Test: hydo-schedule's
+`a_step_has_the_schedules_number`.
+
+**3. The CI history page contradicted itself.** The headline counted the first line only (the
+default branch), so it read `No open problem in redis` above two findings open on `pull/1`, and
+the existing test had recorded that wording. The headline now counts the open, not accepted,
+findings of every line, a finding open on two lines once, and the lead names the lines: `Open and
+not accepted: 2 on pull/1.` `ci-run.json` gains `started` (a results addition, in
+`hydo/schema/results-v1.json`): `hydo ci run` writes the UTC time it started, and `hydo ci merge`
+takes the earliest shard's. The page's runs table is ordered and labelled by it (`Started`), and a
+finding's first sight shows its run's start. A run recorded before has only the time of its
+record, and the page says `recorded <time>`. Tests: `the_page_shows_each_finding_across_commits_and_branches`
+(changed to the true headline) and `the_runs_show_when_they_started`.
+
+**4. The explorer and the report misstated what happened.**
+
+- `hydo explore` printed `the faults it draws: none of the project's kinds` with `faults:
+  [protocol, clock, pause]` and `--protocol-faults`, and then drew `H=` faults. The line now
+  lists the kinds that options draw (`--protocol-faults`, `--protocol-cover`, `--grpc-faults`,
+  `--storage-faults`, `--cluster-faults`, `--pause-workload`, `--pause-thread`, `--upgrades`), and
+  a kind of `faults:` that only an option draws names the option: `it draws no fault. --new-faults
+  adds pauses and clock jumps. --protocol-faults adds faults of the outside services.` Test:
+  `fault_space_line::the_options_that_draw_their_own_kinds_are_in_the_line`.
+- The class `test-failed` read "with no fault that explains it" under a title "while an outside
+  service misbehaved". The class means only that no disk fault, damaged file or relaxed setting
+  was in the run. Its words now say that the test failed while the schedule's faults ran, or with
+  no fault in its schedule, and the advice calls a failure a matter of timing only for a run with
+  no fault. Test: `a_test_that_failed_under_faults_says_so`.
+
+**5. A build of `main` could not boot a guest.** `hydo setup --get 0.3.4` said `the release is
+damaged or incomplete`, because the tree pins `Image-explore-containers`, which no release has,
+and its first line said that it had moved `~/.hydo/bin/hydo`, which it had not.
+
+- A pin that the release does not list, or lists with other bytes, is no longer called damage.
+  Setup names the files, says that the release's own files are as published and that this hydo
+  needs a newer release's guest files, and names the way out. `hydo setup --check` and `hydo
+  doctor` say the same.
+- The link note says what happens when the setup succeeds, and a setup that stops prints `...
+  still points at hydo <version>`.
+- `HYDO_RELEASE_DIR` (a developer variable in `hydo-config`) names a release tree that a hydo
+  built in a checkout uses instead of `~/.hydo/versions/<version>`: a tree built from the
+  checkout, as `docs/RELEASING.md` section 2 builds one. `CONTRIBUTING.md` documents it, and `hydo
+  doctor`'s note for a checkout names it. A released or cargo-installed hydo ignores it.
+- `docs/RELEASING.md` section 2 lists every pinned guest kernel, with 0.4.0's new ones:
+  `guest/bzImage-kvm-containers`, `guest/bzImage-kvm-smp-containers`, and
+  `Image-explore-containers`. They are the only guest files of the trees' pins that 0.3.4 lacks.
+- Tests: `a_release_without_a_newer_pin_is_not_called_damaged`,
+  `a_checkout_build_takes_the_release_tree_it_is_given`, the changed
+  `moving_the_bin_link_to_another_version_is_said_first`, and `docs::`'s
+  `the_release_steps_name_every_pinned_guest_kernel`.
+
+**6. The smaller items.**
+
+- `hydo guide values` names the Blnk example's folder, its build steps, and what each of the two
+  `arch` options does.
+- `hydo fuzz --vm --help` prints the VM's own help. Test:
+  `docs::the_vm_fuzz_help_lists_the_options_the_guide_names` reads the options from the guide.
+- `hydo ci record` points to `hydo guide ci`, section 12, instead of `docs/design/ci.md`. `hydo
+  guide strategies` names no milestone; it says that the numbers come from the project's runs and
+  where the examples are. Four other topics lost a milestone number. Test:
+  `docs::no_guide_topic_names_a_milestone`.
+- An exploration prints a progress line on standard error every 30 s: how long it ran, the
+  schedules run and failed, the replays, and the shrink runs, counted as each run is made. Test:
+  `walks::the_progress_line_counts_the_runs_by_their_part`.
+- `hydo guide web-apps` says that a recording can pass, and that a busy element ends with its
+  document.
+
+**The proof on the Mac engine.** A release tree of 0.3.4 with this tree's `hydo` and
+`hydo-build` built the web-shop walk image (disk `a3bae636…`), and `hydo explore --seeds 1-8
+--protocol-faults` ran it as the trial did. Its first line read `the faults it draws: faults of
+the outside services. --new-faults adds pauses and clock jumps.` It printed 21 progress lines in
+its 10.5 minutes. Seed 2 passed. Seed 7 failed as in the trial and shrank in 32 runs to the
+trial's minimal schedule, with the fingerprint `93b4514a28c3cf83` of the direct run. Its recording
+replay ended with the same verdict. `hydo report` reads `During step 3`, as the finding's `walk
+step 3` does, and names the recording's folder; the web page links its video, trace and test. The
+trial's CI history store gives the headline `2 open problems in redis` and the lead `Open and not
+accepted: 2 on pull/1.`, and its two runs, made before `started`, read `recorded 2026-11-17
+16:55:53 UTC`. A new `hydo ci run --mode push` of the trial's repository on `main` wrote
+`"started": "2026-11-17T18:08:53Z"`, and after `hydo ci record` the page shows that run as
+`2026-11-17 18:08:53 UTC` under `Started`. The trial's minimal walk ran once more from the tree's
+own `target/release/hydo` with `HYDO_RELEASE_DIR` naming the release tree, with the fingerprint
+`fe1bc2e5e2990ead` of the runs above. These fingerprints are of the tree before Milestone 294,
+whose RAM hash moves every epoch-4 fingerprint of the Mac engine; the verdicts do not depend on
+it. `hydo setup --get 0.3.4` of the tree's hydo, in a scratch install cache with the
+0.3.4 archive, names `hv/hvm/explore/out/Image-explore-containers`, calls the release's files as
+published, and ends `... still points at hydo 0.3.1`.
+
+**What moved.** The images of `browser:` get new bytes (`hook.cjs` and `check.mjs` are in them),
+so the fingerprints in the RESULTS.md pages of web-shop, Memos and Vikunja hold for the images
+built before. None of them is in `hydo/onboard/recorded.json`, and nothing recorded moved.
+
+**Checks.** The merge checklist: `cargo fmt --all --check`, the workspace's clippy with `-D
+warnings`, `equivalence::cli_matches_golden`, `agents_equivalence`, `docs::`, `public_content::`,
+hydo-schedule's `language::`, `cargo test -p hydo-config`, `test_tiers`, hydo-explore's `it` and
+`fake_engine`, the control corpus, hydo-schema-compat, `sh ci/consolidate-tests.sh --check`, and
+`sh ci/vale.sh`.

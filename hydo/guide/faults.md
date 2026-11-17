@@ -52,7 +52,7 @@ The host tokens set up the machine the guest runs on. Each is one `key=value` wo
 | `disk=ioerr:<p>` | Seeded I/O errors on the data disk; `<p>` is the error rate in the engine's units (larger means more errors). |
 | `disk=lying:<p>` | A disk that drops some writes it acknowledged; a power cut then loses them even when they were flushed. |
 | `dseed=<hex>` | The seed of the disk's decisions: which requests fail or are dropped (default 0). The same seed gives the same decisions. |
-| `cf=<k>` | A power cut at the k-th disk flush of the workload, instead of `C=` (hvx only; needs `disk=cut`). The disk loses power at that flush, and the run is cut at the next stop: the workload and the services are frozen, and the recovery boot follows (Milestone 261). |
+| `cf=<k>` | A power cut at the k-th disk flush of the workload, instead of `C=` (hvx only; needs `disk=cut`). The disk loses power at that flush, and the run is cut at the next stop: the workload and the services are frozen, and the recovery boot follows. |
 | `tj=<hex>` | Seeded tick jitter: some timer ticks come late, which changes thread interleavings. On hvx a delay counts guest branches; on the Mac and on KVM it counts VM exits. |
 | `tjpm=<n>` | With `tj=`: how many ticks per 1,000 are delayed (default 10). |
 | `tjmax=<n>` | With `tj=`: the longest delay (default 500,000 branches on hvx, 1,000 exits on the Mac and KVM). |
@@ -125,7 +125,7 @@ exist. The guest kernel's cgroup v2 freezer stops the threads, in a cgroup of th
 cgroup tree.
 
 The pause runs on every engine for an image built at fingerprint epoch 3 or later, that is, by
-a hydo with Milestone 234. Such an image boots a guest kernel with cgroups on the Mac and KVM
+hydo 0.3.4 or later. Such an image boots a guest kernel with cgroups on the Mac and KVM
 engines too. An image built before boots the kernels it was recorded with, and those have no
 cgroups on the Mac and KVM engines. Those engines then refuse the pause before any VM boots, and
 the message says to rebuild the image with `hydo build`. hvx's guest kernel has always had
@@ -434,7 +434,7 @@ use reactions: write `A=<event>:kill-<svc>`. `<event>` is the id of an assertion
 system writes to the console (`hydo guide manifest`, section `Reactions`).
 `hydo explore --reactive fault --react-events <id>` draws them.
 
-A reaction can also act inside the workload's own work (Milestone 296):
+A reaction can also act inside the workload's own work:
 
 - `clock+<s>` or `clock-<s>` steps the clock by `s` seconds at that moment.
 - `stop-workload-<ms>` stops the workload's process tree for `ms` milliseconds.

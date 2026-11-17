@@ -154,6 +154,13 @@ same role and name. When a control is not on the page, the walker leaves the act
 says so in the run's console, `hydo-web: walk <step>.<k>: ... not on the page`, and `hydo
 explore`'s line about the recording names the action.
 
+The recorded run repeats the actions, but not their timing: the video costs the guest time. A
+failure that depends on the walk's timing can pass in the recording. `hydo explore` then says that
+the recording did not fail, and `hydo report` and `hydo report --html` of the exploration say it
+under the problem. The page links each problem's recording, its video, its trace and its
+`repro.spec.ts`, in `replays/rec-<k>/screens/`. The minimal schedule without `rec` still shows
+the failure.
+
 ## The properties
 
 Each one is an invariant named `<browser>.<property>`; an empty list in `watch:` turns it off.
@@ -162,7 +169,7 @@ Each one is an invariant named `<browser>.<property>`; an empty list in `watch:`
 |---|---|
 | `browser.tests_pass` | a test fails (turn it off with `must_pass: false` when faults make the tests' own assertions fail by design) |
 | `browser.no_page_errors` | a page throws an uncaught exception, leaves a promise rejection unhandled, or calls `console.error` (`watch.console: false` leaves `console.error` out) |
-| `browser.busy_ends` | a busy element stays for `busy_max_ms` (default 10000), or is still on the screen when its test ends after a failed request that the page did not send again |
+| `browser.busy_ends` | a busy element stays for `busy_max_ms` (default 10000), or is still on the screen when its test ends after a failed request that the page did not send again. A busy element ends with its document: a reload, a back to another page, or a link out ends it |
 | `browser.failures_shown` | a request fails (an answer of 500 or more, or no answer) and within `failures_within_ms` (default 5000) the page shows no error element and does not send the request again. With `watch.failures_of`, a regular expression over the path or over `<METHOD> <path>`, only the requests it matches count: `^(POST|PATCH|DELETE) /api/` names the writes of an API whose reads use the same paths. When the pattern matches none of the requests the pages sent, the run warns: `hydo: warning: ... judged no failed request`. |
 | `browser.no_bad_text` | a page prints a watched text (default `NaN`, `undefined`, `[object Object]`, `Invalid Date`) |
 

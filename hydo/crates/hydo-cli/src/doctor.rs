@@ -581,11 +581,18 @@ fn missing_release_text(
         (Some(t), None) => format!("built in the checkout {}", t.display()),
         (None, _) => "installed by cargo".to_string(),
     };
+    // Milestone 301: a tree can pin guest files that the published release lacks
+    let tree = if checkout.is_some() {
+        "\ndoctor: when the tree pins guest files that the published release lacks, hydo setup \
+         names them; then build a release tree from the checkout and set HYDO_RELEASE_DIR to it."
+    } else {
+        ""
+    };
     format!(
         "doctor: this is hydo {v}, {who}. A checkout or a cargo install has none of a release's \
          files (guest kernels, engine programs, tools), so the checks that need them fail.\n\
          doctor: get them with   hydo setup --get {v}   (the {v} release into {}; this hydo then \
-         uses it), or install a release and run its bin/hydo.",
+         uses it), or install a release and run its bin/hydo.{tree}",
         root.display()
     )
 }

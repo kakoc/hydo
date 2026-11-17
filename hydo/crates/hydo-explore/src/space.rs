@@ -31,6 +31,28 @@ pub const PF_REQ_KINDS: [&str; 4] = ["status", "delay", "drop", "reset"];
 pub const PF_HOOK_KINDS: [&str; 4] = ["dup", "reorder", "late", "lost"];
 pub const PF_TCP_KINDS: [&str; 3] = ["delay", "drop", "reset"];
 
+/// The options of `hydo explore` that draw fault kinds of their own, for the line
+/// [`Space::plain_with`] prints (Milestone 301).
+#[derive(Clone, Debug, Default)]
+pub struct Drawn {
+    pub new_faults: bool,
+    pub strategy: String,
+    /// `--protocol-faults` or `--protocol-cover`: `H=` on the fakes and proxies.
+    pub protocol: bool,
+    /// `--grpc-faults`.
+    pub grpc: bool,
+    /// `--storage-faults`: `G=` and `L=`.
+    pub storage: bool,
+    /// `--cluster-faults`: kills, pauses and partitions of the groups.
+    pub cluster: bool,
+    /// `--pause-workload`.
+    pub workload_pauses: bool,
+    /// `--pause-thread`.
+    pub thread_pauses: bool,
+    /// `--upgrades`.
+    pub upgrades: bool,
+}
+
 /// A group of the manifest's `groups:` (Milestone 195): its members in order, whether it has a
 /// `primary:` probe, and whether every member has `addr:` (its links can be cut).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -381,11 +403,24 @@ impl Space {
             .is_some_and(|c| truthy(c) && c.get("composed").is_some_and(truthy))
     }
 
+    /// [`Space::plain_with`] without the options that draw kinds of their own.
+    pub fn plain(&self, new_faults: bool, strategy: &str) -> String {
+        self.plain_with(&Drawn {
+            new_faults,
+            strategy: strategy.to_string(),
+            ..Drawn::default()
+        })
+    }
+
     /// The fault kinds the explorer draws in this space, in words, as one line for a person
     /// (Milestone 247; before, `hydo explore` printed [`Space::describe`] as JSON). The random
     /// and swarm strategies draw pauses, clock jumps and one-way network faults only with
-    /// `--new-faults`; the line says what that option adds.
-    pub fn plain(&self, new_faults: bool, strategy: &str) -> String {
+    /// `--new-faults`; the line says what that option adds. Milestone 301: the options that draw
+    /// kinds of their own (`--protocol-faults` and the others of [`Drawn`]) are in the list too,
+    /// and a kind of the project's `faults:` that only such an option draws names the option
+    /// (0.4.0's trial: "none of the project's kinds", and then `H=` faults).
+    pub fn plain_with(&self, o: &Drawn) -> String {
+        let (new_faults, strategy) = (o.new_faults, o.strategy.as_str());
         let words = |k: &str| -> &'static str {
             match k {
                 "kill" => "crashes",
@@ -411,6 +446,44 @@ impl Space {
                 more.push(words(k));
             }
         }
+        // the kinds that options draw: (on, the words, the option, a kind of `faults:` it draws)
+        let opts: [(bool, &str, &str, &[&str]); 7] = [
+            (
+                o.protocol,
+                "faults of the outside services",
+                "--protocol-faults",
+                &["protocol"],
+            ),
+            (o.grpc, "gRPC faults", "--grpc-faults", &[]),
+            (
+                o.storage,
+                "storage faults",
+                "--storage-faults",
+                &["corrupt", "powerloss"],
+            ),
+            (o.cluster, "faults of the groups", "--cluster-faults", &[]),
+            (
+                o.workload_pauses,
+                "pauses of the workload",
+                "--pause-workload",
+                &[],
+            ),
+            (
+                o.thread_pauses,
+                "pauses of the workload's threads",
+                "--pause-thread",
+                &[],
+            ),
+            (o.upgrades, "upgrades", "--upgrades", &[]),
+        ];
+        let mut ask: Vec<(&str, &str)> = Vec::new();
+        for (on_, w, opt, kinds) in opts {
+            if on_ {
+                on.push(w.to_string());
+            } else if kinds.iter().any(|k| self.has_fault(k)) {
+                ask.push((opt, w));
+            }
+        }
         if !self.knobs.is_empty() {
             let toks: Vec<&str> = self.knobs.iter().map(|(t, _, _)| t.as_str()).collect();
             on.push(format!(
@@ -426,14 +499,11 @@ impl Space {
                 [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
             }
         };
-        let mut s = format!(
-            "hydo explore: the faults it draws: {}",
-            if on.is_empty() {
-                "none of the project's kinds".to_string()
-            } else {
-                list(&on)
-            }
-        );
+        let mut s = if on.is_empty() {
+            "hydo explore: it draws no fault".to_string()
+        } else {
+            format!("hydo explore: the faults it draws: {}", list(&on))
+        };
         if !self.svcs.is_empty() {
             s.push_str(&format!(
                 " (service{}: {})",
@@ -445,6 +515,9 @@ impl Space {
         if !more.is_empty() {
             let more: Vec<String> = more.iter().map(|m| m.to_string()).collect();
             s.push_str(&format!(" --new-faults adds {}.", list(&more)));
+        }
+        for (opt, w) in ask {
+            s.push_str(&format!(" {opt} adds {w}."));
         }
         s
     }

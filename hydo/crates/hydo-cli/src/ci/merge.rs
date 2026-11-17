@@ -232,6 +232,9 @@ pub fn merge(mut shards: Vec<CiRun>, fail_on: Option<Vec<String>>) -> Result<CiR
             }
         }
     }
+    // the merged run started with its first shard (the times are UTC and of one format, so
+    // the least text is the earliest)
+    m.started = shards.iter().filter_map(|r| r.started.clone()).min();
     m.budget.completed_seeds = Some(seeds::ranges_text(done));
     m.budget.planned = Some(planned);
     m.budget.completed = Some(completed);

@@ -31,9 +31,18 @@ tools. `hydo setup` downloads the published release of the tree's version into
 still to do.
 
 Without release files, everything except booting a guest works: the build, `hydo build --check`,
-and every test of the fast and full tiers. When the tree's version is not published yet, a
-checkout cannot boot guests; maintainers then build a release from the tree
-([docs/RELEASING.md](docs/RELEASING.md), section 2).
+and every test of the fast and full tiers. When the tree's version is not published yet, or the
+tree pins a guest file that the published release lacks, a checkout cannot boot guests with the
+published files. `hydo setup` then names each missing file and says that this hydo needs a newer
+release's guest files. Build a release tree from the checkout
+([docs/RELEASING.md](docs/RELEASING.md), section 2) and point the tree's `hydo` at it:
+
+```sh
+HYDO_RELEASE_DIR=/path/to/the/release/tree target/release/hydo doctor
+```
+
+With `HYDO_RELEASE_DIR`, a `hydo` built in a checkout boots guests with that tree's guest kernels,
+engine programs, and tools. A released or cargo-installed `hydo` ignores the variable.
 
 ## Build the engines
 

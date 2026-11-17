@@ -847,6 +847,129 @@ fn a_disk_error_run_starts_with_the_disk() {
     );
 }
 
+/// Milestone 301: a test program that failed under faults is not "with no fault that explains
+/// it" (0.4.0's trial: a page said that under the title "... failed your check while an outside
+/// service misbehaved").
+#[test]
+fn a_test_that_failed_under_faults_says_so() {
+    let with = class_words("test-failed", "disk=none | run H=api.get_order@0-1:reset").unwrap();
+    assert!(
+        with.contains("while the faults of its schedule ran"),
+        "{with}"
+    );
+    assert!(!with.contains("no fault"), "{with}");
+    let without = class_words("test-failed", "disk=none | run").unwrap();
+    assert!(
+        without.contains("with no fault in its schedule"),
+        "{without}"
+    );
+    let p = advice::problem(
+        "test-failed",
+        &What::Check {
+            id: Some("browser.tests_pass".into()),
+            description: None,
+            found: Some("The test \"places an order\" failed".into()),
+        },
+        "Web-shop",
+        Schedule::parse("disk=none | run H=api.get_order@0-1:reset")
+            .ok()
+            .as_ref(),
+        &[],
+    );
+    assert!(
+        p.title.contains("while an outside service misbehaved"),
+        "{}",
+        p.title
+    );
+    assert!(!p.todo.contains("depends on timing"), "{}", p.todo);
+    assert!(
+        p.why.contains("while an outside service misbehaved"),
+        "{}",
+        p.why
+    );
+}
+
+/// Milestone 301: each problem of a walk links its recording, and says plainly when the recorded
+/// run did not fail (0.4.0's trial: web-shop's stuck spinner had a recording of a passing run,
+/// and the page showed no recording at all).
+#[test]
+fn a_problem_links_its_recording_and_says_when_it_passed() {
+    let d = std::env::temp_dir().join(format!("hydo-report-rec-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let sig = "VIOLATION [browser.busy_ends] The page / showed the busy element .spinner";
+    let minimal = |seed: &str| format!("disk=none | run I={seed},n3");
+    let verdict = format!("HYDO-ORACLE: {sig} for 10.2 s.");
+    let mut doc = Exploration::default();
+    for seed in ["aa", "bb"] {
+        let s = minimal(seed);
+        doc.failures.push(Failure {
+            signature: format!("{sig} {seed}"),
+            reproduced: true,
+            run: Run {
+                tag: Some(format!("seed-{seed}")),
+                schedule: s.clone(),
+                class: Some("durable-defaults".into()),
+                verdict: hydo_results::Verdict {
+                    kind: "violation".into(),
+                    text: format!("{verdict} {seed}"),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        doc.shrinks.push(Shrink {
+            class: "durable-defaults".into(),
+            signature: format!("{sig} {seed}"),
+            minimal: s,
+            verdict: format!("{verdict} {seed}"),
+            ..Default::default()
+        });
+    }
+    // rec-1 passed, rec-2 failed again
+    for (k, text) in [
+        (1, "HYDO-ORACLE: OK invariants=5 held".to_string()),
+        (2, format!("{verdict} bb")),
+    ] {
+        let rd = d.join(REPLAYS).join(format!("rec-{k}"));
+        std::fs::create_dir_all(rd.join("screens")).unwrap();
+        std::fs::write(rd.join("screens/walk-step-2.webm"), b"x").unwrap();
+        std::fs::write(rd.join("screens/repro.spec.ts"), b"x").unwrap();
+        let run = Run {
+            verdict: hydo_results::Verdict {
+                kind: if k == 1 { "ok" } else { "violation" }.into(),
+                text,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        hydo_results::write_document(&rd.join(hydo_results::RUN_DOC), &run).unwrap();
+    }
+    // the two failures read as one problem, which shows the first one's recording
+    let st = exploration_story(&d, &doc, None, "hydo-out/explore-walk");
+    assert_eq!(
+        st.items[0].recording.as_ref().map(|r| r.dir.as_str()),
+        Some("replays/rec-1")
+    );
+    let passed = recording_of(&d, &doc, &minimal("aa")).unwrap();
+    let failed = recording_of(&d, &doc, &minimal("bb")).unwrap();
+    assert_eq!(passed.dir, "replays/rec-1");
+    assert!(!passed.same);
+    let w = passed.words("hydo-out/explore-walk");
+    assert!(w.contains("does not show this failure"), "{w}");
+    assert!(w.contains("ended `OK invariants=5 held`"), "{w}");
+    assert_eq!(failed.dir, "replays/rec-2");
+    assert!(failed.same);
+    assert_eq!(failed.files, ["repro.spec.ts", "walk-step-2.webm"]);
+    let html = recording_html(&failed);
+    assert!(
+        html.contains("href=\"replays/rec-2/screens/walk-step-2.webm\""),
+        "{html}"
+    );
+    assert!(recording_html(&passed).contains("does not show this failure"));
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 /// hydo's own commands in the guest are details of a timeline: the network fault's modules
 /// (whose `insmod` ends with 254 when the kernel has them built in) and its `tc` calls.
 #[test]

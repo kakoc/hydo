@@ -202,7 +202,7 @@ pub fn line<'a>(branch: &str, runs: &[&'a Recorded]) -> Line<'a> {
             match e.event.as_str() {
                 "new" => {
                     t.first_seen = at.clone();
-                    t.first_time = r.entry.recorded.clone();
+                    t.first_time = r.run.started.clone().or_else(|| r.entry.recorded.clone());
                     // a pull request's first run of a finding that the target branch had fixed
                     let back = failing.get(e.key.as_str()).is_some_and(|f| {
                         f.state == ci_state::REAPPEARED
@@ -303,12 +303,24 @@ fn report_link(links: &str, project: &str, r: &Recorded) -> Option<String> {
     ))
 }
 
+/// `2026-11-17T16:55:53Z` as `2026-11-17 16:55:53 UTC`.
+fn utc_words(t: &str) -> String {
+    t.replace('T', " ").trim_end_matches('Z').to_string() + " UTC"
+}
+
+/// When a run started: its own start (`started`, Milestone 301), else the time `hydo ci record`
+/// recorded it, said as such (a run made before Milestone 301 has no start).
 fn when(r: &Recorded) -> String {
-    r.entry
-        .recorded
-        .as_deref()
-        .map(|t| t.replace('T', " ").trim_end_matches('Z').to_string() + " UTC")
-        .unwrap_or_else(|| "-".into())
+    match (r.run.started.as_deref(), r.entry.recorded.as_deref()) {
+        (Some(t), _) => utc_words(t),
+        (None, Some(t)) => format!("recorded {}", utc_words(t)),
+        (None, None) => "-".into(),
+    }
+}
+
+/// The time a run is ordered by: its start, else its record.
+fn order_time(r: &Recorded) -> Option<&str> {
+    r.run.started.as_deref().or(r.entry.recorded.as_deref())
 }
 
 fn budget_words(run: &CiRun) -> String {
@@ -391,6 +403,8 @@ pub fn page_of(store: &Path, shown: &str, links: &str) -> Result<String, String>
     let mut open_total = 0usize;
     let mut runs_total = 0usize;
     let mut names = Vec::new();
+    // the lines with open findings, and how many each has
+    let mut per_line: Vec<(String, usize)> = Vec::new();
     for p in &projects {
         let ledger = history::read_ledger(store, p)?;
         let runs = history::recorded_runs(store, p)?;
@@ -413,16 +427,23 @@ pub fn page_of(store: &Path, shown: &str, links: &str) -> Result<String, String>
                 (b.clone(), line(b, &rs))
             })
             .collect();
-        let open_here = lines
-            .first()
-            .map(|(_, l)| {
-                l.tracks
-                    .values()
-                    .filter(|t| t.open && t.accepted.is_none())
-                    .count()
-            })
-            .unwrap_or(0);
-        open_total += open_here;
+        // Milestone 301: every line's open findings, not only the first line's (0.4.0's trial:
+        // "No open problem in redis" above two open findings of pull/1); a finding open on two
+        // lines is one problem
+        let mut keys: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+        for (b, l) in &lines {
+            let open: Vec<&str> = l
+                .tracks
+                .iter()
+                .filter(|(_, t)| t.open && t.accepted.is_none())
+                .map(|(k, _)| k.as_str())
+                .collect();
+            if !open.is_empty() {
+                per_line.push((b.clone(), open.len()));
+            }
+            keys.extend(open);
+        }
+        open_total += keys.len();
         sections.push_str(&project_section(
             &name,
             p,
@@ -445,8 +466,20 @@ pub fn page_of(store: &Path, shown: &str, links: &str) -> Result<String, String>
             if n == 1 { "" } else { "s" }
         ),
     };
+    let open_on = if per_line.is_empty() {
+        String::new()
+    } else {
+        let each: Vec<String> = per_line
+            .iter()
+            .map(|(b, n)| format!("{n} on {b}"))
+            .collect();
+        format!(
+            "Open and not accepted: {}. ",
+            hydo_schedule::describe::and_list(&each)
+        )
+    };
     let lead = format!(
-        "hydo recorded {} CI run{} here. A finding is open from the run that first saw it until a \
+        "{open_on}hydo recorded {} CI run{} here. A finding is open from the run that first saw it until a \
          run proves it fixed by replaying its schedule: a run that does not find it changes \
          nothing, because a bounded search that finds nothing proves nothing. Accepted findings \
          are open but expected, and they never fail a check.",
@@ -595,7 +628,7 @@ fn project_section(
         .iter()
         .flat_map(|(b, l)| l.runs.iter().map(move |r| (b.as_str(), *r)))
         .collect();
-    all.sort_by(|a, b| b.1.entry.recorded.cmp(&a.1.entry.recorded));
+    all.sort_by(|a, b| order_time(b.1).cmp(&order_time(a.1)));
     let rows: Vec<(String, Vec<String>)> = all
         .iter()
         .take(MAX_RUNS)
@@ -634,7 +667,7 @@ fn project_section(
         .collect();
     s.push_str(&table(
         &[
-            "Recorded", "Branch", "Commit", "Trigger", "Seeds", "Budget", "Engine", "Runs",
+            "Started", "Branch", "Commit", "Trigger", "Seeds", "Budget", "Engine", "Runs",
             "Findings", "Result", "Links",
         ],
         &rows,
@@ -679,10 +712,7 @@ fn finding_card(
             .unwrap_or_else(|| "an unknown commit".into())
     );
     if let Some(t) = &t0.first_time {
-        said.push_str(&format!(
-            " ({} UTC)",
-            esc(t.replace('T', " ").trim_end_matches('Z'))
-        ));
+        said.push_str(&format!(" ({})", esc(&utc_words(t))));
     }
     if !t0.fixed_at.is_empty() {
         said.push_str(&format!(
@@ -844,7 +874,14 @@ mod tests {
             history::record(&d, &r, b, Some("<html>report</html>")).unwrap();
         }
         let html = page_of(&d, "hydo-history", "").unwrap();
-        assert!(html.contains("<h1>No open problem in redis</h1>"), "{html}");
+        // Milestone 301: the headline counts the open findings of every line, and names them
+        // (0.4.0's trial: "No open problem in redis" above a finding open on a pull request)
+        assert!(html.contains("<h1>1 open problem in redis</h1>"), "{html}");
+        assert!(
+            html.contains("Open and not accepted: 1 on pull/7."),
+            "{html}"
+        );
+        assert!(!html.contains("No open problem"));
         assert!(html.contains("VIOLATION [k1] &lt;lost&gt; &amp; gone"));
         assert!(!html.contains("<lost>"));
         assert!(
@@ -879,6 +916,36 @@ mod tests {
         assert!(!html.contains("javascript:"));
         assert!(html.contains("Accepted"));
         assert!(!html.contains("http-equiv") && !html.contains("<script src"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Milestone 301: each run shows its own start, not the time it was recorded; a run without
+    /// a start says that its time is the record's.
+    #[test]
+    fn the_runs_show_when_they_started() {
+        let d = std::env::temp_dir().join(format!("hydo-ci-page-start-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let mut a = run("local:1", "c1c1c1c1c1c1", "main", vec![]);
+        a.started = Some("2026-11-17T16:52:40Z".into());
+        let mut b = run(
+            "local:2",
+            "c2c2c2c2c2c2",
+            "pull/1",
+            vec![f("k1", "new", "explored")],
+        );
+        b.started = Some("2026-11-17T16:49:02Z".into());
+        let old = run("local:3", "c3c3c3c3c3c3", "main", vec![]);
+        for (r, br) in [(a, "main"), (b, "pull/1"), (old, "main")] {
+            history::record(&d, &r, br, None).unwrap();
+        }
+        let html = page_of(&d, "hydo-history", "").unwrap();
+        assert!(html.contains(">2026-11-17 16:52:40 UTC<"), "{html}");
+        assert!(html.contains(">2026-11-17 16:49:02 UTC<"), "{html}");
+        // the finding's first sight is its run's start
+        assert!(html.contains("(2026-11-17 16:49:02 UTC)"), "{html}");
+        assert!(html.contains(">recorded 20"), "{html}");
+        assert!(html.contains("<th>Started</th>"), "{html}");
+        assert!(html.contains("<h1>1 open problem in redis</h1>"), "{html}");
         let _ = std::fs::remove_dir_all(&d);
     }
 

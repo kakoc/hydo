@@ -2016,15 +2016,29 @@ fn shrink_neighbour(
     best
 }
 
-/// What a finding class says, in words (hydo-explore's `finding_class`).
-fn class_words(c: &str) -> Option<&'static str> {
+/// What a finding class says, in words (hydo-explore's `finding_class`), for the failure whose
+/// schedule is `schedule`. Milestone 301: the class `test-failed` says only that no disk fault,
+/// damaged file or relaxed setting was in the run, so a schedule with other faults does not read
+/// "with no fault that explains it" (0.4.0's trial, under a title with an outside service's fault).
+fn class_words(c: &str, schedule: &str) -> Option<&'static str> {
+    if c == "test-failed" {
+        let faults = hydo_schedule::describe::describe_text(schedule, &[])
+            .iter()
+            .any(|x| x.part == hydo_schedule::describe::Part::Fault);
+        return Some(if faults {
+            "The test program failed while the faults of its schedule ran. No disk fault, damaged \
+             file or relaxed setting was among them, so the faults under \"When it happens\" or \
+             the timing they make are what to look at."
+        } else {
+            "The test program failed, with no fault in its schedule."
+        });
+    }
     Some(match c {
         "lying-disk" => "The disk lost writes it had reported as written (disk=lying). A system is only as safe as its disk, so this class is often expected.",
         "io-errors" => "The disk returned errors (disk=ioerr).",
         "corrupted-files" => "A service's files were corrupted on purpose (G=): the system's own checks of its data are under test.",
         "upgrade" => "A service was switched to another version of itself during the run (U=), as in a rolling upgrade or a rollback.",
         "unsafe-knob" => "A setting that trades safety for speed (a setting of the project's manifest, such as R=everysec) met a power cut or lost writes.",
-        "test-failed" => "The test program failed, with no fault that explains it.",
         "durable-defaults" => "The system failed with its safe settings and a working disk: the most serious class.",
         "refused" => "The engine cannot run this schedule, so it is not a failure of the system.",
         _ => return None,
@@ -2088,6 +2102,85 @@ pub struct Item {
     pub replay: Option<String>,
     /// The id of its runs in the page's details.
     pub link: String,
+    /// The recording replay of its minimal schedule, for a walk through the pages.
+    pub recording: Option<Recording>,
+}
+
+/// The recording replay of a walk's minimal schedule (Milestone 258: `replays/rec-<k>/` of the
+/// exploration's folder, with a video, a trace and `repro.spec.ts` in its `screens/`). Recording
+/// slows the browser, so the replay is a run of its own: Milestone 301 shows each problem's
+/// folder, and says so when that run did not fail as the minimal schedule does.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Recording {
+    /// The folder, from the exploration's: `replays/rec-1`.
+    pub dir: String,
+    /// The recorded run ended with the minimal schedule's failure (its signature).
+    pub same: bool,
+    /// The recorded run's verdict line.
+    pub verdict: String,
+    /// The files of its `screens/`: the videos, the traces and the test, in name order.
+    pub files: Vec<String>,
+}
+
+/// The recording replay of the minimal schedule `minimal` (None: none was made, or its run left
+/// no result).
+fn recording_of(dir: &Path, doc: &Exploration, minimal: &str) -> Option<Recording> {
+    let (i, _, folder) = crate::delegated::recordings(doc)
+        .into_iter()
+        .find(|(i, ..)| doc.shrinks[*i].minimal == minimal)?;
+    let rd = dir.join(REPLAYS).join(&folder);
+    let run = hydo_results::reader::read_run(&rd.join(hydo_results::RUN_DOC)).ok()?;
+    let want = &doc.shrinks[i].verdict;
+    let same = run.verdict.text == *want
+        || hydo_explore::results::signature(&run.verdict.text)
+            == hydo_explore::results::signature(want);
+    let mut files: Vec<String> = std::fs::read_dir(rd.join("screens"))
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .filter(|f| {
+                    f.ends_with(".webm") || f.ends_with(".trace.zip") || f.ends_with(".spec.ts")
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    Some(Recording {
+        dir: format!("{REPLAYS}/{folder}"),
+        same,
+        verdict: run
+            .verdict
+            .text
+            .trim_start_matches("HYDO-ORACLE: ")
+            .to_string(),
+        files,
+    })
+}
+
+impl Recording {
+    /// What the recording shows, in plain words (backquotes for paths and commands).
+    pub fn words(&self, shown: &str) -> String {
+        let at = if shown.is_empty() || shown == "." {
+            self.dir.clone()
+        } else {
+            format!("{}/{}", shown.trim_end_matches('/'), self.dir)
+        };
+        if self.same {
+            format!(
+                "A recording of this failure, with a video, a Playwright trace and the walk as a \
+                 Playwright test, is in `{at}/screens/`. `hydo report --html {at}` shows the video."
+            )
+        } else {
+            format!(
+                "The recording in `{at}/screens/` does not show this failure: with recording on, \
+                 the same walk ended `{}`. Recording a video slows the browser, so the recorded \
+                 run has timing of its own, and a failure that depends on the walk's timing can \
+                 pass in it. The command above shows the failure; the video shows the walk's \
+                 actions only.",
+                self.verdict
+            )
+        }
+    }
 }
 
 /// The folder of an exploration's replays: `replays/<tag>/` is a fresh run of run `tag`'s
@@ -2501,6 +2594,11 @@ pub fn exploration_story<'a>(
             accept_note: String::new(),
             replay: if error { first.run.tag.clone() } else { None },
             link: format!("f{}", x.groups[0] + 1),
+            recording: if shrunk {
+                recording_of(dir, doc, &x.schedule)
+            } else {
+                None
+            },
         });
     }
     if !new_kinds.is_empty() {
@@ -2558,6 +2656,7 @@ pub fn exploration_story<'a>(
             accept_note: String::new(),
             replay: None,
             link: "errors".into(),
+            recording: None,
         });
     }
     accept_notes(&mut items);
@@ -2632,6 +2731,9 @@ fn exploration_page(
                 story::seen_lines(&it.seen)
             ));
         }
+        if let Some(r) = &it.recording {
+            more.push_str(&recording_html(r));
+        }
         if !it.lines.is_empty() {
             more.push_str("<ul>\n");
             for (svc, line, runs) in &it.lines {
@@ -2692,6 +2794,42 @@ fn exploration_page(
         &shown,
     )));
     page::document(&format!("{} (hydo report)", st.title), &body)
+}
+
+/// A problem's recording on the exploration's page: links to its files, beside the page in the
+/// exploration's folder, and whether it shows the failure (Milestone 301).
+fn recording_html(r: &Recording) -> String {
+    let links: Vec<String> = r
+        .files
+        .iter()
+        .map(|f| {
+            let p = format!("{}/screens/{f}", r.dir);
+            format!("<a href=\"{}\">{}</a>", esc(&p), esc(&p))
+        })
+        .collect();
+    let mut s = if r.same {
+        format!(
+            "<p><b>The recording</b> <span class=\"muted\">(the same failure, recorded)</span>: {}. {} shows the video.</p>\n",
+            if links.is_empty() {
+                code(&format!("{}/screens/", r.dir))
+            } else {
+                links.join(", ")
+            },
+            code(&format!("hydo report --html {}", r.dir))
+        )
+    } else {
+        format!(
+            "<p><b>The recording does not show this failure.</b> With recording on, the same walk ended {}. Recording a video slows the browser, so the recorded run has timing of its own, and a failure that depends on the walk's timing can pass in it. The command below shows the failure; the video shows only the walk's actions.</p>\n",
+            code(&r.verdict)
+        )
+    };
+    if !r.same && !links.is_empty() {
+        s.push_str(&format!(
+            "<p class=\"small\">The recording's files: {}.</p>\n",
+            links.join(", ")
+        ));
+    }
+    s
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2929,7 +3067,10 @@ fn failure_card(
         esc(class),
         esc(sig)
     );
-    if let Some(w) = class_words(class) {
+    let schedule = sh
+        .map(|x| x.minimal.as_str())
+        .unwrap_or(&first.run.schedule);
+    if let Some(w) = class_words(class, schedule) {
         s.push_str(&format!("<p class=\"muted\">{}</p>\n", esc(w)));
     }
     let seeds: Vec<String> = fs

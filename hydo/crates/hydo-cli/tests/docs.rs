@@ -735,3 +735,84 @@ fn run_help_prints_the_usage() {
     assert!(out.contains("verdict.kind"), "{out}");
     drop(d);
 }
+
+/// Milestone 301: a guide topic is what a release's user reads (`hydo guide <topic>`), and a
+/// release ships neither docs/HISTORY.md nor its milestone numbers, so no topic names one (0.4.0's
+/// trial: `hydo guide strategies` cited "Milestone 291" for its numbers).
+#[test]
+fn no_guide_topic_names_a_milestone() {
+    let dir = top().join("hydo/guide");
+    let mut found = Vec::new();
+    for e in std::fs::read_dir(&dir).unwrap().flatten() {
+        let p = e.path();
+        if p.extension().is_none_or(|x| x != "md") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&p).unwrap();
+        for (i, l) in text.lines().enumerate() {
+            let named = l.match_indices("Milestone").any(|(at, _)| {
+                l[at + "Milestone".len()..]
+                    .trim_start_matches('s')
+                    .trim_start()
+                    .starts_with(|c: char| c.is_ascii_digit())
+            });
+            if named || l.contains("docs/HISTORY.md") {
+                found.push(format!("{}:{}: {l}", p.display(), i + 1));
+            }
+        }
+    }
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+/// Milestone 301: `hydo fuzz --vm --help` lists every option that `hydo guide fuzz` says it
+/// lists (0.4.0's trial got the native help, which names none of them).
+#[test]
+fn the_vm_fuzz_help_lists_the_options_the_guide_names() {
+    let guide = read("hydo/guide/fuzz.md");
+    let at = guide
+        .find("The options are in `hydo fuzz --vm --help`:")
+        .expect("hydo guide fuzz names the VM options");
+    let sentence: String = guide[at..].split("\n\n").next().unwrap().replace('\n', " ");
+    let named: Vec<&str> = sentence
+        .split('`')
+        .filter_map(|c| c.split_whitespace().next())
+        .filter(|w| w.starts_with("--") && *w != "--vm" && *w != "--help")
+        .collect();
+    assert!(named.len() >= 4, "{sentence}");
+    let d = scratch("fuzz-vm-help");
+    let (ok, out) = run_hydo(&d, &["fuzz", "--vm", "--help"]);
+    assert!(ok, "{out}");
+    assert!(out.starts_with("usage: hydo fuzz --vm"), "{out}");
+    for o in named {
+        assert!(out.contains(o), "hydo fuzz --vm --help does not list {o}");
+    }
+    drop(d);
+}
+
+/// Milestone 301: every guest kernel that a release pins (`hydo/dist/<platform>/assets.sha256`) is
+/// named in docs/RELEASING.md's section 2, which builds the tarballs, so a release does not ship
+/// without one. 0.4.0's trial ran a hydo built from `main` whose pins have
+/// `Image-explore-containers`, which no release had, and `hydo setup` could not boot a guest.
+#[test]
+fn the_release_steps_name_every_pinned_guest_kernel() {
+    let rel = read("docs/RELEASING.md");
+    let s2 = rel
+        .split("\n## 2. ")
+        .nth(1)
+        .and_then(|t| t.split("\n## 2a. ").next())
+        .expect("docs/RELEASING.md has a section 2");
+    for p in ["linux", "mac"] {
+        for line in read(&format!("hydo/dist/{p}/assets.sha256")).lines() {
+            let Some(path) = line.split_whitespace().nth(1) else {
+                continue;
+            };
+            let name = path.rsplit('/').next().unwrap_or(path);
+            if name.starts_with("bzImage") || name.starts_with("Image-explore") {
+                assert!(
+                    s2.contains(&format!("`{name}`")) || s2.contains(&format!("/{name}`")),
+                    "docs/RELEASING.md section 2 does not name the {p} guest kernel {name}"
+                );
+            }
+        }
+    }
+}

@@ -486,9 +486,19 @@ pub fn problem(
              required order or an intermediate version."
                 .to_string(),
         ),
+        // Milestone 301: a test that failed under faults is not called a matter of timing
+        // (0.4.0's trial: web-shop's test fails by design when its order cannot be read)
+        ("test-failed", _) if !ctx.is_empty() => (
+            Attention::Look,
+            format!("Your test program failed {ctx}."),
+            "Run it again with the command below and read the test's output. If the same run \
+             without these faults passes, the faults made it fail: decide whether your system \
+             must handle them, or whether the test expects too much of it."
+                .to_string(),
+        ),
         ("test-failed", _) => (
             Attention::Look,
-            "Your test program failed.".to_string(),
+            "Your test program failed, with no fault in its run.".to_string(),
             "Run it again with the command below and read the test's output. A test that fails \
              only under these conditions depends on timing."
                 .to_string(),

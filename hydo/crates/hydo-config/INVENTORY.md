@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-58 user-facing and 94 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 37 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+58 user-facing and 95 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 37 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -164,6 +164,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 |---|---|---|---|---|---|
 | `HYDO_CLI_PLATFORM` | developer | word: linux \| mac | this binary's platform | hydo-cli | `linux` or `mac`: run the `hydo` command as the other platform's (the CLI test checks the other platform's commands that need no engine). |
 | `HYDO_CLI_HOST_ROOT` | developer | path; empty = `/` | / | hydo-cli | A directory read in place of `/` for the host's kernel-module state (`/proc/modules`, `/proc/locks`, `/sys/module`, `/dev`, `/etc/udev/rules.d`): the CLI test sets an empty one, so its recorded answers are those of a host without hvx, KVM or the udev rule. |
+| `HYDO_RELEASE_DIR` | developer | path | ~/.hydo/versions/<version> | hydo-cli | A release tree (a folder with `SHA256SUMS`, `bin/` and the guest files) that a `hydo` built in a source tree uses instead of `~/.hydo/versions/<version>`: for a tree whose pinned guest files no published release has yet (Milestone 301). `docs/RELEASING.md`, section 2, builds one. A released or cargo-installed `hydo` ignores it. An empty value means the default. |
 | `HYDO_INIT_CLOCK_START` | user | whole number: Unix seconds; empty = default | today at 00:00 UTC | hydo-cli, hydo-compose | The `guest.clock_start` (Unix seconds) that `hydo init` and `hydo compose` write into a new project. The default is today at 00:00 UTC, so a new project's guest clock does not start before the software it runs was built; the tests set a fixed value. |
 | `HYDO_HOME` | user | path | ~/.hydo | hydo-cli | The install cache (Milestone 162, docs/design/install-cache.md): `store/` (release archives and guest kernels by sha256), `versions/<version>/` (releases `hydo setup --get` installed), `bin/hydo` (the current one). An empty value means the default. |
 | `HYDO_RELEASE_URL` | user | URL | https://github.com/kakoc/hydo/releases/download | hydo-cli | Where releases are fetched from: `<value>/v<version>/<file>` (hydo), and `<value>/skill-v<version>/<file>` (the onboarding skill, `hydo skill update`). HTTPS only (plain `http://` only to a loopback host). An empty value means the default. |

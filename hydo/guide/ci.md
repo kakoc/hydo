@@ -285,8 +285,8 @@ pr: {seeds: 1-500, strategy: process, budget: 10m, seeds_from: history}
 - A shard keeps its part of the range, because the shards of one run must split one range.
 
 A recorded run's time includes its shrinks and its worker's boot, so a store of small runs gives
-a high estimate. In the proof of Milestone 286 the history said 2.5 s per seed, and the 60 seeds
-it chose took 71 s.
+a high estimate. In one measured store the history said 2.5 s per seed, and the 60 seeds it
+chose took 71 s.
 
 ## 11. Shards
 

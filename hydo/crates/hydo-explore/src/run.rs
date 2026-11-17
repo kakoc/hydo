@@ -467,7 +467,17 @@ fn setup(a: Args, env: &Env) -> Cx {
         let saved = std::fs::write(&file, dumps_line(&sp.describe()) + "\n").is_ok();
         eprintln!(
             "{}{}",
-            sp.plain(a.new_faults, &a.strategy),
+            sp.plain_with(&crate::space::Drawn {
+                new_faults: a.new_faults,
+                strategy: a.strategy.clone(),
+                protocol: a.protocol_faults || a.protocol_cover,
+                grpc: a.grpc_faults,
+                storage: a.storage_faults,
+                cluster: a.cluster_faults,
+                workload_pauses: a.workload_pauses && a.pause_threads.is_none(),
+                thread_pauses: a.pause_threads.is_some(),
+                upgrades: a.upgrades,
+            }),
             if saved {
                 format!(" The whole fault space: {}", file.display())
             } else {
@@ -2916,7 +2926,9 @@ type ShaThread = Option<std::thread::JoinHandle<Option<String>>>;
 
 impl Cx {
     fn run_record(&self, tag: &str, text: &str, r: &Res, role: &str) -> Run {
-        results::explorer_run(&self.out, tag, text, r, role)
+        let run = results::explorer_run(&self.out, tag, text, r, role);
+        self.ev.counted(&run);
+        run
     }
 
     fn image_file(&self) -> PathBuf {

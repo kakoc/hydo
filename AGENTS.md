@@ -1219,6 +1219,24 @@ is the recipe for other systems.
 The comment, the page, and the budget ran on this Mac with the Mac engine; nothing ran on GitHub
 (open item 67). The details are in `docs/HISTORY.md` Milestone 286.
 
+**The fixes of the 0.4.0 trial (M301, tentative number).** What hydo tells a user is true again
+where M297's trial found it false (`docs/design/0.4.0-user-trial.md`, "After the fixes of M301"):
+
+- A busy element of a page ends with its document (a `doc` event of `hook.cjs`), so a walk that
+  goes back while a page loads is no stuck spinner. The trial's walk problem 1 was such a false
+  finding. A recording replay whose run did not fail says so in `hydo explore`'s line, and
+  `hydo report` and its page show and link each problem's `replays/rec-<k>/`.
+- Every user-facing place names a workload step by the schedule's number, from 0 (`@3-4` is
+  "during step 3"); a count stays a count ("after 12 steps").
+- `hydo ci page`'s headline counts the open findings of every line and names them, and each run
+  shows its start, `ci-run.json`'s `started` (a results addition).
+- `hydo explore`'s first line lists the kinds its options draw, and the class `test-failed`
+  speaks of the schedule's faults when it has some.
+- `hydo setup` names a pinned guest file that a release lacks and does not call the release
+  damaged. `HYDO_RELEASE_DIR` gives a hydo built in a checkout a release tree of its own.
+- An exploration prints a progress line every 30 s. `hydo fuzz --vm --help` is the VM's help, and
+  no guide topic names a milestone.
+
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 64 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
 facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
@@ -2072,7 +2090,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       without faults reads `workload steps 0..29` for every stop.
     - A run with a power cut was not recorded; the boot number of the records is tested on
       synthetic records only.
-
 149. Differential testing (M298, `docs/design/differential.md`). What is left:
     - It ran on the Mac engine only. hvx and KVM did not run it.
     - The outcomes come from the controller's reads of `$HYDO_OUTCOMES`. A run that ends in an
@@ -2104,6 +2121,28 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       entry and a build setting of one parameter are not merged.
     - `hydo ci run` does not run the combinations, and `hydo versions` cannot replay a finding
       on a configuration.
+151. What the fixes of the 0.4.0 trial left (M301, `docs/design/0.4.0-user-trial.md`). What is
+    left:
+    - A recording replay has timing of its own. A failure that depends on the walk's timing can
+      pass in it, and then no video shows the failure. The page says so. A recording with the
+      run's own timing is not built.
+    - The images of `browser:` built after M301 have new bytes (`hook.cjs` and `check.mjs`). The
+      fingerprints in the RESULTS.md pages of web-shop, Memos, and Vikunja hold only for the
+      images built before. None of them is in `hydo/onboard/recorded.json`.
+    - `ci-run.json`'s `started` ran in one `hydo ci run` on this Mac; nothing ran on GitHub
+      (open item 67).
+    - `HYDO_RELEASE_DIR` ran on the Mac with a release tree made by hand from 0.3.4's tree and
+      this tree's programs, not with one that `build-release.sh` made.
+    - The help of `hydo diff`, `hydo explain` and `hydo inspect` still names files under
+      `docs/design/`, which a release does not ship.
+    - These frictions of the trial stay:
+      - `hydo ci --help` names no `hvm` engine, and the CI report's replay command has no
+        `--image`.
+      - The Blnk example's `RESULTS.md` fingerprints differ from a tree build's, and `hydo
+        inspect values` prints `1 keys`.
+      - `hydo fuzz` has no property of a function alone, and it prints an empty `fuzz.checks:`.
+      - `hydo guide strategies` does not say which engine each technique needs, or how to
+        choose a step for a new system.
 
 ## Milestone index
 
@@ -2864,6 +2903,12 @@ build machine, before 2026-10-13.
   type `configs`). On the Mac, Redis's `everysec` and `no` and NATS's default and 10 s
   `sync_interval` lost acknowledged writes at every power cut of seeds 1-20, by design, and the
   durable values passed. Nothing recorded moved
+- M301 (tentative number): the trial's frictions fixed. Its stuck-spinner problem was the
+  watcher's: a spinner of a page that the walk left stayed open; a new document ends it now. The
+  report links every recording and says when one did not fail. Steps carry the schedule's
+  numbers everywhere. The CI page's headline counts every line, and runs show their start
+  (`started`). `hydo setup` names the guest files a release lacks, and `HYDO_RELEASE_DIR` runs a
+  tree build. Nothing recorded moved
 
 ## Where to look
 

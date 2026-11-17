@@ -10,7 +10,10 @@
 //! language gets a neutral sentence, never an error.
 //!
 //! A step is one numbered part of the workload (`workload.steps`); a fault "before step n"
-//! happens before the workload runs step n, and the steps count from 0.
+//! happens before the workload runs step n, and the steps count from 0. The words name a step by
+//! the schedule's own number, as the engine's lines, a walk's tests ("walk step 3") and
+//! `repro.spec.ts` do (Milestone 301: before, a window `@0-1` read "during step 1"); a count
+//! of steps ("after 12 steps") is a count, not a step's number.
 
 use crate::clock::{ClockPoint, Every};
 use crate::compose::{Compose, ResolvedField, SeedField};
@@ -323,31 +326,29 @@ fn ordinal(n: u64) -> String {
     format!("{n}{suf}")
 }
 
-/// When a fault at step `n` (counted from 0, before step n runs) happens, counted for people
-/// from 1: "before the first step", "after the first step", "after 12 steps".
+/// When a fault at step `n` (before step n runs) happens, as a count of the steps before it:
+/// "before the first step", "after 1 step", "after 12 steps" (before step 12).
 pub fn after(n: u64) -> String {
     match n {
         0 => "before the first step".into(),
-        1 => "after the first step".into(),
+        1 => "after 1 step".into(),
         n => format!("after {n} steps"),
     }
 }
 
-/// A window of steps [from, to) counted from 1: "during steps 1 to 8", "during step 3".
+/// A window of steps [from, to), by the schedule's numbers: "during steps 0 to 7" (`@0-8`),
+/// "during step 3" (`@3-4`).
 pub fn during(from: u64, to: u64) -> String {
     if to <= from + 1 {
-        format!("during step {}", from + 1)
+        format!("during step {from}")
     } else {
-        format!("during steps {} to {to}", from + 1)
+        format!("during steps {from} to {}", to - 1)
     }
 }
 
-/// Step `n` (counted from 0) counted from 1: "the 13th step".
+/// Step `n` by the schedule's number: "step 12".
 pub fn nth_step(n: u64) -> String {
-    match n {
-        0 => "the first step".into(),
-        n => format!("the {} step", ordinal(n + 1)),
-    }
+    format!("step {n}")
 }
 
 fn code(s: &str) -> String {

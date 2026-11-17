@@ -222,3 +222,36 @@ fn a_violation_signature_has_no_generated_ids() {
         "VIOLATION [memos.saved_memos_survive] memo memos/J#gBW#VwmmuwFTuefuZpLK lost"
     );
 }
+
+/// Milestone 301: an exploration counts its runs by their part, for the progress line it prints
+/// every 30 s (0.4.0's trial: a walk's exploration printed nothing for 30 minutes, most of them
+/// shrinking).
+#[test]
+fn the_progress_line_counts_the_runs_by_their_part() {
+    use hydo_explore::results::Progress;
+    let p = Progress::default();
+    let run =
+        |role: &str, kind: &str| json!({"type": "run", "role": role, "verdict": {"kind": kind}});
+    for r in [
+        run("first", "ok"),
+        run("first", "violation"),
+        run("first", "ok"),
+        run("rerun", "violation"),
+        run("shrink", "ok"),
+        run("shrink", "violation"),
+        run("minimal", "violation"),
+        run("probe", "ok"),
+        json!({"type": "end"}),
+    ] {
+        p.count(&r);
+    }
+    assert_eq!(
+        p.line(90),
+        "hydo explore: 1 min 30 s in: 3 schedules run (1 failed), 1 replay of a failure, \
+         3 shrink runs and 1 other run"
+    );
+    assert_eq!(
+        Progress::default().line(30),
+        "hydo explore: 30 s in: 0 schedules run (0 failed)"
+    );
+}

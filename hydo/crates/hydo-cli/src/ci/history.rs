@@ -470,7 +470,7 @@ pub fn cmd_record(argv: &[String]) -> i32 {
     };
     let run = super::read_ci_run(&p).unwrap_or_else(|e| die(&e));
     if run.trigger == "pull_request" && branch_flag.is_none() {
-        die("hydo ci record: a pull request's run is recorded only with --branch NAME (the history is the line of a branch: pushes to it and its scheduled runs; docs/design/ci.md section 4.3)");
+        die("hydo ci record: a pull request's run is recorded only with --branch NAME (the history is the line of a branch: pushes to it and its scheduled runs; `hydo guide ci`, section 12, \"History across runs\")");
     }
     if !run.shards.is_empty() || run.budget.shard.is_none() {
         // a merged run, or a run without shards

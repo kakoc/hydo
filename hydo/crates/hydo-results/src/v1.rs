@@ -2395,6 +2395,10 @@ pub struct CiRun {
     pub ty: CiRunType,
     /// `<system>:<run id>` (`github:11873625`), or `local:<time>`.
     pub id: String,
+    /// When the run started, in UTC (`2026-11-17T16:52:40Z`; added in Milestone 301). `hydo ci
+    /// page` shows it; a run made before has only the time `hydo ci record` recorded it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started: Option<String>,
     pub ci: CiSystem,
     pub project: CiProject,
     /// `pull_request`, `push`, `schedule` or `manual`.

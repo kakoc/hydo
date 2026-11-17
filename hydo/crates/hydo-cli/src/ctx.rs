@@ -47,7 +47,8 @@ pub struct Ctx {
     pub cargo_installed: bool,
     /// Built in a checkout (`<checkout>/target/.../hydo`, no release around the program): the
     /// checkout. Such a hydo takes its release files from the install cache as a cargo-installed
-    /// one does (`cargo_installed` is true too), and `hydo doctor` says so first.
+    /// one does (`cargo_installed` is true too), and `hydo doctor` says so first; with
+    /// `HYDO_RELEASE_DIR` (Milestone 301) its root is that release tree instead.
     pub checkout: Option<PathBuf>,
 }
 
@@ -64,13 +65,17 @@ impl Ctx {
             .unwrap_or_else(|| PathBuf::from("."));
         crate::module::set_host_root(config.cli.host_root.clone());
         let checkout = checkout_of(&exe, &root);
-        let installed = installed_root(&root, &config.cli.cache.home).or_else(|| {
-            checkout
-                .as_ref()
-                .map(|_| version_root(&config.cli.cache.home))
-        });
+        let tree = release_dir_of(checkout.as_deref(), config.cli.release_dir.as_deref());
+        let installed = match tree {
+            Some(_) => None,
+            None => installed_root(&root, &config.cli.cache.home).or_else(|| {
+                checkout
+                    .as_ref()
+                    .map(|_| version_root(&config.cli.cache.home))
+            }),
+        };
         let cargo_installed = installed.is_some();
-        let root = installed.unwrap_or(root);
+        let root = tree.or(installed).unwrap_or(root);
         let platform = Platform::detect(&config.cli);
         let kvm = platform == Platform::Linux && config.kvm.backend.as_deref() == Some("kvm");
         let backend_chosen = config.kvm.backend.is_some();
@@ -214,6 +219,16 @@ pub fn installed_root(prefix: &Path, cache_home: &Path) -> Option<PathBuf> {
 /// This hydo version's directory of the install cache (`<cache home>/versions/<version>`).
 fn version_root(cache_home: &Path) -> PathBuf {
     hydo_image::store::Home::new(cache_home.to_path_buf()).version(hydo_image::hydo_version())
+}
+
+/// The release tree a hydo built in the source tree `checkout` uses (Milestone 301:
+/// `HYDO_RELEASE_DIR`, for a tree whose pinned guest files no published release has yet): the
+/// folder `dir` when it is a release tree (it has `SHA256SUMS`). None for a hydo of a release or
+/// of a cargo install, which keeps its own files.
+pub fn release_dir_of(checkout: Option<&Path>, dir: Option<&Path>) -> Option<PathBuf> {
+    checkout?;
+    dir.filter(|d| d.join("SHA256SUMS").is_file())
+        .map(Path::to_path_buf)
 }
 
 /// The checkout a `hydo` was built in, when it runs from that checkout's cargo target directory
@@ -390,7 +405,7 @@ pub fn recorded_backend(dir: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{checkout_of, recorded_backend};
+    use super::{checkout_of, recorded_backend, release_dir_of};
     use std::path::Path;
 
     /// `hydo repro <run dir>` follows the engine the run recorded (0.3.0): the engine is read from
@@ -456,6 +471,23 @@ mod tests {
             checkout_of(&other.join("target/release/hydo"), &other.join("target")),
             None
         );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Milestone 301: a hydo built in a source tree takes a release tree from HYDO_RELEASE_DIR;
+    /// a folder without SHA256SUMS, or a hydo that is not a checkout's, keeps the default.
+    #[test]
+    fn a_checkout_build_takes_the_release_tree_it_is_given() {
+        let d = std::env::temp_dir().join(format!("hydo-ctx-reldir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let rel = d.join("rel");
+        std::fs::create_dir_all(&rel).unwrap();
+        let tree = d.join("tree");
+        assert_eq!(release_dir_of(Some(&tree), Some(&rel)), None);
+        std::fs::write(rel.join("SHA256SUMS"), "").unwrap();
+        assert_eq!(release_dir_of(Some(&tree), Some(&rel)), Some(rel.clone()));
+        assert_eq!(release_dir_of(None, Some(&rel)), None);
+        assert_eq!(release_dir_of(Some(&tree), None), None);
         let _ = std::fs::remove_dir_all(&d);
     }
 }

@@ -153,6 +153,11 @@ if (rule === 'tests') {
       } else if (e.kind === 'close') {
         for (const o of open.values()) judge(o, e, true);
         open.clear();
+      } else if (e.kind === 'doc' || (e.kind === 'nav' && String(e.url).startsWith('about:'))) {
+        // a new document (a reload, a back to another page, a link out): the elements of the
+        // one before are gone with it, and they end here (Milestone 301)
+        for (const o of open.values()) judge(o, e, false);
+        open.clear();
       }
     }
   }

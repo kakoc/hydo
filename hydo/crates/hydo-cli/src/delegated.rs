@@ -217,6 +217,21 @@ pub fn left_out_note(console: &str) -> String {
     )
 }
 
+/// The recording replays of an exploration's minimal schedules (Milestone 258): for each, the
+/// index of its shrink in `doc.shrinks`, its schedule with recording on, and its folder under
+/// `replays/` (`rec-<k>`). [`walk_replays`] runs them, and `hydo report` links each problem's
+/// (Milestone 301).
+pub fn recordings(doc: &hydo_results::Exploration) -> Vec<(usize, String, String)> {
+    doc.shrinks
+        .iter()
+        .enumerate()
+        .filter_map(|(i, s)| with_recording(&s.minimal, failing_step(&s.verdict)).map(|r| (i, r)))
+        .take(REPLAYS_MAX)
+        .enumerate()
+        .map(|(k, (i, r))| (i, r, format!("rec-{}", k + 1)))
+        .collect()
+}
+
 /// The step of a walk in which a verdict's first violation happened (Milestone 267): the walker
 /// names the test of step `s` `walk step <s>`, and a page's finding says during which test it
 /// happened.
@@ -247,17 +262,9 @@ pub fn walk_replays(ctx: &Ctx, dir: &Path) -> Vec<String> {
         opts.vcpus = doc.engine.vcpus.filter(|n| *n > 1).map(|n| n as u32);
     }
     let mut lines = Vec::new();
-    for (k, sh) in doc
-        .shrinks
-        .iter()
-        .filter_map(|s| with_recording(&s.minimal, failing_step(&s.verdict)).map(|r| (s, r)))
-        .take(REPLAYS_MAX)
-        .enumerate()
-    {
-        let (s, rec) = sh;
-        let out = dir
-            .join(crate::htmlreport::REPLAYS)
-            .join(format!("rec-{}", k + 1));
+    for (i, rec, folder) in recordings(&doc) {
+        let s = &doc.shrinks[i];
+        let out = dir.join(crate::htmlreport::REPLAYS).join(folder);
         let _ = std::fs::create_dir_all(&out);
         let shown = out.display();
         // Milestone 270: the recording repeats the actions of the minimal schedule's confirmation
@@ -285,16 +292,21 @@ pub fn walk_replays(ctx: &Ctx, dir: &Path) -> Vec<String> {
                     || hydo_explore::results::signature(&run.verdict.text)
                         == hydo_explore::results::signature(&s.verdict);
                 let console = crate::ctx::read_text(&out.join("one.log")).unwrap_or_default();
-                format!(
-                    "the walk of {} {} with recording on: video, trace and repro.spec.ts in {shown}/screens{}",
-                    s.minimal,
-                    if same {
-                        "ended with the same verdict".to_string()
-                    } else {
-                        format!("ended otherwise ({})", run.verdict.text)
-                    },
-                    left_out_note(&console)
-                )
+                if same {
+                    format!(
+                        "the walk of {} ended with the same verdict with recording on: video, trace and repro.spec.ts in {shown}/screens{}",
+                        s.minimal,
+                        left_out_note(&console)
+                    )
+                } else {
+                    // Milestone 301: say plainly that the video is not of the failure
+                    format!(
+                        "the walk of {} did not fail with recording on, so its video in {shown}/screens shows no failure: it ended {} (recording slows the browser, and a failure that depends on the walk's timing can pass in the recorded run; the minimal schedule without recording still fails){}",
+                        s.minimal,
+                        run.verdict.text.trim_start_matches("HYDO-ORACLE: "),
+                        left_out_note(&console)
+                    )
+                }
             }
         });
     }

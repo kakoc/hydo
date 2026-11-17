@@ -189,8 +189,9 @@ For one run, the page shows these parts, in this order. Every line is a fact of 
    what the workload had confirmed, the faults, and what the check found. The line under it
    quotes the check once.
 2. "When it happens": each part of the schedule as a numbered sentence, with the names and
-   values of the project's settings from `knobs:`. Steps are counted from 1: `C=12` is a power
-   cut before step 13, after 12 steps.
+   values of the project's settings from `knobs:`. A step has the schedule's own number, which
+   starts at 0, as on the engine's lines and in a walk's `repro.spec.ts`. `C=12` is a power cut
+   after 12 steps, before step 12. `H=api.get_order@3-4` acts during step 3.
 3. "Is this a bug?": a label, why, and what to do. The label comes from the failure's class:
    - "Expected" for a faulty disk that throws away writes it already confirmed.
    - "Expected for this setting" for a setting that trades safety for speed.

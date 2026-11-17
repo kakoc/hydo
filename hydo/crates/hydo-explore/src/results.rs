@@ -82,9 +82,102 @@ pub fn public(r: &Res) -> Res {
         .collect()
 }
 
-/// The event stream (`events.jsonl`): one line per record, flushed as it is written.
+/// The event stream (`events.jsonl`): one line per record, flushed as it is written. A stream of
+/// an exploration also counts its runs as they are made ([`Events::counted`]), and prints a progress line on standard error every
+/// [`PROGRESS_EVERY_S`] seconds (Milestone 301: 0.4.0's trial waited 30 minutes for a walk's
+/// exploration, most of it shrinking, without a line).
 pub struct Events {
     f: Mutex<Option<std::fs::File>>,
+    progress: std::sync::Arc<Progress>,
+    ticker: Option<std::thread::JoinHandle<()>>,
+}
+
+/// How often an exploration says how far it is.
+pub const PROGRESS_EVERY_S: u64 = 30;
+
+/// The runs an exploration made so far, by their part in it.
+#[derive(Debug, Default)]
+pub struct Progress {
+    /// The schedules of the exploration, and how many of them failed.
+    pub first: std::sync::atomic::AtomicU64,
+    pub failed: std::sync::atomic::AtomicU64,
+    /// Failures run again to confirm them.
+    pub reruns: std::sync::atomic::AtomicU64,
+    /// Shrink candidates and the runs that confirm a minimal schedule.
+    pub shrinks: std::sync::atomic::AtomicU64,
+    /// Any other run (probes, traces, branches).
+    pub other: std::sync::atomic::AtomicU64,
+    stop: std::sync::atomic::AtomicBool,
+}
+
+impl Progress {
+    /// Count one record of the stream (a run counts; other records do not).
+    pub fn count(&self, rec: &Value) {
+        use std::sync::atomic::Ordering::Relaxed;
+        if rec.get("type").and_then(Value::as_str) != Some("run") {
+            return;
+        }
+        let role = rec.get("role").and_then(Value::as_str).unwrap_or("first");
+        let ok = rec
+            .pointer("/verdict/kind")
+            .and_then(Value::as_str)
+            .is_none_or(|k| k == "ok");
+        match role {
+            hydo_results::role::FIRST | hydo_results::role::MANUAL => {
+                self.first.fetch_add(1, Relaxed);
+                if !ok {
+                    self.failed.fetch_add(1, Relaxed);
+                }
+            }
+            hydo_results::role::RERUN => {
+                self.reruns.fetch_add(1, Relaxed);
+            }
+            hydo_results::role::SHRINK
+            | hydo_results::role::MINIMAL
+            | hydo_results::role::ERROR_SHRINK
+            | hydo_results::role::ERROR_MINIMAL => {
+                self.shrinks.fetch_add(1, Relaxed);
+            }
+            _ => {
+                self.other.fetch_add(1, Relaxed);
+            }
+        }
+    }
+
+    /// The progress line after `secs` seconds.
+    pub fn line(&self, secs: u64) -> String {
+        use std::sync::atomic::Ordering::Relaxed;
+        let n = |a: &std::sync::atomic::AtomicU64| a.load(Relaxed);
+        let plural =
+            |k: u64, one: &str, many: &str| format!("{k} {}", if k == 1 { one } else { many });
+        let mut parts = vec![format!(
+            "{} run ({} failed)",
+            plural(n(&self.first), "schedule", "schedules"),
+            n(&self.failed)
+        )];
+        if n(&self.reruns) > 0 {
+            parts.push(plural(
+                n(&self.reruns),
+                "replay of a failure",
+                "replays of failures",
+            ));
+        }
+        if n(&self.shrinks) > 0 {
+            parts.push(plural(n(&self.shrinks), "shrink run", "shrink runs"));
+        }
+        if n(&self.other) > 0 {
+            parts.push(plural(n(&self.other), "other run", "other runs"));
+        }
+        let took = match (secs / 3600, secs / 60 % 60, secs % 60) {
+            (0, 0, s) => format!("{s} s"),
+            (0, m, s) => format!("{m} min {s} s"),
+            (h, m, _) => format!("{h} h {m} min"),
+        };
+        format!(
+            "hydo explore: {took} in: {}",
+            hydo_schedule::describe::and_list(&parts)
+        )
+    }
 }
 
 impl Events {
@@ -92,6 +185,8 @@ impl Events {
     pub fn none() -> Events {
         Events {
             f: Mutex::new(None),
+            progress: Default::default(),
+            ticker: None,
         }
     }
 
@@ -99,13 +194,58 @@ impl Events {
         let f = std::fs::File::create(path)
             .map_err(|e| eprintln!("hydo-explore: {}: {e}", path.display()))
             .ok();
-        Events { f: Mutex::new(f) }
+        let progress: std::sync::Arc<Progress> = Default::default();
+        let p = progress.clone();
+        let ticker = std::thread::Builder::new()
+            .name("explore-progress".into())
+            .spawn(move || {
+                let t0 = std::time::Instant::now();
+                let mut said = 0;
+                while !p.stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    std::thread::park_timeout(std::time::Duration::from_millis(250));
+                    let secs = t0.elapsed().as_secs();
+                    if secs / PROGRESS_EVERY_S > said {
+                        said = secs / PROGRESS_EVERY_S;
+                        eprintln!("{}", p.line(said * PROGRESS_EVERY_S));
+                    }
+                }
+            })
+            .ok();
+        Events {
+            f: Mutex::new(f),
+            progress,
+            ticker,
+        }
     }
 
     pub fn write<T: serde::Serialize>(&self, rec: &T) {
         if let Some(f) = self.f.lock().expect("lock").as_mut() {
             let _ = f.write_all(hydo_results::to_line(rec).as_bytes());
             let _ = f.flush();
+        }
+    }
+}
+
+impl Events {
+    /// Count one run for the progress line, when it is made: a shrink's runs reach the stream
+    /// only after the shrink.
+    pub fn counted(&self, run: &Run) {
+        if self.ticker.is_some() {
+            if let Ok(v) = serde_json::to_value(run) {
+                self.progress.count(&v);
+            }
+        }
+    }
+}
+
+impl Drop for Events {
+    fn drop(&mut self) {
+        self.progress
+            .stop
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(t) = self.ticker.take() {
+            t.thread().unpark();
+            let _ = t.join();
         }
     }
 }

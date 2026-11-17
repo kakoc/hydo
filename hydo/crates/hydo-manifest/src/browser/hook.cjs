@@ -58,6 +58,9 @@ function pageScript(w) {
       /* the page is going away */
     }
   };
+  // a new document starts: the elements of the document before it are gone (Milestone 301: a
+  // spinner of a page that the walk left by going back stayed open until the test ended)
+  send({ kind: 'doc' });
   const brief = (x) => {
     if (x instanceof Error) return `${x.name}: ${x.message}`;
     try {
@@ -148,7 +151,11 @@ function isApi(req) {
 }
 
 async function attach(context) {
-  await context.exposeBinding('__hydoWeb', (source, ev) => record({ ...fromPage(source.page), ...ev }));
+  await context.exposeBinding('__hydoWeb', (source, ev) => {
+    // only the page's own document starts or ends a page's elements, not a frame inside it
+    if (ev && ev.kind === 'doc' && source.page && source.frame !== source.page.mainFrame()) return;
+    record({ ...fromPage(source.page), ...ev });
+  });
   await context.addInitScript(pageScript, watch);
   const onPage = (page) => {
     record({ ...fromPage(page), kind: 'page' });

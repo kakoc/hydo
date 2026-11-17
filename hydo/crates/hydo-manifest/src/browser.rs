@@ -1052,6 +1052,84 @@ mod tests {
             .starts_with("click button \"Copy link\""));
     }
 
+    /// `node check.mjs <rule> <ms>` over the given events, as the guest runs it: its exit
+    /// status and its sentence. None when this machine has no `node`.
+    fn check_mjs(rule: &str, ms: u64, events: &[Value]) -> Option<(i32, String)> {
+        struct Gone(std::path::PathBuf);
+        impl Drop for Gone {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let dir = std::env::temp_dir().join(format!(
+            "hydo-manifest-check-mjs-{}-{rule}-{}",
+            std::process::id(),
+            events.len()
+        ));
+        let _gone = Gone(dir.clone());
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("check.mjs"), CHECK).unwrap();
+        let lines: String = events.iter().map(|e| format!("{e}\n")).collect();
+        std::fs::write(dir.join("events.jsonl"), lines).unwrap();
+        let out = std::process::Command::new("node")
+            .arg(dir.join("check.mjs"))
+            .arg(rule)
+            .arg(ms.to_string())
+            .env("HYDO_WEB_DIR", &dir)
+            .output()
+            .ok()?;
+        Some((
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stdout).trim().to_string(),
+        ))
+    }
+
+    /// Milestone 301: web-shop's walk went back from `/` while its products were loading, and
+    /// the spinner of the page it left stayed open in the events until the test ended, 10.2 s
+    /// later: a stuck spinner that no page showed. A new document ends the elements of the one
+    /// before it; a spinner that stays on its own page is still found.
+    #[test]
+    fn a_spinner_ends_with_its_document() {
+        let t = "walk step 2";
+        let busy = |at: u64, on: bool| {
+            json!({"t": at, "test": t, "page": 1, "url": "/", "kind": "busy", "selector": ".spinner",
+                   "on": on, "text": if on { json!("Loading products…") } else { Value::Null }, "scan": 1})
+        };
+        let doc =
+            |at: u64| json!({"t": at, "test": t, "page": 1, "url": "about:blank", "kind": "doc"});
+        let nav =
+            |at: u64| json!({"t": at, "test": t, "page": 1, "url": "about:blank", "kind": "nav"});
+        let close =
+            |at: u64| json!({"t": at, "test": t, "page": 1, "url": "about:blank", "kind": "close"});
+        let test = json!({"t": 20_000, "kind": "test", "test": t, "status": "passed", "expected": "passed", "ms": 10_500});
+        // the page left by going back: its new document ends the spinner
+        let left = [busy(1_000, true), doc(1_200), close(11_200), test.clone()];
+        let Some((rc, said)) = check_mjs("busy", 10_000, &left) else {
+            eprintln!("no node on this machine: check.mjs not run");
+            return;
+        };
+        assert_eq!(rc, 0, "{said}");
+        // a navigation to about:blank ends it too, when the new document sends nothing
+        let blank = [busy(1_000, true), nav(1_150), close(11_200), test.clone()];
+        assert_eq!(check_mjs("busy", 10_000, &blank).unwrap().0, 0);
+        // the events of the trial, without the new document: the false finding of 0.4.0's trial
+        let old = [busy(1_000, true), close(11_200), test.clone()];
+        let (rc, said) = check_mjs("busy", 10_000, &old).unwrap();
+        assert_eq!(rc, 1, "{said}");
+        assert!(said.contains("for 10.2 s, until the test ended"), "{said}");
+        // a spinner that stays on its own page is still a finding, and one that goes is not
+        let stuck = [busy(1_000, true), close(12_000), test.clone()];
+        assert_eq!(check_mjs("busy", 10_000, &stuck).unwrap().0, 1);
+        let gone = [
+            busy(1_000, true),
+            busy(1_400, false),
+            doc(1_500),
+            close(12_000),
+            test,
+        ];
+        assert_eq!(check_mjs("busy", 10_000, &gone).unwrap().0, 0);
+    }
+
     #[test]
     fn a_manifest_without_browser_is_unchanged() {
         let mut m = json!({"name": "x"});
