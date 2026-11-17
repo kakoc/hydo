@@ -3613,3 +3613,13 @@ KVM engines. hvx's fingerprint is the kernel module's and does not move. The sam
 them. An image built at epoch 3 or before keeps the byte-wise hash: the release's Redis example
 built by the 0.3.4 Mac release gave the quickstart's `a62eee5332a5b9d2`, `474b2874e7ef0fa2` and
 `2e5f02d8ff33394f` with this hydo (docs/HISTORY.md Milestone 290).
+
+**RAM's tree hash (M294, 2026-11-17).** Epoch 4 has a fourth default. On the Mac and KVM engines
+the RAM's part of a fingerprint of an image built at epoch 4 or later is a tree of 4 KiB page
+hashes, made on half of the cores, instead of one chain of the word-wise mix over every byte
+(`hydo_image::defaults`, `ram_tree`; `hydo_hvm::ramtree`). As with M290, no verdict and no `ctl`
+value moves, but every epoch-4 fingerprint of the list moves again on the Mac and KVM engines.
+hvx's fingerprint does not move. The same pass records them. An image built at epoch 3 or
+before keeps the old hash: the release's Redis example built by the 0.3.4 Mac release gave the
+quickstart's `a62eee5332a5b9d2`, `474b2874e7ef0fa2` and `2e5f02d8ff33394f` with this hydo
+(docs/HISTORY.md Milestone 294).

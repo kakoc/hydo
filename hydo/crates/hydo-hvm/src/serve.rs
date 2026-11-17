@@ -1567,6 +1567,8 @@ pub fn opts_from(o: &HvmOptions, hvmx: bool) -> VmOpts {
         soft_irq: soft.unwrap_or(hvmx),
         bootargs: o.bootargs.clone().unwrap_or_else(|| BOOTARGS.to_string()),
         virtio: virt,
+        // the engine sets it by the image's epoch; hvm's boot probes keep every byte
+        ram_tree: false,
     }
 }
 
@@ -1709,8 +1711,10 @@ fn engine_main(
     let mut vo = opts_from(o, true);
     // what the image's own fingerprint epoch decides (hydo_image::defaults): the disks' tree hash
     // from epoch 4 on (Milestone 290); an arm64 image's defaults
-    vo.virtio.disk_tree =
-        hydo_image::defaults(start.image_epoch.unwrap_or(hydo_image::EPOCH), "arm64").disk_tree;
+    let d = hydo_image::defaults(start.image_epoch.unwrap_or(hydo_image::EPOCH), "arm64");
+    vo.virtio.disk_tree = d.disk_tree;
+    // and RAM's tree hash from epoch 4 on (Milestone 294)
+    vo.ram_tree = d.ram_tree;
     let o_contracts = o.contracts.clone();
     vo.ram_size = ram_mib << 20;
     if ram_mib != 1024 {

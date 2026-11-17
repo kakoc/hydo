@@ -15184,3 +15184,152 @@ The trial's answer is that 0.4.0 is almost ready. These are the three fixes it n
 A checkout of `main` could not boot a guest: `hydo setup --get 0.3.4` stopped with `the release
 is damaged or incomplete`, because the tree pins the guest kernel `Image-explore-containers`,
 which no published release has. Nothing recorded moved.
+
+### Milestone 294 (tentative number) - DONE (a cheaper RAM part of the fingerprint on the Mac and KVM engines, part of the fingerprint epoch 4: guest RAM is hashed by a tree of 4 KiB page hashes on half of the cores, with a leaf mix of eight independent lanes; the KVM engine takes the hashes of the pages the guest did not write since its RAM base from the base; on the Mac write tracking by stage-2 faults was measured and not taken; a fingerprint of web-shop's 4 GiB of RAM takes about 43 ms instead of about 1 s, and its `disk=none | run` takes 5.7 to 5.9 s in the engine instead of 7.6 to 8.2 s; an image of the epochs 1 to 3 keeps its values; every epoch-4 Mac and KVM fingerprint moves again and waits for tonight's pass; 2026-11-17)
+
+**Why.** After Milestone 290 the disk's part of a fingerprint costs microseconds, and the RAM's
+part costs the most. The Mac engine hashed every byte of guest RAM with one chain of the
+word-wise mix (`hydo_hvm::fnv::mix64`), and a run takes two fingerprints (the workload's `wfp`
+and the run's `fp`). An engine built for the measurement printed 240 to 366 ms per fingerprint for
+the Redis example's 1 GiB of RAM. On web-shop's 4 GiB it is about 1 s (Milestone 290). The KVM
+engine hashed RAM page by page in the same chain. It skipped the reads of the zero pages of its
+RAM base, but not their mix.
+
+**The scheme** (`hydo/crates/hydo-hvm/src/ramtree.rs`, `hydo_hvm::ramtree`).
+
+- A leaf is a 4 KiB page. Its hash is the word-wise mix in eight lanes: word `i` of the page goes
+  into lane `i % 8`, each lane starts from the FNV offset XOR its number, and the eight lane values
+  are mixed in order at the end. The lanes are independent chains, which one core runs at once.
+- A node is a 2 MiB chunk (512 pages). Its hash folds its pages' hashes in order with `h ^= w;
+  h *= P; h ^= h >> 29`.
+- The root continues the fingerprint with the text `hydo-ram-tree-v1`, the RAM's length, and the
+  chunks' hashes in order. It takes the place of `mix64` over RAM, after the devices' hash.
+- The pages are hashed on half of the host's cores, 64 MiB of RAM per piece of work. The shape
+  depends only on the RAM's length, so the root does not depend on the number of threads.
+
+The root is a function of the RAM's bytes alone. Each step is a bijection of the state when the
+other inputs are fixed, so a change of any one byte always changes the root. A page swapped with
+another changes it too, because the nodes fold the pages in order.
+
+**The KVM engine** (`hydo_kvm::mem`, `Mem::tree_hash`). The engine already knows which pages the
+guest wrote since its RAM base (the base of a snapshot, Milestone 161): the page map lists them
+(`Mem::private_pages`). Its tree hash takes three kinds of page:
+
+- a page that RAM holds itself: hashed from its bytes, on several threads;
+- another page that is nonzero in the base: the base's hash of the page, made once per base on
+  several threads (`RamBase::leaves`);
+- a zero page: the hash of a zero page, without a read.
+
+The value is the tree hash of RAM's bytes, whatever the base: a page written back to the base's
+bytes gives the base's value again (a unit test). Where the page map cannot be read, as on this
+Mac in the tests, every page is compared with the base, which gives the same pages.
+
+**Why the Mac engine tracks no writes.** Hypervisor.framework has no dirty-page log. A write can
+be found only by a stage-2 write protection, a fault at the first write to each 16 KiB granule,
+and an `hv_vm_protect` call that lifts it. An engine built for the measurement did that from the
+first entry of the guest, and it re-protected what the spin observer unprotected. The faults are
+not the guest's exits: no time passes, and the fingerprint stayed the same.
+| run | granules written | faults | time in the fault handler | engine time with tracking, without |
+|---|---|---|---|---|
+| web-shop `disk=none \| run` | 38,186 of 262,144 | 38,186 and 37,971 | 151 and 180 ms | 13.0 and 14.3 s; 5.5 to 5.9 s |
+| Redis `disk=none \| run` | 8,253 of 65,536 | 8,082 to 8,253 | 5.9 to 6.8 ms | 0.1 s; 0.1 s |
+
+The most that tracking can save is the hash of the unwritten pages: about 86 ms per web-shop run
+(two fingerprints of 43 ms) and about 22 ms per Redis run. In web-shop the fault handler alone
+took 151 to 180 ms, and the whole run took 7 to 8 s longer. Most of that is the spin observer's
+46 to 55 looks per run, after each of which the probe had to protect all of RAM again. In Redis
+both the cost and the saving stay below the 0.1 s that the engine time shows. So the Mac engine
+hashes every page at each fingerprint, on several threads, and keeps no write tracking.
+
+**The hash, measured.** On this M2 Pro (12 cores) with other work on the machine, over 4 GiB of
+memory, half of it nonzero:
+
+| what | time |
+|---|---|
+| one chain of `mix64` over every byte (epoch 3) | 1.05 to 1.15 s |
+| the tree with the one-lane leaf of `mix64`, on 1 thread | 0.95 s |
+| the tree with the eight-lane leaf, on 1 thread | 0.19 s |
+| the tree with the eight-lane leaf, on 6 and on 12 threads | 41 ms and 40 ms |
+
+Six threads already read memory as fast as twelve, so the engine takes half of the cores and
+leaves the other half to the explorer's other workers.
+
+**The epoch.** `hydo_image::EpochDefaults` gains `ram_tree`, on from epoch 4. The epoch stays 4:
+the change joins Milestones 269, 283, and 290 before 0.4.0. The Mac engine's `Start` and the KVM
+engine's `Start` read it from the image's epoch, as `disk_tree`. The programs take the image's
+epoch from `--image-epoch N` (Milestone 290). The boot probes of `hydo-hvm hvm` keep the old hash.
+hvx is not changed: its fingerprint is the kernel module's.
+
+**The runs on this Mac.** The base commit's programs (`c1d78449`, "before") and this milestone's
+("after"), each over the 0.3.4 Mac release, one VM at a time. The after programs were this
+milestone's with the write-tracking probe built in and turned off: they printed the time of each
+RAM hash and hashed as this commit does. A last run of this commit's own programs did not get the
+Mac VM lock in 30 minutes.
+
+web-shop's epoch-4 image built with `--set variant=buggy` (disk `bc0ad90a…`, the disk of
+Milestones 284 and 290), `disk=none | run`:
+
+| programs | fingerprint | engine time | wall time | RAM hash per fingerprint |
+|---|---|---|---|---|
+| before | `a6eef3eadef684d5` | 8.2, 7.6 s | 15.8, 13.9 s | about 1 s (Milestone 290) |
+| after | `f67a52270a7c1d7b` | 5.7, 5.9 s | 13.0, 11.4 s | 41 to 45 ms |
+
+The verdict is the same: OK with 6 invariants held. The before value is the after value of
+Milestone 290.
+
+**Old images keep their values.** The release's Redis example built by the 0.3.4 Mac release
+(fingerprint epoch 3, `706c8b95…` and its disk `9ddfc929…`, the quickstart's bytes) gave the
+fingerprints that `QUICKSTART-mac.md` and `hydo/onboard/recorded.json` record, with the before
+programs once and with this milestone's twice. The after programs hashed RAM with `mix64`, 240 to
+366 ms per fingerprint:
+
+| schedule | fingerprint | engine time, before and after |
+|---|---|---|
+| `disk=none \| run` | `a62eee5332a5b9d2` | 0.9 s; 0.8 and 0.7 s |
+| `disk=cut \| run C=12 R=everysec` | `474b2874e7ef0fa2` | 1.0 s; 1.0 and 0.9 s |
+| `disk=cut \| run C=12` | `2e5f02d8ff33394f` | 1.0 s; 1.2 and 1.1 s |
+
+**New images.** The same example built with this milestone's programs (epoch 4, `31e90668…`, the
+same disk) gave one fingerprint over two runs, another one than the before programs, with the
+same verdicts. The RAM hash took 10 to 16 ms per fingerprint:
+
+| schedule | before | after | engine time, before and after |
+|---|---|---|---|
+| `disk=none \| run` | `9c474f594a19bbe6` | `05f433ee427f8e3c` | 0.6 s; 0.1 and 0.1 s |
+| `disk=cut \| run C=12 R=everysec` | `61830a67167b6407` | `2174995ebfb4d2d6` | 0.8 s; 0.3 and 0.3 s |
+| `disk=lying:3 dseed=eac0b527c5ac67d9 \| run C=20` | `8ea3b1817c21d319` | `76b6366c86d97b76` | 0.9 s; 0.5 and 0.8 s |
+
+The before values are Milestone 290's after values.
+
+**Tests.**
+
+- `hydo-hvm`'s `ramtree::` tests compare the root with a plain reference of every leaf and node,
+  and on 1, 2, 3, and 12 threads. They give known page hashes for some pages and get the same root.
+  They change one byte at 9 places, swap two pages, and change the length, and each changes the
+  root. They pin one root.
+- `hydo-kvm`'s `mem::the_tree_hash_is_the_tree_hash_of_the_bytes` maps RAM from a base, writes
+  pages, writes them back, and changes one byte in a base page, in a zero page, and in a page of
+  RAM's own. Each time the value equals the tree hash of the bytes or differs from the old one.
+- `hydo-kvm`'s `engine::one_vcpu_fingerprints_are_pinned` runs its six scripted guests at epoch 3
+  and at epoch 4. Epoch 3 gives the values pinned before the work on several vCPUs, and epoch 4
+  gives new values with the same extras and verdicts. `engine::the_disk_is_in_the_fingerprint_by_its_tree_from_epoch_4`
+  keeps epoch 3's `b997a5136b93d1cc`, and its epoch-4 value is `06a9cfc91b586e50`.
+- `hydo-image`'s test of the defaults names `ram_tree`.
+
+**KVM on GitHub's runners.** The one-off workflow `.github/workflows/tmp-ram-kvm.yml` (the branch
+`tmp-ram-kvm`, a commit of its own) builds this branch's hydo and the hydo of the commit before
+this milestone. On four runners it builds the release's Redis example with 0.3.4 (epoch 3) and
+with this branch (epoch 4), and it runs four schedules. It checks that the epoch-3 image gives
+0.3.4's fingerprint under this branch, twice. It checks that the epoch-4 image gives one
+fingerprint over two runs, with the verdict and the control transcript of the commit before, and
+another fingerprint. It did not run before this commit.
+
+**What moves.** Every fingerprint of an image built at epoch 4 on the Mac and KVM engines. No
+verdict and no `ctl` value moves. The values wait for tonight's pass (open item 105,
+docs/REBASELINE.md section 26).
+
+**Checks.** On this Mac, on `main` at `d2a3145d` with this milestone on top, these passed: `cargo
+fmt --all --check`, workspace clippy with `-D warnings`, `cargo test` of hydo-hvm, hydo-kvm,
+hydo-engine, hydo-image and hydo-config, `equivalence::cli_matches_golden`, `agents_equivalence`
+and `docs::`, `public_content::`, `language::`, `test_tiers`, the explorer's `it` and
+`fake_engine`, the control corpus, `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.

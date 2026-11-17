@@ -118,6 +118,10 @@ pub struct VmOpts {
     /// The fingerprint keeps DR6's host bits ([`CpuState::without_host_dr6`]): only for an image
     /// built before fingerprint epoch 3 (Milestone 252).
     pub host_dr6: bool,
+    /// The fingerprint hashes RAM by a tree of page hashes (`hydo_hvm::ramtree`): the pages not
+    /// written since the base by their known hashes, the others on several threads. An image
+    /// built at the fingerprint epoch 4 or later (Milestone 294).
+    pub ram_tree: bool,
     pub cmdline: String,
     pub virtio: virtio::Config,
     /// the vCPUs (1: the machine of every recorded value; more: [`crate::smp`])
@@ -198,6 +202,8 @@ pub struct Vmm {
     stale_events: bool,
     /// [`VmOpts::host_dr6`]
     host_dr6: bool,
+    /// [`VmOpts::ram_tree`]
+    ram_tree: bool,
     /// full-state cycles proven and resolved (statistics)
     pub state_cycles: u64,
     /// full-state looks that proved nothing (statistics)
@@ -404,6 +410,7 @@ impl Vmm {
             spin_state: o.spin_state,
             stale_events: o.stale_events,
             host_dr6: o.host_dr6,
+            ram_tree: o.ram_tree,
             state_cycles: 0,
             state_gave_up: 0,
             state_why: "",
@@ -2540,10 +2547,14 @@ impl Vmm {
     }
 
     // ---------------- fingerprints ----------------
-    /// All of guest RAM into the hash, page by page in order (the same value as `mix64` over the
-    /// whole RAM: every page is a multiple of 8 bytes): RAM's own pages from RAM, the others
+    /// All of guest RAM into the hash. From the fingerprint epoch 4 by its tree of page hashes
+    /// ([`Mem::tree_hash`]). Before, page by page in order (the same value as `mix64` over
+    /// the whole RAM: every page is a multiple of 8 bytes): RAM's own pages from RAM, the others
     /// from the base, the base's zero pages without reading them.
     fn ram_hash(&self, mut h: u64) -> u64 {
+        if self.ram_tree {
+            return self.ram.tree_hash(h, self.base.as_deref());
+        }
         static ZERO: [u8; PAGE] = [0; PAGE];
         let own = self.ram.private_pages(self.base.as_deref());
         let mut i = 0;

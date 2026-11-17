@@ -43,6 +43,7 @@ pub mod fdt;
 pub mod fnv;
 pub mod layout;
 pub mod machine;
+pub mod ramtree;
 pub mod virtio;
 
 /// Function contracts: breakpoints and reads (Milestone 241).

@@ -199,6 +199,9 @@ pub struct VmOpts {
     pub soft_irq: bool,
     pub bootargs: String,
     pub virtio: crate::virtio::Config,
+    /// The fingerprint hashes RAM by a tree of page hashes on several threads
+    /// (`crate::ramtree`): an image built at the fingerprint epoch 4 or later (Milestone 294).
+    pub ram_tree: bool,
 }
 
 /// One VM held by this process (Hypervisor.framework allows one VM per process).
@@ -233,6 +236,8 @@ pub struct Vmm {
     vm_live: bool,
     /// Function contracts (`HYDO_CONTRACTS`, Milestone 241): in no snapshot and no fingerprint.
     pub ct: Option<Box<crate::contracts::Ct>>,
+    /// [`VmOpts::ram_tree`]
+    ram_tree: bool,
 }
 
 /// The guest RAM view the devices use.
@@ -320,6 +325,7 @@ impl Vmm {
             diag,
             vm_live: false,
             ct: None,
+            ram_tree: o.ram_tree,
         };
         if VM_HELD.swap(true, Ordering::SeqCst) {
             fatal(
@@ -1518,7 +1524,8 @@ impl Vmm {
         [console, regs, mach, ram, h]
     }
 
-    /// serve.c's `xfp()`: console, registers, machine, devices and all RAM.
+    /// serve.c's `xfp()`: console, registers, machine, devices and all RAM (from the fingerprint
+    /// epoch 4 by its tree of page hashes, `crate::ramtree`; before, `mix64` over every byte).
     pub fn xfp(&self) -> u64 {
         let s = self.vtake();
         let mut h = fnv(b"hvm-explore-v1", OFFSET);
@@ -1530,7 +1537,11 @@ impl Vmm {
         if self.vio.attached() {
             h = self.vio.hash(h);
         }
-        crate::fnv::mix64(self.ram.bytes(), h)
+        if self.ram_tree {
+            crate::ramtree::hash_bytes(h, self.ram.bytes(), crate::ramtree::threads())
+        } else {
+            crate::fnv::mix64(self.ram.bytes(), h)
+        }
     }
 }
 

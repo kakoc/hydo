@@ -1453,6 +1453,8 @@ pub fn vm_opts(o: &KvmOptions, disk: Option<&std::path::Path>) -> VmOpts {
         spin_state: o.spin_state.unwrap_or(true),
         stale_events: false,
         host_dr6: false,
+        // the engine sets it by the image's epoch
+        ram_tree: false,
         cmdline: CMDLINE.to_string(),
         virtio: virt,
         vcpus: 1,
@@ -1649,9 +1651,10 @@ fn engine_main(
     vo.stale_events = before_2;
     // Milestone 252: DR6's host bits leave the fingerprint from epoch 3 on
     vo.host_dr6 = start.image_epoch.is_some_and(|e| e < 3);
-    // Milestone 290: the disks' tree hash in the fingerprint from epoch 4 on
-    vo.virtio.disk_tree =
-        hydo_image::defaults(start.image_epoch.unwrap_or(hydo_image::EPOCH), "x86_64").disk_tree;
+    // Milestones 290 and 294: the disks' and RAM's tree hashes in the fingerprint from epoch 4 on
+    let d = hydo_image::defaults(start.image_epoch.unwrap_or(hydo_image::EPOCH), "x86_64");
+    vo.virtio.disk_tree = d.disk_tree;
+    vo.ram_tree = d.ram_tree;
     vo.ram_size = ram_mib << 20;
     vo.vcpus = start.vcpus.max(1);
     if vo.vcpus > 1 {

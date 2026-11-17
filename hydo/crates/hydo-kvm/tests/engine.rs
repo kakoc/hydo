@@ -752,14 +752,27 @@ fn runs_of(prog: &Program, schedules: &[&str]) -> Vec<RunResult> {
 }
 
 fn runs_of_with(prog: &Program, schedules: &[&str], cont: bool) -> Vec<RunResult> {
+    runs_of_epoch(prog, schedules, cont, None)
+}
+
+/// [`runs_of_with`] for an image built at fingerprint epoch `epoch` (None: this hydo's).
+fn runs_of_epoch(
+    prog: &Program,
+    schedules: &[&str],
+    cont: bool,
+    epoch: Option<u64>,
+) -> Vec<RunResult> {
     schedules
         .iter()
         .map(|s| {
-            let mut h = Host::start_program(
+            let (mut h, _) = Host::start_epoch(
                 Mode::Serve {
                     boot: Some(sched("rb=4 | run")),
                 },
-                prog.clone(),
+                Script::new(prog.clone()),
+                1,
+                KvmOptions::default(),
+                epoch,
             );
             boot(&mut h);
             h.recv();
@@ -997,7 +1010,9 @@ fn preemption_records_name_every_point_and_move_nothing() {
 /// The one-vCPU fingerprints of the scripted guests, pinned before the work on several vCPUs
 /// (docs/design/kvm-vcpus.md, "One vCPU stays exactly as it is"): a change that moves the
 /// one-vCPU path fails here on any machine. Each line is a run's `fp`, `wfp`, extras (`stops=`,
-/// `typed=`, `inh=`, `ctl=`, the tick-jitter and preemption-point counts) and verdict.
+/// `typed=`, `inh=`, `ctl=`, the tick-jitter and preemption-point counts) and verdict. An image
+/// built at the fingerprint epoch 3 keeps these values; from epoch 4 RAM's tree hash
+/// (Milestone 294) gives [`PINNED_ONE_VCPU_EPOCH_4`], with the same extras and verdicts.
 #[test]
 fn one_vcpu_fingerprints_are_pinned() {
     // (name, guest, schedule, the host says CONT at the guest's exit stop: the engine's verdict)
@@ -1024,19 +1039,24 @@ fn one_vcpu_fingerprints_are_pinned() {
             false,
         ),
     ];
-    let mut got = Vec::new();
-    for (name, p, s, cont) in cases {
-        let r = &runs_of_with(&p, &[s], cont)[0];
-        let extras: Vec<String> = r.extras.iter().map(|(k, v)| format!("{k}={v}")).collect();
-        got.push(format!(
-            "{name} fp={} wfp={} {} | {}",
-            r.fp,
-            r.wfp,
-            extras.join(" "),
-            r.verdict
-        ));
+    for (epoch, pinned) in [
+        (Some(3), &PINNED_ONE_VCPU),
+        (None, &PINNED_ONE_VCPU_EPOCH_4),
+    ] {
+        let mut got = Vec::new();
+        for (name, p, s, cont) in &cases {
+            let r = &runs_of_epoch(p, &[s], *cont, epoch)[0];
+            let extras: Vec<String> = r.extras.iter().map(|(k, v)| format!("{k}={v}")).collect();
+            got.push(format!(
+                "{name} fp={} wfp={} {} | {}",
+                r.fp,
+                r.wfp,
+                extras.join(" "),
+                r.verdict
+            ));
+        }
+        assert_eq!(&got, pinned, "epoch {epoch:?}, got:\n{}", got.join("\n"));
     }
-    assert_eq!(got, PINNED_ONE_VCPU, "got:\n{}", got.join("\n"));
 }
 
 const PINNED_ONE_VCPU: [&str; 6] = [
@@ -1046,6 +1066,15 @@ const PINNED_ONE_VCPU: [&str; 6] = [
     "cadence fp=1be91463ed7b93ef wfp=8f02392fd574a1ea stops=5 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
     "spin fp=2e8b92015190b56e wfp=1119861f7b2e16f4 stops=19 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
     "counter fp=3c94fb7ed9aacd9c wfp=cab9588566b03486 stops=14 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK counted",
+];
+
+const PINNED_ONE_VCPU_EPOCH_4: [&str; 6] = [
+    "idle fp=42b53f2736033a72 wfp=dbe7e22d43054106 stops=22 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
+    "jitter fp=5cbb27a10e2b5253 wfp=ab5216ae4d32771b tjk=0-12 tjn=11 stops=92 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
+    "preempt fp=e4a4c7aa1bf0dfc9 wfp=0e219a5ad875cd93 pctf=0 pctw=354 stops=92 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
+    "cadence fp=42b53f2736033a72 wfp=dbe7e22d43054106 stops=5 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
+    "spin fp=c2a470f9378cd24e wfp=d29289b4daf5c2ff stops=19 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK ticks",
+    "counter fp=d7c3f6cb40302dbc wfp=83f01dcf0892092d stops=14 typed=0 inh=0000000000000000 | HYDO-ORACLE: OK counted",
 ];
 
 // ---------------- several vCPUs (docs/design/kvm-vcpus.md) ----------------
@@ -1406,7 +1435,8 @@ fn the_disk_is_in_the_fingerprint_by_its_tree_from_epoch_4() {
     let three = run_with_disk(Some(3), &disk);
     assert_eq!(three.verdict, now.verdict);
     assert_ne!(three.fp, now.fp, "epoch 3 keeps the byte-wise hash");
-    // the values: epoch 3's is the one the byte-wise hash gave before Milestone 290
+    // the values: epoch 3's is the one the byte-wise hash gave before Milestone 290; epoch 4's
+    // also hashes RAM by its tree (Milestone 294)
     assert_eq!(
         [three.fp.as_str(), now.fp.as_str()],
         PINNED_DISK,
@@ -1425,7 +1455,7 @@ fn the_disk_is_in_the_fingerprint_by_its_tree_from_epoch_4() {
 }
 
 /// [epoch 3, epoch 4] fingerprints of `the_disk_is_in_the_fingerprint_by_its_tree_from_epoch_4`.
-const PINNED_DISK: [&str; 2] = ["b997a5136b93d1cc", "5132693bfd56d785"];
+const PINNED_DISK: [&str; 2] = ["b997a5136b93d1cc", "06a9cfc91b586e50"];
 
 /// A plan of one function of the scripted guest (Milestone 255): its "entry" is the timer
 /// handler's first operation, and the entry reads the tick counter (rbx). The scripted guest has

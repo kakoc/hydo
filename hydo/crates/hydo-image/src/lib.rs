@@ -102,6 +102,11 @@ pub struct EpochDefaults {
     /// `Disk::tree_hash`), instead of every byte with byte-wise FNV. From epoch 4 (Milestone 290).
     /// hvx's disk is in the kernel module, whose fingerprint does not change.
     pub disk_tree: bool,
+    /// The Mac and KVM engines' fingerprints hash guest RAM by a tree of 4 KiB page hashes, on
+    /// several threads (`hydo_hvm::ramtree`), instead of one chain of the word-wise mix over
+    /// every byte. The KVM engine gives the pages it did not write since its base their known
+    /// hashes. From epoch 4 (Milestone 294). hvx's RAM hash is in the kernel module.
+    pub ram_tree: bool,
 }
 
 /// The defaults of an image built at `epoch` for `arch` (`x86_64` or `arm64`).
@@ -115,6 +120,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         regressions_in_image: epoch < 4,
         cgroup2: epoch >= 4,
         disk_tree: epoch >= 4,
+        ram_tree: epoch >= 4,
     }
 }
 
@@ -519,8 +525,9 @@ mod tests {
         assert!(three.regressions_in_image);
         assert!(!one.cgroup2 && !two.cgroup2 && !three.cgroup2);
         assert!(!one.disk_tree && !two.disk_tree && !three.disk_tree);
-        // epoch 4 (M269, M283, M290): the saved regressions beside the image, cgroup2 mounted at
-        // every boot, and the disks' tree hash; the rest as at epoch 3
+        assert!(!one.ram_tree && !two.ram_tree && !three.ram_tree);
+        // epoch 4 (M269, M283, M290, M294): the saved regressions beside the image, cgroup2
+        // mounted at every boot, and the disks' and RAM's tree hashes; the rest as at epoch 3
         let four = defaults(4, "x86_64");
         assert_eq!(
             four,
@@ -528,10 +535,12 @@ mod tests {
                 regressions_in_image: false,
                 cgroup2: true,
                 disk_tree: true,
+                ram_tree: true,
                 ..three
             }
         );
         assert!(defaults(4, "arm64").disk_tree);
+        assert!(defaults(4, "arm64").ram_tree);
         assert!(defaults(4, "arm64").cgroup2);
         assert!(!defaults(4, "arm64").regressions_in_image);
         assert_eq!(defaults(EPOCH, "x86_64"), four);

@@ -110,6 +110,33 @@ impl Mem {
             .collect()
     }
 
+    /// RAM's tree hash continued from `h` (`hydo_hvm::ramtree`, Milestone 294), with `base` the
+    /// base this memory was mapped from last: RAM's own pages ([`Mem::private_pages`]) hashed from
+    /// their bytes on several threads, its other pages by the base's page hashes (made once per
+    /// base, [`RamBase::leaves`]), and zero pages by a zero page's hash, without reading them. The
+    /// value is the tree hash of the memory's bytes, whatever the base.
+    pub fn tree_hash(&self, h: u64, base: Option<&RamBase>) -> u64 {
+        use hydo_hvm::ramtree;
+        let n = self.len / PAGE;
+        let mut own = vec![0u64; n.div_ceil(64)];
+        for k in self.private_pages(base) {
+            own[k as usize / 64] |= 1 << (k % 64);
+        }
+        let known = base.map(|b| (b, b.leaves()));
+        let zero = ramtree::zero_leaf();
+        let ram = self.bytes();
+        ramtree::tree_hash(h, ram.len(), ramtree::threads(), |k| {
+            if own[k / 64] & (1 << (k % 64)) != 0 {
+                ramtree::leaf(&ram[k * PAGE..(k + 1) * PAGE])
+            } else {
+                match known {
+                    Some((b, l)) if b.nonzero(k) => l[k],
+                    _ => zero,
+                }
+            }
+        })
+    }
+
     /// The page map's answer: present and not the file's page, or swapped out.
     #[cfg(target_os = "linux")]
     fn pagemap_private(&self) -> Option<Vec<u32>> {
@@ -159,6 +186,8 @@ pub struct RamBase {
     len: usize,
     /// a bit per page: the page holds a nonzero byte
     nonzero: Vec<u64>,
+    /// every page's tree hash (`hydo_hvm::ramtree::leaf`), made at the first fingerprint
+    leaves: std::sync::OnceLock<Vec<u64>>,
 }
 
 // SAFETY: the view is never written after the base is made
@@ -229,6 +258,7 @@ impl RamBase {
                 view: Mem { p, len },
                 len,
                 nonzero,
+                leaves: Default::default(),
             })
         }
         #[cfg(not(target_os = "linux"))]
@@ -243,7 +273,12 @@ impl RamBase {
                     }
                 });
             }
-            Ok(RamBase { view, len, nonzero })
+            Ok(RamBase {
+                view,
+                len,
+                nonzero,
+                leaves: Default::default(),
+            })
         }
     }
 
@@ -261,6 +296,21 @@ impl RamBase {
     /// Page k's bytes (read through the read-only view).
     pub fn page(&self, k: usize) -> &[u8] {
         self.view.page(k)
+    }
+    /// Every page's hash in RAM's tree hash (`hydo_hvm::ramtree`, Milestone 294), made at the
+    /// first call on several threads: a zero page's without reading it.
+    pub fn leaves(&self) -> &[u64] {
+        use hydo_hvm::ramtree;
+        self.leaves.get_or_init(|| {
+            let zero = ramtree::zero_leaf();
+            ramtree::leaves(self.len, ramtree::threads(), |k| {
+                if self.nonzero(k) {
+                    ramtree::leaf(self.page(k))
+                } else {
+                    zero
+                }
+            })
+        })
     }
     /// The number of nonzero pages (what the base costs in memory).
     pub fn pages(&self) -> usize {
@@ -353,5 +403,46 @@ mod tests {
         ram.map_base(&base).unwrap();
         assert_eq!(ram.bytes(), boot.bytes());
         assert!(ram.private_pages(Some(&base)).is_empty());
+    }
+
+    /// Milestone 294: RAM's tree hash is the tree hash of its bytes, whether a page comes from
+    /// RAM, from the base's page hashes, or is a zero page; one changed byte changes it.
+    #[test]
+    fn the_tree_hash_is_the_tree_hash_of_the_bytes() {
+        use hydo_hvm::fnv::OFFSET;
+        use hydo_hvm::ramtree::hash_bytes;
+        // 3 MiB and a half chunk: two nodes of the tree, the second short
+        let n = (3 << 20) + 256 * PAGE;
+        let mut boot = Mem::anon(n).unwrap();
+        for k in (0..n / PAGE).step_by(3) {
+            boot.bytes_mut()[k * PAGE..(k + 1) * PAGE].fill((k % 251) as u8 + 1);
+        }
+        let flat = |m: &Mem| hash_bytes(OFFSET, m.bytes(), 1);
+        assert_eq!(boot.tree_hash(OFFSET, None), flat(&boot));
+        let base = RamBase::build(n, |k, put| put(boot.page(k))).unwrap();
+        let mut ram = Mem::anon(n).unwrap();
+        ram.map_base(&base).unwrap();
+        let r0 = ram.tree_hash(OFFSET, Some(&base));
+        assert_eq!(r0, flat(&boot));
+        // pages written: RAM's own, hashed from their bytes
+        ram.bytes_mut()[7 * PAGE + 5] = 0xa5;
+        ram.bytes_mut()[(2 << 20) + 4 * PAGE] = 3;
+        ram.bytes_mut()[n - 1] = 9;
+        let r1 = ram.tree_hash(OFFSET, Some(&base));
+        assert_eq!(r1, flat(&ram));
+        assert_ne!(r1, r0);
+        // a page written back to the base's bytes gives the base's value again
+        let old = base.page(7)[5];
+        ram.bytes_mut()[7 * PAGE + 5] = old;
+        ram.bytes_mut()[(2 << 20) + 4 * PAGE] = base.page((2 << 20) / PAGE + 4)[0];
+        ram.bytes_mut()[n - 1] = base.page(n / PAGE - 1)[PAGE - 1];
+        assert_eq!(ram.tree_hash(OFFSET, Some(&base)), r0);
+        // one changed byte anywhere: in a base page, in a zero page, in a page of RAM's own
+        for at in [0, PAGE + 17, 3 * PAGE + 4095, (3 << 20) + 8, n - 8] {
+            ram.bytes_mut()[at] ^= 0x40;
+            assert_ne!(ram.tree_hash(OFFSET, Some(&base)), r0, "byte {at}");
+            ram.bytes_mut()[at] ^= 0x40;
+        }
+        assert_eq!(ram.tree_hash(OFFSET, Some(&base)), r0);
     }
 }
