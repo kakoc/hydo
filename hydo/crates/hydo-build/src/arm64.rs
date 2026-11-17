@@ -574,7 +574,17 @@ pub fn build(
     // guest.root: disk (Milestone 284): the root is a read-only ext4 file system in p1, and the
     // initramfs only mounts it; else p1 is a 1 MiB placeholder and the root is the initramfs
     let rootfs = if root_on_disk(&m) {
-        Some(disk_root(ctx, rootsec, &r, &name, bdir, out, &cpio, meta.as_ref(), io)?)
+        Some(disk_root(
+            ctx,
+            rootsec,
+            &r,
+            &name,
+            bdir,
+            out,
+            &cpio,
+            meta.as_ref(),
+            io,
+        )?)
     } else {
         None
     };
