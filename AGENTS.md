@@ -587,7 +587,7 @@ A Go client on franz-go produces idempotently, writes transactions and consumes 
 `type: messages` check and the invariant `tx.no_hanging` judge it. Seastar needs cgroup2 mounted
 once in the guest, which hydo does at boot since M283. Strict power losses of one node and
 whole-guest cuts lost no acknowledged record, whether write caching was on or off. Four new
-candidates, not reported upstream:
+candidates; the third and the fourth are reported as redpanda-data/community#395 and #396:
 - A damaged `tx.snapshot` of one partition stops its node at every start (an assertion in
   `persisted_stm.cc`), although a missing one is rebuilt from the log
   (`G=n1@1+2:zero,len=4096,file=tx.snapshot,seed=626bd178`; Docker too).
@@ -1904,7 +1904,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       steps or power cuts did not run. The Mac engine and KVM did not run the example.
     - The example is not in `hydo/onboard/recorded.json`.
 142. The Redpanda example (M279). What is left:
-    - Its four candidates are not reported upstream.
+    - Findings 3 and 4 are reported upstream as redpanda-data/community#395 and #396
+      (2026-11-17; the redpanda-data/redpanda repository is archived, and its issues moved
+      there). Findings 1 and 2 are not reported.
     - Finding 4 (a produce answer with an earlier transaction's offset) ran on KVM only, from
       the one-off workflow of the branch `tmp-redpanda-kvm`. hvx did not run its schedule, and it
       is no saved regression. The example's client writes one record per partition in a
