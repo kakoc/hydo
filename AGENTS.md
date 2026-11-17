@@ -394,7 +394,9 @@ skill (M229). The skill `onboard` in the Claude Code plugin `hydo` (`plugin/skil
 `/plugin marketplace add kakoc/hydo`, `/plugin install hydo@hydo`, then `/hydo:onboard`) holds
 the process; every hydo fact is in the guide `hydo/guide/`, printed by `hydo guide <topic>`.
 docs/ONBOARD.md is the user's page. `docs/ONBOARDING-PLAYBOOK.md` is the process for an onboarding
-of a real project, from the choice of a target to the upstream report (M281). The assertion SDKs are in `sdk/`
+of a real project, from the choice of a target to the upstream report (M281). `hydo guide
+strategies` lists the checks and faults that found bugs, each with its evidence, so that an
+onboarding chooses them from what worked (M293). The assertion SDKs are in `sdk/`
 (Rust is the reference), with the shared cases in `sdk/cases/`. `sdk/README.md` is for SDK
 maintainers: the shared cases, and the Go module with its frozen copy in `hydo/stack` (section
 "The Go module and the frozen copy in `hydo/stack`"). Every code example on the package pages is a
@@ -2684,6 +2686,11 @@ build machine, before 2026-10-13.
   once per process while the guest runs, and only written blocks are hashed again. web-shop's
   run takes 8 s in the engine instead of 42 to 55 s. Older images keep their values. Every
   epoch-4 Mac and KVM fingerprint moves (open item 105)
+- M293 (tentative number): the guide topic `hydo guide strategies`. It lists the 28 techniques
+  that found bugs with hydo. Each entry says what to write, when it fits, what it found and
+  missed, and its cost. A first table maps a type of system to the techniques that found most.
+  The playbook and the skill (2.3.3) point to it, and the retro updates it. Nothing recorded
+  moved
 
 ## Where to look
 

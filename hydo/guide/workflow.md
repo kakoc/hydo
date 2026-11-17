@@ -183,6 +183,8 @@ A project with C code needs a C compiler for the target. Use one of these:
 - Checks in `hydo/checks/`: `hydo guide checks` and `hydo guide invariant-patterns`. Business
   rules from the project's own sources, validated on runs without faults: `hydo guide rules`.
   Error logs as findings: `hydo guide error-logs`.
+- Which checks and faults found bugs in other projects of the same type, with the evidence:
+  `hydo guide strategies`.
 - Outside services (fakes and proxies): `hydo guide outside-services`. Fault kinds, knobs and
   BUGGIFY: `hydo guide faults`. The guest environment and its limits: `hydo guide hazards`. What
   this machine's backend supports: `hydo guide capabilities` and `hydo doctor`.

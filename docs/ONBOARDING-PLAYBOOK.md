@@ -146,7 +146,11 @@ its actions there: 216 actions of Memos's first walks filled the editor without 
 
 ## 3. Which faults find what
 
-The table lists the findings so far by the fault that made them. "None" means that the bug
+Choose a target's checks and faults with `hydo guide strategies`. It lists each technique that
+found a bug, with what to write, when it fits, what it found and missed, and its cost. Its first
+table maps a type of system and its promise to the techniques that found most.
+
+The table below lists the findings so far by the fault that made them. "None" means that the bug
 showed without a fault.
 
 | fault | token | findings |
@@ -246,7 +250,8 @@ hours. Otherwise stop. Record each blocker as a gap of hydo in the example's `RE
 
 4. Read the problems with `hydo report`, and the minimal schedules with `hydo report --details`.
 5. Fix each failure that is a mistake of the rules, rebuild, and explore the next seeds.
-6. Add the options that fit the project:
+6. Add the options that fit the project. `hydo guide strategies` says which ones found bugs in
+   systems of the same type:
    - `--cluster-faults` for the services of `groups:`;
    - `--more-faults` on hvx;
    - `--storage-faults` for services with `storage:`;
@@ -449,7 +454,14 @@ Retro: <project> <version>, <engine>, <date>
 - The findings: <n> new, <n> known, <n> by design or documented, each with its label.
 - What took the most time: <the three largest costs, each with its hours>.
 - What hydo lacked: <each gap>, and for each the fix: an open item, a guide text, or code.
+- Strategies: <each technique that found or missed a finding>, and the entry of hydo guide
+  strategies that was added or updated.
 ```
+
+Add the onboarding's evidence to `hydo/guide/strategies.md`, the text of `hydo guide
+strategies`. Update the entry of each technique that found a finding or missed one, with the
+example's name, the section of its `RESULTS.md`, and the numbers. Add an entry for a new
+technique in the same shape. The next onboarding chooses its techniques from that page.
 
 Turn each gap into one of three fixes:
 

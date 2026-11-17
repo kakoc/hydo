@@ -4,7 +4,7 @@ description: Set up deterministic fault testing with hydo for a software project
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "2.3.2"
+  version: "2.3.3"
   hydo-min: "0.1.0"
 ---
 
@@ -94,7 +94,10 @@ its data directory, its dependencies, and the file where you found each fact. Sh
    not cover (the application's own API), and keep the generated ones beside them.
    An `eventually_` command runs once, so it must retry by itself until its own deadline; an
    `eventually_` check is polled by hydo until it holds (`hydo guide checks`).
-5. Checks: propose the business rules from the project's own sources (its schema, API,
+5. Plan the checks and the faults together: first read `hydo guide strategies` (an older hydo
+   answers "no guide topic"; go on without it). It names the techniques that found bugs in
+   systems of the same type, with their evidence. Tell the user which ones you chose and why.
+   Checks: propose the business rules from the project's own sources (its schema, API,
    documentation, tests and client library) with
    [references/proposing-rules.md](references/proposing-rules.md), into `hydo/rules.yaml`; hydo
    validates them in step 4. Choose the other checks with

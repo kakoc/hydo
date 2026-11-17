@@ -1,0 +1,627 @@
+# Strategies that found bugs: which checks and faults to choose
+
+This page lists the testing techniques that found bugs with hydo, with the evidence for each.
+Read it when you plan the checks and the faults of a new project. Start with the table, then
+read the entries that it names.
+
+Each entry names its source in hydo's repository: an example's results page
+(`hydo/onboard/examples/<name>/RESULTS.md`) or a milestone of `docs/HISTORY.md`. A number that
+the sources do not give is left out. "Blind" means that `hydo explore` drew the faults without a
+hint of where the bug is. A finding keeps the label of its results page: new as far as the search
+found, known, by design, or a deployment setting.
+
+## Start here
+
+| system | its promise | the techniques that found most | where they found bugs |
+|---|---|---|---|
+| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL |
+| log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults | Redpanda, NATS |
+| job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor |
+| ledger or billing system | the books match the acknowledged operations; a limit holds | the generic rule beside domain rules; concurrent clients without faults; value properties | Blnk, Lago, Formance Ledger |
+| service that calls outside APIs | a payment or a mail takes effect once | protocol faults on fakes and emulators; a kill while an answer is late | web-shop, checkout, openapi-payouts, Saleor |
+| device updater | the device boots a complete slot of an allowed version | reactions at the update's events; reboots and added disks; a scan of a reaction's delay | SWUpdate, Mender |
+| web app | a saved object stays saved; the page shows every error | the page walk with a page rule; power cuts of the whole guest; protocol faults | Vikunja, Memos, web-shop |
+| library function | its contract holds for every valid input | function fuzzing | strsim, httparse, num-traits, Qdrant |
+| flaky test | the test passes on every run | a pause of one thread; turn lengths and forced preemption points | Qdrant, nats-server, etcd |
+| cluster that upgrades in place | every member starts on the new version | upgrades | etcd |
+
+Three findings hold for every type of system:
+
+- Write the generic rule first. It found more than any other rule in Lago, Formance Ledger, and
+  Blnk.
+- Explore with `--strategy process` first and `--strategy swarm` last (the entry "The
+  explorer's strategy").
+- Run each durability setting at its durable value. A loss under a relaxed setting is the
+  setting's documented cost.
+
+## Checks
+
+### The generic rule over the client's acknowledged operations
+
+- **What it is.** One check recomputes the business result from the operations that the client
+  saw acknowledged, and compares it with the system's own totals. It knows nothing of the domain.
+- **What to write.** Each workload command records an acknowledged operation and what it
+  changes. A `final_` check in `hydo/checks/` sums the records and compares the sums with the
+  system's. `hydo guide composer` gives the files:
+
+  ```sh
+  printf '%s\n' "$id" >> "$HYDO_ACKED"; printf '%s ack\n' "$id" >> "$HYDO_OUTCOMES"
+  ```
+
+- **When it fits.** A ledger, a billing system, a payment flow: any system whose result is a sum
+  of client operations. The promise is that faults do not change the business result.
+- **What it found.**
+  - Lago (Milestone 218, "The short answers"): it failed in all 11 runs of the first exploration
+    that broke a business result. The billing rules failed in 8 of them.
+  - Lago (Milestone 225, finding 8): it alone found a subscription invoiced twice, with
+    `units:sub4:api_calls: reported 24, acknowledged 12`, in seed 7 of exploration F.
+  - Blnk (Milestone 224, finding 3): it alone found acknowledged commits of holds lost with Redis
+    without an append-only file.
+  - Formance Ledger (Milestone 215): only the rules that read the client's records saw the
+    duplicates of retries without keys and the payments lost on a lying disk. The rules over the
+    ledger's own state found nothing in 177 runs with faults.
+- **What it misses.** It cannot judge a decision that the system makes itself. Blnk's draws past
+  their overdraft limit passed it in every run. It names the total that is short, not the
+  mechanism. Lago's billing rules named the mechanism when they failed.
+- **Cost.** The client must record each operation in a form that the check can replay. The check
+  was 156 lines of Go in Formance and 380 in Blnk. It runs on every engine.
+
+### Domain rules from the project's sources
+
+- **What it is.** A domain rule states one promise of the system in its own terms, often as a
+  `.sql` check: a query that must return no rows. hydo proposes the evidence and validates each
+  rule on runs without faults.
+- **What to write.** `hydo rules scan` lists the schema, the state columns, the API and the
+  documented promises. Write the candidates into `hydo/rules.yaml`, then run
+  `hydo rules check hydo/rules.yaml --mutate` (`hydo guide rules`).
+- **When it fits.** A system that enforces a rule across processes, such as an API, a queue, and a
+  worker.
+- **What it found.**
+  - Blnk (Milestone 224): the overdraft rule alone found finding 1, draws that ignore their
+    limit. The bulk rule found finding 2, an atomic bulk that keeps its first transfer.
+  - Saleor (Milestone 251): `refund_requests_end`, `gift_card_balance_is_its_ledger`, and
+    `placed_orders_are_paid` caught both new bugs, saleor#20022 and saleor#20023.
+  - The rule suggestion (Milestone 236): on Blnk, Lago, and listmonk, 23 of 25 proposed rules
+    held on clean runs. On the examples' saved regressions they caught six findings.
+- **What it misses.** A rule that one database transaction enforces rarely fails: 7 of
+  Formance's 8 domain rules and 5 of Blnk's 7 never failed. The scan matches words. It read none
+  of Saleor's 25 `models.py` files, so 14 of the 17 rules came from reading the code. Blnk's
+  atomic-bulk bug was caught only by a rule written after the miss.
+- **Cost.** A SQL rule was 5 to 21 lines in Formance and Blnk. `hydo rules check` runs the
+  workload without faults on three composition seeds.
+
+### Value properties (`// hydo: keep`)
+
+- **What it is.** A comment line says that a recorded value must not change between two
+  functions. A run that breaks it fails, also when every business rule holds.
+- **What to write.** Record the value with `key` and `record` lines next to a function, and add
+  a `keep` line (`hydo guide values`, section 4):
+
+  ```go
+  // hydo: keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction
+  // hydo: key transaction.Reference
+  // hydo: record transaction.OverdraftLimit as overdraft_limit at entry
+  ```
+
+- **When it fits.** A value that passes through a queue, a cache, or a copy before a decision
+  uses it. Blnk's overdraft limit is such a value.
+- **What it found.** Blnk (Milestone 291, the results page's section "The limit as a property
+  that a run can break"): the property broke in 9 of 30 blind schedules, first at seed 4. The
+  overdraft rule broke in 1, at seed 21. The property fails the run without faults, where every
+  business rule held, and the fixed build holds it. Each break names the first changing call:
+  the worker's coalesced copy had the limit 0.0.
+- **What it misses.** A property names one value. A comparison of two values, or of a value with
+  a constant, is not built.
+- **Cost.** The Mac and KVM engines stop at hardware breakpoints; hvx has none for it. On Blnk a
+  run took 5.6 to 5.9 s of engine time with the plan and 5.7 to 5.8 s without it, with one
+  fingerprint.
+
+### The messages check's claims
+
+- **What it is.** A `type: messages` check judges the history that the client records against
+  the promises that the project declares (`hydo guide messages`).
+- **What to write.** The claims of the Redpanda example. For transactions, add an `eventually`
+  check that no transaction stays open after the heal, as Redpanda's `tx.no_hanging`:
+
+  ```yaml
+  claims:
+    delivery: at-least-once
+    duplicates: forbidden
+    order: {kind: log, scope: key}
+    fan_out: every-group
+    after_ack: no-redelivery
+  ```
+
+- **When it fits.** A log, a stream, a queue, or a job runner. The promises are no loss, no
+  duplicate, an order per key, and no redelivery after an acknowledgement.
+- **What it found.**
+  - Redpanda (Milestone 279, finding 3): the no-loss claim broke for a committed transaction
+    that only one of its two partitions shows.
+  - Redpanda (finding 4, on KVM): the duplicates and order claims broke when a produce answer
+    named an earlier transaction's offset.
+  - Hatchet (Milestone 250, finding 1): `tasks.no-loss` broke with the rule `acked` for the
+    messages that a crashed engine had read (hatchet#5527).
+  - Redpanda (finding 2): seed 9's hang was an error of the drain, which hydo does not shrink.
+    With the `eventually` check, seed 37 reached the same cause as `VIOLATION [tx.no_hanging]`.
+- **What it misses.** The drain's output stays in the guest, also when it fails. A drain that
+  stops before the leases end and the recovery finishes reports false losses. Three of four
+  failed explorations of a user's queue came from the plan (Milestone 240).
+- **Cost.** A drain that reads every message back (`hydo guide messages`, "Write the drain"). It
+  runs on every engine.
+
+### History checks (list-append and registers)
+
+- **What it is.** The client records each operation's call and result. After the run, hydo
+  checks the history for isolation anomalies or for linearizability.
+- **What to write.** A check file `list_append_<name>` with `# hydo: history=log
+  consistency=strict-serializable` (`hydo guide checks`). For PostgreSQL, MySQL, and libSQL,
+  `hydo sql-gen` writes the workloads and the checks (`hydo guide workloads`).
+- **When it fits.** A database with transactions or a store with compare-and-set.
+- **What it found.**
+  - libSQL's sqld (the results page, findings 1 and 3): with its default durability, a power cut
+    lost acknowledged appends (`lost-append`). With `strong` set through the administration API,
+    4 of 100 schedules still lost appends, because sqld forgets the setting at a restart.
+  - YugabyteDB (Milestone 193): its default WAL setting lost acknowledged writes at a power cut.
+    Each loss was found by another generated check.
+- **What it misses.** A level without real time, such as `serializable`, cannot see a lost write.
+  In SurrealDB (Milestone 277), 167 schedules showed no anomaly at strong snapshot isolation.
+- **Cost.** `hydo sql-gen` writes it for the three SQL dialects. The check runs on the host.
+
+### Error logs as findings
+
+- **What it is.** Every error-level line of a service is a finding until you accept its kind in
+  `hydo/known-errors.yaml` (`hydo guide error-logs`).
+- **What to write.** One line in `hydo.yaml`: `errors: true`.
+- **When it fits.** A service whose client retries, so that an error never reaches a rule.
+- **What it found.** Formance Ledger (Milestone 215, finding 1): the only signal of the ledger
+  bug, a `500` when two transactions first use one account in two assets. It came as a new
+  error kind at seed 11 of an exploration, after 70 schedules without a failure. It is reported
+  as formancehq/ledger#2542. In Blnk the error logs showed finding 2's failed rollback beside
+  the rules.
+- **What it misses.** It found a bug alone in one of three ledgers. Every kind needs a review:
+  15 entries in Blnk and 31 kinds in Formance. An id in a log line splits one kind into many
+  (`normalize:` fixes it).
+- **Cost.** One line, and the review of each new kind.
+
+### Concurrent clients without faults
+
+- **What it is.** Several copies of a workload command run at once, so the system's own races
+  show without any fault.
+- **What to write.** Name the command `parallel_driver_<name>` in `hydo/workload/`
+  (`hydo guide composer`). Let the copies choose the same object sometimes, such as one order or
+  one account.
+- **When it fits.** A system that checks a limit or a state across processes.
+- **What it found.**
+  - Blnk (finding 1): five draws of 30.00 against a limit of 50.00 all apply. The value
+    property's failure shrank to a schedule without a fault. It runs only the draw and the repay
+    commands (Milestone 291).
+  - Formance Ledger (finding 1): two first uses of one account at once. Natively 196 of 200
+    pairs failed.
+  - Medusa (finding 1): two refunds of one order at once duplicate its items, found blind at
+    seed 2, and again at seed 1 of a later exploration.
+- **What it misses.** A race between two objects that the drivers never choose together.
+- **Cost.** The drivers only. It runs on every engine.
+
+## Faults
+
+### Power cuts of the whole guest (`C=`)
+
+- **What it is.** Every service loses its power before a workload step. Only data that reached
+  the disk survives, and a recovery boot runs the checks.
+- **What to write.** `disk=cut | run C=12`. `hydo explore` can also run one schedule per cut
+  point (`hydo guide faults`, "Exploring").
+- **When it fits.** Any system that acknowledges a write before it syncs it.
+- **What it found.**
+  - NATS JetStream (Milestone 141, Jepsen's 3.4): with the default `sync_interval`, all 30 cut
+    points lost acknowledged messages on 2.10.23 and 2.12.1. With `sync_interval: always`, none
+    did.
+  - Vikunja (Milestone 273, finding 1): 5 of 40 blind schedules lost tasks that Vikunja had
+    answered as saved. The shrunk walk typed one task, and `C=4` lost it.
+  - Valkey (finding 2, known valkey#5354): a power cut and the restart lose a hash's expiry.
+  - Dragonfly (Milestone 278, known dragonfly#8646): six failures of the first exploration had a
+    cut and no backward clock step.
+  - Mender and SWUpdate (Milestones 263 and 272): `disk=cut | run C=4` gives each its finding 1.
+- **What it misses.** A relaxed durability setting loses writes by design: make the setting a
+  build parameter and run its durable value. A lying disk or disk I/O errors break the disk's own
+  promise. In Valkey's swarm exploration all 28 failures had a disk fault. Use `--durable-only`
+  once the first exploration shows them.
+- **Cost.** One recovery boot per cut. In Redpanda most of a 3 to 14 minute schedule went to
+  recovery boots and drains. It runs on every engine.
+
+### Power cuts at the k-th disk flush (`cf=`)
+
+- **What it is.** The disk loses its power at one exact flush, so the cut falls inside a commit.
+- **What to write.** `disk=cut cf=271 | run T=8:15768000`. `hydo explore --more-faults` draws
+  them.
+- **When it fits.** A system that commits in several steps, each with its own flush.
+- **What it found.**
+  - Saleor (Milestone 251, finding 4, saleor#20023): seed 5 of the exploration charged a gift
+    card without a record. It shrank to `cf=270 T=8:15768000`.
+  - The bug benchmark's order service (Milestone 58): 12 of 282 flush points failed with durable
+    settings and an honest disk. No other fault found that bug.
+  - YugabyteDB (Milestone 193): the lost writes of its default WAL setting shrank to one cut at
+    the fourth flush.
+- **What it misses.** The point moves with the image's bytes. Saleor's `cf=270` stopped
+  reproducing when its image was rebuilt, and `cf=271` gives the finding now (Milestone 268).
+- **Cost.** hvx only.
+
+### One node's storage faults (`G=` and `L=`)
+
+- **What it is.** `G=` damages one file of a service's storage directory: flipped bits, zeroed
+  bytes, or a truncation. `L=` cuts the power of one service while the others run on.
+- **What to write.** Give the service `storage:` with `size_mib`, then `G=n1@1+2:zero,len=4096,
+  file=tx.snapshot` or `L=n2@10+2`. `hydo explore --storage-faults` draws both, and
+  `--corrupt-several` damages several nodes at once.
+- **When it fits.** A replicated store or log. The promise is that one node's damage loses no
+  acknowledged data and does not stop the cluster.
+- **What it found.**
+  - Redpanda (Milestone 279, finding 1): seed 6 found it blind. A zeroed or bit-flipped
+    `tx.snapshot` of one partition stops the whole node at every start.
+  - SurrealKV in SurrealDB (Milestone 277): 7 times blind in 167 schedules. A damaged value of
+    the value log drops every later acknowledged commit. The saved regression is
+    `G=surrealdb@40+1:trunc,file=vlog`.
+  - NATS JetStream (Milestones 235 and 245): Jepsen's 3.2, 3.3, and 3.5 in one VM. With two
+    nodes' blocks zeroed and the third node killed, 2,456 of 24,446 acknowledged messages were
+    lost.
+- **What it misses.** NATS's 3.3 and 3.5 need faults in a narrow order on chosen nodes, and the
+  explorer did not draw them; they were written by hand. `G=` picks its file and offset from its
+  seed, so one token damages other files on another image. The explorer never draws
+  `L=...:strict`.
+- **Cost.** A file system per service. The explorer shrinks detected damage too. In SurrealDB the
+  shrink of seed 3 took an hour. hvx and the Mac engine ran it.
+
+### Kills of the process that holds acknowledged work
+
+- **What it is.** `K=<svc>@<step>+<down>` kills a service's process tree and starts it again.
+  Aim it at the consumer between the acknowledgement and the completion.
+- **What to write.** `disk=none | run K=hatchet_engine_1@6+3`. `--cluster-faults` aims kills at
+  a group's members.
+- **When it fits.** A queue, a job runner, or a worker that takes work from a broker. The promise
+  is that acknowledged work is done.
+- **What it found.**
+  - Hatchet (Milestone 250, hatchet#5527): `K=hatchet_engine_1@6+3` loses acknowledged runs on
+    every run. Of 12 directed kills of an engine, 5 broke a rule.
+  - River (Milestone 233, river#1602): `K=postgres@6+1` gives two leaders on every run. Blind, it
+    came at seed 14.
+  - Saleor (Milestone 251, saleor#20022): `H=payments.refund@1-12:delay=6000 K=worker@6+1`
+    loses a refund request with its Celery task on every run. Each fault alone passes.
+  - Lago (Milestone 218, known lago-api#6901): a swarm schedule that killed and paused Redis
+    during a cancellation.
+- **What it misses.** A pause of a service alone found nothing: a 15 s pause of a Hatchet engine
+  broke nothing, and a kill at the same step lost runs. The restart of a `K=` fault ignores the
+  service's restart policy (River, seed 17).
+- **Cost.** It runs on every engine.
+
+### Clock steps and the clock audit
+
+- **What it is.** `T=<step>:<seconds>` steps the guest's wall clock, as an NTP step does.
+  `hydo rules scan --kind clock` lists the code that measures a duration with the wall clock and
+  proposes three schedules for each function where it is most sure.
+- **What to write.** `disk=none | run K=valkey3@2+3 T=10:-300`. Keep `clock` in `faults:`, and
+  run the audit's schedules with `hydo explore --schedule` (`hydo guide faults`).
+- **When it fits.** A system with leases, timeouts, throttles, replication delays, or snapshots
+  ordered by time.
+- **What it found.**
+  - Valkey (Milestone 232, valkey#5406): a backward step delays a full sync by its size. Blind in
+    4 of 237 schedules. The audit's schedule reproduced it on the Mac engine (Milestone 248).
+  - Temporal (Milestone 231, temporal#13099): after a backward step, one crash of PostgreSQL
+    takes the server down for the step's length.
+  - Dragonfly (Milestone 278): a restart after a backward step loads an older snapshot. Blind in
+    25 of 120 schedules, from the fourth on, shrunk to one step of 18 s back.
+  - River (Milestone 233, finding 2): a forward step longer than the 15 s lease gives two
+    leaders.
+  - Lago (Milestone 225, finding 8): a step to 2 s before the billing tick, `T=3:@:10-2s`, with
+    lost database answers, invoiced a subscription twice.
+- **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
+  and River's runs of every periodic job that a forward step skipped. The audit reads text. It
+  found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
+  clock. A step of a year lets retention delete the evidence (Redpanda seed 25, River's cleaner).
+- **Cost.** The shrinker spends hours on clock steps; stop an exploration once its failures are
+  understood. It runs on every engine.
+
+### Cluster faults and group selectors
+
+- **What it is.** A manifest's `groups:` names a cluster's members, with a `primary:` command.
+  The tokens then select members: the leader, a majority, or two halves of the group.
+- **What to write.** `K=nodes.primary@5+1`, `N=nodes.halves@3-9:loss,100%`, and
+  `hydo explore --cluster-faults` (`hydo guide faults`, "Faults on a cluster").
+- **When it fits.** A cluster with a leader.
+- **What it found.**
+  - NATS JetStream 2.10.22 (Milestone 195): 11 failures in 30 schedules with the option against 9
+    without it. Two had no power cut, for example `N=nodes.isolate@2-10:loss,100% T=11:-18`,
+    which lost 5 of 34 acknowledged messages.
+  - Redpanda (finding 3): the explorer shrank seed 24 to `K=nodes.primary@66+1 P=n2@42+11`.
+- **What it misses.** With `network: bridge` the explorer draws links only between services that
+  list each other in `depends_on`.
+- **Cost.** `network: bridge` for partitions.
+
+### Reactions at console events (`A=`)
+
+- **What it is.** A fault comes at the moment the client or the system writes an assertion record
+  to the console, not at a step boundary.
+- **What to write.** `A=rp.txn_add@20+3:kill-n1` or `A=mender.commit_started@3+7:cut`. Give the
+  client an event before each operation that matters. `hydo explore --reactive fault
+  --react-events <id>,...` draws them.
+- **When it fits.** A narrow window inside one operation: a transaction that adds partitions, an
+  update's commit.
+- **What it found.**
+  - Redpanda (finding 3): `A=rp.txn_add@20+<ms>:kill-<node>` broke the claim in 5 of 9 runs, each
+    node at 0, 3, and 8 ms, with no other fault.
+  - Mender (Milestone 272, finding 2): blind at seed 10 of 24, as `A=mender.commit_started:cut`.
+  - SWUpdate (Milestone 259): two of the five minimal schedules of its hvx exploration carry a
+    reaction.
+- **What it misses.** On the bug benchmark (Milestone 139) the drawn reactions found no defect
+  sooner. The sum of the runs to each defect's first detection grew from 154 to between 181
+  and 187. A new event in the client changes the image, and with it the timing of every
+  schedule.
+- **Cost.** The events in the client. It runs on every engine.
+
+### A scan of a reaction's delay
+
+- **What it is.** One reaction runs with a list of delays after its event, one run per delay, to
+  map the window where a fault breaks a promise.
+- **What to write.** A shell loop over `A=mender.commit_started@3+<ms>:cut` for each delay.
+  The explorer draws a delay from six fixed values only.
+- **When it fits.** A window of a few milliseconds after an event, whose place differs between
+  engines.
+- **What it found.**
+  - Mender on hvx (the results page, "On hvx"): the commit that rolls back a permanent update
+    came at 64 ms and at 69 to 87 ms after the event. On the Mac engine `+7` failed and `+8`
+    passed.
+  - Redpanda (finding 3): delays of 0, 3, and 8 ms on each node gave 5 failures of 9.
+- **What it misses.** The window moves with the program's bytes. A second build of
+  `mender-update` moved it to 65, 70, and 75 ms.
+- **Cost.** One run per delay.
+
+### Protocol faults on fakes and emulators (`H=`)
+
+- **What it is.** A fake or an emulator stands for an outside service, and `H=` delays, drops,
+  resets, or fails its answers (`hydo guide outside-services`).
+- **What to write.** `H=api.place_order@0-1:drop` or
+  `H=stripe.payment_intent@3-4:status=500,effect=yes`. Use `emulators:` for Stripe, SMTP, and S3,
+  and `hydo fake from-openapi` for a service with an OpenAPI description.
+- **When it fits.** Payments, mail, webhooks: any call that must take effect once.
+- **What it found.**
+  - web-shop (Milestone 257): with `--protocol-cover` the double order came at seed 3 and the
+    stuck spinner at seed 4. The random draws first lost the order's answer at seed 120.
+  - openapi-payouts: with `--protocol-cover` the retry bug came at seed 3 instead of seed 28.
+  - checkout (Milestone 242): the planted double charge failed 5 of 200 blind schedules, and none
+    of the first 40.
+  - Saleor (finding 1): the lost refund request needs a delayed refund answer and a kill of the
+    worker. Each fault alone passes.
+- **What it misses.** A fake answers only what it was written to answer. Medusa's first fake
+  could not send Stripe's signed webhooks, so its finding 2 was partly the fake's.
+- **Cost.** Fast runs: checkout ran 200 schedules in 242 s on hvx with 4 workers.
+
+### Pauses of the workload or of one thread
+
+- **What it is.** `P=workload/<thread>@<step>~<ms>:<ms>` stops the named threads of the test for
+  some guest time, while its other threads run on. `P=workload@...` stops the whole test.
+- **What to write.** `disk=none | run P=workload/tests::wal_reco@0~4433:500`. `hydo explore
+  --pause-thread <name>` draws them, with `--pause-min` and `--pause-lengths`.
+- **When it fits.** A flaky test with a race between its own thread and a background worker.
+- **What it found.**
+  - Qdrant's flaky test 10200 (Milestone 226): the pause fails it on every hvx run, and the
+    fixed test passes. 2,604 native runs never failed. The failing starts are about 1 ms wide.
+  - etcd's flaky test 22796 (Milestone 216): a 60 ms pause of the workload failed it at starts of
+    0 to 7 ms on the Mac. On hvx it failed at most starts from 151 to 163 ms.
+- **What it misses.** Blind starts from 0 to 5,000 ms found none of Qdrant's windows in 300
+  schedules. Find the moment first, then give `--pause-min` and `--pause-max` around it.
+- **Cost.** On the Mac and KVM engines it needs an image built at the fingerprint epoch 3 or
+  later.
+
+### Turn lengths and forced preemption points
+
+- **What it is.** hydo changes where threads switch: the turn length of several vCPUs (`q=`),
+  forced preemption points (`pct=`, `pctn=`), or shorter and inserted ticks on hvx (`pp=`,
+  `xt=`).
+- **What to write.** `hydo explore --vcpus 2 --turns`, or `hydo explore --timing --preempt`.
+  To find the turn length where the verdict changes, read the section "Find where the verdict
+  changes" of `hydo guide flaky-tests`.
+- **When it fits.** A flaky test whose failure depends on thread timing.
+- **What it found.**
+  - nats-server's flaky test 8363 (Milestone 227): on KVM with 2 vCPUs the search found the
+    boundaries in 20 runs: `q=15` fails and `q=16` passes, `q=39` passes and `q=40` fails.
+  - Qdrant (epoch 2, KVM): 4 of 400 schedules failed. `pctn=40` failed and `pctn=39` passed.
+  - etcd 22796 with a CPU limit in the guest (Milestone 211): 38 of 100 schedules failed, each
+    with `pp=` or `xt=`. None of the 51 schedules without them failed.
+- **What it misses.** On KVM and the Mac these tokens count VM exits. A window without an exit
+  is out of their reach. A new fingerprint epoch moves the timing: at epoch 3 Qdrant's `pctn=40`
+  passes.
+- **Cost.** Several vCPUs need hvx or KVM.
+
+### Upgrades (`U=`)
+
+- **What it is.** `U=<target>@<step>:<version>` switches a service to another version during the
+  run, on the same data. A list or a group's selector gives a rolling upgrade.
+- **What to write.** `services[].versions` in the manifest, then `disk=none | run
+  U=etcd1@5:3.6.0`. `hydo explore --upgrades` draws them.
+- **When it fits.** A cluster that upgrades in place.
+- **What it found.** etcd (Milestone 238): one token reaches issue 19557, "too many learner
+  members in cluster". Blind, 24 schedules drew `U=` in 11, and two of them were the bug. In
+  SurrealDB (Milestone 277) the experimental upgrade from 3.x held under kills and power cuts.
+- **What it misses.** Versions of an image service are refused, and the explorer draws one `U=`
+  per schedule.
+- **Cost.** The image carries every version.
+
+### Reboots and added disks
+
+- **What it is.** `guest.reboot: true` lets a guest program ask for a real reboot.
+  `guest.disks` adds disks, each with its own write cache, so a device's storage chips can be
+  modelled.
+- **What to write.** A guest program prints the console line `HYDO-REBOOT`. The sections
+  "Reboots" and "Added disks" of `hydo guide manifest` give the keys. Add reactions at the
+  update's events.
+- **When it fits.** A device updater with two root slots and a boot loader's environment.
+- **What it found.**
+  - SWUpdate (Milestones 259 and 263): a slot that is never flushed boots its old contents after
+    a power cut. With real reboots, 20 schedules gave 7 failures, at 82 runs an hour.
+  - Mender (Milestone 272, finding 1): 24 schedules gave 9 failures in three signatures.
+  - RAUC held in 80 schedules on the Mac engine and 58 on hvx.
+- **What it misses.** A window between the install and the reboot exists only when the client
+  waits between them. SWUpdate's first client rebooted at once, and 25 schedules found nothing.
+- **Cost.** Added disks need the Mac or KVM engine. A device model needs its own disk images and
+  a boot loader model.
+
+### The page walk and its invariants
+
+- **What it is.** `browser.explore` lets hydo walk through a web app's pages from a seed. Five
+  invariants watch every page: uncaught errors, spinners that stay, unshown failed requests,
+  broken texts, and failing tests.
+- **What to write.** `browser.explore` in `hydo.yaml` (`hydo guide web-apps`), one page rule
+  over the database, `watch.failures_of` for the writes, and `avoid:` for busy controls.
+- **When it fits.** A web app whose server keeps the data.
+- **What it found.**
+  - web-shop (Milestone 258): both planted bugs blind in 20 schedules, without a test.
+  - Vikunja (Milestone 273): finding 1 failed 5 of 40 schedules, of which 19 had a power cut.
+    Finding 2, an unhandled rejection, came at seed 9 under disk errors.
+  - Memos (Milestone 258): a share link's copy button throws over plain HTTP (memos#6575), one
+    failure in seeds 21 to 60.
+- **What it misses.** Memos's first 20 walks spent 216 actions in the editor without saving.
+  The later walker of Milestone 267 reached neither Memos finding in seeds 21 to 60. A walk that
+  a power cut ends is not judged.
+- **Cost.** About 40 s a run on hvx; `network: bridge`.
+
+## Timing and engines
+
+### A second engine's timing
+
+- **What it is.** The same schedule on another engine runs with other timing, so it reaches
+  other windows.
+- **What to write.** Build the image for the engine, then `hydo run --backend kvm "<schedule>"`.
+- **When it fits.** A timing-sensitive finding, or a schedule that passes on the first engine.
+- **What it found.** Redpanda's finding 4 came only on KVM, from `A=rp.txn_add@20:kill-n3` on
+  three hosts. The hvx explorations never showed it. web-shop's seed 8 walk fails on hvx and
+  passes on KVM.
+- **What it misses.** Fingerprints differ between engines, and on KVM between AMD and Intel.
+  Compare verdicts, not fingerprints.
+- **Cost.** An image per architecture: the Mac engine runs arm64 guests.
+
+### The explorer's strategy
+
+- **What it is.** `--strategy` chooses how `hydo explore` draws faults: `process` gives 2 to 4
+  fault kinds in staggered windows, and `swarm` switches whole categories on and off per run.
+- **What to write.** `hydo explore --seeds 1-20 --strategy process --new-faults` first, and
+  `--strategy swarm --new-faults` last.
+- **When it fits.** Every project.
+- **What it found.** On the bug benchmark (Milestones 54 and 56), out of 24 possible
+  detections, random made 19, swarm 21, and process 24. Swarm finds more kinds of failure,
+  many of them disk faults.
+- **What it misses.** Swarm draws lying disks and I/O errors, whose failures are the disk's.
+- **Cost.** Add `--more-faults` on hvx. With `--backend kvm` and on a Mac the explorer refuses it.
+
+## Narrow and confirm a finding
+
+### A forced order in a native script
+
+- **What it is.** After hydo shows the cause, a script under Docker forces the order of the
+  steps, with locks, an administration call, or a fixed step order. The bug then shows on every
+  try.
+- **What to write.** A script in the example's `native/` folder that runs the project's own
+  images and holds each step until the next one may run.
+- **When it fits.** A cause that is a timing or environment effect, which the code alone does
+  not show.
+- **What it found.**
+  - Redpanda finding 3 (`native/half-commit.sh`): 10 of 10 commits lost their record in the
+    program's step order. Two racing producers without it lost a record in 5 of 205 commits.
+  - Redpanda finding 4 (`native/stale-offset.sh`): with a move of the leader, 20 of 20 rounds;
+    without it, 0 of 20.
+  - Saleor finding 4: two row locks hold the gift card charge at the point after the balance
+    commit.
+- **What it misses.** Without a forced order the native rates are low. Hatchet lost runs in 4
+  of 8 crashes, and River gave two leaders in 5 of 30.
+- **Cost.** About an hour. Skip it when the cause is plain in the code.
+
+### Directed workloads for a narrow trigger
+
+- **What it is.** A workload command builds the trigger that a blind exploration does not reach.
+- **What to write.** One command that makes the trigger with ordinary client requests, such as a
+  `singleton_driver_` command (`hydo guide composer`).
+- **When it fits.** A known issue whose trigger is a coincidence, such as two expiries on one
+  nanosecond.
+- **What it found.** TigerBeetle's issue 3960 (Milestone 217): 150 blind schedules gave no tie.
+  The `tie/` workload sets the guest's clock with `date -s`, and 0.16.29, 0.16.45, and 0.17.9
+  stop on every run.
+- **What it misses.** It needs the cause first, so it confirms a finding and does not find one.
+- **Cost.** One command and one image.
+
+### Version pairs
+
+- **What it is.** One exploration runs on a release with a known bug and on the release with its
+  fix. The pair checks that the setup can reach the bug.
+- **What to write.** A build parameter for the version, then the same seeds on both images.
+  `hydo versions` replays a finding on a list of versions (`hydo guide workflow`).
+- **When it fits.** A project with a known bug that a fault reaches, before the hunt for new ones.
+- **What it found.**
+  - etcd 3.5.5 (issue 14685): 19 of 100 schedules failed, and 0 on 3.5.6.
+  - NATS 2.10.22: 14 of 50 schedules lost the stream, and none on 2.10.23.
+  - `hydo versions` (Milestone 221) replayed Formance's account race. It is present from v2.4.0
+    and absent in v2.3.24.
+- **What it misses.** YugabyteDB's known TA-30772 was not reproduced on either release.
+- **Cost.** One image per version.
+
+## Functions
+
+### Function contracts in a whole-system run
+
+- **What it is.** `// hydo: requires` and `ensures` comments next to a function are checked at
+  every call while the system runs under faults (`hydo guide manifest`, "Function contracts").
+- **What to write.** The comments, and `contracts:` in `hydo.yaml` with the program and its
+  sources:
+
+  ```rust
+  // hydo: ensures req_id > old(l.last_req) || l.balance == old(l.balance)
+  ```
+
+- **When it fits.** A Rust or Go service with a function that moves money and can state its
+  result.
+- **What it found.** The contracts-ledger example's planted double debit breaks `ensures` only
+  under a pause or a lost answer (Milestone 241). On Blnk (Milestone 260) 24 blind schedules
+  found nothing that the rules missed. The overdraft contract broke in the rule's runs and named
+  the call.
+- **What it misses.** No contract states Blnk's atomic bulk.
+- **Cost.** The Mac and KVM engines only. A run with the plan has the fingerprint of the run
+  without it.
+
+### Function fuzzing (`hydo fuzz`)
+
+- **What it is.** `hydo fuzz` tests each contracted Rust function natively, with inputs from its
+  `requires` and `input` lines, and judges each call by `ensures` (`hydo guide fuzz`).
+- **What to write.** The contract's comments, then `hydo fuzz path/to/crate --fn find`.
+- **When it fits.** A library function over integers, strings, bytes, or lists, such as a
+  parser, an encoder, or a distance.
+- **What it found.**
+  - contracts-ledger (Milestone 275): the planted bug from the contract alone, on 96 of 1,000
+    inputs.
+  - Qdrant's `decompress_sequence` (Milestone 275) panics on a header that `compress_sequence`
+    never writes.
+  - memchr with a planted bug (Milestone 282): its own contract broke on 10 of 1,000 calls.
+  - num-integer's `gcd` (Milestone 282) gives the known rust-num/num-integer#55.
+  - Milestone 288: strsim's `sorensen_dice` divides by byte lengths. httparse's
+    `parse_chunk_size` accepts `\r\n` as size 0. num-traits' `abs_sub` panics in a debug build.
+- **What it misses.** Trait methods, types that hold pointers, and enumeration results are
+  refused or not read (Milestone 289). None of the candidates was posted.
+- **Cost.** 1 to 15 s per build and run, with no VM.
+
+## Measured without a gain
+
+Each of these was measured against the plain exploration. The first three are options of `hydo
+explore`. The last two were experiments of the first explorer, before Milestone 102.
+
+- The steered search (`--steer`, Milestone 209): on KVM over five seed ranges it found Qdrant's
+  failure after a median of 118 schedules, and the plain exploration after 72. On hvx neither
+  found it.
+- The state search (`--search state`, Milestone 212): it found the benchmark's d7 and d10 in 2 of
+  5 seed ranges, and the plain exploration in 3 of 5. Neither found etcd 14685's second symptom.
+- Reactions drawn on the bug benchmark (Milestone 139): no defect came sooner (the entry on
+  reactions).
+- Coverage-guided exploration (Milestones 41 and 44): random schedules found an old bug of the
+  order service at runs 1 and 13. The guided search found it at run 14, and once not within 30.
+- Branch points from assertions (Milestone 45): 53 features and 6 signatures. Random schedules
+  gave 59 features and 11 signatures.
+
+## Add an entry
+
+After an onboarding, add its evidence here, in the same shape: what it is, what to write, when it
+fits, what it found, what it misses, and the cost. Name the example's results page or the
+milestone for every number. `docs/ONBOARDING-PLAYBOOK.md`, section 8, asks each retro for it.

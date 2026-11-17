@@ -14945,3 +14945,66 @@ fmt --all --check`, workspace clippy with `-D warnings`, `cargo test` of hydo-hv
 hydo-engine, hydo-image and hydo-config, `equivalence::cli_matches_golden`, `agents_equivalence`
 and `docs::`, `public_content::`, `language::`, `test_tiers`, the explorer's `it` and
 `fake_engine`, the control corpus, `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.
+
+### Milestone 293 (tentative number) - DONE (the guide topic `hydo guide strategies`: the testing techniques that found bugs with hydo, each with its evidence, so that the next onboarding chooses its checks and faults from what worked; a table from a type of system and its promise to the techniques that found most; 28 entries in one shape; the onboarding playbook and the skill (2.3.3) point to it, and the retro updates it; nothing recorded moved; 2026-11-17)
+
+**Why.** The user asked to collect the techniques and tricks that found bugs, and how useful
+each was, so that a playbook of strategies grows from the explorations. Until now the evidence
+was spread over about 30 results pages and the milestones of this file, and the playbook's
+section 3 listed the findings only by the fault that made them.
+
+**The topic.** `hydo/guide/strategies.md`, printed by `hydo guide strategies`. The guide's
+topics are the top-level files of `hydo/guide/`, which `hydo-agents`'s build script embeds, so
+`hydo guide --list` shows the new topic with its first line and nothing else registers it. The
+page starts with a table that maps a type of system (a database or key-value store, a log or
+stream, a job queue, a ledger, a service that calls outside APIs, a device updater, a web app, a
+library function, a flaky test, a cluster that upgrades) and its promise to the two or three
+techniques that found most, with the examples. Then come 28 entries, each with six parts: what
+it is, what to write (the tokens, options or declaration, with an example), when it fits, what
+it found (the project, the finding, the milestone or results section, and the numbers), what it
+misses, and the cost. The entries:
+
+- checks: the generic rule over the client's acknowledged operations, domain rules from the
+  project's sources, value properties, the messages check's claims, history checks, error logs
+  as findings, and concurrent clients without faults;
+- faults: power cuts of the whole guest, power cuts at the k-th flush, one node's storage faults,
+  kills of the process that holds acknowledged work, clock steps and the clock audit, cluster
+  faults, reactions at console events, a scan of a reaction's delay, protocol faults on fakes and
+  emulators, pauses of the workload or of one thread, turn lengths and forced preemption points,
+  upgrades, reboots and added disks, and the page walk;
+- timing and engines: a second engine's timing, and the explorer's strategy;
+- narrowing a finding: a forced order in a native script, directed workloads for a narrow
+  trigger, and version pairs;
+- functions: function contracts in a whole-system run, and `hydo fuzz`.
+
+A last section lists what was measured without a gain, with its numbers: the steered search
+(Milestone 209, a median of 118 schedules against 72), the state search (Milestone 212, 2 of 5
+seed ranges against 3 of 5), the drawn reactions on the bug benchmark (Milestone 139, a sum of 154
+runs to the first detections against 181 to 187), coverage guidance (Milestones 41 and 44), and branch
+points from assertions (Milestone 45). Every number on the page comes from a results page or a
+milestone that the entry names; where the sources give no number, the entry gives none. The
+page names no machine and no product that competes with hydo; Jepsen's findings are named as
+the sources of NATS's and Redpanda's hunts.
+
+**The wiring.**
+
+- `docs/ONBOARDING-PLAYBOOK.md`: section 3 ("Which faults find what") opens with the topic, and
+  phase 3's step that adds the explorer's options points to it. The retro of section 8 gains a
+  line `Strategies:`, and the section asks the retro to add or update the entry of each technique
+  that found or missed a finding, with the example and the numbers.
+- The skill: step 3.5 of `plugin/skills/onboard/SKILL.md` plans the checks and the faults
+  together and reads `hydo guide strategies` first; only the pointer is in the skill. The skill
+  is 2.3.3 in its `metadata.version`, in `plugin/.claude-plugin/plugin.json` and in the
+  marketplace entry.
+- `hydo guide workflow` names the topic among the topics that hold each detail.
+
+**Tests and checks.** The CLI golden `cli.jsonl` was re-recorded with `HYDO_BLESS=1`. Only the
+answers of `guide` and `guide --list` (the topic list) and of `skill install` (the skill's new
+text and version) moved, on both platforms. `agents.jsonl` moved for the same reasons: the new
+topic, the changed `workflow` and `overview` topics, the skill's version, and the ids of the
+topics after `strategies`. Vale lists the guide's topics by the pattern `hydo/guide/*.md`, so it
+reads the new topic without a change. On this Mac, after the rebase onto `origin/main`:
+`cargo fmt --all --check`, `hydo`'s `equivalence::cli_matches_golden`, `agents_equivalence` and
+`docs::`, `hydo-agents`'s `public_content::` and `skill_check::`, `hydo-release`'s
+`test_tiers`, `sh ci/consolidate-tests.sh --check`, and `sh ci/vale.sh`. Nothing recorded moved:
+no engine, image, guest program or example changed.
