@@ -6,6 +6,7 @@
 mod support;
 mod tmpdir;
 
+mod cgroup2_mount;
 mod clock_cut;
 mod conversations;
 mod corpus;

@@ -158,6 +158,8 @@ guest:
                                # Mac and KVM engines; see "The guest kernel for containers"
   branch_tick: true            # optional (the KVM engine on Intel): interrupt code that runs
                                # without VM exits; see "Loops without VM exits"
+  cgroup2: false               # optional: no cgroup2 mount on /sys/fs/cgroup at boot (default
+                               # true since fingerprint epoch 4); see "The cgroup2 mount"
 
 network: bridge                # loopback (default): one network for everything in the guest;
                                # bridge: each service in its own network namespace at its addr:
@@ -1210,6 +1212,36 @@ What the key needs and means on each engine:
 The key is opt-in. An image without it gets the same bytes and fingerprints as before. An image
 with it records the period in `/etc/hydo/branch-tick` and has its own fingerprints. The design
 and the measurements are in `docs/design/exit-free-loops.md`.
+
+### The cgroup2 mount (`guest.cgroup2`)
+
+A container runtime mounts the cgroup2 file system on `/sys/fs/cgroup` before it starts a
+program. Some programs size themselves from it at start: they read `/proc/self/cgroup`, then their
+limits in `/sys/fs/cgroup`. Linux writes the `0::/` line of `/proc/self/cgroup` only after a
+cgroup2 file system is mounted somewhere, so in a guest without the mount the file is empty.
+Seastar programs (Redpanda, ScyllaDB) and Dragonfly then exit at start.
+
+From the fingerprint epoch 4 (Milestone 283) hydo mounts cgroup2 on `/sys/fs/cgroup` at the
+start of every boot, before any service starts. A recovery boot after a power cut and a boot
+after a reboot have it too. `guest.cgroup2: false` turns it off. An image built before epoch 4
+runs without the mount unless its manifest says `true`, so it keeps its recorded fingerprints. A
+`setup:` that mounts cgroup2 itself still works when it checks first, as in `grep -q cgroup2
+/proc/mounts || mount -t cgroup2 none /sys/fs/cgroup`.
+
+Who sees what:
+
+- The workload, the checks and a service that runs in the guest's own root see the mount, also
+  with `network: bridge`, because a service's network namespace shares the guest's mounts.
+- An image service (`image:`) runs in the image's root, which gets `/sys` by a bind that leaves
+  the mount out. Its programs read the `0::/` line, which is what Seastar and Dragonfly need, but
+  they find no files under `/sys/fs/cgroup`.
+- hydo sets no limits. Every process is in the root cgroup, which has no `memory.max` or
+  `cpu.max`, so a program that looks for its limits finds none and uses the guest's memory and
+  CPUs.
+
+A pause of threads (`P=workload/<thread>@...`, "Pause threads of the workload" in `hydo guide
+faults`) uses the same mount. When the guest kernel has no cgroup2, the boot goes on without the
+mount, and the run's log says so. Every engine's guest kernel for an epoch-4 image has cgroup2.
 
 ### Link faults (a network fault between two named services)
 

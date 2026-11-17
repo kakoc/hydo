@@ -78,9 +78,13 @@ The import was changed in three places:
 - Each server reads its `--replicaof` flag from `/data/replicaof`. Each service's `setup` writes
   the file once with the Compose file's value, and a takeover changes it. A server that restarts
   after a takeover then comes back in its new role.
-- Each service's `setup` mounts the cgroup2 file system. Dragonfly reads `/proc/self/cgroup` at
+- Each service's `setup` mounted the cgroup2 file system. Dragonfly reads `/proc/self/cgroup` at
   start and exits when the file is empty (`Failed to parse cgroupv2 format`). The guest's file is
-  empty until a cgroup2 file system is mounted.
+  empty until a cgroup2 file system is mounted. Since Milestone 283 hydo mounts cgroup2 at every
+  boot of an image built at fingerprint epoch 4 or later (`guest.cgroup2`), and `setup` no longer
+  mounts it. The values in this file are from epoch-3 images with the `setup` mount. On hvx the
+  epoch-4 image without it gave `OK` with 6 invariants held and one fingerprint over two runs of
+  `disk=none | run` (`33ed7bed7b566eb8`).
 
 ## The CPU level
 
@@ -321,9 +325,9 @@ them expected after a restart or a fault; `hydo/known-errors.yaml` lists them.
 ## What the onboarding needed from hydo
 
 1. Dragonfly exits at start when `/proc/self/cgroup` is empty, and in hvx's guest that file is
-   empty until a cgroup2 file system is mounted. Each service's `setup` mounts one. A container
+   empty until a cgroup2 file system is mounted. Each service's `setup` mounted one. A container
    runtime always has one, so hydo could mount cgroup2 when it boots the guest, or the importer
-   could warn.
+   could warn. Milestone 283 made hydo mount it at every boot, from the fingerprint epoch 4.
 2. A restarted service's earlier log (`/tmp/hydo/df1.log.old`) stays in the guest. The run
    directory's `logs/df1.log` held only the last start, and the reason of the first crash
    (the SIGILL) needed `hydo inspect`.
@@ -360,6 +364,7 @@ them expected after a restart or a fault; `hydo/known-errors.yaml` lists them.
 - **What the playbook should say:**
   - Mount a cgroup2 file system in `setup` for a program that reads its container limits at
     start and stops when `/proc/self/cgroup` is empty, as Dragonfly does, until hydo mounts it.
+    hydo mounts it since Milestone 283, for an image built at fingerprint epoch 4 or later.
   - On hvx, try `guest.cpu: v3` early when a C or C++ program stops with SIGILL. Check whether
     a bundled library is built for a newer CPU than the program itself.
   - Give every write the server's process id, read on the same connection, so that a

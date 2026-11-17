@@ -270,7 +270,8 @@ dry-runs the packages on every pull request that changes one. The details are in
 image built at epoch 3 or later boots the Mac and KVM guest kernels with cgroups. An image built
 at epoch 4 carries no saved regression: `hydo build` writes them beside it, as
 `<image>.regressions.json`, so saving or editing one leaves the image's bytes and the other
-regressions' runs alone. An image built before keeps them inside and is replayed from them. M244
+regressions' runs alone. An image built before keeps them inside and is replayed from them. An
+image built at epoch 4 also boots with cgroup2 mounted on `/sys/fs/cgroup` (M283). M244
 re-recorded every value of the list at epoch 3; the epoch-4 values wait for the pass before
 0.4.0 (open item 105). The pinned reproducers are
 `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` under `hydo run`: `a76d7fe857fdb37c`
@@ -330,6 +331,19 @@ them without an exit it stops the vCPU at the exact count. Trap-flag steps from 
 overflow reach the count, and the timer comes there as at an idle HLT. It needs an Intel host whose counters count a
 guest; of GitHub's runners only the Xeon 6975P-C hosts do. The Mac engine refuses the key, and
 hvx ignores it. The design and the measurements are in `docs/design/exit-free-loops.md`.
+
+**The cgroup2 mount (M283, tentative number).** From the fingerprint epoch 4 the host controller
+mounts the cgroup2 file system on `/sys/fs/cgroup` at the start of every boot, before the S0
+snapshot, with the agent's existing `mount` primitive. So the agent and its pin stay, and an
+image's bytes do not change with it. A recovery boot and a reboot start from S0 and have it too.
+`guest.cgroup2: false` (a format-1 addition) turns it off, and an image built before epoch 4
+mounts nothing, as before (`hydo_image::defaults`, `cgroup2`). A program that reads
+`/proc/self/cgroup` at start (Seastar, Dragonfly) finds its `0::/` line, so the Dragonfly and
+Redpanda examples no longer mount cgroup2 in `setup:`. A pause of threads uses the mount and
+mounts nothing more. An image service's root gets `/sys` by a bind that is not recursive: its
+programs see the `0::/` line but no cgroup2 files. hvx, the Mac engine and KVM (four Intel
+runners) ran it; a second KVM run of the one-off workflow `tmp-cgroup2-kvm` is open item 144. The reference is MANIFEST.md "The cgroup2
+mount"; the design is the last section of `docs/design/guest-cgroups.md`.
 
 **The CPU's caches (M203, the default since M204).** The key `guest.cpu_cache` (a format-1
 addition) makes the CPUID leaves 2, 4 and `0x80000006` describe one fixed hierarchy on hvx and
@@ -561,9 +575,9 @@ the middle of a run, and every check held. The runs used hvx and the Mac engine.
 `hydo/onboard/examples/redpanda` (RESULTS.md), each with one core, 1 GiB, and its own file system.
 A Go client on franz-go produces idempotently, writes transactions and consumes as a group; one
 `type: messages` check and the invariant `tx.no_hanging` judge it. Seastar needs cgroup2 mounted
-once in the guest (each node's `setup:`). Strict power losses of one node and whole-guest cuts
-lost no acknowledged record, whether write caching was on or off. Four new candidates, not
-reported upstream:
+once in the guest, which hydo does at boot since M283. Strict power losses of one node and
+whole-guest cuts lost no acknowledged record, whether write caching was on or off. Four new
+candidates, not reported upstream:
 - A damaged `tx.snapshot` of one partition stops its node at every start (an assertion in
   `persisted_stm.cc`), although a missing one is rebuilt from the log
   (`G=n1@1+2:zero,len=4096,file=tx.snapshot,seed=626bd178`; Docker too).
@@ -1379,6 +1393,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       carries them. These are 21 hvm images, 6 kvm images, and 43 hvx images. Each of their runs
       may move: 76 hvm runs, 17 kvm runs, and 141 hvx runs. Record them in one pass before the 0.4.0 release, with `epoch` 4 in
       `hydo/onboard/recorded.json` (docs/REBASELINE.md section 26).
+    - M283 mounts cgroup2 at every boot of an image built at epoch 4. The images' bytes do not
+      change. Each boot conversation sends one more command before S0, so every epoch-4 run of
+      the list gets another `ctl` value and another fingerprint on all three engines. The same
+      pass records them.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -1746,8 +1764,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 141. The Dragonfly example (M278). What is left:
     - The snapshot candidate is not reported upstream. It was not reproduced with a real clock
       step outside hydo; `native/` shows the choice by modification time with `touch`.
-    - hvx's guest has no cgroup2 file system until a service mounts one, and Dragonfly exits at
-      start without it. Each service's `setup` mounts it; hydo could mount it at boot.
     - A restarted service's earlier log (`<svc>.log.old`) is not copied into the run directory.
     - `guest.cpu` cannot be a parameter: `{{cpu}}` passes `hydo build --check`, and the
       explorer's corpus test refuses it. The example is for x86_64 only.
@@ -1796,6 +1812,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - An image copied without its `<image>.regressions.json` has no saved regressions, and
       `hydo repro --regressions` says so. The Saleor gift card regression can take an `# expect:
       fp=` line after the re-recording pass.
+144. The cgroup2 mount at boot (M283). What is left:
+    - KVM ran the probe once (run 44066203730, four Intel hosts). Every check passed except two
+      that expected the Mac's exact sleep length. The fixed workflow
+      `.github/workflows/tmp-cgroup2-kvm.yml` (branch `tmp-cgroup2-kvm`) also runs the epoch-3
+      pause under 0.3.4. Its run is still to come, and no AMD host ran the probe yet.
+    - An image service's root gets `/sys` by a bind that is not recursive (hydo-build's
+      launcher), so its programs read the `0::/` line but find no files under `/sys/fs/cgroup`.
+      A recursive bind would change the launcher of every image service.
+    - hydo sets no limits. Every process is in the root cgroup, so a program that sizes itself
+      from `memory.max` or `cpu.max` uses the whole guest. Limits per service, as Compose's
+      `mem_limit` and `cpus` give a container, are not built.
 
 ## Milestone index
 
@@ -2470,6 +2497,11 @@ build machine, before 2026-10-13.
   own image's value. The fingerprint epoch is 4; an image built before keeps its regressions
   inside. Every image built at epoch 4 has new bytes, and its values wait for the pass before
   0.4.0 (open item 105)
+- M283 (tentative number): the guest mounts cgroup2 on `/sys/fs/cgroup` at every boot from the
+  fingerprint epoch 4. The host controller sends the agent's `mount` before S0, so the agent pin
+  and the images' bytes stay; `guest.cgroup2: false` turns it off, and an older image mounts
+  nothing. Dragonfly and Redpanda start on hvx without their `setup:` mounts. The pinned
+  reproducers keep their values. Every epoch-4 run moves and waits for the pass (open item 105)
 
 ## Where to look
 

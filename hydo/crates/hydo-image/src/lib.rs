@@ -61,7 +61,8 @@ pub const VERSION: u64 = 1;
 /// (`Image-explore-cg`, `Image-explore-netns-cg`, `bzImage-kvm-cg`, `bzImage-kvm-smp-cg`;
 /// docs/design/guest-cgroups.md), so a pause of threads runs on every engine. Epoch 4 (Milestone
 /// 269): the saved regressions leave the image for `<image>.regressions.json` beside it
-/// ([`regressions_path`]), so saving or editing one no longer changes the image's bytes.
+/// ([`regressions_path`]), so saving or editing one no longer changes the image's bytes, and
+/// (Milestone 283) the host controller mounts cgroup2 on `/sys/fs/cgroup` at every boot.
 pub const EPOCH: u64 = 4;
 
 /// The epoch of a run, exploration or cache entry that recorded none (written before M155).
@@ -90,6 +91,11 @@ pub struct EpochDefaults {
     /// Before epoch 4. From epoch 4 (Milestone 269) they are in `<image>.regressions.json`
     /// ([`regressions_path`]), which only the host reads.
     pub regressions_in_image: bool,
+    /// What an absent `guest.cgroup2` means: the host controller mounts the cgroup2 file system
+    /// on `/sys/fs/cgroup` at the start of every boot, as a container runtime does, so a program
+    /// that reads `/proc/self/cgroup` at start (Seastar, Dragonfly) finds its `0::/` line. From
+    /// epoch 4 (Milestone 283).
+    pub cgroup2: bool,
 }
 
 /// The defaults of an image built at `epoch` for `arch` (`x86_64` or `arm64`).
@@ -101,6 +107,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         kvm_stale_events: !two,
         cgroups: epoch >= 3,
         regressions_in_image: epoch < 4,
+        cgroup2: epoch >= 4,
     }
 }
 
@@ -503,15 +510,19 @@ mod tests {
         assert!(defaults(3, "arm64").cgroups);
         assert!(one.regressions_in_image && two.regressions_in_image);
         assert!(three.regressions_in_image);
-        // epoch 4 (M269): the saved regressions beside the image; the rest as at epoch 3
+        assert!(!one.cgroup2 && !two.cgroup2 && !three.cgroup2);
+        // epoch 4 (M269, M283): the saved regressions beside the image, and cgroup2 mounted at
+        // every boot; the rest as at epoch 3
         let four = defaults(4, "x86_64");
         assert_eq!(
             four,
             EpochDefaults {
                 regressions_in_image: false,
+                cgroup2: true,
                 ..three
             }
         );
+        assert!(defaults(4, "arm64").cgroup2);
         assert!(!defaults(4, "arm64").regressions_in_image);
         assert_eq!(defaults(EPOCH, "x86_64"), four);
     }

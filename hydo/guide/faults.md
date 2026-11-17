@@ -131,6 +131,11 @@ cgroups on the Mac and KVM engines. Those engines then refuse the pause before a
 the message says to rebuild the image with `hydo build`. hvx's guest kernel has always had
 cgroups, so hvx runs the pause on every image.
 
+The freezer needs the cgroup2 file system on `/sys/fs/cgroup`. For an image built at fingerprint
+epoch 4 or later, hydo mounts it at every boot (`guest.cgroup2`, MANIFEST.md "The cgroup2 mount"),
+and the pause uses that mount. For an older image, or with `guest.cgroup2: false`, the pause mounts
+it itself when it starts.
+
 `hydo explore --pause-thread <name>[,<name>...]` draws such pauses, as `--pause-workload` draws
 pauses of the workload. With both options, the target is drawn among the workload and the names.
 Two more options narrow the draw:

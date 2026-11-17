@@ -7,6 +7,10 @@
 #   sh ../client/build.sh amd64; sh ../client/build.sh arm64
 #   hydo build hydo.yaml                                 # write caching off (the production default)
 #   hydo build hydo.yaml --set bootstrap=bootstrap-write-caching.yaml   # write caching on
+#
+# Seastar exits at start when /proc/self/cgroup is empty. hydo mounts cgroup2 at every boot for an
+# image built at fingerprint epoch 4 or later (guest.cgroup2, Milestone 283), so no `setup:`
+# mounts it.
 format: 1
 hydo_version: "0.3"
 name: redpanda
@@ -56,7 +60,6 @@ services:
     ready: "timeout 4 wget -q -T 3 -O - http://n1:9644/v1/status/ready 2>/dev/null | grep -q '\"ready\"'"
     ready_timeout: 180
     restart: "unless-stopped"
-    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 none /sys/fs/cgroup"   # Seastar reads /proc/self/cgroup
     errors:
       format: none
       match: '^ERROR '
@@ -77,7 +80,6 @@ services:
     ready: "timeout 4 wget -q -T 3 -O - http://n2:9644/v1/status/ready 2>/dev/null | grep -q '\"ready\"'"
     ready_timeout: 180
     restart: "unless-stopped"
-    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 none /sys/fs/cgroup"   # Seastar reads /proc/self/cgroup
     start_after: started         # the nodes form the cluster together: start all three, then check
     errors:
       format: none
@@ -99,7 +101,6 @@ services:
     ready: "timeout 4 wget -q -T 3 -O - http://n3:9644/v1/status/ready 2>/dev/null | grep -q '\"ready\"'"
     ready_timeout: 180
     restart: "unless-stopped"
-    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 none /sys/fs/cgroup"   # Seastar reads /proc/self/cgroup
     start_after: started
     errors:
       format: none

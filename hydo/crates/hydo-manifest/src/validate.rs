@@ -138,6 +138,7 @@ pub(crate) const KNOWN_GUEST: &[&str] = &[
     "reboot",
     "disks",
     "branch_tick",
+    "cgroup2",
     "description",
 ];
 pub const KNOWN_KNOB: &[&str] = &[
@@ -933,6 +934,16 @@ pub fn validate(m: &mut Value) -> R<()> {
         if !c.is_boolean() {
             return Err(err(format!(
                 "guest.branch_tick: true (the KVM engine interrupts code without VM exits after a count of its branches) or false (got {})",
+                repr(c)
+            )));
+        }
+    }
+    // Milestone 283: the cgroup2 mount at every boot (on from the fingerprint epoch 4)
+    if has(&guest, "cgroup2")? {
+        let c = index(&guest, "cgroup2")?;
+        if !c.is_boolean() {
+            return Err(err(format!(
+                "guest.cgroup2: true (hydo mounts cgroup2 on /sys/fs/cgroup at every boot; the default) or false (got {})",
                 repr(c)
             )));
         }

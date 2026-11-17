@@ -14,9 +14,10 @@
 # - the readiness check is the client's: a read must answer, not LOADING;
 # - each server reads its --replicaof flag from /data/replicaof, which `setup` writes once with
 #   Compose's value and a takeover (`--set takeover=yes`) changes, so that a restarted server
-#   comes back in its current role;
-# - `setup` mounts cgroup2: Dragonfly exits at start when /proc/self/cgroup is empty, and in the
-#   guest it is empty until cgroup2 is mounted.
+#   comes back in its current role.
+# Dragonfly exits at start when /proc/self/cgroup is empty. hydo mounts cgroup2 at every boot
+# for an image built at fingerprint epoch 4 or later (guest.cgroup2, Milestone 283), so `setup`
+# no longer mounts it.
 format: 1
 name: dragonfly
 description: "Dragonfly 2.1.0, a primary and two replicas: acknowledged writes, snapshots on SAVE and shutdown, MULTI/EXEC and Lua transactions across two shards, and key expiry under kills, pauses, partitions, power cuts, clock steps and disk faults"
@@ -68,7 +69,7 @@ services:
     image: {x86_64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-amd64.docker.tar, arm64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-arm64-oci}
     image_ref: "ghcr.io/dragonflydb/dragonfly:v2.1.0"
     cmd: [sh, -c, "exec entrypoint.sh dragonfly --logtostderr --proactor_threads=2 --maxmemory=1gb --dir=/data --dbfilename=dump-{timestamp} --version_check=false $(cat /data/replicaof)"]
-    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 cgroup2 /sys/fs/cgroup; [ -e /data/vol/d1/replicaof ] || echo  > /data/vol/d1/replicaof"
+    setup: "[ -e /data/vol/d1/replicaof ] || echo  > /data/vol/d1/replicaof"
     port: 6379
     addr: 10.89.0.11
     ready: "timeout 5 /bin/dfc ready 10.89.0.11:6379"
@@ -85,7 +86,7 @@ services:
     image: {x86_64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-amd64.docker.tar, arm64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-arm64-oci}
     image_ref: "ghcr.io/dragonflydb/dragonfly:v2.1.0"
     cmd: [sh, -c, "exec entrypoint.sh dragonfly --logtostderr --proactor_threads=2 --maxmemory=1gb --dir=/data --dbfilename=dump-{timestamp} --version_check=false $(cat /data/replicaof)"]
-    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 cgroup2 /sys/fs/cgroup; [ -e /data/vol/d2/replicaof ] || echo --replicaof=df1:6379 > /data/vol/d2/replicaof"
+    setup: "[ -e /data/vol/d2/replicaof ] || echo --replicaof=df1:6379 > /data/vol/d2/replicaof"
     port: 6379
     addr: 10.89.0.12
     depends_on: [df1]
@@ -104,7 +105,7 @@ services:
     image: {x86_64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-amd64.docker.tar, arm64: images/ghcr.io-dragonflydb-dragonfly-v2.1.0-arm64-oci}
     image_ref: "ghcr.io/dragonflydb/dragonfly:v2.1.0"
     cmd: [sh, -c, "exec entrypoint.sh dragonfly --logtostderr --proactor_threads=2 --maxmemory=1gb --dir=/data --dbfilename=dump-{timestamp} --version_check=false $(cat /data/replicaof)"]
-    setup: "grep -q cgroup2 /proc/mounts || mount -t cgroup2 cgroup2 /sys/fs/cgroup; [ -e /data/vol/d3/replicaof ] || echo --replicaof=df1:6379 > /data/vol/d3/replicaof"
+    setup: "[ -e /data/vol/d3/replicaof ] || echo --replicaof=df1:6379 > /data/vol/d3/replicaof"
     port: 6379
     addr: 10.89.0.13
     depends_on: [df1]

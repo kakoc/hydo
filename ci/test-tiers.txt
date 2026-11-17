@@ -49,6 +49,7 @@ hydo-composer::ids                       fast
 hydo-config                              fast
 hydo-config::inventory                   fast
 hydo-control                             fast
+hydo-control::cgroup2_mount              fast
 hydo-control::clock_cut                  fast
 hydo-control::conversations              fast
 hydo-control::corpus                     full

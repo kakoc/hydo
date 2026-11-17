@@ -1440,7 +1440,9 @@ fn die_oracle<T>(fx: &mut F<'_>, line: String) -> Step<T> {
 }
 
 /// The start of every boot: `mkdir -p $H`, the empty acked/outcomes/failed files, `lo` up, the
-/// phase line, declare_all. (The agent mounted /dev, /proc, /sys, /tmp and ran hvx_seedrng.)
+/// cgroup2 mount (`guest.cgroup2`), the phase line, declare_all. (The agent mounted /dev, /proc,
+/// /sys, /tmp and ran hvx_seedrng.) S0 is taken after it, so a recovery boot and a reboot, which
+/// start from S0, have it too.
 fn boot_prelude(fx: &mut F<'_>, ctx: &Ctx, phase: &str) -> Step<()> {
     let l = &ctx.plan.layout;
     post(
@@ -1481,6 +1483,7 @@ fn boot_prelude(fx: &mut F<'_>, ctx: &Ctx, phase: &str) -> Step<()> {
         e,
         None,
     )?;
+    cgroup2(fx, ctx)?;
     let names: Vec<&str> = ctx.plan.services.iter().map(|s| s.name.as_str()).collect();
     log(
         fx,
@@ -1496,6 +1499,36 @@ fn boot_prelude(fx: &mut F<'_>, ctx: &Ctx, phase: &str) -> Step<()> {
     declare_all(fx, ctx);
     Ok(())
 }
+
+/// Milestone 283: the cgroup2 file system on `/sys/fs/cgroup`, as a container runtime gives a
+/// program, when the plan says so (`guest.cgroup2`, on for images built at the fingerprint epoch 4
+/// and later). Linux writes a process's `0::/` line into `/proc/self/cgroup` only once cgroup2 is
+/// mounted, and Seastar and Dragonfly exit at start when the file is empty. A pause of threads
+/// (`P=workload/<thread>`, schedule/threads.rs) finds the mount and does not mount again. A guest
+/// kernel without cgroup2 refuses the mount: the run goes on without it, with a line that says so.
+fn cgroup2(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
+    if ctx.plan.cgroup2 != Some(true) {
+        return Ok(());
+    }
+    let r = call(
+        fx,
+        Command::Mount(Mount {
+            src: "cgroup2".into(),
+            dst: CGROUP2_DIR.into(),
+            fstype: "cgroup2".into(),
+            flags: None,
+            data: None,
+        }),
+    )?;
+    match r {
+        Ok(_) => log(fx, format!("mounted cgroup2 on {CGROUP2_DIR}")),
+        Err(e) => log(fx, format!("cgroup2 not mounted on {CGROUP2_DIR}: {e}")),
+    }
+    Ok(())
+}
+
+/// Where [`cgroup2`] mounts the cgroup2 file system, the place every container runtime uses.
+pub(crate) const CGROUP2_DIR: &str = "/sys/fs/cgroup";
 
 fn declare_all(fx: &mut F<'_>, ctx: &Ctx) {
     for i in &ctx.plan.invariants {

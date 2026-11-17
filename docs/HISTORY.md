@@ -14072,3 +14072,163 @@ hydo-build; hydo-schedule's `language::`, hydo-agents's `public_content::`, the 
 program's `docs::`, `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`. On the bare-metal
 machine, in a folder of its own under umask 022: the x86_64 builds and the hvx replays above,
 with this tree's `hydo` over the 0.3.4 Linux release.
+
+### Milestone 283 (tentative number) - DONE (the guest mounts cgroup2 on `/sys/fs/cgroup` at every boot, from the fingerprint epoch 4: the host controller sends the agent's existing `mount` before the S0 snapshot, so the agent pin and the images' bytes stay; `guest.cgroup2: false` turns it off, and an image of an older epoch mounts nothing; the Dragonfly and Redpanda examples start without their `setup:` mounts; the pinned reproducers keep their values on hvx; every epoch-4 run moves and waits for the pass before 0.4.0; 2026-11-17)
+
+**What was asked.** Dragonfly (Milestone 278) and Redpanda (Milestone 279) both stopped at start
+until each service's `setup:` mounted cgroup2. Linux writes the `0::/` line of
+`/proc/self/cgroup` only after the first mount of a cgroup2 file system, and Dragonfly (`Failed
+to parse cgroupv2 format`) and Seastar (`sstring out of range`) exit on an empty file. Every
+program that sizes itself from cgroups meets the same blocker. Mount cgroup2 by default from the
+fingerprint epoch 4, keyed on the image's epoch, with an opt-out key, on all three engines, and
+make the thread pause agree with it.
+
+**Where the mount happens, and why there.** In the host controller's boot prelude
+(`boot_prelude` in `hydo/crates/hydo-control/src/schedule.rs`), after `lo` is up and before the
+phase line, the network namespaces and the S0 snapshot. The request is the agent's `mount`
+primitive, which the controller already uses for the data disk: source `cgroup2`, type `cgroup2`,
+destination `/sys/fs/cgroup`, no flags and no data. The choice:
+
+- The agent is inside every image and has its own pin. A mount in the agent's own start would
+  move the agent pin and give every image new bytes, also an image that turns the mount off. The
+  controller's request is part of the boot conversation only.
+- S0 is taken after the prelude, and a recovery boot after a power cut and a boot after a reboot
+  start from S0, so one request covers every boot. `hydo run`'s solo conversation runs the same
+  prelude.
+- A service enters only its network namespace (`nsenter -n`), so a mount in the guest's root
+  mount namespace reaches every service with `network: bridge` too.
+- When the agent refuses the mount (a guest kernel without cgroup2), the controller logs
+  `cgroup2 not mounted on /sys/fs/cgroup: <reason>` and the boot goes on. Every engine's kernel
+  for an epoch-4 image has cgroup2: hvx's `bzImage`, and the epoch-3 kernels of the Mac and KVM
+  engines (`Image-explore-cg`, `bzImage-kvm-cg` and their variants).
+
+**The epoch and the key.** `hydo_image::EpochDefaults` gained `cgroup2`, on from epoch 4.
+`guest.cgroup2` is a format-1 addition (hydo-manifest's model and validation, the schema
+`hydo/schema/project-v1.json`, `hydo-schema-compat` passes). `Plan` keeps the manifest's value,
+and `agent::plan_of_image` puts in the image's epoch default when the key is absent. A plan read
+from a manifest without an image mounts nothing unless the key says `true`, so the controller's
+recorded corpora and the explorer's goldens stay the same. Epoch 4 is not published yet (it came
+with Milestone 269 for 0.4.0), so this milestone adds a second default to it and does not raise
+the epoch.
+
+**The thread pause.** Its script (`schedule/threads.rs`) mounts cgroup2 only when
+`/sys/fs/cgroup/cgroup.controllers` is missing. On an epoch-4 image the boot's mount is there, and
+the pause mounts nothing. On an older image, or with `guest.cgroup2: false`, it mounts cgroup2 as
+before. No change was needed.
+
+**An image service.** Its root gets `/sys` from hydo-build's launcher by `mount --bind`, which is
+not recursive, so the cgroup2 mount does not reach the image's root. Its programs read the `0::/`
+line, which is all Dragonfly and Seastar need. The examples' `setup:` mounts gave the same, and
+Dragonfly logs `Failed in deducing any cgroup limits` either way (its `known-errors.yaml`). Open
+item 144.
+
+**The proof on the Mac engine.** A probe project: a service writes its `/proc/self/cgroup` to the
+data disk, the workload writes its own and `grep cgroup /proc/mounts` and times a `sleep 2`, and a
+check reads its own `/proc/self/cgroup`. Built with this hydo (epoch 4), with `guest.cgroup2:
+false`, and by the 0.3.4 release (epoch 3). Run with this hydo unless named:
+
+| image | schedule | verdict | fingerprint |
+|---|---|---|---|
+| epoch 4 | `disk=none \| run` (twice) | OK: `svc=0::/ wl=0::/ check=0::/`, `cgroup2 /sys/fs/cgroup cgroup2 rw,relatime` | `81d8e6edfc902e11` twice |
+| `guest.cgroup2: false` | `disk=none \| run` | VIOLATION: no line, no mount | `5027afc8ff2dbbfc` |
+| epoch 4 | `disk=cut \| run C=1` | OK in the recovery boot: `svc=0::/ check=0::/` | `bc02bb06a9898d98` |
+| epoch 4 | `disk=none \| run P=workload/busybox@0~500:3000` | `PAUSED workload/busybox`, then VIOLATION `probe.slept` (`slept=3`): the pause stopped the threads | `caf14ebea83cdcbf` |
+| epoch 3 | `disk=none \| run`, this hydo and 0.3.4 | VIOLATION: no line | `f915c2f25935a5a8` under both |
+| epoch 3 | `disk=cut \| run C=1` | VIOLATION: no line in the recovery boot | `10263c4ccb44d4fa` |
+| epoch 3 | the pause above | the pause mounted cgroup2 itself: `check=0::/`, `slept=3` | `36ba223b66cccd10` |
+
+The workload's threads are all named `busybox` (busybox runs `sleep` as an applet), so the pause
+names `busybox`. A pause whose script fails replies with an `E` line, and the controller then
+ends the run with `HYDO-ORACLE: ERROR P=...`. No run did. The script's own text, error messages
+included, is in the transcript's `send` record of the pause, so a search of the transcript for
+`cannot mount` finds that record and not a reply.
+
+**The proof on hvx** (the bare-metal machine, a tree of its own under umask 022, this tree's
+`hydo`, `hydo-hvx` and `hydo-build` over the 0.3.4 Linux release, every VM through
+`~/bin/hvx-run`). The same probe built for x86_64:
+
+| image | schedule | verdict | fingerprint |
+|---|---|---|---|
+| epoch 4 | `disk=none \| run` (twice) | OK: `svc=0::/ wl=0::/ check=0::/` and the mount | `8725e9cb1054854d` twice |
+| `guest.cgroup2: false` | `disk=none \| run` | VIOLATION: no line, no mount | `41315e3d7aee5731` |
+| epoch 4 | `disk=cut \| run C=1` | OK in the recovery boot: `svc=0::/ check=0::/` | `27d6141ef1646ecc` |
+| epoch 4 | the pause | `PAUSED workload/busybox`, VIOLATION `probe.slept` (`slept=4`) | `773e765fda76e831` |
+| epoch 3 | `disk=none \| run`, this hydo and 0.3.4 | VIOLATION: no line | `2a0fe290804411d6` under both |
+| epoch 3 | the pause, this hydo and 0.3.4 | the pause mounted cgroup2 itself: `check=0::/`, `slept=4` | `5ee84b6090c5fdd7` under both, `ctl=8e00a68cf8d4d0e7` |
+
+The two examples without their `setup:` mounts, `disk=none | run`:
+
+| example | built at | verdict | fingerprint |
+|---|---|---|---|
+| Dragonfly 2.1.0 (`f2c26003…`) | epoch 4 (this hydo) | OK, 6 invariants held, 71 commands, 13 s | `33ed7bed7b566eb8` twice |
+| Dragonfly | epoch 3 (0.3.4), the control | `ERROR service start (df1)`: `Failed to parse cgroupv2 format, got:` | `30e5fc7c35551213` |
+| Redpanda v26.2.7 (`d6d16ed4…`) | epoch 4 (this hydo) | OK, 163 commands, 139 s | `c49b22134b52331c` twice |
+| Redpanda | epoch 3 (0.3.4), the control | `ERROR service start (n1)`: `sstring out of range` | `1e336015506e4cb5` |
+
+So both examples drop the mount from `setup:`. Their RESULTS.md files keep their epoch-3 values,
+measured with the mount, and say so. Open item 141 loses its cgroup2 point.
+
+**The pinned reproducers** on hvx, `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24`,
+before (this tree at Milestone 269) and after (with this milestone), each once per image:
+
+| images | old (VIOLATION, order 11) | fix (OK) |
+|---|---|---|
+| epoch 1, `~/hydo/build/m155` | `1dc3677fb94053cf`, `ctl=e873020651036931` | `ba0aa0612502a1df`, `ctl=07c598044a68e5be` |
+| epoch 2, `~/hydo/build/m204` | `a76d7fe857fdb37c`, `ctl=84a3f0619a00b9e2` | `efbde7b57264be0f`, `ctl=087df49b7b36b10a` |
+| epoch 3, `~/hydo/build/m244` | `a76d7fe857fdb37c`, `ctl=84a3f0619a00b9e2` | `efbde7b57264be0f`, `ctl=087df49b7b36b10a` |
+
+Before and after gave the same `fp`, `wfp`, `inh` and `ctl` on all six; only the wall time
+differed.
+
+**KVM.** The bare-metal machine never runs KVM. `.github/workflows/tmp-cgroup2-kvm.yml` runs the
+probe on four GitHub runners with this tree's `hydo`, `hydo-build` and `hydo-kvm` over the 0.3.4
+release, with 1 and 2 vCPUs (`bzImage-kvm-cg` and `bzImage-kvm-smp-cg`). It also checks that the
+Redis release example built by 0.3.4 gives the published values. Its first run, 44066203730, had
+four Intel hosts: one Xeon Platinum 8370C and three Xeon 6975P-C. Every host gave the same values:
+
+- These checks passed: `0::/` in the service, the workload and the check; one fingerprint over
+  two runs; the opt-out; the recovery boot; 2 vCPUs; no mount at epoch 3; one fingerprint for the
+  epoch-3 image under 0.3.4 and this hydo; and the Redis example's published values
+  (`2d059466fb87a253`, `8af0c14d4ec2c470`).
+- Two checks of the probe failed, and neither is a failure of the pause. They expected the Mac's
+  exact `slept=3`. The KVM engine's clock gave `slept=4` on the epoch-4 image
+  (`7c824ab78d040db9`, after `PAUSED workload/busybox`) and `slept=5` on the epoch-3 image
+  (`fb1ae17ed4c8754c`, `check=0::/`). The `cannot mount cgroup2 on $G` line that the run printed
+  is the script's text in the `send` record (above), not a reply.
+
+The workflow now accepts any `slept` of 3 or more. It reads the pause's outcome from the
+controller's `PAUSED` note and from the absence of an `ERROR P=` verdict. It also runs the
+epoch-3 pause under 0.3.4 and requires one fingerprint, as hvx gave. The second run is open item
+144.
+
+**What moves.** No image's bytes change with the mount itself. Every image built at epoch 4 sends
+one more command in its boot conversation, so every epoch-4 run gets another control transcript
+and another fingerprint on all three engines. Those values wait for the pass before 0.4.0 with
+Milestone 269's (open item 105, docs/REBASELINE.md section 26). The Dragonfly and Redpanda
+images change with their manifests; neither is in `hydo/onboard/recorded.json`. Re-recorded
+goldens, each diff read:
+
+- the schema `hydo/schema/project-v1.json`: the key `guest.cgroup2`;
+- hydo-manifest's equivalence answers (17) and hydo-build's (10): the refusal of an unknown
+  `guest` key, whose list of known keys names `cgroup2`. Only those answers were replaced. A run
+  with `HYDO_BLESS=1` would also draw the mutant corpus again over the examples of Milestones
+  277 to 279, which `main` added without a recording, and change about 8,000 answers that this
+  milestone does not move;
+- the `hydo` program's CLI goldens: `hydo guide manifest` on both platforms (the new section).
+
+**The rebase of Milestone 269.** Milestone 269 was rebased onto `main` at `7944ad08` (Milestones
+270 to 281). AGENTS.md and this file kept both sides, `main`'s text first. The explorer's
+identity-quick and identity-full and corpus-full, and the controller's corpus-quick, passed
+without a new recording. The `hydo` program's CLI golden took `main`'s answers, and its ten
+answers of Milestone 269 were recorded again. hydo-manifest's and hydo-build's equivalence
+answers passed. M269's two new test files now remove their folders when they end (Milestone 271's
+`TmpDir`).
+
+**Checks.** On this Mac, on `main` at `7944ad08` with Milestones 269 and 283 on top: `cargo fmt
+--all --check`; `cargo clippy --workspace --all-targets -- -D warnings`; hydo-image's unit tests;
+hydo-control's `cgroup2_mount::` (the mount before S0 when the plan says so; none without the key,
+with `false`, or again in a recovery boot; the image's epoch decides an absent key) and its
+`corpus::`; the explorer's `identity::` and `corpus::`, also with `HYDO_IDENT_FULL=1`;
+hydo-schedule's `language::`; `cargo test -p hydo-config`; hydo-agents's `public_content::`; the
+`hydo` program's `docs::`, `equivalence::cli_matches_golden` and `agents_equivalence`;
+`hydo-schema-compat`; `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.

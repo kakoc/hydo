@@ -175,6 +175,10 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
             cp.saved = crate::schedule::composer::saved_of(&regs);
         }
     }
+    // Milestone 283: without `guest.cgroup2` the image's epoch decides (the mount from epoch 4)
+    if plan.cgroup2.is_none() {
+        plan.cgroup2 = Some(hydo_engine::image::image_defaults(image).1.cgroup2);
+    }
     // The musl table of the image's busybox: the words of an unmountable data disk (M131).
     let bb = plan.layout.busybox.trim_start_matches('/').to_string();
     if let Ok(bytes) = hydo_engine::image::embedded_file(image, &bb) {

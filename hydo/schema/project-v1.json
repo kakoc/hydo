@@ -459,6 +459,14 @@
           ],
           "default": false
         },
+        "cgroup2": {
+          "description": "hydo mounts the cgroup2 file system on /sys/fs/cgroup at the start of every boot, as a\ncontainer runtime does, so a program that reads /proc/self/cgroup at start finds its\ncgroup. On by default for images built at fingerprint epoch 4 and later; an image built\nearlier keeps it off. false: the guest starts without the mount.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
         "description": {
           "anyOf": [
             {

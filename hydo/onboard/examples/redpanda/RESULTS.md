@@ -127,7 +127,12 @@ not initialize seastar: std::out_of_range (sstring out of range)`, and its resta
 started it again until the readiness deadline. The guest's `/proc/self/cgroup` was empty. hvx's
 guest kernel has cgroups, but Linux shows the cgroup v2 line in that file only after the cgroup2
 file system has been mounted once. Seastar parses that file at start and fails on an
-empty one. Each node's `setup:` now mounts cgroup2 on `/sys/fs/cgroup`, and the nodes start.
+empty one. Each node's `setup:` then mounted cgroup2 on `/sys/fs/cgroup`, and the nodes started.
+
+Since Milestone 283 hydo mounts cgroup2 at every boot of an image built at fingerprint epoch 4 or
+later (`guest.cgroup2`), and no `setup:` mounts it. The values in this file are from epoch-3
+images with the `setup:` mount. On hvx the epoch-4 image without it gave `OK` and one fingerprint
+over two runs of `disk=none | run` (`c49b22134b52331c`).
 
 ## Without faults
 
@@ -831,7 +836,8 @@ whether write caching was on or off.
 **What hydo lacked.**
 
 1. Seastar programs need cgroup2 mounted once in the guest, or they stop with `sstring out of
-   range`. `hydo guide hazards` does not say so; the example mounts it in `setup:`.
+   range`. `hydo guide hazards` does not say so; the example mounted it in `setup:`. Milestone
+   283 made hydo mount it at every boot, from the fingerprint epoch 4.
 2. The output of the messages check's `final:` read-back stays in the guest, also when it fails.
    The client writes its reason to the console.
 3. hydo shrinks only violations. A node that does not start again and a drain that cannot finish
@@ -854,8 +860,9 @@ whether write caching was on or off.
 
 **What the playbook should say.**
 
-- For a Seastar program (Redpanda, ScyllaDB): mount cgroup2 in `setup:`, and run it with
-  `--smp 1 --memory <size> --overprovisioned`. Check `/proc/self/cgroup` in the guest first.
+- For a Seastar program (Redpanda, ScyllaDB): run it with `--smp 1 --memory <size>
+  --overprovisioned`. Check `/proc/self/cgroup` in the guest first. On an image built before the
+  fingerprint epoch 4, mount cgroup2 in `setup:`; hydo mounts it from epoch 4 on.
 - For a log with partitions: one messages channel, the partition as the key, its offset as `o=`,
   and `order: {kind: log, scope: key}`. Record an aborted transaction's records as `fail`, so
   that `no-phantom` catches an aborted read.

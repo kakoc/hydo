@@ -231,6 +231,11 @@ pub struct Plan {
     /// `guest.reboot: true` (Milestone 263, docs/design/devices.md): a guest program may ask for
     /// a reboot with the console line `HYDO-REBOOT`.
     pub reboot: bool,
+    /// `guest.cgroup2` (Milestone 283): mount the cgroup2 file system on `/sys/fs/cgroup` at the
+    /// start of every boot. The manifest's value here; `agent::plan_of_image` puts in what an
+    /// absent key means at the image's fingerprint epoch (on from epoch 4,
+    /// `hydo_image::EpochDefaults::cgroup2`). None or false: no mount.
+    pub cgroup2: Option<bool>,
     pub invariants: Vec<PlanInvariant>,
     pub knobs: Vec<PlanKnob>,
     /// `buggify: true`: a B= token is then written to /tmp/hydo-buggify (features/buggify.rs);
@@ -689,6 +694,7 @@ impl Plan {
             },
             outcomes_after_cut: get(guest, "outcomes_after_cut").is_some_and(py::truthy),
             reboot: get(guest, "reboot").is_some_and(py::truthy),
+            cgroup2: get(guest, "cgroup2").and_then(Value::as_bool),
             cost: 0,
             perf: PlanPerf::of(d),
             screens: hydo_manifest::browser::screens_dir(d),

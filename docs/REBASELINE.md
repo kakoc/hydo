@@ -3593,3 +3593,13 @@ move, and whether a verdict or a recorded ctl value moves.
 
 **The pinned reproducers** stay the stack example's epoch-2 images in `~/hydo/build/m204`, with
 their values `a76d7fe857fdb37c` and `efbde7b57264be0f`: this hydo boots them as before.
+
+**The cgroup2 mount (M283, 2026-11-17).** Epoch 4 has a second default. The host controller
+mounts the cgroup2 file system on `/sys/fs/cgroup` at the start of every boot of an image built
+at epoch 4 or later, before the S0 snapshot (`hydo_image::defaults`, `cgroup2`;
+`guest.cgroup2: false` turns it off). The image's bytes do not change with it, but its boot
+conversation sends one more command, so every epoch-4 run of the list gets another control
+transcript (`ctl`) and another fingerprint on all three engines. The same pass records them. An
+image built at epoch 3 or before mounts nothing at boot: the pinned reproducers gave their values
+on their epoch-1, epoch-2 and epoch-3 images on hvx before and after the change (docs/HISTORY.md
+Milestone 283).

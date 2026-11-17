@@ -129,3 +129,38 @@ KVM engine's `--image-epoch`) instead of adding a third epoch to them. Without t
 x86_64 image of epoch 2 would boot the new KVM kernel without a word, because the twin lookup
 keys on hvx's unchanged `bzImage`. The user kept the strict rule: an image built before keeps its
 recorded values.
+
+## The cgroup2 mount at boot (Milestone 283)
+
+The kernels have cgroups, but nothing mounted the cgroup2 file system before Milestone 283. The
+thread pause mounted it when it started. Linux writes the `0::/` line of `/proc/self/cgroup` only
+after the first mount of cgroup2, so a program that read the file at start found it empty.
+Dragonfly (`hydo/onboard/examples/dragonfly`) and Redpanda's Seastar
+(`hydo/onboard/examples/redpanda`) exit at start on an empty file, and both examples mounted
+cgroup2 in each service's `setup:`.
+
+From the fingerprint epoch 4 the host controller mounts it at the start of every boot
+(`guest.cgroup2`, MANIFEST.md "The cgroup2 mount"):
+
+- **Where.** In the boot conversation's prelude (`boot_prelude` in
+  `hydo/crates/hydo-control/src/schedule.rs`), after `lo` is up and before the S0 snapshot. The
+  request is the agent's existing primitive `mount`, with the source `cgroup2`, the type
+  `cgroup2` and no options. A recovery boot and a reboot start from S0, so they have the mount
+  without a second request.
+- **Why the controller, not the agent.** The agent is part of every image's bytes and has its own
+  pin. An agent that mounted cgroup2 when it starts would move the agent pin and give every image
+  new bytes, also an image whose manifest says `guest.cgroup2: false`. The controller's request is
+  part of the conversation only, and only an image whose plan says so sends it.
+- **The epoch.** `hydo_image::defaults(epoch, arch).cgroup2` is on from epoch 4.
+  `agent::plan_of_image` writes it into the plan when the manifest has no key. A plan read from a
+  manifest without an image, as the controller's own tests read one, mounts nothing unless its key
+  says `true`.
+- **The thread pause.** Its script mounts cgroup2 only when `/sys/fs/cgroup/cgroup.controllers`
+  is missing. On an epoch-4 image the boot's mount is there, so the pause mounts nothing. On an
+  older image it mounts cgroup2 as before.
+- **A kernel without cgroup2.** The agent's refusal becomes a line of the run's log, and the boot
+  goes on. Every engine's kernel for an epoch-4 image has cgroup2.
+
+An image service's root gets `/sys` by a bind mount that is not recursive, so the cgroup2 mount
+does not reach it. Its programs read the `0::/` line, which is all Dragonfly and Seastar need, as
+with the examples' own `setup:` mounts.

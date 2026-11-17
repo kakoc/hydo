@@ -786,6 +786,13 @@ pub struct Guest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = false))]
     pub branch_tick: Option<bool>,
+    /// hydo mounts the cgroup2 file system on /sys/fs/cgroup at the start of every boot, as a
+    /// container runtime does, so a program that reads /proc/self/cgroup at start finds its
+    /// cgroup. On by default for images built at fingerprint epoch 4 and later; an image built
+    /// earlier keeps it off. false: the guest starts without the mount.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
+    pub cgroup2: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
