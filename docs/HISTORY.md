@@ -14586,3 +14586,43 @@ hydo-build, hydo-manifest and hydo-config, `equivalence::cli_matches_golden` and
 `agents_equivalence`, `language::`, `public_content::`, `docs::`, the explorer's `identity::`,
 `corpus::` and `fake_engine`, the control corpus, `test_tiers`, hydo-schema-compat, `sh
 ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.
+
+## Milestone 288 (tentative number): a second evaluation of `hydo fuzz` by a new user
+
+A fresh evaluator, a coding agent that played a Rust developer new to hydo, tried `hydo fuzz` on
+six popular crates before the 0.4.0 release. The evaluator learned the tool only from `hydo guide
+fuzz`, `hydo fuzz --help` and `hydo guide manifest`, and did not read the first evaluation (M280)
+or the design notes. The binary came from `main` at `0038380d`. The page is
+`docs/design/function-fuzzing-evaluation-2.md`.
+
+The crates were strsim 0.11.1, hex 0.4.3, httparse 1.10.1, bytes 1.12.1, num-traits 0.2.19 and
+chrono 0.4.45. The evaluator wrote 26 contracts on library functions, of which hydo fuzzed 24, and
+37 property functions in the crates' test modules. Each crate's first useful run came 2 to 4
+minutes after its copy, and each build and run took 1 to 15 seconds.
+
+The candidates, none posted and none checked against the issue trackers:
+
+- strsim's `sorensen_dice` divides by byte lengths: `sorensen_dice("ab", "aba")` is `0.666...`,
+  and `sorensen_dice("éü", "éüé")` is `0.25`.
+- httparse's `parse_chunk_size` accepts a chunk size line without a hex digit as size 0:
+  `b"\r\n"` gives `Ok(Complete((2, 0)))`. RFC 9112 requires at least one digit.
+- num-traits' `abs_sub(1i64, -9223372036854775807)` panics in a debug build and returns
+  `-9223372036854775808` in a release build. Its documentation calls the result the positive
+  difference.
+
+Two smaller gaps: num-traits' `abs(i32::MIN)` panics in a debug build although its documentation
+says that it returns `MIN`, and hex's `decode("é")` names the character `'Ã'`, which is not in the
+input.
+
+The worst problems, in order:
+
+1. A clause on an `f64` result was decided on 0 of 1,000 calls, and the function still counted as
+   `held` with exit status 0.
+2. The harness fails on `#![forbid(unsafe_code)]`, and the package copy loses the `[lints]` table
+   of `Cargo.toml`. In httparse the second failure came with a message that blamed the crate.
+3. Methods of types that hold pointers, trait methods and enumeration results are refused or not
+   read, so in bytes and httparse every test was a hand-written property function.
+4. `like` is for strings only, so a parser over bytes needs a wrapper that takes `&str`.
+5. A run shows only counts, never the inputs it generated.
+
+Open item 139 points to the page. Nothing recorded moved.

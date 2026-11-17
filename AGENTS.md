@@ -1800,6 +1800,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The two candidates of M280 were not posted: num-integer's `i64::MIN.nth_root(1)` panics
       in a debug build, and byteorder's `ReadBytesExt::read_uint` panics for `nbytes` of 0 or
       more than 8 without a documented panic.
+    - A second evaluation on six other crates (M288,
+      `docs/design/function-fuzzing-evaluation-2.md`) found three candidates and two gaps in
+      documentation. Its worst problems are a clause on an `f64` result that counts as `held` on
+      0 decided calls, and harness builds that fail on `#![forbid(unsafe_code)]` or lose the
+      package's `[lints]` table.
 140. The SurrealDB example (M277). What is left:
     - The SurrealKV candidate is not reported upstream.
     - An exploration cannot leave out one fault kind, and `hydo explore` reads `faults:` without
@@ -2606,6 +2611,10 @@ build machine, before 2026-10-13.
   schedule, the walk found both planted bugs blind in 20 seeds, and a Memos walk and its
   recording gave hvx's verdicts. Each schedule gave one fingerprint over two runs. Nothing
   recorded moved
+- M288 (tentative number): a second evaluation of `hydo fuzz` as a new user, on strsim, hex,
+  httparse, bytes, num-traits and chrono. Candidates: strsim's `sorensen_dice` divides by byte
+  lengths, httparse accepts a chunk size line without a digit, and num-traits' `abs_sub` returns a
+  negative difference. A clause on an `f64` result passes unchecked. Nothing recorded moved
 
 ## Where to look
 
