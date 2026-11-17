@@ -137,6 +137,13 @@
             "string",
             "null"
           ]
+        },
+        "seeds_from": {
+          "description": "How a `budget` chooses the seeds (added in Milestone 286): `range` (the default) explores\n`seeds` and cuts the exploration when the time is up; `history` turns the budget into a\nseed count from the seconds per seed that the history store's recorded runs measured\n(`hydo ci run --history`), so that the run explores the first seeds of `seeds` that fit.\nWithout a measured run it falls back to `range`, and the run says so.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false

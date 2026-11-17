@@ -12,9 +12,13 @@ recipe (`hydo guide ci`); docs/HISTORY.md has the milestone. Stage 2 is built in
 of run cut at a seed boundary (`budget:`, `--budget`, `hydo explore --time-limit`), shards
 (`--shard I/N`) merged without a VM (`hydo ci merge`, which section 9 puts in stage 3), and a
 history store as a directory (`hydo ci record`, `--history`, the ledger with `new`, `fixed` and
-`reappeared`). Not built from stage 2: the history page (`hydo ci page`), the `workflow_run`
-recorder, budgets turned into seed counts from history, and proposed regression files. Stages 3
-and 4 are not built otherwise. It answers the user's question of 2026-11-08 ("is
+`reappeared`). Milestone 286 (a tentative number, 2026-11-17) built what makes a team keep hydo
+after the first try, the rest of stage 2's list: the history page (`hydo ci page`, section 5.3),
+the pull-request comment of only what the change did (`comment.md`, `hydo ci comment`, section
+5.1), the `workflow_run` recorder (`action/examples/hydo-record.yml`, section 4.5), and budgets
+turned into seed counts from history (`seeds_from: history`, section 7.3). Not built from stage 2:
+proposed regression files. From stage 3 only `hydo ci merge` is built (M223); one shrink per
+signature across shards is not. Stage 4 is not built. It answers the user's question of 2026-11-08 ("is
 it scalable into a real solution? ... what was running, when, what's history, what was checked,
 found ... I don't have the whole picture of its evolution") and replaces the short "CI mode (to be
 discussed)" section of `hydo/PRODUCT.md` once the user agrees with it.
@@ -257,7 +261,8 @@ Options, judged for a team on GitHub:
    v1/<project>/findings.jsonl                        the ledger, appended
    v1/<project>/state.json                            the fold of the ledger, rewritten
    v1/<project>/coverage.jsonl                        one line per run: counts for the trend
-   page/index.html                                    the history page (section 5.3), generated
+   v1/<project>/reports/<ci-run id>.html               the run's report page (--report)
+   index.html                                         the history page (section 5.3), generated
    ```
 
    Size: at 50 recorded runs a day and about 5 KB per run, about 90 MB a year before git's

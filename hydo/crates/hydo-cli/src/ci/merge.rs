@@ -236,6 +236,13 @@ pub fn merge(mut shards: Vec<CiRun>, fail_on: Option<Vec<String>>) -> Result<CiR
     m.budget.planned = Some(planned);
     m.budget.completed = Some(completed);
     m.budget.partial = !missing.is_empty() || shards.iter().any(|r| r.budget.partial);
+    // the shards' exploration time added: the seconds per seed of one job (M286)
+    let sum = |f: fn(&CiRun) -> Option<f64>| -> Option<f64> {
+        let v: Vec<f64> = shards.iter().filter_map(f).collect();
+        (v.len() == shards.len()).then(|| (v.iter().sum::<f64>() * 10.0).round() / 10.0)
+    };
+    m.budget.explore_s = sum(|r| r.budget.explore_s);
+    m.budget.base_explore_s = sum(|r| r.budget.base_explore_s);
     // the numbers
     m.summary.runs = shards.iter().map(|r| r.summary.runs).sum();
     m.summary.failures = shards.iter().map(|r| r.summary.failures).sum();
@@ -409,6 +416,7 @@ pub fn cmd_merge(argv: &[String]) -> i32 {
         std::fs::write(d.join(n), t).unwrap_or_else(|e| die(&format!("{n}: {e}")))
     };
     w("report.md", &md);
+    w("comment.md", &super::comment::markdown(&m));
     w("junit.xml", &report::junit(&m));
     hydo_results::write_document(&d.join("ci-run.json"), &m)
         .unwrap_or_else(|e| die(&format!("ci-run.json: {e}")));

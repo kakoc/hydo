@@ -2006,6 +2006,10 @@ pub struct CiImage {
     pub given: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// The `hydo build --set KEY=VALUE` values it was built with, as `KEY=VALUE` (added in
+    /// Milestone 286, so that a report made later from `ci-run.json` alone names them).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub set: Vec<String>,
 }
 
 /// The commit a CI run compares with (added after 0.2.0).
@@ -2072,6 +2076,27 @@ pub struct CiBudget {
     /// The whole seed range a shard is a part of (added in stage 2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub range: Option<String>,
+    /// The wall seconds of this commit's exploration, and of the base's when it was explored
+    /// here: what a later run's budget reads as the measured seconds per seed (added in
+    /// Milestone 286).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explore_s: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_explore_s: Option<f64>,
+    /// Where the seed count came from when the run was asked to fit its seeds to the budget
+    /// (`seeds_from: history`; added in Milestone 286): `history` when the history store's
+    /// recorded runs gave the seconds per seed and `seeds` is the count that fits, `range` when
+    /// no recorded run measured it and the run kept its seed range with the time limit. Absent
+    /// when the run was not asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seeds_from: Option<String>,
+    /// The seconds per seed the count was made from (this commit's exploration and, when the
+    /// base is explored too, the base's), and the recorded runs that measured it (added in
+    /// Milestone 286).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seconds_per_seed: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measured_runs: Option<u64>,
 }
 
 /// The saved regressions a CI run replayed (added after 0.2.0).
@@ -2440,6 +2465,28 @@ pub struct CiLedgerBranch {
     /// Recorded runs.
     #[serde(default)]
     pub runs: u64,
+    /// The recorded runs in the order they were recorded (added in Milestone 286; a store
+    /// written before has none, and `hydo ci page` then orders the run files by name).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recorded: Vec<CiLedgerRun>,
+}
+
+/// One recorded run of a branch (`hydo ci record`; added in Milestone 286).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CiLedgerRun {
+    /// The CI run's `id`.
+    pub id: String,
+    /// Its file, relative to the project's directory of the store (`runs/<id>.json`).
+    pub file: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    /// When it was recorded (UTC, `2026-11-17T10:04:00Z`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorded: Option<String>,
+    /// The run's report page in the store (`hydo ci record --report`), relative to the project's
+    /// directory of the store (`reports/<id>.html`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report: Option<String>,
 }
 
 /// `v1/<project>/state.json` of the history store: the fold of `findings.jsonl`, rewritten by

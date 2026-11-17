@@ -14,8 +14,8 @@ system. The CI system only runs it, keeps its files and, if you want, posts its 
    a state that a run proves (the table in section 7).
 5. It replays the saved regressions in `hydo/regressions/`.
 6. It marks the findings that `hydo/known-findings.yaml` accepts (section 9).
-7. It writes `ci-run.json`, `report.md` and `junit.xml` into its output directory (default
-   `hydo-ci`).
+7. It writes `ci-run.json`, `report.md`, `comment.md` and `junit.xml` into its output
+   directory (default `hydo-ci`).
 
 Its exit status is 0 when the run passed and 1 when it failed by the project's policy
 (`fail_on`). It is 2 when the run could not complete, for example when the image did not build.
@@ -91,12 +91,23 @@ jobs:
 The action installs that hydo release, checked against the release's `SHA256SUMS`. It caches
 `~/.hydo` (the release and the image cache), fetches the pull request's base commit and runs
 `hydo ci run`. It keeps the output directory as an artifact and writes the report into the job
-summary. It also posts the report as one pull-request comment, which it edits on every push. The job fails with
-`hydo ci run`'s exit status. A pull request from a fork gets a read-only token: the comment is
-then skipped with a warning, and the report is still in the job summary.
+summary. It also posts `comment.md` as one pull-request comment, which it edits on every push. The job fails
+with `hydo ci run`'s exit status. A pull request from a fork gets a read-only token: the comment
+is then skipped with a warning, and the report is still in the job summary. Section 13 has a
+recorder workflow that posts the comment for such a pull request too.
 
-Inputs: `hydo-version` (required), `project` (the directory that holds `hydo/hydo.yaml`), `mode`,
-`args` (more `hydo ci run` arguments), `out`, `comment`, `artifact-name`, `github-token`.
+The comment shows only what the pull request changed against its base: the findings in the
+states `new`, `reappeared`, `changed` and `fixed` (section 7). Each finding has its minimal
+schedule, the `hydo run` line that replays it, and the `hydo ci accept` line for it. Findings
+already on the base and accepted findings are only counted there, and `report.md` lists them.
+`hydo ci comment hydo-ci` prints the comment of a recorded run again.
+
+Inputs:
+
+- `hydo-version` (required) and `project` (the directory that holds `hydo/hydo.yaml`).
+- `mode`, `args` (more `hydo ci run` arguments) and `out`.
+- `comment`, `artifact-name` and `github-token`.
+- `merge` (section 11), `history` (section 12), `recorded` and `pull-request` (section 13).
 
 ## 4. GitLab CI
 
@@ -128,7 +139,7 @@ Every other system uses the same command and files:
 3. Run `hydo ci run --base <the target branch or commit>`.
 4. Keep the `hydo-ci/` directory as the job's artifact.
 5. Give the system `hydo-ci/junit.xml` as the test report.
-6. Post `hydo-ci/report.md` as a comment, if the system can.
+6. Post `hydo-ci/comment.md` as a comment, if the system can, and edit it on the next push.
 7. Fail the job with `hydo ci run`'s exit status.
 
 Every finding and every saved regression is one test case in `junit.xml`. A finding in a state
@@ -254,6 +265,29 @@ wall time the whole run may take. It accepts `90s`, `10m`, `1h30m` or a number o
 
 The explorer's own option is `hydo explore --time-limit SECONDS`, with the same cut.
 
+### Seed counts from history
+
+With `seeds_from: history` in a mode's settings, or `--seeds-from history`, and a history store
+(`--history`, section 12), the budget chooses the seeds before the run starts:
+
+```yaml
+pr: {seeds: 1-500, strategy: process, budget: 10m, seeds_from: history}
+```
+
+- The store's recorded runs give the seconds per seed: the exploration time of each of the last
+  10 runs with the same engine, strategy and options, divided by its seeds.
+- When the base is explored too, the base's seconds per seed are added.
+- The run explores the first seeds of the range that fit into the budget's time, for example
+  seeds 1-60 of 1-200. The time limit stays on as a safety stop.
+- The report says where the count came from: `The seed count came from the history: 6 recorded
+  runs measured 2.5 s per seed`. `ci-run.json` has it in `budget.seeds_from`.
+- Without a measured run, the run keeps the range and the time limit, and the report says so.
+- A shard keeps its part of the range, because the shards of one run must split one range.
+
+A recorded run's time includes its shrinks and its worker's boot, so a store of small runs gives
+a high estimate. In the proof of Milestone 286 the history said 2.5 s per seed, and the 60 seeds
+it chose took 71 s.
+
 ## 11. Shards
 
 `--shard I/N` explores the I-th of N contiguous parts of the seed range, so N jobs share one run.
@@ -322,5 +356,48 @@ hydo ci run --base main --history ../hydo-history       # in a pull request
   every pull request. A finding the history has fixed that this change brings back is
   `reappeared`.
 
+- `hydo ci record --report` also keeps the run's report page in the store, as
+  `v1/<project>/reports/<run id>.html`. hydo makes the page from the run's files.
+- `hydo ci page --store DIR` writes the history page, `DIR/index.html` (section 14).
+
 Record only from trusted runs: a pull request from a fork must not get a token that can push to
-the history branch.
+the history branch. Section 13 does this with a second workflow.
+
+## 13. History, the page, and comments from forks
+
+Two workflows keep the history in the branch `hydo-history` of the team's repository. hydo's
+repository has both as examples, in `action/examples/` at an `action-v1.*` tag. They need hydo
+0.4.0 or later. Copy them to `.github/workflows/`:
+
+- `hydo.yml` runs `hydo ci run` on every pull request, every push to `main` and every night. It
+  has a read-only token, so a pull request from a fork runs in it safely. It reads the history
+  branch, so each run replays the branch's open findings. It posts no comment and writes no
+  history.
+- `hydo-record.yml` starts when a run of `hydo` ends (the `workflow_run` event). It runs in the
+  default branch's context, with a token that can write. It downloads the run's artifact, posts
+  or edits the pull request's comment, records the run in the history branch with
+  `hydo ci record --report`, writes the page with `hydo ci page`, and pushes the branch.
+
+The recorder treats the artifact as data. It runs no code from the pull request, and hydo checks
+that `ci-run.json` is a CI run document. Every text from the run is escaped in the comment and on
+the page. The pull request's number comes from the event, not from the artifact. A pull
+request's run goes to its own line in the history, `pull/<number>`. The line `main` is written
+only by the repository's own pushes and nightly runs.
+
+The action's input `recorded` makes it run no VM: it makes the comment from a `ci-run.json` that
+another job wrote. `pull-request` names the pull request to comment on.
+
+## 14. The history page
+
+`hydo ci page --store hydo-history` writes one web page, `hydo-history/index.html`. It loads
+nothing from the network, so it opens from a checkout, and GitHub Pages can serve the branch. For
+each project of the store it shows:
+
+- Each finding across commits and branches: where it was first seen, the commit where a replay
+  proved it fixed, the commits where it came back, and whether it is accepted.
+- Each finding's minimal schedule, the `hydo run` line that replays it, the `hydo ci accept`
+  line, and a link to the report page of the run that last saw it, when the store keeps one.
+- A timeline per branch: one row per finding, one column per recorded run. A cell says `new`,
+  `fails`, `fixed`, `back`, or `·` for a run that did not find a finding that stays open.
+- The runs, the latest first: when, the branch and commit, the seeds, the budget, the engine,
+  the findings by state, the result, and links to the run's report and job.

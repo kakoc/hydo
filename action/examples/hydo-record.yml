@@ -1,0 +1,111 @@
+# An example workflow_run recorder (hydo guide ci, "History, the page and comments from
+# forks"): copy it to .github/workflows/hydo-record.yml next to hydo.yml.
+#
+# It starts when a run of the workflow `hydo` ends. It runs in the default branch's context with
+# a token that can write, so a pull request from a fork, whose own token cannot, still gets its
+# comment and its record in the history. It never runs code from the pull request: it reads the
+# run's artifact as data. hydo validates ci-run.json, and every text from it is escaped in the
+# comment and on the page. The pull request's number comes from the event, not from the artifact.
+# A pull request's run is recorded on the line `pull/<number>` only. The main line is written
+# only by runs of the repository's own pushes and schedules.
+#
+# The history is the branch hydo-history: v1/<project>/ (the runs, the ledger, the report pages)
+# and index.html, the history page (hydo ci page). GitHub Pages can serve that branch.
+name: hydo record
+on:
+  workflow_run:
+    workflows: [hydo]
+    types: [completed]
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+# one writer of the history branch at a time
+concurrency:
+  group: hydo-history
+  cancel-in-progress: false
+jobs:
+  record:
+    if: github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download the run's files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          name: hydo-ci-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+          path: ${{ runner.temp }}/run
+
+      - name: Find the pull request
+        id: pr
+        if: github.event.workflow_run.event == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          LISTED: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          # the event names the pull request of a branch of this repository; a fork's is found
+          # by its head commit among the open pull requests
+          n="$LISTED"
+          if [ -z "$n" ]; then
+            case "$HEAD_SHA" in
+              *[!0-9a-f]*) echo "::error::unexpected head commit $HEAD_SHA"; exit 1 ;;
+            esac
+            n="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" \
+              --jq ".[] | select(.head.sha == \"$HEAD_SHA\") | .number" | head -n 1)"
+          fi
+          echo "number=$n" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on the pull request
+        if: steps.pr.outputs.number != ''
+        uses: kakoc/hydo/action@v1
+        with:
+          hydo-version: 0.4.0
+          recorded: ${{ runner.temp }}/run
+          pull-request: ${{ steps.pr.outputs.number }}
+
+      - name: Install hydo
+        if: steps.pr.outputs.number == ''
+        uses: kakoc/hydo/action@v1
+        with:
+          hydo-version: 0.4.0
+          recorded: ${{ runner.temp }}/run
+          comment: "false"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: repo
+
+      - name: Record the run in the history branch
+        working-directory: repo
+        env:
+          RUN: ${{ runner.temp }}/run
+          EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          PR: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          case "$EVENT" in
+            pull_request)
+              [ -n "$PR" ] || { echo "no open pull request has this head commit: nothing recorded"; exit 0; }
+              line="pull/$PR" ;;
+            push | schedule) line="$HEAD_BRANCH" ;;
+            *) echo "a $EVENT run is not recorded"; exit 0 ;;
+          esac
+          if git fetch --no-tags --depth=1 origin hydo-history; then
+            git worktree add --detach ../history FETCH_HEAD
+          else
+            git worktree add --detach ../history
+            git -C ../history checkout --orphan hydo-history
+            git -C ../history rm -rfq .
+          fi
+          hydo ci record "$RUN" --store ../history --branch "$line" --report
+          hydo ci page --store ../history
+          cd ../history
+          git add -A
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "hydo: record run $RUN_ID on $line"
+          git push origin HEAD:refs/heads/hydo-history

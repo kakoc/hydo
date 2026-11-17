@@ -220,6 +220,7 @@ fn ensure_image(
                 reused: true,
                 given: false,
                 path: Some(img.display().to_string()),
+                ..CiImage::default()
             },
             path: img,
         });
@@ -259,6 +260,7 @@ fn ensure_image(
             reused: false,
             given: false,
             path: Some(img.display().to_string()),
+            ..CiImage::default()
         },
         path: img,
     })
@@ -277,8 +279,97 @@ fn given(p: &str) -> Built {
             reused: false,
             given: true,
             path: Some(path.display().to_string()),
+            ..CiImage::default()
         },
         path,
+    }
+}
+
+/// The recorded runs whose seconds per seed a budget from history averages, at most.
+const MEASURED_RUNS: usize = 10;
+
+fn round1(x: f64) -> f64 {
+    (x * 10.0).round() / 10.0
+}
+
+/// What a budget from history chose (M286).
+#[derive(Clone, Debug, Default, PartialEq)]
+struct ChosenSeeds {
+    /// The seeds to explore, when the count came from the history.
+    seeds: Option<String>,
+    /// `history` or `range` (`CiBudget::seeds_from`).
+    from: Option<String>,
+    per_seed: Option<f64>,
+    runs: Option<u64>,
+    /// What the run prints.
+    said: String,
+}
+
+/// The first seeds of `range` that fit into `left` seconds, by the measured seconds per seed of
+/// this commit's exploration and, when the base is explored too, of the base's.
+fn choose_seeds(
+    left: f64,
+    range: &str,
+    base_explored: bool,
+    m: Option<&history::Measured>,
+    sharded: bool,
+) -> ChosenSeeds {
+    let Some((lo, hi)) = hydo_manifest::ci::parse_seeds(range) else {
+        return ChosenSeeds::default();
+    };
+    if sharded {
+        return ChosenSeeds {
+            from: Some("range".into()),
+            runs: Some(0),
+            said: "budget from history: a shard keeps its part of the range and the time limit \
+                   (the shards of one run must split one range)"
+                .into(),
+            ..ChosenSeeds::default()
+        };
+    }
+    let Some(m) = m else {
+        return ChosenSeeds {
+            from: Some("range".into()),
+            runs: Some(0),
+            said: format!(
+                "budget from history: no recorded run of this engine, strategy and options \
+                 measured the seconds per seed, so the run explores the range {range} with the \
+                 time limit"
+            ),
+            ..ChosenSeeds::default()
+        };
+    };
+    let per = m.head_per_seed
+        + if base_explored {
+            m.base_per_seed.unwrap_or(m.head_per_seed)
+        } else {
+            0.0
+        };
+    let fit = if per > 0.0 {
+        (left.max(0.0) / per).floor() as u64
+    } else {
+        hi - lo + 1
+    };
+    let n = fit.clamp(1, hi - lo + 1);
+    let seeds = format!("{lo}-{}", lo + n - 1);
+    ChosenSeeds {
+        said: format!(
+            "budget from history: {:.0} s left at {per:.1} s per seed{} ({} recorded {}): {n} of \
+             the {} seeds of {range}, seeds {seeds}",
+            left.max(0.0),
+            if base_explored {
+                " (this commit and the base)"
+            } else {
+                ""
+            },
+            m.runs,
+            if m.runs == 1 { "run" } else { "runs" },
+            hi - lo + 1
+        ),
+        seeds: Some(seeds),
+        from: Some("history".into()),
+        per_seed: Some(round1(per)),
+        runs: Some(m.runs),
     }
 }
 
@@ -740,6 +831,7 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     let set_flags = take_all(&mut args, "--set");
     let budget_flag = take(&mut args, "--budget");
     let shard_flag = take(&mut args, "--shard");
+    let seeds_from_flag = take(&mut args, "--seeds-from");
     // paths of the caller's directory (the run works in the project's)
     let known_flag = take(&mut args, "--known").map(|k| abspath(Path::new(&k)));
     let history_flag = take(&mut args, "--history").map(|h| abspath(Path::new(&h)));
@@ -863,6 +955,13 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         plan.seeds = format!("{a}-{b}");
         (i, n)
     });
+    let seeds_from = seeds_from_flag.or(b.seeds_from.clone());
+    if let Some(s) = seeds_from.as_deref() {
+        if !matches!(s, "range" | "history") {
+            die(&format!("--seeds-from {s}: expected range or history"));
+        }
+    }
+    let from_history = seeds_from.as_deref() == Some("history");
     let budget_s: Option<f64> = budget_flag.or(b.budget.clone()).map(|d| {
         hydo_manifest::ci::parse_duration(&d).unwrap_or_else(|| {
             die(&format!(
@@ -870,6 +969,12 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
             ))
         })
     });
+    if from_history && budget_s.is_none() {
+        die("--seeds-from history: the seed count is made from a time budget; give --budget (or budget: in hydo/ci.yaml)");
+    }
+    if from_history && history_flag.is_none() {
+        die("--seeds-from history: the seconds per seed come from the history store; give --history DIR");
+    }
     let known_given = known_flag.is_some();
     let known_path =
         known_flag.unwrap_or_else(|| project.join(hydo_manifest::known_findings::DEFAULT_PATH));
@@ -1026,6 +1131,33 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         .as_ref()
         .is_some_and(|bi| bi.ci.sha256.is_some() && bi.ci.sha256 == head.ci.sha256);
     let base_explored = base_run.is_none() && base_img.is_some() && !same_image;
+    // budgets from history (M286): the first seeds of the range that fit, by the seconds per
+    // seed the store's recorded runs of the same engine, strategy and options measured
+    let mut chosen = ChosenSeeds::default();
+    if let (true, Some(total), Some(store)) = (from_history, budget_s, history_flag.as_ref()) {
+        let left = total * (1.0 - RESERVE) - t0.elapsed().as_secs_f64();
+        let pname = project_name(&manifest_of(&project, &cfg));
+        let m = history::measured(
+            store,
+            &pname,
+            &backend,
+            &plan.strategy,
+            &plan.options,
+            MEASURED_RUNS,
+        )
+        .unwrap_or_else(|e| die(&e));
+        chosen = choose_seeds(
+            left,
+            &plan.seeds,
+            base_explored,
+            m.as_ref(),
+            shard.is_some(),
+        );
+        println!("hydo ci: {}", chosen.said);
+        if let Some(sd) = &chosen.seeds {
+            plan.seeds = sd.clone();
+        }
+    }
     if let Some(total) = budget_s {
         let left = total * (1.0 - RESERVE) - t0.elapsed().as_secs_f64();
         let share = if base_explored { left / 2.0 } else { left };
@@ -1043,8 +1175,10 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         );
     }
     let explore_dir = out.join("explore");
+    let te = Instant::now();
     let doc =
         explore(&ctx, &head.path, &plan, &explore_dir, "this commit").unwrap_or_else(|e| die(&e));
+    let explore_s = te.elapsed().as_secs_f64();
     let (mut found, nondet, route_class) = findings_of(&doc);
     for f in &mut found {
         f.source = Some("explored".into());
@@ -1067,6 +1201,7 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
 
     let mut base_findings: Vec<CiFinding> = Vec::new();
     let mut base_explore = None;
+    let mut base_explore_s = None;
     if let Some(f) = &base_run {
         let r = super::read_ci_run(Path::new(f)).unwrap_or_else(|e| die(&e));
         base.ci_run = Some(r.id.clone());
@@ -1090,8 +1225,10 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
             println!("hydo ci: the budget let this commit explore no seed: the base explores none either");
         } else {
             let d = out.join("base-explore");
+            let tb = Instant::now();
             let bdoc =
                 explore(&ctx, &bi.path, &base_plan, &d, "the base").unwrap_or_else(|e| die(&e));
+            base_explore_s = Some(round1(tb.elapsed().as_secs_f64()));
             base_findings = findings_of(&bdoc).0;
             base_explore = Some("base-explore/exploration.json".to_string());
         }
@@ -1415,7 +1552,10 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
             epoch: hydo_image::EPOCH,
         },
         engine: doc.engine.clone(),
-        image: head.ci.clone(),
+        image: CiImage {
+            set: sets.iter().map(|(k, v)| format!("{k}={v}")).collect(),
+            ..head.ci.clone()
+        },
         budget: CiBudget {
             mode,
             seeds: plan.seeds.clone(),
@@ -1435,7 +1575,14 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
                 .or_else(|| shard.map(|_| doc.summary.schedules)),
             partial,
             shard: shard.map(|(i, n)| format!("{i}/{n}")),
-            range: shard.map(|_| range.clone()),
+            range: shard
+                .map(|_| range.clone())
+                .or_else(|| chosen.seeds.as_ref().map(|_| range.clone())),
+            explore_s: Some(round1(explore_s)),
+            base_explore_s,
+            seeds_from: chosen.from.clone(),
+            seconds_per_seed: chosen.per_seed,
+            measured_runs: chosen.runs,
         },
         summary: CiSummary {
             runs: nruns,
@@ -1470,12 +1617,13 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         std::fs::write(out.join(n), t).unwrap_or_else(|e| die(&format!("{n}: {e}")))
     };
     w("report.md", &md);
+    w("comment.md", &super::comment::markdown(&r));
     w("junit.xml", &report::junit(&r));
     hydo_results::write_document(&out.join("ci-run.json"), &r)
         .unwrap_or_else(|e| die(&format!("ci-run.json: {e}")));
     println!("\n{md}");
     println!(
-        "hydo ci: wrote {}, report.md and junit.xml (exit status {})",
+        "hydo ci: wrote {}, report.md, comment.md and junit.xml (exit status {})",
         out.join("ci-run.json").display(),
         r.outcome.exit
     );
@@ -1565,5 +1713,80 @@ mod tests {
         r.outcome.fail_on.push("present".into());
         decide(&mut r);
         assert_eq!(r.outcome.failed_by.len(), 2);
+    }
+
+    /// A budget from history: the first seeds of the range that fit, by the measured seconds per
+    /// seed of the recorded runs of the same engine, strategy and options.
+    #[test]
+    fn a_budget_becomes_a_seed_count_from_history() {
+        let d = std::env::temp_dir().join(format!("hydo-ci-measured-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let rec = |id: &str, strategy: &str, seeds: &str, explore: f64, base: Option<f64>| {
+            let r = CiRun {
+                id: id.into(),
+                commit: Some("c".into()),
+                project: CiProject {
+                    name: "redis".into(),
+                    ..Default::default()
+                },
+                engine: hydo_results::Engine {
+                    backend: Some("hvm".into()),
+                    ..Default::default()
+                },
+                budget: CiBudget {
+                    seeds: seeds.into(),
+                    strategy: strategy.into(),
+                    explore_s: Some(explore),
+                    base_explore_s: base,
+                    ..Default::default()
+                },
+                ..CiRun::default()
+            };
+            history::record(&d, &r, "main", None).unwrap();
+        };
+        // nothing measured yet: the range with the time limit
+        assert!(history::measured(&d, "redis", "hvm", "swarm", &[], 10)
+            .unwrap()
+            .is_none());
+        let c = choose_seeds(100.0, "1-50", false, None, false);
+        assert_eq!((c.seeds, c.from.as_deref()), (None, Some("range")));
+        rec("local:1", "swarm", "1-10", 40.0, Some(60.0));
+        rec("local:2", "swarm", "1-10", 20.0, None);
+        rec("local:3", "process", "1-10", 500.0, None);
+        let m = history::measured(&d, "redis", "hvm", "swarm", &[], 10)
+            .unwrap()
+            .unwrap();
+        assert_eq!(m.runs, 2);
+        assert!((m.head_per_seed - 3.0).abs() < 1e-9);
+        assert_eq!(m.base_per_seed, Some(6.0));
+        // 100 s at 3 s per seed: 33 seeds; with the base explored too, 3 + 6 s: 11
+        let c = choose_seeds(100.0, "1-50", false, Some(&m), false);
+        assert_eq!(c.seeds.as_deref(), Some("1-33"));
+        assert_eq!(c.from.as_deref(), Some("history"));
+        assert_eq!(c.per_seed, Some(3.0));
+        assert_eq!(
+            choose_seeds(100.0, "5-50", true, Some(&m), false)
+                .seeds
+                .as_deref(),
+            Some("5-15")
+        );
+        // never past the range, never below one seed, and a shard keeps its part
+        assert_eq!(
+            choose_seeds(1e6, "1-20", false, Some(&m), false)
+                .seeds
+                .as_deref(),
+            Some("1-20")
+        );
+        assert_eq!(
+            choose_seeds(0.5, "1-20", false, Some(&m), false)
+                .seeds
+                .as_deref(),
+            Some("1-1")
+        );
+        assert_eq!(
+            choose_seeds(100.0, "1-20", false, Some(&m), true).seeds,
+            None
+        );
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

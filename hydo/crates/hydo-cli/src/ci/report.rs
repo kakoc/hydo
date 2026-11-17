@@ -51,9 +51,13 @@ pub fn headline(r: &CiRun) -> String {
         let open = r
             .findings
             .iter()
-            .filter(|f| f.state != ci_state::ACCEPTED)
+            .filter(|f| f.state != ci_state::ACCEPTED && f.state != ci_state::FIXED)
             .count();
         parts.push(plural(open, "finding", "findings"));
+        let fixed = of_state(r, ci_state::FIXED).len();
+        if fixed > 0 {
+            parts.push(format!("{fixed} fixed"));
+        }
     }
     let back = of_state(r, ci_state::REAPPEARED).len();
     if back > 0 {
@@ -457,6 +461,40 @@ pub fn markdown(r: &CiRun, sets: &[(String, String)]) -> String {
             wall(t),
             b.completed.unwrap_or(0)
         );
+    }
+    match b.seeds_from.as_deref() {
+        Some("history") => {
+            let _ = writeln!(
+                o,
+                "The seed count came from the history: {} recorded {} measured {:.1} s per \
+                 seed{}, so the budget{} fitted seeds {} of the range {}.\n",
+                b.measured_runs.unwrap_or(0),
+                if b.measured_runs == Some(1) {
+                    "run"
+                } else {
+                    "runs"
+                },
+                b.seconds_per_seed.unwrap_or(0.0),
+                if b.base_explore_s.is_some() {
+                    " (this commit's exploration and the base's)"
+                } else {
+                    ""
+                },
+                b.time_limit_s
+                    .map(|t| format!(" of {}", wall(t)))
+                    .unwrap_or_default(),
+                b.seeds,
+                b.range.as_deref().unwrap_or("?")
+            );
+        }
+        Some(_) => {
+            o.push_str(
+                "The budget was to take its seed count from the history, but no recorded run of \
+                 this engine, strategy and options measured the seconds per seed, so the run \
+                 explored its seed range with the time limit.\n\n",
+            );
+        }
+        None => {}
     }
     o.push_str("<details><summary>What ran</summary>\n\n");
     let _ = writeln!(

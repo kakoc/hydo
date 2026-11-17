@@ -14327,3 +14327,134 @@ is the `boot` field, written only after a cut.
 KVM has), hvx has no breakpoints, an inlined function cannot be recorded, a map of more than 8
 entries is unreadable, a call through a function value names only its return address, and no
 run with a power cut was recorded.
+
+### Milestone 286 (tentative number) - DONE (hydo in a team's CI, what makes a team keep it after the first try: `hydo ci page`, the history store as one web page that loads nothing; `comment.md` and `hydo ci comment`, the pull-request comment of only what the change did, edited in place by `action/comment.sh`; the `workflow_run` recorder `action/examples/hydo-record.yml` for pull requests from forks; `seeds_from: history`, budgets turned into seed counts; proven on this Mac with the Mac engine on a throwaway repository of four commits and two pull requests; nothing ran on GitHub; nothing recorded moved; 2026-11-17)
+
+**Why.** Open item 67 listed what stage 2 of `docs/design/ci.md` left after M223. A team that
+tried hydo once still had no view of its findings over time, and a pull request's comment listed
+every finding of the run, also those the change did not cause. A pull request from a fork got no
+comment at all, because its token cannot write. These are the parts a team meets every day.
+
+**Built** (`hydo/crates/hydo-cli/src/ci/`, `src/htmlreport/history.rs`, `action/`, `hydo guide ci`
+sections 3, 10, 12, 13 and 14):
+
+1. **The history page.** `hydo ci page --store DIR [-o FILE]` writes `DIR/index.html` with the
+   style sheet and the copy script of `hydo report --html`; the page loads nothing. It folds each
+   branch's recorded runs again with `history::fold`, so it shows what each run did to each
+   finding. Per project it has:
+   - a card per finding: its state on the main line (`main`, `master`, else the branch with the
+     most runs), the commit where it was first seen and when, the commits where a replay proved
+     it fixed and where it came back, the acceptance and its reason, the minimal schedule, the
+     replay line, the `hydo ci accept` line, the link to the report page of the run that last
+     saw it, and its state on each branch;
+   - a timeline per branch, one column per run (the latest 30), with `new`, `fails`, `fixed`,
+     `back`, and `·` for a run that did not find a finding that stays open;
+   - the runs, the latest first (at most 200): time, branch, commit, trigger, seeds, budget,
+     engine, runs, findings by state, result, and links.
+
+   A pull request's first run of a finding that its target branch had fixed shows `back`. Every
+   text is escaped, and a run's job link is kept only when it starts with `http://` or
+   `https://`, because a fork's run can name any text.
+2. **The store keeps the order and the report pages.** `hydo ci record` adds
+   `CiLedgerBranch.recorded`, the runs in recording order with the time in UTC (a results
+   addition, `CiLedgerRun`). With `--report` it also writes the run's report page, made by
+   `hydo report --html`'s code from the run's directory, to `v1/<project>/reports/<id>.html`; it
+   never copies a page from the run. A store written before has no order; the page then takes
+   the run files in name order.
+3. **The comment of only what the change did.** `hydo ci run`, `hydo ci merge` and `hydo ci
+   compare` write `comment.md` (src/ci/comment.rs). It lists the findings in the states `new`,
+   `reappeared`, `changed` and `fixed`, at most 10 per state. Each has its minimal schedule, the
+   `hydo run` line in a shell block (`--backend kvm` on KVM, shell quoting when the schedule
+   needs it), the commit where the history fixed a finding that came back, the first difference
+   from the base, and the `hydo ci accept` line (the head's key for a `changed` finding, none for
+   a `fixed` one). The other findings are counted in one sentence. Text from a run goes into code
+   spans and fences one backtick longer than any backtick run in it, so a title cannot add
+   Markdown, links or mentions. `hydo ci comment <ci-run.json | DIR> [-o FILE]` makes the same
+   text from a recorded run. `CiImage.set` (a results addition) keeps the `--set` values, so that
+   the comment names the `hydo build` line without the run's settings.
+4. **The comment edited in place.** `action/comment.sh REPO NUMBER MARKER FILE` finds the comment
+   whose first line is the marker `<!-- hydo-ci: <project> -->`, which the action used before, so
+   an existing comment is kept. It edits that comment or posts a new one with `gh api`. The
+   marker is compared in the shell, not put into a jq program, and the body goes from a file
+   (`-F body=@FILE`). A token that cannot write gives a warning and exit status 0. The action
+   posts `comment.md`, or `report.md` for a hydo older than 0.4.0.
+5. **The `workflow_run` recorder.** `action/examples/hydo.yml` runs `hydo ci run` with a read-only
+   token and reads the history branch `hydo-history` into a temporary directory (the action's new
+   `history` input). `action/examples/hydo-record.yml` starts on `workflow_run` of `hydo`, in the
+   default branch's context, with `contents: write` and `pull-requests: write`, in the
+   concurrency group `hydo-history`. It downloads the artifact `hydo-ci-<run id>-<attempt>`. It
+   finds the pull request from the event: the event's own list, else the open pull request whose
+   head is the event's head commit, which must be hexadecimal. The action's new `recorded` input
+   makes the comment with `hydo ci comment` and runs no VM, and `pull-request` names the pull
+   request. The workflow then records the run with `hydo ci record --report`. A pull request goes
+   on the line `pull/<number>`, and a push or a scheduled run on its own branch. It writes the
+   page and pushes the branch, which it creates as an orphan the first time.
+6. **Budgets from history.** `seeds_from: history` per mode in `hydo/ci.yaml` (a format-1
+   addition, with the example `seeds-from-history.yaml`) or `--seeds-from history`, with a
+   budget and `--history`. `history::measured` averages the seconds per seed of the last 10
+   recorded runs with the same engine, strategy and options: `CiBudget.explore_s` over the seeds
+   explored, and `base_explore_s` when the base is explored too. `hydo ci run` then explores the
+   first seeds of the range that fit into the time left after the image builds (85 % of the
+   budget, as before), at least 1 and at most the range. The time limit stays on. `ci-run.json`
+   gets `budget.seeds_from` (`history`, or `range` when nothing was measured), `seconds_per_seed`,
+   `measured_runs`, and `range` for the range the seeds came from. The report says which it
+   used. A shard keeps its part of the range. `hydo ci merge` adds the shards' `explore_s`.
+
+Results-format additions: `CiBudget.explore_s`, `base_explore_s`, `seeds_from`,
+`seconds_per_seed` and `measured_runs`, `CiImage.set`, `CiLedgerBranch.recorded` and the type
+`CiLedgerRun`, with examples from the proof in `hydo/schema/examples/results/v1/mac-redis-ci-page/`.
+`hydo/ci.yaml` format 1 adds `seeds_from`. The schema checks pass against the released schemas. Two small report fixes: a run without a base no longer counts a fixed finding
+in its headline (`1 finding` became `1 fixed`), and `hydo ci comment --help` and `hydo ci page
+--help` print their usage.
+
+**Proof, on this Mac** (an M2 Pro, the Mac engine, this tree's hydo over the 0.3.4 Mac release,
+one VM at a time under the session's VM lock, `workers: 1`). A throwaway git repository holds the
+0.3.2 release's Redis example with `push` and `pr` set to `{seeds: 1-8, strategy: swarm}`. Its
+clean base has no lying disk in `faults:` and no `R` setting, because each loses acknowledged
+writes with `appendfsync always` too; the first two tries found them. The store is a plain
+directory:
+
+| Commit or run | Line | Result |
+|---|---|---|
+| c1, the clean base | `main` | 8 runs, no finding, 19 s |
+| c2 as a pull request against c1 (`appendfsync everysec`) | `pull/1` | `hydo: 1 new finding (failed)`: `VIOLATION [redis.acked_writes_survive] key k:# lost` (`f1:invariant:5ef675c8c9`), minimal schedule `disk=cut dseed=eac0b527c5ac67d9 \| run C=20`, the base passes it; 17 runs, 2 replays, 48 s |
+| c2 on `main` | `main` | the event `new` |
+| c3, a change elsewhere, and `hydo ci accept` of the key | `main` | `hydo: 0 findings, 1 accepted (passed)`; the event `accepted` |
+| c4, `appendfsync always` again and the entry removed | `main` | the exploration did not find it; the history's schedule passed on replay: `fixed` |
+| c5 as a pull request against c4 (`everysec` again) | `pull/2` | `hydo: no new findings, 1 reappeared (failed)`; the comment's section "Back again" names c4 as the commit where it was fixed |
+| c4 with `--budget 3m --seeds 1-200 --seeds-from history` | `main` | `budget from history: 153 s left at 2.5 s per seed (6 recorded runs): 60 of the 200 seeds of 1-200`; all 60 explored in 71 s, so the estimate was high by a factor of 2 |
+
+The comment of each pull request lists only that finding, with its schedule, its replay line,
+its first difference from the base, and its accept line. `hydo ci comment out/pr2` gives the
+same bytes as the run's `comment.md`. The page (15 KiB) was checked by its text: the finding is
+`Fixed` on `main`, first seen at `ac7ab56821`, fixed at `eb12f87641`, accepted before the fix
+with its reason, `Open` on `pull/1` and `Back again` on `pull/2`. The timeline of `main` reads
+nothing, `new`, `fails`, `fixed`, nothing. The runs table has all seven runs with a link to each
+report page. The page has no `http` text and no `src` link. A screenshot by headless Chrome
+showed the same. The 0.3.4 release's hydo read the new `ci-run.json` (`hydo ci compare`) and the
+new `state.json` (`hydo ci record`), and dropped `recorded` when it rewrote the ledger.
+
+Tests: `ci::comment::` (only what the change did, a run's text kept inside its span, the limit
+per state, and `comment.sh` against a fake `gh` over files: it posts the first comment, edits it
+on the next call, leaves a person's comment and another project's alone, warns on a read-only
+token, and refuses a number that is not one before any call), `htmlreport::history::` (the page
+of four commits and a pull request, escaping, the dropped `javascript:` link, the UTC dates) and
+`ci::run::a_budget_becomes_a_seed_count_from_history`. actionlint 1.7.12 and shellcheck report
+nothing for `action/examples/` and `comment.sh`, nor shellcheck for the action's scripts.
+
+**Checklist for the trial on GitHub** (it needs the lead: a repository and a fork):
+
+1. Release 0.4.0, or point the examples' `hydo-version` at a build of this tree.
+2. In a throwaway repository, add the Redis example, `hydo/ci.yaml` with `pr` and `push` seeds
+   `1-20` and `engine: kvm`, and both files of `action/examples/` in `.github/workflows/`.
+3. Push to `main`, and check that `hydo record` creates the branch `hydo-history` with
+   `index.html`.
+4. Open a pull request from a branch with `appendfsync everysec`. Check one comment with the
+   new finding, and that a second push edits it.
+5. Open the same change from a fork. Check that `hydo` passes without writing, and that
+   `hydo record` posts the comment and records the line `pull/<number>`.
+6. Merge, then fix the setting on `main`, and check `fixed` on the page.
+7. Turn on GitHub Pages for `hydo-history`, and open the page.
+
+**Not built** (open item 67): proposed regression files, and one shrink per signature across
+shards. Nothing ran on GitHub.

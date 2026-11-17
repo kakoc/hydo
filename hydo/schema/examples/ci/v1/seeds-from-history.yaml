@@ -1,0 +1,16 @@
+# Milestone 286: a budget whose seed count comes from the history. With `hydo ci run --history
+# DIR`, the run explores the first seeds of the range that fit into the budget, by the seconds per
+# seed that the store's recorded runs measured. Without a measured run it keeps the range and the
+# time limit.
+format: 1
+engine: kvm
+pr:
+  seeds: 1-500
+  strategy: process
+  budget: 10m
+  seeds_from: history
+nightly:
+  seeds: 1-5000
+  strategy: process
+  budget: 1h30m
+fail_on: [new, reappeared, regression]

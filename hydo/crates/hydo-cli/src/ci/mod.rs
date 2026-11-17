@@ -12,11 +12,16 @@
 //! - `hydo ci accept <key>` (src/ci/accept.rs): add an entry to `hydo/known-findings.yaml`.
 //! - `hydo ci merge` (src/ci/merge.rs): the shards' `ci-run.json` into one run and one report.
 //! - `hydo ci record` (src/ci/history.rs): add a run to the history store.
+//! - `hydo ci page` (src/htmlreport/history.rs, Milestone 286): the history store as one web
+//!   page.
+//! - `hydo ci comment` (src/ci/comment.rs, Milestone 286): the pull-request comment, only what
+//!   the change did, from a recorded `ci-run.json` (`hydo ci run` writes it as `comment.md`).
 //!
 //! hydo never calls a CI platform's API: comments and status checks are the adapters' work
 //! (`action/` for GitHub, `ci/gitlab/` for GitLab, the generic recipe in `hydo guide ci`).
 
 pub mod accept;
+pub mod comment;
 pub mod env;
 pub mod history;
 pub mod inputkey;
@@ -37,16 +42,20 @@ pub const HELP: &str = r#"hydo ci -- hydo in continuous integration (hydo guide 
                 [--base-run CI-RUN.JSON] [--image IMG] [--base-image IMG] [--backend kvm|hvx]
                 [--seeds A-B] [--strategy S] [--option OPT ...] [--workers N] [--set KEY=VALUE ...]
                 [--fail-on new,reappeared,regression,...] [--cache DIR]
-                [--budget DURATION] [--shard I/N] [--known FILE] [--history DIR]
+                [--budget DURATION] [--seeds-from range|history] [--shard I/N]
+                [--known FILE] [--history DIR]
         build (or reuse) the image, explore it, replay each finding on the base commit's image
         (new, pre-existing), replay the base's findings here (fixed, present, changed), replay
         the saved regressions, and write ci-run.json, report.md and junit.xml into --out
-        (default hydo-ci). Exit status: 0 passed, 1 failed by fail_on, 2 not completed.
+        (default hydo-ci), with comment.md, the pull-request comment of what the change did.
+        Exit status: 0 passed, 1 failed by fail_on, 2 not completed.
         The CI system's variables give the commit, the base branch and the change number on
         GitHub Actions, GitLab CI, CircleCI, Jenkins, Buildkite and Azure Pipelines; flags win.
         --budget 10m: stop drawing schedules when the rest of the run would not fit (at a seed
         boundary, in seed order; the report names the seeds explored). --shard 2/4: explore the
         second of four parts of the seed range (merge the shards with hydo ci merge).
+        --seeds-from history (with --budget and --history): explore the first seeds of the range
+        that fit the budget, by the seconds per seed the history's recorded runs measured.
         --known: the accepted findings (default hydo/known-findings.yaml). --history: a
         directory written by hydo ci record; its open findings are replayed here.
 
@@ -66,10 +75,21 @@ pub const HELP: &str = r#"hydo ci -- hydo in continuous integration (hydo guide 
         finding key, in shard order; a missing shard makes the merged run partial. Exit status
         as for hydo ci run.
 
-    hydo ci record <ci-run.json or directory> --store DIR [--branch NAME]
+    hydo ci record <ci-run.json or directory> --store DIR [--branch NAME] [--report]
         add a run to the history store (v1/<project>/runs/, findings.jsonl, state.json): a
         finding seen failing is new or reappeared, one proven fixed by replay is fixed, and one
-        not found keeps its state
+        not found keeps its state. --report keeps the run's report page in the store
+        (v1/<project>/reports/), made here from the run's directory.
+
+    hydo ci page --store DIR [-o FILE]
+        one web page of the history store (default DIR/index.html): each finding across commits
+        and branches (first seen, fixed, back again, accepted), the runs per commit with their
+        seeds and budget, and each finding's replay line. It loads nothing from the network.
+
+    hydo ci comment <ci-run.json or directory> [-o FILE]
+        the pull-request comment of a recorded run: only what the change did (new, back again,
+        changed, fixed), each finding with its minimal schedule, its replay line and its
+        hydo ci accept line
 "#;
 
 pub fn cmd_ci(ctx: &Ctx, argv: &[String]) -> i32 {
@@ -79,6 +99,8 @@ pub fn cmd_ci(ctx: &Ctx, argv: &[String]) -> i32 {
         Some("accept") => accept::cmd_accept(&argv[1..]),
         Some("merge") => merge::cmd_merge(&argv[1..]),
         Some("record") => history::cmd_record(&argv[1..]),
+        Some("page") => crate::htmlreport::history::cmd_page(&argv[1..]),
+        Some("comment") => comment::cmd_comment(&argv[1..]),
         Some("-h" | "--help" | "help") => {
             print!("{HELP}");
             0
@@ -183,6 +205,7 @@ fn cmd_compare(argv: &[String]) -> i32 {
             std::fs::write(d.join(n), t).unwrap_or_else(|e| die(&format!("{n}: {e}")))
         };
         w("report.md", &md);
+        w("comment.md", &comment::markdown(&r));
         w("junit.xml", &report::junit(&r));
         let _ = hydo_results::write_document(&d.join("ci-run.json"), &r);
     }

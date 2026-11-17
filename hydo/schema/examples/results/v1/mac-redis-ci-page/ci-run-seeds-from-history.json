@@ -1,0 +1,120 @@
+{
+  "v": 1,
+  "type": "ci-run",
+  "id": "local:20261117T125114",
+  "ci": {
+    "name": "local"
+  },
+  "project": {
+    "name": "redis",
+    "dir": ".",
+    "manifest": "hydo/hydo.yaml",
+    "manifest_sha256": "c411bb46bccf061cb4a9579593d27599046f29922106dc9ff3642f22293d8255"
+  },
+  "trigger": "manual",
+  "commit": "eb12f876414f76cfe670c4efe5edc6cc610bf236",
+  "branch": "main",
+  "base": {
+    "findings_from": "none",
+    "missing": "a push run has no base unless --base is given"
+  },
+  "hydo": {
+    "version": "0.3.4",
+    "commit": "64950f8fd17e1b4411719fb6b614eab2b9dbc191",
+    "epoch": 4
+  },
+  "engine": {
+    "backend": "hvm",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": 1,
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "image": {
+    "input_key": "ik1-35dba05910ebeb76f860fd4501cc43f1",
+    "sha256": "52adb5dcf57183ddd6c95c2baccf1a4ad6a9c6d80f6dfc4da1f2b49160bbfc5b",
+    "reused": true,
+    "given": false,
+    "path": "/tmp/m286/hydo-home/ci/images/ik1-35dba05910ebeb76f860fd4501cc43f1/explore-ob-redis-arm64.cpio.gz"
+  },
+  "budget": {
+    "mode": "push",
+    "seeds": "1-60",
+    "strategy": "swarm",
+    "options": [],
+    "time_limit_s": 180.0,
+    "completed_seeds": "1-60",
+    "planned": 60,
+    "completed": 60,
+    "partial": false,
+    "range": "1-200",
+    "explore_s": 71.0,
+    "seeds_from": "history",
+    "seconds_per_seed": 2.5,
+    "measured_runs": 6
+  },
+  "summary": {
+    "runs": 60,
+    "failures": 0,
+    "findings": 0,
+    "states": {},
+    "replays": 0,
+    "vacuous_passes": 0,
+    "regressions": {
+      "replayed": 0,
+      "as_expected": 0
+    },
+    "wall_s": 71.4
+  },
+  "coverage": {
+    "faults": {
+      "C": 34,
+      "K": 29,
+      "N": 35,
+      "disk": 34
+    },
+    "services": {
+      "redis": 64
+    },
+    "properties": {
+      "declared": 6,
+      "reached": 1,
+      "not_exercised": [
+        "fault.paused",
+        "fault.pause_mid_request",
+        "fault.clock_back",
+        "fault.clock_fwd",
+        "fault.oneway_req",
+        "fault.oneway_resp"
+      ]
+    }
+  },
+  "findings": [],
+  "regressions": [],
+  "nondeterminism": [],
+  "outcome": {
+    "exit": 0,
+    "fail_on": [
+      "new",
+      "reappeared",
+      "regression"
+    ],
+    "failed_by": []
+  },
+  "artifacts": {
+    "exploration": "explore/exploration.json",
+    "report": "report.md",
+    "junit": "junit.xml"
+  },
+  "history": {
+    "store": "/tmp/m286/store",
+    "branch": "main",
+    "open": 0,
+    "fixed": 1
+  }
+}

@@ -13,6 +13,7 @@
 //! size is bounded: the timeline keeps at most [`MAX_EVENTS`] events, a log at most
 //! [`MAX_LOG`] bytes, and the page says what it left out and which command shows it all.
 
+pub mod history;
 mod page;
 mod story;
 #[cfg(test)]
@@ -181,6 +182,22 @@ pub fn cmd(argv: &[String]) -> i32 {
         html.len().div_ceil(1024)
     );
     0
+}
+
+/// The page of a `hydo ci run` output directory (`hydo ci record --report`): `shown` is the
+/// directory as the user named it.
+pub fn ci_dir_page(dir: &Path, shown: &str) -> Result<String, String> {
+    match read_input(dir)? {
+        Input::Ci { dir, doc } => Ok(ci_page(
+            &dir,
+            &doc,
+            &Extra {
+                shown_dir: shown.to_string(),
+                ..Extra::default()
+            },
+        )),
+        _ => Err(format!("{}: not a hydo ci run directory", dir.display())),
+    }
 }
 
 /// What the command line adds to a directory.

@@ -19,6 +19,7 @@
 //!   strategy: process
 //!   options: [--more-faults]
 //!   budget: 10m                       # stage 2: stop drawing schedules when the run would not fit
+//!   seeds_from: history               # M286: the seeds that fit, by the history's seconds per seed
 //! fail_on: [new, reappeared, regression]
 //! ```
 
@@ -115,6 +116,13 @@ pub struct Budget {
     /// boundary in seed order, and the run reports the seeds it explored. Default: no limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget: Option<String>,
+    /// How a `budget` chooses the seeds (added in Milestone 286): `range` (the default) explores
+    /// `seeds` and cuts the exploration when the time is up; `history` turns the budget into a
+    /// seed count from the seconds per seed that the history store's recorded runs measured
+    /// (`hydo ci run --history`), so that the run explores the first seeds of `seeds` that fit.
+    /// Without a measured run it falls back to `range`, and the run says so.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seeds_from: Option<String>,
 }
 
 /// `hydo/ci.yaml`.
@@ -231,6 +239,13 @@ pub fn from_value(v: Value, name: &str) -> Result<CiConfig, ManifestError> {
             if parse_duration(s).is_none() {
                 return Err(err(format!(
                     "{name}: {m}.budget: {s:?} is not a duration like 10m, 90s or 1h30m"
+                )));
+            }
+        }
+        if let Some(s) = b.as_ref().and_then(|b| b.seeds_from.as_deref()) {
+            if !matches!(s, "range" | "history") {
+                return Err(err(format!(
+                    "{name}: {m}.seeds_from: {s:?} is not range or history"
                 )));
             }
         }

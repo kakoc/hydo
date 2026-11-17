@@ -1,0 +1,35 @@
+# An example workflow for a team's repository (hydo guide ci, "History, the page and comments
+# from forks"): copy it to .github/workflows/hydo.yml, together with hydo-record.yml.
+#
+# This workflow runs hydo on every pull request, every push to main and every night, with a
+# read-only token, so it is safe for pull requests from forks. It reads the history branch
+# hydo-history (when there is one), so every run replays the findings that branch has open. It
+# posts no comment and writes no history itself: hydo-record.yml does both, in the default
+# branch's context, from this workflow's artifact.
+name: hydo
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 2 * * *"
+permissions:
+  contents: read
+jobs:
+  hydo:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read the history branch
+        run: |
+          # the history store, read only: an empty directory when the branch does not exist yet
+          mkdir -p "$RUNNER_TEMP/hydo-history"
+          if git fetch --no-tags --depth=1 origin hydo-history; then
+            git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/hydo-history"
+          fi
+      - uses: kakoc/hydo/action@v1
+        with:
+          hydo-version: 0.4.0
+          history: ${{ runner.temp }}/hydo-history
+          # hydo-record.yml posts the comment, also for pull requests from forks
+          comment: "false"

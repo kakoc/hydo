@@ -1076,8 +1076,25 @@ is the recipe for other systems.
   `state.json`), and `hydo ci run --history` replays the branch's open findings and marks
   `reappeared` ones.
 
-The history page, the `workflow_run` recorder and budgets from history are not built (open item
-67).
+**hydo in a team's CI, what makes a team keep it (M286, tentative number).** The rest of stage
+2's list, from the history store:
+
+- `hydo ci page --store DIR` writes one web page, `DIR/index.html`, that loads nothing. It shows
+  each finding across commits and branches (first seen, fixed by replay, back again, accepted),
+  a timeline per branch, and the runs with their seeds and budget. Each finding has its replay
+  line, its `hydo ci accept` line, and a link to the report page that `hydo ci record --report`
+  keeps in `v1/<project>/reports/`.
+- `hydo ci run` writes `comment.md`, which the action posts and edits in place
+  (`action/comment.sh`). It shows only what the pull request changed against its base: `new`,
+  `reappeared`, `changed` and `fixed`. `hydo ci comment` makes it from a recorded `ci-run.json`.
+- The `workflow_run` recorder `action/examples/hydo-record.yml` comments on and records a pull
+  request from a fork, whose own token cannot write, in the line `pull/<number>`. The action's
+  `recorded` input runs no VM.
+- `seeds_from: history` (or `--seeds-from history`) turns a budget into the first seeds that fit,
+  by the seconds per seed of the store's recorded runs. The run says which it used.
+
+The comment, the page, and the budget ran on this Mac with the Mac engine; nothing ran on GitHub
+(open item 67). The details are in `docs/HISTORY.md` Milestone 286.
 
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 60 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
@@ -1254,13 +1271,19 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     schedule and `hydo diff`. The trial found that the action checked `/dev/kvm` before udev had
     applied its rule; fixed in `500a0b7a`. The tags `action-v1.0.0` and `v1` exist since then,
     and `release.yml` starts only on full version tags. The GitLab template never ran (M197).
-    Stage 2 (M223) ran only on this Mac with the Mac engine. The action's `merge` input and the
-    matrix example of `hydo guide ci` passed actionlint and shellcheck but never ran on GitHub.
-    These parts are not built:
-    - the history page (`hydo ci page`) and the `workflow_run` recorder of pull requests;
-    - a history branch that the action keeps;
-    - budgets turned into seed counts from history, and proposed regression files;
-    - one shrink per signature across shards (each shard shrinks its own).
+    Stage 2 (M223) and M286 ran only on this Mac with the Mac engine. The action's `merge`,
+    `recorded`, `history` and `pull-request` inputs, `comment.sh`, the matrix example of `hydo
+    guide ci` and the two workflows of `action/examples/` passed actionlint and shellcheck but
+    never ran on GitHub; `comment.sh` ran against a fake `gh`. What is left:
+    - a trial of `action/examples/` on GitHub, with a pull request from a fork (the checklist is
+      in `docs/HISTORY.md` Milestone 286);
+    - the examples and the guide name hydo 0.4.0, the first release with these commands;
+    - an older hydo that records into a store drops the order of its runs (`recorded`), and the
+      page then orders the run files by name;
+    - a recorded run's seconds per seed include its shrinks and its boot. Small runs give a high
+      estimate: 2.5 s against 1.2 s in the proof;
+    - proposed regression files, and one shrink per signature across shards (each shard shrinks
+      its own).
 68. Agent environments: the guest has no network and one vCPU. There is no incremental state
     hash, so the full fingerprint costs about 0.8 s per call. A snapshot cannot be dropped, and a
     session on hvx holds only 5 branches (M199).
@@ -2547,6 +2570,12 @@ build machine, before 2026-10-13.
   per key with each change. Floats, strings, Go interfaces and small Go maps are read. On Blnk
   the overdraft limit is 50.0 in the API, absent from the saved metadata, and 0.0 in the
   worker's coalesced copy. One fingerprint with and without the plan. Nothing recorded moved
+- M286 (tentative number): hydo in a team's CI, what makes a team keep it. `hydo ci page`
+  writes the history store as one page that loads nothing: each finding across commits and
+  branches, a timeline, and the runs. The pull-request comment shows only what the change did,
+  each finding with its replay and accept lines, edited in place. A `workflow_run` recorder
+  comments on and records pull requests from forks. `seeds_from: history` turns a budget into a
+  seed count. Nothing recorded moved
 
 ## Where to look
 

@@ -1,0 +1,126 @@
+{
+  "v": 1,
+  "type": "ci-ledger",
+  "project": "redis",
+  "branches": {
+    "main": {
+      "findings": {
+        "f1:invariant:5ef675c8c9": {
+          "key": "f1:invariant:5ef675c8c9",
+          "kind": "invariant",
+          "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+          "state": "fixed",
+          "accepted": true,
+          "minimal": "disk=cut dseed=eac0b527c5ac67d9 | run C=20",
+          "schedules": [
+            "disk=cut dseed=eac0b527c5ac67d9 | run C=20"
+          ],
+          "first_seen": "ac7ab568214a",
+          "last_seen": "c37e54d1d17d",
+          "fixed_at": "eb12f876414f",
+          "seen": 2
+        }
+      },
+      "last_run": "local:20261117T125114",
+      "last_commit": "eb12f876414f",
+      "runs": 5,
+      "recorded": [
+        {
+          "id": "local:20261117T124637",
+          "file": "runs/local_20261117T124637.json",
+          "commit": "8ec3481359df9e2e01ff65e608fd7861e9b24efb",
+          "recorded": "2026-11-17T11:47:12Z",
+          "report": "reports/local_20261117T124637.html"
+        },
+        {
+          "id": "local:20261117T124824",
+          "file": "runs/local_20261117T124824.json",
+          "commit": "ac7ab568214a256b4e741519a9889e2fc88d7d99",
+          "recorded": "2026-11-17T11:48:24Z",
+          "report": "reports/local_20261117T124824.html"
+        },
+        {
+          "id": "local:20261117T124859",
+          "file": "runs/local_20261117T124859.json",
+          "commit": "c37e54d1d17d8145ec9c2ad7e928313d14bf89fe",
+          "recorded": "2026-11-17T11:48:59Z",
+          "report": "reports/local_20261117T124859.html"
+        },
+        {
+          "id": "local:20261117T124915",
+          "file": "runs/local_20261117T124915.json",
+          "commit": "eb12f876414f76cfe670c4efe5edc6cc610bf236",
+          "recorded": "2026-11-17T11:49:15Z",
+          "report": "reports/local_20261117T124915.html"
+        },
+        {
+          "id": "local:20261117T125114",
+          "file": "runs/local_20261117T125114.json",
+          "commit": "eb12f876414f76cfe670c4efe5edc6cc610bf236",
+          "recorded": "2026-11-17T11:51:14Z",
+          "report": "reports/local_20261117T125114.html"
+        }
+      ]
+    },
+    "pull/1": {
+      "findings": {
+        "f1:invariant:5ef675c8c9": {
+          "key": "f1:invariant:5ef675c8c9",
+          "kind": "invariant",
+          "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+          "state": "open",
+          "accepted": false,
+          "minimal": "disk=cut dseed=eac0b527c5ac67d9 | run C=20",
+          "schedules": [
+            "disk=cut dseed=eac0b527c5ac67d9 | run C=20"
+          ],
+          "first_seen": "ac7ab568214a",
+          "last_seen": "ac7ab568214a",
+          "seen": 1
+        }
+      },
+      "last_run": "local:20261117T124800",
+      "last_commit": "ac7ab568214a",
+      "runs": 1,
+      "recorded": [
+        {
+          "id": "local:20261117T124800",
+          "file": "runs/local_20261117T124800.json",
+          "commit": "ac7ab568214a256b4e741519a9889e2fc88d7d99",
+          "recorded": "2026-11-17T11:48:00Z",
+          "report": "reports/local_20261117T124800.html"
+        }
+      ]
+    },
+    "pull/2": {
+      "findings": {
+        "f1:invariant:5ef675c8c9": {
+          "key": "f1:invariant:5ef675c8c9",
+          "kind": "invariant",
+          "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+          "state": "open",
+          "accepted": false,
+          "minimal": "disk=cut dseed=eac0b527c5ac67d9 | run C=20",
+          "schedules": [
+            "disk=cut dseed=eac0b527c5ac67d9 | run C=20"
+          ],
+          "first_seen": "e17f603a97f2",
+          "last_seen": "e17f603a97f2",
+          "seen": 1
+        }
+      },
+      "last_run": "local:20261117T125003",
+      "last_commit": "e17f603a97f2",
+      "runs": 1,
+      "recorded": [
+        {
+          "id": "local:20261117T125003",
+          "file": "runs/local_20261117T125003.json",
+          "commit": "e17f603a97f2317c63ecaba6f79442cac72515b1",
+          "recorded": "2026-11-17T11:50:03Z",
+          "report": "reports/local_20261117T125003.html"
+        }
+      ]
+    }
+  }
+}

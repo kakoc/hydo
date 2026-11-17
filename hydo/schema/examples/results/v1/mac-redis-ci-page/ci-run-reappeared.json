@@ -1,0 +1,163 @@
+{
+  "v": 1,
+  "type": "ci-run",
+  "id": "local:20261117T125003",
+  "ci": {
+    "name": "local"
+  },
+  "project": {
+    "name": "redis",
+    "dir": ".",
+    "manifest": "hydo/hydo.yaml",
+    "manifest_sha256": "48da49e9132e7d1850adfd5096364623be31a47009d94b61aca36c65b7977255"
+  },
+  "trigger": "pull_request",
+  "commit": "e17f603a97f2317c63ecaba6f79442cac72515b1",
+  "branch": "pr2",
+  "base": {
+    "branch": "main",
+    "commit": "eb12f876414f76cfe670c4efe5edc6cc610bf236",
+    "findings_from": "explored",
+    "image": {
+      "input_key": "ik1-35dba05910ebeb76f860fd4501cc43f1",
+      "sha256": "52adb5dcf57183ddd6c95c2baccf1a4ad6a9c6d80f6dfc4da1f2b49160bbfc5b",
+      "reused": true,
+      "given": false,
+      "path": "/tmp/m286/hydo-home/ci/images/ik1-35dba05910ebeb76f860fd4501cc43f1/explore-ob-redis-arm64.cpio.gz"
+    }
+  },
+  "hydo": {
+    "version": "0.3.4",
+    "commit": "64950f8fd17e1b4411719fb6b614eab2b9dbc191",
+    "epoch": 4
+  },
+  "engine": {
+    "backend": "hvm",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": 1,
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "image": {
+    "input_key": "ik1-bb70de201cec1f338997e9bd52d4fa0d",
+    "sha256": "64cfef7cd1aec0b0a5b827b3f12e7e48fb08de9c2479ea7402da6148db8472c3",
+    "reused": true,
+    "given": false,
+    "path": "/tmp/m286/hydo-home/ci/images/ik1-bb70de201cec1f338997e9bd52d4fa0d/explore-ob-redis-arm64.cpio.gz"
+  },
+  "budget": {
+    "mode": "pr",
+    "seeds": "1-8",
+    "strategy": "swarm",
+    "options": [],
+    "partial": false,
+    "explore_s": 23.6,
+    "base_explore_s": 12.0
+  },
+  "summary": {
+    "runs": 17,
+    "failures": 5,
+    "findings": 1,
+    "states": {
+      "reappeared": 1
+    },
+    "replays": 2,
+    "vacuous_passes": 0,
+    "regressions": {
+      "replayed": 0,
+      "as_expected": 0
+    },
+    "wall_s": 42.2
+  },
+  "coverage": {
+    "faults": {
+      "C": 5,
+      "K": 2,
+      "N": 4,
+      "disk": 5
+    },
+    "services": {
+      "redis": 6
+    },
+    "properties": {
+      "declared": 6,
+      "reached": 1,
+      "not_exercised": [
+        "fault.paused",
+        "fault.pause_mid_request",
+        "fault.clock_back",
+        "fault.clock_fwd",
+        "fault.oneway_req",
+        "fault.oneway_resp"
+      ]
+    }
+  },
+  "findings": [
+    {
+      "key": "f1:invariant:5ef675c8c9",
+      "kind": "invariant",
+      "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "state": "reappeared",
+      "proof": "base-replay-ok",
+      "minimal": "disk=cut dseed=eac0b527c5ac67d9 | run C=20",
+      "schedules": [
+        "disk=cut dseed=eac0b527c5ac67d9 | run C=20"
+      ],
+      "fp": "9a5d158437732445",
+      "classes": [
+        "durable-defaults"
+      ],
+      "repro": "`hydo run --image /tmp/m286/hydo-home/ci/images/ik1-bb70de201cec1f338997e9bd52d4fa0d/explore-ob-redis-arm64.cpio.gz \"disk=cut dseed=eac0b527c5ac67d9 | run C=20\"`",
+      "replays": [
+        {
+          "on": "base",
+          "schedule": "disk=cut dseed=eac0b527c5ac67d9 | run C=20",
+          "verdict": "HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+          "fp": "1a015bbb3148d164",
+          "dir": "replays/001-base"
+        },
+        {
+          "on": "head",
+          "schedule": "disk=cut dseed=eac0b527c5ac67d9 | run C=20",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+          "fp": "9a5d158437732445",
+          "key": "f1:invariant:5ef675c8c9",
+          "dir": "replays/002-head"
+        }
+      ],
+      "diff": "the first difference in what the checks judge (assertion level, after `hydo-ob: redis ready after 1 polls`) is `redis.acked_writes_survive: ok: A true B false` (A is the base, B this change)",
+      "source": "explored",
+      "fixed_at": "eb12f876414f"
+    }
+  ],
+  "regressions": [],
+  "nondeterminism": [],
+  "outcome": {
+    "exit": 1,
+    "fail_on": [
+      "new",
+      "reappeared",
+      "regression"
+    ],
+    "failed_by": [
+      "reappeared finding VIOLATION [redis.acked_writes_survive] key k:# lost"
+    ]
+  },
+  "artifacts": {
+    "exploration": "explore/exploration.json",
+    "base_exploration": "base-explore/exploration.json",
+    "report": "report.md",
+    "junit": "junit.xml"
+  },
+  "history": {
+    "store": "/tmp/m286/store",
+    "branch": "main",
+    "open": 0,
+    "fixed": 1
+  }
+}

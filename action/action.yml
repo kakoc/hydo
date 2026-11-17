@@ -1,8 +1,10 @@
 # hydo's GitHub Action (docs/design/ci.md section 8.1; `hydo guide ci`): a thin adapter around
 # `hydo ci run`. Every decision is in hydo; this file only installs it, keeps its caches, runs it,
 # keeps its files as an artifact, writes the job summary and posts or updates one pull-request
-# comment with the job's GITHUB_TOKEN. It needs a Linux runner with a usable /dev/kvm (GitHub's
-# standard ubuntu-24.04 runners have one) and, for the comment, `pull-requests: write`.
+# comment with the job's GITHUB_TOKEN (comment.sh). It needs a Linux runner with a usable /dev/kvm
+# (GitHub's standard ubuntu-24.04 runners have one) and, for the comment, `pull-requests: write`.
+# With `recorded` it runs no VM: it makes the comment from a ci-run.json that another workflow's
+# job recorded (the workflow_run recorder of examples/hydo-record.yml, Milestone 286).
 #
 #   - uses: actions/checkout@<sha>
 #   - uses: kakoc/hydo/action@v1
@@ -43,6 +45,15 @@ inputs:
   merge:
     description: "Directories that hold shards' ci-run.json (hydo ci run --shard I/N), split at spaces, globs allowed; when set, the action runs hydo ci merge on them instead of hydo ci run, and needs no /dev/kvm."
     default: ""
+  history:
+    description: "A directory with the history store (a checkout of the history branch, read only here); hydo ci run replays its open findings and can take its budget's seed count from it (seeds_from: history)."
+    default: ""
+  recorded:
+    description: "A directory that holds a ci-run.json another job wrote (for example a downloaded artifact); when set, the action runs no VM and makes the comment from it with hydo ci comment. Its text is data: hydo validates the document and escapes every text from it."
+    default: ""
+  pull-request:
+    description: "The pull request to comment on; empty: the event's pull request. A workflow_run recorder names it from the event's data, never from the recorded files."
+    default: ""
 
 outputs:
   exit-code:
@@ -56,7 +67,7 @@ runs:
   using: composite
   steps:
     - name: Make /dev/kvm usable
-      if: inputs.merge == ''
+      if: inputs.merge == '' && inputs.recorded == ''
       shell: bash
       run: |
         # GitHub's Linux runners have KVM; the device is opened by the runner's user
@@ -108,7 +119,7 @@ runs:
         echo "$HOME/.hydo/versions/$v/bin" >> "$GITHUB_PATH"
 
     - name: Fetch the base commit
-      if: inputs.merge == '' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      if: inputs.merge == '' && inputs.recorded == '' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       env:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -123,10 +134,25 @@ runs:
         MODE: ${{ inputs.mode }}
         ARGS: ${{ inputs.args }}
         MERGE: ${{ inputs.merge }}
+        HISTORY: ${{ inputs.history }}
+        RECORDED: ${{ inputs.recorded }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set +e
         read -ra extra <<< "$ARGS"
+        if [ -n "$RECORDED" ]; then
+          # a run another job recorded: only its comment, made here by this job's hydo
+          mkdir -p "$OUT"
+          hydo ci comment "$RECORDED" -o "$OUT/comment.md"
+          rc=$?
+          {
+            echo "exit-code=$rc"
+            echo "report=$OUT/comment.md"
+            echo "comment=$OUT/comment.md"
+          } >> "$GITHUB_OUTPUT"
+          [ -f "$OUT/comment.md" ] && cat "$OUT/comment.md" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
         if [ -n "$MERGE" ]; then
           # the shards' outputs (globs expand here), merged without a VM
           read -ra shards <<< "$MERGE"
@@ -138,6 +164,7 @@ runs:
         else
           cmd=(hydo ci run --project "$PROJECT" --out "$OUT")
           [ -n "$MODE" ] && cmd+=(--mode "$MODE")
+          [ -n "$HISTORY" ] && cmd+=(--history "$HISTORY")
           # a pull request is compared with the base branch's tip it was opened against
           [ -n "$BASE_SHA" ] && cmd+=(--base "$BASE_SHA")
         fi
@@ -145,6 +172,13 @@ runs:
         rc=$?
         echo "exit-code=$rc" >> "$GITHUB_OUTPUT"
         echo "report=$OUT/report.md" >> "$GITHUB_OUTPUT"
+        # comment.md (hydo 0.4.0 and later) holds only what the change did; an older hydo
+        # writes report.md only
+        if [ -f "$OUT/comment.md" ]; then
+          echo "comment=$OUT/comment.md" >> "$GITHUB_OUTPUT"
+        else
+          echo "comment=$OUT/report.md" >> "$GITHUB_OUTPUT"
+        fi
         if [ -f "$OUT/report.md" ]; then
           cat "$OUT/report.md" >> "$GITHUB_STEP_SUMMARY"
         else
@@ -155,7 +189,7 @@ runs:
         exit 0
 
     - name: Keep hydo's files
-      if: always()
+      if: always() && inputs.recorded == ''
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: ${{ inputs.artifact-name != '' && inputs.artifact-name || format('hydo-ci-{0}-{1}', github.run_id, github.run_attempt) }}
@@ -163,29 +197,19 @@ runs:
         if-no-files-found: ignore
 
     - name: Comment on the pull request
-      if: inputs.comment == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      if: inputs.comment == 'true' && (inputs.pull-request != '' || github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
-        PR: ${{ github.event.pull_request.number }}
-        REPORT: ${{ steps.run.outputs.report }}
+        PR: ${{ inputs.pull-request != '' && inputs.pull-request || github.event.pull_request.number }}
+        COMMENT: ${{ steps.run.outputs.comment }}
         PROJECT: ${{ inputs.project }}
       run: |
         # one comment per project, found again by its first line and edited in place
-        [ -f "$REPORT" ] || exit 0
-        marker="<!-- hydo-ci: $PROJECT -->"
-        body="$(printf '%s\n%s' "$marker" "$(cat "$REPORT")")"
-        id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
-          --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)"
-        if [ -n "$id" ]; then
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" > /dev/null \
-            || echo "::warning::could not update the hydo comment (a pull request from a fork gets a read-only token); the report is in the job summary"
-        else
-          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" > /dev/null \
-            || echo "::warning::could not post the hydo comment (a pull request from a fork gets a read-only token); the report is in the job summary"
-        fi
+        "$GITHUB_ACTION_PATH/comment.sh" "$GITHUB_REPOSITORY" "$PR" "<!-- hydo-ci: $PROJECT -->" "$COMMENT"
 
     - name: Fail by hydo's verdict
+      if: inputs.recorded == ''
       shell: bash
       env:
         RC: ${{ steps.run.outputs.exit-code }}

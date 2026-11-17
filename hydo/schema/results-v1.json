@@ -4584,6 +4584,13 @@
             "string",
             "null"
           ]
+        },
+        "set": {
+          "description": "The `hydo build --set KEY=VALUE` values it was built with, as `KEY=VALUE` (added in\nMilestone 286, so that a report made later from `ci-run.json` alone names them).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -4684,6 +4691,44 @@
             "string",
             "null"
           ]
+        },
+        "explore_s": {
+          "description": "The wall seconds of this commit's exploration, and of the base's when it was explored\nhere: what a later run's budget reads as the measured seconds per seed (added in\nMilestone 286).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "base_explore_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "seeds_from": {
+          "description": "Where the seed count came from when the run was asked to fit its seeds to the budget\n(`seeds_from: history`; added in Milestone 286): `history` when the history store's\nrecorded runs gave the seconds per seed and `seeds` is the count that fits, `range` when\nno recorded run measured it and the run kept its seed range with the time limit. Absent\nwhen the run was not asked.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seconds_per_seed": {
+          "description": "The seconds per seed the count was made from (this commit's exploration and, when the\nbase is explored too, the base's), and the recorded runs that measured it (added in\nMilestone 286).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "measured_runs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [
@@ -5689,6 +5734,13 @@
           "format": "uint64",
           "minimum": 0,
           "default": 0
+        },
+        "recorded": {
+          "description": "The recorded runs in the order they were recorded (added in Milestone 286; a store\nwritten before has none, and `hydo ci page` then orders the run files by name).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiLedgerRun"
+          }
         }
       }
     },
@@ -5757,6 +5809,44 @@
         "title",
         "state",
         "minimal"
+      ]
+    },
+    "CiLedgerRun": {
+      "description": "One recorded run of a branch (`hydo ci record`; added in Milestone 286).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The CI run's `id`.",
+          "type": "string"
+        },
+        "file": {
+          "description": "Its file, relative to the project's directory of the store (`runs/<id>.json`).",
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recorded": {
+          "description": "When it was recorded (UTC, `2026-11-17T10:04:00Z`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "report": {
+          "description": "The run's report page in the store (`hydo ci record --report`), relative to the project's\ndirectory of the store (`reports/<id>.html`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "file"
       ]
     },
     "ValueHistory": {

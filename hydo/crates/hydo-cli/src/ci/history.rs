@@ -6,7 +6,10 @@
 //! ```text
 //! v1/<project>/runs/<ci-run id>.json    every recorded ci-run.json
 //! v1/<project>/findings.jsonl           the ledger: one finding-event per change of state
-//! v1/<project>/state.json               the fold of the ledger (ci-ledger), per branch
+//! v1/<project>/state.json               the fold of the ledger (ci-ledger), per branch, with
+//!                                       the runs in the order they were recorded (M286)
+//! v1/<project>/reports/<ci-run id>.html the run's own report page (`--report`, M286)
+//! index.html                            the history page (`hydo ci page`, M286)
 //! ```
 //!
 //! - `hydo ci record <ci-run.json> --store DIR [--branch NAME]` adds a run. A finding that failed
@@ -141,7 +144,7 @@ fn underlying(f: &CiFinding) -> &str {
 
 /// Whether a run saw the finding failing with its key: found by its exploration, or a replay of
 /// its schedule failed the same way.
-fn seen_failing(f: &CiFinding) -> bool {
+pub fn seen_failing(f: &CiFinding) -> bool {
     let s = underlying(f);
     match s {
         ci_state::NEW | ci_state::PRE_EXISTING | ci_state::REAPPEARED => true,
@@ -242,8 +245,165 @@ pub fn fold(ledger: &mut CiLedger, run: &CiRun, branch: &str) -> Vec<CiFindingEv
     events
 }
 
-/// `hydo ci record`: add a run to the store.
-pub fn record(store: &Path, run: &CiRun, branch: &str) -> Result<Vec<CiFindingEvent>, String> {
+/// Now in UTC, as `2026-11-17T10:04:00Z`.
+pub fn utc_now() -> String {
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    utc(t)
+}
+
+/// Seconds since 1970 in UTC, as `2026-11-17T10:04:00Z` (the civil calendar from days).
+pub fn utc(t: u64) -> String {
+    let (days, rest) = ((t / 86_400) as i64, t % 86_400);
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z",
+        rest / 3600,
+        rest / 60 % 60,
+        rest % 60
+    )
+}
+
+/// The project names a store holds (`v1/<name>/`).
+pub fn projects(store: &Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(store.join("v1"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| e.file_name().to_str().map(str::to_string))
+        .collect();
+    v.sort();
+    v
+}
+
+/// One recorded run, read back.
+pub struct Recorded {
+    pub branch: String,
+    pub entry: hydo_results::CiLedgerRun,
+    pub run: CiRun,
+}
+
+/// The project's recorded runs, per branch in the order they were recorded. A store written
+/// before Milestone 286 has no order in its ledger: its run files are then taken in name order,
+/// each on the branch its run names.
+pub fn recorded_runs(store: &Path, project: &str) -> Result<Vec<Recorded>, String> {
+    let dir = project_dir(store, project);
+    let ledger = read_ledger(store, project)?;
+    let mut out = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for (b, br) in &ledger.branches {
+        for e in &br.recorded {
+            let p = dir.join(&e.file);
+            let run = super::read_ci_run(&p)?;
+            seen.insert(e.file.clone());
+            out.push(Recorded {
+                branch: b.clone(),
+                entry: e.clone(),
+                run,
+            });
+        }
+    }
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir.join("runs"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "json"))
+        .collect();
+    files.sort();
+    for p in files {
+        let file = format!(
+            "runs/{}",
+            p.file_name().and_then(|n| n.to_str()).unwrap_or_default()
+        );
+        if seen.contains(&file) {
+            continue;
+        }
+        let run = super::read_ci_run(&p)?;
+        out.push(Recorded {
+            branch: run.branch.clone().unwrap_or_else(|| "(no branch)".into()),
+            entry: hydo_results::CiLedgerRun {
+                id: run.id.clone(),
+                file,
+                commit: run.commit.clone(),
+                ..Default::default()
+            },
+            run,
+        });
+    }
+    Ok(out)
+}
+
+/// What recorded runs measured: the seconds per seed of the exploration of the head and of the
+/// base (when the base was explored), over the latest runs (at most `last`) of the same engine,
+/// strategy and options; `None` when no recorded run measured it.
+pub struct Measured {
+    pub head_per_seed: f64,
+    pub base_per_seed: Option<f64>,
+    pub runs: u64,
+}
+
+pub fn measured(
+    store: &Path,
+    project: &str,
+    backend: &str,
+    strategy: &str,
+    options: &[String],
+    last: usize,
+) -> Result<Option<Measured>, String> {
+    let mut runs = recorded_runs(store, project)?;
+    // the latest first: the recording time when the ledger has it, else the file order
+    runs.reverse();
+    runs.sort_by(|a, b| b.entry.recorded.cmp(&a.entry.recorded));
+    let (mut hs, mut hn, mut bs, mut bn, mut n) = (0.0, 0u64, 0.0, 0u64, 0u64);
+    for r in runs.iter().filter(|r| {
+        r.run.engine.backend.as_deref() == Some(backend)
+            && r.run.budget.strategy == strategy
+            && r.run.budget.options == options
+    }) {
+        let b = &r.run.budget;
+        let seeds = b
+            .completed
+            .unwrap_or_else(|| super::seeds::count(&super::seeds::parse_ranges(&b.seeds)));
+        let Some(e) = b.explore_s.filter(|_| seeds > 0) else {
+            continue;
+        };
+        hs += e;
+        hn += seeds;
+        if let Some(x) = b.base_explore_s {
+            bs += x;
+            bn += seeds;
+        }
+        n += 1;
+        if n as usize >= last {
+            break;
+        }
+    }
+    Ok((hn > 0).then(|| Measured {
+        head_per_seed: hs / hn as f64,
+        base_per_seed: (bn > 0).then(|| bs / bn as f64),
+        runs: n,
+    }))
+}
+
+/// `hydo ci record`: add a run to the store, with the run's report page (HTML) to keep there.
+pub fn record(
+    store: &Path,
+    run: &CiRun,
+    branch: &str,
+    report: Option<&str>,
+) -> Result<Vec<CiFindingEvent>, String> {
     let dir = project_dir(store, &run.project.name);
     let runs = dir.join("runs");
     std::fs::create_dir_all(&runs).map_err(|e| format!("{}: {e}", runs.display()))?;
@@ -258,6 +418,26 @@ pub fn record(store: &Path, run: &CiRun, branch: &str) -> Result<Vec<CiFindingEv
     }
     let events = fold(&mut ledger, run, branch);
     hydo_results::write_document(&file, run).map_err(|e| format!("{}: {e}", file.display()))?;
+    let name = safe_name(&run.id);
+    let report = match report {
+        Some(html) => {
+            let rd = dir.join("reports");
+            std::fs::create_dir_all(&rd).map_err(|e| format!("{}: {e}", rd.display()))?;
+            let p = rd.join(format!("{name}.html"));
+            std::fs::write(&p, html).map_err(|e| format!("{}: {e}", p.display()))?;
+            Some(format!("reports/{name}.html"))
+        }
+        None => None,
+    };
+    if let Some(b) = ledger.branches.get_mut(branch) {
+        b.recorded.push(hydo_results::CiLedgerRun {
+            id: run.id.clone(),
+            file: format!("runs/{name}.json"),
+            commit: run.commit.clone(),
+            recorded: Some(utc_now()),
+            report,
+        });
+    }
     let jl = dir.join("findings.jsonl");
     let mut text = std::fs::read_to_string(&jl).unwrap_or_default();
     for e in &events {
@@ -273,17 +453,20 @@ pub fn record(store: &Path, run: &CiRun, branch: &str) -> Result<Vec<CiFindingEv
 pub fn cmd_record(argv: &[String]) -> i32 {
     use crate::ctx::{die, take};
     let mut args = argv.to_vec();
-    let store = take(&mut args, "--store")
-        .unwrap_or_else(|| die("usage: hydo ci record <ci-run.json> --store DIR [--branch NAME]"));
+    let store = take(&mut args, "--store").unwrap_or_else(|| {
+        die("usage: hydo ci record <ci-run.json> --store DIR [--branch NAME] [--report]")
+    });
     let branch_flag = take(&mut args, "--branch");
+    let with_report = args.iter().any(|a| a == "--report");
+    args.retain(|a| a != "--report");
     if args.len() != 1 {
-        die("usage: hydo ci record <ci-run.json> --store DIR [--branch NAME]");
+        die("usage: hydo ci record <ci-run.json> --store DIR [--branch NAME] [--report]");
     }
-    let p = Path::new(&args[0]);
-    let p = if p.is_dir() {
-        p.join("ci-run.json")
+    let given = Path::new(&args[0]);
+    let p = if given.is_dir() {
+        given.join("ci-run.json")
     } else {
-        p.to_path_buf()
+        given.to_path_buf()
     };
     let run = super::read_ci_run(&p).unwrap_or_else(|e| die(&e));
     if run.trigger == "pull_request" && branch_flag.is_none() {
@@ -299,7 +482,13 @@ pub fn cmd_record(argv: &[String]) -> i32 {
         .or_else(|| git_branch_name(Path::new(".")))
         .unwrap_or_else(|| die("hydo ci record: the run names no branch; give --branch NAME"));
     let store = PathBuf::from(store);
-    match record(&store, &run, &branch) {
+    // the run's own page, made here from its files (never a page the run brought: a pull
+    // request's files are data)
+    let page = with_report.then(|| {
+        let d = p.parent().unwrap_or(Path::new("."));
+        crate::htmlreport::ci_dir_page(d, &args[0]).unwrap_or_else(|e| die(&e))
+    });
+    match record(&store, &run, &branch, page.as_deref()) {
         Ok(ev) => {
             println!(
                 "hydo ci record: {} on {branch} into {}: {}",
