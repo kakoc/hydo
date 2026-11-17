@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# add to the account a<cmd % 3> (a virtual object), with the idempotency key o<cmd>
+exec /bin/rsv op add

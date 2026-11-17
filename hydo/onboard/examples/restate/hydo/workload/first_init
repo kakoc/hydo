@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=120
+# register the deployment (svc) with the admin API
+exec /bin/rsv init

@@ -417,10 +417,26 @@ fn setup(a: Args, env: &Env) -> Cx {
         }
     };
     if named || carried.is_some() {
+        // the image's parameter values: a manifest whose guest: names a parameter is read as it
+        // was built (Milestone 303)
+        let built_params = {
+            let img = if cx.arm() {
+                cx.hvm_image()
+            } else {
+                cx.build.join(&a.image)
+            };
+            hydo_engine::image::embedded_file(&img, "etc/hydo/params")
+                .map(|t| hydo_manifest::parse_params_file(&t))
+                .unwrap_or_default()
+        };
         let sp = if let Some(m) = &a.manifest {
             Space::from_path(Path::new(m))
         } else if let Some((text, comp)) = carried {
-            Space::from_text(&text, comp.and_then(|t| serde_json::from_str(&t).ok()))
+            Space::from_text_params(
+                &text,
+                comp.and_then(|t| serde_json::from_str(&t).ok()),
+                &built_params,
+            )
         } else if cx.arm() {
             let img = cx.hvm_image();
             let text = hydo_engine::image::embedded_manifest(&img)
@@ -428,7 +444,7 @@ fn setup(a: Args, env: &Env) -> Cx {
             let comp = hydo_engine::image::embedded_file(&img, "etc/hydo/compose.json")
                 .ok()
                 .and_then(|t| serde_json::from_str(&t).ok());
-            Space::from_text(&text, comp)
+            Space::from_text_params(&text, comp, &built_params)
         } else {
             let img = cx.build.join(&a.image);
             let text =
@@ -440,7 +456,7 @@ fn setup(a: Args, env: &Env) -> Cx {
                 });
             let comp = hydo_engine::image::embedded_compose(&img)
                 .and_then(|t| serde_json::from_str(&t).ok());
-            Space::from_text(&text, comp)
+            Space::from_text_params(&text, comp, &built_params)
         };
         let sp = sp.unwrap_or_else(|e| die(&e));
         let img = if cx.arm() {

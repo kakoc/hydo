@@ -1,0 +1,57 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "docker.restate.dev/restatedev/restate:1.8.1-hotfix.2": {
+   "index_digest": "sha256:e3a11e7c694cfe0c134eca1652992c068bef0bcba3caeec9d2a3b3bc50daa62e",
+   "name": "docker.restate.dev/restatedev/restate",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/usr/local/bin/restate-server"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:e239ab0c89cc6417705045ce7d2fee9ef49e0456c55157fa298e29e724f6fb58",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/usr/local/bin/restate-server"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:727dc7f0e91baebe9059f636522deb531cd0bdce669e744b2d7cc6c9850f6660",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "docker.restate.dev/restatedev/restate:1.8.1-hotfix.2",
+   "registry": "docker.restate.dev",
+   "repo": "restatedev/restate",
+   "tag": "1.8.1-hotfix.2"
+  }
+ }
+}

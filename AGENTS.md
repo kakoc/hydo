@@ -650,6 +650,23 @@ member that restarted shortly before a power cut stops at every later start with
 manifest corrupted`. Its old goleveldb syncs `CURRENT` but not the new MANIFEST. The example
 needed `root.share_images: true`, addresses between TiKV and PD, and 7,680 MiB of guest RAM (open
 item 147).
+**Restate's durable execution (M303, tentative number).** Restate v1.8.1-hotfix.2 runs as one
+server from its image in `hydo/onboard/examples/restate` (RESULTS.md), imported with `hydo compose`,
+with its data on a file system of its own. The deployment is the example's own service on
+Restate's Rust SDK 0.13.0, one static musl program. Each journaled step appends a synced line to an
+effects file, so the rules see a step that runs again. A messages check and four rules judge
+calls and sends with idempotency keys, delayed sends, durable sleeps, adds to virtual objects,
+awakeables, and workflow promises. They held under kills, pauses, network faults, and power cuts at
+steps, at events, and at 49 disk flushes on hvx. One new candidate, found blind on the Mac engine
+and confirmed on hvx, not posted:
+- After a backward clock step, a restart of the server holds accepted invocations until the wall
+  clock reaches their creation time. The vqueue scheduler starts an inbox entry only when its
+  `run_at` is not later than the wall clock, and a failover keeps the creation time as `run_at`.
+  A one-way send then waits the step's size: `disk=none dseed=d584008bda670834 | run P=svc@28+2
+  T=30:-300 W=726d723b,p1,q4,r600 L=restate@30+1`. Without `T=`, or without the restart, it passes.
+
+Durable timers that follow the wall clock are documented. The explorer reads an image's manifest
+with its parameter values now, so a `guest:` key can name a parameter.
 
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
@@ -2228,6 +2245,21 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       - `hydo fuzz` has no property of a function alone, and it prints an empty `fuzz.checks:`.
       - `hydo guide strategies` does not say which engine each technique needs, or how to
         choose a step for a new system.
+152. The example `restate` (M303). What is left:
+    - Its candidate is not reported upstream.
+    - An invocation that waits in an inbox at a step back without a restart was not tested. An
+      example is one queued behind a virtual object's lock. The runs without a restart passed.
+    - A check's output is kept up to a size, and the verdict line is then the last line kept. A
+      long output gave the verdict `VIOLATION [jobs] j25: sys_`. The violations were left out of
+      `result.json`, so the example prints its long lines first.
+    - One `K=` per schedule: a kill of the deployment and a kill of the server at other steps
+      cannot be one schedule.
+    - The clock audit reads `SystemTime::now` and its kin, not a project's own clock. Restate's
+      scheduler reads `restate_clock::WallClock`, and the audit's 8 places missed it.
+    - A kill or a stop reaction did not hold a plain send in flight across a restart, because a
+      round's commands run in milliseconds; the explorer's pause of the deployment did.
+    - Exploration B (swarm) was stopped before its shrink, and the KVM engine did not run the
+      example.
 
 ## Milestone index
 
@@ -3005,6 +3037,11 @@ build machine, before 2026-10-13.
   transaction's locks block writers for the length of the step. A known PD bug was reached
   blind: tikv/pd#11596, a member that restarted shortly before a power cut never starts again.
   Nothing recorded moved
+- M303 (tentative number): the onboarding of Restate v1.8.1-hotfix.2, with a deployment on its
+  Rust SDK. An effects file beside the journal, four rules, and a messages check. One new
+  candidate, not posted: after a backward clock step, a restart of the server holds accepted
+  invocations until the wall clock reaches their creation time. The explorer reads an image's
+  `guest:` with its parameter values. Nothing recorded moved
 
 ## Where to look
 

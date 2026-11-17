@@ -431,6 +431,43 @@ pub fn from_embedded_params(
     embedded(text, compose, Some(params)).map(|(m, _)| m)
 }
 
+/// [`from_embedded_meta`] with the image's parameter values in its `guest:` section: the
+/// explorer's fault space of an image whose `guest:` names a parameter (Milestone 303:
+/// `guest.cpu: "{{cpu}}"` failed the validation when it was read literally). The rest of the
+/// manifest is read as written, as [`from_embedded_meta`] reads it.
+pub fn from_embedded_meta_params(
+    text: &str,
+    compose: Option<&Value>,
+    params: &[(String, String)],
+) -> Result<(Manifest, Option<Value>), ManifestError> {
+    embedded_guest(text, compose, params)
+}
+
+/// The `guest:` section with the parameter values applied (the defaults of `params:`, then
+/// `values`), the rest of the manifest as written: the explorer's fault space reads the manifest
+/// literally, and only `guest:` is validated against fixed values (Milestone 303).
+fn guest_from_params(m: &mut Value, values: &[(String, String)]) -> Result<(), ManifestError> {
+    if m.get("params").is_none() || m.get("guest").is_none() {
+        return Ok(());
+    }
+    let mut applied = m.clone();
+    validate::apply_params(&mut applied, values)?;
+    if let (Some(obj), Some(g)) = (m.as_object_mut(), applied.get("guest")) {
+        obj.insert("guest".into(), g.clone());
+    }
+    Ok(())
+}
+
+fn embedded_guest(
+    text: &str,
+    compose: Option<&Value>,
+    values: &[(String, String)],
+) -> Result<(Manifest, Option<Value>), ManifestError> {
+    let mut m = parse_text(text, "hydo.yaml", true)?;
+    guest_from_params(&mut m, values)?;
+    embedded_parsed(m, compose)
+}
+
 /// The `name=value` lines of an image's `/etc/hydo/params`.
 pub fn parse_params_file(text: &str) -> Vec<(String, String)> {
     text.lines()
@@ -450,6 +487,13 @@ fn embedded(
             validate::apply_params(&mut m, p)?;
         }
     }
+    embedded_parsed(m, compose)
+}
+
+fn embedded_parsed(
+    mut m: Value,
+    compose: Option<&Value>,
+) -> Result<(Manifest, Option<Value>), ManifestError> {
     let mut meta = None;
     let has_test = match &m {
         Value::Object(o) => o.contains_key("test"),
@@ -482,6 +526,7 @@ pub fn for_explorer(path: &Path) -> Result<(Value, Option<Value>), ManifestError
     if m.is_object() {
         model::check_format(&m, None)?;
     }
+    guest_from_params(&mut m, &[])?;
     let folder = composer::scan_folder(&py::dirname(&py::abspath(&p)))?;
     let mut warnings = Vec::new();
     let meta = composer::expand(&mut m, folder.as_ref(), &mut warnings)?;

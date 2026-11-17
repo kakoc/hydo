@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: an awakeable and a workflow promise keep their first acknowledged resolution, and complete once
+exec /bin/rsv check signals

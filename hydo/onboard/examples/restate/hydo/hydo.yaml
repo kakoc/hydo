@@ -1,0 +1,108 @@
+# Restate v1.8.1-hotfix.2 (the newest release), one server from its official image as
+# ../docker-compose.yaml runs it, and one deployment of the example's own service on Restate's Rust
+# SDK 0.13.0 (../service, the program rsv). RESULTS.md says what was hunted and found.
+#
+#   sh ../build.sh            # bin/rsv-<arch>: the deployment and the test client (../service)
+#   sh fetch-images.sh        # the Restate image by digest
+#   hydo build hydo.yaml --arch arm64 --set arch=arm64 --set cpu=v2   # on a Mac; on Linux: hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --storage-faults --reactive fault \
+#     --react-events rs.step,rs.send_acked,rs.call_acked,rs.add_acked
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The service restate below is the
+# importer's, with the server's data directory on a file system of its own (storage:, the target
+# of G= and L=) and the client's readiness check. The service svc is the deployment: the
+# handlers that Restate invokes, whose journaled steps append to an effects file (the outside
+# system) on the data disk.
+format: 1
+name: restate
+description: "Restate v1.8.1-hotfix.2 with a Rust SDK deployment: journaled steps run once, idempotency keys, durable sleeps and delayed sends, one writer per virtual object, awakeables and workflow promises, under kills, pauses, network faults, power cuts, clock steps and storage faults"
+hydo_version: "0.3"
+
+params:
+  arch: amd64     # amd64 | arm64: the program rsv's architecture, the same as the image's
+  cpu: v3         # v3 | v2: the x86_64 guest CPU (Restate needs AVX2); build arm64 images with --set cpu=v2
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 2048
+  clock_start: 1794873600   # 2026-11-17 00:00 UTC, the day of the import
+  cpu: "{{cpu}}"            # Restate's x86_64 build needs AVX2 (v3); arm64 takes v2, the default
+  clock_after_cut: 60       # a real machine's clock runs on across a power cut: the recovery boot starts 60 s after the cut
+  outcomes_after_cut: true  # the checks skip operations whose request got no answer, also after a power cut
+
+data:
+  size_mib: 1280   # the data disk (the fault target): the effects file in fx/, Restate's storage below
+  dirs: [fx]
+
+errors: true       # Restate's ERROR lines become findings (hydo/known-errors.yaml)
+
+root:
+  files:
+    - {src: "../bin/rsv-{{arch}}", dst: /bin/rsv, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 restate
+      10.89.0.12 svc
+
+services:
+  # Compose service restate
+  # image docker.restate.dev/restatedev/restate:1.8.1-hotfix.2 = docker.restate.dev/restatedev/restate@sha256:e3a11e7c694cfe0c134eca1652992c068bef0bcba3caeec9d2a3b3bc50daa62e
+  #   linux/amd64: sha256:e239ab0c89cc6417705045ce7d2fee9ef49e0456c55157fa298e29e724f6fb58
+  #   linux/arm64: sha256:727dc7f0e91baebe9059f636522deb531cd0bdce669e744b2d7cc6c9850f6660
+  # ports [8080, 9070]: network faults (N=/O=) act on the first, 8080 (the ingress)
+  - name: restate
+    image: {x86_64: images/docker.restate.dev-restatedev-restate-1.8.1-hotfix.2-amd64.docker.tar, arm64: images/docker.restate.dev-restatedev-restate-1.8.1-hotfix.2-arm64-oci}
+    image_ref: "docker.restate.dev/restatedev/restate:1.8.1-hotfix.2"
+    env:
+      RESTATE_NODE_NAME: "n1"
+      RESTATE_BASE_DIR: "/restate-data"
+      RESTATE_DISABLE_TELEMETRY: "true"
+      RESTATE_ROCKSDB_TOTAL_MEMORY_SIZE: "256 MiB"
+      RESTATE_LOG_DISABLE_ANSI_CODES: "true"
+    port: 8080
+    addr: 10.89.0.11
+    ready: "timeout 8 /bin/rsv ready server"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/restate-data, size_mib: 768}   # Restate's log, partition stores and metadata: the target of G= and L=
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/restate-data, dst: /restate-data}
+
+  # The deployment: Restate's Rust SDK serves Job, Acct, Wait and Flow on :9080 (../service).
+  - name: svc
+    cmd: /bin/rsv serve
+    port: 9080
+    addr: 10.89.0.12
+    ready: "timeout 4 /bin/rsv ready svc"
+    restart: "on-failure"
+    depends_on: [restate]   # the link restate-svc: Restate calls the deployment, which streams its journal back
+
+workload:
+  steps: 40
+  timeout: 600     # the drain waits up to 150 s and each check up to 100 s for the acknowledged work
+
+test:
+  parallel: 4
+  per_round: 4
+  round_ms: 300
+  command_timeout: 150
+
+checks:
+  - id: delivery
+    type: messages
+    history: jobs
+    msg: every call and send of a job that Restate acknowledged runs, once (the invocations of the object Job)
+    final: /bin/rsv drain
+    acknowledgement: none
+    claims:
+      delivery: at-least-once       # every acknowledged send and call completes (no-loss)
+      duplicates: forbidden         # a job's handler completes once: Restate's exactly-once invocations
+
+faults: [kill, pause, network, oneway, cut, clock, disk, corrupt, powerloss]

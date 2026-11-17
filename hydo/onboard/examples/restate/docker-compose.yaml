@@ -1,0 +1,19 @@
+# Restate v1.8.1-hotfix.2 as its documentation starts one server with Docker: the official image,
+# the data in /restate-data on a volume, ingress on 8080, the admin API on 9070, no telemetry.
+# The deployment (the example's service, bin/rsv-<arch> serve) registers itself at the admin API;
+# hydo.yaml runs it as a service of its own.
+services:
+  restate:
+    image: docker.restate.dev/restatedev/restate:1.8.1-hotfix.2
+    environment:
+      RESTATE_NODE_NAME: n1
+      RESTATE_BASE_DIR: /restate-data
+      RESTATE_DISABLE_TELEMETRY: "true"
+      RESTATE_ROCKSDB_TOTAL_MEMORY_SIZE: 256 MiB
+    ports:
+      - "8080:8080"
+      - "9070:9070"
+    volumes:
+      - restate-data:/restate-data
+volumes:
+  restate-data:

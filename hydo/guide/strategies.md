@@ -16,7 +16,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 |---|---|---|---|
 | database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults | Redpanda, NATS |
-| job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor |
+| job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate |
 | ledger or billing system | the books match the acknowledged operations; a limit holds | the generic rule beside domain rules; concurrent clients without faults; value properties | Blnk, Lago, Formance Ledger |
 | service that calls outside APIs | a payment or a mail takes effect once | protocol faults on fakes and emulators; a kill while an answer is late | web-shop, checkout, openapi-payouts, Saleor |
 | device updater | the device boots a complete slot of an allowed version | reactions at the update's events; reboots and added disks; a scan of a reaction's delay | SWUpdate, Mender |
@@ -150,6 +150,25 @@ Three findings hold for every type of system:
 - **Cost.** A drain that reads every message back (`hydo guide messages`, "Write the drain"). It
   runs on every engine.
 
+### An effects file beside a durable execution's journal
+
+- **What it is.** Each journaled step of a handler appends one line with a nonce to a file and
+  syncs it: the outside system that the step changes. A check compares the journal's result of
+  each step with the lines, so it sees a step that ran again after its result was journaled.
+- **What to write.** A `beg` line when the step's closure starts and a result line, both with one
+  nonce, and the handler's state with each step's nonce (the Restate example's `service/`). The
+  check pairs them. A step whose closure starts after a later step started ran again. A later
+  result line whose closure started after the journaled one ended is a re-run too. A closure
+  that an abandoned attempt finishes after the journaled one, started before it, is the
+  at-least-once of a step that was not journaled yet.
+- **When it fits.** A durable execution engine or a workflow engine with journaled steps.
+- **What it found.** Restate: no step ran again after its result was journaled, in 40 blind
+  schedules and about 120 directed runs with kills, power cuts, and pauses.
+- **What it misses.** The file is on the guest's disk, so a lying disk or disk I/O errors break
+  it with the system. A step that an abandoned attempt runs at the same time is undecided without
+  the start lines.
+- **Cost.** One synced write per step. It runs on every engine.
+
 ### History checks (list-append and registers)
 
 - **What it is.** The client records each operation's call and result. After the run, hydo
@@ -246,7 +265,9 @@ Three findings hold for every type of system:
   - YugabyteDB: the lost writes of its default WAL setting shrank to one cut at
     the fourth flush.
 - **What it misses.** The point moves with the image's bytes. Saleor's `cf=270` stopped
-  reproducing when its image was rebuilt, and `cf=271` gives the finding now.
+  reproducing when its image was rebuilt, and `cf=271` gives the finding now. Restate held at
+  all 49 flush points from `cf=37` to `cf=4000`: it syncs its log before it answers, as its
+  documentation says.
 - **Cost.** hvx only.
 
 ### One node's storage faults (`G=` and `L=`)
@@ -321,11 +342,17 @@ Three findings hold for every type of system:
     leaders.
   - Lago (finding 8): a step to 2 s before the billing tick, `T=3:@:10-2s`, with
     lost database answers, invoiced a subscription twice.
+  - Restate (finding 1): a step back of 300 s and then a restart of the server hold
+    accepted invocations until the wall clock reaches their creation time. Blind at seed 14 of 20,
+    shrunk to `P=svc@28+2 T=30:-300 L=restate@30+1`. Either fault without the step passes.
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
   clock. In Meilisearch's 574 Rust files it found one, a metric, and steps of
-  30 s to a year broke nothing in 50 blind schedules. A step of a year lets retention delete the evidence (Redpanda seed 25, River's cleaner).
+  30 s to a year broke nothing in 50 blind schedules. In Restate it found 8 places that read
+  `SystemTime::now`, and none was the finding's: the scheduler reads the wall clock through the
+  project's own `WallClock`. Its first place, a retry's `next_retry_at`, is only reported. A
+  step of a year lets retention delete the evidence (Redpanda seed 25, River's cleaner).
 - **Cost.** The shrinker spends hours on clock steps; stop an exploration once its failures are
   understood. It runs on every engine.
 
@@ -365,7 +392,9 @@ Three findings hold for every type of system:
     payload, shrunk to `A=meili.add_acked:cut`.
   - SWUpdate: two of the five minimal schedules of its hvx exploration carry a
     reaction.
-- **What it misses.** On the bug benchmark the drawn reactions found no defect
+- **What it misses.** Restate held under cuts and kills at six events of the client and the
+  service. One of them is a cut at the start of a step's closure, just after the step before it
+  was journaled. On the bug benchmark the drawn reactions found no defect
   sooner. The sum of the runs to each defect's first detection grew from 154 to between 181
   and 187. A new event in the client changes the image, and with it the timing of every
   schedule.

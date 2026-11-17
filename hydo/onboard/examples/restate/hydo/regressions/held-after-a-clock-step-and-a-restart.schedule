@@ -1,0 +1,7 @@
+# New (RESULTS.md, finding 1): the deployment is paused for steps 28 and 29, so the one-way send
+# j65 that Restate acknowledged at step 29 has not started; the wall clock goes back 5 minutes
+# before step 30, and the server loses its power for one step. After the restart the vqueue
+# scheduler waits until the wall clock reaches the send's creation time, so j65 does not start
+# within the 250 s that the drain and the checks wait. Without T= the schedule passes.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=d584008bda670834 | run P=svc@28+2 T=30:-300 W=726d723b,p1,q4,r600 L=restate@30+1

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# start w<cmd>, resolve its awakeable with v1, then again with v2
+exec /bin/rsv op awk

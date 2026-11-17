@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: a durable sleep ends at or after its time, and a delayed send runs at or after its delay
+exec /bin/rsv check timers

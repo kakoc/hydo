@@ -16080,3 +16080,86 @@ Retro: TiKV v8.5.8, hvx, 2026-11-17
   `/tmp` that the services of a shared tree share; TiKV's gRPC client could not use names; the
   clock audit does not see a timestamp compared with a time to live; no way to crash the workload
   inside an operation. Each is in open item 147.
+
+### Milestone 303 (tentative number) - DONE (Restate v1.8.1-hotfix.2, a durable execution engine, with a deployment of the example's own service on Restate's Rust SDK 0.13.0; one new candidate, not posted: after a backward clock step, a restart of the server holds accepted invocations until the wall clock reaches their creation time, also a plain send without a timer; journaled steps, idempotency keys, one writer per virtual object, awakeables and workflow promises held under kills, pauses, network faults, power cuts at steps, at events and at 49 disk flushes; the explorer reads an image's manifest with its parameter values; nothing recorded moved; 2026-11-17)
+
+**The example.** `hydo/onboard/examples/restate` (RESULTS.md) runs one Restate server from its
+official image `restatedev/restate:1.8.1-hotfix.2` (index `sha256:e3a11e7c…`), imported with
+`hydo compose` from a one-service Compose file. Its data directory is a file system of its own
+(`storage:`). A second service, `svc`, is the deployment: one static musl program `rsv` on
+`restate-sdk` 0.13.0, built for both architectures without a C toolchain (`build.sh`). It serves a
+virtual object `Job` (journaled steps, durable sleeps), `Acct` (adds with a sleep inside, one writer
+per key), `Wait` (an awakeable) and a workflow `Flow` (a durable promise). Each journaled step
+appends a synced line with a nonce to an effects file on the data disk. The same program is the
+client: calls and one-way sends with idempotency keys, delayed sends, adds, two resolutions of
+each awakeable and promise. A messages check (`no-loss`, `duplicates: forbidden`) and four rules
+(`jobs`, `timers`, `objects`, `signals`) judge them. Two clean runs give one fingerprint on the
+Mac engine (`5197fd2b05fab330` on the first image) and on hvx (`3be8abae33f86551`).
+
+**Finding 1, new as far as the search found.** Blind at seed 14 of 20 on the Mac engine, shrunk
+and confirmed on hvx to `disk=none dseed=d584008bda670834 | run P=svc@28+2 T=30:-300
+W=726d723b,p1,q4,r600 L=restate@30+1`: a one-way send acknowledged while the deployment was
+paused never starts after the step back and the power loss of the server, for the 250 s that the
+checks wait. Without `T=`, or with a step of 30 s, it passes; the same step without a restart
+passes. The cause is in VQueues, the scheduler that v1.8.0 turned on for every cluster: an
+invocation without a delay gets its record's creation time as `run_at`
+(`crates/vqueues/src/lib.rs:295`); a failover moves a running invocation back to the inbox with
+that key (`:779`, `:811`); the scheduler takes an inbox head only when `run_at` is not later than
+the wall clock (`crates/vqueues/src/scheduler/vqueue_state.rs:357`, `SchedulerClock` in
+`scheduler/clock.rs`). So every invocation in flight at a restart after a step back of X waits up
+to X. The documentation's note on clocks is about timers. No issue names it (RESULTS.md, "The
+duplicate searches"). Native reproduction: none, the cause is plain in the code. The regression is
+`hydo/regressions/held-after-a-clock-step-and-a-restart.schedule`.
+
+**Documented.** Durable timers follow the wall clock: after a step back, a timer that the timer
+service had armed ends on time by real time, and every later one waits for the wall clock
+(`crates/timer/src/service/clock.rs:29`). The rules judge a sleep by either clock, and a job that
+waits for a timer due later on the wall clock is listed, not counted as lost.
+
+**What held.** Under kills of the server and the deployment, pauses, network faults between them,
+power cuts at steps, power cuts and kills at six events of the client and the service, a stop of
+the deployment inside a step past the inactivity timeout, and on hvx 49 power cuts at disk
+flushes from `cf=37` to `cf=4000`: no acknowledged invocation lost, no handler completed twice, no
+journaled step ran again, one invocation per idempotency key, one add at a time per account and
+each add in the state once, and the first resolution of each awakeable and promise kept.
+Exploration A (process, seeds 1-20, Mac) had 11 failures: finding 1 (seed 14, and seed 16, which
+fails without its `G=` and passes without its `T=`), 5 damaged files that Restate detects at the
+start, 1 truncated RocksDB log that loses the writes after the cut (seed 10), a delayed send whose time the ingress computed just
+before a step back (seed 13, documented), seed 15 not separated, and a delayed send behind a step
+of 30 days (seed 7, documented). Exploration B (swarm, seeds 21-40) had 11 failures, each
+with a lying disk, disk I/O errors or a detected damage.
+
+**The explorer's fix.** `hydo explore` read the manifest that an image carries without the image's
+parameter values, so `guest.cpu: "{{cpu}}"` (v3 on x86_64, v2 on arm64) stopped it with `got
+'{{cpu}}'`, and so did its corpus test, which reads the manifest file. The explorer now applies
+the parameters to the `guest:` section only: the image's values from `/etc/hydo/params`
+(`Space::from_text_params`, `hydo_manifest::from_embedded_meta_params`), and a manifest file's
+defaults (`hydo_manifest::for_explorer`). `hydo run` and the host controller already read the
+image's values. The rest of the manifest reads as before, so no other example's fault space
+changes; the test is `fault_space_line::a_guest_key_from_a_parameter_is_read_as_built`.
+
+**Tests.** The explorer's identity and corpus goldens and the control corpus-quick golden are
+re-recorded for the new example; only its entries moved.
+
+Retro: Restate v1.8.1-hotfix.2, the Mac engine and hvx, 2026-11-17
+- Time to the first clean run: 1 hour of wall time (40 minutes of scouting), none of it waiting
+  for machines.
+- Schedules run before the first finding: 14 blind schedules and about 40 directed runs, of
+  which 3 failed by the rules' mistakes (an add in flight at a cut, interleaved console lines,
+  documented timers counted as lost).
+- The findings: 1 new (a clock effect that breaks a promise), 0 known, 1 documented (wall-clock
+  timers).
+- What took the most time: judging finding 1 (1 hour: 30 directed runs on hvx to separate the
+  faults and to get a plain send in flight across the restart); exploration A (40 minutes, every
+  failing run waits 250 s for acknowledged work); the rules' mistakes (30 minutes).
+- What hydo lacked: the explorer and `params:` in `guest:` (code, fixed here); a check's output
+  cut in its middle, so the verdict line names a fragment (open item 152); one `K=` per schedule
+  (open item 152); the clock audit does not follow a project's own clock wrapper (open item 152);
+  the Linux release's `guest/store.tar` unpacked by hand on hvx (open item 98).
+- Strategies: clock steps found the bug only together with a restart; the clock audit missed it
+  (8 places, none the finding's). Power cuts at 49 flushes and at six events found nothing. The
+  entries "Clock steps and the clock audit", "Power cuts at the k-th disk flush" and "Reactions at
+  console events" of `hydo guide strategies` are updated, and "An effects file beside a durable
+  execution's journal" is new.
+
+**What is left.** Open item 152.

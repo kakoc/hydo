@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: one invocation at a time per virtual object key, and its state has each acknowledged add once
+exec /bin/rsv check objects

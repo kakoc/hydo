@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# send the job j<cmd> (2 steps with a durable sleep of 3 s between them), with the idempotency key j<cmd>
+exec /bin/rsv op sleep

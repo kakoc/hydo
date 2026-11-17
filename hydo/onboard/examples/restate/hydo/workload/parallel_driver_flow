@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# submit the workflow f<cmd>, signal its promise with v1, then v2, then submit it again
+exec /bin/rsv op flow

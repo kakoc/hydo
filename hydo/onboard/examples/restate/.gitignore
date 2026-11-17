@@ -1,0 +1,5 @@
+bin/
+service/target/
+hydo/images/
+hydo/hydo-out/
+hydo/.hydo/

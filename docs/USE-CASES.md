@@ -98,10 +98,10 @@ last line names the ideas that would answer more.
 
 | The question | What hydo answers today | Status |
 |---|---|---|
-| Does an acknowledged write survive a power cut? | `C=` cuts the whole guest's power, and `cf=` cuts it at the k-th disk flush (hvx only). History checks and the messages check judge what survived. | built; `nats-jetstream`, `vikunja`, `yugabyte`, `saleor` |
+| Does an acknowledged write survive a power cut? | `C=` cuts the whole guest's power, and `cf=` cuts it at the k-th disk flush (hvx only). History checks and the messages check judge what survived. | built; `nats-jetstream`, `vikunja`, `yugabyte`, `saleor`, `restate` |
 | Does one node's damage lose data or stop the cluster? | `G=` damages one file of a service's storage, and `L=` cuts one service's power. `hydo explore --storage-faults` draws both. | built; `nats-jetstream/blocks`, `redpanda`, `surrealdb` |
-| Does a backward clock step break a lease or a timeout? | `T=` steps the guest's wall clock. `hydo rules scan --kind clock` proposes the steps. | built; `valkey`, `temporal`, `dragonfly`, `river` |
-| Does an acknowledged job run, and run once? | A `type: messages` check declares the claims. Kills of the process that holds the work test them. | built; `hatchet`, `river`, `redpanda` |
+| Does a backward clock step break a lease or a timeout? | `T=` steps the guest's wall clock. `hydo rules scan --kind clock` proposes the steps. | built; `valkey`, `temporal`, `dragonfly`, `river`, `restate` |
+| Does an acknowledged job run, and run once? | A `type: messages` check declares the claims. Kills of the process that holds the work test them. A durable execution's journaled steps append to an effects file, and a rule finds a step that runs again. | built; `hatchet`, `river`, `redpanda`, `restate` |
 | Do the books still match the client's operations? | The generic rule and domain rules, proposed by `hydo rules scan` and validated by `hydo rules check`. | built; `blnk`, `lago`, `formance-ledger` |
 | Where did a wrong value come from? | Value history and value properties on the Mac engine. | partly built; `blnk` (M285, M291) |
 | Does the cluster upgrade in place? | `U=` switches a member's version during a run, and `hydo explore --upgrades` draws it. | built; `etcd-upgrade` (M238) |

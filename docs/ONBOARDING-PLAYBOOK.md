@@ -158,7 +158,7 @@ showed without a fault.
 | power cut at a step | `C=` | Valkey's lost expiry; SWUpdate's slot; Mender's empty `version` file; NATS 3.1 and 3.4 |
 | power cut at the k-th disk flush (hvx only) | `cf=` | Saleor's gift card charge (a cut at a flush, after a clock step) |
 | power cut at an event | `A=<event>:cut` | Mender's commit that rolls back and exits 0 |
-| clock step | `T=` | Valkey#5406; Temporal's server down for the length of the step ([temporal#13099](https://github.com/temporalio/temporal/issues/13099)); River's clock effects; Blnk's rejected transfers |
+| clock step | `T=` | Valkey#5406; Temporal's server down for the length of the step ([temporal#13099](https://github.com/temporalio/temporal/issues/13099)); River's clock effects; Blnk's rejected transfers; Restate's invocations held after a restart (with `L=` or `K=`) |
 | clock step to a time of day | `T=<at>:@<point>` | Lago's double invoice, with one-way loss of the database's answers |
 | kill | `K=` | Hatchet#5527 (an engine); River#1602 (PostgreSQL); Lago#6901 and Blnk's lost commits (Redis) |
 | kill with a delayed answer | `K=` and `H=...:delay=` | Saleor#20022 (the worker, while the payment app is slow) |

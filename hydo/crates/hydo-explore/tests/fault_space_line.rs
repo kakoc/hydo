@@ -88,3 +88,28 @@ fn the_options_that_draw_their_own_kinds_are_in_the_line() {
         "{more}"
     );
 }
+
+/// Milestone 303: a manifest whose `guest:` names a parameter (`cpu: "{{cpu}}"`, so that one
+/// manifest builds x86_64 with v3 and arm64 with v2) is read with the image's parameter values;
+/// read literally, the explorer stopped at the validation of `guest.cpu`.
+#[test]
+fn a_guest_key_from_a_parameter_is_read_as_built() {
+    let m = json!({
+        "name": "p",
+        "params": {"cpu": "v3"},
+        "guest": {"cpu": "{{cpu}}"},
+        "services": [{"name": "s", "cmd": "s", "ready": "true", "port": 1}],
+        "workload": {"steps": 4, "run": "true"},
+        "invariants": [{"id": "x", "cmd": "true"}],
+    });
+    let text = serde_json::to_string(&m).unwrap();
+    let e = Space::from_text(&text, None).err().unwrap();
+    assert!(e.contains("guest.cpu"), "{e}");
+    let built = [("cpu".to_string(), "v2".to_string())];
+    let sp = Space::from_text_params(&text, None, &built).unwrap();
+    assert!(sp.plain(false, "random").contains("service: s"));
+    assert!(
+        Space::from_text_params(&text, None, &[]).is_ok(),
+        "the parameter's default applies"
+    );
+}

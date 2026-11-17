@@ -356,6 +356,19 @@ impl Space {
         Space::new(man.data, meta)
     }
 
+    /// [`Space::from_text`] with the image's parameter values (`/etc/hydo/params`) in `guest:`:
+    /// a manifest whose `guest:` names a parameter, such as `cpu: "{{cpu}}"`, is read as it was
+    /// built (Milestone 303). Without `params:` in the manifest this is [`Space::from_text`].
+    pub fn from_text_params(
+        text: &str,
+        compose: Option<Value>,
+        params: &[(String, String)],
+    ) -> Result<Space, String> {
+        let (man, meta) = hydo_manifest::from_embedded_meta_params(text, compose.as_ref(), params)
+            .map_err(|e| e.message)?;
+        Space::new(man.data, meta)
+    }
+
     /// The version names with the image's parameter values (`/etc/hydo/params`, Milestone 238):
     /// the image was built with them, so `U=` must name its versions as built.
     pub fn with_params(mut self, params: &[(String, String)]) -> Space {

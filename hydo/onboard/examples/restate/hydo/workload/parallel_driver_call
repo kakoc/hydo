@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# call the job j<cmd> (3 journaled steps) and wait for its answer, with the idempotency key j<cmd>
+exec /bin/rsv op call

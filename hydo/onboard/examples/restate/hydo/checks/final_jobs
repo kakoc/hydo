@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: every acknowledged job completed once, all its steps; no journaled step ran again; one invocation per idempotency key
+exec /bin/rsv check jobs
