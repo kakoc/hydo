@@ -72,7 +72,7 @@ corrupted files.
 | `hydo/hydo.yaml` | the three nodes, the group `nodes`, the workload and the messages check |
 | `hydo/workload/` | `parallel_driver_produce`, `parallel_driver_txn`, `serial_driver_consume`, and the drain |
 | `hydo/regressions/` | the saved schedule of finding 1 |
-| `native/` | the scripts that run Docker: finding 1 without hydo, and the write-caching configuration |
+| `native/` | the scripts that run Docker: findings 1, 3 and 4 without hydo, and the write-caching configuration |
 
 Each node runs the image's `redpanda` program directly, as `rpk redpanda start --mode
 dev-container` would run it, with `--smp 1 --memory 1G --reserve-memory 0M --overprovisioned`.
@@ -610,6 +610,145 @@ With the cause known, five more searches of the issues and pull requests found n
 
 Issue 3278 ("Support KIP-360") added the epoch bump of a producer that retries after an error.
 
+## Finding 4 (new candidate): after a change of leader, a produce answer names an earlier transaction's offset
+
+**What happens.** A transactional producer writes a record and gets the offset of another
+record as the answer. That record is the one that the same transactional id wrote at the same
+sequence number in an earlier transaction. When the request with this answer was a retry, the
+record is in the log at another offset. When the request was new, Redpanda does not write the
+record at all: the producer's commit returns no error, and no reader reads the record. Both
+cases need a change of the partition's leader during the transaction, and nothing else.
+
+**The schedule.** The KVM engine ran the example on GitHub's runners, in run 44046143553 of a
+one-off workflow, with the image built from `main` at `7944ad08`. There `disk=none | run
+A=rp.txn_add@20:kill-n3` broke two claims the same way on three hosts: two AMD EPYC 9V74 and one
+Intel Xeon 6975P-C. The run on the first AMD host
+gave `fp=ff1ea63a6c2f966f`:
+
+```text
+VIOLATION [rp.duplicates] m28b is stored twice: it carries the system ids 5 and 15
+```
+
+The claim `rp.order` reported "m11a and m28b share offset 5 of key p1 (inconsistent offsets)".
+The client's history, shortened:
+
+```text
+HYDO-HIST rp 11 ok 61830000000 send t m11a;k=p1;o=5;s=ok m11b;k=p2;o=11;s=ok
+HYDO-HIST rp 28 invoke 80130000000 send t m28a;k=p2 m28b;k=p1
+HYDO-HIST rp 28 ok 85950000000 send t m28a;k=p2;o=28;s=ok m28b;k=p1;o=5;s=ok
+HYDO-HIST rp 36 ok 88450000000 recv t g ... m28b;k=p1;o=15 ...
+```
+
+Transactions 11 and 28 both used the transactional id `tx-3`. The reaction killed n3 just
+before transaction 28 added its partitions, and transaction 28 took 5.8 seconds. Every reader
+read `m28b` at offset 15, and offset 5 holds `m11a`. On the first host the other seven reaction
+variants of that workflow passed (each node, at 0, 3 and 8 ms). hvx did not run this schedule.
+
+**Where the client's offset comes from.** The client records the offset of franz-go's produce
+promise (`txn` in `client/main.go`). franz-go 1.22.2 takes it from the answer that ends the
+batch: `handleReqRespBatch` in `pkg/kgo/sink.go` passes the ProduceResponse's `BaseOffset` to
+`finishBatch`, which gives the batch's records `baseOffset + i`. A retried batch gets the offset
+of the answer to the retry, and franz-go keeps no offset from an earlier answer. The error
+`DUPLICATE_SEQUENCE_NUMBER` is treated as a success with the answer's base offset, but
+Redpanda's answer here has no error. So the offset 5 is Redpanda's answer, not franz-go's.
+
+**The cause, in the code** (v26.2.2, and the same two files on `dev` at `d9944871`). Each
+partition keeps, for each producer id, its 5 newest finished requests (`requests` in
+`src/v/cluster/producer_state.cc`). `requests::try_emplace` looks a new request up by its first
+and last sequence number only, without the epoch, and answers with the first match's offset. A
+transactional producer starts its sequence numbers at 0 on each partition after each
+InitProducerId, so the transactions of one transactional id use the same sequence ranges. Two
+places reset the cache:
+
+- `do_transactional_replicate` in `src/v/cluster/rm_stm.cc` resets it for the first batch of a
+  transaction, while the partition's transaction state is `initialized`
+  (`reset_sequence_tracking`). Only the leader runs this function.
+- `producer_state::reset_with_new_epoch` resets it for a new epoch. `producer_state::apply_data`
+  calls it only for batches that are not transactional, and `apply_transaction_begin` sets a
+  transaction's new epoch without a reset.
+
+A follower only applies batches, so it keeps the entries of the earlier epochs next to the new
+ones. When it becomes the leader, it has already applied the transaction's first batch, the
+state is `ongoing`, and nothing resets the cache. A request whose sequence range an earlier
+epoch used then matches the earlier entry:
+
+- A retry of a batch that is already in the log gets the earlier batch's offset. The record stays
+  at its own offset. That is the KVM run: the kill of n3 lost the answer to franz-go's first
+  try, and franz-go sent the batch again to the new leader.
+- A new request gets the earlier batch's offset and is not written. The producer counts the
+  record as written, and the commit succeeds without it.
+
+Apache Kafka's `ProducerStateEntry` clears its batch metadata when the epoch changes
+(`maybeUpdateProducerEpoch`), on the leader and on the followers, and `findDuplicateBatch` returns
+no match for a batch of another epoch.
+
+**Without hydo.** `native/stale-offset.sh` starts the cluster of `docker-compose.yaml`, builds
+`native/staleoffset` (Go, with franz-go 1.22.2) and runs it in the client container. Each round
+uses a new transactional id, moves the partition's leader with the HTTP endpoint
+`transfer_leadership` of each node's port 9644, and waits until the metadata names the new leader:
+
+- `retry`: transaction 1 writes `A0` and commits. Transaction 2 writes `B0`, the leader moves,
+  and the same Produce request of `B0` goes again to the new leader, as a client sends it after a
+  lost answer. Then transaction 2 commits.
+- `loss`: transaction 1 writes `A0` and `A1`, one request each, and commits. Transaction 2
+  writes `B0`, the leader moves, and transaction 2 writes `B1` and commits. No request is sent
+  twice.
+
+With `-transfer=false` the leader stays. On this Mac (Docker in Colima, arm64, v26.2.7), 20
+rounds of each gave:
+
+| mode | the leader moves | result |
+|---|---|---|
+| `retry` | yes | 20 of 20 answers to the second `B0` name `A0`'s offset; `B0` is read at its first offset |
+| `retry` | no | 0 of 20 |
+| `loss` | yes | 20 of 20 commits returned no error and lost `B1`: its promise names `A1`'s offset, and `B1` is not in the log, also with `read_uncommitted` |
+| `loss` | no | 0 of 20 |
+
+```text
+0: pid 7: A0@40 (epoch 0); B0@43 (epoch 1) on n2; B0 sent again to n3: answer @40 <nil>; commit: <nil>
+0: A0@1 A1@2; B0@5 on n3; B1@2 on n1; produce: <nil> <nil>; commit: <nil>
+LOST l55-0-B1: given offset 2, which holds "l55-0-A1"; no read_committed reader reads l55-0-B1; in the log at all (read_uncommitted): false
+```
+
+The loss needs no fault and no retry, only one move of the leader between two produce requests
+of a transaction. An earlier transaction's batch with the same sequence range must still be in
+the new leader's cache. Redpanda's leader balancer moves leaders by itself (`enable_leader_balancer`, on
+by default), and a node's restart moves them too.
+
+**Is it a bug?** Yes. The page "Transactions" promises "either all messages are committed or
+none", and in the `loss` mode a committed transaction lost one of its records. In the `retry`
+mode, a produce answer names another record's offset; an idempotent producer's retry should get
+its own batch's offset, as on the same leader without a move.
+
+**What the check said.** The claim `duplicates` read the two offsets of `m28b` as two stored
+copies. The readers saw one copy, at 15, and the acknowledgement named another record. The
+claim's message now says so when every delivery carries one id and an acknowledgement names
+another (`duplicates` in `hydo/crates/hydo-history/src/messages/claims.rs`). On the KVM run's
+console it reads:
+
+```text
+VIOLATION [rp.duplicates] m28b was acknowledged with the system id 5, but each of its 2 deliveries
+carries 15: the system acknowledged another id than the copy it stored, or it stored a second copy
+that no reader read
+```
+
+The example's client writes one record per partition in each transaction, so it can show the
+wrong offset but not the lost record.
+
+**Duplicate search** (GitHub issues and pull requests of redpanda-data/redpanda and twmb/franz-go,
+every state, on 2026-11-17, and Jepsen's list). The terms for Redpanda: "reset_sequence_tracking",
+"returns old offset", "lost updates", "dedup", "producer epoch sequence reset", "transactional"
+with "leadership transfer", "wrong offset", "transactional" with "lost", "producer_state",
+"sequence" with "follower", "idempotent duplicate", "sequence number transactional", and
+"transaction" with "missing record". The terms for franz-go: "redpanda offset", "duplicate
+sequence", "record offset wrong", and "transactional offset". No result describes this case. The
+closest is pull request 5026 ("Fix lost update consistency error", merged on 2022-06-15, for
+issue 5438, "Lost updates in chaos test runs"). Its description names the same answer: a client
+starts a new transaction, "reuses the same seq_id", and "Redpanda dedupes seq_id=42 using the
+original record and returns old offset". Its fix is the leader's reset in `do_transactional_replicate`, so a follower that
+becomes the leader later keeps the old entries. Jepsen's 3039 (no deduplication) and 3616 (lost
+transactional writes after a lost and regained leadership, fixed in 21.11.15) have other causes.
+
 ## Not a bug: records deleted by retention after a clock step of a year
 
 Seed 25 of the fourth exploration (`base8`) ended `VIOLATION [rp.fan-out] m0 was acknowledged
@@ -623,8 +762,9 @@ default.
 
 ## Known bugs reached
 
-None of Jepsen's 2022 issues came back. In no run was an acknowledged record lost, duplicated,
-or read out of order, and no aborted record was read with `read_committed`.
+None of Jepsen's 2022 issues came back. No aborted record was read with `read_committed`. The
+lost records of findings 3 and 4 have other causes than Jepsen's 3616, and finding 4 is not
+Jepsen's 3039.
 
 ## The blind exploration
 
@@ -665,7 +805,9 @@ seed 9 gave finding 2, and seed 24 (the third exploration) gave finding 3.
 (finding 2); both causes are in the code of `dev`. A committed transaction is visible on one of
 its partitions only (finding 3). An InitProducerId with the same transactional id aborts the
 open transaction and does not fence the old producer, whose commit then covers the rest. It
-reproduces without hydo on every try.
+reproduces without hydo on every try. A KVM run after the onboarding gave a fourth (finding
+4): after a change of leader, a produce answer names an earlier transaction's offset, and a new
+request can get such an answer without being written.
 The durability promises held under strict power losses of one node and whole-guest power cuts,
 whether write caching was on or off.
 

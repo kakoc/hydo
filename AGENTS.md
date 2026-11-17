@@ -558,7 +558,7 @@ the middle of a run, and every check held. The runs used hvx and the Mac engine.
 A Go client on franz-go produces idempotently, writes transactions and consumes as a group; one
 `type: messages` check and the invariant `tx.no_hanging` judge it. Seastar needs cgroup2 mounted
 once in the guest (each node's `setup:`). Strict power losses of one node and whole-guest cuts
-lost no acknowledged record, whether write caching was on or off. Three new candidates, not
+lost no acknowledged record, whether write caching was on or off. Four new candidates, not
 reported upstream:
 - A damaged `tx.snapshot` of one partition stops its node at every start (an assertion in
   `persisted_stm.cc`), although a missing one is rebuilt from the log
@@ -575,6 +575,13 @@ reported upstream:
   `K=nodes.primary@66+1 P=n2@42+11`, and one kill of any node during a transaction,
   `A=rp.txn_add@20+3:kill-n1`. `native/half-commit.sh` reproduces it under Docker on 10 of 10
   tries.
+- After a change of a partition's leader, a transactional produce answer names an earlier
+  transaction's offset. The cache of a producer's requests matches by sequence range without the
+  epoch, and only the leader clears it at a transaction's first batch (`requests::try_emplace`,
+  `do_transactional_replicate`). A retry then gets another record's offset, and a new request
+  gets one without being written, so a commit without error loses it. On KVM
+  `A=rp.txn_add@20:kill-n3` gave the wrong offset on three hosts. `native/stale-offset.sh`
+  gives both under Docker on 20 of 20 rounds with a leader move, and 0 of 20 without.
 
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
@@ -1744,7 +1751,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       steps or power cuts did not run. The Mac engine and KVM did not run the example.
     - The example is not in `hydo/onboard/recorded.json`.
 142. The Redpanda example (M279). What is left:
-    - Its three candidates are not reported upstream.
+    - Its four candidates are not reported upstream.
+    - Finding 4 (a produce answer with an earlier transaction's offset) ran on KVM only, from
+      the one-off workflow of the branch `tmp-redpanda-kvm`. hvx did not run its schedule, and it
+      is no saved regression. The example's client writes one record per partition in a
+      transaction, so it shows the wrong offset but not the lost record of `native/stale-offset.sh`.
     - Finding 3's cause is found and reproduces under Docker. Why the hvx runs without faults
       pass was not traced; the kill moves the partitions' leaders apart.
     - The hanging transaction came from two blind schedules, each reproducing only on the image
@@ -1766,7 +1777,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The example's topic keeps the default `retention.ms` of 7 days, so a forward clock step
       of a year deletes records before the drain and breaks `fan-out` (seed 25). Creating the
       topic with `retention.ms=-1` would keep the check strict.
-    - The Mac engine and KVM did not run the example; the Mac had too little free disk.
+    - The Mac engine did not run the example; the Mac had too little free disk. KVM ran it only
+      in the one-off workflow of finding 4.
 
 ## Milestone index
 
@@ -2425,7 +2437,10 @@ build machine, before 2026-10-13.
   check over idempotent produces, transactions, and a consumer group. Strict power losses and
   whole-guest cuts lost nothing. Three new candidates. A damaged `tx.snapshot` stops its node at
   every start. A transaction recorded as `empty` by its coordinator is never aborted. A
-  committed transaction is visible on only one of its partitions. Nothing recorded moved
+  committed transaction is visible on only one of its partitions. A follow-up from KVM: after a
+  change of leader, a produce answer names an earlier transaction's offset, and a new request
+  can get one without being written. The messages check's `duplicates` message names a wrong
+  acknowledged id. Nothing recorded moved
 
 ## Where to look
 

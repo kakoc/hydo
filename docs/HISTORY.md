@@ -13861,3 +13861,32 @@ wrong. `native/half-commit.sh` reproduces it without hydo under Docker. In the p
 producers racing with no fault lost a record in 5 of 205 commits. Against Apache Kafka 3.9.1
 the same program got `PRODUCER_FENCED` and lost nothing. RESULTS.md, finding 3, has the trace and
 the commands.
+
+**Finding 4, from KVM (a follow-up in this milestone).** On GitHub's KVM runners (run
+44046143553 of the one-off workflow of the branch `tmp-redpanda-kvm`, the image built from
+`main` at `7944ad08`), `disk=none | run A=rp.txn_add@20:kill-n3` broke `rp.duplicates` and
+`rp.order` the same way on two AMD EPYC 9V74 hosts and one Intel Xeon 6975P-C host
+(`fp=ff1ea63a6c2f966f` on the first). Transaction 28's promise gave `m28b` offset 5, which holds
+transaction 11's `m11a` of the same transactional id, and every reader read `m28b` at 15.
+franz-go 1.22.2 takes a record's offset from the answer that ends its batch (`sink.go`,
+`handleReqRespBatch` and `finishBatch`), so the offset is Redpanda's answer to franz-go's retry
+after the kill. The cause is in Redpanda v26.2.2, the same on `dev` at `d9944871`:
+
+- A partition's cache of a producer's 5 newest requests matches a request by its sequence range
+  only, without the epoch (`requests::try_emplace` in `producer_state.cc`).
+- A transactional producer starts its sequences at 0 in each epoch.
+- Only the leader clears the cache, at a transaction's first batch (`do_transactional_replicate`
+  in `rm_stm.cc`, the fix of pull request 5026 in 2022). A follower applies a transaction's begin
+  batch without a reset (`apply_transaction_begin`), so after a change of leader the earlier
+  epochs' entries match.
+
+`native/stale-offset.sh` reproduces it under Docker (arm64, v26.2.7) with a move of the leader
+through the admin API. A resent request got the earlier batch's offset in 20 of 20 rounds. A new
+request in the same place got the earlier batch's offset and was not written in 20 of 20 rounds,
+and each commit returned no error. Without the move, 0 of 20 in both modes. Apache Kafka clears
+the batch metadata on every epoch change (`ProducerStateEntry.maybeUpdateProducerEpoch`). The
+messages check's `duplicates` message called the record "stored twice". It now says that the
+acknowledgement named another id when every delivery carries one id
+(`hydo-history` `messages/claims.rs`, with a test in `tests/messages.rs`). No issue or pull
+request of redpanda-data/redpanda or twmb/franz-go describes the case. Nothing was posted, and
+nothing recorded moved.

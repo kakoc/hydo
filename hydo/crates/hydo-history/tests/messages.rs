@@ -385,6 +385,21 @@ fn duplicates() {
     recv(&mut h, 2, 4, &["m1;o=6"]);
     let r = run(&h.text(), forb);
     assert!(r["duplicates"].1.contains("system ids 5 and 6"), "{r:?}");
+    // every delivery carries one id and the acknowledgement another: the message says that the
+    // acknowledged id may be wrong (Redpanda's stale produce answer, Milestone 279's finding 4)
+    let mut h = H::default();
+    h.rec(1, "invoke", 0, "send", &["c", "m1"]);
+    h.rec(1, "ok", 1, "send", &["c", "m1;o=5"]);
+    recv(&mut h, 2, 2, &["m1;o=15"]);
+    recv(&mut h, 3, 4, &["m1;o=15"]);
+    let r = run(&h.text(), forb);
+    assert_eq!(st(&r, "duplicates"), Status::Violated, "{r:?}");
+    assert!(
+        r["duplicates"].1.contains(
+            "m1 was acknowledged with the system id 5, but each of its 2 deliveries carries 15"
+        ),
+        "{r:?}"
+    );
     // a redelivery of the same stored copy is fine
     let mut h = H::default();
     h.rec(1, "invoke", 0, "send", &["c", "m1"]);

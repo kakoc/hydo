@@ -420,7 +420,44 @@ pub fn duplicates(ix: &Ix<'_>) -> Claim {
                 }
                 judged += 1;
                 if let Some(b) = ids.iter().find(|x| x.0 != ids[0].0) {
+                    // system_ids lists the acknowledgements first, then the deliveries
+                    let n_acks = m
+                        .sends
+                        .iter()
+                        .filter(|s| ix.send_out(**s) == Out::Ok && ix.send_item(**s).o.is_some())
+                        .count();
+                    let (acks, dlv) = ids.split_at(n_acks);
                     let mut w = Witness::default();
+                    // Every delivery carries one id, and an acknowledgement names another: the
+                    // readers saw one copy, so the acknowledged id may be wrong rather than the
+                    // copy stored twice (Redpanda, Milestone 279's finding 4).
+                    if let (Some(d), Some(a)) = (dlv.first(), acks.iter().find(|x| x.0 != dlv[0].0))
+                    {
+                        if dlv.iter().all(|x| x.0 == d.0) {
+                            w.op(ix, a.1);
+                            w.op(ix, d.1);
+                            let n = dlv.len();
+                            return violated(
+                                "duplicates",
+                                judged,
+                                und,
+                                format!(
+                                    "{} was acknowledged with the system id {}, but {} carries {}: \
+                                     the system acknowledged another id than the copy it stored, \
+                                     or it stored a second copy that no reader read",
+                                    m.m,
+                                    a.0,
+                                    if n == 1 {
+                                        "its one delivery".to_string()
+                                    } else {
+                                        format!("each of its {n} deliveries")
+                                    },
+                                    d.0
+                                ),
+                                w,
+                            );
+                        }
+                    }
                     w.op(ix, ids[0].1);
                     w.op(ix, b.1);
                     return violated(
