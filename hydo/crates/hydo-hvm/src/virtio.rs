@@ -1405,11 +1405,16 @@ mod tests {
             std::thread::current().id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
-        let p = dir.join("d.img");
         let bytes: Vec<u8> = (0..(crate::disk::BLOCK * 600))
             .map(|i| (i % 253) as u8)
             .collect();
+        // each set of devices gets its own image file: a file that a disk has mapped must not be
+        // rewritten (the module documentation of `disk`), and on Linux a private mapping shows
+        // the rewritten bytes to the full hash of an earlier disk
+        let n = std::cell::Cell::new(0u32);
         let devices = |b: &[u8], tree: bool| {
+            n.set(n.get() + 1);
+            let p = dir.join(format!("d{}.img", n.get()));
             std::fs::write(&p, b).unwrap();
             let c = Config {
                 disk: Some(p.display().to_string()),
