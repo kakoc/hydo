@@ -404,6 +404,12 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
         .find(|a| *a != "--details")
         .cloned()
         .unwrap_or_else(|| pjoin(OUT, "explore"));
+    // `hydo compare-versions`' answer (Milestone 298): a directory of its own
+    if let Some((_, doc)) = hydo_results::compare_of(Path::new(&d)) {
+        let mut o = std::io::stdout().lock();
+        let _ = o.write_all(crate::compare::report_lines(&doc).as_bytes());
+        return 0;
+    }
     // `hydo versions`' answer (M221): next to the report of the run or exploration it came from,
     // or alone for a directory with only versions.json
     let versions = hydo_results::versions_of(Path::new(&d));

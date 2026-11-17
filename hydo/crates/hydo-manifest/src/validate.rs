@@ -87,6 +87,7 @@ pub const KNOWN_SVC: &[&str] = &[
     "logs",
     "version",
     "versions",
+    "compare",
 ];
 /// The keys of a `services[].versions` entry (Milestone 238).
 pub const KNOWN_VERSION: &[&str] = &["name", "cmd", "setup", "ready", "description"];
@@ -682,6 +683,13 @@ pub fn validate(m: &mut Value) -> R<()> {
                         repr(x)
                     )));
                 }
+            }
+        }
+        if let Some(c) = obj_get(s, "compare") {
+            if c.as_str().is_none_or(|x| x.trim().is_empty()) {
+                return Err(err(format!(
+                    "{wh}: compare: a command that prints the state the service stored, such as a SQL query or a scan of every key"
+                )));
             }
         }
         if let Some(b) = obj_get(s, "writable") {

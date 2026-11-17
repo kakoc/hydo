@@ -596,6 +596,7 @@ fn every_command_prints_its_help_without_an_image() {
         &["ci", "comment"],
         &["perf"],
         &["perf", "compare"],
+        &["compare-versions"],
         &["sql-gen"],
         &["guide"],
         &["skill"],

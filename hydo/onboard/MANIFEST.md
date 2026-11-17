@@ -240,6 +240,8 @@ services:                      # may be empty ([] or left out): a project that i
     version: "1.0"                        # with versions:: the name of the version cmd: runs
     versions: [{name: "2.0", cmd: ...}]   # other versions U= can switch it to (see "Versions of
                                           #   a service and upgrades")
+    compare: redis-cli --scan             # prints the state it stored, for hydo compare-versions
+                                          #   (see "State for comparisons")
 
   - name: cache                # a service whose files come from a Docker/OCI image (see below)
     image: images/redis.tar    # a `docker save` tar or an OCI layout directory, relative to
@@ -1423,6 +1425,33 @@ perf:
 The key changes nothing in the guest's files. A run of an image with it sends other commands
 than a run without it, so its fingerprints are its own. The example is
 `hydo/onboard/examples/perf-kv`.
+
+### State for comparisons (`services[].compare`)
+
+`compare:` names a command that prints the state a service stored, such as a SQL query or a
+scan of every key. `hydo compare-versions` compares that output between two versions of the
+system (`hydo guide workflow`, "Does a new version behave the same"). The host controller runs
+the command after the verdict, in the boot that gives the verdict. That boot is the run, or the
+recovery boot after a power cut. It sends each line of the output to the host as a console note
+`HYDO-STATE <service>: <line>`, and then `HYDO-STATE-END <service> rc=<status> lines=<n>
+cut=<0|1>`. A run keeps at most 64 KiB of each service's output, and each line keeps at most
+1,000 bytes.
+
+```yaml
+services:
+  - name: redis
+    cmd: /bin/redis-server /etc/redis.conf
+    ready: /bin/redis-cli ping | grep -q PONG
+    compare: |
+      for k in $(/bin/redis-cli --scan --pattern 'k:*' | sort -t: -k2 -n); do
+        echo "$k $(/bin/redis-cli GET $k)"
+      done
+```
+
+Print the state in a fixed order, because the comparison is line by line. The command runs
+after the checks, so it changes no verdict. A run of an image with the key sends more commands
+than a run without it, so its fingerprints are its own. A run that ends in an error before its
+checks prints no state.
 
 ### Function contracts (`contracts:`)
 

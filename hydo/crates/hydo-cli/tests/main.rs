@@ -6,6 +6,7 @@
 mod tmpdir;
 
 mod agents_equivalence;
+mod compare;
 mod docs;
 mod equivalence;
 mod migrate;

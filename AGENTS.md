@@ -1107,6 +1107,27 @@ cache by input key. The answer is `versions.json` (the results addition `Version
 `hydo report` prints it. Reference: `hydo guide workflow`, "Which versions have a finding";
 proof: `docs/HISTORY.md` Milestone 221.
 
+**Two versions on the same schedules (M298, tentative number).** `hydo compare-versions` runs
+each schedule on version A and on version B and says where the two runs differ. The versions come
+as for `hydo versions` (`--param`, `--git`, `--images`). The schedules are given, the saved
+regressions (`--regressions`), or drawn from seeds as `hydo explore` draws them (`--seeds`), and
+a drawn difference is shrunk with the explorer's candidates. It compares three levels:
+
+- the verdicts and findings;
+- the client's observations: `$HYDO_OUTCOMES`, the acknowledged and failed lists, and the
+  `HYDO-HIST` records without their guest times;
+- the stored state: each service's `compare:` dump (a format-1 addition, `HYDO-STATE` notes after
+  the verdict) and what each check printed.
+
+`--ignore`, `--ignore-json` and `hydo/compare.yaml` blank what may differ, and `--again DIR`
+compares earlier runs again without a VM. The answer is `compare.json` (a results addition), and
+`hydo report` and `hydo report --html` show it. On the Mac engine Redis `appendfsync always`
+against `everysec` differs on 4 of 10 drawn schedules. One shrank to `disk=ioerr:1 | run`: with
+`always` one failed write stops Redis. Two builds of one source and `hz 1` against `hz 10` agree
+on every given schedule. Formance Ledger v2.4.0 logs the account race of its `UpsertAccounts`
+rewrite in a run without faults, and v2.3.24 does not; every check holds on both. Design:
+`docs/design/differential.md`; details: `docs/HISTORY.md` Milestone 298.
+
 **Performance tests (M237).** With `perf:` in the manifest, each workload step is its own
 workload call, and `result.json` gets `perf`: the work of the workload and of each step. The
 unit on hvx is the guest's retired branches (the PMU branch clock). They are exact in every run.
@@ -2004,6 +2025,22 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A run with a power cut was not recorded; the boot number of the records is tested on
       synthetic records only.
 
+149. Differential testing (M298, `docs/design/differential.md`). What is left:
+    - It ran on the Mac engine only. hvx and KVM did not run it.
+    - The outcomes come from the controller's reads of `$HYDO_OUTCOMES`. A run that ends in an
+      error before the read has none, so its side shows no outcome lines.
+    - A reboot's conversations (`guest.reboot`) are not read; only the run and the recovery boot.
+    - A workload that chooses its next operation from the order of earlier answers chooses
+      otherwise on another version (Formance's reverts). No rule can blank that; the workload
+      needs to choose by a seed alone.
+    - A timing change differs under network faults (Redis `hz`). There is no option that draws
+      schedules without the fault kinds that only move timing.
+    - The SDK assertion records of the workload (`HYDO-ASSERT` without a check's output) are not
+      compared. Formance's `ledgerc.retry_acked`, only in v2.4.0, showed only in the console.
+    - `hydo/compare.yaml` has no JSON schema, and `hydo ci` does not call the command.
+    - A shrink keeps the first difference's stream, not its record, and runs each candidate on
+      both versions one at a time.
+
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -2744,6 +2781,12 @@ build machine, before 2026-10-13.
   cores. KVM takes the hashes of the pages not written since its base from the base. web-shop's
   RAM hash takes 43 ms instead of 1 s, and its run 5.8 s in the engine instead of 7.9 s. Older
   images keep their values. Every epoch-4 Mac and KVM fingerprint moves (open item 105)
+- M298 (tentative number): differential testing between versions. `hydo compare-versions` runs
+  given, saved or drawn schedules on two versions and compares the verdicts, the client's
+  outcomes and histories, and the stored state (`services[].compare`), with normalization rules.
+  It shrinks drawn differences and writes `compare.json`. On the Mac engine Redis `always`
+  against `everysec` differs on 4 of 10 drawn schedules. Two builds of one source and `hz` agree.
+  Formance v2.4.0 shows the account race that v2.3.24 does not. Nothing recorded moved
 
 ## Where to look
 

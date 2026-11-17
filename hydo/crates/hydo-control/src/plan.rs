@@ -125,6 +125,9 @@ pub struct PlanService {
     /// `versions:`: the other versions an upgrade (`U=`) can switch the service to, each with its
     /// commands (a missing one is the service's own).
     pub versions: Vec<PlanVersion>,
+    /// `compare:` (Milestone 298): the command that prints the state the service stored, run
+    /// after the verdict for `hydo compare-versions` (`schedule/dump.rs`); "" = none.
+    pub compare: String,
 }
 
 /// Another version of a service (`services[].versions`, Milestone 238), its commands resolved.
@@ -536,6 +539,7 @@ impl Plan {
                     v
                 },
                 version: get(s, "version").map(py::str_of).unwrap_or_default(),
+                compare: truthy_str(s, "compare"),
                 versions: get(s, "versions")
                     .and_then(Value::as_array)
                     .into_iter()

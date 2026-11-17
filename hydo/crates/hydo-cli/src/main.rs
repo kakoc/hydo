@@ -19,6 +19,7 @@ mod build;
 mod cache;
 mod ci;
 mod clockscan;
+mod compare;
 mod ctx;
 mod delegated;
 mod diff;
@@ -100,6 +101,10 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
     hydo rules   scan [DIR] | check <candidates.yaml> [IMG] [--runs N] [--mutate] [--write-checks DIR]
                                                    list what a project promises; validate proposed rules
                                                    on runs without faults (hydo guide rules)
+    hydo compare-versions <"<schedule>"... | --regressions | --seeds A-B>
+                 --param KEY=A,B | --git A,B | --images A=IMG,B=IMG [--ignore REGEX]
+                                                   run two versions of the system on the same schedules and
+                                                   say where they answered or stored something else
     hydo fuzz    [CRATE_DIR] [--fn NAME] [--cases N] [--seed S]
                                                    test each Rust function with a contract on its own:
                                                    inputs from requires, results judged by ensures
@@ -166,6 +171,10 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
     hydo rules   scan [DIR] | check <candidates.yaml> [IMG] [--runs N] [--mutate] [--write-checks DIR]
                                                    list what a project promises; validate proposed rules
                                                    on runs without faults (hydo guide rules)
+    hydo compare-versions <"<schedule>"... | --regressions | --seeds A-B>
+                 --param KEY=A,B | --git A,B | --images A=IMG,B=IMG [--ignore REGEX]
+                                                   run two versions of the system on the same schedules and
+                                                   say where they answered or stored something else
     hydo fuzz    [CRATE_DIR] [--fn NAME] [--cases N] [--seed S]
                                                    test each Rust function with a contract on its own:
                                                    inputs from requires, results judged by ensures
@@ -188,7 +197,16 @@ fn main() {
     // the engine of the commands that run guests (Linux: hvx, or KVM with --backend kvm)
     if matches!(
         argv.get(1).map(String::as_str),
-        Some("run" | "repro" | "explore" | "doctor" | "inspect" | "versions" | "rules")
+        Some(
+            "run"
+                | "repro"
+                | "explore"
+                | "doctor"
+                | "inspect"
+                | "versions"
+                | "rules"
+                | "compare-versions"
+        )
     ) {
         ctx.take_backend(&mut argv);
         // without --backend or HYDO_BACKEND: the engine this machine has (KVM when there is no
@@ -281,6 +299,9 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         // M221: in which versions of the system a finding is present (`hydo versions --help`,
         // `hydo guide workflow`; the main help is a recorded answer)
         "versions" => versions::cmd_versions(ctx, rest),
+        // Milestone 298: two versions on the same schedules, and what differs
+        // (`hydo compare-versions --help`, docs/design/differential.md)
+        "compare-versions" => compare::cmd_compare(ctx, rest),
         "rules" => rules::cmd_rules(ctx, rest),
         // Milestone 237: performance tests from deterministic runs (`hydo perf --help`, `hydo
         // guide perf`; the main help is a recorded answer)

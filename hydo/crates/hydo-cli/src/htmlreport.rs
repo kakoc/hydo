@@ -6,13 +6,16 @@
 //! epoch, schedule), each failure with its minimal schedule and the command that replays it, the
 //! failing run's timeline (the events `hydo inspect events` lists), where it first differs from a
 //! passing neighbour (`hydo diff`), the property table, a CI run's state of each finding against
-//! its base commit, and the versions a finding is in when the results carry them.
+//! its base commit, and the versions a finding is in when the results carry them. A `hydo
+//! compare-versions` directory gets a page of its own: where the two versions first part on each
+//! schedule (Milestone 298).
 //!
 //! It is made from the directory's files only: no VM runs. The page holds its style sheet and its
 //! one small script and loads nothing, so it works opened from disk and as an attachment. Its
 //! size is bounded: the timeline keeps at most [`MAX_EVENTS`] events, a log at most
 //! [`MAX_LOG`] bytes, and the page says what it left out and which command shows it all.
 
+mod comparepage;
 pub mod history;
 mod page;
 mod story;
@@ -52,8 +55,8 @@ const CANDIDATES: usize = 8;
 
 pub const USAGE: &str =
     "usage: hydo report --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]
-  writes one web page for a run directory, an exploration directory or a `hydo ci run` output
-  directory: the verdict, each failure with its minimal schedule and the command that replays
+  writes one web page for a run directory, an exploration directory, a `hydo ci run` output
+  directory or a `hydo compare-versions` directory: the verdict, each failure with its minimal schedule and the command that replays
   it, the failing run's timeline, where it first differs from a passing neighbour, and the
   property table. The page is one file that loads nothing, so it opens from disk and can be
   attached to an issue or kept as a CI artifact. DIR defaults to hydo-out/explore, FILE to
@@ -80,9 +83,14 @@ enum Input {
         dir: PathBuf,
         doc: Box<CiRun>,
     },
+    /// `hydo compare-versions`' directory (Milestone 298).
+    Compare(Box<hydo_results::CompareDoc>),
 }
 
 fn read_input(d: &Path) -> Result<Input, String> {
+    if let Some((_, doc)) = hydo_results::compare_of(d) {
+        return Ok(Input::Compare(Box::new(doc)));
+    }
     let ci = d.join("ci-run.json");
     if ci.is_file() {
         let t = std::fs::read_to_string(&ci).map_err(|e| format!("{}: {e}", ci.display()))?;
@@ -216,6 +224,7 @@ fn render(input: &Input, extra: &Extra) -> Result<String, String> {
             Ok(exploration_page(dir, doc, events.as_ref(), extra))
         }
         Input::Ci { dir, doc } => Ok(ci_page(dir, doc, extra)),
+        Input::Compare(doc) => Ok(comparepage::page(doc, &extra.shown_dir)),
     }
 }
 

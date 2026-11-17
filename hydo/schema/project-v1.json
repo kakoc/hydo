@@ -873,6 +873,17 @@
             "type": "string"
           }
         },
+        "compare": {
+          "description": "A command that prints the state the service stored, for comparisons of two versions of\nthe system (`hydo compare-versions`; Milestone 298): for example a SQL query or a scan of\nevery key. After the verdict, in the boot that gives it, hydo runs it and reports each line\nof its output as `HYDO-STATE <service>: <line>`, at most 64 KiB (MANIFEST.md \"State for\ncomparisons\").",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {

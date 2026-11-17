@@ -560,6 +560,29 @@ Three findings hold for every type of system:
 - **What it misses.** YugabyteDB's known TA-30772 was not reproduced on either release.
 - **Cost.** One image per version.
 
+### Two versions on the same schedules
+
+- **What it is.** `hydo compare-versions` runs each schedule on version A and on version B. It
+  reports where the client's outcomes, the stored state, or the verdicts differ (`hydo guide
+  workflow`, "Does a new version behave the same").
+- **What to write.** A build parameter or two git revisions, and a `compare:` command that
+  prints each service's state in a fixed order.
+- **When it fits.** An upgrade, a dependency bump, a refactor, or a changed setting, when the
+  team wants to know what else changed.
+- **What it found.**
+  - Redis `appendfsync always` against `everysec` (Milestone 298): 4 of 10 drawn schedules
+    differ. One shrank to `disk=ioerr:1 | run`: with `always` Redis stops at the first failed
+    write, and with `everysec` it acknowledged all 20 writes.
+  - Formance Ledger v2.3.24 against v2.4.0 (Milestone 298): `disk=none | run` differs. Only
+    v2.4.0 logs the account race of its `UpsertAccounts` rewrite, and one operation needed a
+    retry.
+  - Two builds of the same Redis source, and Redis `hz 1` against `hz 10` on four schedules,
+    gave no difference.
+- **What it misses.** A workload that picks its next operation from the order of earlier
+  answers makes other choices on another version. In the Formance run, one revert chose
+  another transaction.
+- **Cost.** Two runs per schedule, and a shrink of up to 20 candidates on both versions.
+
 ## Functions
 
 ### Function contracts in a whole-system run

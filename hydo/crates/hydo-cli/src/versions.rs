@@ -407,7 +407,7 @@ fn findings_of_exploration(doc: &hydo_results::Exploration, dir: &Path) -> Vec<F
 
 /// How the versions are made.
 #[derive(Clone, Debug)]
-enum Source {
+pub(crate) enum Source {
     Param {
         key: String,
         manifest: PathBuf,
@@ -421,7 +421,7 @@ enum Source {
 }
 
 impl Source {
-    fn name(&self) -> String {
+    pub(crate) fn name(&self) -> String {
         match self {
             Source::Param { key, .. } => format!("param {key}"),
             Source::Git { .. } => "git".into(),
@@ -431,23 +431,23 @@ impl Source {
 }
 
 #[derive(Clone, Debug)]
-struct Version {
-    label: String,
-    commit: Option<String>,
+pub(crate) struct Version {
+    pub(crate) label: String,
+    pub(crate) commit: Option<String>,
     /// A given image, or why the version cannot be made at all (an unknown revision).
-    image: Option<PathBuf>,
-    bad: Option<String>,
+    pub(crate) image: Option<PathBuf>,
+    pub(crate) bad: Option<String>,
 }
 
 /// A version's image, once made.
 #[derive(Clone, Debug)]
-struct Made {
-    path: PathBuf,
-    sha: Option<String>,
-    reused: bool,
+pub(crate) struct Made {
+    pub(crate) path: PathBuf,
+    pub(crate) sha: Option<String>,
+    pub(crate) reused: bool,
 }
 
-fn git(dir: &Path, args: &[&str]) -> Option<String> {
+pub(crate) fn git(dir: &Path, args: &[&str]) -> Option<String> {
     let o = Command::new("git")
         .arg("-C")
         .arg(dir)
@@ -466,7 +466,7 @@ fn hex(b: &[u8]) -> String {
 }
 
 /// A short name for files: letters, digits and `._-`.
-fn slug(s: &str) -> String {
+pub(crate) fn slug(s: &str) -> String {
     let t: String = s
         .chars()
         .map(|c| {
@@ -538,14 +538,16 @@ fn run_logged(mut cmd: Command, log: &Path, what: &str) -> Result<(), String> {
 }
 
 /// Builds each version's image once, through the image cache.
-struct Maker<'a> {
-    ctx: &'a Ctx,
-    source: Source,
-    sets: Vec<(String, String)>,
-    build: Option<String>,
-    cache: PathBuf,
-    out: PathBuf,
-    made: BTreeMap<usize, Result<Made, String>>,
+pub(crate) struct Maker<'a> {
+    pub(crate) ctx: &'a Ctx,
+    pub(crate) source: Source,
+    pub(crate) sets: Vec<(String, String)>,
+    pub(crate) build: Option<String>,
+    pub(crate) cache: PathBuf,
+    pub(crate) out: PathBuf,
+    pub(crate) made: BTreeMap<usize, Result<Made, String>>,
+    /// The command its lines name (`hydo versions`, `hydo compare-versions`).
+    pub(crate) who: &'static str,
 }
 
 impl Maker<'_> {
@@ -564,7 +566,7 @@ impl Maker<'_> {
         )
     }
 
-    fn image(&mut self, i: usize, v: &Version) -> Result<Made, String> {
+    pub(crate) fn image(&mut self, i: usize, v: &Version) -> Result<Made, String> {
         if let Some(m) = self.made.get(&i) {
             return m.clone();
         }
@@ -731,7 +733,7 @@ impl Maker<'_> {
         sets: &[(String, String)],
     ) -> Result<Made, String> {
         if let Some(m) = self.cache_hit(lines) {
-            println!("hydo versions: {label}: the image from the image cache");
+            println!("{}: {label}: the image from the image cache", self.who);
             return Ok(m);
         }
         let k = Self::key_of(lines);
@@ -766,7 +768,8 @@ impl Maker<'_> {
         let mut cmd = cmd;
         cmd.current_dir(cwd);
         println!(
-            "hydo versions: {label}: hydo build {} {}",
+            "{}: {label}: hydo build {} {}",
+            self.who,
             manifest.display(),
             kv.iter()
                 .map(|s| format!("--set {s}"))
@@ -820,15 +823,15 @@ impl Maker<'_> {
 
 /// One replay's result.
 #[derive(Clone, Debug, Default)]
-struct Replay {
-    verdict: Option<String>,
-    fp: Option<String>,
-    keys: Vec<String>,
+pub(crate) struct Replay {
+    pub(crate) verdict: Option<String>,
+    pub(crate) fp: Option<String>,
+    pub(crate) keys: Vec<String>,
     /// Why there is no verdict.
-    why: Option<String>,
+    pub(crate) why: Option<String>,
 }
 
-fn replay(ctx: &Ctx, opts: &RunOpts, image: &Path, sched: &str, dir: &Path) -> Replay {
+pub(crate) fn replay(ctx: &Ctx, opts: &RunOpts, image: &Path, sched: &str, dir: &Path) -> Replay {
     let _ = std::fs::remove_dir_all(dir);
     let _ = std::fs::create_dir_all(dir);
     if let Some(p) = &ctx.config.pool.scripted_engine {
@@ -1218,7 +1221,7 @@ pub fn report_lines(doc: &VersionsDoc, file: &Path, md: bool) -> String {
 
 // ------------------------------------------------------------------ the command
 
-fn take_all(args: &mut Vec<String>, flag: &str) -> Vec<String> {
+pub(crate) fn take_all(args: &mut Vec<String>, flag: &str) -> Vec<String> {
     let mut out = Vec::new();
     while let Some(v) = take(args, flag) {
         out.push(v);
@@ -1226,7 +1229,7 @@ fn take_all(args: &mut Vec<String>, flag: &str) -> Vec<String> {
     out
 }
 
-fn take_flag(args: &mut Vec<String>, flag: &str) -> bool {
+pub(crate) fn take_flag(args: &mut Vec<String>, flag: &str) -> bool {
     match args.iter().position(|a| a == flag) {
         Some(i) => {
             args.remove(i);
@@ -1236,14 +1239,14 @@ fn take_flag(args: &mut Vec<String>, flag: &str) -> bool {
     }
 }
 
-fn kv(s: &str, flag: &str) -> (String, String) {
+pub(crate) fn kv(s: &str, flag: &str) -> (String, String) {
     match s.split_once('=') {
         Some((k, v)) if !k.is_empty() => (k.to_string(), v.to_string()),
         _ => die(&format!("{flag} {s}: expected KEY=VALUE")),
     }
 }
 
-fn split_list(s: &str) -> Vec<String> {
+pub(crate) fn split_list(s: &str) -> Vec<String> {
     s.split(',')
         .map(str::trim)
         .filter(|x| !x.is_empty())
@@ -1253,7 +1256,7 @@ fn split_list(s: &str) -> Vec<String> {
 
 /// The versions of `--git`: a list of revisions, or `A..B` (A, then every first-parent commit
 /// after it up to B).
-fn git_versions(top: &Path, spec: &str) -> Vec<Version> {
+pub(crate) fn git_versions(top: &Path, spec: &str) -> Vec<Version> {
     let resolve = |r: &str| {
         git(
             top,
@@ -1506,6 +1509,7 @@ pub fn cmd_versions(ctx: &Ctx, argv: &[String]) -> i32 {
         cache,
         out: out.clone(),
         made: BTreeMap::new(),
+        who: "hydo versions",
     };
 
     // a schedule with --image: one replay there names the finding

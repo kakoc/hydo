@@ -246,6 +246,47 @@ exact too, but another engine, vCPU count or turn length can give another verdic
 - The answer is `versions.json` next to the replays, and `hydo report <dir>` prints it with the
   report of the run or exploration.
 
+## Does a new version behave the same
+
+`hydo compare-versions` runs the same schedules on two versions of the system and says where the
+two runs differ. hydo repeats a run exactly, so a difference always comes from the versions.
+Use it before an upgrade, a dependency bump, or a refactor. Give the two versions as for `hydo
+versions`, A first, and the schedules in one of three forms:
+
+```sh
+hydo compare-versions "disk=none | run" "disk=cut | run C=12" --param fsync=always,everysec
+hydo compare-versions --regressions --git v1.4.0,v1.5.0 --build 'sh build.sh'
+hydo compare-versions --seeds 1-20 --images old=a-arm64.cpio.gz,new=b-arm64.cpio.gz
+```
+
+`--regressions` takes the saved regressions beside version A's image. `--seeds` draws schedules
+as `hydo explore` does, from version A's image, and takes the explorer's drawing options after
+it. A drawn schedule whose runs differ is shrunk to a smallest schedule that still differs in
+the same place.
+
+It compares three levels. `--levels` picks some of them:
+
+- `verdicts`: the verdict and each finding.
+- `observations`: what the client saw. These are the lines of `$HYDO_OUTCOMES`, the
+  acknowledged and failed lists, and the `HYDO-HIST` records without their guest times. The
+  lists compare as sets of lines, sorted by operation id.
+- `state`: what the system stored. These are the output of each service's `compare:` command
+  (`hydo guide manifest`, "State for comparisons") and what each check printed.
+
+A field that may differ, such as a generated id or a time, needs a rule. Then the rest must be
+equal:
+
+- `--ignore 'REGEX'` blanks each match; `--ignore 'REGEX=>TEXT'` writes TEXT instead.
+- `--ignore-json PATH` blanks a JSON field, such as `items.*.created_at`.
+- `hydo/compare.yaml` holds rules that every comparison of the project uses:
+  `ignore: [{regex: ..., as: ...}, {json: ...}]`.
+
+For each schedule the command prints the first difference: the workload steps, the record, what
+A had, and what B had. It prints the commands that run the schedule again on each side. The
+answer is `compare.json` in `--out` (default `hydo-out/compare`). `hydo report DIR` prints it,
+and `hydo report --html DIR` writes a page. The exit status is 0 when the versions agree, 1 when
+a schedule differs, and 2 when a side could not run.
+
 ## Performance tests
 
 A run under hydo is deterministic, so the work that a workload does is the same number in every

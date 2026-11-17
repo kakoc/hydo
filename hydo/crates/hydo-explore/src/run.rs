@@ -260,6 +260,49 @@ pub fn main_with(argv: &[String], env: &Env) -> i32 {
     run(cx)
 }
 
+/// Schedules drawn as `hydo explore` draws them, and the shrinker's candidates of a schedule,
+/// without running any (Milestone 298: `hydo compare-versions --seeds` runs each schedule on two
+/// versions of the system and shrinks a difference instead of a failure). It reads the image's
+/// fault space as the explorer does, from the explorer's command line (`--image` and the drawing
+/// options); options that need a probe run (`--protocol-cover`, `--cf-range auto`) draw as if
+/// the probe had found nothing.
+pub struct Drawer {
+    cx: Cx,
+}
+
+impl Drawer {
+    /// The explorer's command line; Err for an option it does not take. A manifest it cannot
+    /// read stops the program, as `hydo explore` does.
+    pub fn new(argv: &[String], env: &Env) -> Result<Drawer, String> {
+        let a = args::parse(argv)?;
+        Ok(Drawer { cx: setup(a, env) })
+    }
+
+    /// The schedule of one seed.
+    pub fn schedule(&self, seed: u64) -> String {
+        let s = self
+            .cx
+            .ex
+            .compose_seed(&self.cx.a.strategy, seed, self.cx.a.durable_only);
+        self.cx.render(&s)
+    }
+
+    /// The shrinker's candidates of a schedule, simplest first; empty for a schedule the
+    /// explorer's reader does not read.
+    pub fn candidates(&self, schedule: &str) -> Vec<String> {
+        match self.cx.ex.parse(schedule) {
+            Ok(s) => self
+                .cx
+                .ex
+                .candidates(&s, None)
+                .iter()
+                .map(|c| self.cx.render(c))
+                .collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+}
+
 fn setup(a: Args, env: &Env) -> Cx {
     let mut known = errlog::load(a.known_errors.as_deref())
         .unwrap_or_else(|e| die(&format!("hydo explore: --known-errors: {e}")));

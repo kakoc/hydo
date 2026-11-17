@@ -519,6 +519,7 @@ dependencies = [
  "hydo-results",
  "hydo-schedule",
  "libc",
+ "regex",
  "serde_json",
  "sha2",
  "tar",

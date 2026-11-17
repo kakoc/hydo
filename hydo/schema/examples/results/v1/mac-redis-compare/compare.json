@@ -1,0 +1,107 @@
+{
+  "v": 1,
+  "type": "compare",
+  "hydo_version": "0.3.4",
+  "epoch": 4,
+  "engine": {
+    "backend": "hvm"
+  },
+  "source": "param fsync",
+  "a": {
+    "version": "always",
+    "image_sha256": "d43e73fb355df07bca29f9f784ab869afe55d2c22025b8b54266215ff81de6a8",
+    "image_reused": false
+  },
+  "b": {
+    "version": "everysec",
+    "image_sha256": "443e5a97187d29b9c8b3d8def41d2db8cdbdc7fe423a4d9068bb477cca9d70e3",
+    "image_reused": false
+  },
+  "levels": [
+    "verdicts",
+    "observations",
+    "state"
+  ],
+  "normalize": [],
+  "schedules": [
+    {
+      "schedule": "disk=none | run",
+      "from": "given",
+      "identical": true,
+      "verdict_a": "HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+      "verdict_b": "HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
+      "fingerprint_a": "29c457aa86c394e4",
+      "fingerprint_b": "014f83b5871aa48c",
+      "dir_a": "runs/001-a-always",
+      "dir_b": "runs/001-b-everysec",
+      "replay_a": "hydo run ~/.hydo/versions/images/vk1-b16ee8197a3b3c0c16c56aad5bed7cdb/explore-ob-redis-arm64.cpio.gz \"disk=none | run\"",
+      "replay_b": "hydo run ~/.hydo/versions/images/vk1-2ce08744b030a233033c84fd775fcf34/explore-ob-redis-arm64.cpio.gz \"disk=none | run\"",
+      "differences": [],
+      "compared": {
+        "observations": 80,
+        "state": 44,
+        "verdicts": 2
+      },
+      "summary": "no difference at the levels compared (126 records)"
+    },
+    {
+      "schedule": "disk=cut | run C=12",
+      "from": "given",
+      "identical": false,
+      "verdict_a": "HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)",
+      "verdict_b": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+      "fingerprint_a": "aaf8cd01a3d41f1b",
+      "fingerprint_b": "32f0a58c50495bc1",
+      "dir_a": "runs/002-a-always",
+      "dir_b": "runs/002-b-everysec",
+      "replay_a": "hydo run ~/.hydo/versions/images/vk1-b16ee8197a3b3c0c16c56aad5bed7cdb/explore-ob-redis-arm64.cpio.gz \"disk=cut | run C=12\"",
+      "replay_b": "hydo run ~/.hydo/versions/images/vk1-2ce08744b030a233033c84fd775fcf34/explore-ob-redis-arm64.cpio.gz \"disk=cut | run C=12\"",
+      "first": 0,
+      "differences": [
+        {
+          "level": "state",
+          "stream": "check redis.acked_writes_survive",
+          "conversation": "recovery",
+          "index": 0,
+          "a": "held: acked=12 all present",
+          "b": "failed: key k:0 lost",
+          "only_a": 1,
+          "only_b": 1
+        },
+        {
+          "level": "state",
+          "stream": "state redis",
+          "conversation": "recovery",
+          "index": 0,
+          "a": "k:0 v0",
+          "only_a": 12,
+          "only_b": 0
+        },
+        {
+          "level": "verdicts",
+          "stream": "verdict",
+          "index": 0,
+          "a": "ok",
+          "b": "violation redis.acked_writes_survive",
+          "only_a": 1,
+          "only_b": 1
+        },
+        {
+          "level": "verdicts",
+          "stream": "findings",
+          "index": 0,
+          "b": "assertion redis.acked_writes_survive: violation",
+          "only_a": 0,
+          "only_b": 2
+        }
+      ],
+      "compared": {
+        "observations": 48,
+        "state": 16,
+        "verdicts": 4
+      },
+      "summary": "the first difference: the check redis.acked_writes_survive printed `held: acked=12 all present` in A (always) and `failed: key k:0 lost` in B (everysec) in the recovery boot after the power cut"
+    }
+  ],
+  "summary": "always and everysec differ on 1 of 2 schedules"
+}

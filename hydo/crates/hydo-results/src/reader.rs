@@ -14,8 +14,8 @@
 //!    ignored; any other line that is not JSON is an error.
 
 use crate::v1::{
-    CiFindingEvent, CiLedger, CiRun, DiagnosisDoc, Diff, End, Exploration, Inspect, InspectError,
-    Run, Shrink, Start, Timeline, ValueHistory, VersionsDoc,
+    CiFindingEvent, CiLedger, CiRun, CompareDoc, DiagnosisDoc, Diff, End, Exploration, Inspect,
+    InspectError, Run, Shrink, Start, Timeline, ValueHistory, VersionsDoc,
 };
 use crate::{EVENTS, EXPLORATION_DOC, RUN_DOC};
 use serde_json::Value;
@@ -51,6 +51,8 @@ pub enum Record {
     CiLedger(Box<CiLedger>),
     /// `hydo inspect values` (added in Milestone 285).
     Values(Box<ValueHistory>),
+    /// `compare.json` (`hydo compare-versions`, added in Milestone 298).
+    Compare(Box<CompareDoc>),
 }
 
 /// A record the reader skipped (rule 3).
@@ -157,6 +159,7 @@ pub fn record(v: Value) -> Result<Option<Record>, String> {
         "finding-event" => Record::CiFindingEvent(de(v, &ty)?),
         "ci-ledger" => Record::CiLedger(de(v, &ty)?),
         "values" => Record::Values(de(v, &ty)?),
+        "compare" => Record::Compare(de(v, &ty)?),
         _ => return Ok(None),
     }))
 }

@@ -2681,6 +2681,175 @@ pub struct VersionsDoc {
     pub findings: Vec<Versions>,
 }
 
+// ------------------------------------------------------------------ compare
+
+tag!(CompareType, "compare");
+
+/// The values of [`CompareDifference::level`] hydo writes (`hydo compare-versions`).
+pub mod compare_level {
+    /// The verdicts and the findings of `result.json`.
+    pub const VERDICTS: &str = "verdicts";
+    /// What the workload's client saw: `$HYDO_OUTCOMES`, `$HYDO_ACKED` and the `HYDO-HIST`
+    /// records of the history and messages checks.
+    pub const OBSERVATIONS: &str = "observations";
+    /// What the system stored: the `HYDO-STATE` dumps of `services[].compare` and the output of
+    /// each check.
+    pub const STATE: &str = "state";
+}
+
+/// One version of a comparison (`hydo compare-versions`; added in Milestone 298).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CompareVersion {
+    /// The version as given: a manifest parameter's value, a git revision, or an image's name.
+    pub version: String,
+    /// A git revision's commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    /// SHA-256 of the version's image.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_sha256: Option<String>,
+    /// The image came from the image cache by its input key, not from a build.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_reused: Option<bool>,
+    /// Why the version has no image (it did not build).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<String>,
+}
+
+/// One place where the two versions' runs of one schedule differ (added in Milestone 298): the
+/// first record of one stream that is not the same in both runs, after the normalization rules.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CompareDifference {
+    /// See [`compare_level`].
+    pub level: String,
+    /// The stream: `verdict`, `findings`, `outcomes`, `acked`, `history <name> <process>`,
+    /// `state <service>` or `check <id>`.
+    pub stream: String,
+    /// The conversation it is in (`run`, `recovery`; absent for the verdicts).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<String>,
+    /// The record's position in its stream (0 for the first).
+    pub index: u64,
+    /// The workload steps the record belongs to in run A and in run B (`0..11`), when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_a: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_b: Option<String>,
+    /// The record in run A, as normalized. Absent: run A has no record there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub a: Option<String>,
+    /// The record in run B, as normalized. Absent: run B has no record there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub b: Option<String>,
+    /// The record before it, which both runs have.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<String>,
+    /// How many records of the stream run A has and run B does not, and the other way round
+    /// (counted as multisets).
+    pub only_a: u64,
+    pub only_b: u64,
+}
+
+/// One schedule run on both versions (added in Milestone 298).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CompareSchedule {
+    /// The schedule both versions ran.
+    pub schedule: String,
+    /// Where it came from: `given`, `regression <name>`, `seed-<n>`, or `shrunk from seed-<n>`.
+    pub from: String,
+    /// No difference at the levels compared. Absent: a side could not run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identical: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict_a: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict_b: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint_a: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint_b: Option<String>,
+    /// The run directories, relative to the directory of `compare.json`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir_a: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir_b: Option<String>,
+    /// The commands that run the schedule again on each version's image.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_a: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_b: Option<String>,
+    /// The first difference in the run's order (the observations by workload step, then the
+    /// stored state, then the verdicts): an index into `differences`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first: Option<u64>,
+    /// The first difference of every stream that differs.
+    #[serde(default)]
+    pub differences: Vec<CompareDifference>,
+    /// How many records of each level run A and run B had together.
+    #[serde(default)]
+    pub compared: BTreeMap<String, u64>,
+    /// The first difference in words, or why a side could not run.
+    pub summary: String,
+    /// The schedule this one was shrunk from (the search's minimal schedules).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shrunk_from: Option<String>,
+    /// Shrink candidates run (each on both versions).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shrink_runs: Option<u64>,
+    /// Why a side gave no run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<String>,
+}
+
+/// The search of `hydo compare-versions --seeds` (added in Milestone 298).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CompareSearch {
+    /// The seed range, as given (`1-20`).
+    pub seeds: String,
+    /// The explorer's options the schedules were drawn with.
+    #[serde(default)]
+    pub options: Vec<String>,
+    /// Schedules drawn and run on both versions.
+    pub drawn: u64,
+    /// Of them, the schedules whose runs differ.
+    pub differ: u64,
+    /// Of them, the schedules a side could not run.
+    pub cannot_run: u64,
+}
+
+/// `compare.json`: schedules run on two versions of the system, and what differs between the two
+/// runs of each (`hydo compare-versions`; added in Milestone 298). Both runs of a schedule repeat
+/// exactly, so every difference comes from the versions, not from noise.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CompareDoc {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: CompareType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydo_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
+    /// The engine every run ran on.
+    pub engine: Engine,
+    /// How the versions were made: `param <KEY>`, `git` or `images` (as `hydo versions`).
+    pub source: String,
+    pub a: CompareVersion,
+    pub b: CompareVersion,
+    /// The levels compared ([`compare_level`]).
+    #[serde(default)]
+    pub levels: Vec<String>,
+    /// The normalization rules, as given (`regex <pattern> => <text>`, `json <path>`).
+    #[serde(default)]
+    pub normalize: Vec<String>,
+    /// The search, when the schedules were drawn from seeds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search: Option<CompareSearch>,
+    #[serde(default)]
+    pub schedules: Vec<CompareSchedule>,
+    /// The answer in one sentence.
+    pub summary: String,
+}
+
 /// Any version-1 record or document (the schema's root).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
@@ -2705,6 +2874,8 @@ pub enum AnyV1 {
     CiLedger(Box<CiLedger>),
     /// `hydo inspect values` (added in Milestone 285).
     Values(Box<ValueHistory>),
+    /// `hydo compare-versions` (added in Milestone 298).
+    Compare(Box<CompareDoc>),
 }
 
 impl Run {

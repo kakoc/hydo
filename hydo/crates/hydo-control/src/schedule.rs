@@ -82,6 +82,9 @@ mod cost;
 pub mod perf;
 // Milestone 254: the screenshots of `browser:` copied out of the guest after the verdict
 pub mod screens;
+// Milestone 298: each service's stored state (`services[].compare`) after the verdict, for
+// `hydo compare-versions`
+pub mod dump;
 // Milestone 226: a timed pause of threads of the workload (P=workload/<name>[#<k>]@...)
 mod threads;
 // Milestone 238: upgrades, U=<target>@<at>[/<gap>][+<back>]:<version>
@@ -2311,6 +2314,8 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     // HYDO_COST: the counters once the verdict is decided, so the probe changes no verdict and
     // nothing before it (the workload's fingerprint stays the run's without the probe)
     cost::probe(fx, ctx, "final", false)?;
+    // compare: (Milestone 298): each service's stored state, after the verdict and the counters
+    dump::collect(fx, ctx)?;
     // browser: (Milestone 254): the pages' screenshots, last, so that their reads change
     // neither the verdict nor the counters
     screens::collect(fx, ctx)?;

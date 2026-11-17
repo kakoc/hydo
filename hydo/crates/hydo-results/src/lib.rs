@@ -17,6 +17,8 @@
 //!   schedule, and an [`End`].
 //! - `diff.json` (`hydo diff`, `hydo explain`; added in M165): one [`Diff`] document, where two
 //!   runs first differ. `diff.txt` next to it is its view for people.
+//! - `compare.json` (`hydo compare-versions`; added in Milestone 298): one [`CompareDoc`]
+//!   document, the schedules run on two versions of the system and what differs between them.
 //!
 //! Every record and document is a JSON object with `"v"` (the format version, 1) and `"type"`.
 //! Within a version only additions are made: new optional fields and new record types. A field
@@ -49,6 +51,20 @@ pub const DIFF_DOC: &str = "diff.json";
 /// `hydo versions`' document (added in Milestone 221): findings replayed on versions of the
 /// system.
 pub const VERSIONS_DOC: &str = "versions.json";
+/// `hydo compare-versions`' document (added in Milestone 298): schedules run on two versions of
+/// the system, and what differs between the two runs of each.
+pub const COMPARE_DOC: &str = "compare.json";
+
+/// The `compare.json` of a directory (`<dir>/compare.json`). None when there is none or it does
+/// not read.
+pub fn compare_of(dir: &std::path::Path) -> Option<(std::path::PathBuf, v1::CompareDoc)> {
+    let p = dir.join(COMPARE_DOC);
+    let text = std::fs::read_to_string(&p).ok()?;
+    match reader::document(&text).ok()? {
+        reader::Record::Compare(d) => Some((p, *d)),
+        _ => None,
+    }
+}
 
 /// The `versions.json` that belongs to a run or exploration directory: `<dir>/versions.json`, or
 /// `<dir>/versions/versions.json` (where `hydo versions <dir>` writes it). None when there is

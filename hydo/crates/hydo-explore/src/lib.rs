@@ -44,7 +44,7 @@ pub mod state;
 pub mod steer;
 pub mod turns;
 
-pub use run::{main_with, Env};
+pub use run::{main_with, Drawer, Env};
 
 /// The exit status when the explorer cannot go on (a bad option, an engine that does not start).
 /// 1 by default; `hydo ci run` sets 2, its status for a run that could not be completed, so that a

@@ -52,6 +52,10 @@
     {
       "description": "`hydo inspect values` (added in Milestone 285).",
       "$ref": "#/$defs/ValueHistory"
+    },
+    {
+      "description": "`hydo compare-versions` (added in Milestone 298).",
+      "$ref": "#/$defs/CompareDoc"
     }
   ],
   "$defs": {
@@ -6208,6 +6212,393 @@
         "keys",
         "stops",
         "broken"
+      ]
+    },
+    "CompareDoc": {
+      "description": "`compare.json`: schedules run on two versions of the system, and what differs between the two\nruns of each (`hydo compare-versions`; added in Milestone 298). Both runs of a schedule repeat\nexactly, so every difference comes from the versions, not from noise.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/CompareType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "engine": {
+          "description": "The engine every run ran on.",
+          "$ref": "#/$defs/Engine"
+        },
+        "source": {
+          "description": "How the versions were made: `param <KEY>`, `git` or `images` (as `hydo versions`).",
+          "type": "string"
+        },
+        "a": {
+          "$ref": "#/$defs/CompareVersion"
+        },
+        "b": {
+          "$ref": "#/$defs/CompareVersion"
+        },
+        "levels": {
+          "description": "The levels compared ([`compare_level`]).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "normalize": {
+          "description": "The normalization rules, as given (`regex <pattern> => <text>`, `json <path>`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "search": {
+          "description": "The search, when the schedules were drawn from seeds.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CompareSearch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schedules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CompareSchedule"
+          },
+          "default": []
+        },
+        "summary": {
+          "description": "The answer in one sentence.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "engine",
+        "source",
+        "a",
+        "b",
+        "summary"
+      ]
+    },
+    "CompareType": {
+      "description": "The `type` of this record: always `\"compare\"`.",
+      "type": "string",
+      "enum": [
+        "compare"
+      ]
+    },
+    "CompareVersion": {
+      "description": "One version of a comparison (`hydo compare-versions`; added in Milestone 298).",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The version as given: a manifest parameter's value, a git revision, or an image's name.",
+          "type": "string"
+        },
+        "commit": {
+          "description": "A git revision's commit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_sha256": {
+          "description": "SHA-256 of the version's image.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_reused": {
+          "description": "The image came from the image cache by its input key, not from a build.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "why": {
+          "description": "Why the version has no image (it did not build).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "version"
+      ]
+    },
+    "CompareSearch": {
+      "description": "The search of `hydo compare-versions --seeds` (added in Milestone 298).",
+      "type": "object",
+      "properties": {
+        "seeds": {
+          "description": "The seed range, as given (`1-20`).",
+          "type": "string"
+        },
+        "options": {
+          "description": "The explorer's options the schedules were drawn with.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "drawn": {
+          "description": "Schedules drawn and run on both versions.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "differ": {
+          "description": "Of them, the schedules whose runs differ.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cannot_run": {
+          "description": "Of them, the schedules a side could not run.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "seeds",
+        "drawn",
+        "differ",
+        "cannot_run"
+      ]
+    },
+    "CompareSchedule": {
+      "description": "One schedule run on both versions (added in Milestone 298).",
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "description": "The schedule both versions ran.",
+          "type": "string"
+        },
+        "from": {
+          "description": "Where it came from: `given`, `regression <name>`, `seed-<n>`, or `shrunk from seed-<n>`.",
+          "type": "string"
+        },
+        "identical": {
+          "description": "No difference at the levels compared. Absent: a side could not run.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "verdict_a": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict_b": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fingerprint_a": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fingerprint_b": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir_a": {
+          "description": "The run directories, relative to the directory of `compare.json`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir_b": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replay_a": {
+          "description": "The commands that run the schedule again on each version's image.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replay_b": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first": {
+          "description": "The first difference in the run's order (the observations by workload step, then the\nstored state, then the verdicts): an index into `differences`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "differences": {
+          "description": "The first difference of every stream that differs.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CompareDifference"
+          },
+          "default": []
+        },
+        "compared": {
+          "description": "How many records of each level run A and run B had together.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "summary": {
+          "description": "The first difference in words, or why a side could not run.",
+          "type": "string"
+        },
+        "shrunk_from": {
+          "description": "The schedule this one was shrunk from (the search's minimal schedules).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shrink_runs": {
+          "description": "Shrink candidates run (each on both versions).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "why": {
+          "description": "Why a side gave no run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "schedule",
+        "from",
+        "summary"
+      ]
+    },
+    "CompareDifference": {
+      "description": "One place where the two versions' runs of one schedule differ (added in Milestone 298): the\nfirst record of one stream that is not the same in both runs, after the normalization rules.",
+      "type": "object",
+      "properties": {
+        "level": {
+          "description": "See [`compare_level`].",
+          "type": "string"
+        },
+        "stream": {
+          "description": "The stream: `verdict`, `findings`, `outcomes`, `acked`, `history <name> <process>`,\n`state <service>` or `check <id>`.",
+          "type": "string"
+        },
+        "conversation": {
+          "description": "The conversation it is in (`run`, `recovery`; absent for the verdicts).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index": {
+          "description": "The record's position in its stream (0 for the first).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "step_a": {
+          "description": "The workload steps the record belongs to in run A and in run B (`0..11`), when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "step_b": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "a": {
+          "description": "The record in run A, as normalized. Absent: run A has no record there.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "b": {
+          "description": "The record in run B, as normalized. Absent: run B has no record there.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "before": {
+          "description": "The record before it, which both runs have.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "only_a": {
+          "description": "How many records of the stream run A has and run B does not, and the other way round\n(counted as multisets).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "only_b": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "level",
+        "stream",
+        "index",
+        "only_a",
+        "only_b"
       ]
     }
   }

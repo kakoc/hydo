@@ -57,9 +57,9 @@ at release, and after release. The tables below take the chart's techniques in i
 | Technique | What hydo has | Status | Evidence |
 |---|---|---|---|
 | Integration tests | The whole system runs in one VM. `hydo onboard`, `hydo compose`, and `hydo k8s` start the project from a repository, a Compose file, or Kubernetes manifests. | built | M84, M214, M229, M243; every example |
-| Tap compare | `hydo versions` replays one finding on several versions (M221). The same schedules on two versions, with their answers compared, is the idea [Differential testing between versions](#differential-testing-between-versions). | idea | M221; Milestone 298, being built |
+| Tap compare | `hydo compare-versions` runs the same schedules on two versions and compares the verdicts, the client's outcomes and histories, and the stored state (`services[].compare`). `hydo versions` replays one finding on several versions. | built | Milestone 298 (Redis settings, Formance Ledger v2.3.24 against v2.4.0); M221 |
 | Load tests | `parallel_driver_` commands run copies of a workload command at once, so races show without faults. Throughput is not hydo's job: time in the VM is virtual, and a guest has at most 8 GiB of RAM. | built for concurrency | M86; `formance-ledger`, `blnk`, `medusa` |
-| Shadowing | Not hydo's job. It sends copies of production traffic to a new version. The nearest idea is [Differential testing between versions](#differential-testing-between-versions). | not hydo's job | |
+| Shadowing | Not hydo's job. It sends copies of production traffic to a new version. The nearest command is `hydo compare-versions`, on schedules instead of traffic. | not hydo's job | |
 | Configuration tests | Build parameters (`params:`, `hydo build --set k=v`) give one image per setting, and `hydo versions --param` replays a finding per setting. The idea [Configuration as an explored dimension](#configuration-as-an-explored-dimension) draws the settings. | partly built | `dragonfly` (`--set takeover=yes`), `swupdate` (`--set dio=1`); Milestone 299, being built |
 | Soak tests | The idea [Soak tests with exact resource counts](#soak-tests-with-exact-resource-counts). `hydo run --memory` (M239) and `perf:` (M237) are its first parts. | idea | |
 
@@ -108,7 +108,6 @@ last line names the ideas that would answer more.
 
 Ideas that would answer more:
 
-- [Differential testing between versions](#differential-testing-between-versions);
 - [Configuration as an explored dimension](#configuration-as-an-explored-dimension);
 - [Soak tests with exact resource counts](#soak-tests-with-exact-resource-counts);
 - [Value properties over two values and over call order](#value-properties-over-two-values-and-over-call-order);
@@ -202,7 +201,7 @@ Ideas that would answer more:
 | Does the new version pass every saved regression? | `hydo repro --regressions` on an image of the new version, or `hydo ci run`. | built; M197 |
 | Is a known finding still there in the new version? | `hydo versions` with `--param`, `--git`, or `--images`. | built; M221 |
 | Does a rolling upgrade, or a rollback, keep the data? | `U=<target>@<at>:<version>`, with `+<back>` for a rollback. | built; `etcd-upgrade`, `surrealdb/upgrade` (M238, M277) |
-| Does the new version answer as the old one did? | Not answered today. | idea; [Differential testing between versions](#differential-testing-between-versions) |
+| Does the new version answer as the old one did? | `hydo compare-versions` runs the same schedules on both versions and names the first difference. | built; Milestone 298 |
 | Does each operation cost more after the bump? | `perf:` and `hydo perf compare`, exact on hvx. | partly built; M237 |
 | Did the bump change a default setting that matters? | Not answered today. | idea; [Configuration as an explored dimension](#configuration-as-an-explored-dimension) |
 
@@ -210,17 +209,6 @@ Ideas that would answer more:
 
 Each idea says what it is, why it matters, what it would need, and where it came from. An idea
 that a milestone builds moves into the tables of this page with its new status.
-
-### Differential testing between versions
-
-- **What it is.** The same schedules run on two versions of a system, and hydo compares what the
-  client saw, step by step.
-- **Why it matters.** A change that breaks no check can still change an answer. This is the
-  pre-production form of tap compare and shadowing.
-- **What it needs.** A record of each answer that two runs can align, and a rule for the answers
-  that may differ, such as generated ids.
-- **Where it came from.** The user's chart of testing stages; being built as Milestone 298
-  (tentative number), not in `main` on 2026-11-17.
 
 ### Configuration as an explored dimension
 

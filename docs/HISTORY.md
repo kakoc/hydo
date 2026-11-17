@@ -15333,3 +15333,137 @@ fmt --all --check`, workspace clippy with `-D warnings`, `cargo test` of hydo-hv
 hydo-engine, hydo-image and hydo-config, `equivalence::cli_matches_golden`, `agents_equivalence`
 and `docs::`, `public_content::`, `language::`, `test_tiers`, the explorer's `it` and
 `fake_engine`, the control corpus, `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.
+### Milestone 298 (tentative number) - DONE (differential testing between versions: `hydo compare-versions` runs the same schedules on two versions of a system and reports where the client's outcomes, the stored state, or the verdicts differ; the format-1 addition `services[].compare` prints a service's state after the verdict; normalization rules blank what may differ; `--seeds` draws schedules as `hydo explore` does and shrinks each difference; `compare.json` is a results addition; on the Mac engine Redis `always` against `everysec` differs on 4 of 10 drawn schedules, two builds of one source and `hz 1` against `hz 10` agree, and Formance Ledger v2.4.0 shows the account race that v2.3.24 does not; nothing recorded moved; 2026-11-17)
+
+**In short.** A team asks before every upgrade, dependency bump, or refactor whether the new
+version behaves as the old one did. hydo repeats a run exactly, so two runs of one schedule on
+two versions differ only where the versions differ. `hydo compare-versions` runs each schedule
+on version A and on version B and compares what the two runs did, at three levels. It names the
+first difference: the workload steps, the record, what A had and what B had, and the commands
+that run it again on each side. The design is `docs/design/differential.md`. The code is
+`hydo/crates/hydo-cli/src/compare.rs`, and the guide's section is `hydo guide workflow`, "Does a
+new version behave the same".
+
+**The command.**
+
+- The two versions come as `hydo versions` makes them (Milestone 221): `--param KEY=A,B`, `--git
+  A,B` with `--build`, or `--images A=IMG,B=IMG`. The code of `hydo versions` that builds the
+  images and replays a schedule is shared, with its image cache.
+- The schedules are given, or they are the saved regressions beside version A's image
+  (`--regressions`), or they are drawn from seeds (`--seeds A-B` and the explorer's drawing
+  options). The draw is the explorer's own: `hydo_explore::Drawer` reads the image's fault space
+  as `hydo explore` does and gives each seed's schedule and the shrinker's candidates.
+- A drawn schedule whose runs differ is shrunk with those candidates. A candidate is kept when its
+  runs still differ in the same level and stream. The shrink takes at most `--shrink-budget`
+  candidates (default 20), each run on both versions.
+- `--again DIR` compares the runs of an earlier comparison once more, with the rules and levels
+  given now, and runs no VM.
+- The exit status is 0 when the versions agree on every schedule, 1 when a schedule differs, and
+  2 when a side could not run.
+
+**What is compared.** Each level is optional (`--levels`):
+
+- `verdicts`: the verdict's kind and check, and each finding of `result.json` (kind, id and
+  status).
+- `observations`: the lines of `$HYDO_OUTCOMES`, read from the controller's `read` commands in the
+  control transcript and the agent's replies in the agent log; the acknowledged and failed lists;
+  and each `HYDO-HIST` record without its guest time, per history and process. The lists compare
+  as sets of lines, so that concurrent operations that finish in another order agree.
+- `state`: each line of a service's `compare:` output, and what each check printed (the
+  `HYDO-ASSERT` record's output and the `HYDO-CHECK-OUT` lines).
+
+The other streams keep their order and are aligned with `hydo diff`'s Myers alignment, so a key
+that only one version stored shows as that key. Normalization rules make the rest exact:
+`--ignore REGEX[=>TEXT]`, `--ignore-json PATH` (dotted, `*` for any key or index), and
+`hydo/compare.yaml` (`ignore:` and `levels:`).
+
+**The format-1 addition.** `services[].compare` names a command that prints the state a service
+stored. The host controller runs it after the verdict, in the boot that gives the verdict
+(`hydo-control`'s `schedule/dump.rs`). It sends each line as a console note, `HYDO-STATE
+<service>: <line>`, and then `HYDO-STATE-END <service> rc=<n> lines=<n> cut=<0|1>`, at most 64
+KiB per service. Without the key a run sends the same commands as before. MANIFEST.md has the
+section "State for comparisons", and `project-v1.json` gains the key.
+
+**The results addition.** `compare.json` (`hydo_results::CompareDoc`, type `compare`) has the two
+versions, the levels, the rules, the search, and one `CompareSchedule` per schedule. Each has its
+verdicts and fingerprints, its run directories, its replay commands, every stream's first
+difference (`CompareDifference`), the index of the first difference in the run's order, and a
+summary sentence. `hydo report DIR` prints it, and `hydo report --html DIR` writes a page with a
+card per schedule and a folded table of every difference. The example is
+`hydo/schema/examples/results/v1/mac-redis-compare/compare.json`, the Redis proof below with the
+image cache's path written as `~/.hydo/versions`.
+
+**The proof on the Mac engine.** This tree's `hydo`, `hydo-build` and `hydo-hvm` ran in a copy of
+the 0.3.4 Mac release, under the shared VM lock, one comparison at a time. The Redis example of
+the release got two parameters, `fsync` (`appendfsync`) and `hz`, and a `compare:` command that
+prints every key and its value by key number.
+
+```sh
+hydo compare-versions "disk=none | run" "disk=cut | run C=12" --param fsync=always,everysec
+```
+
+| schedule | A `always` | B `everysec` | answer |
+|---|---|---|---|
+| `disk=none \| run` | OK, `29c457aa86c394e4` | OK, `014f83b5871aa48c` | no difference (126 records) |
+| `disk=cut \| run C=12` | OK, `aaf8cd01a3d41f1b` | VIOLATION, `32f0a58c50495bc1` | the check printed `acked=12 all present` and `key k:0 lost`; only A stored the 12 keys |
+
+`--seeds 1-10` on the same pair drew 10 schedules, and 4 differ. Each was shrunk:
+
+| seed | minimal schedule | candidates | the first difference |
+|---|---|---|---|
+| 2 | `disk=none \| run K=redis@9+1 N=redis@17-18:loss,28%` | 17 | `17 unknown` in A, `17 ack` in B |
+| 7 | `disk=lying:1 \| run C=1` | 9 | the recovery's check held in A and lost `k:0` in B |
+| 8 | `disk=ioerr:1 \| run` | 5 | A ends `ERROR restart after the faults (redis)`; B acknowledged all 20 writes |
+| 9 | `disk=ioerr:1 \| run` | 6 | the same |
+
+Seeds 8 and 9 show a difference that no check of the example names. With `appendfsync always`
+one failed disk write stops Redis, and hydo cannot start it again. With `everysec` Redis
+acknowledges every write of the same schedule.
+
+The pairs that must agree:
+
+- Two builds of one manifest (`fsync=always`), each with its own `hydo build`, gave the same
+  bytes (`d43e73fb…`). `--images first=...,second=...` on `disk=none | run`, `disk=cut | run C=12`
+  and `disk=none | run K=redis@5+2`: no difference, and the same fingerprints (`29c457aa86c394e4`,
+  `aaf8cd01a3d41f1b`, `2db294d06b54d34d`).
+- `hz 1` against `hz 10` (`4de657b8…`) on those three schedules and `disk=ioerr:1
+  dseed=9e5651b0ef953636 | run`: no difference, with other fingerprints (`8de6b9a75787ff0b`,
+  `31193b877a028225`, `99f2039fca5c95ed`, `593555eb37e03266`). On seeds 1 to 10, 9 agree. Seed 2
+  shrank to `disk=none dseed=975835de1c9756ce | run K=redis@9+2 N=redis@17-20:loss,14%`. Under
+  packet loss the background rate moves which request runs past the client's 2 s deadline.
+
+**A refactor: Formance Ledger v2.3.24 against v2.4.0.** A copy of the example took the ledger's
+release as a parameter (`../bin/ledger-{{ledger}}-{{arch}}`). Each tag was built from GitHub's
+source archive for linux/arm64 with Go 1.27.3, and the client once.
+
+```sh
+hydo compare-versions "disk=none | run" --param ledger=v2.3.24,v2.4.0 --set arch=arm64 \
+  --manifest hydo/hydo.yaml
+```
+
+Both runs end `OK invariants=14 held` (`59b6f16b1e0b7479` and `469d4ba0936a06b1`), so no check
+sees a change. The comparison shows three:
+
+- Only v2.4.0 has the error kinds `027af89500d5` (PostgreSQL's `duplicate key value violates
+  unique constraint 'accounts_ledger'`) and the ledger's `upserting accounts` error. It is the race
+  of Milestone 215: pull request 1064 replaced `ON CONFLICT ... DO UPDATE` by a CTE in
+  `UpsertAccounts`. Two first uses of one account in two assets (`o3a` and `o3b`, account `s3`
+  in `U` and `E`) raced in step 0. The client's retry with its idempotency key was acknowledged,
+  so the outcomes hide it.
+- The acknowledgments of `c1` and `p2` came in the other order. The client's revert `r15` picks
+  its transaction by that order, so it reverted `p2` in v2.3.24 (refused) and `c1` in v2.4.0
+  (acknowledged).
+- So every check that counts transactions printed 52 in A and 53 in B.
+
+The first is a real change of behaviour that the checks do not see. The second is a weakness of
+the workload: an operation that chooses from the order of earlier answers chooses otherwise on
+another version.
+
+**Tests.** `tests/compare.rs` runs the command on the scripted engine: a version against itself,
+a change with and without a rule and with one level, and a search that shrinks each difference.
+Unit tests in `compare.rs` read the recorded Redis runs of `tests/fixtures/report/redis` and
+check the history records, the state dumps, the JSON rules and the lists. `schedule::dump`'s
+test checks the notes. `hydo-results`' examples test reads the new example. The CLI golden is
+re-recorded for the main help's new lines and the changed `hydo guide manifest`.
+
+**What is left.** Open item 149.

@@ -959,6 +959,13 @@ pub struct Service {
     /// show their last lines too.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logs: Option<Vec<String>>,
+    /// A command that prints the state the service stored, for comparisons of two versions of
+    /// the system (`hydo compare-versions`; Milestone 298): for example a SQL query or a scan of
+    /// every key. After the verdict, in the boot that gives it, hydo runs it and reports each line
+    /// of its output as `HYDO-STATE <service>: <line>`, at most 64 KiB (MANIFEST.md "State for
+    /// comparisons").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compare: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
     /// This service's error-log settings (needs the top-level errors:).
