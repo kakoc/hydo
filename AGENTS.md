@@ -731,10 +731,9 @@ crate through a one-line test module written after the function, and judges each
 contracts-ledger example it found the planted bug from the contract alone, and two gaps in the
 contract. On 12 functions of Qdrant's `common` crate nine held. `decompress_sequence` panics in
 the test profile on a header that `compress_sequence` never writes, on the path that decodes
-untrusted sparse vectors. The run inside the VM with faults is designed only. Design:
-`docs/design/function-fuzzing.md` (open item 139). An evaluation on six popular crates (M280,
-`docs/design/function-fuzzing-evaluation.md`) found that a new user would not keep using it
-yet. M282 fixed what it found, and the six crates ran again:
+untrusted sparse vectors. Design: `docs/design/function-fuzzing.md` (open item 139). An
+evaluation on six popular crates (M280, `docs/design/function-fuzzing-evaluation.md`) found that
+a new user would not keep using it yet. M282 fixed what it found, and the six crates ran again:
 - The harness builds on `#![no_std]` crates and reads results with private fields of other
   modules. A function whose harness does not build is reported, and the others run.
 - Each function ends with `held`, `broken`, `vacuous` or `too few inputs`; the last two exit 3
@@ -763,6 +762,25 @@ the harness failed on `#![forbid(unsafe_code)]` and lost the `[lints]` table. M2
   and `--show-inputs N` prints and keeps some of the inputs.
 
 strsim's `jaro` is judged on all 1,000 calls, and strsim and httparse build unchanged.
+
+**Function fuzzing inside the VM (M292, tentative number, a prototype on hvx).** `hydo fuzz --vm
+[CRATE_DIR]` makes the calls inside hydo's VM under faults: power cuts (`C=`, `cf=`), disk errors,
+clock steps, and pauses of the calls. It builds the harness as a static musl program and writes a
+project. The project's workload makes the calls, one step per batch, each call in an empty
+folder of its own on the data disk. hydo builds its image and runs it under drawn schedules.
+`// hydo: durable <check>` names a property function that runs after the run, in the recovery
+boot after a power cut. It runs once for each call that started, with the call's input and its
+result as an `Option` (`None`: the call did not return). A failure shrinks alone in a run of one
+step under the same faults, and `hydo run <image> '<schedule>'` replays it. The example
+`hydo/onboard/examples/fuzz-vm` has three functions:
+- redb 4.6.0's commits held under every power cut, also in the middle of a commit;
+- a save by rename with tempfile 3.27.0 and no sync lost its text at every cut after the call,
+  shrunk to `text = ""`;
+- the same save with two syncs held.
+
+The verdict: keep it for functions that write files and promise durability or atomicity. It is
+not yet worth it for time or concurrency. The evaluation is the section "Inside the virtual
+machine" of `docs/design/function-fuzzing.md`.
 
 **Value history (M285, tentative number; a first version on the Mac engine).** `// hydo: key
 <expr>` and `// hydo: record <expr> [as <name>] [at entry|at return]` next to a function record
@@ -1602,7 +1620,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       old, so every step back of more than an hour meets k3s's certificates.
 120. The hvx engine's host-call port (M245). In `hydo explore` on the NATS example's `blocks/`
     image each of the two workers logged `HVX_HC_PUT: No space left on device` 46 times, and the
-    runs still finished. `hydo run` of the same image logged none. Not investigated.
+    runs still finished. `hydo run` of the same image logged none. Not investigated. In M292 a
+    recovery boot of `hydo fuzz --vm` with about 90 KiB of carried ids logged it in a loop and
+    did not start; its first boot had finished the workload.
 
 121. What the Hatchet onboarding lacked (M250). A service without `image:` cannot have its own
     `env:`. YAML anchors in `hydo.yaml` stop `hydo build` with `unexpected indentation`. The import
@@ -1816,11 +1836,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A fault of a stepped instruction other than #DE, #UD, #GP and #PF leaves the trap flag in
       its frame. Only user mode is counted, so a loop in the guest kernel stays the observer's.
     - The k3s example is not in `hydo/onboard/recorded.json`.
-139. Function fuzzing (M275, M280, M282, M289). What is left:
-    - The run inside hydo's VM with faults is designed and not built
-      (docs/design/function-fuzzing.md, "Inside the virtual machine"). It needs the harness built
-      for the guest and a runner that makes an image per batch. Durability properties also need a
-      second phase in the recovery boot.
+139. Function fuzzing (M275, M280, M282, M289, M292). What is left:
+    - The run inside the VM (`hydo fuzz --vm`, M292) is a prototype that ran on hvx only, not on
+      the Mac engine or KVM. A kill has no target, and a clock step or a pause meets a call only
+      between steps. A `cf=` failure, or one whose input passes alone, is not shrunk. On hvx a
+      VM's console keeps 64 KiB, so long answers past 32 KiB per boot are not read. A recovery
+      boot with about 90 KiB of carried ids hung with `HVX_HC_PUT: No space left on device`
+      (as open item 120). A hung `hydo run` stops the fuzzing. Native `hydo fuzz` of a function
+      that writes files runs every call in the current folder.
     - Rust only, natively. Go, enumerations, `char` and maps are not fuzzed. Floating-point
       values are since M289, but a clause cannot name a NaN or an infinity, and the shrink of a
       floating-point value only halves it.
@@ -2691,6 +2714,10 @@ build machine, before 2026-10-13.
   missed, and its cost. A first table maps a type of system to the techniques that found most.
   The playbook and the skill (2.3.3) point to it, and the retro updates it. Nothing recorded
   moved
+- M292 (tentative number): `hydo fuzz --vm` fuzzes Rust functions inside hydo's VM under power
+  cuts, disk errors, clock steps and pauses, and `// hydo: durable <check>` checks each call
+  again after a power cut. On hvx redb's commits held, and a save by rename without a sync lost
+  its text at every cut. The verdict: keep it for code that writes files. Nothing recorded moved
 
 ## Where to look
 

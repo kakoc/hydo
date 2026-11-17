@@ -15,6 +15,7 @@ pub mod check;
 pub mod harness;
 pub mod rust;
 pub mod value;
+pub mod vm;
 
 use crate::lang::{self, Ast, SrcContract};
 use crate::plan::ClauseKind;
@@ -96,8 +97,53 @@ pub struct Skipped {
     pub why: String,
 }
 
-/// The contracted functions of a package's sources.
+/// The durability checks among `fns` (Milestone 292): a function that another's `durable` line
+/// names is called by `hydo fuzz --vm` after a power cut ([`vm`]), and is not fuzzed on its own.
+/// The functions, and the checks with the writer that names each.
+pub fn split_checks(fns: Vec<Fn>, sources: &[PathBuf]) -> (Vec<Fn>, Vec<(Fn, String)>) {
+    let lines = durable_lines(sources);
+    let (mut plain, mut checks) = (Vec::new(), Vec::new());
+    for f in fns {
+        match vm::checked_by(&f, &lines) {
+            Some(of) => checks.push((f, of)),
+            None => plain.push(f),
+        }
+    }
+    (plain, checks)
+}
+
+/// The contracted functions of a package's sources, the durability checks left out
+/// ([`split_checks`]).
 pub fn find(
+    pkg_dir: &Path,
+    sources: &[PathBuf],
+    pkg: &str,
+) -> (Vec<Fn>, Vec<Skipped>, Vec<String>) {
+    let (all, skipped, errors) = find_all(pkg_dir, sources, pkg);
+    (split_checks(all, sources).0, skipped, errors)
+}
+
+/// Every `durable` line of the sources: the writer's name and the check it names.
+pub(crate) fn durable_lines(sources: &[PathBuf]) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for f in sources {
+        let Ok(t) = std::fs::read_to_string(f) else {
+            continue;
+        };
+        if !t.contains("// hydo: durable") {
+            continue;
+        }
+        for c in lang::scan(&t).0 {
+            if let Some((d, _)) = c.durable {
+                out.push((c.function, d));
+            }
+        }
+    }
+    out
+}
+
+/// [`find`] with the durability checks among the functions.
+pub fn find_all(
     pkg_dir: &Path,
     sources: &[PathBuf],
     pkg: &str,
@@ -612,7 +658,7 @@ pub const MAX_HUNG: u32 = 3;
 pub const SHRINK_BUDGET: Duration = Duration::from_secs(60);
 
 impl Fn {
-    fn module(&self, k: usize) -> String {
+    pub(crate) fn module(&self, k: usize) -> String {
         format!("__hydo_fuzz_{k}")
     }
 
@@ -789,7 +835,7 @@ impl Fn {
 
     /// Generate the `k`-th input: the first is the smallest values, the second the largest,
     /// the others random.
-    fn generate(&self, rng: &mut Rng, k: usize) -> Vec<Val> {
+    pub(crate) fn generate(&self, rng: &mut Rng, k: usize) -> Vec<Val> {
         let mut g = value::Gen {
             rng,
             hints: &self.hints,
@@ -896,7 +942,7 @@ impl Fn {
     }
 
     /// Simpler inputs for the shrink, each one change away and each keeping `requires`.
-    fn candidates(&self, args: &[Val]) -> Vec<Vec<Val>> {
+    pub(crate) fn candidates(&self, args: &[Val]) -> Vec<Vec<Val>> {
         let mut out = Vec::new();
         for (i, p) in self.params.iter().enumerate() {
             for s in value::simpler(&args[i], &p.ty, &p.name, &self.hints) {
@@ -1729,7 +1775,7 @@ impl Opts {
 }
 
 /// Whether the function is the one a `--fn` names: by its name, or by the end of its full name.
-fn named(f: &Fn, want: &[String]) -> bool {
+pub(crate) fn named(f: &Fn, want: &[String]) -> bool {
     want.is_empty()
         || want.iter().any(|w| {
             let short = f.name.rsplit("::").next().unwrap_or(&f.name);
@@ -1770,9 +1816,9 @@ struct Placed {
 
 /// The contracted functions that the run builds harnesses for, and the others of the same
 /// target, which the copy keeps in use (Milestone 289).
-struct Set<'a> {
-    fns: &'a [Fn],
-    others: &'a [Fn],
+pub(crate) struct Set<'a> {
+    pub(crate) fns: &'a [Fn],
+    pub(crate) others: &'a [Fn],
 }
 
 impl Set<'_> {
@@ -1867,7 +1913,7 @@ fn blame(errors: &[cargo::Diag], placed: &[Placed], copy: &Path) -> BTreeMap<usi
 
 /// The test program (none when no harness built), the functions in it, and the functions left
 /// out with the compiler's first error.
-type Built = (Option<PathBuf>, Vec<usize>, Vec<(usize, String)>);
+pub(crate) type Built = (Option<PathBuf>, Vec<usize>, Vec<(usize, String)>);
 
 /// Build the copy with only the uses `keeps`, leaving out each use that an error names. The
 /// uses that stay, or the last build's failure.
@@ -1903,7 +1949,7 @@ fn build_bare(
 /// Build the harness of every function that builds. A function whose harness module does not
 /// compile is left out with the compiler's message, and the others are built again without it.
 #[allow(clippy::too_many_arguments)]
-fn build_each(
+pub(crate) fn build_each(
     cg: &cargo::Cargo,
     pkg: &cargo::Pkg,
     copy: &Path,
@@ -2037,14 +2083,24 @@ fn run_all(o: &Opts) -> Result<i32, String> {
     let lim = o.limits();
     let pkg = cargo::metadata(&cg, &o.dir)?;
     let sources = pkg.sources();
-    let (fns, mut skipped, errors) = find(&pkg.dir, &sources, &pkg.name);
+    let (fns, mut skipped, errors) = find_all(&pkg.dir, &sources, &pkg.name);
+    // Milestone 292: a durability check runs only inside the VM (`hydo fuzz --vm`)
+    let (fns, checks) = split_checks(fns, &sources);
     for e in &errors {
         eprintln!("hydo fuzz: {e}");
     }
     if !errors.is_empty() {
         return Ok(2);
     }
-    let (fns, others): (Vec<Fn>, Vec<Fn>) = fns.into_iter().partition(|f| named(f, &o.fns));
+    let (fns, mut others): (Vec<Fn>, Vec<Fn>) = fns.into_iter().partition(|f| named(f, &o.fns));
+    let checks: Vec<(String, PathBuf, u32, String)> = checks
+        .into_iter()
+        .map(|(c, of)| {
+            let row = (c.name.clone(), c.file.clone(), c.line, of);
+            others.push(c);
+            row
+        })
+        .collect();
     let no_contract = || {
         format!(
             "no function of {} has a `// hydo:` contract: write `// hydo: ensures <expr>` (and \
@@ -2071,6 +2127,13 @@ fn run_all(o: &Opts) -> Result<i32, String> {
                 s.file.display(),
                 s.line,
                 s.why
+            );
+        }
+        for (name, file, line, of) in &checks {
+            println!(
+                "{name} ({}:{line}): the durability check of `{of}`: `hydo fuzz --vm` calls it \
+                 after the run",
+                file.display()
             );
         }
         return Ok(0);
@@ -2357,7 +2420,7 @@ fn write_report(report: &Report, out: &Path, json: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn describe(f: &Fn, x: &Failure) -> String {
+pub(crate) fn describe(f: &Fn, x: &Failure) -> String {
     match x {
         Failure::Clause(i) => {
             let c = &f.contract.clauses[*i];

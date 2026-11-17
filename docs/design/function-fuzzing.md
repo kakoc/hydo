@@ -1,8 +1,8 @@
 # Function fuzzing from contracts (Milestone 275)
 
-Status: a prototype for Rust, natively, on this Mac (Milestone 275, tentative number). The run
-inside hydo's virtual machine with faults is designed, not built
-([Inside the virtual machine](#inside-the-virtual-machine)).
+Status: a prototype for Rust, natively, on this Mac (Milestone 275, tentative number). Since
+Milestone 292 (tentative number) the calls also run inside hydo's virtual machine under faults,
+a prototype on hvx ([Inside the virtual machine](#inside-the-virtual-machine)).
 
 A function contract is a set of `// hydo:` comments right before a function
 ([contracts.md](contracts.md)). During a whole-system run, hydo checks the contract at every call.
@@ -225,31 +225,184 @@ twice, and the replay of an input.
 
 ## Inside the virtual machine
 
-A function that touches the disk, the network, the clock, or threads gives other results under
-faults. The design runs the same harness inside hydo's VM, where the faults come from the
-schedule and the run is deterministic. This part is not built (open item 139).
+Status: a prototype since Milestone 292 (tentative number), run on hvx. The code is the module
+`fuzz::vm` of `hydo-contracts`, and the command is `hydo fuzz --vm`. `hydo guide fuzz` is the
+user's reference.
 
-1. **The harness for the guest.** `hydo fuzz --target <triple>` builds the copy's test program
-   for the guest: `aarch64-unknown-linux-musl` on the Mac engine and `x86_64-unknown-linux-musl`
-   on hvx and KVM, statically linked as the contracts-ledger example's `build.sh` does.
-2. **A runner instead of a process.** The driver hands each batch of inputs to a runner instead
-   of a process. The runner writes an image whose workload runs the harness on the batch.
-   The inputs file and the program go into `root.files`, and the folder that the function
-   writes in goes on the data disk. It then runs the image under one schedule. The harness writes its answers to the
-   console with a marker, and the runner reads them back from the run's console. Each shrink
-   step is one run of the image.
-3. **The faults.** The schedule names them as for any run: `disk=ioerr:<p>` for I/O errors,
-   `T=<step>:<seconds>` for a clock step between batches, `P=workload@<step>~<ms>:<ms>` for a
-   pause inside a call, and `pct=` or `tj=` for other thread interleavings. A finding is then a
-   pair of an input and a schedule, and both replay it.
-4. **What a call can observe.** A clause reads memory. A failed `fsync` that a function hides,
-   or a write that a power cut loses, shows only after a recovery boot. For those, the harness
-   needs a second phase that reads the state back in the recovery boot and judges a property
-   function there. That phase is designed here and not built.
+A function that writes files, syncs them, or reads the clock gives other results under faults.
+`hydo fuzz --vm` makes the calls inside hydo's VM, where a power cut, a disk error, a clock step
+or a pause can meet a call, and the run is deterministic. The generator, the harness, and
+the judge of `ensures` are the native ones. Only the place of the calls changes.
 
-The first targets are the error paths that native runs never reach. Examples are a read error
-taken for a missing file, a dropped `fsync` error, and a duration on the wall clock across a
-pause.
+### How a run goes
+
+1. **The harness for the guest.** hydo builds the copy's test program for
+   `x86_64-unknown-linux-musl` (hvx and KVM) or `aarch64-unknown-linux-musl` (the Mac engine),
+   statically linked. It sets `CARGO_BUILD_TARGET` and the target's `RUSTFLAGS` and calls the
+   native build.
+2. **A project of the calls.** hydo generates the inputs as natively and writes a project:
+   - `cases/<step>/calls` holds the inputs of one workload step, `--batch` calls (default 25);
+   - `run.sh` is the workload: each call is one process of the harness, in the folder
+     `/data/fuzz/<step>.<call>` on the data disk;
+   - `dirs.sh` makes those folders at provisioning, which ends with a `sync`, so that no power
+     cut takes away a folder that no function made;
+   - `check.sh` is the one invariant, the second phase below.
+
+   `hydo build` makes the image, which holds the program and the inputs.
+3. **The schedules.** `hydo run` runs the image under each schedule. The first has no fault, and
+   the others draw one kind each, in turn:
+   - a power cut: `disk=cut` with `C=<step>`, or with `cf=<k>` at the disk's k-th flush on hvx;
+   - disk errors: `disk=ioerr:<p>`, half of them with a `C=`;
+   - a clock step: `T=<step>:<seconds>`;
+   - a pause of the calls: `P=workload@<step>~<ms>:<ms>`.
+
+   `--schedule S` names the schedules instead.
+4. **The answers.** A call's answer is an id `<step>.<call>=<answer>` in `$HYDO_ACKED`. The run
+   reports that file at its end and at a power cut (`hydo-explore-acked:`) and carries it into
+   the recovery boot. The console is a poor channel: the hvx module keeps the first 64 KiB of a
+   VM's console (`HVX_CONSOLE_SZ`). An answer longer than 64 bytes goes to the console all the
+   same, at most 32 KiB of them per boot. The reason is that a recovery boot on hvx with about
+   90 KiB of carried ids did not start ("What is left").
+5. **The judgment.** The host decodes each answer and judges it with the function's `ensures`.
+
+### The second phase: `durable`
+
+`// hydo: durable <check>` names a property function of the crate. hydo calls it after the
+run: in the recovery boot after a power cut, and at the run's end without one. It calls the
+check once for each call that started, in that call's folder. The check's parameters are the
+function's, then the call's result as an `Option`:
+
+- `Some(result)` for a call that returned before the cut;
+- `None` for a call that did not return: the cut came during it, or it panicked or was stopped.
+  A result longer than 64 bytes on the wire also reaches the check as `None`.
+
+The check returns `bool`, or `Option<bool>` with `None` for a call it cannot judge, and carries
+`// hydo: ensures result`. Native `hydo fuzz` does not fuzz a check, and `--list` names it.
+
+`run.sh` lists a call in `$HYDO_ACKED` when it starts and again with its answer when it
+returns. A power cut reads the file before the recovery boot, so the check knows each call that
+started and each result. `check.sh` writes the checks' answers to the console, about 2,000
+bytes per line (`hydo-fuzz: checks`).
+
+The check is Rust code, not a clause. The language of the clauses reads values and calls no
+code of the program, and a durability property must read the state after the cut. The check
+takes the call's own input, so it knows what the call promised.
+
+### How a failure shrinks and replays
+
+A failure is a pair: the input, and the schedule under which the call or its check failed. The
+shrink first runs the input alone in an image of one step. A fault at or before the failing
+call's step moves to step 0, and one after it to step 1, the end of the one step
+(`one_step_schedule`). If the input alone fails the same way, the shrink tries simpler inputs,
+`--batch` of them per image and run, and keeps the first that fails the same way. It stops
+after `--shrink-runs` runs (default 16). If the input alone passes, the report names the whole
+run as the replay and says so. A schedule with `cf=` is not shrunk: the flushes count from the
+workload's start, so the call keeps its place in its run.
+
+The image holds the inputs and the schedule holds the faults, so `hydo run <image>
+'<schedule>'` repeats the failing run. hydo runs the replay once more and reports whether it
+gave the same fingerprint.
+
+### Proof
+
+The example is `hydo/onboard/examples/fuzz-vm`, three functions of one crate with their checks:
+
+- `commit_all` commits lists of keys as write transactions of redb 4.6.0, an embedded key-value
+  store, with its default durability. Its check says three things. Every commit that returned
+  `Ok` is in the database. The transaction after them is there whole or not at all. No later
+  one is there.
+- `save` saves a text with tempfile 3.27.0: it writes a temporary file and renames it over
+  `saved.txt`, and syncs nothing.
+- `save_synced` syncs the temporary file before the rename and the folder after it.
+
+redb is a popular embedded store, and its commits promise durability with an `fsync`. The save
+by rename is a common way to write a file in Rust, and its durability depends on two syncs that
+the code must make itself.
+
+The runs used the bare-metal machine's hvx, 200 inputs per function (600 calls in 24 steps),
+and 24 schedules per seed. Natively, `hydo fuzz` held every clause of the three functions.
+
+| Function | Seed 1 | Seed 2 |
+|---|---|---|
+| `commit_all` | held: 4,465 checks, 1,465 of them after a power cut | held: 4,569 checks, 1,169 of them after a power cut |
+| `save` | broken on 750 calls in 4 runs, first under `disk=cut \| run C=14`; shrunk to `text = ""` | broken on 750 calls in 4 runs, first under `disk=cut \| run C=14`; shrunk to `text = ""` |
+| `save_synced` | held: 3,675 checks, 675 of them after a power cut | held: 3,905 checks, 505 of them after a power cut |
+
+Five `cf=` cuts came in the middle of a call: four in a commit of `commit_all` (`cf=692` and
+`cf=236` of seed 1, `cf=1505` and `cf=913` of seed 2), and one in `save_synced` (`cf=3748`). Each
+check of the call that did not return found the database's transactions whole and in order, and
+the file whole or absent. Each seed took 452 seconds. This time includes the shrink and the replay. The replay of
+`save`'s smallest input gave its fingerprint again in both seeds (`dd2260cccca16aa8` and
+`11464c875d1a0163`).
+
+On the way, hydo reported three findings that came from the checks and from hydo, not from
+the crates. Each one is a lesson for a user:
+
+- A check opened redb's database, started a read, and dropped the database before reading. Every
+  call failed its check, also in the schedule without a fault. The report now says when a
+  failure came without a fault: the function or its check is wrong before any fault meets it.
+- Under `disk=ioerr`, ext4 aborted its journal at the first error. Each later open of the
+  database answered `EIO`, also after the disk's faults were off for the checks, and the check
+  counted that as a lost commit. A check that cannot read the state returns `None`.
+- `check.sh` compared the ids `0.1` and `0.10` with awk as numbers, which are equal. Nine
+  checks got another call's result. hydo's script compares them as text now.
+
+### The evaluation: would a Rust developer keep it
+
+The question was whether a developer would keep `hydo fuzz --vm` after the first runs, and for
+what. The evaluator wrote the example crate as a user would, ran it, and read the reports.
+
+**Time to the first useful run.** On hvx, about one minute from `hydo fuzz --vm` to the first
+report. The harness for the guest built in 5 to 9 seconds (35 seconds on a loaded machine),
+and the image in 4 to 5 seconds. A run of 600 calls took 10 to 16 seconds. 24 schedules with
+their shrinks took about 8 minutes. The missing syncs of `save` showed in the second schedule.
+
+**What it found.** One bug class, and the absence of another:
+
+- the save without a sync lost its text at every power cut after the call;
+- redb's commits and the synced save held under every power cut, also in the middle of a
+  commit (`cf=`), and redb's transactions were whole after each cut.
+
+Neither is new. Native fuzzing can find neither: its runs have no power cut.
+
+**The friction.**
+
+1. The check is a second function with a fixed signature. A wrong signature gets a message
+   that prints the signature hydo wants, which was enough to fix it.
+2. A function under test works in the current folder. A function that takes a path needs a
+   wrapper that passes `.`.
+3. A check is easy to get wrong in a way that looks like a durability bug. Two findings of the
+   first runs were bugs of the example's checks. The note on a failure without a fault, and the
+   shrink's note that the input passed alone, told them apart.
+4. Disk errors made the file system read-only at the first error, so each later call of that
+   run met the same error path. They tested how a function reports an error, and little else.
+5. Clock steps and pauses come between steps, never inside a call. No function of the example
+   read the clock, so they tested nothing here.
+6. On hvx a long answer, such as an error message with a path, is not read past 32 KiB per
+   boot. 212 of 600 answers of a run with disk errors were not read.
+
+**The verdict.** Keep it for one job: a function that writes files and promises durability or
+atomicity, such as a save routine, a log, or a commit to an embedded store. It finds the missing
+sync that native fuzzing cannot find, and each finding comes with a small input and a replay. It is not yet worth it for
+time or concurrency: faults meet a call only at power cuts and disk flushes, and each call is
+one process on one vCPU.
+
+### What is left
+
+The run with faults is a prototype (open item 139):
+
+- It ran on hvx only. The Mac engine and KVM did not run it.
+- A kill has no target, because the calls are the workload. A clock step or a pause meets a
+  call only between steps. Threads and several vCPUs were not tried.
+- A schedule with `cf=` is not shrunk, and a failure whose input passes alone is not shrunk.
+- The answers' channels are small on hvx: 64 KiB of console per VM, and a recovery boot with
+  about 90 KiB of carried ids hung with `HVX_HC_PUT: No space left on device` (open item
+  120). Long answers are dropped past 32 KiB per boot, and their checks get `None`.
+- `hydo run` has no host timeout in `hydo fuzz --vm`: a run that hangs stops the fuzzing.
+- The schedules come from `hydo fuzz --vm`'s own draw, not from `hydo explore`, and their
+  `cf=` values are drawn without the run's count of flushes.
+- Native `hydo fuzz` of a function that writes files writes into the current folder, every call
+  into the same one.
 
 ## Limits
 

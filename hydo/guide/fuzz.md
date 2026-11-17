@@ -5,7 +5,8 @@ reads them and tests each such function on its own, natively, without an image. 
 inputs that keep `requires` and the `input` lines, calls the function on each, and judges each
 call by `ensures`. A broken clause, a panic, or a call that does not return is shrunk to a small
 input that replays. The same comments are checked at every call of a whole-system run (`hydo
-guide manifest`, section "Function contracts").
+guide manifest`, section "Function contracts"). `hydo fuzz --vm` makes the calls inside hydo's
+virtual machine under faults instead (section "Fuzz under faults, inside the VM").
 
 ## A worked example
 
@@ -156,6 +157,77 @@ hydo:   input 1 of 3: buf = b"0\r\n\r\n"
 hydo:   input 2 of 3: buf = b"1a;ex\n"
 hydo:   input 3 of 3: buf = b"ff \r\n"
 ```
+
+## Fuzz under faults, inside the VM
+
+A function that writes files, syncs them, or reads the clock can fail only under faults.
+`hydo fuzz --vm` makes each call inside hydo's virtual machine while hydo injects faults:
+
+- power cuts, with `disk=cut` and `C=<step>`, or `cf=<k>` at the disk's k-th flush on hvx;
+- disk errors (`disk=ioerr:<p>`);
+- clock steps (`T=<step>:<seconds>`);
+- pauses of the calls (`P=workload@<step>~<ms>:<ms>`).
+
+```sh
+hydo fuzz --vm path/to/crate
+```
+
+hydo builds the harness for the guest as a static musl program, writes a project whose workload
+makes the calls, builds its image, and runs it under each schedule. The first schedule has no
+fault; the others draw one fault each. Each call runs in an empty folder of its own on the data
+disk, so the function opens its files relative to the current folder. Its `ensures` lines judge
+it as natively. A failure that came also under the schedule without a fault gets a note: the
+function or its check is wrong before any fault meets it.
+
+The harness's target must be installed: `rustup target add x86_64-unknown-linux-musl` for hvx
+and KVM, or `aarch64-unknown-linux-musl` for the Mac engine. Since Milestone 292 it ran on hvx;
+the Mac engine and KVM have not run it yet.
+
+### What survives a power cut: `durable`
+
+`// hydo: durable <check>` names a property function that runs after the run. It runs in the
+recovery boot after a power cut, and at the end of a run without one. hydo calls it once for
+each call that started, in that call's folder:
+
+- its parameters are the function's parameters, then the call's result as an `Option`;
+- `None` means that the call did not return: the cut came in the middle of it, or it panicked;
+- it returns `bool`, or `Option<bool>` with `None` for a call that it cannot judge;
+- it carries `// hydo: ensures result`, and native `hydo fuzz` does not fuzz it on its own.
+
+```rust
+// hydo: input text len 1..=300
+// hydo: durable save_survives
+pub fn save(text: String) -> Result<(), String> { ... }
+
+/// After the run: a save that returned `Ok` left the whole text.
+// hydo: ensures result
+pub fn save_survives(text: String, done: Option<Result<(), String>>) -> Option<bool> {
+    match done {
+        Some(Ok(())) => Some(std::fs::read("saved.txt").is_ok_and(|b| b == text.as_bytes())),
+        _ => None,
+    }
+}
+```
+
+### The report
+
+Each failure names the schedule it came under, the input, and what the call or the check gave.
+hydo then shrinks the input in a run of one step under the same faults and prints the command
+that replays the smallest one:
+
+```text
+hydo: durability check broken: fuzz-vm::save: fuzz-vm::save_survives: ensures result (line 161) on 750 calls in 4 runs, first under `disk=cut dseed=b6a3ee203ddfdea3 | run C=14`
+hydo:   input: text = "A"
+hydo:   gave: result = Some(false)
+hydo:   smallest input (1 shrink step): text = ""
+hydo:   again: hydo run .../shrink1-2/hydo-out/explore-ob-fuzz-vm-shrink1-2-disk.img 'disk=cut dseed=b6a3ee203ddfdea3 | run C=1'   (step 0 call 0; gave the same fingerprint, dd2260cccca16aa8)
+```
+
+The image holds the inputs, and the schedule holds the faults, so `hydo run` of the two repeats
+the run exactly. `vm.json` in `--out DIR` (default `hydo-out/fuzz-vm`) holds the whole report.
+The options are in `hydo fuzz --vm --help`: `--schedules N` (default 12), `--schedule S` for one
+schedule, `--faults cut,disk,clock,pause`, `--cases N` (default 200) and `--batch N` (calls per
+workload step, default 25).
 
 ## Long runs
 

@@ -232,6 +232,10 @@ pub struct SrcContract {
     pub records: Vec<SrcRecord>,
     /// The properties of recorded values declared next to the function (Milestone 291).
     pub keeps: Vec<SrcKeep>,
+    /// `durable <check>` (Milestone 292, docs/design/function-fuzzing.md, "Inside the virtual
+    /// machine"): the property function that `hydo fuzz --vm` calls after a power cut for each
+    /// call of this function, with the call's input and its result; with its line.
+    pub durable: Option<(String, u32)>,
 }
 
 /// A mistake in a contract, with its line.
@@ -324,6 +328,7 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
         let mut with = Vec::new();
         let mut records: Vec<SrcRecord> = Vec::new();
         let mut keeps: Vec<SrcKeep> = Vec::new();
+        let mut durable: Option<(String, u32)> = None;
         while i < lines.len() {
             let l = lines[i].trim_start();
             if let Some(t) = contract_text(l) {
@@ -339,6 +344,11 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
                     }
                     Ok(Line::Record(r)) => records.push(r),
                     Ok(Line::Keep(k)) => keeps.push(k),
+                    Ok(Line::Durable(..)) if durable.is_some() => errs.push(LangError {
+                        line: i as u32 + 1,
+                        message: "a function has one `durable` line".into(),
+                    }),
+                    Ok(Line::Durable(n, l)) => durable = Some((n, l)),
                     Err(e) => errs.push(e),
                 }
             } else if !(l.starts_with("//") || l.starts_with("#[") || l.starts_with("#![")) {
@@ -355,6 +365,7 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
                 with,
                 records,
                 keeps,
+                durable,
             }),
             None => errs.push(LangError {
                 line: first as u32 + 1,
@@ -374,6 +385,8 @@ enum Line {
     With(Vec<(String, String)>),
     Record(SrcRecord),
     Keep(SrcKeep),
+    /// `durable <check>`: the check's name and the line.
+    Durable(String, u32),
 }
 
 /// `keep <name> [once set] [from <function>] [to <function>] [across boots]` (Milestone 291).
@@ -533,10 +546,23 @@ fn parse_line(t: &str, line: u32) -> Result<Line, LangError> {
             .map(Line::Record)
             .map_err(err),
         "keep" => parse_keep(rest, line).map(Line::Keep).map_err(err),
+        "durable" => {
+            let ok = !rest.is_empty()
+                && rest
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == ':');
+            if !ok {
+                return Err(err(format!(
+                    "`durable {rest}`: write `durable <function>`, the property function that \
+                     checks a call after a power cut"
+                )));
+            }
+            Ok(Line::Durable(rest.to_string(), line))
+        }
         _ => Err(err(format!(
             "`// hydo: {kw}`: a contract line is `requires <expr>`, `ensures <expr>`, \
              `input <path> ...`, `with <type parameter> = <type>`, `record <expr> [as <name>] \
-             [at entry|at return]`, `key <expr>` or `keep <name> ...`"
+             [at entry|at return]`, `key <expr>`, `keep <name> ...` or `durable <function>`"
         ))),
     }
 }

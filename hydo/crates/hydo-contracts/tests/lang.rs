@@ -159,3 +159,24 @@ fn what_the_first_version_refuses() {
     let (_, errs) = scan("// hydo: input n in 5..5\nfn f(n: u8) {}\n");
     assert!(errs[0].message.contains("empty"), "{errs:?}");
 }
+
+#[test]
+fn a_durable_line_names_the_check_of_the_recovery_boot() {
+    let src = "\
+// hydo: input text len 1..=300
+// hydo: durable save_survives
+pub fn save(text: String) -> Result<(), String> {
+    Ok(())
+}
+// hydo: durable a
+// hydo: durable b
+fn twice() {}
+// hydo: durable a b
+fn spaced() {}
+";
+    let (cs, errs) = scan(src);
+    assert_eq!(cs[0].durable, Some(("save_survives".to_string(), 2)));
+    assert_eq!(errs.len(), 2, "{errs:?}");
+    assert!(errs[0].message.contains("one `durable` line"), "{errs:?}");
+    assert!(errs[1].message.contains("durable <function>"), "{errs:?}");
+}

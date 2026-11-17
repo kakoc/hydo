@@ -1,0 +1,14 @@
+[package]
+name = "fuzz-vm"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "Function fuzzing inside hydo's virtual machine (Milestone 292): redb's commits and a file saved by rename, under power cuts, disk errors, clock steps and pauses"
+
+# its own workspace (not part of the repository root's hydo crate)
+[workspace]
+
+[dependencies]
+redb = "=4.6.0"
+tempfile = "=3.27.0"

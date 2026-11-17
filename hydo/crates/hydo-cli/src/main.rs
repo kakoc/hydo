@@ -262,6 +262,8 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         "fake" => hydo_compose::openapi::main(rest),
         // Milestone 275: one function at a time, inputs from its contract (`hydo fuzz --help`;
         // docs/design/function-fuzzing.md)
+        // Milestone 292: the calls inside the virtual machine, under faults (`hydo fuzz --vm --help`)
+        "fuzz" if rest.iter().any(|a| a == "--vm") => hydo_contracts::fuzz::vm::main(rest),
         "fuzz" => hydo_contracts::fuzz::main(rest),
         "build" => build::cmd_build(ctx, rest),
         "run" => runs::cmd_run(ctx, rest),
