@@ -284,6 +284,25 @@ pub fn parse_seeds(s: &str) -> Option<(u64, u64)> {
     (a >= 1 && a <= b).then_some((a, b))
 }
 
+/// `I/N` with 1 <= I <= N: a shard of a seed range (`hydo ci run --shard`, `hydo explore
+/// --shard`).
+pub fn parse_shard(s: &str) -> Option<(u64, u64)> {
+    let (i, n) = s.split_once('/')?;
+    let (i, n): (u64, u64) = (i.trim().parse().ok()?, n.trim().parse().ok()?);
+    (i >= 1 && i <= n).then_some((i, n))
+}
+
+/// The I-th (1-based) of N contiguous parts of `lo..=hi`, the first parts one seed longer when
+/// the range does not divide evenly; None when the part is empty (more shards than seeds).
+pub fn shard_of(lo: u64, hi: u64, i: u64, n: u64) -> Option<(u64, u64)> {
+    let total = hi.checked_sub(lo)? + 1;
+    let (base, rem) = (total / n, total % n);
+    let size = |k: u64| base + u64::from(k < rem);
+    let start = lo + (0..i - 1).map(size).sum::<u64>();
+    let len = size(i - 1);
+    (len > 0).then(|| (start, start + len - 1))
+}
+
 /// The JSON Schema of `hydo/ci.yaml`, generated from the types (committed as
 /// `hydo/schema/ci-v1.json`).
 pub fn schema() -> Value {

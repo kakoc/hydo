@@ -1,0 +1,338 @@
+# An exploration spread over GitHub's KVM runners (Milestone 304). Start it from the Actions tab,
+# with `gh workflow run explore.yml -f example=... -f seeds=... -f shards=...`, or with
+# ci/remote-explore.sh, which also waits for it and downloads the result. docs/CI.md and
+# `hydo guide ci` ("Explore on many runners") describe it.
+#
+# - build: one runner builds hydo from `ref` and the example's image once, over the newest
+#   Linux release of hydo/dist/releases.txt (its guest kernels and agent, sha256 checked). The
+#   example's `prepare` command runs first in the example's folder (a client build, the
+#   fetch-images.sh that copies the service images by digest).
+# - shard: N runners (up to 20) each run `hydo explore --backend kvm --shard I/N` on its part
+#   of the seed range, re-run and shrink their own failures, and upload their folder.
+# - merge: `hydo explore --merge` makes one exploration of the parts, without a VM: one
+#   exploration.json, events.jsonl and report.md, `hydo report`'s problem list and `hydo report
+#   --html`'s page. It runs when some shards failed too, and names the seeds no part explored.
+#
+# GitHub assigns each runner's CPU at random, AMD EPYC or Intel Xeon. KVM fingerprints differ
+# between the two vendors, so each part re-runs and shrinks its failures on its own runner, and
+# the merge compares only verdicts and signatures across parts. Each part's CPU is in the merged
+# exploration.json (`shards`) and in parts/<n>/host.txt.
+#
+# The workflow reads the repository, downloads the release from this repository and the
+# example's own inputs, and writes nothing back. Every input reaches the shell through the
+# environment, never through an expression in a script.
+name: explore
+run-name: "explore ${{ inputs.example }} ${{ inputs.seeds }} in ${{ inputs.shards }} shards ${{ inputs.id }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      example:
+        description: "The example's folder in the repository, for example hydo/onboard/examples/redis"
+        required: true
+      manifest:
+        description: "The manifest, relative to the example's folder (hydo.yaml, hydo/hydo.yaml)"
+        default: hydo.yaml
+      set:
+        description: "Build parameters, as KEY=VALUE words (each becomes --set KEY=VALUE)"
+        default: ""
+      seeds:
+        description: "The seed range, lo-hi"
+        default: "1-40"
+      shards:
+        description: "The number of shards, 1 to 20"
+        default: "8"
+      explore:
+        description: "Options of hydo explore (--strategy swarm --new-faults ...)"
+        default: ""
+      ref:
+        description: "The git ref to build from (empty: this workflow's commit)"
+        default: ""
+      vcpus:
+        description: "--vcpus N for the KVM engine (empty: one vCPU)"
+        default: ""
+      prepare:
+        description: "A shell command run in the example's folder before the build (sh build.sh && sh hydo/fetch-images.sh x86_64)"
+        default: ""
+      id:
+        description: "A label for the run's name and its artifacts' names (letters, digits, . _ -)"
+        default: ""
+  workflow_call:
+    inputs:
+      example: {type: string, required: true}
+      manifest: {type: string, default: hydo.yaml}
+      set: {type: string, default: ""}
+      seeds: {type: string, default: "1-40"}
+      shards: {type: string, default: "8"}
+      explore: {type: string, default: ""}
+      ref: {type: string, default: ""}
+      vcpus: {type: string, default: ""}
+      prepare: {type: string, default: ""}
+      id: {type: string, default: ""}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: never
+  EXAMPLE: ${{ inputs.example }}
+  MANIFEST: ${{ inputs.manifest }}
+  SET: ${{ inputs.set }}
+  SEEDS: ${{ inputs.seeds }}
+  SHARDS: ${{ inputs.shards }}
+  EXPLORE: ${{ inputs.explore }}
+  VCPUS: ${{ inputs.vcpus }}
+  PREPARE: ${{ inputs.prepare }}
+  # the artifacts' names: explore-<id>-build, explore-<id>-part-<i>, explore-<id>-merged
+  ART: explore-${{ inputs.id || 'run' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      image: ${{ steps.image.outputs.image }}
+      release: ${{ steps.release.outputs.version }}
+      release_sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - name: Check the inputs
+        id: plan
+        env:
+          ID: ${{ inputs.id }}
+        run: |
+          bad() { echo "::error::$*"; exit 1; }
+          case "$SHARDS" in ''|*[!0-9]*) bad "shards: a number from 1 to 20 (got '$SHARDS')";; esac
+          { [ "$SHARDS" -ge 1 ] && [ "$SHARDS" -le 20 ]; } || bad "shards: a number from 1 to 20 (got $SHARDS)"
+          echo "$SEEDS" | grep -Eq '^[0-9]+-[0-9]+$' || bad "seeds: lo-hi (got '$SEEDS')"
+          lo=${SEEDS%-*}; hi=${SEEDS#*-}
+          { [ "$lo" -ge 1 ] && [ "$hi" -ge "$lo" ]; } || bad "seeds: 1 <= lo <= hi (got $SEEDS)"
+          [ $((hi - lo + 1)) -ge "$SHARDS" ] || bad "seeds: $SEEDS has fewer than $SHARDS seeds"
+          for p in "$EXAMPLE" "$MANIFEST"; do
+            echo "$p" | grep -Eq '^[A-Za-z0-9._/-]+$' || bad "a path of letters, digits and . _ / - only (got '$p')"
+            case "$p" in /*|*..*) bad "a path inside the repository (got '$p')";; esac
+          done
+          echo "$SET" | grep -Eq '^[A-Za-z0-9_.=,:/+ -]*$' || bad "set: KEY=VALUE words (got '$SET')"
+          echo "$EXPLORE" | grep -Eq '^[A-Za-z0-9_.=,:/+@ -]*$' || bad "explore: options without quotes or shell characters (got '$EXPLORE')"
+          case " $EXPLORE " in *" --seeds"*|*" --shard"*|*" --out"*|*" --image"*|*" --backend"*|*" --merge"*) bad "explore: the workflow sets --seeds, --shard, --out, --image and --backend";; esac
+          echo "$VCPUS" | grep -Eq '^[0-9]*$' || bad "vcpus: a number (got '$VCPUS')"
+          echo "$ID" | grep -Eq '^[A-Za-z0-9._-]*$' || bad "id: letters, digits and . _ - (got '$ID')"
+          echo "shards=[$(seq -s, 1 "$SHARDS")]" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Room on the disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          sudo mkdir -p /mnt/w && sudo chown "$(id -u):$(id -g)" /mnt/w
+          [ -d "$EXAMPLE" ] || { echo "::error::$EXAMPLE is not a folder at $(git rev-parse --short HEAD)"; exit 1; }
+          df -h / /mnt
+      - name: Build hydo (rust-toolchain.toml's Rust)
+        run: |
+          rustup toolchain install
+          cargo build --release --locked -p hydo -p hydo-kvm -p hydo-build
+          mkdir -p /mnt/w/up/bin
+          cp target/release/hydo target/release/hydo-kvm target/release/hydo-build /mnt/w/up/bin/
+          git rev-parse HEAD > /mnt/w/up/commit.txt
+          /mnt/w/up/bin/hydo --version | tee /mnt/w/up/version.txt
+      - name: The newest Linux release, with this commit's programs
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # the newest Linux archive of the release index: its guest files (kernels, agent)
+          read -r _ ver _ sha name <<< "$(awk '$1 == "archive" && $3 == "linux"' hydo/dist/releases.txt | tail -1)"
+          echo "release $ver ($name, $sha)"
+          gh release download "v$ver" -R "$GITHUB_REPOSITORY" -p "$name" -D "$RUNNER_TEMP"
+          echo "$sha  $RUNNER_TEMP/$name" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/$name" -C /mnt/w
+          REL=/mnt/w/hydo-linux-$ver
+          # the release's own hydo checks and sets up the release; then this commit's programs
+          "$REL/bin/hydo" setup > /mnt/w/setup.txt 2>&1 || { tail -20 /mnt/w/setup.txt; exit 1; }
+          cp -f /mnt/w/up/bin/* "$REL/bin/"
+          # the guest kernels this commit pins, against the release's
+          for f in "$REL"/guest/bzImage-kvm*; do
+            b=$(basename "$f")
+            want=$(grep -A3 "file: \"$b\"" hydo/crates/hydo-kvm/src/kernel.rs | sed -n 's/.*sha256: "\([0-9a-f]*\)".*/\1/p' | head -1)
+            got=$(sha256sum "$f" | cut -d' ' -f1)
+            if [ -n "$want" ] && [ "$want" != "$got" ]; then
+              echo "::error::$b: the release has $got, this commit pins $want"; exit 1
+            fi
+          done
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "REL=$REL" >> "$GITHUB_ENV"
+          echo "$REL/bin" >> "$GITHUB_PATH"
+      - name: Prepare the example and build its image
+        id: image
+        run: |
+          # an example whose manifest names files of ~/hydo/build (the Redis example) builds from
+          # the release's copy, which has those files
+          name=$(basename "$EXAMPLE")
+          if grep -q '[~]/hydo/build/' "$EXAMPLE/$MANIFEST" && [ -d "$REL/examples/$name" ]; then
+            src=$REL/examples/$name
+          else
+            src=$EXAMPLE
+          fi
+          W=/mnt/w/ex/$name
+          mkdir -p /mnt/w/ex && cp -R "$src" "$W"
+          if [ -n "$PREPARE" ]; then
+            (cd "$W" && timeout 3600 bash -c "$PREPARE") > /mnt/w/prepare.txt 2>&1 || { tail -40 /mnt/w/prepare.txt; exit 1; }
+            tail -5 /mnt/w/prepare.txt
+          fi
+          sets=()
+          for kv in $SET; do sets+=(--set "$kv"); done
+          M=$W/$MANIFEST
+          mkdir -p /mnt/w/img /mnt/w/up/img
+          (cd "$(dirname "$M")" && umask 022 && timeout 5400 hydo build "$(basename "$M")" "${sets[@]}" --out /mnt/w/img) > /mnt/w/build.txt 2>&1 \
+            || { tail -40 /mnt/w/build.txt; exit 1; }
+          tail -3 /mnt/w/build.txt
+          img=
+          for f in /mnt/w/img/*-disk.img; do [ -f "$f" ] && img=$(basename "$f") && break; done
+          [ -n "$img" ] || { echo "::error::hydo build wrote no image"; exit 1; }
+          # the image and the files beside it that runs read (its build record, its saved
+          # regressions, its contracts' plan), not the build's root trees
+          for f in "/mnt/w/img/${img%.img}"*; do [ -f "$f" ] && cp "$f" /mnt/w/up/img/; done
+          sha256sum "/mnt/w/up/img/$img" | tee /mnt/w/up/image.txt
+          ls -l /mnt/w/up/img
+          echo "image=$img" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.ART }}-build
+          path: /mnt/w/up/
+          compression-level: 1
+          retention-days: 7
+
+  shard:
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.build.outputs.shards) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      I: ${{ matrix.shard }}
+      IMAGE: ${{ needs.build.outputs.image }}
+      REL_VERSION: ${{ needs.build.outputs.release }}
+      REL_SHA: ${{ needs.build.outputs.release_sha }}
+    steps:
+      - name: Give the runner's user /dev/kvm, and room on the disk
+        run: |
+          if [ ! -w /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+              | sudo tee /etc/udev/rules.d/99-hydo-kvm.rules > /dev/null
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+            sudo udevadm settle --timeout=10 || true
+            for _ in 1 2 3 4 5 6 7 8 9 10; do [ -w /dev/kvm ] && break; sleep 1; done
+          fi
+          test -w /dev/kvm
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          sudo mkdir -p /mnt/w && sudo chown "$(id -u):$(id -g)" /mnt/w
+          mkdir -p /mnt/w/part
+          { grep -m1 'vendor_id' /proc/cpuinfo; grep -m1 'model name' /proc/cpuinfo; uname -r; echo "cpus $(nproc)"; free -g | sed -n 2p; } | tee /mnt/w/host.txt
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ env.ART }}-build
+          path: /mnt/w/up
+      - name: The release, with the build's programs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name=hydo-linux-$REL_VERSION.tar.gz
+          gh release download "v$REL_VERSION" -R "$GITHUB_REPOSITORY" -p "$name" -D "$RUNNER_TEMP"
+          echo "$REL_SHA  $RUNNER_TEMP/$name" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/$name" -C /mnt/w
+          REL=/mnt/w/hydo-linux-$REL_VERSION
+          chmod +x /mnt/w/up/bin/*
+          # the release's own hydo checks and sets up the release; then this commit's programs
+          "$REL/bin/hydo" setup > /mnt/w/setup.txt 2>&1 || { tail -20 /mnt/w/setup.txt; exit 1; }
+          cp -f /mnt/w/up/bin/* "$REL/bin/"
+          echo "$REL/bin" >> "$GITHUB_PATH"
+      - name: hydo explore --backend kvm --shard ${{ matrix.shard }}/${{ inputs.shards }}
+        run: |
+          set -- --backend kvm --image "/mnt/w/up/img/$IMAGE" --seeds "$SEEDS" --shard "$I/$SHARDS" --out /mnt/w/part
+          [ -z "$VCPUS" ] || set -- "$@" --vcpus "$VCPUS"
+          # a time limit cuts the exploration at a seed boundary, so the part still writes its
+          # documents and re-runs and shrinks what it found before the job's own limit
+          case " $EXPLORE " in *" --time-limit"*) ;; *) set -- "$@" --time-limit 15000;; esac
+          start=$(date +%s)
+          set +e
+          # shellcheck disable=SC2086 # the options are words
+          timeout 20400 hydo explore "$@" $EXPLORE --json > /mnt/w/explore.txt 2>&1
+          rc=$?
+          set -e
+          echo "exit $rc after $(( $(date +%s) - start )) s" | tee -a /mnt/w/host.txt
+          tail -5 /mnt/w/explore.txt
+          cp /mnt/w/host.txt /mnt/w/explore.txt /mnt/w/part/
+          [ "$rc" = 0 ]
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: ${{ env.ART }}-part-${{ matrix.shard }}
+          path: /mnt/w/part/
+          compression-level: 1
+          retention-days: 7
+
+  merge:
+    needs: [build, shard]
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Room on the disk
+        run: sudo mkdir -p /mnt/w && sudo chown "$(id -u):$(id -g)" /mnt/w
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ env.ART }}-build
+          path: /mnt/w/up
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ${{ env.ART }}-part-*
+          path: /mnt/w/parts
+      - name: hydo explore --merge, hydo report, hydo report --html
+        run: |
+          H=/mnt/w/up/bin/hydo
+          chmod +x "$H"
+          dirs=()
+          # one artifact is unpacked into the path itself, several each into a folder of its own
+          [ ! -f /mnt/w/parts/exploration.json ] || dirs+=(/mnt/w/parts)
+          for d in /mnt/w/parts/*/; do
+            [ "${#dirs[@]}" = 0 ] || [ "${dirs[0]}" != /mnt/w/parts ] || break
+            if [ -f "$d/exploration.json" ]; then dirs+=("${d%/}"); else echo "::warning::$(basename "$d") wrote no exploration.json"; fi
+          done
+          [ "${#dirs[@]}" -gt 0 ] || { echo "::error::no shard finished"; exit 1; }
+          M=/mnt/w/merged
+          "$H" explore --merge "${dirs[@]}" --out "$M" --json 2>&1 | tee /mnt/w/merge.txt
+          "$H" report --html "$M" -o "$M/report.html"
+          "$H" report "$M" > "$M/summary.txt" 2>&1 || true
+          {
+            echo "example=$EXAMPLE manifest=$MANIFEST set=$SET"
+            echo "seeds=$SEEDS shards=$SHARDS explore=$EXPLORE vcpus=$VCPUS"
+            echo "commit=$(cat /mnt/w/up/commit.txt) $(cat /mnt/w/up/version.txt)"
+            echo "image=$(cat /mnt/w/up/image.txt)"
+            echo "parts merged: ${#dirs[@]} of $SHARDS"
+          } > "$M/inputs.txt"
+          {
+            echo '## Exploration'
+            echo
+            echo '```'
+            cat "$M/inputs.txt"
+            tail -1 /mnt/w/merge.txt
+            echo '```'
+            echo
+            echo '```'
+            head -200 "$M/summary.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.ART }}-merged
+          path: /mnt/w/merged/
+          compression-level: 6
+          retention-days: 30

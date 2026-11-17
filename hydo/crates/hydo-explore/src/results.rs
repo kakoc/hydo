@@ -955,46 +955,65 @@ impl Table {
 }
 
 fn verdict(p: &P) -> &'static str {
-    match p.ty.as_slice() {
-        b"always" => {
-            if p.fails > 0 {
+    property_verdict(&String::from_utf8_lossy(&p.ty), p.passes, p.fails)
+}
+
+/// The property table's verdict of a property of one assertion type over its evaluations that
+/// held and that did not (also how `hydo explore --merge` judges a property of several parts).
+pub fn property_verdict(assertion: &str, passes: u64, fails: u64) -> &'static str {
+    match assertion {
+        "always" => {
+            if fails > 0 {
                 "FAIL"
-            } else if p.passes > 0 {
+            } else if passes > 0 {
                 "PASS"
             } else {
                 "FAIL (never evaluated)"
             }
         }
-        b"always_or_unreachable" => {
-            if p.fails > 0 {
+        "always_or_unreachable" => {
+            if fails > 0 {
                 "FAIL"
             } else {
                 "PASS"
             }
         }
-        b"unreachable" => {
-            if p.fails > 0 {
+        "unreachable" => {
+            if fails > 0 {
                 "FAIL (reached)"
             } else {
                 "PASS"
             }
         }
-        b"eventually" => {
-            if p.fails > 0 {
+        "eventually" => {
+            if fails > 0 {
                 "FAIL (deadline missed)"
-            } else if p.passes > 0 {
+            } else if passes > 0 {
                 "PASS"
             } else {
                 "NOT EVALUATED"
             }
         }
         _ => {
-            if p.passes > 0 {
+            if passes > 0 {
                 "PASS"
             } else {
                 "NOT EXERCISED"
             }
         }
+    }
+}
+
+/// A property table verdict as a [`status`].
+pub fn property_status(verdict: &str) -> &'static str {
+    if verdict.starts_with("FAIL") {
+        status::VIOLATION
+    } else if verdict == "NOT EXERCISED" {
+        status::NOT_EXERCISED
+    } else if verdict == "NOT EVALUATED" {
+        status::NOT_EVALUATED
+    } else {
+        status::OK
     }
 }
 
@@ -1064,16 +1083,7 @@ pub fn property_table(runs: &[String]) -> Option<PropertyTable> {
                 runs_passed: p.runs_pass,
                 runs_failed: p.runs_fail,
                 verdict: v.into(),
-                status: if v.starts_with("FAIL") {
-                    status::VIOLATION
-                } else if v == "NOT EXERCISED" {
-                    status::NOT_EXERCISED
-                } else if v == "NOT EVALUATED" {
-                    status::NOT_EVALUATED
-                } else {
-                    status::OK
-                }
-                .into(),
+                status: property_status(v).into(),
                 first_failure: (!p.first_fail.is_empty()).then(|| lossy(&p.first_fail)),
                 slowest_ok_s: (p.ty == b"eventually" && p.max_ok_elapsed >= 0.0)
                     .then_some(p.max_ok_elapsed),

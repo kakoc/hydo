@@ -401,3 +401,41 @@ each project of the store it shows:
   `fails`, `fixed`, `back`, or `·` for a run that did not find a finding that stays open.
 - The runs, the latest first: when, the branch and commit, the seeds, the budget, the engine,
   the findings by state, the result, and links to the run's report and job.
+
+## 15. Explore on many runners
+
+A plain exploration splits into parts the same way as a CI run. `hydo explore --shard I/N`
+explores the I-th of N contiguous parts of `--seeds`, with the split of section 11. Each part
+re-runs and shrinks its own failures. `hydo explore --merge` then makes one exploration of the
+whole range from the parts' folders, without a VM:
+
+```sh
+hydo explore --seeds 1-40 --shard 1/2 --out part-1
+hydo explore --seeds 1-40 --shard 2/2 --out part-2
+hydo explore --merge part-1 part-2 --out explore
+hydo report explore
+```
+
+- The merged folder has one `exploration.json`, `events.jsonl` and `report.md`, and the consoles
+  of the runs it keeps. `hydo report` and `hydo report --html` read it like any exploration.
+- The merge decides what one exploration of the range decides. It puts the failures in seed
+  order and keeps the shrink of the first failure of each class and signature. It also merges
+  the error kinds and the property table.
+- On the scripted engine the merged files equal one exploration's. Only the wall times and the
+  worker counts differ.
+- `shards` in `exploration.json` lists each part with its seeds, its counts, its host CPU and
+  its wall time. `missing_seeds` names the seeds of a part that did not finish.
+- The merge refuses parts of two explorations: another image, another engine, another hydo, or
+  other options.
+
+A part's failure is re-run on the part's own machine. On GitHub's runners the CPU is an AMD EPYC
+or an Intel Xeon, and KVM fingerprints differ between the two vendors (section 6). So the merge
+compares verdicts and signatures across parts, and fingerprints never.
+
+hydo's own repository runs its examples this way in the workflow `explore.yml`. One job builds
+hydo and the image, up to 20 jobs explore one part each, and one job merges them. The script
+`ci/remote-explore.sh` starts it, waits, and downloads the merged folder:
+
+```sh
+sh ci/remote-explore.sh --example hydo/onboard/examples/redis --seeds 1-40 --shards 8
+```

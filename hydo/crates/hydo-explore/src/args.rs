@@ -14,7 +14,8 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
         [--steer-batch N] [--steer-corpus N] [--steer-stop]]
        [--search state [--state-mix N] [--state-corpus N] [--state-rare N] [--state-snaps N]
-        [--state-stop]] [--time-limit SECONDS] [--no-diagnose] ...";
+        [--state-stop]] [--time-limit SECONDS] [--shard I/N] [--no-diagnose] ...
+       hydo explore --merge DIR [DIR...] --out DIR   (one exploration from the --shard parts)";
 
 /// The refusal without `--image` (Milestone 146: explore.py's default, `explore-disk.img`, is a
 /// shell-init image, which hydo has not run since Milestone 145).
@@ -148,6 +149,10 @@ pub struct Args {
     /// many seconds have passed since the explorer started, at a seed boundary in seed order (the
     /// runs already made are re-run and shrunk as usual). Only for a plain seed range.
     pub time_limit: Option<f64>,
+    /// `--shard I/N` (Milestone 304): explore only the I-th of N contiguous parts of `--seeds`
+    /// (the split of `hydo ci run --shard`). After [`parse`], `seeds` is the part, and this
+    /// names the part and the whole range; `hydo explore --merge` combines the parts.
+    pub shard: Option<hydo_results::ConfigShard>,
 }
 
 impl Default for Args {
@@ -239,6 +244,7 @@ impl Default for Args {
             state_snaps: 2,
             state_stop: false,
             time_limit: None,
+            shard: None,
         }
     }
 }
@@ -270,8 +276,9 @@ const FLAGS: [&str; 24] = [
     "state-stop",
 ];
 
-const VALUED: [&str; 60] = [
+const VALUED: [&str; 61] = [
     "seeds",
+    "shard",
     "workers",
     "image",
     "out",
@@ -435,6 +442,16 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "no-compose" => a.no_compose = true,
             "bursts" => a.bursts = true,
             "seeds" => a.seeds = val,
+            "shard" => {
+                let (index, count) = hydo_manifest::ci::parse_shard(v).ok_or_else(|| {
+                    format!("argument --shard: invalid value: '{v}' (I/N with 1 <= I <= N)")
+                })?;
+                a.shard = Some(hydo_results::ConfigShard {
+                    index,
+                    count,
+                    range: String::new(),
+                });
+            }
             "workers" => a.workers = Some(int("workers", v)?.max(1) as usize),
             "image" => a.image = val,
             "out" => {
@@ -552,6 +569,27 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             || a.search.as_deref() == Some("state"))
     {
         return Err("argument --time-limit: only for a plain seed range (not with --sweep, --schedule, --steer, --steer-match or --search state)".into());
+    }
+    if let Some(sh) = a.shard.as_mut() {
+        if a.sweep.is_some()
+            || a.schedule.is_some()
+            || a.steer.is_some()
+            || a.steer_match.is_some()
+            || a.search.as_deref() == Some("state")
+        {
+            return Err("argument --shard: only for a plain seed range (not with --sweep, --schedule, --steer, --steer-match or --search state)".into());
+        }
+        let (lo, hi) = hydo_manifest::ci::parse_seeds(&a.seeds)
+            .ok_or_else(|| format!("argument --shard: --seeds {}: lo-hi", a.seeds))?;
+        let (pa, pb) =
+            hydo_manifest::ci::shard_of(lo, hi, sh.index, sh.count).ok_or_else(|| {
+                format!(
+                    "argument --shard {}/{}: the range {lo}-{hi} has fewer than {} seeds",
+                    sh.index, sh.count, sh.count
+                )
+            })?;
+        sh.range = format!("{lo}-{hi}");
+        a.seeds = format!("{pa}-{pb}");
     }
     if a.image.is_empty() {
         return Err(NO_IMAGE.into());

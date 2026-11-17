@@ -2009,6 +2009,20 @@
         },
         "artifacts": {
           "$ref": "#/$defs/ExplorationArtifacts"
+        },
+        "shards": {
+          "description": "`hydo explore --merge` (added in Milestone 304): the parts it merged, in seed order.\nAbsent for an exploration that ran in one piece.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MergedShard"
+          }
+        },
+        "missing_seeds": {
+          "description": "`hydo explore --merge`: the seeds of the range that no part explored (a shard that did\nnot finish), written `lo-hi,lo-hi`; absent when the parts cover the range.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -2080,10 +2094,47 @@
             "type": "string"
           },
           "default": []
+        },
+        "shard": {
+          "description": "`--shard I/N` (added in Milestone 304): this exploration is the I-th of N contiguous\nparts of a seed range, and `seeds` is its part. `hydo explore --merge` makes one\nexploration of the whole range from the parts.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfigShard"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "strategy"
+      ]
+    },
+    "ConfigShard": {
+      "description": "Which part of a seed range a shard explored (added in Milestone 304).",
+      "type": "object",
+      "properties": {
+        "index": {
+          "description": "The shard's number, from 1, and the number of shards.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "range": {
+          "description": "The whole range the shards split (`--seeds`), written `lo-hi`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "count",
+        "range"
       ]
     },
     "Summary": {
@@ -3119,6 +3170,81 @@
       },
       "required": [
         "events"
+      ]
+    },
+    "MergedShard": {
+      "description": "One part of an exploration that `hydo explore --merge` made from parts (added in Milestone\n304): what it explored and on which machine. Fingerprints of two parts are comparable only\nwhen their engine and their host's CPU vendor are the same; their verdicts always are.",
+      "type": "object",
+      "properties": {
+        "index": {
+          "description": "`--shard I/N`'s I, when the part was explored with it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "seeds": {
+          "description": "The part's seeds, written `lo-hi`.",
+          "type": "string"
+        },
+        "schedules": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "failures": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "host_cpu": {
+          "description": "The machine's CPU and the part's worker count.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HostCpu"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workers": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sweep_wall_s": {
+          "description": "The part's own wall times (its summary's `sweep_wall_s` and `total_wall_s`).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "total_wall_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "dir": {
+          "description": "The part's directory, as the merge was given it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "seeds",
+        "schedules",
+        "failures"
       ]
     },
     "Start": {

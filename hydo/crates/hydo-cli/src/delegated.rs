@@ -41,6 +41,26 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
 
 /// `hydo explore` with the end for a person (`plain`) or for a program (the summary line).
 pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
+    // `--merge DIR... --out DIR` (Milestone 304): the parts of one exploration, without an
+    // image or a VM
+    if argv.iter().any(|a| a == "--merge") {
+        let rc = hydo_explore::merge::main_if_asked(argv, plain).unwrap_or(2);
+        let i = argv.iter().position(|a| a == "--out");
+        let out = i.and_then(|i| argv.get(i + 1)).cloned().unwrap_or_default();
+        if rc == 0 && plain {
+            if let Some(end) = crate::htmlreport::text::explore_end(Path::new(&out), &out) {
+                print!("{end}");
+                return rc;
+            }
+        }
+        if rc == 0 {
+            println!(
+                "hydo: report: {}   (hydo report {out}; hydo report --html {out})",
+                pjoin(&out, "report.md")
+            );
+        }
+        return rc;
+    }
     // `--no-diagnose`: no replay that reads the failing service's log of a problem whose runs
     // stopped with an error (Milestone 247; as `hydo run --no-diagnose`)
     let diagnose = !argv.iter().any(|a| a == "--no-diagnose");

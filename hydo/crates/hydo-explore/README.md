@@ -17,6 +17,8 @@ on it from your own code. To use hydo, install the command with `cargo install h
   bit for bit, and shrinks it to a minimal failing schedule.
 - The exploration's results (`events.jsonl`, `exploration.json`) and its report (`report.md`,
   `hydo report`).
+- The merge of the parts of a seed range that ran on several machines (`--shard I/N` and
+  `--merge`) into one exploration.
 
 ## License
 

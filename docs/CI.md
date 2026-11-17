@@ -294,6 +294,58 @@ and `hydo-control::corpus_net`; and a changed readiness command in the same file
 `hydo-build::equivalence` (7 of 7,430 answers differ) and `hydo-manifest::equivalence`, naming
 the file.
 
+## Explorations on many KVM runners (Milestone 304)
+
+`.github/workflows/explore.yml` explores one example over many GitHub runners. It is no part
+of the test tiers: it starts only when someone asks, from the Actions tab, with `gh workflow run
+explore.yml`, or with `ci/remote-explore.sh`. GitHub's `ubuntu-24.04` runners have `/dev/kvm`,
+and they cost nothing for this public repository. So a blind exploration does not wait for the
+Mac's VM lock or for the bare-metal machine.
+
+Its inputs are the following:
+
+- `example`: the example's folder, for example `hydo/onboard/examples/redis`;
+- `manifest`: the manifest, relative to that folder (default `hydo.yaml`);
+- `set`: build parameters as `KEY=VALUE` words;
+- `seeds`: the seed range (default `1-40`), and `shards`: the number of parts, 1 to 20;
+- `explore`: the options of `hydo explore`, such as `--strategy process --new-faults`;
+- `ref`: the commit or branch to build (default: the workflow's own commit);
+- `vcpus`: `--vcpus N` for the KVM engine;
+- `prepare`: a shell command that runs in the example's folder before the build, such as
+  `sh build.sh && sh hydo/fetch-images.sh x86_64`;
+- `id`: a label in the run's name and in its artifacts' names.
+
+The workflow has three jobs:
+
+1. `build` builds hydo from `ref` and the example's image once. It uses the newest Linux release
+   of `hydo/dist/releases.txt`, checked by its sha256. The release gives the guest kernels and the agent.
+   An example whose manifest names `~/hydo/build/` files (the Redis example) builds from the
+   release's own copy.
+2. `shard` runs on N runners. Each one runs `hydo explore --backend kvm --shard I/N` on its part
+   of the seeds, with `--time-limit 15000` unless the options name a limit.
+3. `merge` runs `hydo explore --merge`, `hydo report` and `hydo report --html`. It uploads the
+   artifact `explore-<id>-merged`. It runs when some parts failed too, and the merged
+   exploration names the seeds that no part explored.
+
+Each runner's CPU is an AMD EPYC or an Intel Xeon, at random. KVM fingerprints differ between
+the two vendors, so each part re-runs and shrinks its failures on its own runner. The merge
+compares verdicts and signatures across parts. Each part's CPU is in the merged
+`exploration.json` (`shards`) and in `parts/<n>/host.txt`.
+
+```sh
+sh ci/remote-explore.sh --example hydo/onboard/examples/dragonfly --manifest hydo/hydo.yaml \
+  --seeds 1-60 --shards 20 --explore "--strategy process --new-faults --cluster-faults" \
+  --prepare "sh build.sh && sh hydo/fetch-images.sh x86_64"
+```
+
+In the proof of Milestone 304, Dragonfly's 60 schedules took 31 minutes on 20 runners and 75
+minutes on one, with the same 60 verdicts. Redpanda's 40 schedules took 2 hours 53 minutes on 20
+runners; the shrinks inside each part took most of it. The build job takes about 6 minutes.
+
+The script needs `gh` with the right to start workflows. The runners build `--ref`, so the commit
+must be pushed. The script waits at most `--wait` minutes (default 360) and downloads the merged
+folder to `hydo-out/remote-<id>`.
+
 ## What does not run, and why
 
 Nothing in CI boots a guest: a GitHub runner has neither the hvx kernel module (`/dev/hvx`)

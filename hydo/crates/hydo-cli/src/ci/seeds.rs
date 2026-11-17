@@ -6,23 +6,10 @@
 //! stops at a seed boundary in seed order. What a run explored is therefore always a list of
 //! ranges, written `1-37,101-140`.
 
-/// `I/N` with 1 <= I <= N.
-pub fn parse_shard(s: &str) -> Option<(u64, u64)> {
-    let (i, n) = s.split_once('/')?;
-    let (i, n): (u64, u64) = (i.trim().parse().ok()?, n.trim().parse().ok()?);
-    (i >= 1 && i <= n).then_some((i, n))
-}
-
-/// The I-th (1-based) of N contiguous parts of `lo..=hi`; None when the part is empty (more
-/// shards than seeds).
-pub fn shard_of(lo: u64, hi: u64, i: u64, n: u64) -> Option<(u64, u64)> {
-    let total = hi.checked_sub(lo)? + 1;
-    let (base, rem) = (total / n, total % n);
-    let size = |k: u64| base + u64::from(k < rem);
-    let start = lo + (0..i - 1).map(size).sum::<u64>();
-    let len = size(i - 1);
-    (len > 0).then(|| (start, start + len - 1))
-}
+/// `I/N` with 1 <= I <= N, and the I-th of N contiguous parts of a range (the explorer's
+/// `--shard` splits a range the same way, so a shard of `hydo ci run` and of `hydo explore`
+/// explore the same seeds).
+pub use hydo_manifest::ci::{parse_shard, shard_of};
 
 /// `a-b` ranges, sorted and joined where they touch.
 pub fn ranges_text(mut r: Vec<(u64, u64)>) -> String {

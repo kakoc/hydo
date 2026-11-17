@@ -248,6 +248,10 @@ fn abspath(p: &Path) -> PathBuf {
 
 /// The explorer's entry point: explore.py's command line; the exit status.
 pub fn main_with(argv: &[String], env: &Env) -> i32 {
+    // `--merge DIR... --out DIR` (Milestone 304): one exploration from parts, without a VM
+    if let Some(rc) = crate::merge::main_if_asked(argv, env.plain_end) {
+        return rc;
+    }
     let a = match args::parse(argv) {
         Ok(a) => a,
         Err(e) => {
@@ -2987,6 +2991,7 @@ impl Cx {
             variants: None,
             schedule: a.schedule.clone(),
             argv: self.argv.clone(),
+            shard: a.shard.clone(),
         }
     }
 

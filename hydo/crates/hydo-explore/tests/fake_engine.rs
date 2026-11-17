@@ -293,6 +293,9 @@ fn scenario(name: &str, args: &[&str]) {
     if name == TIME_LIMIT_SCENARIO {
         return time_limit_scenario();
     }
+    if name == MERGE_SCENARIO {
+        return merge_scenario();
+    }
     let dir = scratch(name);
     let out = dir.join("out");
     let mut cmd = match std::env::var("HYDO_FAKE_EXPLORER") {
@@ -654,10 +657,133 @@ const SCENARIOS: &[(&str, &[&str])] = &[
     (CACHE_SCENARIO, &[]),
     // no golden: time_limit_scenario() checks where the cut is
     (TIME_LIMIT_SCENARIO, &[]),
+    // no golden: merge_scenario() compares a merged exploration with one exploration
+    (MERGE_SCENARIO, &[]),
 ];
 
 const CACHE_SCENARIO: &str = "cache_key_is_the_image_bytes";
 const TIME_LIMIT_SCENARIO: &str = "time_limit_cuts_at_a_seed_boundary";
+const MERGE_SCENARIO: &str = "merge_equals_one_exploration";
+
+/// `hydo explore --merge` (Milestone 304): the parts of a seed range explored apart with
+/// `--shard I/N` and merged give the exploration of the whole range, file for file
+/// (exploration.json, events.jsonl and report.md), apart from the wall times, the workers and
+/// the merge's own `shards`. The options exercise every merged part: failures and their re-runs,
+/// shrinks of several signatures and of several causes of one (renumbered across parts), error
+/// kinds and their shrinks, the property table and the liveness summary, and the flush-count
+/// probe of `--more-faults`. A missing part leaves its seeds in `missing_seeds`, and parts of two
+/// explorations are refused.
+fn merge_scenario() {
+    let dir = scratch(MERGE_SCENARIO);
+    let opts = [
+        "--seeds",
+        "1-60",
+        "--timing",
+        "--new-faults",
+        "--concurrency",
+        "--more-faults",
+        "--buggify",
+        "--shrink-causes",
+        "2",
+        "--errors-shrink",
+        "3",
+        "--known-errors",
+        KNOWN,
+        // a limit the parts never reach (explore.yml gives every part one)
+        "--time-limit",
+        "3600",
+    ];
+    let explore = |name: &str, extra: &[&str]| -> PathBuf {
+        let out = dir.join(name);
+        let mut c = Command::new(env!("CARGO_BIN_EXE_hydo-explore"));
+        c.args(opts)
+            .args(extra)
+            .args(IMAGE)
+            .args(["--workers", "3", "--out"])
+            .arg(&out);
+        run(&mut c, &dir, &out);
+        out
+    };
+    let merge = |parts: &[PathBuf], out: &str| -> std::process::Output {
+        Command::new(env!("CARGO_BIN_EXE_hydo-explore"))
+            .arg("--merge")
+            .args(parts)
+            .arg("--out")
+            .arg(dir.join(out))
+            .output()
+            .expect("run")
+    };
+    let single = explore("single", &[]);
+    let n = 7;
+    let parts: Vec<PathBuf> = (1..=n)
+        .map(|i| explore(&format!("part{i}"), &["--shard", &format!("{i}/{n}")]))
+        .collect();
+    // the parts in any order
+    let mut shuffled = parts.clone();
+    shuffled.reverse();
+    let o = merge(&shuffled, "merged");
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let merged = dir.join("merged");
+    let clean = |out: &Path, t: &str| -> String {
+        let t = t.replace(&out.display().to_string(), "<out>");
+        let t = norm(&t.replace(&dir.display().to_string(), "<dir>"));
+        // the merge's own record of its parts
+        let re = regex::Regex::new(r#"(?s),\s*"shards": \[.*?\n  \]"#).unwrap();
+        let t = re.replace_all(&t, "").into_owned();
+        let re = regex::Regex::new(r"(?s)\n## Parts \(hydo explore --merge\)\n.*?\n\n## ").unwrap();
+        re.replace_all(&t, "\n## ").into_owned()
+    };
+    for f in ["exploration.json", "events.jsonl", "report.md"] {
+        let a = clean(&single, &std::fs::read_to_string(single.join(f)).unwrap());
+        let b = clean(&merged, &std::fs::read_to_string(merged.join(f)).unwrap());
+        if a != b {
+            let (la, lb): (Vec<&str>, Vec<&str>) = (a.lines().collect(), b.lines().collect());
+            let i = la
+                .iter()
+                .zip(&lb)
+                .position(|(x, y)| x != y)
+                .unwrap_or(la.len().min(lb.len()));
+            panic!(
+                "{f}: the merge differs from one exploration at line {}:\n  one:    {}\n  merged: {}",
+                i + 1,
+                la.get(i).unwrap_or(&"<end>"),
+                lb.get(i).unwrap_or(&"<end>")
+            );
+        }
+    }
+    let doc: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(merged.join("exploration.json")).unwrap())
+            .unwrap();
+    assert_eq!(doc["shards"].as_array().unwrap().len(), n);
+    assert_eq!(doc["shards"][0]["seeds"], "1-9");
+    assert_eq!(doc["shards"][0]["index"], 1);
+    assert_eq!(doc["shards"][0]["host_cpu"], doc["engine"]["host_cpu"]);
+    assert!(doc.get("missing_seeds").is_none());
+    assert!(
+        doc["shrinks"].as_array().unwrap().len() >= 4,
+        "the scenario shrinks several failures: {}",
+        doc["shrinks"]
+    );
+    assert!(merged.join("consoles/seed-60.log").is_file());
+    assert!(merged.join("consoles/min2-a.log").is_file());
+    assert!(merged.join("parts/1/exploration.json").is_file());
+    // a missing part: its seeds are named, the rest is merged
+    let o = merge(&parts[..n - 1], "partial");
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let doc: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(dir.join("partial/exploration.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(doc["missing_seeds"], "53-60");
+    assert_eq!(doc["config"]["seeds"], "1-60");
+    // parts of two explorations
+    let other = explore("other", &["--strategy", "swarm", "--shard", "1/7"]);
+    let o = merge(&[parts[1].clone(), other], "refused");
+    assert!(!o.status.success());
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("not one exploration"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
 
 /// `--time-limit` (stage 2 of docs/design/ci.md, section 7.3) stops drawing first runs at a seed
 /// boundary in seed order: the explored seeds are the first ones of the range, whatever runs were

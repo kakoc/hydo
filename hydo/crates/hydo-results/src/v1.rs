@@ -1631,6 +1631,48 @@ pub struct Config {
     /// The explorer's whole command line.
     #[serde(default)]
     pub argv: Vec<String>,
+    /// `--shard I/N` (added in Milestone 304): this exploration is the I-th of N contiguous
+    /// parts of a seed range, and `seeds` is its part. `hydo explore --merge` makes one
+    /// exploration of the whole range from the parts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shard: Option<ConfigShard>,
+}
+
+/// Which part of a seed range a shard explored (added in Milestone 304).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ConfigShard {
+    /// The shard's number, from 1, and the number of shards.
+    pub index: u64,
+    pub count: u64,
+    /// The whole range the shards split (`--seeds`), written `lo-hi`.
+    pub range: String,
+}
+
+/// One part of an exploration that `hydo explore --merge` made from parts (added in Milestone
+/// 304): what it explored and on which machine. Fingerprints of two parts are comparable only
+/// when their engine and their host's CPU vendor are the same; their verdicts always are.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct MergedShard {
+    /// `--shard I/N`'s I, when the part was explored with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index: Option<u64>,
+    /// The part's seeds, written `lo-hi`.
+    pub seeds: String,
+    pub schedules: u64,
+    pub failures: u64,
+    /// The machine's CPU and the part's worker count.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_cpu: Option<HostCpu>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workers: Option<u64>,
+    /// The part's own wall times (its summary's `sweep_wall_s` and `total_wall_s`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sweep_wall_s: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_wall_s: Option<f64>,
+    /// The part's directory, as the merge was given it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
 }
 
 /// The numbers of an exploration. Absent fields do not apply to its mode.
@@ -1857,6 +1899,14 @@ pub struct Exploration {
     #[serde(default)]
     pub liveness: Vec<Liveness>,
     pub artifacts: ExplorationArtifacts,
+    /// `hydo explore --merge` (added in Milestone 304): the parts it merged, in seed order.
+    /// Absent for an exploration that ran in one piece.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shards: Vec<MergedShard>,
+    /// `hydo explore --merge`: the seeds of the range that no part explored (a shard that did
+    /// not finish), written `lo-hi,lo-hi`; absent when the parts cover the range.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub missing_seeds: Option<String>,
 }
 
 /// Where an event of one run is in that run (added in M165): its conversation, the number of the

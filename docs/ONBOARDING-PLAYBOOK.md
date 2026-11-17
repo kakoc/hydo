@@ -258,6 +258,17 @@ hours. Otherwise stop. Record each blocker as a gap of hydo in the example's `RE
    - `--protocol-faults` for fakes and emulators.
 7. Run a swarm exploration last, with `--strategy swarm --new-faults`.
 
+Run the blind explorations on GitHub's KVM runners when the example builds an x86_64 image on
+Linux. Keep this Mac and the bare-metal machine for the directed runs, such as `hydo explore
+--schedule`, the shrinks, and the native reproductions. Push the branch, then start the workflow
+`explore.yml` with the same options (section 9):
+
+```sh
+sh ci/remote-explore.sh --example hydo/onboard/examples/<name> --manifest hydo/hydo.yaml \
+  --ref <branch> --seeds 1-60 --shards 20 --explore "--strategy process --new-faults" \
+  --prepare "sh hydo/fetch-images.sh x86_64"
+```
+
 The first failures are usually the rules' own mistakes. In River five kinds of failure were
 mistakes of the rules, and each of the 10 failures of Valkey's first exploration broke a rule that
 was too strict. TigerBeetle's check read an empty `$HYDO_OUTCOMES` in the recovery boot and
@@ -492,7 +503,7 @@ then by speed.
 |---|---|---|---|
 | hvx | the bare-metal machine, shared | 231 runs an hour for SWUpdate; 38 to 43 s a run for Memos; 2 to 5 minutes a run for Hatchet at a load of 12 to 28 | the only engine with `cf=`, `--more-faults` and the PMU branch clock; one disk |
 | the Mac engine | an Apple Silicon Mac | 1,400 runs an hour for Valkey with three workers; 128 runs an hour for Mender; 4.8 s a schedule for Formance | arm64 guests; image roots live in guest RAM; a 1 GiB worker takes about 1.8 GB |
-| KVM | GitHub's runners | not measured in runs an hour; the web-shop example ran on seven hosts | 2 CPUs per runner; Intel and AMD give different fingerprints, the same verdicts |
+| KVM | GitHub's runners, up to 20 at once (`explore.yml`) | Dragonfly's 60 schedules in 31 minutes on 20 runners, 75 on one; Redpanda's 40 in 2 h 53 min on 20 | 4 CPUs and 15 GB per runner; Intel and AMD give different fingerprints, the same verdicts |
 
 Three facts set the wall time:
 
@@ -504,11 +515,12 @@ Three facts set the wall time:
 - **Shrinking costs the most.** Lago's first exploration ran 20 schedules, 12 re-runs and 306
   shrink runs in 66 minutes.
 
-To shard an exploration, give each machine its own seed range with `--seeds`. For example, run
-`--seeds 1-40` on hvx and `--seeds 41-80` on the Mac. `hydo explore` has no `--shard` option.
-In a team's CI, `hydo ci run --shard I/N` takes the I-th part of the seed range, and `hydo ci
-merge` joins the shards without a VM (`hydo guide ci`). A matrix of GitHub's runners with KVM
-runs one shard per runner.
+To shard an exploration, run `hydo explore --shard I/N` on N machines of one engine. Then
+`hydo explore --merge` joins the parts without a VM (`hydo guide ci`, "Explore on many
+runners"). The workflow `explore.yml` does both on up to 20 of GitHub's runners, and
+`ci/remote-explore.sh` starts it and downloads the merged folder. Parts of two engines, such as
+hvx and the Mac, do not merge, because their images and options differ. In a team's CI, `hydo ci
+run --shard I/N` and `hydo ci merge` do the same for a CI run.
 
 ## 10. Common setup problems
 

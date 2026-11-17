@@ -16284,3 +16284,174 @@ ran again with the same result: the Mac's 76 runs, and hvx's 141 runs with its i
 again to the same bytes (3,143 s). KVM's final check is run 44155738225 above, before the
 rebase; `main` changed no code of the KVM engine, and the controller's commands are the ones the
 hvx and Mac checks covered.
+### Milestone 304 (tentative number) - DONE (explorations spread over many GitHub runners with KVM: `hydo explore --shard I/N` explores one part of a seed range, and `hydo explore --merge` makes one exploration of the parts without a VM, equal to one exploration of the range on the scripted engine; the results addition `config.shard`, `shards` and `missing_seeds`; the standing workflow `.github/workflows/explore.yml` builds once, explores up to 20 parts and merges them, and `ci/remote-explore.sh` starts it, waits and downloads the result; on GitHub's runners Redis in 8 parts gave one runner's 40 verdicts, signatures and shrinks, Dragonfly in 20 parts found its snapshot finding in 9 of 60 schedules in 31 minutes against 75 on one runner, and Redpanda in 20 parts found findings 1 and 2 at hvx's seeds in 2 h 53 min; nothing recorded moved; 2026-11-17)
+
+**What was asked.** Seven agents shared one Mac's VM lock and the bare-metal machine. One
+onboarding waited 1 h 40 min of its 3 h 20 min for the lock. GitHub's `ubuntu-24.04` runners have
+KVM and cost nothing for this public repository. Every engine run repeats exactly, so the parts
+of a seed range can run on separate machines and merge without loss. The task was a standing
+workflow that the team and hydo's agents start without pushing a branch, the merge in hydo, a
+script that starts the workflow and waits, and the docs.
+
+**The parts: `hydo explore --shard I/N`.** The option takes the I-th of N contiguous parts of
+`--seeds`, the first parts one seed longer when the range does not divide evenly. It is the split
+of `hydo ci run --shard`: `parse_shard` and `shard_of` moved from hydo-cli to
+`hydo_manifest::ci`, and both commands use them. A part's `exploration.json` records it as
+`config.shard` (`index`, `count`, `range`), and `config.seeds` is the part. The option is refused
+with `--sweep`, `--schedule`, `--steer`, `--steer-match` and `--search state`.
+
+**The merge: `hydo explore --merge DIR... --out DIR`.** The module `merge` of hydo-explore reads
+each part's `exploration.json` and `events.jsonl`, sorts the parts by their first seed, and
+decides again what one exploration decides over all of its runs:
+
+- The first runs, the re-runs and the failures, in seed order.
+- Which failures are shrunk. One exploration shrinks the first failure of each class and
+  signature, and with `--shrink-causes N` up to N with other fault kinds, in seed order. Such a
+  failure is also the first of its key in its own part, so its part shrank it. The merge keeps
+  that shrink and renames its runs to the number one exploration gives the chain (`shrink3-1-0`,
+  `min3-a`), in the stream, in `shrinks` and in the console files. A part's shrink of a key that
+  an earlier part also found is dropped.
+- The error kinds: the counts add up, each kind keeps its first part's details and its first 12
+  seeds. The new kinds to shrink are chosen from the merged kinds as one exploration chooses them
+  (`errlog::to_shrink`, `--errors-shrink`), and each one's shrink is taken from the part of its
+  first new run.
+- The property table and the liveness summary, from the parts' tables. Counts add up, a property
+  keeps its place of first appearance, and the verdicts are judged again from the counts
+  (`results::property_verdict`). The slowest run and the first miss follow the console-name order
+  of one exploration's summary.
+- The summary's counts. The wall times are the longest part's, because the parts ran side by
+  side, and `mean_run_s` is recomputed from the first runs.
+
+The parts must be one exploration: the same hydo, fingerprint epoch, image sha256, engine and
+guest, and the same options apart from `--seeds`, `--shard`, `--out` and `--workers`. Their seeds
+must not overlap. The merge refuses a sweep, a steered search and a state search. The merged
+folder has `exploration.json`, `events.jsonl`, `report.md`, the consoles of every run it keeps, each
+part's replays of `hydo explore`'s diagnosis, and each part's own documents and worker logs under
+`parts/<n>/`. The results addition `shards` lists each part with its seeds, its counts, its host
+CPU, its workers and its wall times, and `missing_seeds` names the seeds of a part that did not
+finish. report.md gains the section "Parts (hydo explore --merge)". `hydo explore --merge` in a
+terminal ends with the problems in words, as `hydo explore` does.
+
+**No fingerprint across parts.** GitHub assigns each runner an AMD EPYC or an Intel Xeon, and KVM
+fingerprints differ between the two vendors (AGENTS.md, "The KVM engine"). Each part re-runs and
+shrinks its own failures on its own runner, so `reproduced` and `identical` compare runs of one
+machine. The merge compares verdicts and signatures only. When the parts' host CPUs differ, the
+merged `engine.host_cpu` is left out, and the merge says that the vendors differ.
+
+**The proof on the scripted engine.** `fake_engine`'s scenario `merge_equals_one_exploration`
+explores 60 seeds with `--timing --new-faults --concurrency --more-faults --buggify
+--shrink-causes 2 --errors-shrink 3 --known-errors`, once whole and in 7 parts. The merge of the
+parts, given in reverse order, equals the whole exploration's `exploration.json`, `events.jsonl` and
+`report.md` after the scenario normalisation of the wall times and the workers, and without the
+merge's own `shards` and its report section. A merge without the last part names `53-60` in
+`missing_seeds`, and parts with another strategy are refused. By hand the merge also equalled one
+exploration for six more option sets: `--shrink-causes 3` in 7 parts, the redis-errors manifest
+with `--errors-shrink 2` in 3 parts, `--strategy swarm-pos --preempt --durable-only --timing` in 5
+parts, the composed Redis plan in 4 parts, the shop's protocol faults in 6 parts, and every stream
+in 8 parts.
+
+**The workflow `.github/workflows/explore.yml`.** It starts by `workflow_dispatch` and by
+`workflow_call`. Its inputs are `example`, `manifest`, `set`, `seeds`, `shards` (1 to 20),
+`explore`, `ref`, `vcpus`, `prepare` and `id`. Every input reaches the shell through the
+environment and is checked first: numbers, `lo-hi`, paths inside the repository, and options
+without shell characters. The jobs:
+
+1. `build` checks out `ref`, builds `hydo`, `hydo-kvm` and `hydo-build`, and unpacks the newest
+   Linux release of `hydo/dist/releases.txt` (0.3.4, its sha256 checked), runs the release's
+   own `hydo setup`, and then copies those programs into it. It checks that the release's KVM guest kernels are the ones the commit pins. It
+   runs `prepare` in a copy of the example and `hydo build`. An example whose manifest names
+   `~/hydo/build/` files builds from the release's copy (the Redis example). It uploads the
+   programs and the image as `explore-<id>-build`.
+2. `shard`, a matrix of N runners. Each makes `/dev/kvm` usable, records its CPU in `host.txt`,
+   and runs `hydo explore --backend kvm --shard I/N`, with `--time-limit 15000` unless the
+   options name one. It uploads its folder as `explore-<id>-part-<i>`.
+3. `merge` runs when the build passed, also after failed parts. It runs `hydo explore --merge`,
+   `hydo report` and `hydo report --html`, writes the problems into the job summary, and uploads
+   `explore-<id>-merged`.
+
+`ci/remote-explore.sh` starts the workflow with `gh workflow run`, finds the run by the `id` at
+the end of its name, waits at most `--wait` minutes, and downloads the merged artifact into
+`hydo-out/remote-<id>`. It prints the inputs and `hydo report`'s problems.
+
+**The proof on GitHub's runners.** `explore.yml` must be on the default branch before
+`workflow_dispatch` can start it. So the one-off workflow `tmp-explore-test.yml`, on the branch
+`tmp-explore-test` only, called it through `workflow_call`. The runs found four mistakes of the
+workflow, one of the merge, and one of the proof's own options:
+
+- Run 44163758070: the release's `hydo setup` refuses a `bin/` that already holds other
+  programs. The setup now runs before the commit's programs are copied in.
+- Run 44165114222: `hydo build --out` also leaves the build's root trees, whose unreadable files
+  stopped the upload. The build job now uploads only the image and the files beside it. The
+  merge job did not create `/mnt/w`.
+- Run 44168649611: one shard's artifact unpacks into the download path itself, not into a
+  folder of its own, so the merge of one shard found no part. The merged time limit listed each
+  part's seeds instead of joining them. Both are fixed; the first fix ran only on this Mac's copy
+  of the artifacts, because run 44173340814 had 20 shards.
+- Run 44168649611 also gave Redpanda's shards `--more-faults`, whose `cf=` cuts only hvx runs.
+  The explorer refused it in every shard.
+
+The runs below are run 44168649611 (Redis and Dragonfly, at `0574b90f`) and run 44173340814
+(Redpanda, at `0ed3d5ef`). Every runner had 4 CPUs and 15 GB. GitHub gave them AMD EPYC 7763, 9V45
+and 9V74 hosts and Intel Xeon 6975P-C, Platinum 8370C, and Platinum 8573C hosts.
+
+| exploration | runners | wall time from the build's start to the merge's end | the exploration's own time |
+|---|---|---|---|
+| Redis, seeds 1-40, the default options | 1 (a Xeon 6975P-C) | 9 min | 12 s |
+| Redis, seeds 1-40 | 8 (2 AMD, 6 Intel) | 9.4 min | 2 to 7 s a part |
+| Dragonfly, seeds 1-60, `--strategy process --new-faults --cluster-faults` | 1 (a Xeon 6975P-C) | 75 min | 3,996 s |
+| Dragonfly, seeds 1-60, the same options | 20 (8 AMD, 12 Intel) | 31 min | 63 to 1,281 s a part |
+| Redpanda, seeds 1-40, `--strategy process --new-faults --storage-faults --cluster-faults --workers 2` | 20 (8 AMD, 12 Intel) | 2 h 53 min | 146 s to 9,469 s a part |
+
+Each runner's pool had one worker for Dragonfly (a 2 GiB guest), two for Redpanda (the option) and three for Redis. The build
+job took 6 minutes each time, most of it the compile of hydo without a cache.
+
+- **Redis.** The 8 parts and the one runner gave the same 40 verdicts, the same 8 failures with
+  the same 3 signatures (`ERROR redis restart failed` 3 times, `ERROR restart after the faults
+  (redis)` once, `VIOLATION [redis.acked_writes_survive] key k:# lost` 4 times), and the same 2
+  minimal schedules from seeds 20 and 31. The first runs' fingerprints were equal on 30 of 40
+  seeds: those of the parts on the one runner's CPU model, and none of the 10 seeds explored on
+  AMD. The run before the fixes gave the same counts on 4 AMD and 4 Intel parts.
+- **Dragonfly.** The merge found the example's finding 1, Dragonfly loading an older snapshot
+  after a backward clock step, in 9 of 60 schedules (seeds 4, 6, 7, 12, 16, 37, 48, 49 and 51).
+  All 9 reproduced, and the shrink from seed 4 kept `disk=none dseed=5d40003bdb5e0071 | run
+  K=df1@21+1 T=10:-162000 W=ddb740e7,p5,q2,r150` after 81 runs. The one runner gave the same 60
+  verdicts, the same 9 failures and the same minimal schedule; its part was merged on this Mac
+  with `hydo explore --merge`, because that run's merge job had the one-artifact mistake. The
+  fingerprints were equal on the 30 seeds explored on Xeon 6975P-C hosts and on none of the 30
+  explored on AMD or on a Xeon Platinum 8573C. On hvx (RESULTS.md, ex1) the same seeds gave 26
+  failures with the example's first checks: 18 of finding 1, 6 of power cuts, 2 of a check that
+  was too strict.
+- **Wall time.** For Dragonfly, 20 runners took 31 minutes against 75 on one runner. The part of
+  seeds 43 to 45 took 1,281 s without a failure, and the part of seeds 4 to 6 with its shrink took
+  454 s, so the slowest part set the time. The 20 parts used 7,536 s of exploration in all. For
+  Redis the build set both times.
+- **Redpanda.** 14 of 40 schedules failed, and all 14 reproduced on their own runners. The
+  merge found two of the example's known findings in the same seeds as hvx's blind explorations:
+  - Finding 1, a damaged snapshot that stops its node at every start. Seed 27 damaged a
+    partition's `tx.snapshot` and seed 35 the coordinator's `tx.coordinator.snapshot`. Both
+    nodes stopped at the assertion in `persisted_stm.cc` (`ERROR n# restart failed`). On hvx seed
+    35 gave the same finding.
+  - Finding 2, the hanging transaction. Seed 9 broke `tx.no_hanging`, as on hvx.
+
+  Ten more runs broke `rp.no-loss` and one broke `rp.fan-out`, the claims that finding 3 broke on
+  hvx; their causes were not read. The shrink of seed 18 kept no fault at all, only the
+  composition of the workload (`W=06dd08ca,p2,q1,r500,n30,x0-59`). Seed 22 ended `ERROR workload: exit budget exhausted`. No run on one
+  runner was made: the 20 parts used 58,176 s, 16.2 hours, more than a job's 6-hour limit. On
+  hvx one worker gave 4 to 20 Redpanda schedules an hour (RESULTS.md). The shards started up to
+  13 minutes late, behind the Dragonfly shards of the other run.
+- **What set Redpanda's time.** The shrinks. The part of seeds 27 and 28 took 9,469 s, of which
+  146 s were its first runs. It shrank seed 28's failure, whose key an earlier part had found
+  first, so the merge dropped that shrink (72 runs). It also shrank four new error kinds, 83 runs
+  each. The merge kept one of them, because one exploration shrinks only the first 8 new kinds
+  (`--errors-shrink`), and earlier parts had found 7. The part of
+  seeds 3 and 4 had no failure and took 6,689 s, 176 s of first runs and one error kind's shrink.
+
+**Tests.** `fake_engine`'s new scenario; unit tests of the merge's tag renaming, its command line
+and its tie rule; the committed results schema with the additions (hydo-schema-compat passes).
+`cargo fmt --all --check`, workspace clippy with `-D warnings`, `cargo test -p hydo --test it`,
+`public_content::`, hydo-schedule's `language::`, `cargo test -p hydo-config`, `cargo test -p
+hydo-release --test it test_tiers`, `cargo test -p hydo-explore --test it` and `--test
+fake_engine`, `sh ci/consolidate-tests.sh --check`, `sh ci/vale.sh`, and actionlint pass. Nothing
+recorded moved: no engine, guest program or image changed.
+
+**What is left.** Open item 153.

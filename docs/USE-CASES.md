@@ -84,7 +84,7 @@ at release, and after release. The tables below take the chart's techniques in i
 | Monitoring | Not hydo's job. | not hydo's job | |
 | A/B tests | Not hydo's job. They need real users. | not hydo's job | |
 | Tracing | Value history (`// hydo: record`) records chosen values at every call without a change of the run. `HYDO_PREEMPT_RECORD=1` records each forced preemption point. `hydo diff` names where two runs first differ. | partly built | M165, M208, M285; open items 77 and 146 |
-| Dynamic exploration | `hydo explore` searches the fault space from seeds, and `browser.explore` walks through a web app's pages. | built | M38, M102, M258 |
+| Dynamic exploration | `hydo explore` searches the fault space from seeds, and `browser.explore` walks through a web app's pages. `--shard I/N` and `--merge` spread one exploration over many machines. | built | M38, M102, M258, M304 |
 | Real user monitoring | Not hydo's job. It needs real users. | not hydo's job | |
 | Auditing | `hydo rules scan --kind clock` audits the code for durations on the wall clock. The control transcript records every command and fault of a run. An audit of access or compliance is not hydo's job. | partly built | M248 (`valkey`, valkey#5406) |
 | On-call experience | When an incident's cause is a fault that hydo can make, a schedule makes it again. `hydo inspect` opens the failed run at any stop, and `hydo report --html` says what broke in plain words. Paging and runbooks are not hydo's job. | partly built | M178, M228 |
@@ -173,6 +173,7 @@ Ideas that would answer more:
 | What is the history of each finding? | `hydo ci record` keeps a store, and `hydo ci page` writes it as one web page. Its headline counts the open findings of every branch, and each run shows when it started. | built; M286, M301; not run on GitHub |
 | Can the pull request show only what it changed? | `hydo ci run` writes `comment.md`, which the GitHub action posts and edits. | built; M286 |
 | Which commit introduced a finding? | `hydo versions --git A..B` replays it per commit, by hand. | partly built; M221 |
+| Can a long exploration run on many machines at once? | `hydo explore --shard I/N` explores one part of the seeds, and `hydo explore --merge` makes one exploration of the parts. hydo's workflow `explore.yml` runs up to 20 parts on GitHub's KVM runners. | built; M304 (Redis, Redpanda, and Dragonfly on GitHub's runners) |
 
 Ideas that would answer more:
 

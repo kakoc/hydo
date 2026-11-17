@@ -1294,6 +1294,29 @@ where M297's trial found it false (`docs/design/0.4.0-user-trial.md`, "After the
 - An exploration prints a progress line every 30 s. `hydo fuzz --vm --help` is the VM's help, and
   no guide topic names a milestone.
 
+**Explorations on many KVM runners (M304, tentative number).** `hydo explore --shard I/N`
+explores the I-th of N contiguous parts of `--seeds`, with the split of `hydo ci run --shard`.
+`hydo explore --merge DIR... --out DIR` makes one exploration of the parts without a VM. It
+decides again what one exploration decides:
+
+- the failures in seed order, and which failure of each class and signature is shrunk (the
+  part's shrink, renumbered);
+- the error kinds and their shrinks;
+- the property table, and the liveness summary.
+
+`exploration.json` gains `config.shard`, `shards` (each part's seeds, counts, host CPU, and wall
+time) and `missing_seeds`, a results addition. On the scripted engine the merge of 7 parts
+equals one exploration of the same 60 seeds file for file (`fake_engine`'s
+`merge_equals_one_exploration`). The workflow `.github/workflows/explore.yml`
+(`workflow_dispatch` and `workflow_call`) builds hydo and the image once, explores up to 20
+parts on GitHub's `ubuntu-24.04` runners, and merges them. `ci/remote-explore.sh` starts it,
+waits, and downloads the result. The merge compares no fingerprint across parts, because a
+part's runner is an AMD or an Intel host. On GitHub's runners Redis in 8 parts gave one runner's
+verdicts, signatures, and shrinks. Dragonfly in 20 parts found its snapshot finding in 9 of 60
+schedules, in 31 minutes against 75 on one runner. Redpanda in 20 parts found findings 1 and 2
+at the seeds where hvx found them, in 2 h 53 min. The details are in `docs/HISTORY.md`
+Milestone 304.
+
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 64 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
 facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
@@ -2254,6 +2277,29 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Exploration B (swarm) was stopped before its shrink, and the KVM engine did not run the
       example.
 
+153. Explorations on many KVM runners (M304, tentative number). What is left:
+    - `ci/remote-explore.sh` and the workflow's `workflow_dispatch` never ran. GitHub starts a
+      dispatch only for a workflow on the default branch. The proof called `explore.yml` through
+      `workflow_call` from the one-off workflow of the branch `tmp-explore-test`.
+    - Each part shrinks its own failures, so a key that several parts find is shrunk in each of
+      them and only the earliest shrink is kept. The same holds for the shrinks of new error
+      kinds. In Redpanda's part of seeds 27 and 28 such shrinks took most of its 9,469 s. One
+      shrink per key across parts is not built.
+    - Each part makes `hydo explore`'s diagnosis replays of its own first four problems, so a
+      problem of the merged list can lack its replay.
+    - The parts must be one engine: an hvx part and a Mac part do not merge. A failure found on
+      an Intel runner replays with its fingerprint only on Intel, and the same for AMD.
+    - The build job compiles hydo without a cache (about 6 minutes), and each shard downloads
+      the image (Redpanda's is 3 GB). It uses the guest files of the newest release in
+      `hydo/dist/releases.txt`, so a commit that needs newer guest kernels stops at their check.
+    - A part's property table keeps at most 256 properties (`MAX_PROPS`); the merge applies no
+      such limit.
+    - On Dragonfly the first runs' fingerprints of the Xeon Platinum 8573C differed from the Xeon
+      6975P-C's, at the fingerprint epoch 4 (0 of 6 seeds equal). Open item 102's proof did not
+      cover that model. The cause was not looked for.
+    - The `known-errors.yaml` of an example's `hydo/` folder is not passed to the explorer, so the
+      Dragonfly and Redpanda runs reported their expected error kinds as new.
+
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -3042,6 +3088,12 @@ build machine, before 2026-10-13.
   composer at `q4`, and etcd 14685 by its first symptom. A tick jitter that delays no
   timer at epoch 4 is replaced. Whole-RAM dumps showed that the RAM's tree hash follows the RAM.
   Open item 105 is empty
+- M304 (tentative number): explorations spread over GitHub's KVM runners. `hydo explore --shard
+  I/N` explores one part of a seed range, and `hydo explore --merge` makes one exploration of the
+  parts without a VM, equal to one exploration on the scripted engine. The workflow `explore.yml`
+  builds once, explores up to 20 parts and merges them; `ci/remote-explore.sh` starts it. Redis
+  in 8 parts gave one runner's verdicts; Dragonfly in 20 parts found its finding in 31 minutes
+  against 75; Redpanda found findings 1 and 2. Nothing recorded moved
 
 ## Where to look
 

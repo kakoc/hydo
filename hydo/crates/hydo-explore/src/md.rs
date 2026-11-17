@@ -119,6 +119,55 @@ fn class(f: &Failure) -> String {
     f.run.class.clone().unwrap_or_default()
 }
 
+/// The parts of a merged exploration (`hydo explore --merge`, Milestone 304), each with its
+/// seeds, its machine and its wall time; nothing for an exploration that ran in one piece.
+pub fn parts_md(doc: &Exploration) -> Vec<String> {
+    if doc.shards.is_empty() {
+        return Vec::new();
+    }
+    let mut l: Vec<String> = [
+        "",
+        "## Parts (hydo explore --merge)",
+        "",
+        "Each part ran on its own machine. A failure was re-run and shrunk there, so its \
+         fingerprints compare only with that machine's runs; verdicts and signatures compare \
+         across parts.",
+        "",
+        "| part | seeds | schedules | failures | host CPU | workers | wall time |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    .map(String::from)
+    .to_vec();
+    for s in &doc.shards {
+        l.push(format!(
+            "| {} | {} | {} | {} | {} | {} | {} |",
+            s.index.map(|i| i.to_string()).unwrap_or_else(|| "-".into()),
+            s.seeds,
+            s.schedules,
+            s.failures,
+            s.host_cpu
+                .as_ref()
+                .map(|c| if c.model.is_empty() {
+                    c.vendor.clone()
+                } else {
+                    c.model.clone()
+                })
+                .unwrap_or_else(|| "-".into()),
+            s.workers
+                .map(|w| w.to_string())
+                .unwrap_or_else(|| "-".into()),
+            s.total_wall_s
+                .map(|w| format!("{w} s"))
+                .unwrap_or_else(|| "-".into()),
+        ));
+    }
+    if let Some(m) = &doc.missing_seeds {
+        l.push(String::new());
+        l.push(format!("No part explored the seeds {m}."));
+    }
+    l
+}
+
 /// report.md of an exploration document.
 pub fn report(doc: &Exploration) -> String {
     if doc.mode == "branch" {
@@ -126,6 +175,7 @@ pub fn report(doc: &Exploration) -> String {
     }
     let mut l: Vec<String> = vec!["# Explorer report".into(), String::new()];
     table(doc, &mut l);
+    l.extend(parts_md(doc));
     if let Some(t) = &doc.turn_sweep {
         let kvm = doc.engine.backend.as_deref() == Some("kvm");
         l.extend(turn_sweep_md(t, kvm));
