@@ -1,0 +1,71 @@
+# TiKV v8.5.8 for three stores on one small machine (hydo's guest, or Docker on a laptop). Only
+# sizes and thread counts differ from the defaults; every setting of durability and consistency
+# keeps its default (raft-engine, synced Raft logs, the default leader lease).
+#
+# The API version 2 lets RawKV and TxnKV share one cluster (TiKV's configuration documentation,
+# `api-version`), and it needs `enable-ttl = true`.
+memory-usage-limit = "1GB"
+
+[log]
+level = "info"
+
+[server]
+grpc-concurrency = 2
+grpc-memory-pool-quota = "256MB"
+
+[raft-engine]
+memory-limit = "128MB"
+
+[readpool.unified]
+min-thread-count = 1
+max-thread-count = 2
+
+[storage]
+api-version = 2
+enable-ttl = true
+reserve-space = "0MB"        # no 5 GB placeholder file on a 512 MiB file system
+reserve-raft-space = "0MB"
+scheduler-worker-pool-size = 1
+
+[storage.block-cache]
+capacity = "64MB"
+
+[raftstore]
+store-pool-size = 1
+apply-pool-size = 1
+
+# Small regions, so that the workload's few megabytes split into several regions and PD moves
+# their leaders and merges them during a run.
+[coprocessor]
+region-split-size = "1MB"
+region-max-size = "1536KB"
+region-split-keys = 4000
+region-max-keys = 6000
+
+[rocksdb]
+max-open-files = 256
+max-background-jobs = 2
+
+[rocksdb.defaultcf]
+write-buffer-size = "8MB"
+max-write-buffer-number = 2
+
+[rocksdb.writecf]
+write-buffer-size = "8MB"
+max-write-buffer-number = 2
+
+[rocksdb.lockcf]
+write-buffer-size = "4MB"
+max-write-buffer-number = 2
+
+[raftdb]
+max-open-files = 256
+
+[backup]
+num-threads = 1
+
+[import]
+num-threads = 1
+
+[log-backup]
+enable = false

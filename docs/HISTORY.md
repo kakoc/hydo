@@ -15972,3 +15972,111 @@ the new example's lines, they now also hold the current inputs of four files tha
 their last recording: the manifests of dragonfly, memos and redpanda (Milestones 283 and 284),
 and blnk's `hydo-values.yaml` in the full identity golden. Nothing recorded moved: no engine,
 guest program or recorded example changed.
+
+### Milestone 287 (tentative number) - DONE (TiKV v8.5.8 with three PD members and three stores in one hvx guest, against what TiKV promises its clients: snapshot isolation of transactions in real-time order, linearizable raw registers and compare-and-swap, the bank's total and every acknowledged write held under every fault kind, while PD moved, split and merged regions; one new candidate, a clock effect: after a backward step of the wall clock, PD's timestamps keep their physical part, and TiKV judges a lock's time to live by it, so the locks of a client that crashed inside its commit block every writer of their keys for the length of the step; a known PD bug reached blind, tikv/pd#11596: a PD member that restarted shortly before a power cut never starts again; nothing recorded moved; 2026-11-17)
+
+**In short.** `hydo/onboard/examples/tikv` (RESULTS.md) runs TiKV and PD v8.5.8, the newest
+release, from their Docker images on hvx: three PD members and three stores, each store's data
+directory on a file system of its own. The stores use API version 2, the one that the
+documentation names for RawKV and TxnKV in one cluster. `hydo compose` imported a Compose file
+written for the example. A static Go client on client-go v2 (the version of TiDB v8.5.8) records
+a list-append history checked for strong snapshot isolation, raw registers with atomic
+compare-and-swap checked for linearizability, bank transfers, and acknowledged raw and
+transactional writes of new keys. One transaction in three uses async commit and one-phase
+commit. Two more commands ask PD's operator API to move, split and merge regions, and play a
+client that crashes inside its commit (`anytime_crash`, through client-go's exported test
+helpers). Two `eventually` checks say that the keys can be read and written again within 90 s
+after the heal.
+
+**What the setup needed.** The first clean run passed 42 minutes after the start, after four
+changes:
+
+- `root.share_images: true`. Three unpacked copies of the TiKV image (`tikv-server` is 518 MB
+  with debug information, `tikv-ctl` 328 MB) made an 8,836 MiB disk, and an engine maps 4,096 MiB.
+- Addresses instead of names between TiKV and PD. By name, TiKV's gRPC calls to PD ended in
+  `DEADLINE_EXCEEDED` for three minutes, although PD answered HTTP by name.
+- Each store listens on its own address. TiKV locks a file named after its listen address in
+  `$TMPDIR`, and the stores of the shared tree found one another's file (`0.0.0.0_20160 already in
+  use`).
+- 7,680 MiB of guest RAM: each store held about 2 GB at its start. At 5,120 MiB the guest's
+  out-of-memory killer ended a store.
+
+Later, PD's members got the readiness check `true`. After `K=pds.all` hydo restarted pd1 first
+and waited for its readiness, which needs a quorum, so pd1 never became ready (seed 6).
+
+**What was found.**
+
+- **A clock effect, new as far as the search found: after a backward clock step, the locks of a
+  crashed transaction block every writer of their keys for the length of the step.** PD's
+  `UpdateTimestamp` (`pkg/tso/tso.go`) keeps the physical part of the TSO while the wall clock is
+  behind it and only counts the logical part on, as TiDB's TSO page documents. TiKV decides that
+  a lock has expired by `lock.ts.physical() + lock.ttl < current_ts.physical()`
+  (`src/storage/txn/actions/check_txn_status.rs`, lines 55 and 176). So a lock's 3 s do not pass
+  until the wall clock passes the time PD had reached before the step, and a writer that meets
+  the lock backs off until its own deadline. Seed 4 of the first exploration reached it blind
+  (a step back of 30 days among six faults): bank transfers failed from step 70 on, and the
+  final reads of the accounts timed out. Its schedule gave the same error from a fresh boot, and
+  passed without the step. With `anytime_crash` in the workload, `disk=none | run T=20:-3600`
+  and `T=20:-300` break the `writable` check on every run (`fp=5c55bec66f806d2d` and
+  `5e36930d71d80471`, two runs each), a step of 60 s keeps the accounts unwritable for 17 s
+  after the heal, and without a step the locks go 2.18 s after the heal. Seed 13 of the second
+  exploration reached it blind again. The search covered tikv/tikv, tikv/pd, tikv/client-go and
+  pingcap/tidb; RESULTS.md lists the phrases. Nothing was posted.
+- **A known bug, tikv/pd#11596: a PD member that restarted shortly before a power cut never
+  starts again.** Seed 12 of the second exploration (a kill of PD's leader, a partition of the
+  stores, and a whole-guest cut at a flush) ended with a store that could not start. Inside the
+  replay, two PD members had stopped in the recovery boot, one with `leveldb: manifest corrupted
+  (field 'comparer'): missing`. PD v8.5.8 pins goleveldb from 2019, whose `newManifest` syncs
+  `CURRENT` but not the new MANIFEST it names; goleveldb fixed it in 2021. `disk=cut | run
+  K=pds.all@40+1 C=46` gives it on every run. The issue was opened on 2026-11-16, and its fix
+  (pull request #11598) is on PD's master, not on `release-8.5`.
+
+Not bugs: a flipped bit in a store's RocksDB `OPTIONS` file stops the store at its next start,
+and the cluster runs on with two (seed 9). The cluster took clock steps of 30 days either way,
+a kill of all three PD members, whole-guest power cuts, and one store's strict power loss without
+a broken history.
+
+**The runs.** Every run used hvx on the bare-metal machine, one VM at a time, with this branch's
+`hydo`, `hydo-build` and `hydo-hvx` (built at `0038380d`) over the 0.3.4 Linux release, at the
+fingerprint epoch 4. A clean run takes 40 to 60 s of the machine and a schedule of the explorer
+2 to 3 minutes. One explorer worker of the 7,680 MiB guest used about 19 GB of the host, so the
+other workers failed to boot, and `hydo run` beside the explorer ended with `the engine exited`.
+Four blind explorations (`--strategy process --new-faults --more-faults --cluster-faults
+--storage-faults`) ran 60 schedules on four images. Finding 1 came in seeds 4, 13 and 42, finding
+2 in seeds 12 and 83, the readiness mistake in seed 6, and nine stores that did not start after a
+damaged file in the others that failed. The fourth exploration left clock steps out, because a
+backward step reached finding 1 in most schedules and its shrink took the machine; it ran 44
+schedules at 33.7 runs an hour. No swarm exploration ran: the phase reached its limit of 5 hours.
+RESULTS.md lists the nine images and their values. The image of the committed
+folder gave `OK` for `disk=none | run` twice (`fp=9c236dcfc429f5cf`), and `hydo repro
+--regressions` gave `2 of 2 regressions as expected`.
+
+**Tests and checks.** The explorer's `identity-quick.txt` and `corpus-full.txt` and the control
+corpus `corpus-quick.txt` were re-recorded with `HYDO_BLESS=1`. The new example's inputs were
+added, and the chunks after them in the sorted streams moved. The entries of the Dragonfly, Memos
+and Redpanda manifests moved too: Milestones 283 and 284 changed those files without re-recording
+the goldens. On this Mac, on `main` at `5c3de108` with this milestone on top, these passed:
+workspace clippy with `-D warnings`, `cargo fmt --all --check`, `hydo`'s
+`equivalence::cli_matches_golden`, `agents_equivalence` and `docs::`, `hydo-agents`'s
+`public_content::`, `hydo-schedule`'s `language::`, `cargo test -p hydo-config`, `hydo-explore`'s
+`--test it` and `--test fake_engine`, `hydo-control`'s `corpus::`, `hydo-release`'s
+`test_tiers`, `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`. Nothing recorded moved:
+no engine, guest program or existing example changed.
+
+Retro: TiKV v8.5.8, hvx, 2026-11-17
+- Time to the first clean run: 42 minutes of wall time (12 of scouting, 30 of setup), about 20
+  of them waiting for image builds and runs.
+- Schedules run before the first finding: 4 (seed 4 of the first exploration); of them, none
+  failed by the rules' mistakes. Seed 6 later failed by the example's readiness checks.
+- The findings: 1 new (a clock effect), 1 known (tikv/pd#11596, reached blind), 1 by design (a
+  damaged `OPTIONS` file stops a store).
+- What took the most time: making finding 1 happen on every run, from a blind failure that
+  needed a crash inside a commit at the right moment (1.5 hours, ending in `anytime_crash`); the
+  memory of one explorer worker, which kept every run on one VM and lost four directed runs (1
+  hour); looking inside failed runs, because `hydo inspect exec` needs the machine's one VM and a
+  violation keeps no service logs (40 minutes).
+- What hydo lacked: a worker's memory and a silent `the engine exited` beside it; a group
+  restart that waits for each member's readiness in turn; no hint to `root.share_images`, and a
+  `/tmp` that the services of a shared tree share; TiKV's gRPC client could not use names; the
+  clock audit does not see a timestamp compared with a time to live; no way to crash the workload
+  inside an operation. Each is in open item 147.

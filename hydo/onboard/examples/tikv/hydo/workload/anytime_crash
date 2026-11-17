@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=15
+# a client that crashes inside a commit: it writes the locks of a transfer of 1 between two
+# accounts and exits before the commit (../../client/main.go, opCrash); the locks' time to live
+# (3 s) lets the next reader or writer roll the transfer back
+exec /bin/tkc op crash

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=240
+# wait until PD reports three stores up, then write the bank's eight accounts and one raw key
+exec /bin/tkc init

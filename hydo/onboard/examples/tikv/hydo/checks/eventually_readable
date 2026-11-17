@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: within=90 after=heal poll=5
+# hydo-msg: within 90 s after the faults heal, the lists and the accounts can be read in one snapshot (the locks of failed transactions are resolved after their time to live)
+# After a kill or a power cut the regions elect their leaders again within seconds; a lock that
+# a failed transaction left behind expires after its time to live, 3 s for these small
+# transactions, and the next reader rolls it back or commits it.
+exec /bin/tkc check readable

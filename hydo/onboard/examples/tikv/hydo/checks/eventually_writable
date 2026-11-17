@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: within=90 after=heal poll=5
+# hydo-msg: within 90 s after the faults heal, every account can be written again (the locks of crashed transactions are rolled back after their time to live)
+# anytime_crash leaves the locks of a transaction that never commits, as a client that crashes
+# inside its commit does. Percolator resolves such a lock once its time to live (3 s) has
+# passed: the next writer of the key rolls the transaction back.
+exec /bin/tkc check writable

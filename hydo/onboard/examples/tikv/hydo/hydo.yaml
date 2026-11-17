@@ -1,0 +1,195 @@
+# TiKV v8.5.8 (the newest release) with three PD members and three TiKV stores in one guest, as
+# ../docker-compose.yaml runs them. Each store's data directory is a file system of its own
+# (services[].storage), so that one store's files can be corrupted (G=) and one store can lose its
+# power (L=) while the others run on. RESULTS.md says what was hunted and found.
+#
+#   sh ../build.sh                 # bin/tkc-<arch>, the test client (../client)
+#   sh fetch-images.sh             # the PD and TiKV images by digest
+#   hydo build hydo.yaml           # x86_64 (hvx, KVM)
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --cluster-faults --storage-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. Changed from the import: the stores'
+# readiness checks ask TiKV's status servers, and PD's members count as ready at once (PD answers
+# only with a quorum); pd2 and pd3 start with pd1; TiKV and PD name each other by address (TiKV's gRPC client did not reach PD by name in
+# the guest), and each store listens on its own address: TiKV locks a file named after its listen
+# address in /tmp, which the stores of one shared image tree share (`0.0.0.0_20160 already in
+# use`); the stores' data directories are file systems of their own; the guest's RAM.
+format: 1
+name: tikv
+description: "TiKV v8.5.8, three PD members and three stores: snapshot-isolated transactions, linearizable raw registers and compare-and-swap, bank transfers and acknowledged writes under kills, pauses, partitions, power cuts, clock steps and one store's storage faults, while PD moves, splits and merges regions"
+hydo_version: "0.3"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  api: "2"        # 2 | 1: TiKV's API version (conf/tikv.toml says 2; with 1 the client only)
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 7680             # 3 stores (about 2 GB each at the start), 3 PD members, the clients
+  clock_start: 1794873600   # 2026-11-17 00:00 UTC, the day of the import
+  clock_after_cut: 60       # PD's timestamps follow the wall clock: no real clock runs back across a power cut
+
+data:
+  size_mib: 512    # the data disk: PD's directories; each store's directory is a file system of its own on it
+  dirs: [vol/pd1-data, vol/pd2-data, vol/pd3-data]
+
+env:
+  TK_API: "{{api}}"
+
+root:
+  share_images: true     # one unpacked tree per image: three copies of TiKV's 850 MB of binaries
+                         #   do not fit the 4 GiB disk that an engine maps
+  files:                 # bind-mount sources, copied into the read-only root
+    - {src: ../conf/pd.toml, dst: /etc/hydo/compose/bind/0-pd.toml}
+    - {src: ../conf/tikv.toml, dst: /etc/hydo/compose/bind/1-tikv.toml}
+    - {src: "../bin/tkc-{{arch}}", dst: /bin/tkc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 pd1
+      10.89.0.12 pd2
+      10.89.0.13 pd3
+      10.89.0.14 tikv1
+      10.89.0.15 tikv2
+      10.89.0.16 tikv3
+
+services:
+  # Compose service pd1
+  # image pingcap/pd:v8.5.8 = docker.io/pingcap/pd@sha256:424e896800e42e1b7eb585b604c8daa3454110d0f0df5ab41f7c5f49164d3aef
+  #   linux/amd64: sha256:507b401ece53aba15db9628a90a1e350c3cd1b9b39c086c708e2e88541b0e7fd
+  #   linux/arm64: sha256:864318d318b7baee87e4e711f5abad7cd09ca3827fdf0011d5ec6f68b714c9c7
+  - name: pd1
+    image: {x86_64: images/pingcap-pd-v8.5.8-amd64.docker.tar, arm64: images/pingcap-pd-v8.5.8-arm64-oci}
+    image_ref: "pingcap/pd:v8.5.8"
+    cmd: ["--name=pd1", "--data-dir=/data", "--client-urls=http://0.0.0.0:2379", "--advertise-client-urls=http://10.89.0.11:2379", "--peer-urls=http://0.0.0.0:2380", "--advertise-peer-urls=http://pd1:2380", "--initial-cluster=pd1=http://pd1:2380,pd2=http://pd2:2380,pd3=http://pd3:2380", "--config=/etc/pd/pd.toml"]
+    port: 2379
+    addr: 10.89.0.11
+    ready: "true"           # PD answers only with a quorum, and hydo restarts a killed group one
+                            #   member at a time, each after the one before is ready; first_init
+                            #   and the client wait for the cluster instead
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-pd.toml, dst: /etc/pd/pd.toml}
+      - {src: /data/vol/pd1-data, dst: /data}
+  - name: pd2
+    image: {x86_64: images/pingcap-pd-v8.5.8-amd64.docker.tar, arm64: images/pingcap-pd-v8.5.8-arm64-oci}
+    image_ref: "pingcap/pd:v8.5.8"
+    cmd: ["--name=pd2", "--data-dir=/data", "--client-urls=http://0.0.0.0:2379", "--advertise-client-urls=http://10.89.0.12:2379", "--peer-urls=http://0.0.0.0:2380", "--advertise-peer-urls=http://pd2:2380", "--initial-cluster=pd1=http://pd1:2380,pd2=http://pd2:2380,pd3=http://pd3:2380", "--config=/etc/pd/pd.toml"]
+    port: 2379
+    addr: 10.89.0.12
+    start_after: started   # the members form the cluster together: start all three, then check
+    ready: "true"
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-pd.toml, dst: /etc/pd/pd.toml}
+      - {src: /data/vol/pd2-data, dst: /data}
+  - name: pd3
+    image: {x86_64: images/pingcap-pd-v8.5.8-amd64.docker.tar, arm64: images/pingcap-pd-v8.5.8-arm64-oci}
+    image_ref: "pingcap/pd:v8.5.8"
+    cmd: ["--name=pd3", "--data-dir=/data", "--client-urls=http://0.0.0.0:2379", "--advertise-client-urls=http://10.89.0.13:2379", "--peer-urls=http://0.0.0.0:2380", "--advertise-peer-urls=http://pd3:2380", "--initial-cluster=pd1=http://pd1:2380,pd2=http://pd2:2380,pd3=http://pd3:2380", "--config=/etc/pd/pd.toml"]
+    port: 2379
+    addr: 10.89.0.13
+    start_after: started
+    ready: "true"
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-pd.toml, dst: /etc/pd/pd.toml}
+      - {src: /data/vol/pd3-data, dst: /data}
+  # Compose service tikv1
+  # image pingcap/tikv:v8.5.8 = docker.io/pingcap/tikv@sha256:ab84580b6795868940231aa778a34b082d19e4417e6d66f755c609bebdbbfd69
+  #   linux/amd64: sha256:cdb681d570c490424d69ecc1ecda6865999f2b86ae3b2d2cb070989bf4d2701d
+  #   linux/arm64: sha256:60d7cbe7c4a1e91c9ddb38a0e7fc052ae4a172bfb80525c17dc589cf842f0f7a
+  - name: tikv1
+    image: {x86_64: images/pingcap-tikv-v8.5.8-amd64.docker.tar, arm64: images/pingcap-tikv-v8.5.8-arm64-oci}
+    image_ref: "pingcap/tikv:v8.5.8"
+    cmd: ["--addr=10.89.0.14:20160", "--advertise-addr=10.89.0.14:20160", "--status-addr=10.89.0.14:20180", "--advertise-status-addr=10.89.0.14:20180", "--data-dir=/data", "--pd=10.89.0.11:2379,10.89.0.12:2379,10.89.0.13:2379", "--config=/etc/tikv/tikv.toml"]
+    port: 20160
+    addr: 10.89.0.14
+    depends_on: [pd1, pd2, pd3]
+    start_after: started   # the stores register together: start all three, then check
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://tikv1:20180/status 2>/dev/null"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/tikv1-data, size_mib: 384}   # tikv1's data directory, a file system of its own
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/1-tikv.toml, dst: /etc/tikv/tikv.toml}
+      - {src: /data/vol/tikv1-data, dst: /data}
+  - name: tikv2
+    image: {x86_64: images/pingcap-tikv-v8.5.8-amd64.docker.tar, arm64: images/pingcap-tikv-v8.5.8-arm64-oci}
+    image_ref: "pingcap/tikv:v8.5.8"
+    cmd: ["--addr=10.89.0.15:20160", "--advertise-addr=10.89.0.15:20160", "--status-addr=10.89.0.15:20180", "--advertise-status-addr=10.89.0.15:20180", "--data-dir=/data", "--pd=10.89.0.11:2379,10.89.0.12:2379,10.89.0.13:2379", "--config=/etc/tikv/tikv.toml"]
+    port: 20160
+    addr: 10.89.0.15
+    depends_on: [pd1, pd2, pd3]
+    start_after: started
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://tikv2:20180/status 2>/dev/null"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/tikv2-data, size_mib: 384}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/1-tikv.toml, dst: /etc/tikv/tikv.toml}
+      - {src: /data/vol/tikv2-data, dst: /data}
+  - name: tikv3
+    image: {x86_64: images/pingcap-tikv-v8.5.8-amd64.docker.tar, arm64: images/pingcap-tikv-v8.5.8-arm64-oci}
+    image_ref: "pingcap/tikv:v8.5.8"
+    cmd: ["--addr=10.89.0.16:20160", "--advertise-addr=10.89.0.16:20160", "--status-addr=10.89.0.16:20180", "--advertise-status-addr=10.89.0.16:20180", "--data-dir=/data", "--pd=10.89.0.11:2379,10.89.0.12:2379,10.89.0.13:2379", "--config=/etc/tikv/tikv.toml"]
+    port: 20160
+    addr: 10.89.0.16
+    depends_on: [pd1, pd2, pd3]
+    start_after: started
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://tikv3:20180/status 2>/dev/null"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/tikv3-data, size_mib: 384}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/1-tikv.toml, dst: /etc/tikv/tikv.toml}
+      - {src: /data/vol/tikv3-data, dst: /data}
+
+# The groups: K=pds.primary aims at PD's leader, the TSO's only source; K=stores.majority at two
+# of the three stores.
+groups:
+  - name: pds
+    services: [pd1, pd2, pd3]
+    primary: |
+      for n in pd1 pd2 pd3; do
+        l=$(timeout 3 wget -q -T 2 -O - "http://$n:2379/pd/api/v1/leader" 2>/dev/null | sed -n 's/.*"name": *"\(pd[123]\)".*/\1/p' | head -n 1)
+        case $l in pd1|pd2|pd3) echo "$l"; exit 0 ;; esac
+      done
+      exit 1
+  - name: stores
+    services: [tikv1, tikv2, tikv3]
+
+# 80 rounds of 500 ms: 40 s of guest time
+workload:
+  steps: 80
+  timeout: 600
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 500
+  command_timeout: 150   # the read-backs wait up to 120 s for the regions' leaders after a power cut
+  drain_timeout: 40
+
+faults: [kill, pause, network, oneway, cut, clock, disk, corrupt, powerloss]

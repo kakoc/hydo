@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=25
+# one raw read, write or compare-and-swap (atomic mode) of reg/k0..k4, recorded in history reg
+exec /bin/tkc op reg

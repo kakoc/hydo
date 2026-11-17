@@ -629,6 +629,28 @@ order. Three new candidates, found on the Mac engine and not posted:
   batch with `No such file or directory`.
 - A succeeded dump is an empty file after a power cut: it is never synced.
 
+**TiKV (M287, tentative number).** TiKV and PD v8.5.8 run as three PD members and three stores
+in one hvx guest in `hydo/onboard/examples/tikv` (RESULTS.md), imported with `hydo compose`. The
+stores use API version 2, so that RawKV and TxnKV share the cluster. A Go client on client-go v2
+records four things:
+- a list-append history, checked for strong snapshot isolation, also with async commit;
+- raw registers with compare-and-swap, checked for linearizability;
+- bank transfers;
+- acknowledged writes of new keys.
+
+It also asks PD to move, split, and merge regions. Every promise held under kills, pauses,
+partitions, power cuts, one store's power loss and corrupted files, and clock steps. One new
+candidate is a clock effect, not reported upstream. After the wall clock steps back, PD's
+timestamps keep their physical part (documented), and TiKV judges a lock's time to live by it
+(`check_txn_status.rs`). So the locks of a client that crashed inside its commit block every
+writer of their keys for the length of the step. `disk=none | run T=20:-3600` breaks the
+`writable` check on every run. Without the step the locks go 2.18 s after the heal. The
+exploration also reached a known PD bug blind (tikv/pd#11596, fixed on PD's master only). A PD
+member that restarted shortly before a power cut stops at every later start with `leveldb:
+manifest corrupted`. Its old goleveldb syncs `CURRENT` but not the new MANIFEST. The example
+needed `root.share_images: true`, addresses between TiKV and PD, and 7,680 MiB of guest RAM (open
+item 147).
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -2105,6 +2127,38 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       without faults reads `workload steps 0..29` for every stop.
     - A run with a power cut was not recorded; the boot number of the records is tested on
       synthetic records only.
+147. The TiKV example (M287). What is left:
+    - Its candidate (finding 1, crashed transactions' locks after a backward clock step) is not
+      reported upstream. Another way to reach it was not run: a move of PD's leadership away from a
+      member whose clock runs ahead. Pessimistic locks and async commit's locks under the step
+      were not tried.
+    - Seed 4 of the first exploration also timed out the readers of the locked accounts. The
+      directed runs blocked writers only, and why that run's reads could not pass the lock was
+      not traced.
+    - One explorer worker of a 7,680 MiB guest uses about 19 GB of the host. So the explorations
+      ran on one worker. A `hydo run` beside the explorer ends with `the engine exited` and no
+      reason.
+    - After a kill of a group, hydo restarts its members one at a time, each after the one
+      before is ready. So a member whose readiness needs a quorum never becomes ready. In the
+      example, PD's members count as ready at once. So a PD member that dies in the recovery
+      boot is not named, and the verdict names the store that cannot reach PD (finding 2).
+    - Finding 2 (tikv/pd#11596) is known and fixed on PD's master only. A power cut shortly
+      after any start of PD reaches it, so explorations with power cuts meet it often until a
+      release has the fix.
+    - With `root.share_images: true`, TiKV's address lock in `/tmp` was found by the other
+      stores of the same image, although MANIFEST.md gives each service its own `/tmp`. The
+      import does not propose `share_images` when copies of one image pass the engine's disk.
+    - TiKV's gRPC client did not reach PD by service name in the guest; the cause was not
+      traced. The example names PD and the stores by address.
+    - `hydo rules scan --kind clock` does not see a timestamp compared with a time to live
+      (`lock.ts.physical() + lock.ttl`), and ranked cloud-credential code and a test first.
+    - TiKV logged `monotonic time jumped back, 52.048 -> 45.589` once on tikv1 in seed 4's run
+      (the receive delay of a Raft message); whether the guest's clocks or TiKV's comparison
+      caused it was not traced.
+    - hydo kills services, not the workload at a point of its code, so the client crashes inside
+      its commit by itself (`anytime_crash`, with client-go's test helpers).
+    - The Mac engine and KVM did not run the example. The TiKV image is 806 MiB compressed, and
+      each store holds about 2 GB at its start.
 148. The Meilisearch example (M295). What is left:
     - Its three candidates are not reported upstream.
     - A kill reaction (`A=<event>+<ms>:kill-<svc>`) reaches the service through the guest
@@ -2943,6 +2997,13 @@ build machine, before 2026-10-13.
   its task queue promises. Three new candidates, not posted. An index swap runs twice after a
   crash between its two commits, also after a SIGKILL in Docker. A power cut empties an enqueued
   addition's payload, and a succeeded dump is empty after a power cut. Nothing recorded moved
+- M287 (tentative number): the TiKV v8.5.8 onboarding on hvx: three PD members and three
+  stores. Snapshot isolation, linearizable raw registers, the bank, and acknowledged writes held
+  under every fault kind. One new clock-effect candidate: after a backward clock step, PD's
+  timestamps keep their physical part, and TiKV judges lock expiry by it. So a crashed
+  transaction's locks block writers for the length of the step. A known PD bug was reached
+  blind: tikv/pd#11596, a member that restarted shortly before a power cut never starts again.
+  Nothing recorded moved
 
 ## Where to look
 

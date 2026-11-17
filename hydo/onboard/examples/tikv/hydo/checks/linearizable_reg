@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: history=reg model=cas
+# hydo-msg: the raw registers are linearizable (raw reads, writes and atomic compare-and-swap of one key each)
+exec /bin/tkc readback reg

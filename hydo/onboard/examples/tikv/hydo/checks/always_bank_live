@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: every=3
+# hydo-msg: every snapshot of the accounts, also while transfers commit, holds 800 in all
+exec /bin/tkc check bank-live

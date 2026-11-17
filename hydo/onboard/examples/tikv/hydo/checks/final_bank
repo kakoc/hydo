@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: the transfers keep the eight accounts at 800 in all, none below zero
+exec /bin/tkc check bank

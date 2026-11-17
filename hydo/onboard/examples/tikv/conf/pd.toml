@@ -1,0 +1,14 @@
+# PD v8.5.8, three members. The TSO settings keep their defaults. The schedule lets PD merge the
+# workload's small regions soon after a split, so that splits, merges and leader moves happen
+# during a run of a minute or two.
+[pd-server]
+dashboard-address = "none"   # no embedded TiDB Dashboard: it needs memory and a TiDB
+
+[schedule]
+max-merge-region-size = 1     # MiB
+max-merge-region-keys = 4000
+split-merge-interval = "10s"
+patrol-region-interval = "100ms"
+
+[replication]
+max-replicas = 3

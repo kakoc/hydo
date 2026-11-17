@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=15
+# ask PD for one change of the regions: move a leader to another store, split a region, or
+# merge two neighbours (PD's operator API); the keys stay, the regions and leaders change
+exec /bin/tkc op move

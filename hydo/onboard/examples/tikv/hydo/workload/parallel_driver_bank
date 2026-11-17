@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=25
+# one transfer of 1 to 30 between two of the accounts acct/0..7, refused below zero
+exec /bin/tkc op bank

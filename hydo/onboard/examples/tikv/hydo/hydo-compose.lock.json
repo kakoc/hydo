@@ -1,0 +1,129 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "pingcap/pd:v8.5.8": {
+   "index_digest": "sha256:424e896800e42e1b7eb585b604c8daa3454110d0f0df5ab41f7c5f49164d3aef",
+   "name": "pingcap/pd",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/pd-server"
+      ],
+      "Env": [
+       "container=oci",
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "2379/tcp": {},
+       "2380/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:507b401ece53aba15db9628a90a1e350c3cd1b9b39c086c708e2e88541b0e7fd",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/pd-server"
+      ],
+      "Env": [
+       "container=oci",
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "2379/tcp": {},
+       "2380/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:864318d318b7baee87e4e711f5abad7cd09ca3827fdf0011d5ec6f68b714c9c7",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "pingcap/pd:v8.5.8",
+   "registry": "docker.io",
+   "repo": "pingcap/pd",
+   "tag": "v8.5.8"
+  },
+  "pingcap/tikv:v8.5.8": {
+   "index_digest": "sha256:ab84580b6795868940231aa778a34b082d19e4417e6d66f755c609bebdbbfd69",
+   "name": "pingcap/tikv",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/tikv-server"
+      ],
+      "Env": [
+       "container=oci",
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "TZ=/etc/localtime",
+       "TZDIR=/usr/share/zoneinfo",
+       "MALLOC_CONF=prof:true,prof_active:false"
+      ],
+      "ExposedPorts": {
+       "20160/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:cdb681d570c490424d69ecc1ecda6865999f2b86ae3b2d2cb070989bf4d2701d",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/tikv-server"
+      ],
+      "Env": [
+       "container=oci",
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "TZ=/etc/localtime",
+       "TZDIR=/usr/share/zoneinfo",
+       "MALLOC_CONF=prof:true,prof_active:false"
+      ],
+      "ExposedPorts": {
+       "20160/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:60d7cbe7c4a1e91c9ddb38a0e7fc052ae4a172bfb80525c17dc589cf842f0f7a",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "pingcap/tikv:v8.5.8",
+   "registry": "docker.io",
+   "repo": "pingcap/tikv",
+   "tag": "v8.5.8"
+  }
+ }
+}

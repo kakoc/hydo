@@ -1,0 +1,8 @@
+# Finding 2 of RESULTS.md, known as tikv/pd issue 11596 (fixed on PD's master by pull request
+# 11598, not in v8.5.8): all three PD members are killed before step 40 and start again before
+# step 41, and the whole guest loses its power before step 46. At every start PD's LevelDB of
+# region metadata writes a new MANIFEST and points CURRENT at it, and only CURRENT is synced. In
+# the recovery boot the members whose MANIFEST did not reach the disk stop with `leveldb: manifest
+# corrupted (field 'comparer'): missing`, PD has no quorum, and no store can register.
+# expect: violation      (change to ok when PD's goleveldb has the fix)
+disk=cut | run K=pds.all@40+1 C=46

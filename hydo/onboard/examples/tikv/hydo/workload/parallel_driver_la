@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=25
+# one transaction of 1 to 4 appends and reads on la/k0..k7, recorded in history la; one in
+# three commits with async commit and one-phase commit (../../client/main.go, opLA)
+exec /bin/tkc op la

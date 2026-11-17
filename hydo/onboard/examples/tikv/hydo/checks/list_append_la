@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: history=la consistency=strong-snapshot-isolation
+# hydo-msg: the list-append transactions are snapshot-isolated in real-time order (no lost, aborted or duplicated append, no G0, G1c or G-single cycle)
+# TiKV's README promises snapshot isolation and externally consistent transactions; a start
+# timestamp comes from PD after every earlier commit, so a transaction sees every commit that
+# ended before it began. The read-back: every list in one snapshot, recorded as reads.
+exec /bin/tkc readback la

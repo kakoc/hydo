@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=25
+# one new key of 2 to 8 KiB, raw (r/<id>) or in a transaction (t/<id>); acknowledged ones go
+# to $HYDO_ACKED as r<id> or t<id>
+exec /bin/tkc op put
