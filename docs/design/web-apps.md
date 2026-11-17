@@ -207,6 +207,36 @@ What did not work at first, and what changed because of it:
   reference then name the same page alike. Before, the files were numbered in the order they were
   taken, and each shard restarted the count.
 
+## The Mac engine (Milestone 284)
+
+Most web developers work on a Mac, so the Mac engine must run `browser:`. Until this milestone it
+could not. The Mac engine's arm64 image keeps its whole root file system in the initramfs, which
+the guest kernel unpacks into guest RAM. The Playwright image's files are 2.4 GB, so the root
+would take most of a 4 GiB guest before Chromium started.
+
+- **The root moves to the disk.** `guest.root: disk` makes `hydo build` put a read-only ext4
+  file system of the root into the disk's first partition, as the x86_64 images always have it.
+  The initramfs keeps only busybox and an `/init` that mounts `/dev/vda1` and hands PID 1 to the
+  agent with `switch_root`. It is the default with `browser:`. Every other image keeps its root
+  in memory, so no image built before changes its bytes, and nothing recorded moves.
+- **The file system is made in a helper VM.** A Mac has no mke2fs that fills a file system from a
+  folder, and the release has no debugfs. `hydo build` already formats the data disk in a short
+  VM of the Mac engine with the release's static mke2fs. For the root it writes the tree as one
+  cpio archive with every owner and mode in its headers. The helper VM gets a disk with two
+  partitions: the new file system and the archive. The helper formats the first, mounts it, and
+  unpacks the archive into it with busybox as root. The 3,200 MiB root of web-shop took about one
+  minute.
+- **The guest kernel did not change.** Chromium's headless shell, Node.js and Playwright's runner
+  started under `Image-explore-netns-cg`, the kernel of every image with `network: bridge`.
+  Playwright starts Chromium without its sandbox, so the guest needs no user namespaces and no
+  seccomp.
+- **No loop without VM exits stopped a run.** No run ended in `SPIN`. Chromium's and Node.js's
+  waits make system calls, which the engine's clock counts.
+
+The arm64 Playwright image is the one that the catalog pinned in Milestone 253 and never ran. Its
+platform manifest is `sha256:56be08aca06b…`, with 7 layers and 35,741 entries; the archive is
+988,750,336 bytes.
+
 ## Sources
 
 1. State of JavaScript 2024, testing libraries: https://2024.stateofjs.com/en-US/libraries/testing/

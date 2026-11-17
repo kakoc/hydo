@@ -114,6 +114,8 @@ pub(crate) const KNOWN_WORKLOAD: &[&str] = &[
 ];
 /// `guest.kernel` (Milestone 256): the guest kernel variants (`hydo_image::kernels::VARIANTS`).
 pub const KERNEL_VARIANTS: &[&str] = &["containers"];
+/// `guest.root` (Milestone 284): where an arm64 image keeps its root file system.
+pub const ROOT_PLACES: &[&str] = &["memory", "disk"];
 /// `workload.kind` (M205).
 pub const WORKLOAD_KINDS: &[&str] = &["system", "test"];
 pub(crate) const KNOWN_DATA: &[&str] = &["size_mib", "mount", "dirs", "description"];
@@ -135,6 +137,7 @@ pub(crate) const KNOWN_GUEST: &[&str] = &[
     "cpu",
     "cpu_cache",
     "kernel",
+    "root",
     "reboot",
     "disks",
     "branch_tick",
@@ -963,6 +966,15 @@ pub fn validate(m: &mut Value) -> R<()> {
             return Err(err(format!(
                 "guest.kernel: containers (a guest kernel with what containers and Kubernetes need, on the Mac and KVM engines) (got {})",
                 repr(k)
+            )));
+        }
+    }
+    if has(&guest, "root")? {
+        let r = index(&guest, "root")?;
+        if !in_strs(r, ROOT_PLACES) {
+            return Err(err(format!(
+                "guest.root: memory (the Mac engine's root is the initramfs, in guest RAM) or disk (a read-only ext4 root on the image's disk; the default with browser:) (got {})",
+                repr(r)
             )));
         }
     }

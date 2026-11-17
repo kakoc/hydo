@@ -186,6 +186,114 @@ pub fn needs_netns_kernel(m: &serde_json::Value) -> bool {
     shell::has_netns(m) || shell::has_links(m) || shell::has_freeze(m)
 }
 
+/// `guest.root` (Milestone 284): the root is a read-only file system on the disk, not the
+/// initramfs. The default is the disk for an image with `browser:` (the Playwright image is
+/// about 3 GB unpacked, more than guest RAM should hold), else memory, as before.
+pub fn root_on_disk(m: &serde_json::Value) -> bool {
+    match m.get("guest").and_then(|g| g.get("root")) {
+        Some(serde_json::Value::String(s)) => s == "disk",
+        Some(serde_json::Value::Null) | None => m.get(hydo_manifest::browser::META).is_some(),
+        Some(_) => false,
+    }
+}
+
+/// The paths of the root that the host reads from an image's initramfs
+/// (`hydo_engine::image::embedded_file`): its records and plans under /etc/hydo, the busybox
+/// whose messages the controller reads, and a SQL helper's configuration. The initramfs of an
+/// image whose root is on its disk carries copies of them.
+const HOST_READS: &[&str] = &["etc/hydo", "bin/busybox", "hydo/workload/helper_sql.conf"];
+
+/// The init of an image whose root is on its disk: mount the read-only ext4 root of /dev/vda1,
+/// move /dev into it, and hand PID 1 to the agent there.
+const DISK_ROOT_INIT: &str = "#!/bin/busybox sh\n\
+b=/bin/busybox\n\
+$b mount -t devtmpfs none /dev\n\
+n=0; while [ ! -b /dev/vda1 ] && [ $n -lt 1000 ]; do $b usleep 1000; n=$((n+1)); done\n\
+if ! $b mount -t ext4 -o ro,noatime /dev/vda1 /root; then\n\
+  echo 'hydo: the root file system on /dev/vda1 did not mount'\n\
+  while :; do $b sleep 3600; done\n\
+fi\n\
+$b mount --move /dev /root/dev\n\
+exec $b switch_root /root /init\n";
+
+/// `guest.root: disk`: the root tree `r` as a read-only ext4 file system `<out>-arm64-rootfs.img`
+/// of its size (`root.size_mib`, else 1.3 times the tree, in steps of 64 MiB), and the small
+/// initramfs `cpio` that mounts it. The tree is removed once it is in the archive. Returns the
+/// file system and its size in MiB.
+#[allow(clippy::too_many_arguments)]
+fn disk_root(
+    ctx: &Ctx,
+    rootsec: Option<&serde_json::Value>,
+    r: &Path,
+    name: &str,
+    bdir: &Path,
+    out: &str,
+    cpio: &Path,
+    meta: Option<&crate::cpio::Meta>,
+    io: &mut Io,
+) -> Result<(PathBuf, u64), Fail> {
+    let size = pyv::get(rootsec, "size_mib")?
+        .map(|v| pyv::int(v, "root.size_mib"))
+        .transpose()?
+        .unwrap_or(0);
+    let archive = bdir.join(format!("{out}-arm64-root.cpio"));
+    let alen = crate::cpio::write_cpio_file(r, &archive, fsx::FIXED_MTIME as u64, meta)?;
+    let mib: u64 = if size != 0 {
+        size as u64
+    } else {
+        // the archive is the files' bytes and small headers; the file system needs room for
+        // its inodes, directories and block maps besides
+        let used = alen.div_ceil(1 << 20);
+        64.max((used * 13 / 10).div_ceil(64) * 64)
+    };
+    // the initramfs: busybox, the init above, and copies of what the host reads
+    let b = bdir.join(format!("{out}-arm64-boot"));
+    if b.is_dir() {
+        fsx::force_remove(&b)?;
+    }
+    for d in ["dev", "proc", "sys", "root", "bin"] {
+        fsx::makedirs(&b.join(d))?;
+    }
+    for p in HOST_READS {
+        let src = r.join(p);
+        if !lexists(&src) {
+            continue;
+        }
+        if src.is_dir() && !is_link(&src) {
+            let par = b.join(p).parent().unwrap_or(&b).to_path_buf();
+            fsx::makedirs(&par)?;
+            run_ok(
+                Command::new("cp").arg("-a").arg(&src).arg(&par),
+                &format!("cp -a {}", src.display()),
+            )?;
+        } else {
+            copy_one(&src, &b.join(p))?;
+        }
+    }
+    fsx::write_text(&b.join("init"), DISK_ROOT_INIT)?;
+    fsx::chmod(&b.join("init"), 0o755)?;
+    fsx::fix_mtimes(&b)?;
+    crate::cpio::write_cpio_gz(&b, cpio, fsx::FIXED_MTIME as u64, None, true)?;
+    fsx::force_remove(&b)?;
+    // the tree is in the archive now: a root of gigabytes is not kept beside the helper VM's disk
+    fsx::force_remove(r)?;
+    let rootfs = bdir.join(format!("{out}-arm64-rootfs.img"));
+    let made = image::mac_mkfs_root(
+        ctx,
+        &rootfs,
+        mib,
+        &image::uuid_from(name, "root"),
+        &image::uuid_from(name, "root-hash"),
+        &archive,
+        alen,
+        io,
+    );
+    let _ = std::fs::remove_file(&archive);
+    made?;
+    image::zero_times(&rootfs, false)?;
+    Ok((rootfs, mib))
+}
+
 /// hydo_build_arm64's `build(m, manifest_path, out, bdir, H, oci, params)`.
 pub fn build(
     ctx: &Ctx,
@@ -455,25 +563,6 @@ pub fn build(
     )?;
     image::zero_times(&data, true)?;
     let disk = bdir.join(format!("{out}-arm64-disk.img"));
-    let (p1, n1) = (2048u64, 2048u64);
-    let (p2, n2) = (p1 + n1, dmib as u64 * 2048);
-    let vols = crate::x86::volume_images(ctx, &mk, &m, &name, bdir, &format!("{out}-arm64-vol"))?;
-    if vols.is_empty() {
-        image::assemble_disk(
-            &disk,
-            p2 + n2,
-            &[(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
-            &[(&data, p2)],
-        )?;
-    } else {
-        let v: Vec<(&Path, u64)> = vols.iter().map(|(p, n)| (p.as_path(), *n)).collect();
-        image::assemble_disk_volumes(
-            &disk,
-            [(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
-            &[(&data, p2)],
-            &v,
-        )?;
-    }
     // root.fix_pyc (Milestone 202): Python's bytecode caches point at the fixed time below; on
     // unless the manifest says false (fingerprint epoch 2, Milestone 204)
     if pyv::get(rootsec, "fix_pyc")? != Some(&serde_json::Value::Bool(false)) {
@@ -482,16 +571,68 @@ pub fn build(
     fsx::fix_mtimes(&r)?;
     let cpio = bdir.join(format!("{out}-arm64.cpio.gz"));
     let meta = (!oci_meta.is_empty()).then(|| crate::oci::cpio_meta(&oci_meta));
-    crate::cpio::write_cpio_gz(&r, &cpio, fsx::FIXED_MTIME as u64, meta.as_ref(), true)?;
-    outln(
-        io,
-        &format!(
-            "hydo-build: {} (arm64 initramfs) + {} (data {} MiB)",
-            cpio.display(),
-            disk.display(),
-            dmib
-        ),
-    );
+    // guest.root: disk (Milestone 284): the root is a read-only ext4 file system in p1, and the
+    // initramfs only mounts it; else p1 is a 1 MiB placeholder and the root is the initramfs
+    let rootfs = if root_on_disk(&m) {
+        Some(disk_root(ctx, rootsec, &r, &name, bdir, out, &cpio, meta.as_ref(), io)?)
+    } else {
+        None
+    };
+    let (p1, n1) = match &rootfs {
+        Some((_, mib)) => (2048u64, *mib * 2048),
+        None => (2048u64, 2048u64),
+    };
+    let (p2, n2) = (p1 + n1, dmib as u64 * 2048);
+    let mut parts: Vec<(&Path, u64)> = Vec::new();
+    if let Some((f, _)) = &rootfs {
+        parts.push((f.as_path(), p1));
+    }
+    parts.push((&data, p2));
+    let vols = crate::x86::volume_images(ctx, &mk, &m, &name, bdir, &format!("{out}-arm64-vol"))?;
+    if vols.is_empty() {
+        image::assemble_disk(
+            &disk,
+            p2 + n2,
+            &[(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
+            &parts,
+        )?;
+    } else {
+        let v: Vec<(&Path, u64)> = vols.iter().map(|(p, n)| (p.as_path(), *n)).collect();
+        image::assemble_disk_volumes(
+            &disk,
+            [(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
+            &parts,
+            &v,
+        )?;
+    }
+    match &rootfs {
+        Some((f, mib)) => {
+            // the file system is in the disk now; a root of gigabytes is not kept twice
+            let _ = std::fs::remove_file(f);
+            outln(
+                io,
+                &format!(
+                    "hydo-build: {} (arm64 initramfs that mounts the root) + {} (root {} MiB, data {} MiB)",
+                    cpio.display(),
+                    disk.display(),
+                    mib,
+                    dmib
+                ),
+            );
+        }
+        None => {
+            crate::cpio::write_cpio_gz(&r, &cpio, fsx::FIXED_MTIME as u64, meta.as_ref(), true)?;
+            outln(
+                io,
+                &format!(
+                    "hydo-build: {} (arm64 initramfs) + {} (data {} MiB)",
+                    cpio.display(),
+                    disk.display(),
+                    dmib
+                ),
+            );
+        }
+    }
     image::print_shas(io, &[&cpio, &disk])?;
     crate::record::write_sidecar(
         &cpio,
@@ -535,4 +676,24 @@ pub fn build(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn the_root_goes_on_the_disk_with_browser_or_the_key() {
+        assert!(!root_on_disk(&json!({"name": "x"})));
+        assert!(root_on_disk(&json!({"name": "x", "_browser": {}})));
+        assert!(root_on_disk(
+            &json!({"name": "x", "guest": {"root": "disk"}})
+        ));
+        assert!(!root_on_disk(
+            &json!({"name": "x", "_browser": {}, "guest": {"root": "memory"}})
+        ));
+        assert!(DISK_ROOT_INIT.starts_with("#!/bin/busybox sh\n"));
+        assert!(DISK_ROOT_INIT.contains("switch_root /root /init"));
+    }
 }

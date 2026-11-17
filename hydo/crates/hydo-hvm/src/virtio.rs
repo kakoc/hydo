@@ -241,6 +241,8 @@ pub struct Unsync {
 pub struct Config {
     pub disk: Option<String>,
     pub disk_out: Option<String>,
+    /// `HVM_DISK_OUT_BYTES`: only the disk's first bytes go to `disk_out` (None: all of it).
+    pub disk_out_bytes: Option<u64>,
     pub fault: Option<String>,
     pub fault_classes: Option<String>,
     pub fault_prob: Option<String>,
@@ -781,7 +783,11 @@ impl Virtio {
     /// `virtio_finish`: HVM_DISK_OUT (stable media only) and HVM_NET_TX_OUT.
     pub fn finish(&self, c: &Config) {
         if let (Some(o), Some(d)) = (&c.disk_out, &self.disk) {
-            if let Err(e) = d.write_file(o, self.v.blk.disk_size as usize) {
+            let n = match c.disk_out_bytes {
+                Some(b) => b.min(self.v.blk.disk_size),
+                None => self.v.blk.disk_size,
+            };
+            if let Err(e) = d.write_file(o, n as usize) {
                 eprintln!("{o}: {e}");
             }
         }

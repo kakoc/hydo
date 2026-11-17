@@ -1503,6 +1503,10 @@ pub fn opts_from(o: &HvmOptions, hvmx: bool) -> VmOpts {
     let mut virt = virtio::Config {
         disk: o.disk.clone(),
         disk_out: o.disk_out.clone(),
+        disk_out_bytes: o
+            .disk_out_bytes
+            .as_deref()
+            .and_then(|v| v.trim().parse().ok()),
         fault: o.fault.clone(),
         fault_classes: o.fault_classes.clone(),
         fault_prob: o.fault_prob.clone(),

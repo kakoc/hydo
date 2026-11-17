@@ -302,6 +302,131 @@ fn mac_mkfs(
     res
 }
 
+/// `guest.root: disk` on the Mac release (Milestone 284): a read-only root file system made from
+/// `archive`, the root as a newc cpio ([`crate::cpio::write_cpio_file`], every owner and mode
+/// in its headers). The helper VM of [`mac_mkfs`] gets one disk with two partitions: p1, the new
+/// file system of `mib` MiB, and p2, the archive. It formats p1 with the same mke2fs options as
+/// a root on Linux (no journal), mounts it, unpacks the archive into it with busybox cpio (as
+/// root, so the owners stay), and unmounts it; p1 is then copied out to `out`. The kernel writes
+/// the files, so the file system's own allocation differs from mke2fs -d's; the helper VM is
+/// deterministic, so the same archive gives the same bytes. `archive` is removed once it is in
+/// the helper's disk.
+#[allow(clippy::too_many_arguments)]
+pub fn mac_mkfs_root(
+    ctx: &Ctx,
+    out: &Path,
+    mib: u64,
+    uuid: &str,
+    seed: &str,
+    archive: &Path,
+    archive_len: u64,
+    io: &mut Io,
+) -> Result<(), Fail> {
+    let Release::Mac { root: rel, engine } = &ctx.release else {
+        return Err(Fail::Exit(
+            "hydo-build: guest.root: disk for an arm64 image is built with the Mac release (its engine makes the file system in a helper VM)".into(),
+        ));
+    };
+    let guest = rel.join("guest");
+    let kernel = rel.join("hv/hvm/explore/out/Image-explore");
+    let tmp = crate::tempdir("hydo-mkfs-root-")?;
+    let helper = out.with_extension("helper.img");
+    let res = (|| -> Result<(), Fail> {
+        let (p1, n1) = (2048u64, mib * 2048);
+        let (p2, n2) = (p1 + n1, archive_len.div_ceil(512).max(1));
+        assemble_disk(
+            &helper,
+            p2 + n2,
+            &[(p1 as u32, n1 as u32), (p2 as u32, n2 as u32)],
+            &[(archive, p2)],
+        )?;
+        // the archive is in the helper's disk now: a root of gigabytes is not kept twice
+        let _ = fs::remove_file(archive);
+        let root = tmp.join("root");
+        for d in ["bin", "dev", "proc", "sys", "etc", "mnt"] {
+            fs::create_dir_all(root.join(d)).map_err(|e| io_fail("cannot create", &root, e))?;
+        }
+        fsx::copy_file(&guest.join("busybox"), &root.join("bin/busybox"))?;
+        fsx::copy_file(&guest.join("mke2fs"), &root.join("bin/mke2fs"))?;
+        std::os::unix::fs::symlink("busybox", root.join("bin/sh"))
+            .map_err(|e| io_fail("cannot link", &root, e))?;
+        let mut args = vec!["/bin/mke2fs".to_string()];
+        args.extend(mke2fs_args("", uuid, seed, false));
+        args.push("/dev/vda1".into());
+        let quoted: Vec<String> = args.iter().map(|x| format!("'{x}'")).collect();
+        let init = format!(
+            "#!/bin/busybox sh\n\
+             b=/bin/busybox\n\
+             $b mount -t devtmpfs none /dev\n\
+             $b mount -t proc none /proc\n\
+             n=0; while [ ! -b /dev/vda2 ] && [ $n -lt 300 ]; do $b usleep 10000; n=$((n+1)); done\n\
+             if {} && $b mount -t ext4 -o noatime /dev/vda1 /mnt && cd /mnt && $b cpio -i -d -m -u < /dev/vda2 && cd / && $b umount /mnt && $b sync; then echo HYDO-MKFS-OK; else echo HYDO-MKFS-FAIL; fi\n\
+             echo HYDO-MKFS-DONE\n\
+             while :; do $b sleep 3600; done\n",
+            quoted.join(" ")
+        );
+        fsx::write_text(&root.join("init"), &init)?;
+        for p in ["init", "bin/busybox", "bin/mke2fs"] {
+            fsx::chmod(&root.join(p), 0o755)?;
+        }
+        let initrd = tmp.join("mkfs.cpio.gz");
+        crate::cpio::write_cpio_gz(&root, &initrd, fsx::FIXED_MTIME as u64, None, false)?;
+        let abs = crate::abspath(&helper);
+        crate::outln(
+            io,
+            &format!(
+                "hydo-build: making the {mib} MiB root file system in a helper VM from {} MiB of files",
+                archive_len >> 20
+            ),
+        );
+        let p = Command::new(engine)
+            .arg("hvm")
+            .arg("run")
+            .arg(&kernel)
+            .arg(&initrd)
+            .arg("HYDO-MKFS-DONE")
+            .env("HVM_DISK", &abs)
+            .env("HVM_DISK_OUT", &abs)
+            // the archive's partition is not written back: only the MBR and p1
+            .env("HVM_DISK_OUT_BYTES", ((p1 + n1) * 512).to_string())
+            .env("HVM_MEM_MB", "1024")
+            .env("HVM_MAX_EXITS", "100000000000")
+            .stderr(Stdio::piped())
+            .stdout(Stdio::piped())
+            .output()
+            .map_err(|e| Fail::Die(format!("cannot run {}: {e}", engine.display())))?;
+        let mut con = p.stdout.clone();
+        con.extend_from_slice(&p.stderr);
+        let con = String::from_utf8_lossy(&con).into_owned();
+        if !con.contains("HYDO-MKFS-OK") {
+            let tail: String = {
+                let c: Vec<char> = con.chars().collect();
+                c[c.len().saturating_sub(3000)..].iter().collect()
+            };
+            eprint!("{tail}");
+            return Err(Fail::Die(
+                "making the root file system in the helper VM failed (output above)".into(),
+            ));
+        }
+        let mut fi = fs::File::open(&helper).map_err(|e| io_fail("cannot read", &helper, e))?;
+        fi.seek(SeekFrom::Start(p1 * 512))
+            .map_err(|e| io_fail("cannot seek", &helper, e))?;
+        let mut fo = fs::File::create(out).map_err(|e| io_fail("cannot write", out, e))?;
+        let n = std::io::copy(&mut (&mut fi).take(n1 * 512), &mut fo)
+            .map_err(|e| io_fail("cannot copy into", out, e))?;
+        if n != n1 * 512 {
+            return Err(Fail::Die(format!(
+                "the helper VM's disk {} is shorter than its root partition",
+                helper.display()
+            )));
+        }
+        Ok(())
+    })();
+    let _ = fs::remove_file(&helper);
+    let _ = fs::remove_dir_all(&tmp);
+    res
+}
+
 fn u16_at(b: &[u8], o: usize) -> u32 {
     u16::from_le_bytes([b[o], b[o + 1]]) as u32
 }

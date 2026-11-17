@@ -766,7 +766,9 @@ by manifest digest into `browser/` beside the manifest:
     (config `sha256:12708c20bc00…`, 7 gzip layers, 1,012,665,207 bytes; the docker-save archive
     is 1,012,681,216 bytes);
   - linux/arm64 `sha256:56be08aca06bf736a928da2e3235a3b63ef71ee97313beb18c6019fea791aba4`
-    (not run).
+    (config `sha256:9136e3eed8fc…`, 7 layers, 35,741 entries; the docker-save archive is
+    988,750,336 bytes). It runs on the Mac engine since Milestone 284, with the root file
+    system on the image's disk (`guest.root: disk`).
 - Two entries of the amd64 image have a backslash in their names
   (`usr/lib/systemd/system/system-systemd\x2dcryptsetup.slice` and one more). hydo-build leaves
   such entries out since this milestone and lists them in the image record (`skipped_names`);

@@ -433,6 +433,17 @@
             }
           ]
         },
+        "root": {
+          "description": "Where the Mac engine's image keeps its root file system. memory: the whole root is the\ninitramfs, in guest RAM (the default without browser:). disk: a read-only ext4 file system\non the image's disk, which a small initramfs mounts (the default with browser:), so a root\nof gigabytes fits. The x86_64 engines always boot the root from the disk.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RootPlace"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "reboot": {
           "description": "A guest program may ask for a reboot with the console line HYDO-REBOOT: hydo shuts the\nguest down cleanly, starts a new boot of the same machine with the disks' bytes, and goes\non with the next workload step (docs/design/devices.md).",
           "type": [
@@ -498,6 +509,14 @@
       "type": "string",
       "enum": [
         "containers"
+      ]
+    },
+    "RootPlace": {
+      "description": "Where an arm64 image keeps its root file system (Milestone 284).",
+      "type": "string",
+      "enum": [
+        "memory",
+        "disk"
       ]
     },
     "GuestDisk": {

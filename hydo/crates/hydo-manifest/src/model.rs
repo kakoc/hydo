@@ -404,6 +404,10 @@ choice!(
     KernelVariant { Containers = "containers" }
 );
 choice!(
+    /// Where an arm64 image keeps its root file system (Milestone 284).
+    RootPlace { Memory = "memory", Disk = "disk" }
+);
+choice!(
     /// A fault kind the explorer may use.
     FaultKind {
         Kill = "kill",
@@ -769,6 +773,12 @@ pub struct Guest {
     /// image loads itself. Without the key, the engine's usual kernel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kernel: Option<KernelVariant>,
+    /// Where the Mac engine's image keeps its root file system. memory: the whole root is the
+    /// initramfs, in guest RAM (the default without browser:). disk: a read-only ext4 file system
+    /// on the image's disk, which a small initramfs mounts (the default with browser:), so a root
+    /// of gigabytes fits. The x86_64 engines always boot the root from the disk.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<RootPlace>,
     /// A guest program may ask for a reboot with the console line HYDO-REBOOT: hydo shuts the
     /// guest down cleanly, starts a new boot of the same machine with the disks' bytes, and goes
     /// on with the next workload step (docs/design/devices.md).

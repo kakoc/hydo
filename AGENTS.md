@@ -297,7 +297,10 @@ crate `hydo-hvx`, which runs inside `hydo` when the process can open `/dev/hvx`.
 with two guest kernels: `Image-explore`, and `Image-explore-netns` for `network: bridge`. An image
 built at the fingerprint epoch 3 or later boots their builds with cgroups, `Image-explore-cg` and
 `Image-explore-netns-cg` (M234, `docs/design/guest-cgroups.md`). Its clock counts VM exits. The program is signed with `hv/hvm/hv.entitlements` before it runs.
-The details are in Milestones 48, 51, 99, 143, and 147.
+An image's root file system is its initramfs, in guest RAM. With `guest.root: disk` (M284, a
+format-1 addition, the default with `browser:`) the root is a read-only ext4 file system on the
+disk, which a small initramfs mounts. `hydo build` makes it in a helper VM of the Mac engine.
+The details are in Milestones 48, 51, 99, 143, 147, and 284.
 
 **The KVM engine.** `hydo/crates/hydo-kvm` runs the x86_64 images on stock Linux KVM, without the
 module or root, with one vCPU and a patched guest kernel (`bzImage-kvm`). With `--vcpus N` it runs
@@ -835,14 +838,19 @@ never shows, and texts such as `NaN`. The API can be the real backend or a fake 
 The example `hydo/onboard/examples/web-shop` (React, a fake API) ran on hvx with one fingerprint per
 schedule. Its flaky test fails on every run of `H=api.add_item@1-2:delay=1000` and passes on every
 run without it. `hydo explore --protocol-faults` found its stuck spinner and unhandled rejection
-blind (seed 7 of 40). It needs `network: bridge` and runs on x86_64 only. hydo-build now leaves out
+blind (seed 7 of 40). It needs `network: bridge`, and since M284 it runs on every engine. hydo-build now leaves out
 layer entries whose names have a backslash or a quote instead of refusing the image. The design is
 `docs/design/web-apps.md`, the how-to `hydo guide web-apps`, and the details are in
 `docs/HISTORY.md` Milestone 253. Since M254 a passing test counts as acknowledged work, and the
 pages' screenshots go to the run directory's `screens/` after the verdict, where `hydo report
 --html` shows them under the finding that names them. `browser.screens: compare` compares each
 page's screenshot with a recorded reference, pixel for pixel (`<name>.screens_match`). The
-example ran on KVM in M254, with hvx's verdicts and the same screenshots on Intel and AMD hosts.
+example ran on KVM in M254, with hvx's verdicts and the same screenshots on Intel and AMD hosts. Since M284
+the Mac engine runs `browser:` and the walk: the image's root is a read-only ext4 file system on
+its disk (`guest.root: disk`), which a small initramfs mounts. The guest kernel did not change,
+and no run ended in `SPIN`. On the Mac the example web-shop's flaky test, both planted bugs of
+its walk (found blind in seeds 1-20), and Memos's walk with its recording gave hvx's verdicts. Each
+schedule gave one fingerprint (`docs/design/web-apps.md`, section "The Mac engine").
 
 **hydo walks through a web app's pages itself (M258).** `browser.explore` (a format-1 addition)
 replaces `browser.tests`: no Playwright test is needed. hydo's walker (`walk.mjs`) runs in the
@@ -1211,12 +1219,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 48. [user decision] The Rust test SDK is unpublished until the user decides about code-first
     tests (M160, M163).
 49. `hydo diff` and `hydo explain`: deeper levels need engine additions (M165).
-51. Web apps (M166, M253, M254). Since M253 `browser:` runs a team's Playwright tests as the
-    workload and watches the pages; M166's hand-written driver stays an example. Since M254 the
-    screenshots leave the guest and `screens: compare` checks them against references. Left:
-    - The Mac engine does not run it: it keeps the root in guest RAM, and the Playwright image is
-      about 3 GB unpacked. KVM ran it in M254 on seven hosts of GitHub's runners (Intel and
-      AMD), with hvx's verdicts and one fingerprint per schedule and vendor.
+51. Web apps (M166, M253, M254, M284). Since M253 `browser:` runs a team's Playwright tests as
+    the workload and watches the pages; M166's hand-written driver stays an example. Since M254
+    the screenshots leave the guest and `screens: compare` checks them against references. Since
+    M284 the Mac engine runs it, with the root on the image's disk (open item 145 has what that
+    left). KVM ran it in M254 on seven hosts of GitHub's runners (Intel and AMD), with hvx's
+    verdicts and one fingerprint per schedule and vendor. Left:
     - M265 explains and fixes the KVM runs that first stopped in early boot with `SPIN`. The
       spin observer's own looks slowed the 4 GiB guest's memory setup past the 10 s limit.
       The web-shop example did not run again on KVM after the fix.
@@ -1590,7 +1598,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     list one check twice. Without the udev rule, each hvx run leaves root-owned agent logs in
     `hydo-out/`.
 124. Walks through the pages (M258, M264). What is left:
-    - The Mac engine does not run the walks (it does not run `browser:`, open item 51).
+    - The Mac engine runs the walks since M284; Vikunja's walks did not run there.
     - Only one step is recorded: the step that a finding names (M267), else the last that
       takes an action. A run copies at most 1 MiB of files out of the guest (M264), and the
       videos of every step of a Memos walk would pass 2 MB.
@@ -1869,6 +1877,21 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       from `memory.max` or `cpu.max` uses the whole guest. Limits per service, as Compose's
       `mem_limit` and `cpus` give a container, are not built.
     - The Mac engine and KVM did not run the example; the Mac had too little free disk.
+145. Web apps on the Mac engine (M284). What is left:
+    - While the helper VM runs, a build needs free disk of about three times the root: 7 GB
+      for Memos. Each image of `browser:` takes about 3.4 GB. Each example fetches its own copy
+      of the 1 GB Playwright archive into its `browser/`.
+    - The Mac engine hashes every byte of the disk for a fingerprint, twice per run, and each
+      hash of web-shop's disk takes about five seconds. Hashing only the written blocks would
+      need a keyed change of the fingerprint.
+    - A Linux host cannot build such an arm64 image, because the helper VM needs the Mac
+      engine. No path with `mke2fs -d` was built.
+    - A disk fault can now hit a read of the root, as on the x86_64 engines. No exploration
+      with disk faults ran against a frontend on the Mac, and Vikunja did not run there.
+    - A seed's walk differs between engines. Seeds 8 and 12 of web-shop's walk failed on hvx and
+      passed on the Mac, whose pages answer at other moments of the guest's clock.
+    - The Mac engine ran no `screens: compare` run, and its screenshots were not compared with
+      those of hvx or KVM.
 146. Value history (M285, `docs/design/value-history.md`). What is left:
     - KVM: the engine makes the reads, but no KVM run was made. Blnk's plan needs 3 entry
       breakpoints and 1 for returns, and KVM has 3 debug registers.
@@ -2576,6 +2599,13 @@ build machine, before 2026-10-13.
   each finding with its replay and accept lines, edited in place. A `workflow_run` recorder
   comments on and records pull requests from forks. `seeds_from: history` turns a budget into a
   seed count. Nothing recorded moved
+- M284 (tentative number): web apps on the Mac engine. `guest.root: disk` (a format-1 key, the
+  default with `browser:`) puts an arm64 image's root on its disk as a read-only ext4 file
+  system. `hydo build` makes it in a helper VM, and a small initramfs mounts it. The guest kernel
+  did not change, and no run ended in `SPIN`. web-shop's flaky test fails on every run of its
+  schedule, the walk found both planted bugs blind in 20 seeds, and a Memos walk and its
+  recording gave hvx's verdicts. Each schedule gave one fingerprint over two runs. Nothing
+  recorded moved
 
 ## Where to look
 

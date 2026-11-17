@@ -2866,7 +2866,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case299.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) ram (known: branch_tick,…#ba0771bc505b8b93"
+R	^	<tmp>/case299.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) ram (known: branch_tick,…#df0eee906725b79e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -2962,7 +2962,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case315.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: branch_tick, c…#0a9db6ce44e52c77"
+R	^	<tmp>/case315.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: branch_tick, c…#1db7c75e78d5ebe9"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -5356,7 +5356,7 @@ R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00653.json --arch x86_64 --check	run	1	""	"hydo-build: root.nix: invalid type: mapping, expected a list…#bcaeadd8833c2e8e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00654.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) b, d, e, g, i, r (known:…#dea0655b84c0aab3"
+R	^	<tmp>/mutant00654.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) b, d, e, g, i, r (known:…#fcdd6e397c45b902"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00655.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) bogus (known: af…#0044df4d46759703"
@@ -6337,7 +6337,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00980.json --arch arm64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00981.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) a, e, l, n, t, u, v, y (…#4ab3076b589755e2"
+R	^	<tmp>/mutant00981.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) a, e, l, n, t, u, v, y (…#eac53852d50f86ff"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00982.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#d0471f592e9eb25f"
@@ -6358,7 +6358,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00987.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (alma): image <tmp>/images/almalinux…#edec76e5e607be8e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00988.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s) ., 0, 1, 2, 7 (known: br…#fcf33b5db4c7d8ba"
+R	^	<tmp>/mutant00988.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s) ., 0, 1, 2, 7 (known: br…#4f0bf9862fa7197f"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00989.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: name 'A b' must match [a-z][a-z0-9_…#cd94a81e6cfc0ca7"
@@ -6412,7 +6412,7 @@ R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01005.json --arch x86_64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#5ebeb26e7909b622"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01006.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) a (known: branch_tick, c…#ba5b0f88d003cdd6"
+R	^	<tmp>/mutant01006.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) a (known: branch_tick, c…#b6f6f719fee75a22"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01007.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#d0471f592e9eb25f"
@@ -7357,7 +7357,7 @@ R	^	^ --arch x86_64 --print-world	run	0	#fb782305adeeb4b6/2039	^
 R	^	<tmp>/mutant01320.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: port must be a number\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01321.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) ., 0, 1, 7, 8, 9 (known:…#2f9d81d4da810c48"
+R	^	<tmp>/mutant01321.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) ., 0, 1, 7, 8, 9 (known:…#972103d3b5786e5a"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01322.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[2]: status must be a number\n"
@@ -7597,7 +7597,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01400.json --arch arm64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01401.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s)  , A, b (known: branch_t…#05f11f49591c57fd"
+R	^	<tmp>/mutant01401.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s)  , A, b (known: branch_t…#72e4e8ff2fe426db"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01402.json --arch x86_64 --check	run	0	#3213cbc491cbfc75/300	""
@@ -8023,7 +8023,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01542.json --arch x86_64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01543.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#9827670b58e0daac"
+R	^	<tmp>/mutant01543.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#19e66aecabeb69af"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01544.json --arch arm64 --check	run	0	#e2c2e92214085912/279	""
@@ -8983,7 +8983,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01862.json --arch x86_64 --check	run	1	""	"hydo-build: services: must be a list (it may be empty: a pro…#a73c150f25d1fea2"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01863.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#9827670b58e0daac"
+R	^	<tmp>/mutant01863.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#19e66aecabeb69af"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01864.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0]: missing field `src` (project form…#7120c3032438ee2e"

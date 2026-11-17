@@ -21,13 +21,23 @@ pub const S_IFREG: u32 = 0o100000;
 pub const S_IFDIR: u32 = 0o040000;
 pub const S_IFCHR: u32 = 0o020000;
 
-struct Writer {
-    buf: Vec<u8>,
+struct Writer<W: Write> {
+    buf: W,
     ino: u32,
     mtime: u64,
+    /// the first write error (the archive is then incomplete)
+    err: Option<std::io::Error>,
 }
 
-impl Writer {
+impl<W: Write> Writer<W> {
+    fn put(&mut self, b: &[u8]) {
+        if self.err.is_none() {
+            if let Err(e) = self.buf.write_all(b) {
+                self.err = Some(e);
+            }
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn ent(
         &mut self,
@@ -67,13 +77,13 @@ impl Writer {
             hdr.push_str(&format!("{v:08x}"));
         }
         self.ino += 1;
-        self.buf.extend_from_slice(hdr.as_bytes());
-        self.buf.extend_from_slice(&nb);
+        self.put(hdr.as_bytes());
+        self.put(&nb);
         let pad = (4 - (110 + nb.len()) % 4) % 4;
-        self.buf.extend(std::iter::repeat_n(0u8, pad));
-        self.buf.extend_from_slice(data);
+        self.put(&[0u8; 4][..pad]);
+        self.put(data);
         let pad = (4 - data.len() % 4) % 4;
-        self.buf.extend(std::iter::repeat_n(0u8, pad));
+        self.put(&[0u8; 4][..pad]);
     }
 }
 
@@ -122,7 +132,61 @@ pub fn write_cpio_gz(
         buf: Vec::new(),
         ino: 1,
         mtime,
+        err: None,
     };
+    archive(root, &mut w, meta)?;
+    let gz = gzip_python(&w.buf, any_zlib)?;
+    fsx::write_bytes(out_gz, &gz)
+}
+
+/// The same newc archive as [`write_cpio_gz`], not compressed and written to `out` as it is
+/// made: the root of an image whose root file system is on its disk (`guest.root: disk`,
+/// Milestone 284), which the Mac's mkfs helper VM unpacks into the new file system.
+pub fn write_cpio_file(
+    root: &Path,
+    out: &Path,
+    mtime: u64,
+    meta: Option<&Meta>,
+) -> Result<u64, Fail> {
+    let f = fs::File::create(out).map_err(|e| io_fail("cannot write", out, e))?;
+    let mut w = Writer {
+        buf: CountingWriter {
+            inner: std::io::BufWriter::with_capacity(1 << 20, f),
+            n: 0,
+        },
+        ino: 1,
+        mtime,
+        err: None,
+    };
+    archive(root, &mut w, meta)?;
+    if let Some(e) = w.err.take() {
+        return Err(io_fail("cannot write", out, e));
+    }
+    w.buf
+        .inner
+        .flush()
+        .map_err(|e| io_fail("cannot write", out, e))?;
+    Ok(w.buf.n)
+}
+
+struct CountingWriter<W: Write> {
+    inner: W,
+    n: u64,
+}
+
+impl<W: Write> Write for CountingWriter<W> {
+    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+        let k = self.inner.write(b)?;
+        self.n += k as u64;
+        Ok(k)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// Every entry of `root`, sorted, then `dev/console` when the tree has none, then the trailer.
+fn archive<W: Write>(root: &Path, w: &mut Writer<W>, meta: Option<&Meta>) -> Result<(), Fail> {
     let mut have_console = false;
     for p in paths_of(root)? {
         let full = root.join(std::ffi::OsStr::from_bytes(&p));
@@ -158,8 +222,7 @@ pub fn write_cpio_gz(
         w.ent(b"dev/console", S_IFCHR | 0o600, &[], 1, (5, 1), meta);
     }
     w.ent(b"TRAILER!!!", 0, &[], 1, (0, 0), meta);
-    let gz = gzip_python(&w.buf, any_zlib)?;
-    fsx::write_bytes(out_gz, &gz)
+    Ok(())
 }
 
 /// Python's `gzip.GzipFile(filename="", mode="wb", mtime=0, compresslevel=9).write(data)`.
@@ -187,4 +250,32 @@ pub fn gzip_python(data: &[u8], need_zlib: bool) -> Result<Vec<u8>, Fail> {
     out.extend_from_slice(&crc.sum().to_le_bytes());
     out.extend_from_slice(&(data.len() as u32).to_le_bytes());
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Read;
+
+    #[test]
+    fn the_plain_archive_has_the_bytes_of_the_compressed_one() {
+        let d = crate::tempdir("hydo-cpio-test-").unwrap();
+        let r = d.join("root");
+        fs::create_dir_all(r.join("etc/hydo")).unwrap();
+        fs::write(r.join("etc/hydo/control"), "agent 1\n").unwrap();
+        fs::write(r.join("init"), "#!/bin/sh\n").unwrap();
+        std::os::unix::fs::symlink("init", r.join("sbin-init")).unwrap();
+        let mut meta = Meta::new();
+        meta.insert("init".into(), (S_IFREG, 0o750, 7, 8));
+        write_cpio_gz(&r, &d.join("a.cpio.gz"), 1, Some(&meta), false).unwrap();
+        let n = write_cpio_file(&r, &d.join("a.cpio"), 1, Some(&meta)).unwrap();
+        let mut unz = Vec::new();
+        flate2::read::GzDecoder::new(fs::File::open(d.join("a.cpio.gz")).unwrap())
+            .read_to_end(&mut unz)
+            .unwrap();
+        let plain = fs::read(d.join("a.cpio")).unwrap();
+        let _ = fs::remove_dir_all(&d);
+        assert_eq!(plain.len() as u64, n);
+        assert_eq!(plain, unz);
+    }
 }

@@ -82,6 +82,8 @@ pub struct Options {
     pub disk: Option<String>,
     /// `HVM_DISK_OUT`: hvm writes the durable disk image here at its end.
     pub disk_out: Option<String>,
+    /// `HVM_DISK_OUT_BYTES`: only the disk's first N bytes go to `HVM_DISK_OUT`.
+    pub disk_out_bytes: Option<String>,
     /// `HVM_FAULT`: the disk fault seed (the engine sets the flush-aware class at probability 0
     /// when a disk is attached and this is unset).
     pub fault: Option<String>,
@@ -147,6 +149,7 @@ impl Options {
             dump: t(HVM_DUMP),
             disk: t(HVM_DISK),
             disk_out: t(HVM_DISK_OUT),
+            disk_out_bytes: t(HVM_DISK_OUT_BYTES),
             fault: t(HVM_FAULT),
             fault_classes: t(HVM_FAULT_CLASSES),
             fault_prob: t(HVM_FAULT_PROB),

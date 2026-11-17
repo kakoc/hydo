@@ -12,7 +12,8 @@ on it from your own code. To use hydo, install the command with `cargo install h
 ## What it contains
 
 - `hydo build`: a project file compiled into a guest image. On x86_64 the image is an ext4 disk
-  with an initramfs; on arm64 it is an initramfs with a data disk.
+  with an initramfs; on arm64 it is an initramfs with a data disk. With `guest.root: disk` the
+  arm64 root is a read-only ext4 file system on that disk, which a small initramfs mounts.
 - Services from Docker or OCI images, the guest agent, and hydo's guest programs, staged into the
   image.
 - Reproducible output: the same project file gives the same image bytes on any machine.

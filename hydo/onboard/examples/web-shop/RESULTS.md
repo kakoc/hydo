@@ -1,6 +1,7 @@
 # Results: the web-shop example
 
-This page records the runs that proved `browser:` (Milestone 253). The design is
+This page records the runs that proved `browser:` (Milestone 253), the walk (Milestone 258), and
+both on the Mac engine (Milestone 284, the last section). The design is
 `docs/design/web-apps.md`, and `hydo guide web-apps` is the how-to.
 
 ## What is in the example
@@ -323,3 +324,48 @@ run) and found the same 4 failures, seeds 7, 8, 12 and 17, each reproduced:
 Seeds 8 and 17 had one signature, so one shrink. At its end `hydo explore` replayed the three
 minimal walks with `,rec`; each kept its verdict, and each `replays/rec-<k>/screens/` held the
 walk's test, the last step's video and its trace.
+
+## On the Mac engine (Milestone 284)
+
+Both manifests run on an Apple Silicon Mac since Milestone 284. The image's root file system is on
+its disk (`guest.root: disk`, the default with `browser:`), so the 2.4 GB of the Playwright
+image do not have to fit in guest RAM. The runs used this tree's programs over the 0.3.4 Mac
+release on an M2 Pro, one VM at a time, with images built by `hydo build <manifest> --set
+variant=buggy` at the fingerprint epoch 3:
+
+- `hydo.yaml`: `explore-ob-web-shop-arm64.cpio.gz` (830,910 bytes, sha256 `7f7024ca…`) and its
+  disk `a70204c1…`, 3,423,600,640 bytes (a root of 3,200 MiB and a data disk of 64 MiB).
+- `hydo-walk.yaml`: `explore-ob-web-shop-walk-arm64.cpio.gz` (`bf6dd144…`) and its disk
+  `9d2d78ca…`.
+
+| image | schedule | verdict | fingerprint | runs | wall time |
+|---|---|---|---|---|---|
+| tests | `disk=none \| run` | OK: 3 tests passed, 6 invariants held | `e49b289c2d4f34b7` | 2 | 56 s, 50 s |
+| tests | `disk=none \| run H=api.add_item@1-2:delay=1000` | VIOLATION `browser.tests_pass`: Expected "2", Received "0" | `15e26130aad215fd` | 2 | 49 s, 48 s |
+| walk | `disk=none \| run I=2` | OK: 5 invariants held, the fake took 1 order once | `b76ad58b5c0ae26b` | 2 | 56 s, 44 s |
+
+The verdicts are hvx's. The fingerprints are the Mac engine's own, and the walk of `I=2` takes
+other actions than on hvx, because the pages' timing differs between the engines.
+
+These images are of the fingerprint epoch 3. Rebuilt at the epoch 4 (disks `bc0ad90a…` and
+`e253d638…`), each schedule kept its verdict with one fingerprint over two runs:
+`disk=none | run` `7da8112398ae9137`, the delay `24c270f6f56a9d85`, the walk `I=2`
+`6a73a4def523f095`, and seed 7's minimal schedule below `f956bda2f5aaa2c8`.
+
+**Both planted bugs, blind.** `hydo explore --seeds 1-20 --protocol-faults --workers 1` on the
+walk image ran 20 schedules, their shrinks and the recording replays in 79 minutes. That is 104
+runs, with a mean of 40.8 s per run in the engine (on hvx, 19.1 s). Two schedules failed, each reproduced and
+shrunk; both minimal schedules gave one fingerprint on the explorer's two runs:
+
+| seed | minimal schedule | verdict | fingerprint | shrink runs |
+|---|---|---|---|---|
+| 7 | `disk=none dseed=63cbe1e459320dd7 \| run H=api.get_order@3-4:reset I=a0d28305209409f6,n7,x0.0-6,x1.0-6,x2.0-6` | VIOLATION `browser.no_page_errors`: "The page /orders/o10 left a promise rejection unhandled during the test "walk step 3": HttpError: HTTP 502 for /api/orders/o10" | `18de0fcd41170aeb` | 29 |
+| 17 | `disk=none dseed=808475f02ee37363 \| run H=api.place_order@2-4:reset I=37ce1f8dfefa7c4b,x0.0-9,x1.0-9,x2.0-4,x3.0-6,x3.8,x3.9` | VIOLATION `api.order_placed_once`: one cart took effect 4 times | `bec314ece467e3ba` | 49 |
+
+Seed 7 is the order page's planted bug, and seed 17 the double order. The schedules of seeds 7
+and 17 are the ones hvx drew, because the explorer draws them from the seed alone. Seeds 8 and 12,
+which failed on hvx, passed here: the walk's pages answer at other moments of the guest's clock,
+so the reset of `place_order` did not catch an order. The 104 runs had 89 different schedules,
+and no schedule gave two fingerprints. At its end `hydo explore` replayed both minimal walks with
+`,rec`; each kept its verdict, and each `replays/rec-<k>/screens/` held `repro.spec.ts`, the last
+step's video (64,238 and 69,579 bytes) and its trace.

@@ -3,8 +3,8 @@
 # Started with `hydo compose ../docker-compose.yaml`; RESULTS.md says what was found.
 #
 #   sh fetch-images.sh          # the Memos image by digest
-#   hydo build hydo.yaml        # x86_64 only (hvx, KVM): it fetches the Playwright image and
-#                               # playwright-core into browser/
+#   hydo build hydo.yaml        # hvx, KVM and the Mac engine: it fetches the Playwright image
+#                               # and playwright-core into browser/
 #   hydo run "disk=none | run I=1"
 #   hydo explore --seeds 1-20
 #

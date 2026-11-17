@@ -83,8 +83,9 @@ The engines differ in what they give up:
 ## How one run works
 
 1. `hydo build` turns `hydo.yaml` into an image. On x86_64 the image is an ext4 disk. On arm64 it
-   is an initramfs (a root file system that the kernel loads into RAM) and a data disk. The same
-   `hydo.yaml` gives the same bytes on any machine.
+   is an initramfs (a root file system that the kernel loads into RAM) and a data disk. An arm64
+   image with `browser:` or `guest.root: disk` has its root as an ext4 file system on the disk,
+   and its initramfs only mounts it. The same `hydo.yaml` gives the same bytes on any machine.
 2. The engine boots the image once. The guest's first process is `hydo-agent`, a small Rust
    program that only carries out commands. An image with this agent is an agent image; every
    image that `hydo build` makes is one. During this boot the engine takes two snapshots. It takes

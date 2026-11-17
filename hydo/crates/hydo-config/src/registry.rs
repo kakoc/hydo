@@ -277,6 +277,9 @@ variables! {
     HVM_DISK: Hvm, User, "path", "", "hydo-hvm (set by hydo-engine)";
     /// `hydo-hvm hvm` writes the durable disk image here at its end (flushed bytes only).
     HVM_DISK_OUT: Hvm, Developer, "path", "", "hydo-hvm hvm";
+    /// `hydo-hvm hvm` writes only the disk's first N bytes to `HVM_DISK_OUT` (hydo-build's helper
+    /// VM of an arm64 root on the disk, Milestone 284).
+    HVM_DISK_OUT_BYTES: Hvm, Developer, "number", "the whole disk", "hydo-hvm hvm";
     /// Guest RAM in MiB (the engine: 256..8192, default 1024; `hydo-hvm hvm`: default 256);
     /// `--ram-mib` wins.
     HVM_MEM_MB: Hvm, User, "number", "1024 (hydo-hvm hvm: 256)", "hydo-hvm";

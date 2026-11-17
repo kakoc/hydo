@@ -156,6 +156,8 @@ guest:
                                # since fingerprint epoch 2); see "The CPU's caches"
   kernel: containers           # optional: the guest kernel for containers and Kubernetes on the
                                # Mac and KVM engines; see "The guest kernel for containers"
+  root: disk                   # optional (the Mac engine): the root file system on the disk, not in
+                               # guest RAM (default with browser:); see "The root on the disk"
   branch_tick: true            # optional (the KVM engine on Intel): interrupt code that runs
                                # without VM exits; see "Loops without VM exits"
   cgroup2: false               # optional: no cgroup2 mount on /sys/fs/cgroup at boot (default
@@ -1186,6 +1188,30 @@ cannot interrupt. On KVM with one vCPU it stops earlier, because k3s needs the c
 controller. The measurements are in `hydo/onboard/examples/k3s-lease/RESULTS.md`. With
 `guest.branch_tick` (the next section) k3s runs on the KVM engine of an Intel host.
 
+### The root on the disk (`guest.root`)
+
+The Mac engine boots an arm64 image whose whole root file system is the initramfs, which the
+guest kernel unpacks into guest RAM. That costs RAM for every byte of the root: a root of
+gigabytes, such as the Playwright image of `browser:` (about 2.4 GB of files), does not fit.
+`guest.root: disk` (Milestone 284) puts the root on the image's disk instead, as the x86_64
+images always have it:
+
+- `hydo build` makes a read-only ext4 file system of the root in the disk's first partition. The
+  data file system stays the second partition, `/dev/vda2`.
+- The initramfs holds only busybox, a small `/init`, and copies of the files under `/etc/hydo`
+  that the host reads. `/init` mounts `/dev/vda1` read-only and hands PID 1 to the agent there
+  (`switch_root`). The guest kernel does not change.
+- On a Mac, the ext4 file system is made in a short helper VM, which formats it with the release's
+  mke2fs and unpacks the root into it with busybox. The build needs free disk of about three
+  times the root while it runs.
+
+`memory` keeps the root in the initramfs. Without the key the root is on the disk for an image
+with `browser:`, and in memory for every other image, so every image built before keeps its bytes
+and its fingerprints. The x86_64 engines ignore the key: their root is always on the disk.
+
+A disk fault (`disk=ioerr`, `disk=lying`) can also hit a read of the root on the disk, as on the
+x86_64 engines. Files the guest has read once come from its page cache.
+
 ### Loops without VM exits (`guest.branch_tick`)
 
 The Mac and KVM engines measure the guest's time in VM exits and deliver interrupts at exits. A
@@ -1767,6 +1793,8 @@ browser:
   shard it adds `--fully-parallel`, so that Playwright splits the tests one by one, not whole
   files (one worker still runs them in order).
 - `guest.ram_mib` defaults to 4096.
+- On the Mac engine the root file system is on the image's disk (`guest.root: disk`, the section
+  "The root on the disk"), because the Playwright image does not fit in guest RAM (Milestone 284).
 - `hydo build` refuses a project whose `<tests>/node_modules/@playwright/test` is missing or of
   another version.
 - The validated data keeps `_browser`. The explorer draws no fault on the browser's service: the

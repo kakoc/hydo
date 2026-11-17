@@ -14458,3 +14458,131 @@ nothing for `action/examples/` and `comment.sh`, nor shellcheck for the action's
 
 **Not built** (open item 67): proposed regression files, and one shrink per signature across
 shards. Nothing ran on GitHub.
+
+### Milestone 284 (tentative number) - DONE (web apps on the Mac engine: `browser:` and `browser.explore` run on an Apple Silicon Mac; the root file system of such an image is a read-only ext4 file system on its disk, `guest.root: disk`, an opt-in format-1 key that is the default with `browser:`, which `hydo build` makes in a helper VM of the Mac engine; the guest kernel did not change, and no run ended in `SPIN`; web-shop's flaky test fails on every run of its schedule, the walk found both planted bugs blind in 20 seeds, and a Memos walk and its recording replay gave hvx's verdicts; each schedule gave one fingerprint over two runs; nothing recorded moved; 2026-11-17)
+
+**Why.** Most web developers work on a Mac, and `browser:` (Milestones 253 and 254) and the walk
+through the pages (Milestones 258 to 273) ran only on hvx and KVM. Open item 51 named the cause:
+the Mac engine boots an arm64 image whose whole root is the initramfs, which the guest kernel
+unpacks into guest RAM, and the Playwright image is 2.4 GB of files.
+
+**The choice: a key, not an epoch.** The root on the disk could have come with the fingerprint
+epoch 4, for every arm64 image. That would move every recorded Mac value and give the lead a
+re-recording pass for no gain, because a root of a few MB fits in RAM well. A key keeps every
+image built before as it was. `guest.root: memory | disk` (a format-1 addition: the schema's
+`RootPlace`, `hydo_manifest::validate::ROOT_PLACES`) decides; without it the root is on the disk
+for an image with `browser:` and in memory for every other image. No Mac image with `browser:`
+existed before, so no recorded value moves, and open item 105 gets no line. The x86_64 engines
+ignore the key: their root was always on the disk.
+
+**The build** (`hydo/crates/hydo-build/src/arm64.rs` `disk_root`, `image.rs` `mac_mkfs_root`,
+`cpio.rs` `write_cpio_file`).
+
+- The root tree is staged as before. hydo-build writes it as one newc cpio archive, not
+  compressed and written as it is made, with the same entries and owners as the initramfs would
+  have. The archive of web-shop is 2,546,840,484 bytes.
+- The new initramfs holds busybox, an `/init` script, and copies of `/etc/hydo`,
+  `/bin/busybox` and a SQL helper's configuration, the files that the host reads from an image
+  (`hydo_engine::image::embedded_file`). `/init` mounts `/dev/vda1` read-only with `noatime`,
+  moves `/dev` into it, and runs `switch_root /root /init`, so the agent is PID 1 on the root as
+  before. web-shop's initramfs is 830,910 bytes.
+- The root file system is made in a helper VM of the Mac engine (`hydo-hvm hvm run`), as the
+  data disk already was. The helper's disk has two partitions: the new file system and the
+  archive. The helper runs the release's mke2fs with the root options of a Linux build (no
+  journal), mounts it, unpacks the archive with busybox `cpio -i -d -m -u` as root, and unmounts
+  it. The new engine option `HVM_DISK_OUT_BYTES` writes back only the first partition. The
+  tree, the archive and the helper's disk are removed as soon as each is no longer needed; the
+  build of Memos needed 7 GB of free disk at its peak.
+- The root's size is `root.size_mib`, else 1.3 times the archive in steps of 64 MiB: 3,200 MiB
+  for web-shop. The disk is then the root in p1 and the data file system in p2, as on x86_64.
+- A build of web-shop's walk image took 156 s on this Mac, about 60 s of it in the helper VM.
+  On Linux, which has no Mac engine, hydo-build refuses `guest.root: disk` for an arm64 image.
+
+**The guest.** Nothing in the guest kernel, the agent or the engine's run code changed. The image
+boots `Image-explore-netns-cg`, the kernel of every arm64 image with `network: bridge`.
+Playwright's runner, Chromium's headless shell and the config's web server ran at once; Playwright
+starts Chromium without its sandbox, so no namespace or seccomp option was needed. A disk fault
+can now hit a read of the root, as on the x86_64 engines.
+
+**Loops without VM exits.** No run of this milestone ended in `SPIN`, also in the exploration's
+104 runs. Chromium's and Node.js's waits are system calls, which make exits.
+
+**The pin.** The arm64 Playwright image that the catalog pinned in Milestone 253 is
+`sha256:56be08aca06bf736a928da2e3235a3b63ef71ee97313beb18c6019fea791aba4` (config
+`sha256:9136e3eed8fc…`, 7 layers, 35,741 entries; the docker-save archive is 988,750,336 bytes).
+hydo-build leaves out the same two systemd names with a backslash as on amd64. playwright-core
+1.65.1 and `walk.mjs` are JavaScript, so the walk needed no change.
+
+**The runs.** This milestone's programs over the 0.3.4 Mac release on an M2 Pro, one VM at a
+time. The runs of the table and the exploration used images of the fingerprint epoch 3, built on
+`main` at `7944ad08` with `--set variant=buggy` for web-shop:
+
+| image | schedule | verdict | fingerprint | runs | wall time per run |
+|---|---|---|---|---|---|
+| web-shop `hydo.yaml` (`a70204c1…`) | `disk=none \| run` | OK, 3 tests passed, 6 invariants held | `e49b289c2d4f34b7` | 2 | 56 s, 50 s |
+| web-shop `hydo.yaml` | `disk=none \| run H=api.add_item@1-2:delay=1000` | VIOLATION `browser.tests_pass`: Expected "2", Received "0" | `15e26130aad215fd` | 2 | 49 s, 48 s |
+| web-shop `hydo-walk.yaml` (`9d2d78ca…`) | `disk=none \| run I=2` | OK, 5 invariants held | `b76ad58b5c0ae26b` | 2 | 56 s, 44 s |
+| Memos (`887b86b8…`) | `disk=none \| run I=1` | OK: all 5 saved memos are in the database | `70dc50842f43b01b` | 2 | 69 s, 70 s |
+| Memos | `disk=none \| run I=1,rec` | OK, with the video of step 5 (276,792 bytes) and its trace | `3efb64050c17ce3d` | 2 | 144 s, 136 s |
+| Redis with `guest.root: disk` (`cef7cb4e…`) | `disk=none \| run` | OK, 20 writes acknowledged | `83d00ced9410093e` | 1 | 2 s |
+| the same | `disk=cut \| run C=12 R=everysec` | VIOLATION, `key k:1 lost` | `d10e597424bf4a9c` | 2 | 2 s |
+| Redis, the release's example (root in memory, `9ddfc929…`) | `disk=none \| run` | OK | `a62eee5332a5b9d2` | 1 | 3 s |
+| the same | `disk=cut \| run C=12 R=everysec` | VIOLATION, `key k:0 lost` | `474b2874e7ef0fa2` | 2 | 3 s |
+
+On hvx the same schedules took 48 s to 10 minutes on the shared bare-metal machine, and the walk
+`I=2` took 65 s (the web-shop example's RESULTS.md). The verdicts are hvx's. The fingerprints are
+the Mac engine's own.
+
+**At the fingerprint epoch 4.** After the rebase onto `main` at `64950f8f` (Milestones 269 and
+283, the epoch 4), the web-shop images were built again and gave their verdicts with one
+fingerprint over two runs each: `disk=none | run` OK (`7da8112398ae9137`), the delay
+VIOLATION `browser.tests_pass` with Received "0" (`24c270f6f56a9d85`), the walk `I=2` OK
+(`6a73a4def523f095`), and seed 7's minimal schedule VIOLATION `browser.no_page_errors`
+(`f956bda2f5aaa2c8`). The disks are `bc0ad90a…` and `e253d638…`.
+
+**The walk, blind.** `hydo explore --seeds 1-20 --protocol-faults --workers 1` on the walk image
+took 79 minutes for 20 schedules, two shrinks and two recording replays: 104 runs, a mean of
+40.8 s per run in the engine (hvx: 19.1 s, 24 minutes in all). It found both planted bugs:
+
+- Seed 7, the order page that leaves its spinner and a rejection: shrunk in 29 runs to
+  `disk=none dseed=63cbe1e459320dd7 | run H=api.get_order@3-4:reset
+  I=a0d28305209409f6,n7,x0.0-6,x1.0-6,x2.0-6`, `VIOLATION [browser.no_page_errors]`,
+  `18de0fcd41170aeb` on both runs.
+- Seed 17, the order sent again without a key: shrunk in 49 runs to `disk=none
+  dseed=808475f02ee37363 | run H=api.place_order@2-4:reset
+  I=37ce1f8dfefa7c4b,x0.0-9,x1.0-9,x2.0-4,x3.0-6,x3.8,x3.9`, one cart ordered 4 times,
+  `bec314ece467e3ba` on both runs.
+
+The explorer drew the same schedules as on hvx, because it draws them from the seed. Seeds 8 and
+12, which failed on hvx, passed: the pages answer at other moments of the guest's clock, so the
+reset of `place_order` caught no order. The 104 runs had 89 different schedules, and no schedule
+gave two fingerprints. The replays of both minimal walks with `,rec` kept their verdicts and
+copied out `repro.spec.ts`, the last step's video (64,238 and 69,579 bytes) and its trace.
+
+**Memos.** `hydo build hydo.yaml` of the Memos example made a root of 3,264 MiB in 96 s. The walk of `I=1` took 69 s (hvx: 72 s), and the recording
+replay repeated its 72 actions without leaving one out (Milestone 270). The manifest's header
+comment no longer says x86_64 only, so its hvx image gets other bytes than the images its
+RESULTS.md recorded.
+
+**What did not move.** The release's Redis example, built with this tree's programs, has the
+bytes that the 0.3.4 Mac release's programs give (`9ddfc929…` and `706c8b95…`), and its two
+quickstart schedules gave the fingerprints that `QUICKSTART-mac.md` records. The same manifest
+with `guest.root: disk` built twice to the same bytes, so the helper VM's file system is
+reproducible. Its verdicts are those of the image with the root in memory, and its fingerprints
+are its own.
+
+**What a run costs.** The Mac engine's fingerprint hashes every byte of the disk with byte-wise
+FNV. Over a 3.4 GB disk that takes 4.9 s on this Mac, twice per run (the workload's and the
+run's fingerprint), so about 10 s of web-shop's 45 s. A hash of the written blocks alone would
+need a keyed change of the fingerprint (open item 145).
+
+**Tests and checks.** The project schema gained `RootPlace` (`HYDO_BLESS=1`), and the variable
+inventory gained `HVM_DISK_OUT_BYTES`. The new key changes the known fields of the message for an
+unknown `guest:` field, so the recorded equivalence answers of hydo-manifest (17 lines) and
+hydo-build (10 lines) take the new message; no other answer changed. The CLI golden of `hydo
+guide manifest` was re-recorded for MANIFEST.md. On this Mac, on `main` at `cd188ed3` with this
+milestone on top, these passed: workspace clippy with `-D warnings`, `cargo test` of hydo-hvm,
+hydo-build, hydo-manifest and hydo-config, `equivalence::cli_matches_golden` and
+`agents_equivalence`, `language::`, `public_content::`, `docs::`, the explorer's `identity::`,
+`corpus::` and `fake_engine`, the control corpus, `test_tiers`, hydo-schema-compat, `sh
+ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.

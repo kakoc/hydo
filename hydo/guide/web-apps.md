@@ -13,8 +13,8 @@ page the tests open and turns what it sees into properties:
 Because the whole machine is deterministic, a flaky test fails on every run of the schedule that
 makes it fail. Faults between the page and its API (`H=` tokens) show how the frontend behaves
 when the API is slow, fails, or loses an answer. The worked example is
-`hydo/onboard/examples/web-shop` in hydo's repository: a React shop whose API is a fake. This is
-x86_64 only (the hvx and KVM engines); the Mac engine does not run it yet.
+`hydo/onboard/examples/web-shop` in hydo's repository: a React shop whose API is a fake. It runs
+on every engine: hvx and KVM on Linux, and the Mac engine on an Apple Silicon Mac.
 
 ## The project: `browser:`
 
@@ -252,8 +252,12 @@ kernels can draw differently, so record the references on the engine that runs t
 
 ## Limits
 
-- x86_64 only. The Playwright image is about 3 GB unpacked, and the Mac engine keeps the root in
-  guest RAM.
+- On a Mac the image's root file system is on its disk (`guest.root: disk`, the default with
+  `browser:`). The Playwright image is about 2.5 GB of files, more than guest RAM should hold.
+  `hydo build` makes that file system in a short helper VM and needs about 10 GB of free disk
+  while it runs; the image itself is about 3.4 GB.
+- A Mac run and a Linux run of one schedule give different fingerprints, and their walks can take
+  other actions. Record screenshot references on the engine that compares them.
 - One pinned Playwright version (1.65.1) and its Chromium. Firefox and WebKit are in the image
   but were not tried.
 - Tests that call outside sites (a CDN, a login provider) need a fake under that name.

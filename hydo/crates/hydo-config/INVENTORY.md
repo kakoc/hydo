@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-58 user-facing and 93 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 37 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 9 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+58 user-facing and 94 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 37 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 9 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -93,6 +93,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_HVM_ENGINE` | user | path | <root>/target/release/hydo-hvm, else <root>/bin/hydo-hvm | hydo-engine | The Mac engine program (an empty value means the default). |
 | `HVM_DISK` | user | path | - | hydo-hvm (set by hydo-engine) | The data disk (virtio-blk); hydo-engine sets it for an image with a `-disk.img`. |
 | `HVM_DISK_OUT` | developer | path | - | hydo-hvm hvm | `hydo-hvm hvm` writes the durable disk image here at its end (flushed bytes only). |
+| `HVM_DISK_OUT_BYTES` | developer | number | the whole disk | hydo-hvm hvm | `hydo-hvm hvm` writes only the disk's first N bytes to `HVM_DISK_OUT` (hydo-build's helper VM of an arm64 root on the disk, Milestone 284). |
 | `HVM_MEM_MB` | user | number | 1024 (hydo-hvm hvm: 256) | hydo-hvm | Guest RAM in MiB (the engine: 256..8192, default 1024; `hydo-hvm hvm`: default 256); `--ram-mib` wins. |
 | `HVM_STEP` | developer | number | 64 | hydo-hvm | Virtual ticks of the 24 MHz counter per VM exit. |
 | `HVM_MAX_EXITS` | developer | number | 200000000 | hydo-hvm hvm | The exit budget of `hydo-hvm hvm`. |

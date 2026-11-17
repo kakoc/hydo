@@ -267,3 +267,24 @@ the rest is open items 124 and 129 of `AGENTS.md`.
   out.
 - The walk spent its actions on the calendar, the saved views and the filters until `avoid:`
   named them.
+
+## On the Mac engine (Milestone 284)
+
+The example runs on an Apple Silicon Mac since Milestone 284, with the image's root file system
+on its disk (`guest.root: disk`, the default with `browser:`). The runs used this tree's programs
+over the 0.3.4 Mac release on an M2 Pro, one VM at a time, at the fingerprint epoch 3. `sh
+fetch-images.sh` fetched the arm64 Memos image, and `hydo build hydo.yaml` made `explore-ob-memos-arm64.cpio.gz` (sha256
+`76de9388…`) and its disk `887b86b8…` (a root of 3,264 MiB and a data disk of 512 MiB) in 96 s.
+
+| schedule | verdict | fingerprint | runs | wall time |
+|---|---|---|---|---|
+| `disk=none \| run I=1` | OK: "all 5 memos that Memos answered as saved are in the database" | `70dc50842f43b01b` | 2 | 69 s, 70 s |
+| `disk=none \| run I=1,rec` | OK, the same 5 memos | `3efb64050c17ce3d` | 2 | 144 s, 136 s |
+
+On hvx `I=1` took 72 s. The walk of `I=1` on the Mac signs up the administrator and takes 72
+actions in 6 steps, other actions than on hvx, because the pages answer at other moments of the
+guest's clock. The recording replay ran the schedule without `rec` first (`walked/`), then
+repeated its 72 actions with recording on, and left none out. Both recording runs gave one
+fingerprint. Its `screens/` holds
+`repro.spec.ts`, the video of step 5 (`walk-step-5.webm`, 276,792 bytes) and its trace (91,565
+bytes).
