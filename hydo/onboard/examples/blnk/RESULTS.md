@@ -258,7 +258,7 @@ exceeds overdraft limit`, on both builds. The patch saves the limit in `meta_dat
 
 **Decision: a Blnk bug.** The overdrafts page says that with `overdraft_limit` a transaction
 "succeeds only if the resulting negative balance stays within the limit". No upstream issue or
-pull request names it. A report is drafted, not posted.
+pull request names it. Reported as blnkfinance/blnk#437 (2026-11-14); pull request #439 proposes a fix.
 
 ### 2. An atomic bulk keeps its first transfer when a later one fails before it is queued (a Blnk bug)
 
@@ -310,7 +310,7 @@ patches (`--set blnk=blnk-fixed`).
 **Decision: a Blnk bug.** The bulk page promises that with `atomic` "either all transactions
 succeed or all fail". Upstream issue 413 (fixed on 2026-11-10) covered an item that the worker
 rejects. Open pull request 430 covers an item that the queue recovery applies. Neither covers an
-item that fails before it reaches the queue. A report is drafted, not posted.
+item that fails before it reaches the queue. Reported as blnkfinance/blnk#438 (2026-11-14); pull request #440 proposes a fix.
 
 ### 3. Redis without an append-only file loses acknowledged commits and voids of holds (a deployment setting)
 

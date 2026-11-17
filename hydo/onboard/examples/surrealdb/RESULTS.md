@@ -17,8 +17,8 @@ and the changefeeds.
      ones, which do not depend on the damaged bytes, and SurrealDB starts with a warning only.
      Those commits were acknowledged and synced (`sync=every`), and SurrealKV's own sync marks
      say so. The blind explorations found it 7 times: in 3 of 40 seeds on hvx and in 4 of 60 on
-     the Mac. Docker reproduces it without hydo (`native/vlog-tail-cut.sh`). Nothing was
-     posted.
+     the Mac. Docker reproduces it without hydo (`native/vlog-tail-cut.sh`). Reported as
+     surrealdb/surrealkv#536 (2026-11-17).
   2. **Known (surrealdb#7606): changefeed versionstamps go back after a backward clock step and a
      restart.** A changefeed reader that resumes with `SHOW CHANGES ... SINCE` then skips the
      new changes.

@@ -2009,7 +2009,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
         message cannot name the cause there.
       - A panic inside a macro-generated implementation is placed at the macro's call.
 140. The SurrealDB example (M277). What is left:
-    - The SurrealKV candidate is not reported upstream.
+    - The SurrealKV candidate is reported as surrealdb/surrealkv#536 (2026-11-17).
     - An exploration cannot leave out one fault kind, and `hydo explore` reads `faults:` without
       the build's parameters. The example explores without clock steps through a copy of
       `hydo.yaml` (`explore-noclock.yaml`).
@@ -2023,8 +2023,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       on hvx only. Of its power cuts inside the 4.0.1 open, which ones hit the conversion itself
       and which the data migrations after it was not separated.
 141. The Dragonfly example (M278). What is left:
-    - The snapshot candidate is not reported upstream. It was not reproduced with a real clock
-      step outside hydo; `native/` shows the choice by modification time with `touch`.
+    - The snapshot candidate is reported as dragonflydb/dragonfly#8826 (2026-11-17). It was not
+      reproduced with a real clock step outside hydo; `native/` shows the choice by modification
+      time with `touch`.
     - A restarted service's earlier log (`<svc>.log.old`) is not copied into the run directory.
     - `guest.cpu` cannot be a parameter: `{{cpu}}` passes `hydo build --check`, and the
       explorer's corpus test refuses it. The example is for x86_64 only.

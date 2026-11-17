@@ -13,7 +13,8 @@ replication and failover, its transactions, and its key expiry.
      from before the step. A restart then loads a snapshot from before the step, also after a
      clean `SHUTDOWN` that saves first. Every write since that snapshot is gone, although a
      `SAVE` answered `OK` after it. hydo found it blind in 25 of 120 explored schedules, and
-     the shrinker reduced it to one step of 18 s back (`T=8:-18`). No report names it.
+     the shrinker reduced it to one step of 18 s back (`T=8:-18`). Reported as
+     dragonflydb/dragonfly#8826 (2026-11-17).
   2. **A known bug: a power cut loses snapshots that `SAVE` acknowledged.** Dragonfly renames
      its snapshot files into place and answers `OK` without an `fsync`. After a power cut the
      newest snapshots are gone. This is
