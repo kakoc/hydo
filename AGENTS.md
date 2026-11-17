@@ -614,6 +614,21 @@ candidates; the third and the fourth are reported as redpanda-data/community#395
   `A=rp.txn_add@20:kill-n3` gave the wrong offset on three hosts. `native/stale-offset.sh`
   gives both under Docker on 20 of 20 rounds with a leader move, and 0 of 20 without.
 
+**Meilisearch's task queue (M295, tentative number).** Meilisearch v1.57.0 runs as one server
+from its image in `hydo/onboard/examples/meilisearch` (RESULTS.md), started with `hydo onboard`
+from a Compose file, with its data on a file system of its own. A Go client enqueues additions,
+updates, deletions, settings, index swaps, edits by function, dumps and snapshots, and six checks
+judge the queue's promises. No acknowledged task left the queue, and each index's tasks ran in
+order. Three new candidates, found on the Mac engine and not posted:
+- An index swap runs twice after a crash. The swap commits the swapped mapping in one LMDB
+  transaction and the task's status in a later one, so the restart swaps the indexes back
+  (`disk=none | run A=meili.add_acked@20+40:cut`). A SIGKILL in Docker does it in 4 of 48
+  rounds (`native/swap-twice.sh`); hydo's kill reactions never came inside the window.
+- A power cut empties the payload of an enqueued document addition: the file is renamed into
+  place without an `fsync`. The task then succeeds with no document indexed, or fails its whole
+  batch with `No such file or directory`.
+- A succeeded dump is an empty file after a power cut: it is never synced.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -2090,6 +2105,21 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       without faults reads `workload steps 0..29` for every stop.
     - A run with a power cut was not recorded; the boot number of the records is tested on
       synthetic records only.
+148. The Meilisearch example (M295). What is left:
+    - Its three candidates are not reported upstream.
+    - A kill reaction (`A=<event>+<ms>:kill-<svc>`) reaches the service through the guest
+      agent. The service's threads run on until the agent runs. Kills at 18 delays never
+      stopped Meilisearch between the swap's two commits, which a power cut and a SIGKILL in
+      Docker do.
+    - A run's verdict line names its first broken check only. Every power cut within 30 s of a
+      dump breaks `final_dumps`, and finding 1's schedule shows the swap only in `hydo report
+      --details`. The example's build parameter `dumps=no` keeps finding 3 out of explorations.
+    - The explorer draws a reaction's delay from fixed values. No blind schedule came between
+      the swap's commits. The moment of a cut after an event moves with the image's bytes. A
+      change of the client moved finding 1 from 2 ms to 40 ms after its event.
+    - Released 0.3.4 (epoch 3) cuts at other moments and misses finding 1 with `+2` and `+40`.
+    - The shared Mac VM lock: the onboarding waited about 1 hour 40 minutes for it.
+    - The example ran on the Mac engine only, not on hvx (no `cf=`) or KVM.
 149. Differential testing (M298, `docs/design/differential.md`). What is left:
     - It ran on the Mac engine only. hvx and KVM did not run it.
     - The outcomes come from the controller's reads of `$HYDO_OUTCOMES`. A run that ends in an
@@ -2909,6 +2939,10 @@ build machine, before 2026-10-13.
   numbers everywhere. The CI page's headline counts every line, and runs show their start
   (`started`). `hydo setup` names the guest files a release lacks, and `HYDO_RELEASE_DIR` runs a
   tree build. Nothing recorded moved
+- M295 (tentative number): the Meilisearch v1.57.0 onboarding on the Mac engine, against what
+  its task queue promises. Three new candidates, not posted. An index swap runs twice after a
+  crash between its two commits, also after a SIGKILL in Docker. A power cut empties an enqueued
+  addition's payload, and a succeeded dump is empty after a power cut. Nothing recorded moved
 
 ## Where to look
 

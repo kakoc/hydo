@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# enqueue the deletion of one document of an earlier acknowledged addition
+exec /bin/mlc op del

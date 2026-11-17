@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=120
+# the experimental edits by function, the indexes docs, sa, sb and cnt, their settings and first documents
+exec /bin/mlc init

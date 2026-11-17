@@ -14,7 +14,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 
 | system | its promise | the techniques that found most | where they found bugs |
 |---|---|---|---|
-| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL |
+| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults | Redpanda, NATS |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor |
 | ledger or billing system | the books match the acknowledged operations; a limit holds | the generic rule beside domain rules; concurrent clients without faults; value properties | Blnk, Lago, Formance Ledger |
@@ -222,6 +222,9 @@ Three findings hold for every type of system:
   - Dragonfly (known dragonfly#8646): six failures of the first exploration had a
     cut and no backward clock step.
   - Mender and SWUpdate: `disk=cut | run C=4` gives each its finding 1.
+  - Meilisearch (finding 3): `disk=cut | run C=30` left all 5 dumps of the run at
+    0 bytes, while each dump task said `succeeded`. In the first exploration 9 of 25 schedules
+    failed so; a power loss of the service alone (`L=meilisearch@42+1`) does it too.
 - **What it misses.** A relaxed durability setting loses writes by design: make the setting a
   build parameter and run its durable value, or every value with `hydo explore --configs`. A lying disk or disk I/O errors break the disk's own
   promise. In Valkey's swarm exploration all 28 failures had a disk fault. Use `--durable-only`
@@ -288,7 +291,12 @@ Three findings hold for every type of system:
     loses a refund request with its Celery task on every run. Each fault alone passes.
   - Lago (known lago-api#6901): a swarm schedule that killed and paused Redis
     during a cancellation.
-- **What it misses.** A pause of a service alone found nothing: a 15 s pause of a Hatchet engine
+- **What it misses.** A kill comes through the guest agent, so the service's threads run on
+  until the agent runs. Meilisearch's index swap that runs twice (finding 1) needs
+  the server stopped between two LMDB commits. Reactions that killed it at 18 delays after a
+  swap, an edit, or an addition all passed. A power cut at one of them broke it, and a plain
+  SIGKILL in Docker broke it in 4 of 48 rounds (`native/swap-twice.sh`). A pause of a service
+  alone found nothing: a 15 s pause of a Hatchet engine
   broke nothing, and a kill at the same step lost runs. The restart of a `K=` fault ignores the
   service's restart policy (River, seed 17).
 - **Cost.** It runs on every engine.
@@ -316,7 +324,8 @@ Three findings hold for every type of system:
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
-  clock. A step of a year lets retention delete the evidence (Redpanda seed 25, River's cleaner).
+  clock. In Meilisearch's 574 Rust files it found one, a metric, and steps of
+  30 s to a year broke nothing in 50 blind schedules. A step of a year lets retention delete the evidence (Redpanda seed 25, River's cleaner).
 - **Cost.** The shrinker spends hours on clock steps; stop an exploration once its failures are
   understood. It runs on every engine.
 
@@ -349,6 +358,11 @@ Three findings hold for every type of system:
   - Redpanda (finding 3): `A=rp.txn_add@20+<ms>:kill-<node>` broke the claim in 5 of 9 runs, each
     node at 0, 3, and 8 ms, with no other fault.
   - Mender (finding 2): blind at seed 10 of 24, as `A=mender.commit_started:cut`.
+  - Meilisearch (findings 1 and 2): `A=meili.add_acked@20+40:cut` cuts 40 ms
+    after an addition's `202`. It empties the payloads of the additions not yet processed. It
+    also catches an index swap between its two commits, so the restart runs the swap again. A
+    step boundary (`C=30`) loses no payload. Blind, seed 26 of the second exploration lost a
+    payload, shrunk to `A=meili.add_acked:cut`.
   - SWUpdate: two of the five minimal schedules of its hvx exploration carry a
     reaction.
 - **What it misses.** On the bug benchmark the drawn reactions found no defect
@@ -370,6 +384,9 @@ Three findings hold for every type of system:
     came at 64 ms and at 69 to 87 ms after the event. On the Mac engine `+7` failed and `+8`
     passed.
   - Redpanda (finding 3): delays of 0, 3, and 8 ms on each node gave 5 failures of 9.
+  - Meilisearch (finding 1): no kill delay after a swap broke it in hydo (1 to
+    25 ms). The same scan in Docker, `pkill -9` 0 to 45 ms after the swap in steps of 3 ms, ran
+    the swap twice at 0, 9, 12, and 15 ms.
 - **What it misses.** The window moves with the program's bytes. A second build of
   `mender-update` moved it to 65, 70, and 75 ms.
 - **Cost.** One run per delay.
@@ -527,6 +544,8 @@ Three findings hold for every type of system:
     program's step order. Two racing producers without it lost a record in 5 of 205 commits.
   - Redpanda finding 4 (`native/stale-offset.sh`): with a move of the leader, 20 of 20 rounds;
     without it, 0 of 20.
+  - Meilisearch finding 1 (`native/swap-twice.sh`): without a forced order, a SIGKILL after a
+    swap and 16 additions ran the swap twice in 4 of 48 rounds.
   - Saleor finding 4: two row locks hold the gift card charge at the point after the balance
     commit.
 - **What it misses.** Without a forced order the native rates are low. Hatchet lost runs in 4

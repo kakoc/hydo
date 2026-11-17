@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# enqueue a snapshot in one call of four, else an addition
+exec /bin/mlc op snap

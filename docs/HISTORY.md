@@ -15882,3 +15882,93 @@ warnings`, `equivalence::cli_matches_golden`, `agents_equivalence`, `docs::`, `p
 hydo-schedule's `language::`, `cargo test -p hydo-config`, `test_tiers`, hydo-explore's `it` and
 `fake_engine`, the control corpus, hydo-schema-compat, `sh ci/consolidate-tests.sh --check`, and
 `sh ci/vale.sh`.
+
+### Milestone 295 (tentative number) - DONE (Meilisearch v1.57.0, one server from its image, onboarded with `hydo onboard` and hunted on the Mac engine against what its task queue promises; three new candidates: an index swap runs twice after a crash between its two commits, a power cut empties the payload of an enqueued document addition, and a succeeded dump is an empty file after a power cut; nothing posted; nothing recorded moved; 2026-11-17)
+
+**In short.** Meilisearch v1.57.0 (2026-11-16) answers every write with a `taskUid` and
+processes its task queue in batches; the queue and each index are LMDB environments.
+`hydo/onboard/examples/meilisearch` (RESULTS.md) runs one server from the official image,
+imported with `hydo onboard` from a one-service Compose file, with its data folder on a file
+system of its own (`storage:`). The test client `mlc` (Go, standard library only) enqueues
+additions, partial updates, deletions, settings changes, swaps of two indexes, edits by
+function, dumps and snapshots, without waiting for them. Six checks state the documented
+promises: every acknowledged task ends succeeded with all its documents and in order per index,
+the documents are what the succeeded tasks made of them and the search agrees with them, the
+settings are those of the last settings task, the swaps leave the indexes as their count says,
+each edit runs once, and every succeeded dump and the snapshot are whole archives. The build
+parameter `dumps=no` turns the dumps off, because finding 3 breaks every power cut's run.
+
+**What was found.** Three bugs, new as far as the search found; nothing was posted.
+
+- **An index swap runs twice after a crash.** `process_batch` commits the swapped index
+  mapping in its own LMDB transaction (`crates/index-scheduler/src/scheduler/process_batch.rs:434`),
+  and `tick` writes the task's `succeeded` status in a second one (`scheduler/mod.rs:279` to
+  `:452`). The `processing` status lives only in memory, so after a crash between the commits
+  the restart runs the swap again and swaps the indexes back. `disk=none | run
+  A=meili.add_acked@20+40:cut` gives 21 succeeded swaps with both indexes at home, and the swap
+  task 164 started in the recovery boot (`fp=44a749b10aeef55b`, twice). Kill reactions at 18
+  delays never came between the commits. `native/swap-twice.sh` kills the server with
+  `pkill -9` inside its Docker container 0 to 45 ms after a swap and 16 additions: a swap ran
+  twice in 4 of 48 rounds. The code is the same on `main` (`d15a0866`). Issue #1679 (2021)
+  named the case in the design of the task queue.
+- **A power cut empties the payload of an enqueued document addition.** The route renames the
+  payload file into place with `tempfile`'s `persist` and no `fsync`
+  (`crates/file-store/src/lib.rs:147`), then commits the task. After a cut the task succeeds
+  with `indexedDocuments` 0, or fails with `No such file or directory (os error 2)` with every
+  task of its batch, also a deletion (`disk=cut | run A=meili.add_acked@20+2:cut`,
+  `fp=830da5344ced8d40`). Blind in exploration B, seed 26, shrunk to `C=60 A=meili.add_acked:cut`.
+- **A succeeded dump is an empty file after a power cut.** `process_dump_creation` writes the
+  archive with `File::create` and never syncs it (`process_dump_creation.rs:281-285`). `disk=cut |
+  run C=30` leaves all five dumps at 0 bytes (`fp=e4469b79f388a979`); in exploration A 9 of 25
+  schedules, and a power loss of the service alone (`L=meilisearch@42+1`).
+
+**What held.** No acknowledged task was lost from the queue, and each index's tasks ran in uid
+order. In 75 blind schedules and the directed runs, kills, pauses, and clock steps of 30 s to a
+year broke no check; the clock audit found one place, a metric. The settings, the search, and
+the edits (but on a lying disk) held. Damage that Meilisearch detects (`MDB_INVALID`, a corrupted
+version file) stops it at the start. Every failure with disk I/O errors or a lying disk was the
+disk's own loss.
+
+**What hydo lacked** (open item 148; RESULTS.md, section "What hydo lacked"):
+
+- A kill reaction does not come between two commits that a power cut finds; a SIGKILL in Docker
+  does.
+- One schedule's first violation hides the others: the dumps fail in every run with a power cut,
+  and finding 1's verdict line names finding 2.
+- Released 0.3.4 (epoch 3) cuts at other moments and misses finding 1 with `+2` and `+40`. The
+  moment also moved with the example's own bytes: the build parameter `dumps` moved finding 1
+  from `+2` to `+40`.
+- The shared Mac VM lock: about 1 hour 40 minutes of waiting.
+
+Retro: Meilisearch v1.57.0, the Mac engine, 2026-11-17
+- Time to the first clean run: 46 minutes of wall time, about 28 of them waiting for the Mac VM
+  lock.
+- Schedules run before the first finding: 5 (4 clean runs and the first directed cut), of which
+  1 failed by the rules' mistake (a search for `w3` also found `w30`).
+- The findings: 3 new (an index swap that runs twice, an empty payload of an enqueued addition,
+  an empty succeeded dump), 0 known, 0 by design or documented.
+- What took the most time: waiting for the shared Mac VM lock (about 1.6 hours); the kill scans
+  and the native reproduction of finding 1 (about 30 minutes); the write-up and the duplicate
+  searches (about 1 hour).
+- What hydo lacked: a kill that comes between two commits (open item 148); a way to see every
+  broken check of a schedule in its verdict (open item 148); a regression schedule that keeps
+  its moment across a change of the client (open item 132 says the same of image bytes); the
+  Mac VM lock (open item 148).
+- Strategies: reactions at console events found findings 1 and 2 and the payload loss blind;
+  power cuts found finding 3; one node's storage faults (`L=`) found finding 3 alone; kills
+  missed finding 1 in hydo and found it in Docker; the clock audit and clock steps found
+  nothing. `hydo guide strategies` gained Meilisearch's evidence in "Start here", "Power cuts
+  of the whole guest", "Kills of the process that holds acknowledged work", "Clock steps and
+  the clock audit", "Reactions at console events", "A scan of a reaction's delay", and "A
+  forced order in a native script".
+
+**Checks.** Before the commit, on this Mac: `cargo fmt --all --check`, the workspace's clippy
+with `-D warnings`, `cargo test -p hydo --test it equivalence::cli_matches_golden`,
+`agents_equivalence` and `docs::`, `hydo-agents`'s `public_content::`, `hydo-schedule`'s
+`language::`, `hydo-config`, `hydo-explore`'s `it` and `fake_engine`, the control corpus,
+`hydo-release`'s `test_tiers`, `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`. The
+explorer's identity and corpus goldens and the control corpus golden were re-recorded. Besides
+the new example's lines, they now also hold the current inputs of four files that changed after
+their last recording: the manifests of dragonfly, memos and redpanda (Milestones 283 and 284),
+and blnk's `hydo-values.yaml` in the full identity golden. Nothing recorded moved: no engine,
+guest program or recorded example changed.

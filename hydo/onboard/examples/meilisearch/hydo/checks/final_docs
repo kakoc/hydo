@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: the documents are what the succeeded tasks made of them, and the search finds the stored documents
+exec /bin/mlc check docs

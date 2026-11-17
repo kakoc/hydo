@@ -1,0 +1,4 @@
+# New (RESULTS.md, finding 3): a power cut before step 30, within 30 s of the run's five dumps.
+# Every dump task says succeeded with its dumpUid, and every dump file has 0 bytes.
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run C=30

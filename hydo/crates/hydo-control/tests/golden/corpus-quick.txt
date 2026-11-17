@@ -55,14 +55,15 @@ input	hydo/onboard/examples/swupdate/hydo.yaml	2c13d3b1ddef5d7e964d371a7cf999f3d
 input	hydo/onboard/examples/web-shop/hydo-walk.yaml	abf6900eb6261547cfa8e071f21c1721f1bd4ab747988690be44089b57ed5b86
 input	hydo/onboard/examples/web-shop/hydo.yaml	15a3d43c3de0e43da32d581a5bb199ed139ccde4349e777dbd868170183fc52f
 input	hydo/onboard/examples/blnk/hydo/hydo.yaml	7e97e5e2f1ff496ca70bf59e69bf32a213acbfe5b793f72d56bb293771353a9c
-input	hydo/onboard/examples/dragonfly/hydo/hydo.yaml	5be70d4a048877e521ea88d9982348b8e73db20160eea49140441776f929db31
+input	hydo/onboard/examples/dragonfly/hydo/hydo.yaml	5037c40624c84145423634f5a9c0949d5dc86af40ebc1d8a772a10c36b347a9a
 input	hydo/onboard/examples/formance-ledger/hydo/hydo.yaml	c2d48d2d9012cbeb2f305ad2e12cb70d6fd2896f07f6c098102cd7901b757308
 input	hydo/onboard/examples/ghost/hydo/hydo.yaml	e5a0a96f7d60faa87ba107f15fc1757aaf7111ade412aeeadb0424613c6392c6
 input	hydo/onboard/examples/hatchet/hydo/hydo.yaml	e3672df0fb0e8111b40656afe8cbb75554c01acce9e44903591c30ebefc6c557
 input	hydo/onboard/examples/lago/hydo/hydo.yaml	b6cbc77b1992ae4c4a1e578d59e0884ceb724a0d44e018203f960a226f31d60f
 input	hydo/onboard/examples/libsql-replica/hydo/hydo.yaml	e9675d508c22631f89dfe6fe2c719a96e98ffade48092f1738748187814357fd
 input	hydo/onboard/examples/medusa/hydo/hydo.yaml	6e1a65dbb528ebc030ab84acad7e095324263ae3b2d4d30a4e0956d3168675c8
-input	hydo/onboard/examples/memos/hydo/hydo.yaml	c7fbb468adf4cd178dc85cdf847ebc8d70040762343e72d02568d375a1e83332
+input	hydo/onboard/examples/meilisearch/hydo/hydo.yaml	3694e3812f8ec090d5b81136fd2696f8aee89953d0ec343547164046a5dc9586
+input	hydo/onboard/examples/memos/hydo/hydo.yaml	472ecabb0f5b062536e3aa139cc11e75c7215c4f874e9e9ce9f3eedce1087755
 input	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml	4d23b2bfe574b53cb772f9e876efc61b8b3fd0541d58686872ae67ce5148b92f
 input	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	a7e19bf3c01be56d464b7a6e443792caee1ad45e29fa7ea8be9801cf05965719
 input	hydo/onboard/examples/postgres-sql/hydo/hydo.yaml	f6ceeb30a54343c50cd46e85a57e34d3bc1b576857d163ef11561c7a5025733c
@@ -70,7 +71,7 @@ input	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	88fe4f02ad242c2a7
 input	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	b97a539c43ee5a1703876b471476e355c3d9e5fced762ab414d37630c4023fbf
 input	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	15783ea6b8ce52f11642a06b2c38b082baa91e3ac54ca60a1bb8751eac61a9b9
 input	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	f27eb816afc247ea09f68cffe3dec794847ce42cc37ee96c405f4b817c8b215e
-input	hydo/onboard/examples/redpanda/hydo/hydo.yaml	8c1f392ea36014829a09f34597614437cccccb6be0efd309831b1b5c9ad79823
+input	hydo/onboard/examples/redpanda/hydo/hydo.yaml	a81d2ad14bf95e1eb2bb7766eb15c0da8ce0fe3697dd47f9bef090ae919b295a
 input	hydo/onboard/examples/river/hydo/hydo.yaml	6df7b0553b4a38f9d9f3ab285c37bb1d659703f5177ffd9ffcbabe6a1826ba0e
 input	hydo/onboard/examples/saleor/hydo/hydo.yaml	f05fc0c26134482af2ea78fda7c2e9dee2a8f1f082b583b86830e45f9698be94
 input	hydo/onboard/examples/surrealdb/hydo/hydo.yaml	128e7b203e1970e642c1a4c496f775e3a261f05594223920ff0a1c5756208fe7
@@ -3415,6 +3416,7 @@ manifest	hydo/onboard/examples/hatchet/hydo/hydo.yaml	not core: restart policies
 manifest	hydo/onboard/examples/lago/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/libsql-replica/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/medusa/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
+manifest	hydo/onboard/examples/meilisearch/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/memos/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml	core
 boot	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml#0	snapshot	70a416bc3b3aee96

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# enqueue a change of docs's filterable attributes
+exec /bin/mlc op set

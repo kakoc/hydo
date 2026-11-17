@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: sa and sb hold their documents as the number of succeeded swaps says
+exec /bin/mlc check swap

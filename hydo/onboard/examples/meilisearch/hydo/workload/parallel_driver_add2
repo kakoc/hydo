@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# the same as parallel_driver_add, so that additions are a fifth of the operations
+exec /bin/mlc op add

@@ -1,0 +1,6 @@
+# New (RESULTS.md, finding 2): the power goes 2 ms after the first addition acknowledged from
+# step 20 on. The payload files of the additions that were enqueued and not yet processed never
+# reached the disk: the restart fails their batch with "No such file or directory (os error 2)",
+# also a deletion of the same batch, which has no payload of its own.
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run A=meili.add_acked@20+2:cut

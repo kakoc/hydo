@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# enqueue an edit by function that adds 1 to cnt's k
+exec /bin/mlc op edit

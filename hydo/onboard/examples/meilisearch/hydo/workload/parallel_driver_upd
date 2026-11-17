@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# enqueue a partial update of every document of an earlier acknowledged addition
+exec /bin/mlc op upd

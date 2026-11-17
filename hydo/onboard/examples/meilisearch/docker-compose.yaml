@@ -1,0 +1,22 @@
+# Meilisearch v1.57.0 as its documentation starts one server with Docker: the official image, the
+# database in the image's /meili_data volume, development mode without a master key, and no
+# telemetry. Dumps and snapshots go to /meili_data/dumps and /meili_data/snapshots.
+services:
+  meilisearch:
+    image: getmeili/meilisearch:v1.57.0
+    environment:
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_MAX_INDEXING_MEMORY: 256Mb
+      MEILI_MAX_INDEXING_THREADS: "2"
+    ports:
+      - "7700:7700"
+    volumes:
+      - meili-data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  meili-data:

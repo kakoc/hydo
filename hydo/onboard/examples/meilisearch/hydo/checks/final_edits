@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: cnt's k counts the succeeded edits by function, each applied once
+exec /bin/mlc check edits

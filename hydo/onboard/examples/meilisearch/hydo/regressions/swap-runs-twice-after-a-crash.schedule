@@ -1,0 +1,10 @@
+# New (RESULTS.md, finding 1): the power goes 40 ms after the first addition acknowledged from
+# step 20 on, while the swap task 164 is between its two commits: the swapped index mapping is
+# committed, its succeeded status is not. The restart runs the swap again, so sa and sb end as
+# after an even number of swaps while the queue counts 21 succeeded swaps. The same schedule
+# also empties two acknowledged additions' payloads (finding 2), which the verdict line names;
+# the swap's lines are in hydo report --details <run dir>. A SIGKILL does the same in Docker
+# (native/swap-twice.sh). The moment moves with the image's bytes: on the image before the
+# build parameter dumps, the cut 2 ms after the event gave this finding.
+# expect: violation      (change to ok when the bugs are fixed)
+disk=none | run A=meili.add_acked@20+40:cut

@@ -1,0 +1,79 @@
+# Meilisearch v1.57.0 (the newest release), one server from its official image, as
+# ../docker-compose.yaml runs it. RESULTS.md says what was hunted and found.
+#
+#   sh ../build.sh            # bin/mlc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the Meilisearch image by digest
+#   hydo build hydo.yaml --arch arm64 --set arch=arm64     # on a Mac; on Linux: hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-25 --strategy process --new-faults --storage-faults
+#
+# Every power cut within about 30 s of a dump empties it (RESULTS.md, finding 3), and that verdict
+# hides the other findings. To explore without dumps and snapshots, build with --set dumps=no.
+#
+# Started with `hydo onboard` on ../docker-compose.yaml. The service below is the importer's,
+# without the bridge network (one service, and the client in the guest's own namespace), with
+# the database on a file system of its own (storage:, the target of G= and L=) and the client's
+# readiness check.
+format: 1
+name: meilisearch
+description: "Meilisearch v1.57.0: the task queue (every enqueued task ends, in order), documents added, updated and deleted by succeeded tasks, settings, index swaps, edits by function, dumps and snapshots under kills, pauses, power cuts, clock steps and disk faults"
+hydo_version: "0.3"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  dumps: "yes"    # yes | no: whether the dump and snapshot drivers make dumps and snapshots, else additions
+
+guest:
+  ram_mib: 1536
+  clock_start: 1794873600   # 2026-11-17 00:00 UTC, the day of the import
+  clock_after_cut: 60       # a real machine's clock runs on across a power cut: the recovery boot starts 60 s
+                            #   after the cut, not at clock_start (the tasks' dates stay in order)
+  outcomes_after_cut: true  # the checks skip documents that an unanswered request may have changed, also after a power cut
+
+data:
+  size_mib: 768   # the data disk (the fault target); Meilisearch's directory is a file system of its own on it
+
+errors: true      # Meilisearch's ERROR lines and panics become findings (hydo/known-errors.yaml)
+
+env:
+  MLC_DUMPS: "{{dumps}}"   # the client reads it
+
+root:
+  files:
+    - {src: "../bin/mlc-{{arch}}", dst: /bin/mlc, mode: "0755"}
+
+services:
+  # Compose service meilisearch
+  # image getmeili/meilisearch:v1.57.0 = docker.io/getmeili/meilisearch@sha256:91bf09897482c17205c8faeca8daa8d57999fb9de20d862763cdfa92ba4ec790
+  #   linux/amd64: sha256:540676d5fdde739d8a3f276e700d8844893ddab292f694165de884f2091f4cc6
+  #   linux/arm64: sha256:ed87e30e7638d091520d0ecd0cca70e4ca62c770534a744dfb7bc6e5666b1ce1
+  - name: meilisearch
+    image: {x86_64: images/getmeili-meilisearch-v1.57.0-amd64.docker.tar, arm64: images/getmeili-meilisearch-v1.57.0-arm64-oci}
+    image_ref: "getmeili/meilisearch:v1.57.0"
+    cmd: [/bin/meilisearch, "--http-addr", "127.0.0.1:7700", "--db-path", /meili_data/data.ms, "--dump-dir", /meili_data/dumps, "--snapshot-dir", /meili_data/snapshots]
+    env:
+      MEILI_ENV: "development"
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_MAX_INDEXING_MEMORY: "256Mb"
+      MEILI_MAX_INDEXING_THREADS: "2"
+    port: 7700
+    ready: "timeout 5 /bin/mlc ready"
+    ready_timeout: 120
+    restart: "on-failure"
+    storage: {dir: vol/meili, size_mib: 512}   # Meilisearch's LMDB files, update files, dumps and snapshot: the target of G= and L=
+    mounts:
+      - {src: /data/vol/meili, dst: /meili_data}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+
+workload:
+  steps: 60
+  timeout: 600
+
+test:
+  parallel: 4
+  per_round: 4
+  round_ms: 300
+  command_timeout: 120
+
+faults: [kill, pause, cut, clock, disk, corrupt, powerloss]

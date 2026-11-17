@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# enqueue a swap of the indexes sa and sb
+exec /bin/mlc op swap

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# enqueue an addition of 1 to 20 new documents to docs (not waited for)
+exec /bin/mlc op add
