@@ -1,0 +1,144 @@
+# The NATS JetStream example (hydo.yaml beside this file) with the server configuration as a
+# setting that hydo explores (Milestone 299): `hydo explore --configs hydo/hydo-configs.yaml
+# --set nats=2.12.1` builds one image per configuration (the default sync_interval of two
+# minutes, 10 s, always), explores each with the same seeds, and says which configurations lose
+# acknowledged messages under which faults (Jepsen's NATS 2.12.1 finding 3.4). The fault kinds
+# are kills and power cuts, and the workload has 12 steps, so that one exploration is short.
+#
+#   sh hydo/fetch-images.sh; sh client/build.sh arm64; sh client/build.sh amd64   (as hydo.yaml)
+#   hydo explore --configs hydo/hydo-configs.yaml --set nats=2.12.1 --seeds 1-6
+#
+format: 1
+name: nats-jetstream
+description: "NATS JetStream, three nodes, one replicated stream, with the server configuration as a setting to explore: acknowledged messages must survive crashes and power cuts"
+
+params:
+  nats: "2.10.22"              # hand: the NATS release (images/nats-<version>-alpine-*)
+  conf: "nats-server.conf"     # hand: the server configuration (nats-server-sync-always.conf: fsync every write)
+
+# the server configuration as a setting to explore (Milestone 299): JetStream acknowledges a
+# message before it syncs it to disk, every sync_interval
+configs:
+  conf:
+    values: [nats-server-sync-10s.conf, nats-server-sync-always.conf]
+    service: [n1, n2, n3]
+    doc: "https://docs.nats.io/running-a-nats-service/configuration#jetstream"
+    tradeoff:
+      nats-server.conf: "sync_interval at its default of two minutes: JetStream acknowledges before it syncs, so a power loss of every server can lose the messages acknowledged since the last sync (NATS: sync_interval always for strict durability, nats-server issue 7564)"
+      nats-server-sync-10s.conf: "sync_interval 10s: the messages acknowledged in the last 10 seconds can be lost when every server loses power"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 1024   # a guess: 1024 MiB for the services and the kernel; raise it if a service runs out
+
+data:
+  size_mib: 512   # the data disk: every volume lives here (the fault target)
+  dirs: [vol/n1-data, vol/n2-data, vol/n3-data]
+
+root:
+  files:                 # bind-mount sources, copied into the read-only root
+    - {src: "../{{conf}}", dst: /etc/hydo/compose/bind/0-nats-server.conf}
+    # hand: the test client, one static binary per architecture, run as /bin/natsjs-$(uname -m)
+    - {src: ../bin/natsjs-arm64, dst: /bin/natsjs-aarch64, mode: "0755"}
+    - {src: ../bin/natsjs-amd64, dst: /bin/natsjs-x86_64, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 n1
+      10.89.0.12 n2
+      10.89.0.13 n3
+
+errors: true   # hand: error logs as findings (NATS marks errors [ERR] and [FTL]; see services)
+
+services:
+  # Compose service n1
+  # image nats:2.10.22-alpine = docker.io/library/nats@sha256:73b0ba5fec5518c5f698597c58d2a3350a2b5ccae43e84c308f8d2da1242deca
+  #   linux/amd64: sha256:aa536352f09b109b909e8bfbf9859a40601481bb3742ebc7a09cfaf638622407
+  #   linux/arm64/v8: sha256:a7f055eca1521c7f5a89ba5f3dcbff015d57b7a929f8653829c4e6f84164ff2b
+  # (2.10.23 and 2.12.1: hydo/fetch-images.sh has their digests)
+  # ports [4222, 8222]: network faults (N=/O=) act on the first, 4222
+  # ready: from Compose healthcheck
+  # restart: unless-stopped: an agent image starts the service again when its process ends by itself while the test runs (MANIFEST.md "Restart policies"); hydo's kill faults keep their own restart points
+  - name: n1
+    image: {x86_64: "images/nats-{{nats}}-alpine-amd64.docker.tar", arm64: "images/nats-{{nats}}-alpine-arm64-oci"}
+    image_ref: "nats:{{nats}}-alpine"
+    cmd: [nats-server, "--config", /etc/nats/nats-server.conf]
+    env:
+      NATS_NAME: "n1"
+    port: 4222
+    addr: 10.89.0.11
+    ready: "timeout 2 hydo-oci n1 wget -q -O /dev/null 'http://localhost:8222/healthz?js-enabled-only=true'"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors:
+      format: none
+      match: '\[(ERR|FTL)\]'
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-nats-server.conf, dst: /etc/nats/nats-server.conf}
+      - {src: /data/vol/n1-data, dst: /data}   # hand: n1's own volume
+  # Compose service n2
+  # port from the image's EXPOSE [4222, 6222, 8222]
+  - name: n2
+    image: {x86_64: "images/nats-{{nats}}-alpine-amd64.docker.tar", arm64: "images/nats-{{nats}}-alpine-arm64-oci"}
+    image_ref: "nats:{{nats}}-alpine"
+    cmd: [nats-server, "--config", /etc/nats/nats-server.conf]
+    env:
+      NATS_NAME: "n2"
+    port: 4222
+    addr: 10.89.0.12
+    ready: "timeout 2 hydo-oci n2 wget -q -O /dev/null 'http://localhost:8222/healthz?js-enabled-only=true'"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors:
+      format: none
+      match: '\[(ERR|FTL)\]'
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-nats-server.conf, dst: /etc/nats/nats-server.conf}
+      - {src: /data/vol/n2-data, dst: /data}   # hand: n2's own volume
+  # Compose service n3
+  - name: n3
+    image: {x86_64: "images/nats-{{nats}}-alpine-amd64.docker.tar", arm64: "images/nats-{{nats}}-alpine-arm64-oci"}
+    image_ref: "nats:{{nats}}-alpine"
+    cmd: [nats-server, "--config", /etc/nats/nats-server.conf]
+    env:
+      NATS_NAME: "n3"
+    port: 4222
+    addr: 10.89.0.13
+    ready: "timeout 2 hydo-oci n3 wget -q -O /dev/null 'http://localhost:8222/healthz?js-enabled-only=true'"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors:
+      format: none
+      match: '\[(ERR|FTL)\]'
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-nats-server.conf, dst: /etc/nats/nats-server.conf}
+      - {src: /data/vol/n3-data, dst: /data}   # hand: n3's own volume
+
+# hand: the stream exists before the window under test (Jepsen's test creates it at setup)
+provision: /bin/natsjs-$(uname -m) create
+
+# hand: the workload is hydo/workload/ (the test composer); the import's workload.run and TODO
+# invariant were deleted. Checks are in hydo/checks/.
+workload:
+  steps: 12   # hand (configs): 30 in hydo.yaml
+  timeout: 300
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 500
+  command_timeout: 120   # also the checks' timeout: after a power cut the cluster needs time to elect leaders
+  drain_timeout: 30
+
+faults: [kill, cut]   # hand (configs): a node's crash and a power cut of the whole machine

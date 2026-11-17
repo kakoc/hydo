@@ -2850,6 +2850,175 @@ pub struct CompareDoc {
     pub summary: String,
 }
 
+// ------------------------------------------------------------------ configurations
+
+tag!(ConfigsType, "configs");
+
+/// The values of [`ConfigCombination::status`] hydo writes (`hydo explore --configs`).
+pub mod config_status {
+    /// The combination's image was built (or taken from the image cache) and explored.
+    pub const EXPLORED: &str = "explored";
+    /// The combination's image did not build.
+    pub const CANNOT_BUILD: &str = "cannot-build";
+    /// The exploration ended without a report.
+    pub const NOT_EXPLORED: &str = "not-explored";
+}
+
+/// One build parameter that `hydo explore --configs` explored (added in Milestone 299).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ConfigSettingInfo {
+    /// The parameter (a key of the manifest's `params:`).
+    pub param: String,
+    /// The parameter's default in `params:`.
+    pub default: String,
+    /// The values explored, the default first.
+    pub values: Vec<String>,
+    /// The services whose configuration it is.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub services: Vec<String>,
+    /// Where the project documents it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
+    /// The values whose documentation says they weaken a promise (`tradeoff:`), with the note.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tradeoffs: Vec<ConfigTradeoff>,
+}
+
+/// A value of a setting with its documented trade-off (added in Milestone 299).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ConfigTradeoff {
+    pub value: String,
+    pub note: String,
+}
+
+/// One parameter's value in a combination (added in Milestone 299).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ConfigValue {
+    pub param: String,
+    pub value: String,
+}
+
+/// One class of failure that an exploration of a combination found, with its minimal schedule
+/// (added in Milestone 299).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ConfigClass {
+    /// The failure's class (`lost-acked-writes`, ...), as the exploration names it.
+    pub class: String,
+    /// The finding key (`f1:<kind>:<10 hex>`), the same for one failure on every combination.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// The finding's normalized statement (numbers as `#`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The minimal schedule.
+    pub schedule: String,
+    /// The command that replays it on the combination's image.
+    pub replay: String,
+    /// Schedules of the exploration that failed this way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runs: Option<u64>,
+}
+
+/// One combination of values, its image and what its exploration found (added in Milestone
+/// 299).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ConfigCombination {
+    /// `param=value` for each setting, in the order of the settings.
+    pub label: String,
+    pub values: Vec<ConfigValue>,
+    /// Every value is the parameter's default.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub defaults: bool,
+    /// See [`config_status`].
+    pub status: String,
+    /// Why the combination was not explored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<String>,
+    /// The combination's image.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_sha256: Option<String>,
+    /// The image came from the image cache by its input key, not from a build.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_reused: Option<bool>,
+    /// The exploration's directory, relative to the directory of `configs.json`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+    /// Schedules run (first runs).
+    #[serde(default)]
+    pub schedules: u64,
+    /// Schedules that failed.
+    #[serde(default)]
+    pub failed: u64,
+    /// Each class of failure with its minimal schedule.
+    #[serde(default)]
+    pub classes: Vec<ConfigClass>,
+}
+
+/// One failure across the combinations (added in Milestone 299): where it appeared, which values
+/// it needs, and whether a documented trade-off explains it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ConfigFinding {
+    pub class: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The labels of the combinations whose exploration found it.
+    pub found_with: Vec<String>,
+    /// The labels of the explored combinations that did not find it.
+    #[serde(default)]
+    pub not_found_with: Vec<String>,
+    /// The values it appeared with, per setting whose explored values it did not appear with
+    /// all of: the values the failure needs. Empty: it appeared with every value explored.
+    #[serde(default)]
+    pub only_with: Vec<ConfigValue>,
+    /// Every combination that found it has a value with a documented trade-off, and no
+    /// combination without one did: the setting's documented trade-off, not a bug.
+    #[serde(default)]
+    pub by_design: bool,
+    /// The trade-off notes of those values.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tradeoffs: Vec<ConfigTradeoff>,
+    /// The smallest minimal schedule of the combinations that found it, and its replay.
+    pub schedule: String,
+    pub replay: String,
+}
+
+/// `configs.json` (`hydo explore --configs`; added in Milestone 299): the manifest's settings,
+/// one exploration per combination of values with the same seeds, the classes of failure each
+/// found, and each failure across the combinations.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ConfigsDoc {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: ConfigsType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydo_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
+    /// The engine every exploration ran on.
+    pub engine: Engine,
+    /// The manifest the images were built from.
+    pub manifest: String,
+    /// How the combinations were chosen: `all` (every combination), `one` (the defaults, then
+    /// one setting changed at a time) or `pairs` (a set that covers every pair of values of two
+    /// settings).
+    pub mode: String,
+    /// The seeds each combination was explored with.
+    pub seeds: String,
+    /// The explorer's options, the same for every combination.
+    #[serde(default)]
+    pub explore_args: Vec<String>,
+    pub settings: Vec<ConfigSettingInfo>,
+    pub combinations: Vec<ConfigCombination>,
+    #[serde(default)]
+    pub findings: Vec<ConfigFinding>,
+    /// The answer in one or two sentences.
+    pub summary: String,
+}
+
 /// Any version-1 record or document (the schema's root).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
@@ -2876,6 +3045,8 @@ pub enum AnyV1 {
     Values(Box<ValueHistory>),
     /// `hydo compare-versions` (added in Milestone 298).
     Compare(Box<CompareDoc>),
+    /// `hydo explore --configs` (added in Milestone 299).
+    Configs(Box<ConfigsDoc>),
 }
 
 impl Run {

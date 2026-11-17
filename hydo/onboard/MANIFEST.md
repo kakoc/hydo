@@ -203,6 +203,11 @@ params:                        # build parameters: {{name}} in any string value 
                                #   that is not declared, or a --set of an undeclared name, is an
                                #   error. The values are recorded in the image as /etc/hydo/params.
 
+configs:                       # settings that `hydo explore --configs` explores (Milestone 299; see
+  version:                     #   "Settings to explore"): a parameter of params:, the values to
+    values: ["3.51.3"]         #   try (the default comes first), and optionally service:, doc:
+                               #   and tradeoff: (value: what the documentation says it weakens)
+
 services:                      # may be empty ([] or left out): a project that is only a
   - name: db                   #   workload program (e.g. a library under test). Started in this
                                #   order, moved only as far as depends_on requires.
@@ -916,6 +921,35 @@ also a `U=` with the older version's name, and a schedule may hold several `U=`.
 half of them rolling upgrades of a group whose members all have versions (`<group>.all`, 0 to 3
 steps apart), a quarter with a rollback. A failure with `U=` has the class `upgrade`. The guest
 letter `U` is reserved: a knob may not use it. The example is `hydo/onboard/examples/etcd-upgrade`.
+
+### Settings to explore (`configs:`, `hydo explore --configs`)
+
+A setting that the system reads at start, such as an fsync policy or a sync interval, is a build
+parameter. `configs:` (Milestone 299, a format-1 addition) lists the values that `hydo explore
+--configs` tries, one image per combination of values:
+
+```yaml
+params:
+  conf: "nats-server.conf"
+configs:
+  conf:                                # a parameter of params:
+    values: [nats-server-sync-10s.conf, nats-server-sync-always.conf]
+    service: [n1, n2, n3]              # whose configuration it is: a name or a list (optional)
+    doc: "https://docs.nats.io/running-a-nats-service/configuration#jetstream"   # optional
+    tradeoff:                          # optional: value: what its documentation says it weakens
+      nats-server.conf: "a power loss of every server can lose the messages acknowledged since the last sync"
+```
+
+- Each key is a parameter of `params:`. Its default comes first, listed in `values:` or not.
+  Each value is listed once.
+- `service:` names services of `services:`. `tradeoff:` keys are values of the setting, its
+  default among them.
+- `hydo build` ignores `configs:`: an image is made from `params:` and `--set` alone.
+- `hydo explore --configs [MANIFEST]` explores each combination with the same seeds and prints a
+  table of the classes of failure each one found, each with its minimal schedule and replay
+  command. A failure found only with values that have a `tradeoff:` note, and not found with a
+  combination without one, is reported as the setting's documented trade-off. `hydo guide
+  workflow`, "Which settings break a promise", has the rest.
 
 ### Reactions (`A=`, `hydo explore --reactive`)
 

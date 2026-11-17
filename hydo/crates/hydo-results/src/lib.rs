@@ -65,6 +65,18 @@ pub fn compare_of(dir: &std::path::Path) -> Option<(std::path::PathBuf, v1::Comp
         _ => None,
     }
 }
+/// `hydo explore --configs`' document (added in Milestone 299): the explorations of each
+/// combination of the manifest's settings.
+pub const CONFIGS_DOC: &str = "configs.json";
+
+/// The `configs.json` of a directory, if it has one that reads.
+pub fn configs_of(dir: &std::path::Path) -> Option<v1::ConfigsDoc> {
+    let text = std::fs::read_to_string(dir.join(CONFIGS_DOC)).ok()?;
+    match reader::document(&text).ok()? {
+        reader::Record::Configs(d) => Some(*d),
+        _ => None,
+    }
+}
 
 /// The `versions.json` that belongs to a run or exploration directory: `<dir>/versions.json`, or
 /// `<dir>/versions/versions.json` (where `hydo versions <dir>` writes it). None when there is

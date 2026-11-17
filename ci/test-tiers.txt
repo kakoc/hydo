@@ -162,6 +162,7 @@ hydo-world::xcheck                       full
 hydo::agents_equivalence                 fast
 hydo::bin/hydo                           fast
 hydo::compare                            fast
+hydo::configs                            fast
 hydo::docs                               fast
 hydo::equivalence                        fast
 hydo::migrate                            fast

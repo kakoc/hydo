@@ -169,6 +169,22 @@ stream itself survives on 2.10.23 and 2.12.1); with `sync_interval: always` none
 Redis's `appendfsync everysec`, this is the documented behaviour of a setting, not a bug: NATS
 documents the two-minute default and keeps it (issue 7564).
 
+### Every configuration, explored (Milestone 299)
+
+`hydo/hydo-configs.yaml` makes `conf` a setting to explore (`configs:`), with a `tradeoff:` note
+for the default and for 10 s, 12 workload steps, and the fault kinds `kill` and `cut`. On the Mac
+engine, `hydo explore --configs hydo/hydo-configs.yaml --set nats=2.12.1 --seeds 1-20` built one
+image per configuration and explored each with the same seeds, in 113 s with the images cached:
+
+| `conf` | schedules failed | minimal schedule | fp, twice |
+|---|---|---|---|
+| `nats-server.conf` (default) | 5 of 20, the 5 with a power cut | `disk=cut dseed=63cbe1e459320dd7 \| run C=5 W=:p1,r500,cparallel_driver_publish,0.0.0.697350162` | `1a6cee6459096728` |
+| `nats-server-sync-10s.conf` | 5 of 20 | the same | `4638f825f8c84f26` |
+| `nats-server-sync-always.conf` | 0 of 20 | | |
+
+The table labels the lost messages the setting's documented trade-off, found only with the
+default and 10 s. `docs/HISTORY.md`, Milestone 299, has the details.
+
 ## Reactions drawn by the explorer
 
 `hydo explore --seeds 1-50 --strategy process --reactive fault --react-events nats.publish_acked`

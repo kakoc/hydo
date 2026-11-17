@@ -287,6 +287,60 @@ answer is `compare.json` in `--out` (default `hydo-out/compare`). `hydo report D
 and `hydo report --html DIR` writes a page. The exit status is 0 when the versions agree, 1 when
 a schedule differs, and 2 when a side could not run.
 
+## Which settings break a promise
+
+Many findings come from one setting of the system's configuration: an fsync policy, a write
+cache, a sync interval, a journal mode. `hydo explore --configs` explores each value of such a
+setting with the same seeds and says which values lose acknowledged data, or break another check,
+under which faults.
+
+Make the setting a build parameter, and list its values under `configs:`:
+
+```yaml
+params:
+  appendfsync: always              # the default: it comes first
+configs:
+  appendfsync:
+    values: [always, everysec, "no"]
+    service: redis                 # whose configuration it is (a name or a list)
+    doc: "https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/"
+    tradeoff:                      # what the project's documentation says each value weakens
+      everysec: "you may lose 1 second of data if there is a disaster"
+      "no": "the operating system decides when the data reaches the disk"
+root:
+  text:
+    /etc/redis.conf: |
+      appendfsync {{appendfsync}}
+```
+
+Then explore every combination:
+
+```sh
+hydo explore --configs hydo/hydo.yaml --seeds 1-20
+```
+
+- Each combination of values is one image (`hydo build --set appendfsync=everysec`). The images
+  come from the image cache of `hydo versions` by their inputs, so a second run builds nothing.
+- Each image is explored with the same seeds and the same explorer options. Each combination's
+  exploration is a folder of its own in `hydo-out/configs/`, with its own report.
+- With up to 12 combinations every combination is explored. With more, hydo explores a set that
+  covers every pair of values of two settings. `--configs-mode one` explores the defaults, then
+  one setting changed at a time.
+- The table shows each combination's values and each class of failure that it found. Each class
+  has its minimal schedule and the command that replays it.
+- A failure found only with some values names those values. It is labeled the setting's
+  documented trade-off, not a bug, in one case. Every combination that found it has a value with
+  a `tradeoff:` note, and a combination without such a value was explored. Look at the class: a
+  durability note explains lost acknowledged writes, not a crash.
+- A failure found with the safe values too is not the setting's trade-off.
+- The answer is `configs.json` (results type `configs`). `hydo report hydo-out/configs` prints the
+  table, and `hydo report --html hydo-out/configs` writes it as a page.
+
+Choose the faults the setting must survive in `faults:`. A disk that drops acknowledged writes
+(`disk`) loses writes with every setting. Leave it out when you ask which setting is durable.
+The guide `hydo guide strategies` has the evidence, in the entry on settings that trade
+durability.
+
 ## Performance tests
 
 A run under hydo is deterministic, so the work that a workload does is the same number in every

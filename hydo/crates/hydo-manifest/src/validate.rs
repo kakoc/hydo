@@ -55,6 +55,7 @@ pub const KNOWN_TOP: &[&str] = &[
     "contracts",
     "emulators",
     "browser",
+    "configs",
 ];
 /// The keys of a `groups:` entry (Milestone 195).
 pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "description"];
@@ -853,6 +854,12 @@ pub fn validate(m: &mut Value) -> R<()> {
         need(k, "default", &wh, Typ::Str)?;
         need(k, "set", &wh, Typ::Str)?;
     }
+    // configs: the build parameters `hydo explore --configs` explores (Milestone 299)
+    let svc_names: Vec<String> = or_iter(obj_get(m, "services"))?
+        .iter()
+        .filter_map(|s| obj_get(s, "name").map(str_of))
+        .collect();
+    crate::configs::validate(obj_get(m, "configs"), &svc_names)?;
     let faults = or_iter(obj_get(m, "faults"))?;
     for f in &faults {
         if matches!(f, Value::Array(_) | Value::Object(_)) {
@@ -2163,6 +2170,8 @@ pub fn apply_params(m: &mut Value, overrides: &[(String, String)]) -> R<Vec<(Str
             None => vals.push((k.clone(), s)),
         }
     }
+    // configs: names declared parameters, with their defaults (Milestone 299)
+    crate::configs::check_params(obj.get("configs"), &vals)?;
     for (k, v) in overrides {
         match vals.iter_mut().find(|(n, _)| n == k) {
             Some(e) => e.1 = v.clone(),

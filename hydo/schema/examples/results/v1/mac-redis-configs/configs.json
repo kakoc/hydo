@@ -1,0 +1,154 @@
+{
+  "v": 1,
+  "type": "configs",
+  "hydo_version": "0.3.4",
+  "epoch": 4,
+  "engine": {
+    "backend": "hvm"
+  },
+  "manifest": "/tmp/hydo-redis/hydo-configs.yaml",
+  "mode": "all",
+  "seeds": "1-20",
+  "explore_args": [
+    "--seeds",
+    "1-20",
+    "--workers",
+    "2",
+    "--no-diagnose"
+  ],
+  "settings": [
+    {
+      "param": "appendfsync",
+      "default": "always",
+      "values": [
+        "always",
+        "everysec",
+        "no"
+      ],
+      "services": [
+        "redis"
+      ],
+      "doc": "https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/",
+      "tradeoffs": [
+        {
+          "value": "everysec",
+          "note": "fsync every second: Redis's documentation says you may lose 1 second of data if there is a disaster"
+        },
+        {
+          "value": "no",
+          "note": "never fsync, the operating system flushes the data: Redis's documentation calls it the faster and less safe method"
+        }
+      ]
+    }
+  ],
+  "combinations": [
+    {
+      "label": "appendfsync=always",
+      "values": [
+        {
+          "param": "appendfsync",
+          "value": "always"
+        }
+      ],
+      "defaults": true,
+      "status": "explored",
+      "image": "/tmp/hydo-home/versions/images/vk1-99216a38f2b99e192641a077a84224ab/explore-ob-redis-arm64.cpio.gz",
+      "image_sha256": "eaa6d210cf51e8f4173067619975916af8d4ea5366414f2440491542a7a51d56",
+      "image_reused": false,
+      "dir": "01-appendfsync_always",
+      "schedules": 20,
+      "failed": 0,
+      "classes": []
+    },
+    {
+      "label": "appendfsync=everysec",
+      "values": [
+        {
+          "param": "appendfsync",
+          "value": "everysec"
+        }
+      ],
+      "status": "explored",
+      "image": "/tmp/hydo-home/versions/images/vk1-76e8ba4af0d07a55fae6dcf9ca13d9c8/explore-ob-redis-arm64.cpio.gz",
+      "image_sha256": "e150673e3889c0ace0e414b62bbec9fdf14b6664c562242ae106c441380fbcf3",
+      "image_reused": false,
+      "dir": "02-appendfsync_everysec",
+      "schedules": 20,
+      "failed": 5,
+      "classes": [
+        {
+          "class": "durable-defaults",
+          "key": "f1:invariant:5ef675c8c9",
+          "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+          "schedule": "disk=cut dseed=63cbe1e459320dd7 | run C=1",
+          "replay": "hydo run --image /tmp/hydo-home/versions/images/vk1-76e8ba4af0d07a55fae6dcf9ca13d9c8/explore-ob-redis-arm64.cpio.gz \"disk=cut dseed=63cbe1e459320dd7 | run C=1\"",
+          "runs": 5
+        }
+      ]
+    },
+    {
+      "label": "appendfsync=no",
+      "values": [
+        {
+          "param": "appendfsync",
+          "value": "no"
+        }
+      ],
+      "status": "explored",
+      "image": "/tmp/hydo-home/versions/images/vk1-86ed04e86a3dfb7a0d854466bd62481c/explore-ob-redis-arm64.cpio.gz",
+      "image_sha256": "b7205c3c387ec9c6d2af0d3ab1f7b69883e9d6c400900db3f05557e21900fe64",
+      "image_reused": false,
+      "dir": "03-appendfsync_no",
+      "schedules": 20,
+      "failed": 5,
+      "classes": [
+        {
+          "class": "durable-defaults",
+          "key": "f1:invariant:5ef675c8c9",
+          "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+          "schedule": "disk=cut dseed=63cbe1e459320dd7 | run C=1",
+          "replay": "hydo run --image /tmp/hydo-home/versions/images/vk1-86ed04e86a3dfb7a0d854466bd62481c/explore-ob-redis-arm64.cpio.gz \"disk=cut dseed=63cbe1e459320dd7 | run C=1\"",
+          "runs": 5
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "class": "durable-defaults",
+      "key": "f1:invariant:5ef675c8c9",
+      "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "found_with": [
+        "appendfsync=everysec",
+        "appendfsync=no"
+      ],
+      "not_found_with": [
+        "appendfsync=always"
+      ],
+      "only_with": [
+        {
+          "param": "appendfsync",
+          "value": "everysec"
+        },
+        {
+          "param": "appendfsync",
+          "value": "no"
+        }
+      ],
+      "by_design": true,
+      "tradeoffs": [
+        {
+          "value": "appendfsync=everysec",
+          "note": "fsync every second: Redis's documentation says you may lose 1 second of data if there is a disaster"
+        },
+        {
+          "value": "appendfsync=no",
+          "note": "never fsync, the operating system flushes the data: Redis's documentation calls it the faster and less safe method"
+        }
+      ],
+      "schedule": "disk=cut dseed=63cbe1e459320dd7 | run C=1",
+      "replay": "hydo run --image /tmp/hydo-home/versions/images/vk1-76e8ba4af0d07a55fae6dcf9ca13d9c8/explore-ob-redis-arm64.cpio.gz \"disk=cut dseed=63cbe1e459320dd7 | run C=1\""
+    }
+  ],
+  "summary": "3 of 3 combinations of 1 setting explored with seeds 1-20. durable-defaults (VIOLATION [redis.acked_writes_survive] key k:# lost) appears only with appendfsync=everysec, no: the setting's documented trade-off. The defaults passed every schedule."
+}

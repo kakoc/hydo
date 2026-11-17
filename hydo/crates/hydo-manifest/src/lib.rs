@@ -28,6 +28,7 @@
 pub mod browser;
 pub mod ci;
 pub mod composer;
+pub mod configs;
 pub mod emulators;
 pub mod known_findings;
 pub mod messages;
@@ -196,6 +197,7 @@ pub fn validator_keys() -> Vec<(&'static str, Vec<&'static str>)> {
         ("ProxyRoute", v::KNOWN_PROXY_ROUTE.to_vec()),
         ("Emulator", emulators::KNOWN.to_vec()),
         ("Browser", browser::KNOWN.to_vec()),
+        ("ConfigSetting", configs::KNOWN.to_vec()),
         ("BrowserWatch", browser::KNOWN_WATCH.to_vec()),
         ("BrowserExplore", browser::KNOWN_EXPLORE.to_vec()),
         ("BrowserSetupStep", browser::KNOWN_SETUP.to_vec()),

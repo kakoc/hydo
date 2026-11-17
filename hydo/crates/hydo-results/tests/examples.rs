@@ -221,6 +221,9 @@ fn note(s: &mut Seen, r: &Record) {
         Record::Values(_) => {
             s.types.insert("values".into());
         }
+        Record::Configs(_) => {
+            s.types.insert("configs".into());
+        }
     }
 }
 
@@ -292,6 +295,7 @@ fn every_example_parses_and_is_valid() {
         "ci-ledger",
         "values",
         "compare",
+        "configs",
     ] {
         assert!(seen.types.contains(t), "no example has a {t} record");
     }

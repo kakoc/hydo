@@ -20,6 +20,7 @@ mod cache;
 mod ci;
 mod clockscan;
 mod compare;
+mod configs;
 mod ctx;
 mod delegated;
 mod diff;
@@ -251,6 +252,10 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         // 0.4.0 user trial, Milestone 297)
         if cmd == "fuzz" && rest.iter().any(|a| a == "--vm") {
             println!("{}", hydo_contracts::fuzz::vm::USAGE);
+            return 0;
+        }
+        if cmd == "explore" && rest.iter().any(|a| a == "--configs") {
+            print!("{}", configs::HELP);
             return 0;
         }
         if let Some(text) = help::of(cmd, linux) {

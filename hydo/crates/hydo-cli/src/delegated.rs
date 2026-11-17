@@ -30,6 +30,10 @@ pub fn known_errors_default() -> Option<String> {
 /// explorer's summary as one JSON line and the report's path, which scripts and tests read.
 pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
     use std::io::IsTerminal;
+    // Milestone 299: one exploration per combination of the manifest's configs: (src/configs.rs)
+    if argv.iter().any(|a| a == "--configs") {
+        return crate::configs::cmd(ctx, argv);
+    }
     let json = argv.iter().any(|a| a == "--json");
     let args: Vec<String> = argv.iter().filter(|a| *a != "--json").cloned().collect();
     explore_with(ctx, &args, !json && std::io::stdout().is_terminal())
@@ -95,7 +99,11 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
             std::env::set_var("PATH", path);
         }
     } else {
-        let kernel = mac_kernel_for(ctx, &image, true);
+        // the scripted engine of the tests boots no kernel (its stand-in image has none)
+        let kernel = match &ctx.config.pool.scripted_engine {
+            Some(_) => std::path::PathBuf::from("scripted-kernel"),
+            None => mac_kernel_for(ctx, &image, true),
+        };
         full.push("--backend".into());
         full.push("hvm".into());
         full.push("--hvm-kernel".into());
@@ -408,6 +416,11 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
     if let Some((_, doc)) = hydo_results::compare_of(Path::new(&d)) {
         let mut o = std::io::stdout().lock();
         let _ = o.write_all(crate::compare::report_lines(&doc).as_bytes());
+        return 0;
+    }
+    // `hydo explore --configs`' answer (Milestone 299): the table of its combinations
+    if let Some(doc) = hydo_results::configs_of(Path::new(&d)) {
+        print!("{}", crate::configs::text(&doc, &d));
         return 0;
     }
     // `hydo versions`' answer (M221): next to the report of the run or exploration it came from,

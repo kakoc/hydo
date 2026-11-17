@@ -32,7 +32,8 @@ Three findings hold for every type of system:
 - Explore with `--strategy process` first and `--strategy swarm` last (the entry "The
   explorer's strategy").
 - Run each durability setting at its durable value. A loss under a relaxed setting is the
-  setting's documented cost.
+  setting's documented cost. `hydo explore --configs` explores every value and labels such a
+  loss (the entry "Settings that trade durability").
 
 ## Checks
 
@@ -222,7 +223,7 @@ Three findings hold for every type of system:
     cut and no backward clock step.
   - Mender and SWUpdate (Milestones 263 and 272): `disk=cut | run C=4` gives each its finding 1.
 - **What it misses.** A relaxed durability setting loses writes by design: make the setting a
-  build parameter and run its durable value. A lying disk or disk I/O errors break the disk's own
+  build parameter and run its durable value, or every value with `hydo explore --configs`. A lying disk or disk I/O errors break the disk's own
   promise. In Valkey's swarm exploration all 28 failures had a disk fault. Use `--durable-only`
   once the first exploration shows them.
 - **Cost.** One recovery boot per cut. In Redpanda most of a 3 to 14 minute schedule went to
@@ -582,6 +583,32 @@ Three findings hold for every type of system:
   answers makes other choices on another version. In the Formance run, one revert chose
   another transaction.
 - **Cost.** Two runs per schedule, and a shrink of up to 20 candidates on both versions.
+
+### Settings that trade durability (`hydo explore --configs`)
+
+- **What it is.** One exploration per value of a setting that the system reads at start, with
+  the same seeds. The table says which values fail under which faults. A failure that appears
+  only with values whose documentation names the trade-off is labeled by design.
+- **What to write.** The setting as a build parameter and its values under `configs:`, with a
+  `tradeoff:` note per value that the documentation says weakens a promise. Then `hydo explore
+  --configs` (`hydo guide workflow`, "Which settings break a promise").
+- **When it fits.** A store or a log whose durability or consistency depends on a setting: an
+  fsync policy, a sync interval, a write cache, a journal mode.
+- **What it found.**
+  - Redis's `appendfsync` (Milestone 299, the Mac engine, seeds 1-20): `always` passed all 20
+    schedules. `everysec` and `no` lost acknowledged writes in all 5 schedules with a power cut,
+    shrunk to `disk=cut | run C=1`, and the table labeled it the documented trade-off.
+  - NATS 2.12.1's `sync_interval` (Milestone 299, the same seeds): `always` passed all 20. The
+    default of two minutes and 10 s lost acknowledged messages in all 5 power-cut schedules
+    (Jepsen's 3.4), labeled by design. Seeds 1-6 drew no power cut, so start with 20 seeds.
+  - Before it, each such finding came from one setting tried by hand. Examples are the write
+    caching of Redpanda (Milestone 279), the SQLite mode `synchronous=NORMAL` of Vikunja
+    (Milestone 273), and the durability default of libSQL.
+- **What it misses.** A setting that the system changes at run time is a `knobs:` entry (`R=`),
+  which the explorer draws inside one image. A failure with another cause that appears only with a relaxed
+  value is labeled by design too, so read its check before you dismiss it.
+- **Cost.** One image and one exploration per combination. With more than 12 combinations, a
+  pairwise set keeps the count near the product of the two largest settings' values.
 
 ## Functions
 

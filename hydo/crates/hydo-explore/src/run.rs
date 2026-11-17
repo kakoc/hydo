@@ -345,7 +345,9 @@ fn setup(a: Args, env: &Env) -> Cx {
         a,
     };
     let a = cx.a.clone();
-    if cx.arm() {
+    // the scripted engine of the tests opens no image (`hydo explore --configs`' tests give it
+    // stand-in arm64 images)
+    if cx.arm() && cx.env.config.pool.scripted_engine.is_none() {
         let img = cx.hvm_image();
         cx.ex.hvm_disk = hvm::disk_for(&img).is_some();
         // explore.py stopped here with a traceback for a file that is not an arm64 initramfs
@@ -374,6 +376,10 @@ fn setup(a: Args, env: &Env) -> Cx {
             );
         }
         cx.hvm_kernel = Some(b.kernel);
+    } else if cx.arm() {
+        // the stand-in image of the tests has a data disk and the network tools
+        cx.ex.hvm_disk = true;
+        cx.ex.hvm_tc = true;
     }
     let base = Path::new(&a.image)
         .file_name()

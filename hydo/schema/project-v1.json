@@ -127,6 +127,16 @@
         ]
       }
     },
+    "configs": {
+      "description": "Build parameters whose values `hydo explore --configs` explores (Milestone 299): one image\nper combination of values, each explored with the same seeds, and a table of the failures\nfound with each value. Each key is a parameter of params:; its default comes first.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "$ref": "#/$defs/ConfigSetting"
+      }
+    },
     "services": {
       "description": "The long-running processes, started in dependency order.",
       "type": [
@@ -738,6 +748,79 @@
         }
       },
       "additionalProperties": false
+    },
+    "ConfigSetting": {
+      "description": "A build parameter that `hydo explore --configs` explores (Milestone 299).",
+      "type": "object",
+      "properties": {
+        "values": {
+          "description": "The values to explore, each once. The parameter's default (params:) comes first, listed\nhere or not.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Scalar"
+          }
+        },
+        "service": {
+          "description": "The service whose configuration the parameter is (a name of services:), or a list of\nthem (the nodes of a cluster that share one configuration file).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceNames"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "doc": {
+          "description": "Where the project documents the setting (a link or a file).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tradeoff": {
+          "description": "The values whose documentation says they weaken a promise, each with that note. A failure\nfound only with such values is reported as the setting's documented trade-off, not as a\nbug.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "values"
+      ]
+    },
+    "ServiceNames": {
+      "description": "One service's name, or a list of them.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
     },
     "Service": {
       "type": "object",

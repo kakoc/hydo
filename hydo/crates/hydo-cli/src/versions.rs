@@ -273,12 +273,12 @@ struct Recorded {
 
 /// One finding to place among the versions.
 #[derive(Clone, Debug, Default)]
-struct Finding {
-    schedule: String,
-    key: Option<String>,
-    title: Option<String>,
+pub(crate) struct Finding {
+    pub(crate) schedule: String,
+    pub(crate) key: Option<String>,
+    pub(crate) title: Option<String>,
     found_on: Option<String>,
-    class: Option<String>,
+    pub(crate) class: Option<String>,
     recorded: Option<Recorded>,
     /// Every (key, title) the recorded run gave, for `--key`.
     alt: Vec<(String, String)>,
@@ -332,7 +332,7 @@ fn finding_of_run(run: &hydo_results::Run, dir: &Path) -> Finding {
 
 /// The findings of an exploration: one per minimal schedule that reproduced (its first
 /// confirmation's verdict), and one per new error kind with a schedule.
-fn findings_of_exploration(doc: &hydo_results::Exploration, dir: &Path) -> Vec<Finding> {
+pub(crate) fn findings_of_exploration(doc: &hydo_results::Exploration, dir: &Path) -> Vec<Finding> {
     let mut out: Vec<Finding> = Vec::new();
     let backend = doc.engine.backend.clone();
     for s in &doc.shrinks {
@@ -515,7 +515,7 @@ fn last_line(p: &Path) -> String {
 }
 
 /// Run `cmd` with its output into `log`; Err names the log's last line.
-fn run_logged(mut cmd: Command, log: &Path, what: &str) -> Result<(), String> {
+pub(crate) fn run_logged(mut cmd: Command, log: &Path, what: &str) -> Result<(), String> {
     let f = std::fs::File::create(log).map_err(|e| format!("{}: {e}", log.display()))?;
     let f2 = f
         .try_clone()
@@ -546,8 +546,26 @@ pub(crate) struct Maker<'a> {
     pub(crate) cache: PathBuf,
     pub(crate) out: PathBuf,
     pub(crate) made: BTreeMap<usize, Result<Made, String>>,
-    /// The command its lines name (`hydo versions`, `hydo compare-versions`).
+    /// The command its lines name (`hydo versions`, `hydo compare-versions`, `hydo explore
+    /// --configs`).
     pub(crate) who: &'static str,
+}
+
+impl<'a> Maker<'a> {
+    /// A maker of images from `--set` values only ([`Maker::param_image`]): `hydo explore
+    /// --configs`. Its builds' logs go to `out/builds`.
+    pub(crate) fn for_sets(ctx: &'a Ctx, cache: PathBuf, out: PathBuf, who: &'static str) -> Self {
+        Maker {
+            ctx,
+            source: Source::Images,
+            sets: Vec::new(),
+            build: None,
+            cache,
+            out,
+            made: BTreeMap::new(),
+            who,
+        }
+    }
 }
 
 impl Maker<'_> {
@@ -594,45 +612,9 @@ impl Maker<'_> {
         match &self.source {
             Source::Images => Err("no image".into()),
             Source::Param { key: k, manifest } => {
-                let dir = manifest.parent().unwrap_or(Path::new(".")).to_path_buf();
                 let mut sets = self.sets.clone();
                 sets.push((k.clone(), v.label.clone()));
-                if let Some(c) = &self.build {
-                    let mut cmd = Command::new("sh");
-                    cmd.args(["-c", c])
-                        .current_dir(&dir)
-                        .env("HYDO_VERSION", &v.label);
-                    run_logged(
-                        cmd,
-                        &logs.join(format!("{}.build-cmd.log", slug(&v.label))),
-                        "the build command",
-                    )?;
-                }
-                let opts = hydo_manifest::LoadOptions {
-                    arch: self.arch().into(),
-                    sets: sets.clone(),
-                    onboard_dir: self.ctx.onboard(),
-                    ..Default::default()
-                };
-                let loaded = hydo_manifest::load(manifest, &opts)
-                    .map_err(|e| format!("{}: {e}", manifest.display()))?;
-                let mut srcs = Vec::new();
-                inputkey::src_paths(&loaded.manifest.data, &mut srcs);
-                let none = BTreeMap::new();
-                let (mut lines, _) = inputkey::input_key(&inputkey::Inputs {
-                    hydo: Self::hydo_id(),
-                    arch: self.arch(),
-                    sets: &sets,
-                    manifest,
-                    project: &dir,
-                    srcs: &srcs,
-                    inputs: &none,
-                    built_here: false,
-                });
-                if let Some(c) = &self.build {
-                    lines.push(format!("build {c}"));
-                }
-                self.cached_or_built(&lines, &v.label, manifest, &dir, &sets)
+                self.param_image(manifest, &sets, &v.label)
             }
             Source::Git {
                 top, rel, manifest, ..
@@ -699,6 +681,56 @@ impl Maker<'_> {
                 r
             }
         }
+    }
+
+    /// The image of `manifest` built with `sets` (`hydo build --set ...`), from the image cache
+    /// by its input key or built; `label` names it in the output (and is `HYDO_VERSION` for the
+    /// build command). `hydo explore --configs` makes each combination's image here too.
+    pub(crate) fn param_image(
+        &self,
+        manifest: &Path,
+        sets: &[(String, String)],
+        label: &str,
+    ) -> Result<Made, String> {
+        let dir = manifest.parent().unwrap_or(Path::new(".")).to_path_buf();
+        let logs = self.out.join("builds");
+        let _ = std::fs::create_dir_all(&logs);
+        if let Some(c) = &self.build {
+            let mut cmd = Command::new("sh");
+            cmd.args(["-c", c])
+                .current_dir(&dir)
+                .env("HYDO_VERSION", label);
+            run_logged(
+                cmd,
+                &logs.join(format!("{}.build-cmd.log", slug(label))),
+                "the build command",
+            )?;
+        }
+        let opts = hydo_manifest::LoadOptions {
+            arch: self.arch().into(),
+            sets: sets.to_vec(),
+            onboard_dir: self.ctx.onboard(),
+            ..Default::default()
+        };
+        let loaded = hydo_manifest::load(manifest, &opts)
+            .map_err(|e| format!("{}: {e}", manifest.display()))?;
+        let mut srcs = Vec::new();
+        inputkey::src_paths(&loaded.manifest.data, &mut srcs);
+        let none = BTreeMap::new();
+        let (mut lines, _) = inputkey::input_key(&inputkey::Inputs {
+            hydo: Self::hydo_id(),
+            arch: self.arch(),
+            sets,
+            manifest,
+            project: &dir,
+            srcs: &srcs,
+            inputs: &none,
+            built_here: false,
+        });
+        if let Some(c) = &self.build {
+            lines.push(format!("build {c}"));
+        }
+        self.cached_or_built(&lines, label, manifest, &dir, sets)
     }
 
     fn key_of(lines: &[String]) -> String {

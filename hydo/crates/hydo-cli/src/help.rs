@@ -45,6 +45,9 @@ pub fn of(cmd: &str, linux: bool) -> Option<String> {
   instead. `hydo report` prints the problems it found, `hydo repro hydo-out/explore` runs every failure again, and
   `hydo save hydo-out/explore` keeps the minimal schedules as regressions. `hydo guide faults`
   lists the fault kinds.
+  `hydo explore --configs [MANIFEST]` explores each combination of the values the manifest's
+  configs: lists, one image each, and says which settings fail under which faults
+  (`hydo explore --configs --help`).
 
 The explorer's options (hydo explore passes them on; --image and --out have the defaults above):
 {}",

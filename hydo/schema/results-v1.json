@@ -56,6 +56,10 @@
     {
       "description": "`hydo compare-versions` (added in Milestone 298).",
       "$ref": "#/$defs/CompareDoc"
+    },
+    {
+      "description": "`hydo explore --configs` (added in Milestone 299).",
+      "$ref": "#/$defs/ConfigsDoc"
     }
   ],
   "$defs": {
@@ -6599,6 +6603,377 @@
         "index",
         "only_a",
         "only_b"
+      ]
+    },
+    "ConfigsDoc": {
+      "description": "`configs.json` (`hydo explore --configs`; added in Milestone 299): the manifest's settings,\none exploration per combination of values with the same seeds, the classes of failure each\nfound, and each failure across the combinations.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/ConfigsType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "engine": {
+          "description": "The engine every exploration ran on.",
+          "$ref": "#/$defs/Engine"
+        },
+        "manifest": {
+          "description": "The manifest the images were built from.",
+          "type": "string"
+        },
+        "mode": {
+          "description": "How the combinations were chosen: `all` (every combination), `one` (the defaults, then\none setting changed at a time) or `pairs` (a set that covers every pair of values of two\nsettings).",
+          "type": "string"
+        },
+        "seeds": {
+          "description": "The seeds each combination was explored with.",
+          "type": "string"
+        },
+        "explore_args": {
+          "description": "The explorer's options, the same for every combination.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "settings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigSettingInfo"
+          }
+        },
+        "combinations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigCombination"
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigFinding"
+          },
+          "default": []
+        },
+        "summary": {
+          "description": "The answer in one or two sentences.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "engine",
+        "manifest",
+        "mode",
+        "seeds",
+        "settings",
+        "combinations",
+        "summary"
+      ]
+    },
+    "ConfigsType": {
+      "description": "The `type` of this record: always `\"configs\"`.",
+      "type": "string",
+      "enum": [
+        "configs"
+      ]
+    },
+    "ConfigSettingInfo": {
+      "description": "One build parameter that `hydo explore --configs` explored (added in Milestone 299).",
+      "type": "object",
+      "properties": {
+        "param": {
+          "description": "The parameter (a key of the manifest's `params:`).",
+          "type": "string"
+        },
+        "default": {
+          "description": "The parameter's default in `params:`.",
+          "type": "string"
+        },
+        "values": {
+          "description": "The values explored, the default first.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "services": {
+          "description": "The services whose configuration it is.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "doc": {
+          "description": "Where the project documents it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tradeoffs": {
+          "description": "The values whose documentation says they weaken a promise (`tradeoff:`), with the note.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigTradeoff"
+          }
+        }
+      },
+      "required": [
+        "param",
+        "default",
+        "values"
+      ]
+    },
+    "ConfigTradeoff": {
+      "description": "A value of a setting with its documented trade-off (added in Milestone 299).",
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "note"
+      ]
+    },
+    "ConfigCombination": {
+      "description": "One combination of values, its image and what its exploration found (added in Milestone\n299).",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "`param=value` for each setting, in the order of the settings.",
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigValue"
+          }
+        },
+        "defaults": {
+          "description": "Every value is the parameter's default.",
+          "type": "boolean"
+        },
+        "status": {
+          "description": "See [`config_status`].",
+          "type": "string"
+        },
+        "why": {
+          "description": "Why the combination was not explored.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image": {
+          "description": "The combination's image.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_reused": {
+          "description": "The image came from the image cache by its input key, not from a build.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "dir": {
+          "description": "The exploration's directory, relative to the directory of `configs.json`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedules": {
+          "description": "Schedules run (first runs).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "failed": {
+          "description": "Schedules that failed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "classes": {
+          "description": "Each class of failure with its minimal schedule.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigClass"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "label",
+        "values",
+        "status"
+      ]
+    },
+    "ConfigValue": {
+      "description": "One parameter's value in a combination (added in Milestone 299).",
+      "type": "object",
+      "properties": {
+        "param": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "param",
+        "value"
+      ]
+    },
+    "ConfigClass": {
+      "description": "One class of failure that an exploration of a combination found, with its minimal schedule\n(added in Milestone 299).",
+      "type": "object",
+      "properties": {
+        "class": {
+          "description": "The failure's class (`lost-acked-writes`, ...), as the exploration names it.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The finding key (`f1:<kind>:<10 hex>`), the same for one failure on every combination.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "The finding's normalized statement (numbers as `#`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedule": {
+          "description": "The minimal schedule.",
+          "type": "string"
+        },
+        "replay": {
+          "description": "The command that replays it on the combination's image.",
+          "type": "string"
+        },
+        "runs": {
+          "description": "Schedules of the exploration that failed this way.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "class",
+        "schedule",
+        "replay"
+      ]
+    },
+    "ConfigFinding": {
+      "description": "One failure across the combinations (added in Milestone 299): where it appeared, which values\nit needs, and whether a documented trade-off explains it.",
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": "string"
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "found_with": {
+          "description": "The labels of the combinations whose exploration found it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "not_found_with": {
+          "description": "The labels of the explored combinations that did not find it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "only_with": {
+          "description": "The values it appeared with, per setting whose explored values it did not appear with\nall of: the values the failure needs. Empty: it appeared with every value explored.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigValue"
+          },
+          "default": []
+        },
+        "by_design": {
+          "description": "Every combination that found it has a value with a documented trade-off, and no\ncombination without one did: the setting's documented trade-off, not a bug.",
+          "type": "boolean",
+          "default": false
+        },
+        "tradeoffs": {
+          "description": "The trade-off notes of those values.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigTradeoff"
+          }
+        },
+        "schedule": {
+          "description": "The smallest minimal schedule of the combinations that found it, and its replay.",
+          "type": "string"
+        },
+        "replay": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "class",
+        "found_with",
+        "schedule",
+        "replay"
       ]
     }
   }

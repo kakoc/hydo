@@ -85,11 +85,18 @@ enum Input {
     },
     /// `hydo compare-versions`' directory (Milestone 298).
     Compare(Box<hydo_results::CompareDoc>),
+    /// `hydo explore --configs` (Milestone 299).
+    Configs {
+        doc: Box<hydo_results::ConfigsDoc>,
+    },
 }
 
 fn read_input(d: &Path) -> Result<Input, String> {
     if let Some((_, doc)) = hydo_results::compare_of(d) {
         return Ok(Input::Compare(Box::new(doc)));
+    }
+    if let Some(doc) = hydo_results::configs_of(d) {
+        return Ok(Input::Configs { doc: Box::new(doc) });
     }
     let ci = d.join("ci-run.json");
     if ci.is_file() {
@@ -225,7 +232,196 @@ fn render(input: &Input, extra: &Extra) -> Result<String, String> {
         }
         Input::Ci { dir, doc } => Ok(ci_page(dir, doc, extra)),
         Input::Compare(doc) => Ok(comparepage::page(doc, &extra.shown_dir)),
+        Input::Configs { doc } => Ok(configs_page(doc, extra)),
     }
+}
+
+/// The page of `hydo explore --configs` (Milestone 299): the settings, each combination with the
+/// classes of failure it found, and each failure across the combinations with the values it
+/// needs and whether a documented trade-off explains it.
+fn configs_page(doc: &hydo_results::ConfigsDoc, extra: &Extra) -> String {
+    use hydo_results::config_status as cs;
+    let shown = &extra.shown_dir;
+    let bugs = doc.findings.iter().filter(|f| !f.by_design).count();
+    let design = doc.findings.len() - bugs;
+    let title = if doc.findings.is_empty() {
+        "No setting failed".to_string()
+    } else {
+        format!(
+            "{} failure{} across the settings{}",
+            doc.findings.len(),
+            if doc.findings.len() == 1 { "" } else { "s" },
+            if design > 0 {
+                format!(", {design} of them a documented trade-off")
+            } else {
+                String::new()
+            }
+        )
+    };
+    let mut body = top(
+        &format!(
+            "hydo report · {} · hydo explore --configs",
+            esc(&doc.manifest)
+        ),
+        &esc(&title),
+        &esc(&doc.summary),
+    );
+    body.push_str(&h2("settings", "The settings"));
+    let rows: Vec<(String, Vec<String>)> = doc
+        .settings
+        .iter()
+        .map(|s| {
+            let notes: Vec<String> = s
+                .tradeoffs
+                .iter()
+                .map(|t| format!("{}: {}", code(&t.value), esc(&t.note)))
+                .collect();
+            (
+                String::new(),
+                vec![
+                    code(&s.param),
+                    esc(&s.services.join(", ")),
+                    s.values
+                        .iter()
+                        .map(|v| code(v))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    if notes.is_empty() {
+                        "none".into()
+                    } else {
+                        notes.join("<br>")
+                    },
+                ],
+            )
+        })
+        .collect();
+    body.push_str(&table(
+        &[
+            "Setting",
+            "Service",
+            "Values (the default first)",
+            "Documented trade-off",
+        ],
+        &rows,
+    ));
+    body.push_str(&h2("combinations", "What each combination found"));
+    body.push_str(&format!(
+        "<p class=\"small\">Each combination is its own image, explored with the seeds {} and the options {}.</p>\n",
+        esc(&doc.seeds),
+        code(&doc.explore_args.join(" "))
+    ));
+    let rows: Vec<(String, Vec<String>)> = doc
+        .combinations
+        .iter()
+        .map(|c| {
+            let found = if c.status != cs::EXPLORED {
+                format!(
+                    "{} {}",
+                    badge("warn", &c.status),
+                    esc(c.why.as_deref().unwrap_or(""))
+                )
+            } else if c.classes.is_empty() {
+                badge("ok", "none")
+            } else {
+                c.classes
+                    .iter()
+                    .map(|k| {
+                        let label = doc
+                            .findings
+                            .iter()
+                            .find(|f| f.key == k.key && f.class == k.class)
+                            .map(|f| {
+                                if f.by_design {
+                                    badge("note", "documented trade-off")
+                                } else {
+                                    badge("bad", "failed")
+                                }
+                            })
+                            .unwrap_or_default();
+                        format!("{label} {}<br>{}", esc(&k.class), code(&k.schedule))
+                    })
+                    .collect::<Vec<_>>()
+                    .join("<br>")
+            };
+            (
+                String::new(),
+                vec![
+                    code(&c.label),
+                    format!("{} of {}", c.failed, c.schedules),
+                    found,
+                ],
+            )
+        })
+        .collect();
+    body.push_str(&table(
+        &[
+            "Combination",
+            "Failed schedules",
+            "Failures found (minimal schedule)",
+        ],
+        &rows,
+    ));
+    if !doc.findings.is_empty() {
+        body.push_str(&h2("findings", "Each failure across the combinations"));
+    }
+    for (n, f) in doc.findings.iter().enumerate() {
+        let mut s = format!(
+            "<div class=\"card\"><h3>{}. {}</h3>\n",
+            n + 1,
+            esc(&f.title.clone().unwrap_or_else(|| f.class.clone()))
+        );
+        s.push_str(&format!(
+            "<p>{} {}</p>\n",
+            if f.by_design {
+                pill("note", "the setting's documented trade-off, not a bug")
+            } else {
+                pill("bad", "a failure to look at")
+            },
+            esc(&f.class)
+        ));
+        let with = if f.only_with.is_empty() {
+            "It appears with every value explored.".to_string()
+        } else {
+            let mut by: Vec<(String, Vec<String>)> = Vec::new();
+            for v in &f.only_with {
+                match by.iter_mut().find(|(p, _)| p == &v.param) {
+                    Some((_, vs)) => vs.push(v.value.clone()),
+                    None => by.push((v.param.clone(), vec![v.value.clone()])),
+                }
+            }
+            format!(
+                "It appears only with {}, and not with {}.",
+                by.iter()
+                    .map(|(p, vs)| format!("{p} = {}", vs.join(" or ")))
+                    .collect::<Vec<_>>()
+                    .join(" and "),
+                f.not_found_with.join("; ")
+            )
+        };
+        s.push_str(&format!("<p>{}</p>\n", esc(&with)));
+        if f.by_design {
+            s.push_str(
+                "<p>The project's documentation says these values weaken a promise:</p>\n<ul>\n",
+            );
+            for t in &f.tradeoffs {
+                s.push_str(&format!("<li>{}: {}</li>\n", code(&t.value), esc(&t.note)));
+            }
+            s.push_str("</ul>\n");
+        } else if !f.only_with.is_empty() {
+            s.push_str("<p>No <code>tradeoff:</code> note of the manifest explains it: a bug under these values, or a trade-off the manifest does not name.</p>\n");
+        }
+        s.push_str("<p>The minimal schedule and its replay:</p>\n");
+        s.push_str(&copy_block(&f.schedule));
+        s.push_str(&copy_block(&f.replay));
+        s.push_str("</div>\n");
+        body.push_str(&s);
+    }
+    body.push_str(&h2("next", "Next"));
+    body.push_str(&format!(
+        "<div class=\"card\"><p>Each combination's exploration has its own report: {}</p></div>\n",
+        code(&format!("hydo report {shown}/<combination>"))
+    ));
+    page::document(&format!("{} (hydo report)", plain(&title)), &body)
 }
 
 // ---------------------------------------------------------------- words shared by the pages

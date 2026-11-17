@@ -15614,3 +15614,132 @@ schedule without the new actions sends the commands it sent before.
 - KVM and several vCPUs were not tried.
 - The rs-snowflake candidate is not posted.
 - The timer's freeze of `P=workload/<thread>` keeps both script problems (open item 80).
+
+## Milestone 299 (tentative number): configuration as a dimension that hydo explores
+
+Several of hydo's findings came from one setting of the system under test. Examples are Redis's
+`appendfsync everysec`, Redpanda's write caching, Vikunja's SQLite `synchronous=NORMAL`, libSQL's
+durability default, and NATS's `sync_interval`. Each was found by hand, one setting at a time.
+This milestone makes hydo answer which settings lose acknowledged data, or break another check,
+under which fault, with a minimal schedule per setting.
+
+**What a user declares.** The setting is a build parameter (`params:`), and `configs:` (a
+format-1 addition) lists the values to explore:
+
+```yaml
+params:
+  appendfsync: always
+configs:
+  appendfsync:
+    values: [always, everysec, "no"]
+    service: redis
+    doc: "https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/"
+    tradeoff:
+      everysec: "fsync every second: ... you may lose 1 second of data if there is a disaster"
+      "no": "never fsync: ... the faster and less safe method"
+```
+
+- Each key is a parameter of `params:`. Its default comes first, listed in `values:` or not.
+- `service:` names the service whose configuration it is, or a list of services (the nodes of
+  a cluster that share one file).
+- `tradeoff:` holds, per value, what the project's documentation says the value weakens. The
+  default may have a note too, as NATS's default `sync_interval` has.
+- The validator checks the shape and the service names. `apply_params` checks that each key is
+  a declared parameter and that each `tradeoff:` key is one of the values. `hydo build` ignores
+  `configs:`: an image is made from `params:` and `--set` alone.
+
+**What a user runs.**
+
+```sh
+hydo explore --configs hydo/hydo.yaml --seeds 1-20 [--configs-mode all|one|pairs] [--set K=V]
+hydo report hydo-out/configs
+hydo report --html hydo-out/configs
+```
+
+**How it works** (`hydo-cli/src/configs.rs`, `hydo_manifest::configs`):
+
+- The combinations: every combination up to 12 (`all`), else a set that covers every pair of
+  values of two settings (`pairs`, a greedy and deterministic construction). `one` explores the
+  defaults, then one setting changed at a time. The defaults are always the first combination.
+- Each combination's image is made by `hydo versions`' image maker (`Maker::param_image`, now
+  shared): `hydo build --set <param>=<value>` through the image cache by input key, so a second
+  run builds nothing.
+- Each image is explored by a child `hydo explore --image <img> --out <dir>/<NN>-<label>` with
+  the same options, so each combination has a whole exploration folder and report.
+- Per combination, the classes of failure come from the exploration's minimal schedules (the
+  findings of `hydo versions`, with their finding keys). Each has its replay command, `hydo run
+  --image <img> "<schedule>"`.
+- Across the combinations each failure (one finding key) gets the combinations that found it,
+  the values it needs (a setting's values it appeared with, when not all of them), and a label.
+  It is the setting's documented trade-off, not a bug, when every combination that found it has
+  a value with a `tradeoff:` note, and a combination without such a value was explored.
+- The answer is `configs.json`, the results addition `ConfigsDoc` (type `configs`, with
+  `ConfigSettingInfo`, `ConfigCombination`, `ConfigClass`, `ConfigFinding`, `ConfigValue`,
+  `ConfigTradeoff`). `hydo report <dir>` prints its table, and `hydo report --html <dir>` writes
+  a page with the settings, the combinations and each failure with its replay.
+
+**Proof on the Mac** (an M2 Pro, the Mac engine, this tree's `hydo`, `hydo-build` and
+`hydo-hvm` over the 0.3.4 Mac release's guest files, fingerprint epoch 4, one VM lock for each
+`hydo explore --configs`, `--workers 2 --no-diagnose`).
+
+Redis 7.2.4, the release's Redis example with `hydo/onboard/examples-mac/redis/hydo-configs.yaml`:
+`appendfsync` as the parameter, no `knobs:` entry, and the fault kinds of an honest disk (`kill`, `pause`,
+`network`, `oneway`, `cut`, `clock`). `hydo explore --configs hydo-configs.yaml --seeds 1-20`
+took 64 s with the three builds:
+
+| `appendfsync` | image | schedules failed | class, minimal schedule | fingerprint, twice | label |
+|---|---|---|---|---|---|
+| `always` (default) | `eaa6d210…` | 0 of 20 | none | | |
+| `everysec` | `e150673e…` | 5 of 20 | lost acknowledged writes (`key k:0 lost`), `disk=cut dseed=63cbe1e459320dd7 \| run C=1` | `a9ad2a01638d3197` | the documented trade-off |
+| `no` | `b7205c3c…` | 5 of 20 | the same, `disk=cut dseed=63cbe1e459320dd7 \| run C=1` | `4e16ac06d8a05cf3` | the documented trade-off |
+
+The 5 failing schedules are the 5 of the 20 with a power cut (seeds 7, 11, 12, 18 and 20), on
+both relaxed values. With `always` the same 5 schedules passed, so the finding needs
+`everysec` or `no`, and the table names those values.
+
+NATS 2.12.1, three nodes, `hydo/onboard/examples/nats-jetstream/hydo/hydo-configs.yaml`: the
+configuration file `conf` as the parameter (the default `sync_interval` of two minutes, 10 s,
+`always`), 12 workload steps, and the fault kinds `kill` and `cut`. `hydo explore --configs
+hydo/hydo-configs.yaml --set nats=2.12.1 --seeds 1-20` took 113 s with the images from the
+cache:
+
+| `conf` | image | schedules failed | class, minimal schedule | fingerprint, twice | label |
+|---|---|---|---|---|---|
+| `nats-server.conf` (default, 2 min) | `1dec3de6…` | 5 of 20 | lost acknowledged messages (`lost 1 of 1`), `disk=cut dseed=63cbe1e459320dd7 \| run C=5 W=:p1,r500,cparallel_driver_publish,0.0.0.697350162` | `1a6cee6459096728` | the documented trade-off |
+| `nats-server-sync-10s.conf` | `ee2f8d20…` | 5 of 20 | the same schedule | `4638f825f8c84f26` | the documented trade-off |
+| `nats-server-sync-always.conf` | `e6b94b31…` | 0 of 20 | none | | |
+
+Here the default is the relaxed value, with a `tradeoff:` note that quotes NATS's own advice
+(`sync_interval: always` for strict durability, issue 7564). This is Jepsen's NATS finding 3.4,
+which Milestone 141 found by hand. A first run with seeds 1-6 found nothing on any value: the
+random strategy drew no power cut in those seeds (seed 7 is the first), and the kills alone lose
+nothing. The guide says to start with 20 seeds.
+
+Each of the four replay commands that the two tables print (`hydo run --image <cached image>
+"<schedule>"`) ran once more as printed and gave the fingerprint above with the same verdict.
+The six images came from the image cache by their input keys; a second `hydo explore --configs`
+of the NATS manifest built nothing. The Redis images are 140 MB each and the NATS ones 1.1 GB.
+
+**Tests.** `tests/configs.rs` (hydo) runs the whole command on the scripted engine: a stand-in
+image per value, the table, the label, the cache on the second run (no build), `hydo report` and
+`--html`, `--configs-mode one`, and the refusals. Unit tests cover the combinations (every
+pair of two settings is covered, the defaults first), the labels, and the validator's refusals
+(`hydo_manifest::configs`). For those tests the explorer opens no arm64 image when the scripted
+engine runs (`hydo-explore/src/run.rs`), and the Mac `hydo explore` looks for no kernel.
+
+**What moved.** No engine, controller, guest program or image of an existing manifest changed,
+so nothing recorded moved. The schemas gained `configs:` (`project-v1.json`) and the `configs`
+document (`results-v1.json`), additions only. The answers of hydo-manifest's equivalence test
+moved only where the top-level unknown-key message lists the known keys (761 answers, `configs`
+added). The CLI golden moved for `guide manifest`, and the explorer's identity and corpus goldens
+for the two new manifests. The results example `mac-redis-configs/configs.json` is the Redis
+proof's document with neutral paths.
+
+**Left.** Open item 150 lists these parts:
+
+- Only the Mac engine and one setting per manifest ran; `pairs` ran on value counts only.
+- A loss under a relaxed build setting has the explorer's class `durable-defaults`, because the
+  explorer names classes by `knobs:` tokens and disk faults.
+- The label is by values, not by cause.
+- The combinations run one after another, and nothing prunes the image cache.
+- `hydo ci run` and `hydo versions` do not use configurations.

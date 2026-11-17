@@ -7,6 +7,7 @@ mod tmpdir;
 
 mod agents_equivalence;
 mod compare;
+mod configs;
 mod docs;
 mod equivalence;
 mod migrate;

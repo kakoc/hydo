@@ -1142,6 +1142,24 @@ on every given schedule. Formance Ledger v2.4.0 logs the account race of its `Up
 rewrite in a run without faults, and v2.3.24 does not; every check holds on both. Design:
 `docs/design/differential.md`; details: `docs/HISTORY.md` Milestone 298.
 
+**Which settings break a promise (M299, tentative number).** `configs:` (a format-1 addition)
+names build parameters of `params:` and the values to explore, the default first, with
+`service:`, `doc:` and per value a `tradeoff:` note of what the documentation says it weakens.
+`hydo explore --configs [MANIFEST]` builds one image per combination (`all` up to 12, else a
+pairwise set; `one` changes one setting at a time) through `hydo versions`' image cache. It
+explores each with the same seeds and prints a table of the classes of failure per combination.
+Each class has its minimal schedule and replay command. Per failure it names the values it needs. A
+failure found only with values that have a note, and not with a combination without one, is
+labeled the setting's documented trade-off. The answer is `configs.json` (results type
+`configs`); `hydo report` and `--html` show it. On the Mac engine, Redis's `appendfsync`
+(`examples-mac/redis/hydo-configs.yaml`, seeds 1-20) with `always` passed all 20 schedules.
+With `everysec` and `no` all 5 power-cut schedules lost acknowledged writes, shrunk to
+`disk=cut | run C=1` and labeled by design. NATS 2.12.1's `sync_interval`
+(`nats-jetstream/hydo/hydo-configs.yaml`, the same seeds) with `always` passed all 20. With the
+default and with 10 s all 5 power-cut schedules lost acknowledged messages (Jepsen's 3.4),
+labeled by design. Each proof took about two minutes. Reference: `hydo guide workflow`,
+"Which settings break a promise"; proof: `docs/HISTORY.md` Milestone 299.
+
 **Performance tests (M237).** With `perf:` in the manifest, each workload step is its own
 workload call, and `result.json` gets `perf`: the work of the workload and of each step. The
 unit on hvx is the guest's retired branches (the PMU branch clock). They are exact in every run.
@@ -2070,6 +2088,22 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - `hydo/compare.yaml` has no JSON schema, and `hydo ci` does not call the command.
     - A shrink keeps the first difference's stream, not its record, and runs each candidate on
       both versions one at a time.
+150. Settings explored with `hydo explore --configs` (M299). What is left:
+    - It ran on the Mac engine only, with two settings of one value list each. hvx and KVM, a
+      manifest with several settings, and the `pairs` mode on a real project did not run; the
+      pairwise set is tested on value counts only.
+    - The explorer names a failure's class by its `knobs:` tokens and disk faults, so a loss
+      under a relaxed build setting has the class `durable-defaults`. The table's label says
+      whether a `tradeoff:` note explains it.
+    - The label is by values, not by cause: any failure found only with values that have a
+      note is labeled the documented trade-off, also a crash with another cause.
+    - The combinations run one after another, each with its own worker pool, and each image
+      stays in the image cache, which nothing prunes (as open item 47). The NATS images are
+      1.1 GB each.
+    - A setting that the system changes at run time stays a `knobs:` entry (`R=`); such an
+      entry and a build setting of one parameter are not merged.
+    - `hydo ci run` does not run the combinations, and `hydo versions` cannot replay a finding
+      on a configuration.
 
 ## Milestone index
 
@@ -2817,13 +2851,19 @@ build machine, before 2026-10-13.
   It shrinks drawn differences and writes `compare.json`. On the Mac engine Redis `always`
   against `everysec` differs on 4 of 10 drawn schedules. Two builds of one source and `hz` agree.
   Formance v2.4.0 shows the account race that v2.3.24 does not. Nothing recorded moved
-
 - M296 (tentative number): faults inside a call and the Mac engine for `hydo fuzz --vm`. A named
   call (`E=`) reports its start, and a reaction cuts the power, steps the clock, pauses the call
   or its thread, or kills it a few milliseconds later. Planted wall-clock and missing-wait bugs
   broke and their twins held, rs-snowflake gave a smaller id after a backward step, and the Mac
   repeated M292's results. A host timeout per run, and native calls in folders of their own.
   Nothing recorded moved
+- M299 (tentative number): configuration as a dimension that hydo explores. `configs:` lists a
+  build parameter's values with `tradeoff:` notes, and `hydo explore --configs` explores one
+  image per combination with the same seeds. Its table gives each combination's failures with
+  minimal schedules, the values each failure needs, and a "documented trade-off" label (results
+  type `configs`). On the Mac, Redis's `everysec` and `no` and NATS's default and 10 s
+  `sync_interval` lost acknowledged writes at every power cut of seeds 1-20, by design, and the
+  durable values passed. Nothing recorded moved
 
 ## Where to look
 

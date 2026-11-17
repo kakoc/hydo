@@ -652,6 +652,11 @@ pub struct Project {
     /// `hydo build --set name=value`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub params: Option<IndexMap<String, Option<Scalar>>>,
+    /// Build parameters whose values `hydo explore --configs` explores (Milestone 299): one image
+    /// per combination of values, each explored with the same seeds, and a table of the failures
+    /// found with each value. Each key is a parameter of params:; its default comes first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configs: Option<IndexMap<String, ConfigSetting>>,
     /// The long-running processes, started in dependency order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub services: Option<Vec<Service>>,
@@ -1147,6 +1152,37 @@ pub struct Knob {
     pub values: Option<Vec<Scalar>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub safe: Option<Scalar>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<Scalar>,
+}
+
+/// One service's name, or a list of them.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged, expecting = "a service's name, or a list of services' names")]
+pub enum ServiceNames {
+    One(String),
+    Many(Vec<String>),
+}
+
+/// A build parameter that `hydo explore --configs` explores (Milestone 299).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct ConfigSetting {
+    /// The values to explore, each once. The parameter's default (params:) comes first, listed
+    /// here or not.
+    pub values: Vec<Scalar>,
+    /// The service whose configuration the parameter is (a name of services:), or a list of
+    /// them (the nodes of a cluster that share one configuration file).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<ServiceNames>,
+    /// Where the project documents the setting (a link or a file).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doc: Option<Text>,
+    /// The values whose documentation says they weaken a promise, each with that note. A failure
+    /// found only with such values is reported as the setting's documented trade-off, not as a
+    /// bug.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tradeoff: Option<IndexMap<String, Text>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
